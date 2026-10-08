@@ -358,3 +358,17 @@ describe('actual Home calendar reads and rendered read availability', () => {
     }
   });
 });
+
+
+describe('actual SDK Home outcome source transparency',()=>{
+  it('preserves future free annotations in the outcome without invented clashes or native actions',async()=>{
+    mocks.source=true;mocks.snapshot=sourceEnvelope('DTSTART:20260910T180000Z\r\nDURATION:PT1H\r\nRDATE:20260910T183000Z\r\nTRANSP:TRANSPARENT');const snapshot=mocks.snapshot as ReturnType<typeof sourceEnvelope>;
+    const requests=sdkCalendar([],'',snapshot.familyId);const html=await home('UTC','parent',snapshot.familyId);expect(mocks.brief).toHaveBeenCalledOnce();const input=mocks.brief.mock.calls[0][0];
+    expect(input.upcomingEvents).toHaveLength(2);expect(input.upcomingEvents.every((event:{kind:string;transparency:string;reference:{kind:string};actualStartsAt:string})=>event.kind==='source'&&event.transparency==='transparent'&&event.reference.kind==='source'&&event.actualStartsAt)).toBe(true);
+    const {buildHomeBrief}=await vi.importActual<typeof import('@/lib/home/home-brief')>('@/lib/home/home-brief');expect(buildHomeBrief(input,new Date())).toMatchObject({weekCount:2,conflictCount:0});expect(html).toContain('Original source annotation');expect(html).not.toContain('clash');
+    expect(mocks.conflicts.mock.calls[0][0]).toEqual([]);expect(input.upcomingEvents.every((event:object)=>!('id' in event))).toBe(true);expect(requests.filter(url=>url.pathname.includes('/rpc/'))).toHaveLength(3);expect(requests.some(url=>url.pathname.endsWith('/home_briefs'))).toBe(false);
+  });
+  it('keeps malformed source metadata unavailable rather than showing a calm outcome',async()=>{
+    mocks.source=true;mocks.snapshot=sourceEnvelope('DTSTART:20260910T180000Z\r\nDURATION:PT1H\r\nTRANSP:UNKNOWN');const snapshot=mocks.snapshot as ReturnType<typeof sourceEnvelope>;const requests=sdkCalendar([],'',snapshot.familyId);const html=await home('UTC','parent',snapshot.familyId);expect(mocks.brief).not.toHaveBeenCalled();expect(html.match(/<p role="status"/g)).toHaveLength(3);expect(requests.some(url=>url.pathname.endsWith('/home_briefs'))).toBe(false);
+  });
+});

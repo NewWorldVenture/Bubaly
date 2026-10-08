@@ -289,3 +289,27 @@ describe('handled carries source and reason (M6)', () => {
     expect(parsed.data.handled[0]).toMatchObject({ sources: [], reason: null });
   });
 });
+
+describe('durable qualified source timeline',()=>{
+ const reference={kind:'source' as const,feedId:'20000000-0000-4000-8000-000000000001',uid:'long;escaped\\UID'.repeat(200),revisionId:'30000000-0000-4000-8000-000000000001',original:{kind:'utc' as const,value:'20260905T140000Z'}};
+ const row={title:'Free source',start:'2026-09-05T14:00:00Z',end:'2026-09-05T15:00:00Z',kind:'source' as const,transparency:'transparent' as const,reference,occurrenceKey:'original-identity',actualStartsAt:'2026-09-05T14:00:00Z',actualEndsAt:'2026-09-05T15:00:00Z'};
+ it('round-trips long escaped source UID, polarity and original interval metadata',()=>{
+  const brief=buildBrief(input({events:[row]}),TZ);
+  expect(briefSchema.parse(JSON.parse(JSON.stringify(brief))).calendar.timeline[0]).toEqual(brief.calendar.timeline[0]);
+  expect(brief.calendar.todayCount).toBe(1);expect(brief.counts.timeSavedMinutes).toBe(0);
+ });
+ it.each([{transparency:undefined},{transparency:'UNKNOWN'},{kind:'native'},{unexpected:'metadata'},{reference:{...reference,uid:'x'.repeat(4097)}},{reference:{...reference,uid:'bad\nUID'}}])('refuses unqualified stored timeline %j',extra=>{
+  const brief=buildBrief(input({events:[row]}),TZ);Object.assign(brief.calendar.timeline[0],extra);
+  expect(briefSchema.safeParse(brief).success).toBe(false);
+ });
+});
+
+describe('durable clipped intervals',()=>{
+ it.each([
+  {title:'Ongoing native',start:'2026-09-05T03:30:00Z',end:null,actualStartsAt:'2026-09-05T03:30:00Z',actualEndsAt:'2026-09-05T04:30:00Z'},
+  {title:'Ongoing native explicit',start:'2026-09-05T03:30:00Z',end:'2026-09-05T05:30:00Z',actualStartsAt:'2026-09-05T03:30:00Z',actualEndsAt:'2026-09-05T05:30:00Z'},
+ ])('round-trips original clocks when timeline is clipped for $title',event=>{
+  const brief=buildBrief(input({events:[event]}),TZ);expect(brief.calendar.timeline[0].start).toBe('2026-09-05T04:00:00.000Z');
+  expect(briefSchema.parse(JSON.parse(JSON.stringify(brief))).calendar.timeline[0]).toEqual(brief.calendar.timeline[0]);
+ });
+});

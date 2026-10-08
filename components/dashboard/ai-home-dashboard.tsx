@@ -397,7 +397,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     homeBrief = buildHomeBrief({
       timezone: tz,
       upcomingEvents: upcomingEvents.map((e) => ({ title: e.title ?? '', start: e.starts_at, end: e.ends_at,
-        allDay: e.all_day, reference: e.reference, occurrenceKey: e.occurrenceKey })),
+        allDay: e.all_day, reference: e.reference, occurrenceKey: e.occurrenceKey,kind:e.kind,transparency:e.transparency,actualStartsAt:e.actualStartsAt,actualEndsAt:e.actualEndsAt,startDate:e.startDate,endDate:e.endDate })),
       dinnerCandidates,
       choresPending: pendingChores ?? 0,
       openTodos: openTodos ?? 0,

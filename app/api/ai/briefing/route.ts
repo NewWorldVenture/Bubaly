@@ -23,7 +23,8 @@ import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/unt
 import { dayKeyInTz, zonedDayBoundsMs, scopeFromUserContext } from '@/lib/services/scope';
 import { withAiRequest } from '@/lib/ai/observability';
 import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
-import { readDisplayCalendarOccurrences } from '@/lib/calendar/display-occurrences';
+import { qualifyBriefEvents, briefEventIsOccupied } from '@/lib/onboarding/first-brief';
+import { readDisplayCalendarOccurrences, type CalendarDisplayOccurrence } from '@/lib/calendar/display-occurrences';
 import { projectCalendarDay, projectCalendarWindow } from '@/lib/calendar/consumer-spans';
 
 function normalizeBriefTimezone(candidate: string): string {
@@ -32,6 +33,10 @@ function normalizeBriefTimezone(candidate: string): string {
   } catch {
     return 'UTC';
   }
+}
+
+function elapsedCalendarMinutes(startsAt: string, endsAt: string): number {
+  return (Date.parse(endsAt) - Date.parse(startsAt)) / 60_000;
 }
 
 export async function POST(req: NextRequest) {
@@ -170,6 +175,12 @@ export async function POST(req: NextRequest) {
     const todayEvents = projectCalendarDay(todayEventsResult.data??[],today,tz);
     const tomorrowBounds=briefingCalendarBounds(today,tz,1,7);
     const tomorrowEvents = projectCalendarWindow(tomorrowEventsResult.data??[],tomorrowBounds.allDayFromDay,tomorrowBounds.allDayToDay,tz).slice(0,8);
+    // Qualify workload metadata before optional provider execution or response composition.
+    for (const rows of [todayEventsResult.data??[],tomorrowEventsResult.data??[]]) qualifyBriefEvents(rows.map(e=>({
+      title:e.title??'',start:e.starts_at,end:e.ends_at,allDay:e.all_day,reference:e.reference,occurrenceKey:e.occurrenceKey,
+      kind:e.kind,transparency:e.transparency,actualStartsAt:e.actualStartsAt,actualEndsAt:e.actualEndsAt,startDate:e.startDate,endDate:e.endDate,
+    })));
+
 
     // A brief that cannot say what is waiting on you must not pretend nothing
     // is. The read failed closed; so does the request, and the page shows a
@@ -188,6 +199,14 @@ export async function POST(req: NextRequest) {
     const fmt = (iso: string) => new Date(iso).toLocaleTimeString(locale.code, { timeZone: tz, hour: 'numeric', minute: '2-digit' });
     const fmtDate = (iso: string) => dayKeyInTz(new Date(iso), tz);
     const calendarTime = (event: { starts_at: string; displayStartsAt: string; all_day: boolean }) => event.all_day ? tr('calendar.allDay') : fmt(event.displayStartsAt);
+    const calendarOccupancy = (event: CalendarDisplayOccurrence & {displayStartsAt:string;displayEndsAt:string}) => {
+      if (event.transparency === 'transparent') return ' [FREE ANNOTATION: does not occupy time]';
+      if (event.all_day) return ' [OPAQUE DATE ANNOTATION: civil dates, not a timed clash]';
+      if (Date.parse(event.displayEndsAt) <= Date.parse(event.displayStartsAt)) return ' [POINT ANNOTATION: zero duration; no workload or clash]';
+      const estimate = event.kind === 'native' && event.event.ends_at === null ? '; end estimated as one hour' : '';
+      return ` [OPAQUE: occupied ${fmt(event.displayStartsAt)}–${fmt(event.displayEndsAt)}; actual ${event.displayStartsAt} to ${event.displayEndsAt}; elapsed ${elapsedCalendarMinutes(event.displayStartsAt, event.displayEndsAt)} minutes${estimate}]`;
+    };
+
 
     // ── Build the deterministic cross-domain concierge digest ─────────────────
     const medsDueToday = medicationsDueOn((medSchedules ?? []) as unknown as MedicationScheduleRow[], {
@@ -215,11 +234,11 @@ GENERATING FOR: ${ctx.active.member?.display_name ?? 'family'}
 TODAY'S CALENDAR EVENTS (${(todayEvents ?? []).length}):
 ${(todayEvents ?? []).map(e => {
   const assignee = e.assignee_id ? memberMap.get(e.assignee_id)?.display_name : null;
-  return `- ${calendarTime(e)} ${e.title}${assignee ? ` [${assignee}]` : ''}${e.location ? ` @ ${e.location}` : ''}${!e.all_day && e.ends_at ? ` until ${fmt(e.ends_at)}` : ''}`;
+  return `- ${calendarTime(e)} ${e.title}${assignee ? ` [${assignee}]` : ''}${e.location ? ` @ ${e.location}` : ''}${calendarOccupancy(e)}`;
 }).join('\n') || '- No events today'}
 
 TOMORROW/THIS WEEK EVENTS:
-${(tomorrowEvents ?? []).map(e => `- ${e.all_day ? e.displayDay : fmtDate(e.displayStartsAt)} ${calendarTime(e)} ${e.title}`).join('\n') || '- None'}
+${(tomorrowEvents ?? []).map(e => `- ${e.all_day ? e.displayDay : fmtDate(e.displayStartsAt)} ${calendarTime(e)} ${e.title}${calendarOccupancy(e)}`).join('\n') || '- None'}
 
 CHORES DUE TODAY (${(choresDue ?? []).length}):
 ${(choresDue ?? []).map(c => {
@@ -300,7 +319,7 @@ Use this exact JSON structure:
 
 Rules:
 - Be warm, specific, and actionable
-- Detect real time conflicts (overlapping events, travel time issues)
+- Detect real time conflicts only between positive occupied opaque intervals. FREE ANNOTATION entries remain visible but create no workload or conflict (including travel time).
 - Score categories 0-100 honestly based on the data
 - Use appropriate emojis for schedule items (🏥 medical, ⚽ sports, 📚 school, ✈️ travel, 🍽️ dinner, 💼 work, 🎂 birthday)
 - Color choices for schedule: blue, purple, rose, emerald, amber, cyan, indigo
@@ -473,7 +492,7 @@ ${UNTRUSTED_CONTENT_RULE}
     const brief = buildBrief({
       kind: type === 'evening' ? 'evening' : 'daily',
       now,
-      events: (todayEvents ?? []).map(e => ({ title: e.title??'', start: e.starts_at, end: e.ends_at, allDay: e.all_day, location: e.location,reference:e.reference,occurrenceKey:e.occurrenceKey })),
+      events: (todayEvents ?? []).map(e => ({ title: e.title??'', start: e.starts_at, end: e.ends_at, allDay: e.all_day, location: e.location,reference:e.reference,occurrenceKey:e.occurrenceKey,kind:e.kind,transparency:e.transparency,actualStartsAt:e.actualStartsAt,actualEndsAt:e.actualEndsAt,startDate:e.startDate,endDate:e.endDate })),
       snapshot: { ...conciergeSnapshot, now: undefined } as Omit<ConciergeSnapshot, 'now'>,
       completedRuns: (completedRuns ?? []) as CompletedRunRow[],
       activity: (agentActivity ?? []) as AiActivityRow[],
@@ -557,19 +576,20 @@ ${UNTRUSTED_CONTENT_RULE}
 
 /** Overlapping events on the family's day, described the way the card renders them. */
 function todayConflicts(
-  events: { title: string | null; starts_at: string; ends_at: string | null; all_day: boolean;displayStartsAt:string;displayEndsAt:string }[],
+  events: (CalendarDisplayOccurrence & {displayStartsAt:string;displayEndsAt:string})[],
   tz: string,
   locale: LocaleCode,
   tr: (key: string, params?: Record<string, string | number>) => string,
 ): { description: string; suggestion: string }[] {
   const at = (iso: string) => new Date(iso).toLocaleTimeString(locale, { timeZone: tz, hour: 'numeric', minute: '2-digit' });
   const out: { description: string; suggestion: string }[] = [];
+  const occupied=events.filter(e=>!e.all_day && briefEventIsOccupied({title:e.title??'',start:e.starts_at,end:e.ends_at,allDay:e.all_day,reference:e.reference,occurrenceKey:e.occurrenceKey,kind:e.kind,transparency:e.transparency,actualStartsAt:e.actualStartsAt,actualEndsAt:e.actualEndsAt,startDate:e.startDate,endDate:e.endDate}));
   let work=0;
-  for (let i = 0; i < events.length; i += 1) {
-    for (let j = i + 1; j < events.length; j += 1) {
+  for (let i = 0; i < occupied.length; i += 1) {
+    for (let j = i + 1; j < occupied.length; j += 1) {
       if(++work>100_000)throw new Error('Calendar conflict scan bound exhausted');
-      const a = events[i];
-      const b = events[j];
+      const a = occupied[i];
+      const b = occupied[j];
       if (a.all_day || b.all_day) continue;
       const aStart = Date.parse(a.displayStartsAt);
       const bStart = Date.parse(b.displayStartsAt);

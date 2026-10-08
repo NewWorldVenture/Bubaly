@@ -35,7 +35,11 @@ let db = createInMemorySupabase<DB>();
 function row(title: string, starts_at: string, all_day = false, ends_at: string | null = null, family_id = 'family') {
   return { id: title, family_id, title, starts_at, ends_at, all_day, location: 'Literal {location}', category: 'general', assignee_id: null };
 }
-function originalInput(event: ReturnType<typeof row>) { return {title:event.title,start:event.starts_at,end:event.ends_at,allDay:event.all_day,location:event.location,reference:{kind:'native',eventId:event.id},occurrenceKey:JSON.stringify(['native',event.id,event.starts_at])}; }
+function originalInput(event: ReturnType<typeof row>, actualStartsAt: string, actualEndsAt: string) {
+  return {title:event.title,start:event.starts_at,end:event.ends_at,allDay:event.all_day,location:event.location,
+    reference:{kind:'native',eventId:event.id},occurrenceKey:JSON.stringify(['native',event.id,event.starts_at]),
+    kind:'native',transparency:'opaque',startDate:event.starts_at.slice(0,10),endDate:event.ends_at!.slice(0,10),actualStartsAt,actualEndsAt};
+}
 function family(timezone: string, now: string, role = 'parent') {
   vi.setSystemTime(new Date(now));
   mocks.context.mockResolvedValue({ user: { id: 'user' }, active: { familyId: 'family', role, member: { id: 'parent', display_name: 'Alex' }, family: { name: 'Family', timezone } } });
@@ -65,11 +69,11 @@ afterEach(() => { expect(fetch).not.toHaveBeenCalled(); vi.useRealTimers(); vi.u
 
 describe('all-day calendar rows in the actual briefing readers', () => {
   it.each([
-    ['America/New_York', '2026-09-09T16:00:00.000Z', '2026-09-09', '2026-09-10T00:30:00.000Z'],
-    ['America/Los_Angeles', '2026-09-10T06:30:00.000Z', '2026-09-09', '2026-09-10T03:30:00.000Z'],
-    ['Asia/Tokyo', '2026-09-09T22:30:00.000Z', '2026-09-10', '2026-09-10T11:30:00.000Z'],
-    ['UTC', '2026-09-09T16:00:00.000Z', '2026-09-09', '2026-09-09T20:30:00.000Z'],
-  ])('%s preserves date-only holidays and timed conflicts across UTC midnight', async (zone, now, day, timed) => {
+    ['America/New_York', '2026-09-09T16:00:00.000Z', '2026-09-09', '2026-09-10T00:30:00.000Z', '2026-09-09T04:00:00.000Z', '2026-09-10T04:00:00.000Z'],
+    ['America/Los_Angeles', '2026-09-10T06:30:00.000Z', '2026-09-09', '2026-09-10T03:30:00.000Z', '2026-09-09T07:00:00.000Z', '2026-09-10T07:00:00.000Z'],
+    ['Asia/Tokyo', '2026-09-09T22:30:00.000Z', '2026-09-10', '2026-09-10T11:30:00.000Z', '2026-09-09T15:00:00.000Z', '2026-09-10T15:00:00.000Z'],
+    ['UTC', '2026-09-09T16:00:00.000Z', '2026-09-09', '2026-09-09T20:30:00.000Z', '2026-09-09T00:00:00.000Z', '2026-09-10T00:00:00.000Z'],
+  ])('%s preserves date-only holidays and timed conflicts across UTC midnight', async (zone, now, day, timed, actualStart, actualEnd) => {
     family(zone, now);
     const tomorrow = new Date(Date.parse(`${day}T00:00:00Z`) + 86_400_000).toISOString();
     const rows = [row('Today holiday {title}', `${day}T00:00:00.000Z`, true, tomorrow), row('Tomorrow holiday', tomorrow, true),
@@ -86,7 +90,7 @@ describe('all-day calendar rows in the actual briefing readers', () => {
     expect(prompt().split('\n').find(line => line.includes('Today holiday {title}'))).not.toContain(' until ');
     expect(prompt()).toContain(`${tomorrow.slice(0, 10)} All Day Tomorrow holiday`);
     expect(JSON.stringify(body) + prompt()).not.toContain('Other family');
-    expect(calendarInput()[0]).toEqual(originalInput(rows[0]));
+    expect(calendarInput()[0]).toEqual(originalInput(rows[0], actualStart, actualEnd));
     const brief = await morning(zone, day);
     expect(brief.calendar.timeline.map(e => [e.title, e.allDay])).toEqual([['Today holiday {title}', true], ['Meeting', false], ['Practice', false]]);
     expect(brief.calendar.timeline[0].timeLabel).toBe('All day'); expect(brief.calendar.conflicts).toHaveLength(1);
@@ -132,7 +136,10 @@ describe('all-day calendar rows in the actual briefing readers', () => {
       row('Today multi-day holiday', '2026-09-09T00:00:00.000Z', true, '2026-09-12T00:00:00.000Z')]);
     const body=await api();
     expect(body.briefing.schedule.map((e:{title:string})=>e.title)).toEqual(['Earlier ongoing holiday','Today multi-day holiday']);
-    const expected=db.table('calendar_events').map(event=>originalInput(event as ReturnType<typeof row>));
+    // New York remains UTC-04 on all three independently known civil boundaries.
+    const stored = db.table('calendar_events') as ReturnType<typeof row>[];
+    const expected = [originalInput(stored[0], '2026-09-08T04:00:00.000Z', '2026-09-12T04:00:00.000Z'),
+      originalInput(stored[1], '2026-09-09T04:00:00.000Z', '2026-09-12T04:00:00.000Z')];
     expect(calendarInput()).toEqual(expected);
     const brief=await morning('America/New_York','2026-09-09');expect(calendarInput()).toEqual(expected);
     expect(brief.calendar.timeline.map(event=>[event.title,event.originalStart,event.start])).toEqual([['Earlier ongoing holiday','2026-09-08T00:00:00.000Z','2026-09-08T00:00:00.000Z'],['Today multi-day holiday','2026-09-09T00:00:00.000Z','2026-09-09T00:00:00.000Z']]);

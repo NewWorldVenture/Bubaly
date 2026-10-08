@@ -189,7 +189,7 @@ export async function readMorningBrief(scope: ServiceScope, target: MorningTarge
     return ok(buildBrief({
     kind: 'daily',
     now: target.at,
-    events: (events.data ?? []).map((e) => ({ title: e.title??'', start: e.starts_at, end: e.ends_at, allDay: e.all_day, location: e.location,reference:e.reference,occurrenceKey:e.occurrenceKey })),
+    events: (events.data ?? []).map((e) => ({ title: e.title??'', start: e.starts_at, end: e.ends_at, allDay: e.all_day, location: e.location,reference:e.reference,occurrenceKey:e.occurrenceKey,kind:e.kind,transparency:e.transparency,actualStartsAt:e.actualStartsAt,actualEndsAt:e.actualEndsAt,startDate:e.startDate,endDate:e.endDate })),
     snapshot,
     completedRuns: (runs.data ?? []) as CompletedRunRow[],
     activity: (activity.data ?? []) as AiActivityRow[],

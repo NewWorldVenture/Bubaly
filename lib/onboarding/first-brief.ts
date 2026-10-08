@@ -7,13 +7,39 @@
 // value step is a thin renderer, and the same brief summary is persisted to
 // onboarding_imports at finalize (the seed of the TTFV metric).
 
+import { z } from 'zod';
 import { pickDinnerIdeas, type DinnerIdea } from './dinner-ideas';
 import type { FirstBriefDisplay, BriefConflictDisplay, BriefActionDisplay, BriefOpportunityDisplay } from './first-brief-display';
 import { projectCalendarDay } from '@/lib/calendar/consumer-spans';
 import { calendarDisplayDay } from '@/lib/calendar/display-spans';
 import type { CalendarSnapshotReference } from '@/lib/calendar/source-snapshot';
 
+const sourceClockSchema=z.discriminatedUnion('kind',[
+  z.object({kind:z.literal('date'),value:z.string().regex(/^\d{8}$/)}).strict(),
+  z.object({kind:z.literal('utc'),value:z.string().regex(/^\d{8}T\d{6}Z$/)}).strict(),
+  z.object({kind:z.literal('floating'),value:z.string().regex(/^\d{8}T\d{6}$/)}).strict(),
+  z.object({kind:z.literal('zoned'),value:z.string().regex(/^\d{8}T\d{6}$/),tzid:z.string().min(1).max(4096).refine(value=>!/[\u0000-\u0008\u000a-\u001f\u007f]/.test(value))}).strict(),
+]).refine(clock=>{
+  const value=clock.value;
+  const year=Number(value.slice(0,4)),month=Number(value.slice(4,6)),day=Number(value.slice(6,8));
+  const leap=year%4===0&&(year%100!==0||year%400===0);
+  const monthDays=[31,leap?29:28,31,30,31,30,31,31,30,31,30,31];
+  return year>0 && month>=1 && month<=12 && day>=1 && day<=monthDays[month-1]
+    && (clock.kind==='date'||Number(value.slice(9,11))<=23&&Number(value.slice(11,13))<=59&&Number(value.slice(13,15))<=60);
+},'Invalid source clock');
+export const briefEventReferenceSchema=z.discriminatedUnion('kind',[
+  z.object({kind:z.literal('native'),eventId:z.string().min(1).max(8192)}).strict(),
+  z.object({kind:z.literal('source'),feedId:z.string().uuid(),uid:z.string().min(1).max(4096).refine(value=>!/[\u0000-\u0008\u000a-\u001f\u007f]/.test(value)),revisionId:z.string().uuid(),original:sourceClockSchema}).strict(),
+]);
+
 export interface BriefEvent {
+  kind?: 'native' | 'source';
+  transparency?: 'opaque' | 'transparent';
+  actualStartsAt?: string;
+  actualEndsAt?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+
   title: string;
   start: string;              // ISO 8601
   end?: string | null;
@@ -25,6 +51,13 @@ export interface BriefEvent {
 }
 
 export interface TimelineItem {
+  kind?: 'native' | 'source';
+  transparency?: 'opaque' | 'transparent';
+  actualStartsAt?: string;
+  actualEndsAt?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+
   title: string;
   start: string;
   end: string | null;
@@ -77,6 +110,69 @@ export interface FirstBrief {
   display?: FirstBriefDisplay;
 }
 
+/** Qualify the complete dataset before skipping free, DATE, point or outside-window annotations. */
+export function qualifyBriefEvents(events: readonly BriefEvent[]): BriefEvent[] {
+  if (!Array.isArray(events) || events.length > 20_000) throw new Error('Invalid briefing collection');
+  const seen = new Map<string, string>();
+  const out: BriefEvent[] = [];
+  const validDay = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0,10) === value;
+  for (const e of events) {
+    if (!e || typeof e !== 'object') throw new Error('Invalid briefing event');
+    if (e.kind !== undefined && e.kind !== 'native' && e.kind !== 'source') throw new Error('Invalid briefing kind');
+    const parsedReference = e.reference === undefined ? undefined : briefEventReferenceSchema.safeParse(e.reference);
+    if (parsedReference && !parsedReference.success) throw new Error('Invalid briefing reference');
+    if (e.kind && e.reference && e.kind !== e.reference.kind) throw new Error('Conflicting briefing kind/reference');
+    const kind = e.kind ?? e.reference?.kind ?? 'native';
+    if (kind === 'source' && e.reference?.kind !== 'source') throw new Error('Missing briefing source reference');
+    const transparency = e.transparency === undefined && kind === 'native' ? 'opaque' : e.transparency;
+    if (transparency !== 'opaque' && transparency !== 'transparent') throw new Error('Invalid briefing transparency');
+    if (kind === 'native' && e.kind === undefined && e.reference === undefined && e.actualStartsAt === undefined && e.actualEndsAt === undefined
+      && e.transparency === undefined && e.startDate === undefined && e.endDate === undefined
+      && (typeof e.start !== 'string' || !Number.isFinite(Date.parse(e.start)))) continue;
+    if (typeof e.title !== 'string' || typeof e.start !== 'string' || !Number.isFinite(Date.parse(e.start))) throw new Error('Invalid briefing start');
+    if (e.allDay !== undefined && typeof e.allDay !== 'boolean') throw new Error('Invalid briefing DATE flag');
+    if (e.reference?.kind === 'source' && (e.reference.original.kind === 'date') !== !!e.allDay) throw new Error('Conflicting briefing source clock');
+    if (e.end != null && (typeof e.end !== 'string' || !Number.isFinite(Date.parse(e.end)) || Date.parse(e.end) < Date.parse(e.start))) throw new Error('Invalid briefing end');
+    if (e.actualStartsAt !== undefined && (typeof e.actualStartsAt !== 'string' || !Number.isFinite(Date.parse(e.actualStartsAt)))) throw new Error('Invalid briefing actual start');
+    const start = Date.parse(e.actualStartsAt ?? e.start);
+    if (e.actualEndsAt != null && (typeof e.actualEndsAt !== 'string' || !Number.isFinite(Date.parse(e.actualEndsAt)) || Date.parse(e.actualEndsAt) < start)) throw new Error('Invalid briefing actual end');
+    if (!e.allDay) {
+      if (e.actualStartsAt !== undefined && start !== Date.parse(e.start)) throw new Error('Conflicting briefing start clocks');
+      const expectedEnd = e.end == null ? start + (kind === 'source' ? 0 : 3_600_000) : Date.parse(e.end);
+      if (e.actualEndsAt !== undefined && (e.actualEndsAt === null ? e.end != null : Date.parse(e.actualEndsAt) !== expectedEnd)) throw new Error('Conflicting briefing end clocks');
+    }
+    if (e.allDay) {
+      const from = e.startDate ?? e.start.slice(0,10), to = e.endDate ?? (e.end ? e.end.slice(0,10) : calendarDayAfter(from));
+      if (!validDay(from) || !validDay(to) || to <= from) throw new Error('Invalid briefing DATE interval');
+      if (from !== e.start.slice(0,10) || to !== (e.end ? e.end.slice(0,10) : calendarDayAfter(from))) throw new Error('Conflicting briefing civil clocks');
+    } else if (e.startDate != null || e.endDate != null) throw new Error('Conflicting briefing civil dates');
+    if (e.occurrenceKey !== undefined) {
+      if (typeof e.occurrenceKey !== 'string' || !e.occurrenceKey || e.occurrenceKey.length > 65_536) throw new Error('Invalid briefing occurrence key');
+      const signature = JSON.stringify([kind,transparency,!!e.allDay,e.title,e.start,e.end ?? null,e.actualStartsAt,e.actualEndsAt,e.startDate,e.endDate,parsedReference?.success ? parsedReference.data : undefined,e.location,e.recurring]);
+      if (seen.has(e.occurrenceKey)) {
+        if (seen.get(e.occurrenceKey) !== signature) throw new Error('Conflicting briefing occurrence');
+        continue;
+      }
+      seen.set(e.occurrenceKey,signature);
+    }
+    out.push({...e,kind,transparency});
+  }
+  return out;
+}
+
+/** Positive opaque timed occupancy; DATE dinner estimates remain a separate policy. */
+export function briefEventIsOccupied(event: BriefEvent): boolean {
+  const e = qualifyBriefEvents([event])[0];
+  return e ? qualifiedEventIsOccupied(e) : false;
+}
+
+function qualifiedEventIsOccupied(e: BriefEvent): boolean {
+  if (e.allDay || e.transparency === 'transparent') return false;
+  const start = Date.parse(e.actualStartsAt ?? e.start);
+  const end = e.actualEndsAt === undefined ? e.end : e.actualEndsAt;
+  return (end == null ? start + (e.kind === 'source' ? 0 : 3_600_000) : Date.parse(end)) > start;
+}
+
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const WEEKDAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_MS = 86_400_000;
@@ -122,7 +218,7 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
   // All-day dates are calendar dates, even when transport normalized them to
   // UTC midnight. Timed events are instants and belong to the family's zone.
   const eventDayKey = (event: BriefEvent) => event.allDay ? event.start.slice(0, 10) : dayKey(event.start);
-  const valid = (events ?? []).filter((e) => e && typeof e.start === 'string' && Number.isFinite(Date.parse(e.start)));
+  const valid = qualifyBriefEvents(events ?? []);
   const todayKey = dayKey(now);
   const tomorrowKey = calendarDayAfter(todayKey);
   const weekEndKey = new Date(Date.parse(`${todayKey}T12:00:00Z`) + 7 * DAY_MS).toISOString().slice(0, 10);
@@ -131,7 +227,7 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
   const sorted = [...valid].sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
 
   // Today's timeline (all-day first, then chronological).
-  const inputs=sorted.map(event=>({event,starts_at:event.start,ends_at:event.end,all_day:event.allDay,kind:event.reference?.kind}));
+  const inputs=sorted.map(event=>({event,starts_at:event.start,ends_at:event.end,all_day:event.allDay,kind:event.kind,actualStartsAt:event.actualStartsAt,actualEndsAt:event.actualEndsAt,startDate:event.startDate,endDate:event.endDate}));
   const weekSpans=[];
   for(let day=todayKey;day<weekEndKey;day=calendarDayAfter(day)) {
     for(const row of projectCalendarDay(inputs,day,timezone))weekSpans.push({event:row.event,span:{day,actualStartsAt:row.displayStartsAt,actualEndsAt:row.displayEndsAt}});
@@ -141,6 +237,11 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
     ...today.filter(({event}) => event.allDay),
     ...today.filter(({event}) => !event.allDay),
   ].map(({event:e,span}) => ({
+    kind:e.kind,transparency:e.transparency,
+    ...(e.actualStartsAt === undefined ? {} : {actualStartsAt:e.actualStartsAt}),
+    ...(e.actualEndsAt === undefined ? {} : {actualEndsAt:e.actualEndsAt}),
+    ...(e.startDate === undefined ? {} : {startDate:e.startDate}),
+    ...(e.endDate === undefined ? {} : {endDate:e.endDate}),
     title: e.title,
     start: e.allDay || Date.parse(e.start)===Date.parse(span.actualStartsAt)?e.start:span.actualStartsAt,
     end: e.allDay || !e.end || Date.parse(e.end)===Date.parse(span.actualEndsAt)?e.end??null:span.actualEndsAt,
@@ -156,8 +257,8 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
   // modeled planning minutes. An elapsed-hour window drifts at DST boundaries.
   const occupiedEvents=new Set(weekSpans.map(item=>item.event));
   const weekEvents = sorted.filter(e=>occupiedEvents.has(e));
-  const week = weekEvents.filter((e) => !e.allDay);
-  const timedSpans=weekSpans.filter(item=>!item.event.allDay).sort((a,b)=>a.span.day.localeCompare(b.span.day)||a.span.actualStartsAt.localeCompare(b.span.actualStartsAt));
+  const week = weekEvents.filter(qualifiedEventIsOccupied);
+  const timedSpans=weekSpans.filter(item=>qualifiedEventIsOccupied(item.event)).sort((a,b)=>a.span.day.localeCompare(b.span.day)||a.span.actualStartsAt.localeCompare(b.span.actualStartsAt));
   let conflictWork=0;
   calendarDisplayDay(todayKey,timezone);
 
@@ -197,7 +298,7 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
       display: { kind: 'conflict', conflictIndex: conflicts.indexOf(c) },
     });
   }
-  const missingLocation = week.filter((e) => !e.location && (eventDayKey(e) === todayKey || eventDayKey(e) === tomorrowKey));
+  const missingLocation = week.filter((e) => e.kind !== 'source' && !e.location && (eventDayKey(e) === todayKey || eventDayKey(e) === tomorrowKey));
   for (const e of missingLocation.slice(0, 3)) {
     actions.push({
       id: `location:${e.title}:${e.start}`,
@@ -207,8 +308,9 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
       display: { kind: 'location', title: e.title, dayKey: eventDayKey(e) },
     });
   }
-  if (timeline.length > 0 && actions.length < 6) {
-    const first = timeline.find((t) => !t.allDay) ?? timeline[0];
+  const prepTimeline = timeline.filter(item => item.transparency !== 'transparent' && (item.allDay || qualifiedEventIsOccupied({...item,start:item.originalStart ?? item.start,end:item.originalEnd === undefined ? item.end : item.originalEnd})));
+  if (prepTimeline.length > 0 && actions.length < 6) {
+    const first = prepTimeline.find((t) => !t.allDay) ?? prepTimeline[0];
     actions.push({
       id: `prep:${first.title}`,
       kind: 'prep',
@@ -272,7 +374,9 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
 
   // 3 dinner ideas that fit the day (quick when today is busy, more involved on
   // the weekend). Drawn from the curated catalog passed in by the caller.
-  const dinnerIdeas = pickDinnerIdeas(dinnerCandidates, { now: localCalendarDate, busyCount: timeline.length });
+  // Opaque DATE annotations retain the established dinner estimate. Free
+  // annotations and zero-duration points do not make dinner a busy-night task.
+  const dinnerIdeas = pickDinnerIdeas(dinnerCandidates, { now: localCalendarDate, busyCount: today.filter(({event}) => event.transparency !== 'transparent' && (event.allDay || qualifiedEventIsOccupied(event))).length });
 
   return {
     now: now.toISOString(),

@@ -17,7 +17,7 @@ function wrapper(events: BriefEvent[], now: string, timezone = 'UTC') {
   return buildBrief({ kind: 'daily', now: new Date(now), events, snapshot: {}, completedRuns: [], activity: [] }, timezone);
 }
 const allDay = (title: string, day: string): BriefEvent => ({ ...event(title, day + 'T00:00:00.000Z'), end: null, allDay: true, location: null, recurring: true });
-const mixed = [allDay('School holiday', '2026-09-10'), event('Appointment', '2026-09-10T13:00:00Z')];
+const mixed = [allDay('School holiday', '2026-09-10'), event('Appointment', '2026-09-10T13:00:00Z', '2026-09-10T14:00:00Z')];
 const yesterday = [
   { ...event('Yesterday A', '2026-09-09T18:00:00Z', '2026-09-09T19:00:00Z'), recurring: true },
   { ...event('Yesterday B', '2026-09-09T18:30:00Z', '2026-09-09T19:30:00Z'), recurring: true },
@@ -105,7 +105,7 @@ describe('actual wrapper propagation of the calendar week', () => {
 
 describe('calendar-week scope preservation controls', () => {
   it('keeps all-day additions out of timed clashes, location/recurrence opportunities and minutes', () => {
-    const timed = [event('Timed', '2026-09-10T13:00:00Z')];
+    const timed = [event('Timed', '2026-09-10T13:00:00Z', '2026-09-10T14:00:00Z')];
     const baseline = inspect('timed model baseline', timed, '2026-09-10T16:00:00Z');
     const withAllDay = inspect('all-day model eligibility unchanged', [...timed, allDay('Holiday', '2026-09-10')], '2026-09-10T16:00:00Z');
     expect(withAllDay.conflicts).toEqual(baseline.conflicts);
@@ -123,6 +123,8 @@ describe('calendar-week scope preservation controls', () => {
   it('preserves point-event nonconflict semantics within the new date horizon', () => {
     const brief = inspect('explicit point unchanged', [event('Point', '2026-09-10T13:00:00Z'), event('Meeting', '2026-09-10T12:30:00Z', '2026-09-10T13:30:00Z')], '2026-09-10T12:00:00Z');
     expect(brief.weekCount).toBe(2); expect(brief.conflicts).toEqual([]);
+    const pointOnly = inspect('point-only workload', [event('Point', '2026-09-10T13:00:00Z')], '2026-09-10T12:00:00Z');
+    expect(pointOnly.todayCount).toBe(1); expect(pointOnly.timeSavedMinutes).toBe(0); expect(pointOnly.actions).toEqual([]);
   });
 });
 
