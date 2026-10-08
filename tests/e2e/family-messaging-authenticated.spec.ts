@@ -245,4 +245,221 @@ test.describe('authenticated private family messenger', () => {
       if (cleanupFailures.length) throw new Error('Messenger E2E could not fully clean up its owned local fixture.');
     }
   });
+  // Legacy-equivalent rows are seeded after migration installation. The separate
+  // SQL fixture proves pre-0475 upgrade preservation; this proves real JWT APIs.
+  test('legacy audiences survive reactivation and future membership beside a separate empty Family Chat', async ({ baseURL }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium', 'Owned multi-user SDK acceptance runs once.');
+    requireLocalOrigin(baseURL);
+    const provider = requireLocalOrigin(process.env.NEXT_PUBLIC_SUPABASE_URL);
+    if (process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.RESEND_API_KEY
+      || process.env.SENDGRID_API_KEY || process.env.TWILIO_ACCOUNT_SID) {
+      throw new Error('Messenger history E2E refuses external provider credentials.');
+    }
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+    const publicKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY ?? '';
+    const admin = localClient(provider, serviceKey);
+    const accounts: OwnedAccount[] = [], clients: Client[] = [];
+    const uploadedPaths: string[] = [];
+    try {
+      for (let index = 0; index < 4; index++) accounts.push(await createOwnedAccount(provider, serviceKey));
+      const [alice, bob, reactivated, future] = accounts;
+      const familyId = alice.familyId;
+      const memberIds: string[] = [];
+      for (const [index, account] of accounts.entries()) {
+        if (index < 3) {
+          const member = await admin.from('family_members').upsert({ family_id: familyId, user_id: account.userId,
+            display_name: `History member ${index}`, role: 'parent', is_active: index !== 2,
+          }, { onConflict: 'family_id,user_id' }).select('id').single();
+          expect(!member.error && !!member.data, 'Owned history membership is installed').toBe(true);
+          memberIds.push(member.data!.id);
+        }
+        const client = localClient(provider, publicKey);
+        clients.push(client);
+        const auth = await client.auth.signInWithPassword({ email: account.email, password: account.password });
+        expect(!auth.error && auth.data.user?.id === account.userId, 'History client owns its authenticated identity').toBe(true);
+      }
+      const [a, b, c, d] = clients;
+      const ids: string[] = Array.from({ length: 5 }, () => randomUUID());
+      const [ab, abc, named, creatorOnly, union] = ids;
+      const legacy = [
+        { id: ab, name: 'Private AB', participant_ids: memberIds.slice(0, 2), member_ids: [alice.userId, bob.userId], is_archived: false },
+        { id: abc, name: 'Explicitly invited ABC', participant_ids: memberIds, member_ids: [alice.userId, bob.userId, reactivated.userId], is_archived: false },
+        { id: named, name: 'Family Chat', participant_ids: memberIds.slice(0, 2), member_ids: [alice.userId, bob.userId], is_archived: false },
+        { id: creatorOnly, name: 'Family Chat', participant_ids: [], member_ids: [], is_archived: false },
+        { id: union, name: 'Recorded audience union', participant_ids: memberIds.slice(0, 2), member_ids: [alice.userId, reactivated.userId], is_archived: false },
+      ];
+      const seeded = await admin.from('family_conversations').insert(legacy.map(row => ({ ...row,
+        family_id: familyId, created_by: alice.userId, kind: 'group',
+      })));
+      expect(!seeded.error, 'Legacy-equivalent conversations are fixture setup only').toBe(true);
+      // Full local replay installs 0459's private bucket. These byte controls
+      // do not claim confidentiality for production's retained public bucket.
+      const attachmentPath = `${familyId}/messages/${abc}/${alice.userId}/${randomUUID()}.txt`;
+      uploadedPaths.push(attachmentPath);
+      const attachmentBytes = 'Owned explicitly invited legacy attachment';
+      const uploaded = await a.storage.from('family-media').upload(attachmentPath, Buffer.from(attachmentBytes), { contentType: 'text/plain' });
+      expect(!uploaded.error && uploaded.data?.path === attachmentPath, 'Original participant uploads genuine owned attachment bytes').toBe(true);
+      const messages = ids.map((id, index) => ({ id: randomUUID(), family_id: familyId, conversation_id: id,
+        sender_id: alice.userId, sender_name: 'History owner', content: `Owned legacy history ${index}`, kind: 'text',
+        attachment_url: id === abc ? attachmentPath : null,
+      }));
+      expect(!(await admin.from('family_messages').insert(messages)).error, 'Owned legacy history is seeded').toBe(true);
+      expect(!(await admin.from('family_conversations').update({ is_archived: true }).eq('id', named).eq('family_id', familyId)).error,
+        'Fixture archives its named legacy group after seeding its history').toBe(true);
+      const snapshot = async () => {
+        const conversations = await admin.from('family_conversations').select('*').in('id', ids).order('id');
+        const history = await admin.from('family_messages').select('*').in('id', messages.map(row => row.id)).order('id');
+        expect(!conversations.error && !history.error, 'Owned immutable snapshot succeeds').toBe(true);
+        expect(conversations.data).toHaveLength(ids.length);
+        expect(history.data).toHaveLength(messages.length);
+        return { conversations: conversations.data!, history: history.data };
+      };
+      const original = await snapshot();
+      expect(original.conversations.every(row => row.is_family_chat === false), 'Every seeded legacy group retains the noncanonical database default').toBe(true);
+      const assertHistory = async (client: Client, allowed: string[]) => {
+        const rows = await client.from('family_messages').select('id,conversation_id,content,sender_id')
+          .eq('family_id', familyId).in('conversation_id', ids).order('id');
+        expect(!rows.error, 'Authenticated legacy history query succeeds').toBe(true);
+        const expected = messages.filter(row => allowed.includes(row.conversation_id)).map(row => ({
+          id: row.id, conversation_id: row.conversation_id, content: row.content, sender_id: row.sender_id,
+        })).sort((left, right) => left.id.localeCompare(right.id));
+        expect(rows.data, 'Exact original messages are visible only to their recorded audience').toEqual(expected);
+        const overview = await client.rpc('family_conversation_overview', { p_family_id: familyId });
+        // An inactive/non-household caller can be explicitly refused. Active
+        // callers must have a healthy overview, not an error mistaken for denial.
+        if (allowed.length) {
+          expect(!overview.error, 'Authorized history overview succeeds').toBe(true);
+          expect(overview.data!.filter(row => ids.includes(row.conversation_id)).map(row => row.conversation_id).sort()).toEqual([...allowed].sort());
+        } else if (!overview.error) {
+          expect(overview.data!.filter(row => ids.includes(row.conversation_id))).toEqual([]);
+        }
+      };
+      await assertHistory(a, ids);
+      await assertHistory(b, [ab, abc, named, union]);
+      await assertHistory(c, []);
+      await assertHistory(d, []);
+      const assertAttachmentDenied = async (client: Client) => {
+        const signed = await client.storage.from('family-media').createSignedUrl(attachmentPath, 30);
+        expect(!!signed.error && !signed.data, 'Uninvited or inactive member cannot sign old private media').toBe(true);
+        const downloaded = await client.storage.from('family-media').download(attachmentPath);
+        expect(!!downloaded.error && !downloaded.data, 'Uninvited or inactive member cannot download old private bytes').toBe(true);
+      };
+      await assertAttachmentDenied(c);
+      await assertAttachmentDenied(d);
+      const ownFamily = await d.from('family_members').select('id').eq('family_id', future.familyId).eq('user_id', future.userId);
+      expect(!ownFamily.error && ownFamily.data?.length === 1, 'Future member already has healthy real Auth and its own household').toBe(true);
+
+      const canonical = await a.rpc('ensure_family_conversation', { p_family_id: familyId });
+      expect(!canonical.error && !!canonical.data && !ids.includes(canonical.data), 'Canonical RPC creates a separate identity').toBe(true);
+      const canonicalId = canonical.data!;
+      const canonicalRow = await a.from('family_conversations').select('id,is_family_chat').eq('id', canonicalId).single();
+      expect(!canonicalRow.error && canonicalRow.data?.is_family_chat === true, 'Fresh canonical identity is explicitly family-wide').toBe(true);
+      for (const client of [a, b]) {
+        const empty = await client.from('family_messages').select('id').eq('conversation_id', canonicalId);
+        expect(!empty.error && empty.data?.length === 0, 'New canonical history is empty before any family-wide write').toBe(true);
+      }
+      const initialSentinelId = randomUUID();
+      const initialSentinel = { id: initialSentinelId, content: 'Owned canonical history before new memberships' };
+      const initialWrite = await a.from('family_messages').insert({ ...initialSentinel, family_id: familyId,
+        conversation_id: canonicalId, sender_id: alice.userId, kind: 'text',
+      }).select('id').single();
+      expect(!initialWrite.error && initialWrite.data?.id === initialSentinelId, 'Canonical history is intentionally family-wide before membership changes').toBe(true);
+
+      expect(!(await admin.from('family_members').update({ is_active: true }).eq('id', memberIds[2]).eq('family_id', familyId)).error,
+        'Fixture reactivates the original inactive household member').toBe(true);
+      await assertHistory(c, [abc, union]);
+      const invitedAttachment = await c.storage.from('family-media').download(attachmentPath);
+      expect(!invitedAttachment.error && await invitedAttachment.data?.text() === attachmentBytes,
+        'Reactivated explicitly invited member regains actual old attachment bytes').toBe(true);
+      const added = await admin.from('family_members').insert({ family_id: familyId, user_id: future.userId,
+        display_name: 'Future history member', role: 'parent', is_active: true,
+      }).select('id').single();
+      expect(!added.error && !!added.data, 'Fixture adds the first future household membership').toBe(true);
+      await assertHistory(d, []);
+      await assertAttachmentDenied(d);
+      const futureOverview = await d.rpc('family_conversation_overview', { p_family_id: familyId });
+      expect(!futureOverview.error && !futureOverview.data?.some(row => ids.includes(row.conversation_id)),
+        'Active same-family parent has a healthy overview without legacy groups').toBe(true);
+      expect(await snapshot(), 'Reactivation and future membership do not rewrite legacy rows').toEqual(original);
+
+      const invitedTopic = c.channel(`messages:${abc}`, { config: { private: true } }).on('broadcast', { event: 'typing' }, () => {});
+      expect(await join(invitedTopic), 'Reactivated explicitly invited participant can join its old private topic').toBe('SUBSCRIBED');
+      for (const client of [c, d]) {
+        const deniedTopic = client.channel(`messages:${ab}`, { config: { private: true } }).on('broadcast', { event: 'typing' }, () => {});
+        expect(await join(deniedTopic), 'Active household membership cannot grant the old private AB topic').toBe('CHANNEL_ERROR');
+        await client.removeChannel(deniedTopic);
+      }
+      const delivered: Array<{ id: string; conversation_id: string }> = [];
+      const changes = d.channel(`history-family:${randomUUID()}`).on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'family_messages', filter: `family_id=eq.${familyId}`,
+      }, payload => { delivered.push(payload.new as { id: string; conversation_id: string }); });
+      expect(await join(changes), 'Future member has a subscribed authenticated history stream').toBe('SUBSCRIBED');
+      for (const client of clients) {
+        const repeated = await client.rpc('ensure_family_conversation', { p_family_id: familyId });
+        expect(!repeated.error && repeated.data === canonicalId, 'Every active member gets the same canonical identity').toBe(true);
+        const canonicalHistory = await client.from('family_messages').select('id,content').eq('conversation_id', canonicalId);
+        expect(!canonicalHistory.error, 'Active members can read intentional canonical history').toBe(true);
+        expect(canonicalHistory.data, 'Reactivated and future members inherit canonical history only').toEqual([initialSentinel]);
+      }
+      const privateId = randomUUID(), sentinelId = randomUUID();
+      const privateWrite = await a.from('family_messages').insert({ id: privateId, family_id: familyId,
+        conversation_id: ab, sender_id: alice.userId, content: 'Owned later private AB message', kind: 'text',
+      }).select('id').single();
+      expect(!privateWrite.error && privateWrite.data?.id === privateId, 'Original participant can still write its private group').toBe(true);
+      const privateRead = await b.from('family_messages').select('id').eq('id', privateId).single();
+      expect(!privateRead.error && privateRead.data?.id === privateId, 'Original invited participant retains healthy private access').toBe(true);
+      const familyWrite = await a.from('family_messages').insert({ id: sentinelId, family_id: familyId,
+        conversation_id: canonicalId, sender_id: alice.userId, content: 'Owned new family-wide sentinel', kind: 'text',
+      }).select('id').single();
+      expect(!familyWrite.error && familyWrite.data?.id === sentinelId, 'Authenticated owner writes the new family-wide message').toBe(true);
+      await expect.poll(() => delivered.some(row => row.id === sentinelId), { timeout: 20_000 }).toBe(true);
+      expect(delivered.some(row => row.id === privateId || ids.includes(row.conversation_id)),
+        'A later same-socket family delivery does not disclose earlier private history').toBe(false);
+      for (const client of clients) {
+        const visible = await client.from('family_messages').select('id,content').eq('conversation_id', canonicalId).order('id');
+        expect(!visible.error, 'Active household member reads new canonical history').toBe(true);
+        expect(visible.data).toEqual([initialSentinel, { id: sentinelId, content: 'Owned new family-wide sentinel' }]
+          .sort((left, right) => left.id.localeCompare(right.id)));
+      }
+      for (const client of [c, d]) {
+        const forbidden = await client.from('family_messages').select('id').eq('id', privateId);
+        expect(!forbidden.error && forbidden.data?.length === 0, 'Canonical access does not widen private history').toBe(true);
+      }
+      for (const patch of [{ participant_ids: [...memberIds, added.data!.id] }, { member_ids: [alice.userId, bob.userId, future.userId] },
+        { created_by: bob.userId }, { family_id: bob.familyId }, { is_family_chat: true }]) {
+        // Deliberately exercise forbidden wire fields beyond the application's
+        // permitted Update DTO; the real server must reject the actual request.
+        const changed = await a.from('family_conversations')
+          .update(patch as Database['public']['Tables']['family_conversations']['Update']).eq('id', ab).select('id');
+        expect(!!changed.error, 'Authenticated caller cannot rewrite an existing conversation audience or identity').toBe(true);
+      }
+      const finalSnapshot = await snapshot();
+      const originalAB = original.conversations.find(row => row.id === ab)!;
+      const finalAB = finalSnapshot.conversations.find(row => row.id === ab)!;
+      for (const field of ['last_message_at', 'updated_at'] as const) {
+        expect(Number.isFinite(Date.parse(finalAB[field]!)), 'Authorized send has a valid activity timestamp').toBe(true);
+        expect(Date.parse(finalAB[field]!)).toBeGreaterThanOrEqual(Date.parse(originalAB[field]!));
+      }
+      // Only AB received the deliberate later private write. Every other row,
+      // including its activity timestamps, must remain byte-for-byte unchanged.
+      expect({ ...finalSnapshot, conversations: finalSnapshot.conversations.map(row => row.id === ab
+        ? { ...row, last_message_at: originalAB.last_message_at, updated_at: originalAB.updated_at } : row) },
+      'Legacy identity, audience, archived state and every original message remain unchanged').toEqual(original);
+      const finalCanonical = await a.rpc('ensure_family_conversation', { p_family_id: familyId });
+      expect(!finalCanonical.error && finalCanonical.data === canonicalId, 'Canonical identity remains stable after messaging').toBe(true);
+    } finally {
+      const cleanupFailures: boolean[] = [];
+      for (const client of clients) {
+        try { await client.removeAllChannels(); await client.auth.signOut({ scope: 'local' }); } catch { cleanupFailures.push(true); }
+      }
+      if (uploadedPaths.length) {
+        try {
+          const removed = await admin.storage.from('family-media').remove(uploadedPaths);
+          if (removed.error || removed.data?.length !== uploadedPaths.length) cleanupFailures.push(true);
+        } catch { cleanupFailures.push(true); }
+      }
+      for (const account of accounts) { try { await account.dispose(); } catch { cleanupFailures.push(true); } }
+      if (cleanupFailures.length) throw new Error('Messenger history E2E could not fully clean up its owned local fixture.');
+    }
+  });
 });

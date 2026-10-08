@@ -70,7 +70,7 @@ export function ContextRail({ glance, upcoming, activity, prompts, loading = fal
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold">{e.title}</p>
                     <p className="text-xs text-muted">
-                      {fmtDate(d, 'EEE, MMM d')}
+                      {fmtDate(e.all_day ? e.starts_at.slice(0, 10) : d, 'EEE, MMM d')}
                       {!e.all_day && ` · ${fmtTime(d)}`}
                     </p>
                   </div>

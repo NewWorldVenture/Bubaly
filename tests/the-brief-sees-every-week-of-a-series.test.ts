@@ -171,7 +171,9 @@ describe('the four surfaces read through the shared occurrences read', () => {
     'lib/briefing/deliver.ts',
   ])('%s no longer reads calendar_events by its first start alone', (file) => {
     const src = readFileSync(join(ROOT, file), 'utf8');
-    expect(src).toContain(['app/api/ai/briefing/route.ts', 'lib/briefing/deliver.ts'].includes(file) ? 'readDisplayCalendarOccurrences(' : 'readCalendarOccurrences(');
+    const reader = file === 'app/api/cron/weekly-digest/route.ts' ? 'readCompleteCalendarOccurrences('
+      : ['app/api/ai/briefing/route.ts', 'lib/briefing/deliver.ts'].includes(file) ? 'readDisplayCalendarOccurrences(' : 'readCalendarOccurrences(';
+    expect(src).toContain(reader);
     expect(src, 'a bare calendar_events read by starts_at crept back').not.toMatch(/from\('calendar_events'\)/);
   });
 });

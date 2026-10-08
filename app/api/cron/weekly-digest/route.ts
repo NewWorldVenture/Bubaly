@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
-import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { readCompleteCalendarOccurrences } from '@/lib/services/calendar/search-occurrences';
+import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from '@/lib/calendar/source-capability';
 import { dayKeyInZone } from '@/lib/schedule/zoned';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
@@ -105,9 +106,25 @@ export async function GET(req: NextRequest) {
     // the definition table — it carries neither `status` nor `assignee_id`, so
     // reading those from it errors and skipped every family's digest. Counts,
     // not rows: only the totals are rendered.
-    const [{ data: events, error: eventsError }, { count: openChores, error: choresError }, { count: mealsPlanned, error: mealsError }, { data: members, error: membersError }] = await settleAll([
-      // Series included: the digest's week has every week of a weekly event (lib/calendar/occurrences.ts).
-      readCalendarOccurrences(supabase, family.id, instantCalendarBounds(weekStart, weekEnd, tz), tz, { columns: ['title', 'starts_at'], limit: 10 }),
+    const [{ data: events, count: eventCount, error: eventsError }, { count: openChores, error: choresError }, { count: mealsPlanned, error: mealsError }, { data: members, error: membersError }] = await settleAll([
+      // Qualify the entire native domain before the existing ten-row detail
+      // cap. Source adoption remains a separate, held consumer boundary.
+      (async () => {
+        const unavailable = (message: string) => ({ data: null, count: null, error: { message } });
+        if (CALENDAR_SOURCE_ARCHIVE_ENABLED) return unavailable('Weekly digest imported-source calendars are not supported yet.');
+        const result = await readCompleteCalendarOccurrences({ db: supabase, familyId: family.id, tz, userId: null, memberId: null, role: 'system', actorKind: 'system' }, { from: weekStart, to: weekEnd });
+        if (!result.ok) return unavailable(result.error);
+        const native = result.data.occurrences.filter(row => row.kind === 'native');
+        if (native.length !== result.data.occurrences.length) return unavailable('Weekly digest requires a native calendar domain.');
+        const bounds = instantCalendarBounds(weekStart, weekEnd, tz);
+        // Preserve this digest's upcoming-start selection. Qualification also
+        // covers ongoing rows, without adding them to the existing list.
+        const upcoming = native.filter(row => row.all_day
+          ? row.startDate! >= bounds.allDayFromDay && row.startDate! < bounds.allDayToDay
+          : Date.parse(row.starts_at) >= Date.parse(bounds.timedFrom) && Date.parse(row.starts_at) < Date.parse(bounds.timedTo))
+          .sort((a, b) => a.starts_at.localeCompare(b.starts_at) || a.event.id.localeCompare(b.event.id));
+        return { data: upcoming.slice(0, 10), count: upcoming.length, error: null };
+      })(),
       supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
         .eq('family_id', family.id).in('status', ['todo', 'in_progress']),
       supabase.from('meal_plans').select('id', { count: 'exact', head: true })
@@ -163,7 +180,8 @@ export async function GET(req: NextRequest) {
       react: React.createElement(WeeklyDigestEmail, {
         familyName: family.name,
         adminName: adminMember.display_name,
-        events: (events ?? []).map((e) => ({ title: e.title, date: dayIn(e.starts_at) })),
+        events: (events ?? []).map((e) => ({ title: e.event.title, date: e.all_day ? e.startDate! : dayIn(e.starts_at) })),
+        eventCount: eventCount ?? 0,
         openChores: openChores ?? 0,
         mealsPlanned: mealsPlanned ?? 0,
         memberCount: members?.length ?? 0,
