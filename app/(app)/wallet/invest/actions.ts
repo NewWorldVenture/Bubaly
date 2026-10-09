@@ -81,12 +81,21 @@ export async function placeInvestOrderAction(input: { childWalletId: string; ass
 
   const supabase = await createServer();
   const [{ data: cw, error: walletError }, { data: asset, error: assetError }] = await settleAll([
-    supabase.from('child_wallets').select('id').eq('id', input.childWalletId).eq('family_id', familyId).maybeSingle(),
+    supabase.from('child_wallets').select('id, member_id').eq('id', input.childWalletId).eq('family_id', familyId).maybeSingle(),
     supabase.from('invest_assets').select('id, price_cents, is_active').eq('id', input.assetId).maybeSingle(),
   ]);
   if (walletError) return actionFailure('load the child wallet', tr('invest.couldNotLoadTheChildWallet'), walletError);
   if (assetError) return actionFailure('load the investment', t('invest.couldNotLoadTheInvestment'), assetError);
   if (!cw) return { ok: false, error: tr('actions.childWalletNotFound') };
+  // A child orders on their OWN wallet; a manager may order on any child's.
+  // The read above is family-scoped, which stops a stranger, not a sibling, and
+  // `invest_orders` takes an insert from any member (0220). The approval queue
+  // names the wallet's owner, so a sister's "sell" on her brother's shares read
+  // to the parent as him asking. Same rule as requestAllowanceAction and both
+  // redemption actions; a caregiver or guest owns no wallet and orders on none.
+  if (cw.member_id !== ctx.active.member.id && !isManager(ctx.active.role)) {
+    return { ok: false, error: tr('actions.notAuthorized') };
+  }
   if (!asset || !asset.is_active) return { ok: false, error: tr('actions.thatInvestmentIsNotAvailable') };
 
   const amount = orderAmountCents(shares, asset.price_cents);

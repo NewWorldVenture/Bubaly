@@ -90,7 +90,9 @@ beforeEach(() => {
   db = createInMemorySupabase({ rpc: { invest_decide_order: completeDecision } });
   vi.spyOn(db, 'rpc');
   mocks.createServer.mockResolvedValue(db);
-  db.seed('child_wallets', [{ id: WALLET, family_id: FAMILY }]);
+  // The caller's own wallet: a child orders only on their own (a sibling's is
+  // tests/a-child-invests-only-their-own-money.test.ts).
+  db.seed('child_wallets', [{ id: WALLET, family_id: FAMILY, member_id: 'member-child' }]);
   db.seed('invest_assets', [{ id: ASSET, price_cents: 500, is_active: true }]);
   db.seed('wallet_buckets', [{ id: BUCKET, family_id: FAMILY, child_wallet_id: WALLET, kind: 'invest' }]);
   db.seed('wallet_transactions', [

@@ -22,7 +22,8 @@ import { placeInvestOrderAction, decideInvestOrderAction } from '@/app/(app)/wal
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 export type InvestAsset = { id: string; symbol: string; name: string; kind: string; emoji: string; description: string | null; priceCents: number; riskLevel: string };
-export type InvestChild = { id: string; name: string; color: string | null; investCashCents: number };
+/** `canTrade`: the viewer may place orders on this wallet (a manager, or the child it belongs to). */
+export type InvestChild = { id: string; name: string; color: string | null; investCashCents: number; canTrade: boolean };
 export type Holding = { childWalletId: string; assetId: string; shares: number; avgCostCents: number };
 export type PendingOrder = { id: string; childName: string; assetEmoji: string; assetName: string; side: 'buy' | 'sell'; shares: number; amountCents: number };
 
@@ -180,22 +181,29 @@ function ChildInvest({ child, assets, assetById, prices, holdings, busy, onTrade
         </div>
       )}
 
-      {/* Trade panel */}
+      {/* Trade panel. Ordering is offered only where the viewer may order: on a
+          sibling's card a child can still pick an investment and ask Explain. */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex overflow-hidden rounded-lg border border-border">
-          {(['buy', 'sell'] as const).map((s) => (
-            <button key={s} type="button" onClick={() => setSide(s)}
-              className={`px-3 py-1.5 text-xs font-medium ${side === s ? (s === 'buy' ? 'bg-success/15 text-success' : 'bg-danger/15 text-danger') : 'text-muted'}`}>
-              {s === 'buy' ? 'Buy' : 'Sell'}
-            </button>
-          ))}
-        </div>
+        {child.canTrade && (
+          <div className="flex overflow-hidden rounded-lg border border-border">
+            {(['buy', 'sell'] as const).map((s) => (
+              <button key={s} type="button" onClick={() => setSide(s)}
+                className={`px-3 py-1.5 text-xs font-medium ${side === s ? (s === 'buy' ? 'bg-success/15 text-success' : 'bg-danger/15 text-danger') : 'text-muted'}`}>
+                {s === 'buy' ? 'Buy' : 'Sell'}
+              </button>
+            ))}
+          </div>
+        )}
         <select aria-label={tr('fieldName.investment')} value={assetId} onChange={(e) => setAssetId(e.target.value)} className="h-9 rounded-lg border border-border bg-bg px-2 text-sm focus-ring">
           {assets.map((a) => <option key={a.id} value={a.id}>{a.emoji} {a.name} — {formatCents(a.priceCents)}</option>)}
         </select>
-        <input type="number" inputMode="decimal" min="0" step="0.01" value={sharesStr} onChange={(e) => setSharesStr(e.target.value)} placeholder={tr('invest.shares')} className="h-9 w-24 rounded-lg border border-border bg-bg px-2 text-sm focus-ring" />
-        {estCost > 0 && <span className="text-xs text-muted">≈ {formatCents(estCost)}</span>}
-        <Button onClick={trade} loading={busy === `trade-${child.id}`} disabled={!assetId || shares <= 0}>{tr('invest.request')}</Button>
+        {child.canTrade && (
+          <>
+            <input type="number" inputMode="decimal" min="0" step="0.01" value={sharesStr} onChange={(e) => setSharesStr(e.target.value)} placeholder={tr('invest.shares')} className="h-9 w-24 rounded-lg border border-border bg-bg px-2 text-sm focus-ring" />
+            {estCost > 0 && <span className="text-xs text-muted">≈ {formatCents(estCost)}</span>}
+            <Button onClick={trade} loading={busy === `trade-${child.id}`} disabled={!assetId || shares <= 0}>{tr('invest.request')}</Button>
+          </>
+        )}
         <button type="button" onClick={explain} disabled={explaining}
           className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-brand-text hover:bg-elevated disabled:opacity-60">
           {explaining ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} {tr('invest.explain')}
