@@ -18,7 +18,7 @@
 // client (RLS-scoped server client for user actions, service client for cron).
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { parseICS, UnsupportedIcsRecurrenceError } from '@/lib/sync/ics';
+import { parseICS, UnsupportedIcsRecurrenceError, type IcsEvent } from '@/lib/sync/ics';
 import { assertFeedRecurrenceAdmission, planFeedRows, seriesKeys, type FeedEventRow } from '@/lib/calendar/feeds';
 import { fetchPublicCalendarText } from '@/lib/server/public-calendar-fetch';
 import { wroteNoRows } from '@/lib/supabase/errors';
@@ -105,16 +105,18 @@ export function resetApplySyncWarningForTests(): void { warnedMissingApply = fal
 /**
  * True only for the database's answer that the function `name` itself does not
  * exist: PGRST202 (schema cache) or 42883 (Postgres), naming `name` — bare or
- * `public.`-qualified — in the message, details or hint. A 42883 about another
+ * `public.`-qualified — in the message or details. Not the hint: PostgREST's
+ * is "Perhaps you meant …", a near match, so a 0490 applied with another
+ * signature fails instead of falling back. A 42883 about another
  * function (a helper the RPC calls), a permission error, a network failure or
  * a constraint is the failure it is, never a missing migration.
  */
 export function isMissingNamedFunction(error: unknown, name: string): boolean {
   if (!error || typeof error !== 'object') return false;
-  const { code, message, details, hint } = error as { code?: unknown; message?: unknown; details?: unknown; hint?: unknown };
+  const { code, message, details } = error as { code?: unknown; message?: unknown; details?: unknown };
   if (code !== 'PGRST202' && code !== '42883') return false;
   const named = new RegExp(`(?:^|[^A-Za-z0-9_.]|(?<![A-Za-z0-9_])public\\.)${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z0-9_])`);
-  return [message, details, hint].some((text) => typeof text === 'string' && named.test(text));
+  return [message, details].some((text) => typeof text === 'string' && named.test(text));
 }
 
 /**
@@ -255,11 +257,13 @@ async function runSync(
     return { ok: true, imported: 0, sourceGroups: documents.length };
   }
 
+  let events: IcsEvent[];
   let rows;
   let cancelled: string[];
   let cancelledSeries: string[];
   try {
-    ({ rows, cancelled, cancelledSeries } = planFeedRows(parseICS(icsText, { bareCancellations: true, validateEvent: assertFeedRecurrenceAdmission }), feed.family_id, feed.id));
+    events = parseICS(icsText, { bareCancellations: true, validateEvent: assertFeedRecurrenceAdmission });
+    ({ rows, cancelled, cancelledSeries } = planFeedRows(events, feed.family_id, feed.id));
   } catch (error) {
     return failWith(error instanceof UnsupportedIcsRecurrenceError ? error.message : 'Could not parse the calendar');
   }
@@ -294,7 +298,7 @@ async function runSync(
   //
   // Without 0490 nothing is removed, as before it (`legacyApplyChunk`): a
   // delete the fence cannot hold to its snapshot could take what a newer sync
-  // had just written. A cancelled event is still not written as a live one.
+  // had just written.
   const removals = guard.legacy() ? [] : [...cancelled];
   if (cancelledSeries.length && !guard.legacy()) {
     const keysQuery = () => supabase.from('calendar_events')
@@ -314,6 +318,31 @@ async function runSync(
     if (applied !== 'applied') {
       console.error(`Calendar feed cancellation removal failed for ${feed.id}:`, applied.failed);
       return failWith('Could not remove cancelled events');
+    }
+  }
+
+  // Without 0490, a cancelled event that carries a start is written like any
+  // other, as production did before it: its buildFeedRows never read STATUS
+  // (and a bare cancellation, with no start, was never parsed), so planning
+  // the snapshot with STATUS ignored gives what it wrote, on today's keys.
+  // Only what the feed admits as a live event: a cancelled timed series passed
+  // admission because it was a removal, and is not written as a live series.
+  // Known only once a chunk has asked for the function, so a snapshot of
+  // nothing but cancellations this feed never stored asks nothing and writes
+  // nothing — the with-0490 path makes no call there either.
+  if (guard.legacy()) {
+    const written = new Set(rows.map((r) => r.external_uid));
+    const asBefore = planFeedRows(events.map((ev) => ({ ...ev, status: undefined })).filter(admitted), feed.family_id, feed.id)
+      .rows.filter((r) => !written.has(r.external_uid));
+    for (let i = 0; i < asBefore.length; i += 200) {
+      const chunk = asBefore.slice(i, i + 200);
+      const applied = await guard.apply(chunk, []);
+      if (applied === 'lost') return guard.lost();
+      if (applied !== 'applied') {
+        console.error(`Calendar feed event upsert failed for ${feed.id}:`, applied.failed);
+        return failWith('Could not save calendar events');
+      }
+      imported += chunk.length;
     }
   }
 
@@ -363,6 +392,11 @@ async function archiveSources(
   return data.outcome;
 }
 
+/** Whether the feed admits `event` as written (`assertFeedRecurrenceAdmission`). */
+function admitted(event: IcsEvent): boolean {
+  try { assertFeedRecurrenceAdmission(event); return true; } catch { return false; }
+}
+
 /**
  * Writes under the database's locked feed claim. Where 0490's function is
  * missing — that exact answer, naming it, and nothing else — falls back for
@@ -386,7 +420,7 @@ async function applyChunk(
 
   if (!warnedMissingApply) {
     warnedMissingApply = true;
-    console.warn(`Calendar feed sync is writing events without ${APPLY_SYNC_FUNCTION} until migration ${APPLY_SYNC_MIGRATION} is applied: chunks are fenced by a read, not atomically, and cancelled events are not removed`);
+    console.warn(`Calendar feed sync is writing events without ${APPLY_SYNC_FUNCTION} until migration ${APPLY_SYNC_MIGRATION} is applied: chunks are fenced by a read, not atomically, and cancelled events are not removed but written as before it`);
   }
   mode.legacy = true;
   return legacyApplyChunk(supabase, feedId, fence, upserts);
@@ -394,10 +428,11 @@ async function applyChunk(
 
 /**
  * The writes production made before 0490: upsert on (feed_id, external_uid),
- * the conflict target 0285 makes inferable, and no removals — cancelled events
- * are left as they stand. The claim is checked by reading the feed row before
- * each chunk, so a sync that has visibly lost its claim stops writing; the
- * read and the write are not one transaction, and only 0490 closes that.
+ * the conflict target 0285 makes inferable, and no removals — a cancelled
+ * event is upserted like any other (runSync). The claim is checked by reading
+ * the feed row before each chunk, so a sync that has visibly lost its claim
+ * stops writing; the read and the write are not one transaction, and only
+ * 0490 closes that.
  */
 async function legacyApplyChunk(
   supabase: SupabaseClient,
