@@ -13,9 +13,19 @@ export const STALE = 'prior-synthetic-cursor';
 export const CANCELLED_INSTANCE = { id: 'deleted', status: 'cancelled', recurringEventId: 'series',
   originalStartTime: { dateTime: '2026-06-21T09:00:00Z' } };
 
+// 'missing' = neither 0494 RPC exists; 'container'/'item' = only that one is
+// missing. Each answers exactly as PostgREST does for an absent function. The
+// '-unnamed', '-helper' and '-denied' variants are other failures that must not
+// be read as an absent RPC.
+export type SyncRpcFailure = 'missing' | 'container' | 'item' | 'mapping' | 'lock'
+  | 'container-unnamed' | 'container-denied' | 'item-unnamed' | 'item-helper';
+export const missingRpc = (name: string) => ({ code: 'PGRST202', details: 'Searched for the function public.' + name
+  + ' with parameters p_account, p_family, p_user in the schema cache, but no matches were found.', hint: null,
+  message: `Could not find the function public.${name}(p_account, p_family, p_user) in the schema cache` });
+
 export function syncSdkFixture(events: GEvent[], options: {
   failedDelete?: boolean; zeroDelete?: boolean; direction?: string; alreadyDeleted?: boolean;
-  rpcFailure?: 'container' | 'item' | 'mapping' | 'lock'; malformedReceipt?: boolean; uncertainReceipt?: boolean; racedFields?: Row;
+  rpcFailure?: SyncRpcFailure; rawMappingFailure?: boolean; malformedReceipt?: boolean; uncertainReceipt?: boolean; racedFields?: Row;
   tasks?: GTask[]; zeroLiveWrite?: boolean; moveBeforeLiveWrite?: boolean;
   moveMappingBeforeWrite?: boolean; zeroPushWrite?: boolean;
 } = {}) {
@@ -76,7 +86,9 @@ export function syncSdkFixture(events: GEvent[], options: {
       throw new Error(`Unexpected synthetic request: ${url.origin}${url.pathname}`);
     }
     if (url.pathname === '/rest/v1/rpc/ensure_sync_pull_container') {
-      if (options.rpcFailure === 'container') return json({ code: 'PGRST202', message: 'Synthetic RPC absent' }, 404);
+      if (options.rpcFailure === 'missing' || options.rpcFailure === 'container') return json(missingRpc('ensure_sync_pull_container'), 404);
+      if (options.rpcFailure === 'container-unnamed') return json({ code: 'PGRST202', message: 'Synthetic RPC absent' }, 404);
+      if (options.rpcFailure === 'container-denied') return json({ code: '42501', message: 'permission denied for function ensure_sync_pull_container' }, 403);
       if (!body || body.p_account !== ACCOUNT.id || body.p_family !== ACCOUNT.family_id || body.p_user !== ACCOUNT.user_id) throw new Error('Synthetic container identity mismatch');
       const table = body.p_kind === 'event' ? 'sync_calendars' : 'sync_reminder_lists';
       const matching = rows[table].filter(row => row.account_id === body.p_account && row.provider === body.p_provider && row.external_id === body.p_external);
@@ -89,8 +101,10 @@ export function syncSdkFixture(events: GEvent[], options: {
     }
     if (url.pathname === '/rest/v1/rpc/create_sync_pull_item') {
       if (!body || body.p_account !== ACCOUNT.id || body.p_family !== ACCOUNT.family_id || body.p_user !== ACCOUNT.user_id) throw new Error('Synthetic item identity mismatch');
-      if (options.rpcFailure) return json({ code: options.rpcFailure === 'item' ? 'PGRST202'
-        : options.rpcFailure === 'lock' ? '55P03' : '42501', message: 'Synthetic item transaction refused' }, options.rpcFailure === 'item' ? 404 : 403);
+      if (options.rpcFailure === 'missing' || options.rpcFailure === 'item') return json(missingRpc('create_sync_pull_item'), 404);
+      if (options.rpcFailure === 'item-helper') return json({ code: '42883', message: 'function sync_pull_private.admit_account(uuid, uuid, uuid, sync_provider, boolean) does not exist' }, 404);
+      if (options.rpcFailure && options.rpcFailure !== 'container') return json({ code: options.rpcFailure === 'item-unnamed' ? 'PGRST202'
+        : options.rpcFailure === 'lock' ? '55P03' : '42501', message: 'Synthetic item transaction refused' }, options.rpcFailure === 'item-unnamed' ? 404 : 403);
       const table = body.p_kind === 'event' ? 'sync_calendar_events' : 'sync_reminders';
       let mapping = rows.sync_external_mappings.find(row => row.account_id === body.p_account && row.provider === body.p_provider && row.item_type === body.p_kind && row.external_id === body.p_external);
       const created = !mapping && !options.racedFields;
@@ -132,7 +146,7 @@ export function syncSdkFixture(events: GEvent[], options: {
       result.forEach(row => Object.assign(row, body));
     } else if (method === 'POST') {
       if (!body) throw new Error('Synthetic insert body missing');
-      if (table === 'sync_external_mappings' && options.rpcFailure === 'mapping') return json({ code: '42501', message: 'Synthetic mapping refused' }, 403);
+      if (table === 'sync_external_mappings' && (options.rpcFailure === 'mapping' || options.rawMappingFailure)) return json({ code: '42501', message: 'Synthetic mapping refused' }, 403);
       result = [{ id: `${table}-${tableRows.length}`, ...body }];
       tableRows.push(...result);
     } else if (method === 'DELETE') {

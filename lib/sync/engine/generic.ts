@@ -18,7 +18,7 @@ import type { SyncProviderAdapter } from '@/lib/sync/adapter';
 import { SyncApiError } from '@/lib/sync/adapter';
 import { detectConflict } from '@/lib/sync/conflict';
 import { getProviderAccessToken } from '@/lib/sync/access-token';
-import { createSyncPullItem, ensureSyncPullContainer, requireSyncWrite } from '@/lib/sync/persistence';
+import { commitLegacyCalendarCursor, createSyncPullItem, ensureSyncPullContainer, requireSyncWrite } from '@/lib/sync/persistence';
 import { loadSyncExecutionPolicy, type SyncExecutionPolicy } from '@/lib/services/sync/policy';
 import { refreshOnboardingCalendar } from '@/lib/services/onboarding-calendar';
 import { systemScopeForFamily } from '@/lib/services/scope';
@@ -190,6 +190,9 @@ async function syncCalendar(admin: Admin, account: Account, adapter: SyncProvide
     }
 
     if (!pull.expired && pull.nextCursor) nextCursor = pull.nextCursor;
+    // Without 0494 the previous production order applies: the cursor advances
+    // as soon as this calendar's pull succeeds.
+    if (cal.legacy && nextCursor) { await commitLegacyCalendarCursor(admin, cal.id, nextCursor); nextCursor = null; }
   }
   const commitCursor = async () => {
     if (nextCursor) {

@@ -20,7 +20,7 @@ import {
   googleTaskToReminderRow, reminderRowToGoogleTask, reminderContentHash,
   GoogleApiError,
 } from '@/lib/sync/providers/google';
-import { createSyncPullItem, ensureSyncPullContainer, requireSyncWrite } from '@/lib/sync/persistence';
+import { commitLegacyCalendarCursor, createSyncPullItem, ensureSyncPullContainer, requireSyncWrite } from '@/lib/sync/persistence';
 import { loadSyncExecutionPolicy, type SyncExecutionPolicy } from '@/lib/services/sync/policy';
 import { refreshOnboardingCalendar } from '@/lib/services/onboarding-calendar';
 import { systemScopeForFamily } from '@/lib/services/scope';
@@ -207,6 +207,9 @@ async function syncCalendar(admin: Admin, account: Account, accessToken: string,
     }
 
     if (!pull.gone && pull.nextSyncToken) nextCursor = pull.nextSyncToken;
+    // Without 0494 the previous production order applies: the cursor advances
+    // as soon as this calendar's pull succeeds.
+    if (cal.legacy && nextCursor) { await commitLegacyCalendarCursor(admin, cal.id, nextCursor); nextCursor = null; }
   }
   const commitCursor = async () => {
     if (nextCursor) {
