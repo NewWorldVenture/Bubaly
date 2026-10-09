@@ -8503,6 +8503,7 @@
   "itemAction.tryAgain": "Try again: {name}",
   "itemAction.view": "View {name}",
   "joinInvite.createAccount": "Create account",
+  "joinInvite.aKidLoginCannotJoin": "This is a kid login. It only works in your own family, so it can't join another one. Ask your parent.",
   "joinInvite.couldNotJoinTryAgain": "We couldn’t add you to the family just now. Check your connection and try again.",
   "joinInvite.inviteIsForADifferentEmail": "This invite was sent to a different email address. Sign in with that address to join.",
   "joinInvite.inviteIsInvalidOrExpired": "This invite is invalid or has expired. Ask whoever invited you to send a new one.",

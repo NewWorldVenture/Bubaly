@@ -8325,6 +8325,7 @@
   "itemAction.tryAgain": "Erneut versuchen: {name}",
   "itemAction.view": "{name} ansehen",
   "joinInvite.createAccount": "Konto erstellen",
+  "joinInvite.aKidLoginCannotJoin": "Das ist eine Kinder-Anmeldung. Sie gilt nur in deiner eigenen Familie und kann keiner anderen beitreten. Frag deine Eltern.",
   "joinInvite.couldNotJoinTryAgain": "Der Beitritt zur Familie hat gerade nicht geklappt. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
   "joinInvite.inviteIsForADifferentEmail": "Diese Einladung wurde an eine andere E-Mail-Adresse gesendet. Melden Sie sich mit dieser Adresse an, um beizutreten.",
   "joinInvite.inviteIsInvalidOrExpired": "Diese Einladung ist ungültig oder abgelaufen. Bitten Sie die einladende Person um eine neue.",

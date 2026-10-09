@@ -8325,6 +8325,7 @@
   "itemAction.tryAgain": "Opnieuw proberen: {name}",
   "itemAction.view": "{name} bekijken",
   "joinInvite.createAccount": "Account aanmaken",
+  "joinInvite.aKidLoginCannotJoin": "Dit is een kinderaanmelding. Die werkt alleen in je eigen familie, dus hij kan niet bij een andere familie. Vraag het je ouders.",
   "joinInvite.couldNotJoinTryAgain": "Het lukte nu niet om je aan de familie toe te voegen. Controleer je verbinding en probeer het opnieuw.",
   "joinInvite.inviteIsForADifferentEmail": "Deze uitnodiging is naar een ander e-mailadres gestuurd. Log in met dat adres om lid te worden.",
   "joinInvite.inviteIsInvalidOrExpired": "Deze uitnodiging is ongeldig of verlopen. Vraag degene die je uitnodigde om een nieuwe te sturen.",

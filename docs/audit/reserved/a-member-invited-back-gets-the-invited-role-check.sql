@@ -34,7 +34,12 @@
 --   6. re-accepting the same invite answers the family and keeps the role
 --      (0136's idempotence is preserved);
 --   7. accept_invite is still SECURITY DEFINER with a pinned search_path and
---      callable by `authenticated`.
+--      callable by `authenticated`;
+--   8. a kid login cannot join another family through an invite: neither one on
+--      its synthetic address (child.<username>@kids.bubaly.app, which any
+--      household can write an invite to) nor one holding a child_logins row
+--      under an ordinary address. Both are refused with 0495's sentence and
+--      leave no member row in the inviting family.
 --
 -- NEGATIVE CONTROL. Inside this transaction the function is put back to 0136's
 -- conflict arm, and a second removed parent invited back as a guest must then
@@ -57,6 +62,8 @@
 \set UA '00000000-0000-4000-8495-0000000000a4'
 \set UN '00000000-0000-4000-8495-0000000000a5'
 \set UW '00000000-0000-4000-8495-0000000000a6'
+\set UK '00000000-0000-4000-8495-0000000000a7'
+\set UJ '00000000-0000-4000-8495-0000000000a8'
 \set F  '00000000-0000-4000-8495-0000000000f1'
 \set F2 '00000000-0000-4000-8495-0000000000f2'
 
@@ -68,7 +75,9 @@ insert into auth.users (id, email) values
   (:'UY','m0495-former-child@example.com'),
   (:'UA','m0495-adult@example.com'),
   (:'UN','m0495-new@example.com'),
-  (:'UW','m0495-control@example.com')
+  (:'UW','m0495-control@example.com'),
+  (:'UK','child.m0495kid@kids.bubaly.app'),
+  (:'UJ','m0495-kid-mapped@example.com')
   on conflict do nothing;
 
 insert into public.families (id, name, created_by) values (:'F','Invited Back House',:'UP') on conflict do nothing;
@@ -84,12 +93,23 @@ insert into public.family_members (family_id, user_id, display_name, role, is_ac
 insert into public.families (id, name, created_by) values (:'F2','Former Parent Elsewhere',:'UX') on conflict do nothing;
 update public.family_members set role = 'parent', is_active = true where family_id = :'F2' and user_id = :'UX';
 
+-- Two kid logins that belong to that other household. One has the synthetic
+-- address; the other has an ordinary one but holds the child_logins row.
+insert into public.family_members (id, family_id, user_id, display_name, role, is_active) values
+  ('00000000-0000-4000-8495-0000000000d1',:'F2',:'UK','Kid','child',true),
+  ('00000000-0000-4000-8495-0000000000d2',:'F2',:'UJ','Mapped Kid','child',true);
+insert into public.child_logins (family_id, member_id, user_id, username, created_by) values
+  (:'F2','00000000-0000-4000-8495-0000000000d1',:'UK','m0495kid',:'UX'),
+  (:'F2','00000000-0000-4000-8495-0000000000d2',:'UJ','m0495mapped',:'UX');
+
 insert into public.invites (family_id, email, role, token, invited_by) values
   (:'F','m0495-former-parent@example.com','guest', 'm0495-tok-x', :'UP'),
   (:'F','M0495-Former-Child@example.com', 'adult', 'm0495-tok-y', :'UP'),
   (:'F','m0495-adult@example.com',        'parent','m0495-tok-a', :'UP'),
   (:'F','m0495-new@example.com',          'teen',  'm0495-tok-n', :'UP'),
-  (:'F','m0495-control@example.com',      'guest', 'm0495-tok-w', :'UP');
+  (:'F','m0495-control@example.com',      'guest', 'm0495-tok-w', :'UP'),
+  (:'F','child.m0495kid@kids.bubaly.app', 'child', 'm0495-tok-k', :'UP'),
+  (:'F','m0495-kid-mapped@example.com',   'child', 'm0495-tok-j', :'UP');
 
 do $$
 declare
@@ -100,6 +120,9 @@ declare
   ua    uuid := '00000000-0000-4000-8495-0000000000a4';
   un    uuid := '00000000-0000-4000-8495-0000000000a5';
   uw    uuid := '00000000-0000-4000-8495-0000000000a6';
+  uk    uuid := '00000000-0000-4000-8495-0000000000a7';
+  uj    uuid := '00000000-0000-4000-8495-0000000000a8';
+  kid   record;
   failures text[] := '{}';
   got   uuid;
   r     text;
@@ -138,7 +161,27 @@ begin
   perform set_config('request.jwt.claims', json_build_object('sub', un, 'role', 'authenticated', 'email', 'm0495-new@example.com')::text, true);
   perform public.accept_invite('m0495-tok-n');
 
+  -- Each kid login opens the other household's link, as itself.
+  for kid in select * from (values
+      (uk, 'child.m0495kid@kids.bubaly.app', 'm0495-tok-k', 'a kid login on its synthetic address'),
+      (uj, 'm0495-kid-mapped@example.com',   'm0495-tok-j', 'a kid login holding a child_logins row under an ordinary address')
+    ) as k(uid, email, token, label) loop
+    perform set_config('request.jwt.claim.sub', kid.uid::text, true);
+    perform set_config('request.jwt.claims', json_build_object('sub', kid.uid, 'role', 'authenticated', 'email', kid.email)::text, true);
+    begin
+      perform public.accept_invite(kid.token);
+      failures := array_append(failures, format('%s joined another family through an invite', kid.label));
+    exception when others then
+      if sqlerrm not like '%kid login cannot join another family%' then
+        failures := array_append(failures, format('%s was refused for another reason: %s', kid.label, sqlerrm));
+      end if;
+    end;
+  end loop;
+
   perform set_config('role','postgres', true);
+
+  select count(*) into n from public.family_members where family_id = fam and user_id in (uk, uj);
+  if n <> 0 then failures := array_append(failures, format('%s kid login(s) hold a member row in the household that invited them', n)); end if;
 
   select role::text, is_active into r, act from public.family_members where family_id = fam and user_id = ux;
   if r is distinct from 'guest' or act is not true then
@@ -211,7 +254,7 @@ begin
   if array_length(failures, 1) is not null then
     raise exception E'a member invited back does not get the invited role:\n  - %', array_to_string(failures, E'\n  - ');
   end if;
-  raise notice 'a-member-invited-back-gets-the-invited-role: OK (a removed parent invited back as a guest is a guest who cannot manage the family; a removed child invited back as an adult is an adult; an active adult''s self-addressed parent invite leaves them an adult; a first-time teen invite lands as a teen; the other family is untouched; a repeated accept stays idempotent; accept_invite is SECURITY DEFINER, search_path pinned, callable by authenticated; negative control: 0136''s conflict arm restored the removed parent''s old parent role)';
+  raise notice 'a-member-invited-back-gets-the-invited-role: OK (a removed parent invited back as a guest is a guest who cannot manage the family; a removed child invited back as an adult is an adult; an active adult''s self-addressed parent invite leaves them an adult; a first-time teen invite lands as a teen; the other family is untouched; a repeated accept stays idempotent; a kid login on its synthetic address or holding a child_logins row is refused and left out of the inviting family; accept_invite is SECURITY DEFINER, search_path pinned, callable by authenticated; negative control: 0136''s conflict arm restored the removed parent''s old parent role)';
 end $$;
 
 rollback;

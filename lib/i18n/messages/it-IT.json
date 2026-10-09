@@ -8325,6 +8325,7 @@
   "itemAction.tryAgain": "Riprova: {name}",
   "itemAction.view": "Visualizza {name}",
   "joinInvite.createAccount": "Crea account",
+  "joinInvite.aKidLoginCannotJoin": "Questo è un accesso per bambini. Funziona solo nella tua famiglia, quindi non può unirsi a un'altra. Chiedi ai tuoi genitori.",
   "joinInvite.couldNotJoinTryAgain": "Non siamo riusciti a farti entrare nella famiglia. Controlla la connessione e riprova.",
   "joinInvite.inviteIsForADifferentEmail": "Questo invito è stato inviato a un altro indirizzo email. Accedi con quell’indirizzo per unirti.",
   "joinInvite.inviteIsInvalidOrExpired": "Questo invito non è valido o è scaduto. Chiedi a chi ti ha invitato di inviarne uno nuovo.",

@@ -8325,6 +8325,7 @@
   "itemAction.tryAgain": "Réessayer : {name}",
   "itemAction.view": "Voir {name}",
   "joinInvite.createAccount": "Créer un compte",
+  "joinInvite.aKidLoginCannotJoin": "Ceci est une connexion enfant. Elle ne fonctionne que dans ta propre famille, elle ne peut donc pas en rejoindre une autre. Demande à tes parents.",
   "joinInvite.couldNotJoinTryAgain": "Impossible de rejoindre la famille pour le moment. Vérifiez votre connexion et réessayez.",
   "joinInvite.inviteIsForADifferentEmail": "Cette invitation a été envoyée à une autre adresse e-mail. Connectez-vous avec cette adresse pour rejoindre la famille.",
   "joinInvite.inviteIsInvalidOrExpired": "Cette invitation n’est pas valide ou a expiré. Demandez à la personne qui vous a invité d’en envoyer une nouvelle.",

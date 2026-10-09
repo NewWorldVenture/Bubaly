@@ -8326,6 +8326,7 @@
   "itemAction.tryAgain": "Tentar novamente: {name}",
   "itemAction.view": "Ver {name}",
   "joinInvite.createAccount": "Criar conta",
+  "joinInvite.aKidLoginCannotJoin": "Este é um início de sessão infantil. Só funciona na tua própria família, por isso não pode juntar-se a outra. Pergunta aos teus pais.",
   "joinInvite.couldNotJoinTryAgain": "Não foi possível concluir a adesão à família neste momento. Verifique a sua ligação e tente novamente.",
   "joinInvite.inviteIsForADifferentEmail": "Este convite foi enviado para outro endereço de email. Inicie sessão com esse endereço para aderir.",
   "joinInvite.inviteIsInvalidOrExpired": "Este convite é inválido ou expirou. Peça a quem o convidou que envie um novo.",

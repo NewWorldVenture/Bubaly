@@ -108,7 +108,7 @@ source allocations are not evidence that production applied any migration.
 | 0492 held | `0492_approval_requests_private_read.sql` | Requester/manager approval reads; production policies unverified. |
 | 0493 held | `0493_ai_copy_private_read_and_quota.sql` | Private AI copies and count-only usage; missing receipt refuses capped-Free requests. |
 | 0494 held | `0494_sync_atomic_pull.sql` | Service-only admission and atomic item/map creation; missing RPC preserves cursor and refuses writes. |
-| 0495 held (proposed) | `0495_a_member_invited_back_gets_what_the_invite_grants.sql` | A returning member gets the invite's role; an active member's role is unchanged. Number proposed on #771, above every preserved allocation; coordinator confirmation pending. |
+| 0495 held | `0495_a_member_invited_back_gets_what_the_invite_grants.sql` | A returning member gets the invite's role; an active member's role is unchanged; a kid login cannot accept another family's invite. Reserved for #981 above every preserved allocation (confirmed in #981 comment 6089092821). |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4232,7 +4232,7 @@ Historical evidence, superseded: a landing map proposed in the Claude session on
 ## `0495` (reserved, held) — a member invited back came back with their old role
 
 `supabase/reserved/0495_a_member_invited_back_gets_what_the_invite_grants.sql` —
-**held**: proposed as `0495`, above the owner's preserved allocations
+**held**: reserved as `0495` for #981 (confirmed in its comment 6089092821), above the owner's preserved allocations
 (`0477`–`0491`) and the held `0492`–`0494`. It stays outside
 `supabase/migrations/` until every number below it has landed, so neither the
 replay nor `db push` applies it. Its probe is held with it in
@@ -4252,6 +4252,18 @@ exactly the invite's role. An active member's role does not move, so accepting
 a parent invite addressed to oneself cannot promote anyone. Everything else in
 0136 is unchanged.
 
+**Second rule, same function: a kid login does not join another family
+(child safety).** A kid login's address is synthetic and deterministic from
+its username (`child.<username>@kids.bubaly.app`), and any household's parent
+or adult may write an invite to any address. So a child who opened a
+stranger's join link while signed in was enrolled in that household, where its
+adults could message them and the child's own parents could not see it
+(reproduced on the same replay). 0495 refuses a caller whose address is on
+that domain or who holds a `child_logins` row. The join page already refuses
+such an account before calling the function, which protects children while
+0495 is held. If the owner wants a kid login in two households (co-parenting),
+that should be a parent-to-parent action, not a child's click.
+
 **Proof:** `.github/workflows/invite-rejoin-role-runtime.yml` replays every
 runnable migration. It then requires the held probe
 `docs/audit/reserved/a-member-invited-back-gets-the-invited-role-check.sql` to
@@ -4263,7 +4275,9 @@ and explicit `social_access_permissions` rows, which also outlive a removal
 and may be elevations or restrictions. Those rows are recorded as a lead.
 
 **After approved release:** remove a test parent, invite them back
-as a guest, accept as them, and confirm they cannot open family settings.
+as a guest, accept as them, and confirm they cannot open family settings. Then
+invite a test kid login's address from another test family and confirm the
+kid's acceptance is refused.
 
 ## `0471` and `0474` — the admin digest's delivery store, and a removed admin is not sent it
 

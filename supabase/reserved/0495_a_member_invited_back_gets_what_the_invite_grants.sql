@@ -27,6 +27,21 @@
 -- function unchanged: its idempotent re-accept, the expiry and email checks,
 -- the invite stamp and the active-family default.
 --
+-- Second rule, same function: a kid login does not join another family.
+-- A kid login's address is synthetic and deterministic from its username
+-- (child.<username>@kids.bubaly.app), and invites_insert lets any household's
+-- parent or adult write an invite to any address. accept_invite compared only
+-- addresses, so a child who opened a stranger's join link while signed in was
+-- enrolled in that household: its adults could message them and assign them
+-- chores, and the child's own parents could not see it. Reproduced on the same
+-- replay. The caller is refused when their JWT address is on that domain or
+-- they hold a child_logins row (either alone suffices, so neither an address
+-- change nor a deleted mapping row reopens it). There is no designed flow for
+-- a kid login to belong to a second household; if the owner wants one (two
+-- co-parenting households), it should be a parent-to-parent action, not a
+-- child's click. The join page refuses such an account before calling this,
+-- which protects children while this migration is held.
+--
 -- The comparison reads the EXISTING row inside the conflict arm
 -- (`family_members.is_active` is the row as it was; `excluded` is the proposed
 -- one), so it is decided under the row lock ON CONFLICT already takes and a
@@ -60,6 +75,12 @@ begin
 
   if not found then
     raise exception 'Invite is invalid or expired';
+  end if;
+
+  -- A kid login stays in the family that made it.
+  if right(lower(coalesce(auth.jwt()->>'email','')), length('@kids.bubaly.app')) = '@kids.bubaly.app'
+     or exists (select 1 from public.child_logins cl where cl.user_id = auth.uid()) then
+    raise exception 'A kid login cannot join another family';
   end if;
 
   -- Idempotent success: this user already accepted this invite.
@@ -99,7 +120,7 @@ begin
 end; $$;
 
 comment on function public.accept_invite(text) is
-  '0495: accept an invite addressed to the caller. A caller who was not an active member gets the invite''s role; an active member''s role is unchanged. Re-accepting one''s own accepted invite answers its family.';
+  '0495: accept an invite addressed to the caller. A caller who was not an active member gets the invite''s role; an active member''s role is unchanged; a kid login is refused. Re-accepting one''s own accepted invite answers its family.';
 
 do $$
 begin
