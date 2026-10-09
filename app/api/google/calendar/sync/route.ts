@@ -19,7 +19,7 @@ function sameStoredToken(a: unknown, b: unknown): boolean {
 }
 
 // Fetches the next 3 months of events from Google Calendar primary and
-// upserts them into calendar_events with source='google'.
+// imports native calendar_events copies. Repeating a sync is not idempotent.
 export async function POST() {
   const t = await getTranslations();
   try {
@@ -131,7 +131,12 @@ export async function POST() {
       }
     }
 
-    const events = await fetchGoogleCalendarEvents(accessToken, timeMin, timeMax);
+    let events: Awaited<ReturnType<typeof fetchGoogleCalendarEvents>>;
+    try { events = await fetchGoogleCalendarEvents(accessToken, timeMin, timeMax); }
+    catch {
+      console.error('[google/calendar/sync] incomplete provider calendar read');
+      return NextResponse.json({ error: t('sync.syncFailed') }, { status: 503 });
+    }
 
     // Map Google events → calendar_events rows
     const rows = events
@@ -152,14 +157,14 @@ export async function POST() {
       }));
 
     if (rows.length > 0) {
-      // Upsert using a deterministic id approach — we don't store gcal id in schema,
-      // so insert and ignore duplicates by title+starts_at+family_id via do-nothing on conflict.
+      // This is a plain atomic insert, with no stored provider identity or
+      // conflict deduplication. Any refused insert saved none of these rows.
       const { error } = await supabase
         .from('calendar_events')
         .insert(rows);
 
-      if (error && error.code !== '23505') {
-        console.error('Calendar upsert error:', error);
+      if (error) {
+        console.error('Calendar import error:', error);
         return NextResponse.json({ error: t('sync.couldNotSaveImportedCalendar') }, { status: 500 });
       }
     }

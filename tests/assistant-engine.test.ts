@@ -8,12 +8,16 @@ const updates: { table: string; patch: unknown }[] = [];
 
 function chain(table: string) {
   const t = tables[table] ?? {};
+  const ordering: { column: string; ascending: boolean }[] = [];
+  let maximum = Infinity;
   const c: Record<string, unknown> = {
     // The context builder (lib/ai/context) reads through the domain services,
     // which use the full filter vocabulary — every filter is a no-op here and
     // the table's fixture decides what comes back.
     select: () => c, eq: () => c, neq: () => c, in: () => c, is: () => c, not: () => c, or: () => c, ilike: () => c,
-    gte: () => c, gt: () => c, lte: () => c, lt: () => c, order: () => c, limit: () => c, range: () => c,
+    gte: () => c, gt: () => c, lte: () => c, lt: () => c,
+    order: (column: string, options?: { ascending?: boolean }) => { ordering.push({ column, ascending: options?.ascending !== false }); return c; },
+    limit: (count: number) => { maximum = count; return c; }, range: () => c,
     insert: (rows: unknown) => { inserts.push({ table, rows }); return { then: (onF: (v: { error: unknown }) => unknown) => Promise.resolve({ error: t.error ?? null }).then(onF) }; },
     // `.eq().select()` as well as a bare `.eq()`: the conversation metadata
     // write asks for its row since C1-S9-66, and a real builder allows both.
@@ -24,7 +28,18 @@ function chain(table: string) {
     },
     maybeSingle: () => Promise.resolve({ data: t.error ? null : (t.single ?? null), error: t.error ?? null }),
     single: () => Promise.resolve({ data: t.error ? null : (t.single ?? null), error: t.error ?? null }),
-    then: (onF: (v: { data: Row[] | null; error: unknown }) => unknown) => Promise.resolve({ data: t.error ? null : (t.rows ?? []), error: t.error ?? null }).then(onF),
+    // A collection answer carries its count, as PostgREST's Content-Range does:
+    // the rows that matched, before any limit.
+    then: (onF: (v: { data: Row[] | null; error: unknown; count: number | null }) => unknown) => {
+      const rows = [...(t.rows ?? [])].sort((a, b) => {
+        for (const order of ordering) {
+          const delta = String(a[order.column] ?? '').localeCompare(String(b[order.column] ?? ''));
+          if (delta) return order.ascending ? delta : -delta;
+        }
+        return 0;
+      }).slice(0, maximum);
+      return Promise.resolve({ data: t.error ? null : rows, error: t.error ?? null, count: t.error ? null : (t.rows ?? []).length }).then(onF);
+    },
   };
   return c;
 }
@@ -92,7 +107,9 @@ beforeEach(() => {
   // serve `families` (name + zone) and a roster row that belongs to the caller.
   tables.families = { single: { id: 'fam-1', name: 'The Hughens', timezone: 'America/New_York' } };
   tables.family_members = { rows: [{ id: 'm1', user_id: 'user-1', display_name: 'Dan', role: 'parent', is_active: true }] };
-  tables.calendar_events = { rows: [{ title: 'Soccer', starts_at: '2026-09-06T14:00:00Z', category: 'sports' }] };
+  // Calendar context now validates complete wildcard database rows, including
+  // family scope and the nullable/default interval fields, before publication.
+  tables.calendar_events = { rows: [{ id: '40000000-0000-4000-8000-000000000001', family_id: 'fam-1', title: 'Soccer', starts_at: '2026-09-06T14:00:00Z', ends_at: null, all_day: false, assignee_id: null, category: 'sports', description: null, location: null, recurrence: 'none', recurrence_until: null, feed_id: null, external_uid: null, source_recurrence: null, created_by: 'user-1', onboarding_key: null, idempotency_key: null, created_at: '2026-09-01T00:00:00Z', updated_at: '2026-09-01T00:00:00Z' }] };
   tables.chore_assignments = { rows: [{ status: 'todo' }, { status: 'in_progress' }] };
   tables.meals = { rows: [{ name: 'Tacos', meal_type: 'dinner' }] };
   tables.ai_conversations = { single: { title: 'New conversation' } };
@@ -101,6 +118,17 @@ beforeEach(() => {
 afterEach(() => { vi.clearAllMocks(); vi.restoreAllMocks(); });
 
 describe('prepareAssistantTurn', () => {
+  it('uses the most recent forty messages, then restores chronological question/answer order', async () => {
+    tables.ai_messages = { rows: Array.from({ length: 60 }, (_, index) => ({
+      id: String(index).padStart(3, '0'), role: index % 2 ? 'assistant' : 'user', content: `Message ${index}`,
+      created_at: new Date(Date.UTC(2026, 9, 1, 0, Math.floor(index / 2))).toISOString(),
+    })) };
+    const prepared = await prepareAssistantTurn(input);
+    if (!prepared.ok) throw new Error(prepared.error);
+    expect(prepared.turn.messages.map(message => message.content)).toEqual([
+      ...Array.from({ length: 40 }, (_, index) => `Message ${index + 20}`), input.message,
+    ]);
+  });
   it('merges the assistant toolbox with lib/ai/actions.ts tools (toolbox wins on collisions) behind the trust wrapper', async () => {
     const prepared = await prepareAssistantTurn(input);
     expect(prepared.ok).toBe(true);
@@ -266,6 +294,42 @@ describe('createAssistantStream (SSE transport)', () => {
     expect(events.map((e) => e.type)).toEqual(['delta', 'error', 'done']);
     expect(events[2].content).toBe('Partial');
     expect(provider.runTools).not.toHaveBeenCalled();
+    const saved = (inserts.find(row => row.table === 'ai_messages')?.rows as Row[])[1];
+    expect(saved.structured_content).toMatchObject({ responseError: 'cut' });
+  });
+
+  it('does not rerun a tool turn when the stream breaks after an action but before any text', async () => {
+    provider.runToolsStream.mockImplementationOnce(async function* () {
+      yield { type: 'action', name: 'add_chore', args: { title: 'Wash dishes' }, result: { ok: true, summary: 'Chore added.' } };
+      throw new Error('connection broke after action');
+    });
+    const prepared = await prepareAssistantTurn(input);
+    if (!prepared.ok) throw new Error('prepare failed');
+    const events = await readSse(createAssistantStream(input, prepared.turn));
+    expect(events.some(event => event.type === 'error')).toBe(true);
+    expect(provider.runTools).not.toHaveBeenCalled();
+    expect((inserts.find(row => row.table === 'ai_messages')?.rows as Row[])[1].tool_results).toHaveLength(1);
+  });
+
+  it('finishes and saves a disconnected turn without mistaking a closed response for provider failure', async () => {
+    let release!: () => void;
+    const barrier = new Promise<void>(resolve => { release = resolve; });
+    provider.runToolsStream.mockImplementationOnce(async function* () {
+      yield { type: 'delta', text: 'Before disconnect. ' };
+      await barrier;
+      yield { type: 'delta', text: 'Completed afterwards.' };
+    });
+    const prepared = await prepareAssistantTurn(input);
+    if (!prepared.ok) throw new Error('prepare failed');
+    const reader = createAssistantStream(input, prepared.turn).getReader();
+    await reader.read();
+    const cancelled = reader.cancel();
+    release(); await cancelled;
+    await vi.waitFor(() => expect(inserts.some(row => row.table === 'ai_messages')).toBe(true));
+    expect(provider.runTools).not.toHaveBeenCalled();
+    const rows = inserts.find(row => row.table === 'ai_messages')?.rows as Row[];
+    expect(rows[1].content).toBe('Before disconnect. Completed afterwards.');
+    expect(inserts.filter(row => row.table === 'ai_messages')).toHaveLength(1);
   });
 });
 

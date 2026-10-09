@@ -12,7 +12,11 @@ import {
 } from '@/lib/meals/planner';
 import { isDayKey, planWeek, type PlanEntryInput } from '@/lib/services/meals';
 import { scoreWeekNights } from '@/lib/meals/week-context';
+import { readDisplayCalendarOccurrences } from '@/lib/calendar/display-occurrences';
+import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
+import { isValidTimezone } from '@/lib/time/zoned';
 import { expiringSoon } from '@/lib/pantry/logic';
+import { readPlannerMeals, readPlannerRecipes, readPlannerPantry } from '@/lib/meals/planner-inputs';
 import type { MealType } from '@/lib/database.types';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
@@ -68,8 +72,8 @@ export async function POST(req: Request) {
 
   // Candidate dishes ------------------------------------------------------
   const candidateResults = await settleAll([
-    supabase.from('meals').select('id,name,meal_type').eq('family_id', familyId),
-    supabase.from('family_recipes').select('id,name,category,allergy_flags').eq('family_id', familyId),
+    readPlannerMeals(supabase, familyId),
+    readPlannerRecipes(supabase, familyId),
   ]);
   const candidateError = candidateResults.find((result) => result.error)?.error;
   if (candidateError) {
@@ -83,8 +87,7 @@ export async function POST(req: Request) {
   // Expiring pantry items to use up ---------------------------------------
   let expiring: string[] = [];
   if (useExpiring) {
-    const { data: pantry, error: pantryError } = await supabase.from('pantry_items')
-      .select('name,expires_at').eq('family_id', familyId).not('expires_at', 'is', null);
+    const { data: pantry, error: pantryError } = await readPlannerPantry(supabase, familyId);
     if (pantryError) {
       logDatabaseFailure('pantry read', pantryError);
       return databaseUnavailable(t('plan.mealPlanningDataIsTemporarily'));
@@ -95,28 +98,26 @@ export async function POST(req: Request) {
   }
 
   // Busy nights ------------------------------------------------------------
-  // The week the family actually has, not seven identical evenings. Read a day
-  // either side of the week so an event that is Monday evening in the family's
-  // zone is still Monday evening after the zone is applied, and let
-  // `scoreWeekNights` do the local-date arithmetic.
+  // Complete occurrence sets, including earlier recurring masters and ongoing
+  // intervals. Enabled source reads use the coherent archive without fallback.
   const scope = scopeFromUserContext(ctx, supabase);
-  const windowFrom = new Date(`${weekStart}T00:00:00Z`);
-  const windowTo = new Date(windowFrom.getTime() + 8 * 86_400_000);
-  const { data: weekEvents, error: weekEventsError } = await supabase
-    .from('calendar_events')
-    .select('title,starts_at,ends_at,all_day,category')
-    .eq('family_id', familyId)
-    .gte('starts_at', new Date(windowFrom.getTime() - 86_400_000).toISOString())
-    .lt('starts_at', windowTo.toISOString())
-    .order('starts_at', { ascending: true })
-    .limit(400);
+  if (!isValidTimezone(scope.tz)) return databaseUnavailable(t('plan.mealPlanningDataIsTemporarily'));
+  const { data: weekEvents, error: weekEventsError } = await readDisplayCalendarOccurrences(
+    supabase,familyId,briefingCalendarBounds(weekStart,scope.tz,0,7),scope.tz,{overlap:true},
+  );
   if (weekEventsError) {
     // Fail closed. Planning "around" a calendar we could not read would put a
     // two-hour braise on the night of the away game and call it calendar-aware.
     logDatabaseFailure('calendar read', weekEventsError);
     return databaseUnavailable(t('plan.mealPlanningDataIsTemporarily'));
   }
-  const weekContext = scoreWeekNights(weekStart, weekEvents ?? [], { tz: scope.tz });
+  let weekContext;
+  try {
+    weekContext = scoreWeekNights(weekStart, weekEvents, { tz: scope.tz });
+  } catch (error) {
+    logDatabaseFailure('calendar interval projection',error);
+    return databaseUnavailable(t('plan.mealPlanningDataIsTemporarily'));
+  }
 
   const request: PlannerRequest = {
     weekStart, mealTypes: mealTypes.length ? mealTypes : ['dinner'],

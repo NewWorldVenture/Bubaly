@@ -172,8 +172,8 @@ describe('the sites the scan found are on the family\'s (or the admin\'s) calend
     for (const r of ['components/dashboard/family-dashboard.tsx', 'components/dashboard/personal-dashboard.tsx']) {
       const src = code(r);
       expect(src, r).toContain("const { fmtTime, fmtDate } = createFormat(locale.code, undefined, ctx.active.family.timezone || 'UTC');");
-      expect(src, r).toContain("fmtDate(e.starts_at, 'MMM')");
-      expect(src, r).toContain("fmtDate(e.starts_at, 'd')");
+      expect(src, r).toContain("fmtDate(e.all_day ? e.startDate! : e.starts_at, 'MMM')");
+      expect(src, r).toContain("fmtDate(e.all_day ? e.startDate! : e.starts_at, 'd')");
       expect(src, r).not.toMatch(/import \{[^}]*\bfmtTime\b[^}]*\} from '@\/lib\/utils\/format'/);
     }
   });

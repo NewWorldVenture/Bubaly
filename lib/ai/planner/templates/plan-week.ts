@@ -5,7 +5,7 @@
 // the week has gaps, a grocery list from them, prep tasks and reminders for
 // what the calendar demands, a reschedule only when a real clash exists, and
 // one summary to the family. A mid-week follow-up closes the loop (§70).
-import { localTime, shiftDay, type WorkflowTemplate } from './index';
+import { calendarSearchTime, localTime, shiftDay, type WorkflowTemplate } from './index';
 
 export const planWeekTemplate: WorkflowTemplate = {
   intent: 'plan_week',
@@ -23,7 +23,7 @@ export const planWeekTemplate: WorkflowTemplate = {
   ],
   steps: [
     { key: 'members', stepType: 'retrieve', toolName: 'family.listMembers', description: 'Confirm who is in the household this week', input: () => ({}) },
-    { key: 'events', stepType: 'retrieve', toolName: 'calendar.searchEvents', description: 'Read the week\'s calendar', input: (ctx) => ({ from: localTime(ctx.weekStartKey, 0), to: localTime(ctx.weekEndKey, 23, 59), limit: 100 }) },
+    { key: 'events', stepType: 'retrieve', toolName: 'calendar.searchEvents', description: 'Read the week\'s calendar', input: (ctx) => ({ from: calendarSearchTime(ctx.weekStartKey, 0, 0, ctx.tz), to: calendarSearchTime(ctx.weekEndKey, 23, 59, ctx.tz), limit: 100 }) },
     { key: 'conflicts', stepType: 'retrieve', toolName: 'calendar.findConflicts', description: 'Look for overlapping commitments', input: (ctx) => ({ from: localTime(ctx.weekStartKey, 0), to: localTime(ctx.weekEndKey, 23, 59) }) },
     { key: 'school', stepType: 'retrieve', toolName: 'school.listEventsBetween', description: 'Check school events', input: (ctx) => ({ from: localTime(ctx.weekStartKey, 0), to: localTime(ctx.weekEndKey, 23, 59) }) },
     { key: 'homework', stepType: 'retrieve', toolName: 'school.listHomeworkDue', description: 'Check homework due this week', input: (ctx) => ({ from: localTime(ctx.weekStartKey, 0), to: localTime(ctx.weekEndKey, 23, 59) }) },

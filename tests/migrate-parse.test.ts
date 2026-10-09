@@ -73,9 +73,17 @@ describe('parseICS', () => {
       expect(zoned('TZID=Europe/London:20260906T090000').startsAt).toBe('2026-09-06T08:00:00.000Z');
     });
 
-    it('reads a reading the zone skips at spring-forward as the first minute that exists', () => {
+    // RFC 5545 §3.3.5 on DST nights.
+    it('reads a reading the zone skips at spring-forward with the offset in force before the gap', () => {
       // New York jumps from 02:00 to 03:00 on 2026-03-08; 02:30 never happens.
-      expect(zoned('TZID=America/New_York:20260308T023000').startsAt).toBe('2026-03-08T07:00:00.000Z');
+      expect(zoned('TZID=America/New_York:20260308T023000').startsAt).toBe('2026-03-08T07:30:00.000Z');
+      expect(zoned('TZID=America/Chicago:20260308T023000').startsAt).toBe('2026-03-08T08:30:00.000Z');
+      expect(zoned('TZID=Australia/Sydney:20261004T023000').startsAt).toBe('2026-10-03T16:30:00.000Z');
+    });
+
+    it('reads a reading the zone shows twice at fall-back as the first instant', () => {
+      expect(zoned('TZID=Europe/London:20261025T013000').startsAt).toBe('2026-10-25T00:30:00.000Z');
+      expect(zoned('TZID=America/New_York:20261101T013000').startsAt).toBe('2026-11-01T05:30:00.000Z');
     });
 
     it('a quoted zone name with a colon in it is a parameter, not the value', () => {

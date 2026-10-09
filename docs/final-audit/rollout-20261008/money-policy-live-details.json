@@ -1,0 +1,497 @@
+{
+  "grants": [
+    {
+      "role": "anon",
+      "table": "allowance_rules",
+      "delete": true,
+      "insert": true,
+      "update": true
+    },
+    {
+      "role": "anon",
+      "table": "bills",
+      "delete": true,
+      "insert": true,
+      "update": true
+    },
+    {
+      "role": "anon",
+      "table": "budgets",
+      "delete": true,
+      "insert": true,
+      "update": true
+    },
+    {
+      "role": "anon",
+      "table": "financial_accounts",
+      "delete": true,
+      "insert": true,
+      "update": true
+    },
+    {
+      "role": "anon",
+      "table": "transactions",
+      "delete": true,
+      "insert": true,
+      "update": true
+    },
+    {
+      "role": "anon",
+      "table": "savings_goals",
+      "delete": true,
+      "insert": true,
+      "update": true
+    },
+    {
+      "role": "authenticated",
+      "table": "allowance_rules",
+      "delete": true,
+      "insert": true,
+      "update": true
+    },
+    {
+      "role": "authenticated",
+      "table": "bills",
+      "delete": true,
+      "insert": true,
+      "update": true
+    },
+    {
+      "role": "authenticated",
+      "table": "budgets",
+      "delete": true,
+      "insert": true,
+      "update": true
+    },
+    {
+      "role": "authenticated",
+      "table": "financial_accounts",
+      "delete": true,
+      "insert": true,
+      "update": true
+    },
+    {
+      "role": "authenticated",
+      "table": "transactions",
+      "delete": true,
+      "insert": true,
+      "update": true
+    },
+    {
+      "role": "authenticated",
+      "table": "savings_goals",
+      "delete": true,
+      "insert": true,
+      "update": true
+    }
+  ],
+  "helpers": [
+    {
+      "name": "can_manage_family",
+      "definition": "CREATE OR REPLACE FUNCTION public.can_manage_family(p_family_id uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\n  select exists (\n    select 1 from public.family_members\n    where family_id = p_family_id and user_id = auth.uid()\n      and role in ('parent','adult') and is_active\n  );\n$function$\n"
+    },
+    {
+      "name": "is_family_member",
+      "definition": "CREATE OR REPLACE FUNCTION public.is_family_member(p_family_id uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\n  select exists (\n    select 1 from public.family_members\n    where family_id = p_family_id and user_id = auth.uid() and is_active\n  );\n$function$\n"
+    }
+  ],
+  "policies": [
+    {
+      "name": "Members manage allowance_rules",
+      "check": "is_family_member(family_id)",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "allowance_rules",
+      "using": "is_family_member(family_id)",
+      "command": "*",
+      "permissive": true
+    },
+    {
+      "name": "Members can manage bills",
+      "check": "is_family_member(family_id)",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "bills",
+      "using": "is_family_member(family_id)",
+      "command": "*",
+      "permissive": true
+    },
+    {
+      "name": "bills_delete",
+      "check": null,
+      "roles": [
+        "public"
+      ],
+      "table": "bills",
+      "using": "is_family_member(family_id)",
+      "command": "d",
+      "permissive": true
+    },
+    {
+      "name": "bills_insert",
+      "check": "is_family_member(family_id)",
+      "roles": [
+        "public"
+      ],
+      "table": "bills",
+      "using": null,
+      "command": "a",
+      "permissive": true
+    },
+    {
+      "name": "bills_manager_delete_guard",
+      "check": null,
+      "roles": [
+        "authenticated"
+      ],
+      "table": "bills",
+      "using": "can_manage_family(family_id)",
+      "command": "d",
+      "permissive": false
+    },
+    {
+      "name": "bills_manager_insert_guard",
+      "check": "can_manage_family(family_id)",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "bills",
+      "using": null,
+      "command": "a",
+      "permissive": false
+    },
+    {
+      "name": "bills_manager_update_guard",
+      "check": "can_manage_family(family_id)",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "bills",
+      "using": "can_manage_family(family_id)",
+      "command": "w",
+      "permissive": false
+    },
+    {
+      "name": "bills_update",
+      "check": "is_family_member(family_id)",
+      "roles": [
+        "public"
+      ],
+      "table": "bills",
+      "using": "is_family_member(family_id)",
+      "command": "w",
+      "permissive": true
+    },
+    {
+      "name": "Members can manage budgets",
+      "check": "is_family_member(family_id)",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "budgets",
+      "using": "is_family_member(family_id)",
+      "command": "*",
+      "permissive": true
+    },
+    {
+      "name": "budgets_delete",
+      "check": null,
+      "roles": [
+        "public"
+      ],
+      "table": "budgets",
+      "using": "is_family_member(family_id)",
+      "command": "d",
+      "permissive": true
+    },
+    {
+      "name": "budgets_insert",
+      "check": "is_family_member(family_id)",
+      "roles": [
+        "public"
+      ],
+      "table": "budgets",
+      "using": null,
+      "command": "a",
+      "permissive": true
+    },
+    {
+      "name": "budgets_manager_delete_guard",
+      "check": null,
+      "roles": [
+        "authenticated"
+      ],
+      "table": "budgets",
+      "using": "can_manage_family(family_id)",
+      "command": "d",
+      "permissive": false
+    },
+    {
+      "name": "budgets_manager_insert_guard",
+      "check": "can_manage_family(family_id)",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "budgets",
+      "using": null,
+      "command": "a",
+      "permissive": false
+    },
+    {
+      "name": "budgets_manager_update_guard",
+      "check": "can_manage_family(family_id)",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "budgets",
+      "using": "can_manage_family(family_id)",
+      "command": "w",
+      "permissive": false
+    },
+    {
+      "name": "budgets_update",
+      "check": "is_family_member(family_id)",
+      "roles": [
+        "public"
+      ],
+      "table": "budgets",
+      "using": "is_family_member(family_id)",
+      "command": "w",
+      "permissive": true
+    },
+    {
+      "name": "Members can manage financial_accounts",
+      "check": "is_family_member(family_id)",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "financial_accounts",
+      "using": "is_family_member(family_id)",
+      "command": "*",
+      "permissive": true
+    },
+    {
+      "name": "financial_accounts_delete",
+      "check": null,
+      "roles": [
+        "public"
+      ],
+      "table": "financial_accounts",
+      "using": "is_family_member(family_id)",
+      "command": "d",
+      "permissive": true
+    },
+    {
+      "name": "financial_accounts_insert",
+      "check": "is_family_member(family_id)",
+      "roles": [
+        "public"
+      ],
+      "table": "financial_accounts",
+      "using": null,
+      "command": "a",
+      "permissive": true
+    },
+    {
+      "name": "financial_accounts_manager_delete_guard",
+      "check": null,
+      "roles": [
+        "authenticated"
+      ],
+      "table": "financial_accounts",
+      "using": "can_manage_family(family_id)",
+      "command": "d",
+      "permissive": false
+    },
+    {
+      "name": "financial_accounts_manager_insert_guard",
+      "check": "can_manage_family(family_id)",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "financial_accounts",
+      "using": null,
+      "command": "a",
+      "permissive": false
+    },
+    {
+      "name": "financial_accounts_manager_update_guard",
+      "check": "can_manage_family(family_id)",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "financial_accounts",
+      "using": "can_manage_family(family_id)",
+      "command": "w",
+      "permissive": false
+    },
+    {
+      "name": "financial_accounts_update",
+      "check": "is_family_member(family_id)",
+      "roles": [
+        "public"
+      ],
+      "table": "financial_accounts",
+      "using": "is_family_member(family_id)",
+      "command": "w",
+      "permissive": true
+    },
+    {
+      "name": "Members can manage savings_goals",
+      "check": "is_family_member(family_id)",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "savings_goals",
+      "using": "is_family_member(family_id)",
+      "command": "*",
+      "permissive": true
+    },
+    {
+      "name": "savings_goals_delete",
+      "check": null,
+      "roles": [
+        "public"
+      ],
+      "table": "savings_goals",
+      "using": "is_family_member(family_id)",
+      "command": "d",
+      "permissive": true
+    },
+    {
+      "name": "savings_goals_insert",
+      "check": "is_family_member(family_id)",
+      "roles": [
+        "public"
+      ],
+      "table": "savings_goals",
+      "using": null,
+      "command": "a",
+      "permissive": true
+    },
+    {
+      "name": "savings_goals_manager_delete_guard",
+      "check": null,
+      "roles": [
+        "authenticated"
+      ],
+      "table": "savings_goals",
+      "using": "can_manage_family(family_id)",
+      "command": "d",
+      "permissive": false
+    },
+    {
+      "name": "savings_goals_manager_insert_guard",
+      "check": "can_manage_family(family_id)",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "savings_goals",
+      "using": null,
+      "command": "a",
+      "permissive": false
+    },
+    {
+      "name": "savings_goals_manager_update_guard",
+      "check": "can_manage_family(family_id)",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "savings_goals",
+      "using": "can_manage_family(family_id)",
+      "command": "w",
+      "permissive": false
+    },
+    {
+      "name": "savings_goals_update",
+      "check": "is_family_member(family_id)",
+      "roles": [
+        "public"
+      ],
+      "table": "savings_goals",
+      "using": "is_family_member(family_id)",
+      "command": "w",
+      "permissive": true
+    },
+    {
+      "name": "Members can manage transactions",
+      "check": "is_family_member(family_id)",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "transactions",
+      "using": "is_family_member(family_id)",
+      "command": "*",
+      "permissive": true
+    },
+    {
+      "name": "transactions_delete",
+      "check": null,
+      "roles": [
+        "public"
+      ],
+      "table": "transactions",
+      "using": "is_family_member(family_id)",
+      "command": "d",
+      "permissive": true
+    },
+    {
+      "name": "transactions_insert",
+      "check": "is_family_member(family_id)",
+      "roles": [
+        "public"
+      ],
+      "table": "transactions",
+      "using": null,
+      "command": "a",
+      "permissive": true
+    },
+    {
+      "name": "transactions_manager_delete_guard",
+      "check": null,
+      "roles": [
+        "authenticated"
+      ],
+      "table": "transactions",
+      "using": "can_manage_family(family_id)",
+      "command": "d",
+      "permissive": false
+    },
+    {
+      "name": "transactions_manager_insert_guard",
+      "check": "can_manage_family(family_id)",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "transactions",
+      "using": null,
+      "command": "a",
+      "permissive": false
+    },
+    {
+      "name": "transactions_manager_update_guard",
+      "check": "can_manage_family(family_id)",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "transactions",
+      "using": "can_manage_family(family_id)",
+      "command": "w",
+      "permissive": false
+    },
+    {
+      "name": "transactions_update",
+      "check": "is_family_member(family_id)",
+      "roles": [
+        "public"
+      ],
+      "table": "transactions",
+      "using": "is_family_member(family_id)",
+      "command": "w",
+      "permissive": true
+    }
+  ],
+  "anonInheritsAuthenticated": false
+}

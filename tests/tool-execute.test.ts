@@ -53,13 +53,15 @@ function makeDb(respond: (call: Call) => Reply) {
       lte: (c: string, v: unknown) => filter(`lte:${c}`, v),
       gt: (c: string, v: unknown) => filter(`gt:${c}`, v),
       gte: (c: string, v: unknown) => filter(`gte:${c}`, v),
+      neq: (c: string, v: unknown) => filter(`neq:${c}`, v),
       not: (c: string, op: string, v: unknown) => filter(`not:${c}:${op}`, v),
       insert: (payload: unknown) => { call.kind = 'insert'; call.payload = payload; return b; },
       update: (payload: unknown) => { call.kind = 'update'; call.payload = payload; return b; },
       delete: () => { call.kind = 'delete'; return b; },
       single: () => Promise.resolve(respond(call)),
       maybeSingle: () => Promise.resolve(respond(call)),
-      then: (resolve: (value: Reply) => void) => resolve(respond(call)),
+      // A collection answer carries its count, as PostgREST's Content-Range does.
+      then: (resolve: (value: Reply & { count?: number }) => void) => { const r = respond(call); resolve(Array.isArray(r.data) ? { ...r, count: r.data.length } : r); },
     });
     return b;
   };
@@ -509,7 +511,11 @@ describe('trust gate', () => {
 
   it('lets read-only tools through without a gate or a ledger row', async () => {
     const family = makeFamilyDb({
-      domain: (call) => (call.table === 'calendar_events' ? { data: [EVENT_ROW], error: null } : null),
+      domain: (call) => (call.table === 'calendar_events' ? {
+        data: call.filters['neq:recurrence'] === 'none' ? [] : [{
+          ...EVENT_ROW, id: '40000000-0000-4000-8000-000000000001', idempotency_key: null,
+        }], error: null,
+      } : null),
     });
     const ledger = makeLedger();
     ledgerHolder.client = ledger.db;

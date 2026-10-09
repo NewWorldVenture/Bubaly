@@ -2,6 +2,7 @@ import { createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CalendarReadinessEvent } from '@/lib/readiness/calendar-source';
+import { briefingCalendarBounds, calendarWindowFilter } from '@/lib/briefing/calendar-window';
 
 const mocks = vi.hoisted(() => ({
   requireUserContext: vi.fn(), createServer: vi.fn(), effectivePlanLevel: vi.fn(), resolveFamilyPlanLevel: vi.fn(),
@@ -37,9 +38,23 @@ import ReadinessPage from '@/app/(app)/dashboard/readiness/page';
 type Result<T> = { data: T[] | null; count: number | null; error: unknown };
 type Query = { table: string; selection?: string; options?: { count?: string; head?: boolean }; limit?: number; filters: { method: string; key: string; value: unknown }[] };
 const result = <T,>(data: T[], count = data.length): Result<T> => ({ data, count, error: null });
+/** A series row as the page reads it: the recurrence columns ride along with the readiness ones. */
+type SeriesRow = CalendarReadinessEvent & { recurrence: string; recurrence_until: string | null };
 let week: Result<CalendarReadinessEvent>;
 let tomorrow: Result<CalendarReadinessEvent>;
+/** The series that could reach either window; the page expands them itself. */
+let series: Result<SeriesRow>;
 let roster: Result<{ id: string }>;
+
+// The page reads each calendar horizon as two queries — the one-offs by the
+// window, the series that could reach it — through lib/calendar/occurrences.
+// A one-off read is told apart by the window it carries; the family's day is
+// Los Angeles's, and the clock below is 2026-09-06 there.
+const TZ = 'America/Los_Angeles';
+const TOMORROW_FILTER = calendarWindowFilter(briefingCalendarBounds('2026-09-06', TZ, 1, 1));
+const WEEK_FILTER = calendarWindowFilter(briefingCalendarBounds('2026-09-06', TZ, 0, 8));
+const isSeriesRead = (record: Query) => record.filters.some((f) => f.method === 'neq' && f.key === 'recurrence');
+const windowOf = (record: Query) => record.filters.find((f) => f.method === 'or')?.key;
 // `null` is a configured value, not an unset one: it stands for a count
 // query that came back with no count and no error.
 let counts: Record<string, number | null>;
@@ -56,7 +71,9 @@ function from(table: string) {
     then: (resolve: (value: unknown) => unknown) => {
       let reply: unknown;
       if (table === 'family_members') reply = roster;
-      else if (table === 'calendar_events' && !record.options?.head) reply = record.limit === 200 ? week : tomorrow;
+      else if (table === 'calendar_events' && !record.options?.head) {
+        reply = isSeriesRead(record) ? series : windowOf(record) === TOMORROW_FILTER ? tomorrow : week;
+      }
       else if (table === 'meal_plans' && !record.options?.head) reply = result(Array.from({ length: 7 }, (_, i) => ({ plan_date: `2026-09-${String(6 + i).padStart(2, '0')}` })));
       else reply = {
         data: null,
@@ -69,6 +86,8 @@ function from(table: string) {
   for (const method of ['eq', 'in', 'lt', 'lte', 'gte', 'neq', 'not']) {
     query[method] = (key: string, value: unknown) => { record.filters.push({ method, key, value }); return query; };
   }
+  // An `or` carries a whole expression and no column; it is recorded under `key`.
+  query.or = (expression: string) => { record.filters.push({ method: 'or', key: expression, value: undefined }); return query; };
   return query;
 }
 
@@ -100,6 +119,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date('2026-09-06T12:00:00.000Z'));
   week = result([]);
   tomorrow = result([]);
+  series = result([]);
   roster = result([{ id: 'one' }, { id: 'two' }, { id: 'three' }]);
   counts = {};
   queries = [];
@@ -140,10 +160,31 @@ describe('readiness page source coverage', () => {
     const html = await render();
     expect(html).toContain('Everything ahead looks handled.');
     expect(html).not.toContain(COVERAGE_BANNER);
-    const weekly = queries.find((query) => query.table === 'calendar_events' && query.limit === 200)!;
-    expect(weekly.options).toEqual({ count: 'exact' });
-    expect(weekly.filters).toContainEqual({ method: 'gte', key: 'starts_at', value: '2026-09-06T00:00:00Z' });
-    expect(weekly.filters).toContainEqual({ method: 'lte', key: 'starts_at', value: '2026-09-13T23:59:59Z' });
+    // The week is today and the seven days after it, on the family's wall —
+    // timed rows by Los Angeles instants, all-day rows by their date — and its
+    // series read reaches every series that started by the window's end.
+    const weekly = queries.find((query) => query.table === 'calendar_events' && windowOf(query) === WEEK_FILTER)!;
+    expect(weekly.filters).toContainEqual({ method: 'eq', key: 'family_id', value: 'family-1' });
+    expect(WEEK_FILTER).toContain('starts_at.gte.2026-09-06T07:00:00.000Z,starts_at.lt.2026-09-14T07:00:00.000Z');
+    expect(WEEK_FILTER).toContain('starts_at.gte.2026-09-06T00:00:00.000Z,starts_at.lt.2026-09-14T00:00:00.000Z');
+    const weeklySeries = queries.filter((query) => query.table === 'calendar_events' && isSeriesRead(query));
+    expect(weeklySeries.map((q) => q.filters.find((f) => f.method === 'lte' && f.key === 'starts_at')?.value))
+      .toEqual(expect.arrayContaining(['2026-09-14T07:00:00.000Z']));
+  });
+
+  it('a daily commitment created last month is this week\'s load, every week', async () => {
+    // One row, created in August; eight occurrences in the eight-day window,
+    // all on one person. Read by its first start, as the page used to, the
+    // week was empty and "Everything ahead looks handled." was printed over a
+    // household with something on every day.
+    series = result([{
+      id: 'series-1', starts_at: '2026-08-03T17:00:00.000Z', ends_at: '2026-08-03T18:00:00.000Z', all_day: false,
+      assignee_id: 'one', recurrence: 'daily', recurrence_until: null,
+    }]);
+    const html = await render();
+    expect(html).toContain('1 person carrying a heavy load in the visible calendar');
+    expect(html).not.toContain('Everything ahead looks handled.');
+    expect(html).not.toContain(COVERAGE_BANNER);
   });
 
   it('shows weekly read failure as unknown while preserving known bills and meal signals', async () => {
@@ -206,8 +247,10 @@ describe('readiness page source coverage', () => {
   });
 
   it('labels capped conflicts as a lower bound and does not claim exact workload', async () => {
+    // 201 one-offs in the window: the page keeps the first 200 and counts all
+    // 201, so the week reads as incomplete rather than exactly known.
     week = result([event(0), { ...event(1), starts_at: event(0).starts_at },
-      ...Array.from({ length: 198 }, (_, i) => ({ ...event(i + 2), all_day: true }))], 201);
+      ...Array.from({ length: 199 }, (_, i) => ({ ...event(i + 2), all_day: true }))]);
     const html = await render();
     expect(html).toContain('At least 1 clash this week');
     expect(html).toContain('Weekly visible calendar is incomplete');
@@ -215,11 +258,39 @@ describe('readiness page source coverage', () => {
     expect(html).not.toContain('carrying a heavy load');
   });
 
-  it('treats missing count metadata as incomplete even when no rows were returned', async () => {
-    week.count = null;
+  it('a failed series read is a failed week, not a quiet one', async () => {
+    // The week is two reads now; the second failing must not leave the first
+    // standing as the whole calendar.
+    series = { data: null, count: null, error: new Error('Unavailable') };
     const html = await render();
+    expect(html).toContain('Weekly visible calendar could not be read');
     expect(html).toContain(COVERAGE_BANNER);
     expect(html).not.toContain('The week is under control.');
+    expect(html).not.toContain('Everything ahead looks handled.');
+  });
+
+  // The two-read calendar window asks for an exact count and refuses an answer
+  // without one (lib/calendar/occurrences.ts, recheck 5981632558 on #923). The
+  // page must carry that refusal as a week it could not read — never as the
+  // smaller week the uncounted rows would have made.
+  it.each([null, -1, 0.5])('a series read whose count is not a count (%s) is a failed week, not a smaller one', async (count) => {
+    series = { data: [], count, error: null };
+    week = result(Array.from({ length: 8 }, (_, i) => event(i)));
+    const html = await render();
+    expect(html).toContain('Weekly visible calendar could not be read');
+    expect(html).toContain('Workload balance is unknown');
+    expect(html).toContain(COVERAGE_BANNER);
+    expect(html).not.toContain('carrying a heavy load');
+    expect(html).not.toContain('The week is under control.');
+    expect(html).not.toContain('Everything ahead looks handled.');
+  });
+
+  it('a one-off read whose count is not a count is a failed tomorrow', async () => {
+    tomorrow = { data: [event(0)], count: null, error: null };
+    const html = await render();
+    expect(html).toContain('visible calendar could not be read; conflicts and assignments are unknown');
+    expect(html).not.toContain('You&#x27;re set for tomorrow.');
+    expect(html).toContain(COVERAGE_BANNER);
   });
 
   it('does not turn a failed tomorrow read into a clear tomorrow', async () => {

@@ -668,8 +668,10 @@ begin
     select id into v_convo from public.family_conversations
       where family_id = v_family and name = 'Seed Chat' limit 1;
     if v_convo is null then
-      insert into public.family_conversations (family_id, name, kind, avatar_emoji)
-      values (v_family, 'Seed Chat', 'group', '💬') returning id into v_convo;
+      -- Only a newly seeded chat receives the current synthetic audience.
+      -- Existing chats retain their recorded audience across repeat seeding.
+      insert into public.family_conversations (family_id, name, kind, avatar_emoji, participant_ids)
+      values (v_family, 'Seed Chat', 'group', '💬', coalesce(v_members, '{}'::uuid[])) returning id into v_convo;
     end if;
   end if;
 

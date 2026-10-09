@@ -6,7 +6,7 @@
 // The template plans the run-up to ONE holiday date, not the whole season: a
 // plan that tries to cover December from the first of November is a plan
 // nobody reads.
-import { localTime, shiftDay, type TemplateContext, type WorkflowTemplate } from './index';
+import { calendarSearchTime, localTime, shiftDay, type TemplateContext, type WorkflowTemplate } from './index';
 
 /** The holiday being planned: the named date, else three weeks out. */
 export function holidayKey(ctx: TemplateContext): string {
@@ -29,7 +29,7 @@ export const holidayTemplate: WorkflowTemplate = {
   ],
   steps: [
     { key: 'members', stepType: 'retrieve', toolName: 'family.listMembers', description: 'Confirm who is here for the holiday', input: () => ({}) },
-    { key: 'events', stepType: 'retrieve', toolName: 'calendar.searchEvents', description: 'Read what is already booked around the holiday', input: (ctx) => ({ from: localTime(shiftDay(holidayKey(ctx), -14), 0), to: localTime(shiftDay(holidayKey(ctx), 3), 23, 59), limit: 50 }) },
+    { key: 'events', stepType: 'retrieve', toolName: 'calendar.searchEvents', description: 'Read what is already booked around the holiday', input: (ctx) => ({ from: calendarSearchTime(holidayKey(ctx), 0, 0, ctx.tz, -14), to: calendarSearchTime(holidayKey(ctx), 23, 59, ctx.tz, 3), limit: 50 }) },
     { key: 'conflicts', stepType: 'retrieve', toolName: 'calendar.findConflicts', description: 'Look for clashes in the run-up', input: (ctx) => ({ from: localTime(shiftDay(holidayKey(ctx), -7), 0), to: localTime(shiftDay(holidayKey(ctx), 1), 23, 59) }) },
     { key: 'grocery', stepType: 'retrieve', toolName: 'groceries.listOpen', description: 'Read what is already on the shopping list', input: () => ({ limit: 50 }) },
     { key: 'traditions', stepType: 'retrieve', toolName: 'memory.recall', description: 'Recall the family traditions and who eats what', input: () => ({ category: 'preference', query: 'holiday', limit: 20 }) },

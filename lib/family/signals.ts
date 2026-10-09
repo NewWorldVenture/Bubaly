@@ -23,6 +23,8 @@
 // conversion, because there is no instant to convert.
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
+import { readCompleteCalendarOccurrences } from '@/lib/services/calendar/search-occurrences';
+import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from '@/lib/calendar/source-capability';
 import { addDaysToDayKey, dayKeyInTz, zonedDayBoundsMs, zonedTimeMs } from '@/lib/services/scope';
 import { computeStress, type StressInput, type StressResult } from './stress';
 import { completionScore, nextBestActions, type NextAction } from './operations';
@@ -123,8 +125,22 @@ export async function gatherSignalsResult(
     meals,
     grocery,
   ] = await settleAll([
-    supabase.from('calendar_events').select('starts_at')
-      .eq('family_id', familyId).gte('starts_at', startIso).lte('starts_at', in7Iso),
+    (async () => {
+      const unavailable = (message: string) => ({ data: null, error: { message } });
+      if (CALENDAR_SOURCE_ARCHIVE_ENABLED) return unavailable('Family signals imported-source calendars are not supported yet.');
+      const result = await readCompleteCalendarOccurrences({ db: supabase, familyId, tz,
+        userId: null, memberId: null, role: 'system', actorKind: 'system',
+      }, { from: startIso, to: in7Iso });
+      if (!result.ok) return unavailable(result.error);
+      const native = result.data.occurrences.filter(row => row.kind === 'native');
+      if (native.length !== result.data.occurrences.length) return unavailable('Family signals require a native calendar domain.');
+      // Preserve the existing start-based histogram and inclusive seventh-day
+      // boundary, rather than turning ongoing spans into daily workload counts.
+      // Complete qualification also checks ongoing rows before this selection.
+      return { data: native.filter(row => row.all_day
+        ? row.startDate! >= todayKey && row.startDate! <= weekEndKey
+        : Date.parse(row.actualStartsAt) >= Date.parse(startIso) && Date.parse(row.actualStartsAt) <= Date.parse(in7Iso)), error: null };
+    })(),
     supabase.from('appointments').select('id, starts_at')
       .eq('family_id', familyId).gte('starts_at', startIso).lt('starts_at', endIso),
     supabase.from('chore_assignments').select('due_at')
@@ -154,9 +170,11 @@ export async function gatherSignalsResult(
   const byDay = new Map<string, number>();
   const times: number[] = [];
   for (const e of weekEvents.data ?? []) {
-    const day = dayKeyInTz(new Date(e.starts_at), tz);
+    const day = e.all_day ? e.startDate! : dayKeyInTz(new Date(e.actualStartsAt), tz);
     byDay.set(day, (byDay.get(day) ?? 0) + 1);
-    times.push(new Date(e.starts_at).getTime());
+    // A civil DATE has no appointment clock and cannot create a timed
+    // back-to-back transition merely because it is stored at UTC midnight.
+    if (!e.all_day) times.push(Date.parse(e.actualStartsAt));
   }
   const maxEventsPerDay = byDay.size ? Math.max(...byDay.values()) : 0;
   const eventsToday = byDay.get(todayKey) ?? 0;

@@ -9,11 +9,16 @@ import { reactBrowserScripts } from './helpers/react-browser';
 const { react, reactDom } = reactBrowserScripts('development');
 const sources = Object.fromEntries([
   'components/finance/budgets-view.tsx', 'components/finance/bills-view.tsx',
+  'components/finance/bill-payment-modal.tsx',
+  'components/finance/bill-schedule-modal.tsx', 'lib/constants/roles.ts',
   'components/finance/payments-view.tsx', 'components/finance/savings-view.tsx',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
   'components/ui/input.tsx', 'components/app/page-header.tsx', 'lib/finance/hub.ts',
   // bills-view's Mark paid and add form write what lib/finance/recurring.ts decides.
-  'lib/finance/recurring.ts',
+  'lib/finance/recurring.ts', 'lib/finance/bills.ts', 'lib/finance/bill-schedule.ts',
+  // Bills uses the real counted reader; keep its finite dependency graph real.
+  'lib/calendar/occurrences.ts', 'lib/calendar/recurrence.ts', 'lib/calendar/day.ts',
+  'lib/calendar/source-capability.ts', 'lib/calendar/exact-instant.ts', 'lib/onboarding/ics-time.ts', 'lib/briefing/calendar-window.ts',
   // hub.ts reads the locale catalogue for its default currency locale.
   'lib/i18n/locales.ts',
   // And periodStart reads the READER's local day key from here. hub.ts used to
@@ -74,7 +79,7 @@ test.beforeEach(async ({ page }) => {
       react: React,
       'lucide-react': new Proxy({}, { get: () => () => null }),
       '@/lib/utils/cn': { cn: (...values) => values.filter(v => typeof v === 'string').join(' ') },
-      '@/components/app/app-context': { useApp: () => ({ familyId: 'family', userId: 'user' }) },
+      '@/components/app/app-context': { useApp: () => ({ familyId: 'family', userId: 'user', role: 'parent' }) },
       // Every view calls useLocale() as well as useTranslations(), and passes
       // locale.code to hub.ts's usd/fmtDueDate. It must hand back the whole
       // Locale record, not a code string: a () => 'en-US' stub type-checks
@@ -93,6 +98,7 @@ test.beforeEach(async ({ page }) => {
       // above do - so a write that appears here says so, instead of failing as
       // "actions_1.setBudgetAction is not a function" three frames away.
       '@/app/(app)/dashboard/billing/actions': {
+        confirmBillScheduleAction: () => { throw new Error('Unexpected financial write'); },
         setBudgetAction: () => { throw new Error('Unexpected financial write'); },
         deleteBudgetAction: () => { throw new Error('Unexpected financial write'); },
         createSavingsGoalAction: () => { throw new Error('Unexpected financial write'); },
@@ -111,7 +117,7 @@ test.beforeEach(async ({ page }) => {
       if (id in modules) return modules[id];
       if (!(id in sources)) throw new Error('Unexpected fixture import: ' + id);
       const module = { exports: {} }; modules[id] = module.exports;
-      new Function('require', 'module', 'exports', sources[id])(name => load(name.startsWith('./') ? id.slice(0, id.lastIndexOf('/') + 1) + name.slice(2) : name), module, module.exports);
+      new Function('require', 'module', 'exports', sources[id])(name => load(name === '../onboarding/ics-time' ? '@/lib/onboarding/ics-time' : name === '../calendar/exact-instant' ? '@/lib/calendar/exact-instant' : name === '../time/zoned' ? '@/lib/time/zoned' : name.startsWith('./') ? id.slice(0, id.lastIndexOf('/') + 1) + name.slice(2) : name), module, module.exports);
       return module.exports;
     }
     let root;

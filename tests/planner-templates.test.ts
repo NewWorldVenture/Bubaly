@@ -11,8 +11,9 @@ import { parseVerificationSpec } from '@/lib/ai/runs/verify';
 import { conformNulls } from '@/lib/ai/schema-to-json';
 import { getTool } from '@/lib/ai/tools/registry';
 import { parseStepInput } from '@/lib/ai/planner/schema';
+import { validateCalendarSearchWindow } from '@/lib/services/calendar/search-occurrences';
 import {
-  allTemplates, instantiateTemplate, localTime, mondayOf, monthBounds, shiftDay, templateContextFrom, templateFor, weekdayOf,
+  allTemplates, calendarSearchTime, instantiateTemplate, localTime, mondayOf, monthBounds, shiftDay, templateContextFrom, templateFor, weekdayOf,
   type TemplateContext,
 } from '@/lib/ai/planner/templates/index';
 import { INTENT_KEYS } from '@/lib/ai/context/intents';
@@ -208,6 +209,54 @@ describe('workflow templates are runnable skeletons', () => {
 });
 
 describe('template dates resolve in the family\'s calendar', () => {
+  it.each(['America/New_York', 'America/Los_Angeles', 'Asia/Tokyo'])('admits every generated search window on the strict household clock: %s', timezone => {
+    for (const day of ['2026-03-08', '2026-09-05', '2026-11-01']) {
+      const ctx = ctxOn(day, { tz: timezone });
+      let searches = 0;
+      for (const template of allTemplates()) {
+        const plan = instantiateTemplate(template, ctx);
+        for (const step of plan.steps.filter(step => step.tool_name === 'calendar.searchEvents')) {
+          searches++;
+          const input = parseStepInput(step.input);
+          expect(input.ok, `${template.intent}/${step.key}`).toBe(true);
+          if (!input.ok) throw Error('Invalid template search input');
+          const window = validateCalendarSearchWindow({familyId:'synthetic-family',tz:timezone}, {from:String(input.value.from),to:String(input.value.to)});
+          expect(window.from).toMatch(/Z$/);expect(window.to).toMatch(/Z$/);
+          expect(Date.parse(window.to)).toBeGreaterThanOrEqual(Date.parse(window.from));
+        }
+      }
+      expect(searches).toBe(11);
+    }
+  });
+
+  it.each([['2026-03-08',23],['2026-11-01',25]] as const)('preserves the %s civil day across %i hours', (day,hours) => {
+    const from=calendarSearchTime(day,0,0,'America/New_York');
+    const to=calendarSearchTime(shiftDay(day,1),0,0,'America/New_York');
+    expect(Date.parse(to)-Date.parse(from)).toBe(hours*3_600_000);
+    const plan=instantiateTemplate(templateFor('daily_brief')!,ctxOn(day));
+    const input=parseStepInput(plan.steps.find(step=>step.key==='today')!.input);
+    expect(input.ok).toBe(true);if(!input.ok)throw Error('Missing search');
+    expect(input.value.from).toBe(from);expect(Date.parse(String(input.value.to))-Date.parse(from)).toBe(hours*3_600_000-60_000);
+  });
+
+  it('uses the first repeated reading and refuses nonexistent readings or skipped dates', () => {
+    expect(calendarSearchTime('2026-11-01',1,30,'America/New_York')).toBe('2026-11-01T05:30:00.000Z');
+    expect(()=>calendarSearchTime('2026-03-08',2,30,'America/New_York')).toThrow('Nonexistent');
+    expect(()=>calendarSearchTime('2011-12-30',0,0,'Pacific/Apia')).toThrow('Nonexistent');
+  });
+
+  it.each(['holiday','life_event'] as const)('refuses invalid named dates before %s search arithmetic can normalize them', intent => {
+    expect(()=>instantiateTemplate(templateFor(intent)!,ctxOn('2026-09-05',{entities:{day:'2026-02-30'}}))).toThrow('Invalid calendar search clock');
+    expect(()=>calendarSearchTime('2026-02-30',0,0,'America/New_York',7)).toThrow('Invalid');
+  });
+
+  it.each([
+    ['2026-02-30',0,0,'UTC'],['2026-09-05',24,0,'UTC'],['2026-09-05',0,60,'UTC'],
+    ['2026-09-05',0,0,'Invalid/Zone'],['2026-09-05',0,0,''],
+  ] as const)('refuses an invalid search civil clock %s %i:%i %s', (day,hour,minute,timezone) => {
+    expect(()=>calendarSearchTime(day,hour,minute,timezone)).toThrow('Invalid');
+  });
+
   it('knows weekdays and Mondays', () => {
     expect(weekdayOf('2026-09-05')).toBe(6);   // Saturday
     expect(weekdayOf('2026-09-06')).toBe(0);   // Sunday

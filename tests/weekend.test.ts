@@ -111,8 +111,13 @@ describe('ICS parsing', () => {
     expect(parseICSDate('20260115T090000', 'America/Chicago')).toBe('2026-01-15T15:00:00Z');
     expect(parseICSDate('20260625T090000', 'America/Chicago')).toBe('2026-06-25T14:00:00Z');
     expect(parseICSDate('20260625T090015', 'Europe/London')).toBe('2026-06-25T08:00:15Z');
-    // A reading Chicago skips at spring-forward (2026-03-08, 02:00 → 03:00) is the first minute that exists.
-    expect(parseICSDate('20260308T023000', 'America/Chicago')).toBe('2026-03-08T08:00:00Z');
+    // RFC 5545 §3.3.5: a reading Chicago skips at spring-forward (2026-03-08,
+    // 02:00 → 03:00) takes the offset in force before the gap (CST, -6).
+    expect(parseICSDate('20260308T023000', 'America/Chicago')).toBe('2026-03-08T08:30:00Z');
+    expect(parseICSDate('20261004T023000', 'Australia/Sydney')).toBe('2026-10-03T16:30:00Z');
+    // A reading shown twice at fall-back is the first instant.
+    expect(parseICSDate('20261025T013000', 'Europe/London')).toBe('2026-10-25T00:30:00Z');
+    expect(parseICSDate('20261101T013000', 'America/New_York')).toBe('2026-11-01T05:30:00Z');
   });
 
   it('a floating time is read as UTC, the same instant the server always made of it, and a zone it does not know falls back to that', () => {

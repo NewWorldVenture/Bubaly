@@ -96,7 +96,7 @@ export async function toggleDateOnCalendarAction(dateId: string): Promise<Toggle
     // ── On to the calendar ──────────────────────────────────────────────────
     //
     // The shape still comes from `buildCalendarEventForDate`, which owns the
-    // domain rules — all-day, noon UTC so the day is stable across zones,
+    // domain rules — all-day UTC civil boundaries with an exclusive next day,
     // birthdays in the birthday category, recurring dates as yearly events — and
     // has its own tests. Re-deriving them here would have been a second copy of
     // exactly the kind this work exists to remove.
@@ -118,6 +118,7 @@ export async function toggleDateOnCalendarAction(dateId: string): Promise<Toggle
       title: built.title,
       category: built.category as EventCategory,
       startsAt: built.starts_at,
+      endsAt: built.ends_at ?? null,
       allDay: built.all_day ?? true,
       recurrence: built.recurrence as RecurrenceFreq,
       location: built.location ?? null,

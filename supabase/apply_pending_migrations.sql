@@ -1,9 +1,11 @@
 -- ============================================================
--- Bubaly :: pending migrations bundle
--- Paste this whole file into the Supabase SQL Editor (or run via psql).
--- Idempotent: safe to run more than once. Assumes base migrations
--- 0001–0009 are already applied (the app's existing tables).
--- Includes: 0008 super admin seed, 0010 blog, 0011 public_stats, 0012 support_tickets.
+-- Bubaly :: historical migration bundle — NOT a current release plan
+-- Do not paste or execute this legacy bundle against a live database.
+-- Its original 0001–0009 baseline assumptions and repeat-safety claim
+-- are not current production compatibility evidence.
+-- Consult finalaudit.md and docs/PENDING_PROD_MIGRATIONS.md for the preserved
+-- allocation map, catalog/ledger reconciliation and approved release gates.
+-- Retained SQL is historical source; this warning does not authorize applying it.
 -- ============================================================
 
 

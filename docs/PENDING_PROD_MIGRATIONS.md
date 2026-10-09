@@ -1,59 +1,143 @@
 # Production release status and historical feature inventory
 
-> **Status correction, 2026-10-03** (blocked-rows eligibility review;
-> evidence in `docs/final-audit/blocked-rows-eligibility-20261003.md`).
-> The connectivity paragraph below is historical. The `Supabase production
-> migrations` workflow links again: run 84 on main `d25e39ea` (2026-10-02
-> 12:11 UTC) passed `supabase link`, `supabase migration list --linked` and
-> `node scripts/audit-production-migration-state.mjs --enforce-history`,
-> reading **192 ledger rows, `0001`–`0176`**, 444 public tables, 1,002
-> policies, `requiresBaselineReview: false`, and every money table "closed by
-> restrictive guard". So the ledger no longer records only `0001`–`0003`,
-> `0004` is recorded, and the replay-from-`0004` procedure in LB-016 §4.3 no
-> longer applies (DEPLOY-003 is moot on that point). The blocker is `0177`
-> (PROD-DB-0177): before the 2026-09-27 dispatch-only gate a push to main ran
-> the apply step itself, and every such run (64, `35465574540`, 2026-09-19,
-> and the ledger's `533554be` / `7e54596d` / `671c5f6a`) was cancelled inside
-> `0177`'s single `DO` block by the 120 s statement timeout (`SQLSTATE 57014`)
-> after its `families(created_by)` cleanup was skipped on
-> `family_model_dirty_family_id_fkey`, so nothing from `0177` on is applied.
-> No `workflow_dispatch` with `apply=true` has been run.
-> "Apply ordered migrations" runs only on `workflow_dispatch` with
-> `apply=true`; a push to main verifies and never applies. Run 84's own
-> failure is the later schema-verification step, HTTP 401 from PostgREST on
-> all 52 checks: PostgREST rejects the `SUPABASE_SERVICE_ROLE_KEY` the workflow
-> holds, so that repository secret needs replacing; the owner's action.
+## Candidate code versus production evidence — 2026-10-08
 
-**Current status (2026-09-05; main `01881fb279589d7a90acb8302817bb385fbe036d`).**
-**This baseline is stale — see "Migrations added since this document's stated
-baseline" at the end for the thirty-one migrations (`0255`-`0285`) that landed after
-it, three of which gate features already deployed in the app.**
-**Connectivity NO LONGER works, as of 2026-09-13.** The `Supabase production
-migrations` workflow fails before it reads anything, at `supabase link`:
+The next candidate batch repairs ongoing Home/Kids/Display/briefing spans,
+complete meal-library inputs, schedule-only bill recovery and failed calendar
+export completeness probes. It preserves the same allocation map and rollout
+holds. The receipt below belongs to the earlier published head; current batch
+validation is recorded separately in `finalaudit.md` and does not establish
+production acceptance.
 
-```
-Authorization failed for the access token and project ref pair:
-"Your account does not have the necessary privileges to access this endpoint."
-```
+`finalaudit.md` is the current audit ledger. Main remains
+`82f2db1fcd0dca59179d2b391a76acfd459e480b`; #969 is the sole open PR.
+Its published `b1f36efea` includes complete calendar/sidebar and bill reads,
+owner-bound callback repairs, and complete meal-calendar dinner intervals.
+The frozen local matrix passes 2,083 cases in each of three time zones, plus
+web TypeScript/lint and 23 synthetic finance browser checks. Hosted acceptance
+for that head is separate and still running; these receipts do not qualify a
+main merge, actual provider execution or production deployment.
 
-Every apply and verify step after it is **skipped**, so no migration reaches
-production and the audit below cannot refresh itself. This is a regression, not
-the long-standing ledger gate: the 2026-09-07 run got *past* `link` and read the
-real catalogue (441 tables, 978 policies). Something changed for
-`SUPABASE_ACCESS_TOKEN` or `SUPABASE_PROJECT_REF` between those dates — the
-token was rotated or revoked, or its account lost access to the project.
+The candidate also contains a guarded source-calendar archive, parser,
+coherent snapshot reader, subscribed-feed publication path and web/mobile
+span rendering. `CALENDAR_SOURCE_ARCHIVE_ENABLED` remains **false** in code.
+Its disabled legacy feed path still refuses unsupported timed/complex series;
+that restriction is not a description of what the guarded archive can parse.
+Remaining source consumers, alternate ingress/export and existing-data repair
+remain incomplete. Held0490 storage/publication tests do not activate the
+source model or establish production schema/ACL/FK acceptance.
 
-Fixing that alone is **not sufficient**: the baseline gate below still throws by
-design until `0004` is recorded, and repairing the ledger is a credentialed
-operator action (§4). Expect two steps, in that order.
+Preserve the owner's allocation map below. No resequencing, filler or held
+migration promotion is authorized by local/hosted green checks. The retained
+192-entry ledger/high-water0176 observation is neither a contiguous migration
+history nor permission to replay all missing versions. Offline rollout remains
+`REVIEW_REQUIRED_NOT_APPLY_READY`; Production Ready remains **NO**.
 
-The secret names are `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`,
-`SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_ANON_KEY`; never include their values
-in this document, logs, or reports. Production's migration ledger records only
-`0001-0003` despite existing schema. A missing ledger entry does **not** establish
-that the corresponding schema or feature is absent.
+## Current rollout review update — 2026-10-08 01:42 UTC
 
-## Wallet mint boundary — the finding, and what closes it
+The [prepared bill/chat/source metadata preflight](final-audit/messaging-bill-readonly-preflight.sql)
+now includes all reserved0490 source tables, public RPC overloads and private
+helpers, plus explicit missing-object rows and effective role/default ACLs.
+The earlier production snapshot did not query the new archive/read objects;
+their absence or safety remains unverified. The expanded query has **13 synthetic
+PostgreSQL 17.10 controls** in the [local fixture receipt](final-audit/source-catalog-preflight-fixture-20261008.json).
+Reproduce only against a new owned local cluster with
+`node scripts/verify-source-catalog-preflight.mjs --bin "C:/Program Files/PostgreSQL/17/bin"`.
+The verifier accepts no connection URL or external host and stops its own cluster.
+This proves prepared-query coverage and observable unsafe grant controls, not
+production schema compatibility, safe privileges or permission to apply0490.
+
+[Review package](final-audit/rollout-20261008/README.md): fresh metadata confirms missing allowance manager/reference and investment decision/economics guards. Aggregate-only preflight finds existing family/wallet and investment amount inconsistencies; the counts and qualifications are retained without individual records. Source0304/0306/0311/0447 are pinned review inputs, not an apply list. An unallocated composite-reference candidate passes an isolated structural PostgreSQL fixture while preserving historical rows; it remains outside every apply workflow. Data provenance/disposition, full dependency/role/trigger rehearsal and separate production approval remain required. No production write, migration allocation change or financial action occurred. Earlier observations below remain historical.
+
+## Read-only catalog observation — 2026-10-08
+
+The Supabase connector successfully read Bubaly metadata at 00:12 UTC; the
+earlier HTTP 401 reports remain historical evidence for their access path.
+The exact [SELECT](final-audit/catalog-snapshot-20261008.sql) and
+[receipt](final-audit/catalog-snapshot-20261008.json) are retained. No application
+rows were read or written, and no production configuration or DDL changed.
+
+- The migration ledger has 192 entries and lexical high-water `0176`. None of
+  `0254`, `0475`, `0476`, `0488`, `0490`, `0492`, `0493`, `0494` is recorded.
+  This is not proof that their schema changes are absent: the wallet guards
+  below demonstrate catalog/ledger divergence.
+- All four held runtime functions are absent: `calendar_feed_apply_sync`,
+  `count_family_ai_requests_month`, `ensure_sync_pull_container`, and
+  `create_sync_pull_item`. `bills.due_day` is absent too. Existing rollout holds
+  remain necessary; no allocation is promoted.
+- `wallet_transactions` has RLS enabled and all three restrictive authenticated
+  manager write guards. Their expressions call `can_manage_family(family_id)`;
+  that helper checks `auth.uid()`, active membership, and parent/adult role.
+  The old permissive member policy remains, but its presence alone does not
+  demonstrate the child-mint vulnerability while these restrictive guards apply.
+  This supersedes the unresolved-expression/current-missing-guard implication
+  in the historical wallet narrative below, without claiming a live write test.
+- `anon` retains INSERT/UPDATE/DELETE table grants, unlike the repository probe's
+  expected grant closure. All observed wallet policies target `authenticated`,
+  and `anon` does not inherit that role; grants alone do not establish an RLS
+  bypass. Grant reconciliation still needs separately reviewed production work.
+- `family-media` remains public. This observation does not authorize changing it.
+
+This bounded snapshot is not full production catalog/ACL/FK acceptance, a
+deployment receipt, or permission to replay migrations against the ledger.
+
+The subsequent [declared-schema catalog check](final-audit/schema-prerequisites-20261008.json)
+projects all 52 repository `SCHEMA_CHECKS` into a metadata-only
+[SELECT](final-audit/schema-prerequisites-20261008.sql): **11 complete, 41
+incomplete**, comprising **34 absent tables** and missing runtime columns on six
+existing tables (plus the separate column check on absent `ai_requests`). Missing
+tables include the six AI runtime tables, feature tables introduced in 0240–0248,
+and `routine_runs`. Existing AI conversation/message, approval, automation
+rule/run and home-brief tables lack the requested runtime columns. The receipt
+lists every exact name. This is actual schema absence, not an authentication
+failure. The authorized audit cannot remedy it by applying held production DDL.
+No REST exposure, full FK/ACL acceptance, live CRUD or migration replay is inferred.
+
+## Current allocation and rollout holds — 2026-10-07
+
+The owner confirmed preservation of main's allocation map. Messaging occupies
+0475–0476. No other candidate is promoted into the runnable sequence. These
+source allocations are not evidence that production applied any migration.
+
+| Generation | Source file | Release dependency |
+|---|---|---|
+| 0475 | `0475_messaging_conversation_privacy_and_delivery.sql` | Original recorded audience unions; separate empty Family Chat; actor locks, idempotent send and participant operations. |
+| 0476 | `0476_messaging_notifications_preferences.sql` | Typed notification keys, private mute preferences and participant delivery. |
+| 0488 held | `0488_a_month_end_bill_keeps_its_day.sql` | Nullable original bill anchors; older-schema writes refuse losing a chosen anchor. |
+| 0490 held | `0490_a_calendar_feed_sync_writes_only_while_it_holds_its_claim.sql` | Atomic fenced feed writes; missing RPC refuses writes. |
+| 0492 held | `0492_approval_requests_private_read.sql` | Requester/manager approval reads; production policies unverified. |
+| 0493 held | `0493_ai_copy_private_read_and_quota.sql` | Private AI copies and count-only usage; missing receipt refuses capped-Free requests. |
+| 0494 held | `0494_sync_atomic_pull.sql` | Service-only admission and atomic item/map creation; missing RPC preserves cursor and refuses writes. |
+
+Held files remain in `supabase/reserved/`; normal migration replay and
+`supabase db push` do not load them. Reserved gaps must be fulfilled by their
+actual owners before promotion. No filler migrations or resequencing.
+Failure controls do not prove held privacy policies or production RPCs exist.
+Actual catalog, ACL, FK and migration-ledger acceptance remain rollout gates.
+The production migration workflow checks `--require-runnable-rpcs` before an
+explicit apply request; held dependencies stop SQL application. Metadata-only
+verification remains available. This does not configure Vercel deployment gates.
+Complete source-consumer integration and production acceptance remain open.
+With the source capability disabled, legacy feed snapshots with timed/complex recurrence, exception identities or
+EXDATE/RDATE refuse before event writes or deletions. Only singles, bare
+cancelled masters and verified all-day exact DAILY/WEEKLY rules are admitted.
+Existing stored lossy series are not repaired by that refusal; reviewed source
+metadata and data reconciliation are still needed. The guarded archive
+foundation described above is not enabled by this candidate.
+
+#970 merged into main at `82f2db1fcd0dca59179d2b391a76acfd459e480b`.
+Current #969 composition repairs newly reviewed bill regressions and selects
+reviewed #971 messaging/calendar changes without editing its author branch.
+Prior cfa receipts certify that historical source, not this new composition.
+See `finalaudit.md` for evidence and production holds.
+
+## Historical wallet mint finding — superseded live-policy inference
+
+The 2026-10-08 resolved metadata observation above supersedes this section's
+earlier live vulnerability and apply-only remedy inference. Restrictive manager
+guards were observed despite the absent0254 ledger entry. The synthetic probes
+below remain evidence for their tested policy shapes, not evidence of current
+production exploitation, complete grant closure or permission to apply SQL.
 
 A production metadata audit reported that `public.wallet_transactions` still
 carries a **permissive INSERT policy** alongside the intended manager-only one:
@@ -62,9 +146,11 @@ the shape that lets any family member — a child account included — submit a
 policy hashes rather than expressions, so the exact live condition is still
 unverified, and nothing in it showed exploitation or money movement.
 
-**The fix already exists in this repository: `0254_wallet_write_policy_drift.sql`.
-It is unapplied, and applying it is the whole of the remedy.** Nothing new needs
-writing.
+`0254_wallet_write_policy_drift.sql` contains the repository's restrictive-guard
+repair. Its version is absent from the retained ledger; its guard effects were
+nevertheless observed in the live catalog. Reconcile the catalog and ledger
+before proposing any application; an absent ledger entry alone does not prove
+the repair is unapplied or make replay the whole remedy.
 
 Why 0254 is sufficient even though its `drop policy` list is a list of *known
 names* — a stray policy under some other name would survive those drops:
@@ -4069,7 +4155,9 @@ As of 2026-10-04 the 43 holes at or below `0474` are **retired**
 file may take one, and the reservations that left them — `0465`–`0470`,
 `0472`, `0473` among them — are released. Above `0474` the sequence has no
 gaps. `npm run db:audit:migrations` fails on either. Nothing below changes
-what is already applied: production's ledger records `0001`–`0176`.
+what is already applied: the retained production observation contains192
+entries with lexical high-water `0176`, not proof of a contiguous `0001`–`0176`
+history or complete correspondence between catalog and ledger.
 
 **Owner decision, 2026-10-04: existing allocations above `0474` are
 preserved.** It is recorded on #771 (5985652062) and was confirmed in the Claude
@@ -4166,27 +4254,20 @@ switched to the per-recipient engine; the route keeps its current behaviour.
 in `supabase/migrations/` until `0475`–`0487` have landed, so neither the replay
 nor `db push` applies it. Its probe is held with it in `docs/audit/reserved/`.
 
-**Severity: low (a bill's due date). Deploy order: any; the app is written for
-both sides of it.** One nullable, checked column, `bills.due_day` (1–31): the
-day of month a monthly, quarterly or yearly bill is anchored on. No default, no
-backfill, no index, no policy or function change. It re-applies cleanly onto a
-schema that already has it.
+**Rollout hold:** older-schema payments cannot retain an anchor through a
+clamped month. The nullable checked `bills.due_day` column has no default or
+historical backfill; null means the original day is unknown. Month-based
+legacy dates on days28–30 require an explicit day. A stale snapshot or absent
+row stamp refuses before mutation. A missing due_day column may retry only
+when the resulting date itself keeps a proven original anchor; it never
+silently adopts the short month's last day as a new recurring schedule.
 
-"Mark paid" now rolls a recurring bill to its next due date instead of closing
-it. A bill due on the 31st rolls to Feb 28 and must come back on Mar 31, and at
-Feb 28 the row alone cannot say so. Until 0488 is applied the app writes every
-roll whose due date falls on the bill's own day exactly as it would with the
-column, and never silently clamps the one roll it cannot keep (a bill on the
-29th, 30th or 31st rolling into a shorter month). Both Mark paid buttons ask
-the person, in their language, whether to mark it paid and move it to the
-shorter month's last day, due on that day from then on. Yes writes that date
-(the person chose the new day); no leaves the bill as it was and says its day
-can't be kept until a database update is applied. Anything that marks a bill
-paid with no one to ask only refuses. Applying 0488 removes the question: the
-bill moves to the short month's last day and comes back to its own day after.
-`docs/audit/reserved/a-month-end-bill-keeps-its-day-check.sql` proves the column's
-shape, its single check, and that a bill inserted without it reads null.
+The dialog keeps a user's explicit choice, but refuses a payment if the old
+schema would lose that choice. Applying held0488 is required to persist
+month-end anchors durably. The reserved probe checks the column and constraint;
+synthetic browser/unit controls check the actual callbacks and stale-write
+behavior. Neither is production compatibility evidence.
 
-**After applying:** mark paid a monthly bill due on the 31st of a month that is
-followed by a shorter one. It moves to the last day of the next month with no
-question; mark it paid again and it is back on the 31st.
+**After approved release:** verify the actual column/default/check and rollout
+prerequisites, then test a31st-day bill through February and back to March31
+using synthetic data in the designated acceptance environment.

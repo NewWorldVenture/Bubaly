@@ -48,7 +48,8 @@ begin
 
   insert into public.family_albums (family_id, name) values (fam, 'Holidays');
   insert into public.family_contacts (family_id, name) values (fam, 'Pediatrician');
-  insert into public.family_conversations (family_id) values (fam) returning id into conv;
+  insert into public.family_conversations (family_id, member_ids)
+    values (fam, array[uPar, uEx]) returning id into conv;
   insert into public.family_messages (family_id, conversation_id) values (fam, conv);
   insert into public.family_photos (family_id, storage_path) values (fam, fam || '/beach.jpg');
   insert into public.family_recipes (family_id, name) values (fam, 'Pancakes');
@@ -81,8 +82,15 @@ begin
       raise warning 'BREACH: a removed member still reads % (rows: %)', t, n;
       failures := failures + 1;
     end if;
-    execute format('update public.%I set family_id = family_id where family_id = $1', t) using fam;
-    get diagnostics n = row_count;
+    begin
+      execute format('update public.%I set family_id = family_id where family_id = $1', t) using fam;
+      get diagnostics n = row_count;
+    exception when insufficient_privilege then
+      -- Messaging now denies audience/scope columns at the privilege layer.
+      -- Either a zero-row RLS match or an explicit refusal denies this write;
+      -- the positive SELECT control above still proves the original access.
+      n := 0;
+    end;
     if n <> 0 then
       raise warning 'BREACH: a removed member still writes % (rows: %)', t, n;
       failures := failures + 1;
@@ -105,6 +113,10 @@ begin
     failures := failures + 1;
   end if;
   reset role;
+
+  -- Clear the simulated actor before owner cleanup or another same-session probe.
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claims', '', true);
 
   delete from public.families where id = fam;
   delete from auth.users where id in (uPar, uEx);

@@ -230,6 +230,11 @@ function parseOr(expression: string, mode: 'or' | 'and' = 'or'): Predicate {
   return (row) => mode === 'and' ? predicates.every((p) => p(row)) : predicates.some((p) => p(row));
 }
 
+/** Reuse the PostgREST filter parser in fixtures that implement their other filters. */
+export function orPredicate(expression: string): (row: Row) => boolean {
+  return parseOr(expression);
+}
+
 /** Split a select list on top-level commas; `a, b:c, d(e,f)` → three parts. */
 function splitSelect(list: string): string[] {
   const parts: string[] = [];

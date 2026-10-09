@@ -6,22 +6,20 @@ import { GlassCard } from '../../src/components/GlassCard';
 import { ListRow } from '../../src/components/ListRow';
 import { Pill } from '../../src/components/Pill';
 import { Screen } from '../../src/components/Screen';
-import { useAsyncData } from '../../src/hooks/use-async-data';
+import { useCalendar } from '../../src/hooks/use-calendar';
 import { useAuth } from '../../src/lib/auth';
-import { formatTime, groupByDay } from '../../src/lib/format';
-import { fetchUpcomingEvents, type EventRow } from '../../src/lib/queries';
-import { supabase } from '../../src/lib/supabase';
+import { formatTime } from '../../src/lib/format';
+import { groupCalendarDays } from '../../src/lib/calendar-core';
 import { useTheme } from '../../src/theme/theme';
 
 export default function CalendarScreen() {
   const { colors, spacing } = useTheme();
   const { family } = useAuth();
-  const familyId = family?.familyId ?? null;
-  const tz = family?.timezone ?? 'UTC';
-  const events = useAsyncData(() => (familyId ? fetchUpcomingEvents(supabase, familyId, 14) : Promise.resolve([] as EventRow[])), [familyId]);
+  const events = useCalendar(14);
+  const tz = events.data?.timezone ?? family?.timezone ?? 'UTC';
 
   const sections = useMemo(
-    () => groupByDay(events.data ?? [], (e) => e.starts_at, tz).map((g) => ({ key: g.key, title: g.label, data: g.items })),
+    () => groupCalendarDays(events.data?.occurrences ?? [], tz, events.data?.fromDay && events.data.toDay ? { fromDay: events.data.fromDay, toDay: events.data.toDay } : undefined).map((g) => ({ key: g.key, title: g.label, data: g.items })),
     [events.data, tz],
   );
 
@@ -29,17 +27,18 @@ export default function CalendarScreen() {
     <Screen title="Calendar" subtitle="The next two weeks" scroll={false}>
       <SectionList
         sections={sections}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.segmentKey}
         contentContainerStyle={{ paddingHorizontal: spacing[5], paddingBottom: spacing[10], gap: spacing[2] }}
         refreshControl={<RefreshControl refreshing={events.refreshing} onRefresh={events.refresh} tintColor={colors.brandText} colors={[colors.brand]} />}
         stickySectionHeadersEnabled={false}
+        ListFooterComponent={events.data && events.data.count > events.data.occurrences.length ? <AppText variant="muted">Showing {events.data.occurrences.length} of {events.data.count} events.</AppText> : null}
         renderSectionHeader={({ section }) => <AppText variant="label" style={{ marginTop: spacing[3] }}>{section.title}</AppText>}
         renderItem={({ item }) => (
           <GlassCard style={{ paddingVertical: spacing[2] }}>
             <ListRow
-              title={item.title}
-              subtitle={`${formatTime(item.starts_at, tz, item.all_day)}${item.ends_at && !item.all_day ? ` – ${formatTime(item.ends_at, tz)}` : ''}${item.location ? ` · ${item.location}` : ''}`}
-              trailing={<Pill label={item.category} tone="info" />}
+              title={item.title ?? '—'}
+              subtitle={`${formatTime(item.segmentStartsAt, tz, item.all_day)}${!item.all_day ? ` – ${formatTime(item.segmentEndsAt, tz)}` : ''}${item.location ? ` · ${item.location}` : ''}`}
+              trailing={item.category ? <Pill label={item.category} tone="info" /> : null}
             />
           </GlassCard>
         )}

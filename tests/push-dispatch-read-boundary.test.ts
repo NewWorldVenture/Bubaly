@@ -14,7 +14,7 @@ import { dispatchPendingPushes } from '@/lib/server/push';
 // against a fake that really does filter.
 function chain(result: { data: unknown; error: unknown }) {
   const c: Record<string, unknown> = {
-    select: () => c, is: () => c, lte: () => c, eq: () => c, order: () => c, limit: () => c,
+    select: () => c, is: () => c, lte: () => c, eq: () => c, or: () => c, order: () => c, limit: () => c,
     maybeSingle: () => Promise.resolve({ data: null, error: null }),
     then: (onF: (v: unknown) => unknown) => Promise.resolve(result).then(onF),
   };

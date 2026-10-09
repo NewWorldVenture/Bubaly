@@ -155,7 +155,7 @@ export function tempFromFahrenheit(fahrenheit: number, unit: TempUnit): string {
 }
 
 // ── Now & Next ───────────────────────────────────────────────────────────────
-export type TimedEvent = { id: string; title: string; starts_at: string; ends_at?: string | null; all_day?: boolean; location?: string | null; assignee_id?: string | null };
+export type TimedEvent = { id?: string; title: string | null; starts_at: string; ends_at?: string | null; all_day?: boolean | null; location?: string | null; assignee_id?: string | null };
 
 /** Timed occupancy is [start,end). Unknown durations never claim current;
  * all-day dates cannot become timed current/next events. */

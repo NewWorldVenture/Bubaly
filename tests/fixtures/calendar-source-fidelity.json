@@ -1,0 +1,193 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Future recurrence engine acceptance inputs. These expected values are RFC contracts, not a claim that the current application or unmodified ICAL.js implements them.",
+  "standard": "https://www.rfc-editor.org/rfc/rfc5545",
+  "timezoneScope": "Embedded synthetic VTIMEZONE observances cover only the historical test windows; this is not an IANA database.",
+  "expectationOrder": "Generate valid source-zone civil candidates; ignore generated gaps; apply positional selection within each frequency interval; advance RRULE COUNT before EXDATE; preserve original recurrence identity when applying overrides.",
+  "cases": [
+    {
+      "id": "ny-gap",
+      "kind": "recurrence",
+      "ical": "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//synthetic qualification//EN\nBEGIN:VTIMEZONE\nTZID:America/New_York\nBEGIN:STANDARD\nDTSTART:20231105T020000\nTZOFFSETFROM:-0400\nTZOFFSETTO:-0500\nRRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU\nEND:STANDARD\nBEGIN:DAYLIGHT\nDTSTART:20240310T020000\nTZOFFSETFROM:-0500\nTZOFFSETTO:-0400\nRRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU\nEND:DAYLIGHT\nEND:VTIMEZONE\nBEGIN:VEVENT\nUID:ny-gap\nDTSTART;TZID=America/New_York:20250308T023000\nRRULE:FREQ=DAILY;COUNT=3\nEND:VEVENT\nEND:VCALENDAR",
+      "expected": {
+        "recurrenceIds": [
+          "20250308T023000",
+          "20250310T023000",
+          "20250311T023000"
+        ],
+        "utcInstants": [
+          "2025-03-08T07:30:00.000Z",
+          "2025-03-10T06:30:00.000Z",
+          "2025-03-11T06:30:00.000Z"
+        ]
+      }
+    },
+    {
+      "id": "lord-howe-gap",
+      "kind": "recurrence",
+      "ical": "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//synthetic qualification//EN\nBEGIN:VTIMEZONE\nTZID:Australia/Lord_Howe\nBEGIN:STANDARD\nDTSTART:20240407T020000\nTZOFFSETFROM:+1100\nTZOFFSETTO:+1030\nEND:STANDARD\nBEGIN:DAYLIGHT\nDTSTART:20241006T020000\nTZOFFSETFROM:+1030\nTZOFFSETTO:+1100\nEND:DAYLIGHT\nEND:VTIMEZONE\nBEGIN:VEVENT\nUID:lord-howe-gap\nDTSTART;TZID=Australia/Lord_Howe:20241005T021500\nRRULE:FREQ=DAILY;COUNT=3\nEND:VEVENT\nEND:VCALENDAR",
+      "expected": {
+        "recurrenceIds": [
+          "20241005T021500",
+          "20241007T021500",
+          "20241008T021500"
+        ],
+        "utcInstants": [
+          "2024-10-04T15:45:00.000Z",
+          "2024-10-06T15:15:00.000Z",
+          "2024-10-07T15:15:00.000Z"
+        ]
+      }
+    },
+    {
+      "id": "apia-gap",
+      "kind": "recurrence",
+      "ical": "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//synthetic qualification//EN\nBEGIN:VTIMEZONE\nTZID:Pacific/Apia\nBEGIN:STANDARD\nDTSTART:20100101T000000\nTZOFFSETFROM:-1000\nTZOFFSETTO:-1000\nEND:STANDARD\nBEGIN:DAYLIGHT\nDTSTART:20111230T000000\nTZOFFSETFROM:-1000\nTZOFFSETTO:+1400\nEND:DAYLIGHT\nEND:VTIMEZONE\nBEGIN:VEVENT\nUID:apia-gap\nDTSTART;TZID=Pacific/Apia:20111229T120000\nRRULE:FREQ=DAILY;COUNT=3\nEND:VEVENT\nEND:VCALENDAR",
+      "expected": {
+        "recurrenceIds": [
+          "20111229T120000",
+          "20111231T120000",
+          "20120101T120000"
+        ],
+        "utcInstants": [
+          "2011-12-29T22:00:00.000Z",
+          "2011-12-30T22:00:00.000Z",
+          "2011-12-31T22:00:00.000Z"
+        ]
+      }
+    },
+    {
+      "id": "valid-byyearday-intersection",
+      "kind": "recurrence",
+      "ical": "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//synthetic qualification//EN\nBEGIN:VEVENT\nUID:intersection\nDTSTART:20250101T090000Z\nRRULE:FREQ=YEARLY;BYYEARDAY=1;BYMONTH=1;COUNT=2\nEND:VEVENT\nEND:VCALENDAR",
+      "expected": {
+        "recurrenceIds": [
+          "20250101T090000Z",
+          "20260101T090000Z"
+        ]
+      }
+    },
+    {
+      "id": "period-end",
+      "kind": "period",
+      "ical": "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//synthetic qualification//EN\nBEGIN:VEVENT\nUID:period\nDTSTART:20250101T090000Z\nDURATION:PT1H\nRDATE;VALUE=PERIOD:20250102T090000Z/20250102T120000Z\nEND:VEVENT\nEND:VCALENDAR",
+      "expected": {
+        "identity": "20250102T090000Z",
+        "start": "20250102T090000Z",
+        "end": "20250102T120000Z"
+      }
+    },
+    {
+      "id": "detached-uid-isolation",
+      "kind": "uid-isolation",
+      "ical": "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//synthetic qualification//EN\nBEGIN:VEVENT\nUID:A\nDTSTART:20250101T090000Z\nRRULE:FREQ=DAILY;COUNT=2\nEND:VEVENT\nBEGIN:VEVENT\nUID:B\nDTSTART:20250102T150000Z\nRECURRENCE-ID:20250102T090000Z\nEND:VEVENT\nEND:VCALENDAR",
+      "expected": {
+        "uid": "A",
+        "recurrenceId": "20250102T090000Z",
+        "start": "20250102T090000Z",
+        "unrelatedUid": "B",
+        "unrelatedExceptionAdmission": "reject"
+      }
+    },
+    {
+      "id": "unknown-tzid",
+      "kind": "timezone-admission",
+      "ical": "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//synthetic qualification//EN\nBEGIN:VEVENT\nUID:unknown\nDTSTART;TZID=Invented/Missing:20250101T090000\nRRULE:FREQ=DAILY;COUNT=1\nEND:VEVENT\nEND:VCALENDAR",
+      "expected": {
+        "error": "UNRESOLVED_TZID",
+        "tzid": "Invented/Missing",
+        "utcFallback": false,
+        "floatingFallback": false
+      }
+    },
+    {
+      "id": "explicit-gap-and-fold",
+      "kind": "explicit-civil-resolution",
+      "ical": "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//synthetic qualification//EN\nBEGIN:VTIMEZONE\nTZID:America/New_York\nBEGIN:STANDARD\nDTSTART:20231105T020000\nTZOFFSETFROM:-0400\nTZOFFSETTO:-0500\nRRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU\nEND:STANDARD\nBEGIN:DAYLIGHT\nDTSTART:20240310T020000\nTZOFFSETFROM:-0500\nTZOFFSETTO:-0400\nRRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU\nEND:DAYLIGHT\nEND:VTIMEZONE\nBEGIN:VEVENT\nUID:explicit\nDTSTART;TZID=America/New_York:20250309T023000\nEND:VEVENT\nEND:VCALENDAR",
+      "expected": {
+        "gapInstant": "2025-03-09T07:30:00.000Z",
+        "foldInstant": "2025-11-02T05:30:00.000Z"
+      },
+      "foldInput": {
+        "tzid": "America/New_York",
+        "local": "20251102T013000"
+      }
+    },
+    {
+      "id": "utc-until",
+      "kind": "recurrence",
+      "ical": "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//synthetic qualification//EN\nBEGIN:VTIMEZONE\nTZID:America/New_York\nBEGIN:STANDARD\nDTSTART:20231105T020000\nTZOFFSETFROM:-0400\nTZOFFSETTO:-0500\nRRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU\nEND:STANDARD\nBEGIN:DAYLIGHT\nDTSTART:20240310T020000\nTZOFFSETFROM:-0500\nTZOFFSETTO:-0400\nRRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU\nEND:DAYLIGHT\nEND:VTIMEZONE\nBEGIN:VEVENT\nUID:until\nDTSTART;TZID=America/New_York:20250308T190000\nRRULE:FREQ=DAILY;UNTIL=20250309T220000Z\nEND:VEVENT\nEND:VCALENDAR",
+      "expected": {
+        "recurrenceIds": [
+          "20250308T190000"
+        ],
+        "utcInstants": [
+          "2025-03-09T00:00:00.000Z"
+        ]
+      }
+    },
+    {
+      "id": "bysetpos-gap",
+      "kind": "recurrence",
+      "ical": "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//synthetic qualification//EN\nBEGIN:VTIMEZONE\nTZID:America/New_York\nBEGIN:STANDARD\nDTSTART:20231105T020000\nTZOFFSETFROM:-0400\nTZOFFSETTO:-0500\nRRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU\nEND:STANDARD\nBEGIN:DAYLIGHT\nDTSTART:20240310T020000\nTZOFFSETFROM:-0500\nTZOFFSETTO:-0400\nRRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU\nEND:DAYLIGHT\nEND:VTIMEZONE\nBEGIN:VEVENT\nUID:setpos\nDTSTART;TZID=America/New_York:20250308T023000\nRRULE:FREQ=DAILY;BYHOUR=2,3;BYMINUTE=30;BYSETPOS=1;COUNT=3\nEND:VEVENT\nEND:VCALENDAR",
+      "expected": {
+        "recurrenceIds": [
+          "20250308T023000",
+          "20250309T033000",
+          "20250310T023000"
+        ]
+      }
+    },
+    {
+      "id": "count-exdate-control",
+      "kind": "recurrence",
+      "ical": "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//synthetic qualification//EN\nBEGIN:VTIMEZONE\nTZID:America/New_York\nBEGIN:STANDARD\nDTSTART:20231105T020000\nTZOFFSETFROM:-0400\nTZOFFSETTO:-0500\nRRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU\nEND:STANDARD\nBEGIN:DAYLIGHT\nDTSTART:20240310T020000\nTZOFFSETFROM:-0500\nTZOFFSETTO:-0400\nRRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU\nEND:DAYLIGHT\nEND:VTIMEZONE\nBEGIN:VEVENT\nUID:excluded\nDTSTART;TZID=America/New_York:20250308T023000\nRRULE:FREQ=DAILY;COUNT=3\nEXDATE;TZID=America/New_York:20250310T023000\nEND:VEVENT\nEND:VCALENDAR",
+      "expected": {
+        "recurrenceIds": [
+          "20250308T023000",
+          "20250311T023000"
+        ],
+        "generatedBeforeExdate": [
+          "20250308T023000",
+          "20250310T023000",
+          "20250311T023000"
+        ]
+      }
+    },
+    {
+      "id": "bounded-control",
+      "kind": "expansion-budget",
+      "ical": "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//synthetic qualification//EN\nBEGIN:VTIMEZONE\nTZID:America/New_York\nBEGIN:STANDARD\nDTSTART:20231105T020000\nTZOFFSETFROM:-0400\nTZOFFSETTO:-0500\nRRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU\nEND:STANDARD\nBEGIN:DAYLIGHT\nDTSTART:20240310T020000\nTZOFFSETFROM:-0500\nTZOFFSETTO:-0400\nRRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU\nEND:DAYLIGHT\nEND:VTIMEZONE\nBEGIN:VEVENT\nUID:bounded\nDTSTART;TZID=America/New_York:20250308T023000\nRRULE:FREQ=SECONDLY;COUNT=100\nEND:VEVENT\nEND:VCALENDAR",
+      "candidateBudget": 2,
+      "expected": {
+        "status": "incomplete-or-error",
+        "emptySuccess": false
+      }
+    },
+    {
+      "id": "negative-bysetpos-control",
+      "kind": "recurrence",
+      "ical": "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//synthetic qualification//EN\nBEGIN:VTIMEZONE\nTZID:America/New_York\nBEGIN:STANDARD\nDTSTART:20231105T020000\nTZOFFSETFROM:-0400\nTZOFFSETTO:-0500\nRRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU\nEND:STANDARD\nBEGIN:DAYLIGHT\nDTSTART:20240310T020000\nTZOFFSETFROM:-0500\nTZOFFSETTO:-0400\nRRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU\nEND:DAYLIGHT\nEND:VTIMEZONE\nBEGIN:VEVENT\nUID:setpos-last\nDTSTART;TZID=America/New_York:20250308T033000\nRRULE:FREQ=DAILY;BYHOUR=2,3;BYMINUTE=30;BYSETPOS=-1;COUNT=3\nEND:VEVENT\nEND:VCALENDAR",
+      "expected": {
+        "recurrenceIds": [
+          "20250308T033000",
+          "20250309T033000",
+          "20250310T033000"
+        ],
+        "originalSourceUnchanged": true
+      }
+    },
+    {
+      "id": "child-timeout-control",
+      "kind": "harness-timeout",
+      "input": {
+        "program": "nonterminating synthetic child",
+        "timeoutMs": 150
+      },
+      "expected": {
+        "errorCode": "ETIMEDOUT",
+        "childTerminated": true
+      }
+    }
+  ]
+}

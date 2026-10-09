@@ -103,14 +103,17 @@ describe('no writer creates a default list around the one get-or-create', () => 
       if (entry === 'node_modules' || entry.startsWith('.')) continue;
       const path = join(dir, entry);
       if (statSync(path).isDirectory()) files(path, out);
-      else if (/\.(ts|tsx)$/.test(entry)) out.push(path);
+      else if (/\.(ts|tsx)$/.test(entry)) out.push(path.replace(/\\/g, '/'));
     }
     return out;
   }
 
   it('inserts grocery and to-do lists only where it is allowed to', () => {
     const offenders: string[] = [];
-    for (const file of [...files('app'), ...files('lib'), ...files('components')]) {
+    const inventory = [...files('app'), ...files('lib'), ...files('components')];
+    expect(inventory.length).toBeGreaterThan(0);
+    expect(inventory).toContain('lib/services/groceries/index.ts');
+    for (const file of inventory) {
       const source = readFileSync(file, 'utf8');
       for (const [table, allowed] of ALLOWED) {
         const insert = new RegExp(`from\\(\\s*['"]${table}['"]\\s*\\)[\\s\\S]{0,40}?\\.insert\\(`);

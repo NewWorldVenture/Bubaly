@@ -16,7 +16,9 @@ import { DashboardWeather } from '@/components/dashboard/dashboard-weather';
 import { createFormat } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
-import { dayKeyInTz, zonedDayBoundsMs, addDaysToDayKey, weekStartDayKey } from '@/lib/services/scope';
+import { dayKeyInTz, zonedDayBoundsMs, addDaysToDayKey, weekStartDayKey, scopeFromUserContext } from '@/lib/services/scope';
+import { readCompleteCalendarOccurrences, projectCalendarOccurrences } from '@/lib/services/calendar/search-occurrences';
+import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from '@/lib/calendar/source-capability';
 
 const ACCENT = ['bg-violet-500', 'bg-emerald-500', 'bg-orange-500', 'bg-rose-500', 'bg-blue-500', 'bg-teal-500'];
 
@@ -81,14 +83,17 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
   const isKid = role === 'child' || role === 'teen';
   const supabase = await createServer();
   const { start, end, in14 } = dayBounds(ctx.active.family.timezone || 'UTC');
+  const calendarRead = CALENDAR_SOURCE_ARCHIVE_ENABLED ? Promise.resolve(null)
+    : readCompleteCalendarOccurrences(scopeFromUserContext(ctx, supabase, { tz: ctx.active.family.timezone ?? '' }), {
+      from: start.toISOString(), to: in14.toISOString(),
+    });
 
   const [
     { data: myChores },
     { data: myEarned },
     { count: myOpenCount },
     { count: myDoneCount },
-    { data: todayEvents },
-    { data: upcomingEvents },
+    calendarRes,
     { data: members },
   ] = await settleAll([
     // My open / in-progress / submitted chores
@@ -106,22 +111,26 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
       .eq('family_id', familyId).eq('member_id', myMemberId).in('status', ['todo', 'in_progress']),
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('member_id', myMemberId).in('status', ['approved', 'done']),
-    // Today's events assigned to me OR shared with the whole family
-    supabase.from('calendar_events')
-      .select('id, title, starts_at, all_day, location, assignee_id')
-      .eq('family_id', familyId)
-      .or(`assignee_id.eq.${myMemberId},assignee_id.is.null`)
-      .gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString())
-      .order('starts_at').limit(8),
-    supabase.from('calendar_events')
-      .select('id, title, starts_at, all_day, assignee_id')
-      .eq('family_id', familyId)
-      .or(`assignee_id.eq.${myMemberId},assignee_id.is.null`)
-      .gte('starts_at', end.toISOString()).lte('starts_at', in14.toISOString())
-      .order('starts_at').limit(5),
+    calendarRead,
     supabase.from('family_members').select('id, display_name, color, role')
       .eq('family_id', familyId).eq('is_active', true).order('created_at'),
   ]);
+  const calendarData = calendarRes && 'ok' in calendarRes && calendarRes.ok ? calendarRes.data : null;
+  const calendarUnavailable = calendarData === null;
+  // Qualify the authorized family domain before selecting my own/shared view.
+  // The projector orders household DATE starts and timed instants together.
+  const calendarEvents = calendarData ? projectCalendarOccurrences(calendarData.occurrences).events
+    .filter(event => event.assignee_id === null || event.assignee_id === myMemberId) : [];
+  const timezone = ctx.active.family.timezone || 'UTC';
+  const todayKey = dayKeyInTz(start, timezone), tomorrowKey = dayKeyInTz(end, timezone), horizonKey = dayKeyInTz(in14, timezone);
+  const todayCalendarEvents = calendarEvents.filter(event => event.all_day
+    ? event.startDate === todayKey
+    : Date.parse(event.starts_at) >= start.getTime() && Date.parse(event.starts_at) < end.getTime());
+  const upcomingCalendarEvents = calendarEvents.filter(event => event.all_day
+    ? event.startDate !== null && event.startDate >= tomorrowKey && event.startDate <= horizonKey
+    : Date.parse(event.starts_at) >= end.getTime() && Date.parse(event.starts_at) <= in14.getTime());
+  const todayEvents = todayCalendarEvents.slice(0, 8);
+  const upcomingEvents = upcomingCalendarEvents.slice(0, 5);
 
   // Manager-only: chores submitted by anyone, awaiting approval.
   const { data: pendingApprovals } = manager
@@ -202,7 +211,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
       {/* Stat cards — role aware */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard href="/dashboard/chores" label={tr('personalDashboard.myOpenTasks')} value={openCount} icon={ListChecks} bg="bg-violet-600" />
-        <StatCard href="/dashboard/calendar" label={tr('personalDashboard.myEventsToday')} value={todayEvents?.length ?? 0} icon={Calendar} bg="bg-blue-600" />
+        <StatCard href="/dashboard/calendar" label={tr('personalDashboard.myEventsToday')} value={calendarUnavailable ? '—' : todayCalendarEvents.length} icon={Calendar} bg="bg-blue-600" />
         {isKid ? (
           <>
             <StatCard href="/dashboard/chores" label={tr('personalDashboard.pointsEarned')} value={myPoints} icon={Star} bg="bg-amber-500" />
@@ -216,7 +225,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
         ) : (
           <>
             <StatCard href="/dashboard/chores" label={tr('personalDashboard.tasksDone')} value={doneCount} icon={CheckCircle2} bg="bg-emerald-600" />
-            <StatCard href="/dashboard/calendar" label={tr('personalDashboard.comingUp')} value={upcomingEvents?.length ?? 0} icon={Bell} bg="bg-amber-500" />
+            <StatCard href="/dashboard/calendar" label={tr('personalDashboard.comingUp')} value={calendarUnavailable ? '—' : upcomingCalendarEvents.length} icon={Bell} bg="bg-amber-500" />
           </>
         )}
       </div>
@@ -229,10 +238,10 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
             <h2 className="font-semibold">{tr('personalDashboard.myDay')}</h2>
             <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text">{tr('personalDashboard.calendar')}</Link>
           </div>
-          {todayEvents && todayEvents.length > 0 ? (
+          {calendarUnavailable ? <p role="status" className="py-10 text-sm text-muted">{tr('homeCalendar.todayUnavailable')}</p> : todayEvents.length > 0 ? (
             <ul className="space-y-3">
               {todayEvents.map((e, i) => (
-                <li key={e.id} className="flex items-center gap-3">
+                <li key={e.occurrenceKey} className="flex items-center gap-3">
                   <span className="w-14 shrink-0 text-xs text-muted tabular-nums">
                     {e.all_day ? 'All Day' : fmtTime(e.starts_at)}
                   </span>
@@ -362,15 +371,15 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
               <h2 className="font-semibold">{tr('personalDashboard.comingUp')}</h2>
               <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text">{tr('personalDashboard.viewAll')}</Link>
             </div>
-            {upcomingEvents && upcomingEvents.length > 0 ? (
+            {calendarUnavailable ? <p role="status" className="py-10 text-sm text-muted">{tr('homeCalendar.upcomingUnavailable')}</p> : upcomingEvents.length > 0 ? (
               <ul className="space-y-3">
                 {upcomingEvents.map((e, i) => {
                   return (
-                    <li key={e.id} className="flex items-center gap-3">
+                    <li key={e.occurrenceKey} className="flex items-center gap-3">
                       <div className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-lg text-center text-fg', ACCENT[i % ACCENT.length])}>
                         <div>
-                          <p className="text-[9px] font-bold uppercase">{fmtDate(e.starts_at, 'MMM')}</p>
-                          <p className="text-base font-black leading-none">{fmtDate(e.starts_at, 'd')}</p>
+                          <p className="text-[9px] font-bold uppercase">{fmtDate(e.all_day ? e.startDate! : e.starts_at, 'MMM')}</p>
+                          <p className="text-base font-black leading-none">{fmtDate(e.all_day ? e.startDate! : e.starts_at, 'd')}</p>
                         </div>
                       </div>
                       <div className="min-w-0 flex-1">

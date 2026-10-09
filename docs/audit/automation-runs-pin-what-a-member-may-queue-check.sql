@@ -52,10 +52,9 @@
 --      column DEFAULT relied on instead of a literal, as `status='executed'`
 --      (which `lib/metric/completed-plans.ts` counts as a handled plan), or
 --      born stamped `approved_by = <the parent>`;
---   2. a child can still READ the table — the autopilot panel, /display, /home
---      and /dashboard/needs-you all render for whoever is signed in, and
---      narrowing SELECT is a product decision nobody has taken. If that changes
---      this line fails on purpose;
+--   2. requester-only run-copy privacy is HELD with candidate 0493. Its own
+--      read/manager/disclosure controls live in docs/audit/reserved/; this
+--      runnable probe does not claim that privacy migration is applied;
 --   3. a MANAGER can still insert the two rows `tests/e2e/authenticated.spec.ts`
 --      requires to be allowed (`status='pending'` and `status='executed'`, with
 --      `trigger_type='plan_accepted'`), and 0255's own pins still refuse a
@@ -128,12 +127,19 @@ values (:'PL', :'FR', :'UK', 'Whatever the child wants booked', 'booked');
 
 -- The genuine article, written the way planAcceptedAction writes it — with the
 -- SERVICE client, so the fixture is the row the autopilot panel is FOR. The
--- child must still be able to read it after this migration.
+-- run-copy read privacy is separately tested with the held 0493 candidate.
 insert into public.family_automation_runs
   (id, family_id, created_by, trigger_type, status, state, requested_by_member_id, summary, metadata)
 values (:'RN', :'FR', :'UP', 'plan_accepted', 'pending', 'awaiting_approval', :'MS',
         'Waiting for approval: book the school trip',
         jsonb_build_object('plan_id', :'PL'::uuid, 'approval_id', :'AP'::uuid));
+
+-- Positive read control: a genuine server-written run for the signed-in child.
+-- No linked AI request/plan is present, matching the supported legacy shape.
+insert into public.family_automation_runs
+  (id, family_id, created_by, trigger_type, status, state, requested_by_member_id, summary)
+values ('00000000-0000-4000-8000-000000032908', :'FR', :'UK', 'plan_accepted',
+        'pending', 'awaiting_approval', :'MK', 'Synthetic child-owned run');
 
 grant select, insert, update, delete on public.family_automation_runs to authenticated;
 grant select, insert, update, delete on public.approval_requests       to authenticated;
@@ -226,16 +232,10 @@ begin
       failures := array_append(failures, 'a child''s pre-approved run INSERT reached a unique index, so RLS did not refuse it');
   end;
 
-  -- 5. Reads stay open, deliberately. The server-written row from the fixture
-  --    is the one the autopilot panel exists to show; a child seeing zero rows
-  --    here would mean SELECT had been narrowed, which is a product decision
-  --    nobody has taken.
-  select count(*) into n from public.family_automation_runs where family_id = fam;
-  if n < 1 then
-    failures := array_append(failures, 'a child can no longer READ family_automation_runs — the autopilot panel, /display, /home and /dashboard/needs-you render for whoever is signed in; that is a change of decision, update finalaudit.md and this probe');
-  end if;
-
-  -- ── As the parent: the positive controls ────────────────────────────────
+  -- 5. Runnable schema promises no requester-only run-copy privacy. That
+  -- held 0493 acceptance and its original disclosure control are measured in
+  -- docs/audit/reserved/automation-runs-private-copy-read-check.sql. Continue
+  -- the independent write controls as the manager without claiming read repair.
   perform set_config('request.jwt.claim.sub', parent_u::text, true);
 
   -- 6. The two rows tests/e2e/authenticated.spec.ts asserts a member may still
@@ -438,7 +438,7 @@ begin
   if array_length(failures, 1) is not null then
     raise exception E'a run in the approval queue is not authored by a manager or the server:\n  - %', array_to_string(failures, E'\n  - ');
   end if;
-  raise notice 'automation-runs-pin-what-a-member-may-queue: OK (a child cannot file a run into the parent''s queue by any of the four routes, reads are untouched, a manager and the service role still can, and the negative control reproduced the forged decision record; 0390: a manager cannot drop or redirect a queued run''s approval_id or plan_id while an unrelated metadata key still lands, and its negative control reproduced the scrub)';
+  raise notice 'automation-runs-pin-what-a-member-may-queue: OK (a child cannot file a run into the parent''s queue by any of the four routes; held 0493 private-copy read acceptance is separate; a manager and the service role still write, and the negative control reproduced the forged decision record; 0390: a manager cannot drop or redirect a queued run''s approval_id or plan_id while an unrelated metadata key still lands, and its negative control reproduced the scrub)';
 end $$;
 
 rollback;

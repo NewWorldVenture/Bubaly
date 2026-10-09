@@ -12,7 +12,7 @@
 // Amounts are DOLLARS (numeric), matching the finance tables (see hub.ts).
 
 import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
-import { billCadence, namedCadence } from './recurring';
+import { BillScheduleConfirmationRequired, billAnchorDay, billCadence, MONTH_BASED_CADENCES } from './bill-schedule';
 
 export interface TimelineBill {
   name: string;
@@ -24,7 +24,6 @@ export interface TimelineBill {
   category: string | null;
   /** The money leaves on its own — the bill is covered, nothing to do. */
   autopay?: boolean;
-  /** The day of month a month-based series is anchored on (0488); null reads it from due_date. */
   due_day?: number | null;
 }
 
@@ -178,44 +177,36 @@ export function isoWeekStart(d: Date): string {
   return ymd(t);
 }
 
-/**
- * The series' occurrence `months` months after `first`, on `day` of that month
- * — clamped to the month's last day, so a bill due on the 31st forecasts Feb 28
- * and Mar 31. Stepped from the FIRST date each time, never from the clamped
- * one: `setUTCMonth` from Jan 31 used to overflow to Mar 3 and then drift a
- * month at a time, and the forecast disagreed with the list by days.
- */
-function monthsOnUTC(first: Date, months: number, day: number): Date {
-  const y = first.getUTCFullYear();
-  const m = first.getUTCMonth() + months;
-  const lastDay = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
-  return new Date(Date.UTC(y, m, Math.min(day, lastDay), first.getUTCHours(), first.getUTCMinutes()));
+function addMonthsUTC(d: Date, n: number, anchorDay: number): Date {
+  const t = new Date(d.getTime());
+  const targetMonth = t.getUTCMonth() + n;
+  t.setUTCDate(1);
+  t.setUTCMonth(targetMonth);
+  const lastDay = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
+  t.setUTCDate(Math.min(anchorDay, lastDay));
+  return t;
 }
 
+const RECURRENCE_STEP_DAYS: Record<string, number> = { weekly: 7, biweekly: 14, fortnightly: 14 };
+
 /** The dates a (possibly recurring) commitment lands on inside [now, horizonEnd]. */
-function expandDates(first: Date, recurrence: string | null | undefined, now: Date, horizonEnd: Date, anchorDay?: number | null): string[] {
+function expandDates(first: Date, recurrence: string | null | undefined, now: Date, horizonEnd: Date, anchorDay = first.getUTCDate()): string[] {
   const out: string[] = [];
-  const day = typeof anchorDay === 'number' && Number.isInteger(anchorDay) && anchorDay >= 1 && anchorDay <= 31 ? anchorDay : first.getUTCDate();
 
   if (!recurrence) {
     if (first >= startOfDay(now) && first <= horizonEnd) out.push(ymd(first));
     return out;
   }
 
-  // Read as Mark paid reads it (lib/finance/recurring.ts): case and space
-  // ignored, the aliases folded, and only real cadence names.
-  const rec = namedCadence(recurrence);
+  const rec = recurrence.toLowerCase();
   const monthly = rec === 'monthly';
   const quarterly = rec === 'quarterly';
-  const yearly = rec === 'yearly';
-  const stepDays = rec === 'weekly' ? 7 : rec === 'biweekly' ? 14 : undefined;
+  const yearly = rec === 'yearly' || rec === 'annually';
+  const stepDays = RECURRENCE_STEP_DAYS[rec];
 
   // Walk from the stored date forward until we pass the horizon, emitting
   // any occurrence that lands inside [today, horizonEnd].
   let cursor = new Date(first.getTime());
-  const per = monthly ? 1 : quarterly ? 3 : yearly ? 12 : 0;
-  // Month-based series are indexed from the first date, so the clamp never compounds.
-  let k = 0;
 
   // A long-stale start date (a subscription entered years ago, a bill whose
   // first due date predates the account) would otherwise be eaten by the walk
@@ -227,31 +218,33 @@ function expandDates(first: Date, recurrence: string | null | undefined, now: Da
     if (stepDays) {
       const steps = Math.floor((from.getTime() - cursor.getTime()) / (stepDays * DAY));
       if (steps > 0) cursor = new Date(cursor.getTime() + steps * stepDays * DAY);
-    } else if (per) {
+    } else if (monthly || quarterly || yearly) {
+      const per = monthly ? 1 : quarterly ? 3 : 12;
       const months = (from.getUTCFullYear() - cursor.getUTCFullYear()) * 12 + (from.getUTCMonth() - cursor.getUTCMonth());
-      k = Math.max(0, Math.floor(months / per));
-      cursor = monthsOnUTC(first, k * per, day);
+      const steps = Math.floor(months / per);
+      if (steps > 0) cursor = addMonthsUTC(cursor, steps * per, anchorDay);
     }
   }
 
   let guard = 0;
   while (cursor <= horizonEnd && guard++ < 400) {
     if (cursor >= startOfDay(now)) out.push(ymd(cursor));
-    if (per) { k += 1; cursor = monthsOnUTC(first, k * per, day); }
+    if (monthly) cursor = addMonthsUTC(cursor, 1, anchorDay);
+    else if (quarterly) cursor = addMonthsUTC(cursor, 3, anchorDay);
+    else if (yearly) cursor = addMonthsUTC(cursor, 12, anchorDay);
     else if (stepDays) cursor = new Date(cursor.getTime() + stepDays * DAY);
     else break; // unknown cadence → treat as single
   }
   return out;
 }
 
-/**
- * Expand a recurring bill's occurrences within [now, horizonEnd], on the
- * cadence Mark paid rolls it by (`billCadence`): a flagged bill with no or an
- * unknown cadence is monthly there, so it is monthly here, and the date a
- * payment moves it to is the next date shown.
- */
+/** Expand a recurring bill's occurrences within [now, horizonEnd]. */
 function expandOccurrences(bill: TimelineBill, now: Date, horizonEnd: Date): string[] {
-  return expandDates(parseDate(bill.due_date), billCadence(bill), now, horizonEnd, bill.due_day);
+  const cadence = billCadence(bill);
+  if (bill.is_recurring && !cadence) throw new BillScheduleConfirmationRequired();
+  const day = cadence && MONTH_BASED_CADENCES.has(cadence) ? billAnchorDay({ ...bill, due_date: bill.due_date.slice(0, 10) }) : null;
+  if (cadence && MONTH_BASED_CADENCES.has(cadence) && day === null) throw new BillScheduleConfirmationRequired('Confirm the recurring bill day of month before building the forecast.');
+  return expandDates(parseDate(bill.due_date), cadence, now, horizonEnd, day ?? undefined);
 }
 
 function startOfDay(d: Date): Date {
@@ -269,12 +262,12 @@ export function monthlyEquivalent(bill: TimelineBill): number {
 }
 
 function monthlyEquivalentOf(amount: number, recurrence: string): number {
-  const rec = namedCadence(recurrence);
+  const rec = recurrence.toLowerCase();
   if (rec === 'weekly') return amount * 52 / 12;
-  if (rec === 'biweekly') return amount * 26 / 12;
+  if (rec === 'biweekly' || rec === 'fortnightly') return amount * 26 / 12;
   if (rec === 'monthly') return amount;
   if (rec === 'quarterly') return amount / 3;
-  if (rec === 'yearly') return amount / 12;
+  if (rec === 'yearly' || rec === 'annually') return amount / 12;
   return 0;
 }
 
@@ -355,7 +348,7 @@ export function buildCashflowTimeline(input: BuildTimelineInput): CashflowTimeli
   const recurringBillNames = new Set<string>();
   for (const bill of input.bills) {
     const amount = round2(bill.amount);
-    const recurring = billCadence(bill) !== null;
+    const recurring = bill.is_recurring;
     // 'paid' means the money for THAT due date already left, so that one
     // occurrence never hits the projection. For a one-off bill that is the
     // whole bill and there is nothing left to forecast. A RECURRING bill still
@@ -386,7 +379,7 @@ export function buildCashflowTimeline(input: BuildTimelineInput): CashflowTimeli
     const covered = bill.autopay === true;
     for (const date of expandOccurrences(bill, now, horizonEnd)) {
       if (date === paidDate) continue;  // already counted as paid above
-      const landed = push({ date, label: bill.name, amount, kind: recurring ? 'recurring' : 'bill', category: bill.category, ...(covered ? { covered: true } : {}) });
+      const landed = push({ date, label: bill.name, amount, kind: bill.is_recurring ? 'recurring' : 'bill', category: bill.category, ...(covered ? { covered: true } : {}) });
       if (!landed) continue;
       if (covered) { coverage.coveredCount += 1; coverage.coveredAmount = round2(coverage.coveredAmount + amount); autopayCovered = true; }
       else { coverage.openCount += 1; coverage.openAmount = round2(coverage.openAmount + amount); open = true; }

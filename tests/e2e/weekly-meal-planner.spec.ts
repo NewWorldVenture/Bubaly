@@ -32,6 +32,7 @@ function collect(filename: string): string {
   if (modules[id]) return id;
   const raw = fs.readFileSync(id, 'utf8');
   const source = /\.tsx?$/.test(id) ? ts.transpileModule(raw, {
+    fileName: id,
     compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
   }).outputText : raw;
   const item = modules[id] = { source, imports: {} as Record<string, string> };
@@ -57,7 +58,8 @@ type Call = { kind: ActionKind; input: Row | string; familyId: string };
 type Probe = {
   familyId: string; timezone: string; calls: Call[]; notices: Array<{ kind: string; message: string }>;
   errors: string[]; modes: Partial<Record<ActionKind, ActionMode>>; tables: Record<string, Row[]>;
-  readErrors: Record<string, boolean>; reads: Array<{ table: string; filters: Array<[string, string, unknown]> }>;
+  readErrors: Record<string, boolean>; reads: Array<{ table: string; filters: Array<[string, string, unknown]>; offset: number; limit: number; exact: boolean }>;
+  readCap?: number; readFaults?: Record<string, string>;
   finish: (index: number, mode?: ActionMode) => void; render: (patch?: { familyId?: string; timezone?: string }) => void;
   unmount: () => void; flush: () => Promise<void>; captured: (() => unknown) | null;
   captureClick: (label: string) => void; captureSubmit: () => void; fireCaptured: (count: number) => void;
@@ -107,24 +109,25 @@ async function fixture(page: Page, options: { familyId?: string; timezone?: stri
       meal('meal-B', 'Other family dinner', [], 'family-B')],
       meal_plans: options.plans || [], family_recipes: [
         {id:'recipe-soup',family_id:'family-A',name:'Tomato soup',ingredients:[{name:'Tomato',quantity:'3',unit:'cups'}],source_url:'https://recipe.invalid/soup',servings:4,is_favorite:false,last_made_at:null,category:'dinner'},
-        {id:'recipe-B',family_id:'family-B',name:'Other family recipe',ingredients:[],is_favorite:false,last_made_at:null}],
+        {id:'recipe-B',family_id:'family-B',name:'Other family recipe',ingredients:[],is_favorite:false,last_made_at:null,category:'dinner'}],
       grocery_items: [], meal_votes: [] };
     window.addEventListener('error', event => p.errors.push(event.message));
     window.addEventListener('unhandledrejection', event => { p.errors.push(String(event.reason)); event.preventDefault(); });
     const translate = (key, vars = {}) => Object.entries(vars).reduce((text, [name,value]) => text.split('{' + name + '}').join(String(value)), messages[key] || key);
     function from(table) {
       const filters = [];
-      let limit = Infinity; const orders = [];
-      const builder = { select() { return this; }, order(column, options = {}) { orders.push({column, ...options}); return this; }, limit(value) { limit = value; return this; },
+      let limit = Infinity, offset = 0, exact = false; const orders = [];
+      const builder = { select(_columns, options = {}) { exact = options.count === 'exact'; return this; }, order(column, options = {}) { orders.push({column, ...options}); return this; }, limit(value) { limit = value; return this; },
+        range(first,last) { offset = first; limit = last - first + 1; return this; },
         eq(column,value) { filters.push(['eq',column,value]); return this; },
         gte(column,value) { filters.push(['gte',column,value]); return this; },
         lte(column,value) { filters.push(['lte',column,value]); return this; },
         in(column,value) { filters.push(['in',column,value]); return this; },
         then(resolve,reject) {
-          p.reads.push({table,filters:structuredClone(filters)});
+          p.reads.push({table,filters:structuredClone(filters),offset,limit,exact});
           const isJoin = table === 'meals' && filters.some(([op]) => op === 'in');
           const fail = p.readErrors[isJoin ? 'meal-join' : table];
-          const rows = (p.tables[table] || []).filter(row => filters.every(([op,column,value]) => op === 'eq' ? row[column] === value
+          const all = (p.tables[table] || []).filter(row => filters.every(([op,column,value]) => op === 'eq' ? row[column] === value
             : op === 'gte' ? row[column] >= value : op === 'lte' ? row[column] <= value : value.includes(row[column]))).sort((a,b) => {
             for (const ordering of orders) {
               const x=a[ordering.column], y=b[ordering.column];
@@ -133,8 +136,13 @@ async function fixture(page: Page, options: { familyId?: string; timezone?: stri
               const cmp=String(x).localeCompare(String(y)); if (cmp) return ordering.ascending === false ? -cmp : cmp;
             }
             return 0;
-          }).slice(0,limit);
-          return Promise.resolve(fail ? {data:null,error:{message:'Fixture read unavailable',code:'XX000'}} : {data:structuredClone(rows),error:null}).then(resolve,reject);
+          });
+          const fault = (p.readFaults || {})[isJoin ? 'meal-join' : table];
+          let rows = all.slice(offset,offset + Math.min(limit,p.readCap || Infinity));
+          if (fault === 'duplicate' && offset) rows = all.slice(0,1);
+          if (fault === 'short' && offset) rows = [];
+          const count = !exact || fault === 'count' ? null : all.length + (fault === 'drift' && offset ? 1 : 0);
+          return Promise.resolve(fail ? {data:null,error:{message:'Fixture read unavailable',code:'XX000'},count:null} : {data:structuredClone(rows),error:null,count}).then(resolve,reject);
         },
       };
       return builder;
@@ -526,11 +534,9 @@ test('grocery readback failure keeps the committed rows but does not claim compl
   await expect.poll(async()=> (await notices(page)).length).toBe(1);
   expect(await notices(page,'success')).toEqual([]);
   expect(await page.evaluate(()=>window.__weeklyMeals.tables.grocery_items.length)).toBe(2);
-  // The failed read is SHOWN — as the written sentence, not the database's own
-  // words. The fixture's error carries a Postgres code (XX000), and since
-  // 23ff213e a coded error's message is written for whoever maintains the
-  // schema, so describeDbError replaces it rather than passing it to the page.
-  await expect(page.getByText('Could not load data. Please try again.',{exact:true}).first()).toBeVisible();
+  // An incomplete collection is SHOWN using the localized retry sentence;
+  // neither a prefix nor the database's internal message is presented.
+  await expect(page.getByText('We couldn’t load all meal choices. Please retry.',{exact:true}).first()).toBeVisible();
   await expect(page.getByText('Fixture read unavailable',{exact:true})).toHaveCount(0);
   await page.evaluate(()=>{window.__weeklyMeals.readErrors.grocery_items=false;});
   await page.getByRole('button',{name:'Try again',exact:true}).click();
@@ -723,7 +729,10 @@ test('a competing row for the same dinner prevents confirmation of the saved rec
   await expect(dialog(page).getByRole('alert')).toBeVisible();
   expect(await notices(page,'success')).toEqual([]);
   expect(await page.evaluate(()=>window.__weeklyMeals.tables.meal_plans.length)).toBe(2);
-  await expect(slot(page)).toContainText('Coconut curry');
+  // Neither competing row is a complete, unambiguous slot receipt. Preserve
+  // both stored rows and refuse the displayed week instead of picking one.
+  await expect(page.locator('.module-main')).toContainText('We couldn’t load all meal choices. Please retry.');
+  await expect(slot(page)).toHaveCount(0);
 });
 
 const savedToast = (page: Page) => page.getByRole('status').filter({hasText:/^Meal saved\.$/});
@@ -945,4 +954,81 @@ for(const mode of ['transport','lost-response'] as const)test(`${mode} failure g
   await expect(page.locator('.module-main').getByText('Synthetic rice',{exact:true})).toHaveClass(/line-through/);
   expect(await page.evaluate(()=>window.__weeklyMeals.groceryCheckCalls?.length)).toBe(1);
  }
+});
+
+// Complete query/hook/browser controls: the small server cap is independent
+// of the caller's requested range. Existing write/ownership cases stay intact.
+test('cap-two reads expose the late favorite and saved choice before search', async ({page}) => {
+ await fixture(page);
+ await page.evaluate(()=>{
+  const p=window.__weeklyMeals,base=p.tables.family_recipes[0];p.readCap=2;
+  p.tables.family_recipes=Array.from({length:201},(_,i)=>({...base,id:'recipe-'+String(i).padStart(3,'0'),name:'Synthetic recipe '+String(i).padStart(3,'0'),is_favorite:i===200}));
+  window.dispatchEvent(new Event('online'));
+ });
+ await page.getByRole('button',{name:'Favorites',exact:true}).click();
+ await expect(page.getByText('Synthetic recipe 200',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Meal Plan',exact:true}).click();
+ await slot(page).click();await dialog(page).getByRole('textbox',{name:'Search meals and recipes'}).fill('recipe 200');
+ await expect(dialog(page).getByRole('button',{name:/Synthetic recipe 200/})).toBeVisible();
+ const reads=await page.evaluate(()=>window.__weeklyMeals.reads.filter(r=>r.table==='family_recipes'&&r.offset>0));
+ expect(reads.some(r=>r.offset===200)).toBe(true);expect(reads.every(r=>r.exact)).toBe(true);
+ expect(await calls(page)).toEqual([]);expect(await page.evaluate(()=>window.__weeklyMeals.errors)).toEqual([]);
+});
+
+test('cap-two reads expose oldest unchecked item beyond 80 in the full grocery tab', async ({page}) => {
+ await fixture(page);
+ await page.evaluate(()=>{
+  const p=window.__weeklyMeals;p.readCap=2;
+  p.tables.grocery_items=Array.from({length:81},(_,i)=>({id:'item-'+String(i).padStart(3,'0'),family_id:'family-A',list_id:'list-A',name:'Synthetic grocery '+String(i).padStart(3,'0'),quantity:null,category:null,is_checked:false,created_at:'2026-09-01T00:00:00Z'}));
+  window.dispatchEvent(new Event('online'));
+ });
+ await page.getByRole('button',{name:'Groceries',exact:true}).click();
+ await expect(page.locator('.module-main').getByRole('button',{name:'Synthetic grocery 080',exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>window.__weeklyMeals.reads.some(r=>r.table==='grocery_items'&&r.offset===80&&r.exact))).toBe(true);
+ expect(await calls(page)).toEqual([]);
+});
+
+test('cap-two plan and dish joins render the third dinner without showing outside-week rows', async ({page}) => {
+ await fixture(page);
+ await page.evaluate(()=>{
+  const p=window.__weeklyMeals,base=p.tables.meals[0];p.readCap=2;
+  p.tables.meals=Array.from({length:4},(_,i)=>({...base,id:'dish-'+i,name:'Synthetic dinner '+i}));
+  p.tables.meal_plans=Array.from({length:4},(_,i)=>({id:'slot-'+i,family_id:'family-A',meal_id:'dish-'+i,meal_type:'dinner',plan_date:['2026-09-07','2026-09-08','2026-09-09','2026-09-14'][i]}));
+  window.dispatchEvent(new Event('online'));
+ });
+ await expect(slot(page,'Wednesday')).toContainText('Synthetic dinner 2');
+ await expect(page.locator('.module-main')).not.toContainText('Synthetic dinner 3');
+ const reads=await page.evaluate(()=>window.__weeklyMeals.reads.filter(r=>r.offset===2));
+ expect(reads.some(r=>r.table==='meal_plans'&&r.exact)).toBe(true);
+ expect(reads.some(r=>r.table==='meals'&&r.exact&&r.filters.some(f=>f[0]==='in'))).toBe(true);
+ expect(await calls(page)).toEqual([]);
+});
+
+for(const fault of ['count','drift','duplicate','short'])test(`complete recipe ${fault} failure shows retry and recovers instead of claiming no favorites`,async({page})=>{
+ await fixture(page);
+ await page.evaluate(fault=>{
+  const p=window.__weeklyMeals,base=p.tables.family_recipes[0];p.readCap=2;p.readFaults={family_recipes:fault};
+  p.tables.family_recipes=Array.from({length:3},(_,i)=>({...base,id:'recipe-'+i,name:'Recovery recipe '+i,is_favorite:i===2}));
+  window.dispatchEvent(new Event('online'));
+ },fault);
+ await page.getByRole('button',{name:'Favorites',exact:true}).click();
+ await expect(page.locator('.module-main')).toContainText('We couldn’t load all meal choices. Please retry.');
+ await expect(page.getByRole('heading',{name:'No favorites yet',exact:true})).toHaveCount(0);
+ await page.evaluate(()=>{window.__weeklyMeals.readFaults={};});
+ await page.locator('.module-main').getByRole('button',{name:/retry|try again/i}).click();
+ await expect(page.getByText('Recovery recipe 2',{exact:true})).toBeVisible();
+ expect(await calls(page)).toEqual([]);expect(await page.evaluate(()=>window.__weeklyMeals.errors)).toEqual([]);
+});
+
+test('Recently Cooked hides a cached prefix after refresh failure and retries independently', async ({page}) => {
+ await fixture(page);
+ await page.evaluate(()=>{window.__weeklyMeals.tables.family_recipes[0].last_made_at='2026-09-10T12:00:00Z';window.dispatchEvent(new Event('online'));});
+ await expect(page.locator('.module-main').getByText('Tomato soup',{exact:true})).toBeVisible();
+ await page.evaluate(()=>{window.__weeklyMeals.readErrors.family_recipes=true;window.dispatchEvent(new Event('online'));});
+ await expect(page.locator('.module-main')).toContainText('We couldn’t load all meal choices. Please retry.');
+ await expect(page.locator('.module-main').getByText('Tomato soup',{exact:true})).toHaveCount(0);
+ await page.evaluate(()=>{window.__weeklyMeals.readErrors.family_recipes=false;});
+ await page.locator('.module-main').getByRole('button',{name:'Try again',exact:true}).click();
+ await expect(page.locator('.module-main').getByText('Tomato soup',{exact:true})).toBeVisible();
+ expect(await calls(page)).toEqual([]);
 });

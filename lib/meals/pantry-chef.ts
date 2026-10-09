@@ -3,6 +3,7 @@
 // prompt (allergy-aware), parse the model's recipe JSON robustly, and flag any
 // suggestion that conflicts with a family allergy (defense-in-depth in case the
 // model slips). Kept side-effect-free so it unit-tests without a network/DB.
+import { isValidTimezone, localPartsAt } from '@/lib/time/zoned';
 
 export type PantryRecipe = {
   title: string;
@@ -99,10 +100,15 @@ export function parsePantryRecipes(text: string): PantryRecipe[] {
 
 /**
  * Validate a caller-supplied plan date (YYYY-MM-DD, a real calendar day);
- * anything else falls back to today's date. Used by the add-to-plan phase.
+ * anything else uses the household's captured today. The zone is required:
+ * an unknown household clock must never quietly become a different dinner day.
  */
-export function normalizePlanDate(value: unknown, now: Date = new Date()): string {
-  const today = now.toISOString().slice(0, 10);
+export function normalizePlanDate(value: unknown, timezone: string, now: Date = new Date()): string {
+  if (typeof timezone !== 'string' || !timezone.trim() || !isValidTimezone(timezone) || !Number.isFinite(now.getTime())) {
+    throw new RangeError('The household dinner date cannot be determined.');
+  }
+  const { year, month, day } = localPartsAt(now, timezone);
+  const today = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return today;
   const parsed = new Date(`${value}T00:00:00Z`);
   if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) return today;

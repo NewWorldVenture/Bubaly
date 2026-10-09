@@ -4,7 +4,7 @@
 // out who has something tomorrow, and the model writes one notification per
 // person who does — never one to the whole family unless everyone is
 // involved.
-import { localTime, type WorkflowTemplate } from './index';
+import { calendarSearchTime, localTime, type WorkflowTemplate } from './index';
 
 export const remindEveryoneTemplate: WorkflowTemplate = {
   intent: 'remind_everyone',
@@ -20,7 +20,7 @@ export const remindEveryoneTemplate: WorkflowTemplate = {
   ],
   steps: [
     { key: 'members', stepType: 'retrieve', toolName: 'family.listMembers', description: 'See who is in the household', input: () => ({}) },
-    { key: 'tomorrow_events', stepType: 'retrieve', toolName: 'calendar.searchEvents', description: 'Read tomorrow\'s calendar', input: (ctx) => ({ from: localTime(ctx.tomorrowKey, 0), to: localTime(ctx.tomorrowKey, 23, 59), limit: 50 }) },
+    { key: 'tomorrow_events', stepType: 'retrieve', toolName: 'calendar.searchEvents', description: 'Read tomorrow\'s calendar', input: (ctx) => ({ from: calendarSearchTime(ctx.tomorrowKey, 0, 0, ctx.tz), to: calendarSearchTime(ctx.tomorrowKey, 23, 59, ctx.tz), limit: 50 }) },
     { key: 'homework', stepType: 'retrieve', toolName: 'school.listHomeworkDue', description: 'Check homework due tomorrow', input: (ctx) => ({ from: ctx.nowIso, to: localTime(ctx.dayAfterTomorrowKey, 0) }) },
     { key: 'practices', stepType: 'retrieve', toolName: 'sports.listPracticesBetween', description: 'Check tomorrow\'s practices and games', input: (ctx) => ({ from: localTime(ctx.tomorrowKey, 0), to: localTime(ctx.tomorrowKey, 23, 59) }) },
     { key: 'school_events', stepType: 'retrieve', toolName: 'school.listEventsBetween', description: 'Check tomorrow\'s school events', input: (ctx) => ({ from: localTime(ctx.tomorrowKey, 0), to: localTime(ctx.tomorrowKey, 23, 59) }) },

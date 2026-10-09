@@ -20,6 +20,8 @@
 // inputs against the registry without a database.
 import type { AgentId } from '@/lib/agents/roster';
 import type { IntentKey } from '@/lib/ai/context/intents';
+import { validDay } from '@/lib/onboarding/ics-time';
+import { instantForIcsLocalTime, isValidTimezone, localPartsAt } from '@/lib/time/zoned';
 import { encodeStepInput, type Plan, type PlanStep, type PlanStepType } from '../schema';
 import { chiefOfStaffTemplate } from './chief-of-staff';
 import { backToSchoolTemplate } from './back-to-school';
@@ -41,8 +43,8 @@ import { whatAmIForgettingTemplate } from './what-am-i-forgetting';
 
 /**
  * Everything a template needs to write concrete inputs. Every day key is
- * family-local (`YYYY-MM-DD`) and every instant is a naive local ISO time the
- * tools already accept ("ISO 8601 in the family timezone").
+ * family-local (`YYYY-MM-DD`). Calendar search resolves its explicit instants
+ * on `tz`; other tools retain their existing local-time input contracts.
  */
 export type TemplateContext = {
   tz: string;
@@ -239,6 +241,28 @@ export function mondayOf(dayKey: string): string {
 export function localTime(dayKey: string, hour: number, minute = 0): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${dayKey}T${pad(hour)}:${pad(minute)}:00`;
+}
+
+/** Explicit search instant on the household clock. Repeated readings use the
+ * first instant, matching the calendar's RFC5545 fold policy. Nonexistent
+ * readings (including skipped civil dates) refuse instead of shifting time. */
+export function calendarSearchTime(dayKey: string, hour: number, minute: number, timezone: string, shiftDays = 0): string {
+  if (!validDay(dayKey) || !Number.isInteger(hour) || hour < 0 || hour > 23
+    || !Number.isInteger(minute) || minute < 0 || minute > 59
+    || typeof timezone !== 'string' || !timezone.trim() || !isValidTimezone(timezone)
+    || !Number.isSafeInteger(shiftDays)) throw new Error('Invalid calendar search clock');
+  // Validate the original civil date before arithmetic can normalize an invalid
+  // named date such as February30 into an apparently valid March endpoint.
+  const shiftedDay = shiftDays === 0 ? dayKey : shiftDay(dayKey, shiftDays);
+  if (!validDay(shiftedDay)) throw new Error('Invalid calendar search clock');
+  const [year, month, day] = shiftedDay.split('-').map(Number);
+  const instant = instantForIcsLocalTime(year, month, day, hour * 60 + minute, timezone);
+  if (!instant) throw new Error('Invalid calendar search clock');
+  const actual = localPartsAt(instant, timezone);
+  if (actual.year !== year || actual.month !== month || actual.day !== day || actual.hour !== hour || actual.minute !== minute) {
+    throw new Error('Nonexistent calendar search clock');
+  }
+  return instant.toISOString();
 }
 
 /** `YYYY-MM` of a day key. */

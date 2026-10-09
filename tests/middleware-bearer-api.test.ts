@@ -35,6 +35,13 @@ afterEach(() => {
 });
 
 describe('middleware — bearer calls to the AI edge reach their handlers', () => {
+  it('passes only exact GET calendar occurrence bearer requests', async () => {
+    const { middleware } = await import('@/middleware');
+    const headers = { authorization: 'Bearer abc.def.ghi' };
+    expect((await middleware(request('/api/calendar/occurrences', headers, 'GET'))).status).toBe(200);
+    for (const path of ['/api/calendar/occurrences/other', '/api/calendar/occurrences-extra', '/api/calendar']) expect((await middleware(request(path, headers, 'GET'))).status).toBe(307);
+    expect((await middleware(request('/api/calendar/occurrences', headers, 'POST'))).status).toBe(307);
+  });
   it('passes a bearer request to /api/ai/requests through to the route', async () => {
     const { middleware } = await import('@/middleware');
     const res = await middleware(request('/api/ai/requests', { authorization: 'Bearer eyJhbGciOi.test.token' }));

@@ -7,7 +7,7 @@
 // one and the coming weekend's Saturday otherwise — a tournament is almost
 // always a weekend, and guessing "today" would put the prep reminder in the
 // past.
-import { localTime, shiftDay, type TemplateContext, type WorkflowTemplate } from './index';
+import { calendarSearchTime, localTime, shiftDay, type TemplateContext, type WorkflowTemplate } from './index';
 
 /** The tournament day: the one the request named, else the coming Saturday. */
 export function tournamentDayKey(ctx: TemplateContext): string {
@@ -32,7 +32,7 @@ export const tournamentDayTemplate: WorkflowTemplate = {
     { key: 'members', stepType: 'retrieve', toolName: 'family.listMembers', description: 'Confirm who is playing and who is free to drive', input: () => ({}) },
     { key: 'teams', stepType: 'retrieve', toolName: 'sports.listTeams', description: 'Read the teams on record', input: () => ({}) },
     { key: 'games', stepType: 'retrieve', toolName: 'sports.listPracticesBetween', description: 'Read the games and practices that day', input: (ctx) => ({ from: localTime(tournamentDayKey(ctx), 0), to: localTime(tournamentDayKey(ctx), 23, 59) }) },
-    { key: 'events', stepType: 'retrieve', toolName: 'calendar.searchEvents', description: 'Read what else is already on that day', input: (ctx) => ({ from: localTime(tournamentDayKey(ctx), 0), to: localTime(tournamentDayKey(ctx), 23, 59), limit: 50 }) },
+    { key: 'events', stepType: 'retrieve', toolName: 'calendar.searchEvents', description: 'Read what else is already on that day', input: (ctx) => ({ from: calendarSearchTime(tournamentDayKey(ctx), 0, 0, ctx.tz), to: calendarSearchTime(tournamentDayKey(ctx), 23, 59, ctx.tz), limit: 50 }) },
     { key: 'conflicts', stepType: 'retrieve', toolName: 'calendar.findConflicts', description: 'Look for clashes with the tournament', input: (ctx) => ({ from: localTime(tournamentDayKey(ctx), 0), to: localTime(tournamentDayKey(ctx), 23, 59) }) },
     { key: 'kit_memory', stepType: 'retrieve', toolName: 'memory.recall', description: 'Recall what this family packs for a tournament', input: () => ({ category: 'preference', query: 'tournament', limit: 20 }) },
     {

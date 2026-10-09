@@ -8,6 +8,8 @@ import { MoneyTimelineModule } from '@/components/modules/money-timeline-module'
 import { ErrorState } from '@/components/ui/states';
 import { isManager } from '@/lib/constants/roles';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
+import Link from 'next/link';
+import { BillScheduleConfirmationRequired } from '@/lib/finance/bill-schedule';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -41,6 +43,12 @@ export default async function MoneyTimelinePage() {
   } catch (err) {
     console.error('[dashboard/money-timeline] forecast read failed', err);
     const tr = await getTranslations();
+    if (err instanceof BillScheduleConfirmationRequired) return (
+      <div className="space-y-4">
+        <ErrorState message={tr('bills.scheduleForecastNeedsConfirmation')} />
+        <Link href="/dashboard/bills" className="inline-block rounded-xl border border-border px-4 py-3 font-semibold">{tr('bills.reviewSchedules')}</Link>
+      </div>
+    );
     return <ErrorState message={tr('moneyTimeline.couldNotLoadYourMoney')} />;
   }
 

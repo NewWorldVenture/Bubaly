@@ -15,18 +15,11 @@
 -- reading of due_date settles it. This column remembers the day the series is
 -- anchored on.
 --
--- Null reads the day from due_date, exactly as before, so every existing row
--- behaves as it did; the first roll of a month-based bill writes it, and the
--- add forms write it for a new recurring bill. No default, no backfill, no
--- index, no policy or function change; RLS is untouched.
---
--- No backfill is needed, either. Until this column exists the app writes a
--- bill without it only when the due date already falls on the bill's own day.
--- A roll into a month too short for the bill's day is never clamped silently
--- (lib/finance/recurring.ts `writeBillPatch`): the person is asked, and only
--- if they choose to move the bill to the shorter day is it written there, that
--- day being its day from then on. So every row reaching this migration falls
--- on the day it is meant to, and null (read the day from due_date) is right.
+-- Null means the original day is unknown; it is not a license to guess a
+-- clamped legacy anchor. No default or backfill is added. The application
+-- requests an explicit day where the legacy date is ambiguous and refuses a
+-- write that would lose that day on an older schema. Proven legacy days can
+-- advance only when the date itself retains their anchor.
 --
 -- Re-runnable: the column is added only if absent, and the check is named and
 -- added only if absent, so replaying this file onto a schema that already has
@@ -46,4 +39,4 @@ begin
 end $$;
 
 comment on column public.bills.due_day is
-  'Day of month a month-based recurring bill is anchored on (1-31); null reads the day from due_date. Lets a bill due on the 31st come back to the 31st after a short month.';
+  'Day of month a month-based recurring bill is anchored on (1-31); null means the original anchor is unknown. Lets a bill due on the 31st come back to the 31st after a short month.';

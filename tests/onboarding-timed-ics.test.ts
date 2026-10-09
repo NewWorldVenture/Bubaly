@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseIcsResult, parseIcs, toBriefEvents } from '@/lib/onboarding/ics';
 import { normalizedImportEvents } from '@/lib/onboarding/ics-time';
 
-const event = (lines: string) => 'BEGIN:VEVENT\nUID:Original-id\nSUMMARY:School: "Bring lunch\n' + lines + '\nEND:VEVENT';
+const event = (lines: string, uid = 'Original-id') => 'BEGIN:VEVENT\nUID:' + uid + '\nSUMMARY:School: "Bring lunch\n' + lines + '\nEND:VEVENT';
 const calendar = (lines: string, timezone = '') => 'BEGIN:VCALENDAR\nVERSION:2.0\n' + timezone + event(lines) + '\nEND:VCALENDAR';
 const ny = 'BEGIN:VTIMEZONE\nTZID:America/New_York\nX-LIC-LOCATION:America/New_York\n'
   + 'BEGIN:DAYLIGHT\nDTSTART:19700308T020000\nTZOFFSETFROM:-0500\nTZOFFSETTO:-0400\nRRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU\nEND:DAYLIGHT\n'
@@ -30,7 +30,7 @@ describe('strict pasted calendar time forms', () => {
     const input = calendar('DTSTART:20260910T130001Z\nDTEND:20260910T143001Z');
     const original = only(parseIcsResult(input));
     expect(original).toMatchObject({ uid: 'Original-id', title: 'School: "Bring lunch', start: '2026-09-10T13:00:01Z', end: '2026-09-10T14:30:01Z', allDay: false });
-    const result = parseIcsResult(input.replace('END:VCALENDAR', event('DTSTART:20260909T130000Z') + '\nEND:VCALENDAR'));
+    const result = parseIcsResult(input.replace('END:VCALENDAR', event('DTSTART:20260909T130000Z', 'earlier-distinct-event') + '\nEND:VCALENDAR'));
     expect(result.ok && result.events.map(item => item.start)).toEqual(['2026-09-10T13:00:01Z', '2026-09-09T13:00:00Z']);
   });
 
@@ -111,7 +111,7 @@ describe('bounded IANA VTIMEZONE declarations', () => {
     const definition = 'BEGIN:VTIMEZONE\nTZID:America/Boa_Vista\nBEGIN:STANDARD\nDTSTART:20000227T000000\nTZOFFSETFROM:-0300\nTZOFFSETTO:-0400\nEND:STANDARD\nEND:VTIMEZONE\n';
     const endpoints = ['20001007T233000', '20001015T003000'];
     const input = (times: string[]) => 'BEGIN:VCALENDAR\n' + definition
-      + times.map(time => event('DTSTART;TZID=America/Boa_Vista:' + time)).join('\n') + '\nEND:VCALENDAR';
+      + times.map(time => event('DTSTART;TZID=America/Boa_Vista:' + time, 'boa-vista-' + time)).join('\n') + '\nEND:VCALENDAR';
     expect(parseIcsResult(input(endpoints)).ok).toBe(true);
     expect(parseIcsResult(input([endpoints[0], '20001009T120000', endpoints[1]])))
       .toEqual({ ok: false, code: 'unsupportedTimezone' });
@@ -180,7 +180,7 @@ describe('event end/duration and whole-paste semantics', () => {
     expect(parse('DTSTART:20260910T130000Z\n' + line)).toEqual({ ok: false, code: 'unsupportedRecurrence' });
   });
   it('never returns the valid part of a mixed invalid paste', () => {
-    const text = 'BEGIN:VCALENDAR\n' + event('DTSTART:20260910T130000Z') + '\n' + event('DTSTART;TZID=Custom/Office:20260910T090000') + '\nEND:VCALENDAR';
+    const text = 'BEGIN:VCALENDAR\n' + event('DTSTART:20260910T130000Z') + '\n' + event('DTSTART;TZID=Custom/Office:20260910T090000', 'unsupported-zone-event') + '\nEND:VCALENDAR';
     expect(parseIcsResult(text)).toEqual({ ok: false, code: 'unsupportedTimezone' });
     expect(parseIcs(text)).toEqual([]);
   });

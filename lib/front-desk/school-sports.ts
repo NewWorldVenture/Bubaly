@@ -381,7 +381,7 @@ function extractTime(haystack: string): string | null {
 
 // ── the child ──────────────────────────────────────────────────────────────
 
-type ChildCandidate = { member_id: string; name: string; weight: number; at: number };
+type ChildCandidate = { member_id: string; name: string; weight: number; at: number; directLength?: number; owners?: Set<string> };
 
 function nameMatch(haystack: string, name: string): number {
   const trimmed = name.trim();
@@ -431,6 +431,18 @@ function matchAny(haystack: string, aliases: string[]): number {
   return best;
 }
 
+/** Every alias occurrence, excluding the left separator consumed for word boundaries. */
+function nameSpans(haystack: string, name: string): { at: number; end: number }[] {
+  const trimmed = name.trim();
+  if (trimmed.length < 3) return [];
+  // Lookahead keeps overlapping occurrences of the same multiword alias.
+  const re = new RegExp(`(?=(^|[^\\p{L}\\p{N}])(${escapeRegExp(trimmed)})(?![\\p{L}\\p{N}]))`, 'giu');
+  return [...haystack.matchAll(re)].map(match => {
+    const at = match.index + match[1].length;
+    return { at, end: at + match[2].length };
+  });
+}
+
 /**
  * Which child this is about.
  *
@@ -455,35 +467,71 @@ function pickChild(
     if (!full) continue;
     const fullAt = nameMatch(haystack, full);
     if (fullAt >= 0) {
-      candidates.push({ member_id: member.id, name: full, weight: 3, at: fullAt });
+      candidates.push({ member_id: member.id, name: full, weight: 3, at: fullAt, directLength: full.length });
       continue;
     }
     const first = full.split(/\s+/)[0] ?? '';
     const firstAt = first === full ? -1 : nameMatch(haystack, first);
-    if (firstAt >= 0) candidates.push({ member_id: member.id, name: full, weight: 1, at: firstAt });
+    if (firstAt >= 0) candidates.push({ member_id: member.id, name: full, weight: 1, at: firstAt, directLength: first.length });
   }
 
   const rosterHints: { memberId: string | null | undefined; groups: string[][] }[] = [
     ...teams.map((t) => ({ memberId: t.member_id, groups: [placeAliases(t.team_name), personAliases(t.coach)] })),
     ...classes.map((c) => ({ memberId: c.member_id, groups: [personAliases(c.teacher), placeAliases(c.school_name)] })),
   ];
+  const aliases = new Map<string, { at: number; end: number }[]>();
+  const rosterMatches: (ChildCandidate & { end: number })[] = [];
   for (const hint of rosterHints) {
     if (!hint.memberId) continue;
     const name = byId.get(hint.memberId);
     if (name === undefined || name === '') continue;
     for (const group of hint.groups) {
-      const at = matchAny(haystack, group);
-      if (at >= 0) candidates.push({ member_id: hint.memberId, name, weight: 2, at });
+      for (const alias of group) {
+        let spans = aliases.get(alias);
+        if (!spans) { spans = nameSpans(haystack, alias); aliases.set(alias, spans); }
+        for (const span of spans) rosterMatches.push({ member_id: hint.memberId, name, weight: 2, ...span });
+      }
     }
   }
 
+  // A full label and its surname can start at different positions while
+  // naming the same person. Merge overlapping alias spans and keep every
+  // child who owns that mention, including duplicate hints for one child.
+  const mentions: (ChildCandidate & { end: number; owners: Set<string> })[] = [];
+  for (const match of rosterMatches.sort((a, b) => a.at - b.at || b.end - a.end)) {
+    const previous = mentions.at(-1);
+    if (previous && match.at < previous.end) {
+      previous.end = Math.max(previous.end, match.end);
+      previous.owners.add(match.member_id);
+    } else {
+      mentions.push({ ...match, owners: new Set([match.member_id]) });
+    }
+  }
+  candidates.push(...mentions);
+
   if (candidates.length === 0) return null;
-  // Strongest evidence, then the one the message mentions first, then roster
-  // order — three total tie-breaks so the answer never depends on iteration luck.
-  return candidates.reduce((best, next) => {
+  // "Riley Jones" is more specific than its "Riley" prefix at the same
+  // position. "Riley" alone still cannot distinguish those two profiles.
+  const longestName = new Map<number, number>();
+  for (const candidate of candidates) {
+    if (candidate.directLength !== undefined) {
+      longestName.set(candidate.at, Math.max(longestName.get(candidate.at) ?? 0, candidate.directLength));
+    }
+  }
+  const specific = candidates.filter(candidate => candidate.directLength === undefined
+    || candidate.directLength === longestName.get(candidate.at));
+  // Prefer stronger evidence and then the first explicit mention. A shared
+  // name/teacher/coach at that same position cannot identify just one child.
+  const best = specific.reduce((best, next) => {
     if (next.weight !== best.weight) return next.weight > best.weight ? next : best;
     return next.at < best.at ? next : best;
   });
+  // Do not discard an ambiguous winning mention and fall through to a later
+  // teacher or a weaker first name. An explicit full child name still wins.
+  if (best.owners && best.owners.size > 1) return null;
+  return specific.some(candidate => candidate.member_id !== best.member_id
+    && candidate.at === best.at && candidate.directLength === best.directLength
+    && (candidate.weight === best.weight || best.directLength !== undefined)) ? null : best;
 }
 
 // ── the domain ─────────────────────────────────────────────────────────────

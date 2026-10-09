@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { RefreshCw, Link2, Trash2, Plus, Check, AlertCircle } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils/cn';
 import { addCalendarFeed, syncCalendarFeed, removeCalendarFeed } from '@/app/(app)/dashboard/sync/feeds/actions';
 import { CALENDAR_PROVIDERS, getCalendarProvider, type CalendarProvider } from '@/lib/calendar/providers';
 import { feedAddedMessage } from '@/lib/calendar/feeds';
+import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from '@/lib/calendar/source-capability';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { useFormat } from '@/components/i18n/use-format';
@@ -21,6 +22,11 @@ import { useConfirm } from '@/components/ui/confirm';
 type CalendarFeed = Tables<'calendar_feeds'>;
 
 export function CalendarSyncPanel() {
+  const { familyId, userId } = useApp();
+  return <CalendarSyncWorkspace key={`${familyId}:${userId}`} />;
+}
+
+function CalendarSyncWorkspace() {
   const t = useTranslations();
   const askConfirm = useConfirm();
   // The date follows the reader, not the browser: toLocaleDateString() with no
@@ -28,6 +34,9 @@ export function CalendarSyncPanel() {
   const { fmtDate } = useFormat();
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
+  const alive = useRef(true);
+  const syncRequest = useRef(0);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const [open, setOpen] = useState(false);
   const [providerId, setProviderId] = useState<string | null>(null);
   const [url, setUrl] = useState('');
@@ -54,19 +63,34 @@ export function CalendarSyncPanel() {
     e.preventDefault();
     if (!url.trim()) return;
     setAdding(true);
-    const res = await addCalendarFeed({ name, url });
-    setAdding(false);
-    if (!res.ok) { toastError(res.error); return; }
-    success(feedAddedMessage(res, t));
-    closeModal();
+    try {
+      const res = await addCalendarFeed({ name, url });
+      if (!alive.current) return;
+      if (!res.ok) { toastError(res.error); return; }
+      success(feedAddedMessage(res, t));
+      closeModal();
+    } catch {
+      if (alive.current) toastError(t('errors.thatChangeWasNotSaved'));
+    } finally {
+      if (alive.current) setAdding(false);
+    }
   }
 
   async function sync(feed: CalendarFeed) {
+    const request = ++syncRequest.current;
     setSyncing(feed.id);
-    const res = await syncCalendarFeed(feed.id);
-    setSyncing(null);
-    if (!res.ok) { toastError(res.error); return; }
-    success(t('calendarSync.syncedEventsCount', { count: res.imported ?? 0 }));
+    try {
+      const res = await syncCalendarFeed(feed.id);
+      if (!alive.current || request !== syncRequest.current) return;
+      if (!res.ok) { toastError(res.error); return; }
+      success(res.sourceGroups === undefined
+        ? t('calendarSync.syncedEventsCount', { count: res.imported ?? 0 })
+        : t('trustActivity.stateSucceeded'));
+    } catch {
+      if (alive.current && request === syncRequest.current) toastError(t('errors.thatChangeWasNotSaved'));
+    } finally {
+      if (alive.current && request === syncRequest.current) setSyncing(null);
+    }
   }
 
   async function remove(feed: CalendarFeed) {
@@ -113,11 +137,13 @@ export function CalendarSyncPanel() {
                 <div className="flex-1 min-w-0">
                   <p className="truncate text-sm font-semibold">{feed.name}</p>
                   <p className="truncate text-xs text-muted">{feed.url}</p>
-                  {feed.last_status === 'error' && feed.last_error ? (
-                    <p className="text-[10px] text-danger mt-0.5"><AlertCircle className="inline h-2.5 w-2.5" /> {feed.last_error}</p>
+                  {feed.last_status === 'error' || feed.last_status === 'revision_review' ? (
+                    <p className="text-[10px] text-danger mt-0.5"><AlertCircle className="inline h-2.5 w-2.5" /> {feed.last_error ?? t('errors.thatChangeWasNotSaved')}</p>
                   ) : feed.last_synced_at ? (
                     <p className="text-[10px] text-success mt-0.5">
-                      <Check className="inline h-2.5 w-2.5" /> {feed.event_count} events · synced {fmtDate(feed.last_synced_at, 'P')}
+                      <Check className="inline h-2.5 w-2.5" /> {CALENDAR_SOURCE_ARCHIVE_ENABLED
+                        ? `${t('trustActivity.stateSucceeded')} · ${fmtDate(feed.last_synced_at, 'P')}`
+                        : `${feed.event_count} events · synced ${fmtDate(feed.last_synced_at, 'P')}`}
                     </p>
                   ) : (
                     <p className="text-[10px] text-muted mt-0.5">{t('calendarSyncPanel.notSyncedYet')}</p>

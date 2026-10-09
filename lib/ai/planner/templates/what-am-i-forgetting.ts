@@ -4,7 +4,7 @@
 // Deterministic: nine reads over the coming week and sixty days of expiries,
 // then the answer goes to the person who asked (or the parents when the asker
 // has no login). The model may add a task per genuine gap it finds.
-import { localTime, shiftDay, type WorkflowTemplate } from './index';
+import { calendarSearchTime, localTime, shiftDay, type WorkflowTemplate } from './index';
 
 export const whatAmIForgettingTemplate: WorkflowTemplate = {
   intent: 'what_am_i_forgetting',
@@ -18,7 +18,7 @@ export const whatAmIForgettingTemplate: WorkflowTemplate = {
     'Address the answer to the person who asked; use the parents only when the asker cannot be notified. Rewrite the notification body with the gaps found, most urgent first, in two or three sentences.',
   ],
   steps: [
-    { key: 'events', stepType: 'retrieve', toolName: 'calendar.searchEvents', description: 'Read the coming week', input: (ctx) => ({ from: ctx.nowIso, to: localTime(shiftDay(ctx.todayKey, 7), 23, 59), limit: 100 }) },
+    { key: 'events', stepType: 'retrieve', toolName: 'calendar.searchEvents', description: 'Read the coming week', input: (ctx) => ({ from: ctx.nowIso, to: calendarSearchTime(ctx.todayKey, 23, 59, ctx.tz, 7), limit: 100 }) },
     { key: 'conflicts', stepType: 'retrieve', toolName: 'calendar.findConflicts', description: 'Look for overlaps', input: (ctx) => ({ from: ctx.nowIso, to: localTime(shiftDay(ctx.todayKey, 7), 23, 59) }) },
     { key: 'homework', stepType: 'retrieve', toolName: 'school.listHomeworkDue', description: 'Check homework due', input: (ctx) => ({ from: ctx.nowIso, to: localTime(shiftDay(ctx.todayKey, 7), 23, 59) }) },
     { key: 'practices', stepType: 'retrieve', toolName: 'sports.listPracticesBetween', description: 'Check practices and games', input: (ctx) => ({ from: ctx.nowIso, to: localTime(shiftDay(ctx.todayKey, 7), 23, 59) }) },

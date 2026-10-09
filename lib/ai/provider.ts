@@ -419,6 +419,11 @@ export class OpenAIProvider implements AIProvider {
     let executed = 0;
 
     for (let round = 0; round < maxRounds; round++) {
+      // The caller stopped listening (the chat client disconnected, the route
+      // aborted): nothing further is asked for, so nothing further is done — no
+      // model round, and below, no tool. A tool is a write on the family's
+      // behalf, and a person who stopped the turn did not ask for the next one.
+      if (signal?.aborted) return;
       const last = round === maxRounds - 1;
       let content = '';
       let calls: { id: string; name: string; args: string }[] = [];
@@ -471,6 +476,10 @@ export class OpenAIProvider implements AIProvider {
         }
         calls = Object.values(acc).filter((c) => c.name);
       } catch (streamError) {
+        // Stopped by the caller: the stream was cut on purpose, there is nobody
+        // to summarise for, and a closing summary would be one more model call
+        // the person did not ask for. Whatever ran stands; nothing more runs.
+        if (signal?.aborted) return;
         // Nothing has been written yet: the caller's retry/fallback is safe, so
         // give it the real error.
         if (executed === 0) throw streamError;
@@ -487,6 +496,9 @@ export class OpenAIProvider implements AIProvider {
 
       convo.push({ role: 'assistant', content: content || null, tool_calls: calls.map((c) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: c.args } })) });
       for (const c of calls) {
+        // Checked before EACH tool, not once per round: a cancellation that
+        // arrives while the first tool runs must stop the second.
+        if (signal?.aborted) return;
         let args: Record<string, unknown> = {};
         try { args = JSON.parse(c.args || '{}'); } catch { /* ignore */ }
         const tool = byName.get(c.name);

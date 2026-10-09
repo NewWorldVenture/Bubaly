@@ -504,15 +504,10 @@ describe('Supabase migration filename safety', () => {
     // /family/permissions shows them as read-only on (ROLE-M03).
     // 0471 adds the per-recipient admin digest delivery store, and 0474
     // (reserved for #710) withdraws an admin removed after a digest was
-    // frozen. This literal tracks the checked-in high-water mark. The numbers
-    // once allocated below it and never used (0465-0470 to NWV, 0472 to
-    // Support, 0473 to the coordinator) are retired, not held: production
-    // cannot apply them after 0474 (RETIRED_MIGRATION_VERSIONS). Above it the
-    // owner kept the existing reservations (2026-10-04, #771): 0475/0476 are
-    // messaging's (#834), 0477 onward belong to named branches, and a reserved
-    // migration that cannot land in order yet is held in supabase/reserved/
-    // (the bill anchor, 0488) — checked below.
-    expect(audit.nextVersion).toBe('0475');
+    // Messaging occupies 0475-0476. Preserve main's owner allocation map:
+    // bill anchor 0488 and feed claim 0490 remain held in supabase/reserved.
+    // Approval, AI privacy and atomic sync candidates are held at 0492-0494.
+    expect(audit.nextVersion).toBe('0477');
   });
 
   // A hole below the high-water mark is not a free number: `supabase db push`

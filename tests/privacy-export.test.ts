@@ -53,7 +53,7 @@ function household(aal: Aal = { currentLevel: 'aal1', nextLevel: 'aal1' }, maxRo
     { id: 'mem-parent', family_id: FAMILY, user_id: 'user-parent', display_name: 'Jordan', role: 'parent', is_active: true, birthday: null, color: 'teal', avatar_url: null },
     { id: 'mem-teen', family_id: FAMILY, user_id: 'user-teen', display_name: 'Sam', role: 'teen', is_active: true, birthday: '2011-04-02', color: 'amber', avatar_url: null },
   ]);
-  db.seed('calendar_events', [{ id: 'ev-1', family_id: FAMILY, title: 'Soccer', starts_at: `${today}T15:00:00Z`, ends_at: `${today}T16:00:00Z`, category: 'sports', assignee_id: 'mem-teen' }]);
+  db.seed('calendar_events', [{ id: 'ev-1', family_id: FAMILY, title: 'Soccer', all_day: false, starts_at: `${today}T15:00:00Z`, ends_at: `${today}T16:00:00Z`, category: 'sports', assignee_id: 'mem-teen' }]);
   db.seed('transactions', [{ id: 'tx-1', family_id: FAMILY, name: 'Groceries', merchant: 'Market', amount: 84.2, category: 'food', date: today, type: 'expense', member_id: null, account_id: null }]);
   db.seed('documents', [
     { id: 'doc-1', family_id: FAMILY, title: 'School calendar', category: 'school', mime_type: 'application/pdf', size_bytes: 10, expires_at: null, member_id: null, asset_id: null, is_secure: false, storage_path: `${FAMILY}/a.pdf` },
@@ -156,6 +156,31 @@ describe('buildFamilyExport', () => {
   let errorSpy: ReturnType<typeof vi.spyOn>;
   beforeEach(() => { errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {}); });
   afterEach(() => vi.restoreAllMocks());
+
+  it.each([3, 101, 501])('exports all A/B-week classes within its declared cap (%i saved)', async count => {
+    const db = household(undefined, 37);
+    const classes = Array.from({ length: count }, (_, i) => ({
+      id: `class-${String(i).padStart(4, '0')}`, family_id: FAMILY, member_id: 'mem-teen',
+      subject: `Subject ${String(i).padStart(4, '0')}`, teacher: null, room: null,
+      day_of_week: 1, time_slot: '09:00', week_pattern: ['a', 'b', 'all'][i % 3],
+    }));
+    db.seed('school_classes', [...classes, { ...classes[0], id: 'foreign-class', family_id: 'other-family' }]);
+    const built = await buildFamilyExport(scopeFor(db, 'parent'));
+    expect(built.ok).toBe(true);
+    if (!built.ok) throw new Error('export failed');
+    const school = built.data.sections.find(section => section.key === 'school')!;
+    const exported = (school.data as { classes: { id: string }[] }).classes;
+    expect(exported.map(row => row.id)).toEqual(classes.slice(0, 500).map(row => row.id));
+    expect(school).toMatchObject({ count: Math.min(count, 500), limit: 500, truncated: count >= 500 });
+  });
+
+  it('refuses a school export when the class roster cannot be read', async () => {
+    const db = household();
+    failing(db, 'school_classes', { code: '57014', message: 'synthetic class read failure' });
+    expect(await buildFamilyExport(scopeFor(db, 'parent'))).toEqual({
+      ok: false, failed: [{ key: 'school', error: expect.any(String) }],
+    });
+  });
 
   it.each([0, 101, 500, 1001])('exports all %i scheduled routines, including paused ones, through a server cap', async (count) => {
     // A deliberately small server cap catches pagination that assumes a

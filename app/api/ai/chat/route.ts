@@ -7,6 +7,8 @@ import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider, describeAIError, isAIConfigured, type AIMessage } from '@/lib/ai/provider';
 import { finalizeAssistantContent, summarizeToolResult } from '@/lib/ai/assistant-engine';
+import { chronologicalMessages } from '@/lib/ai/conversation-session';
+import { toStructuredContent } from '@/lib/ai/result-cards';
 import { buildAssistantTools } from '@/lib/assistant/tools';
 import { wrapToolsWithTrust } from '@/lib/assistant/trust-wrapper';
 import type { Database } from '@/lib/database.types';
@@ -96,7 +98,8 @@ export async function POST(req: NextRequest) {
       { data: chores, error: choresError },
       { data: meals, error: mealsError },
     ] = await settleAll([
-      supabase.from('ai_messages').select('role, content').eq('conversation_id', conversationId).order('created_at', { ascending: true }).limit(40),
+      supabase.from('ai_messages').select('role, content, created_at').eq('conversation_id', conversationId)
+        .eq('family_id', familyId).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(40),
       supabase.from('family_members').select('id, display_name, role').eq('family_id', familyId).eq('is_active', true),
       // The next twelve things on the calendar, series included; bounded to a
       // month ahead, which is as far as "what's coming up" reaches
@@ -136,6 +139,7 @@ export async function POST(req: NextRequest) {
       'Guidelines:',
       "- When the user asks you to schedule, add, remind, or plan something, USE the tools to actually do it — don't just describe it.",
       '- Resolve relative dates ("tomorrow", "next Friday at 3pm") against the current local date/time and pass ISO 8601 datetimes in the family time zone.',
+      '- For calendar.searchEvents specifically, from and to must be full ISO 8601 instants with Z or the correct explicit UTC offset for the household timezone on each requested date, including daylight saving changes. Never use date-only or offsetless search bounds. Keep the inclusive window within 366 days; omitted bounds use the disclosed finite default horizon.',
       '- You may call several tools in one turn (e.g. add multiple grocery items). Prefer one tool call per item.',
       '- After acting, confirm crisply what you did. If you need a critical detail (like a date), ask one short question instead of guessing.',
       '- Be concise, friendly, and genuinely helpful. Never invent data you were not given.',
@@ -145,7 +149,7 @@ export async function POST(req: NextRequest) {
     ].join('\n');
 
     const messages: AIMessage[] = [
-      ...((history ?? []).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))),
+      ...chronologicalMessages(history ?? []).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
       { role: 'user' as const, content: message },
     ];
 
@@ -156,9 +160,21 @@ export async function POST(req: NextRequest) {
     // Stream the run as Server-Sent Events: `action` chips as tools fire,
     // `delta` chunks as the reply streams, then a final `done` (after persisting).
     const encoder = new TextEncoder();
+    let connected = true;
+    // The client's cancellation reaches the provider: `runToolsStream` checks
+    // this signal before every model round and every tool, so a person who
+    // stopped the turn after its first action does not get its second action
+    // written anyway (audit hold on #834, 2026-10-04). What ran before the stop
+    // stands and is persisted below, so the conversation records it.
+    const stopped = new AbortController();
     const stream = new ReadableStream({
+      cancel() { connected = false; stopped.abort(); },
       async start(controller) {
-        const send = (e: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(e)}\n\n`));
+        const send = (e: unknown) => {
+          if (!connected) return;
+          try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(e)}\n\n`)); }
+          catch { connected = false; }
+        };
         // §33: the chat assistant is the other surface the row names by name.
         // It catches its own stream errors and falls back, so nothing ever
         // reached a wrapper's catch — a turn the family watched break recorded
@@ -169,13 +185,14 @@ export async function POST(req: NextRequest) {
           { feature: 'chat.assistant', text: 'Assistant chat', kind: 'feature', conversationId },
           async (obs) => {
         let content = '';
+        let responseError: string | undefined;
         const actions: { name: string; args: Record<string, unknown>; result: unknown }[] = [];
         const pushAction = (name: string, args: Record<string, unknown>, result: unknown) => {
           actions.push({ name, args, result });
           send({ type: 'action', name, ...summarize(result) });
         };
         try {
-          for await (const ev of provider.runToolsStream({ system, messages, tools, maxTokens: 1500 })) {
+          for await (const ev of provider.runToolsStream({ system, messages, tools, maxTokens: 1500, signal: stopped.signal })) {
             if (ev.type === 'delta') { content += ev.text; send({ type: 'delta', text: ev.text }); }
             else pushAction(ev.name, ev.args, ev.result);
           }
@@ -188,21 +205,24 @@ export async function POST(req: NextRequest) {
           // Resilience: if streaming failed before producing any text (e.g. a proxy
           // buffered/blocked the SSE response), fall back to a single non-streaming
           // run so the assistant still works. Only surface an error if that fails too.
-          if (!content) {
+          // Not when the person stopped the turn: the stream "failed" because they
+          // cut it, and a fallback run would do the work they stopped.
+          if (!content && actions.length === 0 && !stopped.signal.aborted) {
             try {
-              const result = await provider.runTools({ system, messages, tools, maxTokens: 1500 });
+              const result = await provider.runTools({ system, messages, tools, maxTokens: 1500, signal: stopped.signal });
               for (const a of result.actions) if (!actions.some((x) => x.name === a.name && JSON.stringify(x.args) === JSON.stringify(a.args))) pushAction(a.name, a.args, a.result);
               if (result.text) { content = result.text; send({ type: 'delta', text: result.text }); }
             } catch (fallbackErr) {
               console.error('AI fallback error:', fallbackErr);
               obs.failed(fallbackErr);
               send({ type: 'error', error: describeAIError(fallbackErr).message });
-              controller.close();
+              if (connected) controller.close();
               return;
             }
           } else {
             // We already streamed a partial answer; report the interruption but keep what we have.
-            send({ type: 'error', error: describeAIError(streamErr).message });
+            responseError = describeAIError(streamErr).message;
+            send({ type: 'error', error: responseError });
           }
         }
 
@@ -216,6 +236,7 @@ export async function POST(req: NextRequest) {
             { family_id: familyId, conversation_id: conversationId, role: 'user', content: message },
             {
               family_id: familyId, conversation_id: conversationId, role: 'assistant', content: assistantContent,
+              structured_content: toStructuredContent([], [], responseError),
               tool_calls: actions.length ? (actions.map((a) => ({ name: a.name, args: a.args })) as unknown as Database['public']['Tables']['ai_messages']['Insert']['tool_calls']) : null,
               tool_results: actions.length ? (actions.map((a) => ({ name: a.name, ...summarizeToolResult(a.result) })) as unknown as Database['public']['Tables']['ai_messages']['Insert']['tool_results']) : null,
             },
@@ -252,7 +273,7 @@ export async function POST(req: NextRequest) {
 
         obs.used(provider.model, undefined);
         send({ type: 'done', content: assistantContent, persisted: !persistenceError });
-        controller.close();
+        if (connected) controller.close();
           },
         );
       },

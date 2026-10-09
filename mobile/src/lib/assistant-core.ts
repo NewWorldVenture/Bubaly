@@ -142,8 +142,16 @@ export function cardSections(card: AssistantCard, t: MobileTranslator = englishM
     }
     case 'calendar_conflict': {
       const conflicts = list(card.conflicts);
-      const lines = conflicts.map((c) => t('mobileAssistant.overlap', { titles: strings(c.titles).join(t('mobileAssistant.and')), when: str(c.when) ?? '', member: str(c.member) ? ` · ${str(c.member)}` : '' }).trim());
-      return { ...base, subtitle: base.subtitle ?? (conflicts.length ? null : t('mobileAssistant.noOverlap')), ...cap(lines.length ? lines : [t('mobileAssistant.nobodyDoubleBooked')]), tone: conflicts.length ? 'warning' : 'success' };
+      const advisories = list(card.advisories);
+      const personal = conflicts.map((c) => t('mobileAssistant.overlap', { titles: strings(c.titles).join(t('mobileAssistant.and')), when: str(c.when) ?? '', member: str(c.member) ? ` · ${str(c.member)}` : '' }).trim());
+      const family = advisories.map(c => t('mobileAssistant.conflictMobileFamilyLine', { titles: list(c.subjects).map(subject => str(subject.title) ?? t('mobileAssistant.conflictEvent')).join(t('mobileAssistant.conflictAnd')), when: str(c.when) ?? '' }));
+      const lines = [...personal, ...family];
+      // Historical cards only qualified the personal lane. New cards disclose both scopes.
+      const qualified = Array.isArray(card.advisories);
+      const counts = t('mobileAssistant.conflictCounts', { personal: t(conflicts.length === 1 ? 'mobileAssistant.conflictPersonalOne' : 'mobileAssistant.conflictPersonalOther', { count: conflicts.length }), family: t(advisories.length === 1 ? 'mobileAssistant.conflictFamilyOne' : 'mobileAssistant.conflictFamilyOther', { count: advisories.length }) });
+      return { ...base, subtitle: base.subtitle ?? (qualified ? counts : conflicts.length ? null : t('mobileAssistant.noOverlap')),
+        ...cap(lines.length ? lines : [qualified ? t('mobileAssistant.conflictClear') : t('mobileAssistant.nobodyDoubleBooked')]),
+        tone: lines.length ? 'warning' : 'success' };
     }
     case 'budget_analysis': {
       const currency = str(card.currency) ?? 'USD';

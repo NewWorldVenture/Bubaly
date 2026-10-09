@@ -73,13 +73,15 @@ export async function proposeFrontDeskAction(messageId: string): Promise<Propose
   // rather than batched: these return `ServiceResult`, which has `ok` and not
   // `data`, so it can never ride inside `settleAll` (see the strategy file's
   // settleAll hazard) — and each already fails closed on its own.
-  const members = await getMembers(scope);
+  // Every input must be complete: a hidden sibling or shared teacher/coach
+  // would otherwise turn ambiguous evidence into an apparent single match.
+  const members = await getMembers(scope, { requireComplete: true });
   if (!members.ok) return { ok: false, error: members.error, code: members.code };
-  const classes = await listClassRoster(scope);
+  const classes = await listClassRoster(scope, { requireComplete: true });
   if (!classes.ok) return { ok: false, error: classes.error, code: classes.code };
   // Inactive teams included on purpose: last season's coach still identifies
   // the child whose club is writing about this season's kit.
-  const teams = await listTeams(scope, { activeOnly: false });
+  const teams = await listTeams(scope, { activeOnly: false, requireComplete: true });
   if (!teams.ok) return { ok: false, error: teams.error, code: teams.code };
 
   const classification = classify(

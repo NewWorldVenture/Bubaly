@@ -39,15 +39,26 @@ function scope(tz:string,rows:SportsEventRow[],errorBranch?:'single'|'series'):S
     receipts.push({method,path:url.pathname,query:[...url.searchParams]});
     try {
       expect(url.origin).toBe('https://sports-proof.invalid');expect(url.pathname).toBe('/rest/v1/sports_events');expect(method).toBe('GET');expect(receipts.length).toBeLessThanOrEqual(2);
-      expect(url.searchParams.get('family_id')).toBe('eq.'+FAMILY);expect(url.searchParams.get('select')).toBe('*');expect(url.searchParams.get('limit')).toBe('500');
+      expect(url.searchParams.get('family_id')).toBe('eq.'+FAMILY);expect(url.searchParams.get('select')).toBe('*');
+      expect(new Headers(init?.headers).get('prefer')).toContain('count=exact');
+      expect(url.searchParams.get('order')).toBe('starts_at.asc,id.asc');
       expect(url.searchParams.get('recurrence')).toMatch(/^(eq|neq)\.none$/);
-      const times=url.searchParams.getAll('starts_at');expect(times.length).toBe(2);expect(times.some(t=>t.startsWith('gte.'))).toBe(true);expect(times.some(t=>t.startsWith('lte.'))).toBe(true);
+      const isSingle=url.searchParams.get('recurrence')==='eq.none';
+      expect(isSingle ? ['1','200'] : ['500']).toContain(url.searchParams.get('limit'));
+      const times=url.searchParams.getAll('starts_at');expect(times.length).toBe(isSingle?2:1);expect(times.some(t=>t.startsWith('gte.'))).toBe(isSingle);expect(times.some(t=>t.startsWith('lte.'))).toBe(true);
+      if(!isSingle)expect(url.searchParams.get('or')).toMatch(/^\(recurrence_until\.is\.null,recurrence_until\.gt\..+\)$/);
     } catch(cause) {fixtureErrors.push(String(cause));throw cause;}
     const single=url.searchParams.get('recurrence')==='eq.none';
     if(errorBranch===(single?'single':'series')) return new Response(JSON.stringify({code:'42501',message:'synthetic denied'}),{status:403,headers:{'content-type':'application/json'}});
     const data=rows.filter(row=>{
       for(const [key,predicate] of url.searchParams) {
-        if(key==='select'||key==='limit') continue;
+        if(['select','limit','offset','order'].includes(key)) continue;
+        if(key==='or') {
+          const cutoff=predicate.match(/^\(recurrence_until\.is\.null,recurrence_until\.gt\.(.+)\)$/)?.[1];
+          if(!cutoff)throw new Error('unexpected series cutoff');
+          if(row.recurrence_until && Date.parse(row.recurrence_until)<=Date.parse(cutoff))return false;
+          continue;
+        }
         const dot=predicate.indexOf('.'),op=predicate.slice(0,dot),wanted=predicate.slice(dot+1);
         const value=String(row[key as keyof SportsEventRow]);
         if(op==='eq'&&value!==wanted)return false;if(op==='neq'&&value===wanted)return false;
@@ -55,7 +66,10 @@ function scope(tz:string,rows:SportsEventRow[],errorBranch?:'single'|'series'):S
       }
       return true;
     });
-    return new Response(JSON.stringify(data),{status:200,headers:{'content-type':'application/json'}});
+    data.sort((a,b)=>Date.parse(a.starts_at)-Date.parse(b.starts_at)||a.id.localeCompare(b.id));
+    const offset=Number(url.searchParams.get('offset')??0),limit=Number(url.searchParams.get('limit'));
+    const page=data.slice(offset,offset+limit);
+    return new Response(JSON.stringify(page),{status:200,headers:{'content-type':'application/json','content-range':`${offset}-${offset+Math.max(0,page.length-1)}/${data.length}`}});
   };
   const db=createClient('https://sports-proof.invalid','synthetic-anon-not-a-secret',{accessToken:async()=>null,global:{fetch:inertFetch},auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
   return {db:db as ServiceScope['db'],familyId:FAMILY,userId:null,memberId:MEMBER,role:'parent',actorKind:'member',tz};
@@ -66,7 +80,7 @@ function localClock(instant:string,tz:string) {
  const parts=new Intl.DateTimeFormat('en-CA',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(instant));
  const p=Object.fromEntries(parts.map(v=>[v.type,v.value]));return p.year+'-'+p.month+'-'+p.day+' '+p.hour+':'+p.minute;
 }
-describe('sports family timezone actual SDK original contract',()=>{
+describe('sports family timezone actual SDK counted-read contract',()=>{
  it('keeps weekly New York 17:00 across fall-back with source id and duration',async()=>{
   const rows=successful(await listPracticesBetween(scope('America/New_York',[event('2026-10-28T21:00:00.000Z')]),window('2026-11-04T05:00:00.000Z','2026-11-05T05:00:00.000Z')));
   expect(rows.map(r=>[r.id,r.starts_at,r.ends_at,localClock(r.starts_at,'America/New_York')])).toEqual([['series','2026-11-04T22:00:00.000Z','2026-11-04T23:00:00.000Z','2026-11-04 17:00']]);
@@ -128,9 +142,11 @@ describe('sports named family-zone preservation controls',()=>{
   const rows=successful(await listPracticesBetween(scope('America/Los_Angeles',[event('2026-10-28T00:00:00.000Z')]),window('2026-11-03T08:00:00.000Z','2026-11-04T08:00:00.000Z')));
   expect(rows.map(r=>[r.starts_at,localClock(r.starts_at,'America/Los_Angeles')])).toEqual([['2026-11-04T01:00:00.000Z','2026-11-03 17:00']]);
  });
- it('preserves the named resolver first-valid-minute spring gap policy',async()=>{
+ it('preserves the app-native spring-gap wall-clock shift',async()=>{
+  // Native app series currently shift across a gap. This is not RFC RRULE
+  // conformance: feed admission refuses timed imported rules until fidelity is durable.
   const rows=successful(await listPracticesBetween(scope('America/New_York',[event('2026-03-01T07:30:00.000Z')]),window('2026-03-08T05:00:00.000Z','2026-03-09T04:00:00.000Z')));
-  expect(rows.map(r=>[r.starts_at,r.ends_at,localClock(r.starts_at,'America/New_York')])).toEqual([['2026-03-08T07:00:00.000Z','2026-03-08T08:00:00.000Z','2026-03-08 03:00']]);
+  expect(rows.map(r=>[r.starts_at,r.ends_at,localClock(r.starts_at,'America/New_York')])).toEqual([['2026-03-08T07:30:00.000Z','2026-03-08T08:30:00.000Z','2026-03-08 03:30']]);
  });
  it('preserves the named resolver first-fold choice for zero-second timestamps',async()=>{
   const rows=successful(await listPracticesBetween(scope('America/New_York',[event('2026-10-25T05:30:00.000Z')]),window('2026-11-01T04:00:00.000Z','2026-11-02T05:00:00.000Z')));

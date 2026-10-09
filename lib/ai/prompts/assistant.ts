@@ -19,7 +19,7 @@
 import { UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 
 /** Bump when a rule changes meaning. Format: `<surface>-<date>.<revision>`. */
-export const ASSISTANT_PROMPT_VERSION = 'assistant-2026-09-05.1';
+export const ASSISTANT_PROMPT_VERSION = 'assistant-2026-10-08.1';
 
 /**
  * §66 verbatim, lightly typeset. This paragraph is the one both prompt
@@ -69,6 +69,7 @@ export const ASSISTANT_RULES: readonly string[] = [
   'Guidelines:',
   "- When the user asks you to schedule, add, remind, or plan something, USE the tools to actually do it — don't just describe it.",
   '- Resolve relative dates ("tomorrow", "next Friday at 3pm") against the current local date/time and pass ISO 8601 datetimes in the family time zone.',
+  '- For calendar.searchEvents specifically, from and to must be full ISO 8601 instants with Z or the correct explicit UTC offset for the household timezone on each requested date, including daylight saving changes. Never use date-only or offsetless search bounds. Keep the inclusive window within 366 days; omitted bounds use the disclosed finite default horizon.',
   '- You may call several tools in one turn (e.g. add multiple grocery items). Prefer one tool call per item.',
   ...VOICE_RULES.map((rule) => `- ${rule}`),
   '- After acting, confirm crisply what you did, in plain words: say what changed for the family, never which tool or module you used.',

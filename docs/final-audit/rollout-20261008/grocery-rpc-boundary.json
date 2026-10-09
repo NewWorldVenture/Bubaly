@@ -1,0 +1,203 @@
+{
+  "projectRef": "ltcxlbipiihclxwioyqj",
+  "capturedDate": "2026-10-08",
+  "scope": "Read-only function definitions and relation metadata; no household rows read and no function invoked.",
+  "query": "select p.oid::regprocedure::text as signature, pg_get_userbyid(p.proowner) as owner, p.prosecdef as security_definer, pg_get_functiondef(p.oid) as definition from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('marketplace_set_listing_status','grocery_from_meal_plan','marketplace_accept_offer','economy_decide_redemption','guardian_review_suggestion','marketplace_buy_now') order by 1;",
+  "functions": [
+    {
+      "signature": "economy_decide_redemption(uuid,boolean,text)",
+      "owner": "postgres",
+      "security_definer": true,
+      "definition": "CREATE OR REPLACE FUNCTION public.economy_decide_redemption(p_redemption_id uuid, p_approve boolean, p_note text DEFAULT NULL::text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\ndeclare\r\n  v_redemption record;\r\n  v_reward record;\r\n  v_has_reward boolean := false;\r\n  v_balance bigint;\r\n  v_txn_id uuid;\r\nbegin\r\n  if auth.uid() is null then\r\n    return jsonb_build_object('ok', false, 'reason', 'unauthenticated');\r\n  end if;\r\n\r\n  select id, family_id, reward_id, currency_id, member_id, cost, status\r\n    into v_redemption\r\n    from public.economy_redemptions\r\n   where id = p_redemption_id\r\n   for update;\r\n  if not found then\r\n    return jsonb_build_object('ok', false, 'reason', 'not_found');\r\n  end if;\r\n\r\n  if not public.can_manage_family(v_redemption.family_id) then\r\n    return jsonb_build_object('ok', false, 'reason', 'forbidden');\r\n  end if;\r\n  if v_redemption.status <> 'pending' then\r\n    return jsonb_build_object('ok', false, 'reason', 'already_decided');\r\n  end if;\r\n\r\n  if not p_approve then\r\n    update public.economy_redemptions\r\n       set status = 'rejected', decided_by = auth.uid(), decided_at = now(),\r\n           note = left(nullif(trim(coalesce(p_note, '')), ''), 1000)\r\n     where id = v_redemption.id;\r\n    return jsonb_build_object('ok', true, 'status', 'rejected');\r\n  end if;\r\n\r\n  if v_redemption.reward_id is not null then\r\n    select id, stock into v_reward\r\n      from public.economy_rewards\r\n     where id = v_redemption.reward_id\r\n       and family_id = v_redemption.family_id\r\n     for update;\r\n    v_has_reward := found;\r\n    if v_has_reward and v_reward.stock is not null and v_reward.stock <= 0 then\r\n      return jsonb_build_object('ok', false, 'reason', 'out_of_stock');\r\n    end if;\r\n  end if;\r\n\r\n  -- Lock the member's ledger rows before checking the balance. This makes two\r\n  -- concurrent approvals observe each other's debit instead of overspending.\r\n  perform 1\r\n    from public.currency_transactions\r\n   where family_id = v_redemption.family_id\r\n     and currency_id = v_redemption.currency_id\r\n     and member_id = v_redemption.member_id\r\n   for update;\r\n  select coalesce(sum(case when direction = 'credit' then amount else -amount end), 0)::bigint\r\n    into v_balance\r\n    from public.currency_transactions\r\n   where family_id = v_redemption.family_id\r\n     and currency_id = v_redemption.currency_id\r\n     and member_id = v_redemption.member_id;\r\n  if v_balance < v_redemption.cost then\r\n    return jsonb_build_object('ok', false, 'reason', 'insufficient_tokens');\r\n  end if;\r\n\r\n  insert into public.currency_transactions\r\n    (family_id, currency_id, member_id, direction, amount, reason,\r\n     related_type, related_id, created_by)\r\n  values\r\n    (v_redemption.family_id, v_redemption.currency_id, v_redemption.member_id,\r\n     'debit', v_redemption.cost, 'Reward redeemed', 'redemption',\r\n     v_redemption.id, auth.uid())\r\n  returning id into v_txn_id;\r\n\r\n  update public.economy_redemptions\r\n     set status = 'fulfilled', txn_id = v_txn_id, decided_by = auth.uid(),\r\n         decided_at = now(), note = left(nullif(trim(coalesce(p_note, '')), ''), 1000)\r\n   where id = v_redemption.id;\r\n\r\n  if v_has_reward and v_reward.stock is not null then\r\n    update public.economy_rewards\r\n       set stock = stock - 1\r\n     where id = v_reward.id and stock > 0;\r\n  end if;\r\n\r\n  return jsonb_build_object('ok', true, 'status', 'fulfilled', 'txn_id', v_txn_id);\r\nend;\r\n$function$\n"
+    },
+    {
+      "signature": "grocery_from_meal_plan(uuid,date,date,uuid)",
+      "owner": "postgres",
+      "security_definer": true,
+      "definition": "CREATE OR REPLACE FUNCTION public.grocery_from_meal_plan(p_family_id uuid, p_from date, p_to date, p_list_id uuid DEFAULT NULL::uuid)\n RETURNS uuid\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\ndeclare\n  v_list_id uuid := p_list_id;\n  v_ing jsonb;\nbegin\n  if not public.is_family_member(p_family_id) then\n    raise exception 'Not a member of this family';\n  end if;\n\n  if v_list_id is null then\n    insert into public.grocery_lists (family_id, name, created_by)\n    values (p_family_id, 'From meal plan ' || p_from || '–' || p_to, auth.uid())\n    returning id into v_list_id;\n  end if;\n\n  for v_ing in\n    select jsonb_array_elements(m.ingredients) as ing\n    from public.meal_plans mp\n    join public.meals m on m.id = mp.meal_id\n    where mp.family_id = p_family_id\n      and mp.plan_date between p_from and p_to\n      and m.ingredients is not null\n  loop\n    insert into public.grocery_items (family_id, list_id, name, quantity, created_by)\n    values (p_family_id, v_list_id,\n            coalesce(v_ing->>'name','item'), v_ing->>'qty', auth.uid());\n  end loop;\n\n  return v_list_id;\nend; $function$\n"
+    },
+    {
+      "signature": "guardian_review_suggestion(uuid,text,text)",
+      "owner": "postgres",
+      "security_definer": true,
+      "definition": "CREATE OR REPLACE FUNCTION public.guardian_review_suggestion(p_suggestion_id uuid, p_decision text, p_note text DEFAULT NULL::text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\ndeclare\r\n  v_suggestion record;\r\n  v_rule jsonb;\r\n  v_priority integer;\r\n  v_action public.guardian_routing_mode;\r\n  v_trust_levels text[];\r\n  v_time_start time;\r\n  v_time_end time;\r\nbegin\r\n  if auth.uid() is null then\r\n    return jsonb_build_object('ok', false, 'reason', 'unauthenticated');\r\n  end if;\r\n  if p_decision not in ('approved', 'dismissed') then\r\n    return jsonb_build_object('ok', false, 'reason', 'invalid_decision');\r\n  end if;\r\n\r\n  select * into v_suggestion\r\n    from public.guardian_suggestions\r\n   where id = p_suggestion_id\r\n   for update;\r\n  if not found then\r\n    return jsonb_build_object('ok', false, 'reason', 'not_found');\r\n  end if;\r\n  if not public.can_manage_family(v_suggestion.family_id) then\r\n    return jsonb_build_object('ok', false, 'reason', 'forbidden');\r\n  end if;\r\n  if v_suggestion.status <> 'pending' then\r\n    return jsonb_build_object('ok', false, 'reason', 'already_reviewed');\r\n  end if;\r\n\r\n  if p_decision = 'approved' then\r\n    -- Trust-changing suggestions update the contact before the suggestion is\r\n    -- marked approved. A missing contact rolls back the entire review.\r\n    if v_suggestion.suggestion_type in ('update_trust', 'block_contact')\r\n       and v_suggestion.proposed_contact_id is not null\r\n       and v_suggestion.proposed_trust_level is not null then\r\n      update public.guardian_contacts\r\n         set trust_level = v_suggestion.proposed_trust_level,\r\n             trust_override = true\r\n       where id = v_suggestion.proposed_contact_id\r\n         and family_id = v_suggestion.family_id;\r\n      if not found then\r\n        return jsonb_build_object('ok', false, 'reason', 'contact_not_found');\r\n      end if;\r\n    end if;\r\n\r\n    if v_suggestion.suggestion_type = 'new_rule' then\r\n      v_rule := coalesce(v_suggestion.proposed_rule_data, '{}'::jsonb);\r\n      v_priority := case\r\n        when (v_rule->>'priority') ~ '^[0-9]+$'\r\n          then least((v_rule->>'priority')::numeric, 100000)::integer\r\n        else 100\r\n      end;\r\n      v_action := case v_rule->>'action_routing_mode'\r\n        when 'immediate_ring' then 'immediate_ring'::public.guardian_routing_mode\r\n        when 'immediate_ai_summary' then 'immediate_ai_summary'::public.guardian_routing_mode\r\n        when 'voicemail_first' then 'voicemail_first'::public.guardian_routing_mode\r\n        when 'silent_handling' then 'silent_handling'::public.guardian_routing_mode\r\n        when 'blocked' then 'blocked'::public.guardian_routing_mode\r\n        else 'ai_handle_first'::public.guardian_routing_mode\r\n      end;\r\n      if jsonb_typeof(v_rule->'condition_trust_levels') = 'array' then\r\n        v_trust_levels := array(\r\n          select jsonb_array_elements_text(v_rule->'condition_trust_levels')\r\n        );\r\n      end if;\r\n      if (v_rule->>'condition_time_start') ~ '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$' then\r\n        v_time_start := (v_rule->>'condition_time_start')::time;\r\n      end if;\r\n      if (v_rule->>'condition_time_end') ~ '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$' then\r\n        v_time_end := (v_rule->>'condition_time_end')::time;\r\n      end if;\r\n\r\n      insert into public.guardian_routing_rules\r\n        (family_id, name, description, priority, is_active,\r\n         condition_trust_levels, condition_time_start, condition_time_end,\r\n         action_routing_mode, created_by, ai_suggested, approved_by, approved_at)\r\n      values\r\n        (v_suggestion.family_id,\r\n         left(coalesce(nullif(trim(v_rule->>'name'), ''), 'Suggested Guardian rule'), 200),\r\n         left(nullif(trim(v_rule->>'description'), ''), 2000),\r\n         v_priority,\r\n         case when (v_rule->>'is_active') in ('true', 'false')\r\n           then (v_rule->>'is_active')::boolean\r\n           else true\r\n         end,\r\n         v_trust_levels, v_time_start, v_time_end, v_action,\r\n         auth.uid(), true, auth.uid(), now());\r\n    end if;\r\n  end if;\r\n\r\n  update public.guardian_suggestions\r\n     set status = p_decision,\r\n         reviewed_by = auth.uid(),\r\n         reviewed_at = now(),\r\n         review_note = left(nullif(trim(coalesce(p_note, '')), ''), 2000)\r\n   where id = v_suggestion.id;\r\n\r\n  insert into public.guardian_audit_log\r\n    (family_id, actor_user_id, actor, action, entity_type, entity_id, detail)\r\n  values\r\n    (v_suggestion.family_id, auth.uid(), 'parent',\r\n     'suggestion.' || p_decision, 'guardian_suggestions', v_suggestion.id,\r\n     jsonb_build_object('suggestion_type', v_suggestion.suggestion_type));\r\n\r\n  return jsonb_build_object('ok', true, 'status', p_decision);\r\nend;\r\n$function$\n"
+    },
+    {
+      "signature": "marketplace_accept_offer(uuid)",
+      "owner": "postgres",
+      "security_definer": true,
+      "definition": "CREATE OR REPLACE FUNCTION public.marketplace_accept_offer(p_offer uuid)\n RETURNS uuid\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\ndeclare\n  v_offer   public.marketplace_offers%rowtype;\n  v_listing public.marketplace_listings%rowtype;\n  v_caller  uuid;\n  v_kind    text;\n  v_order   uuid;\nbegin\n  select * into v_offer from public.marketplace_offers where id = p_offer;\n  if not found then raise exception 'Offer not found'; end if;\n  select * into v_listing from public.marketplace_listings where id = v_offer.listing_id;\n  if not found then raise exception 'Listing not found'; end if;\n\n  v_caller := public.marketplace_member_id(v_listing.family_id);\n  if v_caller is null or v_listing.member_id is distinct from v_caller then\n    raise exception 'Only the listing owner can accept offers';\n  end if;\n  if v_offer.status <> 'open' then raise exception 'Offer is no longer open'; end if;\n\n  update public.marketplace_listings\n     set status = 'claimed', claimed_by = v_offer.member_id, claimed_at = now(), updated_at = now()\n   where id = v_listing.id;\n\n  update public.marketplace_offers set status = 'accepted', updated_at = now()\n   where id = v_offer.id;\n  update public.marketplace_offers set status = 'declined', updated_at = now()\n   where listing_id = v_listing.id and status = 'open' and id <> v_offer.id;\n\n  v_kind := case\n    when v_listing.kind = 'sell' then 'buy'\n    when v_listing.kind in ('rent','borrow','swap','donate','free') then v_listing.kind\n    else 'buy'\n  end;\n\n  insert into public.marketplace_orders\n    (family_id, listing_id, buyer_member, seller_member, kind, status, amount_cents, created_by)\n  values\n    (v_listing.family_id, v_listing.id, v_offer.member_id, v_listing.member_id, v_kind,\n     'confirmed', coalesce(v_offer.amount_cents, v_listing.price_cents), auth.uid())\n  returning id into v_order;\n\n  return v_order;\nend $function$\n"
+    },
+    {
+      "signature": "marketplace_buy_now(uuid,uuid,uuid)",
+      "owner": "postgres",
+      "security_definer": true,
+      "definition": "CREATE OR REPLACE FUNCTION public.marketplace_buy_now(p_listing_id uuid, p_buyer_member_id uuid, p_buyer_family_id uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\ndeclare\r\n  v_listing record;\r\n  v_member_family uuid;\r\n  v_order_id uuid;\r\n  v_now timestamptz := now();\r\nbegin\r\n  if auth.uid() is null then\r\n    return jsonb_build_object('ok', false, 'reason', 'unauthorized');\r\n  end if;\r\n\r\n  select family_id into v_member_family\r\n  from public.family_members\r\n  where id = p_buyer_member_id and user_id = auth.uid() and is_active;\r\n  if v_member_family is null or v_member_family is distinct from p_buyer_family_id then\r\n    return jsonb_build_object('ok', false, 'reason', 'unauthorized');\r\n  end if;\r\n\r\n  select id, family_id, member_id, buy_now_cents, status, sale_format,\r\n         auction_starts_at, auction_ends_at\r\n  into v_listing\r\n  from public.marketplace_listings\r\n  where id = p_listing_id\r\n  for update;\r\n\r\n  if not found then return jsonb_build_object('ok', false, 'reason', 'not_found'); end if;\r\n  if v_listing.sale_format <> 'auction' or v_listing.buy_now_cents is null\r\n    or v_listing.buy_now_cents <= 0 then\r\n    return jsonb_build_object('ok', false, 'reason', 'not_available');\r\n  end if;\r\n  if v_listing.status <> 'available' then\r\n    return jsonb_build_object('ok', false, 'reason', 'not_available');\r\n  end if;\r\n  if v_listing.family_id = p_buyer_family_id then\r\n    return jsonb_build_object('ok', false, 'reason', 'own_listing');\r\n  end if;\r\n  if v_listing.auction_ends_at is null or v_now >= v_listing.auction_ends_at then\r\n    return jsonb_build_object('ok', false, 'reason', 'ended');\r\n  end if;\r\n  if v_listing.auction_starts_at is not null and v_now < v_listing.auction_starts_at then\r\n    return jsonb_build_object('ok', false, 'reason', 'not_started');\r\n  end if;\r\n\r\n  update public.marketplace_listings\r\n  set status = 'claimed', claimed_by = p_buyer_member_id,\r\n      claimed_at = v_now, auction_closed_at = v_now, updated_at = v_now\r\n  where id = p_listing_id and status = 'available';\r\n\r\n  update public.marketplace_bids\r\n  set status = 'lost'\r\n  where listing_id = p_listing_id and status in ('active', 'outbid');\r\n\r\n  insert into public.marketplace_orders\r\n    (family_id, listing_id, buyer_member, seller_member, kind, status,\r\n     amount_cents, notes, created_by)\r\n  values\r\n    (v_listing.family_id, v_listing.id, p_buyer_member_id, v_listing.member_id,\r\n     'buy', 'confirmed', v_listing.buy_now_cents, 'Buy-It-Now', auth.uid())\r\n  returning id into v_order_id;\r\n\r\n  return jsonb_build_object('ok', true, 'order_id', v_order_id);\r\nend $function$\n"
+    },
+    {
+      "signature": "marketplace_set_listing_status(uuid,text)",
+      "owner": "postgres",
+      "security_definer": true,
+      "definition": "CREATE OR REPLACE FUNCTION public.marketplace_set_listing_status(p_listing uuid, p_status text)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\ndeclare\n  v_listing public.marketplace_listings%rowtype;\n  v_caller  uuid;\n  v_ok      boolean;\nbegin\n  select * into v_listing from public.marketplace_listings where id = p_listing;\n  if not found then raise exception 'Listing not found'; end if;\n\n  v_caller := public.marketplace_member_id(v_listing.family_id);\n  if v_caller is null or v_listing.member_id is distinct from v_caller then\n    raise exception 'Only the listing owner can change this listing';\n  end if;\n\n  v_ok := case\n    when p_status = 'withdrawn'  then v_listing.status in ('available','pending','claimed')\n    when p_status = 'completed'  then v_listing.status in ('claimed','pending')\n    when p_status = 'available'  then v_listing.status in ('pending','withdrawn')\n    when p_status = 'pending'    then v_listing.status = 'available'\n    else false\n  end;\n  if not v_ok then\n    raise exception 'Cannot move listing from % to %', v_listing.status, p_status;\n  end if;\n\n  update public.marketplace_listings set status = p_status, updated_at = now()\n   where id = v_listing.id;\nend $function$\n"
+    }
+  ],
+  "guardQuery": "select jsonb_build_object(\n 'reference_guard',to_regprocedure('public.reference_shares_family()')::text,\n 'triggers',coalesce((select jsonb_agg(jsonb_build_object('table',c.relname,'name',t.tgname,'enabled',t.tgenabled,'definition',pg_get_triggerdef(t.oid))) from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname in ('meal_plans','grocery_items') and not t.tgisinternal),'[]'::jsonb),\n 'foreign_keys',coalesce((select jsonb_agg(jsonb_build_object('table',c.relname,'name',k.conname,'definition',pg_get_constraintdef(k.oid))) from pg_constraint k join pg_class c on c.oid=k.conrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname in ('meal_plans','grocery_items') and k.contype='f'),'[]'::jsonb),\n 'policies',coalesce((select jsonb_agg(to_jsonb(p)) from pg_policies p where p.schemaname='public' and p.tablename in ('meal_plans','grocery_items')),'[]'::jsonb)\n) as metadata;",
+  "guards": {
+    "policies": [
+      {
+        "cmd": "DELETE",
+        "qual": "is_family_member(family_id)",
+        "roles": [
+          "public"
+        ],
+        "tablename": "grocery_items",
+        "permissive": "PERMISSIVE",
+        "policyname": "grocery_items_delete",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "INSERT",
+        "qual": null,
+        "roles": [
+          "public"
+        ],
+        "tablename": "grocery_items",
+        "permissive": "PERMISSIVE",
+        "policyname": "grocery_items_insert",
+        "schemaname": "public",
+        "with_check": "is_family_member(family_id)"
+      },
+      {
+        "cmd": "SELECT",
+        "qual": "is_family_member(family_id)",
+        "roles": [
+          "public"
+        ],
+        "tablename": "grocery_items",
+        "permissive": "PERMISSIVE",
+        "policyname": "grocery_items_select",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "UPDATE",
+        "qual": "is_family_member(family_id)",
+        "roles": [
+          "public"
+        ],
+        "tablename": "grocery_items",
+        "permissive": "PERMISSIVE",
+        "policyname": "grocery_items_update",
+        "schemaname": "public",
+        "with_check": "is_family_member(family_id)"
+      },
+      {
+        "cmd": "DELETE",
+        "qual": "is_family_member(family_id)",
+        "roles": [
+          "public"
+        ],
+        "tablename": "meal_plans",
+        "permissive": "PERMISSIVE",
+        "policyname": "meal_plans_delete",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "INSERT",
+        "qual": null,
+        "roles": [
+          "public"
+        ],
+        "tablename": "meal_plans",
+        "permissive": "PERMISSIVE",
+        "policyname": "meal_plans_insert",
+        "schemaname": "public",
+        "with_check": "is_family_member(family_id)"
+      },
+      {
+        "cmd": "SELECT",
+        "qual": "is_family_member(family_id)",
+        "roles": [
+          "public"
+        ],
+        "tablename": "meal_plans",
+        "permissive": "PERMISSIVE",
+        "policyname": "meal_plans_select",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "UPDATE",
+        "qual": "is_family_member(family_id)",
+        "roles": [
+          "public"
+        ],
+        "tablename": "meal_plans",
+        "permissive": "PERMISSIVE",
+        "policyname": "meal_plans_update",
+        "schemaname": "public",
+        "with_check": "is_family_member(family_id)"
+      }
+    ],
+    "triggers": [
+      {
+        "name": "trg_set_updated_at",
+        "table": "grocery_items",
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_set_updated_at BEFORE UPDATE ON public.grocery_items FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+      },
+      {
+        "name": "trg_set_updated_at",
+        "table": "meal_plans",
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_set_updated_at BEFORE UPDATE ON public.meal_plans FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+      }
+    ],
+    "foreign_keys": [
+      {
+        "name": "grocery_items_assigned_to_id_fkey",
+        "table": "grocery_items",
+        "definition": "FOREIGN KEY (assigned_to_id) REFERENCES auth.users(id) ON DELETE SET NULL"
+      },
+      {
+        "name": "grocery_items_created_by_fkey",
+        "table": "grocery_items",
+        "definition": "FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL"
+      },
+      {
+        "name": "grocery_items_family_id_fkey",
+        "table": "grocery_items",
+        "definition": "FOREIGN KEY (family_id) REFERENCES families(id) ON DELETE CASCADE"
+      },
+      {
+        "name": "grocery_items_list_id_fkey",
+        "table": "grocery_items",
+        "definition": "FOREIGN KEY (list_id) REFERENCES grocery_lists(id) ON DELETE CASCADE"
+      },
+      {
+        "name": "grocery_items_source_meal_id_fkey",
+        "table": "grocery_items",
+        "definition": "FOREIGN KEY (source_meal_id) REFERENCES meals(id) ON DELETE SET NULL"
+      },
+      {
+        "name": "meal_plans_created_by_fkey",
+        "table": "meal_plans",
+        "definition": "FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL"
+      },
+      {
+        "name": "meal_plans_family_id_fkey",
+        "table": "meal_plans",
+        "definition": "FOREIGN KEY (family_id) REFERENCES families(id) ON DELETE CASCADE"
+      },
+      {
+        "name": "meal_plans_meal_id_fkey",
+        "table": "meal_plans",
+        "definition": "FOREIGN KEY (meal_id) REFERENCES meals(id) ON DELETE SET NULL"
+      }
+    ],
+    "reference_guard": null
+  },
+  "assessment": "The grocery RPC still lacks source0313's supplied-list check and meal-family join. Its source0311 reference helper and the two source0313 triggers are absent. Other captured routines contain caller checks; EXECUTE metadata alone does not establish a bypass."
+}

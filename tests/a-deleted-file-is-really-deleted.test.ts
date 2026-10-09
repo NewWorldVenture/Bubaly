@@ -75,11 +75,17 @@ describe('a file the user deleted is really deleted', () => {
     const source = read('components/modules/home-module.tsx');
     expect(source).toContain('const { error: rollbackError }');
     expect(source).toContain('left an object behind');
-    // The messages rollback reads the returned list as well as the error, since
-    // storage answers a refused delete with `error: null` too (SEC-015).
+    // A failed messenger send remains retryable. Explicit discard confirms the
+    // object removal through the shared helper before clearing that retry.
     const messages = read('components/modules/messages-module.tsx');
-    expect(messages).toContain("const rollback = await supabase.storage.from('family-media').remove([stored.path]);");
-    expect(messages).toContain('if (rollback.error || !rollback.data?.some((object) => object.name === stored.path))');
-    expect(messages).toContain('attachment rollback not confirmed');
+    const discard = between(messages, 'async function discardAttachment()', 'const [recording, setRecording]');
+    expect(discard).toContain('const removal = await removeFamilyMedia(supabase, attempt.path);');
+    expect(discard).toContain('if (removal.error) { toastError(describeDbError(removal.error)); return; }');
+    expect(at(discard, 'if (removal.error)')).toBeLessThan(at(discard, 'if (current()) rememberAttachment(null)'));
+    // The shared setter retires both the render state and synchronous retry
+    // authority. Clearing either alone would leave a stale attempt reusable.
+    const remember = between(messages, 'function rememberAttachment(', 'async function sendFile(');
+    expect(remember).toContain('attachmentAttempts.current.delete(failedAttachmentRef.current.convId)');
+    expect(remember).toContain('failedAttachmentRef.current = attempt; setFailedAttachment(attempt);');
   });
 });

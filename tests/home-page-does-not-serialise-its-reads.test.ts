@@ -16,7 +16,7 @@ import { describe, expect, it } from 'vitest';
  * nothing about reads nested inside branches. What it does do is fail when
  * somebody adds a seventh sequential wait to the landing page.
  */
-const source = readFileSync('app/(app)/home/page.tsx', 'utf8');
+const source = readFileSync('app/(app)/home/page.tsx', 'utf8').replaceAll('\r\n', '\n');
 const body = source.slice(source.indexOf('export default async function HomePage'));
 
 // Top-level statements in the function body sit at exactly two spaces.

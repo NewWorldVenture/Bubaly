@@ -2,12 +2,14 @@ import * as React from 'react';
 import { APP_URL } from '@/lib/email';
 
 export function WeeklyDigestEmail({
-  familyName, adminName, events, openChores, mealsPlanned, memberCount, compareLine = null, timeZone,
+  familyName, adminName, events, eventCount = events.length, openChores, mealsPlanned, memberCount, compareLine = null, timeZone,
 }: {
   familyName: string;
   adminName: string;
   /** `date` is a DAY KEY (YYYY-MM-DD) in the family's zone, not an instant. */
   events: { title: string; date: string }[];
+  /** Exact qualifying calendar total before the detail list's display cap. */
+  eventCount?: number;
   openChores: number;
   mealsPlanned: number;
   memberCount: number;
@@ -37,7 +39,7 @@ export function WeeklyDigestEmail({
 
         <div style={{ display: 'flex', gap: 12, marginBottom: 28 }}>
           {[
-            { label: 'Events', value: events.length },
+            { label: 'Events', value: eventCount },
             { label: 'Open chores', value: openChores },
             { label: 'Meals planned', value: mealsPlanned },
             { label: 'Members', value: memberCount },

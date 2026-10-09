@@ -18,7 +18,7 @@
 // decides is manager-only for writes, the client that writes it from the
 // browser must say so too.
 //
-// Nine writers do not, and are named below rather than silently tolerated. They
+// Six writers do not, and are named below rather than silently tolerated. They
 // are not a security hole — the database holds, and `describeDbError` turns
 // 42501 into "You don't have permission to do that" rather than a raw Postgres
 // string — but a control that can never succeed is still a defect, and it sits
@@ -77,9 +77,6 @@ const MANAGER_ONLY_WRITES = [
  */
 const KNOWN_UNGATED = new Set([
   'components/family/invite-form.tsx -> invites',
-  'components/finance/bills-view.tsx -> bills',
-  'components/modules/billing-module.tsx -> bills',
-  'components/modules/billing-module.tsx -> financial_accounts',
   'components/modules/binder-module.tsx -> household_info',
   'components/modules/documents-module.tsx -> documents',
   'components/modules/finances-module.tsx -> financial_accounts',
@@ -91,6 +88,17 @@ const KNOWN_UNGATED = new Set([
 // MANAGER_ROLES directly and was a false positive until this accepted it — the
 // third census in this audit to cry wolf by looking for one spelling.
 const ROLE_CHECK = /\bisManager\s*\(|MANAGER_ROLES\.includes\s*\(/;
+
+// A schedule-repair button does not gate adjacent browser writes. These exact
+// controls authorize a separate server action; autopay, deletion and account
+// creation must retain their existing debts rather than disappear from the
+// ratchet merely because the component acquired its first isManager call.
+function hasBrowserWriteRoleCheck(source: string): boolean {
+  const withoutScheduleControls = source
+    .replace(/isManager\(role\)(?=\s*&&\s*b\.is_recurring\s*&&\s*<Button\b[^\n]*onClick=\{\(\)\s*=>\s*openSchedule\(b\)\})/g, '')
+    .replace(/isManager\(role\)(?=\s*&&\s*bills\.some\([^\n]*<BillScheduleModal\b)/g, '');
+  return ROLE_CHECK.test(withoutScheduleControls);
+}
 
 // Walked from disk, not from `git ls-files`: the first draft used git and
 // silently skipped the migration that had just been written and not yet
@@ -160,12 +168,20 @@ describe('a manager-gated table is manager-gated on screen', () => {
     expect(clientWritersOf('immunizations')).not.toContain('components/medical/print-sheet.tsx');
   });
 
+  it('a schedule-only manager check does not excuse other browser writers', () => {
+    const button = '{isManager(role) && b.is_recurring && <Button onClick={() => openSchedule(b)}>Edit schedule</Button>}';
+    const modal = '{scheduleBill && isManager(role) && bills.some(b => b.id === scheduleBill.id) && <BillScheduleModal bill={scheduleBill} />}';
+    expect(hasBrowserWriteRoleCheck(`${button}\n${modal}\nclient.from(\'bills\').delete()`)).toBe(false);
+    expect(hasBrowserWriteRoleCheck(`${button}\nif (!isManager(role)) return;\nclient.from(\'bills\').delete()`)).toBe(true);
+    expect(hasBrowserWriteRoleCheck('if (!MANAGER_ROLES.includes(role)) return;')).toBe(true);
+  });
+
   it('every browser writer of a manager-only table declares a role check', () => {
     const files = clientComponents();
     const unguarded: string[] = [];
     for (const table of MANAGER_ONLY_WRITES) {
       for (const rel of clientWritersOf(table, files)) {
-        if (ROLE_CHECK.test(readFileSync(path.join(ROOT, rel), 'utf8'))) continue;
+        if (hasBrowserWriteRoleCheck(readFileSync(path.join(ROOT, rel), 'utf8'))) continue;
         const entry = `${rel} -> ${table}`;
         if (!KNOWN_UNGATED.has(entry)) unguarded.push(entry);
       }
@@ -182,7 +198,7 @@ describe('a manager-gated table is manager-gated on screen', () => {
       const [rel, table] = entry.split(' -> ');
       const stillWrites = clientWritersOf(table, files).includes(rel);
       const stillUngated = stillWrites
-        && !ROLE_CHECK.test(readFileSync(path.join(ROOT, rel), 'utf8'));
+        && !hasBrowserWriteRoleCheck(readFileSync(path.join(ROOT, rel), 'utf8'));
       if (!stillUngated) stale.push(entry);
     }
     expect(stale, 'these are fixed or gone — remove them from KNOWN_UNGATED').toEqual([]);

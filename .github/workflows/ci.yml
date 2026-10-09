@@ -235,6 +235,14 @@ jobs:
       - name: Replay every migration
         run: bash docs/audit/pg-bootstrap.sh
 
+      # Exercise the existing typed 0476 conversion and replay the unchanged
+      # 0293 over its restrictive policies in disposable local databases only.
+      - name: Notification key conversion preserves messaging policies
+        run: node scripts/verify-notification-key-migration.mjs
+        env:
+          BUBALY_DISPOSABLE_PG: '1'
+          BUBALY_EXPECTED_PG_DATA_DIR: /var/lib/postgresql/data
+
       # Postgres resolves `ON CONFLICT (a, b)` by INDEX INFERENCE, which matches
       # only a unique index over exactly those columns that is neither partial
       # nor an expression index. Nothing else in CI puts the PAIR together: the
@@ -271,23 +279,25 @@ jobs:
       - name: Boundary probes
         run: bash docs/audit/run-probes.sh
 
-      # Production's ledger records only 0001-0003 while its schema carries all
-      # 307 migrations, so recovery means replaying from 0004 over a database
-      # that ALREADY HAS the schema (LB-016 §4). A from-scratch replay cannot
-      # show whether that works: every statement above ran against an empty
-      # database, where `create policy` has nothing to collide with.
+      # Historical LB-016 §4 stress scenario: reset this disposable full-schema
+      # database's ledger to 0001-0003 and replay later runnable migrations.
+      # A from-scratch replay cannot exercise this case: every statement above
+      # ran against an empty database, where `create policy` has no collision.
+      # This is not the current production ledger or an approved repair plan.
+      # Retained production metadata records 192 entries, high-water 0176;
+      # release/catalog/ACL acceptance remains a separate reviewed gate.
       #
-      # This re-runs all 307 against the schema this job just built. It is the
-      # only step that proves a migration is idempotent rather than merely
-      # correct, and it is why it runs LAST: it rewrites the ledger and replays
-      # everything, so nothing may depend on the database afterwards.
+      # This re-runs the current runnable inventory against the synthetic schema
+      # this job just built. It proves replay behavior in that fixture and runs
+      # LAST because it rewrites its ledger; nothing may depend on it afterwards.
+      # A green result does not prove production replay safety or deployment.
       #
       # It fails if any migration cannot be re-applied — which is what a new
       # `create policy` / `create trigger` / `create index` / `alter publication
       # add table` without a guard does. Fix those the way the neighbours do
       # (`drop policy if exists` first, `create or replace trigger`,
       # `if not exists`), not by exempting the file.
-      - name: Migrations re-apply onto an existing schema (LB-016 §4 repair)
+      - name: Synthetic full-schema migration replay stress (LB-016 §4 scenario)
         run: bash docs/audit/rehearse-ledger-repair.sh
 
   e2e:
@@ -334,9 +344,11 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import tomllib
 
           path = Path('supabase/config.toml')
           source = path.read_text()
+          tomllib.loads(source)
           original = '''[auth]
           enable_signup = true
           site_url = "http://localhost:3000"
@@ -345,6 +357,10 @@ jobs:
           enable_signup = true
           site_url = "http://localhost:3107"
           additional_redirect_urls = ["http://localhost:3107/**"]
+
+          [auth.mfa.totp]
+          enroll_enabled = true
+          verify_enabled = true
 
           [auth.sms]
           enable_signup = true
@@ -369,6 +385,7 @@ jobs:
           # This checkout and GoTrue are disposable. Keep the product defaults,
           # other sections and credentials untouched; stop if their shape drifts.
           assert source.count(original) == 1, 'Unexpected disposable Auth config'
+          assert '[auth.mfa' not in source, 'Unexpected disposable MFA config'
           # CLI 2.109.1 disables phone login unless a provider flag is enabled,
           # even with test_otp or a send_sms hook. These invalid placeholders
           # satisfy that local config check. Keep the hook mandatory: fixed
@@ -376,11 +393,23 @@ jobs:
           # loopback. GoTrue 2.192.0 returns hook errors without provider fallback.
           assert '[auth.sms' not in source, 'Unexpected disposable SMS config'
           assert '[auth.hook' not in source, 'Unexpected disposable Auth hook config'
-          path.write_text(source.replace(original, replacement, 1))
+          configured = source.replace(original, replacement, 1)
+          tomllib.loads(configured)
+          path.write_text(configured)
           PY
+
+      - name: Attest empty local stack before owned startup
+        run: node scripts/ci-recurring-bill-anchor-fixture.mjs
+        env:
+          BUBALY_BILL_STACK_PHASE: prepare
 
       - name: Start isolated Supabase
         run: supabase start
+
+      - name: Capture immutable owned bill stack identities
+        run: node scripts/ci-recurring-bill-anchor-fixture.mjs
+        env:
+          BUBALY_BILL_STACK_PHASE: capture
 
       - name: Verify home brief kind uniqueness in disposable PostgreSQL
         timeout-minutes: 3
@@ -443,6 +472,8 @@ jobs:
           E2E_AUTHENTICATED: '1'
           # Each durable-session test owns a unique local-only account/household.
           E2E_DURABLE_SESSION: '1'
+          # Real Auth/UI proof against the unchanged PG15 older schema.
+          E2E_BILL_ANCHOR_PHASE: old
           # Synthetic, disposable-only input shared by the child fixture/server.
           CHILD_LOGIN_SECRET: ci-only-child-pin-session-fixture
           # Signed Guardian ingress against the disposable server only. A token
@@ -464,6 +495,40 @@ jobs:
           AI_PROVIDER_STUB: '1'
           E2E_PROVIDER_STUB: '1'
 
+      # run-e2e.mjs has stopped its own Next server; all parallel E2E tests
+      # have finished. The reserved file is a disposable fixture only, never
+      # entered into the migration ledger or promoted into migrations.
+      - name: Verify real Auth messaging RPC membership-removal boundaries
+        run: node node_modules/vitest/vitest.mjs run tests/messages-authenticated-rpc-race.test.ts
+        env:
+          BUBALY_MESSAGES_AUTHENTICATED_RPC_GATE: '1'
+          E2E_MESSAGES_PARALLEL_FINISHED: '1'
+          OPENAI_API_KEY: ''
+          ANTHROPIC_API_KEY: ''
+
+      - name: Install held bill anchor fixture in the owned PG15 stack
+        run: node scripts/ci-recurring-bill-anchor-fixture.mjs
+        env:
+          BUBALY_BILL_STACK_PHASE: install
+          E2E_BILL_PARALLEL_FINISHED: '1'
+
+      - name: Verify authenticated durable bill anchors after fresh server start
+        run: npm run test:e2e -- tests/e2e/recurring-bill-authenticated.spec.ts --project=chromium --workers=1
+        env:
+          PLAYWRIGHT_SKIP_BUILD: '1'
+          E2E_BILL_ANCHOR_PHASE: modern
+          E2E_AUTHENTICATED: '1'
+          E2E_DURABLE_SESSION: '1'
+          NODE_OPTIONS: --max-old-space-size=4096
+          CHILD_LOGIN_SECRET: ci-only-child-pin-session-fixture
+          TWILIO_AUTH_TOKEN: ci-only-guardian-signed-ingress-fixture
+          CRON_SECRET: ci-only-guardian-recovery-fixture
+          ANTHROPIC_API_KEY: ''
+          OPENAI_API_KEY: ''
+          NEXT_PUBLIC_SITE_URL: http://localhost:3107
+          AI_PROVIDER_STUB: '1'
+          E2E_PROVIDER_STUB: '1'
+
       # Retain only isolated-fixture DOM snapshots and screenshots on failure.
       # Never upload traces, auth state, environment files, logs, or HTML reports.
       - name: Upload E2E failure evidence
@@ -476,6 +541,9 @@ jobs:
             test-results/**/*.png
             !test-results/**/trace.zip
             !test-results/*durable-session*/**
+            !test-results/*family-messaging-auth*/**
+            !test-results/*recurring-bill-auth*/**
+            !test-results/*dashboard-calendar-auth*/**
             !test-results/**/storageState*
             !test-results/**/storage-state*
             !test-results/**/auth.json
@@ -492,4 +560,6 @@ jobs:
 
       - name: Stop isolated Supabase
         if: always()
-        run: supabase stop --no-backup
+        run: node scripts/ci-recurring-bill-anchor-fixture.mjs
+        env:
+          BUBALY_BILL_STACK_PHASE: cleanup

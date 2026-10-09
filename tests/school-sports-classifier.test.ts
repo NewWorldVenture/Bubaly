@@ -249,6 +249,43 @@ describe('dates and times', () => {
 });
 
 describe('which child', () => {
+  it.each([false, true])('does not select a child from a shared teacher (reversed: %s)', reverse => {
+    const classes = MEMBERS.slice(0, 2).map(member => ({ member_id: member.id, teacher: 'Mrs Okonkwo' }));
+    if (reverse) classes.reverse();
+    const verdict = classify({ body: 'School permission slip from Mrs Okonkwo.' }, MEMBERS, [], classes, OPTS);
+    expect(verdict.child).toBeUndefined();
+    expect(buildProposal({ subject: 'Permission slip' }, verdict)?.args).not.toHaveProperty('assignee_id');
+  });
+
+  it('does not select a child from a shared coach', () => {
+    const teams = MEMBERS.slice(0, 2).map(member => ({ member_id: member.id, coach: 'Coach Delgado' }));
+    expect(classify({ body: 'Practice forms from Coach Delgado.' }, MEMBERS, teams, [], OPTS).child).toBeUndefined();
+  });
+
+  it.each(['Riley', 'Riley Smith'])('does not break an ambiguous name by roster order: %s', name => {
+    const members = [{ id: 'a', display_name: 'Riley Smith' }, { id: 'b', display_name: name === 'Riley' ? 'Riley Jones' : 'Riley Smith' }];
+    expect(classify({ body: `School forms for ${name}.` }, members, [], [], OPTS).child).toBeUndefined();
+  });
+
+  it('keeps duplicate evidence for one child and a stronger explicit full name usable', () => {
+    const sameChild = [{ member_id: 'm-ava', teacher: 'Mrs Okonkwo' }, { member_id: 'm-ava', teacher: 'Mrs Okonkwo' }];
+    expect(classify({ body: 'School notice from Mrs Okonkwo.' }, MEMBERS, [], sameChild, OPTS).child?.member_id).toBe('m-ava');
+    const shared = [...sameChild, { member_id: 'm-noah', teacher: 'Mrs Okonkwo' }];
+    expect(classify({ body: 'Mrs Okonkwo needs Noah Hughen to return the school form.' }, MEMBERS, [], shared, OPTS).child?.member_id).toBe('m-noah');
+  });
+
+  it.each([false, true])('does not favor a short stored name over the same first name (reversed: %s)', reverse => {
+    const members = [{ id: 'short', display_name: 'Riley' }, { id: 'long', display_name: 'Riley Jones' }];
+    if (reverse) members.reverse();
+    expect(classify({ body: 'School forms for Riley.' }, members, [], [], OPTS).child).toBeUndefined();
+  });
+
+  it.each([false, true])('uses an explicitly longer name over its shorter prefix (reversed: %s)', reverse => {
+    const members = [{ id: 'short', display_name: 'Riley' }, { id: 'long', display_name: 'Riley Jones' }];
+    if (reverse) members.reverse();
+    expect(classify({ body: 'School forms for Riley Jones.' }, members, [], [], OPTS).child?.member_id).toBe('long');
+  });
+
   it('matches a full name over a first name', () => {
     const verdict = classify({ body: 'School: Ava Hughen needs a permission slip; Noah is fine.' }, MEMBERS, [], [], OPTS);
     expect(verdict.child).toEqual({ member_id: 'm-ava', name: 'Ava Hughen' });
@@ -437,4 +474,61 @@ describe('what gets proposed', () => {
     expect(messageTitle({})).toBe('');
     expect(messageTitle({ subject: 'x'.repeat(200) }).length).toBe(120);
   });
+});
+
+
+describe('overlapping roster aliases name one ambiguous person', () => {
+  for (const field of ['teacher', 'coach'] as const) {
+    const title = field === 'teacher' ? 'Mrs' : 'Coach';
+    for (const reverse of [false, true]) {
+      it.each([
+        [title + ' Example', 'Example', title + ' Example'],
+        [title + ' Example', 'Dr Example', title + ' Example'],
+        ['Example', title + ' Example', title + ' Example'],
+      ])(`${field} leaves shared alias spans unassigned (reversed: ${reverse}): %j / %j`, (first, second, mention) => {
+        const rows = [{ member_id: 'm-ava', [field]: first }, { member_id: 'm-noah', [field]: second }];
+        if (reverse) rows.reverse();
+        const message = { body: `School permission slip from ${mention}.` };
+        const result = classify(message, MEMBERS, field === 'coach' ? rows : [], field === 'teacher' ? rows : [], OPTS);
+        expect(result.child).toBeUndefined();
+        expect(buildProposal(message, result)?.args).not.toHaveProperty('assignee_id');
+      });
+    }
+    it(`${field} retains duplicate aliases owned by one child`, () => {
+      const rows = [{ member_id: 'm-ava', [field]: title + ' Example' }, { member_id: 'm-ava', [field]: 'Example' }];
+      const result = classify({ body: `School permission slip from ${title} Example.` }, MEMBERS, field === 'coach' ? rows : [], field === 'teacher' ? rows : [], OPTS);
+      expect(result.child?.member_id).toBe('m-ava');
+    });
+    it(`${field} retains a stronger explicit full child name despite shared aliases`, () => {
+      const rows = [{ member_id: 'm-ava', [field]: title + ' Example' }, { member_id: 'm-noah', [field]: 'Example' }];
+      const result = classify({ body: `School permission slip from ${title} Example for Noah Hughen.` }, MEMBERS, field === 'coach' ? rows : [], field === 'teacher' ? rows : [], OPTS);
+      expect(result.child?.member_id).toBe('m-noah');
+    });
+  }
+  it('does not fall through an ambiguous earlier teacher to a later unique teacher', () => {
+    const classes = [{ member_id: 'm-ava', teacher: 'Mrs Example' }, { member_id: 'm-noah', teacher: 'Example' }, { member_id: 'm-noah', teacher: 'Ms Different' }];
+    expect(classify({ body: 'School permission slip from Mrs Example and Ms Different.' }, MEMBERS, [], classes, OPTS).child).toBeUndefined();
+  });
+  it('keeps distinct nonoverlapping teachers in their existing first-mentioned order', () => {
+    const classes = [{ member_id: 'm-ava', teacher: 'Mrs Example' }, { member_id: 'm-noah', teacher: 'Ms Different' }];
+    expect(classify({ body: 'School permission slip from Mrs Example and Ms Different.' }, MEMBERS, [], classes, OPTS).child?.member_id).toBe('m-ava');
+  });
+});
+
+it('retains overlapping occurrences of a repeated multiword alias', () => {
+  const teams = [{ member_id: 'm-ava', team_name: 'North North' }];
+  const classes = [{ member_id: 'm-noah', school_name: 'North School' }];
+  expect(classify({ body: 'School form for North North North School.' }, MEMBERS, teams, classes, OPTS).child).toBeUndefined();
+});
+
+it('shares a person alias across teacher and coach rosters', () => {
+  const teams = [{ member_id: 'm-ava', coach: 'Coach Example' }];
+  const classes = [{ member_id: 'm-noah', teacher: 'Example' }];
+  expect(classify({ body: 'School permission slip from Coach Example.' }, MEMBERS, teams, classes, OPTS).child).toBeUndefined();
+});
+
+it('matches alias punctuation and Unicode boundaries without matching longer words', () => {
+  const classes = [{ member_id: 'm-ava', teacher: 'Mrs Éclair' }];
+  expect(classify({ body: '“Mrs Éclair”: school permission slip.' }, MEMBERS, [], classes, OPTS).child?.member_id).toBe('m-ava');
+  expect(classify({ body: 'School permission slip from Éclairette.' }, MEMBERS, [], classes, OPTS).child).toBeUndefined();
 });

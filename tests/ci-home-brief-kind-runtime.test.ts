@@ -1,5 +1,9 @@
 import { at } from './helpers/source-order';
 import { readFileSync } from 'node:fs';
+import assert from 'node:assert/strict';
+import { createHash, randomUUID } from 'node:crypto';
+import { join } from 'node:path';
+import { runInNewContext } from 'node:vm';
 import { describe, expect, test } from 'vitest';
 import {
   assertInvocation, DOCKER_SOCKET, dockerInvocation, executeAcceptance,
@@ -10,6 +14,7 @@ import {
 const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const fixture = readFileSync(new URL('./fixtures/0261-home-brief-kind-runtime.sql', import.meta.url), 'utf8');
 const migration = readFileSync(new URL('../supabase/migrations/0261_home_briefs_kind_uniqueness.sql', import.meta.url), 'utf8');
+const ownedCleanup = readFileSync(new URL('../scripts/ci-recurring-bill-anchor-fixture.mjs', import.meta.url), 'utf8');
 const identity = makeIdentity('a'.repeat(32));
 const containerId = 'b'.repeat(64);
 const ciEnvironment = {
@@ -164,13 +169,96 @@ test('SQL acceptance uses the real migration and explicit error/catalog assertio
 });
 
 test('CI runs the real SQL gate after isolated startup, before app credentials, and retains always cleanup', () => {
-  const job = workflow.slice(workflow.indexOf('  e2e:\n'));
-  const gate = job.indexOf('      - name: Verify home brief kind uniqueness in disposable PostgreSQL\n');
+  const job = workflow.slice(at(workflow, '  e2e:\n'));
+  const gate = at(job, '      - name: Verify home brief kind uniqueness in disposable PostgreSQL\n');
   expect(gate).toBeGreaterThan(at(job, '      - name: Start isolated Supabase\n'));
   expect(gate).toBeLessThan(at(job, '      - name: Export local Supabase credentials\n'));
   const step = job.slice(gate, job.indexOf('\n      - name:', gate + 1));
   expect(step).toContain('run: node scripts/ci-home-brief-kind-runtime.mjs');
   expect(step).toContain("BUBALY_0261_RUNTIME: '1'");
   expect(step).not.toMatch(/continue-on-error:|if:/);
-  expect(job).toContain('      - name: Stop isolated Supabase\n        if: always()\n        run: supabase stop --no-backup');
+  const cleanup = job.slice(at(job, '      - name: Stop isolated Supabase\n'));
+  expect(cleanup).toContain('if: always()');
+  expect(cleanup).toContain('run: node scripts/ci-recurring-bill-anchor-fixture.mjs');
+  expect(cleanup).toContain("BUBALY_BILL_STACK_PHASE: cleanup");
+  expect(cleanup).not.toContain('run: supabase stop');
+  expect(at(job, '      - name: Stop isolated Supabase\n')).toBeGreaterThan(gate);
+  expect(at(job, '      - name: Attest empty local stack before owned startup\n'))
+    .toBeLessThan(at(job, '      - name: Start isolated Supabase\n'));
+  expect(at(job, '      - name: Capture immutable owned bill stack identities\n')).toBeLessThan(gate);
+});
+
+type CleanupOptions = { stale?: boolean; replaced?: boolean; uncaptured?: boolean; missing?: boolean; remains?: boolean; ci?: string };
+
+// Execute the actual installer's cleanup branch with explicit filesystem and
+// command doubles. No Docker, SQL, network or production acceptance is claimed.
+function exerciseOwnedCleanup(options: CleanupOptions = {}) {
+  const calls: { program: string; args: string[] }[] = [];
+  let stopped = false;
+  const liveId = (options.replaced ? 'c' : 'b').repeat(64);
+  const env = {
+    CI: options.ci ?? 'true', GITHUB_ACTIONS: 'true', GITHUB_JOB: 'e2e', GITHUB_REPOSITORY: 'NewWorldVenture/Bubaly',
+    GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', BUBALY_BILL_STACK_PHASE: 'cleanup',
+    RUNNER_TEMP: '/owned-temp', GITHUB_ENV: '/owned-env', PATH: '/usr/bin',
+  };
+  const receipt = { run: '123-1', nonce: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', startedAt: 1000,
+    ids: options.uncaptured ? null : ['b'.repeat(64)] };
+  const executable = ownedCleanup.slice(0, at(ownedCleanup, 'if (process.argv[1]'))
+    .replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, '') + '\nmain';
+  const main = runInNewContext(executable, {
+    assert, createHash, randomUUID, join,
+    process: { env, platform: 'linux', argv: ['node'] }, console: { log() {} },
+    existsSync: () => !options.missing,
+    readFileSync: (path: string) => path === 'supabase/config.toml' ? 'project_id = "bubaly"\n' : JSON.stringify(receipt),
+    writeFileSync: () => { throw new Error('Cleanup must not write ownership receipts'); },
+    appendFileSync: () => { throw new Error('Cleanup must not export fixture credentials'); },
+    createConnection: () => { throw new Error('Cleanup must not connect to a TCP service'); },
+    spawnSync: (program: string, args: string[]) => {
+      calls.push({ program, args });
+      let stdout: string;
+      if (program === 'supabase') {
+        assert.deepEqual(Array.from(args), ['stop', '--no-backup']); stopped = true; stdout = '';
+      } else if (program === 'docker' && args[0] === 'context') {
+        stdout = args[1] === 'show' ? 'default' : DOCKER_SOCKET;
+      } else if (program === 'docker' && args.includes('ps')) {
+        stdout = stopped && !options.remains ? '' : liveId;
+      } else if (program === 'docker' && args.includes('inspect')) {
+        stdout = JSON.stringify({ id: liveId, project: 'bubaly', created: new Date(options.stale ? 0 : 2000).toISOString() });
+      } else throw new Error('Unexpected cleanup command');
+      return { status: 0, stdout };
+    },
+  }) as () => Promise<void>;
+  return { run: main, calls };
+}
+
+describe('0261 workflow delegates stack cleanup to actual ownership guards', () => {
+  test('a captured unchanged stack reaches real supabase stop and verifies its removal', async () => {
+    const subject = exerciseOwnedCleanup();
+    await subject.run();
+    const stop = subject.calls.findIndex(call => call.program === 'supabase');
+    expect(stop).toBeGreaterThan(-1);
+    expect(subject.calls.slice(0, stop).some(call => call.args.includes('inspect') && call.args.includes('b'.repeat(64)))).toBe(true);
+    expect(subject.calls.slice(stop + 1).some(call => call.args.includes('ps'))).toBe(true);
+    expect(subject.calls.filter(call => call.program === 'supabase')).toHaveLength(1);
+  });
+
+  test.each([
+    { stale: true }, { replaced: true }, { uncaptured: true }, { ci: 'false' },
+  ])('refuses unowned or invalid invocation before stopping anything: %j', async options => {
+    const subject = exerciseOwnedCleanup(options);
+    await expect(subject.run()).rejects.toThrow();
+    expect(subject.calls.some(call => call.program === 'supabase')).toBe(false);
+  });
+
+  test('missing startup attestation performs no stack mutation', async () => {
+    const subject = exerciseOwnedCleanup({ missing: true });
+    await subject.run();
+    expect(subject.calls.some(call => call.program === 'supabase')).toBe(false);
+  });
+
+  test('does not report success when actors remain after the stop command', async () => {
+    const subject = exerciseOwnedCleanup({ remains: true });
+    await expect(subject.run()).rejects.toThrow();
+    expect(subject.calls.filter(call => call.program === 'supabase')).toHaveLength(1);
+  });
 });

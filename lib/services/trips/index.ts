@@ -36,15 +36,22 @@ import { computeReadiness as scoreReadiness, type ReadinessResult } from '@/lib/
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { settle } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
-import { createEvent, searchEvents, type CalendarEvent } from '../calendar';
+import { createEvent } from '../calendar';
 import { getMembers, type FamilyMember } from '../family';
-import { withIdempotency } from '../idempotency';
-import { listEventsBetween, listHomeworkDue, type HomeworkRow, type SchoolEventRow } from '../school';
-import { dayKeyInTz, scopeNow, zonedDayBoundsMs, zonedTimeMs } from '../scope';
-import { listPracticesBetween, type SportsEventRow } from '../sports';
+import { makeKey, sameInstant, scopeKey, withIdempotency } from '../idempotency';
+import type { HomeworkRow, SchoolEventRow } from '../school';
+import { dayKeyInTz, scopeNow } from '../scope';
+import type { SportsEventRow } from '../sports';
 import { createTodo } from '../tasks';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
+import { readCountedRows } from '@/lib/calendar/occurrences';
+import { expandEventsInZone } from '@/lib/calendar/recurrence';
+import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
+import { validDay } from '@/lib/onboarding/ics-time';
+import { isValidTimezone } from '@/lib/time/zoned';
+import { readCompleteCalendarCivilOccurrences, validateCalendarCivilWindow, readCompleteCalendarOccurrences, projectCalendarOccurrences, validateCalendarSearchWindow, type NativeSearchOccurrence, type SourceSearchOccurrence } from '../calendar/search-occurrences';
 import { escapeLike } from '@/lib/supabase/escape-like';
+import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from '@/lib/calendar/source-capability';
 
 export type VacationRow = Tables<'vacations'>;
 export type VacationMemberRow = Tables<'vacation_members'>;
@@ -698,130 +705,210 @@ export async function computeReadiness(scope: ServiceScope, vacationId: string):
 // ── calendar ──────────────────────────────────────────────────────────────────
 
 export type SyncToCalendarResult = {
-  created: { id: string; title: string; startsAt: string }[];
+  created: { id: string; title: string; startsAt: string; allDay: boolean; startDate: string | null; endDate: string | null }[];
   skipped: string[];
 };
 
 /**
- * Put the trip on the family calendar: one all-day span for the trip itself,
- * one event per flight, one per timed reservation. An event with the same
- * title at the same instant is skipped, so syncing twice adds nothing.
+ * Prospective native sync: complete bounded reads precede sequential writes.
+ * Retry keys identify this operation, never historic title-based ownership.
+ * Limits: 1,000 flights/reservations each, 20,000 calendar occurrences, 366 days.
+ * Historic noncanonical DATE rows are not repaired. This is not a transaction.
  */
 export async function syncToCalendar(scope: ServiceScope, vacationId: string): Promise<ServiceResult<SyncToCalendarResult>> {
-  const snapshot = await getTrip(scope, vacationId);
-  if (!snapshot.ok) return snapshot;
-  const { trip, flights, reservations } = snapshot.data;
-  if (!trip.start_date) return fail(`${trip.title} has no dates yet, so there is nothing to put on the calendar.`, { code: SERVICE_CODES.invalidInput });
-  const tz = trip.timezone || scope.tz;
-  const endDate = trip.end_date ?? trip.start_date;
+  const invalid = () => fail('The trip needs valid family and trip clocks, dates and calendar entries within a supported 366-day window before it can be synced.', { code: SERVICE_CODES.invalidInput });
+  if (CALENDAR_SOURCE_ARCHIVE_ENABLED) return fail('Trip sync is unavailable while imported-source calendars are enabled.', { code: SERVICE_CODES.db });
+  if (typeof vacationId !== 'string' || !vacationId.trim() || typeof scope.familyId !== 'string' || !scope.familyId.trim()
+    || typeof scope.tz !== 'string' || !scope.tz.trim() || !isValidTimezone(scope.tz)) return invalid();
+  const tripRead = await scope.db.from('vacations').select('*').eq('family_id', scope.familyId).eq('id', vacationId).maybeSingle();
+  if (tripRead.error) return fail('Could not load the trip for calendar sync.', { code: SERVICE_CODES.db });
+  const trip = tripRead.data;
+  if (!trip) return fail('That trip could not be found.', { code: SERVICE_CODES.notFound });
+  type Candidate = { kind: 'trip' | 'flight' | 'reservation'; originId: string; key: string; title: string; startsAt: string; endsAt: string | null;
+    allDay: boolean; category: 'holiday' | 'other'; location: string | null; description: string | null };
+  const text = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
+  const nullableText = (value: unknown): value is string | null => value === null || typeof value === 'string';
+  const instant = (value: unknown): string => {
+    if (typeof value !== 'string') throw new Error('Missing clock');
+    const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|([+-])(\d{2}):(\d{2}))$/.exec(value);
+    if (!match || !validDay(match[1]) || +match[2] > 23 || +match[3] > 59 || +match[4] > 59
+      || match[6] !== undefined && (+match[6] > 23 || +match[7] > 59) || !Number.isFinite(Date.parse(value))) throw new Error('Invalid clock');
+    return new Date(value).toISOString();
+  };
+  let candidates: Candidate[], from: string, to: string;
+  try {
+    const tz = trip.timezone ?? scope.tz;
+    if (trip.id !== vacationId || trip.family_id !== scope.familyId || !text(trip.title) || !nullableText(trip.destination)
+      || typeof tz !== 'string' || !tz.trim() || !isValidTimezone(tz) || !trip.start_date || !validDay(trip.start_date)
+      || trip.end_date !== null && !validDay(trip.end_date)) return invalid();
+    const endDate = trip.end_date ?? trip.start_date;
+    const days = (Date.parse(endDate + 'T00:00:00Z') - Date.parse(trip.start_date + 'T00:00:00Z')) / DAY_MS + 1;
+    if (!Number.isSafeInteger(days) || days < 1 || days > 366) return invalid();
+    // DATEs are civil labels. Only the household materializer resolves DST.
+    const endsAt = new Date(Date.parse(endDate + 'T00:00:00Z') + DAY_MS).toISOString();
+    const outerKey = scopeKey(scope, 'trips.syncToCalendar', { vacationId });
+    const candidate = (value: Omit<Candidate, 'key'>): Candidate => ({ ...value,
+      key: makeKey(['trips.syncToCalendar:v2', scope.familyId, vacationId, outerKey, value.kind, value.originId]) });
+    candidates = [candidate({ kind: 'trip', originId: trip.id, title: trip.title.trim(), startsAt: trip.start_date + 'T00:00:00.000Z', endsAt,
+      allDay: true, category: 'holiday', location: trip.destination?.trim() || null, description: `Trip: ${trip.title.trim()}` })];
+    const flightsQuery = () => scope.db.from('vacation_flights').select('*', { count: 'exact' }).eq('family_id', scope.familyId).eq('vacation_id', vacationId).order('id');
+    const reservationsQuery = () => scope.db.from('vacation_reservations').select('*', { count: 'exact' }).eq('family_id', scope.familyId).eq('vacation_id', vacationId).order('id');
+    const [flightRead, reservationRead] = await Promise.all([
+      readCountedRows<Tables<'vacation_flights'>>(() => flightsQuery().limit(1000), (a, b) => flightsQuery().range(a, b), 1000, 'trip flights'),
+      readCountedRows<Tables<'vacation_reservations'>>(() => reservationsQuery().limit(1000), (a, b) => reservationsQuery().range(a, b), 1000, 'trip reservations'),
+    ]);
+    if (flightRead.error || reservationRead.error || !flightRead.data || !reservationRead.data) return fail('Could not read every flight and reservation before calendar sync.', { code: SERVICE_CODES.db });
+    for (const f of flightRead.data) {
+      if (!text(f.id) || f.family_id !== scope.familyId || f.vacation_id !== vacationId
+        || ![f.airline, f.flight_number, f.depart_airport, f.arrive_airport, f.confirmation_code].every(nullableText)) return invalid();
+      const depart = f.depart_at === null ? null : instant(f.depart_at);
+      const arrive = f.arrive_at === null ? null : instant(f.arrive_at);
+      if (depart && arrive && Date.parse(arrive) < Date.parse(depart)) return invalid();
+      if (!depart) continue;
+      const route = [f.depart_airport, f.arrive_airport].filter(Boolean).join(' → ');
+      candidates.push(candidate({ kind: 'flight', originId: f.id,
+        title: `Flight ${[f.airline, f.flight_number].filter(Boolean).join(' ')}${route ? ` ${route}` : ''}`.replace(/\s+/g, ' ').trim(),
+        startsAt: depart, endsAt: arrive, allDay: false, category: 'other', location: f.depart_airport?.trim() || null,
+        description: f.confirmation_code?.trim() ? `Confirmation ${f.confirmation_code.trim()}` : null }));
+    }
+    for (const r of reservationRead.data) {
+      if (!text(r.id) || r.family_id !== scope.familyId || r.vacation_id !== vacationId || !text(r.name)
+        || ![r.location, r.confirmation_code].every(nullableText)) return invalid();
+      if (r.reserved_at === null) continue;
+      candidates.push(candidate({ kind: 'reservation', originId: r.id, title: r.name.trim(), startsAt: instant(r.reserved_at), endsAt: null,
+        allDay: false, category: 'other', location: r.location?.trim() || null,
+        description: r.confirmation_code?.trim() ? `Confirmation ${r.confirmation_code.trim()}` : null }));
+    }
+    const familyBounds = briefingCalendarBounds(trip.start_date, scope.tz, 0, days);
+    const clocks = candidates.filter(c => !c.allDay).flatMap(c => [Date.parse(c.startsAt), c.endsAt && Date.parse(c.endsAt) > Date.parse(c.startsAt) ? Date.parse(c.endsAt) - 1 : Date.parse(c.startsAt)]);
+    from = new Date(Math.min(Date.parse(familyBounds.timedFrom), ...clocks)).toISOString();
+    // Points at the final supplied clock must also be included.
+    to = new Date(Math.max(Date.parse(familyBounds.timedTo) - 1, ...clocks)).toISOString();
+    validateCalendarCivilWindow(scope, { from, to });
+  } catch { return invalid(); }
 
-  type Candidate = { title: string; startsAt: string; endsAt: string | null; allDay: boolean; category: 'holiday' | 'other'; location: string | null; description: string | null };
-  const candidates: Candidate[] = [{
-    title: trip.title,
-    startsAt: new Date(zonedTimeMs(trip.start_date, 0, 0, tz)).toISOString(),
-    endsAt: new Date(zonedDayBoundsMs(endDate, tz).end - 1).toISOString(),
-    allDay: true,
-    category: 'holiday',
-    location: trip.destination,
-    description: `Trip: ${trip.title}`,
-  }];
-  for (const f of flights) {
-    if (!f.depart_at) continue;
-    const route = [f.depart_airport, f.arrive_airport].filter(Boolean).join(' → ');
-    candidates.push({
-      title: `Flight ${[f.airline, f.flight_number].filter(Boolean).join(' ')}${route ? ` ${route}` : ''}`.replace(/\s+/g, ' ').trim(),
-      startsAt: new Date(Date.parse(f.depart_at)).toISOString(),
-      endsAt: f.arrive_at ? new Date(Date.parse(f.arrive_at)).toISOString() : null,
-      allDay: false,
-      category: 'other',
-      location: f.depart_airport,
-      description: f.confirmation_code ? `Confirmation ${f.confirmation_code}` : null,
-    });
-  }
-  for (const r of reservations) {
-    if (!r.reserved_at) continue;
-    candidates.push({
-      title: r.name,
-      startsAt: new Date(Date.parse(r.reserved_at)).toISOString(),
-      endsAt: null,
-      allDay: false,
-      category: 'other',
-      location: r.location,
-      description: r.confirmation_code ? `Confirmation ${r.confirmation_code}` : null,
-    });
-  }
-
-  const existing = await searchEvents(scope, {
-    from: new Date(zonedTimeMs(trip.start_date, 0, 0, tz) - 30 * DAY_MS).toISOString(),
-    to: new Date(zonedDayBoundsMs(endDate, tz).end + DAY_MS).toISOString(),
-    limit: 200,
-  });
-  if (!existing.ok) return existing;
-  const present = new Set(existing.data.map((e) => `${e.title.toLowerCase()}|${Date.parse(e.starts_at)}`));
-
-  const created: SyncToCalendarResult['created'] = [];
-  const skipped: string[] = [];
+  const existing = await readCompleteCalendarCivilOccurrences(scope, { from, to });
+  if (!existing.ok) return fail('Could not qualify the complete native calendar before sync. Existing noncanonical all-day rows need explicit review; no historic rows were repaired.', { code: SERVICE_CODES.db });
+  const receiptMatches = (row: Tables<'calendar_events'>, c: Candidate) => {
+    try { instant(row.created_at); instant(row.updated_at); }
+    catch { return false; }
+    return typeof row.id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(row.id)
+    && row.family_id === scope.familyId && row.idempotency_key === c.key && row.created_by === scope.userId
+    && row.title === c.title && sameInstant(row.starts_at, c.startsAt) && sameInstant(row.ends_at, c.endsAt)
+    && row.all_day === c.allDay && row.category === c.category && row.description === c.description && row.location === c.location
+    && row.recurrence === 'none' && row.recurrence_until === null && row.assignee_id === null && row.feed_id === null && row.external_uid === null
+    && nullableText(row.onboarding_key) && (!('source_recurrence' in row) || row.source_recurrence === null);
+  };
+  const present = new Map<string, Tables<'calendar_events'>>(), receiptIds = new Set<string>();
+  // Qualify all retry receipts before any create, including later candidates
+  // whose saved clock may fall outside the newly requested window.
   for (const c of candidates) {
-    if (present.has(`${c.title.toLowerCase()}|${Date.parse(c.startsAt)}`)) { skipped.push(c.title); continue; }
-    const res = await createEvent(scope, { title: c.title, startsAt: c.startsAt, endsAt: c.endsAt, allDay: c.allDay, category: c.category, location: c.location, description: c.description });
-    if (!res.ok) return res;
-    created.push({ id: res.data.id, title: res.data.title, startsAt: res.data.starts_at });
+    const read = await scope.db.from('calendar_events').select('*').eq('family_id', scope.familyId).eq('idempotency_key', c.key).maybeSingle();
+    if (read.error) return fail('Could not check every calendar sync retry receipt.', { code: SERVICE_CODES.db });
+    if (read.data) {
+      if (!receiptMatches(read.data, c) || receiptIds.has(read.data.id)) return fail('An entry saved by this sync attempt has changed. Review it before starting another sync; nothing new was added.', { code: SERVICE_CODES.invalidInput });
+      receiptIds.add(read.data.id); present.set(c.key, read.data);
+    }
+    if (existing.data.occurrences.some(row => row.kind === 'native' && row.title?.toLowerCase() === c.title.toLowerCase()
+      && sameInstant(row.starts_at, c.startsAt) && row.event.idempotency_key !== c.key)) {
+      return fail('A matching calendar entry has unverified trip ownership. Review that coincidence before syncing; nothing new was added.', { code: SERVICE_CODES.invalidInput });
+    }
+  }
+  const created: SyncToCalendarResult['created'] = [], skipped: string[] = [];
+  for (const c of candidates) {
+    if (present.has(c.key)) { skipped.push(c.title); continue; }
+    const res = await createEvent({ ...scope, idempotencyKey: c.key }, {
+      title: c.title, startsAt: c.startsAt, endsAt: c.endsAt, allDay: c.allDay, category: c.category, location: c.location, description: c.description,
+    }, { rejectChangedRetry: true });
+    if (!res.ok) return fail(`${res.error} Calendar sync stopped after ${created.length} confirmed entries; earlier writes may remain.`, { code: res.code, retryable: res.retryable });
+    if (!receiptMatches(res.data, c) || receiptIds.has(res.data.id)) return fail(`Could not confirm the exact calendar entry for this candidate. Sync stopped after ${created.length} confirmed entries; earlier writes may remain.`, { code: SERVICE_CODES.db });
+    receiptIds.add(res.data.id);
+    created.push({ id: res.data.id, title: res.data.title, startsAt: res.data.starts_at,
+      allDay: c.allDay, startDate: c.allDay ? c.startsAt.slice(0, 10) : null, endDate: c.allDay ? c.endsAt!.slice(0, 10) : null });
   }
   return ok({ created, skipped });
 }
 
+
 // ── conflicts with the rest of life ───────────────────────────────────────────
 
 export type CommitmentConflicts = {
-  window: { from: string; to: string };
-  calendar: CalendarEvent[];
-  school: SchoolEventRow[];
-  sports: SportsEventRow[];
-  homework: HomeworkRow[];
-  bills: Tables<'bills'>[];
-  total: number;
+  window: { from: string; to: string; timezone: string };
+  calendar: NativeSearchOccurrence[];
+  source_calendar: SourceSearchOccurrence[];
+  school: SchoolEventRow[]; sports: SportsEventRow[]; homework: HomeworkRow[]; bills: Tables<'bills'>[];
+  total: number; complete: true; horizonEndsAt: string; ownership: 'unverified-included';
+  counts: { review: number; native: number; source: number; occupied: number; annotation: number; calendarDomain: number;
+    school: number; sports: number; homework: number; bills: number };
 };
 
-/** Everything already committed during the trip's dates — the things a family has to move, skip or pay early. */
+/** Complete bounded review. Calendar titles cannot prove durable trip ownership. */
 export async function commitmentConflicts(scope: ServiceScope, vacationId: string): Promise<ServiceResult<CommitmentConflicts>> {
   const snapshot = await getTrip(scope, vacationId);
   if (!snapshot.ok) return snapshot;
   const { trip } = snapshot.data;
-  if (!trip.start_date) return fail(`${trip.title} has no dates yet, so conflicts cannot be checked.`, { code: SERVICE_CODES.invalidInput });
-  const tz = trip.timezone || scope.tz;
-  const endDate = trip.end_date ?? trip.start_date;
-  const from = new Date(zonedTimeMs(trip.start_date, 0, 0, tz)).toISOString();
-  const to = new Date(zonedDayBoundsMs(endDate, tz).end - 1).toISOString();
-
-  const [calendar, school, sports, homework, bills] = await Promise.all([
-    searchEvents(scope, { from, to, limit: 200 }),
-    listEventsBetween(scope, { from, to }),
-    listPracticesBetween(scope, { from, to }),
-    listHomeworkDue(scope, { from, to }),
-    settle(scope.db.from('bills').select('*').eq('family_id', scope.familyId).neq('status', 'paid').gte('due_date', trip.start_date).lte('due_date', endDate).order('due_date', { ascending: true }).limit(100)),
+  let from: string, to: string, endDate: string, tz: string;
+  try {
+    tz = trip.timezone ?? scope.tz;
+    if (trip.family_id !== scope.familyId || trip.id !== vacationId || !isValidTimezone(scope.tz) || !tz || !isValidTimezone(tz) || !trip.start_date || !validDay(trip.start_date)
+      || trip.end_date !== null && !validDay(trip.end_date)) throw new Error('Invalid trip clock');
+    endDate = trip.end_date ?? trip.start_date;
+    const days = (Date.parse(endDate + 'T00:00:00Z') - Date.parse(trip.start_date + 'T00:00:00Z')) / DAY_MS + 1;
+    if (!Number.isSafeInteger(days) || days < 1 || days > 366) throw new Error('Invalid trip dates');
+    const bounds = briefingCalendarBounds(trip.start_date, tz, 0, days);
+    from = bounds.timedFrom; to = new Date(Date.parse(bounds.timedTo) - 1).toISOString();
+    validateCalendarSearchWindow(scope, { from, to });
+  } catch { return fail('The trip needs valid dates and timezones within a supported 366-day window before commitments can be reviewed.', { code: SERVICE_CODES.invalidInput }); }
+  const schoolQuery = () => scope.db.from('school_events').select('*', { count: 'exact' }).eq('family_id', scope.familyId)
+    .gte('starts_at', from).lte('starts_at', to).order('starts_at').order('id');
+  const homeworkQuery = () => scope.db.from('homework_assignments').select('*', { count: 'exact' }).eq('family_id', scope.familyId)
+    .not('due_at', 'is', null).gte('due_at', from).lte('due_at', to).in('status', ['assigned','in_progress']).order('due_at').order('id');
+  const sportsQuery = (series: boolean) => {
+    let query = scope.db.from('sports_events').select('*', { count: 'exact' }).eq('family_id', scope.familyId).lte('starts_at', to);
+    query = series ? query.neq('recurrence','none').or('recurrence_until.is.null,recurrence_until.gt.' + from)
+      : query.eq('recurrence','none').gte('starts_at', from);
+    return query.order('starts_at').order('id');
+  };
+  const billQuery = () => scope.db.from('bills').select('*', { count: 'exact' }).eq('family_id', scope.familyId).neq('status','paid')
+    .gte('due_date', trip.start_date!).lte('due_date', endDate).order('due_date').order('id');
+  const [calendar, school, homework, singles, series, bills] = await Promise.all([
+    readCompleteCalendarOccurrences(scope, { from, to }),
+    readCountedRows<SchoolEventRow>(() => schoolQuery().limit(500), (a,b) => schoolQuery().range(a,b), 500, 'school commitments'),
+    readCountedRows<HomeworkRow>(() => homeworkQuery().limit(500), (a,b) => homeworkQuery().range(a,b), 500, 'homework commitments'),
+    readCountedRows<SportsEventRow>(() => sportsQuery(false).limit(500), (a,b) => sportsQuery(false).range(a,b), 500, 'sports commitments'),
+    readCountedRows<SportsEventRow>(() => sportsQuery(true).limit(500), (a,b) => sportsQuery(true).range(a,b), 2000, 'sports recurring commitments'),
+    readCountedRows<Tables<'bills'>>(() => billQuery().limit(1000), (a,b) => billQuery().range(a,b), 20_000, 'bills due during the trip'),
   ]);
   if (!calendar.ok) return calendar;
-  if (!school.ok) return school;
-  if (!sports.ok) return sports;
-  if (!homework.ok) return homework;
-  if (bills.error) {
-    console.error('[service:trips] bills read failed', bills.error);
-    return fail(describeDbError(bills.error, 'Could not check bills due during the trip.'), { code: SERVICE_CODES.db });
-  }
-
-  // The trip's own calendar entries (from `syncToCalendar`) are not conflicts.
-  const ownTitles = new Set([trip.title.toLowerCase()]);
-  const calendarRows = calendar.data.filter((e) => !(ownTitles.has(e.title.toLowerCase()) && e.all_day) && !/^flight /i.test(e.title));
-  const billRows = bills.data ?? [];
-  return ok({
-    window: { from, to },
-    calendar: calendarRows,
-    school: school.data,
-    sports: sports.data,
-    homework: homework.data,
-    bills: billRows,
-    total: calendarRows.length + school.data.length + sports.data.length + homework.data.length + billRows.length,
-  });
+  if ([school,homework,singles,series,bills].some(result => result.error)) return fail('Could not load the complete trip commitments.', { code: SERVICE_CODES.db });
+  try {
+    const identity = (row: { id: string; family_id: string }) => {
+      if (typeof row.id !== 'string' || !row.id.trim() || row.family_id !== scope.familyId) throw new Error('Invalid commitment identity');
+    };
+    const text = (value: unknown) => { if (typeof value !== 'string' || !value.trim()) throw new Error('Invalid commitment text'); };
+    const member = (value: unknown) => { if (value !== null && (typeof value !== 'string' || !value.trim())) throw new Error('Invalid commitment member'); };
+    const clock = (value: string) => validateCalendarSearchWindow(scope, { from: value, to: value });
+    const inWindow = (value: string) => { clock(value); if (Date.parse(value) < Date.parse(from) || Date.parse(value) > Date.parse(to)) throw new Error('Commitment outside window'); };
+    for (const row of school.data!) { identity(row); text(row.title); member(row.member_id); inWindow(row.starts_at); if (row.ends_at !== null) { clock(row.ends_at); if (Date.parse(row.ends_at) < Date.parse(row.starts_at)) throw new Error('Invalid school interval'); } }
+    for (const row of homework.data!) { identity(row); text(row.title); member(row.member_id); if (!row.due_at || !['assigned','in_progress'].includes(row.status)) throw new Error('Invalid homework'); inWindow(row.due_at); }
+    const sportsIds = new Set<string>();
+    for (const row of singles.data!) { inWindow(row.starts_at); if (row.recurrence !== 'none') throw new Error('Invalid single sports row'); }
+    for (const row of series.data!) { if (row.recurrence === 'none' || Date.parse(row.starts_at) > Date.parse(to)) throw new Error('Invalid sports master'); }
+    for (const row of [...singles.data!, ...series.data!]) { identity(row); if (sportsIds.has(row.id)) throw new Error('Duplicate sports identity'); sportsIds.add(row.id); text(row.title); member(row.member_id); clock(row.starts_at); if (row.ends_at !== null) { clock(row.ends_at); if (Date.parse(row.ends_at) < Date.parse(row.starts_at)) throw new Error('Invalid sports interval'); } if (!['none','daily','weekly','monthly','yearly'].includes(row.recurrence)) throw new Error('Invalid sports recurrence'); if (row.recurrence_until !== null) { clock(row.recurrence_until); if (Date.parse(row.recurrence_until) < Date.parse(row.starts_at)) throw new Error('Invalid sports cutoff'); } }
+    for (const row of bills.data!) { identity(row); text(row.name); if (!validDay(row.due_date) || row.due_date < trip.start_date! || row.due_date > endDate || !['upcoming','overdue'].includes(row.status)) throw new Error('Invalid bill'); }
+    const sports = [...singles.data!, ...expandEventsInZone(series.data!, new Date(from), new Date(Date.parse(to)+1), scope.tz, false, { requireComplete: true })]
+      .sort((a,b) => Date.parse(a.starts_at)-Date.parse(b.starts_at) || a.id.localeCompare(b.id));
+    for (const row of sports) inWindow(row.starts_at);
+    if (sports.length > 500) throw new Error('More than 500 sports commitments');
+    const projected = projectCalendarOccurrences(calendar.data.occurrences);
+    const occupied = calendar.data.occurrences.filter(row => row.occupied).length;
+    const total = calendar.data.totalVisibleCount + school.data!.length + sports.length + homework.data!.length + bills.data!.length;
+    return ok({ window: { from, to, timezone: tz }, calendar: projected.events, source_calendar: projected.source_events,
+      school: school.data!, sports, homework: homework.data!, bills: bills.data!, total, complete: true, horizonEndsAt: to, ownership: 'unverified-included',
+      counts: { review: total, native: projected.events.length, source: projected.source_events.length, occupied,
+        annotation: calendar.data.totalVisibleCount - occupied, calendarDomain: calendar.data.totalVisibleCount,
+        school: school.data!.length, sports: sports.length, homework: homework.data!.length, bills: bills.data!.length } });
+  } catch { return fail('Could not qualify the complete trip commitments.', { code: SERVICE_CODES.db }); }
 }
 
 // ── pets: who feeds them while the family is away ─────────────────────────────

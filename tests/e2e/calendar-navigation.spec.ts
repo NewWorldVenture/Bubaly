@@ -2,11 +2,16 @@ import fs from 'node:fs';
 import ts from 'typescript';
 import { test, expect, type Page } from '@playwright/test';
 import { reactBrowserScripts } from './helpers/react-browser';
+import { localeOrDefault } from '../../lib/i18n/locales';
 
 const scripts = reactBrowserScripts('development');
 const sourceFiles = [
   'components/modules/calendar-module.tsx', 'lib/time/wall-clock.ts',
-  'lib/time/zoned.ts', 'lib/calendar/recurrence.ts',
+  'lib/time/zoned.ts', 'lib/calendar/recurrence.ts', 'lib/calendar/day.ts',
+  'lib/calendar/occurrences.ts', 'lib/calendar/event-dates.ts', 'lib/briefing/calendar-window.ts',
+  'lib/calendar/display-occurrences.ts', 'lib/calendar/display-spans.ts', 'lib/calendar/source-capability.ts',
+  'lib/calendar/exact-instant.ts', 'lib/onboarding/ics-time.ts',
+  'tests/helpers/in-memory-supabase.ts',
 ];
 const sources = Object.fromEntries(sourceFiles.map(file => [
   '@/' + file.replace(/\.tsx?$/, ''),
@@ -16,7 +21,7 @@ const sources = Object.fromEntries(sourceFiles.map(file => [
 ]));
 const browserErrors = new WeakMap<Page, string[]>();
 
-type CalendarConfig = { day: string; zone?: string; events?: { id: string; title: string; starts_at: string; recurrence: string }[] };
+type CalendarConfig = { day: string; zone?: string; events?: { id: string; title: string; starts_at: string; recurrence: string; all_day?: boolean }[] };
 declare global { interface Window { __calendarNavigation: { errors: string[]; reactVersion: string } } }
 test.use({ timezoneId: 'Asia/Tokyo' });
 
@@ -46,6 +51,7 @@ async function start(page: Page, config: CalendarConfig) {
   await page.addScriptTag({ content: `(() => {
     const sources = ${JSON.stringify(sources)};
     const config = ${JSON.stringify(config)};
+    const locale = ${JSON.stringify(localeOrDefault('en-US'))};
     const p = window.__calendarNavigation = { errors: [], reactVersion: React.version };
     window.addEventListener('error', e => p.errors.push(e.message));
     window.addEventListener('unhandledrejection', e => { p.errors.push(String(e.reason)); e.preventDefault(); });
@@ -53,12 +59,43 @@ async function start(page: Page, config: CalendarConfig) {
     const blank = () => null;
     const pass = props => React.createElement('div', null, props.children);
     const stub = new Proxy({ __esModule: true, default: pass }, { get: (obj, key) => key in obj ? obj[key] : blank });
+    const calendarDb = { from: () => {
+      let rows = (config.events || []).map(row => ({ family_id: 'synthetic-family', all_day: false, ends_at: null, recurrence_until: null,
+        category: 'general', description: null, location: null, assignee_id: null, feed_id: null, external_uid: null,
+        onboarding_key: null, idempotency_key: null, created_by: null, source_recurrence: null,
+        created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z', ...row }));
+      let offset = 0; let limit = 1000;
+      const query = {
+        select: () => query,
+        eq: (column, value) => { rows = rows.filter(row => row[column] === value); return query; },
+        neq: (column, value) => { rows = rows.filter(row => row[column] != null && row[column] !== value); return query; },
+        lte: (column, value) => { rows = rows.filter(row => Date.parse(row[column]) <= Date.parse(value)); return query; },
+        or: filter => {
+          rows = rows.filter(load('@/tests/helpers/in-memory-supabase').orPredicate(filter));
+          return query;
+        },
+        order: () => { rows.sort((a, b) => a.starts_at.localeCompare(b.starts_at) || a.id.localeCompare(b.id)); return query; },
+        limit: value => { limit = value; return query; },
+        range: (from, to) => { offset = from; limit = to - from + 1; return query; },
+        then: resolve => resolve({ data: rows.slice(offset, offset + limit), count: rows.length, error: null }),
+      };
+      return query;
+    } };
     const mocks = {
       react: React,
+      'node:crypto': { randomUUID: () => window.crypto.randomUUID() },
       '@/components/app/app-context': { useApp: () => ({ familyId: 'synthetic-family', userId: 'synthetic-user', members: [], selfMember: null }) },
-      '@/lib/hooks/use-realtime-query': { useRealtimeQuery: () => ({ data: config.events || [], loading: false, error: null, refresh: () => {} }) },
+      '@/lib/hooks/use-realtime-query': { useRealtimeQuery: ({ fetcher, deps }) => {
+        const [result, setResult] = React.useState({ data: [], loading: true, error: null });
+        React.useEffect(() => {
+          let active = true;
+          Promise.resolve(fetcher(calendarDb)).then(reply => { if (active) setResult({ data: reply.data || [], loading: false, error: reply.error }); });
+          return () => { active = false; };
+        }, deps);
+        return { ...result, refresh: () => {} };
+      } },
       '@/components/ui/toast': { useToast: () => ({ success: () => {}, error: () => {} }) },
-      '@/components/i18n/locale-provider': { useTranslations: () => key => key },
+      '@/components/i18n/locale-provider': { useTranslations: () => key => key, useLocale: () => locale },
       '@/lib/utils/cn': { cn: (...args) => args.filter(Boolean).join(' ') },
       '@/components/app/page-header': { PageHeader: props => React.createElement('header', null, props.title, props.action) },
       '@/components/ui/button': { Button: props => React.createElement('button', { onClick: props.onClick, disabled: props.disabled }, props.children) },
@@ -68,7 +105,17 @@ async function start(page: Page, config: CalendarConfig) {
       if (id in modules) return modules[id];
       if (!(id in sources)) return stub;
       const module = { exports: {} }; modules[id] = module.exports;
-      new Function('require', 'module', 'exports', sources[id])(load, module, module.exports);
+      const requireFrom = specifier => {
+        if (!specifier.startsWith('.')) return load(specifier);
+        const parts = (id.slice(0, id.lastIndexOf('/') + 1) + specifier).split('/');
+        const resolved = [];
+        for (const part of parts) {
+          if (part === '..') resolved.pop();
+          else if (part !== '.') resolved.push(part);
+        }
+        return load(resolved.join('/'));
+      };
+      new Function('require', 'module', 'exports', sources[id])(requireFrom, module, module.exports);
       return module.exports;
     }
     const wall = load('@/lib/time/wall-clock');
@@ -165,3 +212,14 @@ test('family recurrence remains on its family date and time after month navigati
   expect(await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone)).toBe('Asia/Tokyo');
   expect(await page.evaluate(() => window.__calendarNavigation.errors)).toEqual([]);
 });
+
+for (const day of ['2026-03-08', '2026-11-01']) {
+  test('an imported all-day date stays in its Sunday column on ' + day, async ({ page }) => {
+    await start(page, { day, zone: 'America/New_York', events: [
+      { id: 'synthetic-date', title: 'Synthetic date', starts_at: day + 'T00:00:00.000Z', recurrence: 'none', all_day: true },
+    ] });
+    const column = page.locator('div.border-l').filter({ has: page.getByText(day, { exact: true }) });
+    await expect(column.getByRole('button', { name: 'Synthetic date', exact: true })).toHaveCount(1);
+    await expect(page.locator('#root')).toContainText('calendar.allDay');
+  });
+}

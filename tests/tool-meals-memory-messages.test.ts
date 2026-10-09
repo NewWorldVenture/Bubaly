@@ -361,6 +361,15 @@ describe('memory.recall', () => {
 });
 
 describe('messages tools', () => {
+  it('keeps reply identity in the natural retry key while retaining equivalent input aliases', () => {
+    const tool = getTool('messages.sendFamilyMessage')!;
+    const scope = scopeWith(makeDb(() => ({ data: null, error: null })).db, { requestId: 'one-request' });
+    const key = (input: unknown) => tool.idempotencyFrom?.(tool.input.parse(input), scope);
+    const first = key({ content: ' Dinner at 6! ', conversation_id: 'thread', reply_to_id: 'parent-1' });
+    expect(key({ message: 'Dinner at 6!', conversation_id: 'thread', reply_to_id: 'parent-1' })).toBe(first);
+    expect(key({ content: 'Dinner at 6!', conversation_id: 'thread', reply_to_id: 'parent-2' })).not.toBe(first);
+    expect(key({ content: 'Dinner at 6!', conversation_id: 'thread' })).not.toBe(first);
+  });
   it('accepts the legacy create_announcement shape and reports both author columns were set', async () => {
     const { db, calls } = makeDb((call) => {
       if (call.table === 'agent_activity') return { data: { id: 'activity-1' }, error: null };
@@ -381,10 +390,13 @@ describe('messages tools', () => {
 
   it('sends to the family chat under either spelling of the text argument', async () => {
     const { db, calls } = makeDb((call) => {
-      if (call.table === 'family_conversations') return { data: { id: 'conv-1' }, error: null };
+      if (call.table === 'rpc:ensure_family_conversation') return { data: 'conv-1', error: null };
       if (call.table === 'family_members') return { data: MEMBERS[0], error: null };
-      if (call.table === 'family_messages' && call.kind === 'insert') {
-        return { data: { ...(call.payload as Record<string, unknown>), id: 'msg-1', sender_avatar: null, attachment_url: null, attachment_name: null, attachment_mime: null, reactions: {}, read_by: [], is_pinned: false, deleted_at: null, created_at: NOW.toISOString() }, error: null };
+      if (call.table === 'rpc:send_family_message') {
+        return { data: { id: 'msg-1', conversation_id: call.filters.p_conversation_id, family_id: call.filters.p_family_id,
+          content: call.filters.p_content, sender_id: call.filters.p_user_id, sender_name: 'Dana', kind: call.filters.p_kind,
+          sender_avatar: null, attachment_url: null, attachment_name: null, attachment_mime: null, reply_to_id: null,
+          reactions: {}, read_by: [], is_pinned: false, deleted_at: null, created_at: NOW.toISOString() }, error: null };
       }
       if (call.table === 'agent_activity') return { data: { id: 'activity-1' }, error: null };
       return { data: null, error: null };
@@ -396,7 +408,8 @@ describe('messages tools', () => {
       expect(res.data).toMatchObject({ id: 'msg-1', conversation_id: 'conv-1', content: 'Dinner at 6!', sender_name: 'Dana' });
       expect(tool.summarize({}, res.data)).toBe('Sent to the family chat: "Dinner at 6!"');
     }
-    expect(calls.find((c) => c.table === 'family_messages' && c.kind === 'insert')?.payload).toMatchObject({ sender_id: 'auth-user-1', sender_name: 'Dana' });
+    expect(calls.find((c) => c.table === 'rpc:send_family_message')?.filters)
+      .toMatchObject({ p_user_id: 'auth-user-1', p_member_id: 'member-1', p_family_id: 'fam-1' });
     expect(tool.consequences!({ message: 'Dinner at 6!' })[0]).toContain('Dinner at 6!');
   });
 

@@ -16,13 +16,23 @@
 // fastest way to lose a family's trust in the assistant.
 import 'server-only';
 import { detectConflicts, type ConflictEvent, type EventConflict } from '@/lib/home/conflicts';
-import { freeGaps, mergeIntervals, type Interval } from '@/lib/calendar/scheduling';
+import { readCalendarOccurrences, readCalendarBusySource, readCountedRows } from '@/lib/calendar/occurrences';
+import { readCalendarAvailability } from '@/lib/calendar/availability';
+import { buildConflictAdvisories, conflictSubject, type CalendarConflictAdvisory, type CalendarConflictSubject } from '@/lib/calendar/conflict-advisories';
+import { addDays } from '@/lib/calendar/day';
+import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from '@/lib/calendar/source-capability';
+import { calendarDisplayDay } from '@/lib/calendar/display-spans';
+import { validDay } from '@/lib/onboarding/ics-time';
+import { calendarOpenWindowFilter, instantCalendarBounds, normalizeCalendarWindowInstant } from '@/lib/briefing/calendar-window';
+import { freeGaps, intervalTicks, mergeIntervals, type Interval } from '@/lib/calendar/scheduling';
+import { addExactMilliseconds, exactInstantMilliseconds, exactIntervalOf, formatExactInstant, inclusiveInstantStep, parseExactInstant } from '@/lib/calendar/exact-instant';
+import { instantForIcsLocalTime, isValidTimezone } from '@/lib/time/zoned';
 import type { EventCategory, Insertable, RecurrenceFreq, Tables, Updatable } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
-import { keyedProbe, makeKey, sameId, sameInstant, withIdempotency, type KeyedCreateOptions } from '../idempotency';
-import { dayKeyInTz, dayKeysBetween, scopeNow, zonedTimeMs } from '../scope';
+import { keyedProbe, makeKey, sameId, withIdempotency, type KeyedCreateOptions } from '../idempotency';
+import { dayKeyInTz, dayKeysBetween, scopeNow, zonedDayBoundsMs, zonedTimeMs } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { escapeLike } from '@/lib/supabase/escape-like';
 import { getTranslations } from '@/lib/i18n/server';
@@ -44,10 +54,31 @@ const RECURRENCES = EVENT_RECURRENCES;
 const DEFAULT_DURATION_MIN = 60;
 const MINUTE_MS = 60_000;
 
-function isoOrNull(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const ms = Date.parse(value);
-  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+export function normalizeCalendarWriteInstant(value: string | null | undefined, timezone: string): string | null {
+  if (!value?.trim()) return null;
+  try {
+    const token = value.trim().replace(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})(Z|[+-]\d{2}:\d{2})$/, '$1:00$2');
+    const exact = parseExactInstant(normalizeCalendarWindowInstant(token, timezone));
+    if (exact % 1000n !== 0n) return null; // PostgreSQL stores microseconds: never round.
+    return formatExactInstant(exact);
+  } catch { return null; }
+}
+function invalidOptionalClock(value: string | null | undefined, normalized: string | null): boolean {
+  return Boolean(value?.trim()) && normalized === null;
+}
+function sameCalendarInstant(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return !a && !b;
+  try { return parseExactInstant(a) === parseExactInstant(b); } catch { return false; }
+}
+// DATE labels belong to the caller's original civil prefix; UTC normalization
+// must not silently move an all-day label to a different date.
+function validEventRange(start: string, end: string | null, allDay: boolean, originalStart = start, originalEnd = end): boolean {
+  try {
+    const from = parseExactInstant(start), to = end === null ? null : parseExactInstant(end);
+    if (typeof allDay !== 'boolean' || to !== null && to < from) return false;
+    return !allDay || from === parseExactInstant(originalStart.trim().slice(0, 10) + 'T00:00:00Z')
+      && (to === null || to > from && to === parseExactInstant(originalEnd!.trim().slice(0, 10) + 'T00:00:00Z'));
+  } catch { return false; }
 }
 
 export type CreateEventInput = {
@@ -79,11 +110,11 @@ function eventDrift(stored: CalendarEvent, wanted: EventContent): string[] {
   if ((stored.description ?? null) !== wanted.description) drift.push('description');
   if ((stored.location ?? null) !== wanted.location) drift.push('location');
   if (stored.category !== wanted.category) drift.push('category');
-  if (!sameInstant(stored.starts_at, wanted.starts_at)) drift.push('starts_at');
-  if (!sameInstant(stored.ends_at, wanted.ends_at)) drift.push('ends_at');
+  if (!sameCalendarInstant(stored.starts_at, wanted.starts_at)) drift.push('starts_at');
+  if (!sameCalendarInstant(stored.ends_at, wanted.ends_at)) drift.push('ends_at');
   if (stored.all_day !== wanted.all_day) drift.push('all_day');
   if (stored.recurrence !== wanted.recurrence) drift.push('recurrence');
-  if (!sameInstant(stored.recurrence_until, wanted.recurrence_until)) drift.push('recurrence_until');
+  if (!sameCalendarInstant(stored.recurrence_until, wanted.recurrence_until)) drift.push('recurrence_until');
   if (!sameId(stored.assignee_id, wanted.assignee_id)) drift.push('assignee_id');
   return drift;
 }
@@ -104,13 +135,16 @@ export async function createEvent(
   const title = input.title?.trim() ?? '';
   if (!title) return fail('An event needs a title.', { code: SERVICE_CODES.invalidInput });
 
-  const startsAt = isoOrNull(input.startsAt);
+  const startsAt = normalizeCalendarWriteInstant(input.startsAt, scope.tz);
   if (!startsAt) return fail('That start time could not be understood.', { code: SERVICE_CODES.invalidInput });
 
-  const endsAt = isoOrNull(input.endsAt);
-  if (endsAt && Date.parse(endsAt) < Date.parse(startsAt)) {
+  const endsAt = normalizeCalendarWriteInstant(input.endsAt, scope.tz);
+  if (invalidOptionalClock(input.endsAt, endsAt) || !validEventRange(startsAt, endsAt, input.allDay ?? false, input.startsAt, input.endsAt ?? null)) {
     return fail('An event cannot end before it starts.', { code: SERVICE_CODES.invalidInput });
   }
+
+  const recurrenceUntil = normalizeCalendarWriteInstant(input.recurrenceUntil, scope.tz);
+  if (invalidOptionalClock(input.recurrenceUntil, recurrenceUntil)) return fail('That recurrence end could not be understood.', { code: SERVICE_CODES.invalidInput });
 
   const category = input.category && CATEGORIES.includes(input.category) ? input.category : 'general';
   const recurrence = input.recurrence && RECURRENCES.includes(input.recurrence) ? input.recurrence : 'none';
@@ -124,7 +158,7 @@ export async function createEvent(
     ends_at: endsAt,
     all_day: input.allDay ?? false,
     recurrence,
-    recurrence_until: isoOrNull(input.recurrenceUntil),
+    recurrence_until: recurrenceUntil,
     assignee_id: input.assigneeId ?? null,
   };
 
@@ -229,12 +263,14 @@ export async function createEvents(
   for (const input of inputs) {
     const title = input.title?.trim() ?? '';
     if (!title) return fail('An event needs a title.', { code: SERVICE_CODES.invalidInput });
-    const startsAt = isoOrNull(input.startsAt);
+    const startsAt = normalizeCalendarWriteInstant(input.startsAt, scope.tz);
     if (!startsAt) return fail('That start time could not be understood.', { code: SERVICE_CODES.invalidInput });
-    const endsAt = isoOrNull(input.endsAt);
-    if (endsAt && Date.parse(endsAt) < Date.parse(startsAt)) {
+    const endsAt = normalizeCalendarWriteInstant(input.endsAt, scope.tz);
+    if (invalidOptionalClock(input.endsAt, endsAt) || !validEventRange(startsAt, endsAt, input.allDay ?? false, input.startsAt, input.endsAt ?? null)) {
       return fail('An event cannot end before it starts.', { code: SERVICE_CODES.invalidInput });
     }
+    const recurrenceUntil = normalizeCalendarWriteInstant(input.recurrenceUntil, scope.tz);
+    if (invalidOptionalClock(input.recurrenceUntil, recurrenceUntil)) return fail('That recurrence end could not be understood.', { code: SERVICE_CODES.invalidInput });
     rows.push({
       family_id: scope.familyId,
       title,
@@ -245,7 +281,7 @@ export async function createEvents(
       ends_at: endsAt,
       all_day: input.allDay ?? false,
       recurrence: input.recurrence && RECURRENCES.includes(input.recurrence) ? input.recurrence : 'none',
-      recurrence_until: isoOrNull(input.recurrenceUntil),
+      recurrence_until: recurrenceUntil,
       assignee_id: input.assigneeId ?? null,
       created_by: scope.userId,
       idempotency_key: null,
@@ -333,6 +369,8 @@ export async function deleteEvents(scope: ServiceScope, eventIds: string[]): Pro
     .delete()
     .eq('family_id', scope.familyId)
     .in('id', ids)
+    .is('feed_id', null)
+    .is('external_uid', null)
     .select('id, title');
   if (error) {
     console.error('[service:calendar] batch delete failed', error);
@@ -361,7 +399,11 @@ export async function deleteEvents(scope: ServiceScope, eventIds: string[]): Pro
 
 export type UpdateEventPatch = Partial<Omit<CreateEventInput, 'title'>> & { title?: string };
 
+type EventClockState = Pick<CalendarEvent, 'id' | 'title' | 'starts_at' | 'ends_at' | 'all_day'>;
 export async function updateEvent(scope: ServiceScope, eventId: string, patch: UpdateEventPatch): Promise<ServiceResult<CalendarEvent>> {
+  return applyEventUpdate(scope, eventId, patch);
+}
+async function applyEventUpdate(scope: ServiceScope, eventId: string, patch: UpdateEventPatch, captured?: EventClockState): Promise<ServiceResult<CalendarEvent>> {
   const update: Updatable<'calendar_events'> = {};
 
   if (patch.title !== undefined) {
@@ -370,30 +412,47 @@ export async function updateEvent(scope: ServiceScope, eventId: string, patch: U
     update.title = title;
   }
   if (patch.startsAt !== undefined) {
-    const startsAt = isoOrNull(patch.startsAt);
+    const startsAt = normalizeCalendarWriteInstant(patch.startsAt, scope.tz);
     if (!startsAt) return fail('That start time could not be understood.', { code: SERVICE_CODES.invalidInput });
     update.starts_at = startsAt;
   }
-  if (patch.endsAt !== undefined) update.ends_at = isoOrNull(patch.endsAt);
+  if (patch.endsAt !== undefined) {
+    const end = normalizeCalendarWriteInstant(patch.endsAt, scope.tz);
+    if (invalidOptionalClock(patch.endsAt, end)) return fail('That end time could not be understood.', { code: SERVICE_CODES.invalidInput });
+    update.ends_at = end;
+  }
   if (patch.allDay !== undefined) update.all_day = patch.allDay;
   if (patch.location !== undefined) update.location = patch.location?.trim() || null;
   if (patch.description !== undefined) update.description = patch.description?.trim() || null;
   if (patch.assigneeId !== undefined) update.assignee_id = patch.assigneeId;
   if (patch.category !== undefined && CATEGORIES.includes(patch.category)) update.category = patch.category;
   if (patch.recurrence !== undefined && RECURRENCES.includes(patch.recurrence)) update.recurrence = patch.recurrence;
-  if (patch.recurrenceUntil !== undefined) update.recurrence_until = isoOrNull(patch.recurrenceUntil);
+  if (patch.recurrenceUntil !== undefined) {
+    const until = normalizeCalendarWriteInstant(patch.recurrenceUntil, scope.tz);
+    if (invalidOptionalClock(patch.recurrenceUntil, until)) return fail('That recurrence end could not be understood.', { code: SERVICE_CODES.invalidInput });
+    update.recurrence_until = until;
+  }
 
   if (Object.keys(update).length === 0) {
     return fail('Nothing to change on that event.', { code: SERVICE_CODES.invalidInput });
   }
 
-  // The same range check `createEvent` makes, for the edit that used to have it
-  // only in the browser. Deliberately limited to a patch carrying BOTH sides —
-  // which is what the edit modal sends, since it renders both fields — because
-  // cross-checking a patch that moves only the end would mean reading the row
-  // first, an extra round trip on every edit to guard a shape no caller sends.
-  if (update.starts_at && update.ends_at && Date.parse(update.ends_at) < Date.parse(update.starts_at)) {
+  if (update.starts_at && update.ends_at && parseExactInstant(update.ends_at) < parseExactInstant(update.starts_at)) {
     return fail('An event cannot end before it starts.', { code: SERVICE_CODES.invalidInput });
+  }
+  let clockState: EventClockState | undefined = captured;
+  if (patch.startsAt !== undefined || patch.endsAt !== undefined || patch.allDay !== undefined) {
+    if (!clockState) {
+      const { data, error } = await scope.db.from('calendar_events')
+        .select('id,title,starts_at,ends_at,all_day').eq('id', eventId).eq('family_id', scope.familyId).maybeSingle();
+      if (error) return fail(describeDbError(error, 'Could not load that event.'), { code: SERVICE_CODES.db });
+      if (!data) return fail('That event could not be found.', { code: SERVICE_CODES.notFound });
+      clockState = data;
+    }
+    if (!validEventRange(update.starts_at ?? clockState.starts_at,
+      patch.endsAt === undefined ? clockState.ends_at : update.ends_at ?? null,
+      update.all_day ?? clockState.all_day, patch.startsAt ?? clockState.starts_at,
+      patch.endsAt === undefined ? clockState.ends_at : patch.endsAt)) return fail('Choose valid event date boundaries.', { code: SERVICE_CODES.invalidInput });
   }
 
   if (update.assignee_id != null) {
@@ -414,13 +473,13 @@ export async function updateEvent(scope: ServiceScope, eventId: string, patch: U
     }
   }
 
-  const { data, error } = await scope.db
-    .from('calendar_events')
-    .update(update)
-    .eq('id', eventId)
-    .eq('family_id', scope.familyId)
-    .select('*')
-    .maybeSingle();
+  let mutation = scope.db.from('calendar_events').update(update).eq('id', eventId).eq('family_id', scope.familyId)
+    .is('feed_id', null).is('external_uid', null);
+  if (clockState) {
+    mutation = mutation.eq('starts_at', clockState.starts_at).eq('all_day', clockState.all_day);
+    mutation = clockState.ends_at === null ? mutation.is('ends_at', null) : mutation.eq('ends_at', clockState.ends_at);
+  }
+  const { data, error } = await mutation.select('*').maybeSingle();
 
   if (error) {
     console.error('[service:calendar] update failed', error);
@@ -446,6 +505,8 @@ export async function deleteEvent(scope: ServiceScope, eventId: string): Promise
     .delete()
     .eq('id', eventId)
     .eq('family_id', scope.familyId)
+    .is('feed_id', null)
+    .is('external_uid', null)
     .select('id, title')
     .maybeSingle();
 
@@ -466,34 +527,135 @@ export type SearchEventsInput = {
   assigneeId?: string | null;
   categories?: EventCategory[];
   limit?: number;
+  /**
+   * Expand a recurring event into the occurrences that fall in the window —
+   * the default, because a weekly practice IS on the calendar every week.
+   * `false` returns the stored rows, a series once at its first start, for a
+   * caller that wants the records themselves (the privacy export).
+   */
+  expandSeries?: boolean;
 };
 
-/** Events in a window, soonest first. The default window is open-ended forward. */
+/**
+ * How far ahead a series is expanded when the window has no end. One-off rows
+ * stay open-ended, as they always were; a series cannot be, and a year covers
+ * every frequency the calendar offers at least once.
+ */
+const SEARCH_SERIES_HORIZON_MS = 366 * 24 * 3600_000;
+
+/** The family's zone for expanding a series; a scope carrying an unusable zone expands on UTC rather than failing the read. */
+function zoneOf(scope: ServiceScope): string {
+  return scope.tz && isValidTimezone(scope.tz) ? scope.tz : 'UTC';
+}
+
+/**
+ * Events in a window, soonest first, series included: a recurring event is
+ * returned once per occurrence in the window, at that occurrence's time. The
+ * default window is open-ended forward.
+ *
+ * This read is the planner's eyes — the assistant's calendar tools, the weekly
+ * schedule slice, the trip planner's conflict check all come through here —
+ * and it used to filter `starts_at`, the FIRST start, by the window. A weekly
+ * commitment created in August was therefore in no plan after August: the
+ * assistant proposed dinners over practice and saw no clash in the week it
+ * was asked about.
+ */
 export async function searchEvents(scope: ServiceScope, input: SearchEventsInput = {}): Promise<ServiceResult<CalendarEvent[]>> {
   const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
-  let query = scope.db
-    .from('calendar_events')
-    .select('*')
-    .eq('family_id', scope.familyId)
-    .order('starts_at', { ascending: true })
-    .limit(limit);
+  let from: string, to: string | null;
+  try {
+    from = input.from == null ? scopeNow(scope).toISOString() : normalizeCalendarWindowInstant(input.from, scope.tz);
+    to = input.to == null ? null : normalizeCalendarWindowInstant(input.to, scope.tz);
+  } catch { return fail('That search window could not be understood.', { code: SERVICE_CODES.invalidInput }); }
+  if (input.expandSeries === false) return searchEventRows(scope, input, from, to, limit);
+  // A window that ends before it starts holds nothing, as the row read answered.
+  if (to && parseExactInstant(to) < parseExactInstant(from)) return ok([]);
 
-  const from = isoOrNull(input.from) ?? scopeNow(scope).toISOString();
-  query = query.gte('starts_at', from);
-  const to = isoOrNull(input.to);
-  if (to) query = query.lte('starts_at', to);
-  if (input.assigneeId) query = query.eq('assignee_id', input.assigneeId);
-  if (input.categories?.length) query = query.in('category', input.categories);
-  if (input.query?.trim()) {
-    query = query.ilike('title', `%${escapeLike(input.query.trim())}%`);
+  const tz = zoneOf(scope);
+  // `to` is inclusive, as the row read's `lte` was.
+  const bounds = instantCalendarBounds(from, to ?? addExactMilliseconds(from, SEARCH_SERIES_HORIZON_MS - 1), tz);
+  const res = await readCalendarOccurrences(scope.db, scope.familyId, bounds, tz, {
+    limit,
+    singlesLimit: limit,
+    singlesFilter: to ? undefined : calendarOpenWindowFilter(bounds),
+    assigneeId: input.assigneeId ?? undefined,
+    refine: (query) => {
+      let refined = query;
+      if (input.categories?.length) refined = refined.in('category', input.categories);
+      if (input.query?.trim()) refined = refined.ilike('title', `%${escapeLike(input.query.trim())}%`);
+      return refined;
+    },
+  });
+  if (res.error) {
+    console.error('[service:calendar] search failed', res.error);
+    return fail(describeDbError(res.error, 'Could not load the calendar.'), { code: SERVICE_CODES.db });
   }
+  return ok(res.data);
+}
 
-  const { data, error } = await query;
-  if (error) {
-    console.error('[service:calendar] search failed', error);
-    return fail(describeDbError(error, 'Could not load the calendar.'), { code: SERVICE_CODES.db });
+/** The stored rows in a window by their own `starts_at`: a series once. */
+async function searchEventRows(
+  scope: ServiceScope, input: SearchEventsInput, from: string, to: string | null, limit: number,
+): Promise<ServiceResult<CalendarEvent[]>> {
+  if(CALENDAR_SOURCE_ARCHIVE_ENABLED||typeof scope.familyId!=='string'||!scope.familyId.trim())return fail('Could not load the calendar.',{code:SERVICE_CODES.db});
+  const query = () => {
+    let builder = scope.db.from('calendar_events').select('*', { count: 'exact' })
+      .eq('family_id', scope.familyId).order('starts_at', { ascending: true }).order('id').gte('starts_at', from);
+    if (to) builder = builder.lte('starts_at', to);
+    if (input.assigneeId) builder = builder.eq('assignee_id', input.assigneeId);
+    if (input.categories?.length) builder = builder.in('category', input.categories);
+    if (input.query?.trim()) builder = builder.ilike('title', `%${escapeLike(input.query.trim())}%`);
+    return builder;
+  };
+  const result = await readCountedRows<CalendarEvent>(() => query().limit(limit), (first,last) => query().range(first,last), 20_000, 'stored calendar rows', limit);
+  if (result.error) return fail(describeDbError(result.error, 'Could not load the calendar.'), { code: SERVICE_CODES.db });
+  try { validateCalendarRows(scope,result.data ?? []); }
+  catch { return fail('Could not load the calendar.', { code: SERVICE_CODES.db }); }
+  return ok(result.data ?? []);
+}
+
+/** This service consumes only genuine native rows. Never downgrade an archive
+ * projection into an actionable native identity, or publish malformed scope. */
+function validateCalendarRows(scope: ServiceScope, rows: readonly CalendarEvent[]): void {
+  if(typeof scope.familyId!=='string'||!scope.familyId.trim()||rows.length>20_000)throw new Error('Invalid calendar domain');
+  for(const row of rows){
+    if(!row||row.family_id!==scope.familyId||typeof row.id!=='string'||!row.id.trim()
+      ||typeof row.title!=='string'||typeof row.starts_at!=='string'||typeof row.all_day!=='boolean'
+      ||row.assignee_id!==null&&typeof row.assignee_id!=='string'
+      ||('source_recurrence' in row&&row.source_recurrence!==null))throw new Error('Invalid native calendar row');
+    nativeInterval(row);
   }
-  return ok(data ?? []);
+}
+function nativeInstant(value:string):number {
+  if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:?\d{2})$/.test(value)||!validDay(value.slice(0,10)))throw new Error('Invalid native calendar instant');
+  const valueMs=Date.parse(value);
+  if(!Number.isFinite(valueMs)||+value.slice(11,13)>=24||+value.slice(14,16)>=60||+value.slice(17,19)>=60)throw new Error('Invalid native calendar instant');
+  return exactInstantMilliseconds(parseExactInstant(value));
+}
+function nativeInterval(row: { starts_at:string; ends_at:string|null; all_day:boolean }) {
+  if(!validDay(row.starts_at.slice(0,10))||!Number.isFinite(Date.parse(row.starts_at)))throw new Error('Invalid calendar start');
+  if(row.all_day){
+    const start=row.starts_at.slice(0,10),end=row.ends_at===null?addDays(start,1):row.ends_at.slice(0,10);
+    if(!validDay(end)||end<=start||row.ends_at!==null&&!Number.isFinite(Date.parse(row.ends_at)))throw new Error('Invalid calendar DATE interval');
+    if(parseExactInstant(row.starts_at)!==parseExactInstant(`${start}T00:00:00Z`)
+      ||row.ends_at!==null&&parseExactInstant(row.ends_at)!==parseExactInstant(`${end}T00:00:00Z`))throw new Error('Noncanonical calendar DATE');
+    return {allDay:true as const,start,end};
+  }
+  const start=nativeInstant(row.starts_at),end=row.ends_at===null?start+3_600_000:nativeInstant(row.ends_at);
+  const exactInterval={start:row.starts_at,end:row.ends_at??addExactMilliseconds(row.starts_at,3_600_000)};
+  if(parseExactInstant(exactInterval.end)<parseExactInstant(exactInterval.start))throw new Error('Invalid calendar interval');
+  return {allDay:false as const,start,end,exactInterval};
+}
+function analysisWindow(scope:ServiceScope,input:{from?:string|null;to?:string|null},defaultDays:number) {
+  if((input.from!=null&&!validDay(input.from.slice(0,10)))||(input.to!=null&&!validDay(input.to.slice(0,10))))throw new Error('Invalid calendar window');
+  if(typeof scope.familyId!=='string'||!scope.familyId.trim()||typeof scope.tz!=='string'||!scope.tz.trim()||!isValidTimezone(scope.tz))throw new Error('Invalid family calendar scope');
+  const fromIso=normalizeCalendarWindowInstant(input.from??scopeNow(scope).toISOString(),scope.tz);
+  const toIso=normalizeCalendarWindowInstant(input.to??addExactMilliseconds(fromIso,defaultDays*86_400_000-1),scope.tz);
+  const exactFrom=parseExactInstant(fromIso),exactTo=parseExactInstant(toIso);
+  if(exactTo<exactFrom||exactTo-exactFrom>366n*86_400_000_000_000n)throw new Error('Invalid calendar window');
+  const from=exactInstantMilliseconds(exactFrom),to=exactInstantMilliseconds(exactTo);
+  const bounds=instantCalendarBounds(fromIso,toIso,scope.tz);
+  return {from,to:to+1,bounds,exactFrom,exactTo:exactTo+inclusiveInstantStep(toIso)};
 }
 
 /**
@@ -504,15 +666,27 @@ export async function searchEvents(scope: ServiceScope, input: SearchEventsInput
 export async function findConflicts(
   scope: ServiceScope,
   input: { from?: string | null; to?: string | null } = {},
-): Promise<ServiceResult<{ conflicts: EventConflict[]; events: Record<string, CalendarEvent> }>> {
-  const events = await searchEvents(scope, { from: input.from, to: input.to, limit: 200 });
-  if (!events.ok) return events;
-
-  const conflictEvents: ConflictEvent[] = events.data.map((e) => ({
-    id: e.id, title: e.title, starts_at: e.starts_at, ends_at: e.ends_at, all_day: e.all_day, assignee_id: e.assignee_id,
-  }));
-  const byId = Object.fromEntries(events.data.map((e) => [e.id, e]));
-  return ok({ conflicts: detectConflicts(conflictEvents, DEFAULT_DURATION_MIN), events: byId });
+): Promise<ServiceResult<{ conflicts: EventConflict[]; events: Record<string, CalendarEvent>; advisories: CalendarConflictAdvisory[]; subjects: Record<string, CalendarConflictSubject> }>> {
+  let window:ReturnType<typeof analysisWindow>;
+  try { window=analysisWindow(scope,input,366); }
+  catch { return fail('That window could not be understood.', { code: SERVICE_CODES.invalidInput }); }
+  const result=await readCalendarAvailability(scope.db,scope.familyId,window.bounds,scope.tz);
+  if(result.error)return fail(describeDbError(result.error,'Could not load the calendar.'),{code:SERVICE_CODES.db});
+  try {
+    // Qualify the entire complete input before either personal or family advice.
+    const advisories=buildConflictAdvisories(result.data,{timezone:scope.tz});
+    const native=result.data.filter(row=>row.kind==='native');
+    const events=native.map(row=>row.event);
+    validateCalendarRows(scope,events);
+    const conflictEvents:ConflictEvent[]=native.map(row=>({
+      id:row.event.id,title:row.title,starts_at:row.starts_at,ends_at:row.ends_at,all_day:row.all_day,assignee_id:row.assignee_id,
+      occurrenceKey:row.occurrenceKey,reference:row.reference,
+    }));
+    // Real native action identities and occurrence identities stay separate.
+    const byId=Object.fromEntries(events.map(event=>[event.id,event]));
+    const subjects=Object.fromEntries(native.map(row=>[row.occurrenceKey,conflictSubject(row)]));
+    return ok({conflicts:detectConflicts(conflictEvents,DEFAULT_DURATION_MIN),events:byId,advisories,subjects});
+  } catch { return fail('Could not load the calendar.',{code:SERVICE_CODES.db}); }
 }
 
 export type WorkingHours = { startHour: number; endHour: number };
@@ -542,27 +716,31 @@ export type FindFreeSlotsInput = {
  * whole family being unavailable.
  */
 export async function findFreeSlots(scope: ServiceScope, input: FindFreeSlotsInput): Promise<ServiceResult<FreeSlot[]>> {
+  if (typeof scope.tz !== 'string' || !scope.tz.trim() || !isValidTimezone(scope.tz)
+    || typeof scope.familyId !== 'string' || !scope.familyId.trim()) return fail('That search window could not be understood.', { code: SERVICE_CODES.invalidInput });
   const durationMin = Math.max(Math.round(input.durationMin), 5);
   if (!Number.isFinite(durationMin)) return fail('That duration could not be understood.', { code: SERVICE_CODES.invalidInput });
 
   const now = scopeNow(scope);
-  const fromMs = Date.parse(isoOrNull(input.from) ?? now.toISOString());
-  const toMs = Date.parse(isoOrNull(input.to) ?? new Date(fromMs + 7 * 24 * 3600_000).toISOString());
-  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) {
+  let fromIso: string, toIso: string, fromExact: bigint, toExact: bigint;
+  try {
+    fromIso=normalizeCalendarWindowInstant(input.from??now.toISOString(),scope.tz);
+    toIso=normalizeCalendarWindowInstant(input.to??addExactMilliseconds(fromIso,7*24*3600_000),scope.tz);
+    fromExact=parseExactInstant(fromIso);toExact=parseExactInstant(toIso);
+    if(toExact<=fromExact)throw new Error('Invalid window');
+  } catch {
     return fail('That search window could not be understood.', { code: SERVICE_CODES.invalidInput });
   }
-
-  const fromIso = new Date(fromMs).toISOString();
-  const toIso = new Date(toMs).toISOString();
+  const fromMs=exactInstantMilliseconds(fromExact),toMs=exactInstantMilliseconds(toExact);
   const members = input.memberIds?.filter(Boolean) ?? [];
 
+  // Series included: a weekly practice is busy every week, not the week it
+  // was created. `to` is inclusive, as the row read's `lte` was.
+  const tz = scope.tz;
   const [calendar, school, sports] = await settleAll([
-    scope.db.from('calendar_events').select('starts_at, ends_at, all_day, assignee_id')
-      .eq('family_id', scope.familyId).gte('starts_at', fromIso).lte('starts_at', toIso),
-    scope.db.from('school_events').select('starts_at, ends_at, member_id')
-      .eq('family_id', scope.familyId).gte('starts_at', fromIso).lte('starts_at', toIso),
-    scope.db.from('sports_events').select('starts_at, ends_at, member_id')
-      .eq('family_id', scope.familyId).gte('starts_at', fromIso).lte('starts_at', toIso),
+    readCalendarAvailability(scope.db, scope.familyId, instantCalendarBounds(fromIso, toIso, tz), tz),
+    readCalendarBusySource(scope.db, scope.familyId, 'school_events', fromIso, toIso, tz),
+    readCalendarBusySource(scope.db, scope.familyId, 'sports_events', fromIso, toIso, tz),
   ]);
 
   // A free-slot suggestion is a source-of-truth read: a partial answer would
@@ -575,32 +753,26 @@ export async function findFreeSlots(scope: ServiceScope, input: FindFreeSlotsInp
   }
 
   const busy: Interval[] = [];
-  const push = (startsAt: string, endsAt: string | null, allDay: boolean) => {
-    const start = Date.parse(startsAt);
-    if (!Number.isFinite(start)) return;
-    if (allDay) {
-      // An all-day row blocks the family-local day it falls on, not a UTC day.
-      const key = dayKeyInTz(new Date(start), scope.tz);
-      const dayStart = zonedTimeMs(key, 0, 0, scope.tz);
-      busy.push({ start: dayStart, end: dayStart + 24 * 3600_000 });
-      return;
-    }
-    const parsedEnd = endsAt ? Date.parse(endsAt) : Number.NaN;
-    const end = Number.isFinite(parsedEnd) && parsedEnd > start ? parsedEnd : start + DEFAULT_DURATION_MIN * MINUTE_MS;
-    busy.push({ start, end });
+  const push = (startsAt: string, endsAt: string | null) => {
+    const start=parseExactInstant(startsAt),end=endsAt===null?start+BigInt(DEFAULT_DURATION_MIN*MINUTE_MS)*1_000_000n:parseExactInstant(endsAt);
+    if(end===start)return;
+    if(end<start)throw new Error('Invalid busy interval');
+    busy.push({start:exactInstantMilliseconds(start),end:exactInstantMilliseconds(end),exactInterval:{start:startsAt,end:endsAt??formatExactInstant(end)}});
   };
 
   for (const e of calendar.data ?? []) {
-    if (members.length > 0 && e.assignee_id && !members.includes(e.assignee_id)) continue;
-    push(e.starts_at, e.ends_at, e.all_day);
+    if (!e.occupied || members.length > 0 && e.attribution.kind === 'member' && !members.includes(e.attribution.memberId)) continue;
+    // Source attendee identities are not household membership. Unmapped source
+    // and native unassigned commitments conservatively occupy every member.
+    busy.push({...e.interval,exactInterval:exactIntervalOf(e)});
   }
   for (const e of school.data ?? []) {
     if (members.length > 0 && e.member_id && !members.includes(e.member_id)) continue;
-    push(e.starts_at, e.ends_at, false);
+    push(e.starts_at, e.ends_at);
   }
   for (const e of sports.data ?? []) {
     if (members.length > 0 && e.member_id && !members.includes(e.member_id)) continue;
-    push(e.starts_at, e.ends_at, false);
+    push(e.starts_at, e.ends_at);
   }
 
   const hours = input.workingHours ?? { startHour: 8, endHour: 21 };
@@ -610,7 +782,9 @@ export async function findFreeSlots(scope: ServiceScope, input: FindFreeSlotsInp
     const close = zonedTimeMs(key, hours.endHour, 0, scope.tz);
     const start = Math.max(open, fromMs, now.getTime());
     const end = Math.min(close, toMs);
-    if (Number.isFinite(start) && Number.isFinite(end) && end > start) windows.push({ start, end });
+    const exactStart=[fromExact,BigInt(open)*1_000_000n,BigInt(now.getTime())*1_000_000n].reduce((a,b)=>a>b?a:b);
+    const exactEnd=toExact<BigInt(close)*1_000_000n?toExact:BigInt(close)*1_000_000n;
+    if (Number.isFinite(start) && Number.isFinite(end) && exactEnd > exactStart) windows.push({ start, end,exactInterval:{start:formatExactInstant(exactStart),end:formatExactInstant(exactEnd)} });
   }
 
   const merged = mergeIntervals(busy);
@@ -620,18 +794,19 @@ export async function findFreeSlots(scope: ServiceScope, input: FindFreeSlotsInp
 
   const slots: FreeSlot[] = [];
   for (const window of windows) {
-    for (const gap of freeGaps(merged, window.start, window.end)) {
-      let start = gap.start;
-      const remainder = start % granMs;
-      if (remainder !== 0) start += granMs - remainder;
-      while (start + durationMs <= gap.end) {
+    for (const gap of freeGaps(merged, window.start, window.end,window.exactInterval)) {
+      const exact=intervalTicks(gap),granularity=BigInt(granMs)*1_000_000n,duration=BigInt(durationMs)*1_000_000n;
+      let start = exact.start;
+      const remainder = (start % granularity+granularity)%granularity;
+      if (remainder !== 0n) start += granularity - remainder;
+      while (start + duration <= exact.end) {
         slots.push({
-          startsAt: new Date(start).toISOString(),
-          endsAt: new Date(start + durationMs).toISOString(),
-          dayKey: dayKeyInTz(new Date(start), scope.tz),
+          startsAt: formatExactInstant(start),
+          endsAt: formatExactInstant(start + duration),
+          dayKey: dayKeyInTz(new Date(exactInstantMilliseconds(start)), scope.tz),
         });
         if (slots.length >= limit) return ok(slots);
-        start += granMs;
+        start += granularity;
       }
     }
   }
@@ -647,39 +822,40 @@ export async function busyEvenings(
   scope: ServiceScope,
   input: { from?: string | null; to?: string | null; eveningFromHour?: number } = {},
 ): Promise<ServiceResult<string[]>> {
-  const now = scopeNow(scope);
-  const fromMs = Date.parse(isoOrNull(input.from) ?? now.toISOString());
-  const toMs = Date.parse(isoOrNull(input.to) ?? new Date(fromMs + 7 * 24 * 3600_000).toISOString());
-  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) {
-    return fail('That window could not be understood.', { code: SERVICE_CODES.invalidInput });
-  }
-
-  const fromIso = new Date(fromMs).toISOString();
-  const toIso = new Date(toMs).toISOString();
-  const [calendar, sports] = await settleAll([
-    scope.db.from('calendar_events').select('starts_at, all_day')
-      .eq('family_id', scope.familyId).gte('starts_at', fromIso).lte('starts_at', toIso),
-    scope.db.from('sports_events').select('starts_at')
-      .eq('family_id', scope.familyId).gte('starts_at', fromIso).lte('starts_at', toIso),
+  const hour=input.eveningFromHour??17;
+  if(!Number.isInteger(hour)||hour<0||hour>23)return fail('That window could not be understood.',{code:SERVICE_CODES.invalidInput});
+  let window:ReturnType<typeof analysisWindow>;
+  const evenings:{day:string;start:number;end:number}[]=[];
+  try {
+    window=analysisWindow(scope,input,7);
+    for(let day=window.bounds.allDayFromDay;day<window.bounds.allDayToDay;day=addDays(day,1)){
+      if(evenings.length>=367)throw new Error('Calendar day bound exceeded');
+      const actual=calendarDisplayDay(day,scope.tz);
+      const [year,month,date]=day.split('-').map(Number);
+      const threshold=instantForIcsLocalTime(year,month,date,hour*60,scope.tz);
+      if(!threshold)throw new Error('Invalid evening boundary');
+      evenings.push({day,start:Math.max(window.from,actual.start,threshold.getTime()),end:Math.min(window.to,actual.end)});
+    }
+  } catch { return fail('That window could not be understood.',{code:SERVICE_CODES.invalidInput}); }
+  const [calendar,sports]=await settleAll([
+    readCalendarAvailability(scope.db,scope.familyId,window.bounds,scope.tz),
+    readCalendarBusySource(scope.db,scope.familyId,'sports_events',new Date(window.from).toISOString(),new Date(window.to).toISOString(),scope.tz),
   ]);
-  if (calendar.error || sports.error) {
-    console.error('[service:calendar] busy evenings read failed', calendar.error ?? sports.error);
-    return fail(describeDbError(calendar.error ?? sports.error, 'Could not check the week ahead.'), { code: SERVICE_CODES.db });
-  }
-
-  const eveningHour = input.eveningFromHour ?? 17;
-  const keys = new Set<string>();
-  const consider = (startsAt: string, allDay: boolean) => {
-    const ms = Date.parse(startsAt);
-    if (!Number.isFinite(ms)) return;
-    const key = dayKeyInTz(new Date(ms), scope.tz);
-    // An all-day commitment consumes the evening too.
-    if (allDay || ms >= zonedTimeMs(key, eveningHour, 0, scope.tz)) keys.add(key);
-  };
-  for (const e of calendar.data ?? []) consider(e.starts_at, e.all_day);
-  for (const e of sports.data ?? []) consider(e.starts_at, false);
-
-  return ok([...keys].sort());
+  if(calendar.error||sports.error)return fail(describeDbError(calendar.error??sports.error,'Could not check the week ahead.'),{code:SERVICE_CODES.db});
+  try {
+    const intervals:Interval[]=(calendar.data??[]).filter(row=>row.occupied).map(row=>({...row.interval,exactInterval:exactIntervalOf(row)}));
+    for(const row of sports.data??[]){
+      if(typeof row.id!=='string'||!row.id.trim())throw new Error('Invalid sports identity');
+      const interval=nativeInterval({...row,all_day:false});
+      if(interval.allDay)throw new Error('Invalid sports interval');
+      intervals.push(interval);
+    }
+    return ok(evenings.filter(evening=>{
+      const start=window.exactFrom>BigInt(evening.start)*1_000_000n?window.exactFrom:BigInt(evening.start)*1_000_000n;
+      const end=window.exactTo<BigInt(evening.end)*1_000_000n?window.exactTo:BigInt(evening.end)*1_000_000n;
+      return end>start&&intervals.some(interval=>{const exact=intervalTicks(interval);return exact.start<end&&exact.end>start&&exact.end>exact.start;});
+    }).map(evening=>evening.day));
+  } catch { return fail('Could not check the week ahead.',{code:SERVICE_CODES.db}); }
 }
 
 /**
@@ -692,12 +868,12 @@ export async function rescheduleAfter(
   eventId: string,
   input: { startsAt: string },
 ): Promise<ServiceResult<CalendarEvent>> {
-  const startsAt = isoOrNull(input.startsAt);
+  const startsAt = normalizeCalendarWriteInstant(input.startsAt, scope.tz);
   if (!startsAt) return fail('That new time could not be understood.', { code: SERVICE_CODES.invalidInput });
 
   const { data: existing, error: readError } = await scope.db
     .from('calendar_events')
-    .select('id, title, starts_at, ends_at')
+    .select('id, title, starts_at, ends_at, all_day')
     .eq('id', eventId)
     .eq('family_id', scope.familyId)
     .maybeSingle();
@@ -707,16 +883,14 @@ export async function rescheduleAfter(
   }
   if (!existing) return fail('That event could not be found.', { code: SERVICE_CODES.notFound });
 
-  const previousStart = Date.parse(existing.starts_at);
-  const previousEnd = existing.ends_at ? Date.parse(existing.ends_at) : Number.NaN;
-  const durationMs = Number.isFinite(previousEnd) && Number.isFinite(previousStart) && previousEnd > previousStart
-    ? previousEnd - previousStart
-    : null;
-
-  return updateEvent(scope, eventId, {
-    startsAt,
-    endsAt: durationMs === null ? null : new Date(Date.parse(startsAt) + durationMs).toISOString(),
-  });
+  if (!validEventRange(existing.starts_at, existing.ends_at, existing.all_day)) {
+    return fail('Choose valid event date boundaries.', { code: SERVICE_CODES.invalidInput });
+  }
+  const duration = existing.ends_at === null ? null : parseExactInstant(existing.ends_at) - parseExactInstant(existing.starts_at);
+  return applyEventUpdate(scope, eventId, {
+    startsAt: input.startsAt,
+    endsAt: duration === null ? null : formatExactInstant(parseExactInstant(startsAt) + duration),
+  }, existing);
 }
 
 // ─── RSVPs ──────────────────────────────────────────────────────────────────
@@ -751,30 +925,43 @@ export type ResolvedEvent = { id: string; title: string; starts_at: string; fami
  * one weekly lesson are not a question, whereas "game" matching both
  * "Board game night" and "Away game vs Fairview" is, and the caller is told
  * both so they can say which.
+ *
+ * "Next occurrence" has to include a SERIES whose row started months ago: a
+ * weekly swim lesson is one row with an August `starts_at`, and read by that
+ * column alone it was "already happened" from its second week on. The series
+ * is expanded here (lib/calendar/occurrences.ts), and the event handed back
+ * carries the next occurrence's time; one row is still one candidate, so a
+ * lesson that fills the year does not crowd out a differently-named match.
  */
 export async function findEventByTitle(
   db: ServiceScope['db'],
   familyId: string,
   title: string,
   nowIso: string,
+  timezone = 'UTC',
 ): Promise<ServiceResult<ResolvedEvent>> {
   const needle = title.trim();
   if (!needle) return fail('Which event? Give me its name.', { code: SERVICE_CODES.invalidInput });
 
-  const { data, error } = await db
-    .from('calendar_events')
-    .select('id, title, starts_at, family_id')
-    .eq('family_id', familyId)
-    .ilike('title', `%${escapeLike(needle)}%`)
-    .gte('starts_at', nowIso)
-    .order('starts_at', { ascending: true })
-    .limit(RSVP_TITLE_CANDIDATES);
-  if (error) {
-    console.error('[service:calendar] rsvp event lookup failed', error);
-    return fail(describeDbError(error, 'Could not look up that event.'), { code: SERVICE_CODES.db });
+  const tz = isValidTimezone(timezone) ? timezone : 'UTC';
+  const bounds = instantCalendarBounds(nowIso, new Date(Date.parse(nowIso) + SEARCH_SERIES_HORIZON_MS - 1).toISOString(), tz);
+  const res = await readCalendarOccurrences(db, familyId, bounds, tz, {
+    columns: ['id', 'title', 'starts_at', 'family_id'],
+    singlesFilter: calendarOpenWindowFilter(bounds),
+    singlesLimit: RSVP_TITLE_CANDIDATES,
+    refine: (query) => query.ilike('title', `%${escapeLike(needle)}%`),
+  });
+  if (res.error) {
+    console.error('[service:calendar] rsvp event lookup failed', res.error);
+    return fail(describeDbError(res.error, 'Could not look up that event.'), { code: SERVICE_CODES.db });
   }
 
-  const upcoming = (data ?? []) as ResolvedEvent[];
+  // Soonest first, one entry per row: a series' first occurrence stands for it.
+  const nextById = new Map<string, ResolvedEvent>();
+  for (const row of res.data) {
+    if (!nextById.has(row.id)) nextById.set(row.id, { id: row.id, title: row.title, starts_at: row.starts_at, family_id: row.family_id });
+  }
+  const upcoming = [...nextById.values()].slice(0, RSVP_TITLE_CANDIDATES);
   if (!upcoming.length) {
     // Deliberately not falling back to a past event: answering for something
     // that already happened is never what was asked, and reporting it as done
@@ -843,7 +1030,7 @@ export async function rsvpToEvent(scope: ServiceScope, input: RsvpInput): Promis
     if (!data) return fail('That event could not be found.', { code: SERVICE_CODES.notFound });
     event = data as ResolvedEvent;
   } else {
-    const found = await findEventByTitle(scope.db, scope.familyId, byTitle as string, scopeNow(scope).toISOString());
+    const found = await findEventByTitle(scope.db, scope.familyId, byTitle as string, scopeNow(scope).toISOString(), scope.tz);
     if (!found.ok) return found;
     event = found.data;
   }

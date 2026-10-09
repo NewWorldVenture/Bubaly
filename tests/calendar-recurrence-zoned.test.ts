@@ -19,6 +19,20 @@ const ev = (over: Partial<RecurrableEvent>): RecurrableEvent => ({
   recurrence: 'weekly', recurrence_until: null, ...over,
 });
 
+describe('native Gregorian recurrence across the year0099 boundary', () => {
+  it.each([
+    ['daily', '0099-12-29', '0099-12-30', '0100-01-02', ['0099-12-30T09:00:00.000Z', '0099-12-31T09:00:00.000Z', '0100-01-01T09:00:00.000Z']],
+    ['daily', '0099-12-31', '0100-01-01', '0100-01-03', ['0100-01-01T09:00:00.000Z', '0100-01-02T09:00:00.000Z']],
+    ['weekly', '0099-12-25', '0100-01-01', '0100-01-09', ['0100-01-01T09:00:00.000Z', '0100-01-08T09:00:00.000Z']],
+    ['daily', '2025-12-31', '2026-01-01', '2026-01-03', ['2026-01-01T09:00:00.000Z', '2026-01-02T09:00:00.000Z']],
+    ['weekly', '2025-12-25', '2026-01-01', '2026-01-09', ['2026-01-01T09:00:00.000Z', '2026-01-08T09:00:00.000Z']],
+  ] as const)('steps %s from %s without century remapping', (recurrence, seed, from, to, expected) => {
+    const result = expandEventsInZone([ev({ recurrence, starts_at: `${seed}T09:00:00.000Z` })],
+      new Date(`${from}T00:00:00.000Z`), new Date(`${to}T00:00:00.000Z`), 'UTC', false, { requireComplete: true });
+    expect(result.map(item => item.starts_at)).toEqual(expected);
+  });
+});
+
 describe('a weekly event stays at the time it was set, across a clock change', () => {
   it('keeps 6pm at 6pm through the autumn fall-back', () => {
     // 14 Oct 18:00 in New York is 22:00 UTC (EDT, UTC-4). Three weeks later New
@@ -72,16 +86,18 @@ describe('a weekly event stays at the time it was set, across a clock change', (
     }
   });
 
-  it('moves an occurrence forward when its local time does not exist that morning', () => {
+  it('reads an occurrence whose local time does not exist that morning with the offset before the gap', () => {
     // 8 March 2026, New York: 02:00 becomes 03:00 and 02:30 never happens. The
-    // occurrence must still occur — at the first minute that exists — rather
-    // than being dropped for that week.
+    // occurrence must still occur rather than being dropped for that week, and
+    // RFC 5545 §3.3.5 says where: 02:30 at the offset in force before the gap
+    // (EST, -5), 07:30Z, which the clock shows as 03:30 EDT.
     const out = expandEventsInZone(
       [ev({ starts_at: '2026-03-01T07:30:00.000Z' })], // 1 March 02:30 EST
       new Date('2026-03-08T00:00:00Z'), new Date('2026-03-09T12:00:00Z'), NY,
     );
     expect(out).toHaveLength(1);
-    expect(local(out[0].starts_at)).toBe('08/03/2026, 03:00');
+    expect(out[0].starts_at).toBe('2026-03-08T07:30:00.000Z');
+    expect(local(out[0].starts_at)).toBe('08/03/2026, 03:30');
   });
 });
 

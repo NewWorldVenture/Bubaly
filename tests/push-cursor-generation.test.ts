@@ -9,16 +9,16 @@ const id='00000000-0000-4000-8000-000000000001',previous='00000000-0000-4000-800
 const now=new Date('2026-10-02T01:00:00Z');
 const cursor=(n=id)=>({version:1,createdAt:now.toISOString(),id:n});
 function deferred(){let resolve!:()=>void;const promise=new Promise<void>(r=>{resolve=r});return {promise,resolve};}
-function fixture({advances=false,inactive=false,receiptError=false,generation='',outcome='sent',twoRows=false,claimError=false,emptyClaim=false}={}){
+function fixture({advances=false,inactive=false,receiptError=false,generation='',outcome='sent',twoRows=false,claimError=false,emptyClaim=false,messageBacklog=false}={}){
   const settings:Record<string,unknown>={'push_dispatch_cursor:v1:global':cursor(advances?previous:id),'push_dispatch_cursor:v1:family:family':cursor(advances?previous:id)};
   const notice:any={id,family_id:'family',user_id:'recipient',title:'Synthetic ordinary reminder',body:'Synthetic neutral content',created_at:now.toISOString(),send_at:now.toISOString(),pushed_at:null};
   if(generation)for(const key of Object.keys(settings))settings[key]={...(settings[key] as object),generation};
-  const tables:any={notifications:twoRows?[notice,{...notice,id:'00000000-0000-4000-8000-000000000002'}]:[notice],family_members:[{id:'member',family_id:'family',user_id:'recipient',role:'parent',is_active:!inactive}],user_preferences:[],family_ai_settings:[],push_devices:[{id:'device',user_id:'recipient',provider:'fcm',platform:'android',enabled:true,token:'synthetic-token'}],push_deliveries:[]};
+  const tables:any={notifications:messageBacklog?[{...notice,id:previous,related_type:'family_message'},notice]:twoRows?[notice,{...notice,id:'00000000-0000-4000-8000-000000000002'}]:[notice],family_members:[{id:'member',family_id:'family',user_id:'recipient',role:'parent',is_active:!inactive}],user_preferences:[],family_ai_settings:[],push_devices:[{id:'device',user_id:'recipient',provider:'fcm',platform:'android',enabled:true,token:'synthetic-token'}],push_deliveries:[]};
   const requests:any[]=[];const firstPending=deferred(),bothPending=deferred(),releasePending=deferred(),bothClaims=deferred(),releaseSend=deferred();let barrier=false,pendingReads=0,claims=0,sends=0;
   const fetcher:typeof fetch=async(input,init)=>{
     const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);if(url.origin!=='https://synthetic.invalid')throw Error('Unexpected origin');
     const table=url.pathname.split('/').at(-1)!;const method=init?.method??'GET';const body=init?.body?JSON.parse(String(init.body)):null;
-    requests.push({table,method,query:Object.fromEntries(url.searchParams),body});
+    requests.push({table,method,query:Object.fromEntries(url.searchParams),ors:url.searchParams.getAll('or'),body});
     const reply=(data:any,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json'}});
     const object=(rows:any[])=>String((init?.headers as any)?.Accept??(init?.headers as any)?.accept??'').includes('vnd.pgrst.object')?(rows[0]??null):rows;
     if(table==='app_settings'){
@@ -36,7 +36,7 @@ function fixture({advances=false,inactive=false,receiptError=false,generation=''
     if(table==='push_deliveries'&&receiptError&&method==='GET')return reply({code:'XX000',message:'Synthetic receipt refusal'},500);
     const matches=(row:any)=>[...url.searchParams].every(([key,raw])=>{
       if(['select','order','limit','offset','on_conflict'].includes(key))return true;
-      if(key==='or') {const wrap=raw.includes('created_at.lt.'); const keyCursor={id:raw.match(/id\.(?:lte|gt)\.([^),]+)/)![1]}; const equalTime=row.created_at===now.toISOString();return wrap?(row.created_at<now.toISOString()||(equalTime&&row.id<=keyCursor.id)):(row.created_at>now.toISOString()||(equalTime&&row.id>keyCursor.id));}
+      if(key==='or') { if(raw.includes('related_type.is.null')) return row.related_type==null || row.related_type!=='family_message'; const wrap=raw.includes('created_at.lt.'); const keyCursor={id:raw.match(/id\.(?:lte|gt)\.([^),]+)/)![1]}; const equalTime=row.created_at===now.toISOString();return wrap?(row.created_at<now.toISOString()||(equalTime&&row.id<=keyCursor.id)):(row.created_at>now.toISOString()||(equalTime&&row.id>keyCursor.id));}
       const [op,...parts]=raw.split('.');const value=parts.join('.');
       if(op==='eq')return String(row[key])===value;if(op==='is')return value==='null'?row[key]===null:false;
       if(op==='lte')return row[key]<=value;if(op==='in')return value.slice(1,-1).split(',').map(v=>v.replaceAll('"','')).includes(String(row[key]));
@@ -74,6 +74,17 @@ describe('push cursor overlap actual SDK boundary',()=>{
  it('one existing scope delivers a wrapped same-cursor batch only once',async()=>{const f=fixture();const results=await overlap(f);expect(f.requests.filter(r=>r.table==='app_settings'&&r.method==='PATCH')).toHaveLength(2);expect(f.tables.push_deliveries).toHaveLength(1);expect(f.sends).toBe(1);expect(results.reduce((n,r)=>n+r.result.sent,0)).toBe(1);});
  it('changing the cursor preserves the existing single-winner guard',async()=>{const f=fixture({advances:true});const results=await overlap(f);expect(f.sends).toBe(1);expect(results.reduce((n,r)=>n+r.result.sent,0)).toBe(1);expect(results.some(r=>r.notifications===0)).toBe(true);});
  it('normal one-worker wrap still delivers and acknowledges',async()=>{const f=fixture();f.releaseSend.resolve();const result=await dispatchPendingPushes(f.db as any,{now});expect(result.result.sent).toBe(1);expect(f.notice.pushed_at).toBeTruthy();expect(f.tables.push_deliveries).toHaveLength(1);});
+ it('keeps chat exclusion and cursor filters on the actual SDK URL',async()=>{
+  const f=fixture({messageBacklog:true});f.releaseSend.resolve();
+  const result=await dispatchPendingPushes(f.db as any,{now,limit:1});
+  expect(result.notifications).toBe(1);expect(result.result.sent).toBe(1);
+  const reads=f.requests.filter(r=>r.table==='notifications'&&r.method==='GET');
+  expect(reads.length).toBeGreaterThan(0);
+  expect(reads.every(r=>Array.isArray(r.ors)&&r.ors.length===2)).toBe(true);
+  expect(reads[0].ors[0]).toBe('(related_type.is.null,related_type.neq.family_message)');
+  expect(reads[0].ors[1]).toContain('created_at.gt.');
+  expect(f.tables.notifications[0].pushed_at).toBeNull();expect(f.notice.pushed_at).toBeTruthy();
+ });
  it('sequential global then family does not send an acknowledged row again',async()=>{const f=fixture();f.releaseSend.resolve();await dispatchPendingPushes(f.db as any,{now});expect((await dispatchPendingPushes(f.db as any,{familyId:'family',now})).notifications).toBe(0);expect(f.sends).toBe(1);});
  it('refused receipt read sends and acknowledges nothing',async()=>{const f=fixture({receiptError:true});f.releaseSend.resolve();await expect(dispatchPendingPushes(f.db as any,{now})).rejects.toThrow('Push receipt read failed');expect(f.sends).toBe(0);expect(f.notice.pushed_at).toBeNull();});
  it('inactive membership remains withheld',async()=>{const f=fixture({inactive:true});f.releaseSend.resolve();expect((await dispatchPendingPushes(f.db as any,{now})).result.withheld).toBe(1);expect(f.sends).toBe(0);});

@@ -31,7 +31,7 @@ const hooks = {
 };
 vi.doMock(resolveNative('react'), async () => ({ ...await vi.importActual<Record<string, unknown>>(resolveNative('react')), ...hooks }));
 vi.doMock(resolveNative('react-native'), () => ({ AppState: { currentState: 'active', addEventListener: () => ({ remove: vi.fn() }) },
-  FlatList: 'FlatList', KeyboardAvoidingView: 'KeyboardAvoidingView', Linking: { openURL: vi.fn() }, Platform: { OS: 'ios' }, Pressable: 'Pressable', View: 'View' }));
+  FlatList: 'FlatList', KeyboardAvoidingView: 'KeyboardAvoidingView', Linking: { openURL: vi.fn() }, Platform: { OS: 'ios' }, Pressable: 'Pressable', ScrollView: 'ScrollView', View: 'View' }));
 vi.doMock(resolveNative('expo-router'), () => ({ useFocusEffect: (effect: () => void) => hooks.useEffect(effect, []) }));
 vi.doMock(resolveNative('expo-crypto'), () => ({ randomUUID: () => `conversation-${++nextId}` }));
 vi.doMock(resolveNative('expo-audio'), () => ({ RecordingPresets: { HIGH_QUALITY: {} }, requestRecordingPermissionsAsync: async () => ({ granted: true }),
@@ -43,6 +43,9 @@ for (const name of ['AppText', 'Field', 'GlassCard', 'Pill', 'Screen']) {
 vi.doMock('../mobile/src/theme/theme', () => ({ useTheme: () => ({ colors: {}, spacing: [0, 1, 2, 3, 4, 5], radius: {}, glass: {} }) }));
 vi.doMock('../mobile/src/lib/config', () => ({ config: { apiUrl: 'https://www.bubaly.com' }, webUrl: (path: string) => path }));
 const ask = vi.fn();
+const fetchConversations = vi.fn();
+const fetchHistory = vi.fn();
+vi.doMock('../mobile/src/lib/assistant-history', async () => ({ ...await vi.importActual<Record<string, unknown>>('../mobile/src/lib/assistant-history'), fetchAssistantConversations: fetchConversations, fetchAssistantHistory: fetchHistory }));
 vi.doMock('../mobile/src/lib/api', async () => ({ ...await vi.importActual<Record<string, unknown>>('../mobile/src/lib/api'), askAssistant: ask }));
 const family = { familyId: 'family-a', familyName: 'Private household A', timezone: 'UTC', memberId: 'member-a', role: 'parent', displayName: 'Parent' };
 type Session = { user: { id: string }; access_token: string };
@@ -69,7 +72,7 @@ type Node = { type: unknown; props: Record<string, unknown> };
 function nodes(value: unknown): Node[] {
   if (Array.isArray(value)) return value.flatMap(nodes);
   if (!value || typeof value !== 'object' || !('props' in value)) return [];
-  const node = value as Node; return [node, ...nodes(node.props.children), ...nodes(node.props.right)];
+  const node = value as Node; return [node, ...nodes(node.props.children), ...nodes(node.props.right), ...nodes(node.props.ListHeaderComponent), ...nodes(node.props.ListFooterComponent)];
 }
 function find(tree: unknown, type: string, label?: string) {
   const value = nodes(tree).find((node) => node.type === type && (!label || node.props.accessibilityLabel === label));
@@ -85,9 +88,97 @@ const settle = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(
 beforeEach(() => {
   slots.length = 0; cursor = 0; effects = []; queued = []; holdUpdates = false; nextId = 0;
   ask.mockReset().mockResolvedValue({ conversationId: 'server-conversation', content: 'Private answer A', actions: [], persisted: true });
+  fetchConversations.mockReset().mockResolvedValue({ conversations: [{ id: 'saved-a', title: 'Saved A' }, { id: 'saved-b', title: 'Saved B' }], hasMore: false });
+  fetchHistory.mockReset().mockImplementation(async (_db, _owner, id) => ({ messages: [{ id: `${id}-message`, role: 'assistant', content: `Private history ${id}` }], before: null }));
   passwordSignIn.mockReset().mockResolvedValue({ error: null });
   auth = { ready: true, restoring: false, session: session('user-a'), accessToken: 'token-user-a', family: { ...family }, familyLoading: false, familyError: null,
     signIn: vi.fn(), signOut: vi.fn(), refreshFamily: vi.fn(), freshFamily: async () => ({ ok: true, family: auth.family }) };
+});
+
+describe('native saved assistant conversations', () => {
+  const showHistory = async () => { click(render(), 'Saved conversations'); await settle(); return render(); };
+  it('opens saved chats under the current owner and restores a draft to its own chat', async () => {
+    render(); flushEffects(); await showHistory(); click(render(), 'Saved A'); await settle();
+    draft(render(), 'Draft A');
+    await showHistory(); click(render(), 'Saved B'); await settle();
+    expect(find(render(), 'Field').props.value).toBe('');
+    draft(render(), 'Draft B');
+    await showHistory(); click(render(), 'Saved A'); await settle();
+    expect(find(render(), 'Field').props.value).toBe('Draft A');
+    expect(fetchConversations.mock.calls[0][1]).toEqual({ userId: 'user-a', familyId: 'family-a' });
+    expect(fetchHistory.mock.calls[0][1]).toEqual({ userId: 'user-a', familyId: 'family-a' });
+    expect(find(render(), 'FlatList').props.data).toMatchObject([{ content: 'Private history saved-a' }]);
+    click(render(), 'Send'); await settle();
+    expect(ask).toHaveBeenLastCalledWith(expect.objectContaining({ conversationId: 'saved-a', message: 'Draft A' }));
+  });
+
+  it.each(['reset', 'owner', 'newer-read'])('ignores a held history response after %s and aborts the obsolete read', async (reason) => {
+    let resolve!: (value: unknown) => void;
+    fetchHistory.mockReturnValueOnce(new Promise((done) => { resolve = done; }));
+    render(); flushEffects(); await showHistory(); click(render(), 'Saved A'); await settle();
+    expect(find(render(), 'Field').props.editable).toBe(false);
+    const signal = fetchHistory.mock.calls[0][3] as AbortSignal;
+    if (reason === 'reset') click(render(), 'New conversation');
+    if (reason === 'owner') { auth.session = session('user-b'); render(); flushEffects(); }
+    if (reason === 'newer-read') { click(render(), 'Saved B'); await settle(); }
+    render(); resolve({ messages: [{ id: 'late', role: 'assistant', content: 'Private late A' }], before: null }); await settle();
+    expect(signal.aborted).toBe(true);
+    expect(JSON.stringify(find(render(), 'FlatList').props.data)).not.toContain('Private late A');
+    if (reason === 'owner') expect(nodes(render()).some((node) => node.props.accessibilityLabel === 'Saved A')).toBe(false);
+  });
+
+  it('keeps the current messages and draft after a failed read, and retries only that read', async () => {
+    render(); flushEffects(); await showHistory(); click(render(), 'Saved A'); await settle(); draft(render(), 'Keep my draft');
+    await showHistory(); fetchHistory.mockRejectedValueOnce(new Error('offline')); click(render(), 'Saved B'); await settle();
+    expect(find(render(), 'FlatList').props.data).toMatchObject([{ content: 'Private history saved-a' }]);
+    expect(find(render(), 'Field').props.value).toBe('Keep my draft');
+    click(render(), 'Retry conversation history'); await settle();
+    expect(fetchHistory.mock.calls.at(-1)?.[2]).toBe('saved-b');
+    expect(find(render(), 'FlatList').props.data).toMatchObject([{ content: 'Private history saved-b' }]);
+    expect(ask).not.toHaveBeenCalled();
+  });
+
+  it('loads older saved history without losing the current transcript or resending anything', async () => {
+    const before = { id: 'before-id', created_at: '2026-10-01T00:00:00Z' };
+    fetchHistory.mockResolvedValueOnce({ messages: [{ id: 'new', role: 'assistant', content: 'Latest' }], before });
+    render(); flushEffects(); await showHistory(); click(render(), 'Saved A'); await settle();
+    fetchHistory.mockResolvedValueOnce({ messages: [{ id: 'old', role: 'user', content: 'Earlier' }], before: null });
+    click(render(), 'Load earlier messages'); await settle();
+    expect(fetchHistory.mock.calls.at(-1)?.[4]).toEqual(before);
+    expect(find(render(), 'FlatList').props.data).toMatchObject([{ content: 'Earlier' }, { content: 'Latest' }]);
+    expect(ask).not.toHaveBeenCalled();
+  });
+
+  it('Stop aborts the receiver, keeps the sent question, and offers history review without retrying the action', async () => {
+    let resolve!: (value: unknown) => void; ask.mockReturnValueOnce(new Promise((done) => { resolve = done; }));
+    render(); flushEffects(); draft(render(), 'Send groceries'); click(render(), 'Send'); await settle();
+    click(render(), 'Stop');
+    expect((ask.mock.calls[0][0].signal as AbortSignal).aborted).toBe(true);
+    resolve({ content: 'Late private answer', persisted: true }); await settle();
+    expect(find(render(), 'FlatList').props.data).toMatchObject([{ role: 'user', content: 'Send groceries' }]);
+    expect(find(render(), 'Pressable', 'Review saved conversation')).toBeDefined();
+    click(render(), 'Review saved conversation'); await settle();
+    expect(fetchHistory).toHaveBeenCalledTimes(1); expect(ask).toHaveBeenCalledTimes(1);
+  });
+
+  it('queued result updates are invalidated by Stop even while staying in the same chat', async () => {
+    let resolve!: (value: unknown) => void; ask.mockReturnValueOnce(new Promise((done) => { resolve = done; }));
+    render(); flushEffects(); draft(render(), 'Save this'); click(render(), 'Send'); await settle();
+    holdUpdates = true; resolve({ content: 'Queued result', persisted: true }); await settle();
+    const delayed = queued; queued = []; holdUpdates = false;
+    click(render(), 'Stop'); delayed.forEach((apply) => apply());
+    expect(find(render(), 'FlatList').props.data).toMatchObject([{ role: 'user', content: 'Save this' }]);
+    expect(find(render(), 'Pressable', 'Review saved conversation')).toBeDefined();
+  });
+
+  it('network failure preserves the request for explicit editing and never automatically replays it', async () => {
+    ask.mockRejectedValueOnce(new Error('offline'));
+    render(); flushEffects(); draft(render(), 'Book a meal'); click(render(), 'Send'); await settle();
+    click(render(), 'Edit and retry');
+    expect(find(render(), 'Field').props.value).toBe('Book a meal');
+    expect(ask).toHaveBeenCalledTimes(1);
+    expect(find(render(), 'Pressable', 'Review saved conversation')).toBeDefined();
+  });
 });
 
 it('explains an overlapping sign-in failure without exposing SDK storage diagnostics', async () => {

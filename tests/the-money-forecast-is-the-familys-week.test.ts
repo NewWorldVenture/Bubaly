@@ -68,20 +68,55 @@ const label = (c: Case) => `${c.tz} at ${c.now.toISOString()}`;
 // ── A Supabase stub that records what it was filtered by ────────────────────
 type Reply = { data: unknown; error: unknown };
 type Filter = { table: string; op: string; column: string; value: unknown };
+function matchesExpression(row: Record<string, unknown>, expression: string): boolean {
+  const split = (value: string) => { const parts: string[] = []; let depth = 0, start = 0; for (let i = 0; i < value.length; i++) { if (value[i] === '(') depth++; if (value[i] === ')') depth--; if (value[i] === ',' && depth === 0) { parts.push(value.slice(start, i)); start = i + 1; } } parts.push(value.slice(start)); return parts; };
+  if (expression.startsWith('and(')) return split(expression.slice(4, -1)).every(part => matchesExpression(row, part));
+  if (expression.startsWith('or(')) return split(expression.slice(3, -1)).some(part => matchesExpression(row, part));
+  const [, column, op, value] = /^([^.]+)\.([^.]+)\.(.*)$/.exec(expression) ?? [];
+  const actual = row[column];
+  if (op === 'is') return value === 'null' ? actual == null : String(actual) === value;
+  if (actual == null) return false;
+  if (op === 'eq') return String(actual) === value;
+  if (op === 'neq') return String(actual) !== value;
+  if (op === 'gte') return String(actual) >= value;
+  if (op === 'lte') return String(actual) <= value;
+  if (op === 'gt') return String(actual) > value;
+  if (op === 'lt') return String(actual) < value;
+  throw new Error(`Unsupported synthetic filter ${expression}`);
+}
 
 function fakeSupabase(results: Record<string, Reply>, filters: Filter[] = []): SupabaseClient<Database> {
   const chain = (table: string, result: Reply) => {
     const c: Record<string, unknown> = {};
-    for (const m of ['select', 'order', 'limit']) c[m] = () => c;
+    const localFilters: Filter[] = [];
+    let columns = '*', counted = false, from = 0, to = Infinity;
+    const orders: { column: string; ascending: boolean }[] = [];
+    c.select = (value: string, options?: { count?: string }) => { columns = value; counted = options?.count === 'exact'; return c; };
+    c.order = (column: string, options?: { ascending?: boolean }) => { orders.push({ column, ascending: options?.ascending !== false }); return c; };
+    c.limit = (limit: number) => { to = from + limit - 1; return c; };
     for (const op of ['eq', 'neq', 'in', 'gte', 'lte', 'gt', 'lt']) {
-      c[op] = (column: string, value: unknown) => { filters.push({ table, op, column, value }); return c; };
+      c[op] = (column: string, value: unknown) => { const filter = { table, op, column, value }; filters.push(filter); localFilters.push(filter); return c; };
     }
-    c.range = (from: number, to: number) => ({
-      then: (res: (v: Reply) => unknown, rej?: (e: unknown) => unknown) => Promise.resolve(
-        Array.isArray(result.data) ? { ...result, data: result.data.slice(from, to + 1) } : result,
-      ).then(res, rej),
-    });
-    c.then = (res: (v: Reply) => unknown, rej?: (e: unknown) => unknown) => Promise.resolve(result).then(res, rej);
+    c.or = (value: string) => { const filter = { table, op: 'or', column: '', value }; filters.push(filter); localFilters.push(filter); return c; };
+    c.range = (start: number, end: number) => { from = start; to = end; return c; };
+    const reply = () => {
+      if (result.error || !Array.isArray(result.data)) return result;
+      const rows = result.data.map((row, index) => ({ id: `${table}-${index}`, family_id: 'fam-1', all_day: false, recurrence: null, recurrence_until: null, ends_at: null, ...row }) as Record<string, unknown>).filter(row => localFilters.every(filter => {
+        if (filter.op === 'or') return matchesExpression(row, `or(${String(filter.value)})`);
+        const actual = row[filter.column], expected = filter.value;
+        if (filter.op === 'eq') return actual === expected;
+        if (filter.op === 'neq') return actual != null && actual !== expected;
+        if (filter.op === 'in') return Array.isArray(expected) && expected.includes(actual);
+        if (actual == null || expected == null) return false;
+        if (filter.op === 'gte') return String(actual) >= String(expected);
+        if (filter.op === 'lte') return String(actual) <= String(expected);
+        if (filter.op === 'gt') return String(actual) > String(expected);
+        return String(actual) < String(expected);
+      }));
+      rows.sort((a, b) => { for (const order of orders) { const difference = String(a[order.column]).localeCompare(String(b[order.column])); if (difference) return order.ascending ? difference : -difference; } return 0; });
+      return { ...result, count: counted ? rows.length : null, data: rows.slice(from, to + 1).map(row => columns === '*' ? row : Object.fromEntries(columns.split(',').map(column => [column.trim(), row[column.trim()]]))) };
+    };
+    c.then = (res: (v: Reply) => unknown, rej?: (e: unknown) => unknown) => Promise.resolve(reply()).then(res, rej);
     return c;
   };
   return { from: (table: string) => chain(table, results[table] ?? { data: [], error: null }) } as unknown as SupabaseClient<Database>;
@@ -146,8 +181,9 @@ describe("the money forecast asks the family's day, not Greenwich's", () => {
     expect(bound(filters, 'vacations', 'lte', 'start_date'), label(c)).toBe(c.horizonEnd);
     // The one timestamptz column is bounded by instants — local midnight of the
     // family's today, and local midnight after the horizon's last family day.
-    expect(bound(filters, 'calendar_events', 'gte', 'starts_at'), label(c)).toBe(c.midnightIso);
-    expect(typeof bound(filters, 'calendar_events', 'lt', 'starts_at')).toBe('string');
+    const calendarFilter = String(bound(filters, 'calendar_events', 'or', ''));
+    expect(calendarFilter, label(c)).toContain(`starts_at.gte.${c.midnightIso}`);
+    expect(calendarFilter, label(c)).toContain(`starts_at.gte.${c.day}T00:00:00.000Z`);
   });
 
   it.each(CASES)('hands the brain the family day, so the forecast starts on the family week ($tz, $week)', async (c) => {

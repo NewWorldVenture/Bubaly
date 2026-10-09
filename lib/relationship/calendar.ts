@@ -3,6 +3,7 @@
 // the calendar everyone already looks at. Recurring dates become yearly events.
 
 import type { Database } from '@/lib/database.types';
+import { validDay } from '@/lib/onboarding/ics-time';
 import type { RelKind } from '@/lib/relationship/dates';
 
 type CalendarInsert = Database['public']['Tables']['calendar_events']['Insert'];
@@ -21,13 +22,18 @@ export type CalendarSourceDate = {
  * they appear every year; birthdays use the birthday category.
  */
 export function buildCalendarEventForDate(d: CalendarSourceDate, familyId: string, userId: string | null): CalendarInsert {
+  if (!validDay(d.eventDate)) throw new RangeError('Invalid relationship date');
+  const startsAt = `${d.eventDate}T00:00:00.000Z`;
+  const endsAt = new Date(Date.parse(startsAt) + 86_400_000).toISOString();
+  if (!validDay(endsAt.slice(0, 10))) throw new RangeError('Relationship date exceeds calendar bounds');
   return {
     family_id: familyId,
     created_by: userId,
     title: d.title,
     category: d.kind === 'birthday' ? 'birthday' : 'general',
-    // Noon UTC keeps the calendar day stable across timezones for an all-day event.
-    starts_at: `${d.eventDate}T12:00:00.000Z`,
+    // All-day DATE storage uses UTC civil midnight and an exclusive next day.
+    starts_at: startsAt,
+    ends_at: endsAt,
     all_day: true,
     recurrence: d.recursAnnually ? 'yearly' : 'none',
     location: d.location ?? null,

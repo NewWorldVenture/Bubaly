@@ -1,6 +1,7 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { at } from './helpers/source-order';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -8,9 +9,11 @@ import type { Database } from '@/lib/database.types';
 import type { UserContext } from '@/lib/supabase/auth';
 import { getMessages, translate } from '@/lib/i18n/messages';
 import type { LocaleCode } from '@/lib/i18n/locales';
-import { createInMemorySupabase } from './helpers/in-memory-supabase';
+import { createInMemorySupabase, orPredicate } from './helpers/in-memory-supabase';
+import { parseICSSource } from '@/lib/sync/ics-source';
 
-const mocks = vi.hoisted(() => ({ server: vi.fn(), today: vi.fn(), upcoming: vi.fn(), conflicts: vi.fn(), brief: vi.fn(), locale: 'en-US' as LocaleCode }));
+const mocks = vi.hoisted(() => ({ server: vi.fn(), today: vi.fn(), upcoming: vi.fn(), conflicts: vi.fn(), needs: vi.fn(), brief: vi.fn(), locale: 'en-US' as LocaleCode, source: false, snapshot: null as unknown }));
+vi.mock('@/lib/calendar/source-capability', () => ({ get CALENDAR_SOURCE_ARCHIVE_ENABLED() { return mocks.source; } }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.server }));
 vi.mock('@/lib/supabase/auth', () => ({ isSuperAdmin: async () => false }));
 vi.mock('@/lib/server/plan', () => ({ resolveFamilyPlanLevel: async () => 1 }));
@@ -45,6 +48,10 @@ vi.mock('@/lib/home/home-brief', async original => {
   const actual = await original<typeof import('@/lib/home/home-brief')>();
   return { ...actual, buildHomeBrief: (...args: Parameters<typeof actual.buildHomeBrief>) => { mocks.brief(...args); return actual.buildHomeBrief(...args); } };
 });
+vi.mock('@/lib/home/needs-build',async original=>{
+  const actual=await original<typeof import('@/lib/home/needs-build')>();
+  return {...actual,buildHomeNeeds:(...args:Parameters<typeof actual.buildHomeNeeds>)=>{mocks.needs(...args);return actual.buildHomeNeeds(...args);}};
+});
 import { AiHomeDashboard } from '@/components/dashboard/ai-home-dashboard';
 
 type DB = SupabaseClient<Database>;
@@ -52,8 +59,8 @@ let db = createInMemorySupabase<DB>();
 function row(title: string, starts_at: string, all_day = false, assignee_id: string | null = 'parent', family_id = 'family', ends_at: string | null = null) {
   return { id: title, title, starts_at, ends_at, all_day, assignee_id, family_id, location: 'Literal {location}' };
 }
-async function home(zone = 'UTC', role = 'parent') {
-  const ctx = { user: { id: 'user', email: 'alex@example.test' }, active: { familyId: 'family', role, member: { id: 'parent', display_name: 'Alex' }, family: { name: 'Family', timezone: zone } } } as UserContext;
+async function home(zone = 'UTC', role = 'parent', familyId = 'family') {
+  const ctx = { user: { id: 'user', email: 'alex@example.test' }, active: { familyId, role, member: { id: 'parent', display_name: 'Alex' }, family: { name: 'Family', timezone: zone } } } as UserContext;
   return renderToStaticMarkup(await AiHomeDashboard({ ctx }));
 }
 function failCalendar(read: number, rejection: boolean) {
@@ -61,20 +68,139 @@ function failCalendar(read: number, rejection: boolean) {
   const from = db.from.bind(db);
   return vi.spyOn(db, 'from').mockImplementation(table => {
     const query = from(table);
-    return table !== 'calendar_events' || ++n !== read ? query : new Proxy(query, { get: (target, key, receiver) => key === 'then'
+    return table !== 'calendar_events' || ++n !== (read - 1) * 2 + 1 ? query : new Proxy(query, { get: (target, key, receiver) => key === 'then'
       ? (resolve: (value: unknown) => void, reject: (cause: unknown) => void) => rejection
         ? reject(new Error('Internal calendar transport detail')) : resolve({ data: [], error: { message: 'Internal calendar query detail' } })
       : Reflect.get(target, key, receiver) });
   });
 }
 beforeEach(() => {
-  vi.clearAllMocks(); vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-09T16:00:00Z')); mocks.locale = 'en-US';
+  vi.clearAllMocks(); vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-09T16:00:00Z')); mocks.locale = 'en-US'; mocks.source = false; mocks.snapshot = null;
   db = createInMemorySupabase<DB>(); mocks.server.mockResolvedValue(db);
   vi.stubGlobal('fetch', vi.fn(() => { throw new Error('External requests forbidden'); }));
 });
 afterEach(() => { expect(fetch).not.toHaveBeenCalled(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
+function sdkCalendar(rows: Record<string, unknown>[], fault = '', familyId = 'family') {
+  const requests: URL[] = [];
+  const client = createClient<Database>('https://synthetic-dashboard.invalid', 'synthetic-key', {
+    auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: async (input, init) => {
+      const url = new URL(String(input)); requests.push(url);
+      if(url.pathname.includes('/rpc/calendar_read_occurrence_inputs')) {
+        expect(JSON.parse(String(init?.body))).toEqual({p_family_id:familyId});
+        return Response.json(mocks.snapshot);
+      }
+      if(!url.pathname.endsWith('/calendar_events')) return Response.json([], {headers:{'content-range':'*/0'}});
+      expect(url.searchParams.get('family_id')).toBe(`eq.${familyId}`);
+      expect(url.searchParams.get('order')).toBe('starts_at.asc,id.asc');
+      expect(new Headers(init?.headers).get('prefer')).toContain('count=exact');
+      let selected=rows.filter(orPredicate(`family_id.${url.searchParams.get('family_id')}`));
+      for(const expression of url.searchParams.getAll('or')) selected=selected.filter(orPredicate(expression.slice(1,-1)));
+      for(const expression of url.searchParams.getAll('recurrence')) selected=selected.filter(orPredicate(`recurrence.${expression}`));
+      for(const expression of url.searchParams.getAll('starts_at')) selected=selected.filter(orPredicate(`starts_at.${expression}`));
+      selected.sort((a,b)=>String(a.starts_at).localeCompare(String(b.starts_at))||String(a.id).localeCompare(String(b.id)));
+      const offset=Number(url.searchParams.get('offset')??0),limit=Math.min(2,Number(url.searchParams.get('limit')??1000));
+      let page=selected.slice(offset,offset+limit); const count=selected.length+(fault==='drift'&&offset>0?1:0);
+      if(fault==='duplicate'&&offset>0)page=selected.slice(0,limit);
+      if(fault==='foreign')page=page.map(event=>({...event,family_id:'other-family'}));
+      if(fault==='interval')page=page.map(event=>({...event,ends_at:'invalid'}));
+      if(fault==='midnight')vi.setSystemTime(new Date('2026-09-10T01:00:00Z'));
+      return Response.json(page,{headers:fault==='count'?{}:{'content-range':page.length?`${offset}-${offset+page.length-1}/${count}`:`*/${count}`}});
+    } },
+  });
+  mocks.server.mockResolvedValue(client);return requests;
+}
+function sourceEnvelope(lines:string) {
+  const familyId='10000000-0000-4000-8000-000000000001',revisionId='30000000-0000-4000-8000-000000000001';
+  const document=parseICSSource(`BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Synthetic Dashboard//EN\r\nBEGIN:VEVENT\r\nUID:source-home\r\nSUMMARY:Original source annotation\r\n${lines}\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n`)[0];
+  return {version:1,familyId,nativeRows:[],nativeCount:0,sourceCount:1,watermarkCount:1,sourceGroups:[{
+    feedId:'20000000-0000-4000-8000-000000000001',uid:document.uid,revisionId,materializationState:'ready',document,
+    masterCancellationRevisionId:null,watermarks:[{componentKey:'master',versionComponent:structuredClone(document.master),versionRevisionId:revisionId,cancelledComponent:null,cancellationRevisionId:null}],
+  }]};
+}
+
 describe('actual Home calendar reads and rendered read availability', () => {
+  it('recurring native conflicts retain distinct original occurrence identities for each weekly advisory',async()=>{
+    db.seed('calendar_events',[
+      {...row('Weekly A','2026-06-03T18:00:00.000Z',false,'parent','family','2026-06-03T19:00:00.000Z'),recurrence:'weekly',recurrence_until:null},
+      {...row('Weekly B','2026-06-03T18:30:00.000Z',false,'parent','family','2026-06-03T19:30:00.000Z'),recurrence:'weekly',recurrence_until:null},
+    ]);
+    await home();const conflicts=mocks.needs.mock.calls[0][0].conflicts as {id:string}[];
+    expect(conflicts).toHaveLength(3);expect(new Set(conflicts.map(conflict=>conflict.id)).size).toBe(3);
+  });
+  it('actual SDK cap-two read reaches late rows and clips ongoing travel before five-row presentation caps',async()=>{
+    const rows=[...Array.from({length:6},(_,i)=>({...row(`Other member${i}`,'2026-09-09T07:00:00.000Z',false,'other','family','2026-09-09T08:00:00.000Z'),recurrence:'none'})),
+      {...row('Late visible trip','2026-09-08T23:00:00.000Z',false,'parent','family','2026-09-11T19:00:00.000Z'),recurrence:'none'},
+      {...row('Late meeting','2026-09-10T18:00:00.000Z',false,'parent','family','2026-09-10T19:00:00.000Z'),recurrence:'none'},
+      {...row('Foreign private title','2026-09-09T18:00:00.000Z',false,'parent','other-family','2026-09-09T19:00:00.000Z'),recurrence:'none'},
+      {...row('Exact outside end','2026-09-17T00:00:00.000Z',false,'parent','family','2026-09-17T01:00:00.000Z'),recurrence:'none'}];
+    const requests=sdkCalendar(rows),html=await home();
+    expect(html).toContain('Late visible trip');expect(html).not.toContain('Foreign private title');expect(html).not.toContain('Other member0');
+    expect(mocks.upcoming.mock.calls[0][0].map((e:{title:string})=>e.title)).toEqual(['Late visible trip','Late meeting']);
+    expect(mocks.conflicts.mock.calls[0][0].find((e:{title:string})=>e.title==='Late visible trip').conflictEndsAt).toBe('2026-09-11T19:00:00.000Z');
+    expect(html).toContain('2 events overlap');
+    expect(requests.some(url=>Number(url.searchParams.get('offset'))>=6)).toBe(true);
+  });
+  it.each(['count','drift','duplicate','foreign','interval'])('actual SDK %s uncertainty refuses all calendar claims and outcome advice',async fault=>{
+    vi.spyOn(console,'error').mockImplementation(()=>{});
+    const rows=['a','b','c'].map(id=>({...row(id,'2026-09-09T18:00:00.000Z',false,'parent','family','2026-09-09T19:00:00.000Z'),recurrence:'none'}));
+    sdkCalendar(rows,fault);const html=await home();
+    expect(html.match(/<p role="status"/g)).toHaveLength(fault==='count'?3:2);
+    // The upcoming set is genuinely empty: row-dependent faults cannot occur
+    // there, while even an empty read still requires an exact count.
+    expect(html).not.toContain(translate(getMessages('en-US'),'aiHomeDashboard.aClearDayNothingScheduledAnd'));
+    expect(mocks.brief).not.toHaveBeenCalled();expect(mocks.today.mock.calls[0][0].events).toEqual([]);
+  });
+  it('one server day snapshot survives a midnight crossed during asynchronous calendar reads',async()=>{
+    sdkCalendar([{...row('Snapshot day event','2026-09-09T18:00:00.000Z',false,'parent','family','2026-09-09T19:00:00.000Z'),recurrence:'none'}],'midnight');
+    const html=await home();expect(html).toContain('Snapshot day event');expect(mocks.today.mock.calls[0][0].todayKey).toBe('2026-09-09');
+  });
+  it('Tokyo upcoming DATE annotation sorts at family midnight while keeping its civil badge date',async()=>{
+    vi.setSystemTime(new Date('2026-09-09T12:00:00Z'));
+    db.seed('calendar_events',[row('Tomorrow civil holiday','2026-09-10T00:00:00.000Z',true,null),row('Tomorrow early meeting','2026-09-09T16:00:00.000Z',false,null,'family','2026-09-09T17:00:00.000Z')]);
+    const html=await home('Asia/Tokyo');expect(at(html,'Tomorrow civil holiday')).toBeLessThan(at(html,'Tomorrow early meeting'));
+    expect(html).toContain(new Intl.DateTimeFormat('en-US',{timeZone:'UTC',month:'short',day:'numeric'}).format(new Date('2026-09-10T12:00:00Z')));
+  });
+  it.each([
+    ['DATE','DTSTART;VALUE=DATE:20260908\r\nDTEND;VALUE=DATE:20260912'],
+    ['overnight','DTSTART:20260908T230000Z\r\nDTEND:20260911T190000Z'],
+    ['older weekly master','DTSTART:20260603T180000Z\r\nDURATION:PT1H\r\nRRULE:FREQ=WEEKLY;COUNT=20'],
+    ['implicit point','DTSTART:20260909T180000Z'],
+  ])('enabled actual SDK source %s retains original references without native IDs',async(_kind,lines)=>{
+    mocks.source=true;mocks.snapshot=sourceEnvelope(lines);const familyId=(mocks.snapshot as ReturnType<typeof sourceEnvelope>).familyId;
+    const requests=sdkCalendar([], '', familyId),html=await home('America/New_York','parent',familyId);
+    expect(html).toContain('Original source annotation');
+    const event=mocks.today.mock.calls[0][0].events[0];expect(event.kind).toBe('source');expect(event.reference.kind).toBe('source');expect(event).not.toHaveProperty('id');
+    const {mergeUpcoming}=await vi.importActual<typeof import('@/lib/dashboard/upcoming')>('@/lib/dashboard/upcoming');
+    expect(mergeUpcoming([event],[])[0]).toMatchObject({id:null,reference:event.reference,occurrenceKey:event.occurrenceKey,key:`event:${event.occurrenceKey}`});
+    expect(mocks.conflicts.mock.calls[0][0]).toEqual([]);expect(requests.filter(url=>url.pathname.endsWith('/calendar_events'))).toEqual([]);
+    expect(requests.filter(url=>url.pathname.includes('/rpc/'))).toHaveLength(3);
+  });
+  it.each(['missing','review','short'])('enabled source %s refuses without native fallback or a quiet outcome',async kind=>{
+    vi.spyOn(console,'error').mockImplementation(()=>{});mocks.source=true;
+    const snapshot=sourceEnvelope('DTSTART:20260909T180000Z\r\nDURATION:PT1H');
+    if(kind==='review')snapshot.sourceGroups[0].materializationState='revision_review';
+    if(kind==='short')snapshot.sourceCount=2;
+    mocks.snapshot=kind==='missing'?{code:'PGRST202',message:'Synthetic unavailable RPC'}:snapshot;
+    const requests=sdkCalendar([],'',snapshot.familyId),html=await home('UTC','parent',snapshot.familyId);
+    expect(html.match(/<p role="status"/g)).toHaveLength(3);expect(mocks.brief).not.toHaveBeenCalled();
+    expect(requests.filter(url=>url.pathname.endsWith('/calendar_events'))).toEqual([]);
+  });
+  it('an ongoing trip beginning before today stays in Today and every relevant future window', async () => {
+    db.seed('calendar_events', [row('Ongoing travel', '2026-09-07T18:00:00.000Z', false, 'parent', 'family', '2026-09-11T19:00:00.000Z')]);
+    const html = await home();
+    expect(html).toContain('Ongoing travel');
+    expect(mocks.today.mock.calls[0][0].events).toHaveLength(1);
+    expect(mocks.upcoming.mock.calls[0][0]).toHaveLength(1);
+  });
+  it('an older weekly master appears this week and late assigned commitments are not capped at200', async () => {
+    db.seed('calendar_events', [{ ...row('Weekly lesson', '2026-06-03T18:00:00.000Z', false, 'parent', 'family', '2026-06-03T19:00:00.000Z'), recurrence: 'weekly', recurrence_until: null },
+      ...Array.from({ length: 201 }, (_, index) => row(`Morning${index}`, '2026-09-09T08:00:00.000Z', false, 'parent', 'family', '2026-09-09T08:01:00.000Z')),
+      row('Late commitment', '2026-09-10T18:00:00.000Z', false, 'parent', 'family', '2026-09-10T19:00:00.000Z')]);
+    await home();
+    expect(mocks.conflicts.mock.calls[0][0].some((event: { title: string }) => event.title === 'Weekly lesson')).toBe(true);
+    expect(mocks.conflicts.mock.calls[0][0].some((event: { title: string }) => event.title === 'Late commitment')).toBe(true);
+  });
   it.each(['America/New_York', 'Asia/Tokyo', 'UTC'])('%s retains today and tomorrow date-only events, raw data and visibility', async zone => {
     const rows = [row('Today holiday {title}', '2026-09-09T00:00:00.000Z', true), row('Tomorrow holiday', '2026-09-10T00:00:00.000Z', true),
       row('Shared meeting', '2026-09-09T12:00:00.000Z', false, null), row('Other member', '2026-09-09T13:00:00.000Z', false, 'other'),
@@ -89,7 +215,7 @@ describe('actual Home calendar reads and rendered read availability', () => {
   });
 
   it.each([['America/Santiago', '2026-09-06T15:00:00Z', '2026-09-06T03:30:00.000Z'], ['America/Havana', '2026-03-08T15:00:00Z', '2026-03-08T04:30:00.000Z']])('%s excludes the previous local day at a midnight gap', async (zone, now, previous) => {
-    vi.setSystemTime(new Date(now)); db.seed('calendar_events', [row('Previous local date', previous)]);
+    vi.setSystemTime(new Date(now)); db.seed('calendar_events', [row('Previous local date', previous, false, 'parent', 'family', new Date(Date.parse(previous) + 60_000).toISOString())]);
     await home(zone); expect(mocks.today.mock.calls[0][0].events).toEqual([]); expect(mocks.conflicts.mock.calls[0][0]).toEqual([]);
   });
 
@@ -142,10 +268,10 @@ describe('actual Home calendar reads and rendered read availability', () => {
     ]);
     await home('America/New_York');
     expect(mocks.today.mock.calls[0][0].events.map((e: { title: string }) => e.title)).toEqual(['Today holiday', 'Today0', 'Today1', 'Today2', 'Today3']);
-    expect(mocks.upcoming.mock.calls[0][0].map((e: { title: string }) => e.title)).toEqual(['Tomorrow holiday', 'Tomorrow0', 'Tomorrow1', 'Tomorrow2', 'Tomorrow3']);
+    expect(mocks.upcoming.mock.calls[0][0].map((e: { title: string }) => e.title)).toEqual(['Tomorrow holiday', 'Tomorrow0', 'Tomorrow1', 'Tomorrow2', 'Tomorrow3', 'Tomorrow4', 'Tomorrow5']);
   });
 
-  it('filters date and family before the assigned200 cap, retaining assigned-only order', async () => {
+  it('reads every assigned occurrence before conflict detection, retaining assigned-only order', async () => {
     db.seed('calendar_events', [
       ...Array.from({ length: 205 }, (_, i) => row(`Prior${i}`, '2026-09-08T00:00:00.000Z', true)),
       row('Other family', '2026-09-09T00:00:00.000Z', true, 'parent', 'other'),
@@ -154,7 +280,7 @@ describe('actual Home calendar reads and rendered read availability', () => {
     ]);
     await home('America/New_York');
     const selected = mocks.conflicts.mock.calls[0][0] as { title: string }[];
-    expect(selected).toHaveLength(200); expect(selected[0].title).toBe('Assigned0'); expect(selected[199].title).toBe('Assigned199');
+    expect(selected).toHaveLength(205); expect(selected[0].title).toBe('Assigned0'); expect(selected[204].title).toBe('Assigned204');
   });
 
   it.each(['parent', 'child', 'guest'])('%s retains conflict visibility and same-family member-or-shared schedule permissions', async role => {
@@ -178,26 +304,24 @@ describe('actual Home calendar reads and rendered read availability', () => {
     expect(db.table('daily_insights').some(entry => entry.kind === 'meal')).toBe(true);
   });
 
-  it('the actual Supabase transport emits separate conjunctive visibility and date logic before limits', async () => {
+  it('the actual Supabase transport requests complete family-scoped singles and older masters before visibility/presentation limits', async () => {
     const requests: URL[] = [];
-    const client = createClient<Database>('http://localhost:54321', 'local-test-key', { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: async input => {
+    const client = createClient<Database>('https://synthetic-home.invalid', 'local-test-key', { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: async (input, init) => {
       const url = new URL(String(input)); requests.push(url);
-      return new Response('[]', { headers: { 'content-type': 'application/json' } });
+      if(url.pathname.endsWith('/calendar_events')) expect(new Headers(init?.headers).get('prefer')).toContain('count=exact');
+      return new Response('[]', { headers: { 'content-type': 'application/json', 'content-range': '*/0' } });
     } } });
     mocks.server.mockResolvedValue(client); await home('America/New_York');
     const calendar = requests.filter(url => url.pathname.endsWith('/calendar_events'));
-    expect(calendar).toHaveLength(3);
-    for (const [i, url] of calendar.entries()) {
+    expect(calendar).toHaveLength(6);
+    for (const url of calendar) {
       expect(url.searchParams.get('family_id')).toBe('eq.family');
-      expect(url.searchParams.get('order')).toBe('starts_at.asc');
-      expect(url.searchParams.get('limit')).toBe(i === 2 ? '200' : '5');
+      expect(url.searchParams.get('order')).toBe('starts_at.asc,id.asc');
+      expect(url.searchParams.get('limit')).toBe('1000');
       const logic = url.searchParams.getAll('or');
-      expect(logic).toHaveLength(i === 2 ? 1 : 2);
-      if (i < 2) expect(logic[0]).toBe('(assignee_id.eq.parent,assignee_id.is.null)');
-      else expect(url.searchParams.get('assignee_id')).toBe('not.is.null');
-      expect(logic.at(-1)).toContain('and(all_day.eq.false,starts_at.gte.2026-09-');
-      expect(logic.at(-1)).toContain('and(all_day.eq.true,starts_at.gte.2026-09-');
-      expect(url.searchParams.get('starts_at')).toBeNull();
+      expect(url.searchParams.get('assignee_id')).toBeNull();
+      if(url.searchParams.get('recurrence')==='neq.none') expect(url.searchParams.get('starts_at')).toMatch(/^lte\./);
+      else { expect(logic).toHaveLength(2); expect(logic[0]).toContain('ends_at.gt.'); expect(logic[1]).toBe('(recurrence.is.null,recurrence.eq.none)'); }
     }
   });
 
@@ -232,5 +356,19 @@ describe('actual Home calendar reads and rendered read availability', () => {
       failure.mockRestore(); const recovered = await home('America/New_York');
       expect(recovered).toContain('Today holiday {literal}'); expect(recovered).not.toContain('role="status"');
     }
+  });
+});
+
+
+describe('actual SDK Home outcome source transparency',()=>{
+  it('preserves future free annotations in the outcome without invented clashes or native actions',async()=>{
+    mocks.source=true;mocks.snapshot=sourceEnvelope('DTSTART:20260910T180000Z\r\nDURATION:PT1H\r\nRDATE:20260910T183000Z\r\nTRANSP:TRANSPARENT');const snapshot=mocks.snapshot as ReturnType<typeof sourceEnvelope>;
+    const requests=sdkCalendar([],'',snapshot.familyId);const html=await home('UTC','parent',snapshot.familyId);expect(mocks.brief).toHaveBeenCalledOnce();const input=mocks.brief.mock.calls[0][0];
+    expect(input.upcomingEvents).toHaveLength(2);expect(input.upcomingEvents.every((event:{kind:string;transparency:string;reference:{kind:string};actualStartsAt:string})=>event.kind==='source'&&event.transparency==='transparent'&&event.reference.kind==='source'&&event.actualStartsAt)).toBe(true);
+    const {buildHomeBrief}=await vi.importActual<typeof import('@/lib/home/home-brief')>('@/lib/home/home-brief');expect(buildHomeBrief(input,new Date())).toMatchObject({weekCount:2,conflictCount:0});expect(html).toContain('Original source annotation');expect(html).not.toContain('clash');
+    expect(mocks.conflicts.mock.calls[0][0]).toEqual([]);expect(input.upcomingEvents.every((event:object)=>!('id' in event))).toBe(true);expect(requests.filter(url=>url.pathname.includes('/rpc/'))).toHaveLength(3);expect(requests.some(url=>url.pathname.endsWith('/home_briefs'))).toBe(false);
+  });
+  it('keeps malformed source metadata unavailable rather than showing a calm outcome',async()=>{
+    mocks.source=true;mocks.snapshot=sourceEnvelope('DTSTART:20260910T180000Z\r\nDURATION:PT1H\r\nTRANSP:UNKNOWN');const snapshot=mocks.snapshot as ReturnType<typeof sourceEnvelope>;const requests=sdkCalendar([],'',snapshot.familyId);const html=await home('UTC','parent',snapshot.familyId);expect(mocks.brief).not.toHaveBeenCalled();expect(html.match(/<p role="status"/g)).toHaveLength(3);expect(requests.some(url=>url.pathname.endsWith('/home_briefs'))).toBe(false);
   });
 });

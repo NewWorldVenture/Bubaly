@@ -260,7 +260,12 @@ vi.mock('@/lib/server/bounded-request-body', () => ({
 
 import { POST } from '@/app/api/ai/briefing/route';
 
-function queryResult(data: unknown[] | null, error: unknown = null) {
+function queryResult(data: unknown[] | null, error: unknown = null, calendar = false) {
+  if (calendar) {
+    const db = createInMemorySupabase();
+    db.seed('calendar_events', data as Record<string, unknown>[]);
+    return db.from('calendar_events');
+  }
   const promise = Promise.resolve({ data, error });
   const query: Record<string, unknown> = { then: promise.then.bind(promise) };
   // `or` and `update` are part of the surface the route really uses: the shared
@@ -308,7 +313,7 @@ describe('the briefing route carries decisions', () => {
       table === 'approval_requests' ? pending
         : table === 'family_automation_runs' ? runs
         : table === 'family_members' ? [{ id: 'm-parent', display_name: 'Alex', role: 'parent' }]
-        : [],
+        : [], null, table === 'calendar_events',
     ));
     const response = await requestBriefing();
     expect(response.status).toBe(200);
@@ -322,7 +327,7 @@ describe('the briefing route carries decisions', () => {
   });
 
   it('omits the slice entirely when nothing is waiting, so the envelope says exactly that', async () => {
-    mocks.from.mockImplementation(() => queryResult([]));
+    mocks.from.mockImplementation((table: string) => queryResult([], null, table === 'calendar_events'));
     const response = await requestBriefing();
     expect(response.status).toBe(200);
     const body = await response.json();
@@ -338,7 +343,7 @@ describe('the briefing route carries decisions', () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     mocks.from.mockImplementation((table: string) => table === 'approval_requests'
       ? queryResult(null, { message: 'permission denied', code: '42501', details: null, hint: null })
-      : queryResult([]));
+      : queryResult([], null, table === 'calendar_events'));
     const response = await requestBriefing();
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({ error: 'Failed to generate briefing' });

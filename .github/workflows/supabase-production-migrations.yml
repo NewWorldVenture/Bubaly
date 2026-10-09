@@ -107,6 +107,12 @@ jobs:
           retention-days: 3
           if-no-files-found: warn
 
+      # Keep metadata-only verification available while dependent SQL is held.
+      # An apply request must pass the stricter source dependency gate first.
+      - name: Require runnable RPC dependencies before applying
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.apply == true
+        run: npm run db:audit:queries -- --require-runnable-rpcs
+
       - name: Apply ordered migrations
         if: success() && github.event_name == 'workflow_dispatch' && inputs.apply == true
         run: supabase db push --yes

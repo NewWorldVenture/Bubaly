@@ -6,6 +6,8 @@
 // to a generated ICS feed URL and receive bubaly events. Generation is pure
 // and deterministic (timestamps are passed in), so it is fully unit-testable.
 
+import { canonicalZone, IcsClock, iso, readDate, readWall } from '@/lib/onboarding/ics-time';
+
 export type IcsEvent = {
   uid: string;
   title: string;
@@ -21,6 +23,15 @@ export type IcsEvent = {
   /** Last modification ISO timestamp (drives DTSTAMP / LAST-MODIFIED). */
   updatedAt?: string | null;
   status?: 'confirmed' | 'tentative' | 'cancelled';
+  /** The original occurrence replaced by this component; resolved with the same strict temporal parser. */
+  recurrenceId?: string | null;
+  /** Presence only: this parser does not implement recurrence date sets. */
+  hasExdates?: boolean;
+  hasRdates?: boolean;
+  hasExrule?: boolean;
+  hasDuration?: boolean;
+  /** Duplicate rules cannot be represented by the single recurrenceRule value. */
+  recurrenceRuleCount?: number;
 };
 
 export type IcsCalendarOptions = {
@@ -113,7 +124,9 @@ export function generateICS(events: IcsEvent[], opts: IcsCalendarOptions): strin
 
 // ----------------------------------------------------------------------------
 // Minimal parser — enough to IMPORT a subscribed/exported ICS into bubaly.
-// Handles line unfolding, escaped TEXT, DATE vs UTC DATETIME, RRULE.
+// Handles line unfolding, escaped TEXT, DATE, UTC and explicit IANA DATE-TIME,
+// and raw RRULE. Supplied VTIMEZONE definitions and recurrence exceptions are
+// not interpreted here. Floating values retain the legacy UTC assumption.
 // ----------------------------------------------------------------------------
 export function unescapeIcsText(value: string): string {
   return value
@@ -123,23 +136,104 @@ export function unescapeIcsText(value: string): string {
     .replace(/\\\\/g, '\\');
 }
 
-/** Parse an iCalendar UTC/DATE value into an ISO string. */
-export function parseIcsDate(value: string): { iso: string; allDay: boolean } {
-  // DATE: 20260620 ; UTC DATETIME: 20260620T143000Z ; local DATETIME: 20260620T143000
-  if (/^\d{8}$/.test(value)) {
-    return { iso: `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}T00:00:00.000Z`, allDay: true };
+function parseDateProperty(value: string, params: Record<string, string>, clock: IcsClock,
+  declaredZones: ReadonlySet<string>,
+): { iso: string; allDay: boolean } {
+  const type = params.VALUE?.toUpperCase();
+  const zone = params.TZID;
+  if (type && type !== 'DATE' && type !== 'DATE-TIME') throw new Error('Unsupported ICS date value type');
+  if (type === 'DATE' || (!type && /^\d{8}$/.test(value))) {
+    if (zone) throw new Error('ICS DATE cannot carry TZID');
+    return { iso: readDate(value) + 'T00:00:00.000Z', allDay: true };
   }
-  const m = value.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z?)$/);
-  if (!m) throw new Error(`Unparseable ICS date: ${value}`);
-  const [, y, mo, d, h, mi, s, z] = m;
-  const suffix = z === 'Z' ? 'Z' : 'Z'; // we normalize naive local times to UTC
-  return { iso: `${y}-${mo}-${d}T${h}:${mi}:${s}.000${suffix}`, allDay: false };
+  const utc = value.endsWith('Z');
+  if (utc && zone) throw new Error('ICS UTC DATE-TIME cannot carry TZID');
+  const wall = readWall(utc ? value.slice(0, -1) : value);
+  if (zone) {
+    // An explicit declaration can override even a familiar IANA name. This
+    // path does not validate those definitions; never disregard one silently.
+    if (declaredZones.has(zone)) throw new Error('Unsupported ICS VTIMEZONE declaration');
+    return { iso: iso(clock.resolve(wall, canonicalZone(zone))), allDay: false };
+  }
+  // Compatibility only: without a source zone/observer we still encode floating
+  // wall fields as UTC. This is not RFC floating-time fidelity.
+  return { iso: iso(wall.ms), allDay: false };
 }
 
-export function parseICS(text: string): IcsEvent[] {
+/** Parse a UTC/DATE token; legacy floating values keep their UTC assumption. */
+export function parseIcsDate(value: string, tzid?: string | null): { iso: string; allDay: boolean } {
+  return parseDateProperty(value, tzid ? { TZID: tzid } : {}, new IcsClock(), new Set());
+}
+
+function contentLine(line: string): { name: string; value: string; params: Record<string, string> } | null {
+  let quoted = false, colon = -1;
+  for (let i = 0; i < line.length; i++) {
+    if (line[i] === '"') quoted = !quoted;
+    else if (line[i] === ':' && !quoted) { colon = i; break; }
+  }
+  if (colon === -1) {
+    if (/^(DTSTART|DTEND|RECURRENCE-ID)(?:;|:|$)/i.test(line)) throw new Error('Invalid ICS date property');
+    return null;
+  }
+  const left = line.slice(0, colon);
+  const name = left.split(';')[0].toUpperCase();
+  const params: Record<string, string> = Object.create(null) as Record<string, string>;
+  if (name === 'DTSTART' || name === 'DTEND' || name === 'RECURRENCE-ID') {
+    // A quoted parameter may contain semicolons or colons. Do not truncate it
+    // into a different zone, and reject duplicate/empty temporal parameters.
+    const parts: string[] = [];
+    let start = left.indexOf(';') + 1;
+    quoted = false;
+    for (let i = start; start > 0 && i <= left.length; i++) {
+      if (left[i] === '"') quoted = !quoted;
+      else if (!quoted && (left[i] === ';' || i === left.length)) { parts.push(left.slice(start, i)); start = i + 1; }
+    }
+    if (quoted) throw new Error('Invalid ICS date parameters');
+    for (const part of parts) {
+      const equal = part.indexOf('=');
+      if (equal < 1) throw new Error('Invalid ICS date parameters');
+      const key = part.slice(0, equal).toUpperCase();
+      let value = part.slice(equal + 1);
+      if (!/^[A-Z0-9-]+$/.test(key) || Object.hasOwn(params, key) || !value) throw new Error('Invalid ICS date parameters');
+      if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
+      else if (value.includes('"')) throw new Error('Invalid ICS date parameters');
+      if (!value) throw new Error('Invalid ICS date parameters');
+      params[key] = value;
+    }
+  }
+  return { name, params, value: line.slice(colon + 1) };
+}
+
+function timezoneDeclarations(lines: readonly string[]): Set<string> {
+  const declarations = new Set<string>();
+  let inTimezone = false;
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    if (/^BEGIN:VTIMEZONE$/i.test(line)) inTimezone = true;
+    else if (/^END:VTIMEZONE$/i.test(line)) inTimezone = false;
+    else if (inTimezone && /^TZID(?:;|:)/i.test(line)) {
+      const property = contentLine(line);
+      if (!property) throw new Error('Unsupported ICS VTIMEZONE declaration');
+      declarations.add(property.value);
+    }
+  }
+  return declarations;
+}
+
+export class UnsupportedIcsRecurrenceError extends Error {}
+
+export type ParseIcsOptions = {
+  bareCancellations?: boolean;
+  /** Validate every component before unplaceable components can be omitted. */
+  validateEvent?: (event: Readonly<Partial<IcsEvent>>) => void;
+};
+
+export function parseICS(text: string, opts: ParseIcsOptions = {}): IcsEvent[] {
   // Unfold: a CRLF (or LF) followed by space/tab continues the previous line.
   const unfolded = text.replace(/\r\n/g, '\n').replace(/\n[ \t]/g, '');
   const lines = unfolded.split('\n');
+  const clock = new IcsClock();
+  const declaredZones = timezoneDeclarations(lines);
   const events: IcsEvent[] = [];
   let cur: Partial<IcsEvent> & { _start?: string } | null = null;
 
@@ -150,17 +244,26 @@ export function parseICS(text: string): IcsEvent[] {
       continue;
     }
     if (line === 'END:VEVENT') {
-      if (cur && cur.uid && cur.startsAt && cur.title) {
+      if (cur) opts.validateEvent?.(cur);
+      const placeable = !!(cur && cur.uid && cur.startsAt && cur.title);
+      const cancellation = !!(cur && cur.uid && cur.status === 'cancelled' && opts.bareCancellations);
+      if (cur && (placeable || cancellation)) {
         events.push({
-          uid: cur.uid,
-          title: cur.title,
+          uid: cur.uid as string,
+          title: cur.title ?? '',
           description: cur.description ?? null,
           location: cur.location ?? null,
-          startsAt: cur.startsAt,
+          startsAt: cur.startsAt ?? cur.recurrenceId ?? '',
           endsAt: cur.endsAt ?? null,
           allDay: cur.allDay ?? false,
           recurrenceRule: cur.recurrenceRule ?? null,
           status: cur.status,
+          recurrenceId: cur.recurrenceId ?? null,
+          ...(cur.hasExdates ? { hasExdates: true } : {}),
+          ...(cur.hasRdates ? { hasRdates: true } : {}),
+          ...(cur.hasExrule ? { hasExrule: true } : {}),
+          ...(cur.hasDuration ? { hasDuration: true } : {}),
+          ...(cur.recurrenceRuleCount && cur.recurrenceRuleCount > 1 ? { recurrenceRuleCount: cur.recurrenceRuleCount } : {}),
         });
       }
       cur = null;
@@ -168,11 +271,9 @@ export function parseICS(text: string): IcsEvent[] {
     }
     if (!cur) continue;
 
-    const colon = line.indexOf(':');
-    if (colon === -1) continue;
-    const left = line.slice(0, colon);
-    const value = line.slice(colon + 1);
-    const name = left.split(';')[0].toUpperCase();
+    const property = contentLine(line);
+    if (!property) continue;
+    const { name, value, params } = property;
 
     switch (name) {
       case 'UID':
@@ -188,15 +289,32 @@ export function parseICS(text: string): IcsEvent[] {
         cur.location = unescapeIcsText(value);
         break;
       case 'DTSTART': {
-        const { iso, allDay } = parseIcsDate(value);
+        const { iso, allDay } = parseDateProperty(value, params, clock, declaredZones);
         cur.startsAt = iso;
         cur.allDay = allDay;
         break;
       }
       case 'DTEND':
-        cur.endsAt = parseIcsDate(value).iso;
+        cur.endsAt = parseDateProperty(value, params, clock, declaredZones).iso;
+        break;
+      case 'RECURRENCE-ID':
+        if (params.RANGE) throw new UnsupportedIcsRecurrenceError('Unsupported ICS recurrence range');
+        cur.recurrenceId = parseDateProperty(value, params, clock, declaredZones).iso;
+        break;
+      case 'DURATION':
+        cur.hasDuration = true;
+        break;
+      case 'EXRULE':
+        cur.hasExrule = true;
+        break;
+      case 'EXDATE':
+        cur.hasExdates = true;
+        break;
+      case 'RDATE':
+        cur.hasRdates = true;
         break;
       case 'RRULE':
+        cur.recurrenceRuleCount = (cur.recurrenceRuleCount ?? 0) + 1;
         cur.recurrenceRule = value;
         break;
       case 'STATUS':

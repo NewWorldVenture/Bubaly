@@ -1,4 +1,4 @@
-import { isValidElement, type ReactElement, type ReactNode } from 'react';
+import { createElement, cloneElement, useEffect, useRef, useState, isValidElement, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BillingModule } from '@/components/modules/billing-module';
@@ -7,10 +7,11 @@ import { getMessages } from '@/lib/i18n/messages';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import type { Tables } from '@/lib/database.types';
 
+type HookFrame = { slots: unknown[]; cleanups: Set<() => void>; mounted: boolean };
 type Effect = { deps?: readonly unknown[]; cleanup?: () => void };
 type Result = { data: Tables<'subscriptions'> | null; error: { message: string } | null };
 const mock = vi.hoisted(() => ({
-  slots: [] as unknown[], cursor: 0, effects: [] as (() => void)[], cleanups: new Set<() => void>(),
+  slots: [] as unknown[], cursor: 0, activeFrame: null as HookFrame | null, effects: [] as (() => void)[], cleanups: new Set<() => void>(),
   read: vi.fn<() => Promise<Result>>(), createClient: vi.fn(), eq: vi.fn(),
   channel: vi.fn(), removeChannel: vi.fn(), realtime: undefined as (() => void) | undefined,
   published: false, fetch: vi.fn(), toast: vi.fn(), locale: 'en-US' as LocaleCode, confirm: vi.fn(async () => true),
@@ -38,10 +39,11 @@ vi.mock('react', async (original) => {
     useMemo: memo,
     useCallback: (callback: unknown, deps?: readonly unknown[]) => memo(() => callback, deps),
     useState: (initial: unknown) => {
+      const slots = mock.slots;
       const index = mock.cursor++;
-      if (!(index in mock.slots)) mock.slots[index] = typeof initial === 'function' ? initial() : initial;
-      return [mock.slots[index], (value: unknown) => {
-        mock.slots[index] = typeof value === 'function' ? value(mock.slots[index]) : value;
+      if (!(index in slots)) slots[index] = typeof initial === 'function' ? initial() : initial;
+      return [slots[index], (value: unknown) => {
+        slots[index] = typeof value === 'function' ? value(slots[index]) : value;
       }];
     },
     useRef: (initial: unknown) => {
@@ -51,14 +53,17 @@ vi.mock('react', async (original) => {
     },
     useTransition: () => [false, (callback: () => unknown) => callback()],
     useEffect: (effect: () => void | (() => void), deps?: readonly unknown[]) => {
+      const slots = mock.slots;
+      const frame = mock.activeFrame;
       const index = mock.cursor++;
-      const prior = mock.slots[index] as Effect | undefined;
+      const prior = slots[index] as Effect | undefined;
       if (prior && same(prior.deps, deps)) return;
       mock.effects.push(() => {
-        if (prior?.cleanup) { prior.cleanup(); mock.cleanups.delete(prior.cleanup); }
+        if (frame && !frame.mounted) return;
+        if (prior?.cleanup) { prior.cleanup(); mock.cleanups.delete(prior.cleanup); frame?.cleanups.delete(prior.cleanup); }
         const cleanup = effect();
-        mock.slots[index] = { deps, cleanup };
-        if (typeof cleanup === 'function') mock.cleanups.add(cleanup);
+        slots[index] = { deps, cleanup };
+        if (typeof cleanup === 'function') { mock.cleanups.add(cleanup); frame?.cleanups.add(cleanup); }
       });
     },
   };
@@ -126,7 +131,47 @@ function nodes(node: ReactNode): Node[] {
   if (Array.isArray(node)) return node.flatMap(nodes);
   return isValidElement<Record<string, unknown>>(node) ? [node, ...nodes(node.props.children as ReactNode)] : [];
 }
-function html(node: ReactNode) { return renderToStaticMarkup(node); }
+// SSR still executes actual child components. Give each keyed component its
+// own hook slots, as React does, rather than appending them to BillingModule.
+const childFrames = new Map<string, HookFrame>();
+const componentIds = new WeakMap<object, number>();
+let nextComponentId = 0;
+function keyedChildren(node: ReactNode, path: string, seen: Set<string>): ReactNode {
+  if (Array.isArray(node)) return node.map((child, index) => keyedChildren(child, `${path}/${isValidElement(child) && child.key != null ? child.key : index}`, seen));
+  if (!isValidElement<Record<string, unknown>>(node)) return node;
+  if (typeof node.type === 'function') {
+    const component = node.type as (props: Record<string, unknown>) => ReactNode;
+    if (!componentIds.has(component)) componentIds.set(component, ++nextComponentId);
+    const identity = `${path}:${componentIds.get(component)}:${node.key ?? ''}`;
+    seen.add(identity);
+    let frame = childFrames.get(identity);
+    if (!frame) { frame = { slots: [], cleanups: new Set(), mounted: true }; childFrames.set(identity, frame); }
+    const instance = frame;
+    const componentProps = node.props;
+    function KeyedInstance() {
+      const parent = { slots: mock.slots, cursor: mock.cursor, frame: mock.activeFrame };
+      mock.slots = instance.slots; mock.cursor = 0; mock.activeFrame = instance;
+      try { return keyedChildren(component(componentProps), identity, seen); }
+      finally { mock.slots = parent.slots; mock.cursor = parent.cursor; mock.activeFrame = parent.frame; }
+    }
+    return createElement(KeyedInstance, { key: node.key });
+  }
+  return cloneElement(node, undefined, keyedChildren(node.props.children as ReactNode, path, seen));
+}
+function html(node: ReactNode) {
+  const seen = new Set<string>();
+  const markup = renderToStaticMarkup(keyedChildren(node, 'root', seen));
+  for (const [identity, frame] of childFrames) {
+    if (seen.has(identity)) continue;
+    frame.mounted = false;
+    childFrames.delete(identity);
+    mock.effects.push(() => {
+      for (const cleanup of frame.cleanups) { cleanup(); mock.cleanups.delete(cleanup); }
+      frame.cleanups.clear();
+    });
+  }
+  return markup;
+}
 function escaped(value: string) { return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#x27;').replace(/"/g, '&quot;'); }
 function unavailable(node: ReactNode) {
   const found = nodes(node).find((item) => item.props.message === getMessages(mock.locale)['changePlan.subscriptionStatusIsTemporarilyUnavailable']);
@@ -136,6 +181,7 @@ function unavailable(node: ReactNode) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  childFrames.clear(); mock.activeFrame = null;
   mock.slots = []; mock.cursor = 0; mock.effects = []; mock.cleanups.clear();
   mock.scope = { familyId: 'family-a', family: { name: 'Review family' }, userId: 'user-a', role: 'parent', members: [] };
   mock.checkout = ''; mock.locale = 'en-US'; mock.published = false; mock.realtime = undefined;
@@ -155,6 +201,32 @@ beforeEach(() => {
   vi.stubGlobal('fetch', mock.fetch);
 });
 afterEach(() => { unmount(); vi.unstubAllGlobals(); });
+
+describe('keyed child hook instances in the renderer', () => {
+  it('remounts a changed key and keeps its refs and cleanup separate from parent state', () => {
+    const refs: object[] = [];
+    const cleanup = vi.fn();
+    function Child() {
+      const ref = useRef(true);
+      refs.push(ref);
+      useEffect(() => cleanup, []);
+      return createElement('span', null, 'child');
+    }
+    const tree = (key: string) => render(() => {
+      const [value] = useState('parent-state');
+      expect(value).toBe('parent-state');
+      return createElement(Child, { key });
+    });
+    html(tree('family-a:user-a:false')); flushEffects();
+    html(tree('family-a:user-a:false')); flushEffects();
+    html(tree('family-b:user-a:false')); flushEffects();
+    expect(refs).toHaveLength(3);
+    expect(refs[0]).toBe(refs[1]);
+    expect(refs[0]).not.toBe(refs[2]);
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(mock.slots[0]).toBe('parent-state');
+  });
+});
 
 describe('current-owner subscription read lifecycle', () => {
   it.each(['returned', 'rejected', 'client-creation'] as const)('makes %s failures unavailable and permits a successful retry', async (kind) => {

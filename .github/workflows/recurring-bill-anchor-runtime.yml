@@ -1,0 +1,120 @@
+name: Recurring bill anchor SQL runtime
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - '.github/workflows/recurring-bill-anchor-runtime.yml'
+      - '.nvmrc'
+      - 'tests/fixtures/recurring-bill-anchor.sql'
+      - 'tests/fixtures/recurring-bill-roundtrip.mjs'
+      - 'supabase/reserved/0488_a_month_end_bill_keeps_its_day.sql'
+      - 'supabase/migrations/0006_financial_health_school_sports.sql'
+      - 'lib/finance/bill-schedule.ts'
+      - 'lib/finance/recurring.ts'
+      - 'lib/finance/bills.ts'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/recurring-bill-anchor-runtime.yml'
+      - '.nvmrc'
+      - 'tests/fixtures/recurring-bill-anchor.sql'
+      - 'tests/fixtures/recurring-bill-roundtrip.mjs'
+      - 'supabase/reserved/0488_a_month_end_bill_keeps_its_day.sql'
+      - 'supabase/migrations/0006_financial_health_school_sports.sql'
+      - 'lib/finance/bill-schedule.ts'
+      - 'lib/finance/recurring.ts'
+      - 'lib/finance/bills.ts'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: recurring-bill-anchor-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  recurring-bill-anchor:
+    if: >-
+      github.repository == 'NewWorldVenture/Bubaly' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check out exact same-repository PR or main head without stored credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Use declared Node release for native TypeScript stripping
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24.21.0'
+
+      - name: Require the repository's declared release
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(tr -d '\r\n' < .nvmrc)" == 24.21.0 ]]
+          [[ "$(node --version)" == v24.21.0 ]]
+
+      - name: Start private disposable PostgreSQL 17
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ && "$GITHUB_RUN_ATTEMPT" =~ ^[0-9]+$ ]]
+          container="bubaly-bill-anchor-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          printf 'BILL_ANCHOR_CONTAINER=%s\n' "$container" >> "$GITHUB_ENV"
+          docker run --detach --name "$container" --network none --log-driver none \
+            --label bubaly.bill-anchor-fixture=true \
+            --env POSTGRES_HOST_AUTH_METHOD=trust --env POSTGRES_DB=bubaly_bill_anchor_ci \
+            postgres:17 -c listen_addresses='' > /dev/null
+          streak=0
+          for attempt in $(seq 1 90); do
+            if docker exec "$container" psql -X --no-password --host=/var/run/postgresql \
+              --username=postgres --dbname=bubaly_bill_anchor_ci --set=ON_ERROR_STOP=1 \
+              --output=/dev/null --command='select 1' 2>/dev/null; then
+              streak=$((streak + 1))
+              if [ "$streak" -ge 3 ]; then exit 0; fi
+            else
+              streak=0
+            fi
+            sleep 1
+          done
+          printf '%s\n' 'Disposable bill database never became ready.' >&2
+          exit 1
+
+      - name: Run unchanged held migration fixture in its original relative topology
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="bubaly-bill-anchor-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          [[ "$BILL_ANCHOR_CONTAINER" == "$expected" ]]
+          [[ "$(docker inspect --type container --format '{{index .Config.Labels "bubaly.bill-anchor-fixture"}}' "$expected")" == true ]]
+          [[ "$(docker inspect --type container --format '{{.Config.Image}}' "$expected")" == postgres:17 ]]
+          [[ "$(docker inspect --type container --format '{{.HostConfig.NetworkMode}}' "$expected")" == none ]]
+          [[ -z "$(docker port "$expected")" ]]
+          docker exec "$expected" mkdir -p /fixture/tests/fixtures /fixture/supabase/reserved
+          docker cp tests/fixtures/recurring-bill-anchor.sql "$expected:/fixture/tests/fixtures/recurring-bill-anchor.sql"
+          docker cp supabase/reserved/0488_a_month_end_bill_keeps_its_day.sql "$expected:/fixture/supabase/reserved/0488_a_month_end_bill_keeps_its_day.sql"
+          docker exec "$expected" psql -X --no-password --host=/var/run/postgresql \
+            --username=postgres --dbname=bubaly_bill_anchor_ci --set=ON_ERROR_STOP=1 \
+            --file=/fixture/tests/fixtures/recurring-bill-anchor.sql
+
+      - name: Verify actual helper, persisted rereads and source trigger with handwritten CAS
+        shell: bash
+        run: node tests/fixtures/recurring-bill-roundtrip.mjs --docker "$BILL_ANCHOR_CONTAINER"
+
+      - name: Remove only this run's labelled disposable container
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="bubaly-bill-anchor-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if [[ "${BILL_ANCHOR_CONTAINER:-}" == "$expected" ]] && \
+            [[ "$(docker inspect --type container --format '{{index .Config.Labels "bubaly.bill-anchor-fixture"}}' "$expected" 2>/dev/null)" == true ]]; then
+            docker rm --force --volumes "$expected" > /dev/null
+          fi

@@ -47,7 +47,6 @@ const consumers = files.filter((f) =>
 const REFERENCE_WRITERS: Record<string, string> = {
   'components/modules/photos-module.tsx': 'family_photos.url on upload',
   'components/memories/create-memory.tsx': 'family_photos.url on upload',
-  'components/modules/messages-module.tsx': 'family_messages.attachment_url on send',
   'components/modules/reminders-module.tsx': 'family_reminders.image_url in the editor',
 };
 

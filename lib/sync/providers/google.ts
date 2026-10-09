@@ -282,10 +282,27 @@ export function patchEvent(accessToken: string, calendarId: string, eventId: str
   });
 }
 
-export function deleteEvent(accessToken: string, calendarId: string, eventId: string) {
-  return gfetch<void>(`${CAL_BASE}/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`, accessToken, {
-    method: 'DELETE',
-  });
+export async function deleteEvent(accessToken: string, calendarId: string, eventId: string) {
+  try {
+    await gfetch<void>(`${CAL_BASE}/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`, accessToken, {
+      method: 'DELETE',
+    });
+  } catch (error) {
+    // Google confirms an already deleted resource with 410/reason "deleted".
+    // Retrying that successful deletion must let the engine retire its mapping.
+    // Other 410 reasons require recovery and must remain errors.
+    if (error instanceof GoogleApiError && error.status === 410) {
+      try {
+        const body = JSON.parse(error.body ?? '') as { error?: { code?: number; errors?: Array<{ reason?: string }> } } | null;
+        const details = body?.error?.errors;
+        if (body?.error?.code === 410 && Array.isArray(details) && details.length > 0
+          && details.every(detail => detail?.reason === 'deleted')) return;
+      } catch {
+        // An absent, malformed or truncated receipt cannot confirm deletion.
+      }
+    }
+    throw error;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -362,8 +379,18 @@ export type MappedEvent = {
   cancelled: boolean;
 };
 
-/** Google event -> normalized row fields. Returns null if it lacks a usable start. */
+/** Google event -> normalized row fields. Deleted records need only an ID;
+ * live records still require a usable start. Tombstone timing is deliberately
+ * empty: both engines process cancellation before hashing or writing event data. */
 export function googleEventToRow(ev: GEvent): MappedEvent | null {
+  if (!ev.id) return null;
+  if (ev.status === 'cancelled') {
+    return {
+      external_id: ev.id, uid: ev.iCalUID ?? null, title: '', description: null,
+      location: null, starts_at: '', ends_at: null, all_day: false,
+      recurrence_rule: null, status: 'cancelled', etag: ev.etag ?? null, cancelled: true,
+    };
+  }
   const startRaw = ev.start?.dateTime ?? ev.start?.date;
   if (!startRaw) return null;
   const allDay = !ev.start?.dateTime;
@@ -380,7 +407,7 @@ export function googleEventToRow(ev: GEvent): MappedEvent | null {
     recurrence_rule: ev.recurrence?.find((r) => r.startsWith('RRULE:'))?.replace('RRULE:', '') ?? null,
     status: ev.status ?? 'confirmed',
     etag: ev.etag ?? null,
-    cancelled: ev.status === 'cancelled',
+    cancelled: false,
   };
 }
 

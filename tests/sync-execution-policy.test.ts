@@ -36,16 +36,25 @@ const googleExports = () => [mocks.googleInsertEvent, mocks.googlePatchEvent, mo
 function seed(direction: string, metadata: unknown = {}, provider = 'microsoft') {
   db.seed('sync_accounts', [{ ...ACCOUNT, provider, sync_direction: direction, metadata }]);
   db.seed('sync_connections', [{ id: 'connection', account_id: ACCOUNT.id }]);
-  db.seed('sync_calendars', [{ id: 'calendar', family_id: 'ours', provider, external_id: 'primary', sync_token: null }]);
-  db.seed('sync_reminder_lists', [{ id: 'list', family_id: 'ours', provider, external_id: provider === 'google' ? '@default' : 'default' }]);
-  db.seed('sync_calendar_events', [{ id: 'local-event', calendar_id: 'calendar', provider: 'internal', title: 'Local event', starts_at: '2026-09-12T12:00:00Z', deleted_at: null }]);
-  db.seed('sync_reminders', [{ id: 'local-task', list_id: 'list', provider: 'internal', title: 'Local task', is_completed: false, deleted_at: null }]);
+  db.seed('sync_calendars', [{ id: 'calendar', account_id: ACCOUNT.id, family_id: 'ours', provider, external_id: 'primary', sync_token: null }]);
+  db.seed('sync_reminder_lists', [{ id: 'list', account_id: ACCOUNT.id, family_id: 'ours', provider, external_id: provider === 'google' ? '@default' : 'default' }]);
+  db.seed('sync_calendar_events', [{ id: 'local-event', family_id: 'ours', calendar_id: 'calendar', provider: 'internal', title: 'Local event', starts_at: '2026-09-12T12:00:00Z', deleted_at: null }]);
+  db.seed('sync_reminders', [{ id: 'local-task', family_id: 'ours', list_id: 'list', provider: 'internal', title: 'Local task', is_completed: false, deleted_at: null }]);
 }
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.locale = 'en-US';
   vi.spyOn(console, 'error').mockImplementation(() => {});
-  db = createInMemorySupabase();
+  db = createInMemorySupabase({ rpc: {
+    ensure_sync_pull_container: (args, fixture) => {
+      if (args.p_account !== ACCOUNT.id || args.p_family !== ACCOUNT.family_id || args.p_user !== ACCOUNT.user_id) throw new Error('Wrong synthetic sync owner');
+      const table = args.p_kind === 'event' ? 'sync_calendars' : 'sync_reminder_lists';
+      const row = fixture.table(table).find(row => row.account_id === args.p_account && row.family_id === args.p_family
+        && row.provider === args.p_provider && row.external_id === args.p_external);
+      if (!row) throw new Error('Missing synthetic mirror');
+      return { id: row.id, sync_token: row.sync_token ?? null };
+    },
+  } });
   db.seed('families', [{ id: 'ours', timezone: 'UTC' }]);
   mocks.token.mockResolvedValue('access');
   mocks.legacyToken.mockResolvedValue('access');

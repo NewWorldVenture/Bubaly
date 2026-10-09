@@ -133,11 +133,30 @@ describe('each page renders through the formatter bound to the family\'s zone', 
   it('home: the Coming Up badge, a due day and a photo day', () => {
     const src = code('app/(app)/home/page.tsx');
     expect(src).toContain("const { fmtTime, fmtDate, fmtMoney } = createFormat(locale.code, (key, params) => translate(catalogue, key, params), tz);");
-    expect(src).toContain("fmtDate(e.starts_at, 'MMM')");
-    expect(src).toContain("fmtDate(e.starts_at, 'd')");
+    expect(src).toContain("fmtDate(e.all_day ? e.displayDay : e.displayStartsAt, 'MMM')");
+    expect(src).toContain("fmtDate(e.all_day ? e.displayDay : e.displayStartsAt, 'd')");
     expect(src, 'the badge day number read the host\'s calendar').not.toContain('d.getDate()');
     expect(src).toContain("fmtDate(t.due_date, 'MMM d')");
     expect(src).toContain("fmtDate(p.taken_at || p.created_at, 'MMM d')");
+  });
+  it('home: the actual badge expression keeps a civil DATE and dates a clipped instant in the family zone', () => {
+    const src = code('app/(app)/home/page.tsx');
+    // Extract the expression the page renders, rather than a second copy of
+    // its conditional. Either an all-day or timed regression must fail.
+    const expressions = ['MMM', 'd'].map((pattern) => {
+      const expression = src.match(new RegExp(`\\{(fmtDate\\(e\\.all_day \\? e\\.displayDay : e\\.displayStartsAt, '${pattern}'\\))\\}`))?.[1];
+      expect(expression, `actual ${pattern} badge expression`).toBeTruthy();
+      return new Function('e', 'fmtDate', `return ${expression};`) as (
+        event: { all_day: boolean; displayDay: string; displayStartsAt: string },
+        fmtDate: ReturnType<typeof createFormat>['fmtDate'],
+      ) => string;
+    });
+    const event = { all_day: false, displayDay: '2026-10-05', displayStartsAt: '2026-10-05T02:00:00.000Z' };
+    const badge = (allDay: boolean, zone: string) => expressions.map((render) => render({ ...event, all_day: allDay }, createFormat('en-US', undefined, zone).fmtDate));
+    expect(badge(false, LA)).toEqual(['Oct', '4']);
+    expect(badge(false, 'Pacific/Kiritimati')).toEqual(['Oct', '5']);
+    expect(badge(true, LA)).toEqual(['Oct', '5']);
+    expect(badge(true, 'Pacific/Kiritimati')).toEqual(['Oct', '5']);
   });
   it('conflicts: both ends and the same-day decision', () => {
     const src = code('app/(app)/dashboard/conflicts/page.tsx');

@@ -57,7 +57,8 @@ import { birthdayCountdown } from '@/lib/moments/birthdays';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { WidgetBoundary } from '@/components/ui/widget-boundary';
 import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
-import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { type CalendarDisplayOccurrence, readDisplayCalendarOccurrences } from '@/lib/calendar/display-occurrences';
+import { calendarConsumerKey, projectCalendarDay, projectCalendarWindow } from '@/lib/calendar/consumer-spans';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -196,7 +197,7 @@ export default async function HomePage() {
   const [
     { data: members, count: memberCount, error: membersError },
     { data: todayEvents, count: todayEventsCount, error: todayEventsError },
-    { data: upcomingEvents },
+    { data: upcomingEvents, error: upcomingEventsError },
     { data: tasks },
     { data: choreRows },
     { data: dinnerPlans },
@@ -214,10 +215,10 @@ export default async function HomePage() {
     // Series included: a weekly practice is on Today every week, not only the
     // week it was created, and `count` is every occurrence while the list shows
     // eight (lib/calendar/occurrences.ts).
-    readCalendarOccurrences(supabase, familyId, instantCalendarBounds(todayStart.toISOString(), new Date(todayEnd.getTime() - 1).toISOString(), tz), tz,
-      { columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day', 'location', 'assignee_id'], limit: 8 }),
-    readCalendarOccurrences(supabase, familyId, instantCalendarBounds(todayEnd.toISOString(), new Date(Date.now() + 30 * 86400000).toISOString(), tz), tz,
-      { columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day', 'assignee_id'], limit: 5 }),
+    readDisplayCalendarOccurrences(supabase, familyId, instantCalendarBounds(todayStart.toISOString(), new Date(todayEnd.getTime() - 1).toISOString(), tz), tz,
+      { overlap: true }),
+    readDisplayCalendarOccurrences(supabase, familyId, instantCalendarBounds(todayEnd.toISOString(), new Date(Date.now() + 30 * 86400000).toISOString(), tz), tz,
+      { overlap: true }),
     supabase.from('todo_items').select('id, title, due_date, is_done, assigned_to_id')
       .eq('family_id', familyId).eq('is_done', false).order('due_date', { ascending: true, nullsFirst: false }).limit(6),
     supabase.from('chore_assignments').select('id, status, member_id, chore_id, due_at')
@@ -416,8 +417,16 @@ export default async function HomePage() {
   const needsHeader = needsHeadline(summarizeNeeds(homeNeeds));
 
   const scheduleRes = await schedulePromise;
+  let todayCalendarUnavailable=!!todayEventsError;
+  let upcomingCalendarUnavailable=!!upcomingEventsError;
+  let visibleToday: CalendarDisplayOccurrence[]=[];
+  let visibleUpcoming: ReturnType<typeof projectCalendarWindow<CalendarDisplayOccurrence>>=[];
+  try { visibleToday=projectCalendarDay(todayEvents??[],todayKey,tz); }
+  catch { todayCalendarUnavailable=true; }
+  try { visibleUpcoming=projectCalendarWindow(upcomingEvents??[],dayKeyInTz(todayEnd,tz),dayKeyInTz(new Date(Date.now()+31*86400000),tz),tz); }
+  catch { upcomingCalendarUnavailable=true; }
   const today = buildToday({
-    events: ((todayEvents ?? []) as TodayEventRow[]),
+    events: (visibleToday.slice(0,8) as TodayEventRow[]),
     todos: (todosDueRes.data ?? []) as TodayTodoRow[],
     chores: choresDue,
     reminders: (remindersDueRes.data ?? []) as TodayReminderRow[],
@@ -581,7 +590,8 @@ export default async function HomePage() {
 
       <Card>
         <CardHead icon={Clock} title={tr('home.today')} href="/dashboard/calendar" action="View calendar" />
-        {today.schedule.length === 0 && today.tasks.length === 0 && <EmptyRow>{tr('home.aClearDayNothingScheduledAnd')}</EmptyRow>}
+        {todayCalendarUnavailable && <p role="alert">{tr('home.couldNotCheckTodaysSchedule')} <Link href="/home">{tr('home.tryAgain')}</Link></p>}
+        {!todayCalendarUnavailable && today.schedule.length === 0 && today.tasks.length === 0 && <EmptyRow>{tr('home.aClearDayNothingScheduledAnd')}</EmptyRow>}
         {today.schedule.length > 0 && (
           <ul className="space-y-3" aria-label={i18nT('home.todaysSchedule')}>
             {today.schedule.map((item) => {
@@ -634,21 +644,22 @@ export default async function HomePage() {
       <Card>
         <CardHead icon={CalendarDays} title={tr('home.comingUp')} href="/dashboard/calendar" action="View calendar" />
         <div className="space-y-2.5">
-          {(upcomingEvents ?? []).length === 0 && <EmptyRow>{tr('home.nothingOnTheHorizonYet')}</EmptyRow>}
-          {((upcomingEvents ?? []) as { id: string; title: string; starts_at: string; all_day: boolean; assignee_id: string | null }[]).map((e) => {
+          {upcomingCalendarUnavailable && <p role="alert">{tr('home.couldNotCheckTodaysSchedule')} <Link href="/home">{tr('home.tryAgain')}</Link></p>}
+          {!upcomingCalendarUnavailable && visibleUpcoming.length === 0 && <EmptyRow>{tr('home.nothingOnTheHorizonYet')}</EmptyRow>}
+          {(!upcomingCalendarUnavailable?visibleUpcoming.slice(0,5):[]).map((e) => {
             const owner = e.assignee_id ? memberById.get(e.assignee_id) : undefined;
             return (
-              <Link key={e.id} href="/dashboard/calendar" className="flex min-h-[44px] items-center gap-3 rounded-xl focus-ring">
+              <Link key={calendarConsumerKey(e)} href="/dashboard/calendar" className="flex min-h-[44px] items-center gap-3 rounded-xl focus-ring">
                 <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-elevated text-center">
                   {/* The badge's month and day are the FAMILY's (`fmtDate` is bound to
                       `tz`), not the host's: `d.getDate()` on a UTC host put a 7pm
                       Californian event on tomorrow's square. */}
-                  <span className="text-[9px] font-bold uppercase text-muted leading-none">{fmtDate(e.starts_at, 'MMM')}</span>
-                  <span className="text-sm font-black leading-none">{fmtDate(e.starts_at, 'd')}</span>
+                  <span className="text-[9px] font-bold uppercase text-muted leading-none">{fmtDate(e.all_day ? e.displayDay : e.displayStartsAt, 'MMM')}</span>
+                  <span className="text-sm font-black leading-none">{fmtDate(e.all_day ? e.displayDay : e.displayStartsAt, 'd')}</span>
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold">{e.title}</p>
-                  <p className="truncate text-xs text-muted">{e.all_day ? 'All day' : fmtTime(e.starts_at)}</p>
+                  <p className="truncate text-xs text-muted">{e.all_day ? 'All day' : fmtTime(e.displayStartsAt)}</p>
                 </div>
                 {owner && <Avatar name={owner.display_name} color={owner.color ?? undefined} size={24} className="shrink-0 rounded-full" />}
               </Link>

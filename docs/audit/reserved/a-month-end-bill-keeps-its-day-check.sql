@@ -7,7 +7,7 @@
 --
 --   * the column is a nullable smallint with no default, so every row written
 --     before 0488 (and every insert that leaves it out) reads null, and null
---     reads the day from due_date as before;
+--     means the original anchor is unknown;
 --   * exactly ONE check constraint names it, so re-applying 0488 onto a schema
 --     that already has it (docs/audit/rehearse-ledger-repair.sh) adds nothing;
 --   * the roll Mark paid writes lands, and a day outside 1..31 is refused.

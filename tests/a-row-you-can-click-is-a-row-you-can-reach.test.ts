@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
 import { activatable } from '@/lib/ui/a11y';
 
@@ -104,7 +104,7 @@ describe('an aria-hidden scrim does not hide a menu with no way out', () => {
     /['"]Escape['"]/.test(source)
     || ESCAPE_HOOKS.some((hook) => new RegExp(`\\b${hook}\\s*[<(]`).test(source));
 
-  const files = execSync("git ls-files 'components/*.tsx' 'app/*.tsx'", { encoding: 'utf8' })
+  const files = execFileSync('git', ['ls-files', 'components/*.tsx', 'app/*.tsx'], { encoding: 'utf8' })
     .split('\n').filter(Boolean);
 
   it('is looking at the components (guards the guard)', () => {
