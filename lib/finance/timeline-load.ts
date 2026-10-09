@@ -255,7 +255,9 @@ function isMissingTable(error: unknown): boolean {
  * 42703, naming `bills.due_day`); the read is repeated without it, once, with
  * a warning naming the migration, and each row is read as production read it
  * before 0488 (`billBefore0488`): the due date's own day is the bill's day,
- * and a flagged bill without a named cadence is monthly.
+ * and a flagged bill without a named cadence still asks for its schedule
+ * (BillScheduleConfirmationRequired), as with the column; it is never stepped
+ * as monthly.
  */
 async function readBills(supabase: SupabaseClient<Database>, familyId: string): Promise<{ data: unknown[] | null; error: unknown }> {
   const first = await readBillPages(supabase, familyId, BILL_COLUMNS);

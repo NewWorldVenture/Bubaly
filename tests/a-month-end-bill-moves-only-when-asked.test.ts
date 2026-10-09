@@ -87,8 +87,21 @@ for (const [file, name] of [
       expect(b.env.success).not.toHaveBeenCalled();
     });
     // Owner decision (0488 held): the previous production behaviour, not a refusal.
+    // Not previous production: a bill whose cadence is missing or unknown is
+    // never rolled as monthly (an invented schedule). It asks, as with 0488.
+    it.each([null, 'every month', 'Bi-Monthly'])('older schema: cadence %j asks for the schedule; nothing is probed or written', async (recurrence) => {
+      const row = bill({ due_date: '2026-02-28', recurrence }),
+        db = store(row, true),
+        b = setup(db, row.due_date);
+      await b.run(row);
+      expect(b.env.setPaymentSelection).toHaveBeenCalledWith({ bill: row, owner: b.env.paymentOwner, ticket: 1 });
+      expect(db.reads).toHaveLength(0);
+      expect(db.requests).toHaveLength(0);
+      expect(db.current()).toEqual(row);
+      expect(b.env.askConfirm).not.toHaveBeenCalled();
+      expect(b.env.success).not.toHaveBeenCalled();
+    });
     it.each([
-      { name: 'a cadence-less recurring bill rolls monthly', over: { due_date: '2026-02-28', recurrence: null }, next: '2026-03-28' },
       { name: 'a bill due on the 30th rolls to the 30th', over: { due_date: '2026-03-30' }, next: '2026-04-30' },
       { name: 'a bill due on the 28th rolls to the 28th', over: { due_date: '2026-03-28' }, next: '2026-04-28' },
     ])('older schema: $name, as before 0488', async ({ over, next }) => {

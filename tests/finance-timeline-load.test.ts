@@ -296,14 +296,28 @@ describe('bill anchors in the timeline read', () => {
 
   it.each([
     { name: 'a bill due on the 30th', over: { due_date: '2026-01-30' }, dates: ['2026-01-30', '2026-02-28'] },
-    { name: 'a cadence-less recurring bill', over: { due_date: '2026-01-29', recurrence: null }, dates: ['2026-01-29', '2026-02-28', '2026-03-29'] },
-    { name: 'an unknown cadence name', over: { due_date: '2026-01-15', recurrence: 'every month' }, dates: ['2026-01-15', '2026-02-15', '2026-03-15'] },
   ])('loads the older-schema forecast for $name, as before 0488', async ({ over, dates }) => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const db = transport({ ...row, ...over }, { code: '42703', message: 'column bills.due_day does not exist' });
     const timeline = await loadMoneyTimeline(db.client, 'family-1', 'UTC', NOW);
     expect(timeline.weeks.flatMap((week) => week.moments).map((moment) => moment.date)).toEqual(dates);
     expect(timeline.monthlyRecurring).toBe(100);
+  });
+
+  // Not previous production: a recurring bill with a missing or unknown
+  // cadence is never forecast as monthly. Without the column it asks for the
+  // schedule exactly as it does with it.
+  it.each([
+    { due_date: '2026-01-29', recurrence: null },
+    { due_date: '2026-01-15', recurrence: 'every month' },
+    { due_date: '2026-01-15', recurrence: '' },
+  ])('an older-schema bill with cadence $recurrence asks for its schedule instead of stepping monthly', async (over) => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const db = transport({ ...row, ...over }, { code: '42703', message: 'column bills.due_day does not exist' });
+    await expect(loadMoneyTimeline(db.client, 'family-1', 'UTC', NOW)).rejects.toBeInstanceOf(BillScheduleConfirmationRequired);
+    const input = await loadMoneyTimelineInput(transport({ ...row, ...over }, { code: '42703', message: 'column bills.due_day does not exist' }).client, 'family-1', 'UTC', NOW);
+    expect(input.bills[0]).toMatchObject({ recurrence: over.recurrence });
+    expect(input.bills[0]).not.toHaveProperty('due_day');
   });
 
   it('with the column, an unknown day or cadence still asks for the schedule', async () => {

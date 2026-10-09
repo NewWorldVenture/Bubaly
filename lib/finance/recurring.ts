@@ -122,16 +122,22 @@ export function resetDueDayWarningForTests(): void {
   warnedDueDayMissing = false;
 }
 
-/** Pre-0488 production: a flagged bill with no or an unknown cadence was monthly. */
+/**
+ * The cadence of a row read without `bills.due_day`: only a NAMED one.
+ * Previous production read a flagged bill with no or an unknown cadence as
+ * monthly; that invents a payment schedule nobody chose, so here, as with the
+ * column, it is unknown (null) and the person confirms it.
+ */
 function cadenceBefore0488(bill: Pick<RecurringBillLike, 'is_recurring' | 'recurrence'>): BillCadence | null {
-  return bill.is_recurring ? (namedCadence(bill.recurrence) ?? 'monthly') : null;
+  return bill.is_recurring ? namedCadence(bill.recurrence) : null;
 }
 
 /**
  * A bill row as the previous production read it, for rows read after
- * `bills.due_day` was refused: a flagged bill with no or an unknown cadence is
- * monthly, and a month-based bill is anchored on its due date's own day, the
- * only day that database records.
+ * `bills.due_day` was refused: a month-based bill is anchored on its due
+ * date's own day, the only day that database records. A flagged bill with no
+ * or an unknown cadence is returned as it came, so the forecast asks for its
+ * schedule (BillScheduleConfirmationRequired) instead of stepping it monthly.
  */
 export function billBefore0488<B extends RecurringBillLike>(bill: B): B {
   const cadence = cadenceBefore0488(bill);
@@ -142,9 +148,15 @@ export function billBefore0488<B extends RecurringBillLike>(bill: B): B {
 
 export type BillPaidPatchBefore0488 = { status: 'paid' } | { status: 'upcoming'; due_date: string; due_day?: number };
 
-/** What Mark paid wrote before 0488; `writeBillPatch` drops `due_day` again. */
-export function billPaidPatchBefore0488(bill: RecurringBillLike, today: string): BillPaidPatchBefore0488 {
+/**
+ * What Mark paid wrote before 0488; `writeBillPatch` drops `due_day` again.
+ * Null (nothing is written) for a flagged bill without a named cadence: its
+ * schedule is confirmed by the person, never invented as monthly nor closed
+ * as a one-off.
+ */
+export function billPaidPatchBefore0488(bill: RecurringBillLike, today: string): BillPaidPatchBefore0488 | null {
   const cadence = cadenceBefore0488(bill);
+  if (bill.is_recurring && !cadence) return null;
   const anchor = parseDayKey(bill.due_date);
   if (!cadence || !anchor) return { status: 'paid' };
   const day = MONTH_BASED_CADENCES.has(cadence) ? anchor[2] : null;

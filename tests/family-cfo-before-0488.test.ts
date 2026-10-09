@@ -5,9 +5,10 @@ import type { Database } from '@/lib/database.types';
 // The real Family CFO page, the real forecast loader and the actual Supabase
 // SDK, against a database that has not applied the held 0488 (bills.due_day).
 // Owner decision: until it is applied the dashboard loads as production did
-// before 0488 — a bill due on the 28th–30th, or a recurring bill without a
-// cadence, steps from its due date's own day — and only the exact
-// missing-column answer selects that behaviour.
+// before 0488 — a bill due on the 28th–30th steps from its due date's own
+// day — and only the exact missing-column answer selects that behaviour. A
+// recurring bill without a named cadence is not stepped as monthly: the page
+// asks for its schedule to be confirmed, as it does with the column.
 const h = vi.hoisted(() => ({ db: null as unknown }));
 vi.mock('@/lib/supabase/auth', () => ({ requireFeature: async () => ({ active: { familyId: 'family', family: { timezone: 'UTC' } } }) }));
 vi.mock('@/lib/auth/require-aal2', () => ({ requireAal2: async () => {} }));
@@ -33,6 +34,7 @@ const BILLS = [
   { id: 'bill-28th', name: 'Power', amount: 80, due_date: '2026-10-28', is_recurring: true, recurrence: 'monthly', status: 'upcoming', category: null, autopay: false },
   { id: 'bill-legacy', name: 'Water', amount: 40, due_date: '2026-10-29', is_recurring: true, recurrence: null, status: 'upcoming', category: null, autopay: false },
 ];
+const NAMED = BILLS.filter(row => row.recurrence !== null);
 /** `forecastBills` answers the forecast's select naming due_day; null serves the column. */
 function fixture(forecastBills: { code: string; message: string } | null, rows: Record<string, unknown>[] = BILLS) {
   const billSelects: string[] = [];
@@ -62,9 +64,9 @@ describe('Family CFO and its 12-week forecast without bills.due_day (0488 held)'
   it.each([
     { code: 'PGRST204', message: "Could not find the 'due_day' column of 'bills' in the schema cache" },
     { code: '42703', message: 'column bills.due_day does not exist' },
-  ])('loads for month-end and cadence-less bills on the exact $code answer, warning once with the migration', async (answer) => {
+  ])('loads for month-end bills on the exact $code answer, warning once with the migration', async (answer) => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const selects = fixture(answer);
+    const selects = fixture(answer, NAMED);
     const tree = nodes(await FamilyCfoPage());
     expect(tree.some(n => n.type === 'ErrorState')).toBe(false);
     expect(tree.some(n => n.type === 'StatTile')).toBe(true);
@@ -75,8 +77,24 @@ describe('Family CFO and its 12-week forecast without bills.due_day (0488 held)'
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0][0]).toContain('0488_a_month_end_bill_keeps_its_day.sql');
     // A second load in the same process does not warn again.
-    fixture(answer); await FamilyCfoPage();
+    fixture(answer, NAMED); await FamilyCfoPage();
     expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  // A recurring bill with no or an unknown cadence is never forecast as
+  // monthly: the page says the schedule needs confirming, with or without the column.
+  it.each([
+    { answer: { code: '42703', message: 'column bills.due_day does not exist' }, recurrence: null },
+    { answer: { code: '42703', message: 'column bills.due_day does not exist' }, recurrence: 'every month' },
+    { answer: null, recurrence: null },
+  ])('asks to confirm a recurring bill with cadence $recurrence (missing column: $answer.code)', async ({ answer, recurrence }) => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const legacy = { ...BILLS[2], recurrence, ...(answer ? {} : { due_day: null }) };
+    fixture(answer, [...NAMED, legacy]);
+    const tree = nodes(await FamilyCfoPage());
+    expect(tree.some(n => n.type === 'StatTile')).toBe(false);
+    expect(tree.find(n => n.type === 'ErrorState')?.props.message).toBe('bills.scheduleForecastNeedsConfirmation');
+    expect(tree.some(n => n.props.href === '/dashboard/bills')).toBe(true);
   });
 
   it.each([

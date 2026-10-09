@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Tables } from '@/lib/database.types';
-import { billPaidPatch, billSchedulePatch, type BillScheduleChoice } from './bill-schedule';
+import { billCadence, billPaidPatch, billSchedulePatch, type BillScheduleChoice } from './bill-schedule';
 import {
   whereBillIsAsSeen, writeBillPatch, isMissingDueDayColumn, isDueDayNotKept, billPaidPatchBefore0488,
   warnDueDayMissing, withoutRenamedCadence, type WriteBillPatchOptions,
@@ -82,8 +82,9 @@ const DUE_DAY_PROBE = 'due_day';
 
 /**
  * Mark paid for a row read without `due_day` whose schedule the anchored
- * rules cannot settle (no cadence, or a day 28–30). Null when the database
- * answers for the column: the caller asks for the schedule, as with 0488.
+ * rules cannot settle (a day 28–30). Null when the database answers for the
+ * column, or when the bill names no cadence: the caller asks for the
+ * schedule, as with 0488.
  * On the exact missing-column answer it writes the pre-0488 roll through the
  * same compare-and-swap; any other answer is returned as the error.
  */
@@ -96,6 +97,9 @@ export async function saveBillPaymentBefore0488(
   options: WriteBillPatchOptions = {},
 ) {
   if (bill.due_day !== undefined) return null;
+  // No named cadence: the person confirms the schedule, with or without the
+  // column. Nothing is probed or written, so no request can land late.
+  if (bill.is_recurring && !billCadence(bill)) return null;
   if (!isCurrent()) return { data: null, error: new Error('This bill view is no longer current.') };
   if (!bill.updated_at)
     return { data: null, error: new Error('This bill changed. Refresh before marking it paid.') };

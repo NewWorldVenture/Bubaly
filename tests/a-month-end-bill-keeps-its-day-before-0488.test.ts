@@ -1,17 +1,37 @@
 import { describe, it, expect, vi } from 'vitest';
 import { saveBillPayment, saveBillPaymentBefore0488 } from '@/lib/finance/bills';
-import { writeBillPatch, isDueDayNotKept, dueDayNotKeptQuestion } from '@/lib/finance/recurring';
+import { writeBillPatch, isDueDayNotKept, dueDayNotKeptQuestion, billPaidPatchBefore0488, billBefore0488 } from '@/lib/finance/recurring';
 import { bill, store } from './helpers/recurring-bill-store';
 
 describe('saveBillPaymentBefore0488', () => {
-  it('pays a cadence-less row monthly once the probe gets the exact missing-column answer', async () => {
-    const row = bill({ due_date: '2026-02-28', recurrence: null }),
+  // A missing or unknown cadence is never paid as monthly (an invented
+  // schedule) nor closed as a one-off: the caller asks for the schedule.
+  it.each([null, '', 'every month', 'constructor'])('answers null for cadence %j without probing or writing', async (recurrence) => {
+    const row = bill({ due_date: '2026-02-28', recurrence }),
       db = store(row, true);
-    const result = await saveBillPaymentBefore0488(db.client, row.family_id, row, row.due_date);
-    expect(result?.error).toBeNull();
-    expect(db.reads).toHaveLength(1);
-    expect(db.current()).toMatchObject({ status: 'upcoming', due_date: '2026-03-28', recurrence: null });
-    expect(db.requests.every((r) => r.url.searchParams.get('updated_at') === `eq.${row.updated_at}`)).toBe(true);
+    expect(await saveBillPaymentBefore0488(db.client, row.family_id, row, row.due_date)).toBeNull();
+    expect(db.reads).toHaveLength(0);
+    expect(db.requests).toHaveLength(0);
+    expect(db.current()).toEqual(row);
+  });
+  it('the pre-0488 patch for an unnamed cadence is null, and writeBillPatch then writes nothing', async () => {
+    for (const recurrence of [null, 'every month']) {
+      const row = bill({ due_date: '2026-01-15', recurrence });
+      expect(billPaidPatchBefore0488(row, row.due_date)).toBeNull();
+      const write = vi.fn(async () => ({ data: [], error: null }));
+      const result = await writeBillPatch(billPaidPatchBefore0488(row, row.due_date), write, { dueDayMissing: true });
+      expect(result.error).toBeInstanceOf(Error);
+      expect(write).not.toHaveBeenCalled();
+    }
+    // A one-off and a named cadence are unchanged.
+    expect(billPaidPatchBefore0488(bill({ is_recurring: false, recurrence: null }), '2026-01-31')).toEqual({ status: 'paid' });
+    expect(billPaidPatchBefore0488(bill({ due_date: '2026-01-15', recurrence: 'Monthly' }), '2026-01-15')).toEqual({ status: 'upcoming', due_date: '2026-02-15', due_day: 15 });
+  });
+  it('billBefore0488 leaves an unnamed cadence unknown and anchors a named one on its date', () => {
+    expect(billBefore0488(bill({ due_date: '2026-01-29', recurrence: null }))).toMatchObject({ recurrence: null });
+    expect(billBefore0488(bill({ due_date: '2026-01-29', recurrence: null }))).not.toHaveProperty('due_day');
+    expect(billBefore0488(bill({ due_date: '2026-01-15', recurrence: 'every month' }))).toMatchObject({ recurrence: 'every month' });
+    expect(billBefore0488(bill({ due_date: '2026-01-15', recurrence: 'Monthly' }))).toMatchObject({ recurrence: 'monthly', due_day: 15 });
   });
   it('answers null (ask for the schedule) when the column exists or the row carries it', async () => {
     const row = bill({ due_date: '2026-03-30' }),
