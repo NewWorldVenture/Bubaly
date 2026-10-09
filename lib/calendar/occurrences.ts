@@ -1,4 +1,4 @@
-import { parseExactInstant, exactInstantMilliseconds, compareExactInstants, addExactMilliseconds } from './exact-instant';
+import { parseExactInstant, exactInstantMilliseconds, compareExactInstants } from './exact-instant';
 // lib/calendar/occurrences.ts — what is ON the calendar in a window, series
 // included.
 //
@@ -20,7 +20,7 @@ import { parseExactInstant, exactInstantMilliseconds, compareExactInstants, addE
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { expandEventsInZone } from '@/lib/calendar/recurrence';
-import { calendarOverlapWindowFilter, calendarWindowFilter, type CalendarWindowBounds } from '@/lib/briefing/calendar-window';
+import { calendarOverlapWindowFilter, calendarWindowFilter, estimatedEndLookback, type CalendarWindowBounds } from '@/lib/briefing/calendar-window';
 import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from './source-capability';
 
 type EventRow = Database['public']['Tables']['calendar_events']['Row'];
@@ -139,10 +139,12 @@ export async function readCalendarBusySource(
   try { new Intl.DateTimeFormat('en-US', { timeZone: timezone }).format(fromMs); }
   catch { return fail('Invalid family timezone'); }
   if (fromExact === toExact) return { data: [], error: null };
-  const fallbackFrom = addExactMilliseconds(from, -3_600_000);
+  let lookback: ReturnType<typeof estimatedEndLookback>;
+  try { lookback = estimatedEndLookback(from); }
+  catch { return fail('Invalid busy window'); }
   // Starts at the boundary include explicit points. An earlier point occupies
   // nothing; a missing end keeps the established one-hour estimate.
-  const overlapFilter = `starts_at.gte.${from},ends_at.gt.${from},and(ends_at.is.null,starts_at.gt.${fallbackFrom})`;
+  const overlapFilter = `starts_at.gte.${from},ends_at.gt.${from},and(ends_at.is.null,starts_at.${lookback.comparison}.${lookback.start})`;
   const singlesQuery = () => {
     if (table === 'school_events') return db.from('school_events')
       .select('id, starts_at, ends_at, member_id', { count: 'exact' })

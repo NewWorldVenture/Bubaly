@@ -279,3 +279,36 @@ describe('counted native and secondary completeness integration',()=>{
     for(const table of ['calendar_events','school_events','sports_events'])expect(probe.calls.some(call=>call.url.pathname.endsWith('/'+table)&&call.url.searchParams.get('offset')==='2')).toBe(true);
   });
 });
+
+import {searchEvents as searchBoundaryEvents,findEventByTitle as findBoundaryTitle} from '@/lib/services/calendar';
+describe('minimum supported year through actual SDK availability', () => {
+  it('returns a genuine AD1 gap rather than a healthy empty result', async () => {
+    const probe=sdk();const result=await findFreeSlots({...scope(probe.db),now:new Date('0001-01-01T00:00:00Z')},{from:'0001-01-01T00:00:00Z',to:'0001-01-01T01:00:00Z',durationMin:15,workingHours:{startHour:0,endHour:23},limit:1});
+    expect(result).toMatchObject({ok:true,data:[{startsAt:'0001-01-01T00:00:00.000Z',endsAt:'0001-01-01T00:15:00.000Z'}]});
+    expect(new Set(probe.calls.map(call=>call.url.pathname.split('/').at(-1)))).toEqual(new Set(['calendar_events','school_events','sports_events']));
+  });
+  it('retains genuine occupied absence at AD1', async () => {
+    const rows=[native(1,{starts_at:'0001-01-01T00:00:00Z',ends_at:null})];const probe=sdk({rows});
+    expect(await findFreeSlots({...scope(probe.db),now:new Date('0001-01-01T00:00:00Z')},{from:'0001-01-01T00:00:00Z',to:'0001-01-01T00:30:00Z',durationMin:15,workingHours:{startHour:0,endHour:23}})).toEqual({ok:true,data:[]});
+  });
+  it.each(['America/New_York','America/Los_Angeles'].flatMap(zone=>['free','search','title'].map(kind=>[zone,kind])))('refuses an unrepresentable family day before SDK dispatch / %s / %s', async (zone,kind) => {
+    const probe=sdk(),s={...scope(probe.db,zone),now:new Date('0001-01-01T00:00:00Z')};const window={from:'0001-01-01T00:00:00Z',to:'0001-01-01T00:30:00Z'};
+    const result=kind==='free'?findFreeSlots(s,{...window,durationMin:15}):kind==='search'?searchBoundaryEvents(s,window):findBoundaryTitle(probe.db,FAMILY,'Synthetic',window.from,zone);
+    await expect(result).resolves.toMatchObject({ok:false,code:'invalid_input'});
+    expect(probe.calls).toEqual([]);
+  });
+  it('keeps the supported minimum date when the bisection bracket crosses BC', () => {
+    const bounds=briefingCalendarBounds('0001-01-01','America/New_York',0,1);
+    expect(bounds).toMatchObject({allDayFromDay:'0001-01-01',allDayToDay:'0001-01-02'});
+    for(const [instant,day]of [[bounds.timedFrom,'01'],[bounds.timedTo,'02']]){
+      const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',era:'short',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).formatToParts(new Date(instant));
+      const reading=Object.fromEntries(parts.filter(part=>part.type!=='literal').map(part=>[part.type,part.value]));
+      expect({...reading,hour:String(Number(reading.hour)%24)}).toMatchObject({era:'AD',year:'1',month:'01',day,hour:'0',minute:'00',second:'00'});
+    }
+  });
+  it('retains supported upper DATE bounds and refuses BCE projection or UTC underflow', () => {
+    expect(instantCalendarBounds('9999-12-30T12:00:00Z','9999-12-30T13:00:00Z','UTC')).toMatchObject({allDayFromDay:'9999-12-30',allDayToDay:'9999-12-31'});
+    expect(()=>instantCalendarBounds('0001-01-01T00:00:00Z','0001-01-01T00:30:00Z','America/New_York')).toThrow(RangeError);
+    expect(()=>briefingCalendarBounds('0001-01-01','Asia/Tokyo',0,1)).toThrow();
+  });
+});

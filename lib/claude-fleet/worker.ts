@@ -151,7 +151,12 @@ async function bounded<T>(
   };
   externalSignal?.addEventListener('abort', cancel, { once: true });
   try {
-    return await Promise.race([operation(controller.signal), interrupted]);
+    const result = await Promise.race([operation(controller.signal), interrupted]);
+    // Both promises can already be settled before race attaches its handlers.
+    // Cancellation/timeout still wins before accepting the operation's value.
+    if (externalSignal?.aborted) throw new WorkerCancelled();
+    if (controller.signal.aborted) throw new WorkerTimeout();
+    return result;
   } finally {
     if (timeout) clearTimeout(timeout);
     externalSignal?.removeEventListener('abort', cancel);
@@ -264,12 +269,17 @@ export async function runClaudeReadOnlyWorker(input: RunClaudeWorkerInput, adapt
   const command = (args: string[]): ClaudeWorkerCommand => ({
     cmd: 'claude', args, cwd: paths.worktreePath, env, timeoutMs: remaining(), maxOutputBytes: CLAUDE_WORKER_MAX_OUTPUT_BYTES,
   });
+  let stopAttempt: Promise<void> | undefined;
+  const stopOwnedSandbox = (opened: ClaudeWorkerSandbox) => stopAttempt ??=
+    bounded((cleanupSignal) => opened.stop(cleanupSignal), CLEANUP_TIMEOUT_MS);
   try {
     sandbox = await bounded(async (signal) => {
       const opened = await adapter.open({ jobId: input.jobId, binding, paths, previousSession }, signal);
+      // Own the resource before bounded() or the outer await can reject it.
+      sandbox = opened;
       if (signal.aborted) {
         // Creation may finish after timeout. Terminate that late sandbox too.
-        try { await bounded((cleanupSignal) => opened.stop(cleanupSignal), CLEANUP_TIMEOUT_MS); } catch { /* already quarantined */ }
+        try { await stopOwnedSandbox(opened); } catch { /* already quarantined */ }
         throw new WorkerCancelled();
       }
       return opened;
@@ -284,6 +294,7 @@ export async function runClaudeReadOnlyWorker(input: RunClaudeWorkerInput, adapt
     } else {
       phase = 'auth';
       const auth = await bounded((signal) => sandbox!.runCommand(command(['auth', 'status']), signal), remaining(), input.signal);
+      if (input.signal?.aborted) throw new WorkerCancelled();
       const authBody = parseRecord(auth.stdout);
       if (exceedsOutput(auth)) outcome = fail('failed', 'output_limit');
       else if (auth.exitCode !== 0 || authBody?.loggedIn !== true || authBody.authMethod !== 'api_key') outcome = fail('blocked', 'auth_rejected');
@@ -301,6 +312,7 @@ export async function runClaudeReadOnlyWorker(input: RunClaudeWorkerInput, adapt
           '--', `Reply with exactly this text, with no tools or other content: ${claudeWorkerProbeResult(input.jobId)}`,
         ];
         const completed = await bounded((signal) => sandbox!.runCommand(command(args), signal), remaining(), input.signal);
+        if (input.signal?.aborted) throw new WorkerCancelled();
         const body = parseRecord(completed.stdout);
         if (exceedsOutput(completed)) outcome = fail('quarantined', 'output_limit');
         else if (completed.exitCode !== 0 || body?.is_error === true) outcome = fail('failed', providerFailure(body, completed.stderr));
@@ -314,6 +326,7 @@ export async function runClaudeReadOnlyWorker(input: RunClaudeWorkerInput, adapt
         } else {
           phase = 'snapshot';
           const saved = await bounded((signal) => sandbox!.snapshot(signal), remaining(), input.signal);
+          if (input.signal?.aborted) throw new WorkerCancelled();
           if (!IDENTIFIER_PATTERN.test(saved.snapshotId)) outcome = fail('quarantined', 'snapshot_failed');
           else outcome = {
             status: 'succeeded', result: claudeWorkerProbeResult(input.jobId),
@@ -332,7 +345,7 @@ export async function runClaudeReadOnlyWorker(input: RunClaudeWorkerInput, adapt
   } finally {
     if (sandbox) {
       try {
-        await bounded((signal) => sandbox!.stop(signal), CLEANUP_TIMEOUT_MS);
+        await stopOwnedSandbox(sandbox);
         if (IDENTIFIER_PATTERN.test(sandbox.sandboxId)) {
           outcome = { ...outcome!, sandboxId: sandbox.sandboxId, stoppedSandboxId: sandbox.sandboxId, stopConfirmed: true };
         }
@@ -340,6 +353,15 @@ export async function runClaudeReadOnlyWorker(input: RunClaudeWorkerInput, adapt
         outcome = fail('quarantined', 'cleanup_failed');
       }
     }
+  }
+  // Cancellation may arrive after an inner await or while required cleanup is
+  // settling. The final synchronous acceptance boundary cannot publish a session.
+  if (outcome!.status === 'succeeded' && input.signal?.aborted) {
+    outcome = {
+      status: 'quarantined', reason: 'cancelled', checkedAt: outcome.checkedAt,
+      permissions: outcome.permissions, sandboxId: outcome.sandboxId,
+      stoppedSandboxId: outcome.stoppedSandboxId, stopConfirmed: outcome.stopConfirmed,
+    };
   }
   return outcome!;
 }

@@ -164,15 +164,24 @@ export function hourInTz(date: Date, tz: string): number {
  * UTC: the difference is the offset in force at that moment, which is the only
  * way to get a DST-correct answer without a timezone database.
  */
+/** Preserve Gregorian years 00–99 while retaining UTC field overflow. */
+function utcFieldsMs(year: number, month: number, day: number, hour = 0, minute = 0, second = 0): number {
+  const value = new Date(0);
+  value.setUTCFullYear(year, month, day);
+  value.setUTCHours(hour, minute, second, 0);
+  return value.getTime();
+}
+
 function tzOffsetMs(date: Date, tz: string): number {
   try {
     const parts = new Intl.DateTimeFormat('en-US', {
       timeZone: tz, hour12: false,
-      year: 'numeric', month: '2-digit', day: '2-digit',
+      era: 'short', year: 'numeric', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit', second: '2-digit',
     }).formatToParts(date);
     const get = (type: string) => Number.parseInt(parts.find((p) => p.type === type)?.value ?? '', 10);
-    const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'), get('second'));
+    const year = parts.find((p) => p.type === 'era')?.value === 'BC' ? 1 - get('year') : get('year');
+    const asUtc = utcFieldsMs(year, get('month') - 1, get('day'), get('hour') % 24, get('minute'), get('second'));
     return Number.isFinite(asUtc) ? asUtc - date.getTime() : 0;
   } catch {
     return 0;
@@ -234,7 +243,7 @@ export function addDaysToDayKey(dayKey: string, days: number): string {
   if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return dayKey;
   // UTC arithmetic on a date-only value is exact: no zone is involved, so the
   // usual DST hazards of Date arithmetic do not apply here.
-  const moved = new Date(Date.UTC(y, m - 1, d + days));
+  const moved = new Date(utcFieldsMs(y, m - 1, d + days));
   return moved.toISOString().slice(0, 10);
 }
 
@@ -245,7 +254,7 @@ export function addDaysToDayKey(dayKey: string, days: number): string {
 export function weekStartDayKey(dayKey: string): string {
   const [y, m, d] = dayKey.split('-').map((part) => Number.parseInt(part, 10));
   if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return dayKey;
-  const at = new Date(Date.UTC(y, m - 1, d));
+  const at = new Date(utcFieldsMs(y, m - 1, d));
   // getUTCDay(): 0=Sun … 6=Sat. Shift so Monday is 0.
   const fromMonday = (at.getUTCDay() + 6) % 7;
   return addDaysToDayKey(dayKey, -fromMonday);
