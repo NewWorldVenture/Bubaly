@@ -56,7 +56,7 @@ describe("a read receipt and a reaction are the reader's own (DB-RPC-M02)", () =
     // is reached only when fellBackForMissing names the 0475 RPC; on a database
     // with 0463 the trigger above still refuses any entry that is not the caller's.
     const read = paths.slice(paths.indexOf('export async function markConversationReadThrough('), paths.indexOf('/** Toggle the caller'));
-    expect(read).toMatch(/if \(!fellBackForMissing\(error, MESSAGING_SCHEMA\.markReadThrough,[\s\S]*?return \{ error, legacy: false \};\s*\}\s*await legacyMarkConversationRead\(/);
+    expect(read).toMatch(/if \(!fellBackForMissing\(error, MESSAGING_SCHEMA\.markReadThrough,[\s\S]*?return \{ error, legacy: false \};\s*\}\s*return \{ \.\.\.\(await legacyMarkConversationRead\(/);
     const react = paths.slice(paths.indexOf('export async function toggleMessageReaction('));
     expect(react).toMatch(/if \(!fellBackForMissing\(error, MESSAGING_SCHEMA\.toggleReaction,[\s\S]*?return \{ data, error, legacy: false \};\s*\}\s*return \{ \.\.\.\(await legacyToggleReaction\(/);
   });

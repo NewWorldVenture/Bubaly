@@ -108,23 +108,68 @@ export async function legacyToggleReaction(
 
 /**
  * The old read receipts: 0163's mark_conversation_read appends the reader in
- * one statement; failing that, a per-row append over the rows on screen. Best
- * effort — a receipt that did not land is logged, not shown.
+ * one statement; failing that, a per-row append over the rows on screen.
+ *
+ * Which rows really became read is reported, so the caller never shows a
+ * receipt that did not land. 0163's RPC returns void and is security invoker,
+ * so a success that touched no row (RLS, a conversation the caller cannot
+ * write) looks like any other: the rows it should have marked are read back,
+ * and any not carrying the reader is a failure. A per-row append that errors
+ * (0463 refuses one built from a stale read_by) or writes no row stops the
+ * fallback and is a failure; the rows appended before it still count.
+ *
+ * `readIds` null means every row passed in that is unread for the reader is
+ * now read; otherwise exactly those ids are.
  */
 export async function legacyMarkConversationRead(
   db: DB,
   input: { conversationId: string; familyId: string; userId: string; rows: readonly Message[] },
-): Promise<void> {
+): Promise<{ error: { message: string } | null; readIds: string[] | null }> {
   const { error: rpcErr } = await settle(db.rpc('mark_conversation_read', { p_conversation_id: input.conversationId }));
-  if (!rpcErr) return;
+  if (!rpcErr) return confirmConversationRead(db, input);
+  const readIds: string[] = [];
   const unread = input.rows.filter((m) => !(m.read_by ?? []).includes(input.userId)).slice(-100);
   for (const m of unread) {
     const { data: marked, error } = await settle(db.from('family_messages')
       .update({ read_by: [...(m.read_by ?? []), input.userId] })
       .eq('id', m.id).eq('family_id', input.familyId).select('id'));
-    if (error) { console.error('[messages] read-receipt fallback failed', { message: error.message }); break; }
-    if (wroteNoRows(marked)) { console.warn('[messages] read receipt did not land', { id: m.id }); break; }
+    if (error) {
+      console.error('[messages] read-receipt fallback failed', { message: error.message });
+      return { error, readIds };
+    }
+    if (wroteNoRows(marked)) {
+      console.warn('[messages] read receipt did not land', { id: m.id });
+      return { error: { message: 'The read receipt was not saved.' }, readIds };
+    }
+    readIds.push(m.id);
   }
+  return { error: null, readIds };
+}
+
+/** After 0163's RPC: read back the rows it should have marked; any still unread for the reader is a failure. */
+async function confirmConversationRead(
+  db: DB,
+  input: { conversationId: string; familyId: string; userId: string; rows: readonly Message[] },
+): Promise<{ error: { message: string } | null; readIds: string[] | null }> {
+  const expected = input.rows
+    .filter((m) => !m.deleted_at && m.conversation_id === input.conversationId && !(m.read_by ?? []).includes(input.userId))
+    .map((m) => m.id);
+  if (!expected.length) return { error: null, readIds: null };
+  const { data, error } = await settle(db.from('family_messages').select('id, read_by, deleted_at')
+    .eq('family_id', input.familyId).eq('conversation_id', input.conversationId).in('id', expected));
+  if (error) return { error, readIds: [] };
+  const seen = new Map((data ?? []).map((row) => [row.id, row]));
+  const readIds: string[] = [];
+  let missed = false;
+  for (const id of expected) {
+    const row = seen.get(id);
+    if (row?.deleted_at) continue; // deleted since: 0163 skips it, and it is no longer shown
+    if (row && (row.read_by ?? []).includes(input.userId)) readIds.push(id);
+    else missed = true;
+  }
+  if (!missed) return { error: null, readIds: null };
+  console.warn('[messages] read receipts did not land', { conversationId: input.conversationId });
+  return { error: { message: 'The read receipt was not saved.' }, readIds };
 }
 
 /** The old previews and unread badges: one bounded scan of the family's recent messages. */

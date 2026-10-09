@@ -117,18 +117,36 @@ export async function loadConversationSummaries(
   return { data: next, error: null };
 }
 
-/** Read through `messageId`; before 0475, 0163's mark_conversation_read or a per-row append. */
+/**
+ * Read through `messageId`; before 0475, 0163's mark_conversation_read or a
+ * per-row append. `readIds`, when present, is exactly the rows that became
+ * read (the fallback can land some, or none, and still report an error);
+ * absent or null, every row through `messageId` did. With an error, only
+ * `readIds` may be shown as read.
+ */
 export async function markConversationReadThrough(
   db: DB,
   input: { conversationId: string; messageId: string; familyId: string; userId: string; rows: readonly Message[] },
-): Promise<{ error: DbError | null; legacy: boolean }> {
+): Promise<{ error: DbError | null; legacy: boolean; readIds?: string[] | null }> {
   const { error } = await settle(db.rpc('mark_conversation_read_through', { p_conversation_id: input.conversationId, p_message_id: input.messageId }));
   if (!fellBackForMissing(error, MESSAGING_SCHEMA.markReadThrough,
     "Read receipts use 0163's mark_conversation_read (or a per-row append), as before the build-out.")) {
     return { error, legacy: false };
   }
-  await legacyMarkConversationRead(db, input);
-  return { error: null, legacy: true };
+  return { ...(await legacyMarkConversationRead(db, input)), legacy: true };
+}
+
+/**
+ * Whether `row` may be shown as read after markConversationReadThrough: with
+ * `readIds`, exactly those rows; without, every row through `newest`.
+ */
+export function receiptLanded(
+  row: { id: string; created_at: string },
+  newest: { id: string; created_at: string },
+  readIds: readonly string[] | null | undefined,
+): boolean {
+  if (readIds) return readIds.includes(row.id);
+  return row.created_at < newest.created_at || (row.created_at === newest.created_at && row.id <= newest.id);
 }
 
 /** Toggle the caller's reaction; before 0475 a read-modify-write of the message. */

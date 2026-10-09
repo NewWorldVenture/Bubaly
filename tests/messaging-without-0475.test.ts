@@ -16,7 +16,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Tables } from '@/lib/database.types';
 import {
   createFamilyConversation, ensureFamilyChat, familyChatOf, loadConversationSummaries, loadInbox,
-  markConversationReadThrough, presenceChannelConfig, presenceSchemaOf, toggleMessageReaction,
+  markConversationReadThrough, presenceChannelConfig, presenceSchemaOf, receiptLanded, toggleMessageReaction,
 } from '@/lib/messages/workspace-paths';
 import { resetMissingMigrationWarnings } from '@/lib/messages/schema-compat';
 
@@ -60,10 +60,17 @@ function message(id: string, conversationId: string, extra: Row = {}): Row {
 }
 
 /** A small PostgREST: equality filters, ordering, windows, counts, writes, and RPCs by schema. */
-function memoryDb(options: { has0475: boolean; conversations: Row[]; messages: Row[]; rpcErrors?: Record<string, Err>; insertErrors?: Err[]; selectErrors?: Record<string, Err> }) {
+function memoryDb(options: {
+  has0475: boolean; conversations: Row[]; messages: Row[]; rpcErrors?: Record<string, Err>; insertErrors?: Err[]; selectErrors?: Record<string, Err>;
+  /** Per update call, in order: an error (a trigger or RLS refusal), 'no-rows' (RLS filtered it out), or undefined to apply it. */
+  updateOutcomes?: Array<Err | 'no-rows' | undefined>;
+  /** RPCs that succeed without touching a row, as a security-invoker update filtered by RLS does. */
+  rpcNoops?: string[];
+}) {
   const tables: Record<string, Row[]> = { family_conversations: options.conversations, family_messages: options.messages };
   const calls: Call[] = [];
   const insertErrors = [...(options.insertErrors ?? [])];
+  const updateOutcomes = [...(options.updateOutcomes ?? [])];
   let nextId = 1;
 
   function from(table: string) {
@@ -71,6 +78,7 @@ function memoryDb(options: { has0475: boolean; conversations: Row[]; messages: R
     let payload: Row | null = null;
     let columns = '*';
     const filters: [string, unknown][] = [];
+    const inFilters: [string, unknown[]][] = [];
     const order: [string, boolean][] = [];
     let offset = 0;
     let limit = Infinity;
@@ -85,8 +93,12 @@ function memoryDb(options: { has0475: boolean; conversations: Row[]; messages: R
         rows.push(row);
         return { data: single ? row : [row], count: null, error: null };
       }
-      let selected = rows.filter((row) => filters.every(([key, value]) => (row[key] ?? null) === value));
+      let selected = rows.filter((row) => filters.every(([key, value]) => (row[key] ?? null) === value)
+        && inFilters.every(([key, values]) => values.includes(row[key])));
       if (action === 'update') {
+        const outcome = updateOutcomes.shift();
+        if (outcome === 'no-rows') return { data: [], count: null, error: null };
+        if (outcome) return { data: null, count: null, error: outcome };
         for (const row of selected) Object.assign(row, payload);
         return { data: selected.map((row) => ({ ...row })), count: null, error: null };
       }
@@ -109,6 +121,7 @@ function memoryDb(options: { has0475: boolean; conversations: Row[]; messages: R
       select: (value = '*') => { columns = value; return q; },
       eq: (key: string, value: unknown) => { filters.push([key, value]); return q; },
       is: (key: string, value: unknown) => { filters.push([key, value]); return q; },
+      in: (key: string, values: unknown[]) => { inFilters.push([key, values]); return q; },
       order: (key: string, opts?: { ascending?: boolean }) => { order.push([key, opts?.ascending !== false]); return q; },
       limit: (n: number) => { limit = n; return q; },
       range: (a: number, b: number) => { offset = a; limit = b - a + 1; return q; },
@@ -124,6 +137,7 @@ function memoryDb(options: { has0475: boolean; conversations: Row[]; messages: R
   function answer(name: string, args: Row): { data: unknown; error: Err | null } {
     if (options.rpcErrors?.[name]) return { data: null, error: options.rpcErrors[name] };
     if (!options.has0475 && RPCS_0475.includes(name)) return { data: null, error: missingFunction(name, args) };
+    if (options.rpcNoops?.includes(name)) return { data: null, error: null };
     const convs = tables.family_conversations;
     const msgs = tables.family_messages;
     switch (name) {
@@ -241,8 +255,9 @@ describe('without 0475 the workspace behaves as the previous production build', 
     const { db, calls, tables } = memoryDb({ has0475: false, ...seed(false) });
     const rows = tables.family_messages.filter((m) => m.conversation_id === 'family-group').map(asMessage);
     expect(await markConversationReadThrough(db, { conversationId: 'family-group', messageId: 'm-2', familyId: FAMILY, userId: ME, rows }))
-      .toEqual({ error: null, legacy: true });
+      .toEqual({ error: null, legacy: true, readIds: null });
     expect(calls.filter((c) => c.kind === 'rpc').map((c) => c.name)).toEqual(['mark_conversation_read_through', 'mark_conversation_read']);
+    expect(calls.filter((c) => c.kind === 'update')).toEqual([]);
     expect(tables.family_messages.filter((m) => m.conversation_id === 'family-group').every((m) => (m.read_by as string[]).includes(ME))).toBe(true);
   });
 
@@ -250,7 +265,8 @@ describe('without 0475 the workspace behaves as the previous production build', 
     const { db, calls, tables } = memoryDb({ has0475: false, ...seed(false), rpcErrors: { mark_conversation_read: { code: '42501', message: 'permission denied' } } });
     tables.family_messages[0].read_by = [OTHER];
     const rows = tables.family_messages.filter((m) => m.conversation_id === 'family-group').map(asMessage);
-    expect((await markConversationReadThrough(db, { conversationId: 'family-group', messageId: 'm-2', familyId: FAMILY, userId: ME, rows })).error).toBeNull();
+    expect(await markConversationReadThrough(db, { conversationId: 'family-group', messageId: 'm-2', familyId: FAMILY, userId: ME, rows }))
+      .toEqual({ error: null, legacy: true, readIds: ['m-1', 'm-2'] });
     expect(calls.filter((c) => c.kind === 'update').map((c) => c.args)).toEqual([{ read_by: [OTHER, ME] }, { read_by: [ME] }]);
   });
 
@@ -396,6 +412,60 @@ describe('any other error is still the error it is', () => {
   });
 });
 
+describe('a read receipt that did not land is not shown as read', () => {
+  const rpcRefused = { mark_conversation_read: { code: '42501', message: 'permission denied' } };
+  // What the module holds: its own copies, not the database's rows.
+  const onScreen = (rows: Row[]) => rows.map((row) => asMessage(structuredClone(row)));
+  const through = (rows: Row[], readIds: string[] | null | undefined) =>
+    rows.filter((row) => receiptLanded(asMessage(row), asMessage(rows.at(-1)!), readIds)).map((row) => row.id);
+
+  it('a refused per-row append is an error and leaves the rows unread', async () => {
+    const refusal: Err = { code: '42501', message: "A read receipt is only its reader's to add or remove" };
+    const { db, tables } = memoryDb({ has0475: false, ...seed(false), rpcErrors: rpcRefused, updateOutcomes: [refusal] });
+    const rows = tables.family_messages.filter((m) => m.conversation_id === 'family-group');
+    const res = await markConversationReadThrough(db, { conversationId: 'family-group', messageId: 'm-2', familyId: FAMILY, userId: ME, rows: onScreen(rows) });
+    expect(res).toEqual({ error: refusal, legacy: true, readIds: [] });
+    expect(through(rows, res.readIds)).toEqual([]);
+    expect(rows.every((m) => !(m.read_by as string[]).includes(ME))).toBe(true);
+  });
+
+  it('a per-row append that writes no row is an error, and only the receipts before it are shown', async () => {
+    const { db, tables } = memoryDb({ has0475: false, ...seed(false), rpcErrors: rpcRefused, updateOutcomes: [undefined, 'no-rows'] });
+    const rows = tables.family_messages.filter((m) => m.conversation_id === 'family-group');
+    const res = await markConversationReadThrough(db, { conversationId: 'family-group', messageId: 'm-2', familyId: FAMILY, userId: ME, rows: onScreen(rows) });
+    expect(res.error).not.toBeNull();
+    expect(res.readIds).toEqual(['m-1']);
+    expect(through(rows, res.readIds)).toEqual(['m-1']);
+  });
+
+  it("0163's RPC succeeding without touching a row is an error, read back rather than assumed", async () => {
+    const { db, calls, tables } = memoryDb({ has0475: false, ...seed(false), rpcNoops: ['mark_conversation_read'] });
+    const rows = tables.family_messages.filter((m) => m.conversation_id === 'family-group');
+    const res = await markConversationReadThrough(db, { conversationId: 'family-group', messageId: 'm-2', familyId: FAMILY, userId: ME, rows: onScreen(rows) });
+    expect(res.error).not.toBeNull();
+    expect(res.readIds).toEqual([]);
+    expect(through(rows, res.readIds)).toEqual([]);
+    expect(calls.filter((c) => c.kind === 'update')).toEqual([]);
+  });
+
+  it("a failed read-back after 0163's RPC is an error, with nothing shown as read", async () => {
+    const readFailed: Err = { message: 'fetch failed' };
+    const { db, tables } = memoryDb({ has0475: false, ...seed(false), selectErrors: { family_messages: readFailed } });
+    const rows = tables.family_messages.filter((m) => m.conversation_id === 'family-group');
+    const res = await markConversationReadThrough(db, { conversationId: 'family-group', messageId: 'm-2', familyId: FAMILY, userId: ME, rows: onScreen(rows) });
+    expect(res).toEqual({ error: readFailed, legacy: true, readIds: [] });
+  });
+
+  it('a successful receipt still shows every row through the newest as read', async () => {
+    const { db, tables } = memoryDb({ has0475: false, ...seed(false) });
+    const rows = tables.family_messages.filter((m) => m.conversation_id === 'family-group');
+    const res = await markConversationReadThrough(db, { conversationId: 'family-group', messageId: 'm-2', familyId: FAMILY, userId: ME, rows: onScreen(rows) });
+    expect(res.error).toBeNull();
+    expect(through(rows, res.readIds)).toEqual(['m-1', 'm-2']);
+    expect(rows.every((m) => (m.read_by as string[]).includes(ME))).toBe(true);
+  });
+});
+
 describe('MessagesModule takes these paths', () => {
   const source = readFileSync('components/modules/messages-module.tsx', 'utf8');
   it('loads, ensures, summarises, marks read and reacts through workspace-paths', () => {
@@ -403,6 +473,12 @@ describe('MessagesModule takes these paths', () => {
       'await markConversationReadThrough(supabase,', 'await toggleMessageReaction(createClient(),', 'return createFamilyConversation(createClient(), payload);']) {
       expect(source).toContain(call);
     }
+  });
+
+  it('shows as read only the receipts that landed, and keeps the rest unread on a failure', () => {
+    const mark = source.slice(source.indexOf('await markConversationReadThrough(supabase,'), source.indexOf('// ── Presence: who in the family is online'));
+    expect(mark).toContain('if (error && !readIds?.length) return;');
+    expect(mark).toContain('if (!receiptLanded(row, newest, readIds)) return row;');
   });
 
   it('no longer blanks the inbox or toasts when the old schema is detected', () => {

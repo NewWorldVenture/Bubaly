@@ -41,7 +41,7 @@ import { readDeviceMutes, writeDeviceMutes } from '@/lib/messages/legacy-schema'
 import { readMessageWindow } from '@/lib/messages/reads';
 import {
   createFamilyConversation, ensureFamilyChat, familyChatOf, loadConversationSummaries, loadInbox,
-  markConversationReadThrough, presenceChannelConfig, presenceSchemaOf, toggleMessageReaction, type PresenceSchema,
+  markConversationReadThrough, presenceChannelConfig, presenceSchemaOf, receiptLanded, toggleMessageReaction, type PresenceSchema,
 } from '@/lib/messages/workspace-paths';
 
 type Conversation = Tables<'family_conversations'>;
@@ -511,13 +511,15 @@ function MessagesWorkspace() {
     readPending.current = true;
     const supabase = createClient();
     void (async () => {
-      const { error, legacy } = await markConversationReadThrough(supabase, { conversationId: activeConvId, messageId: newest.id, familyId, userId, rows: messages });
+      const { error, legacy, readIds } = await markConversationReadThrough(supabase, { conversationId: activeConvId, messageId: newest.id, familyId, userId, rows: messages });
       if (!isCurrent()) return;
       if (legacy) setLegacy0475(true);
       readPending.current = false;
-      if (error) { toastError(describeDbError(error)); return; }
+      // Only receipts that landed are shown: on a failure the rest stay unread to retry.
+      if (error) toastError(describeDbError(error));
+      if (error && !readIds?.length) return;
       setMessages((rows) => rows.map((row) => {
-        if (row.created_at > newest.created_at || (row.created_at === newest.created_at && row.id > newest.id)) return row;
+        if (!receiptLanded(row, newest, readIds)) return row;
         const read = { ...row, read_by: [...new Set([...(row.read_by ?? []), userId])] };
         liveRows.current.set(row.id, read);
         return read;
