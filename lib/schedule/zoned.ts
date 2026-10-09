@@ -60,10 +60,12 @@ export function zonedTimeMs(dayKey: string, hour: number, minute: number, tz: st
 /** "6:00 PM" for an instant, on the family's wall clock. Empty when unparseable. */
 export function clockInZone(ms: number, tz: string): string {
   if (!Number.isFinite(ms)) return '';
+  const instant = new Date(ms);
+  if (!Number.isFinite(instant.getTime())) return '';
   try {
-    return new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit' }).format(new Date(ms));
+    return new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit' }).format(instant);
   } catch {
-    return new Date(ms).toISOString().slice(11, 16);
+    return `${String(instant.getUTCHours()).padStart(2, '0')}:${String(instant.getUTCMinutes()).padStart(2, '0')}`;
   }
 }
 

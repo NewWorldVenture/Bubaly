@@ -44,17 +44,22 @@ function formatterFor(timezone: string): Intl.DateTimeFormat {
   if (!dtf) {
     dtf = new Intl.DateTimeFormat('en-US', {
       timeZone: timezone, hour12: false,
-      era: 'short', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+      era: 'short', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
     });
     partsCache.set(timezone, dtf);
   }
   return dtf;
 }
 
-/** The wall-clock reading an observer in `timezone` sees at `instant`. */
-export function localPartsAt(instant: Date, timezone: string): LocalParts {
+function formattedPartsAt(instant: Date, timezone: string): Record<string, string> {
   const parts: Record<string, string> = {};
   for (const part of formatterFor(timezone).formatToParts(instant)) parts[part.type] = part.value;
+  return parts;
+}
+
+/** The wall-clock reading an observer in `timezone` sees at `instant`. */
+export function localPartsAt(instant: Date, timezone: string): LocalParts {
+  const parts = formattedPartsAt(instant, timezone);
   return {
     // Intl numbers BC years from one; Date uses astronomical year zero.
     year: parts.era === 'BC' ? 1 - Number(parts.year) : Number(parts.year),
@@ -90,10 +95,19 @@ export function dayKeyIn(instant: Date, timezone: string): string {
   }
 }
 
+/** Internal exact civil clock; public LocalParts intentionally stays minute-only. */
+function wallMillisecondsAt(instant: Date, timezone: string): number {
+  const parts = formattedPartsAt(instant, timezone);
+  const year = parts.era === 'BC' ? 1 - Number(parts.year) : Number(parts.year);
+  const wall = new Date(0);
+  wall.setUTCFullYear(year, Number(parts.month) - 1, Number(parts.day));
+  wall.setUTCHours(Number(parts.hour) % 24, Number(parts.minute), Number(parts.second), instant.getUTCMilliseconds());
+  return wall.getTime();
+}
+
 /** Zone offset in ms at a given instant (positive east of UTC). */
 function offsetMsAt(instant: Date, timezone: string): number {
-  const p = localPartsAt(instant, timezone);
-  return utcMilliseconds(p.year, p.month - 1, p.day, p.hour, p.minute) - instant.getTime();
+  return wallMillisecondsAt(instant, timezone) - instant.getTime();
 }
 
 /**
@@ -118,7 +132,7 @@ export function zonedLocalToInstant(
   const check = localPartsAt(new Date(ts), timezone);
   const matches = check.year === year && check.month === month && check.day === day
     && check.hour === hour && check.minute === minute;
-  return matches ? new Date(ts) : null;
+  return matches && wallMillisecondsAt(new Date(ts), timezone) === naive ? new Date(ts) : null;
 }
 
 /**
@@ -172,10 +186,7 @@ export function instantForIcsLocalTime(
 ): Date | null {
   const wall = utcMilliseconds(year, month - 1, day, Math.floor(minutes / 60), minutes % 60);
   if (!Number.isFinite(wall)) return null;
-  const reads = (instant: number) => {
-    const p = localPartsAt(new Date(instant), timezone);
-    return utcMilliseconds(p.year, p.month - 1, p.day, p.hour, p.minute);
-  };
+  const reads = (instant: number) => wallMillisecondsAt(new Date(instant), timezone);
   const offsets = new Set([-2, -1, 0, 1, 2].map((days) => offsetMsAt(new Date(wall + days * DAY_MS), timezone)));
   const candidates = [...offsets].map((offset) => wall - offset).sort((a, b) => a - b);
   const exact = candidates.find((instant) => reads(instant) === wall);

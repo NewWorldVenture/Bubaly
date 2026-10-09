@@ -51,6 +51,7 @@
 // Framework-free and safe in a client bundle: no `server-only`, no DOM. The
 // zoned half uses `Intl` through `lib/time/zoned.ts`.
 import { instantForLocalTime, isValidTimezone, localPartsAt } from '@/lib/time/zoned';
+import { parseExactInstant } from '@/lib/calendar/exact-instant';
 
 /**
  * The naive wall clock that a `datetime-local` box shows for an instant, as the
@@ -95,12 +96,26 @@ const NAIVE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3})
  * dropping the event out of the day. From that instant on the round trip is
  * closed as usual, because the box then shows the hour that does exist.
  */
-export function fromLocalInput(value: string | null | undefined, timeZone?: string): string | undefined {
+export function fromLocalInput(
+  value: string | null | undefined, timeZone?: string, originalInstant?: string | null,
+): string | undefined {
   if (value == null) return undefined;
   const v = value.trim();
   if (!v) return undefined;
   const m = NAIVE.exec(v);
   if (!m || Number(m[1]) < 1) return v;
+  // A minute-only box cannot distinguish both occurrences of a repeated hour
+  // or carry the stored seconds. An unchanged edit retains its own original
+  // instant, only when it is valid and displays this exact box in this zone.
+  // Changed values and callers without a hint keep the existing resolution.
+  if (originalInstant) {
+    try {
+      parseExactInstant(originalInstant);
+      if (toLocalInput(originalInstant, timeZone) === v) return originalInstant;
+    } catch {
+      // A malformed or non-absolute hint cannot change the legacy resolution.
+    }
+  }
   if (timeZone && isValidTimezone(timeZone)) {
     // The family's clock, the same frame `toLocalInput(iso, timeZone)` read the
     // prefill in. Seconds and milliseconds are carried on top of the minute the
