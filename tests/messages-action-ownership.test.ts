@@ -5,6 +5,7 @@ import type { Database, Tables } from '@/lib/database.types';
 import { describe, expect, it } from 'vitest';
 import { clearConfirmedDraft, createThreadOwner, mergeThreadRows } from '@/lib/messages/thread-state';
 import { settle } from '@/lib/supabase/settle';
+import { toggleMessageReaction } from '@/lib/messages/workspace-paths';
 
 type Conversation = Tables<'family_conversations'>;
 type Scope = { familyId: string; userId: string; role: string; memberId: string; active: boolean };
@@ -341,7 +342,7 @@ collectActionBodies(sendAst);
 if (actionBodies.length !== actionNames.size) throw new Error('The finite message action graph changed.');
 const actionCompiled = ts.transpileModule(actionBodies.join('\n'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
 type MessageAction = 'delete' | 'pin' | 'reaction';
-type ActionFailure = '' | 'denied' | 'zero' | 'wrong-scope' | 'wrong-result' | 'rejected';
+type ActionFailure = '' | 'denied' | 'zero' | 'wrong-scope' | 'wrong-result' | 'rejected' | 'missing-rpc';
 function messageActionFixture({ deferred = false, failure = '' as ActionFailure, sender = USER, role = 'parent' } = {}) {
   const owner = { current: createThreadOwner() }; owner.current.select(A);
   let scope = { familyId: FAMILY, userId: USER, role, memberId: 'self-member', active: true }, activeConv = conversation(A, USER);
@@ -356,13 +357,15 @@ function messageActionFixture({ deferred = false, failure = '' as ActionFailure,
     if (failure === 'rejected') throw new Error('Synthetic transport rejected');
     if (failure === 'denied') return Response.json({ code: '42501', message: 'Synthetic authorization refusal' }, { status: 403 });
     const reaction = url.pathname.includes('/rpc/');
+    // PostgREST before 0475: the reaction RPC is not in the schema cache.
+    if (failure === 'missing-rpc' && reaction) return Response.json({ code: 'PGRST202', message: 'Could not find the function public.toggle_family_message_reaction(p_emoji, p_message_id) in the schema cache', details: null, hint: null }, { status: 404 });
     if (failure === 'zero') return Response.json(reaction ? null : []);
     const result = { ...message, ...(!reaction ? body : { reactions: { '👍': [USER] } }), ...(failure === 'wrong-scope' ? { conversation_id: B } : {}), ...(failure === 'wrong-result' ? { deleted_at: null, is_pinned: false } : {}) };
     return Response.json(reaction ? result : [result]);
   } } });
   function render() {
     const env = { owner, alive, archiveScope: scope, archiveScopeRef, activeConv, activeConversationRef, familyId: scope.familyId, userId: scope.userId, messageOrigin: owner.current.capture(), sendRequest, messageActionFlight, messagesRef, liveRows,
-      createClient: () => db, settle, mergeThreadRows, setMessages: (update: (rows: typeof messagesRef.current) => unknown) => effects.push({ kind: 'messages', value: update(messagesRef.current) }),
+      createClient: () => db, settle, mergeThreadRows, toggleMessageReaction, setLegacy0475: () => effects.push({ kind: 'legacy0475' }), setMessages: (update: (rows: typeof messagesRef.current) => unknown) => effects.push({ kind: 'messages', value: update(messagesRef.current) }),
       loadSummaries: async () => { effects.push({ kind: 'summaries' }); }, loadConversations: async () => { effects.push({ kind: 'inbox' }); },
       setMsgMenu: (value: unknown) => effects.push({ kind: 'menu', value }), toastError: (value: unknown) => effects.push({ kind: 'toast', value }), describeDbError: (error: { message: string }) => error.message, tr: (key: string) => key,
     };
@@ -412,6 +415,15 @@ describe('render-owned delete, pin and reactions through actual SDK and acceptan
   for (const action of ['delete', 'pin'] as const) it(`${action} refuses a response that did not apply its intended change`, async () => {
     const probe = messageActionFixture({ failure: 'wrong-result' }); await invokeMessageAction(probe.render(), action, probe.message);
     expect(probe.effects.filter(effect => effect.kind === 'messages')).toEqual([]); expect(probe.effects.filter(effect => effect.kind === 'toast')).toHaveLength(1);
+  });
+  it('reaction without 0475 updates the message as before the build-out and accepts the saved row', async () => {
+    const probe = messageActionFixture({ failure: 'missing-rpc' }); await invokeMessageAction(probe.render(), 'reaction', probe.message);
+    expect(probe.requests.map(request => request.method)).toEqual(['POST', 'PATCH']);
+    expect(probe.requests[1].url.pathname).toBe('/rest/v1/family_messages');
+    expect(probe.requests[1].body).toEqual({ reactions: { '👍': [USER] } });
+    expect(probe.effects.filter(effect => effect.kind === 'toast')).toEqual([]);
+    expect(probe.effects.filter(effect => effect.kind === 'messages')).toHaveLength(1);
+    expect(probe.effects.filter(effect => effect.kind === 'legacy0475')).toHaveLength(1);
   });
   it('delete cannot dispatch a message owned by someone else, while pin and reaction keep participant semantics', async () => {
     const probe = messageActionFixture({ sender: 'other-user', role: 'child' }); await invokeMessageAction(probe.render(), 'delete', probe.message); expect(probe.requests).toEqual([]);

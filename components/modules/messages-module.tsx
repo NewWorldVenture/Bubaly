@@ -38,7 +38,11 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { clearConfirmedDraft, createThreadOwner, mergeThreadRows, reconcileLatestThreadRows, messageReadByOthers, shouldSendOnEnter, type ThreadDraft } from '@/lib/messages/thread-state';
 import { fellBackForMissing, MESSAGING_SCHEMA } from '@/lib/messages/schema-compat';
 import { readDeviceMutes, writeDeviceMutes } from '@/lib/messages/legacy-schema';
-import { readConversationInbox, readConversationOverview, readMessageWindow } from '@/lib/messages/reads';
+import { readMessageWindow } from '@/lib/messages/reads';
+import {
+  createFamilyConversation, ensureFamilyChat, familyChatOf, loadConversationSummaries, loadInbox,
+  markConversationReadThrough, toggleMessageReaction,
+} from '@/lib/messages/workspace-paths';
 
 type Conversation = Tables<'family_conversations'>;
 type Message = Tables<'family_messages'>;
@@ -72,15 +76,10 @@ type ConvInsert = {
 
 /**
  * Validate membership and deduplicate direct chats in one database transaction.
- * Before 0475 there is no such RPC: insert directly, as main did.
+ * Before 0475 there is no such RPC: insert directly, as before the build-out.
  */
 async function createConversation(payload: ConvInsert) {
-  const supabase = createClient();
-  const res = await supabase.rpc('create_family_conversation', {
-    p_family_id: payload.family_id, p_participant_ids: payload.participant_ids,
-    p_name: payload.name, p_kind: payload.kind, p_avatar_emoji: payload.avatar_emoji ?? undefined,
-  });
-  return res;
+  return createFamilyConversation(createClient(), payload);
 }
 
 export function MessagesModule() {
@@ -243,9 +242,9 @@ function MessagesWorkspace() {
   const loadConversations = useCallback(async () => {
     const request = ++listRequest.current;
     const supabase = createClient();
-    const { data, error } = await readConversationInbox(supabase, familyId);
+    const { rows, legacy, error } = await loadInbox(supabase, { familyId, userId, selfMemberId: selfMember?.id });
     if (!alive.current || request !== listRequest.current) return;
-    if (error) {
+    if (error || !rows) {
       // Fail visibly instead of showing an empty inbox on a failed load — an empty
       // list here would make the user think they have no conversations.
       setInboxError(describeDbError(error));
@@ -254,14 +253,8 @@ function MessagesWorkspace() {
       return;
     }
     setInboxError(null);
-    // Without the participant schema, do not render a family-wide legacy inbox.
-    if (data?.some((row) => !('is_family_chat' in row))) {
-      setLegacy0475(true); setConversations([]); setActiveConv(null); setLoadingConvs(false);
-      toastError(tr('messagesModule.couldNotCreateConversation')); return;
-    }
-    const rows = (data ?? []).filter((row) => row.is_family_chat
-      || row.participant_ids?.includes(selfMember?.id ?? '') || row.member_ids?.includes(userId)
-      || (!row.participant_ids?.length && !row.member_ids?.length && row.created_by === userId));
+    // Without 0475 the rows carry no is_family_chat: list them all, as before.
+    if (legacy) setLegacy0475(true);
     setConversations(rows);
     setLoadingConvs(false);
     const selected = owner.current.capture().conversationId;
@@ -271,12 +264,12 @@ function MessagesWorkspace() {
       if (!current) { owner.current.select(null); setMessages([]); setText(''); setReplyTo(null); setEditMessage(null); }
     } else if (rows.length > 0) {
       const requested = rows.find((conv) => conv.id === new URLSearchParams(window.location.search).get('conversation'));
-      const familyChat = rows.find((conv) => conv.is_family_chat && !conv.is_archived);
+      const familyChat = familyChatOf(rows, legacy);
       const group = requested ?? familyChat ?? rows.find((conv) => !conv.is_archived);
       if (requested) { setMobileShowThread(true); setShowArchived(requested.is_archived); }
       if (group) { owner.current.select(group.id); setActiveConv(group); setShowArchived(Boolean(group.is_archived)); }
     }
-  }, [familyId, userId, selfMember?.id, toastError, tr]);
+  }, [familyId, userId, selfMember?.id, toastError]);
 
   useEffect(() => { void loadConversations(); }, [loadConversations]);
 
@@ -285,11 +278,14 @@ function MessagesWorkspace() {
     let active = true;
     (async () => {
       const supabase = createClient();
-      let { error } = await settle(supabase.rpc('ensure_family_conversation', { p_family_id: familyId }));
+      const { error, legacy } = await ensureFamilyChat(supabase, {
+        familyId, userId, name: tr('messagesModule.familyChat'), members: membersRef.current,
+      });
       if (!alive.current || !active) return;
-      if (fellBackForMissing(error, MESSAGING_SCHEMA.ensureFamilyConversation,
-        'The separate family chat is unavailable until this migration is applied.')) setLegacy0475(true);
-      if (error) toastError(describeDbError(error, tr('messagesModule.couldNotCreateConversation')));
+      if (legacy) setLegacy0475(true);
+      // Before 0475 a failed lookup or insert was silent and retried next visit.
+      if (error && legacy) console.error('[messages] family chat fallback failed', { message: error.message });
+      else if (error) toastError(describeDbError(error, tr('messagesModule.couldNotCreateConversation')));
       else void loadConversations();
     })();
     return () => { active = false; };
@@ -411,22 +407,17 @@ function MessagesWorkspace() {
   const loadSummaries = useCallback(async () => {
     const request = ++summaryRequest.current;
     const supabase = createClient();
-    const { data, error } = await readConversationOverview(supabase, familyId);
+    const { data, error } = await loadConversationSummaries(supabase, { familyId, userId });
     if (!alive.current || request !== summaryRequest.current) return;
-    if (error) {
+    if (error || !data) {
       // Previews/unread badges are an enhancement over the conversation list;
       // on a failed load, surface it and keep the prior summaries rather than
       // silently wiping every preview + unread badge to zero.
       toastError(describeDbError(error));
       return;
     }
-    const next: ReturnType<typeof summarizeConversations> = { lastByConv: new Map(), unreadByConv: new Map() };
-    for (const row of data ?? []) {
-      if (row.last_message) next.lastByConv.set(row.conversation_id, row.last_message as unknown as Message);
-      next.unreadByConv.set(row.conversation_id, Number(row.unread_count));
-    }
-    setSummaries(next);
-  }, [familyId, toastError]);
+    setSummaries(data);
+  }, [familyId, userId, toastError]);
 
   useEffect(() => { void loadSummaries(); }, [conversations, loadSummaries]);
 
@@ -511,8 +502,9 @@ function MessagesWorkspace() {
     readPending.current = true;
     const supabase = createClient();
     void (async () => {
-      let { error } = await settle(supabase.rpc('mark_conversation_read_through', { p_conversation_id: activeConvId, p_message_id: newest.id }));
+      const { error, legacy } = await markConversationReadThrough(supabase, { conversationId: activeConvId, messageId: newest.id, familyId, userId, rows: messages });
       if (!isCurrent()) return;
+      if (legacy) setLegacy0475(true);
       readPending.current = false;
       if (error) { toastError(describeDbError(error)); return; }
       setMessages((rows) => rows.map((row) => {
@@ -528,9 +520,8 @@ function MessagesWorkspace() {
   // ── Presence: who in the family is online right now ─────────
   useEffect(() => {
     const supabase = createClient();
-    // 0475 authorizes the private family topic; before it, main's public one.
-    if (legacy0475) return;
-    const ch = supabase.channel(`presence:family:${familyId}`, { config: { private: true, presence: { key: userId } } });
+    // 0475 authorizes the private family topic; before it, the old public one.
+    const ch = supabase.channel(`presence:family:${familyId}`, { config: legacy0475 ? { presence: { key: userId } } : { private: true, presence: { key: userId } } });
     ch.on('presence', { event: 'sync' }, () => {
       const state = ch.presenceState() as Record<string, Array<{ user_id?: string }>>;
       const ids = new Set<string>();
@@ -878,7 +869,8 @@ function MessagesWorkspace() {
     const operation = beginMessageAction(msg, 'reaction'); if (!operation) return;
     setMsgMenu(null);
     try {
-      const { data, error } = await settle(createClient().rpc('toggle_family_message_reaction', { p_message_id: msg.id, p_emoji: emoji }));
+      const { data, error, legacy } = await toggleMessageReaction(createClient(), { message: msg, emoji, userId, familyId });
+      if (legacy) setLegacy0475(true);
       if (!currentMessageAction(operation, msg, 'reaction')) return;
       if (error) toastError(describeDbError(error));
       else if (!data || !matchesMessageActionResult(data, msg) || data.deleted_at) toastError(tr('errors.thatChangeWasNotSaved'));
