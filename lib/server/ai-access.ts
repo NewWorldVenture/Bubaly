@@ -203,7 +203,11 @@ export async function assertAIAccess(
         .select('id', { count: 'exact', head: true })
         .eq('family_id', familyId)
         .gte('created_at', monthStartIso(now));
-      count = legacy.error ? null : legacy.count ?? 0;
+      // No `?? 0`: a head count with no error and no count (supabase-js leaves
+      // `count` null when Content-Range does not come back) is an unread
+      // count, not an empty month. It fails closed below, as a null RPC
+      // receipt does.
+      count = legacy.error ? null : legacy.count;
       countError = legacy.error;
     }
   } catch (error) {

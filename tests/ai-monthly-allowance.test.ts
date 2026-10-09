@@ -295,9 +295,36 @@ describe('without held migration 0493, the previous direct count keeps the allow
     expect(access).toMatchObject({ ok: false, status: 429, code: 'allowance_exceeded' });
   });
 
-  it('reads a null previous count as zero, as the previous release did', async () => {
+  // A head count that answers no error and no count (supabase-js leaves `count`
+  // null when the Content-Range header does not come back) is an unread count,
+  // not an empty month. Reading it as zero would reopen the whole allowance;
+  // the RPC path already refuses a null receipt.
+  it.each([['PGRST202', MISSING_PGRST202], ['42883', MISSING_42883]])
+    ('fails closed when the previous count answers no count and no error (%s)', async (_code, missing) => {
+      const { assertAIAccess, AI_ASSISTANT_FEATURE_KEY } = await import('@/lib/server/ai-access');
+      const { client, queries } = legacyDb(missing, { count: null, error: null });
+      expect(await assertAIAccess(ctx(), { db: client, now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY }))
+        .toMatchObject({ ok: false, status: 403, code: 'unavailable' });
+      expect(queries).toHaveLength(1);
+    });
+
+  it.each([NaN, -1, 0.5])('fails closed on an invalid previous count (%s)', async (bad) => {
     const { assertAIAccess, AI_ASSISTANT_FEATURE_KEY } = await import('@/lib/server/ai-access');
-    const { client } = legacyDb(MISSING_PGRST202, { count: null, error: null });
+    const { client } = legacyDb(MISSING_PGRST202, { count: bad, error: null });
+    expect(await assertAIAccess(ctx(), { db: client, now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY }))
+      .toMatchObject({ ok: false, status: 403, code: 'unavailable' });
+  });
+
+  it('fails closed when the previous count errors even if it also reports a count', async () => {
+    const { assertAIAccess, AI_ASSISTANT_FEATURE_KEY } = await import('@/lib/server/ai-access');
+    const { client } = legacyDb(MISSING_42883, { count: 0, error: { code: '57014', message: 'canceling statement due to statement timeout' } });
+    expect(await assertAIAccess(ctx(), { db: client, now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY }))
+      .toMatchObject({ ok: false, status: 403, code: 'unavailable' });
+  });
+
+  it('allows a zero previous count, which is a real empty month', async () => {
+    const { assertAIAccess, AI_ASSISTANT_FEATURE_KEY } = await import('@/lib/server/ai-access');
+    const { client } = legacyDb(MISSING_PGRST202, { count: 0, error: null });
     expect(await assertAIAccess(ctx(), { db: client, now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY }))
       .toMatchObject({ ok: true, monthlyUsed: 0, monthlyAllowance: 10 });
   });
