@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { listPracticesBetween } from '@/lib/services/sports';
 import type { ServiceScope } from '@/lib/services/types';
-import { listEventsBetween, resolveWindow } from '@/lib/services/school';
+import { listEventsBetween, listHomeworkDue, resolveWindow } from '@/lib/services/school';
 
 const scope = { now: new Date('2026-10-08T12:00:00Z'), tz: 'UTC' } as ServiceScope;
 const lastInstant = '+275760-09-13T00:00:00.000Z';
@@ -37,5 +38,27 @@ describe('school window range boundaries return service errors', () => {
 
   it('normalizes explicit offsets and preserves ordinary one-week defaults', () => {
     expect(resolveWindow(scope, { from: '2026-10-08T08:00:00-04:00' })).toEqual({ ok: true, data: { from: '2026-10-08T12:00:00.000Z', to: '2026-10-15T12:00:00.000Z' } });
+  });
+});
+
+
+describe('school window grammar does not bypass calendar validation', () => {
+  const refused = ['2026-02-30Z', '2026-02-30\t12:00:00Z', ' 2026-02-30', '2026-02-28Z', '2026-02-28\t12:00:00Z'];
+  it.each(refused)('refuses unsupported explicit start %j', from => {
+    expect(resolveWindow(scope, { from })).toMatchObject({ ok: false, code: 'invalid_input' });
+  });
+  it.each(refused)('refuses unsupported explicit end %j', to => {
+    expect(resolveWindow(scope, { from: '2026-02-01T00:00:00Z', to })).toMatchObject({ ok: false, code: 'invalid_input' });
+  });
+  for (const read of [listEventsBetween, listHomeworkDue, listPracticesBetween]) {
+    it.each(refused.slice(0, 3))(`${read.name} refuses %j before any database access`, async from => {
+      let requests = 0;
+      const guarded = { ...scope, db: { from: () => { requests++; throw new Error('Unexpected database query'); } } } as unknown as ServiceScope;
+      await expect(read(guarded, { from })).resolves.toMatchObject({ ok: false, code: 'invalid_input' });
+      expect(requests).toBe(0);
+    });
+  }
+  it.each(['2024-02-29', '2024-02-29t12:00:00z', '2024-02-29 12:00:00Z', '2024-02-29T12:00:00+00:00'])('retains recognized valid representation %s', from => {
+    expect(resolveWindow(scope, { from }).ok).toBe(true);
   });
 });

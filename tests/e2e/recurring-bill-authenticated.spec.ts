@@ -231,6 +231,10 @@ async function verifyAuthenticatedFinanceOverview(
   const reads: { offset: number; length: number; count: number; exact: boolean; family: string | null }[] = [];
   const pending: Promise<void>[] = [];
   let bodyReadFailed = false, laterPageRefusals = 0, barrierTimedOut = false;
+  // Locked PostgREST retries failed GETs after 1 + 2 + 4 seconds. Wait for
+  // terminal refusal without disabling retries or releasing the sibling early.
+  const readFailureTimeout = 20_000;
+  const billRetryAttempts = new Set<number>(), accountRetryAttempts = new Set<number>();
   const gates: { wait: () => Promise<void>; release: () => void; hit: boolean }[] = [];
   function gate() {
     let resolve!: () => void;
@@ -239,7 +243,7 @@ async function verifyAuthenticatedFinanceOverview(
       item.hit = true;
       let timer: ReturnType<typeof setTimeout> | undefined;
       try { await Promise.race([promise, new Promise<void>(done => {
-        timer = setTimeout(() => { barrierTimedOut = true; done(); }, 15_000);
+        timer = setTimeout(() => { barrierTimedOut = true; done(); }, 60_000);
       })]); } finally { if (timer) clearTimeout(timer); }
     } };
     gates.push(item); return item;
@@ -270,13 +274,17 @@ async function verifyAuthenticatedFinanceOverview(
     }
     if (stage === 'initial' && url.pathname === '/rest/v1/bills'
       && Number(url.searchParams.get('offset') ?? 0) >= 1000) {
-      laterPageRefusals++; return route.abort('failed');
+      laterPageRefusals++;
+      billRetryAttempts.add(Number(request.headers()['x-retry-count'] ?? '0'));
+      return route.abort('failed');
     }
     if (stage === 'cached' && url.pathname === '/rest/v1/bills') {
       await cachedBills.wait(); return route.continue();
     }
     if (stage === 'cached' && url.pathname === '/rest/v1/financial_accounts') {
-      await cachedAccount.wait(); return route.abort('failed');
+      await cachedAccount.wait();
+      accountRetryAttempts.add(Number(request.headers()['x-retry-count'] ?? '0'));
+      return route.abort('failed');
     }
     return route.continue();
   };
@@ -290,13 +298,14 @@ async function verifyAuthenticatedFinanceOverview(
     await page.route(pattern, intercept);
     await page.goto(`${app}/dashboard/billing`);
     await expect.poll(() => accountLoading.hit && laterPageRefusals > 0).toBe(true);
-    // The bill refusal is real browser transport failure. A genuinely pending
-    // uncached sibling still keeps the actual loading branch ahead of its error.
+    // The bill transport has failed, but SDK retries and the uncached account
+    // read are still pending. Neither partial totals nor a settled error is shown.
     await expect(page.locator('.animate-pulse').first()).toBeVisible();
     await expect(page.getByText(errorText, { exact: true })).toHaveCount(0);
     await expect(page.getByText(tailName, { exact: true })).toHaveCount(0);
     accountLoading.release();
-    await expect(page.getByText(errorText, { exact: true })).toBeVisible();
+    await expect(page.getByText(errorText, { exact: true })).toBeVisible({ timeout: readFailureTimeout });
+    expect([...billRetryAttempts].sort(), 'Later-page GET reached terminal SDK refusal').toEqual([0, 1, 2, 3]);
     await expect(page.locator('.animate-pulse')).toHaveCount(0);
     await expect(page.getByText('$9,876.00', { exact: true })).toHaveCount(0);
     stage = 'healthy';
@@ -321,7 +330,8 @@ async function verifyAuthenticatedFinanceOverview(
     await expect(page.locator('.animate-pulse').first()).toBeVisible();
     await expect(page.getByText(tailName, { exact: true })).toHaveCount(0);
     cachedAccount.release();
-    await expect(page.getByText(errorText, { exact: true })).toBeVisible();
+    await expect(page.getByText(errorText, { exact: true })).toBeVisible({ timeout: readFailureTimeout });
+    expect([...accountRetryAttempts].sort(), 'Cached account GET reached terminal SDK refusal').toEqual([0, 1, 2, 3]);
     await expect(page.locator('.animate-pulse')).toHaveCount(0);
     await expect(page.getByText('$9,876.00', { exact: true })).toHaveCount(0);
     stage = 'healthy';

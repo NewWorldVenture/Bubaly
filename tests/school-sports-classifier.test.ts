@@ -475,3 +475,60 @@ describe('what gets proposed', () => {
     expect(messageTitle({ subject: 'x'.repeat(200) }).length).toBe(120);
   });
 });
+
+
+describe('overlapping roster aliases name one ambiguous person', () => {
+  for (const field of ['teacher', 'coach'] as const) {
+    const title = field === 'teacher' ? 'Mrs' : 'Coach';
+    for (const reverse of [false, true]) {
+      it.each([
+        [title + ' Example', 'Example', title + ' Example'],
+        [title + ' Example', 'Dr Example', title + ' Example'],
+        ['Example', title + ' Example', title + ' Example'],
+      ])(`${field} leaves shared alias spans unassigned (reversed: ${reverse}): %j / %j`, (first, second, mention) => {
+        const rows = [{ member_id: 'm-ava', [field]: first }, { member_id: 'm-noah', [field]: second }];
+        if (reverse) rows.reverse();
+        const message = { body: `School permission slip from ${mention}.` };
+        const result = classify(message, MEMBERS, field === 'coach' ? rows : [], field === 'teacher' ? rows : [], OPTS);
+        expect(result.child).toBeUndefined();
+        expect(buildProposal(message, result)?.args).not.toHaveProperty('assignee_id');
+      });
+    }
+    it(`${field} retains duplicate aliases owned by one child`, () => {
+      const rows = [{ member_id: 'm-ava', [field]: title + ' Example' }, { member_id: 'm-ava', [field]: 'Example' }];
+      const result = classify({ body: `School permission slip from ${title} Example.` }, MEMBERS, field === 'coach' ? rows : [], field === 'teacher' ? rows : [], OPTS);
+      expect(result.child?.member_id).toBe('m-ava');
+    });
+    it(`${field} retains a stronger explicit full child name despite shared aliases`, () => {
+      const rows = [{ member_id: 'm-ava', [field]: title + ' Example' }, { member_id: 'm-noah', [field]: 'Example' }];
+      const result = classify({ body: `School permission slip from ${title} Example for Noah Hughen.` }, MEMBERS, field === 'coach' ? rows : [], field === 'teacher' ? rows : [], OPTS);
+      expect(result.child?.member_id).toBe('m-noah');
+    });
+  }
+  it('does not fall through an ambiguous earlier teacher to a later unique teacher', () => {
+    const classes = [{ member_id: 'm-ava', teacher: 'Mrs Example' }, { member_id: 'm-noah', teacher: 'Example' }, { member_id: 'm-noah', teacher: 'Ms Different' }];
+    expect(classify({ body: 'School permission slip from Mrs Example and Ms Different.' }, MEMBERS, [], classes, OPTS).child).toBeUndefined();
+  });
+  it('keeps distinct nonoverlapping teachers in their existing first-mentioned order', () => {
+    const classes = [{ member_id: 'm-ava', teacher: 'Mrs Example' }, { member_id: 'm-noah', teacher: 'Ms Different' }];
+    expect(classify({ body: 'School permission slip from Mrs Example and Ms Different.' }, MEMBERS, [], classes, OPTS).child?.member_id).toBe('m-ava');
+  });
+});
+
+it('retains overlapping occurrences of a repeated multiword alias', () => {
+  const teams = [{ member_id: 'm-ava', team_name: 'North North' }];
+  const classes = [{ member_id: 'm-noah', school_name: 'North School' }];
+  expect(classify({ body: 'School form for North North North School.' }, MEMBERS, teams, classes, OPTS).child).toBeUndefined();
+});
+
+it('shares a person alias across teacher and coach rosters', () => {
+  const teams = [{ member_id: 'm-ava', coach: 'Coach Example' }];
+  const classes = [{ member_id: 'm-noah', teacher: 'Example' }];
+  expect(classify({ body: 'School permission slip from Coach Example.' }, MEMBERS, teams, classes, OPTS).child).toBeUndefined();
+});
+
+it('matches alias punctuation and Unicode boundaries without matching longer words', () => {
+  const classes = [{ member_id: 'm-ava', teacher: 'Mrs Éclair' }];
+  expect(classify({ body: '“Mrs Éclair”: school permission slip.' }, MEMBERS, [], classes, OPTS).child?.member_id).toBe('m-ava');
+  expect(classify({ body: 'School permission slip from Éclairette.' }, MEMBERS, [], classes, OPTS).child).toBeUndefined();
+});
