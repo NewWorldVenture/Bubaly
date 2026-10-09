@@ -115,23 +115,73 @@ type IdeaForIssue = {
 };
 
 /**
+ * How long a claimed idea is left to the worker filing its issue before another
+ * worker may file it instead. Far longer than one GitHub round trip, so a live
+ * claim is never taken over; short enough that a worker that died holding one
+ * delays the idea by one backfill pass, not for good.
+ */
+export const GITHUB_ISSUE_CLAIM_LEASE_MS = 10 * 60_000;
+
+/**
  * Mirror a feedback idea into the GitHub tracker (the right list by label) and
  * store the issue link back on the row. No-op (returns skipped) when GitHub
  * isn't configured, so submissions never depend on it.
+ *
+ * Claimed before GitHub is called. Three paths file issues — the submit action,
+ * the backfill cron (Vercel and the GitHub dispatcher both fire it) and the
+ * admin's "Sync now" — and each used to read the idea as unsynced, open an
+ * issue and only then write the number back. Two that overlapped both opened
+ * one. The claim is a conditional stamp of `github_synced_at` on a row that
+ * still has no issue and no live claim: Postgres lets one such UPDATE match,
+ * and every other worker matches zero rows and leaves the idea to the winner
+ * (`skipped`, not an error). `github_synced_at` is otherwise written only
+ * alongside an issue number, so on an unlinked idea it means exactly "claimed
+ * at". A create that throws gives the claim back at once; a worker that dies
+ * holding it is overtaken after GITHUB_ISSUE_CLAIM_LEASE_MS.
  */
 export async function syncIdeaToGithub(admin: Admin, idea: IdeaForIssue): Promise<{ ok: true; issue: GithubIssue } | { ok: false; skipped: boolean; error?: string }> {
   if (!isGithubConfigured()) return { ok: false, skipped: true };
+  const claimedAt = new Date();
+  const claimStamp = claimedAt.toISOString();
+  const leaseExpired = new Date(claimedAt.getTime() - GITHUB_ISSUE_CLAIM_LEASE_MS).toISOString();
+  const { data: claimed, error: claimError } = await admin.from('feedback_ideas')
+    .update({ github_synced_at: claimStamp })
+    .eq('id', idea.id)
+    .is('github_issue_number', null)
+    .or(`github_synced_at.is.null,github_synced_at.lt.${leaseExpired}`)
+    .select('id');
+  if (claimError) {
+    console.error('[feedback-notify] GitHub issue claim failed', { ideaId: idea.id, error: claimError });
+    return { ok: false, skipped: false, error: 'Could not claim the idea for GitHub.' };
+  }
+  // Already linked, claimed by a live worker, or deleted: nothing to file here.
+  if (wroteNoRows(claimed)) return { ok: false, skipped: true };
+  let issue: GithubIssue;
   try {
-    const issue = await createIssue({
+    issue = await createIssue({
       title: issueTitle(idea),
       body: issueBody(idea, `${appUrl()}/feedback`),
       labels: githubLabels(idea),
     });
+  } catch (e) {
+    console.error('[feedback-notify] GitHub issue create failed', e);
+    // No issue exists, so give the claim back for the next pass to file it.
+    // Conditional on our own stamp: a worker that took over an expired claim
+    // owns the idea now. A release that fails only waits out the lease.
+    const { error: releaseError } = await admin.from('feedback_ideas')
+      .update({ github_synced_at: null })
+      .eq('id', idea.id)
+      .is('github_issue_number', null)
+      .eq('github_synced_at', claimStamp);
+    if (releaseError) console.error('[feedback-notify] GitHub issue claim release failed', { ideaId: idea.id, error: releaseError });
+    return { ok: false, skipped: false, error: e instanceof Error ? e.message : 'GitHub error' };
+  }
+  try {
     // This one is not best-effort. The issue EXISTS at GitHub by here, and this
     // row is the only record that it does — so a discarded failure returns
-    // { ok: true } for a sync that left no trace, and the next run files a
-    // SECOND issue for the same idea. The catch below names the issue creation,
-    // which does throw; it never covered this write, which does not.
+    // { ok: true } for a sync that left no trace, and once the claim's lease
+    // runs out the next run files a SECOND issue for the same idea. The claim is
+    // deliberately NOT released on this path for that reason.
     // And zero rows is the same lost record: an idea deleted since the read
     // leaves the issue orphaned at GitHub, which someone has to close.
     // Audit C1-S9-69.
@@ -147,8 +197,8 @@ export async function syncIdeaToGithub(admin: Admin, idea: IdeaForIssue): Promis
     }
     return { ok: true, issue };
   } catch (e) {
-    console.error('[feedback-notify] GitHub issue create failed', e);
-    return { ok: false, skipped: false, error: e instanceof Error ? e.message : 'GitHub error' };
+    console.error('[feedback-notify] GitHub issue created but the link write threw', { ideaId: idea.id, issue: issue.number, error: e });
+    return { ok: false, skipped: false, error: 'The GitHub issue was created but could not be recorded.' };
   }
 }
 
