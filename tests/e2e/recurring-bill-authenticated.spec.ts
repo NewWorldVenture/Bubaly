@@ -230,9 +230,11 @@ async function verifyAuthenticatedFinanceOverview(
   const errorText = 'Could not load financial data. Refresh and try again.';
   const reads: { offset: number; length: number; count: number; exact: boolean; family: string | null }[] = [];
   const pending: Promise<void>[] = [];
+  const activeBillReads = new Set<import('@playwright/test').Request>();
+  const bodyReadProblems: { offset: number; kind: 'shape-or-count' | 'cdp-resource-missing' | 'capture-unavailable' }[] = [];
   let bodyReadFailed = false, laterPageRefusals = 0, barrierTimedOut = false;
   // Locked PostgREST retries failed GETs after 1 + 2 + 4 seconds. Wait for
-  // terminal refusal without disabling retries or releasing the sibling early.
+  // terminal refusal without disabling retries.
   const readFailureTimeout = 20_000;
   const billRetryAttempts = new Set<number>(), accountRetryAttempts = new Set<number>();
   const gates: { wait: () => Promise<void>; release: () => void; hit: boolean }[] = [];
@@ -256,13 +258,39 @@ async function verifyAuthenticatedFinanceOverview(
       try {
         const rows: unknown = await response.json();
         const match = /\/(\d+)$/.exec(response.headers()['content-range'] ?? '');
-        if (!Array.isArray(rows) || !match) { bodyReadFailed = true; return; }
+        if (!Array.isArray(rows) || !match) {
+          bodyReadFailed = true;
+          bodyReadProblems.push({ offset: Number(url.searchParams.get('offset') ?? 0), kind: 'shape-or-count' });
+          return;
+        }
         reads.push({ offset: Number(url.searchParams.get('offset') ?? 0), length: rows.length,
           count: Number(match[1]), exact: (response.request().headers()['prefer'] ?? '').includes('count=exact'),
           family: url.searchParams.get('family_id') });
-      } catch { bodyReadFailed = true; }
+      } catch (cause) {
+        bodyReadFailed = true;
+        bodyReadProblems.push({ offset: Number(url.searchParams.get('offset') ?? 0),
+          kind: cause instanceof Error && cause.message.includes('No resource with given identifier found')
+            ? 'cdp-resource-missing' : 'capture-unavailable' });
+      }
     })());
   };
+  const onRequest = (request: import('@playwright/test').Request) => {
+    const url = new URL(request.url());
+    if (url.origin === provider && url.pathname === '/rest/v1/bills' && request.method() === 'GET') activeBillReads.add(request);
+  };
+  const onRequestDone = (request: import('@playwright/test').Request) => { activeBillReads.delete(request); };
+  async function settleBillResponses() {
+    // Navigation can discard CDP response bodies even after the SDK read them.
+    // Drain captures and requests before changing documents, including reads
+    // whose response headers have not arrived yet. Keep malformed data fatal.
+    await expect.poll(async () => {
+      const captured = pending.length;
+      await Promise.all(pending);
+      return activeBillReads.size === 0 && pending.length === captured;
+    }, { message: 'Actual bill requests and response captures settle before navigation' }).toBe(true);
+    if (bodyReadFailed) console.error('Owned finance response capture failed:', JSON.stringify(bodyReadProblems));
+    expect(bodyReadFailed, 'Actual successful bill responses retain count and array shape').toBe(false);
+  }
   const pattern = `${provider}/rest/v1/*`;
   let stage: 'initial' | 'healthy' | 'cached' = 'initial';
   const accountLoading = gate(), cachedBills = gate(), cachedAccount = gate();
@@ -288,13 +316,20 @@ async function verifyAuthenticatedFinanceOverview(
     }
     return route.continue();
   };
-  page.on('response', onResponse);
   try {
+    // Stop the previous BillsView before seeding: its realtime reads do not
+    // belong to this overview observation and lose their bodies on navigation.
+    // Genuine browser authentication remains in the existing context cookies.
+    await page.goto('about:blank');
     // Bound insert/delete URL sizes; no fixture ID is shared with the anchor cases.
     for (let from = 0; from < owned.length; from += 100) {
       const result = await admin.from('bills').insert(owned.slice(from, from + 100));
       expect(!result.error, 'Only owned overview rows are seeded').toBe(true);
     }
+    page.on('request', onRequest);
+    page.on('requestfinished', onRequestDone);
+    page.on('requestfailed', onRequestDone);
+    page.on('response', onResponse);
     await page.route(pattern, intercept);
     await page.goto(`${app}/dashboard/billing`);
     await expect.poll(() => accountLoading.hit && laterPageRefusals > 0).toBe(true);
@@ -320,6 +355,7 @@ async function verifyAuthenticatedFinanceOverview(
     const card = page.getByRole('heading', { name: 'Bills & Reminders', exact: true }).locator('../..');
     const day = card.locator('.grid-cols-7 > div').filter({ has: page.locator('span', { hasText: new RegExp(`^${now.getUTCDate()}$`) }) });
     await expect(day.locator('.bg-amber-500')).toHaveCount(1);
+    await settleBillResponses();
 
     // Reload the real persisted cache (limited to 200 rows by product code).
     // Keep both genuine GETs pending so stale-only loading is observable before
@@ -342,12 +378,16 @@ async function verifyAuthenticatedFinanceOverview(
     await expect(page.getByText(errorText, { exact: true })).toHaveCount(0);
     expect(laterPageRefusals > 0, 'The browser actually refused a later bill page').toBe(true);
     expect(barrierTimedOut, 'Owned read barriers were explicitly released').toBe(false);
+    await settleBillResponses();
     await Promise.all(pending);
     expect(bodyReadFailed, 'Actual successful bill responses retain count and array shape').toBe(false);
   } finally {
     for (const item of gates) item.release();
     await page.unroute(pattern, intercept);
     page.off('response', onResponse);
+    page.off('request', onRequest);
+    page.off('requestfinished', onRequestDone);
+    page.off('requestfailed', onRequestDone);
     await Promise.allSettled(pending);
     for (let from = 0; from < owned.length; from += 100) {
       const removed = await admin.from('bills').delete().in('id', owned.slice(from, from + 100).map(row => row.id))
