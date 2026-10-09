@@ -15,8 +15,9 @@ import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { usd as usdIn, billDueStatus, billPaidPatch, billDateForAnchorDay, newBillDueDay, BILL_CADENCES, DUE_META, fmtDueDate as fmtDueDateIn } from '@/lib/finance/hub';
-import { BILL_READ_CONTRACT, readCompleteBills, isMissingBillDueDay, saveBillPayment } from '@/lib/finance/bills';
-import { writeBillPatch } from '@/lib/finance/recurring';
+import { BILL_READ_CONTRACT, readCompleteBills, isMissingBillDueDay, saveBillPayment, saveBillPaymentBefore0488 } from '@/lib/finance/bills';
+import { dueDayNotKeptQuestion, isDueDayNotKept, writeBillPatch, type DueDayNotKept } from '@/lib/finance/recurring';
+import { useConfirm } from '@/components/ui/confirm';
 import { BillPaymentModal } from '@/components/finance/bill-payment-modal';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
@@ -46,6 +47,7 @@ export function BillsView({ mode }: { mode: BillsMode }) {
   const fmtDueDate = (iso: string) => fmtDueDateIn(iso, locale.code);
   const { familyId, userId, role } = useApp();
   const { success, error: toastError } = useToast();
+  const askConfirm = useConfirm();
   const meta = MODE_META[mode];
 
   const { data: rows, loading, error: readError, stale, refresh } = useRealtimeQuery<Bill>({
@@ -97,15 +99,25 @@ export function BillsView({ mode }: { mode: BillsMode }) {
   async function markPaid(b: Bill) {
     if (!canWrite() || b.family_id !== familyId) return;
     const reopen = b.status === 'paid';
+    // Without bills.due_day (0488) a clamped roll moves only if the person says yes.
+    const confirmClampedDay = (refusal: DueDayNotKept) => askConfirm(dueDayNotKeptQuestion(refusal, t, fmtDueDate, locale.code));
+    let before0488: Awaited<ReturnType<typeof saveBillPaymentBefore0488>> = null;
     if (!reopen && !billPaidPatch(b, clock.todayKey())) {
-      const selection = { bill: b, owner: paymentOwner, ticket: ++paymentTicket.current };
-      currentPayment.current = selection; setPaymentSelection(selection); return;
+      // A row read without due_day is paid as before 0488 once the database
+      // confirms the column is missing; otherwise the person confirms its schedule.
+      before0488 = b.due_day === undefined ? await saveBillPaymentBefore0488(createClient(), familyId, b, clock.todayKey(), canWrite, { confirmClampedDay }) : null;
+      if (!before0488) {
+        if (!canWrite()) return;
+        const selection = { bill: b, owner: paymentOwner, ticket: ++paymentTicket.current };
+        currentPayment.current = selection; setPaymentSelection(selection); return;
+      }
     }
     // A restrictive RLS policy FILTERS an update/delete rather than raising, so
     // a refused write returns zero rows and no error. `.select('id')` is what
     // makes the difference visible — without it `data` is null either way.
-    const { data: rows, error } = await saveBillPayment(createClient(), familyId, b, clock.todayKey(), undefined, reopen, canWrite);
+    const { data: rows, error } = before0488 ?? await saveBillPayment(createClient(), familyId, b, clock.todayKey(), undefined, reopen, canWrite, { confirmClampedDay });
     if (!canWrite()) return;
+    if (isDueDayNotKept(error)) { toastError(t('bills.dueDayNeedsDatabaseUpdate', { day: error.day })); return; }
     if (error) { toastError(isMissingBillDueDay(error) ? t('bills.scheduleUnavailable') : describeDbError(error)); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); void refresh(); return; }
     success(reopen ? 'Reopened' : 'Marked paid');

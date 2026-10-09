@@ -1,9 +1,39 @@
-import { describe, it, expect } from 'vitest';
-import { saveBillPayment } from '@/lib/finance/bills';
+import { describe, it, expect, vi } from 'vitest';
+import { saveBillPayment, saveBillPaymentBefore0488 } from '@/lib/finance/bills';
 import { writeBillPatch, isDueDayNotKept } from '@/lib/finance/recurring';
 import { bill, store } from './helpers/recurring-bill-store';
 
-describe('older-schema writes retain only proven original anchors', () => {
+describe('saveBillPaymentBefore0488', () => {
+  it('pays a cadence-less row monthly once the probe gets the exact missing-column answer', async () => {
+    const row = bill({ due_date: '2026-02-28', recurrence: null }),
+      db = store(row, true);
+    const result = await saveBillPaymentBefore0488(db.client, row.family_id, row, row.due_date);
+    expect(result?.error).toBeNull();
+    expect(db.reads).toHaveLength(1);
+    expect(db.current()).toMatchObject({ status: 'upcoming', due_date: '2026-03-28', recurrence: null });
+    expect(db.requests.every((r) => r.url.searchParams.get('updated_at') === `eq.${row.updated_at}`)).toBe(true);
+  });
+  it('answers null (ask for the schedule) when the column exists or the row carries it', async () => {
+    const row = bill({ due_date: '2026-03-30' }),
+      db = store(row);
+    expect(await saveBillPaymentBefore0488(db.client, row.family_id, row, row.due_date)).toBeNull();
+    expect(db.requests).toHaveLength(0);
+    const anchored = bill({ due_date: '2026-03-30', due_day: null }),
+      none = store(anchored, true);
+    expect(await saveBillPaymentBefore0488(none.client, anchored.family_id, anchored, anchored.due_date)).toBeNull();
+    expect(none.reads).toHaveLength(0);
+  });
+  it('returns any other probe refusal as the error and writes nothing', async () => {
+    const failure = { code: '42703', message: 'column bills.amount does not exist' },
+      row = bill({ due_date: '2026-03-30' }),
+      db = store(row, true, failure);
+    const result = await saveBillPaymentBefore0488(db.client, row.family_id, row, row.due_date);
+    expect(result?.error).toMatchObject(failure);
+    expect(db.requests).toHaveLength(0);
+  });
+});
+
+describe('older-schema writes fall back to the pre-0488 behaviour', () => {
   it.each(['2026-01-15', '2026-07-31', '2026-12-31'])(
     'retries a provable date anchor %s with the same snapshot guard',
     async (due_date) => {
@@ -23,8 +53,7 @@ describe('older-schema writes retain only proven original anchors', () => {
     { day: 31, date: '2026-04-30' },
     { day: 29, date: '2027-02-28' },
     { day: 30, date: '2026-02-28' },
-    { day: 28, date: '2026-03-28' },
-  ])('refuses loss or ambiguous reread: %j', async ({ day, date }) => {
+  ])('refuses a clamp nobody confirmed: %j', async ({ day, date }) => {
     const writes: unknown[] = [];
     const result = await writeBillPatch(
       { status: 'upcoming', due_date: date, due_day: day },
@@ -41,6 +70,79 @@ describe('older-schema writes retain only proven original anchors', () => {
     );
     expect(isDueDayNotKept(result.error)).toBe(true);
     expect(writes).toHaveLength(1);
+  });
+  // Owner decision (0488 held): a day 28–30 on its own date is written as it
+  // was before 0488, where it used to be refused as ambiguous.
+  it.each([
+    { day: 28, date: '2026-03-28' },
+    { day: 29, date: '2026-03-29' },
+    { day: 30, date: '2026-04-30' },
+  ])('writes a day 28-30 that its date carries without the column: %j', async ({ day, date }) => {
+    const writes: Record<string, unknown>[] = [];
+    const result = await writeBillPatch({ status: 'upcoming', due_date: date, due_day: day }, async (patch) => {
+      writes.push(patch);
+      return 'due_day' in patch
+        ? { data: null, error: { code: 'PGRST204', message: "Could not find the 'due_day' column of 'bills' in the schema cache" } }
+        : { data: [{ id: 'synthetic-bill' }], error: null };
+    });
+    expect(result.error).toBeNull();
+    expect(writes).toEqual([{ status: 'upcoming', due_date: date, due_day: day }, { status: 'upcoming', due_date: date }]);
+  });
+  it.each([
+    { old: true, failure: null, writes: 2 },
+    { old: false, failure: null, writes: 1 },
+    { old: true, failure: { code: '42501', message: 'permission denied for table bills' }, writes: 1 },
+  ])('creates a recurring bill due on the 30th (older schema $old, refusal $failure)', async ({ old, failure, writes }) => {
+    const db = store(bill(), old, failure);
+    const created = {
+      family_id: 'synthetic-family', name: 'Rent', amount: 100, due_date: '2026-10-30', due_day: 30,
+      is_recurring: true, recurrence: 'monthly', status: 'upcoming' as const, created_by: null,
+    };
+    const result = await writeBillPatch(created, (p) => db.client.from('bills').insert(p));
+    expect(db.requests).toHaveLength(writes);
+    expect(db.requests[0].patch).toMatchObject({ due_day: 30 });
+    if (failure) expect(result.error).toMatchObject(failure);
+    else expect(result.error).toBeNull();
+    if (old && !failure) {
+      const { due_day: _day, ...withoutDay } = created;
+      expect(db.requests[1].patch).toEqual(withoutDay);
+    }
+  });
+  it('asks before a clamp and writes it without the column only on yes', async () => {
+    for (const answer of [false, true]) {
+      const writes: Record<string, unknown>[] = [];
+      const confirmClampedDay = vi.fn(async () => answer);
+      const result = await writeBillPatch(
+        { status: 'upcoming', due_date: '2026-02-28', due_day: 31 },
+        async (patch) => {
+          writes.push(patch);
+          return 'due_day' in patch
+            ? { data: null, error: { code: '42703', message: 'column bills.due_day does not exist' } }
+            : { data: [{ id: 'synthetic-bill' }], error: null };
+        },
+        { confirmClampedDay },
+      );
+      expect(confirmClampedDay).toHaveBeenCalledWith(expect.objectContaining({ day: 31, dueDate: '2026-02-28' }));
+      if (answer) {
+        expect(result.error).toBeNull();
+        expect(writes[1]).toEqual({ status: 'upcoming', due_date: '2026-02-28' });
+      } else {
+        expect(isDueDayNotKept(result.error)).toBe(true);
+        expect(writes).toHaveLength(1);
+      }
+    }
+  });
+  it('never asks or retries when the refusal is not the missing column', async () => {
+    const confirmClampedDay = vi.fn(async () => true);
+    const failure = { code: 'PGRST204', message: "Could not find the 'due_day_backup' column of 'bills' in the schema cache" };
+    const writes: unknown[] = [];
+    const result = await writeBillPatch({ due_date: '2026-02-28', due_day: 31 }, async (patch) => {
+      writes.push(patch);
+      return { data: null, error: failure };
+    }, { confirmClampedDay });
+    expect(result.error).toBe(failure);
+    expect(writes).toHaveLength(1);
+    expect(confirmClampedDay).not.toHaveBeenCalled();
   });
   it('does not roll a clamped original bill or change its anchor', async () => {
     const row = bill(),
