@@ -3930,6 +3930,7 @@
   "walletSubnav.invest": "Invertir",
   "walletSubnav.settings": "Ajustes",
   "walletSubnav.label": "Secciones del monedero",
+  "childLoginActions.aParentOrAdultSignsIn": "Un padre, una madre o un adulto inicia sesión con su propio correo electrónico, no con un PIN. Invítalo desde la página Familia.",
   "childLoginActions.childLoginsArenTConfigured": "Los inicios de sesión infantiles aún no están configurados en el servidor (define CHILD_LOGIN_SECRET).",
   "childLoginActions.childLoginsArenTConfigured2": "Los inicios de sesión infantiles aún no están configurados en el servidor.",
   "childLoginActions.couldNotCreateTheLogin": "No se ha podido crear el inicio de sesión. Puede que el nombre de usuario ya esté en uso.",

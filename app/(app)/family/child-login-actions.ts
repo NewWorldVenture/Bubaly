@@ -95,12 +95,23 @@ export async function createChildLoginAction(input: {
   const admin = createServiceClient();
 
   const { data: member, error: memberReadError } = await admin.from('family_members')
-    .select('id, family_id, display_name, user_id')
+    .select('id, family_id, display_name, role, user_id')
     .eq('id', input.memberId).maybeSingle();
   // A refused read is not an absence: it used to return the "not found" answer below. Audit C1-S9-75.
   if (memberReadError) return { ok: false, error: describeActionError(memberReadError, t('actions.couldNotCheckThatRefresh')) };
   if (!member || member.family_id !== ctx.active.familyId) return { ok: false, error: t('childLoginActions.memberNotFoundInYour') };
   if (member.user_id) return { ok: false, error: t('childLoginActions.thisMemberAlreadyHasA') };
+  // A username and a 4-digit PIN are a child's sign-in. They must not be all
+  // that stands in front of a parent's or adult's account, which can reach the
+  // family's money, its vault and every other member. resetChildPinAction below
+  // already refuses a manager on exactly that ground, and its comment assumed
+  // this action could never create one: "a manager always has [a user_id]".
+  // A manager added without an email (a grandparent, a co-parent placeholder,
+  // a member onboarding created) has none, so this action used to mint a PIN
+  // login onto that row, signing whoever knew the PIN in as a manager, and
+  // then refuse every reset of it. The rule is the reset's rule: a manager
+  // signs in with their own email, through an invite.
+  if (isManager(member.role)) return { ok: false, error: t('childLoginActions.aParentOrAdultSignsIn') };
 
   // `eq` for the same reason the sign-in lookup uses it: `_` is a LIKE wildcard
   // and the username grammar allows it, so `ilike` made this check answer about

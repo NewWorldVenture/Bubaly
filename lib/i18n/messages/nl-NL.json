@@ -3930,6 +3930,7 @@
   "walletSubnav.invest": "Beleggen",
   "walletSubnav.settings": "Instellingen",
   "walletSubnav.label": "Onderdelen van de portemonnee",
+  "childLoginActions.aParentOrAdultSignsIn": "Een ouder of volwassene meldt zich aan met een eigen e-mailadres, niet met een pincode. Nodig diegene in plaats daarvan uit via de pagina Familie.",
   "childLoginActions.childLoginsArenTConfigured": "Kinderaanmeldingen zijn nog niet ingesteld op de server (stel CHILD_LOGIN_SECRET in).",
   "childLoginActions.childLoginsArenTConfigured2": "Kinderaanmeldingen zijn nog niet ingesteld op de server.",
   "childLoginActions.couldNotCreateTheLogin": "Kan de login niet aanmaken. De gebruikersnaam is mogelijk al in gebruik.",

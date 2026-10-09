@@ -4089,6 +4089,7 @@
   "walletSubnav.invest": "Invest",
   "walletSubnav.settings": "Settings",
   "walletSubnav.label": "Wallet sections",
+  "childLoginActions.aParentOrAdultSignsIn": "A parent or adult signs in with their own email, not a PIN. Invite them from the Family page instead.",
   "childLoginActions.childLoginsArenTConfigured": "Child logins aren’t configured on the server yet (set CHILD_LOGIN_SECRET).",
   "childLoginActions.childLoginsArenTConfigured2": "Child logins aren’t configured on the server yet.",
   "childLoginActions.couldNotCreateTheLogin": "Could not create the login. The username may already be in use.",

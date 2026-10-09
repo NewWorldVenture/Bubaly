@@ -3931,6 +3931,7 @@
   "walletSubnav.invest": "Investir",
   "walletSubnav.settings": "Definições",
   "walletSubnav.label": "Secções da carteira",
+  "childLoginActions.aParentOrAdultSignsIn": "Um pai, uma mãe ou um adulto inicia sessão com o seu próprio email, não com um PIN. Convide-o antes a partir da página Família.",
   "childLoginActions.childLoginsArenTConfigured": "Os inícios de sessão infantis ainda não estão configurados no servidor (defina CHILD_LOGIN_SECRET).",
   "childLoginActions.childLoginsArenTConfigured2": "Os inícios de sessão infantis ainda não estão configurados no servidor.",
   "childLoginActions.couldNotCreateTheLogin": "Não foi possível criar o início de sessão. O nome de utilizador pode já estar em uso.",

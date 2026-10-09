@@ -3930,6 +3930,7 @@
   "walletSubnav.invest": "Investir",
   "walletSubnav.settings": "Réglages",
   "walletSubnav.label": "Sections du portefeuille",
+  "childLoginActions.aParentOrAdultSignsIn": "Un parent ou un adulte se connecte avec sa propre adresse e-mail, pas avec un code PIN. Invitez-le plutôt depuis la page Famille.",
   "childLoginActions.childLoginsArenTConfigured": "Les connexions enfant ne sont pas encore configurées sur le serveur (définissez CHILD_LOGIN_SECRET).",
   "childLoginActions.childLoginsArenTConfigured2": "Les connexions enfant ne sont pas encore configurées sur le serveur.",
   "childLoginActions.couldNotCreateTheLogin": "Impossible de créer la connexion. Le nom d’utilisateur est peut-être déjà utilisé.",
