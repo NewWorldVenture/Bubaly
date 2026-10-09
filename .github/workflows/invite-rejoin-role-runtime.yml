@@ -4,7 +4,7 @@ name: Invite rejoin role SQL runtime
 # role the invite grants. Neither the Database job's replay nor `supabase db
 # push` reads supabase/reserved/, and the Database job's probe glob does not
 # read docs/audit/reserved/, so nothing else in CI exercises it. This job
-# replays every runnable migration exactly as the Database job does, then:
+# replays every runnable migration with the Database job's bootstrap, then:
 #
 #   1. runs the held probe on that released schema and requires it to FAIL on
 #      the defect (a removed parent invited back as a guest comes back a
@@ -50,24 +50,12 @@ jobs:
        (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    services:
-      postgres:
-        # pgvector/pgvector:pg16, as in ci.yml's Database job: 0237 creates the
-        # `vector` extension, which a stock image cannot apply.
-        image: pgvector/pgvector:pg16
-        env:
-          # Throwaway and job-owned; no repository secret, no database URL.
-          POSTGRES_PASSWORD: ci-only-not-a-production-secret
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
-        ports:
-          - 5432:5432
+    # No service container: Docker Hub's unauthenticated pull limit refused
+    # pgvector/pgvector:pg16 on this job's first two runs before any SQL ran.
+    # PostgreSQL 16 and pgvector come from the runner's own apt sources instead,
+    # the same major version and extension the Database job replays into.
     env:
       PGHOST: localhost
-      PGPORT: '5432'
       PGUSER: postgres
       PGPASSWORD: ci-only-not-a-production-secret
       PGDATABASE: bubaly
@@ -79,16 +67,24 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      - name: Ensure the Postgres client is present
+      - name: Start a job-owned PostgreSQL 16 with pgvector
+        shell: bash
         run: |
-          psql --version || {
-            sudo apt-get update -qq
-            sudo apt-get install -y --no-install-recommends postgresql-client
-          }
-          psql --version
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-16 postgresql-16-pgvector
+          sudo pg_ctlcluster 16 main start || true
+          port="$(pg_lsclusters --no-header | awk '$1 == 16 && $2 == "main" { print $3 }')"
+          [[ "$port" =~ ^[0-9]+$ ]]
+          [[ "$(pg_lsclusters --no-header | awk '$1 == 16 && $2 == "main" { print $4 }')" == online ]]
+          echo "PGPORT=$port" >> "$GITHUB_ENV"
+          sudo -u postgres psql -X -p "$port" -v ON_ERROR_STOP=1 -q \
+            -c "alter user postgres password 'ci-only-not-a-production-secret'"
 
       - name: Create the database
-        run: PGDATABASE=postgres psql -c 'create database bubaly'
+        run: |
+          [[ "$(PGDATABASE=postgres psql -X -Atc 'show server_version_num')" == 16* ]]
+          PGDATABASE=postgres psql -X -c 'create database bubaly'
 
       - name: Replay every runnable migration
         run: bash docs/audit/pg-bootstrap.sh
@@ -96,9 +92,11 @@ jobs:
       - name: The released schema still gives a returning member their old role
         shell: bash
         run: |
-          set -uo pipefail
-          out="$(psql -X -v ON_ERROR_STOP=1 -q -f docs/audit/reserved/a-member-invited-back-gets-the-invited-role-check.sql 2>&1)"
-          status=$?
+          set -euo pipefail
+          # GitHub runs bash steps with -e, so the expected failure is caught
+          # here rather than ending the step before it is examined.
+          status=0
+          out="$(psql -X -v ON_ERROR_STOP=1 -q -f docs/audit/reserved/a-member-invited-back-gets-the-invited-role-check.sql 2>&1)" || status=$?
           printf '%s\n' "$out"
           if [ "$status" -eq 0 ]; then
             echo '::error::the held probe passed on the released schema, so it can no longer see the defect 0495 repairs'
