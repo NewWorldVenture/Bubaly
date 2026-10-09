@@ -235,7 +235,7 @@ describe('without held migration 0493, the previous direct count keeps the allow
   type LegacyQuery = { table: string; select?: [string, unknown]; filters: Array<[string, string, unknown]> };
 
   /** RPC answers `rpcError`; the table read answers `{ count, error }` like a head count. */
-  function legacyDb(rpcError: unknown, legacy: { count: number | null; error: unknown }) {
+  function legacyDb(rpcError: unknown, legacy: { count: number | null; error: unknown; rejects?: unknown }) {
     const rpcCalls: string[] = [];
     const queries: LegacyQuery[] = [];
     const client = {
@@ -248,7 +248,9 @@ describe('without held migration 0493, the previous direct count keeps the allow
           eq: (col: string, val: unknown) => { q.filters.push(['eq', col, val]); return builder; },
           gte: (col: string, val: unknown) => { q.filters.push(['gte', col, val]); return builder; },
           then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
-            Promise.resolve({ data: null, count: legacy.count, error: legacy.error }).then(resolve, reject),
+            ('rejects' in legacy
+              ? Promise.reject(legacy.rejects)
+              : Promise.resolve({ data: null, count: legacy.count, error: legacy.error })).then(resolve, reject),
         };
         return builder;
       },
@@ -307,6 +309,13 @@ describe('without held migration 0493, the previous direct count keeps the allow
       .toMatchObject({ ok: false, status: 403, code: 'unavailable' });
   });
 
+  it('fails closed when the previous count query rejects', async () => {
+    const { assertAIAccess, AI_ASSISTANT_FEATURE_KEY } = await import('@/lib/server/ai-access');
+    const { client } = legacyDb(MISSING_PGRST202, { count: null, error: null, rejects: new TypeError('fetch failed') });
+    expect(await assertAIAccess(ctx(), { db: client, now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY }))
+      .toMatchObject({ ok: false, status: 403, code: 'unavailable' });
+  });
+
   it('warns once per process, naming the held migration', async () => {
     const { assertAIAccess, AI_ASSISTANT_FEATURE_KEY } = await import('@/lib/server/ai-access');
     for (let i = 0; i < 3; i++) {
@@ -315,6 +324,7 @@ describe('without held migration 0493, the previous direct count keeps the allow
     }
     expect(warn).toHaveBeenCalledTimes(1);
     expect(String(warn.mock.calls[0][0])).toContain('0493_ai_copy_private_read_and_quota.sql');
+    expect(String(warn.mock.calls[0][0])).toContain("NOTIFY pgrst, 'reload schema'");
   });
 
   it.each([

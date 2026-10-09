@@ -84,7 +84,10 @@ function monthStartIso(now: Date): string {
 // a direct `ai_requests` count under the caller's RLS. Recognised only from the
 // exact missing-function answer that names this function (PGRST202 from the
 // schema cache, 42883 from Postgres), so a permission, network or internal
-// error from an RPC that exists keeps failing closed.
+// error from an RPC that exists keeps failing closed. PGRST202 comes from
+// PostgREST's schema cache, so applying 0493 must be followed by a cache reload
+// (`NOTIFY pgrst, 'reload schema'`): until then this fallback keeps counting
+// directly, and under 0493's private-read RLS that count misses private rows.
 const MONTHLY_COUNT_RPC = 'count_family_ai_requests_month';
 const MONTHLY_COUNT_MIGRATION = 'supabase/reserved/0493_ai_copy_private_read_and_quota.sql';
 let warnedMissingMonthlyCount = false;
@@ -101,7 +104,7 @@ function warnMissingMonthlyCountRpc(): void {
   if (warnedMissingMonthlyCount) return;
   warnedMissingMonthlyCount = true;
   console.warn(
-    `[ai-access] function public.${MONTHLY_COUNT_RPC} is missing: migration ${MONTHLY_COUNT_MIGRATION} has not been applied to this database. Counting this month's AI requests directly from ai_requests, as before.`,
+    `[ai-access] function public.${MONTHLY_COUNT_RPC} is missing: migration ${MONTHLY_COUNT_MIGRATION} has not been applied to this database. Counting this month's AI requests directly from ai_requests, as before. If 0493 has been applied, reload PostgREST's schema cache (NOTIFY pgrst, 'reload schema').`,
   );
 }
 
