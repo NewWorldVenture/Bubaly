@@ -2903,6 +2903,8 @@
   "bills.moveToShorterMonthBody": "Cette facture est due le {day} de chaque mois, mais {month} n'a pas de {day}. Tant qu'une mise à jour de la base de données n'a pas été appliquée, Bubaly ne peut pas retenir le {day}, elle sera donc due le {newDay} à partir de maintenant.",
   "bills.moveToShorterMonthConfirm": "Marquer comme payée et déplacer",
   "bills.moveToShorterMonthCancel": "Laisser telle quelle",
+  "bills.addOnShorterMonthTitle": "Ajouter cette facture avec une échéance au {date} ?",
+  "bills.addOnShorterMonthConfirm": "Ajouter",
   "bills.recurring": "Récurrent",
   "bills.toggleAutoPay": "Activer ou désactiver le prélèvement",
   "billsView.addANameAndAmount": "Ajoutez un nom et un montant",

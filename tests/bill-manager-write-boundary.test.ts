@@ -110,6 +110,8 @@ describe('actual modal hooks before passive cleanup', () => {
     useTranslations: () => (key: string) => key, useToast: () => ({ success, error }), useApp: () => ({ family: { timezone: 'UTC' } }),
     useFamilyClock: () => ({ todayKey: () => '2026-01-01' }), todayInZone: () => '2026-01-31', createClient: () => db.client,
     saveBillPayment, isMissingBillDueDay, writeBillPatch, describeDbError, wroteNoRows, ...schedule,
+    useLocale: () => ({ code: 'en-US' }), useConfirm: () => async () => false, useFormat: () => ({ fmtDate: (day: string) => day }),
+    dueDayNotKeptQuestion, isDueDayNotKept,
     Modal: () => null, Input: () => null, Field: () => null, Select: () => null, Button: () => null, CATEGORIES: ['Other'], BILL_CATEGORIES: ['Other'] };
     const component = actualFunction(file, name, env);
     const render = () => { cursor = 0; return component({ bill: bill({ due_date: '2026-01-01' }), familyId: 'synthetic-family', userId: 'synthetic-user', open: true, defaultAutopay: false, isCurrent: () => current, onDone: done, onClose: close }); };

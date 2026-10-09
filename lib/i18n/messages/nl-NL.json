@@ -2903,6 +2903,8 @@
   "bills.moveToShorterMonthBody": "Deze rekening vervalt elke maand op dag {day}, maar {month} heeft geen dag {day}. Tot er een database-update is toegepast, kan Bubaly dag {day} niet onthouden, dus vanaf nu vervalt hij op dag {newDay}.",
   "bills.moveToShorterMonthConfirm": "Als betaald markeren en verplaatsen",
   "bills.moveToShorterMonthCancel": "Ongewijzigd laten",
+  "bills.addOnShorterMonthTitle": "Deze rekening toevoegen met vervaldatum {date}?",
+  "bills.addOnShorterMonthConfirm": "Toevoegen",
   "bills.recurring": "Terugkerend",
   "bills.toggleAutoPay": "Automatische incasso wisselen",
   "billsView.addANameAndAmount": "Voeg een naam en bedrag toe",

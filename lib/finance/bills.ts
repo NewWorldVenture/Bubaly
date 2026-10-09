@@ -3,7 +3,7 @@ import type { Database, Tables } from '@/lib/database.types';
 import { billPaidPatch, billSchedulePatch, type BillScheduleChoice } from './bill-schedule';
 import {
   whereBillIsAsSeen, writeBillPatch, isMissingDueDayColumn, isDueDayNotKept, billPaidPatchBefore0488,
-  warnDueDayMissing, type WriteBillPatchOptions,
+  warnDueDayMissing, withoutRenamedCadence, type WriteBillPatchOptions,
 } from './recurring';
 import { readCountedRows } from '@/lib/calendar/occurrences';
 
@@ -57,8 +57,11 @@ export async function saveBillPayment(
   if (!isCurrent()) return { data: null, error: new Error('This bill view is no longer current.') };
   if (!bill?.updated_at)
     return { data: null, error: new Error('This bill changed. Refresh before marking it paid.') };
-  const patch = reopen ? { status: 'upcoming' as const } : billPaidPatch(bill, today, choice);
-  return writeBillPatch(patch, writeAsSeen(client, familyId, bill, isCurrent), options);
+  const paid = reopen ? { status: 'upcoming' as const } : billPaidPatch(bill, today, choice);
+  // A row read without due_day (an older schema) keeps its stored cadence
+  // spelling when the patch only renames it, as Mark paid did before 0488.
+  const patch = bill.due_day === undefined && paid && !('due_day' in paid) ? withoutRenamedCadence(paid, bill.recurrence) : paid;
+  return writeBillPatch(patch, writeAsSeen(client, familyId, bill, isCurrent), { ...options, storedRecurrence: bill.recurrence });
 }
 
 function writeAsSeen(client: SupabaseClient<Database>, familyId: string, bill: Tables<'bills'>, isCurrent: () => boolean) {
@@ -100,7 +103,11 @@ export async function saveBillPaymentBefore0488(
   if (!probe.error) return null;
   if (!isMissingDueDayColumn(probe.error)) return { data: null, error: probe.error };
   warnDueDayMissing();
-  return writeBillPatch(billPaidPatchBefore0488(bill, today), writeAsSeen(client, familyId, bill, isCurrent), options);
+  // The probe has answered: write without due_day at once, keeping the clamp question.
+  return writeBillPatch(billPaidPatchBefore0488(bill, today), writeAsSeen(client, familyId, bill, isCurrent), {
+    ...options,
+    dueDayMissing: true,
+  });
 }
 
 /** Both an absent column and a refused unsafe fallback need the update notice. */

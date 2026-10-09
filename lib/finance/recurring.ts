@@ -155,6 +155,15 @@ export function billPaidPatchBefore0488(bill: RecurringBillLike, today: string):
   return day !== null ? { status: 'upcoming', due_date: next, due_day: day } : { status: 'upcoming', due_date: next };
 }
 
+/** The patch without a `recurrence` that only respells the stored one (`Monthly` -> `monthly`). */
+export function withoutRenamedCadence<P extends object>(patch: P, stored: string | null): P {
+  const cadence = (patch as { recurrence?: unknown }).recurrence;
+  if (typeof cadence !== 'string' || namedCadence(stored) !== cadence) return patch;
+  const rest = { ...patch };
+  delete (rest as { recurrence?: unknown }).recurrence;
+  return rest;
+}
+
 export interface WriteBillPatchOptions {
   /**
    * Asks the person whether to move the bill to the clamped date and keep that
@@ -162,6 +171,17 @@ export interface WriteBillPatchOptions {
    * true proceeds. Without it (a server path) such a roll is refused.
    */
   confirmClampedDay?: (refusal: DueDayNotKept) => Promise<boolean>;
+  /**
+   * The database has already answered that `bills.due_day` is missing: go
+   * straight to the write without it instead of sending it once to be refused.
+   */
+  dueDayMissing?: boolean;
+  /**
+   * The row's stored `recurrence`. A write without `due_day` leaves it as
+   * stored when the patch names the same cadence (`Monthly` -> `monthly`), as
+   * Mark paid did before 0488.
+   */
+  storedRecurrence?: string | null;
 }
 
 /**
@@ -178,13 +198,16 @@ export async function writeBillPatch<P extends object, W extends (p: P) => Promi
   options: WriteBillPatchOptions = {},
 ): Promise<Awaited<ReturnType<W>> | { data: null; error: Error | DueDayNotKept }> {
   if (!patch) return { data: null, error: new Error('Confirm the recurring bill schedule before saving.') };
-  const first = (await write(patch)) as Awaited<ReturnType<W>>;
-  if (!first.error || !('due_day' in patch) || !isMissingDueDayColumn(first.error)) return first;
+  if (!(options.dueDayMissing && 'due_day' in patch)) {
+    const first = (await write(patch)) as Awaited<ReturnType<W>>;
+    if (!first.error || !('due_day' in patch) || !isMissingDueDayColumn(first.error)) return first;
+  }
   warnDueDayMissing();
   const { due_day: day, due_date: date } = patch as { due_day?: number | null; due_date?: string };
   const onDate = typeof date === 'string' ? parseDayKey(date)?.[2] : undefined;
-  const rest = { ...patch };
+  let rest = { ...patch };
   delete (rest as { due_day?: unknown }).due_day;
+  if (options.storedRecurrence !== undefined) rest = withoutRenamedCadence(rest, options.storedRecurrence);
   if (day != null && onDate !== day) {
     const refusal: DueDayNotKept = {
       code: DUE_DAY_NOT_KEPT,
@@ -210,12 +233,17 @@ export interface DueDayQuestion {
   destructive: false;
 }
 
-/** The pre-0488 question for a clamped roll: mark paid and move it to that date? */
+/**
+ * The pre-0488 question for a clamped day: mark paid and move it to that date
+ * (a roll), or add it due on that date (a new bill whose chosen day the first
+ * month does not have).
+ */
 export function dueDayNotKeptQuestion(
   refusal: DueDayNotKept,
   t: (key: string, params?: Record<string, string | number>) => string,
   formatDay: (dayKey: string) => string,
   locale: string,
+  purpose: 'markPaid' | 'add' = 'markPaid',
 ): DueDayQuestion {
   const target = refusal.dueDate ? parseDayKey(refusal.dueDate) : null;
   const month = target
@@ -224,10 +252,12 @@ export function dueDayNotKeptQuestion(
       )
     : '';
   return {
-    title: t('bills.moveToShorterMonthTitle', { date: refusal.dueDate ? formatDay(refusal.dueDate) : '' }),
+    title: t(purpose === 'add' ? 'bills.addOnShorterMonthTitle' : 'bills.moveToShorterMonthTitle', {
+      date: refusal.dueDate ? formatDay(refusal.dueDate) : '',
+    }),
     body: t('bills.moveToShorterMonthBody', { day: refusal.day, month, newDay: target?.[2] ?? refusal.day }),
-    confirmLabel: t('bills.moveToShorterMonthConfirm'),
-    cancelLabel: t('bills.moveToShorterMonthCancel'),
+    confirmLabel: t(purpose === 'add' ? 'bills.addOnShorterMonthConfirm' : 'bills.moveToShorterMonthConfirm'),
+    cancelLabel: t(purpose === 'add' ? 'bills.cancel' : 'bills.moveToShorterMonthCancel'),
     destructive: false,
   };
 }

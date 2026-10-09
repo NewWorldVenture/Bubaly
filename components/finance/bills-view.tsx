@@ -231,6 +231,8 @@ export function BillsView({ mode }: { mode: BillsMode }) {
 
 function BillModal({ familyId, userId, defaultAutopay, onClose, isCurrent }: { familyId: string; userId: string; defaultAutopay: boolean; onClose: () => void; isCurrent: () => boolean }) {
   const t = useTranslations();
+  const locale = useLocale();
+  const askConfirm = useConfirm();
   const { family } = useApp();
   const { success, error: toastError } = useToast();
   const alive = useRef(true);
@@ -255,8 +257,12 @@ function BillModal({ familyId, userId, defaultAutopay, onClose, isCurrent }: { f
         due_date: v.due_date, category: v.category, is_recurring: v.is_recurring, autopay: v.autopay,
         recurrence: v.is_recurring ? v.recurrence : null, ...(dueDay !== null ? { due_day: dueDay } : {}),
         status: 'upcoming' as const, created_by: userId,
-      }, p => alive.current && isCurrent() ? createClient().from('bills').insert(p) : Promise.resolve({ data: null, error: new Error('Bill view changed') }));
+      }, p => alive.current && isCurrent() ? createClient().from('bills').insert(p) : Promise.resolve({ data: null, error: new Error('Bill view changed') }), {
+        // Without bills.due_day (0488) a day the first month lacks is added on its last day only if the person says yes.
+        confirmClampedDay: (refusal) => askConfirm(dueDayNotKeptQuestion(refusal, t, (iso) => fmtDueDateIn(iso, locale.code), locale.code, 'add')),
+      });
       if (!alive.current || !isCurrent()) return;
+      if (isDueDayNotKept(error)) return;
       if (error) return toastError(isMissingBillDueDay(error) ? t('bills.scheduleUnavailable') : describeDbError(error));
       success(t('billsView.billAdded'));
       onClose();

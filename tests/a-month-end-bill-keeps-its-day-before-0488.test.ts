@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { saveBillPayment, saveBillPaymentBefore0488 } from '@/lib/finance/bills';
-import { writeBillPatch, isDueDayNotKept } from '@/lib/finance/recurring';
+import { writeBillPatch, isDueDayNotKept, dueDayNotKeptQuestion } from '@/lib/finance/recurring';
 import { bill, store } from './helpers/recurring-bill-store';
 
 describe('saveBillPaymentBefore0488', () => {
@@ -184,5 +184,97 @@ describe('older-schema writes fall back to the pre-0488 behaviour', () => {
     });
     expect(isDueDayNotKept(result.error)).toBe(true);
     expect(db.requests).toHaveLength(0);
+  });
+});
+
+// Review follow-ups: the pre-0488 write sends exactly what 82f2db1 sent.
+describe('pre-0488 writes match the previous production requests', () => {
+  // A month-based roll learns the column is missing from the refused due_day;
+  // a weekly-type roll sends no due_day, and its row was read without the key.
+  it.each([
+    { recurrence: 'Monthly', writes: 2, next: '2026-02-15' },
+    { recurrence: 'annually', writes: 2, next: '2027-01-15' },
+    { recurrence: 'fortnightly', writes: 1, next: '2026-01-29' },
+  ])('leaves a stored cadence spelled $recurrence as stored without the column', async ({ recurrence, writes, next }) => {
+    const row = bill({ due_date: '2026-01-15', recurrence }),
+      db = store(row, true);
+    const result = await saveBillPayment(db.client, row.family_id, row, row.due_date);
+    expect(result.error).toBeNull();
+    expect(db.requests).toHaveLength(writes);
+    expect(db.requests.at(-1)!.patch).toEqual({ status: 'upcoming', due_date: next });
+    expect(db.requests.at(-1)!.url.searchParams.get('updated_at')).toBe(`eq.${row.updated_at}`);
+    expect(db.requests.at(-1)!.url.searchParams.get('recurrence')).toBe(`eq.${recurrence}`);
+    expect(db.current()).toMatchObject({ recurrence, due_date: next });
+  });
+  it.each([
+    { recurrence: 'Monthly', due_day: 15, patch: { status: 'upcoming', due_date: '2026-02-15', recurrence: 'monthly', due_day: 15 } },
+    { recurrence: 'fortnightly', due_day: null, patch: { status: 'upcoming', due_date: '2026-01-29', recurrence: 'biweekly' } },
+  ])('still writes the normalized cadence when the column exists ($recurrence)', async ({ recurrence, due_day, patch }) => {
+    const row = bill({ due_date: '2026-01-15', recurrence, due_day }),
+      db = store(row);
+    expect((await saveBillPayment(db.client, row.family_id, row, row.due_date)).error).toBeNull();
+    expect(db.requests).toHaveLength(1);
+    expect(db.requests[0].patch).toEqual(patch);
+  });
+  it('keeps a cadence that is not the stored one, and surfaces another refusal unchanged', async () => {
+    const writes: Record<string, unknown>[] = [];
+    const missing = { code: 'PGRST204', message: "Could not find the 'due_day' column of 'bills' in the schema cache" };
+    const result = await writeBillPatch({ due_date: '2026-01-15', recurrence: 'quarterly', due_day: 15 }, async (p) => {
+      writes.push(p);
+      return 'due_day' in p ? { data: null, error: missing } : { data: [{ id: 'synthetic-bill' }], error: null };
+    }, { storedRecurrence: 'monthly' });
+    expect(result.error).toBeNull();
+    expect(writes[1]).toEqual({ due_date: '2026-01-15', recurrence: 'quarterly' });
+    const row = bill({ due_date: '2026-01-15', recurrence: 'Monthly' }),
+      failure = { code: '42501', message: 'permission denied for table bills' },
+      db = store(row, true, failure);
+    expect((await saveBillPayment(db.client, row.family_id, row, row.due_date)).error).toEqual(failure);
+    expect(db.requests).toHaveLength(1);
+  });
+  it('pays without sending due_day once the probe has answered that it is missing', async () => {
+    const row = bill({ due_date: '2026-03-30' }),
+      db = store(row, true);
+    const result = await saveBillPaymentBefore0488(db.client, row.family_id, row, row.due_date);
+    expect(result?.error).toBeNull();
+    expect(db.reads).toHaveLength(1);
+    expect(db.requests).toHaveLength(1);
+    expect(db.requests[0].patch).toEqual({ status: 'upcoming', due_date: '2026-04-30' });
+    expect(db.requests[0].url.searchParams.get('updated_at')).toBe(`eq.${row.updated_at}`);
+  });
+  it('still asks before a clamp when it skips the refused write', async () => {
+    for (const answer of [false, true]) {
+      const row = bill({ due_date: '2026-01-30' }),
+        db = store(row, true),
+        confirmClampedDay = vi.fn(async () => answer);
+      const result = await saveBillPaymentBefore0488(db.client, row.family_id, row, row.due_date, undefined, { confirmClampedDay });
+      expect(confirmClampedDay).toHaveBeenCalledWith(expect.objectContaining({ day: 30, dueDate: '2026-02-28' }));
+      if (answer) {
+        expect(result?.error).toBeNull();
+        expect(db.requests).toHaveLength(1);
+        expect(db.requests[0].patch).toEqual({ status: 'upcoming', due_date: '2026-02-28' });
+      } else {
+        expect(isDueDayNotKept(result?.error)).toBe(true);
+        expect(db.requests).toHaveLength(0);
+        expect(db.current()).toEqual(row);
+      }
+    }
+  });
+  it('returns a refusal of the column-less write as it came', async () => {
+    const failure = { code: '42501', message: 'permission denied for table bills' };
+    const writes: unknown[] = [];
+    const result = await writeBillPatch({ status: 'upcoming', due_date: '2026-04-30', due_day: 30 }, async (p) => {
+      writes.push(p);
+      return { data: null, error: failure };
+    }, { dueDayMissing: true });
+    expect(result.error).toBe(failure);
+    expect(writes).toEqual([{ status: 'upcoming', due_date: '2026-04-30' }]);
+  });
+  it('asks an add question, not a mark-paid one, for a new bill', () => {
+    const t = (key: string) => key;
+    const refusal = { code: 'BUBALY_DUE_DAY_NOT_KEPT', message: '', day: 31, dueDate: '2026-04-30' } as Parameters<typeof dueDayNotKeptQuestion>[0];
+    expect(dueDayNotKeptQuestion(refusal, t, (d) => d, 'en-US', 'add')).toMatchObject({
+      title: 'bills.addOnShorterMonthTitle', confirmLabel: 'bills.addOnShorterMonthConfirm', cancelLabel: 'bills.cancel', destructive: false,
+    });
+    expect(dueDayNotKeptQuestion(refusal, t, (d) => d, 'en-US')).toMatchObject({ title: 'bills.moveToShorterMonthTitle' });
   });
 });

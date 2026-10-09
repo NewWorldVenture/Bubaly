@@ -2904,6 +2904,8 @@
   "bills.moveToShorterMonthBody": "Esta fatura vence no dia {day} de cada mês, mas {month} não tem dia {day}. Até ser aplicada uma atualização da base de dados, o Bubaly não consegue lembrar-se do dia {day}, por isso a partir de agora vencerá no dia {newDay}.",
   "bills.moveToShorterMonthConfirm": "Marcar como paga e mover",
   "bills.moveToShorterMonthCancel": "Deixar como está",
+  "bills.addOnShorterMonthTitle": "Adicionar esta fatura com vencimento a {date}?",
+  "bills.addOnShorterMonthConfirm": "Adicionar",
   "bills.recurring": "Recorrente",
   "bills.toggleAutoPay": "Alternar débito automático",
   "billsView.addANameAndAmount": "Adicione um nome e um valor",
