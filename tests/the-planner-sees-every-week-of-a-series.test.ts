@@ -8,7 +8,7 @@ import { generateFamilyNotifications } from '@/lib/server/notifications';
 import { entityIdFrom } from '@/lib/notifications/actions';
 import type { ServiceScope } from '@/lib/services/types';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
-import { bodyOf } from './helpers/source-order';
+import { at, bodyOf } from './helpers/source-order';
 
 // The scheduling API (app/api/ai/schedule) reads the same tables itself; its
 // session and client come from these two seams, and its words from the
@@ -337,7 +337,11 @@ describe('the reads are the shared one (source pins)', () => {
       expect(body, fn).not.toContain(".from('calendar_events')");
       const read = bodyOf(service, fn, ']);');
       if (fn === 'export async function findFreeSlots(') {
-        expect(read, fn).toContain('readCalendarAvailability(scope.db, scope.familyId, instantCalendarBounds(fromIso, toIso, tz), tz)');
+        const sharedRead = 'readCalendarAvailability(scope.db, scope.familyId, bounds, tz)';
+        const validatedBounds = 'bounds=instantCalendarBounds(fromIso,toIso,scope.tz);';
+        expect(read, fn).toContain(sharedRead);
+        expect(at(read, validatedBounds)).toBeLessThan(at(read, sharedRead));
+        expect(read, fn).toMatch(/catch\s*\{\s*return fail\('That search window could not be understood\.', \{ code: SERVICE_CODES\.invalidInput \}\);/);
       } else {
         expect(read, fn).toContain('window=analysisWindow(scope,input,7)');
         expect(read, fn).toContain('readCalendarAvailability(scope.db,scope.familyId,window.bounds,scope.tz)');
@@ -368,7 +372,12 @@ describe('the reads are the shared one (source pins)', () => {
 
   it('the scheduling API reads the calendar through the shared read', () => {
     const route = readFileSync(join(ROOT, 'app/api/ai/schedule/route.ts'), 'utf8');
-    expect(route).toContain('readCalendarOccurrences(supabase, familyId, instantCalendarBounds(fromISO, toISO, tz), tz, { overlap: true })');
+    const sharedRead = 'readCalendarOccurrences(supabase, familyId, bounds, tz, { overlap: true })';
+    const validatedBounds = 'bounds = instantCalendarBounds(fromISO, toISO, tz);';
+    expect(route).toContain(sharedRead);
+    expect(at(route, validatedBounds)).toBeLessThan(at(route, 'const supabase = await createServer();'));
+    expect(at(route, 'const supabase = await createServer();')).toBeLessThan(at(route, sharedRead));
+    expect(route).toContain("catch { return NextResponse.json({ error: t('schedule.invalidWindow') }, { status: 400 }); }");
     expect(route).not.toContain(".from('calendar_events')");
   });
 
