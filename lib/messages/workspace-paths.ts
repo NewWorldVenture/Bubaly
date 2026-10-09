@@ -10,7 +10,7 @@ import type { summarizeConversations } from './overview';
 import { readConversationInbox, readConversationOverview } from './reads';
 import { fellBackForMissing, MESSAGING_SCHEMA, warnMissingMigration } from './schema-compat';
 import {
-  legacyConversationSummaries, legacyCreateConversation, legacyEnsureFamilyChat, legacyFamilyChat,
+  legacyConversationSummaries, legacyCreateConversation, legacyEnsureFamilyChat, legacyExistingDirect, legacyFamilyChat,
   legacyMarkConversationRead, legacyToggleReaction, type LegacyConversationInsert,
 } from './legacy-schema';
 
@@ -62,7 +62,8 @@ export async function ensureFamilyChat(
 
 /**
  * Validate membership and deduplicate direct chats in one database transaction.
- * Before 0475 there is no such RPC: insert directly, as before the build-out.
+ * Before 0475 there is no such RPC: reuse the 1:1 chat with the same roster or
+ * insert directly, as before the build-out.
  */
 export async function createFamilyConversation(db: DB, payload: LegacyConversationInsert) {
   const res = await db.rpc('create_family_conversation', {
@@ -70,7 +71,11 @@ export async function createFamilyConversation(db: DB, payload: LegacyConversati
     p_name: payload.name, p_kind: payload.kind, p_avatar_emoji: payload.avatar_emoji ?? undefined,
   });
   if (!fellBackForMissing(res.error, MESSAGING_SCHEMA.createFamilyConversation,
-    'Creating the conversation with a direct insert, as before the build-out.')) return res;
+    'Creating the conversation with a direct insert (reusing an existing 1:1 chat), as before the build-out.')) return res;
+  if (payload.kind === 'direct') {
+    const existing = await legacyExistingDirect(db, payload);
+    if (existing.error || existing.data) return existing;
+  }
   return legacyCreateConversation(db, payload);
 }
 

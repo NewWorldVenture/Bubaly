@@ -328,6 +328,33 @@ describe('sendFamilyMessage', () => {
     expect(calls.some((c) => c.table === 'rpc:send_family_message' || c.kind === 'insert')).toBe(false);
   });
 
+  it('without find_family_message the same words return the old row even when its kind or reply differs, as before', async () => {
+    const { db, calls } = makeDb((call) => {
+      if (call.table === 'rpc:find_family_message') return { data: null, error: MISSING('find_family_message') };
+      if (call.table === 'family_messages') return { data: MESSAGE({ content: 'hello', kind: 'announcement', reply_to_id: 'msg-0' }), error: null };
+      return successfulReply(call);
+    });
+    const res = await sendFamilyMessage(scopeWith(db, { requestId: 'req-retry' }), { content: 'hello', conversationId: 'conv-1' });
+    expect(res).toMatchObject({ ok: true, data: { id: 'msg-1', kind: 'announcement' } });
+    expect(calls.some((c) => c.table === 'rpc:send_family_message' || c.kind === 'insert')).toBe(false);
+  });
+
+  it('with find_family_message a found row of a different kind is still refused as already saved', async () => {
+    const { db, calls } = makeDb((call) => call.table === 'rpc:find_family_message'
+      ? { data: [MESSAGE({ content: 'hello', kind: 'announcement' })], error: null } : successfulReply(call));
+    const res = await sendFamilyMessage(scopeWith(db, { requestId: 'req-retry' }), { content: 'hello', conversationId: 'conv-1' });
+    expect(res).toMatchObject({ ok: false, code: 'already_saved' });
+    expect(calls.some((c) => c.table === 'rpc:send_family_message' || c.kind === 'insert')).toBe(false);
+  });
+
+  it('a duplicate probe that fails for another reason still fails without the old probe', async () => {
+    const { db, calls } = makeDb((call) => call.table === 'rpc:find_family_message'
+      ? { data: null, error: { code: '42501', message: 'permission denied for function find_family_message' } } : successfulReply(call));
+    const res = await sendFamilyMessage(scopeWith(db, { requestId: 'req-retry' }), { content: 'hello', conversationId: 'conv-1' });
+    expect(res).toMatchObject({ ok: false, code: 'db' });
+    expect(calls.some((c) => c.table === 'family_messages' || c.table === 'rpc:send_family_message')).toBe(false);
+  });
+
   it('without is_family_chat a named conversation only has to exist in the family, as before the build-out', async () => {
     let reads = 0;
     const { db, calls } = makeDb((call) => call.table !== 'family_conversations' ? successfulReply(call)

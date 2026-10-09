@@ -19,7 +19,7 @@ const end = source.indexOf('  // Quoted messages', start);
 if (start < 0 || end <= start) throw new Error('Archive callback group was not found.');
 const compiled = ts.transpileModule(source.slice(start, end), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
 
-function fixture({ deferred = false, outcome = 'success' as Outcome, creator = 'other-user', role = 'parent', archived = false } = {}) {
+function fixture({ deferred = false, outcome = 'success' as Outcome, creator = 'other-user', role = 'parent', archived = false, legacy0475 = false } = {}) {
   const owner = { current: createThreadOwner() }; owner.current.select(A);
   const alive = { current: true }, archiveCurrent = { current: null as number | null }, archiveFlight = { current: null as number | null }, archiveSequence = { current: 0 };
   let activeConv = conversation(A, creator, archived), scope: Scope = { familyId: FAMILY, userId: USER, role, memberId: 'member-a', active: true }, selection: Selection | null = null;
@@ -45,7 +45,7 @@ function fixture({ deferred = false, outcome = 'success' as Outcome, creator = '
   });
   function render() {
     const env = {
-      owner, alive, activeConv, activeConversationRef, archiveScope: scope, archiveScopeRef, familyId: scope.familyId, userId: scope.userId, role: scope.role,
+      owner, alive, legacy0475, activeConv, activeConversationRef, archiveScope: scope, archiveScopeRef, familyId: scope.familyId, userId: scope.userId, role: scope.role,
       jumpOrigin: owner.current.capture(), conversationAction: selection, archiveCurrent, archiveFlight, archiveSequence,
       setConversationAction: (value: Selection | null) => { selection = value; effects.push({ kind: 'modal', value: value?.ticket ?? null }); },
       setChangingConversation: (value: boolean) => effects.push({ kind: 'changing', value }), createClient: () => db,
@@ -126,6 +126,12 @@ describe('archive confirmation owns its rendered visit, authority and modal inst
   });
   it('retains the private creator permission for a current child', async () => {
     const test = fixture({ creator: USER, role: 'child' }); await test.open().archiveConversation(); expect(test.requests).toHaveLength(1);
+  });
+  // Before 0475 no row marks the family chat and the previous build had no
+  // archive action, so archiving could split the family chat in two.
+  it('offers no archive confirmation on a database without 0475', async () => {
+    const test = fixture({ legacy0475: true }); await test.open().archiveConversation();
+    expect(test.selection()).toBeNull(); expect(test.requests).toHaveLength(0);
   });
   for (const scope of [{ role: 'child' }, { active: false }]) it(`refuses a fresh unauthorized or inactive confirmation ${JSON.stringify(scope)}`, async () => {
     const test = fixture(); test.changeScope(scope); test.open(); expect(test.selection()).toBeNull(); expect(test.requests).toHaveLength(0);

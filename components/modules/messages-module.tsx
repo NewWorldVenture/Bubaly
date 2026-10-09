@@ -76,7 +76,8 @@ type ConvInsert = {
 
 /**
  * Validate membership and deduplicate direct chats in one database transaction.
- * Before 0475 there is no such RPC: insert directly, as before the build-out.
+ * Before 0475 there is no such RPC: reuse the 1:1 chat with the same roster or
+ * insert directly, as before the build-out.
  */
 async function createConversation(payload: ConvInsert) {
   return createFamilyConversation(createClient(), payload);
@@ -199,6 +200,9 @@ function MessagesWorkspace() {
   // Set when this database turns out not to have 0475 / 0476 yet: the paths
   // that need them fall back to main's behaviour or hide (schema-compat.ts).
   const [legacy0475, setLegacy0475] = useState(false);
+  // Realtime waits for the first Family Chat ensure, which settles the schema:
+  // a private topic is joined only once 0475 is known to authorize it.
+  const [schemaSettled, setSchemaSettled] = useState(false);
   const [legacy0476, setLegacy0476] = useState(false);
   const legacy0476Ref = useRef(false);
   legacy0476Ref.current = legacy0476;
@@ -283,6 +287,7 @@ function MessagesWorkspace() {
       });
       if (!alive.current || !active) return;
       if (legacy) setLegacy0475(true);
+      setSchemaSettled(true);
       // Before 0475 a failed lookup or insert was silent and retried next visit.
       if (error && legacy) console.error('[messages] family chat fallback failed', { message: error.message });
       else if (error) toastError(describeDbError(error, tr('messagesModule.couldNotCreateConversation')));
@@ -470,7 +475,7 @@ function MessagesWorkspace() {
   useEffect(() => {
     // Typing rides a private Realtime topic that only 0475 authorizes; main
     // had no typing indicator, so without 0475 there is none.
-    if (!activeConvId || legacy0475) return;
+    if (!activeConvId || !schemaSettled || legacy0475) return;
     const ticket = owner.current.capture();
     const supabase = createClient();
     const typers = new Map<string, number>();
@@ -484,7 +489,7 @@ function MessagesWorkspace() {
     typingChannel.current = channel;
     const timer = setInterval(publish, 1500);
     return () => { typingChannel.current = null; clearInterval(timer); setTypingIds([]); void supabase.removeChannel(channel); };
-  }, [activeConvId, userId, members, legacy0475]);
+  }, [activeConvId, userId, members, schemaSettled, legacy0475]);
 
   useEffect(() => {
     const channel = typingChannel.current;
@@ -519,6 +524,7 @@ function MessagesWorkspace() {
 
   // ── Presence: who in the family is online right now ─────────
   useEffect(() => {
+    if (!schemaSettled) return;
     const supabase = createClient();
     // 0475 authorizes the private family topic; before it, the old public one.
     const ch = supabase.channel(`presence:family:${familyId}`, { config: legacy0475 ? { presence: { key: userId } } : { private: true, presence: { key: userId } } });
@@ -531,7 +537,7 @@ function MessagesWorkspace() {
       if (status === 'SUBSCRIBED') await ch.track({ user_id: userId, at: Date.now() });
     });
     return () => { void supabase.removeChannel(ch); };
-  }, [familyId, userId, legacy0475]);
+  }, [familyId, userId, schemaSettled, legacy0475]);
 
   function acceptMessage(message: Message) {
     if (!alive.current) return;
@@ -975,9 +981,11 @@ function MessagesWorkspace() {
     return row !== null && snapshot !== null && row.id === snapshot.id && row.family_id === snapshot.family_id
       && row.created_by === snapshot.created_by && row.is_family_chat === snapshot.is_family_chat && row.is_archived === snapshot.is_archived;
   }
+  // Before 0475 no row marks the family chat and the previous build had no
+  // archive action: archiving the old family group would split the chat.
   function canArchiveConversation() {
     return sameArchiveRow(activeConversationRef.current, activeConv) && alive.current && archiveScopeRef.current === archiveScope && archiveScope.active !== false
-      && activeConv?.family_id === familyId && !activeConv.is_family_chat
+      && activeConv?.family_id === familyId && !activeConv.is_family_chat && !legacy0475
       && (activeConv.created_by === userId || role === 'parent' || role === 'adult');
   }
   function openArchiveAction() {
@@ -1595,7 +1603,7 @@ function MessagesWorkspace() {
               <Search className="h-5 w-5" /> {tr('messages.search')}
             </button>
             <button type="button" onClick={() => void toggleMute()} disabled={muteLoading} aria-pressed={mutedIds.has(activeConv.id)} className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg disabled:opacity-50"><BellOff className="h-5 w-5" />{mutedIds.has(activeConv.id) ? tr('messagesChat.unmute') : tr('messagesChat.mute')}</button>
-            {canManageConversation && !activeConv.is_family_chat && <button type="button" onClick={openArchiveAction} className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg"><Archive className="h-5 w-5" />{activeConv.is_archived ? tr('messagesChat.restore') : tr('messagesChat.archive')}</button>}
+            {canManageConversation && !activeConv.is_family_chat && !legacy0475 && <button type="button" onClick={openArchiveAction} className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg"><Archive className="h-5 w-5" />{activeConv.is_archived ? tr('messagesChat.restore') : tr('messagesChat.archive')}</button>}
             {canManageConversation && activeConv.kind !== 'direct' && <button type="button" onClick={() => setSettingsOpen(true)} className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg">
               <Settings className="h-5 w-5" /> {tr('messages.settings')}
             </button>}

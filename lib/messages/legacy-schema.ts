@@ -35,6 +35,27 @@ export async function legacyCreateConversation(db: DB, payload: LegacyConversati
 }
 
 /**
+ * The old 1:1 reuse: starting a DM with someone you already have one with
+ * opened that conversation instead of inserting a duplicate. The roster
+ * matches on participant_ids, or on member_ids for a row recorded before
+ * participant ids, exactly as the old dialog compared its inbox rows. A failed
+ * read is returned as the error, so it never produces a duplicate either.
+ */
+export async function legacyExistingDirect(db: DB, payload: LegacyConversationInsert) {
+  const { data, error } = await settle(db.from('family_conversations').select('*')
+    .eq('family_id', payload.family_id).eq('kind', 'direct')
+    .order('last_message_at', { ascending: false, nullsFirst: false }));
+  if (error) return { data: null, error };
+  const targetP = [...payload.participant_ids].sort().join(',');
+  const targetU = [...payload.member_ids].sort().join(',');
+  const existing = (data ?? []).find((c) => {
+    if (c.participant_ids?.length) return [...c.participant_ids].sort().join(',') === targetP;
+    return [...(c.member_ids ?? [])].sort().join(',') === targetU;
+  });
+  return { data: existing ?? null, error: null };
+}
+
+/**
  * The old "ensure Family Chat exists": any group conversation counts; with none,
  * one is created holding every member. A failed existence check creates
  * nothing, so a read error never produces a duplicate chat.

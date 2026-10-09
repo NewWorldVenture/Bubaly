@@ -60,7 +60,7 @@ function message(id: string, conversationId: string, extra: Row = {}): Row {
 }
 
 /** A small PostgREST: equality filters, ordering, windows, counts, writes, and RPCs by schema. */
-function memoryDb(options: { has0475: boolean; conversations: Row[]; messages: Row[]; rpcErrors?: Record<string, Err>; insertErrors?: Err[] }) {
+function memoryDb(options: { has0475: boolean; conversations: Row[]; messages: Row[]; rpcErrors?: Record<string, Err>; insertErrors?: Err[]; selectErrors?: Record<string, Err> }) {
   const tables: Record<string, Row[]> = { family_conversations: options.conversations, family_messages: options.messages };
   const calls: Call[] = [];
   const insertErrors = [...(options.insertErrors ?? [])];
@@ -90,6 +90,7 @@ function memoryDb(options: { has0475: boolean; conversations: Row[]; messages: R
         for (const row of selected) Object.assign(row, payload);
         return { data: selected.map((row) => ({ ...row })), count: null, error: null };
       }
+      if (options.selectErrors?.[table]) return { data: null, count: null, error: options.selectErrors[table] };
       if (!options.has0475 && /is_family_chat/.test(columns)) {
         return { data: null, count: null, error: { code: '42703', message: `column ${table}.is_family_chat does not exist` } };
       }
@@ -274,6 +275,43 @@ describe('without 0475 the workspace behaves as the previous production build', 
     expect(pre0017.calls.filter((c) => c.kind === 'insert').map((c) => c.args)).toEqual([payload, withoutParticipants]);
   });
 
+  it('reuses an existing 1:1 chat with the same person instead of inserting a duplicate', async () => {
+    const payload = { family_id: FAMILY, name: 'Blair', kind: 'direct', avatar_emoji: null, created_by: ME, member_ids: [ME, OTHER], participant_ids: ['member-other', ME_MEMBER] };
+    const { db, calls } = memoryDb({ has0475: false, ...seed(false) });
+    const reused = await createFamilyConversation(db, payload);
+    expect(reused).toMatchObject({ error: null, data: { id: 'dm-with-blair' } });
+    expect(calls.some((c) => c.kind === 'insert')).toBe(false);
+    expect(calls.find((c) => c.kind === 'select')?.args).toEqual({ family_id: FAMILY, kind: 'direct' });
+
+    // A second DM to the same person on the old schema: the first one again.
+    const fresh = memoryDb({ has0475: false, conversations: [], messages: [] });
+    const first = await createFamilyConversation(fresh.db, payload);
+    const second = await createFamilyConversation(fresh.db, payload);
+    expect(second.data?.id).toBe(first.data?.id);
+    expect(fresh.calls.filter((c) => c.kind === 'insert')).toHaveLength(1);
+  });
+
+  it('matches a DM recorded before participant ids on its account holders, and a different person gets a new chat', async () => {
+    const { db, calls } = memoryDb({ has0475: false, conversations: [
+      conversation('old-dm', { kind: 'direct', member_ids: [OTHER, ME], participant_ids: [] }, false),
+    ], messages: [] });
+    const base = { family_id: FAMILY, name: 'Blair', kind: 'direct', avatar_emoji: null, created_by: ME };
+    expect((await createFamilyConversation(db, { ...base, member_ids: [ME, OTHER], participant_ids: [ME_MEMBER, 'member-other'] })).data?.id).toBe('old-dm');
+    expect(calls.some((c) => c.kind === 'insert')).toBe(false);
+    const other = await createFamilyConversation(db, { ...base, member_ids: [ME], participant_ids: [ME_MEMBER, 'member-kid'] });
+    expect(other.error).toBeNull();
+    expect(other.data?.id).not.toBe('old-dm');
+    expect(calls.filter((c) => c.kind === 'insert')).toHaveLength(1);
+  });
+
+  it('a failed DM lookup is the error and inserts nothing', async () => {
+    const denied: Err = { code: '42501', message: 'permission denied for table family_conversations' };
+    const { db, calls } = memoryDb({ has0475: false, ...seed(false), selectErrors: { family_conversations: denied } });
+    const res = await createFamilyConversation(db, { family_id: FAMILY, name: 'Blair', kind: 'direct', avatar_emoji: null, created_by: ME, member_ids: [ME, OTHER], participant_ids: [ME_MEMBER, 'member-other'] });
+    expect(res).toEqual({ data: null, error: denied });
+    expect(calls.some((c) => c.kind === 'insert')).toBe(false);
+  });
+
   it('warns once per missing object, naming the migration', async () => {
     const { db } = memoryDb({ has0475: false, ...seed(false) });
     await loadConversationSummaries(db, { familyId: FAMILY, userId: ME });
@@ -376,5 +414,19 @@ describe('MessagesModule takes these paths', () => {
 
   it('joins the old public presence topic before 0475 and the private one after', () => {
     expect(source).toContain('config: legacy0475 ? { presence: { key: userId } } : { private: true, presence: { key: userId } }');
+  });
+
+  it('joins no realtime topic until the first Family Chat ensure has settled the schema', () => {
+    const ensure = source.slice(source.indexOf('// ── Ensure Family Chat exists'), source.indexOf('// ── Load messages for active conv'));
+    expect(ensure).toContain('setSchemaSettled(true);');
+    expect(source).toContain('if (!activeConvId || !schemaSettled || legacy0475) return;');
+    const presence = source.slice(source.indexOf('// ── Presence: who in the family is online'));
+    expect(presence.slice(0, 200)).toContain('if (!schemaSettled) return;');
+  });
+
+  it('offers no archive action before 0475, as the previous build did not', () => {
+    const gate = source.slice(source.indexOf('function canArchiveConversation()'));
+    expect(gate.slice(0, 400)).toContain('!activeConv.is_family_chat && !legacy0475');
+    expect(source).toContain('canManageConversation && !activeConv.is_family_chat && !legacy0475 && <button type="button" onClick={openArchiveAction}');
   });
 });

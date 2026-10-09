@@ -175,6 +175,9 @@ export async function sendFamilyMessage(scope: ServiceScope, input: SendMessageI
   if (!content) return fail('A message needs some text.', { code: SERVICE_CODES.invalidInput });
   if (content.length > MAX_MESSAGE_CHARS) return fail('That message is too long for the family chat.', { code: SERVICE_CODES.invalidInput });
   const kind = input.kind && MESSAGE_KINDS.includes(input.kind) ? input.kind : 'text';
+  // The actor gate is not a 0475 object and stays on every schema: the
+  // previous build also sent for a scope without an active member (signing as
+  // Bubaly), which this hardening deliberately refuses, before or after 0475.
   const actor = await actingMember(scope);
   if (!actor.ok) return actor;
 
@@ -197,6 +200,9 @@ export async function sendFamilyMessage(scope: ServiceScope, input: SendMessageI
     if (!data) return fail('The message being replied to is no longer available in this conversation.', { code: SERVICE_CODES.notFound });
   }
 
+  // Before 0475 a retry was the same words alone: the row the old probe finds
+  // is returned as it was, without the content-drift refusal.
+  let legacyProbe = false;
   return withIdempotency<FamilyMessage>(
     scope,
     {
@@ -214,6 +220,7 @@ export async function sendFamilyMessage(scope: ServiceScope, input: SendMessageI
         });
         if (fellBackForMissing(error, MESSAGING_SCHEMA.findFamilyMessage,
           'A retried send is recognised by the same words in the same thread from the same sender within ten minutes, as before the build-out.')) {
+          legacyProbe = true;
           return legacyDuplicateProbe(scope, targetId, content, since);
         }
         if (error) {
@@ -223,7 +230,7 @@ export async function sendFamilyMessage(scope: ServiceScope, input: SendMessageI
         return ok(data?.[0] ?? null);
       },
       changedRetry: {
-        drift: (found) => [
+        drift: (found) => legacyProbe ? [] : [
           ...(found.conversation_id !== targetId ? ['conversation_id'] : []),
           ...(found.content !== content ? ['content'] : []),
           ...(found.kind !== kind ? ['kind'] : []),
