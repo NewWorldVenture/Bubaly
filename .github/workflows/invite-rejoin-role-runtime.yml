@@ -104,8 +104,15 @@ jobs:
             echo '::error::the held probe passed on the released schema, so it can no longer see the defect 0495 repairs'
             exit 1
           fi
-          grep -qF 'a removed parent invited back as a guest came back as parent' <<<"$out"
-          grep -qF 'a removed child invited back as an adult came back as child' <<<"$out"
+          for expected in \
+            'a removed parent invited back as a guest came back as parent' \
+            'a removed child invited back as an adult came back as child' \
+            'the former parent, invited back as a guest, can manage the family'; do
+            if ! grep -qF "$expected" <<<"$out"; then
+              echo "::error::the held probe failed on the released schema, but not on: $expected"
+              exit 1
+            fi
+          done
 
       - name: Apply the held migration, twice
         run: |
