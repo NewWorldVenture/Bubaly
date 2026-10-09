@@ -14,7 +14,8 @@ vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string)
 
 const event = { id: 'new-event', summary: 'Synthetic new event', start: { dateTime: '2026-06-21T09:00:00Z' } };
 const task = { id: 'new-task', title: 'Synthetic new reminder' };
-beforeEach(() => vi.spyOn(console, 'error').mockImplementation(() => {}));
+// Each test starts with no RPC remembered as absent from an earlier test.
+beforeEach(() => { resetSyncPullMigrationWarnings(); vi.spyOn(console, 'error').mockImplementation(() => {}); });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 for (const engine of ['google', 'generic'] as const) {

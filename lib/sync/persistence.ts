@@ -13,22 +13,39 @@ const record = (value: unknown): Record<string, unknown> | null =>
 // is applied, ensure_sync_pull_container / create_sync_pull_item do not exist and
 // the pull takes the previous production path: the direct container lookup/insert
 // and the separate item + mapping inserts. Only PostgREST's exact missing-function
-// answer naming the RPC selects it; any other failure (permission, lock, network,
-// constraint, a missing helper inside the RPC) still fails the run.
+// answer naming the RPC in its message selects it; any other failure (permission,
+// lock, network, constraint, a missing helper inside the RPC) still fails the run.
+// PostgREST gives that same answer when the function exists with another
+// signature, so a mismatched 0494 is also treated as absent.
 const ATOMIC_PULL_MIGRATION = '0494_sync_atomic_pull.sql';
 const REMOTE_META: Json = { origin: 'remote' };
+// A known-absent RPC is not asked again for a short while, so the old schema
+// does not pay a failed round trip per pulled item; once 0494 is applied the
+// RPC is used again after at most this long (the direct writes stay valid).
+const ABSENT_RETRY_MS = 60_000;
 const warned = new Set<string>();
+const absentUntil = new Map<string, number>();
 
 /** True only when `error` says that exactly the RPC `name` does not exist. */
 export function isMissingSyncPullRpc(error: unknown, name: string): boolean {
   const err = record(error);
-  if (!err || (err.code !== 'PGRST202' && err.code !== '42883')) return false;
-  const named = new RegExp(`(?:^|[^A-Za-z0-9_.]|(?<![A-Za-z0-9_])public\\.)${name}(?![A-Za-z0-9_])`);
-  return [err.message, err.details, err.hint].some(text => typeof text === 'string' && named.test(text));
+  if (!err || typeof err.message !== 'string') return false;
+  const fn = `public\\.${name}\\(`;
+  if (err.code === 'PGRST202') return new RegExp(`^Could not find the function ${fn}`).test(err.message);
+  return err.code === '42883' && new RegExp(`^function ${fn}[^)]*\\) does not exist$`).test(err.message);
+}
+
+function knownAbsent(name: string): boolean {
+  const until = absentUntil.get(name);
+  if (until === undefined) return false;
+  if (Date.now() < until) return true;
+  absentUntil.delete(name);
+  return false;
 }
 
 function fellBackForMissingRpc(error: unknown, name: string): boolean {
   if (!isMissingSyncPullRpc(error, name)) return false;
+  absentUntil.set(name, Date.now() + ABSENT_RETRY_MS);
   if (!warned.has(name)) {
     warned.add(name);
     console.warn(`[sync] function public.${name} is missing: migration ${ATOMIC_PULL_MIGRATION} has not been applied to this database. Using the previous separate sync writes.`);
@@ -36,9 +53,10 @@ function fellBackForMissingRpc(error: unknown, name: string): boolean {
   return true;
 }
 
-/** Test seam: forget which warnings were already printed. */
+/** Test seam: forget which warnings were already printed and which RPCs were absent. */
 export function resetSyncPullMigrationWarnings(): void {
   warned.clear();
+  absentUntil.clear();
 }
 
 /** The database rechecks persisted identity, direction and active ownership.
@@ -48,6 +66,9 @@ export async function ensureSyncPullContainer(admin: Admin, account: Account, pr
   kind: Kind, externalId: string, name: string, timezone = 'UTC', color: string | null = null,
 ): Promise<{ id: string; sync_token: string | null; legacy?: true }> {
   if (!account.user_id) throw new Error('Sync owner unavailable');
+  if (knownAbsent('ensure_sync_pull_container')) {
+    return { ...await ensureLegacyContainer(admin, account, provider, kind, externalId, name, timezone, color), legacy: true };
+  }
   const { data, error } = await admin.rpc('ensure_sync_pull_container', {
     p_account: account.id, p_family: account.family_id, p_user: account.user_id,
     p_provider: provider, p_kind: kind, p_external: externalId, p_name: name, p_timezone: timezone, p_color: color,
@@ -68,6 +89,9 @@ export async function createSyncPullItem(admin: Admin, account: Account, provide
   kind: Kind, containerId: string, externalId: string, fields: Json, hash: string,
 ): Promise<{ created: boolean; mapping: PullMapping }> {
   if (!account.user_id) throw new Error('Sync owner unavailable');
+  if (knownAbsent('create_sync_pull_item')) {
+    return createLegacyItem(admin, account, provider, kind, containerId, externalId, fields, hash);
+  }
   const { data, error } = await admin.rpc('create_sync_pull_item', {
     p_account: account.id, p_family: account.family_id, p_user: account.user_id,
     p_provider: provider, p_kind: kind, p_container: containerId, p_external: externalId, p_fields: fields, p_hash: hash,
