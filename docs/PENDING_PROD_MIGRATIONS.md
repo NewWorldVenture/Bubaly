@@ -108,6 +108,7 @@ source allocations are not evidence that production applied any migration.
 | 0492 held | `0492_approval_requests_private_read.sql` | Requester/manager approval reads; production policies unverified. |
 | 0493 held | `0493_ai_copy_private_read_and_quota.sql` | Private AI copies and count-only usage; missing receipt refuses capped-Free requests. |
 | 0494 held | `0494_sync_atomic_pull.sql` | Service-only admission and atomic item/map creation; missing RPC preserves cursor and refuses writes. |
+| 0495 held (proposed) | `0495_a_member_invited_back_gets_what_the_invite_grants.sql` | A returning member gets the invite's role; an active member's role is unchanged. Number proposed on #771, above every preserved allocation; coordinator confirmation pending. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4227,6 +4228,42 @@ Retiring a hole does not delete anything. These migration files remain on their 
 The colliding pairs are 0475 (meal-plan slot writes, messaging privacy), 0476 (meal-plan delegated actors, messaging notifications), 0477 (AI request admission, family-memory text) and 0491. Two published candidates hold 0491, neither allocation confirmed: #964 at 6e250a00b928970982855fc1e856ea6d5ceba09d (card hold and top-up deadlock, closed unmerged) and draft #969 at 854a990bd24906976231024eeb6c5943ae977da7 (recurring bill anchor). #969 also covers the month-end bill and calendar items below.
 
 Historical evidence, superseded: a landing map proposed in the Claude session on 2026-10-04 would have renumbered the month-end bill, calendar feed and messaging migrations to 0475, 0476, 0477 and 0478 (from 0488, 0490 and 0475/0476). The owner did not adopt it; the decision above preserves the original reservations. Under it, messaging lands as `0475`/`0476`, and the bill anchor (`0488`) and feed claim (`0490`) are held in `supabase/reserved/` until their turn.
+
+## `0495` (reserved, held) — a member invited back came back with their old role
+
+`supabase/reserved/0495_a_member_invited_back_gets_what_the_invite_grants.sql` —
+**held**: proposed as `0495`, above the owner's preserved allocations
+(`0477`–`0491`) and the held `0492`–`0494`. It stays outside
+`supabase/migrations/` until every number below it has landed, so neither the
+replay nor `db push` applies it. Its probe is held with it in
+`docs/audit/reserved/`.
+
+**Severity: high (authorization). Deploy order: any.** Removing a member sets
+`is_active = false` and keeps the row's role. `accept_invite` (0136) then
+reactivates that row with `on conflict ... do update set is_active = true` and
+never reads the invite's role. So a parent who was removed and later invited
+back as a **guest** came back as a **parent**, with every manager power and the
+parent-only ones. A removed child invited back as an adult stayed a child.
+Measured on a replay of every runnable migration: the removed parent's
+`can_manage_family` answered yes.
+
+0495 gives a caller who was not an active member (no row, or an inactive one)
+exactly the invite's role. An active member's role does not move, so accepting
+a parent invite addressed to oneself cannot promote anyone. Everything else in
+0136 is unchanged.
+
+**Proof:** `.github/workflows/invite-rejoin-role-runtime.yml` replays every
+runnable migration. It then requires the held probe
+`docs/audit/reserved/a-member-invited-back-gets-the-invited-role-check.sql` to
+fail on the defect, applies 0495 twice, and requires the probe to pass. With
+0495 applied, all 182 other boundary probes still pass.
+
+**Not changed:** SEC-026 (the owner's decision on who may make a parent),
+and explicit `social_access_permissions` rows, which also outlive a removal
+and may be elevations or restrictions. Those rows are recorded as a lead.
+
+**After approved release:** remove a test parent, invite them back
+as a guest, accept as them, and confirm they cannot open family settings.
 
 ## `0471` and `0474` — the admin digest's delivery store, and a removed admin is not sent it
 
