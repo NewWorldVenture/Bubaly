@@ -44,7 +44,7 @@ function formatterFor(timezone: string): Intl.DateTimeFormat {
   if (!dtf) {
     dtf = new Intl.DateTimeFormat('en-US', {
       timeZone: timezone, hour12: false,
-      year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+      era: 'short', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
     });
     partsCache.set(timezone, dtf);
   }
@@ -56,7 +56,8 @@ export function localPartsAt(instant: Date, timezone: string): LocalParts {
   const parts: Record<string, string> = {};
   for (const part of formatterFor(timezone).formatToParts(instant)) parts[part.type] = part.value;
   return {
-    year: Number(parts.year),
+    // Intl numbers BC years from one; Date uses astronomical year zero.
+    year: parts.era === 'BC' ? 1 - Number(parts.year) : Number(parts.year),
     month: Number(parts.month),
     day: Number(parts.day),
     // 'en-US' with hour12:false renders midnight as 24 in some ICU versions.

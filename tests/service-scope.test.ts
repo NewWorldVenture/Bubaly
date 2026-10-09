@@ -259,3 +259,31 @@ describe('withIdempotency', () => {
     expect(res).toEqual({ ok: false, error: 'column "title" cannot be null', code: 'db' });
   });
 });
+
+import {dayKeyInZone, zonedTimeMs as pureWallTime} from '@/lib/schedule/zoned';
+import {addDaysToDayKey, weekStartDayKey} from '@/lib/services/scope';
+import {localPartsAt} from '@/lib/time/zoned';
+describe('Gregorian boundary arithmetic', () => {
+  it.each(['0001-01-01','0004-02-29','0099-12-31','0100-01-01','1900-03-01','2000-02-29','2026-10-09','9999-12-30'])('preserves the supplied AD year %s in both layers', day => {
+    expect(dayKeyInZone(Date.parse(day+'T12:34:00Z'),'UTC')).toBe(day);
+    expect(new Date(pureWallTime(day,12,34,'UTC')).toISOString()).toBe(day+'T12:34:00.000Z');
+    expect(new Date(zonedTimeMs(day,12,34,'UTC')).toISOString()).toBe(day+'T12:34:00.000Z');
+  });
+  it.each([['0001-01-01','0001-01-02'],['0004-02-28','0004-02-29'],['0099-12-31','0100-01-01'],['1900-02-28','1900-03-01'],['2000-02-28','2000-02-29']])('keeps Gregorian day overflow %s', (day,next) => expect(addDaysToDayKey(day,1)).toBe(next));
+  it('finds the real Monday at the supported minimum', () => expect(weekStartDayKey('0001-01-02')).toBe('0001-01-01'));
+  it.each(['UTC','America/New_York','America/Los_Angeles','Europe/London','Asia/Tokyo','Etc/GMT-14'])('resolves minimum AD midnight in the family zone %s', zone => {
+    for (const resolve of [pureWallTime,zonedTimeMs]) {
+      const parts=new Intl.DateTimeFormat('en-US',{timeZone:zone,era:'short',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).formatToParts(new Date(resolve('0001-01-01',0,0,zone)));
+      const reading=Object.fromEntries(parts.filter(part=>part.type!=='literal').map(part=>[part.type,part.value]));
+      expect({...reading,hour:String(Number(reading.hour)%24)}).toMatchObject({era:'AD',year:'1',month:'01',day:'01',hour:'0',minute:'00',second:'00'});
+    }
+  });
+  it('preserves astronomical year zero internally without admitting a BCE day as AD1', () => {
+    const instant=new Date('0001-01-01T00:00:00Z');
+    expect(localPartsAt(instant,'America/New_York')).toMatchObject({year:0,month:12,day:31});
+    expect(dayKeyInTz(instant,'America/New_York')).toBe('0000-12-31');
+    expect(dayKeyInZone(instant.getTime(),'America/New_York')).toBeNull();
+    expect(dayKeyInZone(Date.parse('0000-01-01T12:00:00Z'),'UTC')).toBeNull();
+    expect(dayKeyInZone(Date.parse('+010000-01-01T12:00:00Z'),'UTC')).toBeNull();
+  });
+});

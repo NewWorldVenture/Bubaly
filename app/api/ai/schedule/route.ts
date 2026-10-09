@@ -39,10 +39,13 @@ export async function POST(req: NextRequest) {
     const memberIds = (body.memberIds ?? []).filter(Boolean);
     const contexts = (body.contexts ?? []).filter(isCalendarContext) as CalendarContext[];
 
-    const supabase = await createServer();
     const fromISO = new Date(windowStart).toISOString();
     const toISO = new Date(windowEnd).toISOString();
     const tz = ctx.active.family.timezone || 'UTC';
+    let bounds: ReturnType<typeof instantCalendarBounds>;
+    try { bounds = instantCalendarBounds(fromISO, toISO, tz); }
+    catch { return NextResponse.json({ error: t('schedule.invalidWindow') }, { status: 400 }); }
+    const supabase = await createServer();
 
     const [
       { data: events, error: eventsError },
@@ -52,7 +55,7 @@ export async function POST(req: NextRequest) {
       // Series included: a weekly practice is busy every week, not the week
       // it was created (lib/calendar/occurrences.ts). Every column, as before,
       // so a `context` column that is not there yet is simply absent.
-      readCalendarOccurrences(supabase, familyId, instantCalendarBounds(fromISO, toISO, tz), tz, { overlap: true }),
+      readCalendarOccurrences(supabase, familyId, bounds, tz, { overlap: true }),
       readCalendarBusySource(supabase, familyId, 'school_events', fromISO, toISO, tz),
       readCalendarBusySource(supabase, familyId, 'sports_events', fromISO, toISO, tz),
     ]);

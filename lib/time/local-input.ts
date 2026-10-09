@@ -64,9 +64,12 @@ export function toLocalInput(iso: string | null | undefined, timeZone?: string):
   const pad = (n: number) => String(n).padStart(2, '0');
   if (timeZone && isValidTimezone(timeZone)) {
     const p = localPartsAt(d, timeZone);
-    return `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`;
+    if (p.year < 1 || p.year > 9999) return '';
+    return `${String(p.year).padStart(4, '0')}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`;
   }
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const year = d.getFullYear();
+  if (year < 1 || year > 9999) return '';
+  return `${String(year).padStart(4, '0')}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 /** The naive wall clocks `asStoredInstant` would stamp a `Z` onto — the exact set this resolves instead. */
@@ -97,7 +100,7 @@ export function fromLocalInput(value: string | null | undefined, timeZone?: stri
   const v = value.trim();
   if (!v) return undefined;
   const m = NAIVE.exec(v);
-  if (!m) return v;
+  if (!m || Number(m[1]) < 1) return v;
   if (timeZone && isValidTimezone(timeZone)) {
     // The family's clock, the same frame `toLocalInput(iso, timeZone)` read the
     // prefill in. Seconds and milliseconds are carried on top of the minute the
@@ -109,9 +112,8 @@ export function fromLocalInput(value: string | null | undefined, timeZone?: stri
     const extra = Number(m[6] ?? 0) * 1000 + Number((m[7] ?? '').padEnd(3, '0'));
     return new Date(at.getTime() + extra).toISOString();
   }
-  const d = new Date(
-    Number(m[1]), Number(m[2]) - 1, Number(m[3]),
-    Number(m[4]), Number(m[5]), Number(m[6] ?? 0), Number((m[7] ?? '').padEnd(3, '0')),
-  );
+  const d = new Date(0);
+  d.setFullYear(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  d.setHours(Number(m[4]), Number(m[5]), Number(m[6] ?? 0), Number((m[7] ?? '').padEnd(3, '0')));
   return Number.isNaN(d.getTime()) ? v : d.toISOString();
 }

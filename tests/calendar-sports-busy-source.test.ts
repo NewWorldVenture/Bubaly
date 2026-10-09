@@ -192,3 +192,71 @@ describe('complete sports series busy intervals through actual SDK', () => {
     expect(result.slots).toEqual([{ startISO: mode === 'point' ? '2026-11-01T13:00:00.000Z' : '2026-11-01T14:00:00.000Z', endISO: '2026-11-01T15:00:00.000Z' }]);
   });
 });
+
+describe('minimum supported year through the real scheduling API', () => {
+  it.each([['0001-01-01T05:00:00Z',true],['2026-10-09T12:00:00Z',false]] as const)('preserves the actual no-past-suggestions clock / %s', async (now,hasSlot) => {
+    const clock=vi.spyOn(Date,'now').mockReturnValue(Date.parse(now));
+    try {
+      const probe=transport([]);seams.db=probe.db;
+      const response=await POST(new NextRequest('https://synthetic.invalid/api/ai/schedule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({windowStartISO:'0001-01-01T05:00:00Z',windowEndISO:'0001-01-01T06:00:00Z',workingHours:{startHour:0,endHour:23},durationMin:15,maxSuggestions:1})}));
+      expect(response.status).toBe(200);expect(await response.json()).toMatchObject({busyCount:0,slots:hasSlot?[{startISO:'0001-01-01T05:00:00.000Z',endISO:'0001-01-01T05:15:00.000Z'}]:[]});
+      expect(new Set(probe.calls.map(url=>url.pathname.split('/').at(-1)))).toEqual(new Set(['calendar_events','school_events','sports_events']));
+    } finally {clock.mockRestore();}
+  });
+  it.each([['0001-01-01T00:00:00Z','0001-01-01T00:30:00Z'],['9999-12-31T12:00:00Z','9999-12-31T12:30:00Z']])('refuses an unrepresentable family DATE window before SDK dispatch / %s', async (from,to) => {
+    const probe=transport([]);seams.db=probe.db;
+    const response=await POST(new NextRequest('https://synthetic.invalid/api/ai/schedule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({windowStartISO:from,windowEndISO:to,durationMin:15})}));
+    expect(response.status).toBe(400);expect(await response.json()).toHaveProperty('error');expect(probe.calls).toEqual([]);
+  });
+});
+
+import { beforeEach as beforeScheduleBoundaryCase, afterEach as afterScheduleBoundaryCase } from 'vitest';
+import * as scheduleBoundaryServer from '@/lib/supabase/server';
+import * as scheduleBoundaryAuth from '@/lib/supabase/auth';
+
+describe('scheduling API refuses unsupported windows before its client factory', () => {
+  beforeScheduleBoundaryCase(() => vi.restoreAllMocks());
+  afterScheduleBoundaryCase(() => vi.restoreAllMocks());
+  const window = { windowStartISO: '2026-10-09T13:00:00Z', windowEndISO: '2026-10-09T14:00:00Z', durationMin: 15, workingHours: { startHour: 0, endHour: 23 }, maxSuggestions: 1 };
+  async function request(body: unknown) {
+    return POST(new NextRequest('https://synthetic.invalid/api/ai/schedule', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }));
+  }
+  it.each([
+    ['0001-01-01T00:00:00Z', '0001-01-01T00:30:00Z'],
+    ['9999-12-31T12:00:00Z', '9999-12-31T12:30:00Z'],
+  ])('rejects an unrepresentable family DATE before createServer / %s', async (from, to) => {
+    const probe = transport([]); seams.db = probe.db;
+    const factory = vi.spyOn(scheduleBoundaryServer, 'createServer');
+    const auth = vi.spyOn(scheduleBoundaryAuth, 'requireUserContext');
+    const response = await request({ ...window, windowStartISO: from, windowEndISO: to });
+    expect(response.status).toBe(400); expect(auth).toHaveBeenCalledTimes(1);
+    expect(factory).not.toHaveBeenCalled(); expect(probe.calls).toEqual([]);
+  });
+  it('stops rejected context before createServer and SDK dispatch', async () => {
+    const probe = transport([]); seams.db = probe.db;
+    const factory = vi.spyOn(scheduleBoundaryServer, 'createServer');
+    const auth = vi.spyOn(scheduleBoundaryAuth, 'requireUserContext').mockRejectedValueOnce(new Error('Synthetic context denied'));
+    const response = await request(window);
+    // This pins the existing error status. Authentication itself is mocked.
+    expect(response.status).toBe(500); expect(auth).toHaveBeenCalledTimes(1);
+    expect(factory).not.toHaveBeenCalled(); expect(probe.calls).toEqual([]);
+  });
+  it('uses context family for actual SDK filters despite foreign family body claims', async () => {
+    const probe = transport([]); seams.db = probe.db;
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-09T12:00:00Z'));
+    const factory = vi.spyOn(scheduleBoundaryServer, 'createServer');
+    const auth = vi.spyOn(scheduleBoundaryAuth, 'requireUserContext');
+    const response = await request({ ...window, familyId: 'foreign-family', family_id: 'foreign-family', active: { familyId: 'foreign-family' } });
+    expect(response.status).toBe(200); expect(auth).toHaveBeenCalledTimes(1); expect(factory).toHaveBeenCalledTimes(1);
+    expect(probe.calls.length).toBeGreaterThan(0);
+    expect(probe.calls.every(url => url.searchParams.get('family_id') === `eq.${family}`)).toBe(true);
+    expect(await response.json()).toMatchObject({ busyCount: 0, slots: [{ startISO: '2026-10-09T13:00:00.000Z', endISO: '2026-10-09T13:15:00.000Z' }] });
+  });
+  it('clips a modern window at now while retaining a genuine future slot', async () => {
+    const probe = transport([]); seams.db = probe.db;
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-09T13:30:00Z'));
+    const response = await request(window);
+    expect(response.status).toBe(200); expect(probe.calls.length).toBeGreaterThan(0);
+    expect(await response.json()).toMatchObject({ slots: [{ startISO: '2026-10-09T13:30:00.000Z', endISO: '2026-10-09T13:45:00.000Z' }] });
+  });
+});

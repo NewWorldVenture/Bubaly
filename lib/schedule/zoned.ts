@@ -10,25 +10,38 @@
 /** The family's calendar day for an instant, as `YYYY-MM-DD`; null when unparseable. */
 export function dayKeyInZone(ms: number, tz: string): string | null {
   if (!Number.isFinite(ms)) return null;
+  const instant = new Date(ms);
+  if (!Number.isFinite(instant.getTime())) return null;
   try {
-    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(ms));
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', era: 'short' }).formatToParts(new Date(ms));
     const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
-    const key = `${get('year')}-${get('month')}-${get('day')}`;
+    if (get('era') !== 'AD') return null;
+    const key = `${get('year').padStart(4, '0')}-${get('month')}-${get('day')}`;
     return /^\d{4}-\d{2}-\d{2}$/.test(key) ? key : null;
   } catch {
-    return new Date(ms).toISOString().slice(0, 10);
+    const year = instant.getUTCFullYear();
+    return year >= 1 && year <= 9999 ? instant.toISOString().slice(0, 10) : null;
   }
 }
 
 /** UTC offset of `tz` at `ms`, in milliseconds (DST-correct without a tz database). */
+/** Preserve Gregorian years 00–99 during UTC field reconstruction. */
+function utcFieldsMs(year: number, month: number, day: number, hour = 0, minute = 0, second = 0): number {
+  const value = new Date(0);
+  value.setUTCFullYear(year, month, day);
+  value.setUTCHours(hour, minute, second, 0);
+  return value.getTime();
+}
+
 function tzOffsetMs(ms: number, tz: string): number {
   try {
     const parts = new Intl.DateTimeFormat('en-US', {
       timeZone: tz, hour12: false,
-      year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+      era: 'short', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
     }).formatToParts(new Date(ms));
     const get = (type: string) => Number.parseInt(parts.find((p) => p.type === type)?.value ?? '', 10);
-    const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'), get('second'));
+    const year = parts.find((p) => p.type === 'era')?.value === 'BC' ? 1 - get('year') : get('year');
+    const asUtc = utcFieldsMs(year, get('month') - 1, get('day'), get('hour') % 24, get('minute'), get('second'));
     return Number.isFinite(asUtc) ? asUtc - ms : 0;
   } catch {
     return 0;

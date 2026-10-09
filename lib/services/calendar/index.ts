@@ -573,7 +573,9 @@ export async function searchEvents(scope: ServiceScope, input: SearchEventsInput
 
   const tz = zoneOf(scope);
   // `to` is inclusive, as the row read's `lte` was.
-  const bounds = instantCalendarBounds(from, to ?? addExactMilliseconds(from, SEARCH_SERIES_HORIZON_MS - 1), tz);
+  let bounds: ReturnType<typeof instantCalendarBounds>;
+  try { bounds = instantCalendarBounds(from, to ?? addExactMilliseconds(from, SEARCH_SERIES_HORIZON_MS - 1), tz); }
+  catch { return fail('That search window could not be understood.', { code: SERVICE_CODES.invalidInput }); }
   const res = await readCalendarOccurrences(scope.db, scope.familyId, bounds, tz, {
     limit,
     singlesLimit: limit,
@@ -722,12 +724,13 @@ export async function findFreeSlots(scope: ServiceScope, input: FindFreeSlotsInp
   if (!Number.isFinite(durationMin)) return fail('That duration could not be understood.', { code: SERVICE_CODES.invalidInput });
 
   const now = scopeNow(scope);
-  let fromIso: string, toIso: string, fromExact: bigint, toExact: bigint;
+  let fromIso: string, toIso: string, fromExact: bigint, toExact: bigint, bounds: ReturnType<typeof instantCalendarBounds>;
   try {
     fromIso=normalizeCalendarWindowInstant(input.from??now.toISOString(),scope.tz);
     toIso=normalizeCalendarWindowInstant(input.to??addExactMilliseconds(fromIso,7*24*3600_000),scope.tz);
     fromExact=parseExactInstant(fromIso);toExact=parseExactInstant(toIso);
     if(toExact<=fromExact)throw new Error('Invalid window');
+    bounds=instantCalendarBounds(fromIso,toIso,scope.tz);
   } catch {
     return fail('That search window could not be understood.', { code: SERVICE_CODES.invalidInput });
   }
@@ -738,7 +741,7 @@ export async function findFreeSlots(scope: ServiceScope, input: FindFreeSlotsInp
   // was created. `to` is inclusive, as the row read's `lte` was.
   const tz = scope.tz;
   const [calendar, school, sports] = await settleAll([
-    readCalendarAvailability(scope.db, scope.familyId, instantCalendarBounds(fromIso, toIso, tz), tz),
+    readCalendarAvailability(scope.db, scope.familyId, bounds, tz),
     readCalendarBusySource(scope.db, scope.familyId, 'school_events', fromIso, toIso, tz),
     readCalendarBusySource(scope.db, scope.familyId, 'sports_events', fromIso, toIso, tz),
   ]);
@@ -944,7 +947,9 @@ export async function findEventByTitle(
   if (!needle) return fail('Which event? Give me its name.', { code: SERVICE_CODES.invalidInput });
 
   const tz = isValidTimezone(timezone) ? timezone : 'UTC';
-  const bounds = instantCalendarBounds(nowIso, new Date(Date.parse(nowIso) + SEARCH_SERIES_HORIZON_MS - 1).toISOString(), tz);
+  let bounds: ReturnType<typeof instantCalendarBounds>;
+  try { bounds = instantCalendarBounds(nowIso, new Date(Date.parse(nowIso) + SEARCH_SERIES_HORIZON_MS - 1).toISOString(), tz); }
+  catch { return fail('That search window could not be understood.', { code: SERVICE_CODES.invalidInput }); }
   const res = await readCalendarOccurrences(db, familyId, bounds, tz, {
     columns: ['id', 'title', 'starts_at', 'family_id'],
     singlesFilter: calendarOpenWindowFilter(bounds),
