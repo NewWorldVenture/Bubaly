@@ -427,7 +427,7 @@ describe('the calendar form compares the times it will save (#688 comment 592212
   it('NewEventModal resolves both boxes on the family\'s clock before comparing them, and saves those', () => {
     const src = readFileSync(join(__dirname, '..', 'components/modules/calendar-module.tsx'), 'utf8');
     const submit = between(src, 'const parsed = eventSchema.safeParse(input);', 'const result = existing');
-    expect(submit).toContain('const startsAt = fromLocalInput(parsed.data.starts_at, timeZone)');
+    expect(submit).toContain('const startsAt = fromLocalInput(parsed.data.starts_at, timeZone, existing?.starts_at)');
     expect(submit).toContain('if (endsAt && new Date(endsAt) <= new Date(startsAt))');
     expect(submit).not.toMatch(/new Date\(parsed\.data\./);
     expect(at(submit, 'const startsAt')).toBeLessThan(at(submit, 'new Date(endsAt)'));

@@ -1071,8 +1071,8 @@ function NewEventModal({ existing, onClose, onSaved }: {
     // device skips (its own DST gap) moves (#688 comment 5922125002).
     // `eventSchema` already rejected a blank start, so the `?? ''` is for the
     // type and cannot fire.
-    const startsAt = fromLocalInput(parsed.data.starts_at, timeZone) ?? '';
-    const endsAt = fromLocalInput(parsed.data.ends_at, timeZone) ?? null;
+    const startsAt = fromLocalInput(parsed.data.starts_at, timeZone, existing?.starts_at) ?? '';
+    const endsAt = fromLocalInput(parsed.data.ends_at, timeZone, existing?.ends_at) ?? null;
     // End must be after start when both are provided.
     if (endsAt && new Date(endsAt) <= new Date(startsAt)) {
       setErrors({ ends_at: tr('calendarModule.endAfterStart') });

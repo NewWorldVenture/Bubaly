@@ -126,9 +126,12 @@ export function normalizeCalendarWindowInstant(value: string, timezone = 'UTC'):
     if (!resolved) throw new RangeError('Invalid calendar local time');
     const exact = BigInt(resolved.getTime()) * 1_000_000n + BigInt(second) * 1_000_000_000n + BigInt(fraction.padEnd(9, '0') || '0');
     const normalized = formatExactInstant(exact);
+    parseExactInstant(normalized);
     return normalized.slice(0, 20) + normalized.slice(20, -1).padEnd(Math.max(3, fraction.length), '0') + 'Z';
   }
-  return normalizeExactInstant(value);
+  const normalized = normalizeExactInstant(value);
+  parseExactInstant(normalized);
+  return normalized;
 }
 
 /** The PostgREST OR filter for a window's two halves, for the rows that are NOT series. */

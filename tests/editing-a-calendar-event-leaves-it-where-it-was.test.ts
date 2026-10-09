@@ -115,8 +115,8 @@ async function saveWithNothingEdited(eventId: string) {
   const startsBox = toLocalInput(stored('starts_at'));
   const endsBox = toLocalInput(stored('ends_at'));
   const result = await updateCalendarEventAction(eventId, {
-    startsAt: fromLocalInput(startsBox) ?? '',
-    endsAt: fromLocalInput(endsBox) ?? null,
+    startsAt: fromLocalInput(startsBox, undefined, stored('starts_at')) ?? '',
+    endsAt: fromLocalInput(endsBox, undefined, stored('ends_at')) ?? null,
   });
   expect(result.ok, result.ok ? '' : result.error).toBe(true);
   return { startsBox, endsBox };
@@ -232,8 +232,8 @@ describe('the modal hands the action an instant, not a box value', () => {
     // side, so the round trip is closed in the family's frame.
     // Resolved once, compared (end after start) and saved as those same values
     // (#688 comment 5922125002).
-    expect(src()).toMatch(/const startsAt = fromLocalInput\(parsed\.data\.starts_at, timeZone\)/);
-    expect(src()).toMatch(/const endsAt = fromLocalInput\(parsed\.data\.ends_at, timeZone\)/);
+    expect(src()).toMatch(/const startsAt = fromLocalInput\(parsed\.data\.starts_at, timeZone, existing\?\.starts_at\)/);
+    expect(src()).toMatch(/const endsAt = fromLocalInput\(parsed\.data\.ends_at, timeZone, existing\?\.ends_at\)/);
     expect(src()).toMatch(/title: parsed\.data\.title,\n\s*startsAt,\n\s*endsAt,/);
     expect(src()).toMatch(/defaultValue=\{toLocalInput\(existing\?\.starts_at \?\? null, timeZone\)\}/);
   });
