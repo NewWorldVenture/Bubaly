@@ -16,6 +16,7 @@ import { parseExactInstant } from '@/lib/calendar/exact-instant';
 import 'server-only';
 import { z } from 'zod';
 import { addExactMilliseconds } from '@/lib/calendar/exact-instant';
+import { calendarEventDayKey } from '@/lib/calendar/event-dates';
 import { CalendarConflictAdvisorySchema, CalendarConflictSubjectSchema, CalendarConflictReferenceSchema, CalendarExactIntervalSchema, validCalendarIntervalProjection } from '@/lib/ai/result-cards';
 import {
   normalizeCalendarWriteInstant, createEvent, deleteEvent, findConflicts, findFreeSlots, busyEvenings, rescheduleAfter, rsvpToEvent, updateEvent,
@@ -40,7 +41,7 @@ const eventOutput = z.object({
   category: z.string(),
   location: z.string().nullable(),
   assignee_id: z.string().nullable(),
-  /** Pre-rendered in the family's timezone so every surface says the same words. */
+  /** Civil DATE for all-day events; family timezone for timed events. */
   when: z.string(),
 });
 
@@ -86,7 +87,7 @@ export const calendarTools: ToolDefinition[] = [
   defineTool({
     name: 'calendar.createEvent',
     aliases: ['create_calendar_event', 'add_calendar_event'],
-    description: 'Add an event to the family calendar. Times are ISO 8601 in the family timezone.',
+    description: 'Add an event to the family calendar. Timed events use ISO 8601 in the family timezone. All-day events use calendar dates (YYYY-MM-DD) or UTC midnight boundaries; their end date is exclusive.',
     domain: 'calendar',
     capability: 'create',
     risk: 'low',
@@ -95,9 +96,9 @@ export const calendarTools: ToolDefinition[] = [
     activityFrom: 'service',
     input: z.object({
       title: z.string().describe('What the event is'),
-      starts_at: z.string().describe('ISO 8601 start, e.g. 2026-09-12T09:00:00'),
-      ends_at: z.string().nullish().describe('ISO 8601 end; omit for a one-hour default'),
-      all_day: z.boolean().nullish(),
+      starts_at: z.string().describe('Timed ISO 8601 start, e.g. 2026-09-12T09:00:00; for all_day use YYYY-MM-DD or YYYY-MM-DDT00:00:00Z'),
+      ends_at: z.string().nullish().describe('Timed ISO 8601 end; omit for a one-hour default. For all_day use an exclusive later date or UTC midnight; omit for one civil day'),
+      all_day: z.boolean().nullish().describe('Use calendar DATE boundaries, not floating local times, when true'),
       category: z.enum(CATEGORIES).nullish(),
       location: z.string().nullish(),
       description: z.string().nullish(),
@@ -137,7 +138,7 @@ export const calendarTools: ToolDefinition[] = [
         location: event.location,
         assignee_id: event.assignee_id,
         when: event.all_day
-          ? `all day ${describeWhen(event.starts_at, scope.tz, scopeNow(scope))}`
+          ? `all day ${calendarEventDayKey(event, scope.tz)}`
           : describeWhen(event.starts_at, scope.tz, scopeNow(scope)),
       });
     },
@@ -204,7 +205,7 @@ export const calendarTools: ToolDefinition[] = [
       return ok({
         id: event.id, title: event.title, starts_at: event.starts_at, ends_at: event.ends_at,
         all_day: event.all_day, category: event.category, location: event.location, assignee_id: event.assignee_id,
-        when: describeWhen(event.starts_at, scope.tz, scopeNow(scope)),
+        when: event.all_day ? `all day ${calendarEventDayKey(event, scope.tz)}` : describeWhen(event.starts_at, scope.tz, scopeNow(scope)),
       });
     },
   }),
@@ -220,7 +221,7 @@ export const calendarTools: ToolDefinition[] = [
     activityFrom: 'service',
     input: z.object({
       event_id: z.string(),
-      starts_at: z.string().describe('New ISO 8601 start time'),
+      starts_at: z.string().describe('New timed ISO 8601 start; for an all-day event use YYYY-MM-DD or UTC midnight'),
     }),
     output: eventOutput,
     summarize: (_input, output) => `Moved ${output.title} to ${output.when}`,
@@ -233,7 +234,7 @@ export const calendarTools: ToolDefinition[] = [
       return ok({
         id: event.id, title: event.title, starts_at: event.starts_at, ends_at: event.ends_at,
         all_day: event.all_day, category: event.category, location: event.location, assignee_id: event.assignee_id,
-        when: describeWhen(event.starts_at, scope.tz, scopeNow(scope)),
+        when: event.all_day ? `all day ${calendarEventDayKey(event, scope.tz)}` : describeWhen(event.starts_at, scope.tz, scopeNow(scope)),
       });
     },
     verify: async (scope, input, output) => {
