@@ -948,3 +948,43 @@ describe('a peer event that outruns its cookie write', () => {
     expect(reads() - base).toBe(18);
   });
 });
+
+describe('claimed session rotation after conflict exhaustion', () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(0); });
+  const rotated = (value: Session) => ({ ...value, access_token: value.access_token + '-rotation' });
+  async function exhausted() {
+    connect(); await settle(); const base=mocks.getSession.mock.calls.length;
+    mocks.getSession.mockImplementation(async () => {
+      await new Promise(resolve => setTimeout(resolve,1));
+      emit('TOKEN_REFRESHED',session(B,S2)); return reply(session());
+    });
+    emit('SIGNED_IN',session(B,S2)); await vi.advanceTimersByTimeAsync(12*60_000);
+    expect(mocks.getSession.mock.calls.length-base).toBe(16);
+    expect(vi.getTimerCount()).toBe(0); expect(getCacheSessionSnapshot().status).toBe('unavailable');
+  }
+  it.each(['SDK event','lifecycle receipt'] as const)('accepts a cookie-bound rotated token for the latest claimed user/session through %s',async mode => {
+    await exhausted(); const next=rotated(session(B,S2)); saveCookies(next); mocks.getSession.mockResolvedValue(reply(next));
+    if(mode==='SDK event')emit('TOKEN_REFRESHED',next);else await refreshCacheSession({force:true});
+    expect(getCacheSessionSnapshot()).toMatchObject({status:'ready',identity:{userId:B,sessionId:S2}});
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it.each(['old owner','different claimed session','newer owner','malformed claim','claim subject mismatch','sign-out claim'] as const)('does not revive cookies after exhaustion behind %s',async kind => {
+    await exhausted();
+    let next=rotated(session(B,S2));
+    if(kind==='old owner')next=rotated(session());
+    if(kind==='different claimed session')next=rotated(session(B,S3));
+    if(kind==='newer owner')emit('SIGNED_IN',session(C,S3));
+    if(kind==='malformed claim')emit('SIGNED_IN',{...session(B,S2),access_token:'unparseable'});
+    if(kind==='claim subject mismatch') { emit('SIGNED_IN',rotated(session(B,S1,A))); next=session(); }
+    if(kind==='sign-out claim')emit('SIGNED_OUT',null);
+    saveCookies(next); mocks.getSession.mockResolvedValue(reply(next));
+    await refreshCacheSession({force:true}); emit('TOKEN_REFRESHED',next);
+    expect(getCacheSessionSnapshot().status).toBe('unavailable');expect(vi.getTimerCount()).toBe(0);
+  });
+  it('a late rotated receipt may adopt only the latest owner, never an earlier claim',async () => {
+    await exhausted(); const held=deferred<Reply>();mocks.getSession.mockImplementation(()=>held.promise);
+    const work=refreshCacheSession({force:true});await settle();emit('SIGNED_IN',session(C,S3));
+    const next=rotated(session(C,S3));saveCookies(next);held.resolve(reply(next));await work;
+    expect(getCacheSessionSnapshot()).toMatchObject({status:'ready',identity:{userId:C,sessionId:S3}});expect(vi.getTimerCount()).toBe(0);
+  });
+});

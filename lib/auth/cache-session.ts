@@ -62,7 +62,7 @@ type ConflictEpisode = {
   busy: boolean; backoff: number; notBefore: number; recovery: number;
   claims: Map<string, number>; refuted: Map<string, string>; hold: Set<string>; held: { session: Session | null } | null;
   users: Set<string>;
-  remaining: number; exhausted: boolean; claimRevision: number; latestClaim: string | null; unverified: boolean;
+  remaining: number; exhausted: boolean; claimRevision: number; latestClaim: string | null; latestClaimIdentity: CacheSessionIdentity | null; unverified: boolean;
 };
 const claimKey = (session: Session | null) => session?.access_token ?? SIGNED_OUT_CLAIM;
 function cookieClaimKey(): string | undefined {
@@ -99,6 +99,14 @@ export function cacheSessionIdentity(session: Pick<Session, 'access_token' | 'us
 
 function sameIdentity(a: CacheSessionIdentity | null, b: CacheSessionIdentity | null): boolean {
   return a?.userId === b?.userId && a?.sessionId === b?.sessionId;
+}
+
+// Call only after a receipt/event exactly matches the current cookie token.
+// Token rotation can keep the claimed user/session while changing its bytes.
+function matchesClaimedSession(session: Session | null, claim: string | null, claimedIdentity: CacheSessionIdentity | null): boolean {
+  if (claimKey(session) === claim) return true;
+  const identity = cacheSessionIdentity(session);
+  return !!identity && !!claimedIdentity && sameIdentity(identity, claimedIdentity);
 }
 
 function publish(status: CacheSessionSnapshot['status'], identity: CacheSessionIdentity | null, error: string | null, observedUserId = identity?.userId ?? null) {
@@ -163,7 +171,7 @@ function ensureConnection() {
   if (connection || typeof window === 'undefined') return;
   try {
     const client = createClient();
-    const current = { client, unsubscribe: () => {}, revision: 0, read: 0, storageRevision: getSessionStorageChangeRevision(), initialSuperseded: false, reading: 0, conflict: { timer: null, active: false, plan: [], extensions: 0, claimOrder: 0, lastReadOrder: 0, busy: false, backoff: 0, notBefore: 0, recovery: 0, claims: new Map(), refuted: new Map(), hold: new Set(), held: null, users: new Set(), remaining: MAX_AUTONOMOUS_READS, exhausted: false, claimRevision: 0, latestClaim: null, unverified: false } as ConflictEpisode };
+    const current = { client, unsubscribe: () => {}, revision: 0, read: 0, storageRevision: getSessionStorageChangeRevision(), initialSuperseded: false, reading: 0, conflict: { timer: null, active: false, plan: [], extensions: 0, claimOrder: 0, lastReadOrder: 0, busy: false, backoff: 0, notBefore: 0, recovery: 0, claims: new Map(), refuted: new Map(), hold: new Set(), held: null, users: new Set(), remaining: MAX_AUTONOMOUS_READS, exhausted: false, claimRevision: 0, latestClaim: null, latestClaimIdentity: null, unverified: false } as ConflictEpisode };
     connection = current;
     const episode = current.conflict;
     const read = () => {
@@ -271,6 +279,10 @@ function ensureConnection() {
         // already name somebody else. Verify that current cookie, rather than
         // requiring the stale event's owner to return.
         episode.latestClaim = otherSession || session === null ? key : cookieKey ?? key;
+        // A malformed event's token cannot reconstruct the valid identity its
+        // original SDK session failed to establish. Preserve that validation.
+        episode.latestClaimIdentity = otherSession || session === null ? identity
+          : cookieKey !== undefined ? tokenIdentity(cookieKey) : identity;
         if (!episode.exhausted) episode.hold.add(episode.latestClaim);
         if (snapshot.status === 'ready') publish('unavailable', snapshot.identity, UNAVAILABLE, snapshot.observedUserId);
       }
@@ -332,8 +344,8 @@ function ensureConnection() {
         }
       }
       if (session && episode.unverified) {
-        // Withheld for a claimed new owner: only that owner's cookie ends it.
-        if (claimKey(session) !== episode.latestClaim) { episode.held = { session }; return; }
+        // Withheld for a claimed owner: only its cookie-bound session ends it.
+        if (!matchesClaimedSession(session, episode.latestClaim, episode.latestClaimIdentity)) { episode.held = { session }; return; }
         episode.hold.clear();
         episode.held = null;
       }
@@ -448,13 +460,12 @@ function readCacheSession(options: { force?: boolean }, autonomous: boolean): Pr
         return;
       }
       const episode = current.conflict;
-      const key = claimKey(data.session);
-      if (episode.exhausted && claimRevision !== episode.claimRevision && key !== episode.latestClaim) {
+      if (episode.exhausted && claimRevision !== episode.claimRevision && !matchesClaimedSession(data.session, episode.latestClaim, episode.latestClaimIdentity)) {
         publish('unavailable', snapshot.identity, UNAVAILABLE, snapshot.observedUserId);
         return;
       }
       if (episode.unverified) {
-        const claimed = key === episode.latestClaim;
+        const claimed = matchesClaimedSession(data.session, episode.latestClaim, episode.latestClaimIdentity);
         // A lifecycle/storage read is not an ownership transition. Even when
         // no newer event arrived during it, a prior claim may still be ahead
         // of its cookie write. Exhaustion cannot refute that claim or make an
