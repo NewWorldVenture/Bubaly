@@ -112,18 +112,28 @@ export async function createSyncPullItem(admin: Admin, account: Account, provide
   } };
 }
 
-/** The previous production mirror: found by household/provider/remote id, else inserted. */
+/** The previous production mirror lookup/insert, scoped as 0494 scopes it: by
+ * the provider account, not only the household. A remote id such as Google's
+ * '@default' task list is the same for every account, so a household-wide
+ * lookup let a second account adopt the first account's mirror and export its
+ * local items. A match naming another household or owner, or more than one
+ * match, fails closed. */
 async function ensureLegacyContainer(admin: Admin, account: Account, provider: SyncProviderEnum,
   kind: Kind, externalId: string, name: string, timezone: string, color: string | null,
 ): Promise<{ id: string; sync_token: string | null }> {
+  const inScope = (row: { family_id: string; user_id: string | null }) =>
+    row.family_id === account.family_id && row.user_id === account.user_id;
   if (kind === 'event') {
     const { data: cal, error: calendarReadError } = await admin
       .from('sync_calendars')
-      .select('id, sync_token')
-      .eq('family_id', account.family_id).eq('provider', provider).eq('external_id', externalId)
+      .select('id, sync_token, family_id, user_id')
+      .eq('account_id', account.id).eq('provider', provider).eq('external_id', externalId)
       .maybeSingle();
     if (calendarReadError) throw new Error('Sync calendar lookup failed');
-    if (cal) return cal;
+    if (cal) {
+      if (!inScope(cal)) throw new Error('Sync calendar scope unavailable');
+      return { id: cal.id, sync_token: cal.sync_token };
+    }
     const { data: created, error: createError } = await admin.from('sync_calendars').insert({
       family_id: account.family_id, user_id: account.user_id, account_id: account.id,
       provider, external_id: externalId, name, timezone, color, is_owned_locally: false,
@@ -132,11 +142,14 @@ async function ensureLegacyContainer(admin: Admin, account: Account, provider: S
   }
   const { data: list, error: listError } = await admin
     .from('sync_reminder_lists')
-    .select('id')
-    .eq('family_id', account.family_id).eq('provider', provider).eq('external_id', externalId)
+    .select('id, family_id, user_id')
+    .eq('account_id', account.id).eq('provider', provider).eq('external_id', externalId)
     .maybeSingle();
   if (listError) throw new Error('Sync reminder list lookup failed');
-  if (list) return { id: list.id, sync_token: null };
+  if (list) {
+    if (!inScope(list)) throw new Error('Sync reminder list scope unavailable');
+    return { id: list.id, sync_token: null };
+  }
   const { data: created, error: createError } = await admin.from('sync_reminder_lists').insert({
     family_id: account.family_id, user_id: account.user_id, account_id: account.id,
     provider, external_id: externalId, name, is_owned_locally: false,
@@ -144,32 +157,52 @@ async function ensureLegacyContainer(admin: Admin, account: Account, provider: S
   return { id: requireSyncWrite(created, createError, 'reminder list creation').id, sync_token: null };
 }
 
-/** The previous production item creation: the mirror row, then its mapping. */
+/** The previous production item creation: the mirror row, then its mapping.
+ * The writes are separate, so a failure between them must not leave a state a
+ * retry duplicates: a failed mapping write removes the item it just inserted,
+ * and a retry that still finds an unmapped item for this remote id in this
+ * account's mirror (the removal did not land, or the run stopped) adopts it
+ * instead of inserting a second one. An item another mapping already claims,
+ * or more than one candidate, fails closed. */
 async function createLegacyItem(admin: Admin, account: Account, provider: SyncProviderEnum,
   kind: Kind, containerId: string, externalId: string, fields: Json, hash: string,
 ): Promise<{ created: true; mapping: PullMapping }> {
   const row = record(fields) ?? {};
   const now = () => new Date().toISOString();
+  const orphanId = await findUnmappedLegacyItem(admin, account, provider, kind, containerId, externalId);
   let localId: string;
   if (kind === 'event') {
     const event = row as { uid?: string | null; title: string; description?: string | null; location?: string | null;
       starts_at: string; ends_at?: string | null; all_day?: boolean; recurrence_rule?: string | null; status?: string; etag?: string | null };
-    const { data: inserted, error: insertError } = await admin.from('sync_calendar_events').insert({
-      calendar_id: containerId, family_id: account.family_id, user_id: account.user_id, provider,
-      external_id: externalId, uid: event.uid, title: event.title, description: event.description, location: event.location,
+    const content = {
+      uid: event.uid, title: event.title, description: event.description, location: event.location,
       starts_at: event.starts_at, ends_at: event.ends_at, all_day: event.all_day, recurrence_rule: event.recurrence_rule,
-      status: event.status, etag: event.etag, content_hash: hash, sync_status: 'synced',
+      status: event.status, etag: event.etag, content_hash: hash, sync_status: 'synced' as const,
       last_synced_at: now(), metadata: REMOTE_META,
-    }).select('id').single();
-    localId = requireSyncWrite(inserted, insertError, 'event creation').id;
+    };
+    const { data: written, error: writeError } = orphanId
+      ? await admin.from('sync_calendar_events').update(content)
+        .eq('id', orphanId).eq('calendar_id', containerId).eq('family_id', account.family_id)
+        .eq('provider', provider).eq('external_id', externalId).select('id').maybeSingle()
+      : await admin.from('sync_calendar_events').insert({
+        calendar_id: containerId, family_id: account.family_id, user_id: account.user_id, provider,
+        external_id: externalId, ...content,
+      }).select('id').single();
+    localId = requireSyncWrite(written, writeError, 'event creation').id;
   } else {
     const reminder = row as { title: string; notes?: string | null; due_at?: string | null; is_completed?: boolean; completed_at?: string | null };
-    const { data: inserted, error: insertError } = await admin.from('sync_reminders').insert({
-      list_id: containerId, family_id: account.family_id, user_id: account.user_id, provider, external_id: externalId,
+    const content = {
       title: reminder.title, notes: reminder.notes, due_at: reminder.due_at, is_completed: reminder.is_completed, completed_at: reminder.completed_at,
-      content_hash: hash, sync_status: 'synced', last_synced_at: now(), metadata: REMOTE_META,
-    }).select('id').single();
-    localId = requireSyncWrite(inserted, insertError, 'reminder creation').id;
+      content_hash: hash, sync_status: 'synced' as const, last_synced_at: now(), metadata: REMOTE_META,
+    };
+    const { data: written, error: writeError } = orphanId
+      ? await admin.from('sync_reminders').update(content)
+        .eq('id', orphanId).eq('list_id', containerId).eq('family_id', account.family_id)
+        .eq('provider', provider).eq('external_id', externalId).select('id').maybeSingle()
+      : await admin.from('sync_reminders').insert({
+        list_id: containerId, family_id: account.family_id, user_id: account.user_id, provider, external_id: externalId, ...content,
+      }).select('id').single();
+    localId = requireSyncWrite(written, writeError, 'reminder creation').id;
   }
   const metadata: Json = { lastHash: hash };
   const { data: mappingRow, error: mappingInsertError } = await admin.from('sync_external_mappings').insert({
@@ -177,8 +210,39 @@ async function createLegacyItem(admin: Admin, account: Account, provider: SyncPr
     ...(kind === 'event' ? { external_etag: (row as { etag?: string | null }).etag } : {}),
     metadata, last_synced_at: now(),
   }).select('id').maybeSingle();
+  if ((mappingInsertError || !mappingRow) && !orphanId) {
+    // Best effort; if this removal does not land, the retry adopts the item.
+    try {
+      if (kind === 'event') {
+        await admin.from('sync_calendar_events').delete().eq('id', localId).eq('calendar_id', containerId).eq('family_id', account.family_id);
+      } else {
+        await admin.from('sync_reminders').delete().eq('id', localId).eq('list_id', containerId).eq('family_id', account.family_id);
+      }
+    } catch { /* covered by the retry adoption */ }
+  }
   const mapping = requireSyncWrite(mappingRow, mappingInsertError, `${kind} mapping creation`);
   return { created: true, mapping: { id: mapping.id, family_id: account.family_id, local_id: localId, external_id: externalId, metadata } };
+}
+
+/** An item a failed earlier attempt left in this account's mirror without its
+ * mapping. The caller only gets here when this account has no mapping for the
+ * remote id, so any mapping that names the item belongs to something else. */
+async function findUnmappedLegacyItem(admin: Admin, account: Account, provider: SyncProviderEnum,
+  kind: Kind, containerId: string, externalId: string,
+): Promise<string | null> {
+  const { data: found, error: findError } = kind === 'event'
+    ? await admin.from('sync_calendar_events').select('id')
+      .eq('calendar_id', containerId).eq('family_id', account.family_id).eq('provider', provider).eq('external_id', externalId).limit(2)
+    : await admin.from('sync_reminders').select('id')
+      .eq('list_id', containerId).eq('family_id', account.family_id).eq('provider', provider).eq('external_id', externalId).limit(2);
+  if (findError || !found) throw new Error(`Sync ${kind} retry lookup failed`);
+  if (found.length === 0) return null;
+  if (found.length > 1) throw new Error(`Sync ${kind} retry scope unavailable`);
+  const { data: claims, error: claimError } = await admin.from('sync_external_mappings').select('id')
+    .eq('item_type', kind).eq('local_id', found[0].id).limit(1);
+  if (claimError || !claims) throw new Error(`Sync ${kind} retry lookup failed`);
+  if (claims.length > 0) throw new Error(`Sync ${kind} retry scope unavailable`);
+  return found[0].id;
 }
 
 /** Without 0494, the previous production cursor write: as soon as the calendar

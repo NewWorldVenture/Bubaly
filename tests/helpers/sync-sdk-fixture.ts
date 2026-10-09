@@ -32,8 +32,8 @@ export function syncSdkFixture(events: GEvent[], options: {
   const rows: Record<string, Row[]> = {
     sync_accounts: [{ ...ACCOUNT, provider: 'google', sync_direction: options.direction ?? 'import', metadata: {} }],
     sync_connections: [{ account_id: ACCOUNT.id, health: 'healthy' }],
-    sync_calendars: [{ id: 'calendar', account_id: ACCOUNT.id, family_id: ACCOUNT.family_id, provider: 'google', external_id: 'primary', sync_token: STALE }],
-    sync_reminder_lists: [{ id: 'list', account_id: ACCOUNT.id, family_id: ACCOUNT.family_id, provider: 'google', external_id: '@default' }],
+    sync_calendars: [{ id: 'calendar', account_id: ACCOUNT.id, family_id: ACCOUNT.family_id, user_id: ACCOUNT.user_id, provider: 'google', external_id: 'primary', sync_token: STALE }],
+    sync_reminder_lists: [{ id: 'list', account_id: ACCOUNT.id, family_id: ACCOUNT.family_id, user_id: ACCOUNT.user_id, provider: 'google', external_id: '@default' }],
     sync_calendar_events: [{ id: 'local', calendar_id: 'calendar', family_id: ACCOUNT.family_id, provider: 'google', external_id: 'deleted', deleted_at: null }],
     sync_external_mappings: [{ id: 'mapping', family_id: ACCOUNT.family_id, account_id: ACCOUNT.id, provider: 'google', item_type: 'event', external_id: 'deleted', local_id: 'local', metadata: {} },
       { id: 'foreign-map', family_id: 'another-family', account_id: 'another-account', provider: 'google', item_type: 'event', external_id: 'foreign-only', local_id: 'foreign-local', metadata: {} }],
