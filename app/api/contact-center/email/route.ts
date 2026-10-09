@@ -64,7 +64,12 @@ function basicAuthPassword(authorization: string | null): string | null {
 
 function authorized(req: NextRequest): boolean {
   const secret = process.env.CONTACT_CENTER_INBOUND_SECRET;
-  if (!secret) return process.env.NODE_ENV !== 'production';
+  // No secret, no inbound mail — in every build. This route is a public
+  // callback in middleware.ts, so this check is all that stands in front of
+  // it, and NODE_ENV is not a security decision: a dev or self-hosted server
+  // run without NODE_ENV=production used to accept anyone's mail here (SEC-002;
+  // the Twilio ingress was fixed the same way, lib/server/twilio-ingress.ts).
+  if (!secret) return false;
   const header = req.headers.get('x-inbound-secret');
   const basic = basicAuthPassword(req.headers.get('authorization'));
   const query = new URL(req.url).searchParams.get('key');
