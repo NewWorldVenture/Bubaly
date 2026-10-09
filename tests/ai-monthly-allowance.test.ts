@@ -132,7 +132,9 @@ describe('private requests keep household quota enforceable', () => {
         .toMatchObject({ ok: false, status: 403, code: 'unavailable' });
     });
 
-  it('fails closed when the unapplied RPC is missing', async () => {
+  // A PGRST202 that does not name the quota function is not "0493 is missing":
+  // it is some other failure and still fails closed, with no row read.
+  it('fails closed on a missing-function answer that does not name the quota RPC', async () => {
     const { assertAIAccess, AI_ASSISTANT_FEATURE_KEY } = await import('@/lib/server/ai-access');
     expect(await assertAIAccess(ctx(), { db: db(null, { code: 'PGRST202', message: 'RPC missing' }).client,
       now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY })).toMatchObject({ ok: false, code: 'unavailable' });
@@ -208,5 +210,135 @@ describe('the assistant and the concierge are gated separately', () => {
     const access = await assertAIAccess(ctx('operator@example.test'), { db: client, now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY });
     expect(access.ok).toBe(true);
     vi.unstubAllEnvs();
+  });
+});
+
+// Production has not taken held migration 0493, so `count_family_ai_requests_month`
+// does not exist there. Until it does, the allowance is counted exactly as the
+// previous release counted it: a direct exact, head-only `ai_requests` count
+// from the start of the UTC month. Only the missing-function answer naming this
+// RPC switches to that path; every other RPC failure still fails closed.
+describe('without held migration 0493, the previous direct count keeps the allowance', () => {
+  const MISSING_PGRST202 = {
+    code: 'PGRST202',
+    message: 'Could not find the function public.count_family_ai_requests_month(p_family_id, p_month_start) in the schema cache',
+    details: 'Searched for the function public.count_family_ai_requests_month with parameters p_family_id, p_month_start or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache.',
+    hint: null,
+  };
+  const MISSING_42883 = {
+    code: '42883',
+    message: 'function public.count_family_ai_requests_month(uuid, timestamp with time zone) does not exist',
+    details: null,
+    hint: 'No function matches the given name and argument types. You might need to add explicit type casts.',
+  };
+
+  type LegacyQuery = { table: string; select?: [string, unknown]; filters: Array<[string, string, unknown]> };
+
+  /** RPC answers `rpcError`; the table read answers `{ count, error }` like a head count. */
+  function legacyDb(rpcError: unknown, legacy: { count: number | null; error: unknown }) {
+    const rpcCalls: string[] = [];
+    const queries: LegacyQuery[] = [];
+    const client = {
+      rpc: async (name: string) => { rpcCalls.push(name); return { data: null, error: rpcError }; },
+      from: (table: string) => {
+        const q: LegacyQuery = { table, filters: [] };
+        queries.push(q);
+        const builder = {
+          select: (cols: string, opts: unknown) => { q.select = [cols, opts]; return builder; },
+          eq: (col: string, val: unknown) => { q.filters.push(['eq', col, val]); return builder; },
+          gte: (col: string, val: unknown) => { q.filters.push(['gte', col, val]); return builder; },
+          then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+            Promise.resolve({ data: null, count: legacy.count, error: legacy.error }).then(resolve, reject),
+        };
+        return builder;
+      },
+    } as never;
+    return { client, rpcCalls, queries };
+  }
+
+  let warn: ReturnType<typeof vi.spyOn>;
+  beforeEach(async () => {
+    warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { resetMonthlyCountFallbackWarning } = await import('@/lib/server/ai-access');
+    resetMonthlyCountFallbackWarning();
+  });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it.each([['PGRST202', MISSING_PGRST202], ['42883', MISSING_42883]])
+    ('allows a request under the allowance using the previous count (%s)', async (_code, missing) => {
+      const { assertAIAccess, AI_ASSISTANT_FEATURE_KEY } = await import('@/lib/server/ai-access');
+      const { client, rpcCalls, queries } = legacyDb(missing, { count: 3, error: null });
+      const access = await assertAIAccess(ctx(), { db: client, now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY });
+      expect(access).toMatchObject({ ok: true, planLevel: 0, monthlyUsed: 3, monthlyAllowance: 10 });
+      expect(rpcCalls).toEqual(['count_family_ai_requests_month']);
+      expect(queries).toEqual([{
+        table: 'ai_requests',
+        select: ['id', { count: 'exact', head: true }],
+        filters: [['eq', 'family_id', 'fam-1'], ['gte', 'created_at', '2026-09-01T00:00:00.000Z']],
+      }]);
+    });
+
+  it('allows the last request just under the allowance when counting the previous way', async () => {
+    const { assertAIAccess, AI_ASSISTANT_FEATURE_KEY, AI_MONTHLY_ALLOWANCE } = await import('@/lib/server/ai-access');
+    const { client } = legacyDb(MISSING_42883, { count: AI_MONTHLY_ALLOWANCE[0]! - 1, error: null });
+    expect(await assertAIAccess(ctx(), { db: client, now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY }))
+      .toMatchObject({ ok: true, monthlyUsed: AI_MONTHLY_ALLOWANCE[0]! - 1 });
+  });
+
+  it('refuses at the allowance with the same 429 when counting the previous way', async () => {
+    const { assertAIAccess, AI_ASSISTANT_FEATURE_KEY, AI_MONTHLY_ALLOWANCE } = await import('@/lib/server/ai-access');
+    const { client } = legacyDb(MISSING_PGRST202, { count: AI_MONTHLY_ALLOWANCE[0]!, error: null });
+    const access = await assertAIAccess(ctx(), { db: client, now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY });
+    expect(access).toMatchObject({ ok: false, status: 429, code: 'allowance_exceeded' });
+  });
+
+  it('reads a null previous count as zero, as the previous release did', async () => {
+    const { assertAIAccess, AI_ASSISTANT_FEATURE_KEY } = await import('@/lib/server/ai-access');
+    const { client } = legacyDb(MISSING_PGRST202, { count: null, error: null });
+    expect(await assertAIAccess(ctx(), { db: client, now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY }))
+      .toMatchObject({ ok: true, monthlyUsed: 0, monthlyAllowance: 10 });
+  });
+
+  it('fails closed when the previous count itself errors', async () => {
+    const { assertAIAccess, AI_ASSISTANT_FEATURE_KEY } = await import('@/lib/server/ai-access');
+    const { client } = legacyDb(MISSING_PGRST202, { count: null, error: { code: '42501', message: 'permission denied for table ai_requests' } });
+    expect(await assertAIAccess(ctx(), { db: client, now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY }))
+      .toMatchObject({ ok: false, status: 403, code: 'unavailable' });
+  });
+
+  it('warns once per process, naming the held migration', async () => {
+    const { assertAIAccess, AI_ASSISTANT_FEATURE_KEY } = await import('@/lib/server/ai-access');
+    for (let i = 0; i < 3; i++) {
+      const { client } = legacyDb(MISSING_PGRST202, { count: 1, error: null });
+      await assertAIAccess(ctx(), { db: client, now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY });
+    }
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain('0493_ai_copy_private_read_and_quota.sql');
+  });
+
+  it.each([
+    ['permission', { code: '42501', message: 'permission denied for function count_family_ai_requests_month' }],
+    ['network', { code: '', message: 'TypeError: fetch failed' }],
+    ['other function missing', { code: '42883', message: 'function public.is_family_member(uuid) does not exist' }],
+    ['longer function name', { code: 'PGRST202', message: 'Could not find the function public.count_family_ai_requests_month_v2 in the schema cache' }],
+    ['missing-table code', { code: 'PGRST205', message: "Could not find the table 'public.count_family_ai_requests_month' in the schema cache" }],
+  ])('still fails closed without a direct read on a %s error', async (_label, rpcError) => {
+    const { assertAIAccess, AI_ASSISTANT_FEATURE_KEY } = await import('@/lib/server/ai-access');
+    const { client, queries } = legacyDb(rpcError, { count: 0, error: null });
+    expect(await assertAIAccess(ctx(), { db: client, now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY }))
+      .toMatchObject({ ok: false, status: 403, code: 'unavailable' });
+    expect(queries).toEqual([]);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('uses the RPC unchanged once 0493 is applied', async () => {
+    const { assertAIAccess, AI_ASSISTANT_FEATURE_KEY } = await import('@/lib/server/ai-access');
+    const { client, calls } = db(4);
+    expect(await assertAIAccess(ctx(), { db: client, now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY }))
+      .toMatchObject({ ok: true, monthlyUsed: 4, monthlyAllowance: 10 });
+    expect(calls).toEqual([{ table: 'count_family_ai_requests_month',
+      filters: [['p_family_id', 'fam-1'], ['p_month_start', '2026-09-01T00:00:00.000Z']] }]);
+    expect(warn).not.toHaveBeenCalled();
   });
 });
