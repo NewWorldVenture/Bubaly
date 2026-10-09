@@ -352,7 +352,7 @@ describe('rescheduleAfter', () => {
   it('keeps the original duration when moving an event', async () => {
     const { db, calls } = makeDb((call) => (call.kind === 'update'
       ? { data: { ...EVENT_ROW, starts_at: '2026-09-08T16:00:00.000Z' }, error: null }
-      : { data: { id: 'event-1', title: 'Dentist', starts_at: '2026-09-07T14:00:00.000Z', ends_at: '2026-09-07T15:30:00.000Z' }, error: null }));
+      : { data: { id: 'event-1', title: 'Dentist', starts_at: '2026-09-07T14:00:00.000Z', ends_at: '2026-09-07T15:30:00.000Z', all_day: false }, error: null }));
 
     const res = await rescheduleAfter(scopeWith(db), 'event-1', { startsAt: '2026-09-08T16:00:00Z' });
     expect(res.ok).toBe(true);

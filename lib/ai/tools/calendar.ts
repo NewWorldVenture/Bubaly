@@ -1,3 +1,4 @@
+import { parseExactInstant } from '@/lib/calendar/exact-instant';
 // Calendar tools — the family's shared time.
 //
 // Input fields are snake_case and named exactly as the legacy flat tools named
@@ -17,7 +18,7 @@ import { z } from 'zod';
 import { addExactMilliseconds } from '@/lib/calendar/exact-instant';
 import { CalendarConflictAdvisorySchema, CalendarConflictSubjectSchema, CalendarConflictReferenceSchema, CalendarExactIntervalSchema, validCalendarIntervalProjection } from '@/lib/ai/result-cards';
 import {
-  createEvent, deleteEvent, findConflicts, findFreeSlots, busyEvenings, rescheduleAfter, rsvpToEvent, updateEvent,
+  normalizeCalendarWriteInstant, createEvent, deleteEvent, findConflicts, findFreeSlots, busyEvenings, rescheduleAfter, rsvpToEvent, updateEvent,
 } from '@/lib/services/calendar';
 import { searchCalendarOccurrences, validateCalendarSearchWindow } from '@/lib/services/calendar/search-occurrences';
 import { scopeNow } from '@/lib/services/scope';
@@ -246,7 +247,8 @@ export const calendarTools: ToolDefinition[] = [
         console.error('[tool:calendar.rescheduleEvent] verification read failed', error);
         return fail(describeDbError(error, 'Could not confirm the new time was saved.'), { code: SERVICE_CODES.db });
       }
-      const moved = Boolean(data) && Date.parse(data!.starts_at) === Date.parse(input.starts_at);
+      let moved = false;
+      try { const expected = normalizeCalendarWriteInstant(input.starts_at, scope.tz); moved = Boolean(data) && expected !== null && parseExactInstant(data!.starts_at) === parseExactInstant(expected); } catch { /* Invalid receipts cannot verify a move. */ }
       return ok({ verified: moved, detail: moved ? `${output.title} now starts at ${output.when}.` : 'The event did not move.' });
     },
   }),

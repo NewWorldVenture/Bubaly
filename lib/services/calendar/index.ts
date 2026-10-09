@@ -31,7 +31,7 @@ import type { EventCategory, Insertable, RecurrenceFreq, Tables, Updatable } fro
 import { describeDbError } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
-import { keyedProbe, makeKey, sameId, sameInstant, withIdempotency, type KeyedCreateOptions } from '../idempotency';
+import { keyedProbe, makeKey, sameId, withIdempotency, type KeyedCreateOptions } from '../idempotency';
 import { dayKeyInTz, dayKeysBetween, scopeNow, zonedDayBoundsMs, zonedTimeMs } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { escapeLike } from '@/lib/supabase/escape-like';
@@ -54,10 +54,31 @@ const RECURRENCES = EVENT_RECURRENCES;
 const DEFAULT_DURATION_MIN = 60;
 const MINUTE_MS = 60_000;
 
-function isoOrNull(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const ms = Date.parse(value);
-  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+export function normalizeCalendarWriteInstant(value: string | null | undefined, timezone: string): string | null {
+  if (!value?.trim()) return null;
+  try {
+    const token = value.trim().replace(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})(Z|[+-]\d{2}:\d{2})$/, '$1:00$2');
+    const exact = parseExactInstant(normalizeCalendarWindowInstant(token, timezone));
+    if (exact % 1000n !== 0n) return null; // PostgreSQL stores microseconds: never round.
+    return formatExactInstant(exact);
+  } catch { return null; }
+}
+function invalidOptionalClock(value: string | null | undefined, normalized: string | null): boolean {
+  return Boolean(value?.trim()) && normalized === null;
+}
+function sameCalendarInstant(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return !a && !b;
+  try { return parseExactInstant(a) === parseExactInstant(b); } catch { return false; }
+}
+// DATE labels belong to the caller's original civil prefix; UTC normalization
+// must not silently move an all-day label to a different date.
+function validEventRange(start: string, end: string | null, allDay: boolean, originalStart = start, originalEnd = end): boolean {
+  try {
+    const from = parseExactInstant(start), to = end === null ? null : parseExactInstant(end);
+    if (typeof allDay !== 'boolean' || to !== null && to < from) return false;
+    return !allDay || from === parseExactInstant(originalStart.trim().slice(0, 10) + 'T00:00:00Z')
+      && (to === null || to > from && to === parseExactInstant(originalEnd!.trim().slice(0, 10) + 'T00:00:00Z'));
+  } catch { return false; }
 }
 
 export type CreateEventInput = {
@@ -89,11 +110,11 @@ function eventDrift(stored: CalendarEvent, wanted: EventContent): string[] {
   if ((stored.description ?? null) !== wanted.description) drift.push('description');
   if ((stored.location ?? null) !== wanted.location) drift.push('location');
   if (stored.category !== wanted.category) drift.push('category');
-  if (!sameInstant(stored.starts_at, wanted.starts_at)) drift.push('starts_at');
-  if (!sameInstant(stored.ends_at, wanted.ends_at)) drift.push('ends_at');
+  if (!sameCalendarInstant(stored.starts_at, wanted.starts_at)) drift.push('starts_at');
+  if (!sameCalendarInstant(stored.ends_at, wanted.ends_at)) drift.push('ends_at');
   if (stored.all_day !== wanted.all_day) drift.push('all_day');
   if (stored.recurrence !== wanted.recurrence) drift.push('recurrence');
-  if (!sameInstant(stored.recurrence_until, wanted.recurrence_until)) drift.push('recurrence_until');
+  if (!sameCalendarInstant(stored.recurrence_until, wanted.recurrence_until)) drift.push('recurrence_until');
   if (!sameId(stored.assignee_id, wanted.assignee_id)) drift.push('assignee_id');
   return drift;
 }
@@ -114,13 +135,16 @@ export async function createEvent(
   const title = input.title?.trim() ?? '';
   if (!title) return fail('An event needs a title.', { code: SERVICE_CODES.invalidInput });
 
-  const startsAt = isoOrNull(input.startsAt);
+  const startsAt = normalizeCalendarWriteInstant(input.startsAt, scope.tz);
   if (!startsAt) return fail('That start time could not be understood.', { code: SERVICE_CODES.invalidInput });
 
-  const endsAt = isoOrNull(input.endsAt);
-  if (endsAt && Date.parse(endsAt) < Date.parse(startsAt)) {
+  const endsAt = normalizeCalendarWriteInstant(input.endsAt, scope.tz);
+  if (invalidOptionalClock(input.endsAt, endsAt) || !validEventRange(startsAt, endsAt, input.allDay ?? false, input.startsAt, input.endsAt ?? null)) {
     return fail('An event cannot end before it starts.', { code: SERVICE_CODES.invalidInput });
   }
+
+  const recurrenceUntil = normalizeCalendarWriteInstant(input.recurrenceUntil, scope.tz);
+  if (invalidOptionalClock(input.recurrenceUntil, recurrenceUntil)) return fail('That recurrence end could not be understood.', { code: SERVICE_CODES.invalidInput });
 
   const category = input.category && CATEGORIES.includes(input.category) ? input.category : 'general';
   const recurrence = input.recurrence && RECURRENCES.includes(input.recurrence) ? input.recurrence : 'none';
@@ -134,7 +158,7 @@ export async function createEvent(
     ends_at: endsAt,
     all_day: input.allDay ?? false,
     recurrence,
-    recurrence_until: isoOrNull(input.recurrenceUntil),
+    recurrence_until: recurrenceUntil,
     assignee_id: input.assigneeId ?? null,
   };
 
@@ -239,12 +263,14 @@ export async function createEvents(
   for (const input of inputs) {
     const title = input.title?.trim() ?? '';
     if (!title) return fail('An event needs a title.', { code: SERVICE_CODES.invalidInput });
-    const startsAt = isoOrNull(input.startsAt);
+    const startsAt = normalizeCalendarWriteInstant(input.startsAt, scope.tz);
     if (!startsAt) return fail('That start time could not be understood.', { code: SERVICE_CODES.invalidInput });
-    const endsAt = isoOrNull(input.endsAt);
-    if (endsAt && Date.parse(endsAt) < Date.parse(startsAt)) {
+    const endsAt = normalizeCalendarWriteInstant(input.endsAt, scope.tz);
+    if (invalidOptionalClock(input.endsAt, endsAt) || !validEventRange(startsAt, endsAt, input.allDay ?? false, input.startsAt, input.endsAt ?? null)) {
       return fail('An event cannot end before it starts.', { code: SERVICE_CODES.invalidInput });
     }
+    const recurrenceUntil = normalizeCalendarWriteInstant(input.recurrenceUntil, scope.tz);
+    if (invalidOptionalClock(input.recurrenceUntil, recurrenceUntil)) return fail('That recurrence end could not be understood.', { code: SERVICE_CODES.invalidInput });
     rows.push({
       family_id: scope.familyId,
       title,
@@ -255,7 +281,7 @@ export async function createEvents(
       ends_at: endsAt,
       all_day: input.allDay ?? false,
       recurrence: input.recurrence && RECURRENCES.includes(input.recurrence) ? input.recurrence : 'none',
-      recurrence_until: isoOrNull(input.recurrenceUntil),
+      recurrence_until: recurrenceUntil,
       assignee_id: input.assigneeId ?? null,
       created_by: scope.userId,
       idempotency_key: null,
@@ -373,7 +399,11 @@ export async function deleteEvents(scope: ServiceScope, eventIds: string[]): Pro
 
 export type UpdateEventPatch = Partial<Omit<CreateEventInput, 'title'>> & { title?: string };
 
+type EventClockState = Pick<CalendarEvent, 'id' | 'title' | 'starts_at' | 'ends_at' | 'all_day'>;
 export async function updateEvent(scope: ServiceScope, eventId: string, patch: UpdateEventPatch): Promise<ServiceResult<CalendarEvent>> {
+  return applyEventUpdate(scope, eventId, patch);
+}
+async function applyEventUpdate(scope: ServiceScope, eventId: string, patch: UpdateEventPatch, captured?: EventClockState): Promise<ServiceResult<CalendarEvent>> {
   const update: Updatable<'calendar_events'> = {};
 
   if (patch.title !== undefined) {
@@ -382,30 +412,47 @@ export async function updateEvent(scope: ServiceScope, eventId: string, patch: U
     update.title = title;
   }
   if (patch.startsAt !== undefined) {
-    const startsAt = isoOrNull(patch.startsAt);
+    const startsAt = normalizeCalendarWriteInstant(patch.startsAt, scope.tz);
     if (!startsAt) return fail('That start time could not be understood.', { code: SERVICE_CODES.invalidInput });
     update.starts_at = startsAt;
   }
-  if (patch.endsAt !== undefined) update.ends_at = isoOrNull(patch.endsAt);
+  if (patch.endsAt !== undefined) {
+    const end = normalizeCalendarWriteInstant(patch.endsAt, scope.tz);
+    if (invalidOptionalClock(patch.endsAt, end)) return fail('That end time could not be understood.', { code: SERVICE_CODES.invalidInput });
+    update.ends_at = end;
+  }
   if (patch.allDay !== undefined) update.all_day = patch.allDay;
   if (patch.location !== undefined) update.location = patch.location?.trim() || null;
   if (patch.description !== undefined) update.description = patch.description?.trim() || null;
   if (patch.assigneeId !== undefined) update.assignee_id = patch.assigneeId;
   if (patch.category !== undefined && CATEGORIES.includes(patch.category)) update.category = patch.category;
   if (patch.recurrence !== undefined && RECURRENCES.includes(patch.recurrence)) update.recurrence = patch.recurrence;
-  if (patch.recurrenceUntil !== undefined) update.recurrence_until = isoOrNull(patch.recurrenceUntil);
+  if (patch.recurrenceUntil !== undefined) {
+    const until = normalizeCalendarWriteInstant(patch.recurrenceUntil, scope.tz);
+    if (invalidOptionalClock(patch.recurrenceUntil, until)) return fail('That recurrence end could not be understood.', { code: SERVICE_CODES.invalidInput });
+    update.recurrence_until = until;
+  }
 
   if (Object.keys(update).length === 0) {
     return fail('Nothing to change on that event.', { code: SERVICE_CODES.invalidInput });
   }
 
-  // The same range check `createEvent` makes, for the edit that used to have it
-  // only in the browser. Deliberately limited to a patch carrying BOTH sides —
-  // which is what the edit modal sends, since it renders both fields — because
-  // cross-checking a patch that moves only the end would mean reading the row
-  // first, an extra round trip on every edit to guard a shape no caller sends.
-  if (update.starts_at && update.ends_at && Date.parse(update.ends_at) < Date.parse(update.starts_at)) {
+  if (update.starts_at && update.ends_at && parseExactInstant(update.ends_at) < parseExactInstant(update.starts_at)) {
     return fail('An event cannot end before it starts.', { code: SERVICE_CODES.invalidInput });
+  }
+  let clockState: EventClockState | undefined = captured;
+  if (patch.startsAt !== undefined || patch.endsAt !== undefined || patch.allDay !== undefined) {
+    if (!clockState) {
+      const { data, error } = await scope.db.from('calendar_events')
+        .select('id,title,starts_at,ends_at,all_day').eq('id', eventId).eq('family_id', scope.familyId).maybeSingle();
+      if (error) return fail(describeDbError(error, 'Could not load that event.'), { code: SERVICE_CODES.db });
+      if (!data) return fail('That event could not be found.', { code: SERVICE_CODES.notFound });
+      clockState = data;
+    }
+    if (!validEventRange(update.starts_at ?? clockState.starts_at,
+      patch.endsAt === undefined ? clockState.ends_at : update.ends_at ?? null,
+      update.all_day ?? clockState.all_day, patch.startsAt ?? clockState.starts_at,
+      patch.endsAt === undefined ? clockState.ends_at : patch.endsAt)) return fail('Choose valid event date boundaries.', { code: SERVICE_CODES.invalidInput });
   }
 
   if (update.assignee_id != null) {
@@ -426,17 +473,13 @@ export async function updateEvent(scope: ServiceScope, eventId: string, patch: U
     }
   }
 
-  const { data, error } = await scope.db
-    .from('calendar_events')
-    .update(update)
-    .eq('id', eventId)
-    .eq('family_id', scope.familyId)
-    // Native writes cannot alter publisher-owned rows. Keep admission on the
-    // mutation itself so a concurrent feed takeover cannot race a preflight.
-    .is('feed_id', null)
-    .is('external_uid', null)
-    .select('*')
-    .maybeSingle();
+  let mutation = scope.db.from('calendar_events').update(update).eq('id', eventId).eq('family_id', scope.familyId)
+    .is('feed_id', null).is('external_uid', null);
+  if (clockState) {
+    mutation = mutation.eq('starts_at', clockState.starts_at).eq('all_day', clockState.all_day);
+    mutation = clockState.ends_at === null ? mutation.is('ends_at', null) : mutation.eq('ends_at', clockState.ends_at);
+  }
+  const { data, error } = await mutation.select('*').maybeSingle();
 
   if (error) {
     console.error('[service:calendar] update failed', error);
@@ -825,12 +868,12 @@ export async function rescheduleAfter(
   eventId: string,
   input: { startsAt: string },
 ): Promise<ServiceResult<CalendarEvent>> {
-  const startsAt = isoOrNull(input.startsAt);
+  const startsAt = normalizeCalendarWriteInstant(input.startsAt, scope.tz);
   if (!startsAt) return fail('That new time could not be understood.', { code: SERVICE_CODES.invalidInput });
 
   const { data: existing, error: readError } = await scope.db
     .from('calendar_events')
-    .select('id, title, starts_at, ends_at')
+    .select('id, title, starts_at, ends_at, all_day')
     .eq('id', eventId)
     .eq('family_id', scope.familyId)
     .maybeSingle();
@@ -840,18 +883,14 @@ export async function rescheduleAfter(
   }
   if (!existing) return fail('That event could not be found.', { code: SERVICE_CODES.notFound });
 
-  const previousStart = Date.parse(existing.starts_at);
-  const previousEnd = existing.ends_at ? Date.parse(existing.ends_at) : Number.NaN;
-  // An explicit zero-length point stays a point; only a missing end keeps
-  // the existing unknown-duration/null policy.
-  const durationMs = Number.isFinite(previousEnd) && Number.isFinite(previousStart) && previousEnd >= previousStart
-    ? previousEnd - previousStart
-    : null;
-
-  return updateEvent(scope, eventId, {
-    startsAt,
-    endsAt: durationMs === null ? null : new Date(Date.parse(startsAt) + durationMs).toISOString(),
-  });
+  if (!validEventRange(existing.starts_at, existing.ends_at, existing.all_day)) {
+    return fail('Choose valid event date boundaries.', { code: SERVICE_CODES.invalidInput });
+  }
+  const duration = existing.ends_at === null ? null : parseExactInstant(existing.ends_at) - parseExactInstant(existing.starts_at);
+  return applyEventUpdate(scope, eventId, {
+    startsAt: input.startsAt,
+    endsAt: duration === null ? null : formatExactInstant(parseExactInstant(startsAt) + duration),
+  }, existing);
 }
 
 // ─── RSVPs ──────────────────────────────────────────────────────────────────

@@ -194,6 +194,7 @@ test.describe('authenticated recurring bill durable anchor', () => {
         await expect(page.getByText('This bill changed. Refresh before confirming its schedule.', { exact: true })).toBeVisible();
         expect(await read(stale.id)).toEqual(retained);
         await page.reload(); expect(await read(stale.id)).toEqual(retained);
+        await verifyAuthenticatedFinanceOverview(page, admin, app, provider, account.familyId, account.userId);
       }
     } finally {
       try { if (context) await closeWithoutSnapshot(context); }
@@ -208,3 +209,140 @@ test.describe('authenticated recurring bill durable anchor', () => {
     }
   });
 });
+
+/** Genuine Next/SDK/cache conformance, only inside the already attested modern stack. */
+async function verifyAuthenticatedFinanceOverview(
+  page: Page, admin: ReturnType<typeof localClient>, app: string, provider: string,
+  familyId: string, userId: string,
+) {
+  const tag = randomUUID();
+  const now = new Date();
+  const due = now.toISOString().slice(0, 10);
+  const before = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1)).toISOString().slice(0, 10);
+  const tailName = `Owned overview tail ${tag}`;
+  const owned = Array.from({ length: 1001 }, (_, i) => ({
+    id: randomUUID(), family_id: familyId, created_by: userId,
+    name: i === 1000 ? tailName : `Owned paid prefix ${tag} ${i}`,
+    due_date: i === 1000 ? due : before, amount: i === 1000 ? 9876 : 1,
+    status: i === 1000 ? 'overdue' as const : 'paid' as const,
+    is_recurring: false, recurrence: null, autopay: false, due_day: null,
+  }));
+  const errorText = 'Could not load financial data. Refresh and try again.';
+  const reads: { offset: number; length: number; count: number; exact: boolean; family: string | null }[] = [];
+  const pending: Promise<void>[] = [];
+  let bodyReadFailed = false, laterPageRefusals = 0, barrierTimedOut = false;
+  const gates: { wait: () => Promise<void>; release: () => void; hit: boolean }[] = [];
+  function gate() {
+    let resolve!: () => void;
+    const promise = new Promise<void>(done => { resolve = done; });
+    const item = { hit: false, release: resolve, wait: async () => {
+      item.hit = true;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try { await Promise.race([promise, new Promise<void>(done => {
+        timer = setTimeout(() => { barrierTimedOut = true; done(); }, 15_000);
+      })]); } finally { if (timer) clearTimeout(timer); }
+    } };
+    gates.push(item); return item;
+  }
+  const onResponse = (response: import('@playwright/test').Response) => {
+    const url = new URL(response.url());
+    if (url.origin !== provider || url.pathname !== '/rest/v1/bills'
+      || response.request().method() !== 'GET' || !response.ok()) return;
+    pending.push((async () => {
+      try {
+        const rows: unknown = await response.json();
+        const match = /\/(\d+)$/.exec(response.headers()['content-range'] ?? '');
+        if (!Array.isArray(rows) || !match) { bodyReadFailed = true; return; }
+        reads.push({ offset: Number(url.searchParams.get('offset') ?? 0), length: rows.length,
+          count: Number(match[1]), exact: (response.request().headers()['prefer'] ?? '').includes('count=exact'),
+          family: url.searchParams.get('family_id') });
+      } catch { bodyReadFailed = true; }
+    })());
+  };
+  const pattern = `${provider}/rest/v1/*`;
+  let stage: 'initial' | 'healthy' | 'cached' = 'initial';
+  const accountLoading = gate(), cachedBills = gate(), cachedAccount = gate();
+  const intercept = async (route: import('@playwright/test').Route) => {
+    const request = route.request(), url = new URL(request.url());
+    if (url.origin !== provider || request.method() !== 'GET') return route.continue();
+    if (stage === 'initial' && url.pathname === '/rest/v1/financial_accounts') {
+      await accountLoading.wait(); return route.continue();
+    }
+    if (stage === 'initial' && url.pathname === '/rest/v1/bills'
+      && Number(url.searchParams.get('offset') ?? 0) >= 1000) {
+      laterPageRefusals++; return route.abort('failed');
+    }
+    if (stage === 'cached' && url.pathname === '/rest/v1/bills') {
+      await cachedBills.wait(); return route.continue();
+    }
+    if (stage === 'cached' && url.pathname === '/rest/v1/financial_accounts') {
+      await cachedAccount.wait(); return route.abort('failed');
+    }
+    return route.continue();
+  };
+  page.on('response', onResponse);
+  try {
+    // Bound insert/delete URL sizes; no fixture ID is shared with the anchor cases.
+    for (let from = 0; from < owned.length; from += 100) {
+      const result = await admin.from('bills').insert(owned.slice(from, from + 100));
+      expect(!result.error, 'Only owned overview rows are seeded').toBe(true);
+    }
+    await page.route(pattern, intercept);
+    await page.goto(`${app}/dashboard/billing`);
+    await expect.poll(() => accountLoading.hit && laterPageRefusals > 0).toBe(true);
+    // The bill refusal is real browser transport failure. A genuinely pending
+    // uncached sibling still keeps the actual loading branch ahead of its error.
+    await expect(page.locator('.animate-pulse').first()).toBeVisible();
+    await expect(page.getByText(errorText, { exact: true })).toHaveCount(0);
+    await expect(page.getByText(tailName, { exact: true })).toHaveCount(0);
+    accountLoading.release();
+    await expect(page.getByText(errorText, { exact: true })).toBeVisible();
+    await expect(page.locator('.animate-pulse')).toHaveCount(0);
+    await expect(page.getByText('$9,876.00', { exact: true })).toHaveCount(0);
+    stage = 'healthy';
+    const readStart = reads.length;
+    await page.getByRole('button', { name: 'Try again', exact: true }).click();
+    await expect(page.getByText(tailName, { exact: true })).toBeVisible();
+    await expect(page.getByText('$9,876.00', { exact: true })).toBeVisible();
+    await expect.poll(() => reads.slice(readStart).some(r => r.offset === 1000 && r.length > 0)).toBe(true);
+    const completeReads = reads.slice(readStart);
+    expect(completeReads.some(r => r.offset === 0 && r.length === 1000 && r.count > 1000), 'Actual counted first response is capped at 1000').toBe(true);
+    expect(completeReads.every(r => r.exact && r.family === `eq.${familyId}`), 'Every actual SDK page is counted and family scoped').toBe(true);
+    const card = page.getByRole('heading', { name: 'Bills & Reminders', exact: true }).locator('../..');
+    const day = card.locator('.grid-cols-7 > div').filter({ has: page.locator('span', { hasText: new RegExp(`^${now.getUTCDate()}$`) }) });
+    await expect(day.locator('.bg-amber-500')).toHaveCount(1);
+
+    // Reload the real persisted cache (limited to 200 rows by product code).
+    // Keep both genuine GETs pending so stale-only loading is observable before
+    // the account request is refused. No cache envelope or hook state is forged.
+    stage = 'cached';
+    await page.reload();
+    await expect.poll(() => cachedBills.hit && cachedAccount.hit).toBe(true);
+    await expect(page.locator('.animate-pulse').first()).toBeVisible();
+    await expect(page.getByText(tailName, { exact: true })).toHaveCount(0);
+    cachedAccount.release();
+    await expect(page.getByText(errorText, { exact: true })).toBeVisible();
+    await expect(page.locator('.animate-pulse')).toHaveCount(0);
+    await expect(page.getByText('$9,876.00', { exact: true })).toHaveCount(0);
+    stage = 'healthy';
+    cachedBills.release();
+    await page.getByRole('button', { name: 'Try again', exact: true }).click();
+    await expect(page.getByText(tailName, { exact: true })).toBeVisible();
+    await expect(page.getByText('$9,876.00', { exact: true })).toBeVisible();
+    await expect(page.getByText(errorText, { exact: true })).toHaveCount(0);
+    expect(laterPageRefusals > 0, 'The browser actually refused a later bill page').toBe(true);
+    expect(barrierTimedOut, 'Owned read barriers were explicitly released').toBe(false);
+    await Promise.all(pending);
+    expect(bodyReadFailed, 'Actual successful bill responses retain count and array shape').toBe(false);
+  } finally {
+    for (const item of gates) item.release();
+    await page.unroute(pattern, intercept);
+    page.off('response', onResponse);
+    await Promise.allSettled(pending);
+    for (let from = 0; from < owned.length; from += 100) {
+      const removed = await admin.from('bills').delete().in('id', owned.slice(from, from + 100).map(row => row.id))
+        .eq('family_id', familyId).eq('created_by', userId);
+      if (removed.error) throw new Error('Could not clean up owned overview bill records.');
+    }
+  }
+}

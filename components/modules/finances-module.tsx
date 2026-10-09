@@ -1,5 +1,8 @@
 'use client';
 
+import { BILL_READ_CONTRACT, readCompleteBills } from '@/lib/finance/bills';
+
+
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
@@ -113,9 +116,9 @@ export function FinancesModule() {
     table: 'budgets', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('budgets').select('*').eq('family_id', familyId),
   });
-  const { data: bills, loading: lbi, error: billsError, refresh: refreshBills } = useRealtimeQuery<Bill>({
-    table: 'bills', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('bills').select('*').eq('family_id', familyId).order('due_date'),
+  const { data: bills, loading: lbi, stale: billsStale, error: billsError, refresh: refreshBills } = useRealtimeQuery<Bill>({
+    table: 'bills', familyId, deps: [familyId, userId, BILL_READ_CONTRACT],
+    fetcher: (sb) => readCompleteBills(sb, familyId),
   });
   const { data: goals, loading: lg, error: goalsError, refresh: refreshGoals } = useRealtimeQuery<Goal>({
     table: 'savings_goals', familyId, deps: [familyId],
@@ -184,8 +187,8 @@ export function FinancesModule() {
     return tr('financesModule.tipBiggestCategory', { category: categoryLabel(tr, top.category), amount: usd(top.total) });
   }, [spendByCat, usd, tr]);
 
-  const loading = la || lt || lb || lbi || lg;
   const readError = accountsError || txnsError || budgetsError || billsError || goalsError;
+  const loading = la || lt || lb || lbi || lg || (billsStale && !readError);
   if (loading) return <SkeletonList count={6} />;
   if (readError) return <ErrorState message={tr('financesModule.couldNotLoadFinancialData')} onRetry={() => { void refreshAccounts(); void refreshTxns(); void refreshBudgets(); void refreshBills(); void refreshGoals(); }} />;
 

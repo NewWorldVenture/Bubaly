@@ -40,7 +40,7 @@ function database(mode: Mode = 'ok', inputRows = rows) {
 }
 
 /** Execute each real UI's options, including its owner-sensitive dependency key. */
-const consumers = ['components/finance/bills-view.tsx', 'components/modules/billing-module.tsx'].map(file => {
+const consumers = ['components/finance/bills-view.tsx', 'components/modules/billing-module.tsx', 'components/modules/finances-module.tsx'].map(file => {
   const text = readFileSync(file, 'utf8');
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const options: ts.ObjectLiteralExpression[] = [];
@@ -103,10 +103,10 @@ describe.each(consumers)('$file complete bills', ({ options }) => {
   });
 });
 
-const ui = vi.hoisted(() => ({ bills: { data: [] as unknown[], loading: false, stale: false, error: null as string | null } }));
+const ui = vi.hoisted(() => ({ siblings: {} as Record<string, {loading?: boolean; error?: string | null}>, bills: { data: [] as unknown[], loading: false, stale: false, error: null as string | null } }));
 vi.mock('@/components/app/app-context', () => ({ useApp: () => ({ familyId: 'synthetic-family', userId: 'owner-a', role: 'owner', members: [] }) }));
 vi.mock('@/lib/hooks/use-realtime-query', () => ({ useRealtimeQuery: ({ table }: { table: string }) => ({
-  ...(table === 'bills' ? ui.bills : { data: [], loading: false, stale: false, error: null }), refresh() {},
+  ...(table === 'bills' ? ui.bills : { data: [], loading: false, stale: false, error: null, ...ui.siblings[table] }), refresh() {},
 }) }));
 vi.mock('@/components/i18n/locale-provider', () => ({
   useTranslations: () => (key: string) => key, useLocale: () => ({ code: 'en-US' }), useFamilyTimeZone: () => 'UTC',
@@ -123,10 +123,12 @@ vi.mock('@/app/(app)/dashboard/billing/actions', () => ({
 }));
 const { BillsView } = await import('@/components/finance/bills-view');
 const { BillingModule } = await import('@/components/modules/billing-module');
+const { FinancesModule } = await import('@/components/modules/finances-module');
 describe('actual bill consumer presentation', () => {
   const views = [
     { view: () => React.createElement(BillsView, { mode: 'all' }), amount: '9,004.00' },
     { view: () => React.createElement(BillingModule), amount: '9,000.00' },
+    { view: () => React.createElement(FinancesModule), amount: '9,000.00' },
   ];
   it.each(views)('includes the final capped-page bill in rendered financial figures', async ({ view, amount }) => {
     const complete = await readCompleteBills(database().client, family);
@@ -261,5 +263,67 @@ describe.each(consumers)('$file real hook owner/cache boundary', ({ options }) =
     host.clearScope();
     expect(host.render(query)).toMatchObject({ data: [], loading: true });
     host.dispose();
+  });
+});
+
+
+describe('actual finance overview bill calendar and unpaid tail', () => {
+  it('includes unpaid tail amount and overdue calendar dot after capped paid rows', async () => {
+    const month = new Date().toISOString().slice(0, 7);
+    const input = [
+      bill({ id: 'paid1', name: 'Paid prefix one', status: 'paid', due_date: `${month}-01` }),
+      bill({ id: 'paid2', name: 'Paid prefix two', status: 'paid', due_date: `${month}-02` }),
+      bill({ id: 'tail', name: 'Unpaid overdue tail', status: 'overdue', due_date: `${month}-03`, amount: 9876 }),
+    ];
+    const options = consumers.find(consumer => consumer.file === 'components/modules/finances-module.tsx')!.options;
+    const complete = await options(family, 'owner-a', BILL_READ_CONTRACT, readCompleteBills).fetcher(database('ok', input).client);
+    expect(complete.error).toBeNull();
+    ui.bills = { data: complete.data!, loading: false, stale: false, error: null };
+    const html = renderToStaticMarkup(React.createElement(FinancesModule));
+    expect(html).toContain('Unpaid overdue tail');
+    expect(html).toContain('9,876.00');
+    expect(html).not.toContain('Paid prefix one');
+    expect(html).not.toContain('Paid prefix two');
+    expect(html).not.toContain('finances.noUpcomingBills');
+    expect(html).toContain('mt-0.5 h-1.5 w-1.5 rounded-full bg-amber-500');
+  });
+  it('shows error and retry rather than a spinner after failed stale revalidation', () => {
+    ui.bills = { data: rows, loading: false, stale: true, error: 'synthetic complete read failed' };
+    const html = renderToStaticMarkup(React.createElement(FinancesModule));
+    expect(html).toContain('financesModule.couldNotLoadFinancialData');
+    expect(html).toContain('<button');
+    expect(html).not.toContain('Synthetic bill');
+    expect(html).not.toContain('animate-pulse');
+  });
+});
+
+afterEach(() => { ui.siblings = {}; });
+describe('finance stale bill and sibling query precedence', () => {
+  const siblingTables = ['financial_accounts', 'transactions', 'budgets', 'savings_goals'];
+  it.each(siblingTables)('renders error and retry for settled %s refusal while bills remain stale', table => {
+    ui.bills = { data: rows, loading: false, stale: true, error: null };
+    ui.siblings = { [table]: { loading: false, error: 'synthetic sibling refusal' } };
+    const html = renderToStaticMarkup(React.createElement(FinancesModule));
+    expect(html).toContain('financesModule.couldNotLoadFinancialData');
+    expect(html).toContain('<button');
+    expect(html).not.toContain('animate-pulse');
+    expect(html).not.toContain('Synthetic bill');
+    expect(html).not.toContain('9,000.00');
+  });
+  it.each(siblingTables)('preserves actual loading precedence for %s even with another query error', table => {
+    ui.bills = { data: rows, loading: false, stale: true, error: null };
+    ui.siblings = { financial_accounts: { loading: false, error: 'synthetic sibling refusal' }, [table]: { loading: true, error: 'synthetic loading refusal' } };
+    const html = renderToStaticMarkup(React.createElement(FinancesModule));
+    expect(html).toContain('animate-pulse');
+    expect(html).not.toContain('financesModule.couldNotLoadFinancialData');
+    expect(html).not.toContain('Synthetic bill');
+  });
+  it('retains pending presentation for stale bills without any query error', () => {
+    ui.bills = { data: rows, loading: false, stale: true, error: null };
+    ui.siblings = {};
+    const html = renderToStaticMarkup(React.createElement(FinancesModule));
+    expect(html).toContain('animate-pulse');
+    expect(html).not.toContain('financesModule.couldNotLoadFinancialData');
+    expect(html).not.toContain('Synthetic bill');
   });
 });
