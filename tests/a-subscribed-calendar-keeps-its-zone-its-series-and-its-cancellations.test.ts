@@ -55,6 +55,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { at } from './helpers/source-order';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createInMemorySupabase, type InMemorySupabase, type Row } from './helpers/in-memory-supabase';
@@ -488,7 +489,7 @@ describe('a sync against the family calendar', () => {
     // production did before it. This asserted no `.upsert(` at all while a
     // missing RPC refused event writes; now the one upsert is the fallback's.
     expect(src.split('.upsert(')).toHaveLength(2);
-    expect(src.indexOf('.upsert(')).toBeGreaterThan(src.indexOf('async function legacyApplyChunk('));
+    expect(at(src, '.upsert(')).toBeGreaterThan(at(src, 'async function legacyApplyChunk('));
     expect(src).not.toContain('.delete()');
   });
 
@@ -642,7 +643,7 @@ describe('one sync of a feed at a time', () => {
     expect(src).toContain('supabase.rpc(APPLY_SYNC_FUNCTION');
     // Owner decision (2026-10-09): was `not.toContain('.upsert(')`. The direct
     // upsert is reached only from the missing-0490 fallback (tests below).
-    expect(src.indexOf('.upsert(')).toBeGreaterThan(src.indexOf('async function legacyApplyChunk('));
+    expect(at(src, '.upsert(')).toBeGreaterThan(at(src, 'async function legacyApplyChunk('));
   });
 
   it('a sync whose claim is taken over between its fence check and its write (the window the function closes) writes nothing', async () => {
