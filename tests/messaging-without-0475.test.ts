@@ -16,7 +16,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Tables } from '@/lib/database.types';
 import {
   createFamilyConversation, ensureFamilyChat, familyChatOf, loadConversationSummaries, loadInbox,
-  markConversationReadThrough, toggleMessageReaction,
+  markConversationReadThrough, presenceChannelConfig, presenceSchemaOf, toggleMessageReaction,
 } from '@/lib/messages/workspace-paths';
 import { resetMissingMigrationWarnings } from '@/lib/messages/schema-compat';
 
@@ -412,8 +412,17 @@ describe('MessagesModule takes these paths', () => {
     expect(ensure).toMatch(/else if \(error\) toastError\(/);
   });
 
-  it('joins the old public presence topic before 0475 and the private one after', () => {
-    expect(source).toContain('config: legacy0475 ? { presence: { key: userId } } : { private: true, presence: { key: userId } }');
+  it('joins the old public presence topic only on the inbox read evidence, never on the RPC-wide legacy flag', () => {
+    const presence = source.slice(source.indexOf('// ── Presence: who in the family is online'), source.indexOf('function acceptMessage'));
+    expect(presence).toContain('const config = presenceChannelConfig(presenceSchema, userId);');
+    expect(presence).toContain('if (!config) return;');
+    expect(presence).toContain('supabase.channel(`presence:family:${familyId}`, { config });');
+    expect(presence).toContain('}, [familyId, userId, schemaSettled, presenceSchema]);');
+    expect(presence).not.toContain('legacy0475');
+    // The presence schema is set from the inbox read alone, never from an RPC fallback.
+    expect(source.match(/setPresenceSchema\(/g)).toHaveLength(1);
+    const load = source.slice(source.indexOf('// ── Load conversations'), source.indexOf('// ── Ensure Family Chat exists'));
+    expect(load).toContain('setPresenceSchema(presenceSchemaOf({ legacy }));');
   });
 
   it('joins no realtime topic until the first Family Chat ensure has settled the schema', () => {
@@ -428,5 +437,42 @@ describe('MessagesModule takes these paths', () => {
     const gate = source.slice(source.indexOf('function canArchiveConversation()'));
     expect(gate.slice(0, 400)).toContain('!activeConv.is_family_chat && !legacy0475');
     expect(source).toContain('canManageConversation && !activeConv.is_family_chat && !legacy0475 && <button type="button" onClick={openArchiveAction}');
+  });
+});
+
+describe('presence follows only the evidence that 0475 is wholly absent', () => {
+  const PUBLIC = { presence: { key: ME } };
+  const PRIVATE = { private: true, presence: { key: ME } };
+
+  it('fully absent: the inbox read lacks is_family_chat and the previous public topic is kept', async () => {
+    const { db } = memoryDb({ has0475: false, ...seed(false) });
+    const inbox = await loadInbox(db, { familyId: FAMILY, userId: ME, selfMemberId: ME_MEMBER });
+    expect(presenceChannelConfig(presenceSchemaOf(inbox), ME)).toEqual(PUBLIC);
+  });
+
+  it('fully present: the private topic, unchanged', async () => {
+    const { db, tables } = memoryDb({ has0475: true, ...seed(true) });
+    const inbox = await loadInbox(db, { familyId: FAMILY, userId: ME, selfMemberId: ME_MEMBER });
+    const rows = tables.family_messages.map(asMessage);
+    expect((await toggleMessageReaction(db, { message: rows[0], emoji: '👍', userId: ME, familyId: FAMILY })).legacy).toBe(false);
+    expect(presenceChannelConfig(presenceSchemaOf(inbox), ME)).toEqual(PRIVATE);
+  });
+
+  it('partially migrated: the column is there but RPCs are missing, and presence stays private', async () => {
+    const rpcErrors = {
+      toggle_family_message_reaction: missingFunction('toggle_family_message_reaction', { p_emoji: '', p_message_id: '' }),
+      mark_conversation_read_through: missingFunction('mark_conversation_read_through', { p_conversation_id: '', p_message_id: '' }),
+    };
+    const { db, tables } = memoryDb({ has0475: true, ...seed(true), rpcErrors });
+    const inbox = await loadInbox(db, { familyId: FAMILY, userId: ME, selfMemberId: ME_MEMBER });
+    const rows = tables.family_messages.map(asMessage);
+    // The RPC fallbacks report legacy (the module's legacy0475 flag), yet presence is unmoved.
+    expect((await toggleMessageReaction(db, { message: rows[0], emoji: '👍', userId: ME, familyId: FAMILY })).legacy).toBe(true);
+    expect((await markConversationReadThrough(db, { conversationId: 'family-group', messageId: 'm-2', familyId: FAMILY, userId: ME, rows })).legacy).toBe(true);
+    expect(presenceChannelConfig(presenceSchemaOf(inbox), ME)).toEqual(PRIVATE);
+  });
+
+  it('joins nothing until an inbox read has answered', () => {
+    expect(presenceChannelConfig(presenceSchemaOf(null), ME)).toBeNull();
   });
 });

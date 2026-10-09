@@ -41,7 +41,7 @@ import { readDeviceMutes, writeDeviceMutes } from '@/lib/messages/legacy-schema'
 import { readMessageWindow } from '@/lib/messages/reads';
 import {
   createFamilyConversation, ensureFamilyChat, familyChatOf, loadConversationSummaries, loadInbox,
-  markConversationReadThrough, toggleMessageReaction,
+  markConversationReadThrough, presenceChannelConfig, presenceSchemaOf, toggleMessageReaction, type PresenceSchema,
 } from '@/lib/messages/workspace-paths';
 
 type Conversation = Tables<'family_conversations'>;
@@ -200,6 +200,9 @@ function MessagesWorkspace() {
   // Set when this database turns out not to have 0475 / 0476 yet: the paths
   // that need them fall back to main's behaviour or hide (schema-compat.ts).
   const [legacy0475, setLegacy0475] = useState(false);
+  // Presence is not keyed on legacy0475: one missing RPC sets that flag, but
+  // only the inbox read lacking is_family_chat may select the public topic.
+  const [presenceSchema, setPresenceSchema] = useState<PresenceSchema>('unknown');
   // Realtime waits for the first Family Chat ensure, which settles the schema:
   // a private topic is joined only once 0475 is known to authorize it.
   const [schemaSettled, setSchemaSettled] = useState(false);
@@ -259,6 +262,7 @@ function MessagesWorkspace() {
     setInboxError(null);
     // Without 0475 the rows carry no is_family_chat: list them all, as before.
     if (legacy) setLegacy0475(true);
+    setPresenceSchema(presenceSchemaOf({ legacy }));
     setConversations(rows);
     setLoadingConvs(false);
     const selected = owner.current.capture().conversationId;
@@ -525,9 +529,12 @@ function MessagesWorkspace() {
   // ── Presence: who in the family is online right now ─────────
   useEffect(() => {
     if (!schemaSettled) return;
+    // 0475 authorizes the private family topic; only an inbox read without
+    // is_family_chat (0475 wholly absent) selects the old public one.
+    const config = presenceChannelConfig(presenceSchema, userId);
+    if (!config) return;
     const supabase = createClient();
-    // 0475 authorizes the private family topic; before it, the old public one.
-    const ch = supabase.channel(`presence:family:${familyId}`, { config: legacy0475 ? { presence: { key: userId } } : { private: true, presence: { key: userId } } });
+    const ch = supabase.channel(`presence:family:${familyId}`, { config });
     ch.on('presence', { event: 'sync' }, () => {
       const state = ch.presenceState() as Record<string, Array<{ user_id?: string }>>;
       const ids = new Set<string>();
@@ -537,7 +544,7 @@ function MessagesWorkspace() {
       if (status === 'SUBSCRIBED') await ch.track({ user_id: userId, at: Date.now() });
     });
     return () => { void supabase.removeChannel(ch); };
-  }, [familyId, userId, schemaSettled, legacy0475]);
+  }, [familyId, userId, schemaSettled, presenceSchema]);
 
   function acceptMessage(message: Message) {
     if (!alive.current) return;

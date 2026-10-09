@@ -43,6 +43,25 @@ export async function loadInbox(db: DB, input: { familyId: string; userId: strin
   return { ...inboxRows(data, input), error: null };
 }
 
+/**
+ * What the family presence topic may be, from the inbox read alone. Only the
+ * conversations read answering without is_family_chat is evidence that 0475 is
+ * entirely absent, and only then is the previous production build's public
+ * topic joined. A missing or stale 0475 RPC (reactions, read receipts, the
+ * Family Chat ensure) is not: with the column present presence stays on the
+ * private topic, which simply fails to authorize if 0475's policies are
+ * missing too. Until a read has answered, nothing is joined.
+ */
+export type PresenceSchema = 'unknown' | 'legacy' | 'current';
+export function presenceSchemaOf(inbox: { legacy: boolean } | null): PresenceSchema {
+  if (!inbox) return 'unknown';
+  return inbox.legacy ? 'legacy' : 'current';
+}
+export function presenceChannelConfig(schema: PresenceSchema, userId: string) {
+  if (schema === 'unknown') return null;
+  return schema === 'legacy' ? { presence: { key: userId } } : { private: true, presence: { key: userId } };
+}
+
 /** The chat opened first: the canonical one, or before 0475 the first group that is not a DM. */
 export function familyChatOf(rows: readonly Conversation[], legacy: boolean) {
   return legacy ? legacyFamilyChat(rows) : rows.find((conv) => conv.is_family_chat && !conv.is_archived);
