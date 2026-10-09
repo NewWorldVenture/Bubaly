@@ -481,10 +481,14 @@ describe('a sync against the family calendar', () => {
     expect(feedRow().last_status).toBe('error');
   });
 
-  it('every event mutation goes through the atomic claim RPC', () => {
+  it('every event mutation goes through the atomic claim RPC, or — without 0490 only — the pre-0490 upsert', () => {
     const src = readFileSync(join(ROOT, 'lib/server/calendar-feeds.ts'), 'utf8');
     expect(src).toContain('supabase.rpc(APPLY_SYNC_FUNCTION');
-    expect(src).not.toContain('.upsert(');
+    // Owner decision (2026-10-09): a database without held 0490 writes the way
+    // production did before it. This asserted no `.upsert(` at all while a
+    // missing RPC refused event writes; now the one upsert is the fallback's.
+    expect(src.split('.upsert(')).toHaveLength(2);
+    expect(src.indexOf('.upsert(')).toBeGreaterThan(src.indexOf('async function legacyApplyChunk('));
     expect(src).not.toContain('.delete()');
   });
 
@@ -632,11 +636,13 @@ describe('one sync of a feed at a time', () => {
     expect(readFileSync(join(ROOT, 'app/(app)/dashboard/sync/feeds/actions.ts'), 'utf8')).toContain('if (createdHere && !result.busy && !result.takenOver) {');
   });
 
-  it('claims and stamps by compare-and-set and writes only through the atomic function', () => {
+  it('claims and stamps by compare-and-set and writes through the atomic function where it exists', () => {
     const src = readFileSync(join(ROOT, 'lib/server/calendar-feeds.ts'), 'utf8');
     expect(src).toContain(".eq('updated_at', fence)");
     expect(src).toContain('supabase.rpc(APPLY_SYNC_FUNCTION');
-    expect(src).not.toContain('.upsert(');
+    // Owner decision (2026-10-09): was `not.toContain('.upsert(')`. The direct
+    // upsert is reached only from the missing-0490 fallback (tests below).
+    expect(src.indexOf('.upsert(')).toBeGreaterThan(src.indexOf('async function legacyApplyChunk('));
   });
 
   it('a sync whose claim is taken over between its fence check and its write (the window the function closes) writes nothing', async () => {
@@ -678,27 +684,124 @@ describe('one sync of a feed at a time', () => {
   });
 });
 
-// Without 0490, supported snapshots are refused before event mutation;
-// there is no client-side check-then-write fallback.
-describe('without the held atomic function, event writes fail closed', () => {
+// Without 0490 the sync writes the way production did before it (owner
+// decision, 2026-10-09; this block used to assert that writes fail closed): it
+// upserts the live events, removes nothing the source cancelled, and checks its
+// claim by reading the feed row before each chunk. Only the exact answer that
+// `calendar_feed_apply_sync` is missing switches to that path; any other error
+// is still a failed sync.
+describe('without the held atomic function, events are written as before it', () => {
   beforeEach(() => { mocks.fetchPublicCalendarText.mockReset(); resetApplySyncWarningForTests(); });
   afterEach(() => vi.restoreAllMocks());
 
-  it.each([['a live import and cancellation', [ALL_DAY_MASTER, CONCERT_OFF]], ['a cancellation-only snapshot', [CONCERT_OFF]]])('refuses %s and preserves stored events', async (_label, events) => {
-    const db = createInMemorySupabase();
-    db.seed('calendar_feeds', [{ ...FEED, last_status: 'ok', event_count: 1 }]);
-    db.seed('calendar_events', [{ id: 'old', feed_id: FEED.id, family_id: FAMILY, external_uid: 'concert', title: 'Concert' }]);
-    mocks.fetchPublicCalendarText.mockResolvedValue({ ok: true, text: ics(...events) });
+  type DbError = { code: string; message: string; details?: string | null; hint?: string | null };
+  /** A database without 0490: the RPC answers `answer`; `before` runs first (a takeover, say). */
+  const withoutApplySync = (answer: DbError, before?: (db: InMemorySupabase) => void) => {
+    const db = createInMemorySupabase({ uniques: { calendar_events: [['feed_id', 'external_uid']] } });
+    db.seed('calendar_feeds', [{ ...FEED, name: 'Team', last_status: 'ok', last_error: null, last_synced_at: '2026-09-01T00:00:00.000Z', event_count: 1, updated_at: '2026-09-01T00:00:00.000Z' }]);
+    db.seed('calendar_events', [{ id: 'old', feed_id: FEED.id, family_id: FAMILY, external_uid: 'concert', title: 'Concert', starts_at: '2026-09-20T18:00:00.000Z', recurrence: 'none' }]);
+    const calls: string[] = [];
+    vi.spyOn(db, 'rpc').mockImplementation((async (name: string) => {
+      calls.push(name);
+      before?.(db);
+      return { data: null, error: answer, count: null, status: 404, statusText: 'Not Found' };
+    }) as never);
+    return { db, calls, client: db as unknown as SupabaseClient<Database> };
+  };
+  // The answers PostgREST and Postgres give for exactly this function.
+  const PGRST202: DbError = {
+    code: 'PGRST202',
+    message: `Could not find the function public.${APPLY_SYNC_FUNCTION}(p_fence, p_feed_id, p_removals, p_upserts) in the schema cache`,
+    details: `Searched for the function public.${APPLY_SYNC_FUNCTION} with parameters p_fence, p_feed_id, p_removals, p_upserts or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache.`,
+    hint: null,
+  };
+  const UNDEFINED_FUNCTION: DbError = { code: '42883', message: `function public.${APPLY_SYNC_FUNCTION}(uuid, timestamp with time zone, jsonb, text[]) does not exist` };
+  const NAMED_IN_DETAILS_ONLY: DbError = { code: 'PGRST202', message: 'Could not find the function in the schema cache', details: `Searched for the function public.${APPLY_SYNC_FUNCTION}`, hint: null };
+
+  it.each([['PGRST202', PGRST202], ['42883', UNDEFINED_FUNCTION], ['PGRST202 naming it in details', NAMED_IN_DETAILS_ONLY]])('on %s, upserts the live events in place and stamps the feed synced', async (_code, missing) => {
+    const { db, calls, client } = withoutApplySync(missing);
+    mocks.fetchPublicCalendarText.mockResolvedValue({ ok: true, url: FEED.url, text: ics(ALL_DAY_MASTER, CONCERT) });
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    expect(await syncFeed(client, FEED)).toEqual({ ok: true, imported: 2 });
+    const events = db.table('calendar_events');
+    expect(events.map((r) => r.external_uid).sort()).toEqual(['concert', 'series']);
+    const concert = events.find((r) => r.external_uid === 'concert')!;
+    expect(concert, 'updated in place on (feed_id, external_uid), not duplicated').toMatchObject({ id: 'old', title: 'Autumn concert' });
+    expect(db.table('calendar_feeds')[0]).toMatchObject({ last_status: 'ok', last_error: null, event_count: 2 });
+    expect(calls, 'asked once in this sync, then wrote the pre-0490 way').toEqual([APPLY_SYNC_FUNCTION]);
+    expect(warning).toHaveBeenCalledTimes(1);
+    expect(String(warning.mock.calls[0][0])).toContain('0490_a_calendar_feed_sync_writes_only_while_it_holds_its_claim.sql');
+    // Warned once per process; the next sync asks again, so an applied 0490 is used at once.
+    expect(await syncFeed(client, FEED)).toEqual({ ok: true, imported: 2 });
+    expect(warning).toHaveBeenCalledTimes(1);
+    expect(calls).toEqual([APPLY_SYNC_FUNCTION, APPLY_SYNC_FUNCTION]);
+  });
+
+  it.each([
+    ['a cancelled event beside a live one', [ALL_DAY_MASTER, CONCERT_OFF], 1],
+    ['a cancellation-only snapshot', [CONCERT_OFF], 0],
+    ['a cancelled master', [CONCERT, MASTER_OFF], 1],
+  ])('leaves stored events the source cancelled in place, as before 0490, and writes no cancellation as live: %s', async (_label, events, imported) => {
+    const { db, client } = withoutApplySync(PGRST202);
+    db.seed('calendar_events', [{ id: 'ev-series', feed_id: FEED.id, family_id: FAMILY, external_uid: 'series', title: 'Practice', starts_at: '2026-09-05T13:00:00.000Z', recurrence: 'weekly' }]);
+    mocks.fetchPublicCalendarText.mockResolvedValue({ ok: true, url: FEED.url, text: ics(...events) });
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    expect(await syncFeed(client, FEED)).toEqual({ ok: true, imported });
+    const stored = db.table('calendar_events');
+    expect(stored.map((r) => r.id)).toEqual(expect.arrayContaining(['old', 'ev-series']));
+    expect(stored).toHaveLength(2);
+    expect(stored.find((r) => r.id === 'old')!.title, 'a cancelled concert is not rewritten').toBe(imported && events.includes(CONCERT) ? 'Autumn concert' : 'Concert');
+    expect(db.table('calendar_feeds')[0]).toMatchObject({ last_status: 'ok', event_count: imported });
+  });
+
+  it('writes nothing, and stamps nothing, once the feed row shows another sync took the claim', async () => {
+    let stamp = '';
+    const { db, client } = withoutApplySync(PGRST202, (d) => {
+      stamp = new Date(Date.now() + 60_000).toISOString();
+      Object.assign(d.table('calendar_feeds')[0], { last_status: SYNCING_STATUS, updated_at: stamp });
+    });
+    mocks.fetchPublicCalendarText.mockResolvedValue({ ok: true, url: FEED.url, text: ics(ALL_DAY_MASTER, CONCERT) });
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    expect(await syncFeed(client, FEED)).toEqual({ ok: false, error: TAKEN_OVER_MESSAGE, takenOver: true });
+    expect(db.table('calendar_events').map((r) => r.id)).toEqual(['old']);
+    expect(db.table('calendar_events')[0].title).toBe('Concert');
+    expect(db.table('calendar_feeds')[0]).toMatchObject({ last_status: SYNCING_STATUS, updated_at: stamp });
+  });
+
+  it.each<[string, DbError]>([
+    ['a permission error', { code: '42501', message: `permission denied for function ${APPLY_SYNC_FUNCTION}` }],
+    ['a network failure', { code: '', message: 'TypeError: fetch failed' }],
+    ['a constraint inside the function', { code: '23505', message: 'duplicate key value violates unique constraint "uq_calendar_events_feed_uid"' }],
+    ['a missing helper the function calls', { code: '42883', message: 'function calendar_feed_private.validate_value(jsonb, text, text) does not exist' }],
+    ['a missing function of another name', { code: 'PGRST202', message: `Could not find the function public.${APPLY_SYNC_FUNCTION}_v2(p_feed_id) in the schema cache`, hint: null }],
+    ['a missing table answer naming it', { code: 'PGRST205', message: `Could not find the table 'public.${APPLY_SYNC_FUNCTION}' in the schema cache` }],
+  ])('still fails on %s, writing nothing', async (_label, failure) => {
+    const { db, client } = withoutApplySync(failure);
+    mocks.fetchPublicCalendarText.mockResolvedValue({ ok: true, url: FEED.url, text: ics(ALL_DAY_MASTER, CONCERT) });
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const result = await syncFeed(db as unknown as SupabaseClient<Database>, FEED);
-    expect(result).toMatchObject({ ok: false, error: expect.stringContaining('atomic feed write function') });
-    expect(db.table('calendar_events')).toHaveLength(1);
-    expect(db.table('calendar_events')[0].id).toBe('old');
-    expect(db.table('calendar_feeds')[0]).toMatchObject({ last_status: 'error', event_count: 1 });
-    expect(warning).toHaveBeenCalledTimes(1);
-    await syncFeed(db as unknown as SupabaseClient<Database>, FEED);
-    expect(warning).toHaveBeenCalledTimes(1);
+    expect(await syncFeed(client, FEED)).toEqual({ ok: false, error: 'Could not save calendar events' });
+    expect(db.table('calendar_events')).toEqual([expect.objectContaining({ id: 'old', title: 'Concert' })]);
+    expect(db.table('calendar_feeds')[0]).toMatchObject({ last_status: 'error', last_error: 'Could not save calendar events', event_count: 1 });
+    expect(warning).not.toHaveBeenCalled();
+  });
+
+  it('a refused fallback upsert is a failed sync, stamped on the feed', async () => {
+    const { db, client } = withoutApplySync(PGRST202);
+    mocks.fetchPublicCalendarText.mockResolvedValue({ ok: true, url: FEED.url, text: ics(ALL_DAY_MASTER, CONCERT) });
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const realFrom = db.from.bind(db);
+    vi.spyOn(db, 'from').mockImplementation(((table: string) => {
+      const builder = realFrom(table);
+      if (table === 'calendar_events') {
+        (builder as unknown as { upsert: unknown }).upsert = async () => ({ data: null, error: { code: '42501', message: 'permission denied for table calendar_events' } });
+      }
+      return builder;
+    }) as never);
+    expect(await syncFeed(client, FEED)).toEqual({ ok: false, error: 'Could not save calendar events' });
+    expect(db.table('calendar_events')).toEqual([expect.objectContaining({ id: 'old', title: 'Concert' })]);
+    expect(db.table('calendar_feeds')[0]).toMatchObject({ last_status: 'error', last_error: 'Could not save calendar events' });
   });
 });
 
