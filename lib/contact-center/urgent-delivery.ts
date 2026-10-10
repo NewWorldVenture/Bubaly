@@ -234,7 +234,10 @@ export async function drainUrgentDeliveries(admin: Admin, options: { limit?: num
   let wrapped = false;
   const visited = new Set<string>();
   while (counts.examined < limit && Date.now() - started < 65_000) {
-    let query = admin.from('ai_tool_calls').select('id,family_id,created_at').eq('tool_name', TOOL).contains('outputs', { drain: true })
+    // Receipts of OPEN families only (families.closed_at): a closed account's
+    // urgent messages stay in its inbox and are not forwarded to a phone.
+    let query = admin.from('ai_tool_calls').select('id,family_id,created_at,family:families!inner(closed_at)').is('family.closed_at', null)
+      .eq('tool_name', TOOL).contains('outputs', { drain: true })
       .order('created_at', { ascending: true }).order('id', { ascending: true }).limit(1);
     if (cursor) query = query.or(`created_at.gt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.gt.${cursor.id})`);
     const batch = await query.abortSignal(AbortSignal.timeout(5000));

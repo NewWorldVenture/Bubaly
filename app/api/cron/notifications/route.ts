@@ -25,9 +25,11 @@ export async function GET(req: NextRequest) {
 
   const supabase = createServiceClient();
   // Every household — see lib/supabase/read-all.ts for why an unbounded select
-  // silently stops at PostgREST's row ceiling.
+  // silently stops at PostgREST's row ceiling. Every OPEN household: a family
+  // that closed its account (families.closed_at) is not notified. The delivery
+  // steps below skip closed families' queued rows the same way.
   const { rows: families, error } = await readAll<{ id: string }>(
-    (from, to) => supabase.from('families').select('id').order('id').range(from, to),
+    (from, to) => supabase.from('families').select('id').is('closed_at', null).order('id').range(from, to),
   );
   if (error) {
     console.error('Notification cron read failed:', error);

@@ -77,6 +77,7 @@
   "accidentClient.whatHappened": "Wat is er gebeurd?",
   "account.couldNotCloseTheAccount": "Kan het account niet sluiten.",
   "account.couldNotReopenTheAccount": "Kan het account niet heropenen.",
+  "account.yourSubscriptionIsStillSetToEnd": "Je abonnement staat nog steeds ingesteld om te stoppen aan het einde van de factuurperiode. Hervat het via Facturering om het te behouden.",
   "accountClosedGate.everythingIsSafeWeHaventDeleted": "Alles is veilig — we hebben niets verwijderd. Heropen wanneer je wilt en ga verder waar je gebleven was.",
   "accountClosedGate.logOut": "Uitloggen",
   "accountClosedGate.welcomeBackYourAccountIs": "Welkom terug! Je account is weer open.",

@@ -1251,7 +1251,10 @@ const AI_APPROVAL_REMINDER_READER: NeedsReader = {
 export async function remindPendingApprovals(db: DB, now: Date = new Date()): Promise<{ reminded: number; families: number }> {
   const { data, error } = await db
     .from('approval_requests')
-    .select('id, family_id, title, amount_cents, created_at, expires_at, agent')
+    // OPEN families only (families.closed_at): a closed account is not
+    // reminded. In the query, before the sweep limit.
+    .select('id, family_id, title, amount_cents, created_at, expires_at, agent, family:families!inner(closed_at)')
+    .is('family.closed_at', null)
     .eq('status', 'pending')
     .eq('requested_by_kind', 'ai')
     .or(`expires_at.is.null,expires_at.gt.${now.toISOString()}`)

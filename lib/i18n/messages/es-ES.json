@@ -77,6 +77,7 @@
   "accidentClient.whatHappened": "¿Qué ha pasado?",
   "account.couldNotCloseTheAccount": "No se ha podido cerrar la cuenta.",
   "account.couldNotReopenTheAccount": "No se ha podido reabrir la cuenta.",
+  "account.yourSubscriptionIsStillSetToEnd": "Tu suscripción sigue configurada para terminar al final del periodo de facturación. Reanúdala desde Facturación para conservarla.",
   "accountClosedGate.everythingIsSafeWeHaventDeleted": "Todo está a salvo: no hemos borrado nada. Reábrelo cuando quieras y continúa justo donde lo dejaste.",
   "accountClosedGate.logOut": "Cerrar sesión",
   "accountClosedGate.welcomeBackYourAccountIs": "¡Bienvenido de nuevo! Tu cuenta vuelve a estar abierta.",

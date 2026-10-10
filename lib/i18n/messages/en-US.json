@@ -77,6 +77,7 @@
   "accidentClient.whatHappened": "What happened?",
   "account.couldNotCloseTheAccount": "Could not close the account.",
   "account.couldNotReopenTheAccount": "Could not reopen the account.",
+  "account.yourSubscriptionIsStillSetToEnd": "Your subscription is still set to end at the end of the billing period. Resume it from Billing to keep it.",
   "accountClosedGate.everythingIsSafeWeHaventDeleted": "Everything is safe — we haven’t deleted a thing. Reopen anytime to pick up right where you left off.",
   "accountClosedGate.logOut": "Log out",
   "accountClosedGate.welcomeBackYourAccountIs": "Welcome back! Your account is open again.",

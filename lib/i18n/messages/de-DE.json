@@ -77,6 +77,7 @@
   "accidentClient.whatHappened": "Was ist passiert?",
   "account.couldNotCloseTheAccount": "Das Konto konnte nicht geschlossen werden.",
   "account.couldNotReopenTheAccount": "Das Konto konnte nicht wieder geöffnet werden.",
+  "account.yourSubscriptionIsStillSetToEnd": "Dein Abonnement endet weiterhin zum Ende des Abrechnungszeitraums. Setze es unter Abrechnung fort, um es zu behalten.",
   "accountClosedGate.everythingIsSafeWeHaventDeleted": "Alles ist sicher – wir haben nichts gelöscht. Öffnen Sie jederzeit wieder und machen Sie genau dort weiter, wo Sie aufgehört haben.",
   "accountClosedGate.logOut": "Abmelden",
   "accountClosedGate.welcomeBackYourAccountIs": "Willkommen zurück! Ihr Konto ist wieder geöffnet.",
