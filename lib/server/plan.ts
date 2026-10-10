@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { planLevel } from '@/lib/constants/plans';
-import { computeEntitlement, PAID_SUBSCRIPTION_STATUSES, type Entitlement } from '@/lib/server/entitlement';
+import { computeEntitlement, PAID_SUBSCRIPTION_STATUSES, subscriptionGrantsPaidLevel, type Entitlement } from '@/lib/server/entitlement';
 
 export { lockedEntitlementCode } from '@/lib/server/entitlement';
 
@@ -51,19 +51,23 @@ export async function resolveFamilyEntitlement(
 ): Promise<Entitlement> {
   const admin = createServiceClient();
   const [{ data: subs, error: subscriptionsError }, { data: fam, error: familyError }] = await settleAll([
-    admin.from('subscriptions').select('plan, status').eq('family_id', familyId).in('status', [...PAID_SUBSCRIPTION_STATUSES]),
+    admin.from('subscriptions').select('plan, status, current_period_end').eq('family_id', familyId).in('status', [...PAID_SUBSCRIPTION_STATUSES]),
     admin.from('families').select('trial_ends_at, closed_at').eq('id', familyId).maybeSingle(),
   ]);
   if (subscriptionsError || familyError || !fam) {
     console.error('[plan] family entitlement read failed', { subscriptionsError, familyError, familyId, foundFamily: Boolean(fam) });
     throw new Error('Family subscription state is unavailable.');
   }
-  const paidLevel = (subs ?? []).reduce((max, s) => Math.max(max, planLevel(s.plan)), 0);
+  const now = new Date();
+  // A past_due row counts only within its grace (PAST_DUE_GRACE_MS).
+  const paidLevel = (subs ?? []).filter((s) => subscriptionGrantsPaidLevel(s, now))
+    .reduce((max, s) => Math.max(max, planLevel(s.plan)), 0);
   // During the 5-day free trial a family gets Family Basic (level 1); existing
   // grandfathered free families (trial_ends_at NULL) stay at their paid level.
   return computeEntitlement({
     paidLevel,
     trialEndsAt: fam?.trial_ends_at ?? null,
     closedAt: fam?.closed_at ?? null,
+    now,
   });
 }

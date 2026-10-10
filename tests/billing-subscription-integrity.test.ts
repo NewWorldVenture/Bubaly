@@ -18,6 +18,11 @@ const h = vi.hoisted(() => ({
   updatedSubs: [] as { id: string; params: Row }[],
   portalOpened: 0,
   event: null as unknown,
+  // Scripted Stripe failures, by session id.
+  retrieveErrors: {} as Record<string, unknown>,
+  expireErrors: {} as Record<string, unknown>,
+  /** Sessions that close (Stripe's own 24h expiry) just as the scripted expire fails. */
+  closesBeforeExpire: new Set<string>(),
 }));
 
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
@@ -38,8 +43,13 @@ vi.mock('@/lib/supabase/server', () => {
     const filters: [string, unknown][] = [];
     const ins: [string, unknown[]][] = [];
     let op: { kind: 'update'; value: Row } | null = null;
+    // `meta->>key` reads a key of a jsonb column, as PostgREST does.
+    const read = (row: Row, c: string) => {
+      const [column, key] = c.split('->>');
+      return key === undefined ? row[column] : (row[column] as Row | undefined)?.[key];
+    };
     const matching = () => (h.tables[table] ?? []).filter(row =>
-      filters.every(([c, v]) => row[c] === v) && ins.every(([c, vs]) => vs.includes(row[c])));
+      filters.every(([c, v]) => read(row, c) === v) && ins.every(([c, vs]) => vs.includes(read(row, c))));
     const settleList = () => {
       if (op) {
         const rows = matching();
@@ -106,11 +116,23 @@ vi.mock('@/lib/stripe', async () => {
       create: async (params: Row, options?: Row) => {
         h.created.push({ params, options });
         const id = `cs-${++n}`;
-        h.sessions[id] = { id, status: 'open', url: `https://checkout.example.test/${id}` };
+        const lineItems = (params.line_items as { price: string }[]).map(li => ({ price: { id: li.price } }));
+        h.sessions[id] = { id, status: 'open', url: `https://checkout.example.test/${id}`, line_items: { has_more: false, data: lineItems } };
         return h.sessions[id];
       },
-      retrieve: async (id: string) => h.sessions[id],
-      expire: async (id: string) => { h.expired.push(id); h.sessions[id] = { ...h.sessions[id], status: 'expired' }; return h.sessions[id]; },
+      retrieve: async (id: string) => {
+        if (h.retrieveErrors[id]) throw h.retrieveErrors[id];
+        const session = h.sessions[id];
+        if (!session) throw Object.assign(new Error('No such checkout.session'), { code: 'resource_missing' });
+        return session;
+      },
+      expire: async (id: string) => {
+        if (h.expireErrors[id]) {
+          if (h.closesBeforeExpire.has(id)) h.sessions[id] = { ...h.sessions[id], status: 'expired' };
+          throw h.expireErrors[id];
+        }
+        h.expired.push(id); h.sessions[id] = { ...h.sessions[id], status: 'expired' }; return h.sessions[id];
+      },
     } },
     billingPortal: { sessions: { create: async () => { h.portalOpened++; return { url: 'https://portal.example.test' }; } } },
   };
@@ -152,11 +174,19 @@ const stripeSub = (id: string, status: string, priceId: string) => ({
 const subscriptionRows = () => h.tables.subscriptions ?? [];
 const subscriptionWrites = () => h.writes.filter(w => w.table === 'subscriptions');
 const alerts = () => h.writes.filter(w => w.table === 'admin_notifications');
+const alertKinds = () => alerts().map(a => (a.value as Row).kind);
+/** A Checkout Session Stripe holds, tracked in checkout_sessions with this status. */
+const trackedSession = (id: string, plan: string, status: string, stripeState: Row = {}) => {
+  h.sessions[id] = { id, status: 'open', url: `https://checkout.example.test/${id}`,
+    line_items: { has_more: false, data: [{ price: { id: PRICES.stripePrices[plan as keyof typeof PRICES.stripePrices].id } }] }, ...stripeState };
+  h.tables.checkout_sessions.push({ session_id: id, family_id: 'family-a', plan, status, created_at: new Date().toISOString() });
+};
 
 beforeEach(() => {
   h.tables = { subscriptions: [], billing_customers: [], checkout_sessions: [] };
   h.writes = []; h.stepUp = false; h.stripeSubs = {}; h.listed = []; h.sessions = {};
   h.created = []; h.expired = []; h.updatedSubs = []; h.portalOpened = 0; h.event = null;
+  h.retrieveErrors = {}; h.expireErrors = {}; h.closesBeforeExpire = new Set();
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
@@ -273,7 +303,31 @@ describe('a cancellation on an unrecognized price still lands', () => {
     const response = await webhook(delivery('customer.subscription.deleted', h.stripeSubs['sub-x']));
     expect(response.status).toBe(200);
     expect(subscriptionRows()[0]).toMatchObject({ plan: 'plus', status: 'canceled', provider_ref: 'sub-x' });
+    expect(alertKinds()).toEqual(['info', 'subscription_churn']);
+  });
+
+  it('records the churn the normal path would, naming the stored plan', async () => {
+    h.stripeSubs['sub-x'] = stripeSub('sub-x', 'canceled', 'price_retired_without_previous_id');
+    await webhook(delivery('customer.subscription.deleted', h.stripeSubs['sub-x']));
+    const churn = alerts().find(a => (a.value as Row).kind === 'subscription_churn');
+    expect(churn?.value).toMatchObject({ related_id: 'family-a', meta: { from: 'plus', plan: 'plus', status: 'canceled' } });
+  });
+
+  it('alerts once, not on every Stripe retry of an event it refuses', async () => {
+    h.stripeSubs['sub-x'] = stripeSub('sub-x', 'active', 'price_retired_without_previous_id');
+    expect((await webhook(delivery('customer.subscription.updated', h.stripeSubs['sub-x']))).status).toBe(500);
+    expect((await webhook(delivery('customer.subscription.updated', h.stripeSubs['sub-x']))).status).toBe(500);
+    expect((await webhook(delivery('customer.subscription.updated', h.stripeSubs['sub-x']))).status).toBe(500);
     expect(alerts()).toHaveLength(1);
+  });
+
+  it('alerts again when the same subscription reaches a different status', async () => {
+    h.stripeSubs['sub-x'] = stripeSub('sub-x', 'active', 'price_retired_without_previous_id');
+    await webhook(delivery('customer.subscription.updated', h.stripeSubs['sub-x']));
+    h.stripeSubs['sub-x'] = stripeSub('sub-x', 'canceled', 'price_retired_without_previous_id');
+    await webhook(delivery('customer.subscription.deleted', h.stripeSubs['sub-x']));
+    await webhook(delivery('customer.subscription.deleted', h.stripeSubs['sub-x']));
+    expect(alertKinds().filter(k => k === 'info')).toHaveLength(2);
   });
 
   it('still refuses (and retries) an unknown price that would grant access', async () => {
@@ -319,5 +373,112 @@ describe('a family with more than one subscriptions row', () => {
     expect(h.updatedSubs.map(u => u.id)).toEqual(['sub-x']);
     expect((await checkout(post('/api/billing/checkout', { plan: 'plus_monthly' }))).status).toBe(409);
     expect(h.created).toEqual([]);
+  });
+});
+
+describe('a session the abandoned-checkout cron marked is still payable, so it is still reused or expired', () => {
+  beforeEach(() => { h.tables.billing_customers = [{ family_id: 'family-a', customer_ref: 'cus-a' }]; });
+
+  it('reuses an open session tracked as abandoned for the same plan and price', async () => {
+    trackedSession('cs-abandoned', 'plus_monthly', 'abandoned');
+    const response = await checkout(post('/api/billing/checkout', { plan: 'plus_monthly' }));
+    expect(response.status).toBe(200);
+    expect((await response.json()).url).toBe('https://checkout.example.test/cs-abandoned');
+    expect(h.created).toEqual([]);
+  });
+
+  it('expires an open session tracked as abandoned for another plan before creating one', async () => {
+    trackedSession('cs-abandoned', 'basic_monthly', 'abandoned');
+    expect((await changePlan(post('/api/billing/change-plan', { plan: 'plus_monthly' }))).status).toBe(200);
+    expect(h.expired).toEqual(['cs-abandoned']);
+    expect(h.created).toHaveLength(1);
+  });
+
+  it('leaves a completed one alone', async () => {
+    trackedSession('cs-done', 'basic_monthly', 'completed');
+    expect((await checkout(post('/api/billing/checkout', { plan: 'plus_monthly' }))).status).toBe(200);
+    expect(h.expired).toEqual([]);
+  });
+});
+
+describe('an open session is reused only for the same price, not just the same plan', () => {
+  it('expires a same-plan session on a replaced price and creates one on the current price', async () => {
+    h.tables.billing_customers = [{ family_id: 'family-a', customer_ref: 'cus-a' }];
+    trackedSession('cs-old-price', 'plus_monthly', 'pending', {
+      line_items: { has_more: false, data: [{ price: { id: 'price_plus_monthly_before_the_change' } }] },
+    });
+    const response = await checkout(post('/api/billing/checkout', { plan: 'plus_monthly' }));
+    expect(response.status).toBe(200);
+    expect(h.expired).toEqual(['cs-old-price']);
+    expect(h.created).toHaveLength(1);
+    expect(h.created[0].params.line_items).toEqual([{ price: PLUS, quantity: 1 }]);
+  });
+});
+
+describe('a tracked session Stripe cannot act on does not break checkout', () => {
+  beforeEach(() => { h.tables.billing_customers = [{ family_id: 'family-a', customer_ref: 'cus-a' }]; });
+
+  it.each([
+    ['checkout', () => checkout(post('/api/billing/checkout', { plan: 'plus_monthly' }))],
+    ['change-plan', () => changePlan(post('/api/billing/change-plan', { plan: 'plus_monthly' }))],
+  ])('%s skips a session the current Stripe key does not know (a key switch)', async (_name, call) => {
+    // Tracked under the previous key: this account answers resource_missing.
+    h.tables.checkout_sessions.push({ session_id: 'cs-other-account', family_id: 'family-a', plan: 'basic_monthly', status: 'pending' });
+    const response = await call();
+    expect(response.status).toBe(200);
+    expect(h.created).toHaveLength(1);
+  });
+
+  it('treats a session that closed before it could be expired as closed', async () => {
+    trackedSession('cs-closing', 'basic_monthly', 'pending');
+    h.expireErrors['cs-closing'] = Object.assign(new Error('Only Checkout Sessions with a status in [open] can be expired.'), { type: 'StripeInvalidRequestError' });
+    h.closesBeforeExpire.add('cs-closing');
+    expect((await checkout(post('/api/billing/checkout', { plan: 'plus_monthly' }))).status).toBe(200);
+    expect(h.created).toHaveLength(1);
+  });
+
+  it('treats a session gone from Stripe at expire time as closed', async () => {
+    trackedSession('cs-gone', 'basic_monthly', 'pending');
+    h.expireErrors['cs-gone'] = Object.assign(new Error('No such checkout.session'), { code: 'resource_missing' });
+    expect((await checkout(post('/api/billing/checkout', { plan: 'plus_monthly' }))).status).toBe(200);
+    expect(h.created).toHaveLength(1);
+  });
+
+  it('refuses rather than create a second payable session when an open one cannot be expired', async () => {
+    trackedSession('cs-stuck', 'basic_monthly', 'pending');
+    h.expireErrors['cs-stuck'] = Object.assign(new Error('Rate limited'), { type: 'StripeRateLimitError' });
+    expect((await checkout(post('/api/billing/checkout', { plan: 'plus_monthly' }))).status).toBe(500);
+    expect(h.created).toEqual([]);
+  });
+
+  it('refuses rather than create a second payable session when a tracked one cannot be read', async () => {
+    trackedSession('cs-unread', 'basic_monthly', 'pending');
+    h.retrieveErrors['cs-unread'] = Object.assign(new Error('Stripe is unavailable'), { type: 'StripeAPIError' });
+    expect((await checkout(post('/api/billing/checkout', { plan: 'plus_monthly' }))).status).toBe(500);
+    expect(h.created).toEqual([]);
+  });
+});
+
+describe('a family whose past_due grace lapsed can still reach the payment fix', () => {
+  // resolveEntitlement now locks this family (tests/locked-family-is-refused-on-the-server.test.ts);
+  // the paywall's checkout must answer 409 so it opens the portal, and the portal must open.
+  beforeEach(() => {
+    h.tables.billing_customers = [{ family_id: 'family-a', customer_ref: 'cus-a' }];
+    h.tables.subscriptions = [{ id: 's1', family_id: 'family-a', plan: 'basic_annual', status: 'past_due', provider_ref: 'sub-a',
+      cancel_at_period_end: false, current_period_end: '2020-02-01T00:00:00Z' }];
+    h.stripeSubs['sub-a'] = stripeSub('sub-a', 'past_due', PRICES.stripePrices.basic_annual.id);
+  });
+
+  it('checkout answers subscription_exists without starting a second subscription', async () => {
+    const response = await checkout(post('/api/billing/checkout', { plan: 'basic_annual' }));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: 'subscription_exists' });
+    expect(h.created).toEqual([]);
+  });
+
+  it('the billing portal opens for it', async () => {
+    const response = await portal(post('/api/billing/portal'));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ url: 'https://portal.example.test' });
   });
 });

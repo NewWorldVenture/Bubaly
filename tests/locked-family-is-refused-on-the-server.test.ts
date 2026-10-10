@@ -42,13 +42,16 @@ vi.mock('@/lib/server/feature-tiers', () => ({
   getResolvedFeatureTiers: async () => ({ 'ai-assistant': 'free', 'smart-kitchen': 'basic' }),
 }));
 
-import { resolveEntitlement } from '@/lib/server/entitlement';
+import { resolveEntitlement, subscriptionGrantsPaidLevel, pastDuePaidThrough, PAST_DUE_GRACE_DAYS, PAST_DUE_GRACE_MS } from '@/lib/server/entitlement';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { resolveFeatureEntitlement } from '@/lib/server/feature-entitlement';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { assertAIAccess, AI_ASSISTANT_FEATURE_KEY } from '@/lib/server/ai-access';
 
 const EXPIRED = '2020-01-01T00:00:00Z';
+const DAY = 24 * 60 * 60 * 1000;
+/** An ISO instant `days` from now (negative is the past). */
+const fromNow = (days: number) => new Date(Date.now() + days * DAY).toISOString();
 const ctx = { user: { id: 'user-a', email: 'parent@example.test' }, memberships: [],
   active: { familyId: 'family-a', role: 'parent', family: { name: 'Fixture' } } } as never;
 
@@ -105,7 +108,10 @@ describe('a trial that ended unpaid is refused by the server, not only the overl
 });
 
 describe('past_due keeps the paid level while Stripe retries the renewal', () => {
-  beforeEach(() => family(EXPIRED, [{ plan: 'basic', status: 'past_due' }]));
+  // Stripe advanced the period when it renewed, so a monthly past_due row ends
+  // ~a month after the renewal that failed. 25 days ahead: that renewal was
+  // ~5 days ago, inside the grace.
+  beforeEach(() => family(EXPIRED, [{ plan: 'basic', status: 'past_due', current_period_end: fromNow(25) }]));
 
   it('does not lock the family behind the paywall', async () => {
     expect(await resolveEntitlement(fakeDb() as never, 'user-a')).toMatchObject({ locked: false, effectiveLevel: 1 });
@@ -118,6 +124,52 @@ describe('past_due keeps the paid level while Stripe retries the renewal', () =>
   it('still locks once Stripe gives up (unpaid)', async () => {
     family(EXPIRED, [{ plan: 'basic', status: 'unpaid' }]);
     expect(await resolveEntitlement(fakeDb() as never, 'user-a')).toMatchObject({ locked: true });
+  });
+});
+
+describe('the past_due grace ends 14 days after the renewal that failed', () => {
+  it('is a named 14-day constant', () => {
+    expect(PAST_DUE_GRACE_DAYS).toBe(14);
+    expect(PAST_DUE_GRACE_MS).toBe(14 * DAY);
+  });
+
+  it('locks a trial-era family whose past_due outlived the grace', async () => {
+    // Renewal ~20 days ago (period ends in ~10): past the 14 days.
+    family(EXPIRED, [{ plan: 'basic', status: 'past_due', current_period_end: fromNow(10) }]);
+    expect(await resolveEntitlement(fakeDb() as never, 'user-a')).toMatchObject({ locked: true, effectiveLevel: 0 });
+    expect(await resolveFamilyPlanLevel(fakeDb() as never, 'family-a')).toBe(0);
+    expect(await resolveFeatureEntitlement(fakeDb() as never, 'family-a', '/dashboard/kitchen'))
+      .toMatchObject({ allowed: false, reason: 'locked', code: 'trial_expired' });
+  });
+
+  it('drops a grandfathered family to Free (not locked) once the grace lapses', async () => {
+    family(null, [{ plan: 'plus', status: 'past_due', current_period_end: fromNow(10) }]);
+    expect(await resolveEntitlement(fakeDb() as never, 'user-a')).toMatchObject({ locked: false, effectiveLevel: 0 });
+  });
+
+  it('does not give an annual plan a year of grace', async () => {
+    // An annual row's period end is a year after its failed renewal.
+    family(EXPIRED, [{ plan: 'plus_annual', status: 'past_due', current_period_end: fromNow(340) }]);
+    expect(await resolveEntitlement(fakeDb() as never, 'user-a')).toMatchObject({ locked: true });
+    family(EXPIRED, [{ plan: 'plus_annual', status: 'past_due', current_period_end: fromNow(360) }]);
+    expect(await resolveEntitlement(fakeDb() as never, 'user-a')).toMatchObject({ locked: false, effectiveLevel: 2 });
+  });
+
+  it('gives a past_due row with no period end no grace', () => {
+    expect(subscriptionGrantsPaidLevel({ status: 'past_due', plan: 'basic', current_period_end: null })).toBe(false);
+    expect(subscriptionGrantsPaidLevel({ status: 'past_due', plan: 'basic', current_period_end: 'not a date' })).toBe(false);
+  });
+
+  it('draws the boundary at exactly renewal + 14 days, in UTC', () => {
+    const sub = { status: 'past_due', plan: 'basic', current_period_end: '2026-04-01T00:00:00Z' };
+    expect(new Date(pastDuePaidThrough(sub)!).toISOString()).toBe('2026-03-01T00:00:00.000Z');
+    expect(subscriptionGrantsPaidLevel(sub, new Date('2026-03-14T23:59:59Z'))).toBe(true);
+    expect(subscriptionGrantsPaidLevel(sub, new Date('2026-03-15T00:00:00Z'))).toBe(false);
+    // Mar 31 less a month is the last day of February, not Mar 3.
+    expect(new Date(pastDuePaidThrough({ plan: 'basic', current_period_end: '2026-03-31T12:00:00Z' })!).toISOString()).toBe('2026-02-28T12:00:00.000Z');
+    expect(new Date(pastDuePaidThrough({ plan: 'basic_annual', current_period_end: '2028-02-29T00:00:00Z' })!).toISOString()).toBe('2027-02-28T00:00:00.000Z');
+    // active and trialing are unaffected by any date.
+    expect(subscriptionGrantsPaidLevel({ status: 'active', current_period_end: '2000-01-01T00:00:00Z' })).toBe(true);
   });
 });
 

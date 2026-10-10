@@ -15,6 +15,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
 import { planLevel } from '@/lib/constants/plans';
 import { chooseActiveMembership } from '@/lib/auth/active-membership';
+import { intervalOfSlug } from '@/lib/billing/plans';
 
 type DB = SupabaseClient<Database>;
 
@@ -61,11 +62,60 @@ export function computeEntitlement(input: {
  * Subscription statuses that carry their plan's level. `past_due` is Stripe's
  * retry window after a failed renewal: the family is still subscribed (checkout
  * refuses them a second subscription, the portal fixes the card), so it keeps
- * its level until Stripe gives up and the status becomes unpaid/canceled.
- * Locking it instead trapped the family behind a paywall whose only action,
- * checkout, answered "already subscribed".
+ * its level for a bounded grace while Stripe retries. Locking it at once
+ * trapped the family behind a paywall whose only action, checkout, answered
+ * "already subscribed"; that paywall now opens the portal on that answer.
  */
 export const PAID_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due'] as const;
+
+/**
+ * How long a `past_due` subscription keeps its paid level after the renewal it
+ * failed to pay. Without a limit, a Stripe account set to leave failed
+ * subscriptions past_due (or a lost final webhook) granted the paid level
+ * forever. After it, the family is treated as unpaid: a trial-era family sees
+ * the paywall, whose checkout answers 409 for the still-recorded subscription
+ * and sends it to the billing portal to fix the card.
+ */
+export const PAST_DUE_GRACE_DAYS = 14;
+export const PAST_DUE_GRACE_MS = PAST_DUE_GRACE_DAYS * 24 * 60 * 60 * 1000;
+
+/**
+ * When a past_due subscription's paid time ran out: the end of the last PAID
+ * period. Stripe advances the period when it renews, before the renewal
+ * invoice is paid, so a past_due row's `current_period_end` is the end of the
+ * UNPAID period; one plan interval before it is the renewal that failed.
+ * Anchoring the grace on the stored date itself would have granted an annual
+ * plan a year and two weeks without payment. Computed in UTC, so the answer
+ * does not move with the server's time zone.
+ */
+export function pastDuePaidThrough(sub: { plan?: string | null; current_period_end?: string | null }): number | null {
+  if (!sub.current_period_end) return null;
+  const end = new Date(sub.current_period_end);
+  if (!Number.isFinite(end.getTime())) return null;
+  const paidThrough = new Date(end.getTime());
+  if (intervalOfSlug(sub.plan) === 'annual') paidThrough.setUTCFullYear(paidThrough.getUTCFullYear() - 1);
+  else paidThrough.setUTCMonth(paidThrough.getUTCMonth() - 1);
+  // Mar 31 minus a month is Feb 31, which Date rolls into March; clamp it to
+  // the last day of the shorter month instead (Feb 29 of a leap year likewise).
+  if (paidThrough.getUTCDate() !== end.getUTCDate()) paidThrough.setUTCDate(0);
+  return paidThrough.getTime();
+}
+
+/**
+ * Does this subscription row carry its plan's level right now? active and
+ * trialing do; past_due does for PAST_DUE_GRACE_MS after the renewal it failed
+ * (see pastDuePaidThrough). A past_due row with no readable period end has no
+ * grace to give.
+ */
+export function subscriptionGrantsPaidLevel(
+  sub: { status: string; plan?: string | null; current_period_end?: string | null },
+  now: Date = new Date(),
+): boolean {
+  if (sub.status === 'active' || sub.status === 'trialing') return true;
+  if (sub.status !== 'past_due') return false;
+  const paidThrough = pastDuePaidThrough(sub);
+  return paidThrough !== null && now.getTime() < paidThrough + PAST_DUE_GRACE_MS;
+}
 
 /** The refusal code for a locked entitlement, or null when it is not locked. */
 export function lockedEntitlementCode(entitlement: Pick<Entitlement, 'locked' | 'closed'>): 'trial_expired' | 'account_closed' | null {
@@ -97,7 +147,7 @@ export async function resolveEntitlement(
 
     const [{ data: fam, error: familyError }, { data: subs, error: subscriptionsError }] = await settleAll([
       supabase.from('families').select('trial_ends_at, closed_at').eq('id', activeId).maybeSingle(),
-      supabase.from('subscriptions').select('plan, status').eq('family_id', activeId).in('status', [...PAID_SUBSCRIPTION_STATUSES]),
+      supabase.from('subscriptions').select('plan, status, current_period_end').eq('family_id', activeId).in('status', [...PAID_SUBSCRIPTION_STATUSES]),
     ]);
     // Never an entitlement computed from half the data: a failed families read
     // read as "grandfathered" (unlocking an expired trial), and a failed
@@ -108,12 +158,15 @@ export async function resolveEntitlement(
       return { ...UNLOCKED_FALLBACK, familyId: activeId };
     }
 
-    const paidLevel = (subs ?? []).reduce((max, s) => Math.max(max, planLevel(s.plan)), 0);
+    const now = new Date();
+    const paidLevel = (subs ?? []).filter((s) => subscriptionGrantsPaidLevel(s, now))
+      .reduce((max, s) => Math.max(max, planLevel(s.plan)), 0);
     const ent = computeEntitlement({
       paidLevel,
       trialEndsAt: fam?.trial_ends_at ?? null,
       closedAt: fam?.closed_at ?? null,
       isSuperAdmin: opts.isSuperAdmin,
+      now,
     });
     return { ...ent, familyId: activeId };
   } catch {

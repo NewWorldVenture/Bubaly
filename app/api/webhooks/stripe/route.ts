@@ -22,15 +22,73 @@ const MAX_WEBHOOK_BODY_BYTES = 256_000;
 type Admin = ReturnType<typeof createServiceClient>;
 const LIVE = ['active', 'trialing', 'past_due'];
 
-/** Best-effort Notification Center entry for a billing state a person has to look at. */
-async function alertBillingAnomaly(supabase: Admin, familyId: string, title: string, body: string, meta: Record<string, unknown>) {
+/**
+ * Best-effort Notification Center entry for a billing state a person has to look at.
+ * With `dedupeKey`, an entry already recorded under that key for this family
+ * is not recorded again: the unknown-price branch runs on every Stripe retry
+ * of an event it throws on (and on each later event for the same subscription),
+ * and one entry per subscription and status is what an admin needs. A failed
+ * probe still records — a duplicate entry is better than a missing one.
+ */
+async function alertBillingAnomaly(supabase: Admin, familyId: string, title: string, body: string, meta: Record<string, unknown>, dedupeKey?: string) {
+  if (dedupeKey) {
+    try {
+      const { data: already, error: probeError } = await supabase.from('admin_notifications')
+        .select('id').eq('related_type', 'subscription').eq('related_id', familyId)
+        .eq('meta->>dedupe_key', dedupeKey).limit(1);
+      if (probeError) console.error('[admin-notify] billing anomaly dedupe read failed', probeError);
+      else if (already && already.length > 0) return;
+    } catch (e) { console.error('[admin-notify] billing anomaly dedupe read failed', e); }
+  }
   try {
     const { recordAdminNotification } = await import('@/lib/admin/notify');
     await recordAdminNotification(supabase, {
       kind: 'info', title, body, url: '/admin/subscriptions',
-      relatedType: 'subscription', relatedId: familyId, meta,
+      relatedType: 'subscription', relatedId: familyId,
+      meta: dedupeKey ? { ...meta, dedupe_key: dedupeKey } : meta,
     });
   } catch (e) { console.error('[admin-notify] billing anomaly alert failed', e); }
+}
+
+/**
+ * The admin alert for the two growth transitions — a NEW paid conversion (not
+ * renewals) and CHURN (a paying family lost). Best-effort. Shared by the
+ * normal path and the unknown-price revoke path, so a family that leaves on a
+ * price Bubaly cannot map still shows up as churn.
+ */
+async function alertGrowthTransition(
+  supabase: Admin, familyId: string,
+  priorSub: { plan?: string | null; status?: string | null } | null | undefined,
+  nextState: { plan: string; status: string },
+) {
+  if (isNewPaidConversion(priorSub, nextState)) {
+    try {
+      const { recordAdminNotification } = await import('@/lib/admin/notify');
+      const { data: fam } = await supabase.from('families').select('name').eq('id', familyId).maybeSingle();
+      await recordAdminNotification(supabase, {
+        kind: 'subscription',
+        title: `New paid conversion: ${fam?.name ?? 'a family'}`,
+        body: `Upgraded to ${nextState.plan} (${nextState.status}).`,
+        url: '/admin/subscriptions',
+        relatedType: 'subscription', relatedId: familyId,
+        meta: { plan: nextState.plan, status: nextState.status },
+      });
+    } catch (e) { console.error('[admin-notify] paid-conversion alert failed', e); }
+  } else if (isChurn(priorSub, nextState)) {
+    try {
+      const { recordAdminNotification } = await import('@/lib/admin/notify');
+      const { data: fam } = await supabase.from('families').select('name').eq('id', familyId).maybeSingle();
+      const lost = priorSub?.plan ?? 'a paid plan';
+      await recordAdminNotification(supabase, {
+        kind: 'subscription_churn',
+        title: `Churn: ${fam?.name ?? 'a family'} left ${lost}`,
+        body: `Subscription ${nextState.status}.`,
+        url: '/admin/subscriptions',
+        relatedType: 'subscription', relatedId: familyId,
+        meta: { from: lost, plan: nextState.plan, status: nextState.status },
+      });
+    } catch (e) { console.error('[admin-notify] churn alert failed', e); }
+  }
 }
 
 /**
@@ -124,7 +182,8 @@ async function persistSubscription(supabase: ReturnType<typeof createServiceClie
     const priceIds = items.map(item => item.price.id);
     await alertBillingAnomaly(supabase, familyId, 'Unknown Stripe subscription price',
       `Subscription ${sub.id} (${sub.status}) is on a price Bubaly does not map to a plan.`,
-      { subscription: sub.id, status: sub.status, prices: priceIds });
+      { subscription: sub.id, status: sub.status, prices: priceIds },
+      `unknown_price:${sub.id}:${sub.status}`);
     if (sub.status === 'active' || sub.status === 'trialing') throw new Error('Unknown Stripe subscription price');
     if (priorSub?.provider_ref !== sub.id) {
       // Not the subscription the row records, so it grants nothing to revoke.
@@ -144,6 +203,8 @@ async function persistSubscription(supabase: ReturnType<typeof createServiceClie
       console.error('[stripe webhook] Subscription status update failed', revokeError);
       throw new Error('Subscription persistence failed');
     }
+    // The stored plan stays, so it is the plan the family left.
+    if (priorSub?.plan) await alertGrowthTransition(supabase, familyId, priorSub, { plan: priorSub.plan, status: sub.status });
     return;
   }
 
@@ -209,35 +270,7 @@ async function persistSubscription(supabase: ReturnType<typeof createServiceClie
 
   // Alert the super admin on the two growth transitions — a NEW paid conversion
   // (🎉, not renewals) and CHURN (📉, a paying family lost). Both best-effort.
-  const nextState = { plan, status: sub.status };
-  if (isNewPaidConversion(priorSub, nextState)) {
-    try {
-      const { recordAdminNotification } = await import('@/lib/admin/notify');
-      const { data: fam } = await supabase.from('families').select('name').eq('id', familyId).maybeSingle();
-      await recordAdminNotification(supabase, {
-        kind: 'subscription',
-        title: `New paid conversion: ${fam?.name ?? 'a family'}`,
-        body: `Upgraded to ${plan} (${sub.status}).`,
-        url: '/admin/subscriptions',
-        relatedType: 'subscription', relatedId: familyId,
-        meta: { plan, status: sub.status },
-      });
-    } catch (e) { console.error('[admin-notify] paid-conversion alert failed', e); }
-  } else if (isChurn(priorSub, nextState)) {
-    try {
-      const { recordAdminNotification } = await import('@/lib/admin/notify');
-      const { data: fam } = await supabase.from('families').select('name').eq('id', familyId).maybeSingle();
-      const lost = priorSub?.plan ?? 'a paid plan';
-      await recordAdminNotification(supabase, {
-        kind: 'subscription_churn',
-        title: `Churn: ${fam?.name ?? 'a family'} left ${lost}`,
-        body: `Subscription ${sub.status}.`,
-        url: '/admin/subscriptions',
-        relatedType: 'subscription', relatedId: familyId,
-        meta: { from: lost, plan, status: sub.status },
-      });
-    } catch (e) { console.error('[admin-notify] churn alert failed', e); }
-  }
+  await alertGrowthTransition(supabase, familyId, priorSub, { plan, status: sub.status });
 }
 
 // Stripe does not deliver events in order. An `updated` sent before a
