@@ -136,6 +136,9 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   F('family-health', 'Family Health', 'Family & Home', 'plus', '/dashboard/family-health'),
   F('stress-tracker', 'Stress Tracker', 'Family & Home', 'plus', '/dashboard/family-stress'),
   F('school-os', 'School OS', 'Family & Home', 'plus', '/dashboard/family-school'),
+  // The Sports Hub is listed Family+ in the sidebar (minLevel 2); without an
+  // entry here the page had no key to gate on and admitted every plan.
+  F('sports-os', 'Sports OS', 'Family & Home', 'plus', '/dashboard/family-sports'),
   F('lifestyle-coaching', 'Lifestyle Coaching', 'Family & Home', 'plus', '/dashboard/family-automation'),
 
   // ── Finances & Admin ───────────────────────────────────────

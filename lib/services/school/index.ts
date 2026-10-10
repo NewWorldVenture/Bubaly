@@ -15,7 +15,9 @@ import type { HomeworkStatus, Tables } from '@/lib/database.types';
 import { readCountedRows } from '@/lib/calendar/occurrences';
 import { classOccursInWeek, slotStartMinutes, weekParity } from '@/lib/school/timetable';
 import { describeDbError } from '@/lib/supabase/errors';
-import { dayKeyInTz, scopeNow } from '../scope';
+import { validDay } from '@/lib/onboarding/ics-time';
+import { instantForIcsLocalTime } from '@/lib/time/zoned';
+import { dayKeyInTz, scopeNow, zonedDayBoundsMs } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
 export type SchoolEventRow = Tables<'school_events'>;
@@ -39,10 +41,46 @@ function isoOrNull(value: string | null | undefined): string | null {
   return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
 }
 
+const NAIVE_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const NAIVE_LOCAL = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/;
+
+/**
+ * One edge of a read window as an instant.
+ *
+ * The planner's prompt defines times as "ISO 8601 in the family's time zone"
+ * and every school/sports template feeds these reads `localTime(dayKey, h, m)`
+ * — a zone-less `2026-10-12T00:00:00`. `Date.parse` resolved that on the HOST's
+ * clock (UTC on Vercel), so a Los Angeles family's school day ran from 5pm the
+ * evening before to 5pm, a 5:30pm practice was missed and the previous
+ * evening's reported, and a date-only `from`/`to` of one day was a zero-width
+ * window at UTC midnight. The naive grammar is read on the FAMILY's clock, as
+ * `calendar.createEvent` already reads the same strings: a bare date is the
+ * family's midnight at the start edge and the last instant of that family day
+ * at the end edge. An offset or `Z` is kept as written.
+ */
+function windowInstant(value: string | null | undefined, tz: string, edge: 'start' | 'end'): string | null {
+  if (!value) return null;
+  if (NAIVE_DAY.test(value)) {
+    if (!validDay(value)) return null;
+    const bounds = zonedDayBoundsMs(value, tz);
+    const ms = edge === 'start' ? bounds.start : bounds.end - 1;
+    return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+  }
+  const local = NAIVE_LOCAL.exec(value);
+  if (local) {
+    const [, day, hour, minute, second = '00'] = local;
+    if (!validDay(day) || Number(hour) > 23 || Number(minute) > 59 || Number(second) > 59) return null;
+    const [year, month, date] = day.split('-').map(Number);
+    const at = instantForIcsLocalTime(year, month, date, Number(hour) * 60 + Number(minute), tz);
+    return at ? new Date(at.getTime() + Number(second) * 1000).toISOString() : null;
+  }
+  return isoOrNull(value);
+}
+
 /** A window defaulting to the coming week; an inverted window is refused rather than returned empty. */
 export function resolveWindow(scope: ServiceScope, input?: { from?: string | null; to?: string | null }): ServiceResult<{ from: string; to: string }> {
-  const explicitFrom = isoOrNull(input?.from);
-  const explicitTo = isoOrNull(input?.to);
+  const explicitFrom = windowInstant(input?.from, scope.tz, 'start');
+  const explicitTo = windowInstant(input?.to, scope.tz, 'end');
   if (input?.from && !explicitFrom) return fail('That start time could not be understood.', { code: SERVICE_CODES.invalidInput });
   if (input?.to && !explicitTo) return fail('That end time could not be understood.', { code: SERVICE_CODES.invalidInput });
   const fromDate = explicitFrom ? new Date(explicitFrom) : scopeNow(scope);

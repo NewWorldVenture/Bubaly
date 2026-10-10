@@ -19,7 +19,7 @@ import { wroteNoRows } from '@/lib/supabase/errors';
 
 export const runtime = 'nodejs';
 
-type Body = { action: 'concierge' | 'build' | 'recommendations'; vacationId: string; conversationId?: string; message?: string; prompt?: string };
+type Body = { action: 'concierge' | 'build' | 'recommendations'; vacationId: string; conversationId?: string; message?: string; prompt?: string; rebuild?: boolean };
 
 const databaseUnavailable = (message: string) => NextResponse.json({ error: message }, { status: 503 });
 
@@ -107,12 +107,13 @@ export async function POST(req: NextRequest) {
 
     for (const w of tripWeatherAdvice((weather.data ?? []) as WeatherDayLike[])) recos.push({ kind: 'weather_warning', title: 'Weather advisory', detail: w.text, severity: w.severity });
 
-    // Replace prior rule-sourced open recommendations. The ERROR gates the
-    // insert below; zero rows deliberately does not — on a first run there is
-    // no prior set, and that is the ordinary case. Audit C1-S9-63.
-    const { error: deleteError } = await supabase.from('vacation_ai_recommendations').delete().eq('vacation_id', vacationId).eq('source', 'rules').eq('status', 'open');
-    if (deleteError) {
-      logDatabaseFailure('recommendation cleanup', deleteError);
+    // Replace prior rule-sourced open recommendations — INSERT FIRST, then
+    // delete the old rows by id. Deleting first and inserting second meant a
+    // failed insert left the family with nothing where their recommendations
+    // had been. Zero prior rows is the ordinary first run. Audit C1-S9-63.
+    const { data: prior, error: priorError } = await supabase.from('vacation_ai_recommendations').select('id').eq('family_id', familyId).eq('vacation_id', vacationId).eq('source', 'rules').eq('status', 'open');
+    if (priorError) {
+      logDatabaseFailure('recommendation read', priorError);
       return databaseUnavailable(t('ai.recommendationsAreTemporarilyUnavailable'));
     }
     if (recos.length) {
@@ -122,11 +123,25 @@ export async function POST(req: NextRequest) {
         return databaseUnavailable(t('ai.recommendationsAreTemporarilyUnavailable'));
       }
     }
+    const priorIds = (prior ?? []).map((row) => row.id);
+    if (priorIds.length) {
+      const { error: deleteError } = await supabase.from('vacation_ai_recommendations').delete().eq('family_id', familyId).eq('vacation_id', vacationId).eq('source', 'rules').eq('status', 'open').in('id', priorIds);
+      if (deleteError) {
+        logDatabaseFailure('recommendation cleanup', deleteError);
+        return databaseUnavailable(t('ai.recommendationsAreTemporarilyUnavailable'));
+      }
+    }
     return NextResponse.json({ count: recos.length });
   }
 
   // ---------- BUILD (AI vacation builder) ----------
   if (action === 'build') {
+    // A trip that already has a plan is left alone unless the caller says
+    // "rebuild" — the same rule `lib/services/trips buildPlan` applies. A lost
+    // response followed by a retry, or two tabs, used to stack a second full
+    // itinerary on the first and overwrite the family's edited budget lines.
+    const hasPlan = (items.data ?? []).length > 0 || a.length > 0;
+    if (hasPlan && body.rebuild !== true) return NextResponse.json({ error: t('ai.tripAlreadyHasAPlan') }, { status: 409 });
     const range = trip.start_date && trip.end_date ? dateRange(trip.start_date, trip.end_date) : [];
     const system = `You are an expert family travel agent. Produce a realistic, family-friendly plan as STRICT JSON only (no prose, no markdown). Schema:
 {"activities":[{"name":string,"category":string,"location":string,"family_friendly":boolean,"cost":number}],
@@ -306,17 +321,17 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
       }
       if (!conversation) return NextResponse.json({ error: t('ai.conversationNotFound') }, { status: 404 });
     }
-    const { error: userMessageError } = await supabase.from('vacation_ai_messages').insert({ family_id: familyId, conversation_id: conversationId, role: 'user', content: message, created_by: ctx.user.id }).select('id').single();
-    if (userMessageError) {
-      logDatabaseFailure('user message write', userMessageError);
-      return databaseUnavailable(t('ai.couldNotSaveYourMessage'));
-    }
 
-    const { data: history, error: historyError } = await supabase.from('vacation_ai_messages').select('role, content').eq('conversation_id', conversationId).order('created_at', { ascending: true }).limit(20);
+    // The history is read BEFORE anything is written and the new message is
+    // appended to it in memory: both rows are persisted only after the model
+    // answered. Persisting the user row first left it in the conversation when
+    // the provider failed, so a retry fed the model a duplicated question.
+    const { data: history, error: historyError } = await supabase.from('vacation_ai_messages').select('role, content').eq('conversation_id', conversationId).order('created_at', { ascending: true }).limit(19);
     if (historyError) {
       logDatabaseFailure('conversation history read', historyError);
       return databaseUnavailable(t('ai.tripConversationIsTemporarilyUnavailable'));
     }
+    const turns = [...(history ?? []).filter((h) => h.role === 'user' || h.role === 'assistant').map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content })), { role: 'user' as const, content: message }];
 
     const budgetSummary = summarizeBudget(budgets.data ?? [], expenses.data ?? []);
     const context = `TRIP CONTEXT
@@ -329,31 +344,33 @@ Itinerary days planned: ${(days.data ?? []).length} | items: ${(items.data ?? []
 
     const system = `You are Bubaly's friendly, expert family Vacation Concierge. Give concise, practical, family-aware advice for THIS trip using the context. Suggest specific activities, restaurants, packing, budgeting, and routing. When asked to build/plan, give a clear day-by-day outline. Keep replies focused and warm. Use the family's actual trip details.\n\n${context}`;
 
-    let reply: string;
+    let reply: string | null;
     try {
       reply = await withAiRequest(
         scopeFromUserContext(ctx, supabase),
         { feature: 'vacations.concierge', text: 'Vacation concierge reply' },
         async (obs) => {
           const provider = await resolveProvider();
-          const completion = await provider.complete({
-            system,
-            messages: (history ?? []).filter((h) => h.role === 'user' || h.role === 'assistant').map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content })),
-            tools: [], maxTokens: 1000,
-          });
+          const completion = await provider.complete({ system, messages: turns, tools: [], maxTokens: 1000 });
           obs.used(provider.model, completion.usage);
-          // The apology is persisted to vacation_ai_messages as if it were an
-          // answer, so without a row the conversation keeps a polite non-reply
-          // and nothing says why.
-          if (!completion.text) obs.failed(new Error('The concierge returned no text; the apology was stored instead.'));
-          return completion.text || 'Sorry, I could not generate a reply.';
+          // No text is a failure, not an answer: a canned apology used to be
+          // stored as the assistant's reply and returned as a 200, so the
+          // family read a failure as an answer and the conversation kept it.
+          if (!completion.text) obs.failed(new Error('The concierge returned no text.'));
+          return completion.text || null;
         },
       );
     } catch (err) {
       console.error('Concierge error:', err);
       return NextResponse.json({ error: t('ai.aiIsTemporarilyUnavailable') }, { status: 502 });
     }
+    if (!reply) return NextResponse.json({ error: t('ai.aiIsTemporarilyUnavailable') }, { status: 502 });
 
+    const { error: userMessageError } = await supabase.from('vacation_ai_messages').insert({ family_id: familyId, conversation_id: conversationId, role: 'user', content: message, created_by: ctx.user.id }).select('id').single();
+    if (userMessageError) {
+      logDatabaseFailure('user message write', userMessageError);
+      return databaseUnavailable(t('ai.couldNotSaveYourMessage'));
+    }
     const { error: assistantMessageError } = await supabase.from('vacation_ai_messages').insert({ family_id: familyId, conversation_id: conversationId, role: 'assistant', content: reply, created_by: ctx.user.id }).select('id').single();
     if (assistantMessageError) {
       logDatabaseFailure('assistant message write', assistantMessageError);

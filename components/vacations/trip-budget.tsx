@@ -61,7 +61,11 @@ export function TripBudget({ vacationId }: { vacationId: string }) {
       : await createClient().from('vacation_budgets').insert({ family_id: familyId, vacation_id: vacationId, category: cat, planned_cents: cents, created_by: userId }).select('id');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(saved)) toastError(t('errors.thatChangeWasNotSaved'));
-    else success(t('tripBudget.budgetUpdated'));
+    else {
+      success(t('tripBudget.budgetUpdated'));
+      // `vacation_budgets` is not realtime-published; re-read what changed.
+      void refreshBudgets();
+    }
     setEditing(null);
   }
 

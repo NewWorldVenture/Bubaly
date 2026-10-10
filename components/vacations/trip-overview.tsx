@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useFamilyCalendarToday } from '@/components/i18n/use-format';
+import { useFamilyCalendarToday, useFamilyClock } from '@/components/i18n/use-format';
 import Link from 'next/link';
-import { Gauge, Sparkles, RefreshCw, Lightbulb, Wallet, CloudSun, CheckCircle2, Plane, BedDouble, Ticket, FolderLock } from 'lucide-react';
+import { Gauge, Sparkles, RefreshCw, Lightbulb, Wallet, CloudSun, CheckCircle2, Plane, BedDouble, Ticket, FolderLock, Globe } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -11,12 +11,14 @@ import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { settle } from '@/lib/supabase/settle';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { ErrorState, LoadingBlock } from '@/components/ui/states';
 import { StatPill, Progress } from './shared';
 import { ReadinessRing } from './vacations-list';
 import { computeReadiness } from '@/lib/vacations/readiness';
 import { summarizeBudget } from '@/lib/vacations/budget';
-import { tripWeatherAdvice, type WeatherDayLike } from '@/lib/vacations/weather';
+import { forecastDaysWithin, tripWeatherAdvice, type WeatherDayLike } from '@/lib/vacations/weather';
+import { isValidTimezone } from '@/lib/time/zoned';
 import { dateRange, countdownLabel } from '@/lib/vacations/dates';
 import { dollars as dollarsIn, RECO_META } from '@/lib/vacations/meta';
 import type { Tables } from '@/lib/database.types';
@@ -120,16 +122,47 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readiness.score, loading, trip, familyId, vacationId]);
 
-  const weatherAdvice = useMemo(() => tripWeatherAdvice(weather as WeatherDayLike[]), [weather]);
+  // Only the forecast days inside the trip: a snapshot cached a month early is
+  // this week's weather at the destination, not the trip's.
+  const weatherAdvice = useMemo(() => tripWeatherAdvice(forecastDaysWithin(weather, trip?.start_date, trip?.end_date) as WeatherDayLike[]), [weather, trip]);
   const openRecos = recos.filter((r) => r.status === 'open').sort((a, b) => b.severity - a.severity);
   const [refreshing, setRefreshing] = useState(false);
+
+  // The trip's clock is the DESTINATION's: itinerary times, imported bookings
+  // and the disruption re-flow all read it. It defaulted to the family's home
+  // zone with no way to change it, so a Tokyo trip planned from Los Angeles
+  // filed a 09:00 breakfast as the previous evening. Edited here.
+  const clock = useFamilyClock();
+  const [tzDraft, setTzDraft] = useState<string | null>(null);
+  const [savingTz, setSavingTz] = useState(false);
+  async function saveTimezone() {
+    if (!trip || savingTz) return;
+    const timezone = (tzDraft ?? trip.timezone ?? clock.timeZone).trim();
+    if (!isValidTimezone(timezone)) return toastError(tr('tripOverview.unknownTimeZone'));
+    setSavingTz(true);
+    try {
+      // Under RLS a refused row comes back with no error and zero rows. Audit C1-S9-84.
+      const { data: updated, error } = await createClient().from('vacations').update({ timezone }).eq('id', trip.id).eq('family_id', familyId).select('id');
+      if (error) return toastError(describeDbError(error));
+      if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
+      success(tr('tripOverview.timeZoneSaved'));
+      setTzDraft(null);
+      void tripQuery.refresh();
+    } finally {
+      setSavingTz(false);
+    }
+  }
 
   async function refreshRecos() {
     setRefreshing(true);
     try {
       const res = await fetch('/api/vacations/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'recommendations', vacationId }) });
       const data = await res.json();
-      if (!res.ok) toastError(data.error || 'Failed'); else success(tr('tripOverview.recommendationsCount', { count: data.count }));
+      if (!res.ok) toastError(data.error || 'Failed');
+      else {
+        success(tr('tripOverview.recommendationsCount', { count: data.count }));
+        void recosQuery.refresh();
+      }
     } catch { toastError(tr('tripOverview.networkError')); }
     setRefreshing(false);
   }
@@ -139,6 +172,7 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
     const { data: updated, error } = await createClient().from('vacation_ai_recommendations').update({ status: 'dismissed' }).eq('id', id).select('id');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(updated)) toastError(tr('errors.thatChangeWasNotSaved'));
+    else void recosQuery.refresh();
   }
 
   if (loading) return <LoadingBlock />;
@@ -170,6 +204,20 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
             {readiness.recommendations.slice(0, 3).map((r, i) => <li key={i} className="flex items-start gap-1.5"><Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" /> {r}</li>)}
           </ul>
         )}
+      </div>
+
+      {/* trip clock */}
+      <div className="rounded-2xl border border-border bg-surface/40 p-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h3 className="flex items-center gap-2 text-sm font-semibold"><Globe className="h-4 w-4 text-brand-text" /> {tr('tripOverview.tripTimeZone')}</h3>
+            <p className="mt-0.5 text-xs text-muted">{tr('tripOverview.tripTimeZoneHint')}</p>
+          </div>
+          <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); void saveTimezone(); }}>
+            <Input value={tzDraft ?? trip?.timezone ?? clock.timeZone} onChange={(e) => setTzDraft(e.target.value)} placeholder="Asia/Tokyo" className="h-9 w-56" />
+            <Button type="submit" size="sm" variant="secondary" loading={savingTz}>{tr('tripOverview.saveTimeZone')}</Button>
+          </form>
+        </div>
       </div>
 
       {/* quick stats */}

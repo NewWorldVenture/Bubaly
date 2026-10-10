@@ -92,6 +92,7 @@ export const tripTools: ToolDefinition[] = [
       kind: z.enum(KINDS).nullish(),
       is_international: z.boolean().nullish(),
       budget: z.number().nullish().describe('Whole-trip budget in dollars'),
+      timezone: z.string().nullish().describe('IANA time zone of the destination, e.g. Asia/Tokyo; itinerary times are read in it. Defaults to the family zone'),
     }),
     output: z.object({ id: z.string(), title: z.string(), destination: z.string().nullable(), start_date: z.string().nullable(), end_date: z.string().nullable(), created: z.boolean() }),
     idempotencyFrom: (input) => `trips.findOrCreateVacation:${(input.title ?? input.destination ?? '').trim().toLowerCase()}:${input.start_date ?? ''}`,
@@ -101,6 +102,7 @@ export const tripTools: ToolDefinition[] = [
       const res = await findOrCreateVacation(scope, {
         title: input.title ?? null, destination: input.destination ?? null, startDate: input.start_date ?? null, endDate: input.end_date ?? null,
         kind: input.kind ?? null, isInternational: input.is_international ?? null, budget: input.budget ?? null,
+        timezone: input.timezone ?? null,
       });
       if (!res.ok) return res;
       const v = res.data.vacation;
@@ -184,6 +186,8 @@ export const tripTools: ToolDefinition[] = [
     capability: 'view',
     risk: 'low',
     readOnly: true,
+    // Carries `document_risks`: each traveller's passport status by name.
+    sensitiveRead: true,
     input: z.object({ vacation_id: z.string() }),
     output: z.object({
       trip_id: z.string(),
@@ -221,6 +225,9 @@ export const tripTools: ToolDefinition[] = [
     capability: 'view',
     risk: 'low',
     readOnly: true,
+    // "<name>'s passport expires <date>" is passport data; 'passports' is
+    // high-stakes even though this tool files under 'travel'.
+    sensitiveRead: true,
     input: z.object({ vacation_id: z.string() }),
     output: z.object({ risks: z.array(documentRisk) }),
     summarize: (_input, output) => (output.risks.length === 0 ? 'Travel documents look fine' : `${plural(output.risks.length, 'document risk')}: ${output.risks[0].title}`),
@@ -270,6 +277,9 @@ export const tripTools: ToolDefinition[] = [
     capability: 'view',
     risk: 'low',
     readOnly: true,
+    // Aggregates the family's unpaid bills and every child's school, homework
+    // and sports rows — finances and education under a 'travel' label.
+    sensitiveRead: true,
     input: z.object({ vacation_id: z.string(), limit: z.number().int().min(1).max(200).optional() }),
     output: TripCommitmentReviewSchema,
     summarize: (_input, output) => `Reviewed ${output.window.from} through ${output.window.to}: ${output.total} review items; ${output.counts.native} native calendar entries, ${output.counts.source} imported read-only family context items (person/category unmapped), ${output.counts.occupied} occupied calendar spans and ${output.counts.annotation} free/point annotations that do not occupy time. Showing ${output.returned} of ${output.total}; ${output.omitted} omitted. Calendar ownership is unverified; review entries before deciding what needs attention.`,

@@ -395,7 +395,7 @@ describe('what gets proposed', () => {
     const message = { subject: 'School closed', body: 'School is closed; the date has been changed to Oct 2.' };
     const proposal = buildProposal(message, classify(message, [], [], [], OPTS));
     expect(proposal?.args.all_day).toBe(true);
-    expect(proposal?.args.starts_at).toBe('2026-10-02T00:00:00');
+    expect(proposal?.args.starts_at).toBe('2026-10-02');
     expect(proposal?.args.category).toBe('school');
   });
 
