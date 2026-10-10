@@ -2,33 +2,36 @@
 --
 -- 0311's class, second wave. Each of these write policies checks only the
 -- row's own family_id, so family A's parent could write A's family_id beside
--- family B's member or wallet. Something running as the service role then
--- acted on that foreign id by itself: Guardian dialled and named B's member,
--- the public gift page named B's child, and card issuing would send B's
--- child's name to Stripe as the cardholder, and the morning brief (service
--- role) embedded a foreign medication's name through a schedule.
+-- family B's member, wallet or medication. Something running as the service
+-- role then acted on that foreign id by itself: Guardian dialled and named B's
+-- member, the public gift page named B's child, card issuing would send B's
+-- child's name to Stripe as the cardholder, and the morning brief embedded
+-- B's medication's name through a schedule.
 --
--- What this probe asserts, as family A's parent through PostgREST's role:
+-- For each of the five bindings, as family A's parent through PostgREST's
+-- role, this probe asserts:
 --
---   1. a Guardian profile naming B's member is refused;
---   2. a gift link carrying B's child wallet is refused;
---   3. a pay handle carrying B's child wallet is refused;
---   4. a child wallet naming B's member is refused;
---   4b. a medication schedule naming B's medication is refused;
---   5. moving A's own gift link onto B's wallet (UPDATE) is refused;
---   6. control: each of the five, with A's own member, wallet or medication,
---      still lands;
---   7. control: a session-less writer (the server, a migration, a seed) is
---      still exempt, as 0311 made it;
---   8. each of the five references is wired to 0311's helper.
+--   1. INSERT of a row naming B's object is refused BY THE GUARD: sqlstate
+--      42501 with reference_shares_family's own sentence ("points at a row in
+--      another family"), not merely any refusal and not merely no row;
+--   2. control: the same INSERT naming A's own object lands (counted);
+--   3. UPDATE of that own row's reference to B's object is refused by the
+--      guard, and the row is unchanged;
+--   4. UPDATE of that own row's family_id to B is refused by the guard (the
+--      trigger fires on family_id too, before RLS's WITH CHECK);
 --
--- Judged on ROW COUNTS, as 0311's probe is: a write refused by nothing simply
--- lands, and an exception-only assertion would report a boundary that is not
--- there.
+-- and, once for the class:
 --
--- NEGATIVE CONTROL. Inside this transaction the gift link trigger is disabled,
--- and A's foreign gift link must then land. That proves the fixture reaches
--- the defect. Everything is rolled back.
+--   5. control: the service role (role service_role, its own claims) is
+--      exempt, and its foreign row lands (counted);
+--   6. control: a session-less writer (postgres, empty claims: a migration,
+--      seed or backfill) is exempt, separately, and its foreign row lands;
+--   7. each of the five references is wired to 0311's helper, exactly;
+--   8. NEGATIVE CONTROL: with the gift link trigger disabled inside the
+--      transaction, A's foreign gift link lands. That proves the fixture
+--      reaches the defect.
+--
+-- Everything is rolled back.
 --
 -- HELD with 0497: this probe sits in docs/audit/reserved/, so the Database
 -- job's glob does not run it against the released schema, where it fails.
@@ -74,8 +77,11 @@ declare
   wal_b   uuid := '00000000-0000-4000-8497-0000000000c2';
   med_a   uuid := '00000000-0000-4000-8497-0000000000e1';
   med_b   uuid := '00000000-0000-4000-8497-0000000000e2';
+  guard   constant text := '42501: % points at a row in another family';
   failures text[] := '{}';
-  n int;
+  b   record;
+  got text;
+  n   int;
 begin
   perform set_config('role','authenticated', true);
   perform set_config('request.jwt.claim.sub', parent::text, true);
@@ -84,53 +90,102 @@ begin
     raise exception 'CONTROL: not acting as a manager of A who is not a member of B; nothing below is a boundary';
   end if;
 
-  -- Each foreign write, as A's parent. Refusal is measured by what lands.
-  begin insert into public.guardian_member_profiles (family_id, member_id, guardian_phone) values (fam_a, kid_b, '+15550497001'); exception when others then null; end;
-  begin insert into public.gift_links (family_id, token, child_wallet_id) values (fam_a, 'm0497-foreign', wal_b); exception when others then null; end;
-  begin insert into public.pay_handles (family_id, handle, child_wallet_id) values (fam_a, 'm0497_foreign', wal_b); exception when others then null; end;
-  begin insert into public.child_wallets (family_id, member_id) values (fam_a, kid_b); exception when others then null; end;
-  begin insert into public.medication_schedules (family_id, medication_id, time_of_day) values (fam_a, med_b, '08:00'); exception when others then null; end;
+  for b in select * from (values
+      ('Guardian profile', 'guardian_member_profiles', 'member_id', 'naming family B''s member',
+       format('insert into public.guardian_member_profiles (family_id, member_id, guardian_phone) values (%L, %L, %L)', fam_a, kid_b, '+15550497001'),
+       format('insert into public.guardian_member_profiles (family_id, member_id, guardian_phone) values (%L, %L, %L)', fam_a, kid_a, '+15550497002'),
+       format('member_id = %L', kid_a), kid_b::text),
+      ('gift link', 'gift_links', 'child_wallet_id', 'carrying family B''s child wallet',
+       format('insert into public.gift_links (family_id, token, child_wallet_id) values (%L, %L, %L)', fam_a, 'm0497-foreign', wal_b),
+       format('insert into public.gift_links (family_id, token, child_wallet_id) values (%L, %L, %L)', fam_a, 'm0497-own', wal_a),
+       format('token = %L', 'm0497-own'), wal_b::text),
+      ('pay handle', 'pay_handles', 'child_wallet_id', 'carrying family B''s child wallet',
+       format('insert into public.pay_handles (family_id, handle, child_wallet_id) values (%L, %L, %L)', fam_a, 'm0497_foreign', wal_b),
+       format('insert into public.pay_handles (family_id, handle, child_wallet_id) values (%L, %L, %L)', fam_a, 'm0497_own', wal_a),
+       format('handle = %L', 'm0497_own'), wal_b::text),
+      ('child wallet', 'child_wallets', 'member_id', 'naming family B''s member',
+       format('insert into public.child_wallets (family_id, member_id) values (%L, %L)', fam_a, kid_b),
+       format('insert into public.child_wallets (family_id, member_id) values (%L, %L)', fam_a, kid_a2),
+       format('member_id = %L', kid_a2), kid_b::text),
+      ('medication schedule', 'medication_schedules', 'medication_id', 'naming family B''s medication',
+       format('insert into public.medication_schedules (family_id, medication_id, time_of_day) values (%L, %L, %L)', fam_a, med_b, '08:00'),
+       format('insert into public.medication_schedules (family_id, medication_id, time_of_day) values (%L, %L, %L)', fam_a, med_a, '09:00'),
+       format('medication_id = %L', med_a), med_b::text)
+    ) as v(label, tbl, col, tail, foreign_sql, own_sql, own_pred, foreign_ref) loop
 
-  -- Controls: the same four with A's own member and wallet.
-  begin insert into public.guardian_member_profiles (family_id, member_id, guardian_phone) values (fam_a, kid_a, '+15550497002'); exception when others then failures := array_append(failures, 'CONTROL: A''s own Guardian profile was refused: ' || sqlerrm); end;
-  begin insert into public.gift_links (family_id, token, child_wallet_id) values (fam_a, 'm0497-own', wal_a); exception when others then failures := array_append(failures, 'CONTROL: A''s own gift link was refused: ' || sqlerrm); end;
-  begin insert into public.pay_handles (family_id, handle, child_wallet_id) values (fam_a, 'm0497_own', wal_a); exception when others then failures := array_append(failures, 'CONTROL: A''s own pay handle was refused: ' || sqlerrm); end;
-  begin insert into public.child_wallets (family_id, member_id) values (fam_a, kid_a2); exception when others then failures := array_append(failures, 'CONTROL: A''s own child wallet was refused: ' || sqlerrm); end;
-  begin insert into public.medication_schedules (family_id, medication_id, time_of_day) values (fam_a, med_a, '09:00'); exception when others then failures := array_append(failures, 'CONTROL: A''s own medication schedule was refused: ' || sqlerrm); end;
+    -- 1. The foreign INSERT, refused by the guard itself.
+    begin execute b.foreign_sql; got := 'landed';
+    exception when others then got := sqlstate || ': ' || sqlerrm; end;
+    if got = 'landed' then
+      failures := array_append(failures, format('family A''s parent wrote a %s %s', b.label, b.tail));
+    elsif got not like guard then
+      failures := array_append(failures, format('the foreign %s was refused, but not by the same-family guard (%s)', b.label, got));
+    end if;
 
-  -- Moving A's own gift link onto B's wallet.
-  begin update public.gift_links set child_wallet_id = wal_b where token = 'm0497-own'; exception when others then null; end;
+    -- 2. The same INSERT for A's own object lands.
+    begin execute b.own_sql;
+    exception when others then
+      failures := array_append(failures, format('CONTROL: A''s own %s was refused (%s: %s)', b.label, sqlstate, sqlerrm));
+    end;
+    execute format('select count(*) from public.%I where family_id = %L and %s', b.tbl, fam_a, b.own_pred) into n;
+    if n <> 1 then
+      failures := array_append(failures, format('CONTROL: A''s own %s did not land (%s rows)', b.label, n));
+      continue;
+    end if;
 
-  perform set_config('role','postgres', true);
-  select count(*) into n from public.guardian_member_profiles where family_id = fam_a and member_id = kid_b;
-  if n <> 0 then failures := array_append(failures, 'family A''s parent wrote a Guardian profile naming family B''s member'); end if;
-  select count(*) into n from public.gift_links where family_id = fam_a and child_wallet_id = wal_b and token = 'm0497-foreign';
-  if n <> 0 then failures := array_append(failures, 'family A''s parent wrote a gift link carrying family B''s child wallet'); end if;
-  select count(*) into n from public.pay_handles where family_id = fam_a and child_wallet_id = wal_b;
-  if n <> 0 then failures := array_append(failures, 'family A''s parent wrote a pay handle carrying family B''s child wallet'); end if;
-  select count(*) into n from public.child_wallets where family_id = fam_a and member_id = kid_b;
-  if n <> 0 then failures := array_append(failures, 'family A''s parent wrote a child wallet naming family B''s member'); end if;
-  select count(*) into n from public.medication_schedules where family_id = fam_a and medication_id = med_b;
-  if n <> 0 then failures := array_append(failures, 'family A''s parent wrote a medication schedule naming family B''s medication'); end if;
-  select count(*) into n from public.gift_links where token = 'm0497-own' and child_wallet_id = wal_b;
-  if n <> 0 then failures := array_append(failures, 'family A''s parent moved its own gift link onto family B''s child wallet'); end if;
-  select count(*) into n from public.guardian_member_profiles where family_id = fam_a and member_id = kid_a;
-  if n <> 1 then failures := array_append(failures, 'CONTROL: A''s own Guardian profile did not land'); end if;
-  select count(*) into n from public.child_wallets where family_id = fam_a and member_id = kid_a2;
-  if n <> 1 then failures := array_append(failures, 'CONTROL: A''s own child wallet did not land'); end if;
-  select count(*) into n from public.medication_schedules where family_id = fam_a and medication_id = med_a;
-  if n <> 1 then failures := array_append(failures, 'CONTROL: A''s own medication schedule did not land'); end if;
+    -- 3. Moving that own row's reference onto B's object.
+    begin
+      execute format('update public.%I set %I = %L where family_id = %L and %s', b.tbl, b.col, b.foreign_ref, fam_a, b.own_pred);
+      get diagnostics n = row_count;
+      got := format('updated %s row(s)', n);
+    exception when others then got := sqlstate || ': ' || sqlerrm; end;
+    if got not like guard then
+      failures := array_append(failures, format('moving A''s own %s onto B''s object was not refused by the guard (%s)', b.label, got));
+    end if;
 
-  -- Control: a session-less writer is still exempt (0311's rule).
+    -- 4. Moving that own row into family B.
+    begin
+      execute format('update public.%I set family_id = %L where family_id = %L and %s', b.tbl, fam_b, fam_a, b.own_pred);
+      get diagnostics n = row_count;
+      got := format('updated %s row(s)', n);
+    exception when others then got := sqlstate || ': ' || sqlerrm; end;
+    if got not like guard then
+      failures := array_append(failures, format('moving A''s own %s into family B was not refused by the guard (%s)', b.label, got));
+    end if;
+
+    -- The own row is exactly as it was written.
+    perform set_config('role','postgres', true);
+    execute format('select count(*) from public.%I where family_id = %L and %s', b.tbl, fam_a, b.own_pred) into n;
+    perform set_config('role','authenticated', true);
+    if n <> 1 then
+      failures := array_append(failures, format('A''s own %s was changed by a refused update (%s rows left as written)', b.label, n));
+    end if;
+  end loop;
+
+  -- 5. The service role, with its own claims, is exempt.
+  perform set_config('role','service_role', true);
   perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claims', json_build_object('role', 'service_role')::text, true);
+  begin
+    insert into public.gift_links (family_id, token, child_wallet_id) values (fam_a, 'm0497-service', wal_b);
+  exception when others then
+    failures := array_append(failures, format('CONTROL: the service role''s write was refused (%s: %s)', sqlstate, sqlerrm));
+  end;
+
+  -- 6. A session-less writer (postgres, no claims) is exempt, separately.
+  perform set_config('role','postgres', true);
   perform set_config('request.jwt.claims', '', true);
   begin
     insert into public.gift_links (family_id, token, child_wallet_id) values (fam_a, 'm0497-server', wal_b);
   exception when others then
-    failures := array_append(failures, 'CONTROL: a session-less (server) write was refused: ' || sqlerrm);
+    failures := array_append(failures, format('CONTROL: a session-less write was refused (%s: %s)', sqlstate, sqlerrm));
   end;
+  select count(*) into n from public.gift_links where token in ('m0497-service', 'm0497-server') and child_wallet_id = wal_b;
+  if n <> 2 then
+    failures := array_append(failures, format('CONTROL: %s of the 2 exempt writes landed', n));
+  end if;
 
-  -- Wiring: each reference runs 0311's helper.
+  -- 7. Wiring: each reference runs 0311's helper, exactly.
   select count(*) into n
     from pg_trigger t
    where t.tgfoid = 'public.reference_shares_family()'::regprocedure
@@ -143,7 +198,7 @@ begin
        ('public.medication_schedules'::regclass,     E'medication_id\\000medications\\000'));
   if n <> 5 then failures := array_append(failures, format('%s of 5 references are wired to reference_shares_family', n)); end if;
 
-  -- NEGATIVE CONTROL: without the gift link trigger, the foreign link lands.
+  -- 8. NEGATIVE CONTROL: without the gift link trigger, the foreign link lands.
   if exists (select 1 from pg_trigger where tgrelid = 'public.gift_links'::regclass and tgname = 'trg_gift_links_child_wallet_id_family') then
     alter table public.gift_links disable trigger trg_gift_links_child_wallet_id_family;
     perform set_config('role','authenticated', true);
@@ -161,7 +216,7 @@ begin
   if array_length(failures, 1) is not null then
     raise exception E'a family''s row can name another family''s member or wallet:\n  - %', array_to_string(failures, E'\n  - ');
   end if;
-  raise notice 'a-childs-wallet-and-guardian-number-stay-in-one-family: OK (as family A''s parent: a Guardian profile naming B''s member, a gift link and a pay handle carrying B''s child wallet, a child wallet naming B''s member, a medication schedule naming B''s medication, and moving A''s gift link onto B''s wallet are all refused; A''s own five land; a session-less server write is still exempt; all five references run reference_shares_family; negative control: with the gift link trigger disabled the foreign link landed)';
+  raise notice 'a-childs-wallet-and-guardian-number-stay-in-one-family: OK (for each of the five bindings, as family A''s parent: the foreign INSERT, the reference UPDATE onto B''s object and the family_id UPDATE into B were each refused by the guard itself (42501, its own sentence), and A''s own row landed and stayed as written; the service role and a session-less writer were each exempt and their foreign rows landed; all five references run reference_shares_family; negative control: with the gift link trigger disabled the foreign link landed)';
 end $$;
 
 rollback;
