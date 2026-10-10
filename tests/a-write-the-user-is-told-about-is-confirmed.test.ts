@@ -1228,7 +1228,9 @@ describe('a cancelled pickup is not a completed one (C1-S9-59)', () => {
   it('confirms the cancel', () => {
     const body = actionBody(handoff, 'export async function cancelHandoffAction');
     expect(body).toContain('wroteNoRows(cancelled)');
-    expect(body).toContain(".in('status', ['proposed', 'confirmed']).select('id')");
+    // Read back with the event it linked, so the cancel can take it off the
+    // family calendar (tests/a-cancelled-pickup-leaves-the-family-calendar.test.ts).
+    expect(body).toContain(".in('status', ['proposed', 'confirmed']).select('id, calendar_event_id')");
   });
 
   it('leaves the C1-S9-23 confirm guard in place beside it', () => {
