@@ -24,7 +24,7 @@ export function suggestUsername(displayName: string): string {
 }
 
 /** The domain every kid login's synthetic address is on. Nothing is ever
- *  delivered there, so no one but Bubaly can hold an account on it. */
+ *  delivered there. */
 export const CHILD_LOGIN_EMAIL_DOMAIN = 'kids.bubaly.app';
 
 /** The synthetic, never-emailed address for a child's auth user. Deterministic
@@ -38,10 +38,11 @@ export function syntheticChildEmail(username: string): string {
  *
  * A kid login belongs to the family whose parent made it. Because its address
  * is deterministic from the username, any household's parent can write an
- * invite to it, and accept_invite only compares addresses, so a child who
- * opened a stranger's join link was enrolled in that stranger's family, where
- * its adults could message them and their own parents could not see it. The
- * join page refuses such an account before it asks the database to accept.
+ * invite to it, and accept_invite compared only addresses (until the held
+ * 0495), so a child who opened a stranger's join link was enrolled in that
+ * stranger's family, where its adults could message them and their own
+ * parents could not see it. The join page refuses such an account before it
+ * asks the database to accept.
  */
 export function isChildLoginEmail(email: string | null | undefined): boolean {
   return typeof email === 'string' && email.trim().toLowerCase().endsWith(`@${CHILD_LOGIN_EMAIL_DOMAIN}`);
