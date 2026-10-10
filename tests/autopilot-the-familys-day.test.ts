@@ -221,10 +221,16 @@ describe('the scan answers the family’s day end to end', () => {
     expect(titles).not.toContain('Dentist is tomorrow');
 
     // The auto-created reminder fires at nine on the family's clock, not at
-    // 09:00Z — which is two in the morning in Los Angeles.
+    // 09:00Z — which is two in the morning in Los Angeles. And at a nine still
+    // to come: when the family's 09:00 today has already passed, the notifier
+    // (which reads only reminders ahead of it) would never deliver it, so it
+    // is the next morning's.
     const reminders = db.table('reminders');
     expect(reminders).toHaveLength(1);
+    const nineToday = Date.parse(defaultReminderIso(c.familyToday, c.tz));
+    const nextDay = new Date(Date.parse(`${c.familyToday}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
     expect(wall(String(reminders[0].remind_at), c.tz))
-      .toEqual({ day: c.familyToday, hour: 9, minute: 0 });
+      .toEqual({ day: nineToday > Date.parse(c.now) ? c.familyToday : nextDay, hour: 9, minute: 0 });
+    expect(Date.parse(String(reminders[0].remind_at))).toBeGreaterThan(Date.parse(c.now));
   });
 });

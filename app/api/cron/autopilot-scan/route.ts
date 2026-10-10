@@ -13,6 +13,16 @@ const AUTOPILOT_FEATURE_HREF = '/dashboard/autopilot';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
+/**
+ * The pass stops STARTING families once this much of `maxDuration` is spent,
+ * so it returns a summary instead of being killed mid-loop. Families it did not
+ * reach are counted and named rather than silently dropped.
+ */
+const TIME_BUDGET_MS = 45_000;
+/** Families scanned at once. Bounded: each scan is a burst of reads and writes. */
+const FAMILY_CONCURRENCY = 4;
+const DAY_MS = 86_400_000;
+
 // The scan STORES suggestion titles, and the subscription ones carry money
 // ("$15.99 charge: Netflix tomorrow"). This cron has no reader to word them for:
 // a family's language lives only in the browsing member's cookie, with no column
@@ -67,14 +77,23 @@ export async function GET(req: NextRequest) {
     let policyCandidates = 0;
     let skipped = 0;
     let failures = 0;
-    for (const fam of families ?? []) {
+    const started = Date.now();
+    // The start point rotates by day. Ordered by id and cut off by the budget,
+    // the same lowest-id families were served first every day and the ones
+    // after the cut-off never at all.
+    const all = families ?? [];
+    const offset = all.length > 0 ? Math.floor(started / DAY_MS) % all.length : 0;
+    const queue = [...all.slice(offset), ...all.slice(0, offset)];
+    const unreached: string[] = [];
+    let cursor = 0;
+    const scanFamily = async (fam: { id: string; timezone: string | null }) => {
       try {
         // Inside the per-family try on purpose. `resolveFeatureEntitlement`
         // throws when the plan cannot be read, and an unreadable plan is not an
         // unentitled family — that counts as a failure for this family, never
         // as a silent skip.
         const entitlement = await resolveFeatureEntitlement(supabase, fam.id, AUTOPILOT_FEATURE_HREF, tiers);
-        if (!entitlement.allowed) { skipped++; continue; }
+        if (!entitlement.allowed) { skipped++; return; }
 
         const r = await runAutopilotScan(supabase, fam.id, null, fam.timezone || 'UTC', SUGGESTION_LOCALE, suggestionText);
         scanned += r.scanned;
@@ -85,11 +104,28 @@ export async function GET(req: NextRequest) {
         failures++;
         console.error(`Autopilot cron failed for family ${fam.id}:`, err);
       }
+    };
+    const worker = async () => {
+      while (cursor < queue.length) {
+        const fam = queue[cursor++];
+        if (Date.now() - started >= TIME_BUDGET_MS) { unreached.push(fam.id); continue; }
+        await scanFamily(fam);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(FAMILY_CONCURRENCY, queue.length) }, worker));
+    if (unreached.length > 0) {
+      console.error(`Autopilot cron ran out of time: ${unreached.length} families not scanned`, unreached.slice(0, 50));
     }
 
+    // A family the pass never reached is a family it failed, not a success.
+    const scanFailures = failures;
+    failures += unreached.length;
     const ok = failures === 0;
     return NextResponse.json(
-      { ok, families: (families ?? []).length, entitled: (families ?? []).length - skipped - failures, skipped, scanned, autoExecuted, notified, policyCandidates, failures },
+      {
+        ok, families: all.length, entitled: all.length - unreached.length - skipped - scanFailures, skipped, scanned, autoExecuted, notified, policyCandidates, failures,
+        unreached: unreached.length, unreachedFamilies: unreached.slice(0, 50),
+      },
       { status: ok ? 200 : 502 },
     );
   } catch (err) {
