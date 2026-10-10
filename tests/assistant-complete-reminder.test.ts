@@ -27,7 +27,7 @@ function fakeDb(selectRows: Record<string, unknown>[], captured: Captured, updat
   return { from: () => make() } as unknown as DbArg;
 }
 
-const ctx: AssistantCtx = { familyId: 'fam-1', userId: 'user-1', memberId: 'mem-self', members: [], tz: 'America/New_York' };
+const ctx: AssistantCtx = { familyId: 'fam-1', userId: 'user-1', role: 'parent', memberId: 'mem-self', members: [], tz: 'America/New_York' };
 
 function tool(name: string, selectRows: Record<string, unknown>[], captured: Captured, updateRows?: unknown[]) {
   const t = buildAssistantTools(fakeDb(selectRows, captured, updateRows), ctx).find((x) => x.name === name);
