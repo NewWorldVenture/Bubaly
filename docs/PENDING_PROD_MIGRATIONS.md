@@ -111,6 +111,7 @@ source allocations are not evidence that production applied any migration.
 | 0495 held | `0495_a_member_invited_back_gets_what_the_invite_grants.sql` | A returning member gets the invite's role; an active member's role is unchanged; a kid login cannot accept another family's invite. Reserved for #981 above every preserved allocation (confirmed in #981 comment 6089092821). |
 | 0496 proposed, held | `0496_a_childs_xp_is_awarded_by_a_parent.sql` | Only a manager or the service role can award a child XP or rewrite streaks through 0341's functions. Requested for #981 on #771 (comment 6089394563); not yet confirmed. |
 | 0497 proposed, held | `0497_a_childs_wallet_and_guardian_number_stay_in_one_family.sql` | 0311's same-family guard on Guardian profiles, gift links, pay handles, child wallets and medication schedules. Requested for #981 on #771 (comment 6092501825); not yet confirmed. |
+| 0498 proposed, held | `0498_a_guest_cannot_feed_the_calendar_or_rewrite_a_grocery_list.sql` | 0464's guest guard on `calendar_feeds` and `grocery_lists`. Requested for #981 on #771 (comment 6094699645); not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4412,6 +4413,50 @@ boundary probes pass.
 **After approved release:** as a test parent, try to save a Guardian profile
 for another test family's member through PostgREST and confirm 42501; then
 save one for your own member and confirm it lands.
+
+## `0498` (proposed, held) — a guest could still feed the calendar and rewrite grocery lists
+
+`supabase/reserved/0498_a_guest_cannot_feed_the_calendar_or_rewrite_a_grocery_list.sql` —
+**held**: proposed as `0498`, the first number above `0497`, for #981. It was
+requested on #771 in comment 6094699645 and is not yet confirmed. Its probe is
+held with it in `docs/audit/reserved/`.
+
+**Severity: low to medium. Deploy order: any.** 0464 (ROLE-M03) refuses a
+guest's writes on the eight resources `/family/permissions` names. Two tables
+sit just outside that list:
+- **`calendar_feeds`:** its only policy is `ALL` for `is_family_member`, so a
+  guest subscribed the family to any ICS URL. On the replay that landed 1 row,
+  while the same guest's direct event insert was refused. The in-app sync runs
+  on the guest's session and is refused at `calendar_events`. The nightly
+  `app/api/cron/calendar-feeds` sync, however, uses the service client, which
+  0464 exempts, and would import that feed's events into the family calendar.
+- **`grocery_lists`:** the parent of the guarded `grocery_items`. A guest
+  created, renamed and deleted lists (1 row each). Deleting a list that has
+  items already failed, through the cascade.
+
+0498 wires 0464's own trigger function onto both tables. There is no new
+function, and 0464's eight tables do not change. Every other role writes both
+tables as before, and the service role and session-less writers stay exempt.
+Only the tables are guarded; the calendar lane's importer, feed actions and the
+held 0490 are untouched, and 0490's probe passes with and without 0498.
+
+**Proof:** `.github/workflows/guest-household-runtime.yml` replays every
+runnable migration. It requires the held probe
+`docs/audit/reserved/a-guest-cannot-feed-the-calendar-or-rewrite-a-grocery-list-check.sql`
+to fail with the guest's writes landing, applies 0498 twice, and requires the
+probe to pass. The passing run shows:
+- the guest's insert, rename and delete on both tables are each refused with
+  0464's own sentence (42501), and nothing changes;
+- the guest still reads both tables;
+- a parent and a child still insert, update and delete both;
+- negative control: with the `grocery_lists` guard disabled, the guest's list
+  lands.
+
+Leaving `grocery_lists` unwired in the source fails exactly its five lines.
+
+**After approved release:** as a test guest, try to add a calendar feed and to
+rename a grocery list through PostgREST and confirm 42501; then do both as a
+test child and confirm they land.
 
 ## `0471` and `0474` — the admin digest's delivery store, and a removed admin is not sent it
 
