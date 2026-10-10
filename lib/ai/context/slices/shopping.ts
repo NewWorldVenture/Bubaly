@@ -5,7 +5,7 @@
 import 'server-only';
 import { fenceUntrusted, sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
 import { listOpen, pantryList } from '@/lib/services/groceries';
-import { recallFactsForContext } from './recall';
+import { recallFactsForContext } from '../recall';
 import { ok } from '@/lib/services/types';
 import type { SliceDefinition } from '../policy';
 import { dayKeyLabel, joinNatural } from '../render';

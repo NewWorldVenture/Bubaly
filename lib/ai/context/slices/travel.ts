@@ -4,7 +4,7 @@
 // planner needs the dates and the destination, and that is all it gets.
 import 'server-only';
 import { fenceUntrusted, sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
-import { recallFactsForContext } from './recall';
+import { recallFactsForContext } from '../recall';
 import { listTrips } from '@/lib/services/trips';
 import { ok } from '@/lib/services/types';
 import type { SliceDefinition } from '../policy';

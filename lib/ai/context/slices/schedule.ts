@@ -7,7 +7,7 @@ import { fenceUntrusted, sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
 import { findConflicts } from '@/lib/services/calendar';
 import { searchCalendarOccurrences, validateCalendarSearchWindow, type NativeSearchOccurrence, type SourceSearchOccurrence, type SearchCalendarOccurrencesResult } from '@/lib/services/calendar/search-occurrences';
 import type { CalendarConflictAdvisory, CalendarConflictSubject } from '@/lib/calendar/conflict-advisories';
-import { recallFactsForContext } from './recall';
+import { recallFactsForContext } from '../recall';
 import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { settle } from '@/lib/supabase/settle';
