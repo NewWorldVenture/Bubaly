@@ -358,6 +358,30 @@ describe('accepting a learned policy suggestion', () => {
     expect(db.table('autopilot_suggestions')[0].status).toBe('executed');
   });
 
+  it('recovers an abandoned claim of your own: an old \'approved\' row with no policy is accepted again, once', async () => {
+    // The accept claimed the row and then stopped before writing the policy.
+    seedSuggestion(db, { status: 'approved', resolved_by: 'user-1', resolved_at: new Date(Date.now() - 10 * 60_000).toISOString() });
+
+    const results = await Promise.all([
+      acceptPolicySuggestionAction({ suggestionId: 'sug-1' }),
+      acceptPolicySuggestionAction({ suggestionId: 'sug-1' }),
+    ]);
+
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(db.table('trust_policies')).toHaveLength(1);
+    expect(db.table('autopilot_suggestions')[0]).toMatchObject({ status: 'executed', resolved_by: 'user-1' });
+  });
+
+  it('leaves a claim that is still in flight, or another manager\'s, alone', async () => {
+    seedSuggestion(db, { status: 'approved', resolved_by: 'user-1', resolved_at: new Date().toISOString() });
+    expect(await acceptPolicySuggestionAction({ suggestionId: 'sug-1' })).toEqual({ ok: false, error: 'That suggestion is no longer open.' });
+    db.reset();
+    seedSuggestion(db, { status: 'approved', resolved_by: 'user-2', resolved_at: new Date(Date.now() - 10 * 60_000).toISOString() });
+    expect(await acceptPolicySuggestionAction({ suggestionId: 'sug-1' })).toEqual({ ok: false, error: 'That suggestion is no longer open.' });
+    expect(db.table('trust_policies')).toEqual([]);
+    expect(db.table('autopilot_suggestions')[0].status).toBe('approved');
+  });
+
   it('never flips a dismissal that landed mid-accept back to executed, and writes no policy', async () => {
     seedSuggestion(db);
     // Another member dismisses the card while the accept re-derives the evidence.

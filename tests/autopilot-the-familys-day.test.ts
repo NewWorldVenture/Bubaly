@@ -67,7 +67,9 @@ const CASES: Case[] = [
     familyToday: '2026-09-20', greenwichToday: '2026-09-21',
     expiresToday: '2026-09-20', expiresIn30: '2026-10-20',
     choreDueLastNight: '2026-09-20T03:00:00Z', // 20:00 on the 19th, PDT
-    apptToday: '2026-09-21T02:00:00Z',        // 19:00 on the 20th, PDT — Greenwich calls it the 21st
+    // 23:30 on the 20th, PDT — Greenwich calls it the 21st. Still AHEAD of
+    // `now` (23:00): an appointment already past is not offered at all.
+    apptToday: '2026-09-21T06:30:00Z',
   },
   {
     // 05:00 on the 22nd, JST (UTC+9). Greenwich is still on the 21st.

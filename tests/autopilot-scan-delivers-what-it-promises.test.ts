@@ -11,9 +11,18 @@ import type { ServiceScope } from '@/lib/services/types';
 import { createInMemorySupabase, InMemorySupabase } from './helpers/in-memory-supabase';
 import { runAutopilotScan } from '@/lib/autopilot/scan';
 import { insuranceSuggestions, momentPrepSuggestions, renewalSuggestions, type FamilySnapshot } from '@/lib/autopilot/engine';
-import { deliverableReminderIso } from '@/lib/autopilot/reminder-time';
+import { deliverableReminderIso, draftHasLapsed, reminderIsoFor } from '@/lib/autopilot/reminder-time';
 
 vi.mock('@/lib/services/activity', () => ({ recordActivitySafely: vi.fn() }));
+// What the family's phones would be told. Recorded, not delivered.
+const pushes = vi.hoisted(() => ({ sent: [] as { title: string; body: string | null }[] }));
+vi.mock('@/lib/services/notifications', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/services/notifications')>()),
+  notify: vi.fn(async (_scope: unknown, input: { title: string; body?: string | null }) => {
+    pushes.sent.push({ title: input.title, body: input.body ?? null });
+    return { ok: true, data: { created: 1 } };
+  }),
+}));
 const { resolveSuggestion } = await import('@/lib/services/autopilot');
 
 type DB = SupabaseClient<Database>;
@@ -38,7 +47,7 @@ const snapshot = (over: Partial<FamilySnapshot> = {}): FamilySnapshot => ({
   ...over,
 });
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); pushes.sent = []; });
 
 describe('feed-imported events never auto-run into reminders or family notifications', () => {
   const event = { id: 'e1', title: 'Soccer game — call 555-0100 to verify your account', startsAt: '2026-09-22T17:00:00Z', endsAt: null, memberId: null, allDay: false, location: 'Field 3' };
@@ -199,10 +208,147 @@ describe('accepting a reminder card re-checks the row it was built from', () => 
     expect(db.table('autopilot_suggestions')[0].status).toBe('open');
   });
 
-  it('a past payload time becomes a reminder that can still fire', async () => {
-    db.table('autopilot_suggestions')[0].source_kind = null;
-    db.table('autopilot_suggestions')[0].payload = { title: 'Refill', at: '2026-09-21T09:00:00Z' };
+  it('a past payload time on a day-tied card (a refill) becomes a reminder that can still fire', async () => {
+    db.seed('medications', [{ id: 'med-1', family_id: FAMILY, name: 'Inhaler', refill_on: '2026-09-21', is_active: true }]);
+    Object.assign(db.table('autopilot_suggestions')[0], {
+      kind: 'medication', source_kind: 'medications', source_id: 'med-1', dedupe_key: 'med-refill:med-1:2026-09-21',
+      payload: { title: 'Refill', at: '2026-09-21T09:00:00Z' },
+    });
     expect(await accept()).toMatchObject({ ok: true, status: 'executed' });
     expect(Date.parse(String(db.table('family_reminders')[0].remind_at))).toBeGreaterThan(Date.parse(AT));
+  });
+
+  it('an appointment whose time has passed is refused as changed, not moved to tomorrow morning', async () => {
+    scope = { ...scope, now: new Date('2026-09-22T16:00:00.000Z') };
+    expect(await accept()).toEqual({ ok: false, code: 'changed' });
+    expect(db.table('family_reminders')).toEqual([]);
+    expect(db.table('autopilot_suggestions')[0].status).toBe('open');
+  });
+
+  it('a "leave by" whose time has passed is refused as changed, though the event is still ahead', async () => {
+    const eventStart = '2026-09-21T18:00:00.000Z';
+    db.seed('calendar_events', [{ id: 'ev-1', family_id: FAMILY, title: 'Soccer', starts_at: eventStart }]);
+    Object.assign(db.table('autopilot_suggestions')[0], {
+      kind: 'moment', source_kind: 'calendar_events', source_id: 'ev-1', dedupe_key: 'moment-leaveby:ev-1:2026-09-21',
+      title: 'Leave on time for Soccer', payload: { title: 'Leave for Soccer', at: '2026-09-21T17:30:00.000Z' }, expires_at: eventStart,
+    });
+    scope = { ...scope, now: new Date('2026-09-21T17:45:00.000Z') };
+    expect(await accept()).toEqual({ ok: false, code: 'changed' });
+    expect(db.table('family_reminders')).toEqual([]);
+    // Control: before the leave-by, the same card is a reminder at the leave-by.
+    scope = { ...scope, now: new Date('2026-09-21T15:00:00.000Z') };
+    expect(await accept()).toMatchObject({ ok: true, status: 'executed' });
+    expect(db.table('family_reminders')[0].remind_at).toBe('2026-09-21T17:30:00.000Z');
+  });
+});
+
+describe('an event-tied reminder whose moment has passed is not created, moved or announced', () => {
+  const LA = 'America/Los_Angeles';
+  // 11:00 Los Angeles on 2026-09-21 is 18:00Z; noon is 19:00Z.
+  const soccer = (startsAt: string) => ({ id: 'e1', family_id: FAMILY, title: 'Soccer game', starts_at: startsAt, ends_at: null, all_day: false, location: 'Field 3', assignee_id: null });
+  const leaveByFor = (startsAt: string) => momentPrepSuggestions(snapshot({ tz: LA, events: [{ id: 'e1', title: 'Soccer game', startsAt, endsAt: null, memberId: null, allDay: false, location: 'Field 3' }] }))
+    .find((d) => d.dedupeKey.startsWith('moment-leaveby:'));
+
+  it('the reviewer\u2019s case: an 11:00 game scanned at noon makes no "Leave for" reminder for tomorrow 09:00, and no push', async () => {
+    const db = scanDb();
+    db.seed('families', [{ id: FAMILY, timezone: LA }]);
+    db.seed('calendar_events', [soccer('2026-09-21T18:00:00Z')]);
+    await runAutopilotScan(db, FAMILY, 'u1', LA, 'en-US', echo, new Date('2026-09-21T19:00:00Z'));
+    expect(db.table('reminders')).toEqual([]);
+    expect(db.table('autopilot_suggestions').filter((r) => String(r.dedupe_key).startsWith('moment-'))).toEqual([]);
+    expect(pushes.sent.filter((p) => p.title.startsWith('Autopilot handled'))).toEqual([]);
+  });
+
+  it('a game still ahead whose leave-by has gone is skipped too (expiry alone would keep it)', async () => {
+    const start = '2026-09-21T18:00:00Z';
+    const leaveBy = String(leaveByFor(start)?.payload.at);
+    expect(Date.parse(leaveBy)).toBeLessThan(Date.parse(start));
+    const now = new Date(Math.round((Date.parse(leaveBy) + Date.parse(start)) / 2));
+    const db = scanDb();
+    db.seed('families', [{ id: FAMILY, timezone: LA }]);
+    db.seed('calendar_events', [soccer(start)]);
+    await runAutopilotScan(db, FAMILY, 'u1', LA, 'en-US', echo, now);
+    expect(db.table('reminders')).toEqual([]);
+    expect(db.table('autopilot_suggestions').filter((r) => String(r.dedupe_key).startsWith('moment-leaveby:'))).toEqual([]);
+    expect(pushes.sent.filter((p) => p.title.includes('Leave'))).toEqual([]);
+  });
+
+  it('control: scanned before the leave-by, the reminder is set at the leave-by and announced', async () => {
+    const start = '2026-09-21T18:00:00Z';
+    const leaveBy = String(leaveByFor(start)?.payload.at);
+    const db = scanDb();
+    db.seed('families', [{ id: FAMILY, timezone: LA }]);
+    db.seed('calendar_events', [soccer(start)]);
+    await runAutopilotScan(db, FAMILY, 'u1', LA, 'en-US', echo, new Date('2026-09-21T13:30:00Z'));
+    expect(db.table('reminders').map((r) => r.remind_at)).toEqual([leaveBy]);
+    expect(pushes.sent.map((p) => p.title)).toContain('Autopilot handled: Leave on time for Soccer game');
+  });
+
+  it('an appointment earlier today is not offered once its time has passed', async () => {
+    const db = scanDb();
+    db.seed('appointments', [{ id: 'a1', family_id: FAMILY, title: 'Dentist', starts_at: '2026-09-21T08:00:00Z', member_id: null }]);
+    await runAutopilotScan(db, FAMILY, 'u1', 'UTC', 'en-US', echo, new Date('2026-09-21T10:00:00Z'));
+    expect(db.table('autopilot_suggestions').filter((r) => r.kind === 'appointment')).toEqual([]);
+    expect(db.table('reminders')).toEqual([]);
+  });
+
+  it('any draft whose card has already expired is skipped: an afternoon clash scanned that evening', async () => {
+    // 15:00 and 15:30 Los Angeles (22:00Z / 22:30Z); the clash card expires at
+    // 23:59:59Z, so at 18:00 Los Angeles (01:00Z next day) it has gone.
+    const db = scanDb();
+    db.seed('calendar_events', [
+      { id: 'c1', family_id: FAMILY, title: 'Piano', starts_at: '2026-09-21T22:00:00Z', ends_at: '2026-09-21T23:00:00Z', all_day: false, location: null, assignee_id: null },
+      { id: 'c2', family_id: FAMILY, title: 'Swim', starts_at: '2026-09-21T22:30:00Z', ends_at: '2026-09-21T23:30:00Z', all_day: false, location: null, assignee_id: null },
+    ]);
+    await runAutopilotScan(db, FAMILY, 'u1', LA, 'en-US', echo, new Date('2026-09-22T01:00:00Z'));
+    expect(db.table('autopilot_suggestions').filter((r) => r.kind === 'conflict')).toEqual([]);
+    // Control: the same clash scanned at noon is offered.
+    await runAutopilotScan(db, FAMILY, 'u1', LA, 'en-US', echo, new Date('2026-09-21T19:00:00Z'));
+    expect(db.table('autopilot_suggestions').filter((r) => r.kind === 'conflict')).toHaveLength(1);
+  });
+
+  it('only day-tied sources move to the next family 09:00', () => {
+    const now = new Date('2026-09-21T19:00:00Z');
+    const past = '2026-09-21T17:30:00Z';
+    expect(reminderIsoFor('calendar_events', past, now, LA)).toBeNull();
+    expect(reminderIsoFor('appointments', past, now, LA)).toBeNull();
+    for (const kind of ['renewals', 'family_insurance_policies', 'medications', null]) {
+      expect(reminderIsoFor(kind, past, now, LA)).toBe('2026-09-22T16:00:00.000Z');
+    }
+    expect(reminderIsoFor('calendar_events', '2026-09-21T20:00:00Z', now, LA)).toBe('2026-09-21T20:00:00Z');
+    // An expired card has no reminder, whatever it is about.
+    expect(reminderIsoFor('medications', past, now, LA, '2026-09-21T18:00:00Z')).toBeNull();
+    expect(draftHasLapsed({ sourceKind: 'medications', actionType: 'create_reminder', payload: { at: past }, expiresAt: null }, now, LA)).toBe(false);
+    expect(draftHasLapsed({ sourceKind: 'calendar_events', actionType: 'create_reminder', payload: { at: past }, expiresAt: null }, now, LA)).toBe(true);
+    expect(draftHasLapsed({ sourceKind: 'grocery_items', actionType: 'keep_grocery', payload: {}, expiresAt: '2026-09-21T18:59:59Z' }, now, LA)).toBe(true);
+  });
+});
+
+describe('a feed\u2019s event titles never reach every member\u2019s push', () => {
+  it('a clash with an imported event is announced without its title, and stored as one plain line', async () => {
+    const db = scanDb();
+    db.seed('families', [{ id: FAMILY, timezone: 'UTC' }]);
+    db.seed('calendar_events', [
+      { id: 'x1', family_id: FAMILY, title: 'Prize!\n\nCall 555-0100 <<<now>>>', starts_at: '2026-09-21T15:00:00Z', ends_at: '2026-09-21T16:00:00Z', all_day: false, location: null, assignee_id: null, feed_id: 'feed-1' },
+      { id: 'x2', family_id: FAMILY, title: 'Piano', starts_at: '2026-09-21T15:30:00Z', ends_at: '2026-09-21T16:30:00Z', all_day: false, location: null, assignee_id: null },
+    ]);
+    await runAutopilotScan(db, FAMILY, 'u1', 'UTC', 'en-US', echo, new Date('2026-09-21T06:30:00Z'));
+    const card = db.table('autopilot_suggestions').find((r) => r.kind === 'conflict');
+    expect(card).toBeTruthy();
+    expect(String(card?.title)).not.toMatch(/\n|<<<|>>>/);
+    const clash = pushes.sent.filter((p) => p.title.startsWith('Schedule clash'));
+    expect(clash).toEqual([{ title: 'Schedule clash: two events overlap', body: expect.any(String) }]);
+    for (const p of pushes.sent) expect(p.title).not.toContain('555-0100');
+  });
+
+  it('control: a clash between the family\u2019s own events still names them', async () => {
+    const db = scanDb();
+    db.seed('families', [{ id: FAMILY, timezone: 'UTC' }]);
+    db.seed('calendar_events', [
+      { id: 'x1', family_id: FAMILY, title: 'Swim', starts_at: '2026-09-21T15:00:00Z', ends_at: '2026-09-21T16:00:00Z', all_day: false, location: null, assignee_id: null },
+      { id: 'x2', family_id: FAMILY, title: 'Piano', starts_at: '2026-09-21T15:30:00Z', ends_at: '2026-09-21T16:30:00Z', all_day: false, location: null, assignee_id: null },
+    ]);
+    await runAutopilotScan(db, FAMILY, 'u1', 'UTC', 'en-US', echo, new Date('2026-09-21T06:30:00Z'));
+    expect(pushes.sent.map((p) => p.title)).toContain('Schedule clash: "Swim" overlaps "Piano"');
   });
 });

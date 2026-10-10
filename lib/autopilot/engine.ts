@@ -44,6 +44,12 @@ export type SuggestionDraft = {
   memberId: string | null;
   dedupeKey: string;
   expiresAt: string | null;
+  /**
+   * What the family-wide push/email says instead of `title`, when the title
+   * carries words from outside the family (a subscribed feed's event title).
+   * Not stored: the card itself still names what it is about.
+   */
+  notificationTitle?: string;
 };
 
 // ---- normalized inputs the route maps real Supabase rows into ----
@@ -311,9 +317,14 @@ export function conflictSuggestions(s: FamilySnapshot): SuggestionDraft[] {
       const key = [a.id, b.id].sort().join('|');
       if (seen.has(key)) continue;
       seen.add(key);
+      // A feed's event title is whoever runs that feed's words. It still names
+      // the clash on the card (the scan flattens it to one plain line), but the
+      // push sent to every member does not repeat it.
+      const external = !!(a.external || b.external);
       out.push({
         kind: 'conflict',
         title: `Schedule clash: "${a.title}" overlaps "${b.title}"`,
+        ...(external ? { notificationTitle: 'Schedule clash: two events overlap' } : {}),
         detail: sameMember ? 'Same person is double-booked.' : 'Two things overlap — who covers which?',
         confidence: sameMember ? 84 : 68,
         urgency: 3,

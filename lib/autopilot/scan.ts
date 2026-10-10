@@ -44,8 +44,9 @@ import { computeMemberTraits, type MemberTraits, type MemberHistory } from '@/li
 import { isPolicySuggestionKey } from '@/lib/autopilot/policy-candidates';
 import { runPolicyScan } from '@/lib/autopilot/policy-scan';
 import { archiveStaleSuggestions } from '@/lib/autopilot/history';
-import { deliverableReminderIso } from '@/lib/autopilot/reminder-time';
+import { draftHasLapsed, reminderIsoFor } from '@/lib/autopilot/reminder-time';
 import { notify } from '@/lib/services/notifications';
+import { sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
 import { addDaysToDayKey, dayKeyInTz, systemScopeForFamily, zonedTimeMs } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
@@ -265,7 +266,10 @@ export async function runAutopilotScan(
     birthdays: (members ?? []).map((m) => ({ memberId: m.id, name: m.display_name, birthday: m.birthday as string, giftIdeas: giftsByMember.get(m.id) })),
     lingeringGroceries: (groceries ?? []).map((g) => ({ id: g.id, name: g.name, addedAt: g.created_at })),
     events: (events ?? []).map((e) => ({
-      id: e.id, title: e.title, startsAt: e.starts_at, endsAt: e.ends_at, memberId: e.assignee_id, allDay: e.all_day, location: e.location,
+      // An imported title is someone else's words: one plain, bounded line
+      // before it reaches a card. (Server-side: the engine is also bundled for
+      // the browser, and the sanitizer is not.)
+      id: e.id, title: e.feed_id != null || e.external_uid != null ? sanitizeUntrusted(e.title, 120) : e.title, startsAt: e.starts_at, endsAt: e.ends_at, memberId: e.assignee_id, allDay: e.all_day, location: e.location,
       external: e.feed_id != null || e.external_uid != null,
     })),
     subscriptions: (subs ?? []).map((x) => ({ id: x.id, name: x.name, costCents: x.cost_cents, cadence: x.cadence, nextCharge: x.next_charge, lastUsed: x.last_used, status: x.status })),
@@ -315,7 +319,11 @@ export async function runAutopilotScan(
     }
   }
 
-  const drafts = buildSuggestions(snapshot, locale, t, traitsByMember);
+  // A draft whose card has already expired, or an event-tied reminder whose
+  // moment has passed (the "leave by" of a game that started an hour ago), is
+  // not offered, auto-run or announced. Left out of `draftKeys` too, so an
+  // open card for it from an earlier scan is archived below as stale.
+  const drafts = buildSuggestions(snapshot, locale, t, traitsByMember).filter((d) => !draftHasLapsed(d, now, tz));
   const draftKeys = new Set(drafts.map((d) => d.dedupeKey));
   const existingByKey = new Map((existing ?? []).map((e) => [e.dedupe_key, e]));
 
@@ -351,7 +359,12 @@ export async function runAutopilotScan(
       // rows whose remind_at is ahead of it, so a past instant (this morning
       // for a family east of the 06:30 UTC cron, an overdue refill's morning)
       // was stored, announced as handled, and never delivered.
-      const at = deliverableReminderIso((d.payload.at as string | undefined) ?? defaultReminderIso(todayKey, tz), now, tz);
+      //
+      // Only a reminder about a DAY (renewal, insurance, refill) moves to the
+      // next morning; an event-tied one whose time has gone is not written
+      // (reminderIsoFor), and the draft was already dropped above.
+      const at = reminderIsoFor(d.sourceKind, (d.payload.at as string | undefined) ?? defaultReminderIso(todayKey, tz), now, tz, d.expiresAt);
+      if (!at) continue;
       const relatedType = d.sourceKind === 'appointments' ? 'appointment'
         : d.sourceKind === 'calendar_events' ? 'event' : 'renewal';
       const { data: reminder, error: remErr } = await supabase.from('reminders').insert({
@@ -456,7 +469,7 @@ export async function runAutopilotScan(
         const sent = await notify(scope, {
           recipients: 'family',
           type: 'system',
-          title: status === 'auto_executed' ? `Autopilot handled: ${d.title}` : d.title,
+          title: status === 'auto_executed' ? `Autopilot handled: ${d.title}` : (d.notificationTitle ?? d.title),
           body: d.detail,
           relatedType: 'autopilot_suggestions',
           relatedId: inserted.id,

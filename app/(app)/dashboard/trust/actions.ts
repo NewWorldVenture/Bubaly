@@ -180,6 +180,8 @@ export async function deletePolicyAction(input: { id: string }): Promise<Result>
  * highest priority among matching policies.
  */
 const ACCEPTED_POLICY_PRIORITY = 200;
+/** An accept's own 'approved' claim older than this, with no policy written, is abandoned work. */
+const STALE_POLICY_CLAIM_MS = 2 * 60_000;
 
 /**
  * Accept an Autopilot `policy` suggestion: write ONE narrow `trust_policies`
@@ -200,7 +202,7 @@ export async function acceptPolicySuggestionAction(input: { suggestionId: string
   const familyId = ctx.active.familyId;
 
   const { data: suggestion, error: readError } = await supabase.from('autopilot_suggestions')
-    .select('id, kind, status, payload, updated_at, resolved_by')
+    .select('id, kind, status, payload, updated_at, resolved_by, resolved_at')
     .eq('id', input.suggestionId).eq('family_id', familyId).maybeSingle();
   if (readError) return actionFailure(readError, t('actions.couldNotReadThatSuggestion'));
   if (!suggestion || suggestion.kind !== POLICY_SUGGESTION_KIND) return { ok: false, error: t('actions.thatSuggestionDoesNotProposeAPolicy') };
@@ -222,7 +224,15 @@ export async function acceptPolicySuggestionAction(input: { suggestionId: string
     .eq('family_id', familyId).in('subject_kind', ['ai', 'everyone']).eq('enabled', true).limit(200);
   if (heldError) return actionFailure(heldError, t('actions.couldNotCreateThatPolicy'));
   const alreadyHeld = (held ?? []).some((p) => policyCoversTool(p, proposal.domain, proposal.capability, proposal.tool));
-  if (resuming && !alreadyHeld) return { ok: false, error: t('actions.thatSuggestionIsNoLongerOpen') };
+  // A claim of yours with no policy behind it is an accept that stopped
+  // between the claim and the write (a crash, a timeout). Left alone it sits
+  // 'approved' for good: no one else may accept it and the scan never
+  // re-offers it. Once it is older than any accept still in flight, the same
+  // manager may take it again — re-claimed below, fenced on the version read,
+  // so two retries still write one policy.
+  const claimedAt = Date.parse(String(suggestion.resolved_at ?? ''));
+  const staleClaim = resuming && !alreadyHeld && (!Number.isFinite(claimedAt) || Date.now() - claimedAt >= STALE_POLICY_CLAIM_MS);
+  if (resuming && !alreadyHeld && !staleClaim) return { ok: false, error: t('actions.thatSuggestionIsNoLongerOpen') };
 
   if (!alreadyHeld) {
     // The stored payload is not evidence. autopilot_suggestions is family-
@@ -248,7 +258,15 @@ export async function acceptPolicySuggestionAction(input: { suggestionId: string
     // the accept whose claim matches a row may write.
     let claim = supabase.from('autopilot_suggestions')
       .update({ status: 'approved', resolved_at: new Date().toISOString(), resolved_by: ctx.user.id })
-      .eq('id', suggestion.id).eq('family_id', familyId).eq('status', 'open');
+      .eq('id', suggestion.id).eq('family_id', familyId);
+    // Re-taking an abandoned claim is fenced on the claim time read too: each
+    // claim stamps a new one, so of two retries only the first matches.
+    if (staleClaim) {
+      claim = claim.eq('status', 'approved').eq('resolved_by', ctx.user.id);
+      claim = suggestion.resolved_at ? claim.eq('resolved_at', suggestion.resolved_at) : claim.is('resolved_at', null);
+    } else {
+      claim = claim.eq('status', 'open');
+    }
     if (suggestion.updated_at) claim = claim.eq('updated_at', suggestion.updated_at);
     const { data: claimed, error: claimError } = await claim.select('id');
     if (claimError) return actionFailure(claimError, t('actions.couldNotCreateThatPolicy'));

@@ -5,7 +5,7 @@ import { keyedProbe, makeKey } from '@/lib/services/idempotency';
 import { scopeNow } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
 import { AUTOPILOT_SOURCE_TAG } from '@/lib/reminders/provenance';
-import { deliverableReminderIso } from '@/lib/autopilot/reminder-time';
+import { reminderIsoFor } from '@/lib/autopilot/reminder-time';
 
 type Suggestion = Tables<'autopilot_suggestions'>;
 export type ResolutionResult =
@@ -81,8 +81,12 @@ export async function resolveSuggestion(scope: ServiceScope, input: ResolveSugge
         if (live === 'unavailable') return { ok: false, code: 'unavailable' };
         if (live === 'changed') return { ok: false, code: 'changed' };
         // An instant already past is never delivered (the notifier reads only
-        // reminders still ahead of it), so it moves to the next one that is.
-        const at = deliverableReminderIso(rawAt, scopeNow(scope), scope.tz || 'UTC');
+        // reminders still ahead of it). A reminder about a DAY (renewal,
+        // insurance, refill) moves to the next morning that is; one about an
+        // event's time (an appointment, a "leave by") has nothing left to
+        // remind anyone of, and the card has changed under the reader.
+        const at = reminderIsoFor(source.source_kind, rawAt, scopeNow(scope), scope.tz || 'UTC', source.expires_at);
+        if (!at) return { ok: false, code: 'changed' };
         // A member_id is a family_members FK, not an auth user ID. Check the
         // source recipient belongs here instead of trusting the stored payload.
         if (source.member_id) {
