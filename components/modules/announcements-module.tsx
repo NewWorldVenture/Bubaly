@@ -126,7 +126,7 @@ export function AnnouncementsModule() {
   async function togglePin(a: Announcement) {
     const supabase = createClient();
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
-    const { data: updated, error: err } = await supabase.from('family_announcements').update({ is_pinned: !a.is_pinned }).eq('id', a.id).select('id');
+    const { data: updated, error: err } = await supabase.from('family_announcements').update({ is_pinned: !a.is_pinned }).eq('id', a.id).eq('family_id', familyId).select('id');
     if (err) toastError(describeDbError(err));
     else if (wroteNoRows(updated)) toastError(t('errors.thatChangeWasNotSaved'));
   }
@@ -134,7 +134,7 @@ export function AnnouncementsModule() {
   async function remove(a: Announcement) {
     if (!(await askConfirm({ title: t('confirm.deleteNamed', { name: a.title }), body: t('confirm.cannotBeUndone') }))) return;
     const supabase = createClient();
-    const { data: removed, error: err } = await supabase.from('family_announcements').delete().eq('id', a.id).select('id');
+    const { data: removed, error: err } = await supabase.from('family_announcements').delete().eq('id', a.id).eq('family_id', familyId).select('id');
     if (err) toastError(describeDbError(err));
     else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved'));
     else success(t('announcementsModule.announcementRemoved'));

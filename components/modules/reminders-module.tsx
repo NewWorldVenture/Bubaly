@@ -196,7 +196,7 @@ export function RemindersModule() {
       // snoozed reminder can be completed too. Audit C1-S9-77.
       const { data: completedRows, error } = await supabase.from('family_reminders')
         .update({ status: 'completed', completed_at: new Date().toISOString() })
-        .eq('id', reminder.id).neq('status', 'completed').select('id');
+        .eq('id', reminder.id).eq('family_id', familyId).neq('status', 'completed').select('id');
       if (error) throw error;
       if (wroteNoRows(completedRows)) { toastError(tr('errors.thatChangeWasNotSaved')); void refresh(); return; }
 
@@ -231,7 +231,7 @@ export function RemindersModule() {
       const next = normalizeSubtasks(reminder.subtasks).map((s) => s.id === subtaskId ? { ...s, done: !s.done } : s);
       const supabase = createClient();
       const { data: ticked, error } = await supabase.from('family_reminders')
-        .update({ subtasks: next as unknown as Reminder['subtasks'] }).eq('id', reminder.id).select('id');
+        .update({ subtasks: next as unknown as Reminder['subtasks'] }).eq('id', reminder.id).eq('family_id', familyId).select('id');
       // Pre-0100 the subtasks column may not exist yet — degrade silently.
       if (error && !isMissingRelationError(error)) throw error;
       // A refused row is no error and zero rows: the box ticked, and nothing
@@ -733,7 +733,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
       // Both branches read back the row they wrote: under RLS a refused edit is
       // no error and zero rows, and this said "Reminder updated". Audit C1-S9-85.
       const run = (uStrip: typeof fullUpdate, iStrip: typeof fullInsert) => reminder
-        ? supabase.from('family_reminders').update(uStrip).eq('id', reminder.id).select('id')
+        ? supabase.from('family_reminders').update(uStrip).eq('id', reminder.id).eq('family_id', familyId).select('id')
         : supabase.from('family_reminders').insert(iStrip).select('id');
 
       let { data: saved, error } = await run(fullUpdate, fullInsert);
