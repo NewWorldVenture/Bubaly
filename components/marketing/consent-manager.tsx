@@ -91,11 +91,21 @@ export function ConsentManager() {
     const body = document.body;
     const before = { scroll: root.style.scrollPaddingBottom, pad: body.style.paddingBottom };
     const reserve = () => {
-      const space = Math.max(0, Math.ceil(window.innerHeight - banner.getBoundingClientRect().top + 8));
+      const b = banner.getBoundingClientRect();
+      const space = Math.max(0, Math.ceil(window.innerHeight - b.top + 8));
       root.style.scrollPaddingBottom = `${space}px`;
       body.style.paddingBottom = `${space}px`;
       // BackToTop, fixed at the bottom too, lifts itself to this.
       root.style.setProperty('--consent-banner-space', `${space}px`);
+      // Reserving space does not move the page. Opening the preferences hides
+      // the banner and drops its space (a page scrolled to its end shifts down
+      // by that much), and closing them puts focus back on the footer's
+      // Privacy choices BEFORE the banner returns, so the link can come back
+      // under it: bring whatever has focus clear of the banner.
+      const focused = document.activeElement as HTMLElement | null;
+      if (!focused || focused === body || banner.contains(focused)) return;
+      const r = focused.getBoundingClientRect();
+      if (r.bottom > b.top && r.top < b.bottom && r.right > b.left && r.left < b.right) focused.scrollIntoView({ block: 'nearest' });
     };
     reserve();
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(reserve);
