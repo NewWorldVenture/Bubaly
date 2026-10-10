@@ -11,6 +11,7 @@ import { fmtDate, fmtMoney } from '@/lib/utils/format';
 import { GrowthChart } from '@/components/admin/growth-chart';
 import { describeDbError } from '@/lib/supabase/errors';
 import { getTranslations } from '@/lib/i18n/server';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -261,7 +262,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
                   <span className="font-medium">{fmtMoney(inv.amountPaid)}</span>
                   <span className="text-xs text-muted">{fmtDate(new Date(inv.created * 1000).toISOString(), 'MMM d, yyyy')}</span>
                   {inv.hostedUrl && (
-                    <a href={inv.hostedUrl} target="_blank" rel="noopener noreferrer" className="ml-auto flex items-center gap-1 text-xs font-medium text-brand-text hover:underline">{tr('subscriptions.view')}{' '}<ExternalLink className="h-3.5 w-3.5" />
+                    <a href={safeWebLink(inv.hostedUrl) ?? undefined} target="_blank" rel="noopener noreferrer" className="ml-auto flex items-center gap-1 text-xs font-medium text-brand-text hover:underline">{tr('subscriptions.view')}{' '}<ExternalLink className="h-3.5 w-3.5" />
                     </a>
                   )}
                 </li>

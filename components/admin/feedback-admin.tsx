@@ -26,6 +26,7 @@ import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 export type AdminComment = { id: string; idea_id: string; author_name: string; is_team: boolean; body: string; created_at: string };
 export type AdminNotification = { id: string; kind: string; title: string; body: string | null; url: string | null; is_read: boolean; created_at: string };
@@ -268,7 +269,7 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
             </span>
             <span className="text-[11px] text-muted">{cat.emoji} {cat.label}</span>
             {idea.github_issue_url && (
-              <a href={idea.github_issue_url} target="_blank" rel="noreferrer"
+              <a href={safeWebLink(idea.github_issue_url) ?? undefined} target="_blank" rel="noreferrer"
                 className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-text hover:underline">
                 <Github className="h-3 w-3" /> #{idea.github_issue_number}
               </a>

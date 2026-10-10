@@ -15,6 +15,16 @@ import { safeSocialLink } from '@/lib/social/links';
  * could save `javascript:…` on a reminder assigned to a parent and it would run
  * as the parent on click. SEC-004 fixed exactly this for social posts; this is
  * the same rule, for everything else.
+ *
+ * The rule below once listed link fields by name, and four member-written
+ * fields were not on the list: a warranty's claim link, a favorite's link, a
+ * trip document's file link and a library item's page link (SEC-006, with
+ * four provider-written ones beside them). It now covers every field whose
+ * name ends in "url", and names the exceptions. Measured on React 19, which
+ * this app now runs: React replaces a `javascript:` href with a throwing stub,
+ * but a `data:` href is rendered as written
+ * (tests/e2e/a-stored-link-is-inert-in-the-page.spec.ts), so the rule still
+ * stands between a stored value and an anchor.
  */
 
 describe('safeWebLink', () => {
@@ -61,9 +71,22 @@ const SERVER_WRITTEN: Record<string, string> = {
   'components/admin/feedback-admin.tsx': 'admin_notifications.url, as above',
 };
 
-// `href={x.url}` and friends: a member expression on a field that holds a
-// stored link, not passed through safeWebLink / safeSocialLink.
-const RAW_LINK = /href=\{(?![^}]*\b(safeWebLink|safeSocialLink|media)\()([^}]*\b[a-zA-Z_]+\.(url|website|website_url|link_url|source_url|recipe_url|registry_url|listing_url|product_url|ticket_url|portal_url|booking_url|homepage|external_url)\b[^}]*)\}/g;
+/**
+ * Fields whose name ends in "url" that hold no stored or provider value: each
+ * is a constant in the code, or built by the server from one, and naming them
+ * keeps the rule below exhaustive.
+ */
+const CONSTANT_FIELDS: Record<string, string> = {
+  'retailer.storeUrl': 'lib/grocery/retailers.ts, a constant table of store pages',
+  'def.docsUrl': 'lib/social/capabilities.ts, a constant per provider',
+  'provider.connectUrl': 'lib/calendar/providers.ts, a constant same-origin /api path',
+  'ai.searchUrl': 'app/api/ai/home/find-pro builds it as https://www.google.com/search?q=…',
+};
+
+// `href={x.url}`, `href={x.claim_url}`, `href={item.pageUrl}`: a member
+// expression on any field whose name ends in "url" (or a website/homepage),
+// not passed through safeWebLink / safeSocialLink / media.
+const RAW_LINK = /href=\{(?![^}]*\b(safeWebLink|safeSocialLink|media)\()([^}]*\b([a-zA-Z_]+\.(?:[a-zA-Z_]*(?:url|Url|URL)|website|homepage))\b[^}]*)\}/g;
 
 describe('a stored link is rendered only as a web link', () => {
   const files = [...walk(join(ROOT, 'app')), ...walk(join(ROOT, 'components'))]
@@ -78,15 +101,24 @@ describe('a stored link is rendered only as a web link', () => {
   it('no href renders a stored link field raw', () => {
     const raw: string[] = [];
     for (const { path, src } of files) {
-      if (path in SERVER_WRITTEN) continue;
       for (const m of src.matchAll(RAW_LINK)) {
+        // Only the named field is exempt in those files: a whole-file skip once
+        // hid a second, provider-written link (feedback-admin's GitHub issue).
+        if (path in SERVER_WRITTEN && m[2].trim() === 'n.url') continue;
         // The passwords vault forces an https:// prefix onto anything that is
         // not already http(s), so `javascript:x` becomes a harmless host name.
         if (/\^https\?:/.test(m[2])) continue;
+        if (m[2].trim() in CONSTANT_FIELDS) continue;
         raw.push(`${path}: href={${m[2].trim()}}`);
       }
     }
     expect(raw, 'wrap these in safeWebLink(...) ?? undefined:\n' + raw.join('\n')).toEqual([]);
+  });
+
+  it('every CONSTANT_FIELDS entry is still rendered, raw, somewhere', () => {
+    for (const field of Object.keys(CONSTANT_FIELDS)) {
+      expect(files.some((f) => f.src.includes(`href={${field}}`)), `${field} is no longer rendered raw — drop it`).toBe(true);
+    }
   });
 
   it('every SERVER_WRITTEN entry still renders a stored url', () => {
