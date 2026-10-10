@@ -16,7 +16,10 @@ import { superAdminAssurance } from '@/lib/auth/super-admin-assurance';
 // and leave them with full access. So both now also remove the person's
 // super_admins grant, under the same rules adminSetSuperAdminAction keeps (a
 // built-in/env admin cannot be removed here; nobody removes their own access),
-// and every roster change is written to audit_logs.
+// and every roster change is written to audit_logs. Activating a
+// super_administrator entry puts the grant back (the grant adminSetSuperAdmin-
+// Action would make), so deactivate-then-activate is a round trip rather than
+// an "active" admin with no access.
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 type AdminClient = ReturnType<typeof createServiceClient>;
@@ -40,7 +43,9 @@ async function auditRoster(
   guarded: { supabase: AdminClient; actor: Actor },
   action: string,
   resource: 'admin_users' | 'super_admins',
-  resourceId: string,
+  // audit_logs.resource_id is a uuid: a roster row id, or null (the email
+  // goes in metadata) for the super_admins grant, which is keyed by email.
+  resourceId: string | null,
   metadata: Record<string, unknown>,
 ) {
   await logAudit(guarded.supabase, {
@@ -80,7 +85,29 @@ async function removeSuperAdminGrant(
   if (isSuperAdminEmail(email)) return { ok: false, error: messages.builtIn };
   const { data, error } = await guarded.supabase.from('super_admins').delete().eq('email', email).select('email');
   if (error) return actionFailure('revoke super-admin access', messages.failure, error);
-  if ((data ?? []).length > 0) await auditRoster(guarded, 'revoke', 'super_admins', email, { email, source: 'admin_roster' });
+  if ((data ?? []).length > 0) await auditRoster(guarded, 'revoke', 'super_admins', null, { email, source: 'admin_roster' });
+  return null;
+}
+
+/**
+ * Puts back the super_admins grant for a super_administrator roster entry, as
+ * adminSetSuperAdminAction's grant does (an idempotent upsert by email). A
+ * built-in/env admin already has access and is left alone; other roles carry
+ * no console access, so nothing is granted for them.
+ */
+async function restoreSuperAdminGrant(
+  guarded: { supabase: AdminClient; actor: Actor },
+  row: RosterRow,
+  failure: string,
+): Promise<ActionResult | null> {
+  if (row.admin_role !== 'super_administrator') return null;
+  const parsed = emailSchema.safeParse(row.email.trim().toLowerCase());
+  if (!parsed.success) return null;
+  const email = parsed.data;
+  if (isSuperAdminEmail(email)) return null;
+  const { error } = await guarded.supabase.from('super_admins').upsert({ email }, { onConflict: 'email' });
+  if (error) return actionFailure('restore super-admin access', failure, error);
+  await auditRoster(guarded, 'grant', 'super_admins', null, { email, source: 'admin_roster' });
   return null;
 }
 
@@ -109,15 +136,19 @@ export async function activateAdminAction(adminId: string): Promise<ActionResult
   const guarded = await guard();
   if (!('supabase' in guarded)) return guarded;
   if (!adminId.trim()) return { ok: false, error: t('actions.anAdminRecordIsRequired') };
+  const row = await readRosterRow(guarded, adminId, t('admins.couldNotActivateThatAdmin'), t('actions.adminRecordNotFound'));
+  if ('ok' in row) return row;
   const { data, error } = await guarded.supabase
     .from('admin_users')
     .update({ status: 'active', last_active_at: new Date().toISOString() })
     .eq('id', adminId).select('id').maybeSingle();
   if (error) return actionFailure('activate that admin', t('admins.couldNotActivateThatAdmin'), error);
   if (!data) return { ok: false, error: t('actions.adminRecordNotFound') };
-  // Activating a roster entry grants nothing (super_admins is unchanged); the
-  // row is still a staff-permission change with an actor.
-  await auditRoster(guarded, 'activate', 'admin_users', adminId, {});
+  await auditRoster(guarded, 'activate', 'admin_users', adminId, { email: row.email, admin_role: row.admin_role });
+  // After the roster write, so a failure here errs toward less access (the
+  // order deactivate keeps the other way round). Re-running activate retries.
+  const failed = await restoreSuperAdminGrant(guarded, row, t('admins.couldNotActivateThatAdmin'));
+  if (failed) return failed;
   revalidatePath('/admin/admins');
   return { ok: true };
 }
@@ -162,12 +193,12 @@ export async function inviteAdminAction(formData: FormData): Promise<ActionResul
   const admin_role = Object.prototype.hasOwnProperty.call(permMap, requestedRole) ? requestedRole : 'administrator';
   const permissions = permMap[admin_role] ?? [];
 
-  const { error } = await guarded.supabase.from('admin_users').upsert(
+  const { data: invited, error } = await guarded.supabase.from('admin_users').upsert(
     { email, full_name, admin_role, permissions, status: 'pending' },
     { onConflict: 'email' },
-  );
+  ).select('id').maybeSingle();
   if (error) return actionFailure('invite that admin', t('admins.couldNotInviteThatAdmin'), error);
-  await auditRoster(guarded, 'invite', 'admin_users', email, { email, admin_role, permissions });
+  await auditRoster(guarded, 'invite', 'admin_users', (invited as { id: string } | null)?.id ?? null, { email, admin_role, permissions });
   revalidatePath('/admin/admins');
   return { ok: true };
 }

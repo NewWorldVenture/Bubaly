@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils/cn';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 import { isSuperAdmin } from '@/lib/supabase/auth';
+import { redirect } from 'next/navigation';
+import { superAdminAssurance, SUPER_ADMIN_STEP_UP_PATH } from '@/lib/auth/super-admin-assurance';
 import { loadOnboardingProgress } from '@/lib/analytics/onboarding-server';
 import { ThirtyMinuteSummary } from '@/components/analytics/thirty-minute-summary';
 import { AppNotFound } from '@/components/app/app-not-found';
@@ -32,6 +34,9 @@ async function ReadFailure() {
 
 export default async function OnboardingAuditPage() {
   if (!(await isSuperAdmin())) return <AppNotFound backHref="/admin" />;
+  // The layout's step-up does not run ahead of this page's own render, so the
+  // service-role read below checks it too.
+  if (!(await superAdminAssurance()).ok) redirect(SUPER_ADMIN_STEP_UP_PATH);
   const t = await getTranslations();
   const supabase = createServiceClient();
 

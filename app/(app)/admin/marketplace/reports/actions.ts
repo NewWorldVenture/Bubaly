@@ -87,7 +87,16 @@ export async function resolveReportAction(
       const { data: restored, error: restoreError } = await guarded.admin
         .from('marketplace_listings').update({ status: withdrewFrom })
         .eq('id', report.listing_id).eq('status', 'withdrawn').select('id').maybeSingle();
-      if (restoreError || !restored) console.error('[admin-marketplace-report] could not restore the withdrawn listing', restoreError ?? report.listing_id);
+      if (restoreError || !restored) {
+        console.error('[admin-marketplace-report] could not restore the withdrawn listing', restoreError ?? report.listing_id);
+        // The listing stays withdrawn with its report unresolved, so the
+        // withdrawal is recorded here: otherwise nothing says who or why.
+        await logAudit(guarded.admin, {
+          familyId: null, actorId: guarded.user.id, action: 'withdraw', resource: 'marketplace_listings',
+          resourceId: report.listing_id,
+          metadata: { report_id: id, previous_status: withdrewFrom, restore_failed: true, via: 'site_admin' },
+        });
+      }
     }
     if (error) return actionFailure(error, t('actions.couldNotUpdateThatReport'));
     return { ok: false, error: t('actions.reportNotFoundOrAlready') };

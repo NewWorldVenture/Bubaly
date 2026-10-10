@@ -13,7 +13,9 @@ export async function saveAIConfigAction(formData: FormData): Promise<{ ok: bool
   const t = await getTranslations();
   const gate = await superAdminGate();
   if (gate.status !== 'allowed') {
-    return { ok: false, error: gate.status === 'unavailable' ? t('ai.accountContextIsTemporarilyUnavailable') : t('actions.forbidden') };
+    const error = gate.status === 'unavailable' ? t('ai.accountContextIsTemporarilyUnavailable')
+      : gate.status === 'step_up' ? t('actions.adminConsoleNeedsYourCode') : t('actions.forbidden');
+    return { ok: false, error };
   }
   const { user } = gate;
 
@@ -31,8 +33,8 @@ export async function saveAIConfigAction(formData: FormData): Promise<{ ok: bool
   // app_settings.updated_by is overwritten by the next save, so it is not a
   // history. The key itself is never logged, only whether one was set.
   await logAudit(service, {
-    familyId: null, actorId: user.id, action: 'update', resource: 'app_settings', resourceId: 'ai_provider',
-    metadata: { provider: 'openai', model, key_changed: Boolean(openaiKey.trim()), via: 'site_admin' },
+    familyId: null, actorId: user.id, action: 'update', resource: 'app_settings', resourceId: null,
+    metadata: { setting_key: 'ai_provider', provider: 'openai', model, key_changed: Boolean(openaiKey.trim()), via: 'site_admin' },
   });
   revalidatePath('/admin/ai');
   return { ok: true };

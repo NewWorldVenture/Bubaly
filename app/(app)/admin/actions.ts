@@ -368,7 +368,7 @@ export async function adminSetSuperAdminAction(input: { email: string; makeAdmin
 
   await adminAuditLog({
     familyId: null, action: input.makeAdmin ? 'grant' : 'revoke', resource: 'super_admins',
-    resourceId: email, metadata: { email },
+    resourceId: null, metadata: { email },
   });
   revalidatePath('/admin/users');
   return { ok: true };
@@ -427,7 +427,7 @@ export async function saveStripeSettingsAction(input: {
   if (error) return actionFailure(error, t('actions.couldNotSaveStripeSettings'));
 
   // Audit without leaking secret values.
-  await adminAuditLog({ familyId: null, action: 'update', resource: 'stripe_settings', resourceId: 'singleton', metadata: { enabled: input.enabled, service_fee_cents: feeCents, has_secret: Boolean(clean(input.secretKey)) } });
+  await adminAuditLog({ familyId: null, action: 'update', resource: 'stripe_settings', resourceId: null, metadata: { setting_key: 'singleton', enabled: input.enabled, service_fee_cents: feeCents, has_secret: Boolean(clean(input.secretKey)) } });
   revalidatePath('/admin/stripe');
   return { ok: true };
 }
@@ -673,7 +673,7 @@ export async function adminToggleFeatureFlagAction(key: string, enabled: boolean
   if (error) return actionFailure(error, t('actions.couldNotUpdateThatFeature'));
   if (wroteNoRows(flagged)) return { ok: false, error: t('actions.couldNotUpdateThatFeature') };
 
-  await adminAuditLog({ familyId: null, action: 'update', resource: 'feature_flags', resourceId: key, metadata: { enabled } });
+  await adminAuditLog({ familyId: null, action: 'update', resource: 'feature_flags', resourceId: null, metadata: { key, enabled } });
   revalidatePath('/admin/wallet');
   return { ok: true };
 }
