@@ -88,7 +88,9 @@
   /* See the dark block. 3.52:1 on --surface, 3.29:1 on --bg. */
   --border-input: 124 137 163;
   --fg: 23 28 42;
-  --muted: 96 108 134;
+  /* 94 105 131, not 96 108 134: muted text also sits on the brand selection
+     tint (an active conversation row, bg-brand/10), where it read 4.32:1. */
+  --muted: 94 105 131;
   --brand: 99 91 230;
   --brand-text: 81 69 205;
   --brand-fg: 255 255 255;
@@ -118,7 +120,7 @@
      source puts behind its text, hover states included (success 25%, danger
      20%, warning 15%). Info already passes on its own. White on each as a
      solid fill rises to 6.0 to 7.2. */
-  --accent: 194 75 24;
+  --accent: 169 66 21; /* the status roles' rule for accent too: 3.71 on its 15% tint at 194 75 24, now 4.5 */
   --success: 18 99 73;
   --warning: 129 93 16;
   --danger: 174 39 39;
