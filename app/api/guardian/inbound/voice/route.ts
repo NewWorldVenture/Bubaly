@@ -172,8 +172,12 @@ export async function POST(req: NextRequest) {
   // Route based on pipeline decision
   const { routingMode, memberProfile: profile } = decision;
 
-  // Update member phone for display
-  const memberData = await supabase.from('family_members').select('display_name').eq('id', memberId).maybeSingle();
+  // The member's name and phone are read inside the number's family. The
+  // profile's member_id was writable with a member of ANOTHER family (its
+  // policy checks only the row's family_id), and this service-role read then
+  // greeted with, and dialled, a stranger. Now such a profile finds nobody:
+  // no name, and no phone, so the call is screened rather than put through.
+  const memberData = await supabase.from('family_members').select('display_name').eq('id', memberId).eq('family_id', familyId).maybeSingle();
   const memberName = (memberData.data as { display_name?: string } | null)?.display_name ?? 'the family';
 
   const { data: familyData } = await supabase.from('families').select('name').eq('id', familyId).maybeSingle();
@@ -197,7 +201,7 @@ export async function POST(req: NextRequest) {
     // for a member with no number on file, which is a different situation, and
     // it is preserved. Logged rather than failed, because a screened call still
     // reaches the family and a 503 would drop it. Audit C1-S9-43.
-    const { data: member, error: memberError } = await supabase.from('family_members').select('phone').eq('id', memberId).maybeSingle();
+    const { data: member, error: memberError } = await supabase.from('family_members').select('phone').eq('id', memberId).eq('family_id', familyId).maybeSingle();
     if (memberError) {
       console.error('[guardian/inbound/voice] member phone read failed; trusted caller will be screened instead of connected', {
         familyId, memberId, callSid, error: memberError.message,
