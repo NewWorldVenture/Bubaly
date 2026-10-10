@@ -23,7 +23,8 @@ import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { tierToLevel } from '@/lib/features/tiers';
 import { getResolvedFeatureTiers } from '@/lib/server/feature-tiers';
 import { ensureActiveFamily } from '@/lib/server/ensure-family';
-import { resolveFamilyPlanLevel } from '@/lib/server/plan';
+import { resolveFamilyEntitlement } from '@/lib/server/plan';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { getUserContext, type UserContext } from '@/lib/supabase/auth';
 import { extractBearerToken, getBearerUserContext } from '@/lib/supabase/bearer';
@@ -57,9 +58,9 @@ export const AI_MONTHLY_ALLOWANCE: Readonly<Record<0 | 1 | 2, number | null>> = 
 
 export type AIAccessDenial = {
   ok: false;
-  /** HTTP status the caller should answer with: 404 when the feature is off (never confirm it exists), 403 for plan, 429 for allowance. */
+  /** HTTP status the caller should answer with: 404 when the feature is off (never confirm it exists), 403 for plan or a closed account, 429 for allowance. */
   status: 403 | 404 | 429;
-  code: 'feature_off' | 'plan_required' | 'allowance_exceeded' | 'unavailable';
+  code: 'feature_off' | 'plan_required' | 'account_closed' | 'allowance_exceeded' | 'unavailable';
   error: string;
   /** Plan level the feature needs, for the upgrade link. */
   needLevel?: number;
@@ -130,11 +131,33 @@ export async function assertAIAccess(
   }
 
   let planLevel: number;
+  let closed = false;
+  let locked = false;
   try {
-    planLevel = superAdmin ? 2 : await resolveFamilyPlanLevel(opts.db, familyId);
+    if (superAdmin) {
+      planLevel = 2;
+    } else {
+      const entitlement = await resolveFamilyEntitlement(opts.db, familyId);
+      planLevel = entitlement.effectiveLevel;
+      closed = entitlement.closed;
+      locked = entitlement.locked;
+    }
   } catch (error) {
     console.error('[ai-access] plan level read failed', error);
     return { ok: false, status: 403, code: 'unavailable', error: 'Bubaly could not confirm your plan right now. Try again in a moment.' };
+  }
+  // A closed family, and one whose trial ended unpaid, are level 0 like a Free
+  // family, so the level test below would hand them a Free-tier feature and its
+  // monthly allowance. The paywall that is meant to stop them is drawn by
+  // `app/(app)/layout.tsx` over the web screens only; this is what stops the
+  // routes, and the phone app, which has no paywall of its own.
+  if (closed) {
+    const t = await getTranslations();
+    return { ok: false, status: 403, code: 'account_closed', error: t('aiAccess.accountClosed') };
+  }
+  if (locked) {
+    const t = await getTranslations();
+    return { ok: false, status: 403, code: 'plan_required', needLevel: 1, error: t('aiAccess.trialEnded') };
   }
   const need = tier === 'off' ? 0 : tierToLevel(tier);
   if (planLevel < need) {

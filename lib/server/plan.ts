@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { planLevel } from '@/lib/constants/plans';
-import { computeEntitlement } from '@/lib/server/entitlement';
+import { computeEntitlement, type Entitlement } from '@/lib/server/entitlement';
 
 /**
  * The family's effective subscription level (0 Free / 1 Basic / 2 Plus),
@@ -29,9 +29,25 @@ import { computeEntitlement } from '@/lib/server/entitlement';
  * the service-role client (see above).
  */
 export async function resolveFamilyPlanLevel(
-  _supabase: SupabaseClient,
+  supabase: SupabaseClient,
   familyId: string,
 ): Promise<number> {
+  return (await resolveFamilyEntitlement(supabase, familyId)).effectiveLevel;
+}
+
+/**
+ * The whole entitlement behind `resolveFamilyPlanLevel`, from the same reads.
+ *
+ * The level alone cannot tell a Free family from a closed one or one whose
+ * trial ended unpaid: all three are level 0. A gate that lets level 0 through
+ * (a Free-tier feature) has to ask `closed` and `locked` as well, or the
+ * paywall exists only on the screens `app/(app)/layout.tsx` covers. Throws
+ * exactly when `resolveFamilyPlanLevel` does.
+ */
+export async function resolveFamilyEntitlement(
+  _supabase: SupabaseClient,
+  familyId: string,
+): Promise<Entitlement> {
   const admin = createServiceClient();
   const [{ data: subs, error: subscriptionsError }, { data: fam, error: familyError }] = await settleAll([
     admin.from('subscriptions').select('plan, status').eq('family_id', familyId).in('status', ['active', 'trialing']),
@@ -48,5 +64,5 @@ export async function resolveFamilyPlanLevel(
     paidLevel,
     trialEndsAt: fam?.trial_ends_at ?? null,
     closedAt: fam?.closed_at ?? null,
-  }).effectiveLevel;
+  });
 }

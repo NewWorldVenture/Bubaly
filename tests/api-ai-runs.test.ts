@@ -120,7 +120,14 @@ vi.mock('@/lib/supabase/bearer', async (importOriginal) => ({
 vi.mock('@/lib/server/ensure-family', () => ({ ensureActiveFamily: async () => false }));
 // `react.cache` is server-only; the tier module is not under test here.
 vi.mock('@/lib/server/feature-tiers', () => ({ getResolvedFeatureTiers: (...a: unknown[]) => getResolvedFeatureTiers(...a) }));
-vi.mock('@/lib/server/plan', () => ({ resolveFamilyPlanLevel: (...a: unknown[]) => resolveFamilyPlanLevel(...a) }));
+// `assertAIAccess` reads the whole entitlement. These cases drive only the
+// level, for a family that is open and not past an unpaid trial.
+vi.mock('@/lib/server/plan', () => ({
+  resolveFamilyPlanLevel: (...a: unknown[]) => resolveFamilyPlanLevel(...a),
+  resolveFamilyEntitlement: async (...a: unknown[]) => ({
+    effectiveLevel: await resolveFamilyPlanLevel(...a), closed: false, locked: false, inTrial: false, trialEndsAt: null,
+  }),
+}));
 vi.mock('@/lib/server/rate-limit', () => ({ rateLimit: () => ({ ok: true }) }));
 vi.mock('@/lib/server/rate-limit-db', () => ({ rateLimitDb: async () => ({ ok: true }) }));
 vi.mock('@/lib/ai/context/intents', async (importOriginal) => ({

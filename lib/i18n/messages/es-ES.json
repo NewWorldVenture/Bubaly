@@ -16843,5 +16843,7 @@
   "mobileAssistant.conflictFamilyOne": "{count} aviso familiar",
   "mobileAssistant.conflictFamilyOther": "{count} avisos familiares",
   "mobileAssistant.conflictCounts": "{personal} · {family}",
-  "mobileAssistant.conflictMobileFamilyLine": "Aviso de ocupación familiar: {titles} se solapan {when}. La ocupación importada se aplica a la familia; no identifica quién tiene una doble reserva."
+  "mobileAssistant.conflictMobileFamilyLine": "Aviso de ocupación familiar: {titles} se solapan {when}. La ocupación importada se aplica a la familia; no identifica quién tiene una doble reserva.",
+  "aiAccess.accountClosed": "La cuenta de tu familia está cerrada. Vuelve a abrirla para usar Bubaly de nuevo.",
+  "aiAccess.trialEnded": "Tu prueba gratuita ha terminado. Elige un plan para seguir usando Bubaly."
 }

@@ -24,7 +24,14 @@ vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 vi.mock('@/lib/server/rate-limit', () => ({ rateLimit: (...a: unknown[]) => rateLimit(...a) }));
 vi.mock('@/lib/server/rate-limit-db', () => ({ rateLimitDb: (...a: unknown[]) => rateLimitDb(...a) }));
 vi.mock('@/lib/server/feature-tiers', () => ({ getResolvedFeatureTiers: (...a: unknown[]) => getResolvedFeatureTiers(...a) }));
-vi.mock('@/lib/server/plan', () => ({ resolveFamilyPlanLevel: (...a: unknown[]) => resolveFamilyPlanLevel(...a) }));
+// `assertAIAccess` reads the whole entitlement. These cases drive only the
+// level, for a family that is open and not past an unpaid trial.
+vi.mock('@/lib/server/plan', () => ({
+  resolveFamilyPlanLevel: (...a: unknown[]) => resolveFamilyPlanLevel(...a),
+  resolveFamilyEntitlement: async (...a: unknown[]) => ({
+    effectiveLevel: await resolveFamilyPlanLevel(...a), closed: false, locked: false, inTrial: false, trialEndsAt: null,
+  }),
+}));
 vi.mock('@/lib/ai/provider', () => ({ isAIConfigured: () => isAIConfigured() }));
 vi.mock('@/lib/ai/runs/intake', () => ({
   submitRequest: (...a: unknown[]) => submitRequest(...a),

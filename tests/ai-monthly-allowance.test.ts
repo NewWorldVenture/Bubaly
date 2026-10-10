@@ -14,7 +14,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const resolveFamilyPlanLevel = vi.fn();
 const getResolvedFeatureTiers = vi.fn();
 
-vi.mock('@/lib/server/plan', () => ({ resolveFamilyPlanLevel: (...a: unknown[]) => resolveFamilyPlanLevel(...a) }));
+// `assertAIAccess` reads the whole entitlement. These cases drive only the
+// level, for a family that is open and not past an unpaid trial.
+vi.mock('@/lib/server/plan', () => ({
+  resolveFamilyPlanLevel: (...a: unknown[]) => resolveFamilyPlanLevel(...a),
+  resolveFamilyEntitlement: async (...a: unknown[]) => ({
+    effectiveLevel: await resolveFamilyPlanLevel(...a), closed: false, locked: false, inTrial: false, trialEndsAt: null,
+  }),
+}));
 vi.mock('@/lib/server/feature-tiers', () => ({
   getResolvedFeatureTiers: (...a: unknown[]) => getResolvedFeatureTiers(...a),
   getFeatureTiersByHref: vi.fn(),
