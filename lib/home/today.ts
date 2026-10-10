@@ -12,6 +12,7 @@
 import { rankNextActions, type ActionInput, type ActionPriority, type NextAction } from '@/lib/opportunities/next-actions';
 import { RUN_STATE_LABELS, summarizeSteps, type RunState, type StepState } from '@/lib/ai/runs/states';
 import { runPagePath } from '@/lib/ai/chat-request';
+import { inAppHref } from '@/lib/auth/redirect';
 import { topInsight, type ScheduleInsight } from '@/lib/schedule/intelligence';
 import { toolDomain } from '@/lib/ai/tool-domains';
 import { calendarConsumerNativeId, calendarConsumerReference, projectCalendarDay, type CalendarConsumerEvent } from '@/lib/calendar/consumer-spans';
@@ -423,7 +424,10 @@ export function mergeCompletedByBubaly(runs: CompletedRunRow[], activity: AiActi
   }
   for (const a of activity) {
     items.push({
-      key: `activity:${a.id}`, kind: 'activity', title: a.title, detail: a.detail, href: a.href ?? '/dashboard/agents', at: a.created_at, partial: false,
+      // `agent_activity.href` is writable by any family member (0127), and this
+      // list is "Completed by Bubaly": a link that would leave the app is not
+      // rendered as Bubaly's. lib/auth/redirect `inAppHref`.
+      key: `activity:${a.id}`, kind: 'activity', title: a.title, detail: a.detail, href: inAppHref(a.href) ?? '/dashboard/agents', at: a.created_at, partial: false,
       sources: a.agent ? uniqueSources([a.agent]) : [],
       reason: null,
     });

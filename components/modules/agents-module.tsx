@@ -18,6 +18,7 @@ import { AGENTS, AGENTS_BY_ID, type AgentId, type AgentBriefing, type AgentStatu
 import { WhyThis } from '@/components/ai/why-this';
 import { explainAgentActivity } from '@/lib/ai/explanation';
 import type { Tables } from '@/lib/database.types';
+import { inAppHref } from '@/lib/auth/redirect';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Activity = Tables<'agent_activity'>;
@@ -51,7 +52,9 @@ export function AgentsModule({ briefings, activity }: { briefings: AgentBriefing
     for (const a of activity) {
       if (hidden.has(a.id)) continue;
       const arr = m.get(a.agent) ?? [];
-      arr.push(a); m.set(a.agent, arr);
+      // `agent_activity.href` is writable by any family member (0127); a link
+      // that would leave the app is not offered as the activity's own.
+      arr.push({ ...a, href: inAppHref(a.href) }); m.set(a.agent, arr);
     }
     return m;
   }, [activity, hidden]);

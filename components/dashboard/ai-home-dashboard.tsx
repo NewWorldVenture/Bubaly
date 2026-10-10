@@ -49,6 +49,7 @@ import { getLocaleContext } from '@/lib/i18n/server';
 import { translate } from '@/lib/i18n/messages';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { dayPhase, phaseGreeting } from '@/lib/home/time-of-day';
+import { inAppHref } from '@/lib/auth/redirect';
 
 function todayLabel(locale: LocaleCode) {
   return new Date().toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric' });
@@ -464,7 +465,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
         .eq('family_id', familyId).eq('as_of_date', today).eq('status', 'active');
       const ranked = rankInsights(((activeRows ?? []) as { id: string; kind: string; title: string; detail: string | null; href: string | null; impact: number }[])
         .filter((r) => !conflictsUnavailable || r.kind !== 'conflict')
-        .map((r) => ({ id: r.id, kind: r.kind as InsightKind, title: r.title, detail: r.detail ?? '', href: r.href ?? '/dashboard', impact: r.impact })));
+        .map((r) => ({ id: r.id, kind: r.kind as InsightKind, title: r.title, detail: r.detail ?? '', href: inAppHref(r.href) ?? '/dashboard', impact: r.impact })));
       const top = ranked[0];
       if (top) insightRow = { id: top.id, kind: top.kind, title: top.title, detail: top.detail, href: top.href, impact: top.impact, alternatives: Math.max(0, ranked.length - 1) };
     }
