@@ -26,6 +26,8 @@ import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { compareOccurrences } from '@/lib/calendar/day';
 import { loadAISettingsFor } from '@/lib/services/ai-settings';
 import { wroteNoRows } from '@/lib/supabase/errors';
+import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
+import { ensureTodoListId } from '@/lib/services/tasks';
 
 type Client = SupabaseClient<Database>;
 
@@ -48,28 +50,60 @@ const MAX_SPOKEN_ITEMS = 20;
 const UTTERANCE_LOG_CHARS = 240;
 
 /**
+ * What a presented token resolved to.
+ *
+ * `not_linked` covers every answer about the TOKEN — unknown, revoked, owner
+ * gone, owner no longer a parent — and the caller must treat those
+ * identically, because distinguishing them would turn this into an oracle for
+ * guessing tokens. `unavailable` is not an answer about the token at all: a
+ * read failed, so nothing is known either way. It is still a refusal (never
+ * "assume they are still a parent"), but a caller that tells a person to
+ * re-link their account on a database blip sends them to mint a new key when
+ * they only needed to try again.
+ */
+export type AssistantLinkLookup =
+  | { status: 'linked'; link: AssistantLink }
+  | { status: 'not_linked' }
+  | { status: 'unavailable' };
+
+/**
  * The live link this token belongs to, or null.
  *
- * Null covers every failure the caller must treat identically — unknown token,
- * revoked link, missing family — because distinguishing them to the caller
- * would turn this into an oracle for guessing tokens.
+ * Null covers every failure, including a read that failed; a caller that needs
+ * to tell an outage apart from "not linked" uses `lookupAssistantLink`.
  */
 export async function resolveAssistantLink(supabase: Client, token: string): Promise<AssistantLink | null> {
+  const found = await lookupAssistantLink(supabase, token);
+  return found.status === 'linked' ? found.link : null;
+}
+
+export async function lookupAssistantLink(supabase: Client, token: string): Promise<AssistantLinkLookup> {
   const { data, error } = await supabase
     .from('assistant_links')
-    .select('id, family_id, user_id, provider, scopes, revoked_at, families(timezone)')
+    .select('id, family_id, user_id, created_by, provider, scopes, revoked_at, families(timezone)')
     .eq('token_hash', hashAssistantToken(token))
     .is('revoked_at', null)
     .maybeSingle();
   if (error) {
     console.error('[assistant] link lookup failed', error);
-    return null;
+    return { status: 'unavailable' };
   }
-  if (!data) return null;
+  if (!data) return { status: 'not_linked' };
   const row = data as unknown as {
-    id: string; family_id: string; user_id: string; provider: string; scopes: string[] | null;
+    id: string; family_id: string; user_id: string; created_by: string | null; provider: string; scopes: string[] | null;
     families: { timezone: string } | { timezone: string }[] | null;
   };
+
+  // A key is minted by a parent FOR THEMSELVES — the only minting path
+  // (dashboard/assistants/actions.ts) writes user_id and created_by from the
+  // same session user. A row where they differ was written some other way: a
+  // parent calling /rest/v1/assistant_links directly to mint a key in a
+  // co-parent's name, or re-pointing their own key's user_id at one, so that
+  // it outlives their own removal (0419 and the owner check below both follow
+  // user_id). That row is not a key this product issued, and it is refused.
+  // The database half — withdrawing the client INSERT/UPDATE grant 0283 gave
+  // `authenticated` — is a migration; this holds whether or not it exists.
+  if (!row.created_by || row.created_by !== row.user_id) return { status: 'not_linked' };
 
   const family = Array.isArray(row.families) ? row.families[0] : row.families;
   const link: AssistantLink = {
@@ -88,8 +122,9 @@ export async function resolveAssistantLink(supabase: Client, token: string): Pro
   // left — an estranged co-parent — kept a key that reads the family's day
   // aloud and, with `capture`, files into it (SRV-001 l12). 0419 revokes the
   // key in the database as well, once it is applied; this holds either way.
-  // A read that fails is null like every other failure here, never "assume
-  // they are still a parent".
+  // A read that fails is a refusal like every other failure here, never
+  // "assume they are still a parent" — reported as `unavailable`, not as
+  // "not linked", because nothing about the key is known.
   const { data: owner, error: ownerError } = await supabase
     .from('family_members')
     .select('role')
@@ -99,11 +134,11 @@ export async function resolveAssistantLink(supabase: Client, token: string): Pro
     .maybeSingle();
   if (ownerError) {
     console.error('[assistant] link owner lookup failed', ownerError);
-    return null;
+    return { status: 'unavailable' };
   }
-  if (!owner || !isAdmin((owner as { role: string }).role)) return null;
+  if (!owner || !isAdmin((owner as { role: string }).role)) return { status: 'not_linked' };
 
-  return link;
+  return { status: 'linked', link };
 }
 
 /** The local calendar day in the family's own zone, as YYYY-MM-DD. */
@@ -419,8 +454,9 @@ async function saveAssistantCapture(
   }
 
   if (kind === 'shopping') {
-    const listId = await ensureList(supabase, link, 'grocery_lists', 'Groceries');
-    if (!listId) return false;
+    const list = await ensureList(supabase, link, 'grocery_lists', 'Groceries');
+    if (!list) return false;
+    const listId = list.id;
 
     // People do not dictate one item at a time. "Add milk, eggs and bread to
     // the shopping list" was becoming a single line reading "Milk, eggs and
@@ -435,18 +471,23 @@ async function saveAssistantCapture(
       .slice(0, MAX_SPOKEN_ITEMS)
       .map((raw) => parseGroceryItem(raw))
       .filter((item) => item.name.trim().length > 0);
-    if (items.length === 0) return false;
+    if (items.length === 0) { await discardEmptyList(supabase, link, 'grocery_lists', list); return false; }
 
     const { error } = await supabase.from('grocery_items').insert(items.map((item) => ({
       family_id: link.family_id, list_id: listId,
       name: boundText(item.name, 200), quantity: item.quantity, created_by: link.user_id,
     })) as never);
-    if (error) { console.error('[assistant] grocery insert failed', error); return false; }
+    if (error) {
+      console.error('[assistant] grocery insert failed', error);
+      await discardEmptyList(supabase, link, 'grocery_lists', list);
+      return false;
+    }
     return true;
   }
 
-  const listId = await ensureList(supabase, link, 'todo_lists', 'To do');
-  if (!listId) return false;
+  const list = await ensureList(supabase, link, 'todo_lists', 'To do');
+  if (!list) return false;
+  const listId = list.id;
   // "Remind me to renew the passports on Friday" is a task that is due on
   // Friday. Dropping the day made it a task due whenever someone noticed it,
   // which is the thing the person was asking not to have to do.
@@ -454,9 +495,16 @@ async function saveAssistantCapture(
     family_id: link.family_id, list_id: listId, title,
     ...(route.dueDate ? { due_date: route.dueDate } : {}),
   } as never);
-  if (error) { console.error('[assistant] task insert failed', error); return false; }
+  if (error) {
+    console.error('[assistant] task insert failed', error);
+    await discardEmptyList(supabase, link, 'todo_lists', list);
+    return false;
+  }
   return true;
 }
+
+/** A list to file into, and whether this request had to create it. */
+type EnsuredList = { id: string; created: boolean };
 
 /**
  * The family's first list of this kind, created if there is not one.
@@ -469,7 +517,7 @@ async function saveAssistantCapture(
  */
 async function ensureList(
   supabase: Client, link: AssistantLink, table: 'todo_lists' | 'grocery_lists', name: string,
-): Promise<string | null> {
+): Promise<EnsuredList | null> {
   // ARCHIVED lists are skipped. This took the family's OLDEST list, which is
   // precisely the one most likely to have been archived and replaced — so a
   // family who tidied up their first Groceries list had every spoken item
@@ -489,12 +537,49 @@ async function ensureList(
     : await supabase.from('grocery_lists').select('id').eq('family_id', link.family_id)
       .eq('is_archived', false).is('archived_at', null).order('created_at').limit(1).maybeSingle();
   if (error) { console.error(`[assistant] ${table} lookup failed`, error); return null; }
-  if (existing?.id) return existing.id;
+  if (existing?.id) return { id: existing.id, created: false };
 
-  const { data: created, error: createError } = await supabase
-    .from(table)
-    .insert({ family_id: link.family_id, name } as never)
-    .select('id').single();
-  if (createError || !created) { console.error(`[assistant] ${table} create failed`, createError); return null; }
-  return created.id;
+  // None yet, so this request may be the one that creates it — through the
+  // same serialised get-or-create the rest of the product uses (0443,
+  // DATA-007). The read-then-insert this did itself had nothing between the
+  // two, so two captures a moment apart (two speakers, or Alexa re-sending
+  // after the person repeats themselves) each saw no list and each made one,
+  // and the family had two "Groceries" lists with the items split across them.
+  // The function holds a per-family lock across its own read and insert; the
+  // second caller waits and gets the first caller's list.
+  //
+  // `created_by`: grocery_lists names an auth user (0002), todo_lists a family
+  // member (0015), which a link does not carry — so null there, as before.
+  const made = table === 'todo_lists'
+    ? await ensureTodoListId(supabase, link.family_id, null, name, false)
+    : await ensureDefaultGroceryListId(supabase, link.family_id, link.user_id, name);
+  if (!made.id) { console.error(`[assistant] ${table} create failed`, made.error); return null; }
+  return { id: made.id, created: true };
+}
+
+/**
+ * Undo a list this capture created, when the item it was created for was not
+ * written — so a failure the person is told about ("I have not changed
+ * anything") leaves nothing behind.
+ *
+ * Only a list this request found missing and then had to make, and only while
+ * it is still EMPTY: under the get-or-create above a concurrent capture may
+ * have been handed the same list, and the item foreign keys cascade, so
+ * deleting a list that holds someone else's item would delete the item. Best
+ * effort, never thrown — the reply is already an error.
+ */
+async function discardEmptyList(
+  supabase: Client, link: AssistantLink, table: 'todo_lists' | 'grocery_lists', list: EnsuredList,
+): Promise<void> {
+  if (!list.created) return;
+  try {
+    const itemTable = table === 'todo_lists' ? 'todo_items' : 'grocery_items';
+    const { data: items, error: itemsError } = await supabase
+      .from(itemTable).select('id').eq('family_id', link.family_id).eq('list_id', list.id).limit(1);
+    if (itemsError || (items ?? []).length > 0) return;
+    const { error } = await supabase.from(table).delete().eq('id', list.id).eq('family_id', link.family_id);
+    if (error) console.error(`[assistant] ${table} cleanup failed`, error);
+  } catch (err) {
+    console.error(`[assistant] ${table} cleanup failed`, err);
+  }
 }
