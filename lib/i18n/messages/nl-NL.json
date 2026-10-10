@@ -7802,6 +7802,7 @@
   "immunizationsModule.trackVaccinesAndNextDue": "Volg vaccinaties en de volgende vervaldata — handig voor school, kamp en reisformulieren.",
   "immunizationsModule.recordUpdated": "Record bijgewerkt",
   "immunizationsModule.immunizationAdded": "Vaccinatie toegevoegd",
+  "import.magicImportCanOnlyCarryOut": "Magische import kan alleen de acties uitvoeren die het heeft voorgesteld.",
   "import.thatTextIsTooLong": "Die tekst is te lang (max. 8.000 tekens).",
   "import.tooManyImportsPleaseTry": "Te veel imports. Probeer het zo dadelijk opnieuw.",
   "inbox.actionItems": "Actiepunten",

@@ -173,7 +173,7 @@ export async function POST(req: NextRequest) {
       // Refused whole, before any item is gated or run: a confirm list naming
       // an action this surface never proposed is not a Magic Import.
       if (confirmed.some((item) => !item || typeof item !== 'object' || !isMagicImportAction(item.name))) {
-        return NextResponse.json({ error: 'Magic Import can only carry out the actions it proposed.' }, { status: 400 });
+        return NextResponse.json({ error: t('import.magicImportCanOnlyCarryOut') }, { status: 400 });
       }
       const results = await Promise.all(
         confirmed.map(async (item) => {

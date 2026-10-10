@@ -11,10 +11,10 @@ import { scopeFromUserContext } from '@/lib/services/scope';
 import { summarizeBudget } from '@/lib/vacations/budget';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import { detectConflicts, type ItemLike } from '@/lib/vacations/conflicts';
-import { tripWeatherAdvice, type WeatherDayLike } from '@/lib/vacations/weather';
+import { forecastDaysWithin, tripWeatherAdvice, type WeatherDayLike } from '@/lib/vacations/weather';
 import { suggestPacking } from '@/lib/vacations/packing';
 import { tripNights, dateRange } from '@/lib/vacations/dates';
-import { parseVacationAIOutput, type VacationAIPlan } from '@/lib/vacations/ai-output';
+import { CONCIERGE_PLAN_MARKER, isConciergePlanRow, parseVacationAIOutput, type VacationAIPlan } from '@/lib/vacations/ai-output';
 import { wroteNoRows } from '@/lib/supabase/errors';
 
 export const runtime = 'nodejs';
@@ -105,7 +105,10 @@ export async function POST(req: NextRequest) {
     const conflicts = detectConflicts((items.data ?? []).map((it): ItemLike => ({ id: it.id, day_id: it.day_id, day_date: it.day_id ? dayById.get(it.day_id)?.day_date ?? null : null, kind: it.kind, day_part: it.day_part, title: it.title, start_time: it.start_time, end_time: it.end_time })), { hasYoungChildren: hasChildren });
     for (const c of conflicts.slice(0, 5)) recos.push({ kind: 'travel_conflict', title: c.title, detail: c.detail, severity: c.severity });
 
-    for (const w of tripWeatherAdvice((weather.data ?? []) as WeatherDayLike[])) recos.push({ kind: 'weather_warning', title: 'Weather advisory', detail: w.text, severity: w.severity });
+    // Only the days inside the trip: a snapshot cached for a week the family is
+    // not away on — a trip that was beyond the forecast horizon, an older
+    // location label — is not the trip's weather and must not become an advisory.
+    for (const w of tripWeatherAdvice(forecastDaysWithin((weather.data ?? []) as WeatherDayLike[], trip.start_date, trip.end_date))) recos.push({ kind: 'weather_warning', title: 'Weather advisory', detail: w.text, severity: w.severity });
 
     // Replace prior rule-sourced open recommendations — INSERT FIRST, then
     // delete the old rows by id. Deleting first and inserting second meant a
@@ -125,6 +128,10 @@ export async function POST(req: NextRequest) {
     }
     const priorIds = (prior ?? []).map((row) => row.id);
     if (priorIds.length) {
+      // The prior set goes only after the new one landed, and only the rows
+      // read above — the ERROR gates the response; the row count does not,
+      // since a row another request already replaced is not a failure here.
+      // Audit C1-S9-63.
       const { error: deleteError } = await supabase.from('vacation_ai_recommendations').delete().eq('family_id', familyId).eq('vacation_id', vacationId).eq('source', 'rules').eq('status', 'open').in('id', priorIds);
       if (deleteError) {
         logDatabaseFailure('recommendation cleanup', deleteError);
@@ -179,12 +186,27 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
     const changedBudgetCategories: NonNullable<typeof budgets.data>[number]['category'][] = [];
     const createdPackingItemIds: string[] = [];
     let createdPackingListId: string | null = null;
+    // An explicit rebuild REPLACES the last build, as the confirm copy
+    // (tripConcierge.rebuildExistingPlan) promises: the rows the builder wrote
+    // are the ones carrying its marker in `notes`, and only those go. A row a
+    // parent added by hand never carries it; a row a parent has booked since is
+    // a commitment, not a suggestion, and stays. Budgets are upserted per
+    // category and days are reused per date, so neither stacks.
+    const priorActivities = body.rebuild === true ? a.filter((row) => isConciergePlanRow(row) && !row.booked) : [];
+    const priorItems = body.rebuild === true ? (items.data ?? []).filter((row) => isConciergePlanRow(row) && !row.booked) : [];
+    const removedActivityIds = new Set<string>();
+    const removedItemIds = new Set<string>();
     const originalBudgets = new Map((budgets.data ?? []).map((row) => [row.category, {
       id: row.id,
       planned_cents: row.planned_cents,
       notes: row.notes,
       created_by: row.created_by,
     }]));
+
+    // A row as it was read, minus the two columns the database stamps itself
+    // (the Insert type refuses them), so it goes back under its own id.
+    const asInsert = <T extends { created_at: string; updated_at: string }>(row: T): Omit<T, 'created_at' | 'updated_at'> =>
+      Object.fromEntries(Object.entries(row).filter(([column]) => column !== 'created_at' && column !== 'updated_at')) as Omit<T, 'created_at' | 'updated_at'>;
 
     const removeRows = async (
       table: 'vacation_activities' | 'vacation_itinerary_days' | 'vacation_itinerary_items' | 'vacation_budgets' | 'vacation_packing_items' | 'vacation_packing_lists',
@@ -210,6 +232,25 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
       await removeRows('vacation_itinerary_days', createdDayIds);
       await removeRows('vacation_activities', createdActivityIds);
       await removeRows('vacation_budgets', createdBudgetIds);
+      // A rebuild removed the prior build's rows only after the new plan had
+      // landed; failing after that puts back exactly the rows this request
+      // removed, as they were read. Logged, as above. Audit C1-S9-63.
+      const restoreItems = priorItems.filter((row) => removedItemIds.has(row.id));
+      if (restoreItems.length) {
+        const { data: restored, error } = await supabase.from('vacation_itinerary_items').insert(restoreItems.map(asInsert)).select('id');
+        if (error) logDatabaseFailure('build rollback vacation_itinerary_items restore', error);
+        else if ((restored?.length ?? 0) !== restoreItems.length) {
+          logDatabaseFailure('build rollback vacation_itinerary_items restore', new Error(`restored ${restored?.length ?? 0} of ${restoreItems.length}`));
+        }
+      }
+      const restoreActivities = priorActivities.filter((row) => removedActivityIds.has(row.id));
+      if (restoreActivities.length) {
+        const { data: restored, error } = await supabase.from('vacation_activities').insert(restoreActivities.map(asInsert)).select('id');
+        if (error) logDatabaseFailure('build rollback vacation_activities restore', error);
+        else if ((restored?.length ?? 0) !== restoreActivities.length) {
+          logDatabaseFailure('build rollback vacation_activities restore', new Error(`restored ${restored?.length ?? 0} of ${restoreActivities.length}`));
+        }
+      }
       for (const category of changedBudgetCategories) {
         const previous = originalBudgets.get(category);
         if (!previous) continue;
@@ -234,7 +275,7 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
 
     // activities
     if (plan.activities.length) {
-      const rows = plan.activities.map((x) => ({ family_id: familyId, vacation_id: vacationId, name: x.name, category: x.category ?? null, location: x.location ?? null, family_friendly: x.family_friendly ?? true, cost_cents: x.cost == null ? null : Math.round(x.cost * 100), created_by: ctx!.user.id }));
+      const rows = plan.activities.map((x) => ({ family_id: familyId, vacation_id: vacationId, name: x.name, category: x.category ?? null, location: x.location ?? null, family_friendly: x.family_friendly ?? true, cost_cents: x.cost == null ? null : Math.round(x.cost * 100), notes: CONCIERGE_PLAN_MARKER, created_by: ctx!.user.id }));
       const { data, error } = await supabase.from('vacation_activities').insert(rows).select('id');
       if (data) createdActivityIds.push(...data.map((row) => row.id));
       if (error || !data || data.length !== rows.length) return buildFailure(t('ai.couldNotSaveTheGenerated'), error ?? new Error('Activity insert returned an incomplete result.'));
@@ -259,7 +300,7 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
         day_id: dayIds[x.day - 1],
         day_part: x.day_part,
         kind: x.kind,
-        title: x.title, created_by: ctx!.user.id,
+        title: x.title, notes: CONCIERGE_PLAN_MARKER, created_by: ctx!.user.id,
       })).filter((x) => x.day_id);
       if (rows.length) {
         const { data, error } = await supabase.from('vacation_itinerary_items').insert(rows).select('id');
@@ -281,8 +322,27 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
         added.budget = rows.length;
       }
     }
+    // Rebuild: the prior build's rows go only now, with the whole new plan in —
+    // INSERT FIRST, then delete by id, for the reason the recommendations
+    // branch gives. Exactly the rows read above; the ERROR gates the response,
+    // the count does not, since a row gone since the read was already replaced
+    // by someone and is not a failure here. Audit C1-S9-63.
+    if (priorActivities.length) {
+      const ids = priorActivities.map((row) => row.id);
+      const { data: removed, error } = await supabase.from('vacation_activities').delete().eq('family_id', familyId).eq('vacation_id', vacationId).in('id', ids).select('id');
+      if (error) return buildFailure(t('ai.couldNotSaveTheGenerated'), error);
+      for (const row of removed ?? []) removedActivityIds.add(row.id);
+      if (removedActivityIds.size !== ids.length) logDatabaseFailure('build replace vacation_activities', new Error(`removed ${removedActivityIds.size} of ${ids.length}`));
+    }
+    if (priorItems.length) {
+      const ids = priorItems.map((row) => row.id);
+      const { data: removed, error } = await supabase.from('vacation_itinerary_items').delete().eq('family_id', familyId).eq('vacation_id', vacationId).in('id', ids).select('id');
+      if (error) return buildFailure(t('ai.couldNotSaveTheGenerated'), error);
+      for (const row of removed ?? []) removedItemIds.add(row.id);
+      if (removedItemIds.size !== ids.length) logDatabaseFailure('build replace vacation_itinerary_items', new Error(`removed ${removedItemIds.size} of ${ids.length}`));
+    }
     // packing (rule-based, always solid)
-    const master = (packing.data ?? []).length ? null : await supabase.from('vacation_packing_lists').insert({ family_id: familyId, vacation_id: vacationId, name: 'Master list', is_master: true, created_by: ctx!.user.id }).select('id').single();
+    const master =(packing.data ?? []).length ? null : await supabase.from('vacation_packing_lists').insert({ family_id: familyId, vacation_id: vacationId, name: 'Master list', is_master: true, created_by: ctx!.user.id }).select('id').single();
     const listId = master?.data?.id;
     if (listId) createdPackingListId = listId;
     if (master?.error) return buildFailure(t('ai.couldNotSaveTheGenerated'), master.error);

@@ -7803,6 +7803,7 @@
   "immunizationsModule.trackVaccinesAndNextDue": "Acompanhe as vacinas e as próximas datas — dá jeito para a escola, os campos de férias e os formulários de viagem.",
   "immunizationsModule.recordUpdated": "Registo atualizado",
   "immunizationsModule.immunizationAdded": "Vacina adicionada",
+  "import.magicImportCanOnlyCarryOut": "A Importação mágica só pode executar as ações que propôs.",
   "import.thatTextIsTooLong": "Esse texto é demasiado longo (máx. 8000 caracteres).",
   "import.tooManyImportsPleaseTry": "Demasiadas importações. Tente novamente em breve.",
   "inbox.actionItems": "Ações a realizar",

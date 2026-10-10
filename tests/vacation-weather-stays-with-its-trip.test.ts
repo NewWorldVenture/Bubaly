@@ -10,6 +10,7 @@
 //     into range.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { at } from './helpers/source-order';
 
 const mocks = vi.hoisted(() => ({
   geocode: vi.fn(),
@@ -107,8 +108,12 @@ describe('the weather route writes only into the trip\'s own family', () => {
     expect(stale!.table).toBe('vacation_weather_snapshots');
     expect(stale!.filters).toMatchObject({ family_id: 'family-B', vacation_id: TRIP.id, location_label: 'Tokyo', or: 'forecast_date.lt.2026-11-01,forecast_date.gt.2026-11-05' });
     expect(stale!.selected, 'the delete asks for its rows').toBe(true);
-    // The cleanup follows the forecast that was asked for.
-    expect(mocks.calls.findIndex((c) => c.kind === 'upsert')).toBeLessThan(mocks.calls.indexOf(stale!));
+    // The cleanup follows the forecast that was asked for. Both ends are
+    // asserted present first: a bare index answers -1 for a missing write and
+    // would pass this with the upsert deleted.
+    const upsert = mocks.calls.find((c) => c.kind === 'upsert');
+    expect(upsert).toBeDefined();
+    expect(at(mocks.calls, upsert!)).toBeLessThan(at(mocks.calls, stale!));
   });
 
   it('a trip beyond the forecast horizon is answered with the note and nothing is written', async () => {

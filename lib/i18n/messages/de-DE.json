@@ -7802,6 +7802,7 @@
   "immunizationsModule.trackVaccinesAndNextDue": "Impfungen und die nächsten Fälligkeiten verfolgen – praktisch für Schule, Ferienlager und Reiseformulare.",
   "immunizationsModule.recordUpdated": "Eintrag aktualisiert",
   "immunizationsModule.immunizationAdded": "Impfung hinzugefügt",
+  "import.magicImportCanOnlyCarryOut": "Der Magische Import kann nur die Aktionen ausführen, die er vorgeschlagen hat.",
   "import.thatTextIsTooLong": "Dieser Text ist zu lang (max. 8.000 Zeichen).",
   "import.tooManyImportsPleaseTry": "Zu viele Importe. Bitte versuchen Sie es in Kürze erneut.",
   "inbox.actionItems": "Aufgabenpunkte",
