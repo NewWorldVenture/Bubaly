@@ -447,6 +447,23 @@ begin
     raise exception 'ATTRIBUTION UNPROVEN: the fourth ''documents'' policy on storage.objects is no longer 0007''s INSERT-only upload policy (or is no longer INSERT-only), so "0007''s fourth policy is INSERT-only" in the header is stale';
   end if;
 
+  -- (ii-b) The one RESTRICTIVE policy storage.objects may carry is the held
+  --       0508's "Tax files are a manager's" (the owner's decision on PROD-002),
+  --       with exactly its predicate. It withholds only tax files (under a
+  --       family's tax/ folder, or named by a tax_documents row of that family)
+  --       and none of the paths above is one, so it cannot be what refused
+  --       them. Any other restrictive policy, or this one re-scoped, is a second
+  --       candidate for the zeros above.
+  select count(*) into visible
+    from pg_policies p
+   where p.schemaname = 'storage' and p.tablename = 'objects' and p.permissive = 'RESTRICTIVE'
+     and not (p.policyname = 'Tax files are a manager''s' and p.cmd = 'ALL'
+              and p.qual = '((bucket_id <> ''documents''::text) OR (NOT tax_file_is_withheld(name)))'
+              and p.with_check = p.qual);
+  if visible <> 0 then
+    raise exception 'ATTRIBUTION UNPROVEN: storage.objects carries % RESTRICTIVE policy(ies) other than 0508''s tax-file policy with its exact predicate — something else on this table could be what refused above', visible;
+  end if;
+
   -- (iii) The function the three predicates call is still SECURITY DEFINER and
   --       still pins its search_path — the whole of 0303's fix. A definer that
   --       lost `security definer` reproduces 0266's hole exactly (the refusals

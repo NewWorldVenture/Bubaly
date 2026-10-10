@@ -14094,6 +14094,8 @@
   "taxVault.save": "Guardar",
   "taxVault.taxDocumentVault": "Cofre de documentos fiscais",
   "taxVault.taxYear": "Ano fiscal",
+  "taxVault.keptByParents": "O cofre fiscal é gerido pelos pais da tua família",
+  "taxVault.keptByParentsBody": "Os documentos fiscais são para um pai, uma mãe ou um adulto da casa. Pede a um deles se precisares de alguma coisa.",
   "taxVaultModule.couldNotLoadTaxDocuments": "Não foi possível carregar os documentos fiscais. Atualize e tente novamente.",
   "taxVaultModule.deleteThisDocument": "Eliminar este documento?",
   "taxVaultModule.deleted": "Eliminado",

@@ -14093,6 +14093,8 @@
   "taxVault.save": "Opslaan",
   "taxVault.taxDocumentVault": "Kluis voor belastingdocumenten",
   "taxVault.taxYear": "Belastingjaar",
+  "taxVault.keptByParents": "De belastingkluis wordt bijgehouden door de ouders in je gezin",
+  "taxVault.keptByParentsBody": "Belastingdocumenten zijn voor een ouder of volwassene in het huishouden. Vraag het een van hen als je er iets uit nodig hebt.",
   "taxVaultModule.couldNotLoadTaxDocuments": "Kon de belastingdocumenten niet laden. Ververs en probeer het opnieuw.",
   "taxVaultModule.deleteThisDocument": "Dit document verwijderen?",
   "taxVaultModule.deleted": "Verwijderd",

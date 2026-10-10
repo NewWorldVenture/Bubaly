@@ -14301,6 +14301,8 @@
   "taxVault.save": "Save",
   "taxVault.taxDocumentVault": "Tax Document Vault",
   "taxVault.taxYear": "Tax year",
+  "taxVault.keptByParents": "The Tax Vault is kept by your family's parents",
+  "taxVault.keptByParentsBody": "Tax documents are for a parent or adult of the household. Ask one of them if you need something from it.",
   "taxVaultModule.couldNotLoadTaxDocuments": "Could not load tax documents. Refresh and try again.",
   "taxVaultModule.deleteThisDocument": "Delete this document?",
   "taxVaultModule.deleted": "Deleted",

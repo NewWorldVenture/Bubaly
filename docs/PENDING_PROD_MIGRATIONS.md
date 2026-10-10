@@ -121,6 +121,7 @@ source allocations are not evidence that production applied any migration.
 | 0505 proposed, held | `0505_a_listing_others_hold_records_of_is_withdrawn_not_erased.sql` | A signed-in caller's delete of a marketplace listing that has any order, offer, question, bid, negotiation or round, handoff or report is refused; such a listing is withdrawn instead, and nothing other families hold is erased by the cascade. Decided by the account holder on the lead in #771 comment 6097101249; requested on #771 (comment 6100826185), not yet confirmed. |
 | 0506 proposed, held | `0506_a_health_record_is_read_by_a_manager_or_its_own_member.sql` | A row of `symptom_logs`, `health_metrics`, `health_goals`, `health_visits`, `immunizations`, `sleep_logs`, `sleep_checkins` or `nutrition_logs` is read by a manager of its family, the member it is about, or its author, all inside `is_family_member(family_id)`; every other member no longer reads it. Writes unchanged. Decided by the account holder on the lead in #771 comment 6092825901; requested on #771 (comment 6100826185), not yet confirmed. |
 | 0507 proposed, held | `0507_a_kid_login_does_not_start_a_household.sql` | A signed-in kid login (the synthetic kid domain or `app_metadata.bubaly_kid_login`, read from `auth.users` as 0495 does) cannot create a family, so it never becomes the parent of a household of its own; everyone else, the service role and session-less writers create families as before. Found by Support (#771 comment 6100987720); requested on #771 (comment 6101311405), not yet confirmed. |
+| 0508 proposed, held | `0508_tax_documents_are_a_managers.sql` | `tax_documents` is read and written only by a parent or adult of the family (four `can_manage_family` policies; 0391's step-up guards kept), and a restrictive `storage.objects` policy withholds the documents bucket's tax files (the family's `tax/` folder, or a file a `tax_documents` row of that family names) from anyone else. Decided by the account holder on PROD-002; requested on #771 (comment 6101674181), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4747,6 +4748,97 @@ Dropping any one table's trigger turns the probe red on that table. 184 of
 families, try to vote in one family's poll under their member id from the
 other family and confirm 42501; then vote as their own member there and
 confirm it lands.
+
+## `0508` (proposed, held) — every member had the household's tax documents
+
+`supabase/reserved/0508_tax_documents_are_a_managers.sql` — **held**: proposed
+as `0508`, the first number above `0507`. The account holder decided PROD-002's
+`tax_documents` item as "managers only", recorded and requested on #771 in
+comment 6101674181. Not yet confirmed.
+
+**Severity: medium (tax filings read and erasable by a child or a guest).
+Deploy order: any; the page change ships first and changes nothing for a
+manager.** `tax_documents` carries 0077's `FOR ALL is_family_member`, and
+0391's step-up guards are written `session_cleared_step_up() or not
+can_manage_family(family_id)`, so they bind only a manager. The documents
+bucket serves `{family}/tax/<year>/…` to every member, because
+`document_object_is_restricted` reads only `documents`. Measured on a replay of
+every runnable migration, as each of a teen, a child, a caregiver and a guest:
+- reads both tax rows (OK 2) and all three tax files (OK 3);
+- renames the W-2 (OK 1), deletes it (OK 1), and files a new tax row (OK 1);
+- moves the W-2's file (OK 1), and uploads under `tax/` (OK 1).
+
+A parent with a verified factor at aal1 reads none.
+
+0508:
+- drops every permissive policy on `tax_documents` and creates four, one per
+  command, each `can_manage_family(family_id)` for authenticated. 0391's four
+  restrictive step-up guards stay, so a manager still needs the second factor;
+- adds `tax_file_is_withheld(name)` (SECURITY DEFINER, pinned search_path, not
+  executable by PUBLIC or anon) and one RESTRICTIVE policy on
+  `storage.objects`, "Tax files are a manager's", for every command, to
+  authenticated: `bucket_id <> 'documents' or not tax_file_is_withheld(name)`.
+  An object is withheld from a caller who does not manage its family when it
+  sits under that family's `tax/` folder (where the Tax Vault uploads,
+  including a file whose row is not written yet), or when a `tax_documents`
+  row of the object's own family names it. The family is the object's first
+  folder, cast as the bucket's policies cast it (0499's rule), so every
+  spelling the cast accepts is the same family. A row planted in another
+  family withholds nothing. 0303's and 0499's four permissive policies are not
+  touched, and the policy names no `bucket_id = 'documents'`, so 0499's
+  inventory of the bucket is unchanged.
+
+**App change, shipping with the source:** `/dashboard/tax-vault` tells a
+non-manager the vault is kept by the household's parents (new
+`taxVault.keptByParents*` messages in the seven base locales), before the
+step-up guard and the module. A manager's path is unchanged.
+`tests/tax-documents-are-a-managers.test.ts` pins it.
+
+**Released and held probes made rule-aware:**
+- `a-password-alone-does-not-open-the-familys-vault-check.sql` expected an
+  enrolled child to read the tax document; under 0508 it expects 0.
+- 0499's held probe expected every member to reach the W-2's file; under
+  0508 the teen, child, caregiver and guest are refused all six verbs.
+- `document-bytes-boundary-check.sql` now credits 0508's restrictive policy by
+  name and exact predicate, and fails on any other restrictive policy on
+  `storage.objects`.
+
+All pass with and without 0508.
+
+**Proof:** `.github/workflows/tax-documents-runtime.yml` replays every
+runnable migration. It requires the held probe
+`docs/audit/reserved/tax-documents-are-a-managers-check.sql` to fail on the
+released schema, with no control failing. It applies 0508 twice, requires the
+probe to pass, and re-runs the vault, bucket, document-vault and gated-write
+probes. The fixture is laid again before each role, so a write landing on the
+released schema does not move the next role's counts. The passing run shows:
+- the teen, child, caregiver and guest each read 0 rows and 0 files;
+- their rename and delete change 0 rows, and their new row is refused (42501);
+- their move, replace and delete of the file change 0 rows, and their upload
+  under `tax/` (upper-cased family id) is refused by the tax-file policy
+  (42501). Both rows and all three files remain, counted;
+- each still reads the receipt and uploads outside `tax/`;
+- the parent and the adult read, annotate, file, upload under `tax/` and
+  remove the in-flight file;
+- 0391 still binds the enrolled parent at aal1 (0) and not at aal2 (2);
+- a stranger reads nothing, and a tax row planted in Next Door does not
+  withhold Tax House's receipt from its child;
+- the service role, with and without a user id, reads both rows, and the
+  storage server (no session) reads all three files;
+- the wiring is exact;
+- negative control N1 (0077's rule back, tax-file policy dropped): the child
+  reads both rows and all three files;
+- mutation M1 (either branch of the helper removed): the child reads the
+  1099's file or the in-flight file.
+
+184 of 184 released probes pass on the released schema, with 0508 alone, and
+with every held migration through 0508 applied twice, where all 18 held probes
+pass.
+
+**After approved release:** as a test child, open `/dashboard/tax-vault` and
+confirm the parents-only message; as a test parent, confirm the step-up and
+the vault are unchanged; confirm a child's signed link to a tax file is
+refused.
 
 ## `0507` (proposed, held) — a kid login could start a household of its own
 

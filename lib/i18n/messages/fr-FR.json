@@ -14095,6 +14095,8 @@
   "taxVault.save": "Enregistrer",
   "taxVault.taxDocumentVault": "Coffre à documents fiscaux",
   "taxVault.taxYear": "Année fiscale",
+  "taxVault.keptByParents": "Le coffre fiscal est tenu par les parents de votre famille",
+  "taxVault.keptByParentsBody": "Les documents fiscaux sont réservés à un parent ou à un adulte du foyer. Demandez-leur si vous avez besoin de quelque chose.",
   "taxVaultModule.couldNotLoadTaxDocuments": "Impossible de charger les documents fiscaux. Actualisez et réessayez.",
   "taxVaultModule.deleteThisDocument": "Supprimer ce document ?",
   "taxVaultModule.deleted": "Supprimé",

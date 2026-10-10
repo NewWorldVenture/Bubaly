@@ -14093,6 +14093,8 @@
   "taxVault.save": "Speichern",
   "taxVault.taxDocumentVault": "Tresor für Steuerunterlagen",
   "taxVault.taxYear": "Steuerjahr",
+  "taxVault.keptByParents": "Der Steuer-Tresor wird von den Eltern deiner Familie geführt",
+  "taxVault.keptByParentsBody": "Steuerunterlagen sind für einen Elternteil oder Erwachsenen des Haushalts. Frag einen von ihnen, wenn du etwas daraus brauchst.",
   "taxVaultModule.couldNotLoadTaxDocuments": "Fehler beim Laden: die Steuerunterlagen. Bitte aktualisieren und erneut versuchen.",
   "taxVaultModule.deleteThisDocument": "Dieses Dokument löschen?",
   "taxVaultModule.deleted": "Gelöscht",

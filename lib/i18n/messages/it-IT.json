@@ -14095,6 +14095,8 @@
   "taxVault.save": "Salva",
   "taxVault.taxDocumentVault": "Cassaforte dei documenti fiscali",
   "taxVault.taxYear": "Anno fiscale",
+  "taxVault.keptByParents": "La cassaforte fiscale è gestita dai genitori della tua famiglia",
+  "taxVault.keptByParentsBody": "I documenti fiscali sono per un genitore o un adulto della famiglia. Chiedi a uno di loro se ti serve qualcosa.",
   "taxVaultModule.couldNotLoadTaxDocuments": "Impossibile caricare i documenti fiscali. Aggiorna e riprova.",
   "taxVaultModule.deleteThisDocument": "Eliminare questo documento?",
   "taxVaultModule.deleted": "Eliminato",

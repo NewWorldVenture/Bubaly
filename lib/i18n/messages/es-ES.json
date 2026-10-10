@@ -14095,6 +14095,8 @@
   "taxVault.save": "Guardar",
   "taxVault.taxDocumentVault": "Caja fuerte de documentos fiscales",
   "taxVault.taxYear": "Año fiscal",
+  "taxVault.keptByParents": "La bóveda de impuestos la gestionan los padres de tu familia",
+  "taxVault.keptByParentsBody": "Los documentos fiscales son para un padre, una madre o un adulto del hogar. Pídeselo a uno de ellos si necesitas algo de ahí.",
   "taxVaultModule.couldNotLoadTaxDocuments": "Error al cargar los documentos fiscales. Actualiza y vuelve a intentarlo.",
   "taxVaultModule.deleteThisDocument": "¿Eliminar este documento?",
   "taxVaultModule.deleted": "Eliminado",
