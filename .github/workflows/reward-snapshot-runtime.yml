@@ -5,7 +5,8 @@ name: Reward snapshot SQL runtime
 # title, and keeps them. Without it a child queued "New bike · 1 pts" five
 # ways (no reward, another family's reward, the family's cheap reward under
 # the bike's title, and re-pricing or retitling their own pending request),
-# each indistinguishable in the parent's queue from a real request. Neither
+# each indistinguishable in the parent's queue from a real request. It also
+# adds the title check 0428's token-economy guard lacked. Neither
 # the Database job's replay nor `supabase db push` reads supabase/reserved/,
 # and the Database job's probe glob does not read docs/audit/reserved/, so
 # nothing else in CI exercises it. This job replays every runnable migration
@@ -16,8 +17,8 @@ name: Reward snapshot SQL runtime
 #      can no longer see anything;
 #   2. applies the held migration twice (it is re-runnable);
 #   3. runs the probe again and requires it to pass;
-#   4. re-runs the released probes that write reward redemptions, because 0500
-#      replaces 0308's guard under its own name.
+#   4. re-runs the released probes that write redemptions, because 0500
+#      replaces 0308's and 0428's guards under their own names.
 #
 # When 0500 is released into supabase/migrations/, its probe moves back to
 # docs/audit/ (the Database job then runs it) and this workflow is retired with
@@ -36,6 +37,8 @@ on:
       - 'docs/audit/redemption-owner-check.sql'
       - 'docs/audit/chore-dispute-resolution-check.sql'
       - 'docs/audit/gated-write-tables-check.sql'
+      - 'docs/audit/economy-redemption-price-check.sql'
+      - 'docs/audit/economy-invest-decision-check.sql'
       - 'docs/audit/pg-bootstrap.sh'
       - 'supabase/migrations/**'
   push:
@@ -50,6 +53,8 @@ on:
       - 'docs/audit/redemption-owner-check.sql'
       - 'docs/audit/chore-dispute-resolution-check.sql'
       - 'docs/audit/gated-write-tables-check.sql'
+      - 'docs/audit/economy-redemption-price-check.sql'
+      - 'docs/audit/economy-invest-decision-check.sql'
       - 'docs/audit/pg-bootstrap.sh'
       - 'supabase/migrations/**'
 
@@ -124,7 +129,8 @@ jobs:
             'A: a child queued a ticket naming no reward' \
             "B2: a child queued a ticket naming another family's reward" \
             "D: a child queued a ticket naming the family's own sticker" \
-            'C: a child cleared reward_id and re-priced their pending bike request'; do
+            'C: a child cleared reward_id and re-priced their pending bike request' \
+            'G: a child queued a token request for the 1-token sticker titled'; do
             if ! grep -qF "$expected" <<<"$out"; then
               echo "::error::the held probe failed on the released schema, but not on: $expected"
               exit 1
@@ -154,7 +160,9 @@ jobs:
             docs/audit/reward-balance-check.sql \
             docs/audit/redemption-owner-check.sql \
             docs/audit/chore-dispute-resolution-check.sql \
-            docs/audit/gated-write-tables-check.sql; do
+            docs/audit/gated-write-tables-check.sql \
+            docs/audit/economy-redemption-price-check.sql \
+            docs/audit/economy-invest-decision-check.sql; do
             echo "== $probe"
             psql -X -v ON_ERROR_STOP=1 -q -f "$probe"
           done

@@ -113,7 +113,7 @@ source allocations are not evidence that production applied any migration.
 | 0497 confirmed, held | `0497_a_childs_wallet_and_guardian_number_stay_in_one_family.sql` | 0311's same-family guard on Guardian profiles, gift links, pay handles, child wallets and medication schedules. Requested for #981 on #771 (comment 6092501825); confirmed as a source-only reservation in #981 comment 6092625435, which is not an installation approval. |
 | 0498 confirmed, held | `0498_a_guest_cannot_feed_the_calendar_or_rewrite_a_grocery_list.sql` | 0464's guest guard on `calendar_feeds` and `grocery_lists`. Requested for #981 on #771 (comment 6094699645); confirmed as a held source and probe reservation in #981 comment 6094770726, which is not an installation or production approval. |
 | 0499 proposed, held | `0499_a_stored_file_answers_to_its_own_familys_rows.sql` | The `documents` bucket's upload, update and delete policies follow the row of the object's own family that names the file: insurance card images (managers), a household document's bytes (not a guest), a sensitive document's path (managers); another family's rows no longer count. Requested for #981 on #771 (comment 6094859264); not yet confirmed. |
-| 0500 proposed, held | `0500_a_reward_request_is_the_rewards_own_snapshot.sql` | 0308's ticket guard completed: a reward request names a reward of its own family at that reward's price and title, and keeps them (the foreign key's set-null on a deleted reward excepted). Requested for #981 on #771 (comment 6094977772); not yet confirmed. |
+| 0500 proposed, held | `0500_a_reward_request_is_the_rewards_own_snapshot.sql` | 0308's ticket guard completed: a reward request names a reward of its own family at that reward's price and title, and keeps them (the foreign key's set-null on a deleted reward excepted); 0428's token-economy guard also checks the title. Requested for #981 on #771 (comment 6094977772, economy scope 6095050742); not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4563,8 +4563,9 @@ try to remove the file behind an ordinary test document and confirm it stays.
 
 `supabase/reserved/0500_a_reward_request_is_the_rewards_own_snapshot.sql` —
 **held**: proposed as `0500`, the first number above `0499`, for #981. It was
-requested on #771 in comment 6094977772 and is not yet confirmed. Its probe is
-held with it in `docs/audit/reserved/`.
+requested on #771 in comment 6094977772, with the economy scope added in
+6095050742, and is not yet confirmed. Its probe is held with it in
+`docs/audit/reserved/`.
 
 **Severity: medium (the parent approves a request whose title and price the
 child wrote). Deploy order: any.** 0308 made a redemption carry the shelf's
@@ -4592,9 +4593,17 @@ name and trigger, still SECURITY DEFINER. For a signed-in caller:
   title and price it was made with (0028). Decisions, withdrawals and notes
   are untouched.
 
-The service role and session-less writers (seeds) stay exempt.
-`requestRedemptionAction`, the only writer, already writes exactly this, so
-nothing legitimate changes. A parent renaming or re-pricing a reward in the
+**The token economy has the same title hole.** 0428's
+`economy_redemption_request_guard` binds a non-manager's request to a reward of
+the family, at its cost and in its currency, and refuses later updates, but
+never reads `economy_redemptions.title`, which `/economy` shows the parent.
+Measured: the 1-token sticker titled "New bike" landed. 0500 replaces that
+function's body with the same body plus a title check (42501). The function,
+trigger, SECURITY INVOKER and exemptions are unchanged.
+
+The service role and session-less writers (seeds) stay exempt. Each table's
+only writer, `requestRedemptionAction` (rewards and economy), already writes
+exactly this, so nothing legitimate changes. A parent renaming or re-pricing a reward in the
 instant between that action's read and its insert now gets a refusal; 0308
 already refused the re-pricing half of that race.
 
@@ -4617,11 +4626,13 @@ write redemptions. The passing run shows:
 - a withdrawal and a parent's approval still land, and deleting a reward
   leaves its ticket as made;
 - the service role and a session-less writer are exempt;
-- four mutation controls each let a forgery back in.
+- in the token economy, the real request lands and the sticker under the
+  bike's title is refused;
+- five mutation controls each let a forgery back in.
 
-Five source mutations were checked locally: removing the family clause, the
-title check, the update refusal or the delete allowance, or restoring 0308's
-null early return. Each turns the probe red with the matching line. 184 of 184
+Six source mutations were checked locally: removing the family clause, the
+title check, the update refusal, the delete allowance or the economy title
+check, or restoring 0308's null early return. Each turns the probe red with the matching line. 184 of 184
 released probes pass with and without 0500.
 
 **After approved release:** as a test child, try to insert a redemption with

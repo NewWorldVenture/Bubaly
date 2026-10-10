@@ -19,6 +19,8 @@
 --           at that reward's own title and price);
 --        D  a ticket naming the family's own sticker under the bike's title;
 --      and 0308's own refusal (the bike at 1 point) is unchanged;
+--   2b. the token economy (0428's guard): the real sticker request lands, and
+--      G, the 1-token sticker under the bike's title, is refused (42501);
 --   3. refused on the child's own pending requests, and the row is unchanged:
 --        C  clearing reward_id and re-pricing to 1 point;
 --        E  retitling the sticker request "New bike";
@@ -32,7 +34,8 @@
 --   7. MUTATION CONTROLS, only where 0500 is installed, each in a rolled-back
 --      subtransaction: with 0308's early return for a null reward_id put back
 --      A lands; without the title check D lands; without the update refusal C
---      lands; without the own-family clause B2 lands.
+--      lands; without the own-family clause B2 lands; without the economy
+--      title check G lands.
 --
 -- Everything is rolled back.
 --
@@ -64,6 +67,12 @@ insert into public.rewards (id, family_id, title, cost_points) values
   ('00000000-0000-4000-8500-0000000000e1','00000000-0000-4000-8500-0000000000f1','New bike',5000),
   ('00000000-0000-4000-8500-0000000000e3','00000000-0000-4000-8500-0000000000f1','Sticker',1),
   ('00000000-0000-4000-8500-0000000000e2','00000000-0000-4000-8500-0000000000f2','Sticker',1);
+-- The token economy's shelf: the same two rewards in one currency.
+insert into public.family_currencies (id, family_id, name) values
+  ('00000000-0000-4000-8500-0000000000d1','00000000-0000-4000-8500-0000000000f1','Stars');
+insert into public.economy_rewards (id, family_id, currency_id, title, cost) values
+  ('00000000-0000-4000-8500-0000000000e5','00000000-0000-4000-8500-0000000000f1','00000000-0000-4000-8500-0000000000d1','New bike',5000),
+  ('00000000-0000-4000-8500-0000000000e6','00000000-0000-4000-8500-0000000000f1','00000000-0000-4000-8500-0000000000d1','Sticker',1);
 -- The child has earned enough for the sticker the parent approves in step 4.
 with c as (insert into public.chores (family_id, title) values ('00000000-0000-4000-8500-0000000000f1','Dishes') returning id)
 insert into public.chore_assignments (family_id, chore_id, member_id, status, points_awarded)
@@ -77,10 +86,14 @@ declare
   sticker   constant uuid := '00000000-0000-4000-8500-0000000000e3';
   foreign_r constant uuid := '00000000-0000-4000-8500-0000000000e2';
   no_reward constant text := '23514: a reward request must name a reward of this family';
+  eco_title constant text := '42501: a redemption carries the reward''s own title';
+  stars     constant uuid := '00000000-0000-4000-8500-0000000000d1';
+  eco_stk   constant uuid := '00000000-0000-4000-8500-0000000000e6';
   bad_title constant text := '23514: redemption title is not this reward''s title';
   kept      constant text := '23514: a reward request keeps the reward, title and price it was made with';
   bad_price constant text := '23514: redemption cost 1 is not this reward''s price 5000';
   installed boolean := pg_get_functiondef('public.reward_redemption_cost_guard()'::regprocedure) ~ 'must name a reward of this family';
+  eco_installed boolean := pg_get_functiondef('public.economy_redemption_request_guard()'::regprocedure) ~ 'own title';
   failures  text[] := '{}';
   t         record;
   got       text;
@@ -130,6 +143,31 @@ begin
       failures := array_append(failures, format('%s: %s was refused, but not by the snapshot guard (%s)', t.k, t.what, got));
     end if;
   end loop;
+
+  -- 2b. The token economy: the real sticker request lands; the sticker under
+  --     the bike's title is refused by 0428's guard with 0500's check.
+  begin
+    insert into public.economy_redemptions (family_id, reward_id, currency_id, member_id, title, cost, status)
+      values (fam, eco_stk, stars, kid, 'Sticker', 1, 'pending');
+    raise exception using errcode = 'P0R01';
+  exception
+    when sqlstate 'P0R01' then null;
+    when others then failures := array_append(failures, format('CONTROL: the child''s real token request was refused (%s: %s)', sqlstate, sqlerrm));
+  end;
+  begin
+    insert into public.economy_redemptions (family_id, reward_id, currency_id, member_id, title, cost, status)
+      values (fam, eco_stk, stars, kid, 'New bike', 1, 'pending');
+    got := 'landed';
+    raise exception using errcode = 'P0R01';
+  exception
+    when sqlstate 'P0R01' then null;
+    when others then got := sqlstate || ': ' || sqlerrm;
+  end;
+  if got = 'landed' then
+    failures := array_append(failures, 'G: a child queued a token request for the 1-token sticker titled "New bike"');
+  elsif got is distinct from eco_title then
+    failures := array_append(failures, format('G: the sticker titled "New bike" was refused, but not by the title check (%s)', got));
+  end if;
 
   -- 3. Rewriting the child's own pending requests.
   for t in select * from (values
@@ -272,11 +310,34 @@ begin
       perform set_config('role','postgres', true);
     end loop;
   end if;
+  if eco_installed then
+    -- M5. Without the economy title check, the sticker titled "New bike" lands.
+    begin
+      execute replace(pg_get_functiondef('public.economy_redemption_request_guard()'::regprocedure),
+                      'if new.title is distinct from v_reward.title then', 'if false then');
+      perform set_config('role','authenticated', true);
+      perform set_config('request.jwt.claim.sub', '00000000-0000-4000-8500-0000000000a4', true);
+      perform set_config('request.jwt.claims', json_build_object('sub','00000000-0000-4000-8500-0000000000a4','role','authenticated')::text, true);
+      begin
+        insert into public.economy_redemptions (family_id, reward_id, currency_id, member_id, title, cost, status)
+          values (fam, eco_stk, stars, kid, 'New bike', 1, 'pending');
+        got := 'landed';
+      exception when others then got := sqlstate || ': ' || sqlerrm;
+      end;
+      perform set_config('role','postgres', true);
+      if got is distinct from 'landed' then
+        failures := array_append(failures, format('MUTATION CONTROL M5: without the economy title check the sticker titled "New bike" still did not land (%s)', got));
+      end if;
+      raise exception using errcode = 'P0R01';
+    exception when sqlstate 'P0R01' then null;
+    end;
+    perform set_config('role','postgres', true);
+  end if;
 
   if array_length(failures, 1) is not null then
     raise exception E'a reward request is not the reward''s own snapshot:\n  - %', array_to_string(failures, E'\n  - ');
   end if;
-  raise notice 'a-reward-request-is-the-rewards-own-snapshot: OK (as a child: the real bike and sticker requests landed; a ticket naming no reward, another family''s reward, or the sticker under the bike''s title was refused with 0500''s sentences and the bike at 1 point with 0308''s; clearing, re-pricing, retitling and re-pointing their own pending requests were refused and nothing changed; withdrawing and a parent''s approval still land; deleting a reward leaves its ticket as made; the service role and a session-less writer are exempt; mutation controls M1-M4 each let the forgery back in)';
+  raise notice 'a-reward-request-is-the-rewards-own-snapshot: OK (as a child: the real bike and sticker requests landed; a ticket naming no reward, another family''s reward, or the sticker under the bike''s title was refused with 0500''s sentences and the bike at 1 point with 0308''s; clearing, re-pricing, retitling and re-pointing their own pending requests were refused and nothing changed; withdrawing and a parent''s approval still land; deleting a reward leaves its ticket as made; the service role and a session-less writer are exempt; in the token economy the real request landed and the sticker under the bike''s title was refused; mutation controls M1-M5 each let the forgery back in)';
 end $$;
 
 rollback;
