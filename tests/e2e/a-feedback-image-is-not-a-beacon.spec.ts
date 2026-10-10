@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { expect, test, type Page } from '@playwright/test';
-import { createOwnedAccount, requireLocalOrigin, type OwnedAccount } from './helpers/durable-session';
+import { closeWithoutSnapshot, createOwnedAccount, requireLocalOrigin, type OwnedAccount } from './helpers/durable-session';
 
 // SEC-007: a feedback screenshot must not make the super admin's browser fetch
 // an arbitrary URL — and the screenshots the board takes must still reach the
@@ -75,7 +75,11 @@ test.describe('SEC-007: feedback screenshots reach the super admin, and nothing 
     account = await createOwnedAccount(requireLocalOrigin(provider), serviceKey);
   });
 
-  test.afterEach(async () => {
+  test.afterEach(async ({ context }) => {
+    // Pages close before the context, and before Playwright's failure
+    // snapshot, so a failure cannot attach the sign-in form's values to it
+    // (the established pattern; CI's artifact upload also excludes this suite).
+    await closeWithoutSnapshot(context);
     try {
       const db = admin();
       await db.from('feedback_ideas').delete().like('title', `%${run}%`);
