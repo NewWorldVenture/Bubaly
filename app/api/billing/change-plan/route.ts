@@ -11,6 +11,11 @@ import { canonicalStripePlan, isStripePlanKey, verifyStripePlanPrice } from '@/l
 import { rememberStripeCustomer } from '@/lib/billing/customer-ref';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
+import { refuseWithoutBillingStepUp } from '@/lib/billing/route-step-up';
+import { readFamilySubscription } from '@/lib/billing/subscription-row';
+import type { Tables } from '@/lib/database.types';
+import { reviewBillingPath } from '@/lib/billing/review-selection';
+import { createSubscriptionCheckout, stripeCustomerHasLiveSubscription } from '@/lib/billing/subscription-checkout';
 
 const MAX_BILLING_REQUEST_BYTES = 4_096;
 
@@ -74,6 +79,8 @@ export async function POST(req: NextRequest) {
     if (!isAdmin(ctx.active.role)) {
       return NextResponse.json({ error: t('changePlan.onlyAParentCanChange') }, { status: 403 });
     }
+    const stepUp = await refuseWithoutBillingStepUp(ctx, t);
+    if (stepUp) return stepUp;
     const familyId = ctx.active.familyId;
     if (!isStripePlanKey(plan)) {
       return NextResponse.json({ error: t('changePlan.invalidPlan') }, { status: 400 });
@@ -89,7 +96,10 @@ export async function POST(req: NextRequest) {
     );
     // The key checkout used: Super Admin → Stripe Setup first, then the
     // environment (getStripe() read only the environment).
-    const secretKey = effectiveSecretKey(await getStripeSettings());
+    // The settings are kept, not just the key: a Checkout started here carries
+    // the same service fee as one started by /api/billing/checkout.
+    const stripeSettings = await getStripeSettings();
+    const secretKey = effectiveSecretKey(stripeSettings);
     if (!secretKey) return NextResponse.json({ error: t('checkout.billingIsNotSetUp') }, { status: 503 });
     const stripe = stripeFromKey(secretKey);
 
@@ -98,11 +108,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: t('changePlan.subscriptionStatusIsTemporarilyUnavailable') }, { status: 503 });
     }
 
-    const { data: sub, error: subError } = await supabase
+    const { data: sub, error: subError } = await readFamilySubscription<Pick<Tables<'subscriptions'>, 'plan' | 'status' | 'provider_ref' | 'cancel_at_period_end'>>(() => supabase
       .from('subscriptions')
       .select('plan, status, provider_ref, cancel_at_period_end')
-      .eq('family_id', familyId)
-      .maybeSingle();
+      .eq('family_id', familyId));
     if (subError) {
       console.error('[billing-change-plan] Subscription read failed', subError);
       return NextResponse.json({ error: t('changePlan.subscriptionStatusIsTemporarilyUnavailable') }, { status: 503 });
@@ -162,6 +171,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: t('changePlan.billingAccountStatusIsTemporarily') }, { status: 503 });
     }
 
+    // The local row can trail the webhook by seconds (or stay stale while a
+    // webhook retries), so the known Stripe customer is asked directly before a
+    // new subscription is started — the PAY-DOUBLE-001 guard checkout has.
+    if (bc?.customer_ref && await stripeCustomerHasLiveSubscription(stripe, bc.customer_ref)) {
+      return NextResponse.json(
+        { error: t('checkout.alreadySubscribed'), code: 'subscription_exists', review: reviewBillingPath(canonicalStripePlan(plan)) },
+        { status: 409 },
+      );
+    }
+
     let customerId = bc?.customer_ref ?? null;
     if (!customerId) {
       const customer = await stripe.customers.create({
@@ -182,25 +201,21 @@ export async function POST(req: NextRequest) {
 
     // PAY-5: trusted configured base first, not the caller-controlled Origin header.
     const origin = process.env.NEXT_PUBLIC_APP_URL ?? req.headers.get('origin') ?? 'http://localhost:3000';
-    const session = await stripe.checkout.sessions.create({
-      customer: customerId,
-      mode: 'subscription',
-      payment_method_types: ['card'],
-      line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${origin}/dashboard/billing?success=1`,
-      cancel_url: `${origin}/dashboard/billing`,
-      metadata: { family_id: familyId, plan },
-      subscription_data: { metadata: { family_id: familyId } },
-      allow_promotion_codes: true,
+    // The same session checkout starts: service fee included, the family's
+    // open session reused, and an idempotency key on the create.
+    const session = await createSubscriptionCheckout(stripe, createServiceClient(), {
+      familyId, customerId, priceId, plan, origin, settings: stripeSettings,
     });
 
-    try {
-      const { error: trackingError } = await createServiceClient().from('checkout_sessions').insert({
-        session_id: session.id, family_id: familyId, email: ctx.user.email ?? null,
-        name: ctx.active.family.name ?? null, plan, status: 'pending',
-      });
-      if (trackingError) console.error('[billing-change-plan] Checkout tracking write failed', trackingError);
-    } catch (error) { console.error('[billing-change-plan] Checkout tracking write failed', error); }
+    if (!session.reused) {
+      try {
+        const { error: trackingError } = await createServiceClient().from('checkout_sessions').insert({
+          session_id: session.id, family_id: familyId, email: ctx.user.email ?? null,
+          name: ctx.active.family.name ?? null, plan, status: 'pending',
+        });
+        if (trackingError) console.error('[billing-change-plan] Checkout tracking write failed', trackingError);
+      } catch (error) { console.error('[billing-change-plan] Checkout tracking write failed', error); }
+    }
 
     return NextResponse.json({ ok: true, changed: false, mode: 'checkout', url: session.url });
   } catch (err) {
