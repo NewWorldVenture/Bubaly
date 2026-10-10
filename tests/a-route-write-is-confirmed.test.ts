@@ -213,11 +213,25 @@ describe('ai-runs counts a run as returned only when it was (C1-S9-63)', () => {
   });
 });
 
+describe('the abandoned-checkout claim is guarded on pending and confirmed', () => {
+  // It used to be the fourth ungated cron below. Its rows now decide whether
+  // anyone is nudged: zero rows means the session completed (or another run
+  // claimed it) after the read.
+  it('claims before the nudge, only a pending row, and reads the claimed rows back', () => {
+    const src = read('app/api/cron/checkout-abandoned/route.ts');
+    const stmt = src.slice(at(src, ".update({ status: 'abandoned', abandoned_at: new Date().toISOString() })"));
+    const write = stmt.slice(0, stmt.indexOf(';'));
+    expect(write).toContain(".eq('status', 'pending')");
+    expect(write).toContain(".select('session_id')");
+    expect(src).toContain('if (wroteNoRows(claimed)) continue;');
+    expect(at(src, 'if (wroteNoRows(claimed)) continue;')).toBeLessThan(at(src, 'await fireAutomationEvent('));
+  });
+});
+
 describe('crons whose zero rows means the row is gone stay ungated (C1-S9-63)', () => {
   const cases = [
     ['app/api/cron/return-reminders/route.ts', "update({ overdue_notified_at: nowIso }).eq('id', o.id)", 'which no run will sweep'],
     ['app/api/cron/wallet-allowance/route.ts', ".from('allowance_rules')\n          .update({ next_run_on: rule.next_run_on", 'no schedule to restore'],
-    ['app/api/cron/checkout-abandoned/route.ts', ".update({ status: 'abandoned', abandoned_at: new Date().toISOString() })", 'a gone row is not swept again'],
     ['app/api/cron/guardian-learning/route.ts', ".update({ status: 'auto_dismissed' })", 'ordinary "nothing expired" tick'],
   ] as const;
   for (const [file, write, reason] of cases) {

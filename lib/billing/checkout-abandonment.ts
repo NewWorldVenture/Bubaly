@@ -27,11 +27,11 @@ const HOUR = 3_600_000;
  * older than the grace window, newer than the max look-back, and with an email
  * to send to. Deterministic given `now`.
  */
-export function selectAbandonedSessions(
-  sessions: CheckoutSessionLike[],
+export function selectAbandonedSessions<T extends CheckoutSessionLike>(
+  sessions: T[],
   now: number = Date.now(),
   opts: AbandonmentOptions = {},
-): CheckoutSessionLike[] {
+): T[] {
   const grace = (opts.graceMinutes ?? 60) * MIN;
   const maxAge = (opts.maxAgeHours ?? 24) * HOUR;
   return sessions.filter((s) => {

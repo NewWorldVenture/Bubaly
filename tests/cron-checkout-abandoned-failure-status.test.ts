@@ -36,16 +36,24 @@ vi.mock('@/lib/supabase/server', () => ({
   createServiceClient: () => ({
     from: () => {
       const b: Row = {};
+      // The status write is a claim guarded on `pending` and confirmed by the
+      // rows it returns, so the fake answers it with the claimed row.
+      let updating = false;
+      let sessionId = '';
       Object.assign(b, {
-        select: () => b, eq: (_c: string, v: unknown) => {
-          state.marked.push(String(v));
-          return state.markFails.has(String(v))
-            ? Promise.resolve({ error: { message: 'could not write checkout_sessions' } })
-            : Promise.resolve({ error: null });
+        select: () => b,
+        eq: (c: string, v: unknown) => {
+          if (c === 'session_id') { sessionId = String(v); state.marked.push(sessionId); }
+          return b;
         },
-        update: () => b,
+        update: () => { updating = true; return b; },
         order: () => b, range: () => b, limit: () => b,
-        then: (resolve: (v: unknown) => void) => resolve({ data: state.sessions, error: null }),
+        then: (resolve: (v: unknown) => void) => {
+          if (!updating) return resolve({ data: state.sessions, error: null });
+          return resolve(state.markFails.has(sessionId)
+            ? { data: null, error: { message: 'could not write checkout_sessions' } }
+            : { data: [{ session_id: sessionId }], error: null });
+        },
       });
       return b;
     },
@@ -101,5 +109,7 @@ describe('the abandoned-checkout sweep reports its own failures', () => {
     expect(res.status, 'a session left pending forever was recorded as a clean run').toBe(502);
     // Still marks the second: the failure is that row's, not the sweep's.
     expect(state.marked).toEqual(['cs_1', 'cs_2']);
+    // The claim comes first, so the row it could not claim is not nudged.
+    expect(state.fired).toEqual(['cs_2']);
   });
 });
