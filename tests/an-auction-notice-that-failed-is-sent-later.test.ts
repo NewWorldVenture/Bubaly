@@ -58,6 +58,7 @@ const notifiedFamilies = () => harness.scope.mock.calls.map(([, familyId]) => fa
 
 beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
   db = createInMemorySupabase({ rpc: { marketplace_close_auction: closeAuction } });
   harness.db = db;
   harness.notify.mockReset();
@@ -114,5 +115,49 @@ describe('closing auctions', () => {
     const res = await run();
     expect(res.status).toBe(200);
     expect(harness.notify).not.toHaveBeenCalled();
+  });
+
+  it('re-offers every lost notice in the window, not only the 50 newest', async () => {
+    // 260 auctions settled over the last few days, none of whose notices went
+    // out: more than one page, and the oldest are the ones a newest-first
+    // read capped at 50 never reached.
+    const ids = Array.from({ length: 260 }, (_, i) => `s${String(i).padStart(3, '0')}`);
+    db.seed('marketplace_listings', ids.map((id, i) => auction(id, {
+      status: 'claimed', claimed_by: `winner-member-${id}`,
+      auction_closed_at: new Date(Date.now() - (2 + i * 0.25) * HOUR).toISOString(),
+    })));
+    db.seed('marketplace_orders', ids.map((id) => ({ id: `order-${id}`, listing_id: id, amount_cents: 5_000, notes: 'Won at auction' })));
+    const res = await run();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ rechecked: 260, failed: 0 });
+    const orders = new Set(harness.notify.mock.calls.map(([, input]) => (input as { relatedId: string }).relatedId));
+    expect(orders.size).toBe(260);
+    // The oldest settlement in the window is among them.
+    expect(orders.has('order-s259')).toBe(true);
+  });
+
+  it('counts a family with no notice scope as skipped, not as a failed run', async () => {
+    db.seed('marketplace_listings', [
+      auction('gone', { status: 'claimed', claimed_by: 'winner-member-gone', auction_closed_at: new Date(Date.now() - HOUR).toISOString() }),
+      auction('live'),
+    ]);
+    db.seed('marketplace_orders', [{ id: 'order-gone', listing_id: 'gone', amount_cents: 5_000, notes: 'Won at auction' }]);
+    // The winner of `gone` has no family row any more: its scope is null on
+    // every run for the whole retry window.
+    harness.scope.mockImplementation(async (_db: unknown, familyId: string) => (familyId === 'winner-gone' ? null : { familyId }));
+    const res = await run();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, sold: 1, failed: 0, skipped: 1 });
+    expect(console.warn).toHaveBeenCalled();
+    // The seller of `gone` and both households of `live` were still told.
+    expect(harness.notify).toHaveBeenCalledTimes(3);
+  });
+
+  it('still fails the run when a notice write fails', async () => {
+    db.seed('marketplace_listings', [auction('a')]);
+    harness.notify.mockResolvedValue({ ok: false, error: 'insert failed' });
+    const res = await run();
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ failed: 1, skipped: 0 });
   });
 });

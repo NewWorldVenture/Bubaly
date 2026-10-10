@@ -72,6 +72,11 @@ export async function shareListingAction(listingId: string, circleId: string): P
   const t = await getTranslations();
   if (!listingId || !circleId) return { ok: false, error: t('actions.invalidShare') };
   const ctx = await requireUserContext();
+  // Sharing puts the listing in front of the circle's other households, who
+  // can then bid on it, buy it and arrange to collect it: the same decision as
+  // creating or joining the circle. Unsharing and leaving only withdraw, and
+  // stay open to every member.
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan16') };
   const sb = await createServer();
   const { error } = await sb.from('marketplace_listing_shares').insert({
     listing_id: listingId, circle_id: circleId, family_id: ctx.active.familyId, created_by: ctx.user.id,

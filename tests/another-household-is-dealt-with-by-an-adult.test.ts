@@ -4,7 +4,9 @@ import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memo
 /**
  * Every auction a family can bid on, and every Buy-It-Now it can use, belongs
  * to ANOTHER household (the RPCs refuse own_listing). Bidding, buying,
- * accepting a cross-family offer and joining or creating a circle all commit
+ * making, countering or accepting an offer (every negotiation is between two
+ * families: 0187's distinct_families check), and creating, joining or sharing
+ * a listing into a circle all commit
  * the household to pay and meet another family's adult, and the RPCs accept
  * any active member for auth.uid(). The actions are where a child or teen is
  * refused; the RPC-side role check is reported separately (it needs SQL).
@@ -32,8 +34,8 @@ vi.mock('@/lib/i18n/server', async () => {
 });
 
 const { placeBidAction, buyNowAction } = await import('@/app/(app)/marketplace/auctions/actions');
-const { respondToOfferAction } = await import('@/app/(app)/marketplace/negotiations/actions');
-const { createCircleAction, joinCircleAction } = await import('@/app/(app)/marketplace/community/actions');
+const { makeOfferAction, respondToOfferAction } = await import('@/app/(app)/marketplace/negotiations/actions');
+const { createCircleAction, joinCircleAction, shareListingAction, unshareListingAction, leaveCircleAction } = await import('@/app/(app)/marketplace/community/actions');
 const { buyNowClosedByBids } = await import('@/lib/marketplace/auction');
 const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
 const t = (key: string) => translate(SOURCE_MESSAGES, key);
@@ -52,6 +54,8 @@ beforeEach(() => {
     rpc: {
       marketplace_place_bid: record('marketplace_place_bid', { ok: true, leading: true, current_cents: 1_000 }),
       marketplace_buy_now: record('marketplace_buy_now', { ok: true, order_id: 'order-1' }),
+      marketplace_negotiation_offer: record('marketplace_negotiation_offer', { ok: true, negotiation_id: 'neg-new', countered: false }),
+      marketplace_leave_circle: record('marketplace_leave_circle', null),
       marketplace_negotiation_respond: record('marketplace_negotiation_respond', { ok: true, status: 'agreed', order_id: 'order-2' }),
       marketplace_create_circle: record('marketplace_create_circle', 'circle-1'),
       marketplace_join_circle: record('marketplace_join_circle', 'circle-1'),
@@ -64,7 +68,6 @@ beforeEach(() => {
   }]);
   db.seed('marketplace_negotiations', [
     { id: 'neg-cross', family_id: 'fam-seller', buyer_family_id: 'fam-buyer', status: 'open' },
-    { id: 'neg-home', family_id: 'fam-buyer', buyer_family_id: 'fam-buyer', status: 'open' },
   ]);
 });
 
@@ -79,11 +82,26 @@ describe('a child or teen does not deal with another household', () => {
     expect(calls).toEqual([]);
   });
 
-  it('still lets a teen accept an offer inside their own family, and counter across families', async () => {
+  it.each(['child', 'teen'])('refuses a %s opening an offer, countering one, or sharing a listing into a circle', async (role) => {
+    harness.role = role;
+    // The seller's adult accepting either of these makes a confirmed order
+    // with the child as the buyer or the seller.
+    expect(await makeOfferAction({ listingId: 'listing-1', amountCents: 900 })).toEqual({ ok: false, error: ADULTS_ONLY });
+    expect(await respondToOfferAction({ negotiationId: 'neg-cross', action: 'counter', amountCents: 900 }))
+      .toEqual({ ok: false, error: ADULTS_ONLY });
+    expect(await shareListingAction('listing-1', 'circle-1')).toEqual({ ok: false, error: ADULTS_ONLY });
+    expect(calls).toEqual([]);
+    expect(db.table('marketplace_listing_shares')).toEqual([]);
+  });
+
+  it('still lets a teen end a thread or step back from a circle', async () => {
     harness.role = 'teen';
-    expect((await respondToOfferAction({ negotiationId: 'neg-home', action: 'accept' })).ok).toBe(true);
-    expect((await respondToOfferAction({ negotiationId: 'neg-cross', action: 'counter', amountCents: 900 })).ok).toBe(true);
-    expect(calls).toEqual(['marketplace_negotiation_respond', 'marketplace_negotiation_respond']);
+    expect((await respondToOfferAction({ negotiationId: 'neg-cross', action: 'decline' })).ok).toBe(true);
+    expect((await respondToOfferAction({ negotiationId: 'neg-cross', action: 'withdraw' })).ok).toBe(true);
+    expect((await leaveCircleAction('circle-1')).ok).toBe(true);
+    db.seed('marketplace_listing_shares', [{ listing_id: 'listing-1', circle_id: 'circle-1', family_id: 'fam-buyer' }]);
+    expect((await unshareListingAction('listing-1', 'circle-1')).ok).toBe(true);
+    expect(calls).toEqual(['marketplace_negotiation_respond', 'marketplace_negotiation_respond', 'marketplace_leave_circle']);
   });
 
   it('lets a parent do all of it', async () => {
@@ -91,7 +109,14 @@ describe('a child or teen does not deal with another household', () => {
     expect((await respondToOfferAction({ negotiationId: 'neg-cross', action: 'accept' })).ok).toBe(true);
     expect((await createCircleAction('Street swap')).ok).toBe(true);
     expect((await buyNowAction('listing-1')).ok).toBe(true);
-    expect(calls).toEqual(['marketplace_place_bid', 'marketplace_negotiation_respond', 'marketplace_create_circle', 'marketplace_buy_now']);
+    expect((await makeOfferAction({ listingId: 'listing-1', amountCents: 900 })).ok).toBe(true);
+    expect((await respondToOfferAction({ negotiationId: 'neg-cross', action: 'counter', amountCents: 900 })).ok).toBe(true);
+    expect((await shareListingAction('listing-1', 'circle-1')).ok).toBe(true);
+    expect(calls).toEqual([
+      'marketplace_place_bid', 'marketplace_negotiation_respond', 'marketplace_create_circle', 'marketplace_buy_now',
+      'marketplace_negotiation_offer', 'marketplace_negotiation_respond',
+    ]);
+    expect(db.table('marketplace_listing_shares')).toHaveLength(1);
   });
 });
 
