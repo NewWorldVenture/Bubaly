@@ -50,6 +50,7 @@ import type { ServiceScope } from '@/lib/services/types';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
+import { isManager } from '@/lib/constants/roles';
 import type { LocaleCode } from '@/lib/i18n/locales';
 
 type DB = SupabaseClient<Database>;
@@ -317,6 +318,23 @@ export async function runAutopilotScan(
   //    without anyone opening the app.
   let autoExecuted = 0;
   let notified = 0;
+  // Who hears about a prescription: the person it is written for and the
+  // family's managers (F-G09), never the household row every member reads. A
+  // refill is always urgent enough to notify, and the cron runs this on the
+  // service client, so no RLS stands between a parent's Sertraline and a
+  // child's, a babysitter's or a guest's bell. Read once, and only when a
+  // refill is due; `null` means the household could not be read, and then
+  // the alert is not sent rather than sent to everyone.
+  let household: { id: string; role: string }[] | null | undefined;
+  const prescriptionAudience = async (memberId: string | null): Promise<string[] | null> => {
+    if (household === undefined) {
+      const { data, error } = await supabase.from('family_members').select('id, role')
+        .eq('family_id', familyId).eq('is_active', true);
+      if (error) console.error('[autopilot] could not read who a refill alert is for; not sending it', { familyId, error });
+      household = error ? null : (data ?? []);
+    }
+    return household ? household.filter((m) => isManager(m.role) || m.id === memberId).map((m) => m.id) : null;
+  };
   for (const d of drafts) {
     const prior = existingByKey.get(d.dedupeKey);
     if (prior) continue; // respect prior state (resolved or already-open); avoid churn
@@ -422,11 +440,12 @@ export async function runAutopilotScan(
     //
     // NOT urgent: an autopilot suggestion is a courtesy. It is still delivered,
     // just at the hour the family said they were willing to hear from Bubaly.
-    if (d.urgency >= 2 || status === 'auto_executed') {
+    const recipients = d.sourceKind === 'medications' ? await prescriptionAudience(d.memberId) : 'family' as const;
+    if ((d.urgency >= 2 || status === 'auto_executed') && (recipients === 'family' || (recipients && recipients.length > 0))) {
       const scope = notifyScope ?? (notifyScope = await systemScopeForFamily(supabase, familyId));
       if (scope) {
         const sent = await notify(scope, {
-          recipients: 'family',
+          recipients,
           type: 'system',
           title: status === 'auto_executed' ? `Autopilot handled: ${d.title}` : d.title,
           body: d.detail,
