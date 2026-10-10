@@ -177,6 +177,8 @@ describe('the push campaign suppression list', () => {
     db.seed('push_devices', users.map((user_id, index) => ({ id: devices[index], user_id, enabled: true })));
     db.seed('profiles', users.map(id => ({ id, email: `${id}@example.test` })));
     db.seed('marketing_suppressions', users.slice(0, -1).map(id => ({ email: `${id}@example.test` })));
+    // Marketing push is opt-in; every account here has said yes.
+    db.seed('user_preferences', users.map(user_id => ({ user_id, notification_prefs: { marketingPush: true } })));
     // A single-page device scan cannot see the only eligible owner. A partial
     // suppression scan would incorrectly include opted-out owners near the end.
     const short = await (db as unknown as DB).from('push_devices').select('user_id').eq('enabled', true);
