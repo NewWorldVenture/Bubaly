@@ -121,8 +121,11 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
       .eq('family_id', familyId),
     supabase.from('family_reminders').select('id, title, remind_at').eq('family_id', familyId)
       .not('status', 'in', '(done,dismissed)').lt('remind_at', start.toISOString()).order('remind_at').limit(3),
+    // Unread means waiting for ME: not deleted, not my own (a sender is never
+    // in `read_by`), not yet read. The same filters as the sidebar badge.
     supabase.from('family_messages').select('id', { count: 'exact', head: true })
-      .eq('family_id', familyId).not('read_by', 'cs', `{${ctx.active.member.user_id}}`),
+      .eq('family_id', familyId).is('deleted_at', null).neq('sender_id', ctx.user.id)
+      .not('read_by', 'cs', `{${ctx.user.id}}`),
   ]);
   const calendarData = calendarRes && 'ok' in calendarRes && calendarRes.ok ? calendarRes.data : null;
   const calendarUnavailable = calendarData === null;
