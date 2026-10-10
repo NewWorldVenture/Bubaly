@@ -707,13 +707,12 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
                 // A server-rendered navigation, given signIn's allowance.
                 await expect(page).toHaveURL(/\/dashboard\/assistant$/, { timeout: 60_000 });
                 const composer = page.getByRole('textbox', { name: names.ask });
-                if (w > 1024) await expect(composer).toBeVisible();
-                // KNOWN, and not the toast's: at 1024 the assistant page's
-                // three columns (components/assistant/workspace.tsx,
-                // lg:grid-cols-[320px_1fr_330px] in a 688px main) leave the
-                // middle one, and the composer in it, 0px wide. Reported on
-                // #778; this flips when that layout is fixed.
-                else await expect(composer).toBeHidden();
+                // At 1024 too: the assistant page's three fixed columns left
+                // its composer 0px wide below about 1180px (recorded here on
+                // #778). From lg it is now two columns with the context under
+                // them, three from 2xl (components/assistant/workspace.tsx);
+                // tests/e2e/assistant-composer-width.spec.ts holds the widths.
+                await expect(composer).toBeVisible();
               } else {
                 // Below lg it opens the assistant over the page.
                 const sheet = page.getByRole('dialog', { name: names.aiSheet });
