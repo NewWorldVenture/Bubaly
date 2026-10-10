@@ -9,6 +9,8 @@ import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { normalizeEmailLocal, isValidEmailLocal, isReservedEmailLocal } from '@/lib/contact-center/address';
 import { normalizeFallbackPhone } from '@/lib/contact-center/phone';
 import { getOrCreateChannelResult, provisionFamilyNumber } from '@/lib/contact-center/server';
+import { setInboxMessageStatus } from '@/lib/services/inbox';
+import { scopeFromUserContext } from '@/lib/services/scope';
 
 type Fail = { ok: false; error: string };
 
@@ -112,19 +114,20 @@ export async function updateConciergeAction(input: {
   return { ok: true };
 }
 
-/** Mark an inbox message read / archived. */
+/**
+ * Mark an inbox message read / archived.
+ *
+ * Through the inbox service, not a bare service-role update: members may only
+ * SELECT this table (0214), so the role check is the whole authorization, and
+ * the service is where it lives — filing the household's front-desk mail is a
+ * manager's act (lib/services/inbox). This used to write with no role check at
+ * all, so a child or guest could archive a message the parents never saw.
+ */
 export async function setMessageStatusAction(id: string, status: 'read' | 'archived'): Promise<{ ok: true } | Fail> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
-  const admin = createServiceClient();
-  const { data: updated, error } = await admin
-    .from('family_inbox_messages')
-    .update({ status })
-    .eq('id', id)
-    .eq('family_id', ctx.active.familyId) // scope to the caller's family
-    .select('id');
-  if (error) return { ok: false, error: describeActionError(error, t('actions.couldNotUpdateTheMessage')) };
-  if (wroteNoRows(updated)) return { ok: false, error: t('actions.couldNotUpdateTheMessage') };
+  const filed = await setInboxMessageStatus(scopeFromUserContext(ctx, createServiceClient()), id, status);
+  if (!filed.ok) return { ok: false, error: filed.error || t('actions.couldNotUpdateTheMessage') };
   revalidatePath('/dashboard/contact-center');
   return { ok: true };
 }

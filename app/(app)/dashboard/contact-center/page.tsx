@@ -11,6 +11,7 @@ import { isTwilioConfigured } from '@/lib/guardian/twilio';
 import type { Tables } from '@/lib/database.types';
 import { ContactCenterModule } from '@/components/modules/contact-center-module';
 import { ErrorState } from '@/components/ui/states';
+import { isManager } from '@/lib/constants/roles';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -51,6 +52,7 @@ export default async function ContactCenterPage() {
       suggestedLocal={suggestEmailLocal(ctx.active.family.name)}
       twilioReady={isTwilioConfigured()}
       canManage={ctx.active.role === 'parent'}
+      canFile={isManager(ctx.active.role)}
     />
   );
 }

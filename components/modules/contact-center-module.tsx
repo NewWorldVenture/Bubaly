@@ -41,8 +41,10 @@ const SMS_REPLY_COPY = {
   failed: ['contactSmsReply.failed', 'contactSmsReply.failedDetail'],
 } as const;
 
-export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, suggestedLocal, twilioReady, canManage }: {
+export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, suggestedLocal, twilioReady, canManage, canFile = false }: {
   channel: Channel; messages: InboxRow[]; suggestedLocal: string; twilioReady: boolean; canManage: boolean;
+  /** Mark read / Archive: a manager's act, refused on the server to anyone else (lib/services/inbox). */
+  canFile?: boolean;
   smsReplyStatuses?: Record<string, SmsReplyStatus>;
 }) {
   const tr = useTranslations();
@@ -224,7 +226,7 @@ export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, 
                           <p className="mt-1">{t(replyCopy[1])}</p>
                         </div>
                       )}
-                      {!outbound && (
+                      {!outbound && canFile && (
                         <div className="mt-2 flex items-center gap-3">
                           {m.status !== 'read' && (
                             <button type="button" disabled={pending} onClick={() => run(() => setMessageStatusAction(m.id, 'read'))}

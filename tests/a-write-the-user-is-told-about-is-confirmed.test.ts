@@ -406,9 +406,14 @@ describe('an address the family is told they have is confirmed (C1-S9-47)', () =
   });
 
   it('the concierge patch and the message status are confirmed', () => {
-    for (const binding of ['patched', 'updated']) {
-      expect(contactCenter, binding).toContain(`wroteNoRows(${binding})`);
-    }
+    expect(contactCenter).toContain('wroteNoRows(patched)');
+    // The message status is filed through the inbox service now, which owns
+    // the manager check (a child archiving the family's mail was the bug) and
+    // confirms the row itself: zero rows back is "could not be found", never ok.
+    const setStatus = bodyOf(contactCenter, 'export async function setMessageStatusAction', '\n}\n');
+    expect(at(setStatus, 'if (!filed.ok) return')).toBeLessThan(at(setStatus, 'return { ok: true };'));
+    const inbox = bodyOf(readFileSync('lib/services/inbox/index.ts', 'utf8'), 'export async function setInboxMessageStatus', '\n}\n');
+    expect(at(inbox, ".select('id')")).toBeLessThan(at(inbox, "if (!data) return fail('That message could not be found.'"));
     // The concierge patch includes call forwarding, which is why it is not
     // treated as a cosmetic settings write. (Spelt `fallback.value` since main's
     // #581 normaliser replaced `normalized` on this path; Audit C1-S9-92.)

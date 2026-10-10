@@ -411,14 +411,30 @@ export async function finalizeOnboardingAction(input: {
   let familyId: string;
   let newFamily = false; // set when this run creates a brand-new family (a signup)
   const { data: existingMembership, error: membershipLookupError } = await admin
-    .from('family_members').select('family_id')
+    .from('family_members').select('family_id, role')
     .eq('user_id', auth.user.id).eq('is_active', true)
     .order('created_at').limit(1).maybeSingle();
   if (membershipLookupError) return onboardingFailure('membership lookup', membershipLookupError, 'Could not check your family setup.');
   if (existingMembership?.family_id) {
     const progress = await getOnboardingProgress(admin, auth.user.id);
     const resumableWizard = progress?.source === 'wizard' && progress.status !== 'completed';
-    if (progress?.source !== 'auto_provision' && !resumableWizard) {
+    // The progress row says a setup MAY still be open; it is not who owns it.
+    // Its `source` and `status` are client-writable (0454 keeps them for the
+    // calendar path) and `resetOnboardingAction` writes one for any member, so
+    // a child in someone else's household could mark it resumable — and
+    // adopting runs, as the service role, a rename, a timezone change, member
+    // and invite writes, and the upsert below that makes the caller a PARENT.
+    // Only the space this user created and is the parent of is theirs to set
+    // up: the same test `prepareCalendarFamily`, `verifyCalendarWizard` and
+    // the claim RPC (0454) apply. Anyone else gets the untouched answer.
+    let ownsOpenSetup = false;
+    if ((progress?.source === 'auto_provision' || resumableWizard) && existingMembership.role === 'parent') {
+      const { data: owned, error: ownerReadError } = await admin
+        .from('families').select('created_by').eq('id', existingMembership.family_id).maybeSingle();
+      if (ownerReadError) return onboardingFailure('family owner check', ownerReadError, t('actions.couldNotFinishSettingUp2'));
+      ownsOpenSetup = owned?.created_by === auth.user.id;
+    }
+    if (!ownsOpenSetup) {
       if (connectedReceipt && connectedScope) {
         if (existingMembership.family_id !== connectedReceipt.familyId) return { ok: false, error: t('connectedCalendar.unavailable') };
         const refreshed = await finishConnectedCalendar(connectedScope, connectedReceipt, calendarImport.events);
