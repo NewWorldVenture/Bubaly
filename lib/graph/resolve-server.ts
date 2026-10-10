@@ -8,7 +8,13 @@ import { normalizeEntityName, resolveInboundEntities, senderMailbox, type Inboun
 type GraphRow = { id: string; name: string; kind: string; ref_table: string | null; ref_id: string | null; attributes: unknown };
 type FactRow = { id: string; label: string; value: string; category: string; source: string; expires_at: string | null };
 const MANUAL_KINDS: Record<string, InboundEntityKind> = { school: 'school', team: 'team', contact: 'contact', sender: 'contact', company: 'provider', service_provider: 'provider' };
-const PRIVATE_NAME = /\b(doctor|dr\.?|clinic|hospital|medical|dental|dentist|therapy|therapist|psychiatr|bank|insurance|financial|account|pediatric|pharmacy)\b/i;
+// Whole words in every form: `psychiatr` was a stem and matched nothing, and the
+// singular-only entries let "Northside Psychiatry" or "Chase accounts" through.
+const PRIVATE_NAME = new RegExp(`\\b(?:${[
+  'doctors?', 'dr\\.?', 'clinics?', 'hospitals?', 'medical', 'dental', 'dentists?', 'therapy', 'therapies',
+  'therapists?', 'psychiatr(?:y|ic|ist|ists)', 'banks?', 'insurance', 'financial', 'accounts?',
+  'pediatric(?:s|ian|ians)?', 'pharmacy', 'pharmacies',
+].join('|')})\\b`, 'i');
 const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const strings = (value: unknown): string[] => Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string' && v.trim().length >= 3 && v.length <= 200).map((v) => v.trim()) : [];
 const safeName = (label: string) => label.length >= 3 && label.length <= 200 && !PRIVATE_NAME.test(label) && !isSensitiveMemory({ key: label, content: '' });

@@ -69,7 +69,18 @@ export const AI_FACT_SOURCES: MemorySource[] = ['ai_conversation', 'ai_inferred'
  */
 export const SENSITIVE_MEMORY_CATEGORIES: FactCategory[] = ['medical', 'account'];
 
-const SENSITIVE_TERMS = /\b(ssn|social security|passport (?:no|number)|password|passcode|pin\b|bank|routing|account number|card number|credit card|iban|allerg(?:y|ies|ic)|diagnos|prescription|medication|therap|hiv|pregnan|salary)\b/i;
+// Every form of each word is spelled out: the list matches WHOLE words, so a
+// stem never matches. `diagnos`, `therap` and `pregnan` used to be stems, and
+// matched nothing ("diagnosed", "therapist" and "pregnant" have no word
+// boundary inside them), and the singular-only entries missed their plurals:
+// "Mom is pregnant" and "Two prescriptions to refill" were ordinary memories
+// a child was shown (AI-001).
+const SENSITIVE_TERMS = new RegExp(`\\b(?:${[
+  'ssn', 'social security', 'passports? (?:no|numbers?)', 'passwords?', 'passcodes?', 'pins?',
+  'banks?', 'banking', 'routing', 'account numbers?', 'card numbers?', 'credit cards?', 'iban',
+  'allerg(?:y|ies|ic)', 'diagnos(?:e|ed|es|is|ing|tic|tics)', 'prescriptions?', 'prescrib(?:e|ed|es|ing)',
+  'medications?', 'therap(?:y|ies|ist|ists|eutic)', 'hiv', 'pregnan(?:t|cy|cies)', 'salar(?:y|ies)',
+].join('|')})\\b`, 'i');
 
 /**
  * True when a memory should not be written by the assistant: the category is
