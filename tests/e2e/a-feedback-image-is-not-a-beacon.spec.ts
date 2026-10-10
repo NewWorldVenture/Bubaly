@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { expect, test, type Page } from '@playwright/test';
 import { closeWithoutSnapshot, createOwnedAccount, requireLocalOrigin, type OwnedAccount } from './helpers/durable-session';
+import { cleanUpFeedbackFixture } from './helpers/feedback-fixture-cleanup';
 
 // SEC-007: a feedback screenshot must not make the super admin's browser fetch
 // an arbitrary URL — and the screenshots the board takes must still reach the
@@ -19,6 +20,12 @@ import { closeWithoutSnapshot, createOwnedAccount, requireLocalOrigin, type Owne
 // accounts (the console's is a super admin through a super_admins row,
 // removed with it); synthetic one-pixel PNGs. Every request to a host other
 // than this machine is aborted and recorded.
+//
+// The submit runs onFeedbackSubmitted on the server, which files a GitHub
+// issue and emails the super admins when their keys are set. Browser routing
+// cannot see those requests. The server the runner starts has those keys
+// blanked (scripts/e2e-server-env.mjs), and this suite refuses to start when
+// they, or the other providers' keys, are in its own environment.
 const enabled = process.env.E2E_AUTHENTICATED === '1';
 const provider = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
@@ -63,6 +70,11 @@ test.describe('SEC-007: feedback screenshots reach the super admin, and nothing 
   test.describe.configure({ timeout: 90_000 });
 
   test.beforeEach(async ({ context }) => {
+    // Before any account, row or request.
+    if (process.env.GITHUB_TOKEN || process.env.GITHUB_FEEDBACK_TOKEN || process.env.RESEND_API_KEY
+      || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.SENDGRID_API_KEY || process.env.TWILIO_ACCOUNT_SID) {
+      throw new Error('Feedback E2E refuses external provider credentials.');
+    }
     external = [];
     requested = [];
     await context.route('**/*', (route) => {
@@ -79,17 +91,11 @@ test.describe('SEC-007: feedback screenshots reach the super admin, and nothing 
     // Pages close before the context, and before Playwright's failure
     // snapshot, so a failure cannot attach the sign-in form's values to it
     // (the established pattern; CI's artifact upload also excludes this suite).
-    await closeWithoutSnapshot(context);
-    try {
-      const db = admin();
-      await db.from('feedback_ideas').delete().like('title', `%${run}%`);
-      if (account) {
-        const { data } = await db.storage.from(BUCKET).list(account.userId);
-        if (data?.length) await db.storage.from(BUCKET).remove(data.map((o) => `${account!.userId}/${o.name}`));
-        await db.from('super_admins').delete().eq('email', account.email.toLowerCase());
-      }
-      await account?.dispose();
-    } finally { account = null; }
+    // Every step runs whatever the one before it did, and each failure is
+    // reported (tests/a-feedback-fixture-cleanup-runs-every-step.test.ts).
+    const owned = account;
+    account = null;
+    await cleanUpFeedbackFixture({ close: () => closeWithoutSnapshot(context), db: admin, bucket: BUCKET, run, account: owned });
   });
 
   test('a member posts an idea with a screenshot through the real form; it is stored as the uploaded path', async ({ page }) => {
