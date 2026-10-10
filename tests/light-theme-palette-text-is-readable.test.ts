@@ -39,14 +39,38 @@ function lightToken(name: string): Rgb {
   return [Number(m![1]), Number(m![2]), Number(m![3])];
 }
 
+const OUT = ':not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *))';
+
 /** hue → the rgb its base rule sets. */
 function rules(): Map<string, Rgb> {
   const out = new Map<string, Rgb>();
-  for (const m of block.matchAll(/\.light :is\(\.text-([a-z]+)-200,[^{]*\{\s*color: rgb\((\d+) (\d+) (\d+) \/ var\(--tw-text-opacity, 1\)\);/g)) {
+  for (const m of block.matchAll(/^:where\(\.light\) \.text-([a-z]+)-200:not\([^{]*\{\s*color: rgb\((\d+) (\d+) (\d+) \/ var\(--tw-text-opacity, 1\)\);/gm)) {
     out.set(m[1], [Number(m[2]), Number(m[3]), Number(m[4])]);
   }
   return out;
 }
+
+/** Each rule's selectors, split at the top level only (the exclusion holds commas). */
+function selectorsOf(header: string): string[] {
+  const parts: string[] = [];
+  let depth = 0, from = 0;
+  for (let i = 0; i < header.length; i += 1) {
+    if (header[i] === '(') depth += 1;
+    else if (header[i] === ')') depth -= 1;
+    else if (header[i] === ',' && depth === 0) { parts.push(header.slice(from, i).trim()); from = i + 1; }
+  }
+  parts.push(header.slice(from).trim());
+  return parts;
+}
+
+/** Classes plus pseudo-classes, the way specificity counts them, outside :where() (which counts nothing). */
+function specificity(selector: string): number {
+  const visible = selector.split(OUT).join('').replace(':where(.light)', '');
+  // `.light` itself counts where it is not wrapped in :where().
+  return (visible.match(/(?<!\\)[.:](?!:)/g) ?? []).length;
+}
+
+const headers = () => (block.match(/^(?::where\(\.light\)|\.light) [^{]+\{/gm) ?? []).map((h) => h.slice(0, -1).trim());
 
 function sourceFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -83,24 +107,44 @@ describe('the light theme’s palette text is readable', () => {
         const [, cls, hue, shade, alpha] = m;
         if (!(hue in TAILWIND_500)) continue;
         if (!hues.has(hue)) { missing.add(`${cls} (${file})`); continue; }
-        if (cls.startsWith('hover:') && !block.includes(`.hover\\:text-${hue}-${shade}:hover`)) missing.add(`${cls} (${file})`);
-        if (cls.startsWith('group-hover:') && !block.includes(`.group:hover .group-hover\\:text-${hue}-${shade}`)) missing.add(`${cls} (${file})`);
-        if (alpha && !block.includes(`.light .text-${hue}-${shade}\\/${alpha}:not(:is(.keep-dark-palette, .marketing-theme, .dark) *)`)) missing.add(`${cls} (${file})`);
+        if (cls.startsWith('hover:') && !block.includes(`.light .hover\\:text-${hue}-${shade}:hover${OUT}`)) missing.add(`${cls} (${file})`);
+        if (cls.startsWith('group-hover:') && !block.includes(`.light .group:hover .group-hover\\:text-${hue}-${shade}${OUT}`)) missing.add(`${cls} (${file})`);
+        if (alpha && !block.includes(`:where(.light) .text-${hue}-${shade}\\/${alpha}${OUT}`)) missing.add(`${cls} (${file})`);
       }
     }
     expect([...missing]).toEqual([]);
   });
 
   it('a slash variant keeps its own alpha on the darker colour', () => {
-    for (const m of block.matchAll(/\.light \.text-([a-z]+)-\d+\\\/(\d+):not\(:is\(\.keep-dark-palette, \.marketing-theme, \.dark\) \*\) \{ color: rgb\((\d+) (\d+) (\d+) \/ ([\d.]+)\); \}/g)) {
+    const slashes = [...block.matchAll(/^:where\(\.light\) \.text-([a-z]+)-\d+\\\/(\d+):not\(.*\) \{ color: rgb\((\d+) (\d+) (\d+) \/ ([\d.]+)\); \}$/gm)];
+    expect(slashes.length).toBeGreaterThan(0);
+    for (const m of slashes) {
       expect(Number(m[6]), m[0]).toBeCloseTo(Number(m[2]) / 100, 5);
       expect([Number(m[3]), Number(m[4]), Number(m[5])], m[0]).toEqual(rules().get(m[1]));
     }
   });
 
-  it('applies only in the signed-in app’s light theme: never on marketing pages, in a forced-dark subtree or on a surface marked to keep the original shades', () => {
-    for (const rule of block.match(/^\.light [^{]+\{/gm) ?? []) {
-      expect(rule).toMatch(/:not\(:is\(\.keep-dark-palette, \.marketing-theme, \.dark\) \*\) \{$/);
+  it('a base rule has its Tailwind class\u2019s specificity (so appended variants still win); a hover rule one more than the variant it replaces', () => {
+    const seen = { base: 0, hover: 0, group: 0, slash: 0 };
+    for (const header of headers()) {
+      for (const sel of selectorsOf(header)) {
+        if (sel.includes('.group:hover')) { expect(specificity(sel), sel).toBe(4); seen.group += 1; }
+        else if (sel.includes(':hover')) { expect(specificity(sel), sel).toBe(3); seen.hover += 1; }
+        else if (sel.includes('\\/')) { expect(specificity(sel), sel).toBe(1); seen.slash += 1; }
+        else { expect(specificity(sel), sel).toBe(1); seen.base += 1; }
+      }
+    }
+    expect(seen.base).toBe(3 * rules().size);
+    expect(seen.hover).toBe(3 * rules().size);
+    expect(seen.group).toBe(3 * rules().size);
+  });
+
+  it('applies only in the signed-in app\u2019s light theme: never to an element in or under a marketing page, a dark subtree or a marked presentation', () => {
+    for (const header of headers()) {
+      for (const sel of selectorsOf(header)) {
+        expect(sel.includes(':hover') ? sel.startsWith('.light ') : sel.startsWith(':where(.light) '), sel).toBe(true);
+        expect(sel.endsWith(OUT), sel).toBe(true);
+      }
     }
     expect(block).not.toMatch(/^\.dark /m);
   });

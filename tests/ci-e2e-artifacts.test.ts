@@ -54,6 +54,7 @@ function assertPrivatePaths(source = workflow) {
     '!test-results/*durable-session*/**',
     '!test-results/*family-messaging-auth*/**',
     '!test-results/*a-feedback-image-is-not*/**',
+    '!test-results/*light-theme-palette*/**',
     '!test-results/*recurring-bill-auth*/**',
     '!test-results/*dashboard-calendar-auth*/**',
     '!test-results/**/storageState*',
@@ -152,6 +153,7 @@ async function proveCleanupOwnership(source: string) {
 test.each([
   '!test-results/**/trace.zip', '!test-results/*durable-session*/**',
   '!test-results/*family-messaging-auth*/**', '!test-results/*a-feedback-image-is-not*/**',
+  '!test-results/*light-theme-palette*/**',
   '!test-results/*recurring-bill-auth*/**',
   '!test-results/*dashboard-calendar-auth*/**', '!test-results/**/storageState*',
   '!test-results/**/storage-state*', '!test-results/**/auth.json', '!test-results/**/auth/**',
@@ -168,12 +170,14 @@ test('artifact contract refuses a whole-directory upload or hidden files', () =>
 });
 
 const privateSpecs = ['family-messaging-authenticated', 'recurring-bill-authenticated',
-  'dashboard-calendar-authenticated', 'durable-session', 'a-feedback-image-is-not-a-beacon'] as const;
+  'dashboard-calendar-authenticated', 'durable-session', 'a-feedback-image-is-not-a-beacon',
+  'light-theme-palette-in-the-browser'] as const;
 
 // A suite's exclusion is a prefix of its file name short enough to survive the
 // worker's truncation: `-authenticated` shortened to `-auth`, or named here.
 const shortPrefix: Partial<Record<typeof privateSpecs[number], string>> = {
   'a-feedback-image-is-not-a-beacon': 'a-feedback-image-is-not',
+  'light-theme-palette-in-the-browser': 'light-theme-palette',
 };
 const exclusionFor = (spec: typeof privateSpecs[number]) =>
   `!test-results/*${shortPrefix[spec] ?? spec.replace('-authenticated', '-auth')}*/**`;
