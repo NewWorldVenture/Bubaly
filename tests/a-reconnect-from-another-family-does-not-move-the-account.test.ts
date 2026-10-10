@@ -1,0 +1,58 @@
+import { readFileSync } from 'node:fs';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
+import { connectAccount } from '@/lib/sync/accounts';
+
+// A user in families A and B connects the same Google account while B is
+// active. The normal (non-onboarding) branch upserted on (user, provider,
+// external_id) with family_id = B, so the account, its tokens and its
+// connection moved out of A while A's calendars still pointed at it.
+const userId = '10000000-0000-4000-8000-000000000001';
+const familyA = '20000000-0000-4000-8000-00000000000a';
+const familyB = '20000000-0000-4000-8000-00000000000b';
+const accountId = '30000000-0000-4000-8000-000000000001';
+
+let db: InMemorySupabase;
+const tokens = { accessToken: 'access', refreshToken: 'refresh', expiresAt: Date.now() + 3600_000 };
+
+beforeEach(() => {
+  vi.stubEnv('SYNC_TOKEN_KEY', '12'.repeat(32));
+  db = createInMemorySupabase({ uniques: { sync_accounts: [['user_id', 'provider', 'external_id']], sync_tokens: [['account_id']], sync_connections: [['account_id']] } });
+  db.seed('sync_accounts', [{ id: accountId, user_id: userId, family_id: familyA, provider: 'google', external_id: 'me@example.test', sync_direction: 'two_way' }]);
+  db.seed('sync_tokens', [{ account_id: accountId, user_id: userId, family_id: familyA, provider: 'google', external_id: 'me@example.test', access_token_enc: 'old' }]);
+  db.seed('sync_connections', [{ account_id: accountId, user_id: userId, family_id: familyA, provider: 'google', external_id: 'me@example.test' }]);
+});
+
+describe('connecting an account another family already holds', () => {
+  it('refuses rather than moving the account, its tokens and its connection', async () => {
+    await expect(connectAccount(db as never, {
+      userId, familyId: familyB, provider: 'google', externalId: 'me@example.test', tokens,
+    })).rejects.toThrow(/another family/);
+    expect(db.table('sync_accounts')[0]).toMatchObject({ id: accountId, family_id: familyA });
+    expect(db.table('sync_tokens')[0]).toMatchObject({ family_id: familyA, access_token_enc: 'old' });
+    expect(db.table('sync_connections')[0]).toMatchObject({ family_id: familyA });
+  });
+
+  it('still reconnects in the family that holds it (not over-tightened)', async () => {
+    const id = await connectAccount(db as never, { userId, familyId: familyA, provider: 'google', externalId: 'me@example.test', tokens });
+    expect(id).toBe(accountId);
+    expect(db.table('sync_accounts')).toHaveLength(1);
+    expect(db.table('sync_tokens')[0].access_token_enc).not.toBe('old');
+  });
+
+  it('refuses an account with no identity instead of keying it on something shared', async () => {
+    await expect(connectAccount(db as never, { userId, familyId: familyA, provider: 'google', externalId: '', tokens })).rejects.toThrow();
+  });
+});
+
+describe('the OAuth callbacks never key an account on the user id', () => {
+  // `identity ?? ctx.user.id` made every account whose identity lookup failed
+  // share one key, so a second account overwrote the first one's tokens.
+  for (const file of ['app/api/sync/[provider]/callback/route.ts', 'app/api/sync/google/callback/route.ts']) {
+    it(file, () => {
+      const src = readFileSync(file, 'utf8');
+      expect(src).not.toMatch(/externalId:\s*\w+\s*\?\?\s*ctx\.user\.id/);
+      expect(src).toMatch(/if \(!(identity|email)\) return redirect\('error=connect_failed'\)/);
+    });
+  }
+});

@@ -37,13 +37,17 @@ export async function GET(req: NextRequest) {
     const redirectUri = googleSyncRedirectUri(origin);
     const tokens = await exchangeCode(code, redirectUri);
     const email = await getGoogleUserEmail(tokens.accessToken);
+    // No fallback to the user's own id: that key is shared by every Google
+    // account the user connects, so a second account would overwrite the
+    // first one's tokens. Without an identity the connect fails.
+    if (!email) return redirect('error=connect_failed');
 
     const admin = createServiceClient();
     await connectAccount(admin, {
       userId: ctx.user.id,
       familyId: ctx.active.familyId,
       provider: 'google',
-      externalId: email ?? ctx.user.id,
+      externalId: email,
       displayName: email,
       scope: tokens.scope ?? null,
       tokens,

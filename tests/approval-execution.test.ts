@@ -131,6 +131,11 @@ function approvalRow(over: Partial<Row> = {}): Row {
   };
 }
 
+/** What evaluateTrust / the risk tier write, via the service role, for a row they file. */
+function bubalyFiledMarker(approvalId = 'appr-1'): Row {
+  return { id: `audit-${approvalId}`, family_id: 'fam-1', actor_kind: 'ai_agent', actor_id: 'bubaly', approval_id: approvalId, decision: 'require_approval' };
+}
+
 function runRow(over: Partial<Row> = {}): Row {
   return {
     id: 'run-1', family_id: 'fam-1', plan_id: 'plan-1', request_id: 'req-1', requested_by_member_id: 'member-1',
@@ -256,6 +261,8 @@ describe('decide — tool payloads', () => {
   it('executes a legacy alias payload through executeTool with the gate skipped and a stable idempotency key', async () => {
     const store = makeStore({
       approval_requests: [approvalRow({ payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } } })],
+      // The gate's own audit line for the row it filed (service-only, 0260).
+      trust_audit_logs: [bubalyFiledMarker()],
     });
     holder.service = store.db;
 
@@ -270,7 +277,7 @@ describe('decide — tool payloads', () => {
     expect(typeof call.opts.idempotencyKey).toBe('string');
 
     expect(store.tables.approval_requests[0]).toMatchObject({ status: 'approved', execution_result: 'Did create_calendar_event' });
-    expect(store.tables.trust_audit_logs.map((a) => a.decision)).toEqual(['approved', 'approved_execution']);
+    expect(store.tables.trust_audit_logs.map((a) => a.decision)).toEqual(['require_approval', 'approved', 'approved_execution']);
   });
 
   it('re-evaluates the trust gate for a tool payload on a row a member filed themselves', async () => {
@@ -335,6 +342,9 @@ describe('decide — tool payloads', () => {
     const res = await decide(scopeWith(store.db), 'appr-1', 'approved');
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toContain('Calendar is read-only');
+    // Not retryable, whatever the tool said: the row is decided, so a retry
+    // is refused as "already decided" and nothing re-executes it.
+    expect(res).toMatchObject({ ok: false, retryable: false });
     expect(store.tables.approval_requests[0]).toMatchObject({ status: 'approved', execution_result: 'error: Calendar is read-only right now.' });
   });
 });
@@ -513,5 +523,96 @@ describe('editAndApprove', () => {
     expect(store.tables.approval_requests[0].edited_payload).toEqual({ title: 'Soccer', starts_at: '2026-09-06T14:00:00Z' });
     expect(store.tables.ai_plan_steps[0].status).toBe('ready');
     expect(kicked.runs).toEqual(['run-1']);
+  });
+});
+
+describe('a pending row a manager rewrote is not trusted for what it says about itself', () => {
+  it('runs the trust gate for a row that claims requested_by_kind = ai without the server having filed it', async () => {
+    // An adult files a member row, PATCHes requested_by_kind to 'ai' (no
+    // column pin stops it), then approves it alone. `skipTrust` read that
+    // column, so any registered tool ran with every family rule skipped.
+    const store = makeStore({
+      approval_requests: [approvalRow({
+        requested_by_kind: 'ai', requested_by_member_id: 'member-1', agent: null,
+        payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } }, payload_kind: 'tool',
+      })],
+      family_members: [{ id: 'member-1', family_id: 'fam-1', user_id: 'auth-user-1' }],
+    });
+    holder.service = store.db;
+    const res = await decide(scopeWith(store.db), 'appr-1', 'approved');
+    expect(res).toMatchObject({ ok: true });
+    expect(executed.calls).toHaveLength(1);
+    expect(executed.calls[0].opts.skipTrust).toBe(false);
+  });
+
+  it('refuses a member approving the request they filed themselves', async () => {
+    const store = makeStore({
+      approval_requests: [approvalRow({
+        requested_by_kind: 'member', requested_by_member_id: 'member-1', agent: null,
+        payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } }, payload_kind: 'tool',
+      })],
+    });
+    holder.service = store.db;
+    expect(await decide(scopeWith(store.db), 'appr-1', 'approved')).toMatchObject({ ok: false, code: 'denied' });
+    expect(await editAndApprove(scopeWith(store.db), 'appr-1', { title: 'Soccer!' })).toMatchObject({ ok: false, code: 'denied' });
+    expect(store.tables.approval_requests[0].status).toBe('pending');
+    expect(executed.calls).toHaveLength(0);
+    // Withdrawing your own request is still yours to do.
+    expect(await decide(scopeWith(store.db), 'appr-1', 'rejected')).toMatchObject({ ok: true, data: { status: 'rejected' } });
+  });
+
+  it('never re-points or releases a step gated by a DIFFERENT approval, whatever plan_step_ids the row names', async () => {
+    // The attacker's row names the victim step (held by a pending two-parent
+    // approval) in plan_step_ids and claims to be Bubaly's. foldIntoRun used
+    // to set that step ready with approval_id = the attacker's row, and the
+    // executor then ran it on the strength of the attacker's single vote.
+    const store = makeStore({
+      approval_requests: [
+        approvalRow({
+          requested_by_kind: 'ai', payload: { kind: 'plan_steps', run_id: 'run-1', step_ids: ['victim'] }, payload_kind: 'plan_steps',
+          run_id: 'run-1', plan_step_ids: ['victim'], plan_step_id: 'victim',
+        }),
+        approvalRow({ id: 'appr-two-parent', approval_model: 'two_parent', required_approvals: 2 }),
+      ],
+      family_automation_runs: [runRow()],
+      ai_plan_steps: [stepRow({ id: 'victim', approval_id: 'appr-two-parent' })],
+      trust_audit_logs: [bubalyFiledMarker()],
+    });
+    holder.service = store.db;
+    await decide(scopeWith(store.db), 'appr-1', 'approved');
+    expect(store.tables.ai_plan_steps[0]).toMatchObject({ status: 'awaiting_approval', approval_id: 'appr-two-parent' });
+    expect(store.tables.family_automation_runs[0].state).toBe('awaiting_approval');
+    expect(kicked.runs).toEqual([]);
+  });
+
+  it('a decision whose run could not be resumed is not reported as retryable', async () => {
+    // The status flip commits first; a retry is refused as "already decided".
+    // Telling the parent to retry lost the work. The settled-run sweep resumes it.
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const store = makeStore({
+      approval_requests: [approvalRow({ payload: { kind: 'plan_steps', run_id: 'run-1', step_ids: ['step-1'] }, payload_kind: 'plan_steps', run_id: 'run-1', plan_step_ids: ['step-1'] })],
+      family_automation_runs: [runRow()],
+      ai_plan_steps: [stepRow()],
+    });
+    const fake = store.db as unknown as { from: (table: string) => Record<string, unknown> };
+    const original = fake.from;
+    fake.from = (table: string) => {
+      const b = original(table);
+      if (table === 'family_automation_runs') {
+        const update = b.update as (p: unknown) => unknown;
+        b.update = (p: unknown) => {
+          update(p);
+          b.then = (onFulfilled: (v: { data: null; error: { message: string } }) => void) => onFulfilled({ data: null, error: { message: 'timeout' } });
+          return b;
+        };
+      }
+      return b;
+    };
+    holder.service = store.db;
+    const res = await decide(scopeWith(store.db), 'appr-1', 'approved');
+    expect(res).toMatchObject({ ok: false, retryable: false });
+    if (!res.ok) expect(res.error).toContain('recorded');
+    expect(store.tables.approval_requests[0].status).toBe('approved');
+    errors.mockRestore();
   });
 });

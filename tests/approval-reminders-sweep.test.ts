@@ -88,7 +88,7 @@ describe('remindPendingApprovals', () => {
     const store = makeStore(seed());
     holder.service = store.db;
     const result = await remindPendingApprovals(store.db, NOW);
-    expect(result).toEqual({ reminded: 2, families: 1 });
+    expect(result).toEqual({ reminded: 2, families: 1, failures: 0 });
 
     const rows = store.tables.notifications;
     expect(rows.map((r) => r.user_id).sort()).toEqual(['u1', 'u2']);
@@ -103,7 +103,7 @@ describe('remindPendingApprovals', () => {
     await remindPendingApprovals(store.db, NOW);
     for (const row of store.tables.notifications) row.is_read = true;
     const again = await remindPendingApprovals(store.db, new Date(NOW.getTime() + 6 * 3600_000));
-    expect(again).toEqual({ reminded: 0, families: 0 });
+    expect(again).toEqual({ reminded: 0, families: 0, failures: 0 });
     expect(store.tables.notifications).toHaveLength(2);
   });
 
@@ -120,8 +120,27 @@ describe('remindPendingApprovals', () => {
       return b;
     };
     holder.service = store.db;
-    expect(await remindPendingApprovals(store.db, NOW)).toEqual({ reminded: 0, families: 0 });
+    // Skipped AND counted: a swallowed failure let the cron answer 200 while
+    // no reminder went out.
+    expect(await remindPendingApprovals(store.db, NOW)).toEqual({ reminded: 0, families: 0, failures: 1 });
     expect(store.tables.notifications).toHaveLength(0);
+    errors.mockRestore();
+  });
+
+  it('reports a sweep read that failed instead of an empty success', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const store = makeStore(seed());
+    const fake = store.db as unknown as { from: (table: string) => unknown };
+    const original = fake.from;
+    fake.from = (table: string) => {
+      const b = original(table) as Record<string, unknown>;
+      if (table === 'approval_requests') {
+        b.then = (onFulfilled: (v: { data: null; error: { message: string } }) => void) => onFulfilled({ data: null, error: { message: 'timeout' } });
+      }
+      return b;
+    };
+    holder.service = store.db;
+    expect(await remindPendingApprovals(store.db, NOW)).toEqual({ reminded: 0, families: 0, failures: 1 });
     errors.mockRestore();
   });
 });

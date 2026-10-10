@@ -46,13 +46,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ prov
       || `${origin}/api/sync/${provider}/callback`;
     const tokens = await adapter.exchangeCode(code, redirectUri);
     const identity = await adapter.getAccountIdentity(tokens.accessToken).catch(() => null);
+    // No fallback to the user's own id: that key is shared by every account of
+    // this provider the user connects, so a second account would overwrite the
+    // first one's tokens. Without an identity the connect fails.
+    if (!identity) return redirect('error=connect_failed');
 
     const admin = createServiceClient();
     await connectAccount(admin, {
       userId: ctx.user.id,
       familyId: ctx.active.familyId,
       provider,
-      externalId: identity ?? ctx.user.id,
+      externalId: identity,
       displayName: identity,
       scope: tokens.scope ?? null,
       tokens,

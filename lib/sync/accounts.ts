@@ -32,6 +32,10 @@ export type ConnectInput = {
  * first consent), the previously stored refresh token is preserved.
  */
 export async function connectAccount(admin: Admin, input: ConnectInput): Promise<string> {
+  // The external id is the account's identity: without one, every account this
+  // user connects for the provider would share one key and overwrite another's
+  // tokens.
+  if (!input.externalId?.trim()) throw new Error('The provider account could not be identified');
   let onboardingMetadata: Record<string, unknown> | undefined;
   let onboardingExisting: { id: string; updated_at: string } | null = null;
   if (input.onboardingCalendar) {
@@ -44,6 +48,18 @@ export async function connectAccount(admin: Admin, input: ConnectInput): Promise
       !marker || typeof marker !== 'object' || Array.isArray(marker) || marker.version !== 1 || marker.state !== 'preview')) throw new Error('This calendar is already connected outside this setup');
     onboardingMetadata = { ...metadata, onboardingCalendar: { version: 1, state: 'preview' } };
     onboardingExisting = existing.data;
+  } else {
+    // The upsert below is keyed on (user, provider, external_id) and writes
+    // family_id, so reconnecting an account that is already connected for
+    // ANOTHER family would silently move it — and its tokens and connection —
+    // out of that family while its calendars there still point at it. Refuse,
+    // as the onboarding branch above does.
+    const existing = await admin.from('sync_accounts').select('id, family_id')
+      .eq('user_id', input.userId).eq('provider', input.provider).eq('external_id', input.externalId).maybeSingle();
+    if (existing.error) throw new Error('Could not check the existing calendar connection');
+    if (existing.data && existing.data.family_id !== input.familyId) {
+      throw new Error('This account is already connected for another family');
+    }
   }
   const values = {
         user_id: input.userId,
