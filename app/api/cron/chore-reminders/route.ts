@@ -9,6 +9,7 @@ import { ChoreReminderEmail } from '@/lib/emails/chore-reminder';
 import * as React from 'react';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { childrenBlockedOn } from '@/lib/notifications/child-channels';
+import { CHORE_REMINDERS_SCHEDULE, occurrenceSendKey, weeklySlot } from '@/lib/server/cron-occurrence';
 
 // Runs every Sunday at 18:00 UTC via Vercel Cron.
 // Finds every family member who has open chore assignments due this week and emails them.
@@ -34,6 +35,13 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = createServiceClient();
+
+  // The Sunday slot this request belongs to. Vercel and the GitHub dispatcher
+  // both fire this route at that minute, and a 502 invites a re-run; every one
+  // of those calls names the same slot, and each member's email carries one
+  // provider idempotency key for it, so a repeat is folded rather than sent
+  // again (lib/server/cron-occurrence.ts).
+  const slot = weeklySlot(new Date(), CHORE_REMINDERS_SCHEDULE);
 
   const weekEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -72,6 +80,7 @@ export async function GET(req: NextRequest) {
 
   // Group by member_id
   type MemberBucket = {
+    memberId: string;
     userId: string;
     memberName: string;
     familyId: string;
@@ -90,6 +99,7 @@ export async function GET(req: NextRequest) {
     if (!byMember.has(a.member_id)) {
       // Fetch family name separately since chore_assignments doesn't join families
       byMember.set(a.member_id, {
+        memberId: a.member_id,
         userId: member.user_id,
         memberName: member.display_name,
         familyId: a.family_id,
@@ -190,7 +200,7 @@ export async function GET(req: NextRequest) {
   let unserved = 0;
   const startedAt = Date.now();
 
-  const remind = async ({ userId, memberName, familyId, familyName, chores }: MemberBucket) => {
+  const remind = async ({ memberId, userId, memberName, familyId, familyName, chores }: MemberBucket) => {
     if (emailBlocked.has(userId)) { skipped++; return; }
     const email = emailByUserId.get(userId);
     if (!email) { skipped++; return; }
@@ -198,6 +208,8 @@ export async function GET(req: NextRequest) {
       to: email,
       subject: `${chores.length} chore${chores.length !== 1 ? 's' : ''} coming up this week`,
       react: React.createElement(ChoreReminderEmail, { memberName, familyName, chores, timeZone: familyZoneById.get(familyId) ?? 'UTC' }),
+      // Per member, not per address: a member of two families gets two emails.
+      idempotencyKey: occurrenceSendKey('chore-reminders', slot, memberId),
     });
     // No provider: sendReactEmail answers ok with `skipped`, and nothing was sent.
     if (notSent) skipped++;

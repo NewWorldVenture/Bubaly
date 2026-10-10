@@ -14,6 +14,7 @@ import * as React from 'react';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { loadCompareLine } from '@/lib/network/compare-line-server';
 import { renderCompareLine } from '@/lib/network/compare-line';
+import { WEEKLY_DIGEST_SCHEDULE, occurrenceSendKey, weeklySlot } from '@/lib/server/cron-occurrence';
 
 // Runs every Monday at 08:00 UTC via Vercel Cron.
 // Sends each family a summary of the week ahead: events, due chores, meal count.
@@ -50,6 +51,13 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = createServiceClient();
+
+  // The Monday slot this request belongs to. Vercel and the GitHub dispatcher
+  // both fire this route at that minute, and a 502 invites a re-run; every one
+  // of those calls names the same slot, and each family's digest carries one
+  // provider idempotency key for it, so a repeat is folded rather than sent
+  // again (lib/server/cron-occurrence.ts).
+  const slot = weeklySlot(new Date(), WEEKLY_DIGEST_SCHEDULE);
 
   const weekStart = new Date().toISOString();
   const weekEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -191,6 +199,8 @@ export async function GET(req: NextRequest) {
         // and only from the k-anonymized rows the nightly aggregation persisted.
         compareLine: renderCompareLine(await loadCompareLine(supabase, family.id), t),
       }),
+      // Per family: one digest per household per week, whichever parent it reaches.
+      idempotencyKey: occurrenceSendKey('weekly-digest', slot, family.id),
     });
     // No provider: sendReactEmail answers ok with `skipped`, and nothing was sent.
     if (notSent) skipped++;
