@@ -662,6 +662,7 @@
   "actions.youCanTBuyYour": "Je kunt de advertentie van je eigen gezin niet kopen.",
   "actions.youCanTMakeAn": "Je kunt geen bod doen op een advertentie van je eigen gezin.",
   "actions.youCanTPlaceA": "Je kunt met dit account niet bieden.",
+  "actions.youAlreadyLeadThisAuction": "Je bent al de hoogste bieder, dus opnieuw bieden zou alleen je eigen prijs verhogen.",
   "actions.youCanTRemoveYour": "Je kunt je eigen superbeheerderstoegang niet verwijderen.",
   "actions.youCanTReportYour": "Je kunt de advertentie van je eigen gezin niet melden.",
   "actions.youDoNotHavePermission": "Je hebt geen toestemming om posts te publiceren.",

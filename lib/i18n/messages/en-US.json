@@ -655,6 +655,7 @@
   "actions.youCanTBuyYour": "You can’t buy your own family’s listing.",
   "actions.youCanTMakeAn": "You can’t make an offer on your own family’s listing.",
   "actions.youCanTPlaceA": "You can’t place a bid for this account.",
+  "actions.youAlreadyLeadThisAuction": "You’re already the top bidder, so bidding again would only raise your own price.",
   "actions.youCanTRemoveYour": "You can’t remove your own super-admin access.",
   "actions.youCanTReportYour": "You can’t report your own family’s listing.",
   "actions.youDoNotHavePermission": "You do not have permission to publish posts.",

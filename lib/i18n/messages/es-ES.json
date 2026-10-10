@@ -662,6 +662,7 @@
   "actions.youCanTBuyYour": "No puedes comprar el anuncio de tu propia familia.",
   "actions.youCanTMakeAn": "No puedes hacer una oferta por un anuncio de tu propia familia.",
   "actions.youCanTPlaceA": "No puedes pujar con esta cuenta.",
+  "actions.youAlreadyLeadThisAuction": "Ya eres el mejor postor, así que volver a pujar solo subiría tu propio precio.",
   "actions.youCanTRemoveYour": "No puedes quitarte tu propio acceso de superadministrador.",
   "actions.youCanTReportYour": "No puedes denunciar el anuncio de tu propia familia.",
   "actions.youDoNotHavePermission": "No tienes permiso para publicar entradas.",

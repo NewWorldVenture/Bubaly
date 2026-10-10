@@ -12,7 +12,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import {
-  auctionStatus, isLive, timeLeft, minNextBidCents, quickBidLadder,
+  auctionStatus, isLive, timeLeft, minNextBidCents, quickBidLadder, buyNowClosedByBids,
   type AuctionView,
 } from '@/lib/marketplace/auction';
 import { placeBidAction, buyNowAction } from '@/app/(app)/marketplace/auctions/actions';
@@ -156,7 +156,9 @@ export function AuctionPanel({
       </div>
 
       {/* Bid controls */}
-      {live && !isOwner && (
+      {/* A leading household is not offered a bid: the proxy engine would
+          raise the price it pays against itself. */}
+      {live && !isOwner && !iLead && (
         <div className="mt-4 space-y-3">
           <div className="flex flex-wrap gap-2">
             {ladder.map((amt) => (
@@ -186,7 +188,7 @@ export function AuctionPanel({
           <p className="flex items-center gap-1 text-[11px] text-muted">
             <ShieldCheck className="h-3 w-3" /> {tr('auction.enterYourMaxWeBidThe')}
           </p>
-          {a.buyNowCents != null && (
+          {a.buyNowCents != null && !buyNowClosedByBids(a.bidCount) && (
             <button onClick={buyNow} disabled={pending}
               className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 py-2.5 text-sm font-bold text-emerald-400 transition hover:bg-emerald-500/20 disabled:opacity-50">
               <Zap className="h-4 w-4" /> {tr('auctionPanel.buyItNowForAmount', { amount: money(a.buyNowCents) })}

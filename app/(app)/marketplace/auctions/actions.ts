@@ -10,6 +10,8 @@ import { MARKETPLACE_CURRENCY } from '@/lib/marketplace/listings';
 import { getFormat } from '@/lib/utils/format-server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { isManager } from '@/lib/constants/roles';
+import { buyNowClosedByBids } from '@/lib/marketplace/auction';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -37,6 +39,23 @@ export async function placeBidAction(input: { listingId: string; maxCents: numbe
   const maxCents = Math.round(input.maxCents);
   if (!input.listingId || !Number.isFinite(maxCents) || maxCents <= 0 || maxCents > 1_000_000_000_00) {
     return { ok: false, error: t('actions.enterAValidBidAmount') };
+  }
+  // Every auction a family can bid on belongs to ANOTHER household (the RPC
+  // refuses own_listing), so a bid is a commitment to pay another family's
+  // adult and, on winning, to meet them. A child or teen does not make it.
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan16') };
+
+  // A household that already leads is not raised against itself. The proxy
+  // engine treats any higher max as a NEW leader and moves the visible price
+  // to the old max plus an increment, so the leader re-bidding (or another
+  // member of the same family) pushed up the price they would pay with no
+  // competitor at all. Refused here; raising only the hidden max needs the
+  // RPC to learn the "same leader" branch.
+  const { data: listing, error: listingError } = await supabase.from('marketplace_listings')
+    .select('id, highest_bidder_family_id').eq('id', input.listingId).maybeSingle();
+  if (listingError) return { ok: false, error: t('actions.couldNotPlaceThatBid') };
+  if (listing && listing.highest_bidder_family_id === ctx.active.familyId) {
+    return { ok: false, error: t('actions.youAlreadyLeadThisAuction') };
   }
 
   const { data, error } = await supabase.rpc('marketplace_place_bid', {
@@ -76,6 +95,16 @@ export async function buyNowAction(listingId: string): Promise<Result<{ orderId:
   const ctx = await requireUserContext();
   const supabase = await createServer();
   if (!listingId) return { ok: false, error: t('actions.invalidListing') };
+  // Buying commits the household to pay and meet another family's adult.
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan16') };
+  // Buy-It-Now closes once bidding has begun (the panel hides it then too): a
+  // standing bid can already be above the fixed price, and Buy-It-Now would
+  // let anyone undercut the leader and hand the seller less than was bid.
+  const { data: listing, error: listingError } = await supabase.from('marketplace_listings')
+    .select('id, bid_count').eq('id', listingId).maybeSingle();
+  if (listingError) return { ok: false, error: t('actions.couldNotCompleteBuyIt') };
+  if (!listing) return { ok: false, error: t('actions.listingNotFound') };
+  if (buyNowClosedByBids(listing.bid_count)) return { ok: false, error: t('actions.buyItNowIsnT') };
   const { data, error } = await supabase.rpc('marketplace_buy_now', {
     p_listing_id: listingId,
     p_buyer_member_id: ctx.active.member.id,

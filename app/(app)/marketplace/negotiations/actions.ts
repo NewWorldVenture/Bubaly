@@ -11,6 +11,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { describeActionError } from '@/lib/supabase/errors';
+import { isManager } from '@/lib/constants/roles';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -87,9 +88,19 @@ export async function respondToOfferAction(
 ): Promise<Result<{ status: string; orderId?: string }>> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
-  void ctx; // auth enforced by requireUserContext + the RPC's ownership checks
   const supabase = await createServer();
   if (!input.negotiationId) return { ok: false, error: t('actions.invalidNegotiation') };
+
+  // Accepting creates a confirmed order with another household and the
+  // pickup that follows it. Across families only a parent or adult agrees to
+  // that; inside one family (a sibling buying a sibling's bike) nothing changes.
+  if (input.action === 'accept' && !isManager(ctx.active.role)) {
+    const { data: neg, error: negError } = await supabase.from('marketplace_negotiations')
+      .select('id, family_id, buyer_family_id').eq('id', input.negotiationId).maybeSingle();
+    if (negError) return actionFailure('load the negotiation', t('negotiations.couldNotRespondToTheOffer'), negError);
+    if (!neg) return { ok: false, error: t(RESPOND_REASON.not_found) };
+    if (neg.family_id !== neg.buyer_family_id) return { ok: false, error: t('actions.onlyAParentGuardianCan16') };
+  }
 
   const amount = input.action === 'counter' ? Math.round(input.amountCents ?? 0) : null;
   if (input.action === 'counter' && (!amount || amount <= 0)) {
