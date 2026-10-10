@@ -44,7 +44,9 @@ export type Notification = Tables<'notifications'>;
  * column, so the first member to read that row (a child tapping "mark all
  * read") cleared it from every other member's bell and brief, and the unread
  * dedupe then let the next run re-create it for everyone. One row per member
- * gives each person their own read state.
+ * gives each person their own read state. Those rows are written with the
+ * email digest's `sent_at` already stamped, so a family notice stays in-app and
+ * push only, exactly as the NULL row was (see notify()).
  */
 export type NotifyRecipients = 'family' | 'managers' | string[];
 
@@ -224,6 +226,17 @@ export async function notify(scope: ServiceScope, input: NotifyInput): Promise<S
   const { sendAt: resolvedSendAt, deferred: wasDeferred } =
     await deliveryTimeFor(scope, { sendAt: input.sendAt, urgent: input.urgent });
 
+  // A 'family' notice was one NULL-user row, and the email digest
+  // (lib/server/notification-emails.ts) deliberately skips NULL-user rows:
+  // whole-family notices are in-app and push only. Fanning out to one row per
+  // member must not turn each of them into an email from Bubaly's sender to
+  // every member (gift pledges carry an outsider's typed name; guardian texts
+  // come from arbitrary numbers). `sent_at` is the email digest's own
+  // "resolved" stamp (0038 split push onto `pushed_at`), so stamping it here
+  // settles the email channel as intentionally skipped while push and the
+  // in-app list, which never read it, deliver exactly as before.
+  const emailSettledAt = recipientsAreFamily(input.recipients) ? scopeNow(scope).toISOString() : null;
+
   let deferred = 0;
   const rows = targets.map((userId) => {
     if (wasDeferred) deferred += 1;
@@ -236,6 +249,7 @@ export async function notify(scope: ServiceScope, input: NotifyInput): Promise<S
       related_type: input.relatedType ?? null,
       related_id: input.relatedId ?? null,
       send_at: resolvedSendAt,
+      ...(emailSettledAt ? { sent_at: emailSettledAt } : {}),
     };
   });
 
@@ -245,6 +259,10 @@ export async function notify(scope: ServiceScope, input: NotifyInput): Promise<S
     return fail(describeDbError(error, 'Could not send that notification.'), { code: SERVICE_CODES.db });
   }
   return ok({ created: (data ?? []).length, ids: (data ?? []).map((r) => r.id), duplicates, skippedMemberIds, deferred });
+}
+
+function recipientsAreFamily(recipients: NotifyRecipients): recipients is 'family' {
+  return recipients === 'family';
 }
 
 /**

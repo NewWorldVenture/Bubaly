@@ -343,9 +343,11 @@ describe('notify is unchanged by the priority split', () => {
     expect(res.ok).toBe(true);
     const rows = calls.find((c) => c.table === 'notifications' && c.kind === 'insert')?.payload as Record<string, unknown>[];
     // No `priority` key: the classifier is a function, not a column, and
-    // inventing the column here would fail the insert.
+    // inventing the column here would fail the insert. `sent_at` (0002) is the
+    // email digest's stamp: a 'family' notice settles it at write time so the
+    // per-member rows stay in-app and push only, as the NULL row was.
     expect(Object.keys(rows[0]).sort()).toEqual(
-      ['body', 'family_id', 'related_id', 'related_type', 'send_at', 'title', 'type', 'user_id'],
+      ['body', 'family_id', 'related_id', 'related_type', 'send_at', 'sent_at', 'title', 'type', 'user_id'],
     );
   });
 });
