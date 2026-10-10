@@ -28,12 +28,27 @@ const SESSION = '00000000-0000-4000-8000-0000000a0c51';
 const COMM = '00000000-0000-4000-8000-0000000a0cc1';
 
 type Db = ReturnType<typeof createInMemorySupabase>;
-const state = vi.hoisted(() => ({ db: null as unknown }));
+const state = vi.hoisted(() => ({
+  db: null as unknown,
+  routingMode: 'immediate_ring' as string,
+  screenedName: null as string | null,
+  memberReadFails: false,
+}));
 
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('@/lib/supabase/server', () => ({
   createServiceClient: () => state.db,
-  createServer: async () => state.db,
+  // The action's own session. When asked to, its member read fails, so the
+  // action's read-error path is exercised rather than assumed.
+  createServer: async () => (state.memberReadFails
+    ? new Proxy(state.db as object, {
+      get: (target, prop) => (prop === 'from'
+        ? (name: string) => (name === 'family_members'
+          ? { select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: { message: 'permission denied', code: '42501' } }) }) }) }) }
+          : (target as { from: (n: string) => unknown }).from(name))
+        : (target as Record<string | symbol, unknown>)[prop]),
+    })
+    : state.db),
 }));
 vi.mock('@/lib/supabase/auth', () => ({
   requireUserContext: async () => ({ user: { id: PARENT_USER }, active: { familyId: FAMILY, role: 'parent', member: { id: 'm-parent' } } }),
@@ -47,21 +62,25 @@ vi.mock('@/lib/guardian/twilio', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/guardian/twilio')>()),
   lookupCallerName: async () => null,
 }));
-// The pipeline decides that this caller is one the family puts straight
-// through, which is the branch that dials.
+// The pipeline's routing decision is the test's to choose: immediate_ring is
+// the branch that dials, and ai_handle_first and voicemail_first are the
+// branches that SPEAK the member's name (immediate_ring never does).
 vi.mock('@/lib/guardian/pipeline', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/guardian/pipeline')>()),
   runDecisionPipeline: async () => ({
-    routingMode: 'immediate_ring', memberProfile: null, contactName: 'Grandma', trustLevel: 'trusted',
+    routingMode: state.routingMode, memberProfile: null, contactName: 'Grandma', trustLevel: 'trusted',
     ruleId: null, reason: 'trusted caller', scamDetected: false, scamType: null, spamScore: 0,
   }),
 }));
 vi.mock('@/lib/guardian/ai-screen', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/guardian/ai-screen')>()),
-  screeningTurn: async () => ({
+  screeningTurn: async ({ memberName }: { memberName: string }) => {
+    state.screenedName = memberName;
+    return {
     responseText: 'Connecting you now.',
     decision: { action: 'transfer', risk: 'safe', urgency: 'medium', intent: 'personal', summary: 'Grandma calling.', callerName: 'Grandma' },
-  }),
+    };
+  },
   summarizeScreening: async () => 'summary',
 }));
 
@@ -104,7 +123,17 @@ async function screenedTurn(): Promise<string> {
   return response.text();
 }
 
-describe('the inbound call is put through only to the number\'s own family', () => {
+beforeEach(() => {
+  state.routingMode = 'immediate_ring';
+  state.screenedName = null;
+  state.memberReadFails = false;
+});
+
+// The voice route reads the member twice, each within the number's family:
+// its display name (spoken by the greeting and the voicemail prompt) and its
+// phone (dialled on immediate_ring). Each case below is decided by exactly one
+// of those reads, so removing either filter fails its own case.
+describe('the inbound call is put through only to the number\'s own family (phone read)', () => {
   it('control: a trusted caller is dialled through to the family\'s own member', async () => {
     state.db = freshDb('m-own');
     const xml = await inboundCall();
@@ -112,28 +141,49 @@ describe('the inbound call is put through only to the number\'s own family', () 
     expect(xml).toContain(OWN_PHONE);
   });
 
-  it('a profile naming another family\'s member dials nobody and does not speak their name', async () => {
+  it('a profile naming another family\'s member dials nobody: the call is thanked and hung up', async () => {
     state.db = freshDb('m-stranger');
     const xml = await inboundCall();
     expect(xml).not.toContain(STRANGER_PHONE);
-    expect(xml).not.toContain('Stranger Kid');
     expect(xml).not.toContain('<Dial');
+    // With no phone in the number's family, immediate_ring falls through to the
+    // route's default: a thank-you and a hang-up. It is not screened.
+    expect(xml).toContain('voice.thankYouForCallingWe');
+    expect(xml).toContain('<Hangup');
   });
 });
 
-describe('the screened call transfers only to the number\'s own family', () => {
-  it('control: a transfer dials the family\'s own member', async () => {
+describe('the inbound call speaks only the number\'s own family member\'s name (name read)', () => {
+  it.each(['ai_handle_first', 'voicemail_first'])('control: %s speaks the family\'s own member\'s name', async (mode) => {
+    state.routingMode = mode;
+    state.db = freshDb('m-own');
+    const xml = await inboundCall();
+    expect(xml).toContain('Own Kid');
+  });
+
+  it.each(['ai_handle_first', 'voicemail_first'])('%s never speaks another family\'s member\'s name', async (mode) => {
+    state.routingMode = mode;
+    state.db = freshDb('m-stranger');
+    const xml = await inboundCall();
+    expect(xml).not.toContain('Stranger Kid');
+    expect(xml).toContain('the family');
+  });
+});
+
+describe('the screened call names and transfers only to the number\'s own family', () => {
+  it('control: the screening turn is given the family\'s own member\'s name, and the transfer dials them', async () => {
     state.db = freshDb('m-own');
     const xml = await screenedTurn();
+    expect(state.screenedName).toBe('Own Kid');
     expect(xml).toContain('<Dial');
     expect(xml).toContain(OWN_PHONE);
   });
 
-  it('a profile naming another family\'s member is never dialled', async () => {
+  it('a profile naming another family\'s member is neither named to the screener nor dialled', async () => {
     state.db = freshDb('m-stranger');
     const xml = await screenedTurn();
+    expect(state.screenedName).toBe('the family member');
     expect(xml).not.toContain(STRANGER_PHONE);
-    expect(xml).not.toContain('Stranger Kid');
   });
 });
 
@@ -171,5 +221,25 @@ describe('the profile actions save only a member of the caller\'s own family', (
     const result = await upsertMemberProfileAction({ member_id: 'm-stranger', default_mode_trusted: 'immediate_ring' });
     expect(profilesFor('m-stranger')).toEqual([]);
     expect(result).toEqual({ ok: false, error: 'actions.familyMemberNotFound' });
+  });
+
+  it('refuses a member id that exists nowhere, writing nothing', async () => {
+    const { assignGuardianPhoneAction } = await import('@/app/(app)/guardian/actions');
+    const result = await assignGuardianPhoneAction({ member_id: 'm-nobody', phone: '+15550004444' });
+    expect(profilesFor('m-nobody')).toEqual([]);
+    expect(result).toEqual({ ok: false, error: 'actions.familyMemberNotFound' });
+  });
+
+  it.each(['assign', 'routing'])('a failed member read refuses the %s action and writes nothing', async (which) => {
+    const actions = await import('@/app/(app)/guardian/actions');
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const before = JSON.stringify((state.db as Db).table('guardian_member_profiles'));
+    state.memberReadFails = true;
+    const result = which === 'assign'
+      ? await actions.assignGuardianPhoneAction({ member_id: 'm-own', phone: '+15550005555' })
+      : await actions.upsertMemberProfileAction({ member_id: 'm-own', default_mode_trusted: 'immediate_ring' });
+    expect(result.ok).toBe(false);
+    expect(JSON.stringify((state.db as Db).table('guardian_member_profiles'))).toBe(before);
+    errors.mockRestore();
   });
 });

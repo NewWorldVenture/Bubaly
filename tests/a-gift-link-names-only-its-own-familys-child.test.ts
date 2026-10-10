@@ -38,7 +38,15 @@ vi.mock('@/lib/ai/provider', () => ({
   }),
 }));
 
-function seed(wallet: 'cw-own' | 'cw-stranger'): void {
+// Four wallets. The two mixed ones exist so that each family filter decides a
+// case on its own (otherwise a foreign wallet with a foreign member lets either
+// filter mask the removal of the other):
+//   cw-own-holds-stranger  A's wallet naming B's member: only the MEMBER filter
+//                          keeps B's child's name off the page;
+//   cw-foreign-holds-own   B's wallet naming A's member: only the WALLET filter
+//                          refuses a wallet outside the link's family.
+type Wallet = 'cw-own' | 'cw-stranger' | 'cw-own-holds-stranger' | 'cw-foreign-holds-own';
+function seed(wallet: Wallet): void {
   const db = createInMemorySupabase();
   db.seed('families', [{ id: FAMILY, name: 'Link House' }, { id: OTHER_FAMILY, name: 'Their House' }]);
   db.seed('family_members', [
@@ -48,6 +56,8 @@ function seed(wallet: 'cw-own' | 'cw-stranger'): void {
   db.seed('child_wallets', [
     { id: 'cw-own', family_id: FAMILY, member_id: 'm-own' },
     { id: 'cw-stranger', family_id: OTHER_FAMILY, member_id: 'm-stranger' },
+    { id: 'cw-own-holds-stranger', family_id: FAMILY, member_id: 'm-stranger' },
+    { id: 'cw-foreign-holds-own', family_id: OTHER_FAMILY, member_id: 'm-own' },
   ]);
   db.seed('gift_links', [{
     id: 'g1', token: 'tok', is_active: true, occasion: 'birthday', message: null, suggested_cents: [500],
@@ -86,6 +96,20 @@ describe('the public gift page', () => {
     expect(html).not.toContain('Quinn');
     expect(html).toContain('GIFT-FORM');
   });
+
+  it('member filter alone: the family\'s own wallet naming another family\'s child names nobody', async () => {
+    seed('cw-own-holds-stranger');
+    const html = await page();
+    expect(html).not.toContain('Quinn');
+    expect(html).toContain('GIFT-FORM');
+  });
+
+  it('wallet filter alone: another family\'s wallet is not followed, even to this family\'s child', async () => {
+    seed('cw-foreign-holds-own');
+    const html = await page();
+    expect(html).not.toContain('Robin');
+    expect(html).toContain('GIFT-FORM');
+  });
 });
 
 describe('the public gift assistant', () => {
@@ -100,5 +124,17 @@ describe('the public gift assistant', () => {
     expect(await assistant()).toBe(200);
     expect(state.prompts).toHaveLength(1);
     expect(state.prompts.join('\n')).not.toContain('Quinn');
+  });
+
+  it('member filter alone: the family\'s own wallet naming another family\'s child names nobody to the model', async () => {
+    seed('cw-own-holds-stranger');
+    expect(await assistant()).toBe(200);
+    expect(state.prompts.join('\n')).not.toContain('Quinn');
+  });
+
+  it('wallet filter alone: another family\'s wallet is not followed to any name', async () => {
+    seed('cw-foreign-holds-own');
+    expect(await assistant()).toBe(200);
+    expect(state.prompts.join('\n')).not.toContain('Robin');
   });
 });

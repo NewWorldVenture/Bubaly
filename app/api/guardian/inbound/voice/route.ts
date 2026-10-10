@@ -175,8 +175,10 @@ export async function POST(req: NextRequest) {
   // The member's name and phone are read inside the number's family. The
   // profile's member_id was writable with a member of ANOTHER family (its
   // policy checks only the row's family_id), and this service-role read then
-  // greeted with, and dialled, a stranger. Now such a profile finds nobody:
-  // no name, and no phone, so the call is screened rather than put through.
+  // greeted with, and dialled, a stranger. Now such a profile finds nobody: the
+  // greeting and voicemail prompt say "the family", and with no phone an
+  // immediate-ring call is not put through; it ends at the default below
+  // (a thank-you and a hang-up).
   const memberData = await supabase.from('family_members').select('display_name').eq('id', memberId).eq('family_id', familyId).maybeSingle();
   const memberName = (memberData.data as { display_name?: string } | null)?.display_name ?? 'the family';
 
@@ -218,7 +220,9 @@ export async function POST(req: NextRequest) {
         twimlDial(memberPhone, to ?? undefined),
       ));
     }
-    // Member has no phone configured — fall through to AI screening
+    // No phone in this family (none configured, or the profile names someone
+    // outside it): nothing is dialled. An immediate-ring call then matches none
+    // of the modes below and ends at the default thank-you and hang-up.
   }
 
   if (routingMode === 'voicemail_first') {
