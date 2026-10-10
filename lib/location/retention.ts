@@ -10,8 +10,10 @@
 //   * Nobody's history is kept forever: location_events older than the window
 //     are deleted, and any coordinates still on newer ones (written before
 //     events stopped storing them) or on old check-ins are cleared.
-//     Its cron route (app/api/cron/location-retention) is unscheduled pending the
-//     owner's retention decision; until then the sweep runs only by hand.
+//     Its cron route is held out of the deployable tree, at
+//     held/api/cron/location-retention/route.ts (Next does not route held/), and
+//     unscheduled, pending the owner's retention decision; until then nothing
+//     runs the sweep.
 //
 // If a database-level guarantee is wanted, the same member rule belongs in a
 // trigger on family_members.is_active going false — reported, not written here.

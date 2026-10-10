@@ -13,7 +13,7 @@
 // And nobody's history was ever shortened: location_events was append-only
 // for clients and no job purged it, so every member's exact positions
 // accumulated for ever.
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
@@ -173,15 +173,17 @@ describe('location history retention', () => {
     expect(await enforceLocationRetention(db as unknown as SupabaseClient, now)).toMatchObject({ ok: true, purgedEvents: 0, clearedEvents: 0, clearedCheckIns: 0 });
   });
 
-  it('is held unscheduled pending the owner\'s retention decision, in both places a schedule lives', () => {
+  it('is held out of the deployable tree pending the owner\'s retention decision', () => {
     // The sweep deletes location_events and clears coordinates for good. A
-    // destructive retention sweep must not run from the deployable candidate
-    // until the owner sets a retention policy, so neither scheduler carries it.
-    // The route stays, gated by CRON_SECRET, for a hand run once that policy
-    // exists; tests/cron-schedule-registration.test.ts holds it by name.
+    // destructive retention sweep must not be reachable from the deployable
+    // candidate until the owner sets a retention policy, so the route file sits
+    // under held/, which Next does not route, and neither scheduler carries it.
+    // The handler is kept whole there for the day that policy exists;
+    // tests/cron-schedule-registration.test.ts holds it by name.
+    expect(existsSync('app/api/cron/location-retention/route.ts')).toBe(false);
     const vercel = JSON.parse(readFileSync('vercel.json', 'utf8')) as { crons: { path: string; schedule: string }[] };
     expect(vercel.crons.some((cron) => cron.path === '/api/cron/location-retention')).toBe(false);
     expect(readFileSync('scripts/cron-dispatch.mjs', 'utf8')).not.toMatch(/'\/api\/cron\/location-retention':\s*'[^']+'/);
-    expect(readFileSync('app/api/cron/location-retention/route.ts', 'utf8')).toContain('enforceLocationRetention(createServiceClient())');
+    expect(readFileSync('held/api/cron/location-retention/route.ts', 'utf8')).toContain('enforceLocationRetention(createServiceClient())');
   });
 });

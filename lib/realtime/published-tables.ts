@@ -98,7 +98,8 @@ export const DELETE_BLIND_ACCEPTED: ReadonlySet<string> = new Set([
   // an arrival/departure event is older than the retention window (0335 keeps
   // the table append-only for clients). A months-old timeline entry leaving
   // the screen at the next refetch rather than live is the intended shape.
-  // That cron is unscheduled pending the owner's retention decision, so until then nothing deletes them.
+  // That cron's route is held under held/ (not deployed) and unscheduled pending
+  // the owner's retention decision, so until then nothing deletes them.
   'location_events',
 ]);
 

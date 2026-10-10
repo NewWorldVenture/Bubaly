@@ -1,3 +1,10 @@
+// HELD OUT OF THE DEPLOYABLE TREE. This file lives under held/, which Next does
+// not route, so no deployment exposes it, and no schedule names it. A
+// destructive retention sweep must not be reachable from the candidate until
+// the owner sets a retention policy. To restore it: git mv this file back to
+// app/api/cron/location-retention/route.ts, re-add its schedule to vercel.json
+// and scripts/cron-dispatch.mjs, and drop the hold from
+// tests/cron-schedule-registration.test.ts.
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
