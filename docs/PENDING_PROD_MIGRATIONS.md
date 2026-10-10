@@ -114,6 +114,7 @@ source allocations are not evidence that production applied any migration.
 | 0498 confirmed, held | `0498_a_guest_cannot_feed_the_calendar_or_rewrite_a_grocery_list.sql` | 0464's guest guard on `calendar_feeds` and `grocery_lists`. Requested for #981 on #771 (comment 6094699645); confirmed as a held source and probe reservation in #981 comment 6094770726, which is not an installation or production approval. |
 | 0499 confirmed, held | `0499_a_stored_file_answers_to_its_own_familys_rows.sql` | The `documents` bucket's upload, update and delete policies follow the row of the object's own family that names the file: insurance card images (managers), a household document's bytes (not a guest), a sensitive document's path (managers); another family's rows no longer count, and the family is read with the policies' own uuid cast. Requested for #981 on #771 (comment 6094859264); confirmed as a held source and probe reservation in #981 comment 6094986591, which is not an installation approval. |
 | 0500 confirmed, held | `0500_a_reward_request_is_the_rewards_own_snapshot.sql` | 0308's ticket guard completed: a reward request names a reward and a member of its own family at that reward's price and title, and keeps them and its family and member (the foreign key's set-null on a deleted reward excepted); 0428's token-economy guard also checks the title. Requested for #981 on #771 (comment 6094977772, economy scope 6095050742); confirmed as a held source and probe reservation in #981 comment 6095082508, which is not an installation or financial approval. |
+| 0501 proposed, held | `0501_one_member_one_vote_in_two_households.sql` | 0311's same-family guard on `member_id` of `family_poll_votes`, `meal_vote_ballots`, `watchlist_votes` and `event_rsvps`: a member of two families votes once in each. Requested for #981 on #771 (comment 6095180270); not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4662,6 +4663,65 @@ released probes pass with and without 0500.
 **After approved release:** as a test child, try to insert a redemption with
 no `reward_id` through PostgREST and confirm 23514; then request a real reward
 through the app and confirm it lands.
+
+## `0501` (proposed, held) — a member of two families could vote twice
+
+`supabase/reserved/0501_one_member_one_vote_in_two_households.sql` —
+**held**: proposed as `0501`, the first number above `0500`, for #981. It was
+requested on #771 in comment 6095180270 and is not yet confirmed. Its probe is
+held with it in `docs/audit/reserved/`.
+
+**Severity: low to medium (the integrity of a family's polls, dinner votes,
+watchlist and RSVP counts). Deploy order: any.** Twenty-three tables let a
+member write as themselves with `is_family_member(family_id) and
+is_self_member(member_id)`. `is_self_member` asks whether the member row is the
+caller's in any family, so a person active in two families can file a row in
+one under their member id from the other (the pattern the owner's review of
+0500, 6095082508, named). Where it counts: these four tables are unique per
+(option, member), and every tally reads its own family's rows. Measured as a
+child of two households, in one of them:
+- a second vote for the same poll option: landed (2 votes from one child);
+- a second dinner ballot, a second watchlist vote and a second RSVP: landed.
+
+0501 wires 0311's own `reference_shares_family('member_id', 'family_members')`
+onto the four tables, exactly as 0497 wires it, after validating each table and
+its parent. There is no new function. The service role and session-less
+writers stay exempt, and the in-app writers use the active family's own
+member, so a member of two families still votes once in each.
+
+**Not changed, recorded:** 16 more tables use the same unbound
+`is_self_member` where the second member id only files the person's own data
+under their other membership and nothing is counted twice:
+`announcement_reads`, `chore_disputes`, `chore_submissions` (a payout follows
+`chore_assignments`, which 0311 binds), `driver_licenses`, `family_facts`,
+`health_goals`, `health_metrics`, `journal_entries`, `location_events`,
+`marketplace_reports`, `member_locations`, `nutrition_logs`,
+`safety_check_ins`, `sleep_checkins`, `sleep_logs` and `symptom_logs`. Each is
+one more line of 0501's loop if the owner wants it.
+
+**Proof:** `.github/workflows/one-member-one-vote-runtime.yml` replays every
+runnable migration. It requires the held probe
+`docs/audit/reserved/one-member-one-vote-in-two-households-check.sql` to fail
+on the released schema with the second votes landing, applies 0501 twice, and
+requires the probe to pass. It then re-runs the released `vote-owner`,
+`poll-single-choice`, `meal-ballot-is-per-option` and `cross-family-reference`
+probes. The passing run shows, for each table, as the child of two
+households:
+- their vote in one household as their member there lands;
+- the same vote again under their other member, re-pointing their vote at
+  that member, and moving their vote into the other household are each
+  refused by the guard (42501, its own sentence), and the household holds one;
+- they still vote in the other household's own poll as their member there;
+- the service role and a session-less writer are exempt;
+- negative control: with the poll-vote guard disabled, the second vote lands.
+
+Dropping any one table's trigger turns the probe red on that table. 184 of
+184 released probes pass with 0501.
+
+**After approved release:** as a test user who is a member of two test
+families, try to vote in one family's poll under their member id from the
+other family and confirm 42501; then vote as their own member there and
+confirm it lands.
 
 ## `0471` and `0474` — the admin digest's delivery store, and a removed admin is not sent it
 
