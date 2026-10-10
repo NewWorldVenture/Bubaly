@@ -153,7 +153,8 @@ export async function POST(req: NextRequest) {
         : withheld<MedicationScheduleRow>(),
       // On an open repeating task, completed_at records the last completion.
       supabase.from('maintenance_tasks').select('title, due_at, status, completed_at').eq('family_id', familyId).in('status', ['todo', 'in_progress']).not('due_at', 'is', null).lte('due_at', `${horizon}T23:59:59.999Z`).order('due_at').limit(20),
-      supabase.from('home_warranties').select('name, expires_on').eq('family_id', familyId).not('expires_on', 'is', null).lte('expires_on', horizon).order('expires_on').limit(20),
+      // A deleted warranty is soft-deleted (`deleted_at`), like on every other reader of this table.
+      supabase.from('home_warranties').select('name, expires_on').eq('family_id', familyId).is('deleted_at', null).not('expires_on', 'is', null).lte('expires_on', horizon).order('expires_on').limit(20),
       supabase.from('vacations').select('title, destination, start_date, end_date, status').eq('family_id', familyId).not('status', 'in', '("completed","cancelled")').not('start_date', 'is', null).limit(20),
       supabase.from('pantry_items').select('name, expires_at').eq('family_id', familyId).not('expires_at', 'is', null).lte('expires_at', horizon).order('expires_at').limit(25),
       // What Bubaly actually finished. Not for the prompt — for the answer:
