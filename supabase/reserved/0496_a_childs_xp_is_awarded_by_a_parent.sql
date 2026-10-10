@@ -25,9 +25,10 @@
 -- the level curve, the cross-family refusal and the grants are untouched;
 -- `create or replace` keeps the existing EXECUTE grants.
 --
--- HELD: proposed as 0496 (the first number above 0495; requested on #771 in
--- comment 6089394563, not yet confirmed) in supabase/reserved/ until every
--- number below it has landed. Proven by
+-- HELD: 0496, the first number above 0495, requested on #771 in comment
+-- 6089394563 and confirmed as a held source and probe reservation in #981
+-- comment 6092383149 (not an installation, merge or deployment approval). It
+-- stays in supabase/reserved/ until every number below it has landed. Proven by
 -- docs/audit/reserved/a-childs-xp-is-awarded-by-a-parent-check.sql and
 -- .github/workflows/kid-progress-award-runtime.yml. Not applied to production
 -- by an agent; recorded in docs/PENDING_PROD_MIGRATIONS.md for the owner.

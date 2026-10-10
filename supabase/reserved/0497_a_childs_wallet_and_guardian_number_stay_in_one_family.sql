@@ -45,9 +45,10 @@
 -- because a parent table without family_id would make the trigger raise 42703
 -- on every authenticated write (0311's own warning).
 --
--- HELD: proposed as 0497 (the first number above 0496; requested on #771 in
--- comment 6092501825, not yet confirmed) in supabase/reserved/ until every
--- number below it has landed. Proven by
+-- HELD: 0497, the first number above 0496, requested on #771 in comment
+-- 6092501825 and confirmed as a source-only reservation in #981 comment
+-- 6092625435 (not an installation or production security approval). It stays
+-- in supabase/reserved/ until every number below it has landed. Proven by
 -- docs/audit/reserved/a-childs-wallet-and-guardian-number-stay-in-one-family-check.sql
 -- and .github/workflows/family-reference-wave-two-runtime.yml. Not applied to
 -- production by an agent; recorded in docs/PENDING_PROD_MIGRATIONS.md.

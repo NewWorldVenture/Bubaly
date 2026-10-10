@@ -3,8 +3,9 @@ name: Guest household SQL runtime
 # The held 0498 (supabase/reserved/) wires 0464's guest guard
 # (household_write_is_not_a_guests) onto calendar_feeds and grocery_lists,
 # the two tables just outside 0464's eight through which a guest still changed
-# what the household sees: a calendar feed the nightly service-role sync
-# imports into the family calendar, and grocery lists. Neither the Database
+# what the household sees: a calendar feed (whose events the service-role
+# sync can import only once the held 0490 exists; this job proves the rows,
+# not that chain) and grocery lists. Neither the Database
 # job's replay nor `supabase db push` reads supabase/reserved/, and the
 # Database job's probe glob does not read docs/audit/reserved/, so nothing
 # else in CI exercises it. This job replays every runnable migration with the
