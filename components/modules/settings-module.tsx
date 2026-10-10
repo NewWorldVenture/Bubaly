@@ -23,7 +23,7 @@ import { PhoneInput } from '@/components/ui/phone-input';
 import { guessDialCodeFromPhone, extractLocalNumber, COUNTRY_DIAL_CODES } from '@/lib/utils/phone';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
-import { ROLE_LABEL_KEYS, ROLE_ORDER, isAdmin, roleLabel } from '@/lib/constants/roles';
+import { REMOVED_MEMBER_PATCH, ROLE_LABEL_KEYS, ROLE_ORDER, isAdmin, roleLabel } from '@/lib/constants/roles';
 import {
   DASHBOARD_VIEWS, dashboardLabel, dashboardIcon, DASHBOARD_DESCRIPTION_KEYS, type DashboardView,
 } from '@/lib/constants/dashboards';
@@ -189,7 +189,7 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
     // The `window.location.reload()` below made that especially convincing — the
     // member came back, with no message saying why.
     const { data: updated, error } = await supabase.from('family_members')
-      .update({ is_active: false }).eq('id', memberId).eq('family_id', family.id).select('id');
+      .update(REMOVED_MEMBER_PATCH).eq('id', memberId).eq('family_id', family.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(updated)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('settingsModule.memberRemoved'));

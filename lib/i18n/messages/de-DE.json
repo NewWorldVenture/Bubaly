@@ -3942,6 +3942,7 @@
   "childLoginActions.couldNotSaveTheLogin": "Die Anmeldung konnte nicht gespeichert werden.",
   "childLoginActions.loginNotFound": "Anmeldung nicht gefunden.",
   "childLoginActions.memberNotFoundInYour": "Mitglied in Ihrer Familie nicht gefunden.",
+  "childLoginActions.onlyForAMemberWhoIsNot": "Eine PIN-Anmeldung gibt es nur für Mitglieder, die kein Elternteil und kein Erwachsener sind.",
   "childLoginActions.onlyAParentOrGuardian": "Nur ein Elternteil oder Erziehungsberechtigter kann eine Kinder-Anmeldung erstellen.",
   "childLoginActions.onlyAParentOrGuardian2": "Nur ein Elternteil oder Erziehungsberechtigter kann eine PIN zurücksetzen.",
   "childLoginActions.pinMustBe4Digits": "Die PIN muss 4 Ziffern haben.",

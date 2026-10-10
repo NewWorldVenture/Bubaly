@@ -3942,6 +3942,7 @@
   "childLoginActions.couldNotSaveTheLogin": "Impossibile salvare l’accesso.",
   "childLoginActions.loginNotFound": "Accesso non trovato.",
   "childLoginActions.memberNotFoundInYour": "Membro non trovato nella tua famiglia.",
+  "childLoginActions.onlyForAMemberWhoIsNot": "L'accesso con PIN è solo per i membri che non sono genitori né adulti.",
   "childLoginActions.onlyAParentOrGuardian": "Solo un genitore o tutore può creare un accesso per bambini.",
   "childLoginActions.onlyAParentOrGuardian2": "Solo un genitore o tutore può reimpostare un PIN.",
   "childLoginActions.pinMustBe4Digits": "Il PIN deve avere 4 cifre.",

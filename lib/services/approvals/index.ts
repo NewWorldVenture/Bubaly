@@ -695,6 +695,10 @@ export async function scopeForApprovedWork(scope: ServiceScope, row: ApprovalRow
     .select('id, user_id')
     .eq('id', row.requested_by_member_id)
     .eq('family_id', scope.familyId)
+    // A removed asker is "a roster entry since removed" (see unattributed()):
+    // removal is a soft `is_active = false`, so without this the work ran as
+    // someone no longer in the family.
+    .eq('is_active', true)
     .maybeSingle();
   if (error || !asker) {
     if (error) console.error('[service:approvals] could not resolve the asker', error);

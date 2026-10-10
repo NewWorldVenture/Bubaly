@@ -3942,6 +3942,7 @@
   "childLoginActions.couldNotSaveTheLogin": "Kan de login niet opslaan.",
   "childLoginActions.loginNotFound": "Login niet gevonden.",
   "childLoginActions.memberNotFoundInYour": "Lid niet gevonden in je gezin.",
+  "childLoginActions.onlyForAMemberWhoIsNot": "Inloggen met een pincode is alleen voor leden die geen ouder of volwassene zijn.",
   "childLoginActions.onlyAParentOrGuardian": "Alleen een ouder of voogd kan een kinderlogin aanmaken.",
   "childLoginActions.onlyAParentOrGuardian2": "Alleen een ouder of voogd kan een pincode opnieuw instellen.",
   "childLoginActions.pinMustBe4Digits": "De pincode moet 4 cijfers hebben.",

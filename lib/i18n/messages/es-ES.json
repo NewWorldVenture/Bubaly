@@ -3942,6 +3942,7 @@
   "childLoginActions.couldNotSaveTheLogin": "No se ha podido guardar el inicio de sesión.",
   "childLoginActions.loginNotFound": "No se ha encontrado el inicio de sesión.",
   "childLoginActions.memberNotFoundInYour": "No se ha encontrado al miembro en tu familia.",
+  "childLoginActions.onlyForAMemberWhoIsNot": "El acceso con PIN es solo para miembros que no sean madre, padre ni adulto.",
   "childLoginActions.onlyAParentOrGuardian": "Solo un progenitor o tutor puede crear un inicio de sesión infantil.",
   "childLoginActions.onlyAParentOrGuardian2": "Solo un progenitor o tutor puede restablecer un PIN.",
   "childLoginActions.pinMustBe4Digits": "El PIN debe tener 4 dígitos.",

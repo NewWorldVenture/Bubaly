@@ -38,8 +38,20 @@ import { finishConnectedCalendar, enableConnectedCalendar, validateConnectedCale
 import type { ServiceScope } from '@/lib/services/types';
 import type { OnboardingOwner } from '@/lib/onboarding/owner';
 import { verifyOnboardingOwner } from '@/lib/onboarding/verify-owner';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+import { isChildLoginAccount } from '@/lib/server/child-account';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
+
+/**
+ * The most invite EMAILS one finalize may send. The schema admits 30 drafted
+ * members, and every invite used to mail a caller-chosen address from
+ * Bubaly's sender with a caller-chosen family name in the subject, with no
+ * limiter at all — so a fresh account was a 30-message spam relay. Invite
+ * rows past the cap are still created; they can be re-sent from Settings,
+ * through /api/email/invite and its limiter.
+ */
+const ONBOARDING_INVITE_EMAIL_CAP = 5;
 
 function onboardingFailure(operation: string, error: unknown, fallback: string): { ok: false; error: string } {
   console.error(`[onboarding] ${operation} failed`, error);
@@ -411,7 +423,7 @@ export async function finalizeOnboardingAction(input: {
   let familyId: string;
   let newFamily = false; // set when this run creates a brand-new family (a signup)
   const { data: existingMembership, error: membershipLookupError } = await admin
-    .from('family_members').select('family_id')
+    .from('family_members').select('family_id, role')
     .eq('user_id', auth.user.id).eq('is_active', true)
     .order('created_at').limit(1).maybeSingle();
   if (membershipLookupError) return onboardingFailure('membership lookup', membershipLookupError, 'Could not check your family setup.');
@@ -428,6 +440,22 @@ export async function finalizeOnboardingAction(input: {
         return { ok: true, data: { familyId: existingMembership.family_id, brief: buildFirstBrief(calendarImport.events, new Date(), [], family.timezone) } };
       }
       return { ok: true, data: { familyId: existingMembership.family_id } };
+    }
+    // ADOPT only the caller's own first family. The oldest active membership
+    // is not necessarily that: an auto-provisioned user who later joined
+    // another household as a guest and deactivated their own row would
+    // otherwise have that household renamed and be upserted into it as a
+    // PARENT with the service role below. The same three facts
+    // prepareCalendarFamily / verifyOnboardingOwner already insist on: the
+    // marker names this family, the caller is its parent, and they created it.
+    if (progress?.family_id !== existingMembership.family_id || existingMembership.role !== 'parent') {
+      return { ok: false, error: t('onboardingWizard.contextChanged') };
+    }
+    {
+      const { data: adoptable, error: adoptableError } = await admin
+        .from('families').select('created_by').eq('id', existingMembership.family_id).maybeSingle();
+      if (adoptableError) return onboardingFailure('adopted family owner check', adoptableError, t('actions.couldNotFinishSettingUp2'));
+      if (adoptable?.created_by !== auth.user.id) return { ok: false, error: t('onboardingWizard.contextChanged') };
     }
     // Preserve the pre-existing marker long enough to make the resume decision
     // above, then claim this request as the active wizard run.
@@ -453,6 +481,9 @@ export async function finalizeOnboardingAction(input: {
       return onboardingFailure('auto-provisioned family update', new Error('no rows updated'), t('actions.couldNotFinishSettingUp2'));
     }
   } else {
+    // A child login without an active membership was removed from its family;
+    // it must not mint a household of its own as that household's parent.
+    if (await isChildLoginAccount(admin, auth.user)) return { ok: false, error: t('onboardingWizard.contextChanged') };
     // Claim first-family creation under a per-user database lock. This keeps
     // double-submit/retry requests on one family even before the membership
     // trigger is visible to a later request.
@@ -593,6 +624,7 @@ export async function finalizeOnboardingAction(input: {
   // sending a duplicate email on replay.
   // Who the invite is from, for the email's subject and body.
   const inviterName = profile.firstName.trim() || DEFAULT_OWNER_DISPLAY_NAME;
+  let inviteEmailsSent = 0;
   for (const [index, m] of members.entries()) {
     if (m.kind !== 'invite') continue;
     const { data: invite, error: inviteErr } = await admin
@@ -627,6 +659,14 @@ export async function finalizeOnboardingAction(input: {
       token = existingInvite.token;
     }
     if (!invite) continue;
+    // Bounded per call, per user and per family (the same family bucket
+    // /api/email/invite spends). The invite row above stands either way.
+    if (inviteEmailsSent >= ONBOARDING_INVITE_EMAIL_CAP) continue;
+    const userLimited = await enforceRequestRateLimit(admin, `email:onboarding-invite:${auth.user.id}`, { limit: ONBOARDING_INVITE_EMAIL_CAP, windowMs: 3_600_000 });
+    if (!userLimited.ok) continue;
+    const familyLimited = await enforceRequestRateLimit(admin, `email:invite:${familyId}`, { limit: 20, windowMs: 3_600_000 });
+    if (!familyLimited.ok) continue;
+    inviteEmailsSent++;
     // The branded template every other invite in the product already uses
     // (app/api/email/invite). This site used to build its own two-line HTML
     // string, and an i18n sweep left the calls UNINTERPOLATED inside it:

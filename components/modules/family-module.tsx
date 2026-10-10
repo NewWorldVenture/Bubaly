@@ -20,7 +20,7 @@ import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
-import { MANAGER_ROLES, type MemberRole } from '@/lib/constants/roles';
+import { MANAGER_ROLES, REMOVED_MEMBER_PATCH, assignableMemberRoles, canRemoveMember, type MemberRole } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
 import { usePlural, useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock, useFormat, type FamilyClock, useFamilyCalendarToday } from '@/components/i18n/use-format';
@@ -75,7 +75,6 @@ function shortLocation(address: string | null): string | null {
   return parts[0] ?? null;
 }
 
-const ROLE_OPTIONS: MemberRole[] = ['parent', 'adult', 'teen', 'child', 'caregiver', 'guest'];
 const MEMBER_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#14b8a6'];
 
 export function FamilyModule() {
@@ -280,7 +279,7 @@ export function FamilyModule() {
                             <button className="fixed inset-0 z-10 cursor-default" aria-hidden tabIndex={-1} onClick={() => setMenuId(null)} />
                             <div className="absolute right-0 z-20 mt-1 w-32 overflow-hidden rounded-xl border border-border bg-surface text-left shadow-lg">
                               <button onClick={() => { setMenuId(null); setEditMember(m); setAddOpen(true); }} className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-elevated"><Edit3 className="h-3.5 w-3.5" /> {t('family.edit')}</button>
-                              <button onClick={() => { setMenuId(null); setRemoveMember(m); }} className="flex w-full items-center gap-2 px-3 py-2 text-sm text-rose-400 hover:bg-elevated"><Trash2 className="h-3.5 w-3.5" /> {t('family.remove')}</button>
+                              {canRemoveMember(role, m.role) && <button onClick={() => { setMenuId(null); setRemoveMember(m); }} className="flex w-full items-center gap-2 px-3 py-2 text-sm text-rose-400 hover:bg-elevated"><Trash2 className="h-3.5 w-3.5" /> {t('family.remove')}</button>}
                             </div>
                           </>
                         )}
@@ -471,6 +470,8 @@ export function FamilyModule() {
             <Button variant="secondary" onClick={() => setRemoveMember(null)}>{t('family.cancel')}</Button>
             <Button variant="danger" onClick={async () => {
               if (!removeMember) return;
+              // Only a parent may remove a parent (see canRemoveMember).
+              if (!canRemoveMember(role, removeMember.role)) { setRemoveMember(null); toastError(t('errors.thatChangeWasNotSaved')); return; }
               const sb = createClient();
               // `family_members` is manager-gated (fm_update, 0211), and RLS FILTERS
               // an UPDATE rather than refusing it — so a member a non-manager tried
@@ -478,7 +479,7 @@ export function FamilyModule() {
               // delete makes that worse than a no-op: the row disappears from the
               // list on screen until the next read puts it back.
               const { data: rows, error: err } = await sb.from('family_members')
-                .update({ is_active: false }).eq('id', removeMember.id).eq('family_id', familyId).select('id');
+                .update(REMOVED_MEMBER_PATCH).eq('id', removeMember.id).eq('family_id', familyId).select('id');
               setRemoveMember(null);
               if (err) { toastError(describeDbError(err)); return; }
               if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
@@ -525,6 +526,9 @@ function MemberModal({ familyId, createdBy, member, onClose, onSaved }: {
   familyId: string; createdBy: string; member: Member | null; onClose: () => void; onSaved: () => void;
 }) {
   const t = useTranslations();
+  const { role: actorRole } = useApp();
+  // An adult may not grant `parent` or change a parent's role (F: adult -> parent self-promotion).
+  const roleOptions = assignableMemberRoles(actorRole, member?.role ?? null);
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState(member?.display_name ?? '');
@@ -536,6 +540,7 @@ function MemberModal({ familyId, createdBy, member, onClose, onSaved }: {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
+    if (!roleOptions.includes(mrole)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     setSaving(true);
     const sb = createClient();
     const payload = {
@@ -564,7 +569,7 @@ function MemberModal({ familyId, createdBy, member, onClose, onSaved }: {
         <Field label={t('family.name')} required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('family.eGEllaParker')} required />}</Field>
         <Field label={t('family.role')}>{(id) => (
           <Select id={id} value={mrole} onChange={(e) => setMrole(e.target.value as MemberRole)}>
-            {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{t(ROLE_LABEL_KEY[r])}</option>)}
+            {roleOptions.map((r) => <option key={r} value={r}>{t(ROLE_LABEL_KEY[r])}</option>)}
           </Select>
         )}</Field>
         <Field label={t('family.birthday')}>{(id) => <Input id={id} type="date" value={birthday} onChange={(e) => setBirthday(e.target.value)} />}</Field>

@@ -3942,6 +3942,7 @@
   "childLoginActions.couldNotSaveTheLogin": "Impossible d’enregistrer la connexion.",
   "childLoginActions.loginNotFound": "Connexion introuvable.",
   "childLoginActions.memberNotFoundInYour": "Membre introuvable dans votre famille.",
+  "childLoginActions.onlyForAMemberWhoIsNot": "La connexion par code PIN est réservée aux membres qui ne sont ni parent ni adulte.",
   "childLoginActions.onlyAParentOrGuardian": "Seul un parent ou tuteur peut créer une connexion enfant.",
   "childLoginActions.onlyAParentOrGuardian2": "Seul un parent ou tuteur peut réinitialiser un code PIN.",
   "childLoginActions.pinMustBe4Digits": "Le code PIN doit comporter 4 chiffres.",

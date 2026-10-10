@@ -12,7 +12,7 @@ import { InviteEmail } from '@/lib/emails/invite';
 import { emailSchema } from '@/lib/validation';
 import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { stripeFromKey } from '@/lib/stripe';
-import type { MemberRole } from '@/lib/constants/roles';
+import { REMOVED_MEMBER_PATCH, type MemberRole } from '@/lib/constants/roles';
 import type { PlanId } from '@/lib/constants/plans';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
@@ -225,7 +225,7 @@ export async function adminRemoveMemberAction(memberId: string): Promise<Result>
 
   const supabase = createServiceClient();
   const { data: member, error } = await supabase.from('family_members')
-    .update({ is_active: false }).eq('id', memberId).select('family_id, display_name').single();
+    .update(REMOVED_MEMBER_PATCH).eq('id', memberId).select('family_id, display_name').single();
   if (error) return actionFailure(error, t('actions.couldNotRemoveThatMember'));
 
   await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name } });

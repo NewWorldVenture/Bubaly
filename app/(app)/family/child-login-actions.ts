@@ -58,8 +58,10 @@ async function rollbackChildLogin(
     }
   }
 
+  // Conditional on THIS attempt's user: a concurrent create for the same
+  // member that linked first must not be unlinked by our rollback.
   const { data: unlinked, error: unlinkError } = await admin.from('family_members')
-    .update({ user_id: null }).eq('id', opts.memberId).select('id');
+    .update({ user_id: null }).eq('id', opts.memberId).eq('user_id', opts.childUserId).select('id');
   if (unlinkError || wroteNoRows(unlinked)) {
     complete = false;
     console.error('[child-login] rollback could not unlink the member — they are now stuck', {
@@ -95,12 +97,16 @@ export async function createChildLoginAction(input: {
   const admin = createServiceClient();
 
   const { data: member, error: memberReadError } = await admin.from('family_members')
-    .select('id, family_id, display_name, user_id')
+    .select('id, family_id, display_name, user_id, role')
     .eq('id', input.memberId).maybeSingle();
   // A refused read is not an absence: it used to return the "not found" answer below. Audit C1-S9-75.
   if (memberReadError) return { ok: false, error: describeActionError(memberReadError, t('actions.couldNotCheckThatRefresh')) };
   if (!member || member.family_id !== ctx.active.familyId) return { ok: false, error: t('childLoginActions.memberNotFoundInYour') };
   if (member.user_id) return { ok: false, error: t('childLoginActions.thisMemberAlreadyHasA') };
+  // A PIN login is for a child, never a manager: it would be a full manager
+  // account behind four digits its creator knows, and resetChildPinAction
+  // refuses a manager, so that PIN could never be changed afterwards.
+  if (isManager(member.role)) return { ok: false, error: t('childLoginActions.onlyForAMemberWhoIsNot') };
 
   // `eq` for the same reason the sign-in lookup uses it: `_` is a LIKE wildcard
   // and the username grammar allows it, so `ilike` made this check answer about
@@ -148,8 +154,15 @@ export async function createChildLoginAction(input: {
   // they sign in successfully and have no identity, no family, nothing. It
   // therefore takes the SAME rollback as a link error rather than falling
   // through to the `child_logins` insert. Audit C1-S9-57.
+  //
+  // Compare-and-set on `user_id IS NULL`: the "already has a login" check above
+  // is a plain read, so two creates for one member both pass it. Without this
+  // the second overwrote the first's link, failed on child_logins'
+  // unique(member_id), and its rollback then cleared user_id — leaving the
+  // first login pointing at a member that no longer knew it. Zero rows here
+  // means another attempt linked first.
   const { data: linked, error: linkErr } = await admin.from('family_members')
-    .update({ user_id: childUserId, is_active: true }).eq('id', member.id).select('id');
+    .update({ user_id: childUserId, is_active: true }).eq('id', member.id).is('user_id', null).select('id');
   if (linkErr || wroteNoRows(linked)) {
     const { error: deleteError } = await admin.auth.admin.deleteUser(childUserId);
     if (deleteError) {
@@ -158,6 +171,7 @@ export async function createChildLoginAction(input: {
       });
       return { ok: false, error: t('childLoginActions.couldNotFinishAndCouldNotUndo') };
     }
+    if (!linkErr) return { ok: false, error: t('childLoginActions.thisMemberAlreadyHasA') };
     return { ok: false, error: t('childLoginActions.couldNotLinkTheLogin') };
   }
 

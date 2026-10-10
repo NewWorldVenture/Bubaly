@@ -41,6 +41,30 @@ export async function GET(req: NextRequest) {
     const adapter = getAdapter(account.provider as SyncProviderEnum);
     if (!adapter || !adapter.isConfigured()) { skipped++; continue; }
     try {
+      // A connection whose owner has been removed from the family is switched
+      // OFF rather than synced. Removal is a soft `is_active = false` that
+      // leaves sync_accounts in place, and this job runs on the service role,
+      // so it kept pulling the removed member's calendar into the household and
+      // pushing the household's events out to them — with nobody left able to
+      // disconnect it (the owner has no family; managers are not the owner).
+      // loadSyncExecutionPolicy refuses the same account; disabling it here
+      // also keeps it from sitting first in this oldest-first batch forever.
+      const { data: owner, error: ownerError } = await admin.from('family_members').select('id')
+        .eq('family_id', account.family_id).eq('user_id', account.user_id).eq('is_active', true).limit(1);
+      if (ownerError) throw ownerError;
+      if (!owner?.length) {
+        // The account row was just read, so zero rows is a failure; an account
+        // may have no connection rows, so zero there is ordinary.
+        const [{ data: accountOff, error: accountOffError }, { error: connectionOffError }] = await Promise.all([
+          admin.from('sync_accounts').update({ sync_direction: 'disabled' }).eq('id', account.id).eq('family_id', account.family_id).select('id'),
+          admin.from('sync_connections').update({ sync_direction: 'disabled' }).eq('account_id', account.id).eq('family_id', account.family_id).select('id'),
+        ]);
+        if (accountOffError || connectionOffError) throw accountOffError ?? connectionOffError;
+        if (!accountOff?.length) throw new Error('Removed member sync account could not be disabled');
+        skipped++;
+        details.push({ account: account.id, provider: account.provider, disabled: 'ownerRemoved' });
+        continue;
+      }
       const result = await runProviderSync(admin, account, adapter);
       if (result.error) failed++; else synced++;
       details.push({

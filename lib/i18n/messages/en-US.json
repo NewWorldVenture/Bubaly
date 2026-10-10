@@ -4101,6 +4101,7 @@
   "childLoginActions.couldNotSaveTheLogin": "Could not save the login.",
   "childLoginActions.loginNotFound": "Login not found.",
   "childLoginActions.memberNotFoundInYour": "Member not found in your family.",
+  "childLoginActions.onlyForAMemberWhoIsNot": "A PIN login is only for a member who is not a parent or adult.",
   "childLoginActions.onlyAParentOrGuardian": "Only a parent or guardian can create a child login.",
   "childLoginActions.onlyAParentOrGuardian2": "Only a parent or guardian can reset a PIN.",
   "childLoginActions.pinMustBe4Digits": "PIN must be 4 digits.",

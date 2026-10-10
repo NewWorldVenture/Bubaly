@@ -65,8 +65,8 @@ describe('a gated chat tool can be replayed from its approval', () => {
     });
     holder.db = db;
     db.seed('family_members', [
-      { id: 'parent', user_id: 'parent-user', family_id: 'family', role: 'parent' },
-      { id: 'asker', user_id: 'asker-user', family_id: asker === 'foreign' ? 'other-family' : 'family', role: 'teen' },
+      { id: 'parent', user_id: 'parent-user', family_id: 'family', role: 'parent', is_active: true },
+      { id: 'asker', user_id: 'asker-user', family_id: asker === 'foreign' ? 'other-family' : 'family', role: 'teen', is_active: true },
     ]);
     db.seed('calendar_events', [{ id: 'event', title: 'Soccer', family_id: 'family', starts_at: '2026-09-16T16:00:00Z' }]);
     db.seed('event_rsvps', [{ id: 'parent-reply', event_id: 'event', family_id: 'family', member_id: 'parent', status: 'declined' }]);
