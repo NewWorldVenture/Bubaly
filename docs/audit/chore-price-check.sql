@@ -478,9 +478,24 @@ begin
     trigger_names text;
     guard_shape boolean;
   begin
-    select string_agg(tgname, ', ' order by tgname) into trigger_names
-      from pg_trigger
-     where tgrelid = 'public.chores'::regclass and not tgisinternal;
+    -- Only triggers that can fire on this probe's own statements are counted:
+    -- every refusal above is an INSERT (4) or an UPDATE (16) of chores' title,
+    -- points or cash columns. A trigger on DELETE alone, or on UPDATE OF other
+    -- columns only, cannot refuse one. That is the held 0502's
+    -- trg_chore_with_assignments_is_a_managers (BEFORE DELETE OR UPDATE OF
+    -- family_id), which keeps a chore with assignments a manager's to remove or
+    -- move out of its family.
+    select string_agg(tg.tgname, ', ' order by tg.tgname) into trigger_names
+      from pg_trigger tg
+     where tg.tgrelid = 'public.chores'::regclass and not tg.tgisinternal
+       and ((tg.tgtype & 4) <> 0
+            or ((tg.tgtype & 16) <> 0
+                and (cardinality(tg.tgattr::int2[]) = 0
+                     or exists (select 1 from pg_attribute a
+                                 where a.attrelid = tg.tgrelid
+                                   and a.attnum = any (tg.tgattr::int2[])
+                                   and a.attname in ('title', 'points', 'points_min', 'points_max',
+                                                     'cash_cents', 'cash_min_cents', 'cash_max_cents')))));
     -- 0464 adds trg_chores_not_a_guests. It cannot be what refused above: its
     -- one raise is keyed on the caller's role in the row's family being
     -- 'guest', and every caller this probe measures is a child, a teen or a
