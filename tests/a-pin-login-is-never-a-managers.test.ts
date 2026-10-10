@@ -30,6 +30,7 @@ const state = vi.hoisted(() => ({
   roster: [] as Row[],
   logins: [] as Row[],
   created: [] as string[],
+  appMetadata: [] as unknown[],
   memberWrites: [] as Row[],
   accessProps: null as Row | null,
 }));
@@ -59,8 +60,9 @@ function fakeAdmin() {
     from: (name: string) => table(name),
     auth: {
       admin: {
-        createUser: async ({ email }: { email: string }) => {
+        createUser: async ({ email, app_metadata }: { email: string; app_metadata?: unknown }) => {
           state.created.push(email);
+          state.appMetadata.push(app_metadata);
           return { data: { user: { id: NEW_USER } }, error: null };
         },
         deleteUser: async () => ({ data: null, error: null }),
@@ -112,6 +114,7 @@ beforeEach(() => {
   state.roster = [];
   state.logins = [];
   state.created = [];
+  state.appMetadata = [];
   state.memberWrites = [];
   state.accessProps = null;
 });
@@ -125,6 +128,9 @@ describe('createChildLoginAction makes a PIN login only for a member who is not 
     expect(result).toEqual({ ok: true, data: { username: 'jordan' } });
     expect(state.created).toHaveLength(1);
     expect(state.memberWrites).toContainEqual({ user_id: NEW_USER, is_active: true });
+    // The server-owned mark of a kid login (app_metadata, which only the
+    // service role can write); the held 0495 reads it if the address changes.
+    expect(state.appMetadata).toEqual([{ bubaly_kid_login: true }]);
   });
 
   it.each(['teen', 'caregiver', 'guest'])('still creates one for a %s, who manages nothing', async (role) => {

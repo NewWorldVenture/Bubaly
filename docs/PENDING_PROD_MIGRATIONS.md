@@ -4260,34 +4260,53 @@ its username (`child.<username>@kids.bubaly.app`), and any household's parent
 or adult may write an invite to any address. So a child who opened a
 stranger's join link while signed in was enrolled in that household, where its
 adults could message them and the child's own parents could not see it
-(reproduced on the same replay). 0495 refuses a caller whose address is on
-that domain, or who holds a `child_logins` row that the server's own link
-corroborates: the row's member is in the row's family, `family_members.user_id`
-on it is the caller (0458 makes that column the server's alone to write), and
-that member is not a parent or adult. A bare `child_logins` row is not enough,
-because its write policy lets any household's parent or adult write one naming
-any user id; trusted on its own, it would let a stranger household stop an
-unrelated adult from ever accepting an invitation (shown on the replay: three
-such rows, written through that policy, each blocked an adult under the earlier
-predicate). `user_metadata` is not used; its owner can edit it. The join page
-refuses an account on the synthetic domain before calling the function, which
-protects most children while 0495 is held; it is not protection against a
-direct RPC call, and it cannot see a kid login whose address was changed. If
-the owner wants a kid login in two households (co-parenting), that should be a
-parent-to-parent action, not a child's click.
+(reproduced on the same replay). 0495 reads kid identity from the account
+itself, in `auth.users`, which only the server writes: its address is on that
+domain, or its `app_metadata` carries `bubaly_kid_login: true`, which
+`createChildLoginAction` now sets on every kid login it creates. Only the service
+role can write `app_metadata`, so the mark survives a later change of address.
 
-Remaining limits of the kid rule, recorded rather than smoothed over: a
-household's parent can still demote one of its own adult members to a
-non-manager role and then map them, which blocks that person's invitations
-elsewhere until the row is removed; and a kid login whose address was moved off
-the synthetic domain and whose mapping row was deleted is not recognised.
+It does **not** read kid identity from `child_logins` or from membership. A
+household's parent can write a `child_logins` row (0297's policy is
+`can_manage_family(family_id)` and nothing more) naming any user, including an
+ordinary-email caregiver or guest of their own household, active or not. Owner
+reviews 6089395851 and 6092383149 showed that trusting either would let a
+household stop that adult from ever accepting another household's invitation.
+The replay reproduced it against the earlier predicates. `user_metadata` is not
+used, because its owner can edit it.
+
+The same provenance now guards the PIN reset in code (`resetChildPinAction`,
+owner review 6092410939). Before any credential is touched, the target
+account's address must be exactly `syntheticChildEmail(username)`, read from
+the auth server. Otherwise a parent's mapping of a caregiver's or guest's own
+account let the reset replace that person's real password.
+
+The join page refuses an account on the synthetic domain before calling the
+function, which protects most children while 0495 is held. It is not
+protection against a direct RPC call. If the owner wants a kid login in two
+households (co-parenting), that should be a parent-to-parent action, not a
+child's click.
+
+Remaining limit, recorded rather than smoothed over: a kid login created
+before the `app_metadata` mark, whose address was later moved off the synthetic
+domain, is not recognised. Its PIN sign-in, which uses the synthetic address,
+no longer works either. Making `child_logins` server-written is a separate
+proposed policy change (#981 comment 6092615411), not part of this rule.
 
 **Proof:** `.github/workflows/invite-rejoin-role-runtime.yml` replays every
 runnable migration. It then requires the held probe
 `docs/audit/reserved/a-member-invited-back-gets-the-invited-role-check.sql` to
 fail on the defect, applies 0495 twice, and requires the probe to pass. The
-passing run also takes each clause of the kid-login guard back out inside its
-transaction and requires the case that clause alone decides to flip. With 0495
+passing run covers:
+- the kid cases: synthetic with and without a mapping, and an ordinary address
+  with the server's mark;
+- six adults who must still accept: five mapped by a household's parent,
+  including an active caregiver and an inactive guest of that household, and
+  one whose own `user_metadata` says child.
+
+Mutation controls: without the address clause, or without the mark clause,
+that clause's kid gets in. Trusting `child_logins` instead refuses the mapped
+caregiver. With 0495
 applied, all 182 other boundary probes still pass.
 
 **Not changed:** SEC-026 (the owner's decision on who may make a parent),

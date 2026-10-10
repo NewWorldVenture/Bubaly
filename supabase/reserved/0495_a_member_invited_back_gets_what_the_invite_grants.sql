@@ -34,26 +34,31 @@
 -- addresses, so a child who opened a stranger's join link while signed in was
 -- enrolled in that household: its adults could message them and assign them
 -- chores, and the child's own parents could not see it. Reproduced on the same
--- replay. The caller is refused when either of two facts that only the server
--- writes says they are a kid login (either alone suffices, so neither an
--- address change nor a deleted mapping row reopens it):
+-- replay. The caller is refused when the ACCOUNT ITSELF says it is a kid
+-- login, read from auth.users, which only the server writes:
 --
---   * their JWT address is on that domain. createChildLoginAction creates
---     kid logins there with the service role, no household can write another
---     person's auth address, and an account that moved itself onto the domain
---     would only be refusing itself.
---   * a child_logins row maps them to a member row that the SERVER linked to
---     their login, in that mapping's own family, and that member is not a
---     parent or adult. A child_logins row alone is not enough: its write
---     policy (0297) is can_manage_family(family_id) and nothing more, so any
---     household's parent or adult can write a row carrying ANY user id, and
---     an unrelated adult would then be refused every invitation they ever
---     got. family_members.user_id is the corroboration because 0458 makes it
---     the server's alone to write. The role clause keeps a manager from
---     marking a co-parent or adult of their own household, whose login the
---     server did link there; createChildLoginAction never makes a PIN login
---     for a parent or adult.
---     user_metadata ({child: true}) is not used: its owner can edit it.
+--   * its address is on that domain. createChildLoginAction creates kid logins
+--     there with the service role, and no household can write another
+--     person's auth address; or
+--   * its app_metadata carries `bubaly_kid_login: true`, which
+--     createChildLoginAction sets and only the service role can write. That
+--     keeps a kid login recognised if its address is ever moved off the
+--     domain.
+--
+-- Not child_logins, and not the membership. A household's parent can write a
+-- child_logins row (0297: can_manage_family(family_id) and nothing more) for
+-- ANY user id, and for any member of their own household who is not a
+-- manager: a caregiver or guest with their own ordinary account, active or
+-- not. Trusted as identity, either would let one household stop an adult from
+-- ever accepting another household's invitation (owner reviews 6089395851 and
+-- 6092383149, reproduced on the replay). The membership link (0458) shows whose
+-- row it is, not what kind of account it is. user_metadata ({child: true}) is
+-- not used either: its owner can edit it.
+--
+-- Residual, recorded: a kid login created before createChildLoginAction set the
+-- app_metadata mark, whose address was later moved off the domain, is not
+-- recognised. Its PIN sign-in no longer works either, since that signs in at
+-- the synthetic address.
 --
 -- There is no designed flow for a kid login to belong to a second household;
 -- if the owner wants one (two co-parenting households), it should be a
@@ -96,16 +101,13 @@ begin
     raise exception 'Invite is invalid or expired';
   end if;
 
-  -- A kid login stays in the family that made it. Each clause below is
-  -- written by the server alone; see the header for why each is there.
-  if right(lower(coalesce(auth.jwt()->>'email','')), length('@kids.bubaly.app')) = '@kids.bubaly.app'
-     or exists (select 1
-                  from public.child_logins cl
-                  join public.family_members fm on fm.id = cl.member_id
-                 where cl.user_id = auth.uid()
-                   and fm.user_id = cl.user_id
-                   and fm.family_id = cl.family_id
-                   and fm.role::text not in ('parent', 'adult')) then
+  -- A kid login stays in the family that made it. Read from the account in
+  -- auth.users, which only the server writes; see the header.
+  if exists (select 1
+               from auth.users u
+              where u.id = auth.uid()
+                and (right(lower(coalesce(u.email, '')), length('@kids.bubaly.app')) = '@kids.bubaly.app'
+                     or coalesce(u.raw_app_meta_data->>'bubaly_kid_login', '') = 'true')) then
     raise exception 'A kid login cannot join another family';
   end if;
 
@@ -157,5 +159,12 @@ begin
        and exists (select 1 from unnest(p.proconfig) c where c = 'search_path=public')
   ) then
     raise exception '0495: accept_invite must stay SECURITY DEFINER with search_path=public, or an invitee cannot write their own member row';
+  end if;
+  -- The kid-login check reads auth.users as the function's owner. Fail here,
+  -- at apply time, rather than on every invitation if that owner cannot.
+  if not has_table_privilege(
+       (select pg_get_userbyid(p.proowner) from pg_proc p where p.oid = 'public.accept_invite(text)'::regprocedure),
+       'auth.users', 'SELECT') then
+    raise exception '0495: accept_invite''s owner cannot read auth.users, so the kid-login check would fail every invitation';
   end if;
 end $$;

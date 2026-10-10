@@ -35,25 +35,31 @@
 --      (0136's idempotence is preserved);
 --   7. accept_invite is still SECURITY DEFINER with a pinned search_path and
 --      callable by `authenticated`;
---   8. a kid login cannot join another family through an invite: not one on
---      its synthetic address (child.<username>@kids.bubaly.app, which any
---      household can write an invite to) with a child_logins row, not one on
---      that address with NO child_logins row (the address clause alone), and
---      not one holding a server-linked child_logins row under an ordinary
---      address (the mapping clause alone). Each is refused with 0495's
+--   8. a kid login cannot join another family through an invite. Kid identity
+--      is read from the account in auth.users: its synthetic address
+--      (child.<username>@kids.bubaly.app, which any household can write an
+--      invite to), with or without a child_logins row, or the server's
+--      app_metadata mark on an account whose address is ordinary (a genuine
+--      kid login whose address was moved). Each is refused with 0495's
 --      sentence and leaves no member row in the inviting family;
---   9. a child_logins row is not an identity on its own say-so. A parent of a
---      third household writes three rows through child_logins' own write
---      policy, each naming an adult who is not that household's kid: against
---      an unlinked placeholder member, against the adult's member row in a
---      FOURTH household, and against the adult's own adult member row in the
---      mapping household. Each adult can still accept their own invitation and
---      lands with its role.
+--   9. neither a child_logins row nor a membership makes anyone a kid login. A
+--      parent of a third household writes child_logins rows through the
+--      table's own write policy for five adults who are not kid logins:
+--      against an unlinked placeholder, against a guest's member row in a
+--      FOURTH household, against the adult's own adult row in the mapping
+--      household, against an ordinary-email CAREGIVER of the mapping household
+--      (active, not a manager), and against an ordinary-email GUEST of it whose
+--      membership is inactive. A sixth adult says {child: true} in the
+--      user_metadata they can edit. Each still accepts their own invitation
+--      with its role.
 --
 -- MUTATION CONTROLS. Each clause of the kid-login guard decides exactly one
--- case above. With that clause taken out of the real function, inside this
--- transaction, that case must flip (a kid gets in, or a poisoned adult is
--- refused), so removing any one clause from 0495 turns this probe red.
+-- case above, and with it taken out of the real function, inside this
+-- transaction, that case must flip: without the address clause the unmapped
+-- synthetic kid gets in; without the app_metadata clause the ordinary-address
+-- kid gets in. A third control swaps the address clause for "holds a
+-- child_logins row" (the trust 0495 must not place in that table), and the
+-- caregiver the mapping household's parent mapped must then be refused.
 --
 -- NEGATIVE CONTROL. Inside this transaction the function is put back to 0136's
 -- conflict arm, and a second removed parent invited back as a guest must then
@@ -105,8 +111,15 @@ insert into auth.users (id, email) values
   (:'V1','m0495-unlinked@example.com'),
   (:'V2','m0495-elsewhere@example.com'),
   (:'UO','m0495-elsewhere-parent@example.com'),
-  (:'V3','m0495-coadult@example.com')
+  (:'V3','m0495-coadult@example.com'),
+  ('00000000-0000-4000-8495-0000000000b6','m0495-caregiver@example.com'),
+  ('00000000-0000-4000-8495-0000000000b7','m0495-former-guest@example.com'),
+  ('00000000-0000-4000-8495-0000000000b8','m0495-says-child@example.com')
   on conflict do nothing;
+-- The genuine kid login under an ordinary address carries the server's mark;
+-- the adult who claims to be a child does so in the metadata they can edit.
+update auth.users set raw_app_meta_data = '{"bubaly_kid_login": true}'::jsonb where id = :'UJ';
+update auth.users set raw_user_meta_data = '{"child": true}'::jsonb where id = '00000000-0000-4000-8495-0000000000b8';
 
 insert into public.families (id, name, created_by) values (:'F','Invited Back House',:'UP') on conflict do nothing;
 update public.family_members set role = 'parent', is_active = true where family_id = :'F' and user_id = :'UP';
@@ -144,7 +157,9 @@ update public.family_members set role = 'parent', is_active = true where family_
 insert into public.family_members (id, family_id, user_id, display_name, role, is_active) values
   ('00000000-0000-4000-8495-0000000000d3',:'F3',null,'Placeholder','child',true),
   ('00000000-0000-4000-8495-0000000000d4',:'F4',:'V2','Guest Elsewhere','guest',true),
-  ('00000000-0000-4000-8495-0000000000d5',:'F3',:'V3','Co-adult','adult',true);
+  ('00000000-0000-4000-8495-0000000000d5',:'F3',:'V3','Co-adult','adult',true),
+  ('00000000-0000-4000-8495-0000000000d7',:'F3','00000000-0000-4000-8495-0000000000b6','Caregiver','caregiver',true),
+  ('00000000-0000-4000-8495-0000000000d8',:'F3','00000000-0000-4000-8495-0000000000b7','Former Guest','guest',false);
 
 insert into public.invites (family_id, email, role, token, invited_by) values
   (:'F','m0495-former-parent@example.com','guest', 'm0495-tok-x', :'UP'),
@@ -157,7 +172,10 @@ insert into public.invites (family_id, email, role, token, invited_by) values
   (:'F','child.m0495solo@kids.bubaly.app','child', 'm0495-tok-q', :'UP'),
   (:'F','m0495-unlinked@example.com',     'adult', 'm0495-tok-v1', :'UP'),
   (:'F','m0495-elsewhere@example.com',    'adult', 'm0495-tok-v2', :'UP'),
-  (:'F','m0495-coadult@example.com',      'guest', 'm0495-tok-v3', :'UP');
+  (:'F','m0495-coadult@example.com',      'guest', 'm0495-tok-v3', :'UP'),
+  (:'F','m0495-caregiver@example.com',    'adult', 'm0495-tok-v4', :'UP'),
+  (:'F','m0495-former-guest@example.com', 'adult', 'm0495-tok-v5', :'UP'),
+  (:'F','m0495-says-child@example.com',   'adult', 'm0495-tok-v6', :'UP');
 
 do $$
 declare
@@ -175,6 +193,9 @@ declare
   v1    uuid := '00000000-0000-4000-8495-0000000000b2';
   v2    uuid := '00000000-0000-4000-8495-0000000000b3';
   v3    uuid := '00000000-0000-4000-8495-0000000000b5';
+  v4    uuid := '00000000-0000-4000-8495-0000000000b6';
+  v5    uuid := '00000000-0000-4000-8495-0000000000b7';
+  v6    uuid := '00000000-0000-4000-8495-0000000000b8';
   fam3  uuid := '00000000-0000-4000-8495-0000000000f3';
   kid   record;
   victim record;
@@ -231,7 +252,9 @@ begin
     insert into public.child_logins (family_id, member_id, user_id, username, created_by) values
       (fam3, '00000000-0000-4000-8495-0000000000d3', v1, 'm0495poisona', um),
       (fam3, '00000000-0000-4000-8495-0000000000d4', v2, 'm0495poisonb', um),
-      (fam3, '00000000-0000-4000-8495-0000000000d5', v3, 'm0495poisonc', um);
+      (fam3, '00000000-0000-4000-8495-0000000000d5', v3, 'm0495poisonc', um),
+      (fam3, '00000000-0000-4000-8495-0000000000d7', v4, 'm0495poisond', um),
+      (fam3, '00000000-0000-4000-8495-0000000000d8', v5, 'm0495poisone', um);
   exception when insufficient_privilege then
     poisoned_by_policy := false;
   end;
@@ -240,7 +263,9 @@ begin
     insert into public.child_logins (family_id, member_id, user_id, username, created_by) values
       (fam3, '00000000-0000-4000-8495-0000000000d3', v1, 'm0495poisona', um),
       (fam3, '00000000-0000-4000-8495-0000000000d4', v2, 'm0495poisonb', um),
-      (fam3, '00000000-0000-4000-8495-0000000000d5', v3, 'm0495poisonc', um);
+      (fam3, '00000000-0000-4000-8495-0000000000d5', v3, 'm0495poisonc', um),
+      (fam3, '00000000-0000-4000-8495-0000000000d7', v4, 'm0495poisond', um),
+      (fam3, '00000000-0000-4000-8495-0000000000d8', v5, 'm0495poisone', um);
     perform set_config('role','authenticated', true);
   end if;
 
@@ -248,7 +273,10 @@ begin
   for victim in select * from (values
       (v1, 'm0495-unlinked@example.com',  'm0495-tok-v1', 'an adult mapped against another household''s unlinked placeholder'),
       (v2, 'm0495-elsewhere@example.com', 'm0495-tok-v2', 'a guest of a fourth household mapped through their member row there'),
-      (v3, 'm0495-coadult@example.com',   'm0495-tok-v3', 'an adult of the mapping household mapped through their own adult member row')
+      (v3, 'm0495-coadult@example.com',   'm0495-tok-v3', 'an adult of the mapping household mapped through their own adult member row'),
+      (v4, 'm0495-caregiver@example.com', 'm0495-tok-v4', 'an ordinary-email caregiver of the mapping household its parent mapped'),
+      (v5, 'm0495-former-guest@example.com', 'm0495-tok-v5', 'an ordinary-email guest of the mapping household, inactive, its parent mapped'),
+      (v6, 'm0495-says-child@example.com', 'm0495-tok-v6', 'an adult whose own user_metadata says child')
     ) as v(uid, email, token, label) loop
     perform set_config('request.jwt.claim.sub', victim.uid::text, true);
     perform set_config('request.jwt.claims', json_build_object('sub', victim.uid, 'role', 'authenticated', 'email', victim.email)::text, true);
@@ -266,7 +294,7 @@ begin
   for kid in select * from (values
       (uk, 'child.m0495kid@kids.bubaly.app',  'm0495-tok-k', 'a kid login on its synthetic address and holding a child_logins row'),
       (uq, 'child.m0495solo@kids.bubaly.app', 'm0495-tok-q', 'a kid login on its synthetic address with no child_logins row'),
-      (uj, 'm0495-kid-mapped@example.com',    'm0495-tok-j', 'a kid login holding a child_logins row under an ordinary address')
+      (uj, 'm0495-kid-mapped@example.com',    'm0495-tok-j', 'a kid login under an ordinary address carrying the server''s app_metadata mark')
     ) as k(uid, email, token, label) loop
     perform set_config('request.jwt.claim.sub', kid.uid::text, true);
     perform set_config('request.jwt.claims', json_build_object('sub', kid.uid, 'role', 'authenticated', 'email', kid.email)::text, true);
@@ -308,7 +336,10 @@ begin
   for victim in select * from (values
       (v1, 'adult', 'an adult mapped against another household''s unlinked placeholder'),
       (v2, 'adult', 'a guest of a fourth household mapped through their member row there'),
-      (v3, 'guest', 'an adult of the mapping household mapped through their own adult member row')
+      (v3, 'guest', 'an adult of the mapping household mapped through their own adult member row'),
+      (v4, 'adult', 'an ordinary-email caregiver of the mapping household its parent mapped'),
+      (v5, 'adult', 'an ordinary-email guest of the mapping household, inactive, its parent mapped'),
+      (v6, 'adult', 'an adult whose own user_metadata says child')
     ) as v(uid, role, label) loop
     select role::text, is_active into r, act from public.family_members where family_id = fam and user_id = victim.uid;
     if r is distinct from victim.role or act is not true then
@@ -338,21 +369,16 @@ begin
   select pg_get_functiondef('public.accept_invite(text)'::regprocedure) into original_def;
   if position('kid login cannot join another family' in original_def) > 0 then
     for m in select * from (values
-        ($c$right(lower(coalesce(auth.jwt()->>'email','')), length('@kids.bubaly.app')) = '@kids.bubaly.app'$c$, 'false',
+        ($c$right(lower(coalesce(u.email, '')), length('@kids.bubaly.app')) = '@kids.bubaly.app'$c$, 'false',
          uq, 'child.m0495solo@kids.bubaly.app', 'm0495-tok-q', true,
          'without the address clause, the kid login on its synthetic address with no child_logins row'),
-        ($c$or exists (select 1$c$, $c$or false and exists (select 1$c$,
+        ($c$coalesce(u.raw_app_meta_data->>'bubaly_kid_login', '') = 'true'$c$, 'false',
          uj, 'm0495-kid-mapped@example.com', 'm0495-tok-j', true,
-         'without the mapping clause, the kid login under an ordinary address'),
-        ($c$and fm.user_id = cl.user_id$c$, 'and true',
-         v1, 'm0495-unlinked@example.com', 'm0495-tok-v1', false,
-         'without the login-link clause, the adult mapped against an unlinked placeholder'),
-        ($c$and fm.family_id = cl.family_id$c$, 'and true',
-         v2, 'm0495-elsewhere@example.com', 'm0495-tok-v2', false,
-         'without the same-family clause, the guest mapped through a fourth household''s member row'),
-        ($c$and fm.role::text not in ('parent', 'adult')$c$, 'and true',
-         v3, 'm0495-coadult@example.com', 'm0495-tok-v3', false,
-         'without the role clause, the adult mapped through their own adult member row')
+         'without the app_metadata clause, the kid login under an ordinary address'),
+        ($c$right(lower(coalesce(u.email, '')), length('@kids.bubaly.app')) = '@kids.bubaly.app'$c$,
+         $c$exists (select 1 from public.child_logins cl where cl.user_id = u.id)$c$,
+         v4, 'm0495-caregiver@example.com', 'm0495-tok-v4', false,
+         'trusting child_logins instead, the caregiver its household''s parent mapped')
       ) as x(clause, replacement, uid, email, token, kid_gets_in, label) loop
       if position(m.clause in original_def) = 0 then
         failures := array_append(failures, format('PROBE DRIFT: the guard no longer contains %s, so its mutation control measures nothing', m.clause));
@@ -418,7 +444,7 @@ begin
   if array_length(failures, 1) is not null then
     raise exception E'a member invited back does not get the invited role:\n  - %', array_to_string(failures, E'\n  - ');
   end if;
-  raise notice 'a-member-invited-back-gets-the-invited-role: OK (a removed parent invited back as a guest is a guest who cannot manage the family; a removed child invited back as an adult is an adult; an active adult''s self-addressed parent invite leaves them an adult; a first-time teen invite lands as a teen; the other family is untouched; a repeated accept stays idempotent; a kid login on its synthetic address with or without a child_logins row, or holding a server-linked one under an ordinary address, is refused and left out of the inviting family; three adults named in child_logins rows another household wrote (unlinked placeholder, a fourth household''s member row, their own adult row; written %) each accepted their invitation with its role; mutation controls: without each guard clause its case flipped; accept_invite is SECURITY DEFINER, search_path pinned, callable by authenticated; negative control: 0136''s conflict arm restored the removed parent''s old parent role)',
+  raise notice 'a-member-invited-back-gets-the-invited-role: OK (a removed parent invited back as a guest is a guest who cannot manage the family; a removed child invited back as an adult is an adult; an active adult''s self-addressed parent invite leaves them an adult; a first-time teen invite lands as a teen; the other family is untouched; a repeated accept stays idempotent; a kid login on its synthetic address with or without a child_logins row, or under an ordinary address with the server''s app_metadata mark, is refused and left out of the inviting family; five adults named in child_logins rows a household''s parent wrote (unlinked placeholder, a fourth household''s guest row, their own adult row, an active ordinary-email caregiver, an inactive ordinary-email guest; written %) and an adult whose own user_metadata says child each accepted their invitation with its role; mutation controls: without the address or the app_metadata clause its kid got in, and trusting child_logins instead refused the mapped caregiver; accept_invite is SECURITY DEFINER, search_path pinned, callable by authenticated; negative control: 0136''s conflict arm restored the removed parent''s old parent role)',
     case when poisoned_by_policy then 'by that household''s parent through child_logins'' own write policy'
          else 'as the server, because that policy now refuses the parent' end;
 end $$;
