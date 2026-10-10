@@ -10,6 +10,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isPlatform, platformLabel, type Platform } from '@/lib/social/feed';
 import { buildItemFromHtml, isSafePublicUrl } from '@/lib/social/unfurl';
+import { safeSocialLink } from '@/lib/social/links';
 import { fetchPublicText } from '@/lib/server/public-calendar-fetch';
 import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 
@@ -186,6 +187,14 @@ export async function addFeedItemAction(input: {
   const ctx = await requireUserContext();
   if (!isPlatform(input.platform)) return { ok: false, error: t('actions.pickASupportedPlatform') };
   if (!input.authorName?.trim()) return { ok: false, error: t('actions.addWhoPostedIt') };
+  // Every stored link is opened or rendered by another family member, so only a
+  // web link is stored (SEC-002; the same rule as lib/utils/safe-link).
+  const permalink = input.permalink?.trim() || null;
+  const thumbnailUrl = input.thumbnailUrl || null;
+  const mediaUrls = input.mediaUrls ?? [];
+  if ([permalink, thumbnailUrl, ...mediaUrls].some((link) => link !== null && !safeSocialLink(link))) {
+    return { ok: false, error: t('actions.enterAValidPublicWeb') };
+  }
   const supabase = await createServer();
   const { error } = await supabase.from('social_reader_items').insert({
     family_id: ctx.active.familyId,
@@ -194,9 +203,9 @@ export async function addFeedItemAction(input: {
     author_name: input.authorName.trim(),
     author_handle: input.authorHandle?.trim() || null,
     content: input.content?.trim() || null,
-    media_urls: input.mediaUrls ?? [],
-    thumbnail_url: input.thumbnailUrl ?? null,
-    permalink: input.permalink?.trim() || null,
+    media_urls: mediaUrls,
+    thumbnail_url: thumbnailUrl,
+    permalink,
     kind: input.kind ?? 'post',
     duration_label: input.durationLabel ?? null,
     category: asCategory(input.category),

@@ -8,24 +8,37 @@ import type { GEvent, GTask } from '@/lib/sync/providers/google';
 type Row = Record<string, unknown>;
 type Call = { url: URL; method: string; body: Row | null };
 export const ACCOUNT = { id: 'account', family_id: 'family', user_id: 'owner', external_id: 'synthetic@example.invalid' };
+const ITEM_TABLES = new Set(['sync_calendar_events', 'sync_reminders']);
 export const NEXT = 'next-synthetic-cursor';
 export const STALE = 'prior-synthetic-cursor';
 export const CANCELLED_INSTANCE = { id: 'deleted', status: 'cancelled', recurringEventId: 'series',
   originalStartTime: { dateTime: '2026-06-21T09:00:00Z' } };
 
+// 'missing' = neither 0494 RPC exists; 'container'/'item' = only that one is
+// missing. Each answers exactly as PostgREST does for an absent function. The
+// '-unnamed', '-helper' and '-denied' variants are other failures that must not
+// be read as an absent RPC.
+export type SyncRpcFailure = 'missing' | 'container' | 'item' | 'mapping' | 'lock'
+  | 'container-unnamed' | 'container-denied' | 'item-unnamed' | 'item-helper';
+export const missingRpc = (name: string) => ({ code: 'PGRST202', details: 'Searched for the function public.' + name
+  + ' with parameters p_account, p_family, p_user in the schema cache, but no matches were found.', hint: null,
+  message: `Could not find the function public.${name}(p_account, p_family, p_user) in the schema cache` });
+
 export function syncSdkFixture(events: GEvent[], options: {
   failedDelete?: boolean; zeroDelete?: boolean; direction?: string; alreadyDeleted?: boolean;
-  rpcFailure?: 'container' | 'item' | 'mapping' | 'lock'; malformedReceipt?: boolean; uncertainReceipt?: boolean; racedFields?: Row;
+  rpcFailure?: SyncRpcFailure; rawMappingFailure?: boolean; committedMappingFailure?: boolean; malformedReceipt?: boolean; uncertainReceipt?: boolean; racedFields?: Row;
   tasks?: GTask[]; zeroLiveWrite?: boolean; moveBeforeLiveWrite?: boolean;
   moveMappingBeforeWrite?: boolean; zeroPushWrite?: boolean;
+  /** Awaited before each synthetic database request is applied, so a test can pause one pull mid-flight. */
+  gate?: (call: { table: string; method: string; url: URL; body: Row | null }) => Promise<void> | void;
 } = {}) {
   const rows: Record<string, Row[]> = {
     sync_accounts: [{ ...ACCOUNT, provider: 'google', sync_direction: options.direction ?? 'import', metadata: {} }],
     // A connection syncs only while its owner is an active member of its family.
     family_members: [{ id: 'owner-member', family_id: ACCOUNT.family_id, user_id: ACCOUNT.user_id, role: 'parent', is_active: true }],
     sync_connections: [{ account_id: ACCOUNT.id, health: 'healthy' }],
-    sync_calendars: [{ id: 'calendar', account_id: ACCOUNT.id, family_id: ACCOUNT.family_id, provider: 'google', external_id: 'primary', sync_token: STALE }],
-    sync_reminder_lists: [{ id: 'list', account_id: ACCOUNT.id, family_id: ACCOUNT.family_id, provider: 'google', external_id: '@default' }],
+    sync_calendars: [{ id: 'calendar', account_id: ACCOUNT.id, family_id: ACCOUNT.family_id, user_id: ACCOUNT.user_id, provider: 'google', external_id: 'primary', sync_token: STALE }],
+    sync_reminder_lists: [{ id: 'list', account_id: ACCOUNT.id, family_id: ACCOUNT.family_id, user_id: ACCOUNT.user_id, provider: 'google', external_id: '@default' }],
     sync_calendar_events: [{ id: 'local', calendar_id: 'calendar', family_id: ACCOUNT.family_id, provider: 'google', external_id: 'deleted', deleted_at: null }],
     sync_external_mappings: [{ id: 'mapping', family_id: ACCOUNT.family_id, account_id: ACCOUNT.id, provider: 'google', item_type: 'event', external_id: 'deleted', local_id: 'local', metadata: {} },
       { id: 'foreign-map', family_id: 'another-family', account_id: 'another-account', provider: 'google', item_type: 'event', external_id: 'foreign-only', local_id: 'foreign-local', metadata: {} }],
@@ -39,6 +52,9 @@ export function syncSdkFixture(events: GEvent[], options: {
       provider: 'google', item_type: 'reminder', external_id: 'remote-task', local_id: 'local-task', metadata: {} });
   }
   const calls: Call[] = [];
+  // The set_updated_at trigger: every item write gets a new, later updated_at.
+  let clock = Date.parse('2026-06-01T00:00:00Z');
+  const tick = () => new Date(clock += 1000).toISOString();
   const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), {
     status, headers: { 'Content-Type': 'application/json' },
   });
@@ -78,7 +94,9 @@ export function syncSdkFixture(events: GEvent[], options: {
       throw new Error(`Unexpected synthetic request: ${url.origin}${url.pathname}`);
     }
     if (url.pathname === '/rest/v1/rpc/ensure_sync_pull_container') {
-      if (options.rpcFailure === 'container') return json({ code: 'PGRST202', message: 'Synthetic RPC absent' }, 404);
+      if (options.rpcFailure === 'missing' || options.rpcFailure === 'container') return json(missingRpc('ensure_sync_pull_container'), 404);
+      if (options.rpcFailure === 'container-unnamed') return json({ code: 'PGRST202', message: 'Synthetic RPC absent' }, 404);
+      if (options.rpcFailure === 'container-denied') return json({ code: '42501', message: 'permission denied for function ensure_sync_pull_container' }, 403);
       if (!body || body.p_account !== ACCOUNT.id || body.p_family !== ACCOUNT.family_id || body.p_user !== ACCOUNT.user_id) throw new Error('Synthetic container identity mismatch');
       const table = body.p_kind === 'event' ? 'sync_calendars' : 'sync_reminder_lists';
       const matching = rows[table].filter(row => row.account_id === body.p_account && row.provider === body.p_provider && row.external_id === body.p_external);
@@ -91,8 +109,10 @@ export function syncSdkFixture(events: GEvent[], options: {
     }
     if (url.pathname === '/rest/v1/rpc/create_sync_pull_item') {
       if (!body || body.p_account !== ACCOUNT.id || body.p_family !== ACCOUNT.family_id || body.p_user !== ACCOUNT.user_id) throw new Error('Synthetic item identity mismatch');
-      if (options.rpcFailure) return json({ code: options.rpcFailure === 'item' ? 'PGRST202'
-        : options.rpcFailure === 'lock' ? '55P03' : '42501', message: 'Synthetic item transaction refused' }, options.rpcFailure === 'item' ? 404 : 403);
+      if (options.rpcFailure === 'missing' || options.rpcFailure === 'item') return json(missingRpc('create_sync_pull_item'), 404);
+      if (options.rpcFailure === 'item-helper') return json({ code: '42883', message: 'function sync_pull_private.admit_account(uuid, uuid, uuid, sync_provider, boolean) does not exist' }, 404);
+      if (options.rpcFailure && options.rpcFailure !== 'container') return json({ code: options.rpcFailure === 'item-unnamed' ? 'PGRST202'
+        : options.rpcFailure === 'lock' ? '55P03' : '42501', message: 'Synthetic item transaction refused' }, options.rpcFailure === 'item-unnamed' ? 404 : 403);
       const table = body.p_kind === 'event' ? 'sync_calendar_events' : 'sync_reminders';
       let mapping = rows.sync_external_mappings.find(row => row.account_id === body.p_account && row.provider === body.p_provider && row.item_type === body.p_kind && row.external_id === body.p_external);
       const created = !mapping && !options.racedFields;
@@ -110,6 +130,7 @@ export function syncSdkFixture(events: GEvent[], options: {
       return json(options.malformedReceipt ? { created, mapping: { ...mapping, family_id: 'another-family' } } : { created, mapping });
     }
     const table = url.pathname.slice('/rest/v1/'.length);
+    await options.gate?.({ table, method, url, body });
     const tableRows = rows[table];
     if (!tableRows) throw new Error(`Unexpected synthetic table: ${table}`);
     if (table === 'sync_calendar_events' && method === 'PATCH' && body?.title && options.moveBeforeLiveWrite) {
@@ -121,7 +142,12 @@ export function syncSdkFixture(events: GEvent[], options: {
     const selected = tableRows.filter(row => [...url.searchParams].every(([column, value]) => {
       if (column === 'select' || column === 'limit') return true;
       if (!value.startsWith('eq.')) throw new Error(`Unexpected synthetic filter: ${column}=${value}`);
-      return String(row[column]) === value.slice(3);
+      // A JSON path (metadata->adoption->>token) compares the text at that path;
+      // SQL NULL (an absent key) equals nothing.
+      const [base, ...path] = column.split(/->>?/);
+      const found = path.reduce<unknown>((at, key) => at !== null && typeof at === 'object' ? (at as Row)[key] : undefined, row[base]);
+      if (path.length && (found === undefined || found === null)) return false;
+      return String(found) === value.slice(3);
     }));
     let result = url.searchParams.has('limit') ? selected.slice(0, Number(url.searchParams.get('limit'))) : selected;
     if (method === 'PATCH') {
@@ -131,12 +157,20 @@ export function syncSdkFixture(events: GEvent[], options: {
         if (options.failedDelete) return json({ code: '42501', message: 'Synthetic deletion refused', details: null, hint: null }, 403);
         if (options.zeroDelete) return json(null);
       }
-      result.forEach(row => Object.assign(row, body));
+      result.forEach(row => Object.assign(row, body, ITEM_TABLES.has(table) ? { updated_at: tick() } : {}));
     } else if (method === 'POST') {
       if (!body) throw new Error('Synthetic insert body missing');
-      if (table === 'sync_external_mappings' && options.rpcFailure === 'mapping') return json({ code: '42501', message: 'Synthetic mapping refused' }, 403);
-      result = [{ id: `${table}-${tableRows.length}`, ...body }];
+      if (table === 'sync_external_mappings' && (options.rpcFailure === 'mapping' || options.rawMappingFailure)) return json({ code: '42501', message: 'Synthetic mapping refused' }, 403);
+      // 0018's unique (provider, item_type, external_id, account_id) and
+      // (provider, item_type, local_id, account_id).
+      if (table === 'sync_external_mappings' && tableRows.some(row => row.provider === body.provider && row.item_type === body.item_type
+        && row.account_id === body.account_id && (row.external_id === body.external_id || row.local_id === body.local_id))) {
+        return json({ code: '23505', message: 'duplicate key value violates unique constraint', details: null, hint: null }, 409);
+      }
+      result = [{ id: `${table}-${tableRows.length}`, ...(ITEM_TABLES.has(table) ? { updated_at: tick() } : {}), ...body }];
       tableRows.push(...result);
+      // The INSERT commits, but the answer is lost: the client reports a network error.
+      if (table === 'sync_external_mappings' && options.committedMappingFailure) throw new TypeError('fetch failed');
     } else if (method === 'DELETE') {
       rows[table] = tableRows.filter(row => !result.includes(row));
     } else if (method !== 'GET') throw new Error(`Unexpected synthetic database method: ${method}`);

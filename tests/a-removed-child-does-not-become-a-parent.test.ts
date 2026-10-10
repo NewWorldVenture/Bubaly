@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { isSyntheticChildEmail, syntheticChildEmail } from '@/lib/onboarding/child-login';
+import { isChildLoginEmail, syntheticChildEmail } from '@/lib/onboarding/child-login';
 
 /**
  * A child removed from the family does not become the parent of a new one.
@@ -157,12 +157,12 @@ beforeEach(() => {
 
 describe('telling a child login by its address', () => {
   it('matches the synthetic kids domain in any case, and nothing else', () => {
-    expect(isSyntheticChildEmail(syntheticChildEmail('emma'))).toBe(true);
-    expect(isSyntheticChildEmail(' Child.Emma@Kids.Bubaly.App ')).toBe(true);
-    expect(isSyntheticChildEmail('emma@example.com')).toBe(false);
-    expect(isSyntheticChildEmail('child.emma@kids.bubaly.app.example.com')).toBe(false);
-    expect(isSyntheticChildEmail(null)).toBe(false);
-    expect(isSyntheticChildEmail(undefined)).toBe(false);
+    expect(isChildLoginEmail(syntheticChildEmail('emma'))).toBe(true);
+    expect(isChildLoginEmail(' Child.Emma@Kids.Bubaly.App ')).toBe(true);
+    expect(isChildLoginEmail('emma@example.com')).toBe(false);
+    expect(isChildLoginEmail('child.emma@kids.bubaly.app.example.com')).toBe(false);
+    expect(isChildLoginEmail(null)).toBe(false);
+    expect(isChildLoginEmail(undefined)).toBe(false);
   });
 });
 

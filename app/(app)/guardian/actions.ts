@@ -50,6 +50,26 @@ async function logGuardianAudit(entry: GuardianAuditEntry): Promise<void> {
   }
 }
 
+/**
+ * A Guardian profile is what maps a Guardian number to a person: the voice and
+ * screening callbacks dial that member's phone and speak their name. The
+ * profile table's write policy checks only the row's own family_id, so a
+ * member id from another family was accepted and those callbacks, which run
+ * with the service role, rang a stranger's phone from this family's number.
+ * The member is read through the caller's own session, which cannot see
+ * another family's members, AND filtered to the active family.
+ */
+async function memberIsInFamily(
+  supabase: Awaited<ReturnType<typeof createServer>>,
+  familyId: string,
+  memberId: string,
+): Promise<{ ok: true; found: boolean } | { ok: false; error: unknown }> {
+  const { data, error } = await supabase.from('family_members')
+    .select('id').eq('id', memberId).eq('family_id', familyId).maybeSingle();
+  if (error) return { ok: false, error };
+  return { ok: true, found: data?.id === memberId };
+}
+
 async function reviewResult(data: unknown): Promise<ActionResult> {
   const t = await getTranslations();
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
@@ -211,6 +231,9 @@ export async function upsertMemberProfileAction(
   const familyId = ctx.active.familyId;
 
   const payload = guardianProfilePayload(input, familyId);
+  const member = await memberIsInFamily(supabase, familyId, payload.member_id);
+  if (!member.ok) return actionFailure('check the Guardian member', t('guardian.couldNotSaveTheGuardianMember'), member.error);
+  if (!member.found) return { ok: false, error: t('actions.familyMemberNotFound') };
 
   const { error } = await supabase.from('guardian_member_profiles')
     .upsert(payload, { onConflict: 'family_id,member_id' });
@@ -263,6 +286,10 @@ export async function assignGuardianPhoneAction(input: {
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
+
+  const member = await memberIsInFamily(supabase, familyId, input.member_id);
+  if (!member.ok) return actionFailure('check the Guardian member', t('guardian.couldNotAssignTheGuardianPhone'), member.error);
+  if (!member.found) return { ok: false, error: t('actions.familyMemberNotFound') };
 
   // Normalize: strip everything but digits/+, coerce to E.164 (assume US if 10 digits).
   const raw = input.phone.trim();

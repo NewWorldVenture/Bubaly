@@ -2,7 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServiceClient } from '@/lib/supabase/server';
 import { autoFamilyName, autoOwnerName, DEFAULT_OWNER_DISPLAY_NAME } from '@/lib/onboarding/family';
-import { isSyntheticChildEmail } from '@/lib/onboarding/child-login';
+import { isChildLoginEmail } from '@/lib/onboarding/child-login';
 
 // Guarantees an authenticated user always has a family space, so onboarding can
 // never trap them in a redirect loop (sign up → land on the dashboard with an
@@ -78,7 +78,7 @@ export async function ensureActiveFamily(
   // `child_logins` row (server-written, manager-only) covers an account whose
   // address is not the synthetic one. A failed read refuses: the caller's
   // fallback is the same as for any other provisioning failure.
-  if (isSyntheticChildEmail(user.email)) {
+  if (isChildLoginEmail(user.email)) {
     console.error('[ensure-family] a child login has no active family; not provisioning one');
     return false;
   }

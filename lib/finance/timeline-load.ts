@@ -40,7 +40,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
-import { BillScheduleConfirmationRequired, isMissingDueDayColumn, billAnchorDay, billCadence, MONTH_BASED_CADENCES } from '@/lib/finance/recurring';
+import { isMissingDueDayColumn, billBefore0488, warnDueDayMissing } from '@/lib/finance/recurring';
 import { monthlyCostCents } from './subscriptions';
 import {
   buildCashflowTimeline,
@@ -252,23 +252,20 @@ function isMissingTable(error: unknown): boolean {
 /**
  * The bills the forecast steps, with each one's anchor day (`due_day`, 0488).
  * On a database that has not applied 0488 the column is refused (PGRST204 /
- * 42703); the read is repeated without it, once, with a warning naming the
- * migration. Ambiguous legacy days and unknown cadences refuse a complete
- * forecast. Proven date anchors can be projected; writes that could lose them
- * still refuse until 0488 exists.
+ * 42703, naming `bills.due_day`); the read is repeated without it, once, with
+ * a warning naming the migration, and each row is read as production read it
+ * before 0488 (`billBefore0488`): the due date's own day is the bill's day,
+ * and a flagged bill without a named cadence still asks for its schedule
+ * (BillScheduleConfirmationRequired), as with the column; it is never stepped
+ * as monthly.
  */
 async function readBills(supabase: SupabaseClient<Database>, familyId: string): Promise<{ data: unknown[] | null; error: unknown }> {
   const first = await readBillPages(supabase, familyId, BILL_COLUMNS);
   if (!first.error || !isMissingDueDayColumn(first.error)) return first;
-  console.warn('bills.due_day is not in this database yet (migration 0488_a_month_end_bill_keeps_its_day, reserved and held in supabase/reserved until 0475–0487 land, has not been applied); the forecast uses only proven date anchors and refuses ambiguous legacy schedules.');
+  warnDueDayMissing();
   const legacy = await readBillPages(supabase, familyId, BILL_COLUMNS_BEFORE_0488);
   if (legacy.error) return legacy;
-  const ambiguous = (legacy.data ?? []).some(row => {
-    const bill = row as TimelineBill;
-    const cadence = billCadence(bill);
-    return bill.is_recurring && (!cadence || (MONTH_BASED_CADENCES.has(cadence) && billAnchorDay(bill) === null));
-  });
-  return ambiguous ? {data:null,error:new BillScheduleConfirmationRequired('Recurring bill anchors are unavailable; confirm the schedule before building the full forecast.')} : legacy;
+  return { data: (legacy.data ?? []).map(row => billBefore0488(row as TimelineBill)), error: null };
 }
 
 /**

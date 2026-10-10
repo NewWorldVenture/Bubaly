@@ -7,6 +7,15 @@
 // identifies them as the canonical Family Chat. Elevated executors also use
 // the atomic send RPC, which locks and revalidates the actor and audience.
 //
+// On a database without 0475 (lib/messages/schema-compat.ts) each of those
+// paths does what the previous production build did, with one console warning
+// naming the migration: the oldest un-archived group chat is the family chat
+// (created with every member when there is none), an addressed conversation
+// only has to exist in the family (that schema's RLS is family-wide), a retry
+// is the same words in the same thread from the same sender within ten
+// minutes, and the message is a direct insert. Only the exact missing-object
+// answer selects a fallback; every other error is reported as before.
+//
 // `family_announcements` (0046) carries both `author_id` (auth.users) and
 // `author_member_id` (family_members). The legacy toolbox filled only the
 // member id — and picked `ctx.members[0]`, i.e. whoever happened to be first
@@ -19,8 +28,9 @@
 import 'server-only';
 import type { Tables } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
+import { fellBackForMissing, MESSAGING_SCHEMA } from '@/lib/messages/schema-compat';
 import { recordActivitySafely } from '../activity';
-import { getMember, type FamilyMember } from '../family';
+import { getMember, getMembers, type FamilyMember } from '../family';
 import { withIdempotency } from '../idempotency';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
@@ -43,11 +53,55 @@ async function openFamilyConversation(scope: ServiceScope): Promise<ServiceResul
   const { data, error } = await scope.db.rpc('ensure_family_conversation', {
     p_family_id: scope.familyId, p_member_id: scope.memberId, p_user_id: scope.userId,
   });
+  if (fellBackForMissing(error, MESSAGING_SCHEMA.ensureFamilyConversation,
+    'The oldest un-archived group chat is the family chat, created with every member when there is none, as before the build-out.')) {
+    return legacyFamilyConversation(scope);
+  }
   if (error || !data) {
     console.error('[service:messages] conversation create failed', error);
     return fail(describeDbError(error, 'Could not open the family chat.'), { code: SERVICE_CODES.db });
   }
   return ok({ id: data });
+}
+
+/** The previous production ensureFamilyConversation, for a database without 0475. */
+async function legacyFamilyConversation(scope: ServiceScope): Promise<ServiceResult<{ id: string }>> {
+  const { data: existing, error: lookupError } = await scope.db
+    .from('family_conversations')
+    .select('id')
+    .eq('family_id', scope.familyId)
+    .eq('kind', 'group')
+    .eq('is_archived', false)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (lookupError) {
+    console.error('[service:messages] conversation lookup failed', lookupError);
+    return fail(describeDbError(lookupError, 'Could not open the family chat.'), { code: SERVICE_CODES.db });
+  }
+  if (existing?.id) return ok({ id: existing.id });
+
+  const members = await getMembers(scope);
+  if (!members.ok) return members;
+  const { data, error } = await scope.db
+    .from('family_conversations')
+    .insert({
+      family_id: scope.familyId,
+      name: FAMILY_CONVERSATION_NAME,
+      kind: 'group',
+      avatar_emoji: '👨‍👩‍👧‍👦',
+      member_ids: members.data.map((m) => m.userId).filter((id): id is string => Boolean(id)),
+      participant_ids: members.data.map((m) => m.id),
+      // family_conversations.created_by references auth.users (0014).
+      created_by: scope.userId,
+    })
+    .select('id')
+    .single();
+  if (error || !data) {
+    console.error('[service:messages] conversation create failed', error);
+    return fail(describeDbError(error, 'Could not start the family chat.'), { code: SERVICE_CODES.db });
+  }
+  return ok({ id: data.id });
 }
 
 async function actingMember(scope: ServiceScope): Promise<ServiceResult<FamilyMember | null>> {
@@ -65,6 +119,49 @@ async function actingMember(scope: ServiceScope): Promise<ServiceResult<FamilyMe
   return member;
 }
 
+/** The conversation a send names must be this family's, open, and the actor's. */
+async function addressedConversation(scope: ServiceScope, actor: FamilyMember | null, conversationId: string): Promise<ServiceResult<null>> {
+  const { data, error } = await scope.db
+    .from('family_conversations')
+    .select('id,is_family_chat,is_archived,member_ids,participant_ids,created_by')
+    .eq('family_id', scope.familyId)
+    .eq('id', conversationId)
+    .maybeSingle();
+  if (fellBackForMissing(error, MESSAGING_SCHEMA.isFamilyChat,
+    'A conversation only has to exist in the family, as before the build-out (that schema\'s RLS is family-wide).')) {
+    return legacyConversationExists(scope, conversationId);
+  }
+  if (error) {
+    console.error('[service:messages] conversation read failed', error);
+    return fail(describeDbError(error, 'Could not open that conversation.'), { code: SERVICE_CODES.db });
+  }
+  if (!data) return fail('That conversation could not be found.', { code: SERVICE_CODES.notFound });
+  if (data.is_archived) return fail('That conversation is archived.', { code: SERVICE_CODES.denied });
+  const participates = actor && (data.participant_ids.includes(actor.id)
+    || data.member_ids.includes(scope.userId!)
+    || (!data.participant_ids.length && !data.member_ids.length && data.created_by === scope.userId));
+  if (!data.is_family_chat && !participates) {
+    return fail('You are not a participant in that conversation.', { code: SERVICE_CODES.denied });
+  }
+  return ok(null);
+}
+
+/** The previous production conversation read: it only had to exist in the family. */
+async function legacyConversationExists(scope: ServiceScope, conversationId: string): Promise<ServiceResult<null>> {
+  const { data, error } = await scope.db
+    .from('family_conversations')
+    .select('id')
+    .eq('family_id', scope.familyId)
+    .eq('id', conversationId)
+    .maybeSingle();
+  if (error) {
+    console.error('[service:messages] conversation read failed', error);
+    return fail(describeDbError(error, 'Could not open that conversation.'), { code: SERVICE_CODES.db });
+  }
+  if (!data) return fail('That conversation could not be found.', { code: SERVICE_CODES.notFound });
+  return ok(null);
+}
+
 export type SendMessageInput = {
   content: string;
   /** Defaults to the family group chat. */
@@ -78,29 +175,16 @@ export async function sendFamilyMessage(scope: ServiceScope, input: SendMessageI
   if (!content) return fail('A message needs some text.', { code: SERVICE_CODES.invalidInput });
   if (content.length > MAX_MESSAGE_CHARS) return fail('That message is too long for the family chat.', { code: SERVICE_CODES.invalidInput });
   const kind = input.kind && MESSAGE_KINDS.includes(input.kind) ? input.kind : 'text';
+  // The actor gate is not a 0475 object and stays on every schema: the
+  // previous build also sent for a scope without an active member (signing as
+  // Bubaly), which this hardening deliberately refuses, before or after 0475.
   const actor = await actingMember(scope);
   if (!actor.ok) return actor;
 
   let conversationId = input.conversationId ?? null;
   if (conversationId) {
-    const { data, error } = await scope.db
-      .from('family_conversations')
-      .select('id,is_family_chat,is_archived,member_ids,participant_ids,created_by')
-      .eq('family_id', scope.familyId)
-      .eq('id', conversationId)
-      .maybeSingle();
-    if (error) {
-      console.error('[service:messages] conversation read failed', error);
-      return fail(describeDbError(error, 'Could not open that conversation.'), { code: SERVICE_CODES.db });
-    }
-    if (!data) return fail('That conversation could not be found.', { code: SERVICE_CODES.notFound });
-    if (data.is_archived) return fail('That conversation is archived.', { code: SERVICE_CODES.denied });
-    const participates = actor.data && (data.participant_ids.includes(actor.data.id)
-      || data.member_ids.includes(scope.userId!)
-      || (!data.participant_ids.length && !data.member_ids.length && data.created_by === scope.userId));
-    if (!data.is_family_chat && !participates) {
-      return fail('You are not a participant in that conversation.', { code: SERVICE_CODES.denied });
-    }
+    const addressed = await addressedConversation(scope, actor.data, conversationId);
+    if (!addressed.ok) return addressed;
   } else {
     const chat = await openFamilyConversation(scope);
     if (!chat.ok) return chat;
@@ -116,6 +200,9 @@ export async function sendFamilyMessage(scope: ServiceScope, input: SendMessageI
     if (!data) return fail('The message being replied to is no longer available in this conversation.', { code: SERVICE_CODES.notFound });
   }
 
+  // Before 0475 a retry was the same words alone: the row the old probe finds
+  // is returned as it was, without the content-drift refusal.
+  let legacyProbe = false;
   return withIdempotency<FamilyMessage>(
     scope,
     {
@@ -131,6 +218,11 @@ export async function sendFamilyMessage(scope: ServiceScope, input: SendMessageI
           p_member_id: scope.memberId, p_user_id: scope.userId,
           p_content: content, p_kind: kind, p_reply_to_id: replyToId, p_since: since, p_idempotency_key: key,
         });
+        if (fellBackForMissing(error, MESSAGING_SCHEMA.findFamilyMessage,
+          'A retried send is recognised by the same words in the same thread from the same sender within ten minutes, as before the build-out.')) {
+          legacyProbe = true;
+          return legacyDuplicateProbe(scope, targetId, content, since);
+        }
         if (error) {
           console.error('[service:messages] duplicate probe failed', error);
           return fail(describeDbError(error, 'Could not check for a duplicate message.'), { code: SERVICE_CODES.db });
@@ -138,7 +230,7 @@ export async function sendFamilyMessage(scope: ServiceScope, input: SendMessageI
         return ok(data?.[0] ?? null);
       },
       changedRetry: {
-        drift: (found) => [
+        drift: (found) => legacyProbe ? [] : [
           ...(found.conversation_id !== targetId ? ['conversation_id'] : []),
           ...(found.content !== content ? ['content'] : []),
           ...(found.kind !== kind ? ['kind'] : []),
@@ -153,11 +245,15 @@ export async function sendFamilyMessage(scope: ServiceScope, input: SendMessageI
       // The actor read above gives useful errors; the RPC rechecks it under a
       // membership lock in the same transaction as INSERT, including service
       // clients that bypass RLS. Missing RPC/schema errors never retry a raw insert.
-      const { data, error } = await scope.db.rpc('send_family_message', {
+      let { data, error } = await scope.db.rpc('send_family_message', {
         p_family_id: scope.familyId, p_conversation_id: targetId,
         p_member_id: scope.memberId, p_user_id: scope.userId,
         p_content: content, p_kind: kind, p_reply_to_id: replyToId, p_idempotency_key: key,
       });
+      if (fellBackForMissing(error, MESSAGING_SCHEMA.sendFamilyMessage,
+        'The message is a direct insert into family_messages, as before the build-out.')) {
+        ({ data, error } = await legacySend(scope, { conversationId: targetId, senderName: actor.data?.displayName ?? 'Bubaly', content, kind, replyToId }));
+      }
       if (error || !data) {
         console.error('[service:messages] send failed', error);
         return fail(describeDbError(error, 'Could not send that message.'), { code: SERVICE_CODES.db });
@@ -171,6 +267,44 @@ export async function sendFamilyMessage(scope: ServiceScope, input: SendMessageI
       return ok(data);
     },
   );
+}
+
+/** The previous production duplicate probe: same words, same thread, same sender, within the window. */
+async function legacyDuplicateProbe(scope: ServiceScope, conversationId: string, content: string, since: string): Promise<ServiceResult<FamilyMessage | null>> {
+  let probe = scope.db
+    .from('family_messages')
+    .select('*')
+    .eq('family_id', scope.familyId)
+    .eq('conversation_id', conversationId)
+    .eq('content', content)
+    .gte('created_at', since)
+    .is('deleted_at', null)
+    .limit(1);
+  probe = scope.userId ? probe.eq('sender_id', scope.userId) : probe.is('sender_id', null);
+  const { data, error } = await probe.maybeSingle();
+  if (error) {
+    console.error('[service:messages] duplicate probe failed', error);
+    return fail(describeDbError(error, 'Could not check for a duplicate message.'), { code: SERVICE_CODES.db });
+  }
+  return ok(data ?? null);
+}
+
+/** The previous production send: a direct insert of the message row. */
+function legacySend(scope: ServiceScope, input: { conversationId: string; senderName: string; content: string; kind: string; replyToId: string | null }) {
+  return scope.db
+    .from('family_messages')
+    .insert({
+      conversation_id: input.conversationId,
+      family_id: scope.familyId,
+      // family_messages.sender_id references auth.users (0014).
+      sender_id: scope.userId,
+      sender_name: input.senderName,
+      content: input.content,
+      kind: input.kind,
+      reply_to_id: input.replyToId,
+    })
+    .select('*')
+    .single();
 }
 
 export type CreateAnnouncementInput = { title: string; body?: string | null; pinned?: boolean };

@@ -7,7 +7,7 @@ import { resolveFeatureEntitlement } from '@/lib/server/feature-entitlement';
 import { ensureActiveFamily } from '@/lib/server/ensure-family';
 import { isRetryableAuthError } from '@/lib/auth/session';
 import { chooseActiveMembership } from '@/lib/auth/active-membership';
-import { isSyntheticChildEmail } from '@/lib/onboarding/child-login';
+import { isChildLoginEmail } from '@/lib/onboarding/child-login';
 import type { MemberRole } from '@/lib/constants/roles';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Tables } from '@/lib/database.types';
@@ -203,7 +203,7 @@ export async function requireUserContext(): Promise<UserContext> {
     // neither a newcomer to provision (that made it a family's parent) nor one
     // to hand the wizard (which does the same with more steps): it goes back to
     // the kid sign-in, which now refuses that login.
-    if (isSyntheticChildEmail(auth.user?.email)) redirect('/kid-login');
+    if (isChildLoginEmail(auth.user?.email)) redirect('/kid-login');
     if (auth.user) {
       const ok = await ensureActiveFamily(supabase, auth.user);
       if (ok) {
