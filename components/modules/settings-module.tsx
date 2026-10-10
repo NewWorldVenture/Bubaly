@@ -188,7 +188,8 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
     // refusing it, so a removal a non-manager attempted was reported as done.
     // The `window.location.reload()` below made that especially convincing — the
     // member came back, with no message saying why. The server action also
-    // switches off a removed child's PIN login.
+    // switches off a removed child's PIN login and forgets their location
+    // (their last position and location history leave with them).
     const res = await removeFamilyMemberAction({ memberId }).catch(() => null);
     if (!res) return toastError(t('errors.thatChangeWasNotSaved'));
     if (!res.ok) return toastError(res.error);

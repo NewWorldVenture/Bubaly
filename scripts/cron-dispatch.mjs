@@ -69,6 +69,9 @@ export const SCHEDULES = {
   '/api/cron/model-refresh': '0 4,16 * * *',
   '/api/cron/network-aggregate': '0 3 * * *',
   '/api/cron/guardian-learning': '0 2 * * *',
+  // Location history retention: drops old location_events, clears coordinates
+  // nothing reads. A second run the same day finds nothing to do.
+  '/api/cron/location-retention': '40 3 * * *',
   '/api/cron/provider-sync': '15 */4 * * *',
   '/api/cron/journey-recovery': '0 9,15,21 * * *',
   '/api/cron/close-auctions': '*/5 * * * *',

@@ -477,7 +477,9 @@ export function FamilyModule() {
               // an UPDATE rather than refusing it — so a member a non-manager tried
               // to remove was reported as removed and stayed in the family. The
               // server action reports that as not saved, and also switches off a
-              // removed child's PIN login, which only the service role can do.
+              // removed child's PIN login and forgets their location (the live
+              // position and the coordinates on their history), both of which
+              // only the service role can do.
               const res = await removeFamilyMemberAction({ memberId: removeMember.id }).catch(() => null);
               setRemoveMember(null);
               if (!res) { toastError(t('errors.thatChangeWasNotSaved')); return; }

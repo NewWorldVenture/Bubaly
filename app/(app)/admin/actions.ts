@@ -19,6 +19,7 @@ import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { isValidTimezone } from '@/lib/time/zoned';
 import { superAdminAssurance } from '@/lib/auth/super-admin-assurance';
+import { forgetMemberLocation } from '@/lib/location/retention';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -246,7 +247,13 @@ export async function adminRemoveMemberAction(memberId: string): Promise<Result<
 
   // A removed child's PIN login is switched off too; the removal stands if that fails.
   const loginRevocation = await revokeRemovedChildLogin(supabase, member);
-  await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name, login_revocation: loginRevocation } });
+  // Their last position and location history leave with them. The removal
+  // stands if this fails as well; the failure is logged and the audit row says
+  // whether the location was cleared.
+  const forgotten = await forgetMemberLocation(supabase, member.family_id, memberId);
+  if (!forgotten.ok) console.error('[admin-action] removed member location was not cleared', { memberId, failures: forgotten.failures });
+
+  await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name, login_revocation: loginRevocation, location_forgotten: forgotten.ok } });
   revalidatePath('/admin/users');
   return loginRevocation === 'failed'
     ? { ok: true, data: { warning: t('familyModule.removedButLoginStillActive') } }

@@ -5,11 +5,14 @@ import type { Database } from '@/lib/database.types';
 import { runDecisionPipeline } from './pipeline';
 import { detectScamWithAI } from './scam-ai';
 import { formatPhone } from './phone';
+import { shouldRingImmediately } from './trust';
 import { claimGuardianSms, finishGuardianSms, releaseGuardianSms, type GuardianSmsLease } from './sms-intake';
 import { captureGuardianSmsReceipt, readGuardianSmsReceipt, readGuardianSmsReceiptById, saveGuardianSmsDecision,
   markGuardianSmsCompleted, guardianSmsReceiptId, type GuardianSmsReceipt, type GuardianSmsReceiptInput, type GuardianSmsDecision } from './sms-receipt';
 import { guardianSmsScope, notifyGuardianSms } from './sms-notification';
 import { smsStep } from './sms-deadline';
+import { escalateGuardianEmergency } from './escalate';
+import { GUARDIAN_INBOUND_CAP_REASON, GUARDIAN_INBOUND_FAMILY_CAP, GUARDIAN_INBOUND_SENDER_CAP, GUARDIAN_INBOUND_WINDOW_MS } from './inbound-caps';
 
 type Client = SupabaseClient<Database>;
 type Options = { signal?: AbortSignal };
@@ -17,7 +20,17 @@ export type GuardianSmsProcessingResult = 'completed' | 'busy' | 'unavailable';
 type SignedInput = Pick<GuardianSmsReceiptInput, 'smsSid' | 'from' | 'to' | 'body'>;
 type Destination = { id: string; family_id: string; member_id: string; guardian_phone: string; is_active: boolean };
 const TOTAL_MS = 45_000;
+/**
+ * The emergency escalation texts AND calls every manager (two Twilio requests
+ * per manager, 15 s deadline each) around five database round-trips, so the
+ * step's default 5 s budget was a timeout waiting to happen: the alerts kept
+ * going out detached while the route answered 503 and Twilio retried into the
+ * escalation's own claim. Bounded by the message's total budget either way.
+ */
+const ESCALATION_MS = 30_000;
 const MAX_DECISION_FILTER_CHARS = 4096;
+/** How long a filed "add to contacts?" suggestion keeps the same sender from being suggested again. */
+const SUGGESTION_MEMORY_MS = 60 * 24 * 60 * 60 * 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ROUTING_MODES = ['immediate_ring', 'immediate_ai_summary', 'ai_handle_first', 'voicemail_first', 'silent_handling', 'blocked'];
 const TRUST_LEVELS = ['immediate_family', 'close_family', 'trusted_friend', 'known_contact', 'unknown', 'suspected_spam', 'blocked'];
@@ -105,6 +118,32 @@ async function retain(client: Client, input: GuardianSmsReceiptInput, id: string
   return row;
 }
 
+type InboundCap = { sender: boolean; family: boolean };
+const UNDER_CAP: InboundCap = { sender: false, family: false };
+
+/**
+ * Whether this sender, and whether this family, is past its rolling inbound
+ * cap. The count includes the message being processed (it was retained
+ * first). A count that cannot be read is not a reason to stop analysing
+ * messages, so it reads as under the cap.
+ */
+async function overInboundCap(client: Client, input: GuardianSmsReceiptInput, signal: AbortSignal): Promise<InboundCap> {
+  const since = new Date(Date.now() - GUARDIAN_INBOUND_WINDOW_MS).toISOString();
+  const count = async (sender: boolean): Promise<number> => {
+    try {
+      const result = resultEnvelope(await smsStep(signal, current => {
+        let query = table(client, 'guardian_communications').select('id', { count: 'exact', head: true })
+          .eq('family_id', input.familyId).eq('comm_type', 'sms_inbound').gte('started_at', since);
+        if (sender) query = input.from === null ? query.is('from_number', null) : query.eq('from_number', input.from);
+        return query.retry(false).abortSignal(current);
+      }));
+      return !result.error && typeof result.count === 'number' ? result.count : 0;
+    } catch { return 0; }
+  };
+  const [fromSender, forFamily] = await Promise.all([count(true), count(false)]);
+  return { sender: fromSender > GUARDIAN_INBOUND_SENDER_CAP, family: forFamily > GUARDIAN_INBOUND_FAMILY_CAP };
+}
+
 async function processOwned(client: Client, input: GuardianSmsReceiptInput, lease: GuardianSmsLease,
   trusted: GuardianSmsReceipt | null, allowCapture: boolean, signal: AbortSignal): Promise<GuardianSmsProcessingResult> {
   await ownsDestination(client, input, signal);
@@ -147,7 +186,24 @@ async function processOwned(client: Client, input: GuardianSmsReceiptInput, leas
       callerPhone: input.from, callerName: null, familyId: input.familyId, memberId: input.memberId, initialTranscript: input.body,
     }));
     await fence();
-    const scam = await smsStep(signal, current => detectScamWithAI(input.body, input.from, `Family ID: ${input.familyId}`, current), 15_000);
+    // No model call where the answer cannot change anything: the family has
+    // already blocked this sender, or the pattern detector is already sure.
+    // And none past the rolling cap, which is what kept a blocked or spamming
+    // sender from buying one LLM request per text.
+    const settled = decision.routingMode === 'blocked' || (decision.scamDetected === true && decision.spamScore >= 80);
+    const cap = settled ? UNDER_CAP : await overInboundCap(client, input, signal);
+    // Past either cap the pattern detector decides alone, whoever is texting:
+    // that is the bound on model spend. But only a sender the family has not
+    // vouched for is HELD. A contact at a ring-through trust level (immediate
+    // family, close family, trusted friend) is who the Guardian number exists
+    // to let through, and their eleventh text in an hour is still a text from
+    // them. The family-wide flood cap holds for everyone.
+    const modelCapped = cap.sender || cap.family;
+    const throttled = cap.family || (cap.sender && !shouldRingImmediately(decision.trustLevel));
+    const scam = settled || modelCapped
+      ? { isScam: decision.scamDetected === true, scamType: decision.scamType ?? null,
+        confidence: decision.scamDetected === true && Number.isFinite(decision.spamScore) ? Math.min(100, Math.max(0, decision.spamScore)) : 0 }
+      : await smsStep(signal, current => detectScamWithAI(input.body, input.from, `Family ID: ${input.familyId}`, current), 15_000);
     if (!ROUTING_MODES.includes(decision.routingMode) || !TRUST_LEVELS.includes(decision.trustLevel)
       || (decision.contactId !== null && !validId(decision.contactId)) || (decision.ruleId !== null && !validId(decision.ruleId))
       || (decision.contactName !== null && typeof decision.contactName !== 'string') || typeof decision.reason !== 'string'
@@ -156,9 +212,16 @@ async function processOwned(client: Client, input: GuardianSmsReceiptInput, leas
     const confidence = Math.floor(scam.confidence);
     const fields: GuardianSmsDecision = {
       contact_id: decision.contactId, from_name: decision.contactName, trust_level_at_time: decision.trustLevel,
-      routing_mode_used: decision.routingMode, routing_rule_id: decision.ruleId, ai_decision_reason: decision.reason,
+      routing_mode_used: decision.routingMode, routing_rule_id: decision.ruleId,
+      // A routine message past the cap is held as `blocked`, and the record
+      // says why: that is what keeps the family unpinged on a flood, and the
+      // one durable answer a retried delivery (which cannot recount the window)
+      // completes against.
+      ai_decision_reason: throttled ? `${decision.reason} ${GUARDIAN_INBOUND_CAP_REASON}` : decision.reason,
       scam_detected: scam.isScam, scam_type: scam.scamType, scam_confidence: confidence,
-      status: scam.isScam && confidence >= 80 ? 'blocked' : 'received',
+      // An emergency from a sender the family has not blocked is never
+      // discarded on a scam score: a real "help me" can read like a scam.
+      status: decision.shouldEscalate === true ? 'escalated' : (scam.isScam && confidence >= 80) || throttled ? 'blocked' : 'received',
     };
     await fence();
     receipt = await saveGuardianSmsDecision(client, receipt, fields, { signal });
@@ -194,15 +257,19 @@ async function processOwned(client: Client, input: GuardianSmsReceiptInput, leas
         .eq('family_id', input.familyId).eq('id', comm!.contact_id!).retry(false).abortSignal(current));
     } catch { /* Optional contact recency cannot establish message completion. */ }
   }
-  const blocked = fields.status === 'blocked' || fields.routing_mode_used === 'blocked' || fields.scam_detected && fields.scam_confidence >= 80;
+  const emergency = fields.status === 'escalated';
+  const blocked = !emergency && (fields.status === 'blocked' || fields.routing_mode_used === 'blocked' || fields.scam_detected && fields.scam_confidence >= 80);
   if (!blocked) {
     const scope = await smsStep(signal, current => guardianSmsScope(client, input.familyId, current));
     if (!scope || scope.familyId !== input.familyId) return unavailable();
     await fence();
+    const sender = fields.from_name ?? formatPhone(input.from);
     const notified = await smsStep(signal, current => notifyGuardianSms(scope, {
-      recipients: 'family', type: 'system', title: `💬 Text from ${fields.from_name ?? formatPhone(input.from)}`,
+      recipients: 'family', type: 'system', title: emergency ? `🚨 Emergency text from ${sender}` : `💬 Text from ${sender}`,
       body: input.body.length > 100 ? `${input.body.slice(0, 100)}…` : input.body,
       relatedType: 'guardian_communications', relatedId: receipt.communicationId, once: true,
+      // Quiet hours hold a routine text until morning; they must not hold this.
+      ...(emergency ? { urgent: true } : {}),
     }, { receiptId: receipt.id, signal: current, beforeWrite: async () => { await fence(); await exactDecision(); } }), 15_000);
     if (!notified.ok || !Number.isInteger(notified.data.created) || !Number.isInteger(notified.data.duplicates)
       || notified.data.created < 0 || notified.data.duplicates < 0 || notified.data.created + notified.data.duplicates !== 1
@@ -214,9 +281,15 @@ async function processOwned(client: Client, input: GuardianSmsReceiptInput, leas
           .eq('family_id', input.familyId).eq('from_number', input.from!).retry(false).abortSignal(current)));
         if (!count.error && typeof count.count === 'number' && count.count >= 3) {
           const messageCount = count.count;
+          // Keyed on THIS sender: any one update_trust row used to stop every
+          // other repeat sender from ever being suggested (and two of them made
+          // maybeSingle fail). A dismissed suggestion for this sender is
+          // remembered for the same window the learning run looks back over.
+          const remembered = new Date(Date.now() - SUGGESTION_MEMORY_MS).toISOString();
           const existing = resultEnvelope(await smsStep(signal, current => table(client, 'guardian_suggestions').select('id')
-            .eq('family_id', input.familyId).eq('suggestion_type', 'update_trust').maybeSingle().retry(false).abortSignal(current)));
-          if (!existing.error && !existing.data) {
+            .eq('family_id', input.familyId).eq('suggestion_type', 'update_trust').eq('evidence->>phone', input.from!)
+            .or(`status.eq.pending,created_at.gte.${remembered}`).limit(1).retry(false).abortSignal(current)));
+          if (!existing.error && Array.isArray(existing.data) && existing.data.length === 0) {
             await fence();
             await exactDecision();
             await smsStep(signal, current => table(client, 'guardian_suggestions').insert({
@@ -227,6 +300,22 @@ async function processOwned(client: Client, input: GuardianSmsReceiptInput, leas
           }
         }
       } catch { /* Optional suggestions never establish receipt or completion. */ }
+    }
+  }
+  if (emergency) {
+    // Text and call the managers. Keyed on the communication, so a retried
+    // delivery is answered by the escalation's own claim instead of alarming
+    // twice. A storage failure before anything was sent asks Twilio to retry;
+    // an escalation that reached nobody is recorded (and logged) there.
+    await fence();
+    const escalation = await smsStep(signal, () => escalateGuardianEmergency(client, {
+      familyId: input.familyId, commId: receipt.communicationId, escalationType: 'urgent_personal', severity: 'critical',
+      description: `Emergency text from ${fields.from_name ?? formatPhone(input.from)}: "${input.body.slice(0, 300)}"`,
+      ...(input.from ? { callerNumber: input.from.slice(0, 64) } : {}),
+    }), ESCALATION_MS);
+    if (escalation.kind === 'claim_unavailable' || escalation.kind === 'read_failed') return unavailable();
+    if (escalation.kind !== 'delivered' && escalation.kind !== 'duplicate') {
+      console.error('[guardian-sms] emergency escalation did not reach a manager', { familyId: input.familyId, communicationId: receipt.communicationId, outcome: escalation.kind });
     }
   }
   await fence();

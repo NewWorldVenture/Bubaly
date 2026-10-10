@@ -6,6 +6,7 @@ import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { REMOVED_MEMBER_PATCH, canRemoveMember } from '@/lib/constants/roles';
 import { revokeRemovedChildLogin, type ChildLoginRevocation } from '@/lib/server/child-account';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
+import { forgetMemberLocation } from '@/lib/location/retention';
 
 type RemoveResult = { ok: true; loginRevocation: ChildLoginRevocation } | { ok: false; error: string };
 
@@ -13,10 +14,14 @@ type RemoveResult = { ok: true; loginRevocation: ChildLoginRevocation } | { ok: 
  * Remove (soft-delete) a member from one of the caller's families.
  *
  * This used to be a browser `.update` in family-module and settings-module,
- * which could not switch off a removed child's PIN login: that needs the
- * service role. The write itself still goes through the caller's own session,
- * so fm_update (manager-gated) stays the boundary, and RLS filtering it to zero
- * rows is still reported as not saved.
+ * which could not switch off a removed child's PIN login, nor clear the
+ * member's location trail: both need the service role. The write itself still
+ * goes through the caller's own session, so fm_update (manager-gated) stays the
+ * boundary, and RLS filtering it to zero rows is still reported as not saved.
+ *
+ * Every in-app removal goes through here, so every removed member also takes
+ * their position with them (forgetMemberLocation), as the admin console's
+ * removal does.
  */
 export async function removeFamilyMemberAction(input: { memberId: string }): Promise<RemoveResult> {
   const t = await getTranslations();
@@ -40,6 +45,14 @@ export async function removeFamilyMemberAction(input: { memberId: string }): Pro
 
   // The removal stands whatever happens here; a failure is logged by the
   // helper and returned so the screen can say the login is still live.
-  const loginRevocation = await revokeRemovedChildLogin(createServiceClient(), target);
+  const service = createServiceClient();
+  const loginRevocation = await revokeRemovedChildLogin(service, target);
+  // Their last position and location history leave with them: the live
+  // member_locations row is blanked and the coordinates on their
+  // location_events and safety_check_ins cleared. Service role, because
+  // location_events is append-only for clients (0335). The removal stands if
+  // this fails; the failure is logged, as the admin console's removal logs it.
+  const forgotten = await forgetMemberLocation(service, familyId, target.id);
+  if (!forgotten.ok) console.error('[family] removed member location was not cleared', { familyId, memberId: target.id, failures: forgotten.failures });
   return { ok: true, loginRevocation };
 }
