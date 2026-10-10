@@ -31,7 +31,13 @@
 --   * INSERT: reward_id names a reward of the ticket's own family; cost_points
 --     is that reward's price (0308's sentence, unchanged); reward_title is that
 --     reward's title.
---   * UPDATE: reward_id, reward_title and cost_points stay as they were.
+--   * INSERT: member_id is a member of the ticket's family. The insert policy's
+--     is_self_member is not bound to a family, so a member of two families
+--     could file in one against their member in the other.
+--   * UPDATE: family_id and member_id never change (owner review 6095082508:
+--     the own-request policies let a member of two families move their
+--     requested ticket, with its snapshot, into the other family under their
+--     member there). reward_id, reward_title and cost_points stay as they were.
 --     Decisions, withdrawals and notes change other columns and are untouched.
 --     The one change allowed is the foreign key's ON DELETE SET NULL when the
 --     reward itself has been deleted, so a ticket's history still survives its
@@ -56,9 +62,11 @@
 -- between that read and the insert now gets a refusal instead of a ticket at
 -- the old figures; 0308 already refused the re-pricing half of that race.
 --
--- HELD: proposed as 0500 (the first number above 0499; requested on #771 in
--- comment 6094977772, economy scope added in 6095050742, not yet confirmed)
--- in supabase/reserved/ until every
+-- HELD: 0500, the first number above 0499, requested on #771 in comment
+-- 6094977772 (economy scope added in 6095050742) and confirmed as a held
+-- source and probe reservation in #981 comment 6095082508 (no installation,
+-- live financial operation or production policy approval). It stays in
+-- supabase/reserved/ until every
 -- number below it has landed. Proven by
 -- docs/audit/reserved/a-reward-request-is-the-rewards-own-snapshot-check.sql
 -- and .github/workflows/reward-snapshot-runtime.yml. Not applied to production
@@ -99,6 +107,14 @@ begin
   end if;
 
   if tg_op = 'UPDATE' then
+    -- The ticket stays with its family and member, the deleted-reward case
+    -- included: the policies let a member of two families move their own
+    -- request across (#981 review 6095082508).
+    if new.family_id is distinct from old.family_id
+       or new.member_id is distinct from old.member_id then
+      raise exception 'a reward request stays with the family and member it was made for'
+        using errcode = '23514';
+    end if;
     if new.reward_id is not distinct from old.reward_id
        and new.reward_title is not distinct from old.reward_title
        and new.cost_points is not distinct from old.cost_points then
@@ -112,6 +128,15 @@ begin
       return new;
     end if;
     raise exception 'a reward request keeps the reward, title and price it was made with'
+      using errcode = '23514';
+  end if;
+
+  -- Whose points: a member of this family. is_self_member, which the insert
+  -- policy asks, is not bound to a family, so a member of two families could
+  -- file here against their other family's member.
+  if not exists (select 1 from public.family_members m
+                  where m.id = new.member_id and m.family_id = new.family_id) then
+    raise exception 'a reward request is for a member of this family'
       using errcode = '23514';
   end if;
 
@@ -227,7 +252,9 @@ begin
                     and f.prosecdef
                     and exists (select 1 from unnest(f.proconfig) c where c ~ '^search_path=')
                     and pg_get_functiondef(f.oid) ~ 'must name a reward of this family'
-                    and pg_get_functiondef(f.oid) ~ 'keeps the reward, title and price') then
+                    and pg_get_functiondef(f.oid) ~ 'keeps the reward, title and price'
+                    and pg_get_functiondef(f.oid) ~ 'stays with the family and member'
+                    and pg_get_functiondef(f.oid) ~ 'is for a member of this family') then
     raise exception '0500: reward_redemption_cost_guard is not the snapshot guard (SECURITY DEFINER, pinned search_path)';
   end if;
   if not exists (select 1 from pg_trigger

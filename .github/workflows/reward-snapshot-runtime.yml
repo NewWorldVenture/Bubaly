@@ -130,7 +130,9 @@ jobs:
             "B2: a child queued a ticket naming another family's reward" \
             "D: a child queued a ticket naming the family's own sticker" \
             'C: a child cleared reward_id and re-priced their pending bike request' \
-            'G: a child queued a token request for the 1-token sticker titled'; do
+            'G: a child queued a token request for the 1-token sticker titled' \
+            'X1: a child moved their pending sticker request into the other family' \
+            'X3: a child queued a request in this family against their member in the other family'; do
             if ! grep -qF "$expected" <<<"$out"; then
               echo "::error::the held probe failed on the released schema, but not on: $expected"
               exit 1

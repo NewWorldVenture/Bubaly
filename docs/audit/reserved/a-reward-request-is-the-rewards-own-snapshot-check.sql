@@ -25,6 +25,11 @@
 --        C  clearing reward_id and re-pricing to 1 point;
 --        E  retitling the sticker request "New bike";
 --        F  re-pointing the sticker request at the bike;
+--        X1 moving the sticker request into the other family, where the same
+--           person is a parent, under their member there;
+--        X2 moving it onto their member in the other family;
+--      and X3, a new request here against their member in the other family,
+--      is refused too (owner review 6095082508);
 --   4. control: the child still withdraws a request, and a parent still
 --      approves one (decisions are untouched);
 --   5. control: a parent deleting the reward leaves its pending ticket with the
@@ -35,7 +40,8 @@
 --      subtransaction: with 0308's early return for a null reward_id put back
 --      A lands; without the title check D lands; without the update refusal C
 --      lands; without the own-family clause B2 lands; without the economy
---      title check G lands.
+--      title check G lands; without the family and member freeze X1 lands;
+--      without the member check X3 lands.
 --
 -- Everything is rolled back.
 --
@@ -62,7 +68,10 @@ insert into public.families (id, name, created_by) values
 update public.family_members set role = 'parent', is_active = true
  where user_id in ('00000000-0000-4000-8500-0000000000a1','00000000-0000-4000-8500-0000000000b1');
 insert into public.family_members (id, family_id, user_id, display_name, role, is_active) values
-  ('00000000-0000-4000-8500-0000000000c4','00000000-0000-4000-8500-0000000000f1','00000000-0000-4000-8500-0000000000a4','Kid','child',true);
+  ('00000000-0000-4000-8500-0000000000c4','00000000-0000-4000-8500-0000000000f1','00000000-0000-4000-8500-0000000000a4','Kid','child',true),
+  -- The same person, a PARENT of the other family: a member of two families,
+  -- with a different role in each (owner review 6095082508).
+  ('00000000-0000-4000-8500-0000000000c5','00000000-0000-4000-8500-0000000000f2','00000000-0000-4000-8500-0000000000a4','Kid (a parent there)','parent',true);
 insert into public.rewards (id, family_id, title, cost_points) values
   ('00000000-0000-4000-8500-0000000000e1','00000000-0000-4000-8500-0000000000f1','New bike',5000),
   ('00000000-0000-4000-8500-0000000000e3','00000000-0000-4000-8500-0000000000f1','Sticker',1),
@@ -82,6 +91,10 @@ do $$
 declare
   fam       constant uuid := '00000000-0000-4000-8500-0000000000f1';
   kid       constant uuid := '00000000-0000-4000-8500-0000000000c4';
+  kid_there constant uuid := '00000000-0000-4000-8500-0000000000c5';
+  other_fam constant uuid := '00000000-0000-4000-8500-0000000000f2';
+  moved     constant text := '23514: a reward request stays with the family and member it was made for';
+  not_ours  constant text := '23514: a reward request is for a member of this family';
   bike      constant uuid := '00000000-0000-4000-8500-0000000000e1';
   sticker   constant uuid := '00000000-0000-4000-8500-0000000000e3';
   foreign_r constant uuid := '00000000-0000-4000-8500-0000000000e2';
@@ -144,6 +157,22 @@ begin
     end if;
   end loop;
 
+  -- X3. A ticket in this family against their member in the other family.
+  begin
+    insert into public.reward_redemptions (family_id, reward_id, member_id, reward_title, cost_points, status)
+      values (fam, sticker, kid_there, 'Sticker', 1, 'requested');
+    got := 'landed';
+    raise exception using errcode = 'P0R01';
+  exception
+    when sqlstate 'P0R01' then null;
+    when others then got := sqlstate || ': ' || sqlerrm;
+  end;
+  if got = 'landed' then
+    failures := array_append(failures, 'X3: a child queued a request in this family against their member in the other family');
+  elsif got is distinct from not_ours then
+    failures := array_append(failures, format('X3: the request against their other family''s member was refused, but not by the member check (%s)', got));
+  end if;
+
   -- 2b. The token economy: the real sticker request lands; the sticker under
   --     the bike's title is refused by 0428's guard with 0500's check.
   begin
@@ -176,7 +205,11 @@ begin
       ('E', 'retitled their pending sticker request "New bike"',
             format('update public.reward_redemptions set reward_title = %L where id = %L', 'New bike', stk_req), stk_req),
       ('F', 're-pointed their pending sticker request at the bike',
-            format('update public.reward_redemptions set reward_id = %L, reward_title = %L, cost_points = 5000 where id = %L', bike, 'New bike', stk_req), stk_req)
+            format('update public.reward_redemptions set reward_id = %L, reward_title = %L, cost_points = 5000 where id = %L', bike, 'New bike', stk_req), stk_req),
+      ('X1', 'moved their pending sticker request into the other family, where they are a parent, under their member there',
+            format('update public.reward_redemptions set family_id = %L, member_id = %L where id = %L', other_fam, kid_there, stk_req), stk_req),
+      ('X2', 'moved their pending sticker request onto their member in the other family, leaving it in this one',
+            format('update public.reward_redemptions set member_id = %L where id = %L', kid_there, stk_req), stk_req)
     ) as v(k, what, sql, rid) loop
     begin
       execute t.sql;
@@ -187,7 +220,7 @@ begin
       when sqlstate 'P0R01' then null;
       when others then got := sqlstate || ': ' || sqlerrm;
     end;
-    if got is distinct from kept then
+    if got is distinct from (case when t.k like 'X%' then moved else kept end) then
       failures := array_append(failures, format('%s: a child %s (%s)', t.k, t.what, got));
     end if;
   end loop;
@@ -285,6 +318,14 @@ begin
         ('M3', 'without the update refusal, the child''s re-pricing of their bike request',
                'raise exception ''a reward request keeps the reward, title and price it was made with''', 'return new; raise exception ''x''',
                format('update public.reward_redemptions set reward_id = null, cost_points = 1 where id = %L', bike_req)),
+        ('M6', 'without the family and member freeze, the child''s move of their request into the other family',
+               'if new.family_id is distinct from old.family_id
+       or new.member_id is distinct from old.member_id then', 'if false then',
+               format('update public.reward_redemptions set family_id = %L, member_id = %L where id = %L', other_fam, kid_there, stk_req)),
+        ('M7', 'without the member check, the child''s request against their other family''s member',
+               'if not exists (select 1 from public.family_members m
+                  where m.id = new.member_id and m.family_id = new.family_id) then', 'if false then',
+               format('insert into public.reward_redemptions (family_id, reward_id, member_id, reward_title, cost_points, status) values (%L, %L, %L, %L, 1, %L)', fam, sticker, kid_there, 'Sticker', 'requested')),
         ('M4', 'without the own-family clause, the child''s ticket naming another family''s reward',
                'or shelf.family_id is distinct from new.family_id', '',
                format('insert into public.reward_redemptions (family_id, reward_id, member_id, reward_title, cost_points, status) values (%L, %L, %L, %L, 1, %L)', fam, foreign_r, kid, 'Sticker', 'requested'))
@@ -337,7 +378,7 @@ begin
   if array_length(failures, 1) is not null then
     raise exception E'a reward request is not the reward''s own snapshot:\n  - %', array_to_string(failures, E'\n  - ');
   end if;
-  raise notice 'a-reward-request-is-the-rewards-own-snapshot: OK (as a child: the real bike and sticker requests landed; a ticket naming no reward, another family''s reward, or the sticker under the bike''s title was refused with 0500''s sentences and the bike at 1 point with 0308''s; clearing, re-pricing, retitling and re-pointing their own pending requests were refused and nothing changed; withdrawing and a parent''s approval still land; deleting a reward leaves its ticket as made; the service role and a session-less writer are exempt; in the token economy the real request landed and the sticker under the bike''s title was refused; mutation controls M1-M5 each let the forgery back in)';
+  raise notice 'a-reward-request-is-the-rewards-own-snapshot: OK (as a child: the real bike and sticker requests landed; a ticket naming no reward, another family''s reward, or the sticker under the bike''s title was refused with 0500''s sentences and the bike at 1 point with 0308''s; clearing, re-pricing, retitling and re-pointing their own pending requests were refused and nothing changed; withdrawing and a parent''s approval still land; deleting a reward leaves its ticket as made; the service role and a session-less writer are exempt; in the token economy the real request landed and the sticker under the bike''s title was refused; a member of two families could neither move a request across nor file one against their other family''s member; mutation controls M1-M7 each let the forgery back in)';
 end $$;
 
 rollback;

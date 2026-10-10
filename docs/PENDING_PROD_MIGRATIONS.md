@@ -113,7 +113,7 @@ source allocations are not evidence that production applied any migration.
 | 0497 confirmed, held | `0497_a_childs_wallet_and_guardian_number_stay_in_one_family.sql` | 0311's same-family guard on Guardian profiles, gift links, pay handles, child wallets and medication schedules. Requested for #981 on #771 (comment 6092501825); confirmed as a source-only reservation in #981 comment 6092625435, which is not an installation approval. |
 | 0498 confirmed, held | `0498_a_guest_cannot_feed_the_calendar_or_rewrite_a_grocery_list.sql` | 0464's guest guard on `calendar_feeds` and `grocery_lists`. Requested for #981 on #771 (comment 6094699645); confirmed as a held source and probe reservation in #981 comment 6094770726, which is not an installation or production approval. |
 | 0499 confirmed, held | `0499_a_stored_file_answers_to_its_own_familys_rows.sql` | The `documents` bucket's upload, update and delete policies follow the row of the object's own family that names the file: insurance card images (managers), a household document's bytes (not a guest), a sensitive document's path (managers); another family's rows no longer count, and the family is read with the policies' own uuid cast. Requested for #981 on #771 (comment 6094859264); confirmed as a held source and probe reservation in #981 comment 6094986591, which is not an installation approval. |
-| 0500 proposed, held | `0500_a_reward_request_is_the_rewards_own_snapshot.sql` | 0308's ticket guard completed: a reward request names a reward of its own family at that reward's price and title, and keeps them (the foreign key's set-null on a deleted reward excepted); 0428's token-economy guard also checks the title. Requested for #981 on #771 (comment 6094977772, economy scope 6095050742); not yet confirmed. |
+| 0500 confirmed, held | `0500_a_reward_request_is_the_rewards_own_snapshot.sql` | 0308's ticket guard completed: a reward request names a reward and a member of its own family at that reward's price and title, and keeps them and its family and member (the foreign key's set-null on a deleted reward excepted); 0428's token-economy guard also checks the title. Requested for #981 on #771 (comment 6094977772, economy scope 6095050742); confirmed as a held source and probe reservation in #981 comment 6095082508, which is not an installation or financial approval. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4573,13 +4573,14 @@ test insurance card image through the Storage API and confirm both are
 refused; then do both as a test parent and confirm they land. As a test guest,
 try to remove the file behind an ordinary test document and confirm it stays.
 
-## `0500` (proposed, held) — a child could forge the reward request a parent approves
+## `0500` (confirmed, held) — a child could forge the reward request a parent approves
 
 `supabase/reserved/0500_a_reward_request_is_the_rewards_own_snapshot.sql` —
-**held**: proposed as `0500`, the first number above `0499`, for #981. It was
-requested on #771 in comment 6094977772, with the economy scope added in
-6095050742, and is not yet confirmed. Its probe is held with it in
-`docs/audit/reserved/`.
+**held**: `0500`, the first number above `0499`, for #981. It was requested on
+#771 in comment 6094977772, with the economy scope added in 6095050742, and
+confirmed as a held source and probe reservation in #981 comment 6095082508,
+which is not an installation, live financial or production policy approval. Its
+probe is held with it in `docs/audit/reserved/`.
 
 **Severity: medium (the parent approves a request whose title and price the
 child wrote). Deploy order: any.** 0308 made a redemption carry the shelf's
@@ -4602,10 +4603,17 @@ name and trigger, still SECURITY DEFINER. For a signed-in caller:
 - **INSERT:** `reward_id` must name a reward of the ticket's family;
   `cost_points` must be its price (0308's sentence) and `reward_title` its
   title.
-- **UPDATE:** those three stay. The foreign key's `ON DELETE SET NULL` after
-  the reward is deleted is the one change allowed, so the ticket keeps the
-  title and price it was made with (0028). Decisions, withdrawals and notes
-  are untouched.
+- **INSERT:** `member_id` is a member of the ticket's family. The insert
+  policy's `is_self_member` is not bound to a family.
+- **UPDATE:** `family_id` and `member_id` never change, and those three stay.
+  The review of the first cut (6095082508) found that a member of two families
+  could move their own requested ticket, with its snapshot, into the other
+  family under their member there, because the own-request policies allow both
+  sides; the probe now runs that as a person who is a child in one family and
+  a parent in the other. The foreign key's `ON DELETE SET NULL` after the
+  reward is deleted is the one change allowed, with family and member
+  unchanged, so the ticket keeps the title and price it was made with (0028).
+  Decisions, withdrawals and notes are untouched.
 
 **The token economy has the same title hole.** 0428's
 `economy_redemption_request_guard` binds a non-manager's request to a reward of
@@ -4642,7 +4650,9 @@ write redemptions. The passing run shows:
 - the service role and a session-less writer are exempt;
 - in the token economy, the real request lands and the sticker under the
   bike's title is refused;
-- five mutation controls each let a forgery back in.
+- a member of two families can neither move a request across, onto their
+  other member, nor file one against their other family's member;
+- seven mutation controls each let a forgery back in.
 
 Six source mutations were checked locally: removing the family clause, the
 title check, the update refusal, the delete allowance or the economy title
