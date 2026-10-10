@@ -110,6 +110,7 @@ source allocations are not evidence that production applied any migration.
 | 0494 held | `0494_sync_atomic_pull.sql` | Service-only admission and atomic item/map creation; missing RPC preserves cursor and refuses writes. |
 | 0495 held | `0495_a_member_invited_back_gets_what_the_invite_grants.sql` | A returning member gets the invite's role; an active member's role is unchanged; a kid login cannot accept another family's invite. Reserved for #981 above every preserved allocation (confirmed in #981 comment 6089092821). |
 | 0496 proposed, held | `0496_a_childs_xp_is_awarded_by_a_parent.sql` | Only a manager or the service role can award a child XP or rewrite streaks through 0341's functions. Requested for #981 on #771 (comment 6089394563); not yet confirmed. |
+| 0497 proposed, held | `0497_a_childs_wallet_and_guardian_number_stay_in_one_family.sql` | 0311's same-family guard on Guardian profiles, gift links, pay handles and child wallets. Requested for #981 on #771 (comment 6092501825); not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4335,6 +4336,57 @@ child is still refused, and under 0341's predicate the child's self-award lands.
 **After approved release:** as a test child, call
 `kid_progress_apply_completion` for your own member and confirm `forbidden`;
 then approve a test chore as a parent and confirm the XP lands.
+
+## `0497` (proposed, held) — a family's row could name another family's child
+
+`supabase/reserved/0497_a_childs_wallet_and_guardian_number_stay_in_one_family.sql` —
+**held**: proposed as `0497`, the first number above `0496`, for #981. It was
+requested on #771 in comment 6092501825 and is not yet confirmed. Its probe is
+held with it in `docs/audit/reserved/`.
+
+**Severity: medium (privacy and child contact). Deploy order: any.** 0311
+named the class: each family-scoped write policy checks only the row's own
+`family_id`, so a family may write its id beside another family's member or
+wallet. Most such references are inert, because the code that acts on them
+also keys by the caller's family. A replay counts 447 single-column foreign
+keys between family-scoped tables, 6 of them guarded. The notification roster,
+the wallet balance sums and the card hold were checked and are double-keyed.
+These four are not, and a service-role consumer acts on the foreign id by
+itself:
+
+| Reference | Consumer acting on it |
+|---|---|
+| `guardian_member_profiles.member_id` | The Guardian voice and screening callbacks dial that member's phone and greet with their name. |
+| `gift_links.child_wallet_id` | The public gift page and its AI name that wallet's child. |
+| `pay_handles.child_wallet_id` | It resolves to a gift link, so the same page. |
+| `child_wallets.member_id` | `issueCardAction` sends that member's name to Stripe as the cardholder. |
+
+As family A's parent under RLS, every one of the four writes landed on the
+replay. The Guardian and gift consumers are already fixed in code in #981.
+0497 makes the database refuse the row, using 0311's existing helper and no
+new function. In-app writers use only the family's own members and wallets,
+and the helper exempts the service role and session-less writers (migrations,
+seeds, backfills). Rows written before it are left alone.
+
+**Proof:** `.github/workflows/family-reference-wave-two-runtime.yml` replays
+every runnable migration. It requires the held probe
+`docs/audit/reserved/a-childs-wallet-and-guardian-number-stay-in-one-family-check.sql`
+to fail with each of the four foreign writes landing, applies 0497 twice, and
+requires the probe to pass. The passing run shows:
+- the four foreign writes, and an update moving a gift link onto another
+  family's wallet, are refused;
+- the family's own four still land, and a session-less write is still exempt;
+- all four triggers run the helper;
+- negative control: with the gift link trigger disabled, the foreign link lands.
+
+`docs/audit/wallet-write-rls-check.sql` is re-pointed so it reads past this one
+helper on `child_wallets`; any other `BEFORE INSERT` trigger still trips it.
+That is a no-op on the released schema. With 0497 (and 0496) applied, all 183
+boundary probes pass.
+
+**After approved release:** as a test parent, try to save a Guardian profile
+for another test family's member through PostgREST and confirm 42501; then
+save one for your own member and confirm it lands.
 
 ## `0471` and `0474` — the admin digest's delivery store, and a removed admin is not sent it
 
