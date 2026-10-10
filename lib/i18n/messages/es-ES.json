@@ -5679,6 +5679,7 @@
   "doOneThing.overdueDetail": "Tus siguientes acciones ordenadas: empieza por la primera.",
   "doOneThing.overdueLabel": "Resuelve lo atrasado",
   "doOneThing.title": "Haz una cosa ahora",
+  "documentCapture.access_denied": "Tu acceso actual al hogar no permite esta importación.",
   "documentCapture.choose": "Elegir archivo",
   "documentCapture.context_changed": "Tu cuenta o el hogar activo ha cambiado. Vuelve a seleccionar el archivo en el hogar correcto.",
   "documentCapture.description": "Sube un PDF, una foto o un archivo de texto de hasta 4 MB. El texto capturado se guarda en Documentación para revisarlo.",

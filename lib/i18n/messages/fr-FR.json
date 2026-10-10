@@ -5679,6 +5679,7 @@
   "doOneThing.overdueDetail": "Vos prochaines actions classées — commencez par la première.",
   "doOneThing.overdueLabel": "Réglez ce qui est en retard",
   "doOneThing.title": "Faites une chose maintenant",
+  "documentCapture.access_denied": "Vos droits d’accès actuels au foyer ne permettent pas cette importation.",
   "documentCapture.choose": "Choisir un fichier",
   "documentCapture.context_changed": "Votre compte ou le foyer actif a changé. Sélectionnez à nouveau le fichier dans le bon foyer.",
   "documentCapture.description": "Importez un PDF, une photo ou un fichier texte de 4 Mo maximum. Le texte extrait est enregistré dans les documents administratifs pour vérification.",

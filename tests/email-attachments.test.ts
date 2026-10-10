@@ -170,6 +170,20 @@ describe('inbound multipart attachment capture', () => {
     expect(transcribe).toHaveBeenCalledTimes(3);
   });
 
+  it.each(['refusal', 'malformed', 'unconfigured'] as const)('acknowledges a permanent %s extraction failure instead of 503-looping the webhook', async (kind) => {
+    // Each of these fails the same way on every redelivery. Returning 503 made
+    // the provider redeliver until it gave up, re-billing OCR every time and
+    // never reaching the auto-reply.
+    if (kind === 'refusal') transcribe.mockResolvedValueOnce({ text: '', refusal: 'I cannot help with that' } as never);
+    else if (kind === 'malformed') transcribe.mockResolvedValueOnce({ text: '{"text":null}' });
+    else transcribe.mockRejectedValueOnce(new Error('OpenAI API key is not configured'));
+    const first = await deliver([pdf(), png()]);
+    expect(first.status).toBe(200);
+    expect(await first.json()).toMatchObject({ attachments: [{ status: 'skipped', reason: 'provider_unavailable' }, { status: 'filed' }] });
+    expect(db.table('paperwork_items')).toHaveLength(1);
+    expect(transcribe).toHaveBeenCalledTimes(2);
+  });
+
   it('fails closed on attachment dedupe read errors before extraction and succeeds on retry', async () => {
     failNext('paperwork_items', 'select');
     const first = await fileEmailAttachments(db, source([pdf()]));
@@ -284,7 +298,12 @@ describe('inbound multipart attachment capture', () => {
 
   it('requires an actual blank transcription before treating a document as empty', async () => {
     transcribe.mockResolvedValueOnce({ text: 'null' });
-    expect((await deliver([pdf()])).status).toBe(503);
+    // A null transcription is not a blank document, and it is not saved; it is
+    // also not something a redelivery of the same bytes would fix.
+    const first = await deliver([pdf()]);
+    expect(first.status).toBe(200);
+    expect(await first.json()).toMatchObject({ attachments: [{ status: 'skipped', reason: 'provider_unavailable' }] });
+    expect(db.table('paperwork_items')).toHaveLength(0);
     transcribe.mockResolvedValueOnce({ text: '{"text":"","truncated":false}' });
     const retry = await deliver([pdf()]);
     expect(retry.status).toBe(200);

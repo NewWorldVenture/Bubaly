@@ -1,5 +1,6 @@
 import 'server-only';
 import type { AIProvider } from '@/lib/ai/provider';
+import { describeAIError } from '@/lib/ai/provider';
 import { fenceUntrusted, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 
 export const MAX_DOCUMENT_BYTES = 4 * 1024 * 1024;
@@ -32,6 +33,26 @@ export function documentType(input: DocumentInput): string | null {
     }
     default: return null;
   }
+}
+
+/** A failure that the same document will hit again on every retry. */
+class PermanentExtractionError extends Error {
+  override name = 'PermanentExtractionError';
+}
+
+/**
+ * Whether retrying the same bytes can succeed. A refusal or an unusable
+ * transcription is the model's answer about THIS document, and a missing or
+ * rejected key, or an unknown model, is configuration: retrying those only
+ * re-sends (and re-bills) the document. Network, timeout, rate-limit and 5xx
+ * failures stay retryable.
+ */
+function isRetryableExtractionError(error: unknown): boolean {
+  if (error instanceof PermanentExtractionError || error instanceof SyntaxError) return false;
+  const status = (error as { status?: unknown } | null)?.status;
+  if (status === 400 || status === 401 || status === 403 || status === 404) return false;
+  const { code } = describeAIError(error);
+  return !(code === 'unconfigured' || code === 'auth' || code === 'model');
 }
 
 /** Transcription only: no tools, actions, links, or document instructions run. */
@@ -69,16 +90,16 @@ export async function extractDocumentText(
       jsonSchema: { type: 'object', properties: { text: { type: 'string' }, truncated: { type: 'boolean' } }, required: ['text', 'truncated'], additionalProperties: false },
       maxTokens: 8192, signal: deadline,
     });
-    if (result.refusal) throw new Error('Document transcription was refused');
+    if (result.refusal) throw new PermanentExtractionError('Document transcription was refused');
     const parsed: unknown = JSON.parse(result.text);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)
       || typeof (parsed as { text?: unknown }).text !== 'string'
-      || typeof (parsed as { truncated?: unknown }).truncated !== 'boolean') throw new Error('Document transcription response is incomplete');
+      || typeof (parsed as { truncated?: unknown }).truncated !== 'boolean') throw new PermanentExtractionError('Document transcription response is incomplete');
     const { text, truncated } = parsed as { text: string; truncated: boolean };
     return { ok: true, text: text.slice(0, MAX_DOCUMENT_TEXT_CHARS), truncated: truncated || text.length > MAX_DOCUMENT_TEXT_CHARS, method: 'multimodal' };
   } catch (error) {
     // Provider errors may contain document data; keep the raw response out of logs.
     console.error('[document-text] extraction failed', error instanceof Error ? error.name : 'provider_error');
-    return { ok: false, reason: 'provider_unavailable', retryable: true };
+    return { ok: false, reason: 'provider_unavailable', retryable: isRetryableExtractionError(error) };
   }
 }

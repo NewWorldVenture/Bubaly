@@ -52,7 +52,9 @@ describe('bounded document transcription', () => {
 
   it.each([null, '', '{}', '{"text":null,"truncated":false}', 'not JSON'])('does not turn absent or malformed output %s into a successful blank document', async (content) => {
     vi.stubGlobal('fetch', vi.fn(async () => reply(content)));
-    expect(await extractDocumentText(pdf, provider)).toMatchObject({ ok: false, retryable: true });
+    // Not a blank document, and not worth re-sending: the same bytes get the
+    // same unusable transcription, so a webhook retry would only re-bill OCR.
+    expect(await extractDocumentText(pdf, provider)).toMatchObject({ ok: false, reason: 'provider_unavailable', retryable: false });
   });
 
   it('distinguishes an explicitly blank document from a missing response', async () => {
@@ -60,21 +62,30 @@ describe('bounded document transcription', () => {
     expect(await extractDocumentText(pdf, provider)).toEqual({ ok: true, text: '', truncated: false, method: 'multimodal' });
   });
 
-  it.each(['http', 'network', 'timeout', 'refusal', 'oversized_response'] as const)('keeps %s extraction failures retryable', async (kind) => {
+  it.each(['http', 'rate_limit', 'network', 'timeout', 'oversized_response'] as const)('keeps %s extraction failures retryable', async (kind) => {
     vi.stubGlobal('fetch', vi.fn(async (_url: unknown, init: RequestInit) => {
       if (kind === 'network') throw new TypeError('fetch failed');
       if (kind === 'timeout') { expect(init.signal).toBeTruthy(); throw new DOMException('Timed out', 'TimeoutError'); }
       if (kind === 'http') return new Response('Unavailable', { status: 503 });
-      if (kind === 'oversized_response') return new Response('{}', { headers: { 'content-length': String(3 * 1024 * 1024) } });
-      return new Response(JSON.stringify({ choices: [{ message: { refusal: 'Cannot transcribe', content: null } }] }));
+      if (kind === 'rate_limit') return new Response(JSON.stringify({ error: { message: 'Rate limit reached' } }), { status: 429 });
+      return new Response('{}', { headers: { 'content-length': String(3 * 1024 * 1024) } });
     }));
     expect(await extractDocumentText(pdf, provider)).toMatchObject({ ok: false, retryable: true });
   });
 
-  it('returns a retryable result when no provider key is configured', async () => {
+  it.each(['refusal', 'auth', 'unknown_model'] as const)('reports a %s failure as permanent, so a retry does not re-send the document', async (kind) => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      if (kind === 'auth') return new Response(JSON.stringify({ error: { message: 'Incorrect API key provided' } }), { status: 401 });
+      if (kind === 'unknown_model') return new Response(JSON.stringify({ error: { message: 'The model does not exist' } }), { status: 404 });
+      return new Response(JSON.stringify({ choices: [{ message: { refusal: 'Cannot transcribe', content: null } }] }));
+    }));
+    expect(await extractDocumentText(pdf, provider)).toMatchObject({ ok: false, reason: 'provider_unavailable', retryable: false });
+  });
+
+  it('returns a permanent result when no provider key is configured, without calling out', async () => {
     const fetcher = vi.fn();
     vi.stubGlobal('fetch', fetcher);
-    expect(await extractDocumentText(pdf, async () => new OpenAIProvider(DEFAULT_TASK_MODELS.vision, ''))).toMatchObject({ ok: false, retryable: true });
+    expect(await extractDocumentText(pdf, async () => new OpenAIProvider(DEFAULT_TASK_MODELS.vision, ''))).toMatchObject({ ok: false, retryable: false });
     expect(fetcher).not.toHaveBeenCalled();
   });
 

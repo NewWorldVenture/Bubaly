@@ -5679,6 +5679,7 @@
   "doOneThing.overdueDetail": "Ihre wichtigsten nächsten Schritte – beginnen Sie mit dem ersten.",
   "doOneThing.overdueLabel": "Überfälliges erledigen",
   "doOneThing.title": "Machen Sie jetzt eine Sache",
+  "documentCapture.access_denied": "Ihre aktuellen Zugriffsrechte für den Haushalt erlauben diesen Import nicht.",
   "documentCapture.choose": "Datei auswählen",
   "documentCapture.context_changed": "Dein Konto oder der aktive Haushalt hat sich geändert. Wähle die Datei im richtigen Haushalt erneut aus.",
   "documentCapture.description": "Lade eine PDF-, Foto- oder Textdatei bis 4 MB hoch. Der erfasste Text wird unter Papierkram zur Prüfung gespeichert.",

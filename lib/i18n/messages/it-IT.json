@@ -5679,6 +5679,7 @@
   "doOneThing.overdueDetail": "Le tue prossime azioni in ordine: parti dalla prima.",
   "doOneThing.overdueLabel": "Sistema ciò che è in ritardo",
   "doOneThing.title": "Fai una cosa adesso",
+  "documentCapture.access_denied": "I tuoi attuali permessi nel nucleo familiare non consentono questa importazione.",
   "documentCapture.choose": "Scegli un file",
   "documentCapture.context_changed": "L’account o il nucleo familiare attivo è cambiato. Seleziona di nuovo il file nel nucleo familiare corretto.",
   "documentCapture.description": "Carica un PDF, una foto o un file di testo fino a 4 MB. Il testo acquisito viene salvato in Pratiche per la revisione.",

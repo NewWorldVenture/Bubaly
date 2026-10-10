@@ -74,6 +74,8 @@ export async function authorizeDocumentLink(
     // current memberships are needed: a newly joined family may now be active.
     const active = chooseActiveMembership(members.data, prefs.data?.active_family_id);
     if (!active || active.id !== memberId || active.family_id !== familyId || active.role !== ctx.active.role) return changed();
+    // Guests are view-only; re-checked here so the pre-write check refuses too.
+    if (active.role === 'guest') return denied();
     if (!needsInbox) return { ok: true };
 
     // Use the newly authenticated email, never an earlier context's email.
