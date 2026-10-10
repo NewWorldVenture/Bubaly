@@ -97,7 +97,7 @@ export async function createChildLoginAction(input: {
   const admin = createServiceClient();
 
   const { data: member, error: memberReadError } = await admin.from('family_members')
-    .select('id, family_id, display_name, user_id, role')
+    .select('id, family_id, display_name, user_id, role, is_active')
     .eq('id', input.memberId).maybeSingle();
   // A refused read is not an absence: it used to return the "not found" answer below. Audit C1-S9-75.
   if (memberReadError) return { ok: false, error: describeActionError(memberReadError, t('actions.couldNotCheckThatRefresh')) };
@@ -161,8 +161,13 @@ export async function createChildLoginAction(input: {
   // unique(member_id), and its rollback then cleared user_id — leaving the
   // first login pointing at a member that no longer knew it. Zero rows here
   // means another attempt linked first.
+  //
+  // Linking also reactivates a REMOVED local child. Removal drops the row to
+  // `guest` (REMOVED_MEMBER_PATCH), so a reactivated row is put back as the
+  // `child` a PIN login is for, rather than coming back as a guest.
   const { data: linked, error: linkErr } = await admin.from('family_members')
-    .update({ user_id: childUserId, is_active: true }).eq('id', member.id).is('user_id', null).select('id');
+    .update({ user_id: childUserId, is_active: true, ...(member.is_active ? {} : { role: 'child' as const }) })
+    .eq('id', member.id).is('user_id', null).select('id');
   if (linkErr || wroteNoRows(linked)) {
     const { error: deleteError } = await admin.auth.admin.deleteUser(childUserId);
     if (deleteError) {

@@ -67,8 +67,8 @@ describe('a removed member comes back, if ever, with the least privilege', () =>
   });
 
   it.each([
-    'components/modules/family-module.tsx',
-    'components/modules/settings-module.tsx',
+    // family-module and settings-module remove through this server action.
+    'app/(app)/family/member-actions.ts',
     'app/(app)/admin/actions.ts',
   ])('%s removes with that patch', (file) => {
     const src = readFileSync(file, 'utf8');

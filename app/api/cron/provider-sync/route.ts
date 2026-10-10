@@ -47,8 +47,9 @@ export async function GET(req: NextRequest) {
       // so it kept pulling the removed member's calendar into the household and
       // pushing the household's events out to them — with nobody left able to
       // disconnect it (the owner has no family; managers are not the owner).
-      // loadSyncExecutionPolicy refuses the same account; disabling it here
-      // also keeps it from sitting first in this oldest-first batch forever.
+      // loadSyncExecutionPolicy (inside runProviderSync) refuses such an
+      // account too; disabling it here also keeps it from sitting first in
+      // this oldest-first batch forever.
       const { data: owner, error: ownerError } = await admin.from('family_members').select('id')
         .eq('family_id', account.family_id).eq('user_id', account.user_id).eq('is_active', true).limit(1);
       if (ownerError) throw ownerError;

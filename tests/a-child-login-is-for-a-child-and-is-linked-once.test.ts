@@ -64,6 +64,19 @@ describe('createChildLoginAction', () => {
     expect(db.table('child_logins')).toHaveLength(1);
   });
 
+  it('restores a removed local child as a child, not as the guest removal left', async () => {
+    // REMOVED_MEMBER_PATCH: a removed row is { is_active: false, role: 'guest' }.
+    db.seed('family_members', [{ id: 'm', family_id: FAMILY, display_name: 'Emma', user_id: null, role: 'guest', is_active: false }]);
+    expect(await createChildLoginAction({ memberId: 'm', username: 'emma', pin: '1234' })).toMatchObject({ ok: true });
+    expect(db.table('family_members')[0]).toMatchObject({ user_id: 'child-user-1', is_active: true, role: 'child' });
+  });
+
+  it("leaves an active member's role alone (control)", async () => {
+    db.seed('family_members', [{ id: 'm', family_id: FAMILY, display_name: 'Sam', user_id: null, role: 'teen', is_active: true }]);
+    expect(await createChildLoginAction({ memberId: 'm', username: 'samsam', pin: '1234' })).toMatchObject({ ok: true });
+    expect(db.table('family_members')[0]).toMatchObject({ is_active: true, role: 'teen' });
+  });
+
   it('does not overwrite a link another attempt made in the meantime', async () => {
     db.seed('family_members', [{ id: 'm', family_id: FAMILY, display_name: 'Emma', user_id: null, role: 'child', is_active: true }]);
     // Attempt A links between B's read and B's link: simulate by linking the

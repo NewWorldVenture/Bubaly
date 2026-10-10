@@ -13,7 +13,12 @@ import { buildFinalizePayload, emptyDraft } from '@/lib/onboarding/flow';
 //    caller-chosen subject, with no limiter. Now capped at 5 and limited.
 // 3. A child login removed from its family must not mint one of its own.
 
-const mock = vi.hoisted(() => ({ db: null as unknown, sendReactEmail: vi.fn(), rateAllowed: true }));
+const mock = vi.hoisted(() => ({ db: null as unknown, sendReactEmail: vi.fn(), rateAllowed: true, epoch: 0 }));
+// The in-process limiter's buckets outlive a test; give each test its own.
+vi.mock('@/lib/server/rate-limit', async (original) => {
+  const real = await original<typeof import('@/lib/server/rate-limit')>();
+  return { ...real, rateLimit: (key: string, opts?: Parameters<typeof real.rateLimit>[1]) => real.rateLimit(`${mock.epoch}:${key}`, opts) };
+});
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => mock.db, createServiceClient: () => mock.db }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('@/lib/server/profiles', () => ({ saveUserProfile: async () => ({ ok: true }) }));
@@ -56,6 +61,7 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
   mock.sendReactEmail.mockReset().mockResolvedValue({ ok: true });
   mock.rateAllowed = true;
+  mock.epoch++;
   build();
 });
 
@@ -115,6 +121,26 @@ describe('onboarding invite emails are bounded', () => {
     expect(result.ok).toBe(true);
     expect(db.table('invites')).toHaveLength(12);
     expect(inviteMails()).toHaveLength(5);
+    // The seven past the cap are returned, not dropped, each with the invite
+    // id the Done screen's Send button posts to /api/email/invite.
+    const unsent = result.ok ? result.data?.unsentInvites ?? [] : [];
+    expect(unsent.map((u) => u.email)).toEqual(invites(12).slice(5).map((i) => i.email));
+    const ids = new Map(db.table('invites').map((i) => [i.email, i.id]));
+    for (const u of unsent) expect(u.id).toBe(ids.get(u.email));
+  });
+
+  it('reports no unsent invites when every one was mailed (control)', async () => {
+    seedNewUser();
+    const result = await finalizeOnboardingAction(payload(invites(2)));
+    expect(result.ok && result.data?.unsentInvites).toBeFalsy();
+    expect(inviteMails()).toHaveLength(2);
+  });
+
+  it('reports an invite the mail provider rejected as unsent', async () => {
+    seedNewUser();
+    mock.sendReactEmail.mockResolvedValueOnce({ ok: false });
+    const result = await finalizeOnboardingAction(payload(invites(2)));
+    expect(result.ok && result.data?.unsentInvites?.map((u) => u.email)).toEqual(['p0@example.test']);
   });
 
   it('sends none when the limiter refuses', async () => {
@@ -124,6 +150,7 @@ describe('onboarding invite emails are bounded', () => {
     expect(result.ok).toBe(true);
     expect(db.table('invites')).toHaveLength(2);
     expect(inviteMails()).toHaveLength(0);
+    expect(result.ok && result.data?.unsentInvites?.map((u) => u.email)).toEqual(['p0@example.test', 'p1@example.test']);
   });
 });
 

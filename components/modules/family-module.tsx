@@ -20,7 +20,7 @@ import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
-import { MANAGER_ROLES, REMOVED_MEMBER_PATCH, assignableMemberRoles, canRemoveMember, type MemberRole } from '@/lib/constants/roles';
+import { MANAGER_ROLES, assignableMemberRoles, canRemoveMember, type MemberRole } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
 import { usePlural, useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock, useFormat, type FamilyClock, useFamilyCalendarToday } from '@/components/i18n/use-format';
@@ -29,6 +29,7 @@ import { isValidTimezone } from '@/lib/time/zoned';
 import { localDayKey } from '@/lib/time/local-day';
 import { ageOn, nextBirthday } from '@/lib/utils/birthday';
 import { FamilyMediaImg } from '@/components/media/family-media-img';
+import { removeFamilyMemberAction } from '@/app/(app)/family/member-actions';
 
 type Family = Tables<'families'>;
 type Member = Tables<'family_members'>;
@@ -472,18 +473,18 @@ export function FamilyModule() {
               if (!removeMember) return;
               // Only a parent may remove a parent (see canRemoveMember).
               if (!canRemoveMember(role, removeMember.role)) { setRemoveMember(null); toastError(t('errors.thatChangeWasNotSaved')); return; }
-              const sb = createClient();
               // `family_members` is manager-gated (fm_update, 0211), and RLS FILTERS
               // an UPDATE rather than refusing it — so a member a non-manager tried
-              // to remove was reported as removed and stayed in the family. The soft
-              // delete makes that worse than a no-op: the row disappears from the
-              // list on screen until the next read puts it back.
-              const { data: rows, error: err } = await sb.from('family_members')
-                .update(REMOVED_MEMBER_PATCH).eq('id', removeMember.id).eq('family_id', familyId).select('id');
+              // to remove was reported as removed and stayed in the family. The
+              // server action reports that as not saved, and also switches off a
+              // removed child's PIN login, which only the service role can do.
+              const res = await removeFamilyMemberAction({ memberId: removeMember.id, familyId }).catch(() => null);
               setRemoveMember(null);
-              if (err) { toastError(describeDbError(err)); return; }
-              if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
-              success(t('familyModule.memberRemoved')); void refreshMembers();
+              if (!res) { toastError(t('errors.thatChangeWasNotSaved')); return; }
+              if (!res.ok) { toastError(res.error); return; }
+              if (res.loginRevocation === 'failed') toastError(t('familyModule.removedButLoginStillActive'));
+              else success(t('familyModule.memberRemoved'));
+              void refreshMembers();
             }}>{t('family.remove')}</Button>
           </div>
         </div>

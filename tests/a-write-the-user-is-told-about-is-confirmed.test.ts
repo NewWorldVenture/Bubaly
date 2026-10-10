@@ -239,7 +239,7 @@ describe('a rollback that fails is not reported as a clean failure (C1-S9-35)', 
     // C1-S9-35 — went red on that improvement. Ninth of the session, and the
     // first of mine: `toContain("<exact statement>")` is a trap regardless of
     // who writes it.
-    const link = between(childLogin, "update({ user_id: childUserId, is_active: true })", 'const { error: rowErr }');
+    const link = between(childLogin, "update({ user_id: childUserId, is_active: true", 'const { error: rowErr }');
     expect(link).toContain('const { error: deleteError } = await admin.auth.admin.deleteUser(childUserId);');
     expect(link).toContain("t('childLoginActions.couldNotFinishAndCouldNotUndo')");
   });

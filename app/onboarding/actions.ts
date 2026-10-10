@@ -43,13 +43,19 @@ import { isChildLoginAccount } from '@/lib/server/child-account';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
+/** An invite finalize created but did not email (see ONBOARDING_INVITE_EMAIL_CAP). */
+export type UnsentInvite = { id: string; email: string };
+
 /**
  * The most invite EMAILS one finalize may send. The schema admits 30 drafted
  * members, and every invite used to mail a caller-chosen address from
  * Bubaly's sender with a caller-chosen family name in the subject, with no
  * limiter at all — so a fresh account was a 30-message spam relay. Invite
- * rows past the cap are still created; they can be re-sent from Settings,
- * through /api/email/invite and its limiter.
+ * rows past the cap (or refused by a limiter, or rejected by the mail
+ * provider) are still created but NOT emailed. Finalize returns them as
+ * `unsentInvites`, and the Done screen offers a Send button for each, which
+ * goes through /api/email/invite and its own limiter. Nothing else re-sends
+ * them.
  */
 const ONBOARDING_INVITE_EMAIL_CAP = 5;
 
@@ -371,7 +377,7 @@ export async function finalizeOnboardingAction(input: {
   >;
   appearance?: { color?: string; age?: number | null; avatarUrl?: string; pin?: string };
   calendarImport?: { source: string; events: BriefEvent[]; receipt?: string };
-}, expectedOwner?: OnboardingOwner): Promise<Result<{ familyId: string; brief?: FirstBrief }>> {
+}, expectedOwner?: OnboardingOwner): Promise<Result<{ familyId: string; brief?: FirstBrief; unsentInvites?: UnsentInvite[] }>> {
   const t = await getTranslations();
   const parsed = finalizeOnboardingSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid onboarding data' };
@@ -625,6 +631,7 @@ export async function finalizeOnboardingAction(input: {
   // Who the invite is from, for the email's subject and body.
   const inviterName = profile.firstName.trim() || DEFAULT_OWNER_DISPLAY_NAME;
   let inviteEmailsSent = 0;
+  const unsentInvites: UnsentInvite[] = [];
   for (const [index, m] of members.entries()) {
     if (m.kind !== 'invite') continue;
     const { data: invite, error: inviteErr } = await admin
@@ -636,7 +643,7 @@ export async function finalizeOnboardingAction(input: {
         invited_by: auth.user.id,
         onboarding_key: onboardingItemKey(runKey, 'invite', index, m),
       }, { onConflict: 'family_id,onboarding_key', ignoreDuplicates: true })
-      .select('token')
+      .select('id, token')
       .maybeSingle();
     if (inviteErr) {
       return inviteErr
@@ -661,11 +668,13 @@ export async function finalizeOnboardingAction(input: {
     if (!invite) continue;
     // Bounded per call, per user and per family (the same family bucket
     // /api/email/invite spends). The invite row above stands either way.
-    if (inviteEmailsSent >= ONBOARDING_INVITE_EMAIL_CAP) continue;
+    // An invite not mailed here is returned, so the Done screen can say so.
+    const unsent = { id: invite.id, email: m.email };
+    if (inviteEmailsSent >= ONBOARDING_INVITE_EMAIL_CAP) { unsentInvites.push(unsent); continue; }
     const userLimited = await enforceRequestRateLimit(admin, `email:onboarding-invite:${auth.user.id}`, { limit: ONBOARDING_INVITE_EMAIL_CAP, windowMs: 3_600_000 });
-    if (!userLimited.ok) continue;
+    if (!userLimited.ok) { unsentInvites.push(unsent); continue; }
     const familyLimited = await enforceRequestRateLimit(admin, `email:invite:${familyId}`, { limit: 20, windowMs: 3_600_000 });
-    if (!familyLimited.ok) continue;
+    if (!familyLimited.ok) { unsentInvites.push(unsent); continue; }
     inviteEmailsSent++;
     // The branded template every other invite in the product already uses
     // (app/api/email/invite). This site used to build its own two-line HTML
@@ -678,13 +687,15 @@ export async function finalizeOnboardingAction(input: {
     // "{t('actions.youVeBeenInvitedTo')}" — with the accept link labelled
     // "{t('actions.acceptYourInvite')}". It typechecked, it sent, and the keys
     // existed in all eleven catalogues, so the i18n gate passed too.
-    await sendReactEmail({
+    const sent = await sendReactEmail({
       to: m.email,
       subject: `${inviterName} invited you to join ${family.name} on Bubaly`,
       react: React.createElement(InviteEmail, {
         familyName: family.name, inviterName, token, role: m.role,
       }),
     });
+    // A rejected send, or no mail provider at all, is not a sent invite either.
+    if (!sent?.ok || sent.skipped) unsentInvites.push(unsent);
   }
 
   // 6a. VALUE-FIRST (T1): persist the calendar the user imported in the value step
@@ -950,5 +961,5 @@ export async function finalizeOnboardingAction(input: {
     console.error('[onboarding] family email provisioning failed', e);
   }
 
-  return { ok: true, data: { familyId, brief: finalBrief } };
+  return { ok: true, data: { familyId, brief: finalBrief, ...(unsentInvites.length ? { unsentInvites } : {}) } };
 }
