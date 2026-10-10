@@ -23,9 +23,15 @@ export async function GET(req: NextRequest) {
   }
 
   const admin = createServiceClient();
+  // Only accounts of OPEN families. A closed family (families.closed_at) keeps
+  // its stored provider tokens so it can reopen, but nothing uses them while it
+  // is closed. Filtered in the query, not after it: this read is oldest-first
+  // and bounded, so closed families' accounts — never synced again — would
+  // otherwise sit at the head of every batch and starve the open ones.
   const { data: accounts, error } = await admin
     .from('sync_accounts')
-    .select('id, user_id, family_id, external_id, provider')
+    .select('id, user_id, family_id, external_id, provider, family:families!inner(closed_at)')
+    .is('family.closed_at', null)
     .in('sync_direction', ['import', 'export', 'two_way'])
     .order('last_synced_at', { ascending: true, nullsFirst: true })
     .limit(BATCH);

@@ -9648,6 +9648,8 @@
   "migrateActions.couldNotCheckYourContactsForDuplicates": "Could not check your contacts for duplicates, so nothing was imported. Try again.",
   "migrateActions.couldNotReadYourFamilyToReview": "Could not read your family, so nothing was imported. Try again.",
   "migrateActions.theImportStoppedPartWayThrough": "The import stopped part way through. Already saved: {events} events, {tasks} tasks, {grocery} grocery items, {notes} notes, {contacts} contacts. Importing the same file again adds only what is not already here.",
+  "migrateActions.thisImportWasAlreadySent": "This import was already sent, so nothing was added again. It may still be saving: check your calendar, tasks, lists, notes and contacts before importing the file again.",
+  "migrateActions.couldNotStartTheImport": "Could not start the import, so nothing was imported. Try again.",
   "migrateWizard.acceptsIcsCalendarsAndCsvLists": "Accepts .ics calendars and .csv lists. Naive (timezone-less) times are imported as UTC.",
   "migrateWizard.acceptsIcsCsvAndVcf": "Accepts .ics calendars, .csv lists and .vcf contact cards.",
   "migrateWizard.anotherApp": "Another app?",

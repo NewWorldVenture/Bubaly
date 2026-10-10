@@ -318,14 +318,38 @@ class QueryBuilder implements PromiseLike<Reply> {
   }
   delete() { this.op = 'delete'; return this; }
 
-  eq(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, value === null ? 'is' : 'eq', value)); return this; }
+  /**
+   * A filter on an EMBEDDED resource's column (`family.closed_at`), named by the
+   * embed's alias in the select list, as PostgREST names it. An `!inner` embed
+   * also drops the parent row when the embedded row does not match; a plain
+   * embed only filters the embedded value, which this fake does not model, so
+   * it is left unfiltered. Null when the column is not an embed's.
+   */
+  private embedPredicate(column: string, op: string, value: unknown): Predicate | null {
+    const dot = /^([\w]+)\.([\w]+)$/.exec(column);
+    if (!dot || !this.selectList) return null;
+    const part = splitSelect(this.selectList.replace(/\s+/g, ' '))
+      .map((p) => /^(?:([\w]+):)?([\w]+)(!inner)?\((.*)\)$/.exec(p))
+      .find((m) => m && (m[1] ?? m[2]) === dot[1]);
+    if (!part) return null;
+    if (!part[3]) return () => true;
+    const alias = part[1] ?? part[2];
+    const table = part[2];
+    const inner = operatorPredicate(dot[2], op, value);
+    return (row) => {
+      const fk = [`${alias}_id`, `${table.replace(/s$/, '')}_id`, `${table}_id`].find((c) => c in row);
+      const target = fk ? this.db.table(table).find((r) => looseEq(r.id, row[fk])) : undefined;
+      return target !== undefined && inner(target);
+    };
+  }
+  eq(column: string, value: unknown) { const op = value === null ? 'is' : 'eq'; this.predicates.push(this.embedPredicate(column, op, value) ?? operatorPredicate(column, op, value)); return this; }
   neq(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'neq', value)); return this; }
   gt(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'gt', value)); return this; }
   gte(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'gte', value)); return this; }
   lt(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'lt', value)); return this; }
   lte(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'lte', value)); return this; }
   in(column: string, values: unknown[]) { this.predicates.push(operatorPredicate(column, 'in', values)); return this; }
-  is(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'is', value)); return this; }
+  is(column: string, value: unknown) { this.predicates.push(this.embedPredicate(column, 'is', value) ?? operatorPredicate(column, 'is', value)); return this; }
   like(column: string, pattern: string) { this.predicates.push(operatorPredicate(column, 'like', pattern)); return this; }
   ilike(column: string, pattern: string) { this.predicates.push(operatorPredicate(column, 'ilike', pattern)); return this; }
   contains(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'contains', value)); return this; }
