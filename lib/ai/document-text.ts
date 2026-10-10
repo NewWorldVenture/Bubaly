@@ -1,6 +1,5 @@
 import 'server-only';
 import type { AIProvider } from '@/lib/ai/provider';
-import { describeAIError } from '@/lib/ai/provider';
 import { fenceUntrusted, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 
 export const MAX_DOCUMENT_BYTES = 4 * 1024 * 1024;
@@ -41,18 +40,20 @@ class PermanentExtractionError extends Error {
 }
 
 /**
- * Whether retrying the same bytes can succeed. A refusal or an unusable
- * transcription is the model's answer about THIS document, and a missing or
- * rejected key, or an unknown model, is configuration: retrying those only
- * re-sends (and re-bills) the document. Network, timeout, rate-limit and 5xx
- * failures stay retryable.
+ * Whether retrying the same bytes can succeed. Only a failure about THIS
+ * document is permanent: a refusal, an unusable transcription, or an HTTP
+ * 400/413/422 rejection of the request. A missing or rejected key, an unknown
+ * model (401/403/404), network, timeout, rate-limit and 5xx failures are
+ * retryable, so the webhook answers 503 and the attachment is redelivered once
+ * the configuration is fixed instead of being skipped. A numeric `status`
+ * decides on its own; message wording never overrides it.
  */
+const PERMANENT_STATUSES = new Set([400, 413, 422]);
 function isRetryableExtractionError(error: unknown): boolean {
   if (error instanceof PermanentExtractionError || error instanceof SyntaxError) return false;
   const status = (error as { status?: unknown } | null)?.status;
-  if (status === 400 || status === 401 || status === 403 || status === 404) return false;
-  const { code } = describeAIError(error);
-  return !(code === 'unconfigured' || code === 'auth' || code === 'model');
+  if (typeof status === 'number') return !PERMANENT_STATUSES.has(status);
+  return true;
 }
 
 /** Transcription only: no tools, actions, links, or document instructions run. */

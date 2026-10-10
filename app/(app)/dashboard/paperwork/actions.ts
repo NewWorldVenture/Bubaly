@@ -77,6 +77,10 @@ export async function addPaperworkAction(formData: FormData): Promise<PaperworkA
   const gate = await paperworkScope();
   if (!gate.ok) return gate;
   const { ctx, supabase } = gate;
+  // Guests are view-only (roles.ts, 0464): filing paperwork into the
+  // household's action queue is a write they do not have — the same refusal
+  // captureDocument and captureDocumentLink give.
+  if (ctx.active.role === 'guest') return { ok: false, error: tr('actionRefusal.notAllowed') };
 
   const row = await paperworkInsertRow({
     familyId: ctx.active.familyId, userId: ctx.user.id, text, sender,

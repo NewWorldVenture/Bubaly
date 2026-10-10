@@ -50,7 +50,10 @@ export async function resolveAssigneeId(
       .eq('id', input.assignee_id)
       .eq('family_id', scope.familyId)
       .maybeSingle();
-    if (error) return fail('Could not check who that is.', { code: SERVICE_CODES.db });
+    if (error) {
+      console.error('[tools:family] assignee lookup failed', error);
+      return fail('Could not check who that is.', { code: SERVICE_CODES.db });
+    }
     if (!data) return fail('That person is not in this family.', { code: SERVICE_CODES.notFound });
     return ok(data.id);
   }

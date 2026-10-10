@@ -73,19 +73,29 @@ describe('bounded document transcription', () => {
     expect(await extractDocumentText(pdf, provider)).toMatchObject({ ok: false, retryable: true });
   });
 
-  it.each(['refusal', 'auth', 'unknown_model'] as const)('reports a %s failure as permanent, so a retry does not re-send the document', async (kind) => {
+  it.each(['refusal', 'bad_request'] as const)('reports a %s failure about this document as permanent, so a retry does not re-send it', async (kind) => {
     vi.stubGlobal('fetch', vi.fn(async () => {
-      if (kind === 'auth') return new Response(JSON.stringify({ error: { message: 'Incorrect API key provided' } }), { status: 401 });
-      if (kind === 'unknown_model') return new Response(JSON.stringify({ error: { message: 'The model does not exist' } }), { status: 404 });
+      if (kind === 'bad_request') return new Response(JSON.stringify({ error: { message: 'Invalid file content' } }), { status: 400 });
       return new Response(JSON.stringify({ choices: [{ message: { refusal: 'Cannot transcribe', content: null } }] }));
     }));
     expect(await extractDocumentText(pdf, provider)).toMatchObject({ ok: false, reason: 'provider_unavailable', retryable: false });
   });
 
-  it('returns a permanent result when no provider key is configured, without calling out', async () => {
+  it.each([
+    ['auth', 401, 'Incorrect API key provided'],
+    ['forbidden', 403, 'Project does not have access'],
+    ['unknown_model', 404, 'The model does not exist'],
+    ['5xx naming unauthorized', 503, 'Upstream unauthorized'],
+    ['5xx naming a missing model', 503, 'Backend does not exist'],
+  ] as const)('keeps a %s configuration or provider failure retryable, so the attachment is redelivered', async (_kind, status, message) => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { message } }), { status })));
+    expect(await extractDocumentText(pdf, provider)).toMatchObject({ ok: false, reason: 'provider_unavailable', retryable: true });
+  });
+
+  it('keeps a missing provider key retryable, without calling out', async () => {
     const fetcher = vi.fn();
     vi.stubGlobal('fetch', fetcher);
-    expect(await extractDocumentText(pdf, async () => new OpenAIProvider(DEFAULT_TASK_MODELS.vision, ''))).toMatchObject({ ok: false, retryable: false });
+    expect(await extractDocumentText(pdf, async () => new OpenAIProvider(DEFAULT_TASK_MODELS.vision, ''))).toMatchObject({ ok: false, retryable: true });
     expect(fetcher).not.toHaveBeenCalled();
   });
 

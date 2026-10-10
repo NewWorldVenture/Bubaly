@@ -170,18 +170,33 @@ describe('inbound multipart attachment capture', () => {
     expect(transcribe).toHaveBeenCalledTimes(3);
   });
 
-  it.each(['refusal', 'malformed', 'unconfigured'] as const)('acknowledges a permanent %s extraction failure instead of 503-looping the webhook', async (kind) => {
+  it.each(['refusal', 'malformed', 'bad_request'] as const)('acknowledges a permanent %s extraction failure instead of 503-looping the webhook', async (kind) => {
     // Each of these fails the same way on every redelivery. Returning 503 made
     // the provider redeliver until it gave up, re-billing OCR every time and
     // never reaching the auto-reply.
     if (kind === 'refusal') transcribe.mockResolvedValueOnce({ text: '', refusal: 'I cannot help with that' } as never);
     else if (kind === 'malformed') transcribe.mockResolvedValueOnce({ text: '{"text":null}' });
-    else transcribe.mockRejectedValueOnce(new Error('OpenAI API key is not configured'));
+    else transcribe.mockRejectedValueOnce(Object.assign(new Error('OpenAI error 400: Invalid file'), { status: 400 }));
     const first = await deliver([pdf(), png()]);
     expect(first.status).toBe(200);
     expect(await first.json()).toMatchObject({ attachments: [{ status: 'skipped', reason: 'provider_unavailable' }, { status: 'filed' }] });
     expect(db.table('paperwork_items')).toHaveLength(1);
     expect(transcribe).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['unconfigured', new Error('OpenAI API key is not configured')],
+    ['auth', Object.assign(new Error('OpenAI error 401: Incorrect API key provided'), { status: 401 })],
+    ['model', Object.assign(new Error('OpenAI error 404: The model does not exist'), { status: 404 })],
+  ] as const)('returns 503 for a %s provider failure so the attachment is redelivered, not silently skipped', async (_kind, error) => {
+    transcribe.mockRejectedValueOnce(error);
+    const first = await deliver([pdf(), png()]);
+    expect(first.status).toBe(503);
+    expect(await first.json()).toMatchObject({ ok: false, retryable: true, attachments: [{ status: 'retry', reason: 'provider_unavailable' }, { status: 'filed' }] });
+    expect(db.table('paperwork_items')).toHaveLength(1);
+    const second = await deliver([pdf(), png()]);
+    expect(second.status).toBe(200);
+    expect(db.table('paperwork_items')).toHaveLength(2);
   });
 
   it('fails closed on attachment dedupe read errors before extraction and succeeds on retry', async () => {
