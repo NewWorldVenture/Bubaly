@@ -74,7 +74,7 @@ export default async function SubmitProofPage({ params }: { params: Promise<{ as
         </div>
       ) : null}
 
-      <SubmitProofForm assignmentId={assignmentId} proofKind={proofKind} />
+      <SubmitProofForm assignmentId={assignmentId} proofKind={proofKind} familyId={ctx.active.familyId} memberId={assignment.member_id} />
     </div>
   );
 }
