@@ -148,6 +148,17 @@ html {
   scroll-behavior: smooth;
 }
 
+/* From lg the assistant workspace can be taller than the window (its context
+   row sits under the conversation until 2xl), so the window itself scrolls
+   under the sticky top bar. Without this, scrolling something into view — a
+   control reached by Tab, a thread's last message — can leave it under the
+   bar: visible to the browser, hidden from the person (WCAG 2.4.11). */
+@media (min-width: 1024px) {
+  html {
+    scroll-padding-top: calc(var(--topbar-height) + var(--safe-top, 0px));
+  }
+}
+
 body {
   background-color: rgb(var(--bg));
   color: rgb(var(--fg));
