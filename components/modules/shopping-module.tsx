@@ -410,7 +410,7 @@ export function ShoppingModule() {
                                 </a>
                               )}
                               <button onClick={() => deleteItem(item.id)} disabled={isPending(`delete:${item.id}`)} aria-label={t('shopping.deleteItem')}
-                                className="rounded p-1 text-muted opacity-0 transition group-hover:opacity-100 hover:text-danger disabled:opacity-50">
+                                className="rounded p-1 text-muted opacity-100 sm:opacity-0 transition sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 hover:text-danger disabled:opacity-50">
                                 {isPending(`delete:${item.id}`) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                               </button>
                             </div>

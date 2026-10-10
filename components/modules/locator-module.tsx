@@ -461,7 +461,7 @@ export function LocatorModule() {
                     <p className="truncate text-[11px] text-muted">{p.address ?? `${p.radius_m} m radius`}</p>
                   </div>
                   {canManage && (
-                    <button onClick={() => openEditPlace(p)} aria-label={tr('itemAction.edit', { name: p.name })} className="rounded p-1 text-muted opacity-0 transition group-hover:opacity-100 hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => openEditPlace(p)} aria-label={tr('itemAction.edit', { name: p.name })} className="rounded p-1 text-muted opacity-100 sm:opacity-0 transition sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
                   )}
                   <button onClick={() => canManage && toggleGeofence(p)} disabled={!canManage || togglingGeo === p.id} role="switch" aria-checked={p.geofence_enabled} aria-label={tr('locator.toggleGeofence', { name: p.name })}
                     className={cn('relative h-6 w-11 shrink-0 rounded-full transition-colors', p.geofence_enabled ? 'bg-emerald-500' : 'bg-elevated', !canManage && 'opacity-60')}>

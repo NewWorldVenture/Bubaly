@@ -246,9 +246,9 @@ export function RoutinesPanel({ events, weekStartMonday, timeZone, onApplied }: 
                     <p className="text-[10px] text-muted">{weekdayMaskLabel(t.weekday_mask)} · {its.length} step{its.length === 1 ? '' : 's'}</p>
                   </div>
                   <button onClick={() => setEditing({ template: t, items: its })} aria-label={tr('routines.editRoutine')}
-                    className="rounded p-1 text-muted opacity-0 transition hover:text-fg group-hover:opacity-100"><Pencil className="h-3.5 w-3.5" /></button>
+                    className="rounded p-1 text-muted opacity-100 sm:opacity-0 transition hover:text-fg sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100"><Pencil className="h-3.5 w-3.5" /></button>
                   <button onClick={() => deleteTemplate(t)} disabled={isPending(`del:${t.id}`)} aria-label={tr('routines.deleteRoutine')}
-                    className="rounded p-1 text-muted opacity-0 transition hover:text-danger group-hover:opacity-100">
+                    className="rounded p-1 text-muted opacity-100 sm:opacity-0 transition hover:text-danger sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100">
                     {isPending(`del:${t.id}`) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                   </button>
                 </div>
