@@ -61,8 +61,15 @@ export function DisruptionForm({ vacationId }: { vacationId: string }) {
         outcome,
         delayMinutes: outcome === 'delayed' ? Number(delay) : 0,
       });
-      if (res.ok) setResult(res);
-      else setIssue(res.error);
+      if (res.ok) {
+        setResult(res);
+        // The report moved the booking and the plans. Leaving it selected made
+        // the same press a SECOND delay on top of the first; choosing it again
+        // is now a deliberate "it slipped further".
+        setChoice('');
+      } else {
+        setIssue(res.error);
+      }
     } catch {
       setIssue(t('vacationDisruption.couldNotReport'));
     } finally {

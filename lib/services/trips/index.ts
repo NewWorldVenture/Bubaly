@@ -1117,8 +1117,12 @@ export async function planTripDisruption(
 ): Promise<ServiceResult<TripDisruption>> {
   const snapshot = await getTrip(scope, vacationId);
   if (!snapshot.ok) return snapshot;
-  const tz = snapshot.data.trip.timezone || scope.tz;
-  const anchor = anchorFor(snapshot.data, request, tz);
+  return planFrom(scope, snapshot.data, request);
+}
+
+function planFrom(scope: ServiceScope, trip: TripSnapshot, request: DisruptionRequest): ServiceResult<TripDisruption> {
+  const tz = trip.trip.timezone || scope.tz;
+  const anchor = anchorFor(trip, request, tz);
   if (!anchor.ok) return fail(anchor.error, { code: SERVICE_CODES.invalidInput });
 
   const plan = replanDisruption(
@@ -1131,14 +1135,14 @@ export async function planTripDisruption(
       delayMinutes: request.delayMinutes ?? 0,
       cancelled: request.cancelled ?? false,
     },
-    itineraryFor(snapshot.data),
-    reservationsFor(snapshot.data, tz),
-    { hasYoungChildren: snapshot.data.hasChildren },
+    itineraryFor(trip),
+    reservationsFor(trip, tz),
+    { hasYoungChildren: trip.hasChildren },
   );
 
   return ok({
-    tripId: snapshot.data.trip.id,
-    tripTitle: snapshot.data.trip.title,
+    tripId: trip.trip.id,
+    tripTitle: trip.trip.title,
     booking: { kind: request.kind, id: request.bookingId, label: anchor.label, day: anchor.day },
     plan,
   });
@@ -1170,30 +1174,121 @@ async function dayIdFor(
   return ok(data?.id ?? null);
 }
 
+type FlightTimes = Pick<Tables<'vacation_flights'>, 'depart_at' | 'arrive_at'>;
+
+/** An instant moved by whole minutes, or null left null. */
+function laterBy(stamp: string | null, minutes: number): string | null {
+  if (!stamp) return null;
+  const at = Date.parse(stamp);
+  return Number.isFinite(at) ? new Date(at + minutes * 60_000).toISOString() : stamp;
+}
+
+/**
+ * Move a delayed flight's own times, but only from the times the plan was read
+ * from. The re-flow anchors on `arrive_at`, so a delay that moved the plans and
+ * not the flight left every later report anchored on the old landing time,
+ * moving the same plans again. And a second report racing this one read the
+ * same times: the compare-and-set lets exactly one of them through.
+ */
+async function moveDelayedFlight(
+  scope: ServiceScope,
+  vacationId: string,
+  flightId: string,
+  from: FlightTimes,
+  to: FlightTimes,
+): Promise<ServiceResult<null>> {
+  let update = scope.db
+    .from('vacation_flights')
+    .update(to)
+    .eq('id', flightId)
+    .eq('family_id', scope.familyId)
+    .eq('vacation_id', vacationId);
+  update = from.arrive_at === null ? update.is('arrive_at', null) : update.eq('arrive_at', from.arrive_at);
+  update = from.depart_at === null ? update.is('depart_at', null) : update.eq('depart_at', from.depart_at);
+  const { data, error } = await update.select('id');
+  if (error) {
+    console.error('[service:trips] delayed flight time update failed', error);
+    return fail(describeDbError(error, 'Could not move the flight to its new time.'), { code: SERVICE_CODES.db });
+  }
+  if (wroteNoRows(data)) {
+    return fail('This flight\'s times changed while you were reporting — another report may have just been saved. Refresh the trip and check it before reporting again.', { code: SERVICE_CODES.invalidInput });
+  }
+  return ok(null);
+}
+
 /**
  * Apply the re-flow: move the family's own itinerary rows and record what
  * happened as a `note` item. Nothing here contacts an airline, a hotel or a
  * restaurant, so nothing here may be described as rebooked — `plan.toRebook`
  * is the list a PERSON still has to work through.
+ *
+ * A delayed flight moves its own times first (`moveDelayedFlight`), so the trip
+ * says when it now lands and a duplicate report is refused before it moves
+ * anything. The writes are not one transaction, so a failure after that undoes
+ * what had moved: an error here means the trip is as it was, and the retry it
+ * invites moves each plan once. A delayed STAY has no time to move —
+ * `vacation_lodging.check_in` is a date — so it is re-flowed as before.
  */
 export async function reportTripDisruption(
   scope: ServiceScope,
   vacationId: string,
   request: DisruptionRequest,
 ): Promise<ServiceResult<ReportedDisruption>> {
-  const planned = await planTripDisruption(scope, vacationId, request);
+  // One read for the plan and the writes, so the flight's compare-and-set is
+  // against the very times the re-flow was planned from.
+  const snapshot = await getTrip(scope, vacationId);
+  if (!snapshot.ok) return snapshot;
+  const planned = planFrom(scope, snapshot.data, request);
   if (!planned.ok) return planned;
   const { plan, booking } = planned.data;
   if (plan.noop) return ok({ ...planned.data, applied: { shifted: 0, noteItemId: null } });
 
-  const snapshot = await getTrip(scope, vacationId);
-  if (!snapshot.ok) return snapshot;
   const dayIds = new Map(snapshot.data.days.map((d) => [d.day_date, d.id]));
+  const originals = new Map(snapshot.data.items.map((i) => [i.id, i]));
+
+  const delay = request.cancelled ? 0 : Math.max(0, Math.round(request.delayMinutes ?? 0));
+  const delayedFlight = request.kind === 'flight' && delay > 0
+    ? snapshot.data.flights.find((f) => f.id === request.bookingId) ?? null
+    : null;
+  const flightFrom: FlightTimes | null = delayedFlight ? { depart_at: delayedFlight.depart_at, arrive_at: delayedFlight.arrive_at } : null;
+  const flightTo: FlightTimes | null = flightFrom
+    ? { depart_at: laterBy(flightFrom.depart_at, delay), arrive_at: laterBy(flightFrom.arrive_at, delay) }
+    : null;
+  if (delayedFlight && flightFrom && flightTo) {
+    const moved = await moveDelayedFlight(scope, vacationId, delayedFlight.id, flightFrom, flightTo);
+    if (!moved.ok) return moved;
+  }
+
+  const movedItems: string[] = [];
+  /** Best effort: put back what this report moved. A failure is logged, and the caller's error stands. */
+  const undo = async () => {
+    for (const id of movedItems) {
+      const was = originals.get(id);
+      if (!was) continue;
+      const { data: restoredItem, error } = await scope.db
+        .from('vacation_itinerary_items')
+        .update({ day_id: was.day_id, start_time: was.start_time, end_time: was.end_time })
+        .eq('id', id)
+        .eq('family_id', scope.familyId)
+        .eq('vacation_id', vacationId)
+        .select('id');
+      if (error || wroteNoRows(restoredItem)) {
+        console.error('[service:trips] could not restore an itinerary item after a failed disruption', { id }, error);
+      }
+    }
+    if (delayedFlight && flightFrom && flightTo) {
+      const restored = await moveDelayedFlight(scope, vacationId, delayedFlight.id, flightTo, flightFrom);
+      if (!restored.ok) console.error('[service:trips] could not restore a flight after a failed disruption', { id: delayedFlight.id }, restored.error);
+    }
+  };
 
   let shifted = 0;
   for (const move of plan.shiftedItems) {
     const target = await dayIdFor(scope, vacationId, move.toDay, dayIds);
-    if (!target.ok) return target;
+    if (!target.ok) {
+      await undo();
+      return target;
+    }
     const patch: Updatable<'vacation_itinerary_items'> = {
       start_time: move.toStart,
       end_time: move.toEnd,
@@ -1212,15 +1307,20 @@ export async function reportTripDisruption(
       .select('id');
     if (error) {
       console.error('[service:trips] itinerary shift failed', error);
+      await undo();
       return fail(describeDbError(error, 'Could not move the itinerary.'), { code: SERVICE_CODES.db });
     }
     if (!wroteNoRows(shiftedRow)) shifted += 1;
+    if (!wroteNoRows(shiftedRow)) movedItems.push(move.id);
   }
 
   // The record of the disruption itself. `vacation_itinerary_items` already
   // has a `note` kind and a `notes` column, so this needs no new schema.
   const anchorDayId = await dayIdFor(scope, vacationId, booking.day, dayIds);
-  if (!anchorDayId.ok) return anchorDayId;
+  if (!anchorDayId.ok) {
+    await undo();
+    return anchorDayId;
+  }
   const { data: note, error: noteError } = await scope.db
     .from('vacation_itinerary_items')
     .insert({
@@ -1238,6 +1338,7 @@ export async function reportTripDisruption(
     .maybeSingle();
   if (noteError) {
     console.error('[service:trips] disruption note create failed', noteError);
+    await undo();
     return fail(describeDbError(noteError, 'Could not record the disruption on the itinerary.'), { code: SERVICE_CODES.db });
   }
 
