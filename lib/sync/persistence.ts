@@ -269,16 +269,38 @@ const mappingScope = (account: Account, provider: SyncProviderEnum, kind: Kind, 
  * generation, conditionally on the exact generation it read: two pulls that
  * read the same token cannot both take it over, and every earlier holder's
  * completion and release (fenced on its own token) no longer match.
- * It then touches the item (set_updated_at moves updated_at on every write)
- * and fences all of its own item writes on the updated_at that touch
- * returned. Every earlier generation fenced its item writes on an updated_at
- * it read before this touch, so once the touch commits none of them can write
- * the item again: a stale recovery can neither overwrite this generation's
- * state nor clear a deleted_at that this or a later generation set. */
+ * Invariant: every item write is fenced on an updated_at read BEFORE the
+ * proof (the mapping compare-and-set, or the token re-check) that authorizes
+ * it. So it first READS the item's updated_at under the ownership scope, takes
+ * the claim over conditionally on the exact generation it read, then touches
+ * the item (set_updated_at moves updated_at on every write) fenced on that
+ * pre-claim updated_at. A generation whose claim was taken over between its
+ * compare-and-set and its touch finds the item moved on (the newer
+ * generation's touch) and its touch misses instead of minting a fresh fence
+ * for a claim it no longer holds. One healing retry (re-read the fence, prove
+ * the token is still ours, re-touch) covers a stale write that landed before
+ * our touch: a newer generation that moved the item before the re-read has
+ * also replaced the token, so the proof fails and this run stops without
+ * writing. A refused re-touch leaves the claim 'syncing' under our token for
+ * the next pull, which re-delivers because no cursor advanced. All later item
+ * writes of this generation are fenced on the updated_at the touch returned,
+ * so nothing a superseded generation writes can land after the superseding
+ * generation's touch: a stale recovery can neither overwrite this
+ * generation's state nor clear a deleted_at that this or a later generation
+ * set. */
 export async function takeOverPendingAdoption(admin: Admin, account: Account, provider: SyncProviderEnum, kind: Kind,
   containerId: string, mapping: PullMapping, observed: PendingAdoption,
 ): Promise<AdoptionClaim> {
   if (!account.user_id) throw new Error('Sync owner unavailable');
+  // Still in this account's mirror and still owned by the account owner, as
+  // the adoption's own refresh is fenced.
+  const owner = { user_id: account.user_id, provider, external_id: mapping.external_id };
+  const scope = { ...owner, id: mapping.local_id, family_id: account.family_id };
+  // The item fence is read BEFORE the claim is taken, never after: a generation
+  // whose claim was taken over between its compare-and-set and its touch then
+  // finds the item moved on (the newer generation's touch) and its touch misses,
+  // instead of minting a fresh fence for a claim it no longer holds.
+  const before = await readAdoptionFence(admin, kind, containerId, scope);
   const token = crypto.randomUUID();
   const { data: taken, error: takeError } = await admin.from('sync_external_mappings')
     .update({ sync_status: 'syncing', metadata: adoptionMeta({ state: 'syncing', token }) })
@@ -286,19 +308,56 @@ export async function takeOverPendingAdoption(admin: Admin, account: Account, pr
     .eq(ADOPTION_TOKEN, observed.token)
     .select('id').maybeSingle();
   requireSyncWrite(taken, takeError, `${kind} adoption takeover`);
-  // Still in this account's mirror and still owned by the account owner, as
-  // the adoption's own refresh is fenced.
-  const owner = { user_id: account.user_id, provider, external_id: mapping.external_id };
-  const scope = { ...owner, id: mapping.local_id, family_id: account.family_id };
-  const { data: touched, error: touchError } = kind === 'event'
-    ? await admin.from('sync_calendar_events').update({ metadata: REMOTE_META })
-      .match({ ...scope, calendar_id: containerId }).select('id, updated_at').maybeSingle()
-    : await admin.from('sync_reminders').update({ metadata: REMOTE_META })
-      .match({ ...scope, list_id: containerId }).select('id, updated_at').maybeSingle();
-  const item = requireSyncWrite(touched, touchError, `${kind} adoption takeover`);
+  let touched = await touchAdoptedItem(admin, kind, containerId, scope, before);
+  if (touched.data === null && !touched.error) {
+    // Self-healing, once: the item moved between the read and the touch. Either
+    // a superseded generation wrote it (its completion will miss on the token)
+    // or a newer generation took this claim over. Re-read the fence FIRST, then
+    // prove the claim is still this generation's; only then re-touch. A newer
+    // generation that moved the item before the re-read has also replaced the
+    // token, so the proof fails and this run stops without writing. More
+    // retries would add round trips without changing the guarantee.
+    const again = await readAdoptionFence(admin, kind, containerId, scope);
+    const { data: held, error: heldError } = await admin.from('sync_external_mappings').select('id')
+      .match({ ...mappingScope(account, provider, kind, mapping), sync_status: 'syncing' })
+      .eq(ADOPTION_TOKEN, token).maybeSingle();
+    if (heldError || !held) throw new Error(`Sync ${kind} adoption takeover failed`);
+    touched = await touchAdoptedItem(admin, kind, containerId, scope, again);
+  }
+  const item = requireSyncWrite(touched.data, touched.error, `${kind} adoption takeover`);
   // updated_at is NOT NULL in the schema; without one no later write could be fenced.
   if (typeof item.updated_at !== 'string' || !item.updated_at) throw new Error(`Sync ${kind} adoption scope unavailable`);
   return { token, fence: { ...owner, updated_at: item.updated_at } };
+}
+
+type AdoptionScope = { id: string; family_id: string; user_id: string; provider: SyncProviderEnum; external_id: string };
+
+/** The item's updated_at as it stands, under the ownership scope. This is only
+ * a reading; it fails closed when the item is not this account's any more or
+ * has no updated_at (NOT NULL in the schema, so none means no fence is
+ * possible). It runs BEFORE the claim is taken, so a missing or re-owned item
+ * leaves the previous generation's claim intact for the next pull. */
+async function readAdoptionFence(admin: Admin, kind: Kind, containerId: string, scope: AdoptionScope): Promise<string> {
+  const { data: item, error } = kind === 'event'
+    ? await admin.from('sync_calendar_events').select('id, updated_at').match({ ...scope, calendar_id: containerId }).maybeSingle()
+    : await admin.from('sync_reminders').select('id, updated_at').match({ ...scope, list_id: containerId }).maybeSingle();
+  if (error) throw new Error(`Sync ${kind} adoption lookup failed`);
+  if (!item || typeof item.updated_at !== 'string' || !item.updated_at) throw new Error(`Sync ${kind} adoption scope unavailable`);
+  return item.updated_at;
+}
+
+/** Touch the item only while it still carries the updated_at this generation
+ * read before proving its claim (set_updated_at moves it on every write). The
+ * body stays exactly { metadata: { origin: 'remote' } } so the audit trigger
+ * logs origin 'remote'. Zero rows is an answer: someone wrote the item since
+ * that read; the caller decides what that means. */
+async function touchAdoptedItem(admin: Admin, kind: Kind, containerId: string, scope: AdoptionScope, updatedAt: string,
+): Promise<{ data: { id: string; updated_at: string | null } | null; error: unknown }> {
+  return kind === 'event'
+    ? await admin.from('sync_calendar_events').update({ metadata: REMOTE_META })
+      .match({ ...scope, calendar_id: containerId, updated_at: updatedAt }).select('id, updated_at').maybeSingle()
+    : await admin.from('sync_reminders').update({ metadata: REMOTE_META })
+      .match({ ...scope, list_id: containerId, updated_at: updatedAt }).select('id, updated_at').maybeSingle();
 }
 
 /** Complete a generation this pull holds: only while the mapping still carries
