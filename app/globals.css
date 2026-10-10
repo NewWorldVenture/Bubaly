@@ -107,11 +107,21 @@
      improves too (danger 4.38 -> 4.84).
 
      Computed and asserted in tests/brand-contrast-contract.test.ts, which now
-     measures the ratio instead of only checking that a --brand-text token exists. */
+     measures the ratio instead of only checking that a --brand-text token exists.
+
+     A status role's text also sits on its own tint (`bg-success/15` behind
+     `text-success`: a status chip). Against --bg alone these passed; against
+     their own tint they did not (success 4.20 on its 15% tint, measured by axe
+     on the social accounts and sync chips; 3.25 on its 25% hover tint). So
+     success, warning and danger are darkened again, the same way: lightness
+     only, each the first value that reaches 4.5:1 on its strongest tint the
+     source puts behind its text, hover states included (success 25%, danger
+     20%, warning 15%). Info already passes on its own. White on each as a
+     solid fill rises to 6.0 to 7.2. */
   --accent: 194 75 24;
-  --success: 24 129 95;
-  --warning: 147 106 18;
-  --danger: 210 55 55;
+  --success: 18 99 73;
+  --warning: 129 93 16;
+  --danger: 174 39 39;
   --danger-fg: 255 255 255;
   --success-fg: 255 255 255;
   --info: 37 99 235;
