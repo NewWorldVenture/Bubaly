@@ -66,6 +66,29 @@ const settled = (control: Locator) => control.evaluate((el) => new Promise<void>
   requestAnimationFrame(tick);
 }));
 
+/** Waits until the window has stopped scrolling (a smooth scroll the page started). */
+const windowSettled = (page: Page) => page.evaluate(() => new Promise<void>((resolve) => {
+  let last = Number.NaN;
+  let still = 0;
+  const tick = () => {
+    still = scrollY === last ? still + 1 : 0;
+    last = scrollY;
+    if (still >= 5) resolve(); else requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}));
+
+/** Where `control` is against the window and the sticky top bar, as the page left it. */
+const placement = (control: Locator) => control.evaluate((el) => {
+  const b = el.getBoundingClientRect();
+  const bar = document.querySelector('header.app-topbar')?.getBoundingClientRect().bottom ?? 0;
+  const hit = b.width && b.height ? document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2) : null;
+  return {
+    scrollY: Math.round(scrollY), top: Math.round(b.top), bottom: Math.round(b.bottom), barBottom: Math.round(bar), viewport: innerHeight,
+    hitsItself: !!hit && (hit === el || el.contains(hit)),
+  };
+});
+
 /** The desktop workspace grid as laid out: its tracks, and each child's box; null below lg. */
 const desktopGrid = (page: Page) => page.evaluate(() => {
   const grid = Array.from(document.querySelectorAll('div')).find((d) => d.className.includes('grid-cols-[320px_1fr_330px]'));
@@ -82,6 +105,15 @@ const overflow = (page: Page) => page.evaluate(() => {
   const main = document.querySelector('main')!;
   return { page: document.documentElement.scrollWidth - innerWidth, main: main.scrollWidth - main.clientWidth };
 });
+
+/** Tab on from where focus is now until `control` holds it; the number of presses, or null. */
+async function tabOnTo(page: Page, control: Locator, limit = 12) {
+  for (let presses = 1; presses <= limit; presses += 1) {
+    await page.keyboard.press('Tab');
+    if (await control.evaluate((el) => el === document.activeElement)) return presses;
+  }
+  return null;
+}
 
 /** Tab from the top of the page until `control` holds focus; the number of presses, or null. */
 async function tabTo(page: Page, control: Locator, limit = 120) {
@@ -127,21 +159,29 @@ test.describe('assistant: the composer and the workspace either side of lg and 2
     return { box, send: pane.getByRole('button', { name: 'Send' }) };
   }
 
-  /** The hero's text box and Send can be seen, pointed at, reached by Tab and typed in. */
+  /**
+   * The hero's text box and Send can be seen, pointed at, reached by Tab and
+   * typed in. Each is reached by Tab, never focused by script, and pointed at
+   * again where that focus left it: focus can scroll the window, and a
+   * control scrolled under the sticky top bar still counts as visible.
+   */
   async function expectUsableHero(page: Page, box: Locator, send: Locator) {
     const at = await geometry(box);
     expect(at.width, 'text box width').toBeGreaterThan(100);
     expect(at.hitsItself, 'a pointer at the text box lands on it').toBe(true);
     await expect(box).toBeVisible();
     expect(await tabTo(page, box), 'Tab reaches the text box').not.toBeNull();
+    await settled(box);
+    expect((await geometry(box)).hitsItself, 'where Tab left it, a pointer at the text box lands on it').toBe(true);
     await page.keyboard.type('Plan dinners');
     await expect(box).toHaveValue('Plan dinners');
     expect((await geometry(box)).width, 'and it is still a box you can see while typing').toBeGreaterThan(100);
     const sendAt = await geometry(send);
     expect(sendAt.width).toBe(44);
     expect(sendAt.hitsItself, 'a pointer at Send lands on it').toBe(true);
-    await send.focus();
-    await expect(send).toBeFocused();
+    expect(await tabOnTo(page, send), 'Tab on from the text box reaches Send').not.toBeNull();
+    await settled(send);
+    expect((await geometry(send)).hitsItself, 'where Tab left it, a pointer at Send lands on it').toBe(true);
   }
 
   // From lg: the grid's tracks, and where the context sits, either side of 2xl.
@@ -195,6 +235,25 @@ test.describe('assistant: the composer and the workspace either side of lg and 2
     });
   }
 
+  test('the scroll padding is the assistant page\'s, between lg and 2xl, and no other page\'s', async ({ page }) => {
+    // app/globals.css stops scrolls below the sticky top bar only where the
+    // two-column layout can make this page taller than the window.
+    const padding = () => page.evaluate(() => getComputedStyle(document.documentElement).scrollPaddingTop);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await signIn(page, '/dashboard/assistant');
+    await expect(page.locator('h1[data-scroll-below-topbar]')).toHaveCount(1);
+    for (const [width, expected] of [[1280, '72px'], [1024, '72px'], [1535, '72px'], [1536, 'auto'], [1600, 'auto'], [1023, 'auto'], [390, 'auto']] as const) {
+      await page.setViewportSize({ width, height: 800 });
+      await expect.poll(padding, { message: `${width}px` }).toBe(expected);
+    }
+    // Leaving by the app's own navigation, the marker goes with the page.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.locator('a[href="/dashboard/calendar"]:visible').first().click();
+    await page.waitForURL((url) => url.pathname === '/dashboard/calendar');
+    await expect(page.locator('[data-scroll-below-topbar]')).toHaveCount(0);
+    expect(await padding()).toBe('auto');
+  });
+
   test('1024px, a conversation opened from the history: its docked composer works, and "New chat" brings back a working hero', async ({ page }) => {
     const origin = requireLocalOrigin(provider);
     const admin = createClient(origin, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
@@ -219,24 +278,49 @@ test.describe('assistant: the composer and the workspace either side of lg and 2
     await expect(left.getByText('What is for dinner this week?')).toBeVisible();
 
     const box = left.getByRole('textbox', { name: 'Message Bubaly' });
-    // Opening a thread scrolls to its foot smoothly; read the box once it is
-    // in view and has stopped moving.
-    await box.scrollIntoViewIfNeeded();
+    const send = left.getByRole('button', { name: 'Send' });
+    // As the page leaves it: opening a thread scrolls to its foot smoothly.
+    // Read the docked composer once that scroll has settled, before anything
+    // here scrolls or focuses.
+    await windowSettled(page);
     await settled(box);
-    const at = await geometry(box);
-    expect(at.width).toBeGreaterThan(100);
-    expect(at.hitsItself).toBe(true);
+    // Measured (Chromium, 1024x800): the window at 360 and the composer at
+    // 127, below a bar ending at 72. Without the scroll padding in
+    // app/globals.css it settled at 55, under the bar.
+    const opened = await placement(box);
+    expect(opened.top, 'as opened, the composer starts below the top bar').toBeGreaterThanOrEqual(opened.barBottom);
+    expect(opened.bottom, 'and ends inside the window').toBeLessThanOrEqual(opened.viewport);
+    expect(opened.hitsItself, 'as opened, a pointer at the composer lands on it').toBe(true);
+    expect((await geometry(box)).width).toBeGreaterThan(100);
+    // Then by keyboard and pointer from there: into the box, type, Tab to
+    // Send, and point at each where focus left it.
     await box.click();
     await page.keyboard.type('And on Friday?');
     await expect(box).toHaveValue('And on Friday?');
-    expect((await geometry(left.getByRole('button', { name: 'Send' }))).hitsItself).toBe(true);
+    expect(await tabOnTo(page, send), 'Tab on from the composer reaches Send').not.toBeNull();
+    await settled(send);
+    expect((await geometry(send)).hitsItself, 'where Tab left it, a pointer at Send lands on it').toBe(true);
     expect(await overflow(page)).toEqual({ page: 0, main: 0 });
+    // After an explicit scroll to it, still usable (kept apart from the
+    // measurement above, which no repair touches).
+    await box.scrollIntoViewIfNeeded();
+    await settled(box);
+    expect((await geometry(box)).hitsItself).toBe(true);
 
-    // "New chat" returns to the hero, which works at this width too.
+    // "New chat" returns to the hero. Read it first where the page leaves it.
     await left.getByRole('button', { name: 'New chat' }).click();
     const pane = page.getByRole('region', { name: 'Plan and results' });
     const hero = pane.getByRole('textbox', { name: 'Ask Bubaly' });
-    await expect(hero).toBeVisible();
+    await expect(hero).toBeAttached();
+    await windowSettled(page);
+    await settled(hero);
+    // Measured (Chromium, 1024x800): the page, shorter without the thread,
+    // is back at the top, and the hero at 367.
+    const fresh = await placement(hero);
+    expect(fresh.top, 'after New chat, the hero starts below the top bar').toBeGreaterThanOrEqual(fresh.barBottom);
+    expect(fresh.bottom, 'and ends inside the window').toBeLessThanOrEqual(fresh.viewport);
+    expect(fresh.hitsItself, 'after New chat, a pointer at the hero lands on it').toBe(true);
+    // Then, apart from that, from the top of the page: the same checks as a fresh arrival.
     await page.evaluate(() => window.scrollTo(0, 0));
     await settled(hero);
     await expectUsableHero(page, hero, pane.getByRole('button', { name: 'Send' }));
