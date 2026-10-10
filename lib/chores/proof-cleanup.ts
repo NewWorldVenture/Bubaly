@@ -18,6 +18,26 @@
 // request holds it, or one stopped without letting go — is left alone: a
 // release keeps it, a submission refuses it. Kept is the safe side: an orphan
 // costs storage, a removed object costs a child their proof.
+//
+// A claim is let go only once nothing it covers can still change. A removal
+// that was sent without an answer to rely on (it threw, or came back with an
+// error) may yet land, so its paths' claims are KEPT, for good: letting go
+// would let a submission record a path whose delete is still in flight. That
+// disposition travels with the claims (ProofClaims.keep), so a caller that
+// lets go of them later — submitProofAction's finally — keeps those too.
+//
+// These are COOPERATIVE application claims, not integrity the database
+// enforces: every path in this app that records or removes proof goes through
+// here and takes one, but a writer that does not (a script with the service
+// role, a direct Storage call, a future feature written without this module)
+// is not stopped by them.
+//
+// Bucket hardening note: claims are empty `text/plain` objects in the
+// chore-proof bucket, which today sets only a file size limit (00430). A future
+// allowed_mime_types on that bucket must admit text/plain, and any minimum size
+// must admit an empty object, or every claim — and so every submission and
+// release — is refused (tests/chore-proof-claims-survive-bucket-hardening.test.ts
+// holds the migrations to that). No bucket or config change is made here.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { PROOF_BUCKET } from '@/lib/chores/proof-media';
@@ -30,8 +50,17 @@ export function proofClaimPath(path: string): string {
   return `${path.slice(0, cut)}/claims/${path.slice(cut + 1)}`;
 }
 
-/** Takes the claim on each path; resolves to the paths this caller now holds. */
-export async function claimProof(client: ProofClient, paths: readonly string[]): Promise<string[]> {
+/** The claims one caller holds. */
+export type ProofClaims = {
+  readonly held: readonly string[];
+  /** Paths whose removal was sent with no answer to rely on: their claims are never let go. */
+  keep(paths: readonly string[]): void;
+  /** Lets go of every claim held, except those kept. */
+  letGo(): Promise<void>;
+};
+
+/** Takes the claim on each path; resolves to the claims this caller now holds. */
+export async function claimProof(client: ProofClient, paths: readonly string[]): Promise<ProofClaims> {
   const held: string[] = [];
   for (const path of new Set(paths)) {
     // Any error is "not held": a claim that exists, a refusal, or a lost answer
@@ -40,39 +69,46 @@ export async function claimProof(client: ProofClient, paths: readonly string[]):
       .upload(proofClaimPath(path), new Blob([]), { contentType: 'text/plain', upsert: false });
     if (!error) held.push(path);
   }
-  return held;
+  const kept = new Set<string>();
+  return {
+    held,
+    keep: (keep) => { for (const path of keep) kept.add(path); },
+    letGo: () => unclaimProof(client, held.filter((path) => !kept.has(path))),
+  };
 }
 
-/** Lets go of claims this caller holds. One that cannot be removed keeps its path from ever being removed: logged, not raised. */
-export async function unclaimProof(client: ProofClient, held: readonly string[]): Promise<void> {
-  if (!held.length) return;
-  const { error } = await client.storage.from(PROOF_BUCKET).remove(held.map(proofClaimPath));
+/** Removes claim objects. One that cannot be removed keeps its path from ever being removed: logged, not raised. */
+async function unclaimProof(client: ProofClient, paths: readonly string[]): Promise<void> {
+  if (!paths.length) return;
+  const { error } = await client.storage.from(PROOF_BUCKET).remove(paths.map(proofClaimPath));
   if (error) console.warn('[chore proof] could not let go of a claim; its object will be kept', error);
 }
 
 /**
  * Removes the paths no chore submission in the family references; returns the
  * ones removed. It claims each path first and touches only those it holds,
- * unless the caller already holds every claim (`claimed`), as submitProofAction
- * does while it works on the paths it was given.
+ * unless the caller passes the claims it already holds (`claims`), as
+ * submitProofAction does while it works on the paths it was given; a removal
+ * whose outcome is unknown is then marked on those claims for the caller.
  */
 export async function releaseUnreferencedProof(
   client: ProofClient,
   familyId: string,
   paths: readonly string[],
-  { claimed = false }: { claimed?: boolean } = {},
+  { claims }: { claims?: ProofClaims } = {},
 ): Promise<string[]> {
   const unique = [...new Set(paths)];
   if (!unique.length) return [];
-  const held = claimed ? unique : await claimProof(client, unique);
+  const own = claims ?? await claimProof(client, unique);
+  const held = unique.filter((path) => own.held.includes(path));
   try {
-    return await removeUnreferenced(client, familyId, held);
+    return await removeUnreferenced(client, familyId, held, own);
   } finally {
-    if (!claimed) await unclaimProof(client, held);
+    if (!claims) await own.letGo();
   }
 }
 
-async function removeUnreferenced(client: ProofClient, familyId: string, held: string[]): Promise<string[]> {
+async function removeUnreferenced(client: ProofClient, familyId: string, held: string[], claims: ProofClaims): Promise<string[]> {
   if (!held.length) return [];
   const { data, error } = await client.from('chore_submissions')
     .select('media_paths').eq('family_id', familyId).overlaps('media_paths', held);
@@ -84,9 +120,17 @@ async function removeUnreferenced(client: ProofClient, familyId: string, held: s
   const referenced = new Set((data ?? []).flatMap((row) => (row.media_paths as string[] | null) ?? []));
   const free = held.filter((path) => !referenced.has(path));
   if (!free.length) return [];
-  const { error: removeError } = await client.storage.from(PROOF_BUCKET).remove(free);
+  let removeError: unknown = null;
+  try {
+    ({ error: removeError } = await client.storage.from(PROOF_BUCKET).remove(free));
+  } catch (thrown) {
+    removeError = thrown ?? true;
+  }
   if (removeError) {
-    console.error('[chore proof] media cleanup failed', removeError);
+    // Sent, and no answer to rely on: the delete may still land. Keep these
+    // claims, so no submission can record a path that may yet vanish.
+    claims.keep(free);
+    console.error('[chore proof] media cleanup failed or went unanswered; keeping its claims', removeError);
     return [];
   }
   return free;

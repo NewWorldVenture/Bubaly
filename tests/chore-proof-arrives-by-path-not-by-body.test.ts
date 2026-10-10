@@ -42,7 +42,8 @@ const harness = vi.hoisted(() => ({
   failDownload: new Set<string>(),
   /** Interleaving points: run before Storage answers info() / acts on remove(). */
   onInfo: null as null | ((path: string) => Promise<void>),
-  onRemove: null as null | ((paths: string[]) => Promise<void>),
+  /** Resolving to an answer makes remove() answer with it instead of removing. */
+  onRemove: null as null | ((paths: string[]) => Promise<void | { data: null; error: unknown }>),
   memberId: 'member-kid',
   role: 'child',
 }));
@@ -104,7 +105,10 @@ function withStorage(db: InMemorySupabase) {
       return o?.bytes ? { data: new Blob([o.bytes]), error: null } : { data: null, error: { message: 'Object not found' } };
     },
     remove: async (paths: string[]) => {
-      if (paths.some((p) => !isClaim(p))) await harness.onRemove?.(paths);
+      if (paths.some((p) => !isClaim(p))) {
+        const answered = await harness.onRemove?.(paths);
+        if (answered) return answered;
+      }
       for (const p of paths) (isClaim(p) ? harness.unclaimed : harness.removed).push(p);
       paths.forEach((p) => harness.objects.delete(p));
       return { data: [], error: null };
@@ -126,6 +130,8 @@ vi.mock('@/lib/supabase/server', () => ({ createServer: async () => harness.db, 
 
 const { submitProofAction } = await import('@/app/(app)/missions/actions');
 const { releaseUnreferencedProof, proofClaimPath } = await import('@/lib/chores/proof-cleanup');
+/** Claims nobody took: a release handed these reads and removes with no claim at all (the control). */
+const unclaimed = (held: string[]) => ({ held, keep: () => {}, letGo: async () => {} });
 const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
 const UPLOAD_FAILED = translate(SOURCE_MESSAGES, 'actions.couldNotUploadProofMedia');
 
@@ -362,7 +368,7 @@ describe('a release and a submission of the same path cannot interleave (#984: S
 
   it('control, without the claim (the release reading and removing on its own): the harness loses P from a recorded submission', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const { a, b } = await interleave(() => releaseUnreferencedProof(harness.db as never, FAMILY, [P], { claimed: true }));
+    const { a, b } = await interleave(() => releaseUnreferencedProof(harness.db as never, FAMILY, [P], { claims: unclaimed([P]) }));
     expect(a).toEqual({ ok: true });
     expect(b).toEqual([P]);
     expect(db.table('chore_submissions')[0].media_paths).toEqual([P]);
@@ -524,5 +530,90 @@ describe('the form sends paths, never the files', () => {
   it('releases uploads only through the reference-checked helper', () => {
     expect(form).toMatch(/release: \(paths\) => releaseUnreferencedProof\(client, familyId, paths\)/);
     expect(form).not.toMatch(/\.remove\(/);
+  });
+});
+
+describe('a removal with no answer to rely on keeps its claim (#984: a delete that lands late)', () => {
+  const P = kidPath(UUID2, 'proof.jpg');
+  beforeEach(() => {
+    store(P, { contentType: 'image/jpeg', size: 10, bytes: new Uint8Array([3]) });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  /** The next removal of a proof object is sent and its answer lost; the delete itself lands at `land()`. */
+  function lostDelete() {
+    let pending: string[] = [];
+    harness.onRemove = async (paths) => {
+      harness.onRemove = null;
+      pending = [...paths];
+      throw new Error('connection reset');
+    };
+    return () => { for (const path of pending) harness.objects.delete(path); };
+  }
+
+  it('control: had the claim been let go, the late delete takes P from the submission recorded meanwhile', async () => {
+    const land = lostDelete();
+    expect(await releaseUnreferencedProof(harness.db as never, FAMILY, [P])).toEqual([]);
+    // What letting go of every claim used to do, whatever the removal's outcome.
+    harness.objects.delete(proofClaimPath(P));
+    expect(await submit([P])).toEqual({ ok: true });
+    land();
+    expect(db.table('chore_submissions')[0].media_paths).toEqual([P]);
+    expect(harness.objects.has(P), 'the recorded proof is gone').toBe(false);
+  });
+
+  it('a release whose removal went unanswered keeps the claim: P cannot be recorded, so the late delete costs no submission', async () => {
+    const land = lostDelete();
+    expect(await releaseUnreferencedProof(harness.db as never, FAMILY, [P])).toEqual([]);
+    expect(harness.objects.has(proofClaimPath(P)), 'the claim is kept').toBe(true);
+    expect(await submit([P])).toEqual({ ok: false, error: UPLOAD_FAILED });
+    land();
+    expect(db.table('chore_submissions')).toEqual([]);
+    harness.objects.delete(proofClaimPath(P));
+  });
+
+  it('the action’s own cleanup, unanswered, is kept through its finally: a refused path stays claimed', async () => {
+    store(P, { contentType: 'image/svg+xml', size: 10 });
+    const land = lostDelete();
+    expect(await submit([P])).toEqual({ ok: false, error: UPLOAD_FAILED });
+    expect(harness.objects.has(proofClaimPath(P)), 'kept past the action’s finally').toBe(true);
+    land();
+    expect(await submit([P])).toEqual({ ok: false, error: UPLOAD_FAILED });
+    harness.objects.delete(proofClaimPath(P));
+  });
+
+  it('a rollback whose removal went unanswered keeps the claims of everything that removal covered', async () => {
+    const Q = kidPath(UUID, 'other.jpg');
+    store(Q, { contentType: 'image/jpeg', size: 10, bytes: new Uint8Array([4]) });
+    const inserted = recordInserts({ refuseVerdict: true });
+    let pending: string[] = [];
+    harness.onRemove = async (paths) => {
+      harness.onRemove = null;
+      pending = paths.filter((p) => p === P);
+      // Q's removal is answered; P's goes unanswered.
+      for (const p of paths.filter((x) => x !== P)) harness.objects.delete(p);
+      if (pending.length) throw new Error('connection reset');
+    };
+    expect(await submit([P, Q])).toEqual({ ok: false, error: translate(SOURCE_MESSAGES, 'actions.couldNotSaveTheProof') });
+    expect(inserted).toHaveLength(1);
+    expect(db.table('chore_submissions')).toEqual([]);
+    // One removal call for both: unanswered, so both are kept.
+    expect(harness.objects.has(proofClaimPath(P))).toBe(true);
+    expect(harness.objects.has(proofClaimPath(Q))).toBe(true);
+    harness.objects.delete(proofClaimPath(P));
+    harness.objects.delete(proofClaimPath(Q));
+  });
+
+  it('an answered refusal from Storage is not a reliable answer either: the claim is kept', async () => {
+    harness.onRemove = async () => { harness.onRemove = null; return { data: null, error: { statusCode: '504', message: 'Gateway Timeout' } }; };
+    expect(await releaseUnreferencedProof(harness.db as never, FAMILY, [P])).toEqual([]);
+    expect(harness.objects.has(proofClaimPath(P))).toBe(true);
+    harness.objects.delete(proofClaimPath(P));
+  });
+
+  it('a removal that is answered lets go of the claim, as before', async () => {
+    expect(await releaseUnreferencedProof(harness.db as never, FAMILY, [P])).toEqual([P]);
+    expect(harness.objects.has(proofClaimPath(P))).toBe(false);
+    expect(harness.objects.has(P)).toBe(false);
   });
 });
