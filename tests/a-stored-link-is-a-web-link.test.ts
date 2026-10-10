@@ -85,7 +85,9 @@ const CONSTANT_FIELDS: Record<string, string> = {
 
 // `href={x.url}`, `href={x.claim_url}`, `href={item.pageUrl}`: a member
 // expression on any field whose name ends in "url" (or a website/homepage),
-// not passed through safeWebLink / safeSocialLink / media.
+// not passed through safeWebLink / safeSocialLink / media. A heuristic over
+// source text: a stored link reaching href under another name, or through a
+// variable, is not seen here (the browser spec covers four surfaces).
 const RAW_LINK = /href=\{(?![^}]*\b(safeWebLink|safeSocialLink|media)\()([^}]*\b([a-zA-Z_]+\.(?:[a-zA-Z_]*(?:url|Url|URL)|website|homepage))\b[^}]*)\}/g;
 
 describe('a stored link is rendered only as a web link', () => {

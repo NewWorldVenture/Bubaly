@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
-import { createOwnedAccount, requireLocalOrigin, type OwnedAccount } from './helpers/durable-session';
+import { closeWithoutSnapshot, createOwnedAccount, requireLocalOrigin, type OwnedAccount } from './helpers/durable-session';
 
 // SEC-006: a link a family member stored is rendered only as a web link.
 //
@@ -94,17 +94,27 @@ test.describe('SEC-006: a stored link is rendered only as a web link', () => {
     if (error) throw new Error(`Could not give the household a Plus plan (${error.code ?? 'no code'}).`);
   });
 
-  test.afterEach(async () => {
-    try { await account?.dispose(); } finally { account = null; }
+  test.afterEach(async ({ context }) => {
+    // Pages close before the context, and before Playwright's failure
+    // snapshot, so a failure cannot attach the sign-in form's values to it
+    // (the established pattern; CI's artifact upload also excludes this suite).
+    try { await closeWithoutSnapshot(context); } finally {
+      try { await account?.dispose(); } finally { account = null; }
+    }
     expect(external, 'requests that left this machine').toEqual([]);
     expect(dialogs, 'a stored link ran script').toEqual([]);
   });
 
-  /** Opens `to`, then: no active-content href anywhere, the safe link is a link, and each hostile row's link, clicked, runs nothing and opens nothing. */
+  /**
+   * Opens `to`, then: no active-content href anywhere, the safe link is a
+   * link, and each hostile row's link, clicked, runs nothing and opens
+   * nothing. The href check is soft, so where it fails (main) the clicks are
+   * still made and their outcome reported beside it.
+   */
   async function expectInert(page: Page, to: string, safeLink: () => ReturnType<Page['locator']>, hostileClickTargets: () => ReturnType<Page['locator']>) {
     await signIn(page, to);
     await expect(safeLink()).toHaveAttribute('href', SAFE);
-    expect(await activeContentHrefs(page)).toEqual([]);
+    expect.soft(await activeContentHrefs(page), 'non-web hrefs on the page').toEqual([]);
     const targets = hostileClickTargets();
     expect(await targets.count(), 'one rendered (inert) link per hostile row').toBe(HOSTILE.length);
     for (let i = 0; i < HOSTILE.length; i += 1) await targets.nth(i).click({ timeout: 5_000 });
