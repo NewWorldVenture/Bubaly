@@ -27,6 +27,20 @@ export type ConnectInput = {
 };
 
 /**
+ * The provider account is connected for another family the user still belongs
+ * to. Moving it would strand that family's calendars, so the user is told to
+ * disconnect it there first (the callbacks turn this into
+ * `error=connected_elsewhere`).
+ */
+export class AccountConnectedElsewhereError extends Error {
+  readonly code = 'connected_elsewhere' as const;
+  constructor() {
+    super('This account is already connected for another family');
+    this.name = 'AccountConnectedElsewhereError';
+  }
+}
+
+/**
  * Upserts the account + its encrypted tokens. Idempotent on (user, provider,
  * external_id). If a re-connect omits a refresh token (Google only returns it on
  * first consent), the previously stored refresh token is preserved.
@@ -58,7 +72,18 @@ export async function connectAccount(admin: Admin, input: ConnectInput): Promise
       .eq('user_id', input.userId).eq('provider', input.provider).eq('external_id', input.externalId).maybeSingle();
     if (existing.error) throw new Error('Could not check the existing calendar connection');
     if (existing.data && existing.data.family_id !== input.familyId) {
-      throw new Error('This account is already connected for another family');
+      // The disconnect routes only look in the ACTIVE family, so a user who
+      // has left (or been removed from) the family holding the account could
+      // never release it, and every connect elsewhere would fail forever. That
+      // family is no longer theirs to protect: drop the stale connection —
+      // what a disconnect there would have done — and connect afresh here.
+      const membership = await admin.from('family_members').select('id')
+        .eq('user_id', input.userId).eq('family_id', existing.data.family_id).eq('is_active', true).limit(1);
+      if (membership.error) throw new Error('Could not check the existing calendar connection');
+      if ((membership.data ?? []).length > 0) throw new AccountConnectedElsewhereError();
+      const released = await admin.from('sync_accounts').delete()
+        .eq('id', existing.data.id).eq('user_id', input.userId).eq('family_id', existing.data.family_id).select('id');
+      if (released.error || (released.data ?? []).length !== 1) throw new Error('Could not release the connection left in a former family');
     }
   }
   const values = {

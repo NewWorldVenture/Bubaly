@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { exchangeCode, getGoogleUserEmail, googleSyncRedirectUri } from '@/lib/sync/providers/google';
-import { connectAccount } from '@/lib/sync/accounts';
+import { AccountConnectedElsewhereError, connectAccount } from '@/lib/sync/accounts';
 import { hasEncryptionKey } from '@/lib/sync/crypto';
 import { syncOAuthStateCookie, syncOAuthStatePath, verifySyncOAuthState } from '@/lib/sync/oauth-state';
 import { finishOnboardingCalendarOAuth } from '@/lib/services/onboarding-calendar/oauth';
@@ -59,6 +59,9 @@ export async function GET(req: NextRequest) {
 
     return redirect('connected=1');
   } catch (err) {
+    // Said plainly: a generic failure left the user retrying a connect that
+    // can only succeed once the account is disconnected in the other family.
+    if (err instanceof AccountConnectedElsewhereError) return redirect('error=connected_elsewhere');
     console.error('Google sync callback error:', err);
     return redirect('error=connect_failed');
   }

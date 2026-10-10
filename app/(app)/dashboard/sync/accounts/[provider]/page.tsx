@@ -90,6 +90,7 @@ const STATUS_MSG: Record<string, { tone: 'success' | 'danger'; text: string }> =
   'error=state_mismatch': { tone: 'danger', text: 'Security check failed (state mismatch). Please try connecting again.' },
   'error=denied': { tone: 'danger', text: 'Authorization was cancelled or denied.' },
   'error=connect_failed': { tone: 'danger', text: 'Could not complete the connection. Please try again.' },
+  'error=connected_elsewhere': { tone: 'danger', text: 'This account is already connected in another of your families. Switch to that family and disconnect it there first, then connect it here.' },
   // The disconnect route reports this when the account row could not be
   // deleted. It must not fall through to 'disconnected=1' above: that line
   // tells the member their access was revoked, and here it was not.

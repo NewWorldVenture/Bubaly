@@ -529,14 +529,20 @@ describe('editAndApprove', () => {
 describe('a pending row a manager rewrote is not trusted for what it says about itself', () => {
   it('runs the trust gate for a row that claims requested_by_kind = ai without the server having filed it', async () => {
     // An adult files a member row, PATCHes requested_by_kind to 'ai' (no
-    // column pin stops it), then approves it alone. `skipTrust` read that
+    // column pin stops it), then has it approved. `skipTrust` read that
     // column, so any registered tool ran with every family rule skipped.
+    // (Approving it ALONE is now refused outright — see "whose request it is
+    // comes from the server's ledger" below — so the approver here is another
+    // adult, and the gate must still run.)
     const store = makeStore({
       approval_requests: [approvalRow({
-        requested_by_kind: 'ai', requested_by_member_id: 'member-1', agent: null,
+        requested_by_kind: 'ai', requested_by_member_id: 'member-2', agent: null,
         payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } }, payload_kind: 'tool',
       })],
-      family_members: [{ id: 'member-1', family_id: 'fam-1', user_id: 'auth-user-1' }],
+      family_members: [
+        { id: 'member-1', family_id: 'fam-1', user_id: 'auth-user-1' },
+        { id: 'member-2', family_id: 'fam-1', user_id: 'auth-user-2' },
+      ],
     });
     holder.service = store.db;
     const res = await decide(scopeWith(store.db), 'appr-1', 'approved');
@@ -613,6 +619,106 @@ describe('a pending row a manager rewrote is not trusted for what it says about 
     expect(res).toMatchObject({ ok: false, retryable: false });
     if (!res.ok) expect(res.error).toContain('recorded');
     expect(store.tables.approval_requests[0].status).toBe('approved');
+    errors.mockRestore();
+  });
+});
+
+describe('whose request it is comes from the server\'s ledger, not the row\'s own columns', () => {
+  // `requested_by_kind` is writable on a pending row. `isOwnMemberRequest` read
+  // it, so an adult who filed their own row flipped it to 'ai' and approved
+  // alone. The tool branch re-ran the gate, but the concierge_plan branch has
+  // none: an adult could materialise a plan by themselves.
+  const planRow = () => approvalRow({
+    requested_by_kind: 'ai', requested_by_member_id: 'member-1', agent: null,
+    payload: { plan_id: 'plan-9', kinds: ['calendar'] }, payload_kind: 'concierge_plan', domain: 'scheduling',
+  });
+  const planSeed = () => ({
+    concierge_plans: [{ id: 'plan-9', family_id: 'fam-1', title: 'Zoo trip', description: null, location: null, planned_for: '2026-09-12', budget_cents: null }],
+    concierge_plan_actions: [] as Row[],
+  });
+
+  it('refuses an adult approving a concierge_plan row they filed and relabelled as Bubaly\'s', async () => {
+    const store = makeStore({ approval_requests: [planRow()], ...planSeed() });
+    holder.service = store.db;
+    expect(await decide(scopeWith(store.db), 'appr-1', 'approved')).toMatchObject({ ok: false, code: 'denied' });
+    expect(await editAndApprove(scopeWith(store.db), 'appr-1', { calendar: true })).toMatchObject({ ok: false, code: 'denied' });
+    expect(store.tables.approval_requests[0].status).toBe('pending');
+    expect(store.tables.calendar_events ?? []).toHaveLength(0);
+  });
+
+  it('refuses the same for a relabelled tool row', async () => {
+    const store = makeStore({
+      approval_requests: [approvalRow({
+        requested_by_kind: 'ai', requested_by_member_id: 'member-1',
+        payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } }, payload_kind: 'tool',
+      })],
+    });
+    holder.service = store.db;
+    expect(await decide(scopeWith(store.db), 'appr-1', 'approved')).toMatchObject({ ok: false, code: 'denied' });
+    expect(executed.calls).toHaveLength(0);
+  });
+
+  it('still lets the person Bubaly asked for approve a row Bubaly really filed (not over-tightened)', async () => {
+    const store = makeStore({ approval_requests: [planRow()], ...planSeed(), trust_audit_logs: [bubalyFiledMarker()] });
+    holder.service = store.db;
+    expect(await decide(scopeWith(store.db), 'appr-1', 'approved')).toMatchObject({ ok: true, data: { status: 'approved', executed: true } });
+    expect(store.tables.calendar_events).toHaveLength(1);
+  });
+
+  it('still lets the asker approve their own run\'s step, which the executor files without an audit line', async () => {
+    const store = makeStore({
+      approval_requests: [approvalRow({ requested_by_member_id: 'member-1', payload: { kind: 'plan_steps', run_id: 'run-1', step_ids: ['step-1'] }, payload_kind: 'plan_steps', run_id: 'run-1', plan_step_ids: ['step-1'] })],
+      family_automation_runs: [runRow()],
+      ai_plan_steps: [stepRow()],
+    });
+    holder.service = store.db;
+    expect(await decide(scopeWith(store.db), 'appr-1', 'approved')).toMatchObject({ ok: true, data: { status: 'approved' } });
+  });
+});
+
+describe('a standalone tool approval whose run lookup failed is not promised to a sweep that never sees it', () => {
+  // `resumeSettledRuns` scans runs. A tool approval that belongs to no run was
+  // told "It will pick it up on its next check" when the step read timed out —
+  // and then nothing ever executed it.
+  function failingStepReads(store: ReturnType<typeof makeStore>, failures: number) {
+    const fake = store.db as unknown as { from: (table: string) => Record<string, unknown> };
+    const original = fake.from;
+    let left = failures;
+    fake.from = (table: string) => {
+      const b = original(table);
+      if (table === 'ai_plan_steps' && left > 0) {
+        left -= 1;
+        b.then = (onFulfilled: (v: { data: null; error: { message: string } }) => void) => onFulfilled({ data: null, error: { message: 'timeout' } });
+      }
+      return b;
+    };
+  }
+  const toolRow = () => approvalRow({ payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } }, payload_kind: 'tool' });
+
+  it('does the work once a second look shows no run is waiting on it', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const store = makeStore({ approval_requests: [toolRow()], trust_audit_logs: [bubalyFiledMarker()] });
+    failingStepReads(store, 1);
+    holder.service = store.db;
+    const res = await decide(scopeWith(store.db), 'appr-1', 'approved');
+    expect(res).toMatchObject({ ok: true, data: { status: 'approved', executed: true } });
+    expect(executed.calls).toHaveLength(1);
+    errors.mockRestore();
+  });
+
+  it('says plainly it did nothing, and does not promise a pick-up, when it still cannot tell', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const store = makeStore({ approval_requests: [toolRow()], trust_audit_logs: [bubalyFiledMarker()] });
+    failingStepReads(store, 2);
+    holder.service = store.db;
+    const res = await decide(scopeWith(store.db), 'appr-1', 'approved');
+    expect(res).toMatchObject({ ok: false, retryable: false });
+    if (!res.ok) {
+      expect(res.error).toContain('recorded');
+      expect(res.error).not.toContain('next check');
+      expect(res.error).toContain('ask Bubaly again');
+    }
+    expect(executed.calls).toHaveLength(0);
     errors.mockRestore();
   });
 });

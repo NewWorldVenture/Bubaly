@@ -574,8 +574,14 @@ export async function materializeConciergePlan(
       // A failed insert is not "applied": release the reservation so the
       // idempotent re-run tries this kind again.
       console.error(`[concierge] ${kind} write-back failed`, { planId: plan.id, familyId, kind, error: createErr });
-      const { data: released, error: releaseErr } = await db.from('concierge_plan_actions').delete()
-        .eq('id', reserved.id).eq('family_id', familyId).is('target_id', null).select('id');
+      // Through the server's writer, not the caller's client: a member DELETE
+      // policy on the ledger lets anyone in the family erase rows and have the
+      // next apply create the records again, and the proposed pin removes it.
+      // The release is the server undoing its own reservation, so it does not
+      // depend on that policy.
+      const releaser = await ledgerWriter(db);
+      const { data: released, error: releaseErr } = await releaser.from('concierge_plan_actions').delete()
+        .eq('id', reserved.id).eq('family_id', familyId).eq('plan_id', plan.id).is('target_id', null).select('id');
       if (releaseErr || wroteNoRows(released)) console.error('[concierge] could not release the write-back reservation', { planId: plan.id, familyId, kind, error: releaseErr });
       failed.push(kind);
       continue;
@@ -781,6 +787,19 @@ function decidedButNotResumed(error: string): ServiceResult<never> {
   });
 }
 
+/**
+ * The decision is recorded, but whether a run is waiting on it could not be
+ * read. If one is, the settled-run sweep resumes it; if not, nothing ever will
+ * — and executing here could do the work a second time beside the run. So
+ * nothing is done, and the message says both halves honestly.
+ */
+function decidedButUnclear(error: string): ServiceResult<never> {
+  console.error('[service:approvals] a decision was recorded but Bubaly could not tell whether a run was waiting on it', error);
+  return fail('Your decision is recorded, but Bubaly could not check whether this was part of something it is already working on, so it has not done it yet. If that work does not carry on by itself shortly, ask Bubaly again.', {
+    code: SERVICE_CODES.db, retryable: false,
+  });
+}
+
 async function performApproved(
   scope: ServiceScope,
   row: ApprovalRow,
@@ -823,8 +842,17 @@ async function performApproved(
       // A gate opened inside a run: the step, not this call, performs the tool
       // so the run's idempotency key and timeline stay the single record.
       const folded = await foldIntoRun(scope, row, 'approved');
-      if (!folded.ok) return decidedButNotResumed(folded.error);
-      if (folded.data.released > 0) {
+      if (!folded.ok) {
+        // "It will pick it up on its next check" is only true when a run step
+        // is parked on this row: `resumeSettledRuns` scans runs, and a
+        // standalone tool approval has none. The fold can fail before it knew
+        // which case this is (the step read), so look again.
+        const parked = await stepsWaitingOn(ledgerClient(scope), scope.familyId, row.id);
+        if (!parked.ok) return decidedButUnclear(folded.error);
+        if (parked.data.length > 0) return decidedButNotResumed(folded.error);
+        // No run waits on this row: it is a standalone approval, and the work
+        // is done here, below, exactly as when the fold found no steps.
+      } else if (folded.data.released > 0) {
         const summary = 'Approved — Bubaly is picking this up now.';
         await stampExecution(scope, row.id, summary);
         await auditDecision(scope, row, 'approved_execution', summary, { released: folded.data.released, resumed_run_id: folded.data.resumedRunId });
@@ -922,8 +950,18 @@ const VOTE_RETRIES = 3;
  * still fine.) An AI-filed row on someone's behalf is different — the asker is
  * Bubaly, and the person it asked for may well be the parent who decides.
  */
-function isOwnMemberRequest(row: ApprovalRow, memberId: string): boolean {
-  return row.requested_by_kind !== 'ai' && row.requested_by_member_id === memberId;
+async function isOwnMemberRequest(scope: ServiceScope, row: ApprovalRow, memberId: string): Promise<boolean> {
+  if (row.requested_by_member_id !== memberId) return false;
+  if (row.requested_by_kind !== 'ai') return true;
+  // 'ai' is a column any manager can PATCH onto their own pending row, so it
+  // only makes the row Bubaly's when the server's ledger says Bubaly filed it
+  // (`filedByBubaly`). Otherwise an adult flips the column and approves alone —
+  // and the concierge_plan branch, unlike the tool branch, runs no gate after.
+  // A plan_steps row is the exception: the executor files those without an
+  // audit line, and a decision on one only releases steps the server itself
+  // parked on that row (`stepsWaitingOn`), so a forged one releases nothing.
+  if (classifyPayload(row)?.kind === 'plan_steps') return false;
+  return !(await filedByBubaly(scope, row));
 }
 const OWN_REQUEST = fail('You asked for this one, so someone else in the family needs to approve it.', { code: SERVICE_CODES.denied });
 
@@ -946,7 +984,7 @@ export async function decide(
   if (prior.some((v) => v.member_id === memberId)) {
     return fail('You already responded to this request.', { code: SERVICE_CODES.invalidInput });
   }
-  if (decision === 'approved' && isOwnMemberRequest(row, memberId)) return OWN_REQUEST;
+  if (decision === 'approved' && await isOwnMemberRequest(scope, row, memberId)) return OWN_REQUEST;
   const nowIso = scopeNow(scope).toISOString();
   const cleanNote = note?.trim() || null;
   const threshold = await thresholdOf(scope, row);
@@ -1152,7 +1190,7 @@ export async function editAndApprove(
   if (prior.some((v) => v.member_id === memberId)) {
     return fail('You already responded to this request.', { code: SERVICE_CODES.invalidInput });
   }
-  if (isOwnMemberRequest(row, memberId)) return OWN_REQUEST;
+  if (await isOwnMemberRequest(scope, row, memberId)) return OWN_REQUEST;
   const threshold = await thresholdOf(scope, row);
   if (threshold.parentsOnly && scope.role !== 'parent') {
     return fail('This one needs two parents to agree. Ask a parent to approve it.', { code: SERVICE_CODES.denied });

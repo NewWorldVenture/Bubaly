@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
-import { connectAccount } from '@/lib/sync/accounts';
+import { AccountConnectedElsewhereError, connectAccount } from '@/lib/sync/accounts';
 
 // A user in families A and B connects the same Google account while B is
 // active. The normal (non-onboarding) branch upserted on (user, provider,
@@ -21,6 +21,11 @@ beforeEach(() => {
   db.seed('sync_accounts', [{ id: accountId, user_id: userId, family_id: familyA, provider: 'google', external_id: 'me@example.test', sync_direction: 'two_way' }]);
   db.seed('sync_tokens', [{ account_id: accountId, user_id: userId, family_id: familyA, provider: 'google', external_id: 'me@example.test', access_token_enc: 'old' }]);
   db.seed('sync_connections', [{ account_id: accountId, user_id: userId, family_id: familyA, provider: 'google', external_id: 'me@example.test' }]);
+  // The user belongs to both families.
+  db.seed('family_members', [
+    { id: 'm-a', user_id: userId, family_id: familyA, is_active: true },
+    { id: 'm-b', user_id: userId, family_id: familyB, is_active: true },
+  ]);
 });
 
 describe('connecting an account another family already holds', () => {
@@ -55,4 +60,36 @@ describe('the OAuth callbacks never key an account on the user id', () => {
       expect(src).toMatch(/if \(!(identity|email)\) return redirect\('error=connect_failed'\)/);
     });
   }
+});
+
+// The refusal above locked a user out for good once they had LEFT family A: the
+// disconnect routes only look in the active family, so the A-bound row could
+// never be removed, and every connect in B failed with a generic error.
+describe('a user who left the family holding the account is not locked out', () => {
+  it('releases the stale connection and connects the account in the new family', async () => {
+    db.table('family_members').find((m) => m.id === 'm-a')!.is_active = false;
+    const id = await connectAccount(db as never, { userId, familyId: familyB, provider: 'google', externalId: 'me@example.test', tokens });
+    const accounts = db.table('sync_accounts');
+    expect(accounts).toHaveLength(1);
+    expect(accounts[0]).toMatchObject({ id, family_id: familyB, external_id: 'me@example.test' });
+    expect(id).not.toBe(accountId);
+  });
+
+  it('a member of both still gets the specific refusal the callbacks can explain', async () => {
+    const err = await connectAccount(db as never, { userId, familyId: familyB, provider: 'google', externalId: 'me@example.test', tokens }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AccountConnectedElsewhereError);
+    expect(db.table('sync_accounts')[0]).toMatchObject({ id: accountId, family_id: familyA });
+  });
+
+  for (const file of ['app/api/sync/[provider]/callback/route.ts', 'app/api/sync/google/callback/route.ts']) {
+    it(`${file} says why instead of a generic connect_failed`, () => {
+      const src = readFileSync(file, 'utf8');
+      expect(src).toMatch(/if \(err instanceof AccountConnectedElsewhereError\) return redirect\('error=connected_elsewhere'\)/);
+    });
+  }
+
+  it('the provider page has words for that error', () => {
+    const src = readFileSync('app/(app)/dashboard/sync/accounts/[provider]/page.tsx', 'utf8');
+    expect(src).toContain("'error=connected_elsewhere'");
+  });
 });
