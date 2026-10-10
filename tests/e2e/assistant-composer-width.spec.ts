@@ -235,23 +235,136 @@ test.describe('assistant: the composer and the workspace either side of lg and 2
     });
   }
 
-  test('the scroll padding is the assistant page\'s, between lg and 2xl, and no other page\'s', async ({ page }) => {
-    // app/globals.css stops scrolls below the sticky top bar only where the
-    // two-column layout can make this page taller than the window.
-    const padding = () => page.evaluate(() => getComputedStyle(document.documentElement).scrollPaddingTop);
+  test('scrolls stop clear of the app\'s fixed chrome, on this page and every other, at every width', async ({ page }) => {
+    // app/globals.css keeps a scroll from leaving anything under the sticky
+    // top bar, or under the tab bar and the floating buttons at the bottom
+    // (WCAG 2.4.11). It was this page's alone between lg and 2xl (#985); the
+    // keyboard walk found the same on nine other pages.
+    const padding = () => page.evaluate(() => {
+      const s = getComputedStyle(document.documentElement);
+      return [s.scrollPaddingTop, s.scrollPaddingBottom];
+    });
     await page.setViewportSize({ width: 1280, height: 800 });
     await signIn(page, '/dashboard/assistant');
-    await expect(page.locator('h1[data-scroll-below-topbar]')).toHaveCount(1);
-    for (const [width, expected] of [[1280, '72px'], [1024, '72px'], [1535, '72px'], [1536, 'auto'], [1600, 'auto'], [1023, 'auto'], [390, 'auto']] as const) {
+    for (const [width, expected] of [[1280, ['72px', '152px']], [1024, ['72px', '152px']], [1600, ['72px', '152px']], [1023, ['72px', '200px']], [640, ['72px', '200px']], [639, ['64px', '200px']], [390, ['64px', '200px']]] as const) {
       await page.setViewportSize({ width, height: 800 });
-      await expect.poll(padding, { message: `${width}px` }).toBe(expected);
+      await expect.poll(padding, { message: `${width}px` }).toEqual(expected);
     }
-    // Leaving by the app's own navigation, the marker goes with the page.
+    // Another page, by the app's own navigation: the same.
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.locator('a[href="/dashboard/calendar"]:visible').first().click();
     await page.waitForURL((url) => url.pathname === '/dashboard/calendar');
-    await expect(page.locator('[data-scroll-below-topbar]')).toHaveCount(0);
-    expect(await padding()).toBe('auto');
+    expect(await padding()).toEqual(['72px', '152px']);
+    // A page without the app shell scrolls as it did.
+    await page.goto('/pricing');
+    await expect.poll(padding).toEqual(['auto', 'auto']);
+  });
+
+  /**
+   * Opens `route` (asserting it is that page, by its own heading), tags every
+   * control named in `named` (each instance, so a repeated label cannot be
+   * satisfied by its first), then tabs `stops` times. Each stop is judged once
+   * the smooth scroll settles: what fixed chrome, if any, is painted at its
+   * centre, and, for a tagged control, whether it is strictly visible: real
+   * size, its own centre inside the viewport (no clamping), and the hit test
+   * there landing on the control.
+   */
+  async function tabStops(page: Page, route: string, heading: string, named: readonly string[], stops: number) {
+    await page.goto(route);
+    expect(new URL(page.url()).pathname).toBe(route);
+    await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
+    const tags = await page.evaluate((labels) => {
+      const out: string[] = [];
+      for (const label of labels) {
+        let i = 0;
+        for (const el of Array.from(document.querySelectorAll<HTMLElement>('a[href], button, select, input'))) {
+          const name = (el.getAttribute('aria-label') ?? el.textContent ?? '').trim().replace(/\s+/g, ' ');
+          if (name !== label) continue;
+          el.dataset.namedStop = `${label}#${i}`;
+          out.push(el.dataset.namedStop);
+          i += 1;
+        }
+      }
+      return out;
+    }, named);
+    for (const label of named) expect(tags.some((t) => t.startsWith(`${label}#`)), `${route} has "${label}"`).toBe(true);
+    await page.evaluate(() => { (document.activeElement as HTMLElement | null)?.blur(); window.scrollTo(0, 0); });
+    const seen: { name: string; tag: string | null; strictlyVisible: boolean; hiddenBy: string | null }[] = [];
+    for (let i = 0; i < stops; i += 1) {
+      await page.keyboard.press('Tab');
+      seen.push(await page.evaluate(async () => {
+        for (let still = 0, last = -1, frames = 0; still < 3 && frames < 120; frames += 1) {
+          await new Promise(requestAnimationFrame);
+          still = scrollY === last ? still + 1 : 0;
+          last = scrollY;
+        }
+        const el = document.activeElement as HTMLElement | null;
+        if (!el || el === document.body) return { name: '', tag: null, strictlyVisible: false, hiddenBy: null };
+        const name = (el.getAttribute('aria-label') ?? el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 40);
+        const tag = el.dataset.namedStop ?? null;
+        const r = el.getBoundingClientRect();
+        const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+        const inView = r.width > 0 && r.height > 0 && cx >= 0 && cy >= 0 && cx < innerWidth && cy < innerHeight;
+        const hit = inView ? document.elementFromPoint(cx, cy) : null;
+        const strictlyVisible = !!hit && (hit === el || el.contains(hit));
+        let hiddenBy: string | null = null;
+        if (r.width >= 1 && r.height >= 1) {
+          const x = Math.min(Math.max(cx, 0), innerWidth - 1), y = Math.min(Math.max(cy, 0), innerHeight - 1);
+          const top = document.elementFromPoint(x, y);
+          if (top && top !== el && !el.contains(top) && !top.contains(el)) {
+            const chrome = (top as HTMLElement).closest('.app-topbar, nav.fixed, .fixed');
+            hiddenBy = chrome ? chrome.className.toString().slice(0, 40) : null;
+          }
+        }
+        return { name, tag, strictlyVisible, hiddenBy };
+      }));
+    }
+    // Every tagged control was a stop, and strictly visible there.
+    const reached = new Map(seen.filter((s) => s.tag).map((s) => [s.tag!, s.strictlyVisible]));
+    for (const tag of tags) {
+      expect(reached.has(tag), `${route}: Tab reached "${tag}"`).toBe(true);
+      expect(reached.get(tag), `${route}: "${tag}" visible at its own centre`).toBe(true);
+    }
+    return seen;
+  }
+
+  test('Tab never leaves a control under the top bar or the floating buttons', async ({ page }) => {
+    // Three of the pages the keyboard walk caught at 1280x720, with the
+    // controls it caught: "Change language" under the top bar (reasoning),
+    // "Upload Files" and "Create New Folder" under it (documents), and "View
+    // all" under the AI orb (family COO).
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await signIn(page, '/dashboard/reasoning');
+    for (const [route, heading, named] of [
+      ['/dashboard/reasoning', 'Family Reasoning', ['Change language']],
+      ['/dashboard/documents', 'Files', ['Upload Files', 'Create New Folder']],
+      ['/dashboard/family-coo', 'Family COO', ['View all']],
+    ] as const) {
+      const seen = await tabStops(page, route, heading, named, 80);
+      expect(seen.filter((s) => s.hiddenBy).map((s) => `${route}: "${s.name}" under ${s.hiddenBy}`)).toEqual([]);
+    }
+  });
+
+  test('390x844: the controls the tab bar and the AI orb hid on main are reached, and visible', async ({ page }) => {
+    // On main, at this size: family COO's "View all" links under the orb and
+    // "Change language" under the tab bar; dental's "Add Dentist" buttons
+    // under the orb and "Add visit" under the tab bar. The floating buttons
+    // must be there for that to mean anything.
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signIn(page, '/dashboard/family-coo');
+    for (const [route, heading, named] of [
+      ['/dashboard/family-coo', 'Family COO', ['View all', 'Change language']],
+      ['/dashboard/dental', 'Dental', ['Add Dentist', 'Add visit']],
+    ] as const) {
+      await page.goto(route);
+      await expect(page.getByRole('button', { name: 'Ask the AI assistant' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Quick capture' })).toBeVisible();
+      await expect(page.locator('nav.fixed')).toBeVisible();
+      const seen = await tabStops(page, route, heading, named, 60);
+      expect(seen.filter((s) => s.hiddenBy).map((s) => `${route}: "${s.name}" under ${s.hiddenBy}`)).toEqual([]);
+    }
   });
 
   test('1024px, a conversation opened from the history: its docked composer works, and "New chat" brings back a working hero', async ({ page }) => {

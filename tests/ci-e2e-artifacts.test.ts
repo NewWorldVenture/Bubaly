@@ -57,6 +57,7 @@ function assertPrivatePaths(source = workflow) {
     '!test-results/*light-theme-palette*/**',
     '!test-results/*recurring-bill-auth*/**',
     '!test-results/*dashboard-calendar-auth*/**',
+    '!test-results/*a-stored-link-is-inert*/**',
     '!test-results/**/storageState*',
     '!test-results/**/storage-state*',
     '!test-results/**/auth.json',
@@ -155,7 +156,8 @@ test.each([
   '!test-results/*family-messaging-auth*/**', '!test-results/*a-feedback-image-is-not*/**',
   '!test-results/*light-theme-palette*/**',
   '!test-results/*recurring-bill-auth*/**',
-  '!test-results/*dashboard-calendar-auth*/**', '!test-results/**/storageState*',
+  '!test-results/*dashboard-calendar-auth*/**', '!test-results/*a-stored-link-is-inert*/**',
+  '!test-results/**/storageState*',
   '!test-results/**/storage-state*', '!test-results/**/auth.json', '!test-results/**/auth/**',
   '!test-results/**/.auth/**', '!test-results/**/.env*', '!test-results/**/*.log',
   '!test-results/**/logs/**', '!test-results/**/*.html', '!test-results/**/playwright-report/**',
@@ -171,13 +173,14 @@ test('artifact contract refuses a whole-directory upload or hidden files', () =>
 
 const privateSpecs = ['family-messaging-authenticated', 'recurring-bill-authenticated',
   'dashboard-calendar-authenticated', 'durable-session', 'a-feedback-image-is-not-a-beacon',
-  'light-theme-palette-in-the-browser'] as const;
+  'light-theme-palette-in-the-browser', 'a-stored-link-is-inert-in-the-page'] as const;
 
 // A suite's exclusion is a prefix of its file name short enough to survive the
 // worker's truncation: `-authenticated` shortened to `-auth`, or named here.
 const shortPrefix: Partial<Record<typeof privateSpecs[number], string>> = {
   'a-feedback-image-is-not-a-beacon': 'a-feedback-image-is-not',
   'light-theme-palette-in-the-browser': 'light-theme-palette',
+  'a-stored-link-is-inert-in-the-page': 'a-stored-link-is-inert',
 };
 const exclusionFor = (spec: typeof privateSpecs[number]) =>
   `!test-results/*${shortPrefix[spec] ?? spec.replace('-authenticated', '-auth')}*/**`;

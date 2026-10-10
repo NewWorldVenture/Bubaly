@@ -107,11 +107,21 @@
      improves too (danger 4.38 -> 4.84).
 
      Computed and asserted in tests/brand-contrast-contract.test.ts, which now
-     measures the ratio instead of only checking that a --brand-text token exists. */
+     measures the ratio instead of only checking that a --brand-text token exists.
+
+     A status role's text also sits on its own tint (`bg-success/15` behind
+     `text-success`: a status chip). Against --bg alone these passed; against
+     their own tint they did not (success 4.20 on its 15% tint, measured by axe
+     on the social accounts and sync chips; 3.25 on its 25% hover tint). So
+     success, warning and danger are darkened again, the same way: lightness
+     only, each the first value that reaches 4.5:1 on its strongest tint the
+     source puts behind its text, hover states included (success 25%, danger
+     20%, warning 15%). Info already passes on its own. White on each as a
+     solid fill rises to 6.0 to 7.2. */
   --accent: 194 75 24;
-  --success: 24 129 95;
-  --warning: 147 106 18;
-  --danger: 210 55 55;
+  --success: 18 99 73;
+  --warning: 129 93 16;
+  --danger: 174 39 39;
   --danger-fg: 255 255 255;
   --success-fg: 255 255 255;
   --info: 37 99 235;
@@ -349,18 +359,29 @@ html {
   scroll-behavior: smooth;
 }
 
-/* The assistant page between lg and 2xl: its context row sits under the
-   conversation and results there (components/assistant/workspace.tsx), so the
-   page can be taller than the window, and the window scrolls under the sticky
-   top bar. Without this, scrolling something into view — a control reached by
-   Tab, a thread's last message — can leave it under the bar: visible to the
-   browser, hidden from the person (WCAG 2.4.11). Only that page asks for it,
-   by the marker on its h1 (the AI orb's sheet, which renders the same module,
-   does not carry it), and only at those widths; every other page and width
-   scrolls as it did. */
-@media (min-width: 1024px) and (max-width: 1535.98px) {
-  html:has([data-scroll-below-topbar]) {
+/* Wherever the app's chrome is fixed or sticky, a scroll that brings
+   something into view stops short of it (WCAG 2.4.11, focus not obscured).
+   The top bar is sticky at every width; below lg the tab bar is fixed at the
+   bottom; at every width the quick-capture button and the AI orb float at
+   the bottom right, the orb's top edge 9.5rem up from lg and 12.5rem up below
+   it. Without this, a control reached by Tab, or anything scrolled into view,
+   could sit under them: on the browser's screen, hidden from the person. A
+   keyboard walk of every signed-in page found 12 such stops on 9 pages at
+   1280px (under the top bar on 6, under the orb on 4), and the assistant page
+   had the same between lg and 2xl (#985's rule, which this generalises).
+   Pages without the app shell (no .app-topbar) scroll as they did. */
+html:has(.app-topbar) {
+  scroll-padding-top: calc(4rem + var(--safe-top, 0px));
+  scroll-padding-bottom: calc(12.5rem + var(--safe-bottom, 0px));
+}
+@media (min-width: 640px) {
+  html:has(.app-topbar) {
     scroll-padding-top: calc(var(--topbar-height) + var(--safe-top, 0px));
+  }
+}
+@media (min-width: 1024px) {
+  html:has(.app-topbar) {
+    scroll-padding-bottom: calc(9.5rem + var(--safe-bottom, 0px));
   }
 }
 
