@@ -117,6 +117,7 @@ source allocations are not evidence that production applied any migration.
 | 0501 confirmed, held | `0501_one_member_one_vote_in_two_households.sql` | 0311's same-family guard on `member_id` of `family_poll_votes`, `meal_vote_ballots`, `watchlist_votes` and `event_rsvps`: a member of two families votes once in each. Requested for #981 on #771 (comment 6095180270); confirmed as a held source and probe reservation for these four bindings in #981 comment 6095247473, which is not an installation approval. |
 | 0502 confirmed, held | `0502_a_chore_with_assignments_is_a_managers_to_remove.sql` | A signed-in caller who does not manage the chore's family deletes it only while it has no assignments, and does not move it to another family at all, so its cascade cannot remove assignments 0374 reserves to a manager. Requested for #981 on #771 (comment 6097049650); confirmed as a held source and probe reservation in #981 comment 6097190516, which is not an installation or production policy approval. |
 | 0503 proposed, held | `0503_a_trip_item_stays_with_its_trips_family.sql` | A signed-in caller changes a trip item's family only if they manage both the family it leaves and the family it joins, and an item names only its own family's trip (0311's binding), so a member of two families cannot move the first family's packing items out. Requested on #771 (comments 6097696125 and 6097700163); not yet confirmed. |
+| 0504 proposed, held | `0504_a_kid_login_mapping_is_the_servers_to_write.sql` | `child_logins` is written only by the server: 0297's manager write policy is dropped and client INSERT/UPDATE/DELETE revoked; the members' read is kept. Decided by the account holder on the lead in #771 comment 6092615411; requested on #771 (comment 6100826185), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4743,6 +4744,75 @@ Dropping any one table's trigger turns the probe red on that table. 184 of
 families, try to vote in one family's poll under their member id from the
 other family and confirm 42501; then vote as their own member there and
 confirm it lands.
+
+## `0504` (proposed, held) — a kid login mapping is the server's to write
+
+`supabase/reserved/0504_a_kid_login_mapping_is_the_servers_to_write.sql` —
+**held**: proposed as `0504`, the first number above `0503`. The account holder
+decided it on the lead in #771 comment 6092615411. It was requested on #771 in
+comment 6100826185 and is not yet confirmed.
+
+**Severity: low (a recorded limit of 0495 closed at the root). Deploy order:
+any.** `child_logins` maps a kid login's username to its synthetic auth user.
+0297 left a manager write policy on it ("Managers manage child_logins", FOR
+ALL), and the client roles kept every DML grant. Nothing in the application
+uses either: every mapping is written through the service role
+(`app/(app)/family/child-login-actions.ts`), and the one session read
+(`/dashboard/family-access`) is covered by the members' read policy.
+
+What the policy still allowed is 0495's recorded limit. Measured on the replay
+as a household's parent:
+- writing a mapping onto one of its own grown-ups, demoted to a non-manager
+  role: 1 row;
+- repointing the kid's login at the parent's own account: 1 row;
+- deleting the kid's login: 1 row.
+
+Once a mapping names a grown-up, that grown-up's invitations elsewhere are
+refused as a kid login's.
+
+0504 drops the manager write policy and revokes INSERT, UPDATE and DELETE from
+`anon` and `authenticated`. SELECT and the members' read policy are unchanged,
+and the service role writes as before.
+
+**Released probes changed with it**, each now reading which rule is installed
+and passing under both:
+- `child-login-mapping-is-managers-only-check.sql` restates the client grants
+  only under 0297. Under 0504 it asserts that the child, in the family they
+  manage, and the parent are each refused outright ("permission denied for table
+  child_logins", exact), and that reads stay open.
+- `sensitive-role-boundary-check.sql` turns its child_logins control legs and
+  the adult's leg into the same refusal under 0504; the control row is cleaned
+  up by the owner.
+- `access-record-write-boundary-check.sql` accepts the privilege refusal beside
+  0297's zero-row filter.
+- `gated-write-tables-check.sql` drops `child_logins` from the member-filtered
+  list when no client role holds a write on it.
+
+**Proof:** `.github/workflows/kid-login-mapping-runtime.yml` replays every
+runnable migration. It requires the held probe
+`docs/audit/reserved/a-kid-login-mapping-is-the-servers-to-write-check.sql` to
+fail on the released schema with the parent's three writes landing. It applies
+0504 twice, requires the probe to pass, and re-runs the four probes above. The
+passing run shows:
+- the parent's mapping onto the demoted grown-up, their repoint and delete of
+  the kid's login, and the kid's own rename and delete are each refused with
+  `42501: permission denied for table child_logins` (exact);
+- no mapping reaches the grown-up, and the kid's login is unchanged (counted);
+- the parent and the kid still read the family's logins;
+- the service role (carrying a user id) writes, renames and removes a second
+  kid's mapping (1 row each);
+- no client write policy or grant remains, and the members' read is kept;
+- negative control: with 0297's rule put back, the parent's mapping onto the
+  grown-up lands.
+
+Mutations: dropping only the policy (grants kept) turns the refusals into an RLS
+refusal and fails every write line plus the grant line; revoking only the
+grants (policy kept) fails the policy line alone. 184 of 184 released probes
+pass with and without 0504.
+
+**After approved release:** as a test parent, try to insert a `child_logins`
+row through PostgREST and confirm 42501; create a kid login through the app and
+confirm it still works.
 
 ## `0503` (proposed, held) — a trip item left its family through a move
 

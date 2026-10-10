@@ -156,6 +156,15 @@ begin
     raise exception 'A plain family-membership policy is being read as a restriction — check the helper spelling.';
   end if;
 
+  -- The held 0504 makes child_logins server-written: no client role holds a
+  -- write on it, so there is no member's write left to filter. Where it is
+  -- installed the table leaves the list; under 0297 it stays on it.
+  if not has_table_privilege('authenticated', 'public.child_logins', 'delete')
+     and not has_table_privilege('authenticated', 'public.child_logins', 'update')
+     and not has_table_privilege('authenticated', 'public.child_logins', 'insert') then
+    recorded := array_remove(recorded, 'child_logins');
+  end if;
+
   select array_agg(t order by t) into added
   from unnest(measured) t where not (t = any(recorded));
   select array_agg(t order by t) into removed

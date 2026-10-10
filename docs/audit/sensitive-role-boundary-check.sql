@@ -119,6 +119,11 @@ declare
   par_m uuid; adult_m uuid; kid_m uuid; sib_m uuid;
   lic_par uuid; lic_kid uuid; acct uuid;
   n int; refused boolean;
+  -- The held 0504 makes child_logins server-written (no client role holds a
+  -- write). Where it is installed, every child_logins write below is refused
+  -- for every signed-in caller, a manager included, and the legs say so; under
+  -- 0297 they prove the manager rule as before.
+  logins_server_only boolean := not has_table_privilege('authenticated', 'public.child_logins', 'update');
 begin
   insert into public.families (id, name) values (fam, '0297 boundary') on conflict do nothing;
   insert into auth.users (id, email) values
@@ -267,7 +272,12 @@ begin
   exception when others then
     n := -1; ctl_err := format('%s: %s', sqlstate, sqlerrm);
   end;
-  if n <> 1 then
+  if logins_server_only then
+    if ctl_err is null or ctl_err not like '42501:%' then
+      raise exception '0504: a MANAGER''s UPDATE of a login row (the child, in the family they manage) was not refused outright — child_logins is the server''s to write (%)',
+        coalesce(ctl_err, format('%s row(s)', n));
+    end if;
+  elsif n <> 1 then
     raise exception '0297 boundary UNPROVEN (control d): this child''s UPDATE of `username` on a login row in the family they DO manage touched % — so the zero rows asserted at 2 prove nothing: a row this session cannot see, or cannot write, reports zero either way',
       coalesce(ctl_err, format('%s row(s)', n));
   end if;
@@ -285,7 +295,16 @@ begin
   exception when others then
     n := -1; ctl_err := format('%s: %s', sqlstate, sqlerrm);
   end;
-  if n <> 1 then
+  if logins_server_only then
+    if ctl_err is null or ctl_err not like '42501:%' then
+      raise exception '0504: a MANAGER''s DELETE of a login row (the child, in the family they manage) was not refused outright — child_logins is the server''s to write (%)',
+        coalesce(ctl_err, format('%s row(s)', n));
+    end if;
+    -- The server's own cleanup of the control row, since nobody else may.
+    perform set_config('role', 'postgres', true);
+    delete from public.child_logins where family_id = ctl_fam and member_id = ctl_ward_m;
+    perform set_config('role', 'authenticated', true);
+  elsif n <> 1 then
     raise exception '0297 boundary UNPROVEN (control e): this child''s DELETE of a login row in the family they DO manage removed % — so the zero rows asserted for the sibling delete at 2 prove nothing about can_manage_family',
       coalesce(ctl_err, format('%s row(s)', n));
   end if;
@@ -304,13 +323,19 @@ begin
   -- 2. A sibling's login row is not a child's to rewrite or delete. The child
   --    sign-in derives BOTH the synthetic email and the password from
   --    username, so a rename or a delete locks that sibling out for good.
-  update public.child_logins set username = 'hijacked' where member_id = sib_m;
-  get diagnostics n = row_count;
+  begin
+    update public.child_logins set username = 'hijacked' where member_id = sib_m;
+    get diagnostics n = row_count;
+  exception when insufficient_privilege then n := 0;  -- 0504: refused outright
+  end;
   if n <> 0 then
     raise exception '0297: a child rewrote % sibling login row(s) — that sibling can no longer sign in', n;
   end if;
-  delete from public.child_logins where member_id = sib_m;
-  get diagnostics n = row_count;
+  begin
+    delete from public.child_logins where member_id = sib_m;
+    get diagnostics n = row_count;
+  exception when insufficient_privilege then n := 0;  -- 0504: refused outright
+  end;
   if n <> 0 then
     raise exception '0297: a child deleted % sibling login row(s)', n;
   end if;
@@ -349,9 +374,20 @@ begin
   if n <> 2 then
     raise exception '0297: an ADULT sees %/2 child logins', n;
   end if;
-  update public.child_logins set username = 'k0297-kid-renamed' where member_id = kid_m;
-  if not found then
-    raise exception '0297: an ADULT cannot manage a child login — the fix is too strict';
+  if logins_server_only then
+    refused := false;
+    begin
+      update public.child_logins set username = 'k0297-kid-renamed' where member_id = kid_m;
+    exception when insufficient_privilege then refused := true;
+    end;
+    if not refused then
+      raise exception '0504: an ADULT wrote a child login — child_logins is the server''s to write';
+    end if;
+  else
+    update public.child_logins set username = 'k0297-kid-renamed' where member_id = kid_m;
+    if not found then
+      raise exception '0297: an ADULT cannot manage a child login — the fix is too strict';
+    end if;
   end if;
   -- 0406: the OAuth token store answers to NOBODY holding a JWT, adult
   -- included. This probe previously asserted the opposite — that an adult
@@ -390,5 +426,9 @@ begin
     raise exception '0297/0406: the service role cannot write a token row (rows: %)', n;
   end if;
 
-  raise notice '0297+0406 OK: the same child CAN read their own licence and CAN read, rename and delete child logins in the family they manage (control); in the family they do not they are refused a parent licence, a sibling login and the OAuth tokens; parent and adult keep the licences and logins; the token table answers only the service role (0406)';
+  if logins_server_only then
+    raise notice '0297+0406+0504 OK: the same child CAN read their own licence; child logins are the server''s to write (0504): the child, even in the family they manage, and the adult were each refused outright, and the logins still read; in the family they do not manage the child is refused a parent licence, a sibling login and the OAuth tokens; parent and adult keep the licences; the token table answers only the service role (0406)';
+  else
+    raise notice '0297+0406 OK: the same child CAN read their own licence and CAN read, rename and delete child logins in the family they manage (control); in the family they do not they are refused a parent licence, a sibling login and the OAuth tokens; parent and adult keep the licences and logins; the token table answers only the service role (0406)';
+  end if;
 end $$;
