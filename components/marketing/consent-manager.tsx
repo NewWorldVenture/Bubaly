@@ -74,6 +74,44 @@ export function ConsentManager() {
     void trackTouchOnce(resolved, gpc);
   }, [gpc]);
 
+  // While the first-load banner is up it sits over the bottom of the page, so a
+  // keyboard user tabbing down a page focused controls hidden behind it (WCAG
+  // 2.4.11), the footer's Privacy, Terms and Cookies links on every marketing
+  // page among them. While it shows, the page reserves its height: as scroll
+  // padding, so focus scrolls clear of it, and as padding at the end of the
+  // page, so the last links can scroll above it. Both are put back when it
+  // closes. A DOM lookup, not a ref: tests drive this component with stand-in
+  // hooks.
+  const showingBanner = bannerOpen && !prefsOpen;
+  useEffect(() => {
+    if (!showingBanner || typeof document === 'undefined') return;
+    const banner = document.querySelector<HTMLElement>('[data-consent-banner]');
+    if (!banner) return;
+    const root = document.documentElement;
+    const body = document.body;
+    const before = { scroll: root.style.scrollPaddingBottom, pad: body.style.paddingBottom };
+    const reserve = () => {
+      const space = Math.max(0, Math.ceil(window.innerHeight - banner.getBoundingClientRect().top + 8));
+      root.style.scrollPaddingBottom = `${space}px`;
+      body.style.paddingBottom = `${space}px`;
+      // BackToTop, fixed at the bottom too, lifts itself to this.
+      root.style.setProperty('--consent-banner-space', `${space}px`);
+    };
+    reserve();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(reserve);
+    observer?.observe(banner);
+    window.addEventListener('resize', reserve);
+    banner.addEventListener('animationend', reserve);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', reserve);
+      banner.removeEventListener('animationend', reserve);
+      root.style.scrollPaddingBottom = before.scroll;
+      body.style.paddingBottom = before.pad;
+      root.style.removeProperty('--consent-banner-space');
+    };
+  }, [showingBanner]);
+
   if (!mounted || !draft) return null;
 
   return (
@@ -81,6 +119,7 @@ export function ConsentManager() {
       {/* First-load banner */}
       {bannerOpen && !prefsOpen && (
         <div
+          data-consent-banner
           role="dialog"
           aria-label={t('consentManager.cookieConsent')}
           className="animate-fade-in-up fixed inset-x-3 bottom-3 z-50 mx-auto max-w-2xl rounded-2xl border border-border bg-surface/95 p-4 shadow-glass backdrop-blur sm:inset-x-auto sm:right-4 sm:bottom-4 sm:p-5"
