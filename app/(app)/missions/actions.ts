@@ -1,6 +1,5 @@
 'use server';
 
-import { randomUUID } from 'node:crypto';
 import { getTranslations } from '@/lib/i18n/server';
 import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
@@ -15,10 +14,11 @@ import { applyCompletionRewards, logChoreEvent } from '@/lib/chores/server';
 import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 import { assertAIAccess } from '@/lib/server/ai-access';
 import { familyDetailsBaseSchema } from '@/lib/validation';
+import {
+  PROOF_BUCKET, MAX_PROOF_FILES, MAX_VISION_BYTES, VISION_TYPES, isProofPathFor, proofFileProblem,
+} from '@/lib/chores/proof-media';
 
-const BUCKET = 'chore-proof';
-const MAX_FILE = 50 * 1024 * 1024;
-const VISION_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+const BUCKET = PROOF_BUCKET;
 
 function str(fd: FormData, k: string): string | null {
   const v = String(fd.get(k) ?? '').trim();
@@ -159,23 +159,34 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
   const proofKind = (chore.proof_required as string) ?? 'none';
   const note = str(formData, 'note');
 
-  // Upload any submitted files and collect base64 for vision.
-  const files = formData.getAll('media').filter((f): f is File => f instanceof File && f.size > 0);
+  // The proof media is already in Storage: the form uploads it straight to the
+  // child's own folder (0376), because a server action's body is capped at 1 MB
+  // and a phone photo or video is not. Only paths arrive here. Each must be one
+  // object in THIS assignment's member folder, and what Storage holds — its
+  // real type and size, not the browser's claim — must be proof media.
+  const submitted = formData.getAll('media_path').map((value) => String(value));
+  const ownPaths = submitted.filter((path) => isProofPathFor(path, familyId, assignment.member_id));
+  if (ownPaths.length !== submitted.length || submitted.length > MAX_PROOF_FILES || new Set(submitted).size !== submitted.length) {
+    await cleanupProofMedia(supabase, ownPaths);
+    return { ok: false, error: t('actions.couldNotUploadProofMedia') };
+  }
   const mediaPaths: string[] = [];
   const images: { media_type: string; data: string }[] = [];
-  for (const file of files.slice(0, 4)) {
-    if (file.size > MAX_FILE) continue;
-    const safe = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_').slice(-100);
-    const path = `${familyId}/${assignment.member_id}/${randomUUID()}-${safe}`;
-    const { error } = await supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false });
-    if (error) {
-      await cleanupProofMedia(supabase, mediaPaths);
+  for (const path of submitted) {
+    const { data: stored, error: infoError } = await supabase.storage.from(BUCKET).info(path);
+    const mediaType = stored?.contentType ?? (stored?.metadata as { mimetype?: string } | undefined)?.mimetype ?? '';
+    const size = stored?.size ?? Number((stored?.metadata as { size?: number } | undefined)?.size ?? 0);
+    if (infoError || !stored || proofFileProblem({ type: mediaType, size })) {
+      await cleanupProofMedia(supabase, submitted);
       return { ok: false, error: t('actions.couldNotUploadProofMedia') };
     }
     mediaPaths.push(path);
-    if (VISION_TYPES.has(file.type)) {
-      const buf = Buffer.from(await file.arrayBuffer());
-      images.push({ media_type: file.type, data: buf.toString('base64') });
+    if (VISION_TYPES.has(mediaType) && size <= MAX_VISION_BYTES) {
+      // The reviewer reads the bytes Storage holds. A download that fails leaves
+      // this photo to the parent rather than failing the child's submission.
+      const { data: blob, error: downloadError } = await supabase.storage.from(BUCKET).download(path);
+      if (downloadError || !blob) console.warn('[chore proof] could not read a photo for review', downloadError);
+      else images.push({ media_type: mediaType, data: Buffer.from(await blob.arrayBuffer()).toString('base64') });
     }
   }
 

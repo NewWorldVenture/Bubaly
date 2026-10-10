@@ -5,8 +5,14 @@ import { useRouter } from 'next/navigation';
 import { Camera, PartyPopper, Loader2, Send } from 'lucide-react';
 import { submitProofAction } from '@/app/(app)/missions/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { createClient } from '@/lib/supabase/client';
+import {
+  MAX_PROOF_BYTES, MAX_PROOF_FILES, PROOF_BUCKET, newProofObjectId, proofFileProblem, proofObjectPath,
+} from '@/lib/chores/proof-media';
 
-export function SubmitProofForm({ assignmentId, proofKind }: { assignmentId: string; proofKind: string }) {
+export function SubmitProofForm({ assignmentId, proofKind, familyId, memberId }: {
+  assignmentId: string; proofKind: string; familyId: string; memberId: string;
+}) {
   const t = useTranslations();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -25,10 +31,41 @@ export function SubmitProofForm({ assignmentId, proofKind }: { assignmentId: str
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-    const fd = new FormData(e.currentTarget);
+    const form = new FormData(e.currentTarget);
+    const files = form.getAll('media').filter((f): f is File => f instanceof File && f.size > 0);
+    if (files.length > MAX_PROOF_FILES) { setError(t('kidsSubmitSubmitForm.tooManyFiles', { count: MAX_PROOF_FILES })); return; }
+    for (const file of files) {
+      const problem = proofFileProblem(file);
+      if (problem === 'type') { setError(t('kidsSubmitSubmitForm.thatFileCannotBeProof')); return; }
+      if (problem === 'size') { setError(t('kidsSubmitSubmitForm.thatFileIsTooBig', { limit: MAX_PROOF_BYTES / (1024 * 1024) })); return; }
+    }
+    // The files go straight to Storage, into this child's own proof folder
+    // (0376), and the action gets only their paths. A server action's body is
+    // capped at 1 MB, so sending the files through it refused an ordinary phone
+    // photo — and every video — before the action could run.
+    const fd = new FormData();
     fd.set('assignment_id', assignmentId);
+    const note = form.get('note');
+    if (typeof note === 'string') fd.set('note', note);
     start(async () => {
-      const res = await submitProofAction(fd);
+      const storage = createClient().storage.from(PROOF_BUCKET);
+      const uploaded: string[] = [];
+      for (const file of files) {
+        const path = proofObjectPath(familyId, memberId, newProofObjectId(), file.name);
+        const { error: uploadError } = await storage.upload(path, file, { contentType: file.type, upsert: false })
+          .catch((thrown: unknown) => ({ error: thrown }));
+        if (uploadError) {
+          // Nothing was submitted, so nothing will refer to what did upload.
+          if (uploaded.length) await storage.remove(uploaded).catch(() => undefined);
+          setError(t('actions.couldNotUploadProofMedia'));
+          return;
+        }
+        uploaded.push(path);
+        fd.append('media_path', path);
+      }
+      // Past this point the server owns the uploads: a refusal removes them
+      // there, and a lost response may still have recorded the submission.
+      const res = await submitProofAction(fd).catch(() => ({ ok: false, error: undefined }));
       if (res.ok) { setDone(true); setTimeout(() => router.push('/kids'), 2200); }
       else setError(res.error ?? t('submitForm.somethingWentWrongTryAgain'));
     });
