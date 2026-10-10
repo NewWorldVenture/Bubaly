@@ -25,7 +25,7 @@ export const missingRpc = (name: string) => ({ code: 'PGRST202', details: 'Searc
 
 export function syncSdkFixture(events: GEvent[], options: {
   failedDelete?: boolean; zeroDelete?: boolean; direction?: string; alreadyDeleted?: boolean;
-  rpcFailure?: SyncRpcFailure; rawMappingFailure?: boolean; malformedReceipt?: boolean; uncertainReceipt?: boolean; racedFields?: Row;
+  rpcFailure?: SyncRpcFailure; rawMappingFailure?: boolean; committedMappingFailure?: boolean; malformedReceipt?: boolean; uncertainReceipt?: boolean; racedFields?: Row;
   tasks?: GTask[]; zeroLiveWrite?: boolean; moveBeforeLiveWrite?: boolean;
   moveMappingBeforeWrite?: boolean; zeroPushWrite?: boolean;
 } = {}) {
@@ -149,6 +149,8 @@ export function syncSdkFixture(events: GEvent[], options: {
       if (table === 'sync_external_mappings' && (options.rpcFailure === 'mapping' || options.rawMappingFailure)) return json({ code: '42501', message: 'Synthetic mapping refused' }, 403);
       result = [{ id: `${table}-${tableRows.length}`, ...body }];
       tableRows.push(...result);
+      // The INSERT commits, but the answer is lost: the client reports a network error.
+      if (table === 'sync_external_mappings' && options.committedMappingFailure) throw new TypeError('fetch failed');
     } else if (method === 'DELETE') {
       rows[table] = tableRows.filter(row => !result.includes(row));
     } else if (method !== 'GET') throw new Error(`Unexpected synthetic database method: ${method}`);

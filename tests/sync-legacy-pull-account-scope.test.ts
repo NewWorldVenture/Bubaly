@@ -81,30 +81,57 @@ for (const engine of ['google', 'generic'] as const) {
         return state;
       };
 
-      it(`${kind} a failed mapping write leaves no orphan and the retry creates exactly one pair`, async () => {
+      it(`${kind} a refused mapping write keeps the item and the retry adopts it into exactly one pair`, async () => {
         const options: Parameters<typeof syncSdkFixture>[1] = { rawMappingFailure: true };
         const { db, rows } = fixture(options);
         expect((await run(db)).error).toContain(`${kind} mapping creation`);
-        expect(rows[table].filter(row => row.external_id === external)).toEqual([]);
+        const left = rows[table].filter(row => row.external_id === external);
+        expect(left).toHaveLength(1);
+        expect(rows.sync_external_mappings.filter(row => row.item_type === kind && row.external_id === external)).toEqual([]);
         options.rawMappingFailure = false;
         expect((await run(db)).error).toBeUndefined();
         const items = rows[table].filter(row => row.external_id === external);
-        expect(items).toHaveLength(1);
+        expect(items).toEqual([expect.objectContaining({ id: left[0].id })]);
         const maps = rows.sync_external_mappings.filter(row => row.item_type === kind && row.external_id === external);
         expect(maps).toEqual([expect.objectContaining({ account_id: ACCOUNT.id, local_id: items[0].id })]);
+      });
+
+      it(`${kind} a mapping write that commits but reports an error keeps its item, so the next run is not wedged`, async () => {
+        const options: Parameters<typeof syncSdkFixture>[1] = { committedMappingFailure: true };
+        const { db, rows, calls } = fixture(options);
+        expect((await run(db)).error).toContain(`${kind} mapping creation`);
+        const items = rows[table].filter(row => row.external_id === external);
+        expect(items).toHaveLength(1);
+        const maps = () => rows.sync_external_mappings.filter(row => row.item_type === kind && row.external_id === external);
+        expect(maps()).toEqual([expect.objectContaining({ account_id: ACCOUNT.id, local_id: items[0].id })]);
+        expect(calls.some(call => call.method === 'DELETE' && call.url.pathname === `/rest/v1/${table}`)).toBe(false);
+        options.committedMappingFailure = false;
+        expect((await run(db)).error).toBeUndefined();
+        expect(rows[table].filter(row => row.external_id === external)).toEqual([expect.objectContaining({ id: items[0].id })]);
+        expect(maps()).toEqual([expect.objectContaining({ local_id: items[0].id })]);
       });
 
       it(`${kind} a retry adopts an unmapped item left by an interrupted attempt instead of duplicating it`, async () => {
         const { db, rows } = fixture();
         rows[table].push({ id: 'orphan', ...container, family_id: ACCOUNT.family_id, user_id: ACCOUNT.user_id,
-          provider: 'google', external_id: external, title: 'Stale partial write', deleted_at: null });
+          provider: 'google', external_id: external, title: 'Stale partial write', deleted_at: '2026-06-01T00:00:00Z' });
         expect((await run(db)).error).toBeUndefined();
         const items = rows[table].filter(row => row.external_id === external);
         expect(items).toHaveLength(1);
-        expect(items[0]).toMatchObject({ id: 'orphan', title: kind === 'event' ? event.summary : task.title,
+        expect(items[0]).toMatchObject({ id: 'orphan', title: kind === 'event' ? event.summary : task.title, deleted_at: null,
+          user_id: ACCOUNT.user_id,
           content_hash: expect.stringMatching(/^[a-f0-9]{64}$/), metadata: { origin: 'remote' } });
         expect(rows.sync_external_mappings.filter(row => row.item_type === kind && row.external_id === external))
           .toEqual([expect.objectContaining({ account_id: ACCOUNT.id, local_id: 'orphan', metadata: { lastHash: items[0].content_hash } })]);
+      });
+
+      it(`${kind} an unmapped item owned by someone else is never adopted`, async () => {
+        const { db, rows } = fixture();
+        rows[table].push({ id: 'foreign', ...container, family_id: ACCOUNT.family_id, user_id: 'someone-else',
+          provider: 'google', external_id: external, title: 'Someone else', deleted_at: null });
+        expect((await run(db)).error).toContain(`${kind} retry scope`);
+        expect(rows[table].filter(row => row.external_id === external)).toEqual([expect.objectContaining({ id: 'foreign', title: 'Someone else' })]);
+        expect(rows.sync_external_mappings.filter(row => row.local_id === 'foreign')).toEqual([]);
       });
 
       it(`${kind} an existing item another mapping claims is never adopted`, async () => {

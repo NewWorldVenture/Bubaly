@@ -159,11 +159,14 @@ async function ensureLegacyContainer(admin: Admin, account: Account, provider: S
 
 /** The previous production item creation: the mirror row, then its mapping.
  * The writes are separate, so a failure between them must not leave a state a
- * retry duplicates: a failed mapping write removes the item it just inserted,
- * and a retry that still finds an unmapped item for this remote id in this
- * account's mirror (the removal did not land, or the run stopped) adopts it
- * instead of inserting a second one. An item another mapping already claims,
- * or more than one candidate, fails closed. */
+ * retry duplicates or cannot read. A failed mapping write keeps the item: the
+ * client can report an error for an INSERT that committed, and removing the
+ * item then would leave a mapping naming a missing row, which wedges every
+ * later pull. If the mapping did commit, the next run finds it; if it did not,
+ * the next run finds the unmapped item for this remote id in this account's
+ * mirror and adopts it (live, as the RPC inserts it) instead of inserting a
+ * second one. An item another mapping already claims, one owned by someone
+ * else, or more than one candidate, fails closed. */
 async function createLegacyItem(admin: Admin, account: Account, provider: SyncProviderEnum,
   kind: Kind, containerId: string, externalId: string, fields: Json, hash: string,
 ): Promise<{ created: true; mapping: PullMapping }> {
@@ -181,7 +184,7 @@ async function createLegacyItem(admin: Admin, account: Account, provider: SyncPr
       last_synced_at: now(), metadata: REMOTE_META,
     };
     const { data: written, error: writeError } = orphanId
-      ? await admin.from('sync_calendar_events').update(content)
+      ? await admin.from('sync_calendar_events').update({ ...content, deleted_at: null })
         .eq('id', orphanId).eq('calendar_id', containerId).eq('family_id', account.family_id)
         .eq('provider', provider).eq('external_id', externalId).select('id').maybeSingle()
       : await admin.from('sync_calendar_events').insert({
@@ -196,7 +199,7 @@ async function createLegacyItem(admin: Admin, account: Account, provider: SyncPr
       content_hash: hash, sync_status: 'synced' as const, last_synced_at: now(), metadata: REMOTE_META,
     };
     const { data: written, error: writeError } = orphanId
-      ? await admin.from('sync_reminders').update(content)
+      ? await admin.from('sync_reminders').update({ ...content, deleted_at: null })
         .eq('id', orphanId).eq('list_id', containerId).eq('family_id', account.family_id)
         .eq('provider', provider).eq('external_id', externalId).select('id').maybeSingle()
       : await admin.from('sync_reminders').insert({
@@ -210,16 +213,6 @@ async function createLegacyItem(admin: Admin, account: Account, provider: SyncPr
     ...(kind === 'event' ? { external_etag: (row as { etag?: string | null }).etag } : {}),
     metadata, last_synced_at: now(),
   }).select('id').maybeSingle();
-  if ((mappingInsertError || !mappingRow) && !orphanId) {
-    // Best effort; if this removal does not land, the retry adopts the item.
-    try {
-      if (kind === 'event') {
-        await admin.from('sync_calendar_events').delete().eq('id', localId).eq('calendar_id', containerId).eq('family_id', account.family_id);
-      } else {
-        await admin.from('sync_reminders').delete().eq('id', localId).eq('list_id', containerId).eq('family_id', account.family_id);
-      }
-    } catch { /* covered by the retry adoption */ }
-  }
   const mapping = requireSyncWrite(mappingRow, mappingInsertError, `${kind} mapping creation`);
   return { created: true, mapping: { id: mapping.id, family_id: account.family_id, local_id: localId, external_id: externalId, metadata } };
 }
@@ -231,13 +224,15 @@ async function findUnmappedLegacyItem(admin: Admin, account: Account, provider: 
   kind: Kind, containerId: string, externalId: string,
 ): Promise<string | null> {
   const { data: found, error: findError } = kind === 'event'
-    ? await admin.from('sync_calendar_events').select('id')
+    ? await admin.from('sync_calendar_events').select('id, user_id')
       .eq('calendar_id', containerId).eq('family_id', account.family_id).eq('provider', provider).eq('external_id', externalId).limit(2)
-    : await admin.from('sync_reminders').select('id')
+    : await admin.from('sync_reminders').select('id, user_id')
       .eq('list_id', containerId).eq('family_id', account.family_id).eq('provider', provider).eq('external_id', externalId).limit(2);
   if (findError || !found) throw new Error(`Sync ${kind} retry lookup failed`);
   if (found.length === 0) return null;
-  if (found.length > 1) throw new Error(`Sync ${kind} retry scope unavailable`);
+  // This path always inserts with the account owner; an item naming another
+  // owner (or none) is not one of its partial writes.
+  if (found.length > 1 || found[0].user_id !== account.user_id) throw new Error(`Sync ${kind} retry scope unavailable`);
   const { data: claims, error: claimError } = await admin.from('sync_external_mappings').select('id')
     .eq('item_type', kind).eq('local_id', found[0].id).limit(1);
   if (claimError || !claims) throw new Error(`Sync ${kind} retry lookup failed`);
