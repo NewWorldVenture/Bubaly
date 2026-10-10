@@ -82,6 +82,11 @@ vi.mock('@/lib/supabase/server', () => ({
   createServer: () => { throw new Error('Cookie-bound auth must not run'); },
   createServiceClient: () => ({ from: (table: string) => {
     if (table === 'child_login_throttle') return throttleTable();
+    // The linked member is active, so the removed-child refusal does not apply.
+    if (table === 'family_members') {
+      const member = { select: () => member, eq: () => member, maybeSingle: () => later(() => ({ data: { id: 'member-emma' }, error: null })) };
+      return member;
+    }
     const lookup = { select: () => lookup, eq: () => lookup,
       limit: () => later(() => ({ data: state.known ? [{ username: 'emma', user_id: CHILD }] : [], error: null })) };
     return lookup;

@@ -12,7 +12,8 @@ import { InviteEmail } from '@/lib/emails/invite';
 import { emailSchema } from '@/lib/validation';
 import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { stripeFromKey } from '@/lib/stripe';
-import type { MemberRole } from '@/lib/constants/roles';
+import { REMOVED_MEMBER_PATCH, type MemberRole } from '@/lib/constants/roles';
+import { REMOVED_CHILD_BAN_MARKER, revokeRemovedChildLogin } from '@/lib/server/child-account';
 import type { PlanId } from '@/lib/constants/plans';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
@@ -218,19 +219,23 @@ export async function adminCreateFamilyAction(input: {
 }
 
 /** Removes a member from a family (reversible — they can be re-added or re-invited). */
-export async function adminRemoveMemberAction(memberId: string): Promise<Result> {
+export async function adminRemoveMemberAction(memberId: string): Promise<Result<{ warning?: string }>> {
   const t = await getTranslations();
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
 
   const supabase = createServiceClient();
   const { data: member, error } = await supabase.from('family_members')
-    .update({ is_active: false }).eq('id', memberId).select('family_id, display_name').single();
+    .update(REMOVED_MEMBER_PATCH).eq('id', memberId).select('id, family_id, display_name, user_id').single();
   if (error) return actionFailure(error, t('actions.couldNotRemoveThatMember'));
 
-  await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name } });
+  // A removed child's PIN login is switched off too; the removal stands if that fails.
+  const loginRevocation = await revokeRemovedChildLogin(supabase, member);
+  await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name, login_revocation: loginRevocation } });
   revalidatePath('/admin/users');
-  return { ok: true };
+  return loginRevocation === 'failed'
+    ? { ok: true, data: { warning: t('familyModule.removedButLoginStillActive') } }
+    : { ok: true };
 }
 
 /** Updates a member's display name and role. */
@@ -541,7 +546,11 @@ export async function adminSetUserBanAction(userId: string, banned: boolean): Pr
 
   const supabase = createServiceClient();
   // 'none' lifts a ban; a long duration is an effectively-indefinite ban (reversible).
-  const { error } = await supabase.auth.admin.updateUserById(userId, { ban_duration: banned ? '876000h' : 'none' });
+  // Clearing the removal marker makes this ban (or unban) the admin's: re-adding
+  // a removed child never lifts a ban that does not carry it.
+  const { error } = await supabase.auth.admin.updateUserById(userId, {
+    ban_duration: banned ? '876000h' : 'none', app_metadata: { [REMOVED_CHILD_BAN_MARKER]: false },
+  });
   if (error) return actionFailure(error, t('actions.couldNotUpdateThatUser'));
 
   await adminAuditLog({ familyId: null, action: banned ? 'ban' : 'unban', resource: 'users', resourceId: userId });

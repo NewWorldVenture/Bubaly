@@ -85,6 +85,10 @@ const BASELINE: Record<string, { table: string; why: 'projected' | 'not-called';
     { table: 'documents', why: 'projected', note: "select('id') for a count of documents expiring within 30 days" },
     { table: 'financial_accounts', why: 'projected', note: "select('id, balance') filtered to overdrawn non-credit accounts, then reduced to `accountsRes.data?.length` — a count reaches the model, never a balance" },
     { table: 'family_messages', why: 'projected', note: "select('conversation_id, read_by') — no message body" },
+    { table: 'child_logins', why: 'not-called', note: "lib/server/child-account.ts, reached through ensureActiveFamily: select('id') to answer whether the CALLER is a child login, and the removal/re-add ban helpers, which read only ids; nothing from child_logins reaches the model" },
+  ],
+  'schedule.ts': [
+    { table: 'child_logins', why: 'not-called', note: "lib/server/child-account.ts, reached through ensureActiveFamily: select('id') to answer whether the CALLER is a child login, and the removal/re-add ban helpers, which read only ids; nothing from child_logins reaches the model" },
   ],
   'travel.ts': [
     { table: 'vacation_documents', why: 'not-called', note: 'exported by the trips service module the slice imports for trip listing' },
@@ -154,7 +158,7 @@ describe('a sensitive table is one call away (PRIV-001)', () => {
     const before = sensitiveReach('tasks.ts');
     const after = sensitiveReach('tasks.ts', injected);
     expect(before.reaches).toEqual([]);
-    expect(after.reaches.map((r) => r.table).sort()).toEqual(['documents', 'family_messages', 'financial_accounts']);
+    expect(after.reaches.map((r) => r.table).sort()).toEqual(['child_logins', 'documents', 'family_messages', 'financial_accounts']);
     expect(withExtra('@/lib/ai/context/policy')).toBe('lib/ai/context/policy.ts');
   });
 });
