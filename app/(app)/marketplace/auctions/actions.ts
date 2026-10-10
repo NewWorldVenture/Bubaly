@@ -12,6 +12,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { buyNowClosedByBids } from '@/lib/marketplace/auction';
+import { readBidTarget } from '@/lib/marketplace/circle-reads';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -25,6 +26,10 @@ const BID_REASON: Record<string, string> = {
   not_started: 'actions.thisAuctionHasnTStarted',
   own_listing: 'actions.youCanTBidOn',
   too_low: 'actions.yourBidIsBelowThe',
+  // From the proposed economy SQL (sections 5 and 7): the RPC's own role gate,
+  // and the leading household resubmitting a max that is not above its own.
+  manager_only: 'actions.onlyAParentGuardianCan16',
+  already_leading: 'actions.yourMaxAlreadyCoversThat',
 };
 
 /**
@@ -49,10 +54,12 @@ export async function placeBidAction(input: { listingId: string; maxCents: numbe
   // engine treats any higher max as a NEW leader and moves the visible price
   // to the old max plus an increment, so the leader re-bidding (or another
   // member of the same family) pushed up the price they would pay with no
-  // competitor at all. Refused here; raising only the hidden max needs the
-  // RPC to learn the "same leader" branch.
-  const { data: listing, error: listingError } = await supabase.from('marketplace_listings')
-    .select('id, highest_bidder_family_id').eq('id', input.listingId).maybeSingle();
+  // competitor at all. Refused here until the proposed economy SQL lands: its
+  // section 5 teaches marketplace_place_bid the "same leader" branch (only the
+  // hidden max rises, or `already_leading`), and then the RPC handles it and
+  // this refusal can go. The listing is another family's, so the read goes
+  // through the circle view when the database has it (readBidTarget).
+  const { data: listing, error: listingError } = await readBidTarget(supabase, input.listingId);
   if (listingError) return { ok: false, error: t('actions.couldNotPlaceThatBid') };
   if (listing && listing.highest_bidder_family_id === ctx.active.familyId) {
     return { ok: false, error: t('actions.youAlreadyLeadThisAuction') };
@@ -100,8 +107,7 @@ export async function buyNowAction(listingId: string): Promise<Result<{ orderId:
   // Buy-It-Now closes once bidding has begun (the panel hides it then too): a
   // standing bid can already be above the fixed price, and Buy-It-Now would
   // let anyone undercut the leader and hand the seller less than was bid.
-  const { data: listing, error: listingError } = await supabase.from('marketplace_listings')
-    .select('id, bid_count').eq('id', listingId).maybeSingle();
+  const { data: listing, error: listingError } = await readBidTarget(supabase, listingId);
   if (listingError) return { ok: false, error: t('actions.couldNotCompleteBuyIt') };
   if (!listing) return { ok: false, error: t('actions.listingNotFound') };
   if (buyNowClosedByBids(listing.bid_count)) return { ok: false, error: t('actions.buyItNowIsnT') };
@@ -111,9 +117,15 @@ export async function buyNowAction(listingId: string): Promise<Result<{ orderId:
     p_buyer_family_id: ctx.active.familyId,
   });
   if (error) return { ok: false, error: t('actions.couldNotCompleteBuyIt') };
-  const result = (data ?? {}) as { ok?: boolean; reason?: string; order_id?: string };
+  const result = (data ?? {}) as { ok?: boolean; reason?: string; detail?: string; order_id?: string };
   if (!result.ok || !result.order_id) {
     const reason = result.reason;
+    // The proposed economy SQL (sections 6 and 7) adds two refusals: its own
+    // role gate, and `not_available` with detail `bids_placed` when a bid
+    // landed between the pre-read above and the listing lock. That second one
+    // is the pre-read's own rule (buyNowClosedByBids), so it says the same.
+    if (reason === 'manager_only') return { ok: false, error: t('actions.onlyAParentGuardianCan16') };
+    if (reason === 'not_available' && result.detail === 'bids_placed') return { ok: false, error: t('actions.buyItNowIsnT') };
     if (reason === 'own_listing') return { ok: false, error: t('actions.youCanTBuyYour') };
     if (reason === 'ended') return { ok: false, error: t('actions.thisAuctionHasEnded') };
     if (reason === 'not_started') return { ok: false, error: t('actions.thisAuctionHasnTStarted') };

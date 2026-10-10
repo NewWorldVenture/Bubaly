@@ -9,6 +9,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
+import { readFamilyOrders } from '@/lib/marketplace/schema-compat';
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -141,12 +142,14 @@ export async function setOrderStatusAction(orderId: string, status: string): Pro
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
-  const { data: order, error: orderError } = await supabase
+  // Either party's family (readFamilyOrders): an order between two households
+  // carries the seller's family_id and, after the proposed economy SQL, the
+  // buyer's as buyer_family_id.
+  const { data: order, error: orderError } = await readFamilyOrders(ctx.active.familyId, (scope) => scope(supabase
     .from('marketplace_orders')
-    .select('id, status')
-    .eq('id', orderId)
-    .eq('family_id', ctx.active.familyId)
-    .maybeSingle();
+    .select('id, status, family_id')
+    .eq('id', orderId))
+    .maybeSingle());
   if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
   if (!order) return { ok: false, error: t('actions.orderNotFound') };
   if (!(ORDER_FLOW[order.status] ?? []).includes(status)) {
@@ -167,11 +170,13 @@ export async function setOrderStatusAction(orderId: string, status: string): Pro
   //
   // The `family_id` filter is defence in depth: ownership is already proven by
   // the read above and by RLS, but a write that carries its own scope cannot be
-  // detached from its guard by a later edit. Audit C1-S9-56.
+  // detached from its guard by a later edit. Audit C1-S9-56. It is the order's
+  // own family_id, read above under the caller's either-party scope: for the
+  // buyer's household on a cross-family order that is the seller's family.
   const { data: advanced, error } = await supabase.from('marketplace_orders')
     .update({ status })
     .eq('id', orderId)
-    .eq('family_id', ctx.active.familyId)
+    .eq('family_id', order.family_id)
     .eq('status', order.status)
     .select('id');
   if (error) return actionFailure('update the order', t('marketplace.couldNotUpdateTheOrder'), error);
@@ -189,12 +194,11 @@ export async function leaveReviewAction(input: { orderId: string; rating: number
   const supabase = await createServer();
   const memberId = ctx.active.member.id;
 
-  const { data: order, error: orderError } = await supabase
+  const { data: order, error: orderError } = await readFamilyOrders(ctx.active.familyId, (scope) => scope(supabase
     .from('marketplace_orders')
     .select('id, listing_id, buyer_member, seller_member, status')
-    .eq('id', input.orderId)
-    .eq('family_id', ctx.active.familyId)
-    .maybeSingle();
+    .eq('id', input.orderId))
+    .maybeSingle());
   if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
   if (!order) return { ok: false, error: t('actions.orderNotFound') };
   if (order.status !== 'completed') return { ok: false, error: t('actions.reviewsOpenOnceTheExchange') };

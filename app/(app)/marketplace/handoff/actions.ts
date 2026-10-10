@@ -12,6 +12,7 @@ import { createServer } from '@/lib/supabase/server';
 import { generateHandoffCode, type LocationKind } from '@/lib/marketplace/handoff';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
+import { readFamilyOrders } from '@/lib/marketplace/schema-compat';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -45,10 +46,14 @@ const COMPLETE_REASON: Record<string, string> = {
 async function loadOrderRole(orderId: string) {
   const ctx = await requireUserContext();
   const sb = await createServer();
-  const { data: order, error: orderError } = await sb
+  // Either side's family: an order from an auction, Buy-It-Now or an accepted
+  // negotiation carries the SELLER's family_id, and the winner's household is
+  // buyer_family_id (proposed economy SQL, section 2). Without that column the
+  // read is the seller-family read it always was (readFamilyOrders).
+  const { data: order, error: orderError } = await readFamilyOrders(ctx.active.familyId, (scope) => scope(sb
     .from('marketplace_orders')
     .select('id, family_id, listing_id, buyer_member, seller_member, status')
-    .eq('id', orderId).eq('family_id', ctx.active.familyId).maybeSingle();
+    .eq('id', orderId)).maybeSingle());
   // Only the two people in the exchange arrange its pickup. Anyone else in the
   // family used to be treated as the buyer here (`seller ? 'seller' : 'buyer'`),
   // so a sibling could propose, confirm - minting the hand-off code - or cancel
@@ -134,8 +139,11 @@ export async function confirmHandoffAction(orderId: string): Promise<Result<{ co
   let calendarEventId: string | null = null;
   if (handoff.meet_at) {
     try {
+      // The confirming party's own calendar: on an order between two
+      // households, order.family_id is the seller's, which the buyer's
+      // family cannot write to.
       const { data: ev } = await sb.from('calendar_events').insert({
-        family_id: order.family_id,
+        family_id: ctx.active.familyId,
         title: `Marketplace pickup${handoff.location_label ? ` · ${handoff.location_label}` : ''}`,
         description: 'Bubaly marketplace hand-off. Bring the item + the hand-off code.',
         location: handoff.location_label, category: 'general',

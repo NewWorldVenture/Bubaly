@@ -868,8 +868,13 @@ describe('an order transition is claimed, not assumed (C1-S9-56)', () => {
   it('the order write carries its own family scope', () => {
     // Ownership is already proven by the read above and by RLS. Carrying the
     // scope on the write too means a later edit cannot detach it from its guard.
+    // The read is scoped to the caller's family on either side of the exchange
+    // (readFamilyOrders: family_id or buyer_family_id), and the write to the
+    // family_id of the order that read returned.
     const body = bodyOf(marketplaceActions, 'export async function setOrderStatusAction', 'return { ok: true };');
-    expect(body.match(/eq\('family_id', ctx\.active\.familyId\)/g) ?? []).toHaveLength(2);
+    expect(body).toContain('readFamilyOrders(ctx.active.familyId, (scope) => scope(');
+    expect(body).toContain(".select('id, status, family_id')");
+    expect(body.match(/\.eq\('family_id', order\.family_id\)/g) ?? []).toHaveLength(1);
   });
 
   it('the match, save and follow writes are confirmed', () => {

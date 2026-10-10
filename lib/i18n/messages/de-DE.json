@@ -663,6 +663,7 @@
   "actions.youCanTMakeAn": "Auf das Angebot Ihrer eigenen Familie können Sie keinen Preisvorschlag machen.",
   "actions.youCanTPlaceA": "Für dieses Konto können Sie kein Gebot abgeben.",
   "actions.youAlreadyLeadThisAuction": "Du bist bereits Höchstbietender – ein weiteres Gebot würde nur deinen eigenen Preis erhöhen.",
+  "actions.yourMaxAlreadyCoversThat": "Du bist bereits Höchstbietender und dein Maximum deckt diesen Betrag schon ab. Gib ein höheres Maximum ein, um es anzuheben.",
   "actions.youCanTRemoveYour": "Sie können Ihren eigenen Super-Admin-Zugang nicht entfernen.",
   "actions.youCanTReportYour": "Sie können die Anzeige Ihrer eigenen Familie nicht melden.",
   "actions.youDoNotHavePermission": "Sie haben keine Berechtigung, Beiträge zu veröffentlichen.",
