@@ -180,6 +180,8 @@ export async function deletePolicyAction(input: { id: string }): Promise<Result>
  * highest priority among matching policies.
  */
 const ACCEPTED_POLICY_PRIORITY = 200;
+/** An accept's own 'approved' claim older than this, with no policy written, is abandoned work. */
+const STALE_POLICY_CLAIM_MS = 2 * 60_000;
 
 /**
  * Accept an Autopilot `policy` suggestion: write ONE narrow `trust_policies`
@@ -200,11 +202,15 @@ export async function acceptPolicySuggestionAction(input: { suggestionId: string
   const familyId = ctx.active.familyId;
 
   const { data: suggestion, error: readError } = await supabase.from('autopilot_suggestions')
-    .select('id, kind, status, payload')
+    .select('id, kind, status, payload, updated_at, resolved_by, resolved_at')
     .eq('id', input.suggestionId).eq('family_id', familyId).maybeSingle();
   if (readError) return actionFailure(readError, t('actions.couldNotReadThatSuggestion'));
   if (!suggestion || suggestion.kind !== POLICY_SUGGESTION_KIND) return { ok: false, error: t('actions.thatSuggestionDoesNotProposeAPolicy') };
-  if (suggestion.status !== 'open') return { ok: false, error: t('actions.thatSuggestionIsNoLongerOpen') };
+  // 'approved' is this action's own claim (below). It is accepted again only
+  // to finish a claim whose final stamp did not land, and only when the policy
+  // it wrote is already held — never to write a second one.
+  const resuming = suggestion.status === 'approved' && suggestion.resolved_by === ctx.user.id;
+  if (suggestion.status !== 'open' && !resuming) return { ok: false, error: t('actions.thatSuggestionIsNoLongerOpen') };
 
   const proposal = policyProposalFromPayload(suggestion.payload);
   // Narrow by construction: a proposal that names no single domain, capability
@@ -218,6 +224,15 @@ export async function acceptPolicySuggestionAction(input: { suggestionId: string
     .eq('family_id', familyId).in('subject_kind', ['ai', 'everyone']).eq('enabled', true).limit(200);
   if (heldError) return actionFailure(heldError, t('actions.couldNotCreateThatPolicy'));
   const alreadyHeld = (held ?? []).some((p) => policyCoversTool(p, proposal.domain, proposal.capability, proposal.tool));
+  // A claim of yours with no policy behind it is an accept that stopped
+  // between the claim and the write (a crash, a timeout). Left alone it sits
+  // 'approved' for good: no one else may accept it and the scan never
+  // re-offers it. Once it is older than any accept still in flight, the same
+  // manager may take it again — re-claimed below, fenced on the version read,
+  // so two retries still write one policy.
+  const claimedAt = Date.parse(String(suggestion.resolved_at ?? ''));
+  const staleClaim = resuming && !alreadyHeld && (!Number.isFinite(claimedAt) || Date.now() - claimedAt >= STALE_POLICY_CLAIM_MS);
+  if (resuming && !alreadyHeld && !staleClaim) return { ok: false, error: t('actions.thatSuggestionIsNoLongerOpen') };
 
   if (!alreadyHeld) {
     // The stored payload is not evidence. autopilot_suggestions is family-
@@ -235,6 +250,27 @@ export async function acceptPolicySuggestionAction(input: { suggestionId: string
     const supported = candidates.find((c) => c.domain === proposal.domain
       && c.capability === proposal.capability && c.toolName === proposal.tool);
     if (!supported) return { ok: false, error: t('actions.thatSuggestionDoesNotProposeAPolicy') };
+    // Claim the suggestion BEFORE writing the policy: open -> approved,
+    // fenced on the status and version read above. Two managers pressing
+    // Accept together both saw 'open' and no held policy, and both wrote one
+    // (trust_policies has no unique index to stop the second); an accept also
+    // used to overwrite a dismissal or an archive that landed in between. Only
+    // the accept whose claim matches a row may write.
+    let claim = supabase.from('autopilot_suggestions')
+      .update({ status: 'approved', resolved_at: new Date().toISOString(), resolved_by: ctx.user.id })
+      .eq('id', suggestion.id).eq('family_id', familyId);
+    // Re-taking an abandoned claim is fenced on the claim time read too: each
+    // claim stamps a new one, so of two retries only the first matches.
+    if (staleClaim) {
+      claim = claim.eq('status', 'approved').eq('resolved_by', ctx.user.id);
+      claim = suggestion.resolved_at ? claim.eq('resolved_at', suggestion.resolved_at) : claim.is('resolved_at', null);
+    } else {
+      claim = claim.eq('status', 'open');
+    }
+    if (suggestion.updated_at) claim = claim.eq('updated_at', suggestion.updated_at);
+    const { data: claimed, error: claimError } = await claim.select('id');
+    if (claimError) return actionFailure(claimError, t('actions.couldNotCreateThatPolicy'));
+    if (wroteNoRows(claimed)) return { ok: false, error: t('actions.thatSuggestionIsNoLongerOpen') };
     const saved = await savePolicyAction({
       name: acceptedPolicyName({ tool: supported.toolName }),
       description: `Accepted from an Autopilot suggestion — ${supported.evidence}.`,
@@ -252,7 +288,14 @@ export async function acceptPolicySuggestionAction(input: { suggestionId: string
       priority: ACCEPTED_POLICY_PRIORITY,
       enabled: true,
     });
-    if (!saved.ok) return saved;
+    if (!saved.ok) {
+      // Release the claim so the offer is still there to accept.
+      const { error: releaseError } = await supabase.from('autopilot_suggestions')
+        .update({ status: 'open', resolved_at: null, resolved_by: null })
+        .eq('id', suggestion.id).eq('family_id', familyId).eq('status', 'approved').eq('resolved_by', ctx.user.id);
+      if (releaseError) console.error('[trust] suggestion claim release failed', { suggestionId: suggestion.id, error: releaseError });
+      return saved;
+    }
   }
 
   // The policies are already saved by here. A resolve matching no rows leaves the
@@ -261,13 +304,25 @@ export async function acceptPolicySuggestionAction(input: { suggestionId: string
   // which is how a permission nobody granted twice becomes hard to trace back to
   // one decision. The existing message already says the halves came apart; it just
   // never ran for the half that fails silently. Audit C1-S9-59.
-  const { data: resolved, error: resolveError } = await supabase.from('autopilot_suggestions')
+  //
+  // Compare-and-set: from this action's own claim when it wrote the policy,
+  // or from the 'open' (or resumed 'approved') row it read when the family
+  // already held one. A row dismissed or archived meanwhile matches nothing
+  // and is never flipped back to executed.
+  const fromStatus = alreadyHeld ? suggestion.status : 'approved';
+  // A concurrent accept that already finished this exact resolution is success.
+  const alreadyExecuted = async () => (await supabase.from('autopilot_suggestions')
+    .select('status').eq('id', suggestion.id).eq('family_id', familyId).maybeSingle()).data?.status === 'executed';
+  let resolve = supabase.from('autopilot_suggestions')
     .update({ status: 'executed', resolved_at: new Date().toISOString(), resolved_by: ctx.user.id })
-    .eq('id', suggestion.id).eq('family_id', familyId).select('id');
+    .eq('id', suggestion.id).eq('family_id', familyId).eq('status', fromStatus);
+  if (alreadyHeld && suggestion.updated_at) resolve = resolve.eq('updated_at', suggestion.updated_at);
+  const { data: resolved, error: resolveError } = await resolve.select('id');
   if (resolveError) return actionFailure(resolveError, t('actions.thePolicyWasSavedButTheSuggestion'));
-  if (wroteNoRows(resolved)) {
+  // When the policy was already held, this call wrote nothing: say so instead.
+  if (wroteNoRows(resolved) && !await alreadyExecuted()) {
     console.error('[trust] suggestion resolve matched no rows', { suggestionId: suggestion.id, familyId });
-    return { ok: false, error: t('actions.thePolicyWasSavedButTheSuggestion') };
+    return { ok: false, error: !alreadyHeld ? t('actions.thePolicyWasSavedButTheSuggestion') : t('actions.thatSuggestionIsNoLongerOpen') };
   }
 
   revalidatePath('/dashboard/trust');

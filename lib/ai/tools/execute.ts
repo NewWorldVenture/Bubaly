@@ -458,6 +458,11 @@ async function gate(
   if (decision.effect === 'deny') return { kind: 'denied', reason: decision.reason };
   if (decision.effect === 'require_approval') {
     if (tool.name === 'finances.advisePurchase' && (!approvalId || !await associatePurchaseRequest(scope, approvalId))) {
+      // The card is already in the parents' queue. Left pending with no
+      // request attached, an approval of it could never be delivered
+      // (scopeForApprovedPurchase refuses a row without request_id), so it is
+      // withdrawn rather than left for a parent to approve into nothing.
+      if (approvalId) await withdrawUnassociatedPurchaseApproval(scope, approvalId);
       const t = await getTranslations();
       return { kind: 'denied', reason: t('purchaseAdvice.privateUnavailable') };
     }
@@ -536,6 +541,24 @@ async function associatePurchaseRequest(scope: ServiceScope, approvalId: string)
   } catch (error) {
     console.error('[tool-exec] could not associate a private purchase request', error);
     return false;
+  }
+}
+
+/** Cancel a still-pending purchase approval that never got a request attached.
+ * A card that already carries a request (a reused, validly associated one) is
+ * untouched: the fence on `request_id is null` keeps someone else's question. */
+async function withdrawUnassociatedPurchaseApproval(scope: ServiceScope, approvalId: string): Promise<void> {
+  try {
+    const writer = await trustWriter(scope);
+    let query = writer.from('approval_requests')
+      .update({ status: 'cancelled', decided_at: (scope.now ?? new Date()).toISOString() })
+      .eq('id', approvalId).eq('family_id', scope.familyId).eq('requested_by_kind', 'ai')
+      .eq('status', 'pending').is('request_id', null);
+    if (scope.memberId) query = query.eq('requested_by_member_id', scope.memberId);
+    const { error } = await query.select('id');
+    if (error) console.error('[tool-exec] could not withdraw an unassociated purchase approval', { approvalId, error });
+  } catch (error) {
+    console.error('[tool-exec] could not withdraw an unassociated purchase approval', { approvalId, error });
   }
 }
 

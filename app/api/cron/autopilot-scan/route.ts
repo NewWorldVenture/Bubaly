@@ -4,6 +4,7 @@ import type { LocaleCode } from '@/lib/i18n/locales';
 import { getMessages, translate } from '@/lib/i18n/messages';
 import { createServiceClient } from '@/lib/supabase/server';
 import { runAutopilotScan } from '@/lib/autopilot/scan';
+import { rotateForRun } from '@/lib/autopilot/cron-rotation';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { readAll } from '@/lib/supabase/read-all';
 import { getFeatureTiersByHref, resolveFeatureEntitlement } from '@/lib/server/feature-entitlement';
@@ -12,6 +13,24 @@ const AUTOPILOT_FEATURE_HREF = '/dashboard/autopilot';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
+
+/**
+ * The pass stops STARTING families once this much of `maxDuration` is spent,
+ * so it returns a summary instead of being killed mid-loop. Families it did not
+ * reach are counted and named rather than silently dropped.
+ */
+const TIME_BUDGET_MS = 40_000;
+/**
+ * One family's scan may take at most this long before the pass stops waiting
+ * for it and counts it as failed. With the start cut-off above, the last
+ * family started still settles by ~52 s, inside `maxDuration` 60 — a family
+ * started at 45 s with no bound could run the function into its kill.
+ */
+const FAMILY_TIMEOUT_MS = 12_000;
+/** Families scanned at once. Bounded: each scan is a burst of reads and writes. */
+const FAMILY_CONCURRENCY = 4;
+/** The cron runs once a day (vercel.json), so a run is numbered by its day. */
+const DAY_MS = 86_400_000;
 
 // The scan STORES suggestion titles, and the subscription ones carry money
 // ("$15.99 charge: Netflix tomorrow"). This cron has no reader to word them for:
@@ -67,29 +86,69 @@ export async function GET(req: NextRequest) {
     let policyCandidates = 0;
     let skipped = 0;
     let failures = 0;
-    for (const fam of families ?? []) {
+    const started = Date.now();
+    // The start point rotates by a whole batch per run (lib/autopilot/cron-rotation.ts).
+    // Ordered by id and cut off by the budget, the same lowest-id families were
+    // served first every day and the ones after the cut-off never at all; a
+    // one-family-a-day rotation left them waiting years. No per-family "last
+    // scanned" signal exists to order by, so every family is reached within
+    // ceil(N / stride) runs instead.
+    const all = families ?? [];
+    const queue = rotateForRun(all, Math.floor(started / DAY_MS));
+    const unreached: string[] = [];
+    let cursor = 0;
+    // `counted` goes false once the pass stops waiting for this family, so a scan
+    // that finishes (or fails) after its timeout is not counted a second time.
+    const scanFamily = async (fam: { id: string; timezone: string | null }, counted: { current: boolean }) => {
       try {
         // Inside the per-family try on purpose. `resolveFeatureEntitlement`
         // throws when the plan cannot be read, and an unreadable plan is not an
         // unentitled family — that counts as a failure for this family, never
         // as a silent skip.
         const entitlement = await resolveFeatureEntitlement(supabase, fam.id, AUTOPILOT_FEATURE_HREF, tiers);
-        if (!entitlement.allowed) { skipped++; continue; }
+        if (!entitlement.allowed) { if (counted.current) skipped++; return; }
 
         const r = await runAutopilotScan(supabase, fam.id, null, fam.timezone || 'UTC', SUGGESTION_LOCALE, suggestionText);
+        if (!counted.current) return;
         scanned += r.scanned;
         autoExecuted += r.autoExecuted;
         notified += r.notified;
         policyCandidates += r.policyCandidates;
       } catch (err) {
-        failures++;
+        if (counted.current) failures++;
         console.error(`Autopilot cron failed for family ${fam.id}:`, err);
       }
+    };
+    const worker = async () => {
+      while (cursor < queue.length) {
+        const fam = queue[cursor++];
+        if (Date.now() - started >= TIME_BUDGET_MS) { unreached.push(fam.id); continue; }
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const timedOut = new Promise<'timeout'>((resolve) => { timer = setTimeout(() => resolve('timeout'), FAMILY_TIMEOUT_MS); });
+        const counted = { current: true };
+        const outcome = await Promise.race([scanFamily(fam, counted).then(() => 'done' as const), timedOut]);
+        clearTimeout(timer);
+        if (outcome === 'timeout') {
+          counted.current = false;
+          failures++;
+          console.error(`Autopilot cron gave up waiting for family ${fam.id} after ${FAMILY_TIMEOUT_MS} ms`);
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(FAMILY_CONCURRENCY, queue.length) }, worker));
+    if (unreached.length > 0) {
+      console.error(`Autopilot cron ran out of time: ${unreached.length} families not scanned`, unreached.slice(0, 50));
     }
 
+    // A family the pass never reached is a family it failed, not a success.
+    const scanFailures = failures;
+    failures += unreached.length;
     const ok = failures === 0;
     return NextResponse.json(
-      { ok, families: (families ?? []).length, entitled: (families ?? []).length - skipped - failures, skipped, scanned, autoExecuted, notified, policyCandidates, failures },
+      {
+        ok, families: all.length, entitled: all.length - unreached.length - skipped - scanFailures, skipped, scanned, autoExecuted, notified, policyCandidates, failures,
+        unreached: unreached.length, unreachedFamilies: unreached.slice(0, 50),
+      },
       { status: ok ? 200 : 502 },
     );
   } catch (err) {

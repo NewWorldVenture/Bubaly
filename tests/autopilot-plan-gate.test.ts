@@ -176,6 +176,94 @@ describe('the Autopilot cron runs only for entitled families', () => {
     expect(response.status).toBe(500);
   });
 
+  it('stops starting families inside its time budget, names the ones it did not reach, and rotates who goes first', async () => {
+    const db = createInMemorySupabase<DB>();
+    const ids = Array.from({ length: 12 }, (_, i) => `family-${String(i).padStart(2, '0')}`);
+    db.seed('families', ids.map((id) => ({ id, name: id, timezone: 'UTC', trial_ends_at: '2020-01-01T00:00:00.000Z', closed_at: null })));
+    db.seed('subscriptions', ids.map((id) => ({ family_id: id, plan: 'plus', status: 'active' })));
+    state.db = db;
+    let clock = Date.parse('2026-09-21T06:30:00Z');
+    vi.spyOn(Date, 'now').mockImplementation(() => clock);
+    // Every scan takes 20 seconds of the function's 60.
+    scan.run.mockImplementation(async () => { clock += 20_000; return { scanned: 1, autoExecuted: 0, notified: 0, policyCandidates: 0, cleared: 0 }; });
+
+    const response = await cron(cronRequest() as never);
+    const body = await response.json();
+    const first = scannedFamilies();
+
+    expect(first.length).toBeLessThan(ids.length);
+    expect(body.unreached).toBe(ids.length - first.length);
+    expect([...first, ...body.unreachedFamilies].sort()).toEqual(ids);
+    expect(body.ok).toBe(false);
+    expect(response.status).toBe(502);
+
+    // The next day starts somewhere else, so the same families are not always last.
+    scan.run.mockClear();
+    clock = Date.parse('2026-09-22T06:30:00Z');
+    await cron(cronRequest() as never);
+    expect(scannedFamilies()[0]).not.toBe(first[0]);
+    scan.run.mockImplementation(async () => ({ scanned: 1, autoExecuted: 0, notified: 0, policyCandidates: 0, cleared: 0 }));
+    vi.mocked(Date.now).mockRestore();
+  });
+
+  it('reaches every family within a bounded number of runs, not one family further a day', async () => {
+    // 400 families, about 40 scanned a run. A start that moved one family a day
+    // left the family after the cut-off waiting ~360 days; spread starts reach
+    // every family within 4·N/C runs (lib/autopilot/cron-rotation.ts).
+    const db = createInMemorySupabase<DB>();
+    const ids = Array.from({ length: 400 }, (_, i) => `family-${String(i).padStart(3, '0')}`);
+    db.seed('families', ids.map((id) => ({ id, name: id, timezone: 'UTC', trial_ends_at: '2020-01-01T00:00:00.000Z', closed_at: null })));
+    db.seed('subscriptions', ids.map((id) => ({ family_id: id, plan: 'plus', status: 'active' })));
+    state.db = db;
+    let clock = 0;
+    vi.spyOn(Date, 'now').mockImplementation(() => clock);
+    scan.run.mockImplementation(async () => { clock += 4_000; return { scanned: 1, autoExecuted: 0, notified: 0, policyCandidates: 0, cleared: 0 }; });
+
+    const reached = new Set<unknown>();
+    let perRun = Infinity;
+    let runs = 0;
+    const firstDay = Date.parse('2026-09-21T06:30:00Z');
+    while (reached.size < ids.length && runs < ids.length) {
+      scan.run.mockClear();
+      clock = firstDay + runs * 86_400_000;
+      await cron(cronRequest() as never);
+      const scannedNow = scannedFamilies();
+      perRun = Math.min(perRun, scannedNow.length);
+      for (const id of scannedNow) reached.add(id);
+      runs++;
+    }
+
+    expect(perRun).toBeGreaterThan(10);
+    expect(perRun).toBeLessThan(ids.length);
+    expect(reached.size).toBe(ids.length);
+    expect(runs).toBeLessThanOrEqual(Math.ceil((4 * ids.length) / perRun));
+    scan.run.mockImplementation(async () => ({ scanned: 1, autoExecuted: 0, notified: 0, policyCandidates: 0, cleared: 0 }));
+    vi.mocked(Date.now).mockRestore();
+  }, 60_000);
+
+  it('stops waiting for a family whose scan hangs, so the pass still returns inside maxDuration', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      let release: () => void = () => {};
+      scan.run.mockImplementation(() => new Promise((resolve) => {
+        release = () => resolve({ scanned: 1, autoExecuted: 0, notified: 0, policyCandidates: 0, cleared: 0 });
+      }));
+      const pending = cron(cronRequest() as never);
+      await vi.advanceTimersByTimeAsync(12_000);
+      const response = await pending;
+      const body = await response.json();
+      expect(scannedFamilies()).toEqual([PLUS]);
+      expect(body).toMatchObject({ ok: false, failures: 1, scanned: 0 });
+      // A late finish is not counted a second time.
+      release();
+      await Promise.resolve();
+      expect(body.scanned).toBe(0);
+    } finally {
+      vi.useRealTimers();
+      scan.run.mockImplementation(async () => ({ scanned: 1, autoExecuted: 0, notified: 0, policyCandidates: 0, cleared: 0 }));
+    }
+  });
+
   it('still refuses an unauthorised caller before reading anything', async () => {
     const response = await cron(cronRequest('wrong') as never);
 
