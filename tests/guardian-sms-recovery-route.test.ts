@@ -7,7 +7,7 @@ vi.mock('@/lib/supabase/server', () => ({ createServiceClient: seam.factory }));
 vi.mock('@/lib/guardian/sms-recovery', () => ({ drainGuardianSmsReceipts: seam.drain }));
 vi.mock('@/lib/guardian/escalation-retry', () => ({ retryUndeliveredGuardianEscalations: seam.retry }));
 
-const NOTHING_TO_RETRY = { examined: 0, delivered: 0, duplicate: 0, undelivered: 0, unavailable: 0 };
+const NOTHING_TO_RETRY = { examined: 0, delivered: 0, duplicate: 0, undelivered: 0, unreachable: 0, unavailable: 0 };
 
 beforeEach(() => {
   vi.stubEnv('CRON_SECRET', 'synthetic-recovery-cron-secret');
@@ -50,6 +50,12 @@ describe('Guardian SMS recovery scheduled HTTP boundary', () => {
   it('a retry sweep that completed every escalation it found is a success', async () => {
     seam.retry.mockResolvedValue({ ...NOTHING_TO_RETRY, examined: 2, delivered: 1, duplicate: 1 });
     expect((await GET(request())).status).toBe(200);
+  });
+  it('an escalation with nobody to text or call owes nothing: not a failure the scheduler should keep seeing', async () => {
+    seam.retry.mockResolvedValue({ ...NOTHING_TO_RETRY, examined: 1, unreachable: 1 });
+    const result = await GET(request());
+    expect(result.status).toBe(200);
+    expect(await result.json()).toMatchObject({ ok: true, escalations: { examined: 1, unreachable: 1 } });
   });
   it('reports temporarily owned work without duplicating its processing', async () => {
     seam.drain.mockResolvedValue({ examined: 1, completed: 0, busy: 1, unavailable: 0 });

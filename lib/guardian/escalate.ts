@@ -23,14 +23,26 @@ export type GuardianEscalationOutcome =
   | { kind: 'duplicate' }
   /** A read the alert depends on failed before anything was sent; the claim was given back. */
   | { kind: 'read_failed' }
-  /** Alerts went out but the escalation row could not be written; the claim is parked as `error`. */
+  /** Alerts went out (or there was nobody to alert) but the escalation row could not be written; the claim is parked as `error`. */
   | { kind: 'record_failed' }
   /**
-   * No manager was reached by SMS or call (no manager phone, Twilio not
-   * configured, or every send failed). Recorded, and the claim given back so a
-   * retry can try again: nothing reached a phone, so a retry cannot text twice.
+   * There was nobody to text or call: Twilio is not configured, or no active
+   * manager has a phone on file. Nothing to retry, so this is recorded (with
+   * `notified_member_ids` NULL rather than empty, which is how the retry sweep
+   * tells it from `undelivered`), the claim is marked processed, and the
+   * callers complete. The dashboard row says nobody was reached by phone, and
+   * the in-app notice went out; a phone added later is for the next emergency.
    */
-  | { kind: 'undelivered'; pushSent: boolean; notifiedCount: 0 }
+  | { kind: 'unreachable'; pushSent: boolean; notifiedCount: 0 }
+  /**
+   * A manager could have been reached, and every send to every one of them
+   * failed (a Twilio 5xx, a refused connection). Recorded with nobody notified,
+   * and the claim given back, so the undelivered-escalation sweep on the
+   * recovery cron re-attempts it from its record for a bounded time: nothing
+   * reached a phone, so a retry cannot text twice. `recorded` says whether the
+   * record landed; the sweep cannot find one that did not.
+   */
+  | { kind: 'undelivered'; pushSent: boolean; notifiedCount: 0; recorded: boolean }
   /**
    * The caller's deadline passed (or it cancelled) before any manager was
    * confirmed reached, and no further send was started once it had. Recorded
@@ -148,18 +160,22 @@ export async function escalateGuardianEmergency(
 
   const twilioReady = isTwilioConfigured();
   if (!twilioReady) console.error('[guardian] escalation cannot text or call: Twilio is not configured', { familyId, callbackId });
+  // The manager pair this product actually has. `public.member_role` is
+  // ('parent','adult','teen','child','caregiver','guest') — the list here
+  // used to read ['owner', 'manager', 'parent'], and two of those three
+  // match nobody, so an adult co-parent was never texted or called.
+  const managers = ((members ?? []) as Array<{ id: string; user_id: string | null; display_name: string; role: string }>).filter((m) => isManager(m.role));
+  // Set once a manager with a phone is found while Twilio is configured: there
+  // was somebody to text or call. Without it, an escalation that reached nobody
+  // is `unreachable` (nothing to retry) rather than `undelivered` (retry).
+  let reachable = false;
   // Set the moment the first Twilio request is started. After that an abort
   // is not proof that nothing reached a phone (see `interrupted`).
   let sendStarted = false;
-  if (twilioReady && members?.length) {
+  if (twilioReady && managers.length) {
     const BASE_URL = appBaseUrl();
     const smsText = `[Bubaly Emergency Alert]\n${alertTitle}\n${alertBody}\nReply STOP to opt out.`;
     const twimlUrl = `${BASE_URL}/api/guardian/escalate/twiml?family=${familyId}&msg=${encodeURIComponent(description.slice(0, 200))}`;
-    // The manager pair this product actually has. `public.member_role` is
-    // ('parent','adult','teen','child','caregiver','guest') — the list here
-    // used to read ['owner', 'manager', 'parent'], and two of those three
-    // match nobody, so an adult co-parent was never texted or called.
-    const managers = (members as Array<{ id: string; user_id: string | null; display_name: string; role: string }>).filter((m) => isManager(m.role));
     // Every manager at once, not one after another. Sequentially this was two
     // Twilio requests of up to 15 s each PER manager, so a family with three
     // managers on a slow provider could not finish inside any caller's budget;
@@ -173,6 +189,7 @@ export async function escalateGuardianEmergency(
         console.error('[guardian] escalation cannot reach a manager with no phone on file', { familyId, callbackId, memberId: m.id });
         return null;
       }
+      reachable = true;
       const result: Reached = { id: m.id, sms: false, call: false };
 
       // SMS
@@ -219,13 +236,33 @@ export async function escalateGuardianEmergency(
     severity,
     description,
     caller_number: callerNumber ?? null,
-    notified_member_ids: notifiedIds,
+    // NULL when there was nobody to text or call, [] when there was and nobody
+    // was reached. The dashboard shows both as "no manager reached by phone";
+    // the retry sweep (lib/guardian/escalation-retry.ts) re-attempts only the
+    // second, since a phone that is not on file cannot be reached by trying
+    // again. The column has no other writer, so the distinction holds.
+    notified_member_ids: reachable ? notifiedIds : null,
     push_sent: pushSent,
     sms_sent: smsSent,
     call_attempted: callAttempted,
   }, { onConflict: 'id' });
 
-  if (notifiedIds.length === 0) {
+  if (notifiedIds.length === 0 && !reachable && !escalationError) {
+    // Nobody to tell: Twilio is not configured, or no active manager has a
+    // phone on file. A retry would find the same, so this is not left for one:
+    // the in-app notice and the dashboard row are what this family gets, the
+    // claim is processed, and the callers complete. (Before this answer existed
+    // the case was `undelivered`, and the SMS lane answered 503 for it every
+    // five minutes until a phone was added.) With the record NOT landed as
+    // well, it falls through to `record_failed` below: the same bounded answer.
+    console.error('[guardian] escalation had nobody to text or call; recorded with nobody reached', {
+      familyId, callbackId, pushSent, twilioReady, managers: managers.length,
+    });
+    await markGuardianCallbackProcessed(supabase, callbackId);
+    return { kind: 'unreachable', pushSent, notifiedCount: 0 };
+  }
+
+  if (notifiedIds.length === 0 && reachable) {
     if (interrupted && sendStarted) {
       // Cut off with a send in flight. That send may still have been accepted
       // by Twilio, so the claim is parked rather than given back: the ten
@@ -240,20 +277,21 @@ export async function escalateGuardianEmergency(
       return { kind: 'interrupted', pushSent, notifiedCount: 0 };
     }
     // Nobody's phone was reached. Not a success: say so, and give the claim
-    // back so the caller can retry. The unacknowledged row stays at the top of
-    // the Guardian dashboard either way.
+    // back so the retry sweep (or a caller's retry) can try again. The
+    // unacknowledged row stays at the top of the Guardian dashboard either way.
     console.error('[guardian] escalation reached no manager by SMS or call; leaving it retryable', {
       familyId, callbackId, pushSent, recorded: !escalationError, interrupted,
     });
     await releaseGuardianCallback(supabase, 'emergency_escalation', callbackId);
-    return interrupted ? { kind: 'interrupted', pushSent, notifiedCount: 0 } : { kind: 'undelivered', pushSent, notifiedCount: 0 };
+    return interrupted ? { kind: 'interrupted', pushSent, notifiedCount: 0 } : { kind: 'undelivered', pushSent, notifiedCount: 0, recorded: !escalationError };
   }
 
   if (escalationError) {
-    // Deliberately `error`, not a release: the alerts above have gone out, and
-    // the ten minutes before an `error` row can be reclaimed is what keeps an
-    // immediate retry from texting and calling every manager a second time.
-    console.error('[guardian] escalation could not be recorded after alerts went out', { familyId, callbackId, error: escalationError });
+    // Deliberately `error`, not a release: the alerts above have gone out (or,
+    // with nobody to text or call, the in-app notice has), and the ten minutes
+    // before an `error` row can be reclaimed is what keeps an immediate retry
+    // from texting and calling every manager a second time.
+    console.error('[guardian] escalation could not be recorded after alerts went out', { familyId, callbackId, notifiedCount: notifiedIds.length, error: escalationError });
     await markGuardianCallbackError(supabase, callbackId, 'Unable to record escalation.');
     return { kind: 'record_failed' };
   }

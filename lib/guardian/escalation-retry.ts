@@ -19,6 +19,14 @@
 // row, and skips the in-app notification it already wrote. A partial success
 // is `delivered` with the reached managers recorded, which this never touches:
 // nobody is texted twice. Run from the Guardian recovery cron.
+//
+// It is the ONLY retrier of a recorded escalation that reached nobody, and it
+// is finite: a record older than the window, an acknowledged one, and one the
+// escalation marked `unreachable` (nobody to text or call — no manager phone on
+// file, or Twilio not configured — written with notified_member_ids NULL rather
+// than empty) are not re-attempted. The inbound lanes complete such messages
+// rather than answering 503 for them, because their own retry (the receipt
+// drain and Twilio's redelivery) has no deadline.
 
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -45,6 +53,11 @@ export type GuardianEscalationRetryCounts = {
   duplicate: number;
   /** Still nobody reached (or cut off before anyone was); left for the next run. */
   undelivered: number;
+  /**
+   * Nobody to text or call any more (a manager's phone was removed, or Twilio
+   * is unconfigured now). The record is marked so, and not re-attempted again.
+   */
+  unreachable: number;
   /** The ledger could not be read, a record was malformed, or the attempt itself could not complete. */
   unavailable: number;
 };
@@ -79,7 +92,7 @@ export async function retryUndeliveredGuardianEscalations(
   client: SupabaseClient,
   options: { limit?: number; signal?: AbortSignal } = {},
 ): Promise<GuardianEscalationRetryCounts> {
-  const counts: GuardianEscalationRetryCounts = { examined: 0, delivered: 0, duplicate: 0, undelivered: 0, unavailable: 0 };
+  const counts: GuardianEscalationRetryCounts = { examined: 0, delivered: 0, duplicate: 0, undelivered: 0, unreachable: 0, unavailable: 0 };
   const limit = Math.min(MAX_LIMIT, Math.max(1, Math.trunc(options.limit ?? DEFAULT_LIMIT)));
   const since = new Date(Date.now() - GUARDIAN_ESCALATION_RETRY_WINDOW_MS).toISOString();
   let rows: Record<string, unknown>[];
@@ -87,12 +100,17 @@ export async function retryUndeliveredGuardianEscalations(
     // "Reached nobody" is `sms_sent = false AND call_attempted = false`: a
     // member is recorded as notified only when a text or call to them went
     // through, so the two flags are false exactly when notified_member_ids is
-    // empty — and they are plain booleans a filter can ask for.
+    // empty — and they are plain booleans a filter can ask for. A NULL
+    // notified_member_ids is the escalation's own mark for "nobody to text or
+    // call" (lib/guardian/escalate.ts, `unreachable`): no phone on file is not
+    // mended by trying again, so those are left out here rather than re-run
+    // every five minutes for a day.
     const { data, error } = await client.from('guardian_escalations')
       .select(COLUMNS)
       .is('acknowledged_at', null)
       .eq('sms_sent', false)
       .eq('call_attempted', false)
+      .not('notified_member_ids', 'is', null)
       .gte('escalated_at', since)
       .order('escalated_at', { ascending: true })
       .limit(limit);
@@ -129,6 +147,10 @@ export async function retryUndeliveredGuardianEscalations(
         case 'duplicate': counts.duplicate += 1; break;
         case 'undelivered':
         case 'interrupted': counts.undelivered += 1; break;
+        // The escalation re-wrote the record with notified_member_ids NULL and
+        // marked its claim processed, so the next read leaves it out. Nothing
+        // owed, so this does not fail the cron.
+        case 'unreachable': counts.unreachable += 1; break;
         default: counts.unavailable += 1;
       }
     } catch (error) {

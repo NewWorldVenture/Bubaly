@@ -41,6 +41,11 @@ export async function POST(req: NextRequest) {
     // Nobody was reached by SMS or call. Not `ok`: the claim was given back so
     // the caller's retry is processed rather than answered as a duplicate.
     case 'undelivered': return NextResponse.json({ ok: false, delivered: false, pushSent: outcome.pushSent, notifiedCount: 0 }, { status: 503 });
+    // Nobody to text or call: no manager has a phone on file, or Twilio is not
+    // configured. Recorded, and nothing to retry, so not a 503 — a retry would
+    // find the same and is answered as a duplicate — but not `ok` either: the
+    // caller is told that no phone was reached.
+    case 'unreachable': return NextResponse.json({ ok: false, delivered: false, unreachable: true, pushSent: outcome.pushSent, notifiedCount: 0 });
     // Cut off by the caller's deadline before anyone was confirmed reached:
     // the same answer. (This route passes no deadline, so it sees this only if
     // the escalation itself did; the inbound lanes do pass one.)

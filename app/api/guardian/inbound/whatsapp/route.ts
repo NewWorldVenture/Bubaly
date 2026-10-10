@@ -336,6 +336,13 @@ export async function POST(req: NextRequest) {
       // is complete.
       console.error('[guardian/inbound/whatsapp] emergency escalation went out but could not be recorded', { familyId, smsSid });
     }
+    if (outcome === 'unreachable') {
+      // Nobody to text or call (no manager with a phone on file, or Twilio not
+      // configured): recorded with nobody reached, and nothing to retry — a
+      // redelivery or the sweep would find the same. Logged, and the message is
+      // complete; it is not parked for the sweep as `undelivered` is.
+      console.error('[guardian/inbound/whatsapp] emergency escalation had nobody to text or call; recorded with nobody reached', { familyId, smsSid });
+    }
   }
 
   await markGuardianCallbackProcessed(supabase, smsSid);

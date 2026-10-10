@@ -323,19 +323,32 @@ async function processOwned(client: Client, input: GuardianSmsReceiptInput, leas
       description: `Emergency text from ${fields.from_name ?? formatPhone(input.from)}: "${input.body.slice(0, 300)}"`,
       ...(input.from ? { callerNumber: input.from.slice(0, 64) } : {}),
     }, { signal: current }), ESCALATION_MS);
-    // A storage failure before anything was sent, an escalation that reached
-    // nobody, and one cut off before anyone was confirmed reached all ask for
-    // a retry the same way: the lease is released as `error`, the route answers
-    // 503, and the receipt stays `decided`, so Twilio's redelivery or the
-    // recovery cron re-runs this step. `undelivered` used to be logged and the
-    // message completed — the one answer after which nothing would ever try
-    // again. The escalation's own claim and stable ids keep the retry from
-    // texting twice; an alert that DID reach someone is `delivered`, never
-    // retried, and `record_failed` means the alerts went out and only the
-    // record did not.
-    if (escalation.kind === 'claim_unavailable' || escalation.kind === 'read_failed'
-      || escalation.kind === 'undelivered' || escalation.kind === 'interrupted') return unavailable();
-    if (escalation.kind === 'record_failed') {
+    // A storage failure before anything was sent, one cut off before anyone
+    // was confirmed reached, and one that reached nobody AND could not be
+    // recorded all ask for a retry the same way: the lease is released as
+    // `error`, the route answers 503, and the receipt stays `decided`, so
+    // Twilio's redelivery or the recovery cron re-runs this step. That is the
+    // lane's own retry, for storage, and it has no deadline of its own.
+    //
+    // An escalation that reached nobody but IS on record is not that. It
+    // completes here, and the retry sweep on the recovery cron (lib/guardian/
+    // escalation-retry.ts) re-attempts it from its record until a manager is
+    // reached, the escalation is acknowledged, or its window passes. Answering
+    // 503 for it instead made the whole lane re-run every five minutes with
+    // no end — the sweep is bounded, the receipt drain is not — and when the
+    // cause was permanent (no manager with a phone on file) the recovery cron
+    // was red for as long. That case is now `unreachable`, which nothing
+    // retries: nobody could be told, and a retry would find the same. The
+    // escalation's own claim and stable ids keep every retry from texting
+    // twice; an alert that DID reach someone is `delivered`, never retried, and
+    // `record_failed` means the alerts went out and only the record did not.
+    if (escalation.kind === 'claim_unavailable' || escalation.kind === 'read_failed' || escalation.kind === 'interrupted') return unavailable();
+    if (escalation.kind === 'undelivered' && !escalation.recorded) return unavailable();
+    if (escalation.kind === 'undelivered') {
+      console.error('[guardian-sms] emergency escalation reached no manager; left for the retry sweep', { familyId: input.familyId, communicationId: receipt.communicationId });
+    } else if (escalation.kind === 'unreachable') {
+      console.error('[guardian-sms] emergency escalation had nobody to text or call; recorded with nobody reached', { familyId: input.familyId, communicationId: receipt.communicationId });
+    } else if (escalation.kind === 'record_failed') {
       console.error('[guardian-sms] emergency escalation went out but could not be recorded', { familyId: input.familyId, communicationId: receipt.communicationId });
     }
   }

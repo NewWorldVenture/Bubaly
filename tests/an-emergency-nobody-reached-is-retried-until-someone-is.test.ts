@@ -13,15 +13,20 @@
 // row (delivered by the push cron, hours later at best) and an unacknowledged
 // dashboard entry left behind.
 //
-// Now: the SMS lane treats `undelivered` like a storage failure — the lease is
-// released, the route answers 503, the receipt stays `decided`, and the
-// redelivery or the recovery cron re-runs the escalation. The WhatsApp route
-// parks its callback as `error` and answers 503. And every lane is backstopped
-// by retryUndeliveredGuardianEscalations, run from the guardian-sms-recovery
-// cron: it re-attempts every recent unacknowledged escalation whose record says
-// nobody was reached. Stable ids and the escalation's own claim keep each retry
-// from texting twice, and a partial success (one manager reached) is
-// `delivered`, so it is never re-sent.
+// Now: every lane is backstopped by retryUndeliveredGuardianEscalations, run
+// from the guardian-sms-recovery cron: it re-attempts every recent
+// unacknowledged escalation whose record says nobody was reached. Stable ids
+// and the escalation's own claim keep each retry from texting twice, and a
+// partial success (one manager reached) is `delivered`, so it is never re-sent.
+// The SMS lane completes a message whose escalation is on record as
+// undelivered and leaves the retry to that sweep (a 503 instead made the whole
+// lane re-run every five minutes with no end, since the receipt drain has no
+// deadline of its own); the WhatsApp route parks its callback as `error` and
+// answers 503, which its claim bounds to ten minutes. And when there was nobody
+// to text or call at all — no manager with a phone on file, or Twilio not
+// configured — the escalation is `unreachable`: recorded with
+// notified_member_ids NULL, its claim processed, the message complete, and
+// nothing retries it, because trying again would find the same.
 import { createHash, createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { NextRequest } from 'next/server';
@@ -33,7 +38,7 @@ import { guardianEscalationEventId, type GuardianEscalationInput } from '@/lib/g
 
 const seam = vi.hoisted(() => ({
   service: vi.fn(), scam: vi.fn(), notify: vi.fn(), turn: vi.fn(), after: vi.fn(),
-  telephony: { down: false, failFor: new Set<string>() },
+  telephony: { configured: true, down: false, failFor: new Set<string>() },
   sent: [] as string[], called: [] as string[], attempts: 0,
 }));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: seam.service }));
@@ -47,9 +52,10 @@ vi.mock('@/lib/guardian/ai-screen', () => ({ screeningTurn: seam.turn, summarize
 // Telephony that can be switched off and on: a send while it is down rejects
 // the way a Twilio 5xx or a refused connection does; a send while it is up is
 // recorded, so "sent once" can be asserted on successes rather than attempts.
+// It can also be unconfigured, which is not an outage: nothing can be sent.
 vi.mock('@/lib/guardian/twilio', async (original) => ({
   ...await original<typeof import('@/lib/guardian/twilio')>(),
-  isTwilioConfigured: () => true,
+  isTwilioConfigured: () => seam.telephony.configured,
   sendSms: async (to: string) => {
     seam.attempts += 1;
     if (seam.telephony.down || seam.telephony.failFor.has(to)) throw new Error('Twilio 503: Service Unavailable');
@@ -118,7 +124,7 @@ beforeEach(() => {
   vi.stubEnv('NODE_ENV', 'production'); vi.stubEnv('NEXT_PUBLIC_APP_URL', ORIGIN); vi.stubEnv('TWILIO_AUTH_TOKEN', TOKEN);
   vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('live transport is prohibited in this fixture'); }));
   seam.sent.length = 0; seam.called.length = 0; seam.attempts = 0;
-  seam.telephony.down = false; seam.telephony.failFor.clear();
+  seam.telephony.configured = true; seam.telephony.down = false; seam.telephony.failFor.clear();
   seam.after.mockReset();
   seam.after.mockImplementation(() => { throw new Error('`after` was called outside a request scope.'); });
   db = createInMemorySupabase({
@@ -155,49 +161,179 @@ beforeEach(() => {
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
+/** The SMS lane's receipt for a message, as the recovery drain sees it. */
+const receiptPhase = () => (db.table('ai_tool_calls').find((row) => row.tool_name === 'guardian.sms_intake')?.outputs as { phase: string }).phase;
+/** The escalation's own claim, keyed on the communication the lane recorded. */
+const escalationClaim = () => callback(guardianEscalationEventId({ familyId: FAMILY, commId: db.table('guardian_communications')[0].id as string, escalationType: 'urgent_personal', severity: 'critical', description: '' }));
+const emergencyNotices = () => db.table('notifications').filter((row) => String(row.title).startsWith('🚨 EMERGENCY'));
+/** The one manager has no number on file, as onboarding allows and profiles.phone is nullable. */
+const parentHasNoPhone = () => db.replace('profiles', [{ id: 'u-parent', phone: null }, { id: 'u-child', phone: '+15550000001' }]);
+async function resume(smsSid: string) {
+  const { resumeGuardianSms } = await import('@/lib/guardian/sms-processing');
+  const { guardianSmsReceiptId } = await import('@/lib/guardian/sms-receipt');
+  return resumeGuardianSms(client(), guardianSmsReceiptId(smsSid));
+}
+
 describe('an emergency SMS whose every text and call failed', () => {
-  it('is not completed: the lease is released for a retry, the receipt stays decided, and the recovery re-run reaches the manager once', async () => {
+  it('completes with the escalation on record, and the retry sweep — not the lane — reaches the manager once', async () => {
     seam.telephony.down = true;
-    // The defect: 'completed' — the callback processed, the receipt completed,
-    // and nothing anywhere would ever text or call a manager about it.
-    expect(await sms(SMS_SID, EMERGENCY)).toBe('unavailable');
+    // The first defect: 'completed' with nothing anywhere ever retrying the
+    // alert. The second, which replaced it: 'unavailable' — the lease released
+    // as `error`, the receipt left `decided`, and the whole lane re-run by the
+    // recovery cron every five minutes with no end, since the drain has no
+    // window and no attempt cap. The record is the retry's carrier, and the
+    // sweep that reads it is bounded; so the message is done here.
+    expect(await sms(SMS_SID, EMERGENCY)).toBe('completed');
     expect(escalations()).toHaveLength(1);
-    expect(escalations()[0]).toMatchObject({ notified_member_ids: [], sms_sent: false, call_attempted: false });
-    expect(callback(SMS_SID), 'the lease is released as error, not finished').toMatchObject({ status: 'error', processed_at: null });
-    const receipt = db.table('ai_tool_calls').find((row) => row.tool_name === 'guardian.sms_intake');
-    expect((receipt?.outputs as { phase: string }).phase, 'the receipt is left where the recovery cron looks').toBe('decided');
+    expect(escalations()[0]).toMatchObject({ notified_member_ids: [], sms_sent: false, call_attempted: false, push_sent: true });
+    expect(callback(SMS_SID), 'the message is finished; its retry is the sweep').toMatchObject({ status: 'processed' });
+    expect(escalationClaim(), 'the escalation gave its claim back for the sweep').toBeUndefined();
+    expect(receiptPhase(), 'the receipt is where the recovery drain does not look').toBe('completed');
     expect(seam.sent).toEqual([]);
 
-    // Telephony is back; the recovery lane resumes the receipt and the same
-    // escalation goes through — once, into the same record.
+    // While telephony stays down, neither a redelivery nor the recovery lane
+    // re-runs the escalation: the sweep does, and it is the one that reports
+    // nobody reached.
+    expect(await sms(SMS_SID, EMERGENCY)).toBe('completed');
+    expect(await resume(SMS_SID)).toBe('completed');
+    expect(seam.attempts, 'the lane sent nothing more').toBe(2);
+    expect(await sweep()).toMatchObject({ examined: 1, delivered: 0, undelivered: 1, unavailable: 0 });
+    expect(escalationClaim(), 'given back again for the next pass').toBeUndefined();
+
+    // Telephony is back; the sweep re-runs the escalation once into the same
+    // record.
     seam.telephony.down = false;
-    const { resumeGuardianSms } = await import('@/lib/guardian/sms-processing');
-    const { guardianSmsReceiptId } = await import('@/lib/guardian/sms-receipt');
-    expect(await resumeGuardianSms(client(), guardianSmsReceiptId(SMS_SID))).toBe('completed');
+    expect(await sweep()).toMatchObject({ examined: 1, delivered: 1, undelivered: 0, unavailable: 0 });
     expect(escalations()).toHaveLength(1);
     expect(escalations()[0]).toMatchObject({ notified_member_ids: [PARENT], sms_sent: true, call_attempted: true });
     expect(seam.sent).toEqual([PARENT_PHONE]);
     expect(seam.called).toEqual([PARENT_PHONE]);
-    expect(callback(SMS_SID)).toMatchObject({ status: 'processed' });
+    expect(escalationClaim()).toMatchObject({ status: 'processed' });
     // The family notice was written once, by the first attempt, and not again.
     expect(db.table('notifications').filter((row) => String(row.title).startsWith('🚨 Emergency text from'))).toHaveLength(1);
-    expect(db.table('notifications').filter((row) => String(row.title).startsWith('🚨 EMERGENCY'))).toHaveLength(1);
+    expect(emergencyNotices()).toHaveLength(1);
 
-    // A redelivery after that alarms nobody twice.
+    // Nothing is left for the next sweep, and a redelivery alarms nobody twice.
+    expect(await sweep()).toMatchObject({ examined: 0 });
     expect(await sms(SMS_SID, EMERGENCY)).toBe('completed');
     expect(seam.sent).toEqual([PARENT_PHONE]);
     expect(seam.called).toEqual([PARENT_PHONE]);
   });
 
-  it('a redelivery while telephony is still down is retried again, not acknowledged', async () => {
+  it('the sweep stops when a manager acknowledges the escalation in the dashboard', async () => {
     seam.telephony.down = true;
-    expect(await sms(SMS_SID, EMERGENCY)).toBe('unavailable');
-    expect(await sms(SMS_SID, EMERGENCY)).toBe('unavailable');
-    expect(callback(SMS_SID)).toMatchObject({ status: 'error' });
-    seam.telephony.down = false;
     expect(await sms(SMS_SID, EMERGENCY)).toBe('completed');
-    expect(seam.sent).toEqual([PARENT_PHONE]);
+    expect(await sweep()).toMatchObject({ examined: 1, undelivered: 1 });
+    await db.from('guardian_escalations').update({ acknowledged_at: new Date().toISOString(), acknowledged_by: 'u-parent' }).eq('id', escalations()[0].id as string);
+    expect(await sweep()).toMatchObject({ examined: 0 });
+    seam.telephony.down = false;
+    expect(await sweep()).toMatchObject({ examined: 0 });
+    expect(seam.attempts, 'one text and one call by the lane, the same by the one sweep, and no more').toBe(4);
+    expect(seam.sent).toEqual([]);
+  });
+
+  it('one that reached nobody AND could not be recorded is the lane\'s own retry, since the sweep cannot find it', async () => {
+    seam.telephony.down = true;
+    const before = db.from.bind(db);
+    const reply = { data: null, error: { code: '57014', message: 'canceling statement due to statement timeout' }, count: null, status: 503, statusText: 'Service Unavailable' };
+    const chain: Record<string | symbol, unknown> = new Proxy({}, {
+      get(_target, prop) {
+        if (prop === 'then') return (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) => Promise.resolve(reply).then(resolve, reject);
+        return () => chain;
+      },
+    });
+    db.from = ((name: string) => (name === 'guardian_escalations' ? chain : before(name))) as InMemorySupabase['from'];
+    // Not completed: there is no record for the sweep to read, so the lease is
+    // released and the receipt stays `decided` for the recovery drain.
+    expect(await sms(SMS_SID, EMERGENCY)).toBe('unavailable');
+    expect(callback(SMS_SID)).toMatchObject({ status: 'error', processed_at: null });
+    expect(receiptPhase()).toBe('decided');
+    expect(escalations()).toEqual([]);
+
+    db.from = before;
+    seam.telephony.down = false;
+    expect(await resume(SMS_SID)).toBe('completed');
     expect(escalations()).toHaveLength(1);
+    expect(escalations()[0]).toMatchObject({ notified_member_ids: [PARENT], sms_sent: true });
+    expect(seam.sent).toEqual([PARENT_PHONE]);
+    expect(emergencyNotices(), 'the in-app row from the first attempt is reused').toHaveLength(1);
+  });
+});
+
+describe('an emergency with nobody to text or call', () => {
+  it('SMS: the one manager has no phone on file — completed, recorded with nobody reached, and never re-run', async () => {
+    parentHasNoPhone();
+    // The defect: 'unavailable' — the lease released as `error`, the receipt
+    // left `decided`, and the recovery cron re-ran the whole lane (twenty-odd
+    // PostgREST calls, two console.errors, a 503) every five minutes for as
+    // long as the family had no phone on file, which is to say indefinitely.
+    // Acknowledging the escalation stopped the sweep, but not this.
+    expect(await sms(SMS_SID, EMERGENCY)).toBe('completed');
+    expect(seam.attempts, 'nothing was sent: there was nobody to send to').toBe(0);
+    expect(escalations()).toHaveLength(1);
+    // NULL, not []: nobody COULD be told. The dashboard shows both as "no
+    // manager reached by phone"; the sweep re-attempts only the second.
+    expect(escalations()[0]).toMatchObject({ notified_member_ids: null, sms_sent: false, call_attempted: false, push_sent: true });
+    expect(callback(SMS_SID)).toMatchObject({ status: 'processed' });
+    expect(escalationClaim(), 'the escalation is as handled as it can be').toMatchObject({ status: 'processed' });
+    expect(receiptPhase()).toBe('completed');
+    // The family still hears about it in the app, once: the lane's own notice
+    // and the escalation's.
+    const familyNotices = () => db.table('notifications').filter((row) => String(row.title).startsWith('🚨 Emergency text from'));
+    expect(familyNotices()).toHaveLength(1);
+    expect(emergencyNotices()).toHaveLength(1);
+
+    // Nothing retries it: not the sweep, not the recovery lane, not a redelivery.
+    expect(await sweep()).toMatchObject({ examined: 0, undelivered: 0, unavailable: 0 });
+    expect(await resume(SMS_SID)).toBe('completed');
+    expect(await sms(SMS_SID, EMERGENCY)).toBe('completed');
+    expect(seam.attempts).toBe(0);
+    expect(escalations()).toHaveLength(1);
+    expect(familyNotices()).toHaveLength(1);
+    expect(emergencyNotices()).toHaveLength(1);
+
+    // A phone added later is for the next emergency, not this one.
+    db.replace('profiles', [{ id: 'u-parent', phone: PARENT_PHONE }, { id: 'u-child', phone: '+15550000001' }]);
+    expect(await sweep()).toMatchObject({ examined: 0 });
+    expect(seam.attempts).toBe(0);
+  });
+
+  it('WhatsApp: the message is complete with a 200, not parked for a sweep that would find the same', async () => {
+    parentHasNoPhone();
+    const res = await whatsapp(WA_SID, EMERGENCY);
+    // The defect: 503 with the callback parked as `error`, and the sweep
+    // re-running the escalation every five minutes for a day.
+    expect(res.status).toBe(200);
+    expect(callback(WA_SID)).toMatchObject({ status: 'processed' });
+    expect(escalations()).toHaveLength(1);
+    expect(escalations()[0]).toMatchObject({ notified_member_ids: null, sms_sent: false, call_attempted: false });
+    expect(seam.notify).toHaveBeenCalledOnce();
+    expect(await sweep()).toMatchObject({ examined: 0 });
+    expect((await whatsapp(WA_SID, EMERGENCY)).status).toBe(200);
+    expect(db.table('guardian_communications')).toHaveLength(1);
+    expect(seam.attempts).toBe(0);
+  });
+
+  it('Twilio unconfigured is the same answer, not an outage to wait out', async () => {
+    seam.telephony.configured = false;
+    expect(await sms(SMS_SID, EMERGENCY)).toBe('completed');
+    expect(escalations()[0]).toMatchObject({ notified_member_ids: null, sms_sent: false, call_attempted: false });
+    expect(callback(SMS_SID)).toMatchObject({ status: 'processed' });
+    expect(receiptPhase()).toBe('completed');
+    expect(await sweep()).toMatchObject({ examined: 0 });
+    expect(seam.attempts).toBe(0);
+  });
+
+  it('a manager without a phone beside one whose sends failed is still undelivered: there was somebody to reach', async () => {
+    secondManager();
+    db.replace('profiles', [{ id: 'u-parent', phone: null }, { id: 'u-adult', phone: ADULT_PHONE }, { id: 'u-child', phone: '+15550000001' }]);
+    seam.telephony.down = true;
+    expect(await sms(SMS_SID, EMERGENCY)).toBe('completed');
+    expect(escalations()[0]).toMatchObject({ notified_member_ids: [], sms_sent: false });
+    seam.telephony.down = false;
+    expect(await sweep()).toMatchObject({ examined: 1, delivered: 1 });
+    expect(escalations()[0]).toMatchObject({ notified_member_ids: [ADULT], sms_sent: true });
+    expect(seam.sent).toEqual([ADULT_PHONE]);
   });
 });
 
@@ -325,6 +461,24 @@ describe('the retry sweep', () => {
     seam.telephony.down = false;
     expect(await sweep()).toMatchObject({ examined: 1, delivered: 1 });
     expect(seam.sent).toEqual([PARENT_PHONE]);
+  });
+
+  it('leaves a record marked as having had nobody to text or call, and marks a legacy one so on its single re-run', async () => {
+    // The escalation's own mark: notified_member_ids NULL. Not read at all.
+    db.seed('guardian_escalations', [row('nobody to tell', { notified_member_ids: null })]);
+    expect(await sweep()).toMatchObject({ examined: 0, undelivered: 0, unavailable: 0 });
+
+    // A record written before the mark existed ([] with nobody reached) for a
+    // family that has nobody with a phone: without the fix, re-run every tick
+    // and counted undelivered (a 503 from the cron) for the whole window.
+    const legacy = row(DESCRIPTION);
+    db.seed('guardian_escalations', [legacy]);
+    parentHasNoPhone();
+    expect(await sweep()).toMatchObject({ examined: 1, unreachable: 1, undelivered: 0, unavailable: 0 });
+    expect(escalations().find((r) => r.id === legacy.id), 'marked on the way out').toMatchObject({ notified_member_ids: null, sms_sent: false, call_attempted: false });
+    expect(db.table('guardian_callback_events')).toEqual([expect.objectContaining({ event_id: guardianEscalationEventId({ familyId: FAMILY, escalationType: 'urgent_personal', severity: 'critical', description: DESCRIPTION, callerNumber: CALLER }), status: 'processed' })]);
+    expect(await sweep()).toMatchObject({ examined: 0 });
+    expect(seam.attempts).toBe(0);
   });
 
   it('reports a ledger it cannot read rather than claiming an empty sweep', async () => {
