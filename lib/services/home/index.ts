@@ -342,6 +342,20 @@ export async function createServiceRecord(scope: ServiceScope, input: CreateServ
       },
     },
     async () => {
+      // The contractor must be one the family still has. The foreign key only
+      // proves the id exists somewhere: a deleted contractor would get a new
+      // visit on its hidden row, and another family's id would be stored here.
+      // Checked inside the create, so a retry of a visit already saved still
+      // answers with it.
+      if (input.contractorId) {
+        const { data: live, error: contractorReadError } = await scope.db.from('home_contractors').select('id')
+          .eq('id', input.contractorId).eq('family_id', scope.familyId).is('deleted_at', null).maybeSingle();
+        if (contractorReadError) {
+          console.error('[service:home] contractor check failed', contractorReadError);
+          return fail(describeDbError(contractorReadError, 'Could not check that contractor.'), { code: SERVICE_CODES.db });
+        }
+        if (!live) return fail('That contractor could not be found.', { code: SERVICE_CODES.notFound });
+      }
       const { data, error } = await scope.db
         .from('home_service_records')
         .insert({
@@ -377,7 +391,8 @@ export async function createServiceRecord(scope: ServiceScope, input: CreateServ
       }
       if (input.contractorId) {
         const { data: contractorTouched, error: contractorError } = await scope.db.from('home_contractors')
-          .update({ last_used_on: serviceDate, updated_by: scope.userId }).eq('id', input.contractorId).eq('family_id', scope.familyId).select('id');
+          .update({ last_used_on: serviceDate, updated_by: scope.userId }).eq('id', input.contractorId).eq('family_id', scope.familyId)
+          .is('deleted_at', null).select('id');
         if (contractorError || wroteNoRows(contractorTouched)) {
           console.error('[service:home] home_contractors last_used_on update failed', contractorError ?? { contractorId: input.contractorId, error: 'no rows updated' });
         }

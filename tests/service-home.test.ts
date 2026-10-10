@@ -190,13 +190,17 @@ describe('lastServiceByTrade', () => {
 describe('service records and maintenance tasks', () => {
   it('logs a service record and refreshes the asset and contractor dates best-effort', async () => {
     const record = { id: 'r-9', family_id: 'fam-1', home_id: null, asset_id: 'a-1', contractor_id: 'c-1', title: 'Flushed heater', service_date: '2026-09-05', provider: null, cost: 100, description: null, next_due_on: null, created_by: 'auth-1', updated_by: null, deleted_at: null, metadata: {}, created_at: '', updated_at: '' };
-    const { db, calls } = makeDb((call) => (call.kind === 'insert' ? { data: record, error: null } : { data: null, error: null }));
+    // The contractor is checked first: a live one of this family (see
+    // a-service-visit-names-a-contractor-the-family-still-has.test.ts).
+    const { db, calls } = makeDb((call) => (call.kind === 'insert' ? { data: record, error: null }
+      : call.kind === 'select' && call.table === 'home_contractors' ? { data: { id: 'c-1' }, error: null } : { data: null, error: null }));
     const res = await createServiceRecord(scopeWith(db), { title: 'Flushed heater', assetId: 'a-1', contractorId: 'c-1', cost: 100 });
     expect(res).toMatchObject({ ok: true, data: { id: 'r-9' } });
     expect(calls.find((c) => c.kind === 'insert')?.payload).toMatchObject({ family_id: 'fam-1', title: 'Flushed heater', service_date: '2026-09-05', asset_id: 'a-1', contractor_id: 'c-1', cost: 100, created_by: 'auth-1' });
     const updates = calls.filter((c) => c.kind === 'update');
     expect(updates.map((u) => u.table).sort()).toEqual(['home_assets', 'home_contractors']);
     expect(updates.every((u) => u.filters.family_id === 'fam-1')).toBe(true);
+    expect(calls.find((c) => c.kind === 'select' && c.table === 'home_contractors')?.filters).toMatchObject({ id: 'c-1', family_id: 'fam-1', deleted_at: null });
   });
 
   it('creates a maintenance task with a normalised due instant and the assignee', async () => {
