@@ -1,6 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
+import { superAdminAssurance } from '@/lib/auth/super-admin-assurance';
 import { createServiceClient } from '@/lib/supabase/server';
 import { describeActionError } from '@/lib/supabase/errors';
 import { refusalError, refusalForError } from '@/lib/actions/refusal';
@@ -81,6 +82,9 @@ export async function requireMarketingAdmin(): Promise<{
   if (!user) throw new MarketingAuthError(401, 'Please sign in to continue.');
   const ok = await isSuperAdmin();
   if (!ok) throw new MarketingAuthError(403, 'You do not have permission to manage marketing settings.');
+  // A password-only session of an admin with an enrolled authenticator is not
+  // let in on the email alone (lib/auth/super-admin-assurance.ts).
+  if (!(await superAdminAssurance()).ok) throw new MarketingAuthError(403, 'Enter your two-step code before using the admin console.');
   return { supabase: createServiceClient(), actorId: user.id, actorEmail: user.email ?? null };
 }
 

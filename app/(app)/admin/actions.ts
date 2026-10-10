@@ -18,6 +18,7 @@ import type { PlanId } from '@/lib/constants/plans';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { isValidTimezone } from '@/lib/time/zoned';
+import { superAdminAssurance } from '@/lib/auth/super-admin-assurance';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -44,6 +45,10 @@ async function assertSuperAdmin(): Promise<Result> {
     return { ok: false, error: t('ai.accountContextIsTemporarilyUnavailable') };
   }
   if (!allowed) return { ok: false, error: t('actions.notAuthorized') };
+  // The email says WHO; it does not say the session proved its second factor.
+  // A password-only session of an admin with an authenticator is refused here
+  // exactly as it is on the family's money pages.
+  if (!(await superAdminAssurance()).ok) return { ok: false, error: t('actions.adminConsoleNeedsYourCode') };
   return { ok: true };
 }
 
@@ -79,20 +84,30 @@ export async function adminCreateUserAction(input: {
   });
   if (error || !data.user) return error ? actionFailure(error, t('actions.couldNotCreateUser')) : { ok: false, error: t('actions.couldNotCreateUser') };
 
-  if (input.familyId) {
-    const { error: memberError } = await supabase.from('family_members').insert({
-      family_id: input.familyId,
-      user_id: data.user.id,
-      role: input.role ?? 'adult',
-      display_name: parsedEmail.data.split('@')[0],
-    });
-    if (memberError) return actionFailure(memberError, t('actions.userCreatedButJoiningThe'));
-  }
-
+  // The account and its invite email exist from here on, whatever happens to
+  // the optional family join below, so the record of who created it is written
+  // now rather than after a step that can fail.
   await adminAuditLog({
     familyId: input.familyId ?? null, action: 'create', resource: 'users',
     resourceId: data.user.id, metadata: { email: parsedEmail.data },
   });
+
+  if (input.familyId) {
+    const role = input.role ?? 'adult';
+    const { error: memberError } = await supabase.from('family_members').insert({
+      family_id: input.familyId,
+      user_id: data.user.id,
+      role,
+      display_name: parsedEmail.data.split('@')[0],
+    });
+    if (memberError) {
+      await adminAuditLog({
+        familyId: input.familyId, action: 'join_failed', resource: 'family_members',
+        resourceId: data.user.id, metadata: { email: parsedEmail.data, role },
+      });
+      return actionFailure(memberError, t('actions.userCreatedButJoiningThe'));
+    }
+  }
   revalidatePath('/admin/users');
   return { ok: true };
 }
@@ -358,7 +373,7 @@ export async function adminSetSuperAdminAction(input: { email: string; makeAdmin
 
   await adminAuditLog({
     familyId: null, action: input.makeAdmin ? 'grant' : 'revoke', resource: 'super_admins',
-    resourceId: email, metadata: { email },
+    resourceId: null, metadata: { email },
   });
   revalidatePath('/admin/users');
   return { ok: true };
@@ -393,15 +408,22 @@ export async function saveStripeSettingsAction(input: {
 
   // Secrets: a blank field means "keep the existing value" so the admin can
   // tweak the fee without re-pasting keys.
-  const { data: current } = await supabase.from('stripe_settings').select('secret_key, webhook_secret').eq('id', 'singleton').maybeSingle();
-  const keepOr = (next: string | null, prev: string | null | undefined) => clean(next) ?? prev ?? null;
+  // The read's error is READ: a refused read resolves with `data: null`, and
+  // "keep the existing value" applied to null wrote secret_key and
+  // webhook_secret as NULL, wiping the live Stripe configuration from a fee
+  // change. A blank secret is also simply left out of the write, so the stored
+  // value cannot be replaced with null at all (same defect as Audit C1-S9-76).
+  const { error: readError } = await supabase.from('stripe_settings').select('secret_key, webhook_secret').eq('id', 'singleton').maybeSingle();
+  if (readError) return actionFailure(readError, t('actions.couldNotSaveStripeSettings'));
+  const secretKey = clean(input.secretKey);
+  const webhookSecret = clean(input.webhookSecret);
 
   const { error } = await supabase.from('stripe_settings').upsert({
     id: 'singleton',
     enabled: input.enabled,
     publishable_key: clean(input.publishableKey),
-    secret_key: keepOr(input.secretKey, current?.secret_key),
-    webhook_secret: keepOr(input.webhookSecret, current?.webhook_secret),
+    ...(secretKey ? { secret_key: secretKey } : {}),
+    ...(webhookSecret ? { webhook_secret: webhookSecret } : {}),
     connect_account_id: clean(input.connectAccountId),
     service_fee_cents: feeCents,
     service_fee_price_id: clean(input.serviceFeePriceId),
@@ -410,7 +432,7 @@ export async function saveStripeSettingsAction(input: {
   if (error) return actionFailure(error, t('actions.couldNotSaveStripeSettings'));
 
   // Audit without leaking secret values.
-  await adminAuditLog({ familyId: null, action: 'update', resource: 'stripe_settings', resourceId: 'singleton', metadata: { enabled: input.enabled, service_fee_cents: feeCents, has_secret: Boolean(clean(input.secretKey)) } });
+  await adminAuditLog({ familyId: null, action: 'update', resource: 'stripe_settings', resourceId: null, metadata: { setting_key: 'singleton', enabled: input.enabled, service_fee_cents: feeCents, has_secret: Boolean(clean(input.secretKey)) } });
   revalidatePath('/admin/stripe');
   return { ok: true };
 }
@@ -545,6 +567,24 @@ export async function adminSetUserBanAction(userId: string, banned: boolean): Pr
   if (me?.id === userId) return { ok: false, error: t('actions.youCanTBanYour') };
 
   const supabase = createServiceClient();
+  // A super-admin is not banned from here. A ban of the built-in/env owner
+  // locked them out with no in-app way back (every unban needs an admin
+  // session), and one DB admin could lock out all the others. Access is
+  // removed first through adminSetSuperAdminAction, which carries the
+  // immutability and self-lockout rules. Only a BAN is refused: lifting one
+  // must stay possible.
+  if (banned) {
+    const { data: target, error: targetError } = await supabase.auth.admin.getUserById(userId);
+    if (targetError) return actionFailure(targetError, t('actions.couldNotUpdateThatUser'));
+    const targetEmail = target?.user?.email?.trim().toLowerCase() ?? null;
+    if (targetEmail) {
+      if (isSuperAdminEmail(targetEmail)) return { ok: false, error: t('actions.revokeSuperAdminBeforeBanning') };
+      const { data: grant, error: grantError } = await supabase
+        .from('super_admins').select('email').eq('email', targetEmail).maybeSingle();
+      if (grantError) return actionFailure(grantError, t('actions.couldNotUpdateThatUser'));
+      if (grant) return { ok: false, error: t('actions.revokeSuperAdminBeforeBanning') };
+    }
+  }
   // 'none' lifts a ban; a long duration is an effectively-indefinite ban (reversible).
   // Clearing the removal marker makes this ban (or unban) the admin's: re-adding
   // a removed child never lifts a ban that does not carry it.
@@ -642,7 +682,7 @@ export async function adminToggleFeatureFlagAction(key: string, enabled: boolean
   if (error) return actionFailure(error, t('actions.couldNotUpdateThatFeature'));
   if (wroteNoRows(flagged)) return { ok: false, error: t('actions.couldNotUpdateThatFeature') };
 
-  await adminAuditLog({ familyId: null, action: 'update', resource: 'feature_flags', resourceId: key, metadata: { enabled } });
+  await adminAuditLog({ familyId: null, action: 'update', resource: 'feature_flags', resourceId: null, metadata: { key, enabled } });
   revalidatePath('/admin/wallet');
   return { ok: true };
 }
