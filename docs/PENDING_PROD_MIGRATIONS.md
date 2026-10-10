@@ -110,7 +110,7 @@ source allocations are not evidence that production applied any migration.
 | 0494 held | `0494_sync_atomic_pull.sql` | Service-only admission and atomic item/map creation; missing RPC preserves cursor and refuses writes. |
 | 0495 held | `0495_a_member_invited_back_gets_what_the_invite_grants.sql` | A returning member gets the invite's role; an active member's role is unchanged; a kid login cannot accept another family's invite. Reserved for #981 above every preserved allocation (confirmed in #981 comment 6089092821). |
 | 0496 proposed, held | `0496_a_childs_xp_is_awarded_by_a_parent.sql` | Only a manager or the service role can award a child XP or rewrite streaks through 0341's functions. Requested for #981 on #771 (comment 6089394563); not yet confirmed. |
-| 0497 proposed, held | `0497_a_childs_wallet_and_guardian_number_stay_in_one_family.sql` | 0311's same-family guard on Guardian profiles, gift links, pay handles and child wallets. Requested for #981 on #771 (comment 6092501825); not yet confirmed. |
+| 0497 proposed, held | `0497_a_childs_wallet_and_guardian_number_stay_in_one_family.sql` | 0311's same-family guard on Guardian profiles, gift links, pay handles, child wallets and medication schedules. Requested for #981 on #771 (comment 6092501825); not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4352,7 +4352,7 @@ wallet. Most such references are inert, because the code that acts on them
 also keys by the caller's family. A replay counts 447 single-column foreign
 keys between family-scoped tables, 6 of them guarded. The notification roster,
 the wallet balance sums and the card hold were checked and are double-keyed.
-These four are not, and a service-role consumer acts on the foreign id by
+These five are not, and a service-role consumer acts on the foreign id by
 itself:
 
 | Reference | Consumer acting on it |
@@ -4361,9 +4361,11 @@ itself:
 | `gift_links.child_wallet_id` | The public gift page and its AI name that wallet's child. |
 | `pay_handles.child_wallet_id` | It resolves to a gift link, so the same page. |
 | `child_wallets.member_id` | `issueCardAction` sends that member's name to Stripe as the cardholder. |
+| `medication_schedules.medication_id` | The morning brief (notifications cron, service role) embeds `medications(name, …)` through it, so it names another family's medication. A session read hides it; the service-role embed does not. |
 
-As family A's parent under RLS, every one of the four writes landed on the
-replay. The Guardian and gift consumers are already fixed in code in #981.
+As family A's parent under RLS, every one of the five writes landed on the
+replay. For the schedule, A's parent read 0 of B's medications, yet the
+service-role embed returned B's medication name. The Guardian and gift consumers are already fixed in code in #981.
 0497 makes the database refuse the row, using 0311's existing helper and no
 new function. In-app writers use only the family's own members and wallets,
 and the helper exempts the service role and session-less writers (migrations,
@@ -4372,12 +4374,12 @@ seeds, backfills). Rows written before it are left alone.
 **Proof:** `.github/workflows/family-reference-wave-two-runtime.yml` replays
 every runnable migration. It requires the held probe
 `docs/audit/reserved/a-childs-wallet-and-guardian-number-stay-in-one-family-check.sql`
-to fail with each of the four foreign writes landing, applies 0497 twice, and
+to fail with each of the five foreign writes landing, applies 0497 twice, and
 requires the probe to pass. The passing run shows:
-- the four foreign writes, and an update moving a gift link onto another
+- the five foreign writes, and an update moving a gift link onto another
   family's wallet, are refused;
-- the family's own four still land, and a session-less write is still exempt;
-- all four triggers run the helper;
+- the family's own five still land, and a session-less write is still exempt;
+- all five triggers run the helper;
 - negative control: with the gift link trigger disabled, the foreign link lands.
 
 `docs/audit/wallet-write-rls-check.sql` is re-pointed so it reads past this one

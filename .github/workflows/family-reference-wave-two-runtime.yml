@@ -1,16 +1,17 @@
 name: Family reference wave two SQL runtime
 
 # The held 0497 (supabase/reserved/) wires 0311's reference_shares_family()
-# onto four references where a family's row could name another family's member
-# or child wallet and a service-role consumer then acted on it: Guardian
-# profiles, gift links, pay handles and child wallets. Neither the Database
+# onto five references where a family's row could name another family's
+# member, child wallet or medication and a service-role consumer then acted on
+# it: Guardian profiles, gift links, pay handles, child wallets and medication
+# schedules. Neither the Database
 # job's replay nor `supabase db push` reads supabase/reserved/, and the
 # Database job's probe glob does not read docs/audit/reserved/, so nothing
 # else in CI exercises it. This job replays every runnable migration with the
 # Database job's bootstrap, then:
 #
 #   1. runs the held probe on that released schema and requires it to FAIL on
-#      the defect (each of the four foreign writes lands), so a green step 3
+#      the defect (each of the five foreign writes lands), so a green step 3
 #      is the migration's and not a probe that can no longer see anything;
 #   2. applies the held migration twice (it is re-runnable);
 #   3. runs the probe again and requires it to pass.
@@ -108,7 +109,8 @@ jobs:
             "family A's parent wrote a Guardian profile naming family B's member" \
             "family A's parent wrote a gift link carrying family B's child wallet" \
             "family A's parent wrote a pay handle carrying family B's child wallet" \
-            "family A's parent wrote a child wallet naming family B's member"; do
+            "family A's parent wrote a child wallet naming family B's member" \
+            "family A's parent wrote a medication schedule naming family B's medication"; do
             if ! grep -qF "$expected" <<<"$out"; then
               echo "::error::the held probe failed on the released schema, but not on: $expected"
               exit 1

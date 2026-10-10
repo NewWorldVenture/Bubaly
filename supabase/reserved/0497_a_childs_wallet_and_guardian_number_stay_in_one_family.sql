@@ -21,8 +21,13 @@
 --     the wallet's child under the link's household.
 --   * child_wallets.member_id. issueCardAction reads the wallet member's name
 --     with the service client and sends it to Stripe as the cardholder.
+--   * medication_schedules.medication_id. The morning brief (the notifications
+--     cron, service role) embeds medications(name, ...) through it, so a
+--     schedule naming another family's medication put that family's drug name
+--     into this family's brief. A session read hides it (RLS on medications);
+--     the embed under the service role does not.
 --
--- Measured as family A's parent under RLS, every one of the four writes
+-- Measured as family A's parent under RLS, every one of the five writes
 -- landed. The first two consumers are already fixed in code (they now read
 -- within the row's family); this makes the database refuse the row itself, so
 -- the next consumer does not have to remember to.
@@ -56,7 +61,8 @@ begin
       ('guardian_member_profiles', 'member_id',       'family_members'),
       ('gift_links',               'child_wallet_id', 'child_wallets'),
       ('pay_handles',              'child_wallet_id', 'child_wallets'),
-      ('child_wallets',            'member_id',       'family_members')
+      ('child_wallets',            'member_id',       'family_members'),
+      ('medication_schedules',     'medication_id',   'medications')
     ) as v(child, col, parent)
   loop
     if to_regclass('public.' || w.child) is null or to_regclass('public.' || w.parent) is null then
@@ -98,9 +104,10 @@ begin
        ('public.guardian_member_profiles'::regclass, E'member_id\\000family_members\\000'),
        ('public.gift_links'::regclass,               E'child_wallet_id\\000child_wallets\\000'),
        ('public.pay_handles'::regclass,              E'child_wallet_id\\000child_wallets\\000'),
-       ('public.child_wallets'::regclass,            E'member_id\\000family_members\\000'));
-  if n <> 4 then
-    raise exception '0497: % of 4 references are wired to reference_shares_family', n;
+       ('public.child_wallets'::regclass,            E'member_id\\000family_members\\000'),
+       ('public.medication_schedules'::regclass,     E'medication_id\\000medications\\000'));
+  if n <> 5 then
+    raise exception '0497: % of 5 references are wired to reference_shares_family', n;
   end if;
 end
 $$;
