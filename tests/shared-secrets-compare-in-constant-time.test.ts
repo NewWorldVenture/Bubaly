@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { bearerMatches, secretsMatch } from '@/lib/server/secret-compare';
 import { hasCronAuthorization, hasInternalSecret } from '@/lib/server/cron-auth';
@@ -88,7 +88,32 @@ describe('no shared-secret call site compares with ===', () => {
     'lib/server/cron-auth.ts',
     'app/api/guardian/escalate/route.ts',
     'app/api/contact-center/email/route.ts',
+    'lib/claude-fleet/manager.ts',
   ];
+
+  it('lists every file that checks a request against a shared secret', () => {
+    // A file that reads a *SECRET from the environment AND an Authorization or
+    // x-*-secret header from the request is checking a caller against a shared
+    // secret. The list above is only a guard if it is complete: a new such
+    // check that is not on it could go back to === unnoticed. (F-E08's
+    // integrated retest found lib/claude-fleet/manager.ts missing here.)
+    const found: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = `${dir}/${entry.name}`;
+        if (entry.isDirectory()) { walk(path); continue; }
+        if (!/\.tsx?$/.test(entry.name) || /\.test\.tsx?$/.test(entry.name)) continue;
+        const code = readFileSync(path, 'utf8');
+        if (/process\.env\.[A-Z_]*SECRET\b/.test(code)
+            && /headers\.get\((['"])(authorization|x-[a-z-]*secret)\1\)/i.test(code)) {
+          found.push(path);
+        }
+      }
+    };
+    walk('app');
+    walk('lib');
+    expect(found.sort()).toEqual([...SITES].sort());
+  });
 
   it('each reaches the constant-time comparison', () => {
     for (const file of SITES) {

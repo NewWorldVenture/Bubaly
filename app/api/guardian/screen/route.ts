@@ -154,7 +154,9 @@ export async function POST(req: NextRequest) {
   const memberProfile = profileRows?.length === 1 ? profileRows[0] : null;
 
   const { data: memberData } = memberProfile
-    ? await supabase.from('family_members').select('display_name, phone').eq('id', (memberProfile as { member_id: string }).member_id).maybeSingle()
+    // Inside the session's family: a profile naming another family's member
+    // must not dial them (see inbound/voice).
+    ? await supabase.from('family_members').select('display_name, phone').eq('id', (memberProfile as { member_id: string }).member_id).eq('family_id', sess.family_id).maybeSingle()
     : { data: null };
   const memberName = (memberData as { display_name?: string } | null)?.display_name ?? 'the family member';
 

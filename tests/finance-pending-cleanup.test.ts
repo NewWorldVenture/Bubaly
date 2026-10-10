@@ -97,6 +97,7 @@ for (const [file, owner, handler, pending] of cases)
         syncCalendarFeed: () => work,
         createClient: () => ({}),
         isMissingBillDueDay: () => false,
+        isDueDayNotKept: () => false,
         describeDbError: () => "db-error",
         feedAddedMessage: () => "feed-added",
       };

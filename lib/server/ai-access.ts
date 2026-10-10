@@ -85,11 +85,46 @@ function monthStartIso(now: Date): string {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
 }
 
+// `count_family_ai_requests_month` arrives with held migration 0493. Until a
+// database has it, the allowance is counted as the previous release counted it:
+// a direct `ai_requests` count under the caller's RLS. Recognised only from the
+// exact missing-function answer that names this function (PGRST202 from the
+// schema cache, 42883 from Postgres), so a permission, network or internal
+// error from an RPC that exists keeps failing closed. PGRST202 comes from
+// PostgREST's schema cache, so applying 0493 must be followed by a cache reload
+// (`NOTIFY pgrst, 'reload schema'`): until then this fallback keeps counting
+// directly, and under 0493's private-read RLS that count misses private rows.
+const MONTHLY_COUNT_RPC = 'count_family_ai_requests_month';
+const MONTHLY_COUNT_MIGRATION = 'supabase/reserved/0493_ai_copy_private_read_and_quota.sql';
+let warnedMissingMonthlyCount = false;
+
+function isMissingMonthlyCountRpc(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const { code, message, details, hint } = error as { code?: unknown; message?: unknown; details?: unknown; hint?: unknown };
+  if (code !== 'PGRST202' && code !== '42883') return false;
+  const names = new RegExp(`(?:^|[^A-Za-z0-9_.]|(?<![A-Za-z0-9_])public\\.)${MONTHLY_COUNT_RPC}(?![A-Za-z0-9_])`);
+  return [message, details, hint].some((text) => typeof text === 'string' && names.test(text));
+}
+
+function warnMissingMonthlyCountRpc(): void {
+  if (warnedMissingMonthlyCount) return;
+  warnedMissingMonthlyCount = true;
+  console.warn(
+    `[ai-access] function public.${MONTHLY_COUNT_RPC} is missing: migration ${MONTHLY_COUNT_MIGRATION} has not been applied to this database. Counting this month's AI requests directly from ai_requests, as before. If 0493 has been applied, reload PostgREST's schema cache (NOTIFY pgrst, 'reload schema').`,
+  );
+}
+
+/** Test seam: forget that the missing-RPC warning was printed. */
+export function resetMonthlyCountFallbackWarning(): void {
+  warnedMissingMonthlyCount = false;
+}
+
 /**
  * May this caller file a concierge request right now?
  *
  * `db` is the caller's RLS-bound client. A protected count-only RPC includes
- * all household usage while private request rows stay hidden. Super-admins bypass the
+ * all household usage while private request rows stay hidden; on a database
+ * without that RPC (held 0493) the count is the previous direct read. Super-admins bypass the
  * tier the same way `requireFeature` lets them preview an `off` feature.
  */
 export async function assertAIAccess(
@@ -165,13 +200,31 @@ async function monthlyAllowance(
 
   let count: unknown;
   let countError: unknown;
+  const now = opts.now ?? new Date();
   try {
     const result = await opts.db.rpc('count_family_ai_requests_month', {
       p_family_id: familyId,
-      p_month_start: monthStartIso(opts.now ?? new Date()),
+      p_month_start: monthStartIso(now),
     });
     count = result.data;
     countError = result.error;
+    if (isMissingMonthlyCountRpc(countError)) {
+      // Held migration 0493 is not on this database yet: count the way the
+      // previous release did. Only that exact missing-function answer lands
+      // here; every other RPC failure still fails closed below.
+      warnMissingMonthlyCountRpc();
+      const legacy = await opts.db
+        .from('ai_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('family_id', familyId)
+        .gte('created_at', monthStartIso(now));
+      // No `?? 0`: a head count with no error and no count (supabase-js leaves
+      // `count` null when Content-Range does not come back) is an unread
+      // count, not an empty month. It fails closed below, as a null RPC
+      // receipt does.
+      count = legacy.error ? null : legacy.count;
+      countError = legacy.error;
+    }
   } catch (error) {
     countError = error;
   }
