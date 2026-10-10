@@ -238,6 +238,21 @@ html {
   scroll-behavior: smooth;
 }
 
+/* The assistant page between lg and 2xl: its context row sits under the
+   conversation and results there (components/assistant/workspace.tsx), so the
+   page can be taller than the window, and the window scrolls under the sticky
+   top bar. Without this, scrolling something into view — a control reached by
+   Tab, a thread's last message — can leave it under the bar: visible to the
+   browser, hidden from the person (WCAG 2.4.11). Only that page asks for it,
+   by the marker on its h1 (the AI orb's sheet, which renders the same module,
+   does not carry it), and only at those widths; every other page and width
+   scrolls as it did. */
+@media (min-width: 1024px) and (max-width: 1535.98px) {
+  html:has([data-scroll-below-topbar]) {
+    scroll-padding-top: calc(var(--topbar-height) + var(--safe-top, 0px));
+  }
+}
+
 body {
   background-color: rgb(var(--bg));
   color: rgb(var(--fg));

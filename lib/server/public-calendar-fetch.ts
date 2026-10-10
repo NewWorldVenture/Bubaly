@@ -4,6 +4,7 @@ import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
 import { isIP, type LookupFunction } from 'node:net';
 import { Readable } from 'node:stream';
 import { normalizeFeedUrl } from '@/lib/calendar/feeds';
+import { isPublicAddress } from '@/lib/server/public-address';
 
 export const MAX_CALENDAR_RESPONSE_BYTES = 1_048_576;
 
@@ -16,30 +17,6 @@ function ipv4Number(address: string): number | null {
   const octets = address.split('.');
   if (octets.length !== 4 || octets.some((part) => !/^\d{1,3}$/.test(part) || Number(part) > 255)) return null;
   return octets.reduce((value, part) => (value * 256) + Number(part), 0);
-}
-
-function inRange(value: number, start: number, end: number): boolean {
-  return value >= start && value <= end;
-}
-
-function blockedIpv4(address: string): boolean {
-  const value = ipv4Number(address);
-  if (value === null) return true;
-  return [
-    [0x00000000, 0x00ffffff], // unspecified/current network
-    [0x0a000000, 0x0affffff], // private
-    [0x64400000, 0x647fffff], // carrier-grade NAT
-    [0x7f000000, 0x7fffffff], // loopback
-    [0xa9fe0000, 0xa9feffff], // link-local
-    [0xac100000, 0xac1fffff], // private
-    [0xc0000000, 0xc00000ff], // protocol assignments
-    [0xc0000200, 0xc00002ff], // TEST-NET-1
-    [0xc0a80000, 0xc0a8ffff], // private
-    [0xc6120000, 0xc613ffff], // benchmark
-    [0xc6336400, 0xc63364ff], // TEST-NET-2
-    [0xcb007100, 0xcb0071ff], // TEST-NET-3
-    [0xe0000000, 0xffffffff], // multicast/reserved
-  ].some(([start, end]) => inRange(value, start, end));
 }
 
 function ipv4String(value: bigint): string {
@@ -77,25 +54,24 @@ function ipv6Number(address: string): bigint | null {
 function blockedIp(address: string): boolean {
   const clean = address.replace(/^\[|\]$/g, '');
   const family = isIP(clean);
-  if (family === 4) return blockedIpv4(clean);
-  if (family !== 6) return true;
+  if (family === 4) return !isPublicAddress(clean);
+  // A zone index only ever qualifies a link-local or other scoped address.
+  if (family !== 6 || clean.includes('%')) return true;
 
   const value = ipv6Number(clean);
   if (value === null) return true;
-  const top8 = value >> 120n;
-  const top7 = value >> 121n;
-  const top10 = value >> 118n;
   const top96 = value >> 32n;
-  if (top96 === 0xffffn || top96 === 0n) return blockedIpv4(ipv4String(value & 0xffffffffn));
-  // NAT64 (RFC 6052): 64:ff9b::/96 carries an IPv4 address in its low 32 bits,
-  // and on a NAT64 network it routes to that address — so 64:ff9b::7f00:1 is
-  // 127.0.0.1 and 64:ff9b::a9fe:a9fe is the cloud metadata endpoint. Unwrapped
-  // exactly like the ::ffff: form above, so NAT64 to a PUBLIC host still works.
-  if (top96 === 0x64ff9b0000000000000000n) return blockedIpv4(ipv4String(value & 0xffffffffn));
-  // The local-use NAT64 range (RFC 8215) is never a public destination.
-  if ((value >> 80n) === 0x64ff9b0001n) return true;
-  return value === 0n || value === 1n || top7 === 126n || top10 === 1018n || top8 === 255n
-    || (value >> 96n) === 0x20010db8n;
+  // An IPv4 address carried in IPv6 is judged as that IPv4 address: mapped
+  // (::ffff:), compatible (::) and NAT64 (RFC 6052, 64:ff9b::/96), which on a
+  // NAT64 network routes to its low 32 bits — so 64:ff9b::a9fe:a9fe is the
+  // cloud metadata endpoint, while NAT64 to a PUBLIC host still works.
+  if (top96 === 0xffffn || top96 === 0n || top96 === 0x64ff9b0000000000000000n) {
+    return !isPublicAddress(ipv4String(value & 0xffffffffn));
+  }
+  // Everything else by the one shared policy (lib/server/public-address.ts):
+  // global unicast only, without 6to4, Teredo, documentation or benchmarking
+  // ranges. A private list here once drifted and let those through.
+  return !isPublicAddress(clean);
 }
 
 function blockedHostname(hostname: string): boolean {

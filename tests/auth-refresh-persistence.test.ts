@@ -237,3 +237,71 @@ describe('actual middleware refresh', () => {
     expect(response.headers.get('pragma')).toBe('no-cache');
   });
 });
+
+describe('renewal expiry admission preserves the durable session', () => {
+  const malformed = [
+    ['string expiry', { expires_at: 'not-a-number' }],
+    ['numeric string expiry', { expires_at: '9999999999' }],
+    ['null expiry', { expires_at: null }],
+    ['NaN expiry encoded by JSON', { expires_at: Number.NaN }],
+    ['infinite expiry encoded by JSON', { expires_at: Number.POSITIVE_INFINITY }],
+    ['negative infinity expiry encoded by JSON', { expires_at: Number.NEGATIVE_INFINITY }],
+    ['already expired expiry', { expires_at: 1 }],
+    ['unrepresentable expiry', { expires_at: Number.MAX_VALUE }],
+    ['unrepresentable duration with omitted expiry', { expires_at: undefined, expires_in: Number.MAX_VALUE }],
+    ['unrepresentable duration with valid expiry', { expires_in: Number.MAX_VALUE }],
+  ] as const;
+
+  for (const kind of ['browser', 'server', 'native'] as const) {
+    it.each(malformed)(`${kind} refuses %s without replacing storage and later recovers`, async (_name, override) => {
+      const original = session('expiry-original-refresh', true);
+      const values = new Map([[key, kind === 'native' ? JSON.stringify(original) : encode(original)]]);
+      const before = [...values];
+      const deletions: string[] = [];
+      let recovered = false;
+      const global = { fetch: createSessionRefreshFetch(origin, async () => Response.json(
+        recovered ? session('expiry-recovered-refresh', false) : { ...session('expiry-unusable-refresh', false), ...override },
+      )) };
+      const auth = { autoRefreshToken: false, detectSessionInUrl: false, persistSession: true, storageKey: key };
+      const cookies = {
+        getAll: () => [...values].map(([name, value]) => ({ name, value })),
+        setAll: (items: { name: string; value: string; options: { maxAge?: number } }[]) => {
+          for (const item of items) {
+            if (item.options.maxAge === 0) { deletions.push(item.name); values.delete(item.name); }
+            else values.set(item.name, item.value);
+          }
+        },
+      };
+      const client = kind === 'native'
+        ? createClient(origin, 'synthetic-anon', { global, auth: { ...auth, storage: {
+          getItem: async name => values.get(name) ?? null,
+          setItem: async (name, value) => { values.set(name, value); },
+          removeItem: async name => { deletions.push(name); values.delete(name); },
+        } } })
+        : kind === 'browser'
+          ? createBrowserClient(origin, 'synthetic-anon', { global, auth, cookies, isSingleton: false, cookieOptions: durableCookieOptions(false) })
+          : createServerClient(origin, 'synthetic-anon', { global, auth, cookies, cookieOptions: durableCookieOptions(false) });
+      try {
+        const pending = client.auth.getSession();
+        await vi.advanceTimersByTimeAsync(35_000);
+        const result = await pending;
+        expect.soft(result.error?.name, 'Unusable renewal remains retryable').toBe('AuthRetryableFetchError');
+        expect.soft([...values], 'Exact saved bytes survive before a valid replacement').toEqual(before);
+        expect.soft(deletions).toEqual([]);
+        recovered = true;
+        await vi.advanceTimersByTimeAsync(120_000);
+        expect((await client.auth.getSession()).data.session?.refresh_token).toBe('expiry-recovered-refresh');
+      } finally { await client.auth.stopAutoRefresh(); }
+    });
+  }
+
+  it.each(['explicit', 'omitted'] as const)('valid %s expiry preserves original response bytes', async kind => {
+    const value = session('valid-expiry-refresh', false);
+    if (kind === 'omitted') delete (value as Partial<typeof value>).expires_at;
+    const original = Response.json(value, { headers: { 'x-fixture': 'expiry-original' } });
+    const response = await createSessionRefreshFetch(origin, async () => original)(`${origin}/auth/v1/token?grant_type=refresh_token`, { method: 'POST' });
+    expect(response).toBe(original); expect(response.bodyUsed).toBe(false);
+    expect(response.headers.get('x-fixture')).toBe('expiry-original');
+    expect(await response.json()).toEqual(value);
+  });
+});
