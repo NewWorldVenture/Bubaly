@@ -182,6 +182,7 @@ begin
   insert into public.chores (family_id, title) values (fam, 'Dishes') returning id into chore;
   insert into public.chore_assignments (family_id, chore_id, member_id, status, points_awarded)
   values (fam, chore, child_mid, 'approved', 100);
+  insert into public.rewards (family_id, title, cost_points) values (fam, 'Extra screen time', 100);
 
   -- ── The negative control's own household ─────────────────────────────────
   -- A SECOND family in which this SAME child is a manager, so
@@ -324,8 +325,9 @@ begin
   end if;
 
   -- 2. May still ASK. A guard that blocked this would break the product.
-  insert into public.reward_redemptions (family_id, member_id, reward_title, cost_points, status)
-  values (fam, child_mid, 'Extra screen time', 100, 'requested') returning id into red;
+  insert into public.reward_redemptions (family_id, member_id, reward_id, reward_title, cost_points, status)
+  values (fam, child_mid, (select id from public.rewards where family_id = fam and title = 'Extra screen time'),
+          'Extra screen time', 100, 'requested') returning id into red;
 
   -- 3. Cannot approve the request they just made.
   blocked := false;
@@ -424,9 +426,10 @@ begin
        ('trg_reward_redemption_cost_guard',       'public.reward_redemption_cost_guard()'::regprocedure),
        ('trg_reward_redemption_decision_guard',   'public.reward_redemption_decision_guard()'::regprocedure),
        ('trg_reward_redemption_zz_balance_guard', 'public.reward_redemption_balance_guard()'::regprocedure),
+       ('trg_reward_redemption_request_shape_guard', 'public.reward_redemption_request_shape_guard()'::regprocedure),
        ('trg_set_updated_at',                     'public.set_updated_at()'::regprocedure));
   if n <> 0 or (select count(*) from pg_trigger t
-                 where t.tgrelid = 'public.reward_redemptions'::regclass and not t.tgisinternal) <> 4 then
+                 where t.tgrelid = 'public.reward_redemptions'::regclass and not t.tgisinternal) <> 5 then
     stale := stale || format('public.reward_redemptions carries a trigger the header does not name (%s)',
       (select string_agg(t.tgname || ' -> ' || t.tgfoid::regprocedure::text, ', ' order by t.tgname)
          from pg_trigger t
