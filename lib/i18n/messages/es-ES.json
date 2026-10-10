@@ -16845,5 +16845,7 @@
   "mobileAssistant.conflictCounts": "{personal} · {family}",
   "mobileAssistant.conflictMobileFamilyLine": "Aviso de ocupación familiar: {titles} se solapan {when}. La ocupación importada se aplica a la familia; no identifica quién tiene una doble reserva.",
   "accountStanding.accountClosed": "La cuenta de tu familia está cerrada. Vuelve a abrirla para usar Bubaly de nuevo.",
-  "accountStanding.trialEnded": "Tu prueba gratuita ha terminado. Elige un plan para seguir usando Bubaly."
+  "accountStanding.trialEnded": "Tu prueba gratuita ha terminado. Elige un plan para seguir usando Bubaly.",
+  "accountStanding.unavailable": "Bubaly no ha podido comprobar la cuenta de tu familia en este momento. Inténtalo de nuevo en un momento.",
+  "gift.ideasAreNotAvailableForThisFamily": "Las ideas de regalo no están disponibles para esta familia en este momento."
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { refuseClosedOrTrialEnded } from '@/lib/server/account-standing';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
@@ -64,6 +65,9 @@ export async function POST(req: Request) {
   const write = body.write === true;
 
   const supabase = await createServer();
+  // A closed or trial-ended family is refused before any work: see lib/server/account-standing.ts.
+  const refused = await refuseClosedOrTrialEnded(supabase, familyId);
+  if (refused) return refused;
   const limited = await enforceAIRateLimit(supabase, `ai-meals-plan:${userId}`, { limit: 10 });
   if (!limited.ok) return NextResponse.json(
     { error: t('plan.tooManyMealPlanRequests') },

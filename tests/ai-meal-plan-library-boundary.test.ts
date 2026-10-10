@@ -6,6 +6,10 @@ import { orPredicate } from './helpers/in-memory-supabase';
 const h = vi.hoisted(() => ({ db: null as unknown, complete: vi.fn(), urls: [] as URL[],
   rows: {} as Record<string, Record<string, unknown>[]>, cap: 2, fault: '', faultTable: 'meals', client: 0,
 }));
+// The account-standing gate (a closed or trial-ended family is refused) has its
+// own test, tests/the-free-ai-helpers-refuse-a-closed-or-trial-ended-family.test.ts.
+// The family here is open, so the gate is answered rather than seeded.
+vi.mock('@/lib/server/account-standing', () => ({ refuseClosedOrTrialEnded: async () => null }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: async () => ({ user: { id: 'synthetic-user' },
   active: { familyId: 'synthetic-family', role: 'parent', member: { id: 'synthetic-member' }, family: { timezone: 'UTC' } },

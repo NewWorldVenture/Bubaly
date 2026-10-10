@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { refuseClosedOrTrialEnded } from '@/lib/server/account-standing';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
@@ -29,6 +30,9 @@ export async function POST(req: NextRequest) {
     const familyId = ctx.active.familyId;
     const userId = ctx.user.id;
     const supabase = await createServer();
+    // A closed or trial-ended family is refused before any work: see lib/server/account-standing.ts.
+    const refused = await refuseClosedOrTrialEnded(supabase, familyId);
+    if (refused) return refused;
 
     const limited = await enforceAIRateLimit(supabase, `ai-pantry-chef:${userId}`, { limit: 15 });
     if (!limited.ok) return NextResponse.json(

@@ -16845,5 +16845,7 @@
   "mobileAssistant.conflictCounts": "{personal} · {family}",
   "mobileAssistant.conflictMobileFamilyLine": "Aviso de ocupação familiar: {titles} sobrepõem-se {when}. A ocupação importada aplica-se à família; não identifica quem tem dois compromissos simultâneos.",
   "accountStanding.accountClosed": "A conta da sua família está encerrada. Reabra-a para voltar a usar o Bubaly.",
-  "accountStanding.trialEnded": "O seu período experimental gratuito terminou. Escolha um plano para continuar a usar o Bubaly."
+  "accountStanding.trialEnded": "O seu período experimental gratuito terminou. Escolha um plano para continuar a usar o Bubaly.",
+  "accountStanding.unavailable": "O Bubaly não conseguiu verificar a conta da sua família neste momento. Tente novamente daqui a pouco.",
+  "gift.ideasAreNotAvailableForThisFamily": "As ideias de presentes não estão disponíveis para esta família neste momento."
 }

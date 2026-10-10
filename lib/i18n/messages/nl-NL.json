@@ -16845,5 +16845,7 @@
   "mobileAssistant.conflictCounts": "{personal} · {family}",
   "mobileAssistant.conflictMobileFamilyLine": "Advies over gezinsbezetting: {titles} overlappen {when}. Geïmporteerde bezetting geldt voor het gezin; deze geeft niet aan wie dubbel is ingepland.",
   "accountStanding.accountClosed": "Het account van je gezin is gesloten. Open het opnieuw om Bubaly weer te gebruiken.",
-  "accountStanding.trialEnded": "Je gratis proefperiode is afgelopen. Kies een abonnement om Bubaly te blijven gebruiken."
+  "accountStanding.trialEnded": "Je gratis proefperiode is afgelopen. Kies een abonnement om Bubaly te blijven gebruiken.",
+  "accountStanding.unavailable": "Bubaly kon het account van je gezin nu niet controleren. Probeer het zo meteen opnieuw.",
+  "gift.ideasAreNotAvailableForThisFamily": "Cadeau-ideeën zijn op dit moment niet beschikbaar voor dit gezin."
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { refuseClosedOrTrialEnded } from '@/lib/server/account-standing';
 import { assertAIRequestFamily, getAIRequestTranslations } from '@/lib/server/ai-request-context';
 import { authenticateAI } from '@/lib/server/ai-access';
 import { getOpenAIKey } from '@/lib/ai/settings';
@@ -29,6 +30,9 @@ export async function POST(req: NextRequest) {
     const { supabase, ctx } = authed;
     const familyError = assertAIRequestFamily(req, ctx.active.familyId, t);
     if (familyError) return familyError;
+    // A closed or trial-ended family is refused before any work: see lib/server/account-standing.ts.
+    const refused = await refuseClosedOrTrialEnded(supabase, ctx.active.familyId);
+    if (refused) return refused;
     const limited = await enforceAIRateLimit(supabase, `ai-voice-transcribe:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
       { error: t('transcribe.tooManyVoiceRequestsPlease') },
