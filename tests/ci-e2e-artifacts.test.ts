@@ -55,6 +55,7 @@ function assertPrivatePaths(source = workflow) {
     '!test-results/*family-messaging-auth*/**',
     '!test-results/*recurring-bill-auth*/**',
     '!test-results/*dashboard-calendar-auth*/**',
+    '!test-results/*a-stored-link-is-inert*/**',
     '!test-results/**/storageState*',
     '!test-results/**/storage-state*',
     '!test-results/**/auth.json',
@@ -151,7 +152,8 @@ async function proveCleanupOwnership(source: string) {
 test.each([
   '!test-results/**/trace.zip', '!test-results/*durable-session*/**',
   '!test-results/*family-messaging-auth*/**', '!test-results/*recurring-bill-auth*/**',
-  '!test-results/*dashboard-calendar-auth*/**', '!test-results/**/storageState*',
+  '!test-results/*dashboard-calendar-auth*/**', '!test-results/*a-stored-link-is-inert*/**',
+  '!test-results/**/storageState*',
   '!test-results/**/storage-state*', '!test-results/**/auth.json', '!test-results/**/auth/**',
   '!test-results/**/.auth/**', '!test-results/**/.env*', '!test-results/**/*.log',
   '!test-results/**/logs/**', '!test-results/**/*.html', '!test-results/**/playwright-report/**',
@@ -166,7 +168,15 @@ test('artifact contract refuses a whole-directory upload or hidden files', () =>
 });
 
 const privateSpecs = ['family-messaging-authenticated', 'recurring-bill-authenticated',
-  'dashboard-calendar-authenticated', 'durable-session'] as const;
+  'dashboard-calendar-authenticated', 'durable-session', 'a-stored-link-is-inert-in-the-page'] as const;
+
+// A suite's exclusion is a prefix of its file name short enough to survive the
+// worker's truncation: `-authenticated` shortened to `-auth`, or named here.
+const shortPrefix: Partial<Record<typeof privateSpecs[number], string>> = {
+  'a-stored-link-is-inert-in-the-page': 'a-stored-link-is-inert',
+};
+const exclusionFor = (spec: typeof privateSpecs[number]) =>
+  `!test-results/*${shortPrefix[spec] ?? spec.replace('-authenticated', '-auth')}*/**`;
 
 function artifactPatterns(source: string): string[] {
   const block = e2eStep(uploadStepName, source).match(/^          path: \|\n((?: {12}[^\n]+\n?)+)/m);
@@ -228,14 +238,14 @@ test('real artifact globs retain benign DOM and screenshot evidence only', () =>
 
 test.each(privateSpecs.filter(spec => spec !== 'durable-session'))(
   'actual-path oracle rejects reverting %s to its unsafe full-filename glob', spec => {
-    const safe = `!test-results/*${spec.replace('-authenticated', '-auth')}*/**`;
+    const safe = exclusionFor(spec);
     assert.ok(workflow.includes(safe));
     assert.throws(() => assertPrivateOutputs(workflow.replace(safe, `!test-results/*${spec}*/**`), spec));
   });
 
 test.each(privateSpecs.filter(spec => spec !== 'durable-session'))(
   'actual-path oracle rejects removing the %s exclusion', spec => {
-    const safe = `!test-results/*${spec.replace('-authenticated', '-auth')}*/**`;
+    const safe = exclusionFor(spec);
     assert.ok(workflow.includes(safe));
     assert.throws(() => assertPrivateOutputs(workflow.replace(`            ${safe}\n`, ''), spec));
   });
