@@ -129,7 +129,7 @@ export function QuickPost({ className }: { className?: string }) {
       kind: draft.kind,
       category: draft.category,
       condition: draft.condition,
-      price_cents: priced ? dollarsToCents(price) : 0,
+      price_cents: priced ? dollarsToCents(price, locale.code) : 0,
       location: draft.location,
       photo_url: photo.trim() || null,
     });
@@ -257,7 +257,7 @@ export function QuickPost({ className }: { className?: string }) {
             )}
           </div>
 
-          {suggested != null && kindHasPrice(draft.kind) && dollarsToCents(price) !== suggested && (
+          {suggested != null && kindHasPrice(draft.kind) && dollarsToCents(price, locale.code) !== suggested && (
             <button
               type="button"
               onClick={() => setPrice(String(suggested / 100))}

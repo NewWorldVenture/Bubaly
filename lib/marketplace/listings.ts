@@ -115,11 +115,44 @@ export function priceLabel(
   return rentKey ? t(rentKey, { amount }) : amount;
 }
 
-/** Parse a user-typed dollar string ("12.50", "$8") into whole cents. */
-export function dollarsToCents(input: string): number {
-  const cleaned = input.replace(/[^0-9.]/g, '');
-  if (!cleaned) return 0;
-  const n = Number.parseFloat(cleaned);
+/** The character `locale` writes between whole dollars and cents. */
+function decimalMark(locale: LocaleCode): string {
+  return new Intl.NumberFormat(locale).formatToParts(1.5).find((p) => p.type === 'decimal')?.value ?? '.';
+}
+
+/**
+ * Parse a user-typed dollar string ("12.50", "$8", "12,50 $") into whole cents,
+ * reading it in the notation of `locale`, the language it was typed in.
+ *
+ * This kept digits and `.` and dropped everything else, so a German "12,50"
+ * became 1250 dollars, and the quick-post box listed the item at a hundred times
+ * its price. Which mark is the decimal point is now decided like this:
+ *   - with both `.` and `,`, the last one ("1.250,75", "1,250.75");
+ *   - one mark used more than once separates thousands ("1.234.567");
+ *   - one mark used once, followed by anything but three digits, is the decimal
+ *     point ("12,5", "12.50"), which is also how the box's own fills read: the
+ *     AI draft and the suggestion write `String(cents / 100)` in every locale;
+ *   - followed by exactly three digits it is ambiguous ("1.250"), and the
+ *     locale decides: a decimal point in en-US, a thousand in de-DE.
+ *
+ * A `<input type="number">` value is always in the canonical notation, so its
+ * callers leave `locale` at the en-US default.
+ */
+export function dollarsToCents(input: string, locale: LocaleCode = 'en-US'): number {
+  const cleaned = input.replace(/[^0-9.,]/g, '');
+  if (!/[0-9]/.test(cleaned)) return 0;
+  const marks = cleaned.replace(/[0-9]/g, '');
+  let decimalAt = -1;
+  if (marks.includes('.') && marks.includes(',')) {
+    decimalAt = Math.max(cleaned.lastIndexOf('.'), cleaned.lastIndexOf(','));
+  } else if (marks.length === 1) {
+    const at = cleaned.search(/[.,]/);
+    const ambiguous = cleaned.length - at - 1 === 3;
+    if (!ambiguous || cleaned[at] === decimalMark(locale)) decimalAt = at;
+  }
+  const whole = (decimalAt < 0 ? cleaned : cleaned.slice(0, decimalAt)).replace(/[.,]/g, '');
+  const fraction = decimalAt < 0 ? '' : cleaned.slice(decimalAt + 1).replace(/[.,]/g, '');
+  const n = Number.parseFloat(`${whole || '0'}.${fraction || '0'}`);
   return Number.isFinite(n) ? Math.max(0, Math.round(n * 100)) : 0;
 }
 
