@@ -38,6 +38,12 @@ type Listing = Omit<Tables<'marketplace_listings'>, 'reserve_cents' | 'highest_m
 // A literal, not a joined array: supabase-js types the result by parsing this
 // string, and a computed one reads as GenericStringError.
 const LISTING_COLUMNS = `id, family_id, member_id, title, description, kind, category, condition, price_cents, rent_period, photo_url, location, status, claimed_by, claimed_at, created_by, created_at, updated_at, sale_format, auction_starts_at, auction_ends_at, starting_bid_cents, buy_now_cents, current_bid_cents, bid_count, highest_bidder_member_id, highest_bidder_family_id, anti_snipe_minutes, auction_closed_at, ${RESERVE_VIEW_COLUMNS}`;
+
+/** The held 0505's refusal: a listing other families hold records of is withdrawn, not removed. */
+function keptForOthersRecords(err: { code?: string; message?: string }): boolean {
+  return err.code === '42501' && /withdrawn, not removed/.test(err.message ?? '');
+}
+
 type Offer = Tables<'marketplace_offers'>;
 
 const KIND_ICON: Record<ListingKind, typeof Store> = {
@@ -194,9 +200,30 @@ export function MarketplaceModule({
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-85.
     const { data: removed2, error: err } = await sb.from('marketplace_listings').delete()
       .eq('id', l.id).eq('family_id', familyId).select('id');
+    if (err && keptForOthersRecords(err)) { await keepWithdrawn(l); return; }
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(removed2)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('marketplaceModule.removed'));
+  }
+
+  // A listing other families hold records of (an order, an offer, a question, a
+  // bid, a negotiation, a report) is withdrawn, not erased: deleting it would
+  // cascade those records away (held 0505 refuses it). Its photo is already
+  // gone above, as the seller asked, so the row stops pointing at it, and the
+  // listing is withdrawn unless it already is, or is completed.
+  async function keepWithdrawn(l: Listing) {
+    const sb = createClient();
+    const { data: cleared, error: clearError } = await sb.from('marketplace_listings').update({ photo_url: null })
+      .eq('id', l.id).eq('family_id', familyId).select('id');
+    if (clearError) console.error('[marketplace] could not clear a removed photo from a kept listing', clearError);
+    else if (wroteNoRows(cleared)) console.error('[marketplace] a kept listing\'s removed photo was not cleared', { listingId: l.id });
+    if (l.status !== 'withdrawn' && l.status !== 'completed') {
+      const { error: withdrawError } = await sb.rpc('marketplace_set_listing_status', { p_listing: l.id, p_status: 'withdrawn' });
+      if (withdrawError) { toastError(describeDbError(withdrawError)); return; }
+      success(t('marketplaceModule.keptAndWithdrawn'));
+      return;
+    }
+    success(t('marketplaceModule.keptWithItsRecords'));
   }
 
   async function withdraw(l: Listing) {

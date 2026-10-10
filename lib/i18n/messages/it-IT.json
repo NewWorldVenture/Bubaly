@@ -9046,6 +9046,8 @@
   "marketplaceModule.giveYourListingATitle": "Dai un titolo al tuo annuncio",
   "marketplaceModule.listingRemovedButItsUploaded": "L’annuncio è stato rimosso, ma non è stato possibile ripulire la foto caricata.",
   "marketplaceModule.listingWithdrawn": "Annuncio ritirato",
+  "marketplaceModule.keptAndWithdrawn": "Altre famiglie conservano dati su questo annuncio, quindi è stato ritirato invece che eliminato",
+  "marketplaceModule.keptWithItsRecords": "Altre famiglie conservano dati su questo annuncio, quindi resta",
   "marketplaceModule.markedComplete": "Contrassegnato come completato 🎉",
   "marketplaceModule.offerDeclined": "Offerta rifiutata",
   "marketplaceModule.postTheFirstItemSell": "Pubblica il primo articolo: vendi giochi diventati piccoli, presta un attrezzo o regala vestiti passati di mano.",

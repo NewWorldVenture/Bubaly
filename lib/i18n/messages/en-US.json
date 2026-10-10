@@ -9226,6 +9226,8 @@
   "marketplaceModule.giveYourListingATitle": "Give your listing a title",
   "marketplaceModule.listingRemovedButItsUploaded": "Listing removed, but its uploaded photo could not be cleaned up.",
   "marketplaceModule.listingWithdrawn": "Listing withdrawn",
+  "marketplaceModule.keptAndWithdrawn": "Others hold records of this listing, so it was withdrawn instead of deleted",
+  "marketplaceModule.keptWithItsRecords": "Others hold records of this listing, so it stays",
   "marketplaceModule.markedComplete": "Marked complete 🎉",
   "marketplaceModule.offerDeclined": "Offer declined",
   "marketplaceModule.postTheFirstItemSell": "Post the first item — sell outgrown toys, lend a tool, or give away hand-me-downs.",

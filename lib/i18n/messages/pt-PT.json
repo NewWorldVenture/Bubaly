@@ -9047,6 +9047,8 @@
   "marketplaceModule.giveYourListingATitle": "Dê um título ao seu anúncio",
   "marketplaceModule.listingRemovedButItsUploaded": "O anúncio foi removido, mas não foi possível limpar a fotografia carregada.",
   "marketplaceModule.listingWithdrawn": "Anúncio retirado",
+  "marketplaceModule.keptAndWithdrawn": "Outras famílias guardam registos deste anúncio, por isso foi retirado em vez de eliminado",
+  "marketplaceModule.keptWithItsRecords": "Outras famílias guardam registos deste anúncio, por isso mantém-se",
   "marketplaceModule.markedComplete": "Marcado como concluído 🎉",
   "marketplaceModule.offerDeclined": "Oferta recusada",
   "marketplaceModule.postTheFirstItemSell": "Publique o primeiro artigo — venda brinquedos de que já cresceram, empreste uma ferramenta ou dê roupa que já não serve.",

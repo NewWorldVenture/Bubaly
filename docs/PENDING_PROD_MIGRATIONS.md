@@ -118,6 +118,7 @@ source allocations are not evidence that production applied any migration.
 | 0502 confirmed, held | `0502_a_chore_with_assignments_is_a_managers_to_remove.sql` | A signed-in caller who does not manage the chore's family deletes it only while it has no assignments, and does not move it to another family at all, so its cascade cannot remove assignments 0374 reserves to a manager. Requested for #981 on #771 (comment 6097049650); confirmed as a held source and probe reservation in #981 comment 6097190516, which is not an installation or production policy approval. |
 | 0503 proposed, held | `0503_a_trip_item_stays_with_its_trips_family.sql` | A signed-in caller changes a trip item's family only if they manage both the family it leaves and the family it joins, and an item names only its own family's trip (0311's binding), so a member of two families cannot move the first family's packing items out. Requested on #771 (comments 6097696125 and 6097700163); not yet confirmed. |
 | 0504 proposed, held | `0504_a_kid_login_mapping_is_the_servers_to_write.sql` | `child_logins` is written only by the server: 0297's manager write policy is dropped and client INSERT/UPDATE/DELETE revoked; the members' read is kept. Decided by the account holder on the lead in #771 comment 6092615411; requested on #771 (comment 6100826185), not yet confirmed. |
+| 0505 proposed, held | `0505_a_listing_others_hold_records_of_is_withdrawn_not_erased.sql` | A signed-in caller's delete of a marketplace listing that has any order, offer, question, bid, negotiation or round, handoff or report is refused; such a listing is withdrawn instead, and nothing other families hold is erased by the cascade. Decided by the account holder on the lead in #771 comment 6097101249; requested on #771 (comment 6100826185), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4744,6 +4745,72 @@ Dropping any one table's trigger turns the probe red on that table. 184 of
 families, try to vote in one family's poll under their member id from the
 other family and confirm 42501; then vote as their own member there and
 confirm it lands.
+
+## `0505` (proposed, held) — a seller's Remove erased other families' records
+
+`supabase/reserved/0505_a_listing_others_hold_records_of_is_withdrawn_not_erased.sql`
+— **held**: proposed as `0505`, the first number above `0504`. The account
+holder decided it on the lead in #771 comment 6097101249. It was requested on
+#771 in comment 6100826185 and is not yet confirmed.
+
+**Severity: medium (other families' records and moderation evidence erased).
+Deploy order: any; the app change ships first and is a no-op until then.**
+`marketplace_listings_delete` lets a listing's own seller delete it, and the
+marketplace module offers that hard delete as "Remove". Every table recording a
+dealing with the listing cascades on `listing_id`: orders, offers, questions,
+bids, negotiations and their rounds, handoffs and reports. Those rows are other
+families'. A report carries the reporter's family, so the seller cannot even
+see it. Measured as Seller House's parent, on a listing where Buyer House has a
+confirmed order and a "scam" report: the delete is 1 row, and the order and
+the report are gone.
+
+0505 adds `marketplace_listing_keeps_others_records`, BEFORE DELETE, SECURITY
+DEFINER. A signed-in caller's delete of a listing that has any of those
+records is refused (42501, its own sentence). A listing with none still
+deletes. Reviews already survive a delete (`ON DELETE SET NULL`). The service
+role, session-less writers and a family deletion cascade are unaffected (0502's
+family-gone branch). A DELETE's row lock waits for any record being inserted
+alongside, which 0502's two-session probe shows for the same shape.
+
+**App change, shipping with the source:** `components/modules/marketplace-module.tsx`
+meets the refusal by withdrawing the listing
+(`marketplace_set_listing_status`). It clears the `photo_url` of the photo it
+has already removed, and says the listing was kept because others hold records
+of it. Until 0505 is released the refusal never comes, and Remove deletes as
+before. `tests/a-listing-others-hold-records-of-is-withdrawn.test.ts` ties the
+module's recognition to the migration's exact sentence.
+
+**Recorded, not changed:** a family that has sold something on an order cannot
+be deleted by its own owner today. The family deletion sets the order's
+`seller_member` to null, which the order-terms guard refuses ("seller_member is
+a term of the deal…"). That is measured on the released schema, independent of
+0505.
+
+**Proof:** `.github/workflows/marketplace-records-runtime.yml` replays every
+runnable migration. It requires the held probe
+`docs/audit/reserved/a-listing-others-hold-records-of-is-withdrawn-not-erased-check.sql`
+to fail on the released schema, with the seller's six deletes landing and their
+records gone. It applies 0505 twice, requires the probe to pass, and re-runs
+the six released probes that delete listings. The passing run shows:
+- the seller's delete of a listing with an order and a report, an offer, a
+  question, a bid, a negotiation with its round, and one with only a report
+  they cannot see is each refused with the guard's sentence (42501, exact),
+  and every listing and record remains (counted);
+- the seller withdraws a listing with an order and a report, and both remain;
+- a listing nobody dealt with still deletes (OK 1);
+- the service role (carrying a user id) and, separately, a null-uid writer each
+  delete a listing with records;
+- a family's own deletion still takes its listing, records included;
+- mutation M1 (the guard without its reports clause) and negative control N1
+  (the guard disabled) each let the refused delete land.
+
+Source mutations, each failing exactly its own control: the family-gone branch
+removed, the service-role exemption removed, the null-uid exemption removed. 184
+of 184 released probes pass with and without 0505.
+
+**After approved release:** as a test seller with a test order on a listing,
+press Remove and confirm the listing is withdrawn and the order is still there.
+On a listing nobody has dealt with, confirm Remove deletes it.
 
 ## `0504` (proposed, held) — a kid login mapping is the server's to write
 

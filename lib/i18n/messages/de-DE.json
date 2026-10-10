@@ -9046,6 +9046,8 @@
   "marketplaceModule.giveYourListingATitle": "Geben Sie Ihrer Anzeige einen Titel",
   "marketplaceModule.listingRemovedButItsUploaded": "Die Anzeige wurde entfernt, aber ihr hochgeladenes Foto konnte nicht bereinigt werden.",
   "marketplaceModule.listingWithdrawn": "Anzeige zurückgezogen",
+  "marketplaceModule.keptAndWithdrawn": "Andere haben Aufzeichnungen zu dieser Anzeige, daher wurde sie zurückgezogen statt gelöscht",
+  "marketplaceModule.keptWithItsRecords": "Andere haben Aufzeichnungen zu dieser Anzeige, daher bleibt sie bestehen",
   "marketplaceModule.markedComplete": "Als erledigt markiert 🎉",
   "marketplaceModule.offerDeclined": "Angebot abgelehnt",
   "marketplaceModule.postTheFirstItemSell": "Stellen Sie den ersten Artikel ein – herausgewachsenes Spielzeug verkaufen, ein Werkzeug verleihen oder Kleidung weitergeben.",

@@ -9046,6 +9046,8 @@
   "marketplaceModule.giveYourListingATitle": "Da un título a tu anuncio",
   "marketplaceModule.listingRemovedButItsUploaded": "El anuncio se ha eliminado, pero no se ha podido limpiar la foto subida.",
   "marketplaceModule.listingWithdrawn": "Anuncio retirado",
+  "marketplaceModule.keptAndWithdrawn": "Otras familias tienen registros de este anuncio, así que se retiró en lugar de eliminarse",
+  "marketplaceModule.keptWithItsRecords": "Otras familias tienen registros de este anuncio, así que se mantiene",
   "marketplaceModule.markedComplete": "Marcado como completado 🎉",
   "marketplaceModule.offerDeclined": "Oferta rechazada",
   "marketplaceModule.postTheFirstItemSell": "Publica el primer artículo: vende juguetes que se les han quedado pequeños, presta una herramienta o regala ropa heredada.",

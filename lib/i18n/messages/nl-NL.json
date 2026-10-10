@@ -9046,6 +9046,8 @@
   "marketplaceModule.giveYourListingATitle": "Geef je advertentie een titel",
   "marketplaceModule.listingRemovedButItsUploaded": "De advertentie is verwijderd, maar de geüploade foto kon niet worden opgeruimd.",
   "marketplaceModule.listingWithdrawn": "Advertentie ingetrokken",
+  "marketplaceModule.keptAndWithdrawn": "Anderen hebben gegevens over deze advertentie, dus is ze ingetrokken in plaats van verwijderd",
+  "marketplaceModule.keptWithItsRecords": "Anderen hebben gegevens over deze advertentie, dus blijft ze bestaan",
   "marketplaceModule.markedComplete": "Gemarkeerd als voltooid 🎉",
   "marketplaceModule.offerDeclined": "Aanbod geweigerd",
   "marketplaceModule.postTheFirstItemSell": "Plaats het eerste item — verkoop uitgegroeid speelgoed, leen gereedschap uit of geef afdankertjes weg.",
