@@ -2903,6 +2903,8 @@
   "bills.moveToShorterMonthBody": "Esta factura vence el día {day} de cada mes, pero {month} no tiene día {day}. Hasta que se aplique una actualización de la base de datos, Bubaly no puede recordar el día {day}, así que a partir de ahora vencerá el día {newDay}.",
   "bills.moveToShorterMonthConfirm": "Marcar como pagada y mover",
   "bills.moveToShorterMonthCancel": "Dejarla como está",
+  "bills.addOnShorterMonthTitle": "¿Añadir esta factura con vencimiento el {date}?",
+  "bills.addOnShorterMonthConfirm": "Añadir",
   "bills.recurring": "Recurrente",
   "bills.toggleAutoPay": "Alternar pago automático",
   "billsView.addANameAndAmount": "Añade un nombre y un importe",

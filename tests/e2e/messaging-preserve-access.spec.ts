@@ -15,7 +15,7 @@ const sourceFiles = [
   'components/ui/button.tsx', 'components/ui/input.tsx',
   'components/ui/states.tsx', 'components/ui/states-client.tsx',
   'lib/messages/overview.ts', 'lib/messages/thread-state.ts', 'lib/messages/schema-compat.ts', 'lib/messages/reads.ts',
-  'lib/messages/legacy-schema.ts', 'lib/supabase/escape-like.ts', 'lib/realtime/own-channel.ts',
+  'lib/messages/legacy-schema.ts', 'lib/messages/workspace-paths.ts', 'lib/supabase/escape-like.ts', 'lib/realtime/own-channel.ts',
   'lib/supabase/errors.ts', 'lib/supabase/settle.ts', 'lib/constants/roles.ts',
   'lib/utils/format.ts', 'lib/i18n/locales.ts',
 ];

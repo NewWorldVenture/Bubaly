@@ -2903,6 +2903,8 @@
   "bills.moveToShorterMonthBody": "Questa bolletta scade il giorno {day} di ogni mese, ma {month} non ha il giorno {day}. Finché non viene applicato un aggiornamento del database, Bubaly non può ricordare il giorno {day}, quindi d'ora in poi scadrà il giorno {newDay}.",
   "bills.moveToShorterMonthConfirm": "Segna come pagata e sposta",
   "bills.moveToShorterMonthCancel": "Lascia invariata",
+  "bills.addOnShorterMonthTitle": "Aggiungere questa bolletta con scadenza il {date}?",
+  "bills.addOnShorterMonthConfirm": "Aggiungi",
   "bills.recurring": "Ricorrente",
   "bills.toggleAutoPay": "Attiva/disattiva addebito",
   "billsView.addANameAndAmount": "Aggiungi un nome e un importo",

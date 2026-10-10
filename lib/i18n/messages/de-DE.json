@@ -2903,6 +2903,8 @@
   "bills.moveToShorterMonthBody": "Diese Rechnung ist jeden Monat am {day}. fällig, aber der {month} hat keinen {day}. Tag. Bis ein Datenbank-Update eingespielt ist, kann sich Bubaly den {day}. nicht merken, deshalb ist sie ab jetzt jeweils am {newDay}. fällig.",
   "bills.moveToShorterMonthConfirm": "Bezahlt markieren und verschieben",
   "bills.moveToShorterMonthCancel": "Unverändert lassen",
+  "bills.addOnShorterMonthTitle": "Diese Rechnung mit Fälligkeit am {date} hinzufügen?",
+  "bills.addOnShorterMonthConfirm": "Hinzufügen",
   "bills.recurring": "Wiederkehrend",
   "bills.toggleAutoPay": "Lastschrift umschalten",
   "billsView.addANameAndAmount": "Fügen Sie Namen und Betrag hinzu",

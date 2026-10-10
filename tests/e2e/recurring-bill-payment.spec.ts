@@ -179,10 +179,18 @@ function exactMutation(proof: Proof, rendered: Bill) {
   });
 }
 
+// Owner decision 2026-10-09 (PR #982): while held migration 0488 is absent,
+// recurring bills fall back to the previous production behaviour, and
+// lib/finance/recurring.ts warns exactly once per page that bills.due_day is
+// missing. That one warning is the only diagnostic either missing outcome may
+// produce; every other outcome stays diagnostic-free.
+const dueDayMissingWarning = 'warning: bills.due_day is not in this database yet (migration supabase/reserved/0488_a_month_end_bill_keeps_its_day.sql has not been applied); recurring bills step from their due date\'s own day, as they did before it, until it is.';
+
 async function finish(page: Page, proof: Proof) {
   await expect.poll(proof.settled).toBe(1);
   await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
-  expect(proof.diagnostics).toEqual([]);
+  expect(proof.diagnostics).toEqual(proof.outcome === 'missing-column' || proof.outcome === 'missing-cache'
+    ? [dueDayMissingWarning] : []);
   expect(proof.expectedHttpErrors).toEqual(proof.outcome === 'missing-column' || proof.outcome === 'missing-cache'
     ? ['Failed to load resource: the server responded with a status of 400 (Bad Request)'] : []);
 }
@@ -242,8 +250,15 @@ test('a stale occurrence returns zero rows, shows an error and never reports pay
   expect(await page.evaluate(() => window.__billPayment)).toMatchObject({ done: 1, closed: 1 });
 });
 
+// Owner decision 2026-10-09 (PR #982) replaced "refuse until 0488 lands" with
+// the pre-0488 fallback. On the exact missing bills.due_day answer the
+// fallback warns once and drops due_day; it retries through the same CAS only
+// when the due date itself carries the day. Day 31 rolling to Apr 30 is a day
+// only the column could keep, and this modal passes no confirmClampedDay, so
+// the fallback refuses (DueDayNotKept) before any second write: one PATCH,
+// the "not available yet" alert, and the row as it was.
 for (const outcome of ['missing-column', 'missing-cache'] as const) {
-  test(outcome + ' surfaces schedule unavailability without retrying away the anchor', async ({ page }) => {
+  test(outcome + ' warns once that due_day is missing and keeps a day-31 bill unchanged without a second write', async ({ page }) => {
     const rendered = bill();
     const proof = await fixture(page, rendered, outcome);
     await day(page).selectOption('31');
@@ -258,6 +273,10 @@ for (const outcome of ['missing-column', 'missing-cache'] as const) {
     await expect(day(page)).toHaveValue('31');
     await expect(markPaid(page)).toBeEnabled();
     expect(await page.evaluate(() => window.__billPayment)).toMatchObject({ done: 0, closed: 0 });
+    // Once the refusal is on screen: still the single PATCH (no retry without
+    // due_day) and still exactly the one missing-column warning.
+    exactMutation(proof, rendered);
+    expect(proof.diagnostics).toEqual([dueDayMissingWarning]);
   });
 }
 

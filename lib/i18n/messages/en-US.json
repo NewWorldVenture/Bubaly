@@ -3067,6 +3067,8 @@
   "bills.moveToShorterMonthBody": "This bill is due on day {day} of each month, but {month} has no day {day}. Until a database update is applied, Bubaly can't remember day {day}, so from now on it will be due on day {newDay}.",
   "bills.moveToShorterMonthConfirm": "Mark paid and move it",
   "bills.moveToShorterMonthCancel": "Leave it unchanged",
+  "bills.addOnShorterMonthTitle": "Add this bill due on {date}?",
+  "bills.addOnShorterMonthConfirm": "Add it",
   "bills.recurring": "Recurring",
   "bills.toggleAutoPay": "Toggle Auto Pay",
   "billsView.addANameAndAmount": "Add a name and amount",
