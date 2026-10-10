@@ -9,6 +9,8 @@ vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.context }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.server }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
+// The monthly allowance (F19) is its own suite (every-ai-route-counts-against-the-allowance); this one is the advisor's memory metadata.
+vi.mock('@/lib/server/ai-access', () => ({ refuseOverAIAllowance: async () => null }));
 vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: async () => null }));
 vi.mock('@/lib/ai/provider', () => ({
   isAIConfigured: async () => true,

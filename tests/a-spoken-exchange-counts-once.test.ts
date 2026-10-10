@@ -24,6 +24,11 @@ const ctx = {
 function client() {
   return {
     auth: { getUser: async () => ({ data: { user: { id: 'user-1' } } }) },
+    // The monthly count through main's count-only RPC (supabase/reserved/0493):
+    // the same family ledger the head count below reads.
+    rpc: async (name: string, args: { p_family_id?: string }) => (name === 'count_family_ai_requests_month'
+      ? { data: state.rows.filter((r) => r.family_id === args.p_family_id).length, error: null }
+      : { data: null, error: { message: `no fake for ${name}` } }),
     from(table: string) {
       if (table === 'ai_messages') {
         // savedAnswerOf: select(...).eq(family).eq(request_id).eq(role).order(created_at).order(id).limit(1).

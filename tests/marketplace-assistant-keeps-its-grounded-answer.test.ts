@@ -24,6 +24,10 @@ const LISTINGS = [
 
 function db() {
   return {
+    // The allowance counts through main's count-only RPC (supabase/reserved/0493).
+    rpc: async (name: string) => (name === 'count_family_ai_requests_month'
+      ? { data: state.used, error: null }
+      : { data: null, error: { message: `no fake for ${name}` } }),
     from(table: string) {
       if (table === 'ai_requests') {
         return {

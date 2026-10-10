@@ -15,6 +15,8 @@ vi.mock('@/lib/ai/provider', () => ({ isAIConfigured: async () => true,
   resolveProvider: async () => ({ complete: h.complete }), describeAIError: () => ({ message: 'Synthetic failure' }),
 }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
+// The monthly allowance (F19) is its own suite (every-ai-route-counts-against-the-allowance); this one is the library boundary.
+vi.mock('@/lib/server/ai-access', () => ({ refuseOverAIAllowance: async () => null }));
 vi.mock('@/lib/ai/observability', () => ({ withAiRequest: (_scope: unknown, _feature: unknown,
   run: (observer: { used: () => void }) => Promise<string>) => run({ used: () => {} }),
 }));

@@ -41,7 +41,11 @@ describe('the profile row follows the listing', () => {
   const page = readFileSync('app/(app)/dashboard/profile/page.tsx', 'utf8');
 
   it('renders only when a listing was passed, and opens it with noopener', () => {
-    expect(profile).toMatch(/\{storeListing && \(\s*<Row icon=\{Star\} label=\{t\('profile\.rateTheApp'\)\} onClick=\{\(\) => window\.open\(storeListing, '_blank', 'noopener,noreferrer'\)\}/);
+    // Through safeWebLink first: the listing is stored configuration, and
+    // window.open takes only a literal or a checked web link
+    // (a-stored-link-is-opened-only-as-a-web-link).
+    expect(profile).toContain('const storeHref = safeWebLink(storeListing);');
+    expect(profile).toMatch(/\{storeHref && \(\s*<Row icon=\{Star\} label=\{t\('profile\.rateTheApp'\)\} onClick=\{\(\) => window\.open\(storeHref, '_blank', 'noopener,noreferrer'\)\}/);
   });
 
   it('never links the internal form or a store front page', () => {

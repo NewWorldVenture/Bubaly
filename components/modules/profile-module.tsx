@@ -15,6 +15,7 @@ import { useTheme } from '@/components/theme/use-theme';
 import { roleLabel } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 type Member = Tables<'family_members'>;
 
@@ -68,6 +69,8 @@ function Section({ children, className }: { children: React.ReactNode; className
 }
 
 export function ProfileModule({ member, userEmail, stats, storeListing = null }: ProfileModuleProps) {
+  // Stored configuration, so it reaches window.open only as a checked web link.
+  const storeHref = safeWebLink(storeListing);
   const t = useTranslations();
   const { family, role, isSuperAdmin } = useApp();
   const { theme, setTheme } = useTheme();
@@ -167,8 +170,8 @@ export function ProfileModule({ member, userEmail, stats, storeListing = null }:
           {/* Shown only once a real store listing is configured (INT-O01, the
               owner's decision): it opened the App Store's front page, which
               lists no Bubaly app. noopener, as INT-L01 requires. */}
-          {storeListing && (
-            <Row icon={Star} label={t('profile.rateTheApp')} onClick={() => window.open(storeListing, '_blank', 'noopener,noreferrer')} />
+          {storeHref && (
+            <Row icon={Star} label={t('profile.rateTheApp')} onClick={() => window.open(storeHref, '_blank', 'noopener,noreferrer')} />
           )}
         </Section>
       </div>

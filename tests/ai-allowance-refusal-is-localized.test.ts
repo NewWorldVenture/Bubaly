@@ -33,7 +33,11 @@ function client() {
     select: () => chain, eq: () => chain, gte: () => chain,
     then: (ok: (v: unknown) => unknown) => ok({ data: null, error: null, count: state.used }),
   };
-  return { from: () => chain, auth: { getUser: async () => ({ data: { user: ctx.user } }) } };
+  // The allowance counts through main's count-only RPC (supabase/reserved/0493).
+  const rpc = async (name: string) => (name === 'count_family_ai_requests_month'
+    ? { data: state.used, error: null }
+    : { data: null, error: { message: `no fake for ${name}` } });
+  return { rpc, from: () => chain, auth: { getUser: async () => ({ data: { user: ctx.user } }) } };
 }
 const db = client();
 

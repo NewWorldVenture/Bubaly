@@ -17,6 +17,11 @@ const state = vi.hoisted(() => ({
 
 function fakeDb() {
   return {
+    // The allowance counts through main's count-only RPC (supabase/reserved/0493):
+    // the family's rows in the same ledger the head count below reads.
+    rpc: async (name: string, args: { p_family_id?: string }) => (name === 'count_family_ai_requests_month'
+      ? { data: state.rows.filter((r) => r.family_id === args.p_family_id).length, error: null }
+      : { data: null, error: { message: `no fake for ${name}` } }),
     from(table: string) {
       if (table === 'gift_links') {
         return {
