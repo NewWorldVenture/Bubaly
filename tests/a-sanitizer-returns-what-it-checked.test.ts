@@ -152,6 +152,7 @@ describe('a sanitizer returns what it checked (SEC-014)', () => {
       'components/modules/handle-it-button.tsx|data.redirect': 'as command-bar',
       'components/native/native-bootstrap.tsx|target': 'safeInternalRedirect(parsed.pathname, ...)',
       'lib/auth/require-aal2.ts|decision.to': 'stepUpPath(), which applies isSafeReturnPath',
+      'app/(app)/admin/layout.tsx|SUPER_ADMIN_STEP_UP_PATH': "stepUpPath('/admin') — a constant path, in lib/auth/super-admin-assurance.ts",
       'lib/services/onboarding-calendar/oauth.ts|url': 'the provider authorization URL — deliberately external',
       'lib/services/onboarding-calendar/oauth.ts|authUrl': 'the provider authorization URL — deliberately external',
     };

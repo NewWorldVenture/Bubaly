@@ -663,6 +663,8 @@
   "actions.youCanTMakeAn": "Non puoi fare una proposta sull’annuncio della tua famiglia.",
   "actions.youCanTPlaceA": "Non puoi fare offerte con questo account.",
   "actions.youCanTRemoveYour": "Non puoi rimuovere il tuo accesso di super-amministratore.",
+  "actions.adminConsoleNeedsYourCode": "Inserisci il codice dell'accesso in due passaggi prima di usare la console di amministrazione.",
+  "actions.revokeSuperAdminBeforeBanning": "Questo account ha l'accesso di super-amministratore. Rimuovi quell'accesso prima di bloccarlo.",
   "actions.youCanTReportYour": "Non puoi segnalare l’annuncio della tua famiglia.",
   "actions.youDoNotHavePermission": "Non hai il permesso di pubblicare post.",
   "actions.youReNotAbleTo": "Non puoi intervenire su questa proposta.",

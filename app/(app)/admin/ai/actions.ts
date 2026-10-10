@@ -7,6 +7,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { setAIConfig } from '@/lib/ai/settings';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
 import { describeActionError } from '@/lib/supabase/errors';
+import { logAudit } from '@/lib/server/audit';
 
 export async function saveAIConfigAction(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const t = await getTranslations();
@@ -20,12 +21,19 @@ export async function saveAIConfigAction(formData: FormData): Promise<{ ok: bool
   const model = String(formData.get('model') || '').trim() || null;
   const openaiKey = String(formData.get('openaiKey') || '');
 
+  const service = createServiceClient();
   try {
-    await setAIConfig(createServiceClient(), { provider: 'openai', model, openaiKey }, user.id);
+    await setAIConfig(service, { provider: 'openai', model, openaiKey }, user.id);
   } catch (e) {
     console.error('[admin-ai] config save failed', e);
     return { ok: false, error: describeActionError(e, t('actions.couldNotSaveAiSettings')) };
   }
+  // app_settings.updated_by is overwritten by the next save, so it is not a
+  // history. The key itself is never logged, only whether one was set.
+  await logAudit(service, {
+    familyId: null, actorId: user.id, action: 'update', resource: 'app_settings', resourceId: 'ai_provider',
+    metadata: { provider: 'openai', model, key_changed: Boolean(openaiKey.trim()), via: 'site_admin' },
+  });
   revalidatePath('/admin/ai');
   return { ok: true };
 }

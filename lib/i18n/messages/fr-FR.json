@@ -663,6 +663,8 @@
   "actions.youCanTMakeAn": "Vous ne pouvez pas faire une offre sur une annonce de votre propre famille.",
   "actions.youCanTPlaceA": "Vous ne pouvez pas enchérir avec ce compte.",
   "actions.youCanTRemoveYour": "Vous ne pouvez pas supprimer votre propre accès super-administrateur.",
+  "actions.adminConsoleNeedsYourCode": "Saisissez votre code de connexion en deux étapes avant d'utiliser la console d'administration.",
+  "actions.revokeSuperAdminBeforeBanning": "Ce compte a un accès super-administrateur. Retirez cet accès avant de le bannir.",
   "actions.youCanTReportYour": "Vous ne pouvez pas signaler l’annonce de votre propre famille.",
   "actions.youDoNotHavePermission": "Vous n’avez pas l’autorisation de publier.",
   "actions.youReNotAbleTo": "Vous ne pouvez pas agir sur cette offre.",

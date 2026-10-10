@@ -663,6 +663,8 @@
   "actions.youCanTMakeAn": "Auf das Angebot Ihrer eigenen Familie können Sie keinen Preisvorschlag machen.",
   "actions.youCanTPlaceA": "Für dieses Konto können Sie kein Gebot abgeben.",
   "actions.youCanTRemoveYour": "Sie können Ihren eigenen Super-Admin-Zugang nicht entfernen.",
+  "actions.adminConsoleNeedsYourCode": "Gib deinen Code für die zweistufige Anmeldung ein, bevor du die Admin-Konsole verwendest.",
+  "actions.revokeSuperAdminBeforeBanning": "Dieses Konto hat Super-Admin-Zugang. Entfernen Sie diesen Zugang, bevor Sie es sperren.",
   "actions.youCanTReportYour": "Sie können die Anzeige Ihrer eigenen Familie nicht melden.",
   "actions.youDoNotHavePermission": "Sie haben keine Berechtigung, Beiträge zu veröffentlichen.",
   "actions.youReNotAbleTo": "Sie können zu diesem Angebot nichts unternehmen.",
