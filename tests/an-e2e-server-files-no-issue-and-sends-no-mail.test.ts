@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
+import { at } from './helpers/source-order';
 import { MANAGED_SERVER_MARKER, OUTBOUND_PROVIDER_KEYS_OFF, e2eServerEnv } from '../scripts/e2e-server-env.mjs';
 
 const SYNTHETIC_ADMIN = 'synthetic-admin@example.test';
@@ -57,9 +58,9 @@ describe('the E2E server environment', () => {
     const spec = readFileSync('tests/e2e/a-feedback-image-is-not-a-beacon.spec.ts', 'utf8');
     expect(spec).toContain(`if (process.env.PLAYWRIGHT_EXTERNAL_SERVER === '1' && process.env.${MANAGED_SERVER_MARKER} !== '1') {`);
     // It precedes everything the suite does to set up.
-    const beforeEach = spec.slice(spec.indexOf('test.beforeEach('));
-    expect(beforeEach.indexOf(MANAGED_SERVER_MARKER)).toBeLessThan(beforeEach.indexOf('createOwnedAccount('));
-    expect(beforeEach.indexOf(MANAGED_SERVER_MARKER)).toBeLessThan(beforeEach.indexOf('context.route('));
+    const beforeEach = spec.slice(at(spec, 'test.beforeEach('));
+    expect(at(beforeEach, MANAGED_SERVER_MARKER)).toBeLessThan(at(beforeEach, 'createOwnedAccount('));
+    expect(at(beforeEach, MANAGED_SERVER_MARKER)).toBeLessThan(at(beforeEach, 'context.route('));
   });
 
   it('is what both entry points start the server with', async () => {
