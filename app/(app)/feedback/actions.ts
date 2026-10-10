@@ -26,7 +26,7 @@ function authorNameFor(ctx: Awaited<ReturnType<typeof requireUserContext>>): str
 export async function submitIdeaAction(draft: IdeaDraft): Promise<Result & { id?: string }> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
-  const norm = normalizeIdea(draft);
+  const norm = normalizeIdea(draft, { authorId: ctx.user.id });
   if (!norm.ok) return { ok: false, error: norm.error };
 
   const supabase = await createServer();

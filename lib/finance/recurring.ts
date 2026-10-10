@@ -1,8 +1,10 @@
 // 0488_a_month_end_bill_keeps_its_day, reserved and held in supabase/reserved.
-// Its absent column allows only writes that retain a proven original anchor.
+// Until it is applied, a bill read or write refused for exactly that column
+// falls back to the previous production behaviour: the due date's own day is
+// the bill's day, and a clamp is written only when the person says yes.
 // Calendar scheduling is shared by payment, forecast and subscription readers.
 export * from './bill-schedule';
-import type { BillCadence, RecurringBillLike } from './bill-schedule';
+import { MONTH_BASED_CADENCES, type BillCadence, type RecurringBillLike } from './bill-schedule';
 
 const CADENCES: Record<string, BillCadence> = {
   weekly: 'weekly',
@@ -107,33 +109,169 @@ export function isDueDayNotKept(error: unknown): error is DueDayNotKept {
   );
 }
 
-/** Retry only when the date alone proves the same original anchor on reread. */
+let warnedDueDayMissing = false;
+/** Once per process: the column is absent, so the pre-0488 behaviour is in use. */
+export function warnDueDayMissing(): void {
+  if (warnedDueDayMissing) return;
+  warnedDueDayMissing = true;
+  console.warn(
+    "bills.due_day is not in this database yet (migration supabase/reserved/0488_a_month_end_bill_keeps_its_day.sql has not been applied); recurring bills step from their due date's own day, as they did before it, until it is.",
+  );
+}
+export function resetDueDayWarningForTests(): void {
+  warnedDueDayMissing = false;
+}
+
+/**
+ * The cadence of a row read without `bills.due_day`: only a NAMED one.
+ * Previous production read a flagged bill with no or an unknown cadence as
+ * monthly; that invents a payment schedule nobody chose, so here, as with the
+ * column, it is unknown (null) and the person confirms it.
+ */
+function cadenceBefore0488(bill: Pick<RecurringBillLike, 'is_recurring' | 'recurrence'>): BillCadence | null {
+  return bill.is_recurring ? namedCadence(bill.recurrence) : null;
+}
+
+/**
+ * A bill row as the previous production read it, for rows read after
+ * `bills.due_day` was refused: a month-based bill is anchored on its due
+ * date's own day, the only day that database records. A flagged bill with no
+ * or an unknown cadence is returned as it came, so the forecast asks for its
+ * schedule (BillScheduleConfirmationRequired) instead of stepping it monthly.
+ */
+export function billBefore0488<B extends RecurringBillLike>(bill: B): B {
+  const cadence = cadenceBefore0488(bill);
+  if (!cadence) return bill;
+  const day = MONTH_BASED_CADENCES.has(cadence) ? parseDayKey(bill.due_date)?.[2] : undefined;
+  return { ...bill, recurrence: cadence, ...(day !== undefined ? { due_day: day } : {}) };
+}
+
+export type BillPaidPatchBefore0488 = { status: 'paid' } | { status: 'upcoming'; due_date: string; due_day?: number };
+
+/**
+ * What Mark paid wrote before 0488; `writeBillPatch` drops `due_day` again.
+ * Null (nothing is written) for a flagged bill without a named cadence: its
+ * schedule is confirmed by the person, never invented as monthly nor closed
+ * as a one-off.
+ */
+export function billPaidPatchBefore0488(bill: RecurringBillLike, today: string): BillPaidPatchBefore0488 | null {
+  const cadence = cadenceBefore0488(bill);
+  if (bill.is_recurring && !cadence) return null;
+  const anchor = parseDayKey(bill.due_date);
+  if (!cadence || !anchor) return { status: 'paid' };
+  const day = MONTH_BASED_CADENCES.has(cadence) ? anchor[2] : null;
+  const due = bill.due_date.slice(0, 10);
+  const floor = parseDayKey(today) && today.slice(0, 10) > due ? today.slice(0, 10) : due;
+  const next = firstStepAfter(anchor, cadence, floor, anchor[2], false);
+  if (!next) return { status: 'paid' };
+  return day !== null ? { status: 'upcoming', due_date: next, due_day: day } : { status: 'upcoming', due_date: next };
+}
+
+/** The patch without a `recurrence` that only respells the stored one (`Monthly` -> `monthly`). */
+export function withoutRenamedCadence<P extends object>(patch: P, stored: string | null): P {
+  const cadence = (patch as { recurrence?: unknown }).recurrence;
+  if (typeof cadence !== 'string' || namedCadence(stored) !== cadence) return patch;
+  const rest = { ...patch };
+  delete (rest as { recurrence?: unknown }).recurrence;
+  return rest;
+}
+
+export interface WriteBillPatchOptions {
+  /**
+   * Asks the person whether to move the bill to the clamped date and keep that
+   * day from then on. Called only when the database has no `bills.due_day`;
+   * true proceeds. Without it (a server path) such a roll is refused.
+   */
+  confirmClampedDay?: (refusal: DueDayNotKept) => Promise<boolean>;
+  /**
+   * The database has already answered that `bills.due_day` is missing: go
+   * straight to the write without it instead of sending it once to be refused.
+   */
+  dueDayMissing?: boolean;
+  /**
+   * The row's stored `recurrence`. A write without `due_day` leaves it as
+   * stored when the patch names the same cadence (`Monthly` -> `monthly`), as
+   * Mark paid did before 0488.
+   */
+  storedRecurrence?: string | null;
+}
+
+/**
+ * Writes the patch. On the exact missing `bills.due_day` answer it does what
+ * production did before 0488: a due date on the bill's own day is written
+ * again without the column, and a day only the column could carry (a 31st
+ * bill rolling to Feb 28) is given up only when the person confirms. Every
+ * retry goes through the caller's same compare-and-swap `write`; any other
+ * refusal is returned as it came.
+ */
 export async function writeBillPatch<P extends object, W extends (p: P) => PromiseLike<{ error: unknown }>>(
   patch: P | null,
   write: W,
+  options: WriteBillPatchOptions = {},
 ): Promise<Awaited<ReturnType<W>> | { data: null; error: Error | DueDayNotKept }> {
   if (!patch) return { data: null, error: new Error('Confirm the recurring bill schedule before saving.') };
-  const first = (await write(patch)) as Awaited<ReturnType<W>>;
-  if (!first.error || !('due_day' in patch) || !isMissingDueDayColumn(first.error)) return first;
+  if (!(options.dueDayMissing && 'due_day' in patch)) {
+    const first = (await write(patch)) as Awaited<ReturnType<W>>;
+    if (!first.error || !('due_day' in patch) || !isMissingDueDayColumn(first.error)) return first;
+  }
+  warnDueDayMissing();
   const { due_day: day, due_date: date } = patch as { due_day?: number | null; due_date?: string };
   const onDate = typeof date === 'string' ? parseDayKey(date)?.[2] : undefined;
-  // A day 28–30 without its column is historically ambiguous. A clamp also
-  // loses the original day. Neither may be reinterpreted as a new schedule.
-  if (day != null && (onDate !== day || (day >= 28 && day <= 30))) {
-    return {
-      data: null,
-      error: {
-        code: DUE_DAY_NOT_KEPT,
-        message:
-          'The bill anchor cannot be kept until reserved migration 0488 is applied. Nothing was saved.',
-        day,
-        dueDate: date ?? null,
-      },
-    };
-  }
-  const rest = { ...patch };
+  let rest = { ...patch };
   delete (rest as { due_day?: unknown }).due_day;
+  if (options.storedRecurrence !== undefined) rest = withoutRenamedCadence(rest, options.storedRecurrence);
+  if (day != null && onDate !== day) {
+    const refusal: DueDayNotKept = {
+      code: DUE_DAY_NOT_KEPT,
+      message:
+        'The bill anchor cannot be kept until reserved migration 0488 is applied. Nothing was saved.',
+      day,
+      dueDate: date ?? null,
+    };
+    if (!date || !options.confirmClampedDay || !(await options.confirmClampedDay(refusal))) {
+      return { data: null, error: refusal };
+    }
+  }
   return (await write(rest)) as Awaited<ReturnType<W>>;
+}
+
+/** What the Mark paid buttons ask through the shared confirm dialog (components/ui/confirm.tsx). */
+export interface DueDayQuestion {
+  title: string;
+  body: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  /** Moving a bill is not a delete: the proceed button is not painted red. */
+  destructive: false;
+}
+
+/**
+ * The pre-0488 question for a clamped day: mark paid and move it to that date
+ * (a roll), or add it due on that date (a new bill whose chosen day the first
+ * month does not have).
+ */
+export function dueDayNotKeptQuestion(
+  refusal: DueDayNotKept,
+  t: (key: string, params?: Record<string, string | number>) => string,
+  formatDay: (dayKey: string) => string,
+  locale: string,
+  purpose: 'markPaid' | 'add' = 'markPaid',
+): DueDayQuestion {
+  const target = refusal.dueDate ? parseDayKey(refusal.dueDate) : null;
+  const month = target
+    ? new Intl.DateTimeFormat(locale, { month: 'long', timeZone: 'UTC' }).format(
+        new Date(Date.UTC(target[0], target[1], 1)),
+      )
+    : '';
+  return {
+    title: t(purpose === 'add' ? 'bills.addOnShorterMonthTitle' : 'bills.moveToShorterMonthTitle', {
+      date: refusal.dueDate ? formatDay(refusal.dueDate) : '',
+    }),
+    body: t('bills.moveToShorterMonthBody', { day: refusal.day, month, newDay: target?.[2] ?? refusal.day }),
+    confirmLabel: t(purpose === 'add' ? 'bills.addOnShorterMonthConfirm' : 'bills.moveToShorterMonthConfirm'),
+    cancelLabel: t(purpose === 'add' ? 'bills.cancel' : 'bills.moveToShorterMonthCancel'),
+    destructive: false,
+  };
 }
 
 // ── Subscriptions ───────────────────────────────────────────────────────────

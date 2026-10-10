@@ -48,7 +48,7 @@ vi.mock('@/lib/analytics/activation-server', () => ({ recordActivationServer: mo
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }));
 
 import { addCalendarFeed } from '@/app/(app)/dashboard/sync/feeds/actions';
-import { APPLY_SYNC_FUNCTION, CLAIM_STALE_MS, TAKEN_OVER_MESSAGE } from '@/lib/server/calendar-feeds';
+import { APPLY_SYNC_FUNCTION, CLAIM_STALE_MS, TAKEN_OVER_MESSAGE, resetApplySyncWarningForTests } from '@/lib/server/calendar-feeds';
 import { applyCalendarFeedSync } from './helpers/calendar-feed-apply';
 import { feedAddedMessage } from '@/lib/calendar/feeds';
 import { getTranslations } from '@/lib/i18n/server';
@@ -377,5 +377,51 @@ describe('a link longer than the one-subscription-per-URL index can hold', () =>
     expect(result).toEqual({ ok: true, imported: 2 });
     expect(feedAddedMessage(result.ok ? result : {}, await getTranslations())).toBe('Added — 2 events imported');
     expect(subscriptions().map((f) => f.url)).toEqual([ofLength(2048)]);
+  });
+});
+
+// Owner decision (2026-10-09): until held 0490 is applied, the first sync of a
+// new calendar writes its events the way production did before it, so "Add &
+// Sync Now" keeps the subscription instead of rolling it back on the missing
+// function. Any other failure of the function still rolls the add back.
+describe('a calendar added to a database without held migration 0490', () => {
+  const withApplySync = (handler?: () => unknown) => {
+    db = createInMemorySupabase({
+      ...(handler ? { rpc: { [APPLY_SYNC_FUNCTION]: handler } } : {}),
+      uniques: { calendar_feeds: FEED_UNIQUES, calendar_events: [['feed_id', 'external_uid']] },
+      defaults: { calendar_feeds: { color: 'blue', last_status: 'pending', last_error: null, last_synced_at: null, event_count: 0 } },
+    });
+  };
+
+  it('is kept and synced when the function is missing, and adding it again re-syncs that one subscription', async () => {
+    // The fake answers an unknown RPC as Postgres does: 42883 naming it.
+    withApplySync();
+    resetApplySyncWarningForTests();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mocks.fetchPublicCalendarText.mockResolvedValue(reachable());
+
+    expect(await addCalendarFeed({ name: 'School', url: PASTED })).toEqual({ ok: true, imported: 2 });
+    const [only, ...extra] = subscriptions();
+    expect(extra).toEqual([]);
+    expect(only).toMatchObject({ url: STORED, last_status: 'ok', last_error: null, event_count: 2 });
+    expect(importedEvents().map((e) => e.external_uid).sort()).toEqual(['sports-day@school.example', 'term-start@school.example']);
+    expect(mocks.recordActivationServer).toHaveBeenCalledTimes(1);
+
+    expect(await addCalendarFeed({ name: 'School', url: PASTED })).toEqual({ ok: true, imported: 2, alreadySubscribedAs: 'School' });
+    expect(subscriptions()).toHaveLength(1);
+    expect(importedEvents()).toHaveLength(2);
+  });
+
+  it('is still rolled back when the function exists and fails', async () => {
+    withApplySync(() => { throw new Error('permission denied for function calendar_feed_apply_sync'); });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    mocks.fetchPublicCalendarText.mockResolvedValue(reachable());
+
+    const result = await addCalendarFeed({ name: 'School', url: PASTED });
+
+    expect(result).toEqual({ ok: false, error: 'Could not save calendar events' });
+    expect(subscriptions()).toEqual([]);
+    expect(importedEvents()).toEqual([]);
+    expect(mocks.recordActivationServer).not.toHaveBeenCalled();
   });
 });

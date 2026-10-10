@@ -59,6 +59,28 @@ describe('explicit schedule-only bill repair', () => {
     expect(db.requests[1].url.search).toBe(db.requests[0].url.search);
     expect(db.current()).toMatchObject({ due_date: row.due_date, status: row.status });
   });
+  // Owner decision (0488 held): a bill due on the 28th–30th can be edited on an
+  // older schema, as before 0488, when the chosen day is its due date's day.
+  it.each([28, 29, 30])('old-schema edit saves a day-%s schedule without the column', async dueDay => {
+    const row = bill({ due_date: `2026-03-${dueDay}`, recurrence: null }), db = store(row, true);
+    expect((await saveBillSchedule(db.client, row.family_id, row, { cadence: 'monthly', dueDay })).error).toBeNull();
+    expect(db.requests).toHaveLength(2);
+    expect(db.requests[1].patch).toEqual({ due_date: row.due_date, recurrence: 'monthly' });
+    expect(db.requests[1].url.search).toBe(db.requests[0].url.search);
+    expect(db.current()).toMatchObject({ due_date: row.due_date, recurrence: 'monthly', status: row.status });
+  });
+  it('an edit refused for another reason is returned as it came, never retried', async () => {
+    const failure = { code: '42501', message: 'permission denied for table bills' };
+    const row = bill({ due_date: '2026-03-30' }), db = store(row, false, failure);
+    expect((await saveBillSchedule(db.client, row.family_id, row, { cadence: 'monthly', dueDay: 30 })).error).toMatchObject(failure);
+    expect(db.requests).toHaveLength(1);
+  });
+  it('with the column an edit records the chosen day in one write', async () => {
+    const row = bill({ due_date: '2026-03-30', due_day: null }), db = store(row);
+    expect((await saveBillSchedule(db.client, row.family_id, row, { cadence: 'monthly', dueDay: 30 })).error).toBeNull();
+    expect(db.requests).toHaveLength(1);
+    expect(db.current()).toMatchObject({ due_day: 30, recurrence: 'monthly' });
+  });
   it.each([
     { amount: 200, updated_at: '2026-01-02T00:00:00Z' },
     { due_date: '2026-02-28', updated_at: '2026-01-02T00:00:00Z' },

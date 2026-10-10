@@ -19,12 +19,28 @@ export const bill = (over: Partial<Tables<'bills'>> = {}): Tables<'bills'> => ({
 export function store(initial = bill(), old = false, failure: unknown = null) {
   let row = { ...initial };
   const requests: { url: URL; patch: Record<string, unknown> }[] = [];
+  const reads: URL[] = [];
   const client = createClient<Database>('https://synthetic.invalid', 'synthetic-key', {
     auth: { persistSession: false, autoRefreshToken: false },
     global: {
       fetch: async (input, init) => {
-        const url = new URL(String(input)),
-          patch = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        const url = new URL(String(input));
+        // A read (the pre-0488 column probe) answers as PostgREST does: an
+        // older schema refuses a selected `due_day` with Postgres's 42703.
+        if ((init?.method ?? 'GET') === 'GET') {
+          reads.push(url);
+          const select = url.searchParams.get('select') ?? '';
+          const error =
+            failure ||
+            (old && select.split(',').some((c) => c.trim() === 'due_day')
+              ? { code: '42703', message: 'column bills.due_day does not exist' }
+              : null);
+          if (error)
+            return new Response(JSON.stringify(error), { status: 400, headers: { 'Content-Type': 'application/json' } });
+          const projected = Object.fromEntries(select.split(',').map((c) => [c.trim(), (row as Record<string, unknown>)[c.trim()] ?? null]));
+          return new Response(JSON.stringify([projected]), { headers: { 'Content-Type': 'application/json' } });
+        }
+        const patch = JSON.parse(String(init?.body)) as Record<string, unknown>;
         requests.push({ url, patch });
         const error =
           failure ||
@@ -53,5 +69,5 @@ export function store(initial = bill(), old = false, failure: unknown = null) {
       },
     },
   });
-  return { client, requests, current: () => row };
+  return { client, requests, reads, current: () => row };
 }

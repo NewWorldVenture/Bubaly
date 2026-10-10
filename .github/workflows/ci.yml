@@ -542,6 +542,7 @@ jobs:
             !test-results/**/trace.zip
             !test-results/*durable-session*/**
             !test-results/*family-messaging-auth*/**
+            !test-results/*a-feedback-image-is-not*/**
             !test-results/*recurring-bill-auth*/**
             !test-results/*dashboard-calendar-auth*/**
             !test-results/*a-stored-link-is-inert*/**

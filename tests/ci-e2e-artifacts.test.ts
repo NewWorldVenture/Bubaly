@@ -53,6 +53,7 @@ function assertPrivatePaths(source = workflow) {
     '!test-results/**/trace.zip',
     '!test-results/*durable-session*/**',
     '!test-results/*family-messaging-auth*/**',
+    '!test-results/*a-feedback-image-is-not*/**',
     '!test-results/*recurring-bill-auth*/**',
     '!test-results/*dashboard-calendar-auth*/**',
     '!test-results/*a-stored-link-is-inert*/**',
@@ -151,7 +152,8 @@ async function proveCleanupOwnership(source: string) {
 
 test.each([
   '!test-results/**/trace.zip', '!test-results/*durable-session*/**',
-  '!test-results/*family-messaging-auth*/**', '!test-results/*recurring-bill-auth*/**',
+  '!test-results/*family-messaging-auth*/**', '!test-results/*a-feedback-image-is-not*/**',
+  '!test-results/*recurring-bill-auth*/**',
   '!test-results/*dashboard-calendar-auth*/**', '!test-results/*a-stored-link-is-inert*/**',
   '!test-results/**/storageState*',
   '!test-results/**/storage-state*', '!test-results/**/auth.json', '!test-results/**/auth/**',
@@ -168,11 +170,13 @@ test('artifact contract refuses a whole-directory upload or hidden files', () =>
 });
 
 const privateSpecs = ['family-messaging-authenticated', 'recurring-bill-authenticated',
-  'dashboard-calendar-authenticated', 'durable-session', 'a-stored-link-is-inert-in-the-page'] as const;
+  'dashboard-calendar-authenticated', 'durable-session', 'a-feedback-image-is-not-a-beacon',
+  'a-stored-link-is-inert-in-the-page'] as const;
 
 // A suite's exclusion is a prefix of its file name short enough to survive the
 // worker's truncation: `-authenticated` shortened to `-auth`, or named here.
 const shortPrefix: Partial<Record<typeof privateSpecs[number], string>> = {
+  'a-feedback-image-is-not-a-beacon': 'a-feedback-image-is-not',
   'a-stored-link-is-inert-in-the-page': 'a-stored-link-is-inert',
 };
 const exclusionFor = (spec: typeof privateSpecs[number]) =>

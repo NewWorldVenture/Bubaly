@@ -62,9 +62,9 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables, SubscriptionStatus, AccountType, TransactionType, BudgetPeriod, BillStatus } from '@/lib/database.types';
 import { categoryLabel } from '@/lib/finance/category-label';
 import { billPaidPatch, billDateForAnchorDay, newBillDueDay } from '@/lib/finance/hub';
-import { BILL_READ_CONTRACT, readCompleteBills, isMissingBillDueDay, saveBillPayment } from '@/lib/finance/bills';
+import { BILL_READ_CONTRACT, readCompleteBills, isMissingBillDueDay, saveBillPayment, saveBillPaymentBefore0488 } from '@/lib/finance/bills';
 import { BillScheduleModal } from '@/components/finance/bill-schedule-modal';
-import { writeBillPatch } from '@/lib/finance/recurring';
+import { dueDayNotKeptQuestion, isDueDayNotKept, writeBillPatch, type DueDayNotKept } from '@/lib/finance/recurring';
 import { BillPaymentModal } from '@/components/finance/bill-payment-modal';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { FamilyDeliveredValue } from '@/components/billing/family-delivered-value';
@@ -449,6 +449,9 @@ function AddBillModal({ open, onClose, familyId, userId, onDone, isCurrent }: {
   open: boolean; onClose: () => void; familyId: string; userId: string; onDone: () => void; isCurrent: () => boolean;
 }) {
   const tr = useTranslations();
+  const { fmtDate } = useFormat();
+  const locale = useLocale();
+  const askConfirm = useConfirm();
   const { success, error: toastError } = useToast();
   const alive = useRef(true);
   const inFlight = useRef(false);
@@ -479,8 +482,12 @@ function AddBillModal({ open, onClose, familyId, userId, onDone, isCurrent }: {
         is_recurring: isRecurring, recurrence: isRecurring ? recurrence : null,
         ...(dueDay !== null ? { due_day: dueDay } : {}),
         status: 'upcoming' as const, category,
-      }, p => alive.current && isCurrent() ? supabase.from('bills').insert(p) : Promise.resolve({ data: null, error: new Error('Bill view changed') }));
+      }, p => alive.current && isCurrent() ? supabase.from('bills').insert(p) : Promise.resolve({ data: null, error: new Error('Bill view changed') }), {
+        // Without bills.due_day (0488) a day the first month lacks is added on its last day only if the person says yes.
+        confirmClampedDay: (refusal) => askConfirm(dueDayNotKeptQuestion(refusal, tr, fmtDate, locale.code, 'add')),
+      });
       if (!alive.current || !isCurrent()) return;
+      if (isDueDayNotKept(error)) return;
       if (error) return toastError(isMissingBillDueDay(error) ? tr('bills.scheduleUnavailable') : describeDbError(error));
       success(tr('billingModule.billAdded'));
       reset(); onDone(); onClose();
@@ -1025,13 +1032,23 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
 
   async function markBillPaid(bill: Bill) {
     if (!canWrite() || bill.family_id !== familyId) return;
+    // Without bills.due_day (0488) a clamped roll moves only if the person says yes.
+    const confirmClampedDay = (refusal: DueDayNotKept) => askConfirm(dueDayNotKeptQuestion(refusal, tr, fmtDate, locale.code));
+    let before0488: Awaited<ReturnType<typeof saveBillPaymentBefore0488>> = null;
     if (!billPaidPatch(bill, clock.todayKey())) {
-      const selection = { bill, owner: paymentOwner, ticket: ++paymentTicket.current };
-      currentPayment.current = selection; setPaymentSelection(selection); return;
+      // A row read without due_day is paid as before 0488 once the database
+      // confirms the column is missing; otherwise the person confirms its schedule.
+      before0488 = bill.due_day === undefined ? await saveBillPaymentBefore0488(createClient(), familyId, bill, clock.todayKey(), canWrite, { confirmClampedDay }) : null;
+      if (!before0488) {
+        if (!canWrite()) return;
+        const selection = { bill, owner: paymentOwner, ticket: ++paymentTicket.current };
+        currentPayment.current = selection; setPaymentSelection(selection); return;
+      }
     }
     const supabase = createClient();
-    const { data: rows, error } = await saveBillPayment(supabase, familyId, bill, clock.todayKey(), undefined, false, canWrite);
+    const { data: rows, error } = before0488 ?? await saveBillPayment(supabase, familyId, bill, clock.todayKey(), undefined, false, canWrite, { confirmClampedDay });
     if (!canWrite()) return;
+    if (isDueDayNotKept(error)) return toastError(tr('bills.dueDayNeedsDatabaseUpdate', { day: error.day }));
     if (error) return toastError(isMissingBillDueDay(error) ? tr('bills.scheduleUnavailable') : describeDbError(error));
     if (wroteNoRows(rows)) { toastError(tr('errors.thatChangeWasNotSaved')); void refreshBills(); return; }
     success(tr('billingModule.billMarkedAsPaid'));

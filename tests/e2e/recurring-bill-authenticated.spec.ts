@@ -40,7 +40,9 @@ test.use({ trace: 'off', screenshot: 'off', video: 'off', locale: 'en-US' });
 test.describe('authenticated recurring bill durable anchor', () => {
   test.skip(phase === undefined, 'Requires the explicitly owned isolated CI bill stack and phase.');
   test.setTimeout(240_000);
-  test('real Auth, Next schedule action, browser payment and fresh reload preserve or refuse the anchor', async ({ browser, baseURL }, testInfo) => {
+  // Phase 'old' follows the owner decision of 2026-10-09 (PR #982): without
+  // 0488 bills fall back to pre-0488 behaviour and ask before a clamp.
+  test('real Auth, Next schedule action, browser payment and fresh reload preserve the anchor, or ask before a pre-0488 clamp', async ({ browser, baseURL }, testInfo) => {
     test.skip(testInfo.project.name !== 'chromium', 'Run the owned desktop fixture once.');
     const app = requireLocalOrigin(baseURL), provider = requireLocalOrigin(process.env.NEXT_PUBLIC_SUPABASE_URL);
     if (!['localhost', '127.0.0.1'].includes(new URL(provider).hostname) || new URL(provider).port !== '54321'
@@ -148,17 +150,76 @@ test.describe('authenticated recurring bill durable anchor', () => {
       if (phase === 'old') {
         const safe = await seed(`${year}-01-15`);
         await paid(safe, `${year}-02-15`);
+        // Owner decision 2026-10-09 (PR #982): until held 0488 (bills.due_day)
+        // is applied, recurring bills fall back to the previous production
+        // behaviour instead of refusing. Mark paid on a 31st bill sends the
+        // anchored patch once; on the genuine PGRST204 it drops due_day (and
+        // the cadence it would only respell) and, because Feb has no day 31,
+        // asks before writing the clamp. "Leave it unchanged" writes nothing
+        // and says why; "Mark paid and move it" writes status and due date only.
+        const feb = new Date(Date.UTC(year, 2, 0)).getUTCDate(), febDue = `${year}-02-${feb}`;
         const known = await seed(`${year}-01-31`), before = await read(known.id);
-        const missingColumn = page.waitForResponse(response => new URL(response.url()).origin === provider
-          && new URL(response.url()).pathname === '/rest/v1/bills' && response.request().method() === 'PATCH');
+        // Recorded in arrival order; only a refusal's error code is read later.
+        const patches: { body: Record<string, unknown>; query: URLSearchParams; status: number; code: Promise<unknown> }[] = [];
+        const capture = (response: import('@playwright/test').Response) => {
+          const url = new URL(response.url());
+          if (url.origin !== provider || url.pathname !== '/rest/v1/bills' || response.request().method() !== 'PATCH') return;
+          patches.push({ body: response.request().postDataJSON() as Record<string, unknown>, query: url.searchParams,
+            status: response.status(), code: response.ok() ? Promise.resolve(undefined)
+              : response.json().then((body: { code?: unknown }) => body.code, () => 'unreadable') });
+        };
+        const seen = (from = 0) => Promise.all(patches.slice(from).map(async p => ({ body: p.body, status: p.status, code: await p.code })));
+        page.on('response', capture);
+        const anchored = { status: 'upcoming', due_date: febDue, recurrence: 'monthly', due_day: 31 };
+        const move = page.getByRole('dialog', { name: `Mark paid and move this bill to ${new Date(`${febDue}T00:00:00Z`)
+          .toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}?` });
+        const notKept = 'This bill is due on day 31 of each month, and the next month is shorter. That day can\'t be kept until a database update is applied, so the bill was left as it was and not marked paid.';
+        // Declined: the one refused anchored PATCH, the question, then the
+        // "left as it was" notice and an untouched row.
         await rowFor(page, known.name).getByRole('button', { name: 'Mark paid', exact: true }).click();
-        const refused = await missingColumn;
-        expect(refused.status(), 'Real old-schema PostgREST refusal').toBe(400);
-        expect((await refused.json()).code, 'Genuine PostgREST missing-column code').toBe('PGRST204');
-        await expect(page.getByText(unavailable, { exact: true })).toBeVisible();
+        await expect(move).toBeVisible();
+        await expect(move).toContainText(`This bill is due on day 31 of each month, but February has no day 31. Until a database update is applied, Bubaly can't remember day 31, so from now on it will be due on day ${feb}.`);
+        expect(await seen(), 'Real old-schema PostgREST refusal of the anchored patch')
+          .toEqual([{ body: anchored, status: 400, code: 'PGRST204' }]);
+        await move.getByRole('button', { name: 'Leave it unchanged', exact: true }).click();
+        await expect(move).toBeHidden();
+        await expect(page.getByText(notKept, { exact: true })).toBeVisible();
+        await expect(page.getByText(unavailable, { exact: true })).toHaveCount(0);
+        expect(patches, 'Declining sends no write without due_day').toHaveLength(1);
         expect(await read(known.id)).toEqual(before);
-        const ambiguous = await seed(`${year}-03-28`), snapshot = await read(ambiguous.id);
+        // Accepted: the anchored PATCH is refused again, then the same CAS is
+        // sent with status and due date only (no due_day, stored cadence kept).
+        const requests = payments;
+        await rowFor(page, known.name).getByRole('button', { name: 'Mark paid', exact: true }).click();
+        await expect(move).toBeVisible();
+        await move.getByRole('button', { name: 'Mark paid and move it', exact: true }).click();
+        await expect(move).toBeHidden();
+        await expect.poll(() => patches.length).toBe(3);
+        expect(payments - requests, 'Exactly the refused and the fallback browser PATCH').toBe(2);
+        expect(await seen(1)).toEqual([
+          { body: anchored, status: 400, code: 'PGRST204' },
+          { body: { status: 'upcoming', due_date: febDue }, status: 200, code: undefined },
+        ]);
+        for (const p of patches) {
+          expect(Object.fromEntries(p.query), 'Old-schema CAS never filters on due_day').toEqual({
+            id: `eq.${known.id}`, family_id: `eq.${account.familyId}`, updated_at: `eq.${before.updated_at}`,
+            due_date: `eq.${before.due_date}`, status: 'eq.upcoming', is_recurring: 'eq.true', recurrence: 'eq.monthly', select: 'id',
+          });
+        }
+        page.off('response', capture);
+        const moved = await read(known.id);
+        expect('due_day' in moved, 'Old schema still has no bills.due_day').toBe(false);
+        expect(moved.updated_at !== before.updated_at, 'Source trigger changed updated_at').toBe(true);
+        expect(moved).toEqual({ ...before, due_date: febDue, status: 'upcoming', updated_at: moved.updated_at });
+        await reloadDate(known.name, febDue);
+        expect(await read(known.id)).toEqual(moved);
+        // Schedule edits run server-side with no one to ask, so a day the due
+        // date cannot carry (31 on the 28th) is still refused by the fallback
+        // (DueDayNotKept -> "not available yet"); the row and dialog stay.
+        const ambiguous = await seed(`${year}-03-28`), snapshot = await read(ambiguous.id), browserWrites = payments;
         await confirm(ambiguous.name, '31', unavailable);
+        await expect(page.getByRole('dialog', { name: 'Edit schedule' })).toBeVisible();
+        expect(payments, 'Schedule fallback writes only through the server action').toBe(browserWrites);
         expect(await read(ambiguous.id)).toEqual(snapshot);
         await page.reload(); expect(await read(ambiguous.id)).toEqual(snapshot);
       } else {
