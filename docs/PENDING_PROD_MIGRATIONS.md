@@ -109,9 +109,10 @@ source allocations are not evidence that production applied any migration.
 | 0493 held | `0493_ai_copy_private_read_and_quota.sql` | Private AI copies and count-only usage; missing receipt refuses capped-Free requests. |
 | 0494 held | `0494_sync_atomic_pull.sql` | Service-only admission and atomic item/map creation; missing RPC preserves cursor and refuses writes. |
 | 0495 held | `0495_a_member_invited_back_gets_what_the_invite_grants.sql` | A returning member gets the invite's role; an active member's role is unchanged; a kid login cannot accept another family's invite. Reserved for #981 above every preserved allocation (confirmed in #981 comment 6089092821). |
-| 0496 proposed, held | `0496_a_childs_xp_is_awarded_by_a_parent.sql` | Only a manager or the service role can award a child XP or rewrite streaks through 0341's functions. Requested for #981 on #771 (comment 6089394563); not yet confirmed. |
-| 0497 proposed, held | `0497_a_childs_wallet_and_guardian_number_stay_in_one_family.sql` | 0311's same-family guard on Guardian profiles, gift links, pay handles, child wallets and medication schedules. Requested for #981 on #771 (comment 6092501825); not yet confirmed. |
+| 0496 confirmed, held | `0496_a_childs_xp_is_awarded_by_a_parent.sql` | Only a manager or the service role can award a child XP or rewrite streaks through 0341's functions. Requested for #981 on #771 (comment 6089394563); confirmed as a held source and probe reservation in #981 comment 6092383149, which is not an installation approval. |
+| 0497 confirmed, held | `0497_a_childs_wallet_and_guardian_number_stay_in_one_family.sql` | 0311's same-family guard on Guardian profiles, gift links, pay handles, child wallets and medication schedules. Requested for #981 on #771 (comment 6092501825); confirmed as a source-only reservation in #981 comment 6092625435, which is not an installation approval. |
 | 0498 confirmed, held | `0498_a_guest_cannot_feed_the_calendar_or_rewrite_a_grocery_list.sql` | 0464's guest guard on `calendar_feeds` and `grocery_lists`. Requested for #981 on #771 (comment 6094699645); confirmed as a held source and probe reservation in #981 comment 6094770726, which is not an installation or production approval. |
+| 0499 proposed, held | `0499_a_stored_file_answers_to_its_own_familys_rows.sql` | The `documents` bucket's upload, update and delete policies follow the row of the object's own family that names the file: insurance card images (managers), a household document's bytes (not a guest), a sensitive document's path (managers); another family's rows no longer count. Requested for #981 on #771 (comment 6094859264); not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4320,11 +4321,12 @@ invite a test kid login's address from another test family and confirm the
 kid's acceptance is refused. Confirm a test adult who is not anyone's kid login
 can still accept an invitation.
 
-## `0496` (proposed, held) — a child could award themselves XP
+## `0496` (confirmed, held) — a child could award themselves XP
 
 `supabase/reserved/0496_a_childs_xp_is_awarded_by_a_parent.sql` —
-**held**: proposed as `0496`, the first number above `0495`, for #981. It was
-requested on #771 in comment 6089394563 and is not yet confirmed. It stays
+**held**: `0496`, the first number above `0495`, for #981. It was requested on
+#771 in comment 6089394563 and confirmed as a held source and probe reservation
+in #981 comment 6092383149, which is not an installation approval. It stays
 outside `supabase/migrations/` until every number below it has landed. Its
 probe is held with it in `docs/audit/reserved/`.
 
@@ -4358,12 +4360,13 @@ child is still refused, and under 0341's predicate the child's self-award lands.
 `kid_progress_apply_completion` for your own member and confirm `forbidden`;
 then approve a test chore as a parent and confirm the XP lands.
 
-## `0497` (proposed, held) — a family's row could name another family's child
+## `0497` (confirmed, held) — a family's row could name another family's child
 
 `supabase/reserved/0497_a_childs_wallet_and_guardian_number_stay_in_one_family.sql` —
-**held**: proposed as `0497`, the first number above `0496`, for #981. It was
-requested on #771 in comment 6092501825 and is not yet confirmed. Its probe is
-held with it in `docs/audit/reserved/`.
+**held**: `0497`, the first number above `0496`, for #981. It was requested on
+#771 in comment 6092501825 and confirmed as a source-only reservation in #981
+comment 6092625435, which is not an installation approval. Its probe is held
+with it in `docs/audit/reserved/`.
 
 **Severity: medium (privacy and child contact). Deploy order: any.** 0311
 named the class: each family-scoped write policy checks only the row's own
@@ -4467,6 +4470,93 @@ Leaving `grocery_lists` unwired in the source fails exactly its five lines.
 **After approved release:** as a test guest, try to add a calendar feed and to
 rename a grocery list through PostgREST and confirm 42501; then do both as a
 test child and confirm they land.
+
+## `0499` (proposed, held) — a stored file did not answer to the row that names it
+
+`supabase/reserved/0499_a_stored_file_answers_to_its_own_familys_rows.sql` —
+**held**: proposed as `0499`, the first number above `0498`, for #981. It was
+requested on #771 in comment 6094859264 and is not yet confirmed. Its probe is
+held with it in `docs/audit/reserved/`.
+
+**Severity: medium (integrity of health and household records; a narrow
+cross-family lock-out). Deploy order: any.** The `documents` bucket's four
+policies (0007 upload; 0303 read, update, delete) ask only whether the caller
+belongs to the folder's family and whether a sensitive `documents` row of any
+family restricts the object. storage-api runs upload-with-upsert, update, move
+and remove as SQL under the caller's RLS, so these policies are the whole rule.
+Measured on a replay of every runnable migration, one row each, rolled back:
+- **Insurance card images.** `medical-records-module` uploads them to
+  `{family}/insurance/…` and saves the path on `insurance_policies`, whose
+  writes are managers' only. A child, teen, caregiver and guest each replaced,
+  moved and removed both images.
+- **A household document's bytes.** 0464 refuses a guest at the `documents`
+  row; the guest replaced, moved and removed the file behind it.
+- **A sensitive document's path.** 0007's upload policy never checked
+  sensitivity, so where a sensitive document's file was missing, a teen, child,
+  caregiver or guest uploaded bytes at its path, which the parent's vault would
+  then open.
+- **Across families.** A parent of family A inserted, in A, a sensitive
+  `documents` row whose `storage_path` names a file of family B. Nothing ties
+  the path to the row's family, and 0303's lookup counts any family's row, so
+  B's own parent and child then read 0 of their file. It needs the exact path,
+  so it is narrow.
+
+0499 changes functions and policies only, with no table, trigger or data
+change:
+1. `document_object_is_restricted` counts only rows of the object's own family
+   (the first folder of its path).
+2. A new SECURITY DEFINER helper, `document_object_write_is_refused(name)`,
+   bound the same way, is true when an `insurance_policies` row of that family
+   names the object and the caller cannot manage the family, or a `documents`
+   row of that family names it and the caller is its guest.
+3. The upload, update and delete policies gain that clause in every half that
+   governs a write; the upload policy also gains 0303's
+   `not document_object_is_restricted(name)`. They keep their names, PERMISSIVE
+   and `to authenticated`, so the bucket keeps exactly four policies. The read
+   policy is unchanged.
+
+**Not changed:** tax-vault and trip-memory files keep their rows' rule, any
+member (PROD-002 / ROLE-SCOPE-001, the owner's decision). O-03's step-up for
+stored files (D1, D3) stays the owner's. Every other bucket, family-media
+included, is untouched. **Recorded lead:** the run executor's
+`documents.readDocument` and the super admin's sign and delete use the service
+role on a row-supplied `storage_path` without checking that it lies in the
+row's family; that is the AI-runs and admin owners' call.
+
+A refused update, move or remove is a filter (0 rows), as 0303's already is:
+storage-api answers a refused remove with an empty list, which
+`lib/storage/confirm-removal.ts` reads as "not removed". A refused upload or
+move onto a guarded path gets storage-api's row-level security error.
+
+**Proof:** `.github/workflows/stored-file-rows-runtime.yml` replays every
+runnable migration. It requires the held probe
+`docs/audit/reserved/a-stored-file-answers-to-its-own-familys-rows-check.sql`
+to fail on the released schema with those writes landing, applies 0499 twice,
+and requires the probe to pass. It then re-runs the bucket's released probes
+(`document-bytes-boundary`, `document-vault-boundary`,
+`document-category-classifier`, `bucket-visibility-is-declared`) over the
+re-created policies. The passing run shows, for six roles and an outsider on
+six files (read, replace, move away, move onto, remove, upload):
+- only a parent or adult replaces, moves, removes or re-uploads an insurance
+  card image, and every role still reads it;
+- everyone but the guest writes a household document's bytes;
+- tax files are unchanged for every role;
+- only a manager reads, writes or uploads at a sensitive document's path;
+- another family's planted rows neither hide the file nor block its family;
+- four mutation controls (the delete policy without the clause, the update
+  policy's USING half without it, and each function without its own-family
+  binding) each turn a refusal back into a landing.
+
+Seven source mutations were checked locally: removing the guest clause, the
+insurance clause, the restricted function's binding, the upload policy's
+sensitivity check, or the clause from the update USING, update CHECK or delete
+policy each turns the probe red with the matching line. 184 of 184 released
+probes pass with and without 0499.
+
+**After approved release:** as a test child, try to replace and to remove a
+test insurance card image through the Storage API and confirm both are
+refused; then do both as a test parent and confirm they land. As a test guest,
+try to remove the file behind an ordinary test document and confirm it stays.
 
 ## `0471` and `0474` — the admin digest's delivery store, and a removed admin is not sent it
 
