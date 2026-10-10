@@ -7,7 +7,7 @@ import { dispatchPendingPushes } from '@/lib/server/push';
 import { deliverNotificationEmails } from '@/lib/server/notification-emails';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { deliverMorningBriefs } from '@/lib/briefing/deliver';
-import { expireStale, remindPendingApprovals } from '@/lib/services/approvals';
+import { expireStale, remindPendingApprovals, resumeSettledRuns } from '@/lib/services/approvals';
 
 export const runtime = 'nodejs';
 
@@ -50,11 +50,24 @@ export async function GET(req: NextRequest) {
   // run before push dispatch so the reminders ride the same tick's pushes.
   // A sweep failure counts as a generation failure: the reminders it would
   // have produced are notifications this tick did not generate.
-  let approvals = { expired: 0, blockedRuns: 0, reminded: 0, remindedFamilies: 0 };
+  // The sweeps RETURN their failures (a refused read or write) rather than
+  // throw, so those are counted here too: a tick whose approvals stopped
+  // expiring or reminding must answer 502, not 200.
+  //
+  // `resumeSettledRuns` runs after the expiry: a run still parked on an
+  // approval that was decided (or expired) while its fold failed is returned
+  // to the queue, since no claim path ever leases `awaiting_approval`.
+  let approvals = { expired: 0, blockedRuns: 0, reminded: 0, remindedFamilies: 0, resumedRuns: 0, failures: 0 };
   try {
     const swept = await expireStale(supabase);
+    const resumed = await resumeSettledRuns(supabase);
     const reminded = await remindPendingApprovals(supabase);
-    approvals = { ...swept, reminded: reminded.reminded, remindedFamilies: reminded.families };
+    const failures = swept.failures + resumed.failures + reminded.failures;
+    generationFailures += failures;
+    approvals = {
+      expired: swept.expired, blockedRuns: swept.blockedRuns, reminded: reminded.reminded, remindedFamilies: reminded.families,
+      resumedRuns: resumed.resumed, failures,
+    };
   } catch (e) {
     generationFailures += 1;
     console.error('Approval expiry/reminder sweep failed:', e);
