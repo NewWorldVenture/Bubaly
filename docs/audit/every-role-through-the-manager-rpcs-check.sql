@@ -37,7 +37,10 @@
 -- "refused" ('forbidden').
 --
 -- The predicates the gates are built from are asserted for the same actors:
--- can_manage_family, is_family_admin, is_family_member and family_role.
+-- can_manage_family, is_family_admin, is_family_member and family_role, and
+-- the social module's social_role_for (parent admin, adult marketing manager,
+-- teen content creator, everyone else read-only, non-members none) and
+-- social_has_permission for publish_posts (the parent and the adult only).
 --
 -- MUTATION CONTROLS. Inside the transaction, one row-first gate
 -- (guardian_review_suggestion) and one gate-first gate (wallet_transfer) are
@@ -117,21 +120,21 @@ begin
    where family_id = '00000000-0000-4000-8a11-0000000000f2' and user_id = '00000000-0000-4000-8a11-0000000000b1';
 
   for a in select * from (values
-      ('parent',          '00000000-0000-4000-8a11-0000000000a1'::uuid, 'authenticated', true,  true,  true,  'parent'),
-      ('adult',           '00000000-0000-4000-8a11-0000000000a2'::uuid, 'authenticated', true,  false, true,  'adult'),
-      ('teen',            '00000000-0000-4000-8a11-0000000000a3'::uuid, 'authenticated', false, false, true,  'teen'),
-      ('child',           '00000000-0000-4000-8a11-0000000000a4'::uuid, 'authenticated', false, false, true,  'child'),
-      ('caregiver',       '00000000-0000-4000-8a11-0000000000a5'::uuid, 'authenticated', false, false, true,  'caregiver'),
-      ('guest',           '00000000-0000-4000-8a11-0000000000a6'::uuid, 'authenticated', false, false, true,  'guest'),
+      ('parent',          '00000000-0000-4000-8a11-0000000000a1'::uuid, 'authenticated', true,  true,  true,  'parent',    'admin',             true),
+      ('adult',           '00000000-0000-4000-8a11-0000000000a2'::uuid, 'authenticated', true,  false, true,  'adult',     'marketing_manager', true),
+      ('teen',            '00000000-0000-4000-8a11-0000000000a3'::uuid, 'authenticated', false, false, true,  'teen',      'content_creator',   false),
+      ('child',           '00000000-0000-4000-8a11-0000000000a4'::uuid, 'authenticated', false, false, true,  'child',     'read_only',         false),
+      ('caregiver',       '00000000-0000-4000-8a11-0000000000a5'::uuid, 'authenticated', false, false, true,  'caregiver', 'read_only',         false),
+      ('guest',           '00000000-0000-4000-8a11-0000000000a6'::uuid, 'authenticated', false, false, true,  'guest',     'read_only',         false),
       -- family_role reads the row whatever its activity, so a removed parent
       -- still answers 'parent'. Recorded, not asserted as a defect: its one
       -- consumer, the guest write guard (0464), only uses it to refuse, and
       -- every policy that would admit them reads is_family_member, which is
       -- false. If that ever changes, this line fails on purpose.
-      ('removed parent',  '00000000-0000-4000-8a11-0000000000a7'::uuid, 'authenticated', false, false, false, 'parent'),
-      ('outsider parent', '00000000-0000-4000-8a11-0000000000b1'::uuid, 'authenticated', false, false, false, null),
-      ('anon',            null::uuid,                                   'anon',          false, false, false, null)
-    ) as v(label, uid, pg_role, manages, admin, member, role) loop
+      ('removed parent',  '00000000-0000-4000-8a11-0000000000a7'::uuid, 'authenticated', false, false, false, 'parent',    null,                false),
+      ('outsider parent', '00000000-0000-4000-8a11-0000000000b1'::uuid, 'authenticated', false, false, false, null,        null,                false),
+      ('anon',            null::uuid,                                   'anon',          false, false, false, null,        null,                false)
+    ) as v(label, uid, pg_role, manages, admin, member, role, social, publishes) loop
 
     -- The predicates, as this actor. Read inside a rolled-back block so the
     -- role switch cannot leak into the next actor.
@@ -144,7 +147,9 @@ begin
         raise exception 'CONTROL: the impersonation of the % did not take', a.label;
       end if;
       raise exception using errcode = 'P0R01', message = concat_ws('|',
-        public.can_manage_family(fam), public.is_family_admin(fam), public.is_family_member(fam), public.family_role(fam));
+        coalesce(public.can_manage_family(fam)::text, 'null'), coalesce(public.is_family_admin(fam)::text, 'null'),
+        coalesce(public.is_family_member(fam)::text, 'null'), coalesce(public.family_role(fam)::text, 'null'),
+        coalesce(public.social_role_for(fam)::text, 'null'), coalesce(public.social_has_permission(fam, 'publish_posts')::text, 'null'));
     exception
       when sqlstate 'P0R01' then got := sqlerrm;
       when others then
@@ -164,9 +169,10 @@ begin
       when 'removed parent' then '00000000-0000-4000-8a11-0000000000d7'
       when 'outsider parent' then outsider_member
     end;
-    if got is distinct from concat_ws('|', a.manages, a.admin, a.member, a.role) then
-      failures := array_append(failures, format('%s: can_manage_family|is_family_admin|is_family_member|family_role answered %s, expected %s',
-        a.label, got, concat_ws('|', a.manages, a.admin, a.member, a.role)));
+    if got is distinct from concat_ws('|', a.manages::text, a.admin::text, a.member::text, coalesce(a.role, 'null'),
+                                      coalesce(a.social, 'null'), a.publishes::text) then
+      failures := array_append(failures, format('%s: can_manage_family|is_family_admin|is_family_member|family_role|social_role_for|social_has_permission(publish_posts) answered %s, expected %s',
+        a.label, got, concat_ws('|', a.manages::text, a.admin::text, a.member::text, coalesce(a.role, 'null'), coalesce(a.social, 'null'), a.publishes::text)));
     end if;
 
     for c in select * from (values
@@ -261,7 +267,7 @@ begin
   if array_length(failures, 1) is not null then
     raise exception E'a manager-only RPC answers the wrong role:\n  - %', array_to_string(failures, E'\n  - ');
   end if;
-  raise notice 'every-role-through-the-manager-rpcs: OK (99 calls: the parent and the adult got past the gate of all eleven manager RPCs; the teen, child, caregiver, guest, a removed parent, a parent of another family and anon were refused at it; can_manage_family, is_family_admin, is_family_member and family_role answered as designed for all nine actors; mutation controls: with guardian_review_suggestion''s and wallet_transfer''s gates loosened to is_family_member the child got past both)';
+  raise notice 'every-role-through-the-manager-rpcs: OK (99 calls: the parent and the adult got past the gate of all eleven manager RPCs; the teen, child, caregiver, guest, a removed parent, a parent of another family and anon were refused at it; can_manage_family, is_family_admin, is_family_member, family_role, social_role_for and social_has_permission(publish_posts) answered as designed for all nine actors; mutation controls: with guardian_review_suggestion''s and wallet_transfer''s gates loosened to is_family_member the child got past both)';
 end $$;
 
 rollback;
