@@ -143,6 +143,8 @@ declare
   verb     text;
   k        int;
   i_closed boolean;
+  row_txt  text;
+  t        record;
   looser   boolean;
   tighter  boolean;
   n        int;
@@ -303,6 +305,33 @@ begin
   exception when sqlstate 'P0R01' then null;
   end;
   perform set_config('role','postgres', true);
+
+  -- The family helper agrees with the policies' uuid cast on every spelling,
+  -- valid and not, and opens no subtransaction (a plain SQL function).
+  if to_regprocedure('public.document_object_family(text)') is not null then
+    for t in select * from (values
+        ('00000000-0000-4000-8499-0000000000f1'), ('00000000-0000-4000-8499-0000000000F1'),
+        ('{00000000-0000-4000-8499-0000000000f1}'), ('000000000000400084990000000000f1'),
+        ('{000000000000400084990000000000f1}'), ('0000-0000-0000-4000-8499-0000-0000-00f1'),
+        ('{00000000-0000-4000-8499-0000000000f1'), ('00000000-0000-4000-8499-0000000000f1}'),
+        (' 00000000-0000-4000-8499-0000000000f1'), ('00000000--0000-4000-8499-0000000000f1'),
+        ('00000000-0000-4000-8499-0000000000f1-'), ('not-a-family'), ('')
+      ) as v(folder) loop
+      begin
+        got := (t.folder::uuid)::text;
+      exception when others then got := null;
+      end;
+      execute 'select public.document_object_family($1)::text' into row_txt using t.folder || '/x.pdf';
+      if row_txt is distinct from got then
+        failures := array_append(failures, format('the family helper reads folder %L as %s, but the policies'' cast reads it as %s', t.folder, coalesce(row_txt, 'null'), coalesce(got, 'an error')));
+      end if;
+    end loop;
+    if not exists (select 1 from pg_proc f
+                    where f.oid = to_regprocedure('public.document_object_family(text)')
+                      and f.prolang = (select oid from pg_language where lanname = 'sql')) then
+      failures := array_append(failures, 'the family helper is not a plain SQL function, so a storage listing pays a subtransaction per object');
+    end if;
+  end if;
 
   if installed then
     -- M1. Without the clause on the delete policy, the child's delete lands.

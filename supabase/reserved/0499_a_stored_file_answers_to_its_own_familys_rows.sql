@@ -106,22 +106,29 @@ $$;
 
 -- 0. The object's family, read exactly as the bucket's policies read it:
 --    the first folder cast to uuid. Every spelling the cast accepts (upper
---    case, braces, no hyphens) resolves to the same family, so a row is matched
---    on the uuid and never on the path's text. A first folder that is not a
---    uuid, or no folder, resolves to null, and both helpers below then refuse
---    (fail closed). The policies' own cast raises on such a name before either
---    helper matters; this keeps the helpers closed on their own as well.
+--    case, braces, no hyphens, a hyphen after any group of four) resolves to
+--    the same family, so a row is matched on the uuid and never on the path's
+--    text. A first folder that is not a uuid, or no folder, resolves to null,
+--    and both helpers below then refuse (fail closed). The policies' own cast
+--    raises on such a name before either helper matters; this keeps the helpers
+--    closed on their own as well.
+--
+--    The shape is checked with a pattern that accepts exactly what the cast
+--    accepts, and only then cast, rather than catching the cast's error: an
+--    exception block would open a subtransaction for every object a storage
+--    listing evaluates. Should the two ever disagree the cast raises, which is
+--    closed too.
 create or replace function public.document_object_family(p_object_name text)
 returns uuid
-language plpgsql
+language sql
 stable
 set search_path = public, pg_temp
 as $$
-begin
-  return ((storage.foldername(p_object_name))[1])::uuid;
-exception when invalid_text_representation then
-  return null;
-end
+  select case
+    when s.folder ~* '^(\{[0-9a-f]{4}(-?[0-9a-f]{4}){7}\}|[0-9a-f]{4}(-?[0-9a-f]{4}){7})$'
+      then s.folder::uuid
+  end
+  from (select (storage.foldername(p_object_name))[1] as folder) s;
 $$;
 
 comment on function public.document_object_family(text) is
@@ -255,6 +262,11 @@ begin
            and p.qual ~ 'NOT document_object_write_is_refused\(name\)'));
   if n <> 3 then
     raise exception '0499: % of 3 write policies on the documents bucket carry the row rule', n;
+  end if;
+  if not exists (select 1 from pg_proc f
+                  where f.oid = 'public.document_object_family(text)'::regprocedure
+                    and f.prolang = (select oid from pg_language where lanname = 'sql')) then
+    raise exception '0499: document_object_family is not a plain SQL function (no per-row subtransaction)';
   end if;
   if not exists (select 1 from pg_proc f
                   where f.oid = 'public.document_object_write_is_refused(text)'::regprocedure

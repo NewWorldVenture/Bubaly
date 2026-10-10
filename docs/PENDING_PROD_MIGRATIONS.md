@@ -4511,6 +4511,9 @@ change:
    as the policies read it: the first folder cast to uuid. Braces, no hyphens
    and upper case all resolve to the same family, and a first folder that is
    not a uuid resolves to null, which both row helpers refuse (fail closed).
+   It is a plain SQL function that checks the shape with a pattern accepting
+   exactly what the cast accepts before casting, so a storage listing pays no
+   subtransaction per object (an exception block would).
    The review of the first cut (6094986591) found it compared the path's text
    instead, so a sensitive document stored under `{family id}` became
    readable and writable by every non-manager; the probe now stores real
