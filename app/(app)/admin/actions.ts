@@ -248,16 +248,19 @@ export async function adminRemoveMemberAction(memberId: string): Promise<Result<
   // A removed child's PIN login is switched off too; the removal stands if that fails.
   const loginRevocation = await revokeRemovedChildLogin(supabase, member);
   // Their last position and location history leave with them. The removal
-  // stands if this fails as well; the failure is logged and the audit row says
-  // whether the location was cleared.
+  // stands if this fails as well; the failure is logged, the audit row says
+  // whether the location was cleared, and the console is told — as it is told
+  // about a login that could not be signed out. (The daily retention sweep
+  // repairs the live row of any member no longer active.)
   const forgotten = await forgetMemberLocation(supabase, member.family_id, memberId);
   if (!forgotten.ok) console.error('[admin-action] removed member location was not cleared', { memberId, failures: forgotten.failures });
 
   await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name, login_revocation: loginRevocation, location_forgotten: forgotten.ok } });
   revalidatePath('/admin/users');
-  return loginRevocation === 'failed'
-    ? { ok: true, data: { warning: t('familyModule.removedButLoginStillActive') } }
-    : { ok: true };
+  const warning = loginRevocation === 'failed'
+    ? t('familyModule.removedButLoginStillActive')
+    : !forgotten.ok ? t('familyModule.removedButLocationStillVisible') : null;
+  return warning ? { ok: true, data: { warning } } : { ok: true };
 }
 
 /** Updates a member's display name and role. */

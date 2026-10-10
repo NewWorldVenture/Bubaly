@@ -6381,6 +6381,7 @@
   "familyModule.familyProfileUpdated": "Family profile updated",
   "familyModule.memberRemoved": "Member removed",
   "familyModule.removedButLoginStillActive": "The member was removed, but their PIN login could not be signed out. Please contact support to switch it off.",
+  "familyModule.removedButLocationStillVisible": "The member was removed, but their last location could not be cleared and may still show on the family map.",
   "familyModule.pasteAnImageUrlFor": "Paste an image URL for your family cover.",
   "familyModule.showFewer": "Show fewer",
   "familyModule.unknownTimeZone": "Unknown time zone. Use a name like America/Chicago.",

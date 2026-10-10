@@ -6190,6 +6190,7 @@
   "familyModule.familyProfileUpdated": "Perfil da família atualizado",
   "familyModule.memberRemoved": "Membro removido",
   "familyModule.removedButLoginStillActive": "O membro foi removido, mas não foi possível terminar a sessão do seu acesso com PIN. Contacta o suporte para o desativar.",
+  "familyModule.removedButLocationStillVisible": "O membro foi removido, mas não foi possível apagar a sua última localização, que pode continuar visível no mapa da família.",
   "familyModule.pasteAnImageUrlFor": "Cole o URL de uma imagem para a capa da sua família.",
   "familyModule.showFewer": "Mostrar menos",
   "familyModule.unknownTimeZone": "Fuso horário desconhecido. Use um nome como America/Chicago.",

@@ -17,12 +17,23 @@
 // contact at a ring-through trust level (immediate family, close family,
 // trusted friend) is who the number exists to let through: past the cap they
 // lose the model call, never the delivery. The family-wide cap holds for all.
+//
+// And the cap is a HARD cap on model spend. A count that cannot be read used
+// to read as zero (fail-open), so a slow or refused count bought the model
+// call; now an unreadable count withholds the model call and nothing else —
+// the message is still recorded and delivered. The WhatsApp lane also counted
+// BEFORE it recorded the message, so concurrent distinct deliveries at one
+// under the cap all read "under" and all bought a model call; it now records
+// first and counts second, as the SMS lane always did, and a message it could
+// not record (and so cannot count) buys no model call either.
 import { createHmac } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
+import { at } from './helpers/source-order';
 import { GUARDIAN_INBOUND_FAMILY_CAP, GUARDIAN_INBOUND_SENDER_CAP } from '@/lib/guardian/inbound-caps';
 
 const seam = vi.hoisted(() => ({ service: vi.fn(), pipeline: vi.fn(), scam: vi.fn(), notify: vi.fn() }));
@@ -84,6 +95,30 @@ async function whatsapp(smsSid: string, from: string, body = 'hello?') {
 }
 
 const commFor = (smsSid: string) => db.table('guardian_communications').find((row) => row.twilio_sms_sid === smsSid);
+
+/**
+ * The inbox table answers every COUNT with a resolved error (a statement
+ * timeout, as PostgREST reports it) while every other read and write still
+ * works — the shape of a slow count under load.
+ */
+function refuseCounts(client: InMemorySupabase): void {
+  const before = client.from.bind(client);
+  const reply = { data: null, error: { code: '57014', message: 'canceling statement due to statement timeout' }, count: null, status: 503, statusText: 'Service Unavailable' };
+  const chain: Record<string | symbol, unknown> = new Proxy({}, {
+    get(_target, prop) {
+      if (prop === 'then') return (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) => Promise.resolve(reply).then(resolve, reject);
+      return () => chain;
+    },
+  });
+  client.from = ((table: string) => {
+    const query = before(table);
+    if (table !== 'guardian_communications') return query;
+    const realSelect = query.select.bind(query);
+    query.select = ((list?: string, opts?: { count?: 'exact' | 'planned' | 'estimated'; head?: boolean }) =>
+      (opts?.head ? chain : realSelect(list, opts))) as typeof query.select;
+    return query;
+  }) as InMemorySupabase['from'];
+}
 
 /**
  * The tables as the migrations declare them: guardian_communications.started_at
@@ -288,5 +323,60 @@ describe('an inbound WhatsApp', () => {
       expect(commFor(sid(15))).toMatchObject({ status: 'blocked', trust_level_at_time: 'immediate_family' });
       expect(String(commFor(sid(15))?.ai_decision_reason)).toMatch(/hourly message cap/);
     });
+  });
+});
+
+describe('the cap is a hard cap on model spend', () => {
+  it('concurrent WhatsApp deliveries at one under the cap buy at most one model call between them', async () => {
+    priorMessages(GUARDIAN_INBOUND_SENDER_CAP - 1, SENDER, 'whatsapp_inbound');
+    const sids = [sid(20), sid(21), sid(22)];
+    const responses = await Promise.all(sids.map((smsSid) => whatsapp(smsSid, SENDER)));
+    for (const res of responses) expect(res.status).toBe(200);
+    // The defect: the lane counted before it recorded, so all three read
+    // "nine this hour" and all three bought a model call.
+    expect(seam.scam.mock.calls.length).toBeLessThanOrEqual(1);
+    // Every message is still recorded, and each is processed to a decision.
+    for (const smsSid of sids) expect(commFor(smsSid)).toMatchObject({ body: 'hello?', status: expect.stringMatching(/^(received|blocked)$/) });
+    expect(db.table('guardian_callback_events').filter((row) => row.status === 'processed')).toHaveLength(3);
+  });
+
+  it('an inbound SMS whose cap count cannot be read is recorded and announced without a model call', async () => {
+    refuseCounts(db);
+    expect(await sms(sid(30), SENDER)).toBe('completed');
+    // The defect: the unreadable count read as zero, and the model was asked.
+    expect(seam.scam).not.toHaveBeenCalled();
+    // Only the model call is withheld: the message is kept and the family told.
+    expect(commFor(sid(30))).toMatchObject({ status: 'received', body: 'Dentist appointment tomorrow' });
+    expect(String(commFor(sid(30))?.ai_decision_reason)).not.toMatch(/hourly message cap/);
+    expect(db.table('notifications')).toHaveLength(1);
+  });
+
+  it('an inbound WhatsApp whose cap count cannot be read is recorded and announced without a model call', async () => {
+    refuseCounts(db);
+    expect((await whatsapp(sid(31), SENDER)).status).toBe(200);
+    expect(seam.scam).not.toHaveBeenCalled();
+    expect(seam.notify).toHaveBeenCalledOnce();
+    expect(commFor(sid(31))).toMatchObject({ status: 'received', body: 'hello?' });
+    expect(String(commFor(sid(31))?.ai_decision_reason)).not.toMatch(/hourly message cap/);
+  });
+
+  it('an inbound WhatsApp that could not be recorded cannot be counted, and buys no model call either', async () => {
+    // The row this delivery would write already exists (twilio_sms_sid is
+    // unique), so the insert is refused and the message goes on unlogged.
+    db.seed('guardian_communications', [{ id: `cccccccc-0000-4000-8000-${'0'.repeat(12)}`, family_id: FAMILY, member_id: MEMBER, comm_type: 'whatsapp_inbound', direction: 'inbound',
+      from_number: OTHER, to_number: GUARDIAN, body: 'an earlier delivery', twilio_sms_sid: sid(32), status: 'received', started_at: minutesAgo(1) }]);
+    expect((await whatsapp(sid(32), SENDER)).status).toBe(200);
+    // The defect: counted before recording, so the failed record was invisible
+    // to the cap and the model was asked for a message the ledger never saw.
+    expect(seam.scam).not.toHaveBeenCalled();
+    // Still delivered, as the route has always promised for a failed record.
+    expect(seam.notify).toHaveBeenCalledOnce();
+    expect(db.table('guardian_callback_events')).toEqual([expect.objectContaining({ event_id: sid(32), status: 'processed' })]);
+  });
+
+  it('the WhatsApp lane records before it counts, like the SMS lane', () => {
+    const source = readFileSync('app/api/guardian/inbound/whatsapp/route.ts', 'utf8');
+    expect(at(source, "from('guardian_communications').insert(")).toBeLessThan(at(source, 'await overInboundCap('));
+    expect(at(source, 'await overInboundCap(')).toBeLessThan(at(source, 'await detectScamWithAI('));
   });
 });
