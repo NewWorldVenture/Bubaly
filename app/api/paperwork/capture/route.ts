@@ -15,6 +15,8 @@ const unavailable = { ok: false, reason: 'unavailable', retryable: true } as con
 export async function POST(req: NextRequest) {
   let ctx: Awaited<ReturnType<typeof requireUserContext>>;
   try { ctx = await requireUserContext(); } catch { return NextResponse.json(unavailable, { status: 401 }); }
+  // Guests are view-only: they cannot file paperwork into the household queue.
+  if (ctx.active.role === 'guest') return NextResponse.json({ ok: false, reason: 'access_denied', retryable: false }, { status: 403 });
   try {
     const assurance = await aal2Verdict(ctx, 'documents', '/dashboard/paperwork');
     if (assurance.action === 'step_up') return NextResponse.json({ ok: false, reason: 'step_up', retryable: false, stepUp: assurance.to }, { status: 403 });
@@ -43,7 +45,7 @@ export async function POST(req: NextRequest) {
       input = { captureId: (body.value as { captureId: string }).captureId };
     }
     const result = await captureDocument(scopeFromUserContext(ctx, db), input);
-    const status = result.ok ? 200 : result.reason === 'needs_file' ? 404 : result.retryable ? 503 : 400;
+    const status = result.ok ? 200 : result.reason === 'needs_file' ? 404 : result.reason === 'access_denied' ? 403 : result.retryable ? 503 : 400;
     return NextResponse.json(result, { status });
   } catch {
     console.error('[paperwork-capture] request failed');

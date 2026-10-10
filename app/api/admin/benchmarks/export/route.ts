@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
+import { superAdminAssurance, SUPER_ADMIN_STEP_UP_PATH } from '@/lib/auth/super-admin-assurance';
 import { createServiceClient } from '@/lib/supabase/server';
 import { recordAudit } from '@/lib/server/audit';
 import { readBenchmarkAggregates } from '@/lib/network/benchmarks-server';
@@ -18,6 +19,7 @@ export async function GET() {
   const user = await getUser();
   if (!user) return NextResponse.json({ error: t('benchmarksExport.signInRequired') }, { status: 401, headers: { 'Cache-Control': 'no-store' } });
   if (!(await isSuperAdmin())) return NextResponse.json({ error: t('benchmarksExport.notAuthorized') }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
+  if (!(await superAdminAssurance()).ok) return NextResponse.json({ error: 'step_up_required', stepUp: SUPER_ADMIN_STEP_UP_PATH }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
 
   const supabase = createServiceClient();
   const read = await readBenchmarkAggregates(supabase);

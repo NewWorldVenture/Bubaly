@@ -39,6 +39,7 @@ import { useBillingSubscription } from '@/lib/hooks/use-billing-subscription';
 import { SelectedPlanReview } from '@/components/billing/selected-plan-review';
 import { isReviewPlan, parseReviewSelection, type ReviewPlan } from '@/lib/billing/review-selection';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
+import { settleAction } from '@/lib/ui/settle-action';
 import { useToast } from '@/components/ui/toast';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { Badge } from '@/components/ui/badge';
@@ -113,8 +114,10 @@ const PLAN_LABELS: Record<string, { nameKey: string; descriptionKey: string }> =
 async function openPortal(): Promise<{ ok: true } | { ok: false; error: string | null }> {
   try {
     const res = await fetch('/api/billing/portal', { method: 'POST' });
-    const json = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+    const json = (await res.json().catch(() => ({}))) as { url?: string; error?: string; stepUp?: string };
     if (res.ok && json.url) { window.location.href = json.url; return { ok: true }; }
+    // The route asks for the two-step code on an aal1 session: go enter it.
+    if (json.stepUp) { reportRefusal({ error: json.error ?? '', stepUp: json.stepUp }, () => {}); return { ok: true }; }
     return { ok: false, error: json.error ?? null };
   } catch {
     return { ok: false, error: null };
@@ -740,7 +743,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       try {
         const res = await fetch('/api/billing/change-plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan }) });
         const json = await res.json();
-        if (!res.ok) { toastError(json.error ?? tr('billingModule.couldNotChangeThePlan')); return; }
+        if (!res.ok) { reportRefusal({ error: json.error ?? tr('billingModule.couldNotChangeThePlan'), stepUp: json.stepUp }, toastError); return; }
         if (json.url) { window.location.href = json.url; return; }       // Free → Checkout
         if (json.changed) { success(tr('billingModule.planUpdatedYourNextInvoice')); }
         else if (json.message) { success(json.message); }
@@ -781,7 +784,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         return;
       }
       if (!current()) return;
-      if (!res.ok) { toastError(json.error ?? tr('billingModule.couldNotChangeThePlan')); return; }
+      if (!res.ok) { reportRefusal({ error: json.error ?? tr('billingModule.couldNotChangeThePlan'), stepUp: json.stepUp }, toastError); return; }
       if (json.url) { window.location.href = json.url; return; }
       success(tr('billingReview.alreadyCurrent'));
       await loadSub();
@@ -822,7 +825,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       try {
         const res = await fetch('/api/billing/cancel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resume }) });
         const json = await res.json();
-        if (!res.ok) { toastError(json.error ?? tr('billingModule.couldNotUpdateTheSubscription')); return; }
+        if (!res.ok) { reportRefusal({ error: json.error ?? tr('billingModule.couldNotUpdateTheSubscription'), stepUp: json.stepUp }, toastError); return; }
         success(resume ? 'Your plan will continue.' : 'Your plan will end at the period’s end.');
         await loadSub();
       } catch { toastError(tr('billingModule.couldNotUpdateTheSubscription')); }
@@ -1000,7 +1003,8 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   // ── CRUD helpers ────────────────────────────────────────────────────────
   async function deleteTransaction(id: string) {
     if (!(await askConfirm({ title: tr('billing.deleteTransactionQ'), body: tr('confirm.cannotBeUndone') }))) return;
-    const res = await deleteTransactionAction(id);
+    const res = await settleAction(() => deleteTransactionAction(id), tr('actions.couldNotRemoveThatTransaction'), toastError, refreshTransactions);
+    if (!res) return;
     if (!res.ok) return reportRefusal(res, toastError);
     success(tr('billingModule.transactionRemoved'));
     void refreshTransactions();
@@ -1008,7 +1012,8 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
 
   async function deleteBudget(id: string) {
     if (!(await askConfirm({ title: tr('billing.deleteBudgetQ'), body: tr('confirm.cannotBeUndone') }))) return;
-    const res = await deleteBudgetAction(id);
+    const res = await settleAction(() => deleteBudgetAction(id), tr('actions.couldNotRemoveThatBudget'), toastError, refreshBudgets);
+    if (!res) return;
     if (!res.ok) return reportRefusal(res, toastError);
     success(tr('billingModule.budgetRemoved'));
     void refreshBudgets();
@@ -1057,7 +1062,8 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
 
   async function deleteGoal(id: string) {
     if (!(await askConfirm({ title: tr('billing.deleteGoalQ'), body: tr('confirm.cannotBeUndone') }))) return;
-    const res = await deleteSavingsGoalAction(id);
+    const res = await settleAction(() => deleteSavingsGoalAction(id), tr('actions.couldNotRemoveThatSavings'), toastError, refreshGoals);
+    if (!res) return;
     if (!res.ok) return reportRefusal(res, toastError);
     success(tr('billingModule.goalRemoved'));
     void refreshGoals();

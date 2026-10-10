@@ -59,6 +59,12 @@ declare
   -- them too (its KNOWN_UNFIXED records the call sites that measurement
   -- revealed).
   recorded text[] := array[
+    -- 0478 (goals) and 0479 (family_reminders, todo_items), 2026-10-10
+    'family_reminders', 'goals', 'todo_items',
+    -- rls sweep 2026-10-10 (0481)
+    'dashboard_layout_events', 'dining_out', 'expense_split_shares', 'family_announcements', 'family_dates',
+    'family_food_scores', 'family_poll_options', 'meal_nutrition', 'meal_vote_options', 'meal_votes',
+    'medication_doses', 'trip_memories', 'wishlist_items',
     'ai_conversations', 'ai_messages', 'allowance_rules', 'announcement_reads',
     'approval_requests', 'assistant_links', 'autopilot_suggestions',
     'babysitter_payments', 'babysitter_profiles', 'behavior_logs', 'billing_customers',

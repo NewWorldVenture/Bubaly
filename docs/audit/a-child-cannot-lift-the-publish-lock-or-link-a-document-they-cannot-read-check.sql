@@ -142,6 +142,10 @@ insert into public.documents (id, family_id, title, category, storage_path, is_s
   -- sensitive by CATEGORY alone (is_secure false), the case 0312 widened
   ('00000000-0000-4000-8000-000000387a13',:'FA','Parent passport','Passports & IDs',
      '00000000-0000-4000-8000-000000387a00/passport.pdf', false, :'UP'),
+  -- a second vault document, so the parent's positive control can link and
+  -- repoint without repeating a (trip, document) pair 0484 makes unique
+  ('00000000-0000-4000-8000-000000387a17',:'FA','Vault will','general',
+     '00000000-0000-4000-8000-000000387a00/will.pdf', true, :'UP'),
   -- an ordinary document of the OTHER household
   ('00000000-0000-4000-8000-000000387b11',:'FX','Other house itinerary','Itinerary',
      '00000000-0000-4000-8000-000000387b00/itinerary.pdf', false, :'UX')
@@ -382,6 +386,7 @@ declare
   d_plain  constant uuid := '00000000-0000-4000-8000-000000387a11';
   d_vault  constant uuid := '00000000-0000-4000-8000-000000387a12';
   d_pass   constant uuid := '00000000-0000-4000-8000-000000387a13';
+  d_vault2 constant uuid := '00000000-0000-4000-8000-000000387a17';
   d_other  constant uuid := '00000000-0000-4000-8000-000000387b11';
   r_linked constant uuid := '00000000-0000-4000-8000-000000387a20';
   r_mine   constant uuid := '00000000-0000-4000-8000-000000387a21';
@@ -526,15 +531,28 @@ begin
   end;
 
   -- ── Positive: the parent links and repoints to vault documents ───────────
+  -- 0484 makes (vacation_id, document_id) unique and the fixture row r_linked
+  -- already holds the vault deed on this trip, so the parent links the
+  -- passport and repoints at the second vault document — both sensitive,
+  -- neither a pair already on the trip, and the passport is free again for
+  -- the server below.
   perform set_config('request.jwt.claim.sub', up::text, true);
   begin
     insert into public.vacation_documents (id, family_id, vacation_id, document_id, kind, title, created_by)
-      values (r_parent, fam, trip, d_vault, 'other', 'Vault deed', up);
-    update public.vacation_documents set document_id = d_pass where id = r_parent;
+      values (r_parent, fam, trip, d_pass, 'other', 'Parent passport', up);
+    update public.vacation_documents set document_id = d_vault2 where id = r_parent;
     get diagnostics n = row_count;
     if n <> 1 then failures := array_append(failures, 'the PARENT could not repoint a link at a sensitive document — the guard refuses a manager'); end if;
   exception when others then
     failures := array_append(failures, format('the PARENT could not link a sensitive document (%s: %s) — the guard refuses a manager', sqlstate, sqlerrm));
+  end;
+  -- 0484: the same document linked to the same trip twice is a 23505, the
+  -- answer linkToVacation reads as "already linked".
+  begin
+    insert into public.vacation_documents (family_id, vacation_id, document_id, kind, title, created_by)
+      values (fam, trip, d_vault, 'other', 'Vault deed again', up);
+    failures := array_append(failures, 'the same document was linked to the same trip twice — 0484''s unique index on (vacation_id, document_id) is missing');
+  exception when unique_violation then null;
   end;
 
   -- ── Trusted server: links a sensitive one; still one household ──────────

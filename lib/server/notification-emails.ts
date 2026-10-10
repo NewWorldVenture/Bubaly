@@ -36,7 +36,10 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
   const nowIso = new Date().toISOString();
   const { data: pending, error: pendingError } = await supabase
     .from('notifications')
-    .select('id, family_id, user_id, type, title, body')
+    // OPEN families only (families.closed_at): a closed account is not emailed.
+    // In the query, before the limit, so a closed family's queue cannot fill it.
+    .select('id, family_id, user_id, type, title, body, family:families!inner(closed_at)')
+    .is('family.closed_at', null)
     .is('sent_at', null)
     // Chat notices are in-app only; do not turn every message into an email.
     .or('related_type.is.null,related_type.neq.family_message')

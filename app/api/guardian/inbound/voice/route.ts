@@ -109,6 +109,23 @@ export async function POST(req: NextRequest) {
   const familyId = memberProfile.family_id as string;
   const memberId = memberProfile.member_id as string;
 
+  // The profile names a member, but nothing in the database ties that member to
+  // the profile's family (a plain FK to family_members.id), and every member
+  // read below runs with the service role. So check the member really is this
+  // family's before saying their name or putting a caller through to their
+  // phone — the SMS lane refuses the same case in ownsDestination.
+  const { data: owner, error: ownerError } = await supabase.from('family_members')
+    .select('id, family_id, display_name').eq('id', memberId).eq('family_id', familyId).eq('is_active', true).maybeSingle();
+  if (ownerError) {
+    console.error('[guardian-voice] Guardian member lookup failed', { familyId, memberId, error: ownerError });
+    await releaseGuardianCallback(supabase, 'inbound_voice', callSid);
+    return new NextResponse('Guardian routing unavailable', { status: 503 });
+  }
+  if (!owner || (owner as { family_id?: string }).family_id !== familyId) {
+    console.error('[guardian-voice] Guardian number names a member outside its family; refusing the call', { familyId, memberId, to });
+    return finish(wrapTwiml(twimlSay(tr('voice.iMSorryWeRe')), twimlHangup()));
+  }
+
   // Enrich caller ID via Twilio Lookup (best-effort, non-blocking)
   const callerName = await lookupCallerName(from ?? '').catch(() => null);
 
@@ -172,15 +189,14 @@ export async function POST(req: NextRequest) {
   // Route based on pipeline decision
   const { routingMode, memberProfile: profile } = decision;
 
-  // The member's name and phone are read inside the number's family. The
-  // profile's member_id was writable with a member of ANOTHER family (its
-  // policy checks only the row's family_id), and this service-role read then
-  // greeted with, and dialled, a stranger. Now such a profile finds nobody: the
-  // greeting and voicemail prompt say "the family", and with no phone an
-  // immediate-ring call is not put through; it ends at the default below
-  // (a thank-you and a hang-up).
-  const memberData = await supabase.from('family_members').select('display_name').eq('id', memberId).eq('family_id', familyId).maybeSingle();
-  const memberName = (memberData.data as { display_name?: string } | null)?.display_name ?? 'the family';
+  // The member's name for the greeting and the voicemail prompt, from the
+  // family-checked row above. The profile's member_id was writable with a
+  // member of ANOTHER family (its policy checks only the row's family_id), and
+  // a service-role read by id alone then greeted with, and dialled, a stranger.
+  // Such a profile is refused before the pipeline runs (see `owner`), and the
+  // phone read below is scoped to the number's family as well, so neither read
+  // can name or dial anyone outside it.
+  const memberName = (owner as { display_name?: string | null }).display_name ?? 'the family';
 
   const { data: familyData } = await supabase.from('families').select('name').eq('id', familyId).maybeSingle();
   const familyName = (familyData as { name?: string } | null)?.name ?? 'the family';

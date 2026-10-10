@@ -103,6 +103,15 @@ source allocations are not evidence that production applied any migration.
 |---|---|---|
 | 0475 | `0475_messaging_conversation_privacy_and_delivery.sql` | Original recorded audience unions; separate empty Family Chat; actor locks, idempotent send and participant operations. |
 | 0476 | `0476_messaging_notifications_preferences.sql` | Typed notification keys, private mute preferences and participant delivery. |
+| 0477 | `0477_an_assistant_key_is_minted_and_revoked_only_by_the_server.sql` | 2026-10-10 audit. Client INSERT/UPDATE on `assistant_links` revoked; keys are minted and revoked by server actions. |
+| 0478 | `0478_a_family_goal_is_shaped_by_the_household_and_removed_by_its_managers.sql` | 2026-10-10 audit. `goals`: guests and caregivers read only; delete is a manager's. |
+| 0479 | `0479_a_reminder_or_a_to_do_is_deleted_by_a_manager_or_its_author.sql` | 2026-10-10 audit. `family_reminders` / `todo_items` DELETE is a manager's or the author's. |
+| 0480 | `0480_an_approval_says_who_filed_it_and_only_the_server_can_say_otherwise.sql` | 2026-10-10 audit. Filer, linkage, domain and dedupe key of an approval request are pinned after insert; a member's own row carries no dedupe key; the concierge write-back ledger is not a member's to erase. |
+| 0481 | `0481_the_rls_sweep_narrows_the_household_tables_to_their_roles.sql` | 2026-10-10 RLS sweep over ~27 household tables (guest writes, member-only rows, manager decisions). Probe `rls-sweep-check.sql`. kid_progress, calendar_feeds and reward_redemptions deferred to the held 0496, 0498 and 0500: their negative-control workflows need the released schema to still show each defect, so 0481 leaves those three tables as main has them. |
+| 0482 | `0482_who_may_make_unmake_and_invite_a_parent.sql` | 2026-10-10 audit. Only a parent makes, unmakes or invites a parent; a family that has a parent keeps one; invite terms are the server's; a removed member's sync links are disabled; a child login founds no household. accept_invite is not changed: a returning member's role is deferred to the held 0495 (invite-rejoin-role-runtime.yml is its negative control); the inviter-still-active re-check follows 0495. |
+| 0483 | `0483_a_live_hold_counts_and_an_order_names_both_families.sql` | 2026-10-10 audit. Live card holds count against the spend; `marketplace_orders.buyer_family_id`; party-only hand-offs; proxy-bid and reserve fixes; manager-only cross-family actions; circle remove/block/rotate and the `marketplace_circle_listings` view. Ship with the app half (audit/economy-fix), which works on both schemas. |
+| 0484 | `0484_a_trip_links_a_document_once_and_a_guest_does_not_file_paperwork.sql` | 2026-10-10 audit. Unique `vacation_documents (vacation_id, document_id)`, built only when no pair is linked twice: the preflight `vacation_documents_duplicates_refuse()` refuses with 23505 (count and a sample of the pairs) and deletes nothing, so the owner dedupes by hand and re-runs; `paperwork_items` joins 0464's guest guard. Probe `a-trip-links-a-document-once-check.sql`. |
+| 0485 | `0485_a_device_is_found_by_its_key.sql` | 2026-10-10 audit. Index on `push_devices (device_key)` for the sign-in takeover read. |
 | 0488 held | `0488_a_month_end_bill_keeps_its_day.sql` | Nullable original bill anchors; older-schema writes refuse losing a chosen anchor. |
 | 0490 held | `0490_a_calendar_feed_sync_writes_only_while_it_holds_its_claim.sql` | Atomic fenced feed writes; missing RPC refuses writes. |
 | 0492 held | `0492_approval_requests_private_read.sql` | Requester/manager approval reads; production policies unverified. |
@@ -4196,6 +4205,12 @@ not reassigned to whichever branch lands first. The preserved map:
 
 Still unresolved: #958's `0477` and the two `0491` candidates. Closing those PRs
 did not release the numbers.
+
+**Owner decision, 2026-10-10:** the SQL halves of the 2026-10-10 audit are
+assembled as `0477`–`0485`, consecutively from the next free number (see the
+allocation table above). The holders the preserved map lists for `0477`–`0487`
+take the next free number when they land; `0486` and `0487` are free. `0488`,
+`0490` and `0492`–`0494` stay held in `supabase/reserved/`.
 
 A migration whose reserved number is above the next free one cannot be released
 yet, for two reasons:

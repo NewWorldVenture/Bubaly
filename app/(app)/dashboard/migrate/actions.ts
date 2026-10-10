@@ -25,6 +25,7 @@ import {
   type ExistingContact, type ExistingGroceryItem, type ExistingItem, type ExistingMember, type ResolutionPlan,
 } from '@/lib/migrate/resolve';
 import { readAll } from '@/lib/supabase/read-all';
+import { isSubmissionId } from '@/lib/utils/submission-id';
 
 /**
  * The list an import's grocery items land on. Named once because it is now TWO
@@ -55,6 +56,13 @@ export type ImportItemInput = { name: string; extra?: string | null; memberId?: 
 
 export type ImportPayload = {
   source: string; // competitor key
+  /**
+   * The browser's id for this one commit (lib/utils/submission-id.ts), minted
+   * once and held across every retry of it. The commit claims it before writing
+   * anything, so a retry sent while the first attempt is still running — or
+   * after it finished — writes nothing a second time.
+   */
+  submissionId?: string;
   events?: ImportEventInput[];
   tasks?: ImportItemInput[];
   grocery?: ImportItemInput[];
@@ -286,6 +294,27 @@ export async function commitImport(payload: ImportPayload): Promise<ImportResult
   };
   let assigned = 0;
 
+  // Claim this submission before reading anything. The per-kind de-dupe below
+  // reads the family's rows and inserts afterwards, so two calls running at once
+  // (a network retry of the server action, a double submit) both read the set
+  // before either insert commits and BOTH write the whole file. The claim is a
+  // single atomic counter in Postgres (`rate_limit_hit`, a row per key), so only
+  // one call per submission id gets past it. The key carries the user id because
+  // the function only lets a caller reserve its own namespace.
+  if (isSubmissionId(payload.submissionId)) {
+    const { data: claim, error: claimError } = await supabase.rpc('rate_limit_hit', {
+      p_key: `migrate:commit:${familyId}:${userId}:${payload.submissionId}`,
+      p_limit: 1,
+      p_window_seconds: 86_400,
+    });
+    const row = Array.isArray(claim) ? claim[0] : claim;
+    if (claimError || !row || typeof row.allowed !== 'boolean') {
+      console.error('[migrate] import claim failed', claimError ?? 'no claim row');
+      return { ok: false, error: t('migrateActions.couldNotStartTheImport'), retryable: true };
+    }
+    if (!row.allowed) return { ok: false, error: t('migrateActions.thisImportWasAlreadySent') };
+  }
+
   // Member ids are caller input, so they are checked against the family before
   // any of them reaches an `assignee_id`/`linked_member_id` column.
   const memberRes = await loadMembers(supabase, familyId);
@@ -354,7 +383,24 @@ export async function commitImport(payload: ImportPayload): Promise<ImportResult
       });
       if (assignments.length) {
         const { error: assignErr } = await supabase.from('chore_assignments').insert(assignments);
-        if (assignErr) return partialFailure('chore assignments', assignErr);
+        if (assignErr) {
+          // Take back the chores this call just created. Left in place they are
+          // unassigned for good: a re-run de-dupes them as already here and
+          // only builds assignments for the chores it creates itself. Removed,
+          // the re-run the failure message invites creates them again WITH
+          // their owners. A removal that fails leaves them counted as saved.
+          const createdIds = (created ?? []).map((row) => row.id);
+          const { data: removed, error: removeErr } = await supabase.from('chores')
+            .delete().eq('family_id', familyId).in('id', createdIds).select('id');
+          if (removeErr || (removed?.length ?? 0) !== createdIds.length) {
+            console.error('[migrate] could not take back chores after their assignments failed', removeErr ?? 'not every chore removed');
+            counts.tasks -= removed?.length ?? 0;
+          } else {
+            counts.tasks = 0;
+          }
+          assigned -= assignments.length;
+          return partialFailure('chore assignments', assignErr);
+        }
       }
     }
   }

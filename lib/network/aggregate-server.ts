@@ -168,7 +168,11 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
   const { rows: consents, error: cErr } = await readAll<{
     family_id: string; enabled: boolean; scopes: Database['public']['Tables']['network_consent']['Row']['scopes'];
   }>((from, to) => sb.from('network_consent')
-    .select('family_id, enabled, scopes').eq('enabled', true).order('family_id').range(from, to));
+    // OPEN families only (families.closed_at): a closed account stops feeding
+    // the network, and the prune below removes its stored contribution as it
+    // does a withdrawn consent's. Reopening contributes again the next night.
+    .select('family_id, enabled, scopes, family:families!inner(closed_at)').is('family.closed_at', null)
+    .eq('enabled', true).order('family_id').range(from, to));
   if (cErr) return { ok: false, error: describeActionError(cErr), contributors: 0, aggregates: 0 };
 
   const optedIn = consents;

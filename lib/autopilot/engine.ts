@@ -44,6 +44,12 @@ export type SuggestionDraft = {
   memberId: string | null;
   dedupeKey: string;
   expiresAt: string | null;
+  /**
+   * What the family-wide push/email says instead of `title`, when the title
+   * carries words from outside the family (a subscribed feed's event title).
+   * Not stored: the card itself still names what it is about.
+   */
+  notificationTitle?: string;
 };
 
 // ---- normalized inputs the route maps real Supabase rows into ----
@@ -52,7 +58,11 @@ export type AppointmentSignal = { id: string; title: string; startsAt: string; m
 export type ChoreSignal = { id: string; title: string; dueAt: string | null; memberId: string | null };
 export type BirthdaySignal = { memberId: string; name: string; birthday: string; giftIdeas?: string[] }; // birthday = YYYY-MM-DD (year ignored); giftIdeas from their wishlist
 export type GrocerySignal = { id: string; name: string; addedAt: string };
-export type EventSignal = { id: string; title: string; startsAt: string; endsAt: string | null; memberId: string | null; allDay?: boolean; location?: string | null };
+export type EventSignal = {
+  id: string; title: string; startsAt: string; endsAt: string | null; memberId: string | null; allDay?: boolean; location?: string | null;
+  /** Imported from a subscribed feed or an outside invite (`feed_id`/`external_uid` set): its title is someone else's words. */
+  external?: boolean;
+};
 export type SubscriptionSignal = { id: string; name: string; costCents: number; cadence: string; nextCharge: string | null; lastUsed: string | null; status: string };
 export type StressSignal = { memberId: string | null; weight: number; occurredOn: string };
 export type MedicationSignal = { id: string; name: string; memberId: string | null; refillOn: string; reminderDays: number };
@@ -119,6 +129,15 @@ function localMorningIso(s: FamilySnapshot, dayKey: string): string {
   const ms = zonedTimeMs(dayKey, 9, 0, s.tz);
   return Number.isFinite(ms) ? new Date(ms).toISOString() : `${dayKey}T09:00:00Z`;
 }
+/**
+ * The last instant of `dayKey` on the family's wall. `${day}T23:59:59Z` is the
+ * end of GREENWICH's day — 16:59 in Los Angeles, so a card about something due
+ * "today" became un-acceptable for the whole of the family's evening.
+ */
+function localEndOfDayIso(s: FamilySnapshot, dayKey: string): string {
+  const ms = zonedTimeMs(addDaysIso(dayKey, 1), 0, 0, s.tz);
+  return Number.isFinite(ms) ? new Date(ms - 1).toISOString() : `${dayKey}T23:59:59Z`;
+}
 function daysUntil(today: string, target: string): number {
   return Math.round((Date.parse(`${isoDay(target)}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / DAY_MS);
 }
@@ -152,7 +171,11 @@ export function renewalSuggestions(s: FamilySnapshot): SuggestionDraft[] {
         urgency: clampUrgency(d <= 3 ? 3 : d <= 14 ? 2 : 1),
         actionType: 'create_reminder',
         actionLabel: 'Add renewal reminder',
-        payload: { title: `Renew ${r.label}`, remindOffsetDays: Math.max(0, d - 3) },
+        // A real instant, three days before the lapse (or this morning when
+        // that has already passed). It used to carry only `remindOffsetDays`,
+        // which nothing read, so an accepted card made a reminder due NOW —
+        // a month early — and nothing near the date it was for.
+        payload: { title: `Renew ${r.label}`, at: localMorningIso(s, maxDay(addDaysIso(r.expiresOn, -3), s.today)) },
         sourceKind: 'renewals',
         sourceId: r.id,
         memberId: null,
@@ -162,7 +185,7 @@ export function renewalSuggestions(s: FamilySnapshot): SuggestionDraft[] {
         // the row; keyed by the row alone, this nudge came once, ever. Same
         // rule the insurance and refill nudges below already follow.
         dedupeKey: `renewal:${r.id}:${isoDay(r.expiresOn)}`,
-        expiresAt: `${isoDay(r.expiresOn)}T23:59:59Z`,
+        expiresAt: localEndOfDayIso(s, isoDay(r.expiresOn)),
       };
     });
 }
@@ -294,9 +317,14 @@ export function conflictSuggestions(s: FamilySnapshot): SuggestionDraft[] {
       const key = [a.id, b.id].sort().join('|');
       if (seen.has(key)) continue;
       seen.add(key);
+      // A feed's event title is whoever runs that feed's words. It still names
+      // the clash on the card (the scan flattens it to one plain line), but the
+      // push sent to every member does not repeat it.
+      const external = !!(a.external || b.external);
       out.push({
         kind: 'conflict',
         title: `Schedule clash: "${a.title}" overlaps "${b.title}"`,
+        ...(external ? { notificationTitle: 'Schedule clash: two events overlap' } : {}),
         detail: sameMember ? 'Same person is double-booked.' : 'Two things overlap — who covers which?',
         confidence: sameMember ? 84 : 68,
         urgency: 3,
@@ -519,6 +547,9 @@ export function medicationSuggestions(s: FamilySnapshot): SuggestionDraft[] {
 function addDaysIso(iso: string, days: number): string {
   return new Date(Date.parse(`${isoDay(iso)}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10);
 }
+function maxDay(a: string, b: string): string {
+  return isoDay(a) >= isoDay(b) ? isoDay(a) : isoDay(b);
+}
 
 /**
  * Meal Agent (Family Memory): when the next 3 days are mostly missing a dinner
@@ -575,7 +606,7 @@ export function insuranceSuggestions(s: FamilySnapshot): SuggestionDraft[] {
         sourceId: p.id,
         memberId: null,
         dedupeKey: `insurance:${p.id}:${isoDay(p.renewalOn)}`,
-        expiresAt: `${isoDay(p.renewalOn)}T23:59:59Z`,
+        expiresAt: localEndOfDayIso(s, isoDay(p.renewalOn)),
       };
     });
 }
@@ -616,6 +647,11 @@ export function momentPrepSuggestions(s: FamilySnapshot): SuggestionDraft[] {
   const out: SuggestionDraft[] = [];
   const now = new Date(`${s.today}T00:00:00Z`);
   for (const e of s.events) {
+    // Auto-tier work writes the event's title into a reminder and a
+    // family-wide "Autopilot handled: …" notification with nobody in between.
+    // An event imported from a subscribed feed or an outside invite carries a
+    // title whoever controls that feed chose, so it never auto-preps.
+    if (e.external) continue;
     const d = daysUntil(s.today, localDay(s, e.startsAt));
     if (d < 0 || d > 2) continue; // only imminent moments auto-prep
 

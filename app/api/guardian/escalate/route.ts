@@ -1,22 +1,18 @@
 // app/api/guardian/escalate/route.ts
-// Emergency escalation endpoint — called when AI detects an emergency call.
-// Notifies every manager (parent + adult) via push + SMS + attempted outbound call.
+// Emergency escalation endpoint — the internal HTTP face of
+// lib/guardian/escalate.ts, which the inbound SMS, WhatsApp and screening flows
+// also call directly. Notifies every manager (parent + adult) via push + SMS +
+// attempted outbound call.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { sendSms, initiateCall, isTwilioConfigured } from '@/lib/guardian/twilio';
-import { formatPhone } from '@/lib/guardian/phone';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
-import { claimGuardianCallback, markGuardianCallbackError, markGuardianCallbackProcessed, releaseGuardianCallback } from '@/lib/guardian/callbacks';
-import { guardianEscalationEventId, guardianEscalationSchema } from '@/lib/guardian/escalation';
-import { appBaseUrl } from '@/lib/server/app-url';
-import { isManager } from '@/lib/constants/roles';
+import { guardianEscalationSchema } from '@/lib/guardian/escalation';
+import { escalateGuardianEmergency } from '@/lib/guardian/escalate';
 import { bearerMatches } from '@/lib/server/secret-compare';
 
 export const runtime = 'nodejs';
-
-const BASE_URL = appBaseUrl();
 
 export async function POST(req: NextRequest) {
   const tr = await getTranslations();
@@ -32,143 +28,22 @@ export async function POST(req: NextRequest) {
   if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body is too large.' : 'Invalid JSON' }, { status: 400 });
   const parsed = guardianEscalationSchema.safeParse(boundedBody.value);
   if (!parsed.success) return NextResponse.json({ error: tr('escalate.invalidEscalationPayload') }, { status: 400 });
-  const body = parsed.data;
 
-  const { familyId, commId, escalationType, severity, description, callerNumber } = body;
-  const supabase = createServiceClient();
-  const callbackId = guardianEscalationEventId(body);
-  const claim = await claimGuardianCallback(supabase, 'emergency_escalation', callbackId);
-  // The claim could not be written, so nothing here has been recorded. A 200
-  // would tell Twilio this callback succeeded and it would never retry; a 503
-  // asks it to come back. Silence is the one answer that loses the event.
-  if (claim === 'unavailable') return NextResponse.json({ error: 'Escalation claim unavailable' }, { status: 503 });
-  if (claim !== 'claimed') return NextResponse.json({ ok: true, duplicate: true });
-  const finish = async (payload: Record<string, unknown>, status = 200) => {
-    await markGuardianCallbackProcessed(supabase, callbackId);
-    return NextResponse.json(payload, { status });
-  };
-
-  // Get all parent/manager members with phone numbers
-  const { data: members, error: membersError } = await supabase
-    .from('family_members')
-    .select('id, user_id, display_name, role')
-    .eq('family_id', familyId)
-    .eq('is_active', true);
-  if (membersError) {
-    // Nothing has been sent, so the claim goes back rather than to `error`: an
-    // `error` row is reclaimable only after ten minutes, and inside that window
-    // the caller's retry was answered `{ ok: true, duplicate: true }` — an
-    // emergency escalation reported as handled when nobody had been told.
-    console.error('[guardian] escalation could not load family members; releasing the claim for a retry', membersError);
-    await releaseGuardianCallback(supabase, 'emergency_escalation', callbackId);
-    return NextResponse.json({ error: tr('escalate.unableToProcessEscalation') }, { status: 500 });
-  }
-
-  // Every read the alert depends on happens before anything is sent. A failed
-  // phone lookup used to read as "no phones": nobody was texted or called, and
-  // the escalation was recorded as handled. Failing here, with nothing sent yet,
-  // releases the claim, so a retry can take it at once without any alert being
-  // sent twice. (Marking it `error` did not do that: see the members read.)
-  const userIds = (members ?? [])
-    .map((member) => (member as { user_id: string | null }).user_id)
-    .filter((id): id is string => !!id);
-  let phoneMap = new Map<string, string | null | undefined>();
-  if (isTwilioConfigured() && userIds.length > 0) {
-    const { data: profiles, error: profilesError } = await supabase.from('profiles').select('id, phone').in('id', userIds);
-    if (profilesError) {
-      console.error('[guardian] escalation could not load member phone numbers; releasing the claim for a retry', profilesError);
-      await releaseGuardianCallback(supabase, 'emergency_escalation', callbackId);
-      return NextResponse.json({ error: tr('escalate.unableToProcessEscalation') }, { status: 500 });
-    }
-    phoneMap = new Map((profiles ?? []).map((p: { id: string; phone?: string | null }) => [p.id, p.phone]));
-  }
-
-  const notifiedIds: string[] = [];
-  let pushSent = false;
-  let smsSent = false;
-  let callAttempted = false;
-
-  const callerDisplay = formatPhone(callerNumber);
-  const alertTitle = severity === 'critical'
-    ? `🚨 EMERGENCY — Call from ${callerDisplay}`
-    : `⚠️ Urgent Call — ${callerDisplay}`;
-  const alertBody = description;
-
-  // Push notifications for all parents.
-  //
-  // `pushSent` is written into the guardian_escalations row below and returned
-  // to the caller, so it has to mean the row LANDED. A PostgREST insert resolves
-  // with { data, error } rather than throwing, so the catch never fired on a
-  // failed write and `pushSent = true` ran anyway: an emergency escalation was
-  // permanently recorded as having alerted the parents when nothing had been
-  // written. Take the error, and only claim the push on success.
-  try {
-    const { error: notifyError } = await supabase.from('notifications').insert({
-      family_id: familyId,
-      user_id: null,
-      type: 'system',
-      title: alertTitle,
-      body: alertBody,
-      related_type: commId ? 'guardian_communications' : undefined,
-      related_id: commId ?? null,
-    });
-    if (notifyError) console.error('[guardian] escalation notification write failed', notifyError);
-    else pushSent = true;
-  } catch (error) {
-    console.error('[guardian] escalation notification write threw', error);
-  }
-
-  if (isTwilioConfigured() && members?.length) {
-    // Get phones from profiles table where it's stored
-    for (const member of members) {
-      const m = member as { id: string; user_id: string | null; display_name: string; role: string };
-      // The manager pair this product actually has. `public.member_role` is
-      // ('parent','adult','teen','child','caregiver','guest') — the list here
-      // used to read ['owner', 'manager', 'parent'], and two of those three
-      // match nobody, so an adult co-parent was never texted or called.
-      if (!isManager(m.role)) continue;
-      const phone = m.user_id ? phoneMap.get(m.user_id) : null;
-      if (!phone) continue;
-      notifiedIds.push(m.id);
-
-      // SMS
-      try {
-        const smsText = `[Bubaly Emergency Alert]\n${alertTitle}\n${alertBody}\nReply STOP to opt out.`;
-        await sendSms(phone, smsText);
-        smsSent = true;
-      } catch { /* non-fatal */ }
-
-      // Outbound call for critical emergencies
-      if (severity === 'critical') {
-        try {
-          const twimlUrl = `${BASE_URL}/api/guardian/escalate/twiml?family=${familyId}&msg=${encodeURIComponent(description.slice(0, 200))}`;
-          await initiateCall({ to: phone, twimlUrl });
-          callAttempted = true;
-        } catch { /* non-fatal */ }
-      }
+  const outcome = await escalateGuardianEmergency(createServiceClient(), parsed.data);
+  switch (outcome.kind) {
+    // The claim could not be written, so nothing here has been recorded. A 200
+    // would tell the caller this succeeded and it would never retry; a 503
+    // asks it to come back. Silence is the one answer that loses the event.
+    case 'claim_unavailable': return NextResponse.json({ error: 'Escalation claim unavailable' }, { status: 503 });
+    case 'duplicate': return NextResponse.json({ ok: true, duplicate: true });
+    case 'read_failed':
+    case 'record_failed': return NextResponse.json({ error: tr('escalate.unableToProcessEscalation') }, { status: 500 });
+    // Nobody was reached by SMS or call. Not `ok`: the claim was given back so
+    // the caller's retry is processed rather than answered as a duplicate.
+    case 'undelivered': return NextResponse.json({ ok: false, delivered: false, pushSent: outcome.pushSent, notifiedCount: 0 }, { status: 503 });
+    case 'delivered': {
+      const { pushSent, smsSent, callAttempted, notifiedCount } = outcome;
+      return NextResponse.json({ ok: true, pushSent, smsSent, callAttempted, notifiedCount });
     }
   }
-
-  // Record the escalation
-  const { error: escalationError } = await supabase.from('guardian_escalations').insert({
-    family_id: familyId,
-    communication_id: commId ?? null,
-    escalation_type: escalationType,
-    severity,
-    description,
-    caller_number: callerNumber ?? null,
-    notified_member_ids: notifiedIds,
-    push_sent: pushSent,
-    sms_sent: smsSent,
-    call_attempted: callAttempted,
-  });
-  if (escalationError) {
-    // Deliberately `error`, not a release: the alerts above have gone out, and
-    // the ten minutes before an `error` row can be reclaimed is what keeps an
-    // immediate retry from texting and calling every manager a second time.
-    await markGuardianCallbackError(supabase, callbackId, 'Unable to record escalation.');
-    return NextResponse.json({ error: tr('escalate.unableToProcessEscalation') }, { status: 500 });
-  }
-
-  return finish({ ok: true, pushSent, smsSent, callAttempted, notifiedCount: notifiedIds.length });
 }

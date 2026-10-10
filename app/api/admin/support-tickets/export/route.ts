@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
+import { superAdminAssurance, SUPER_ADMIN_STEP_UP_PATH } from '@/lib/auth/super-admin-assurance';
 import { createServiceClient } from '@/lib/supabase/server';
 import { recordAudit } from '@/lib/server/audit';
 import { readAll } from '@/lib/supabase/read-all';
@@ -20,6 +21,7 @@ export async function GET() {
   const user = await getUser();
   if (!user) return NextResponse.json({ error: t('benchmarksExport.signInRequired') }, { status: 401, headers: noStore });
   if (!(await isSuperAdmin())) return NextResponse.json({ error: t('benchmarksExport.notAuthorized') }, { status: 403, headers: noStore });
+  if (!(await superAdminAssurance()).ok) return NextResponse.json({ error: 'step_up_required', stepUp: SUPER_ADMIN_STEP_UP_PATH }, { status: 403, headers: noStore });
 
   const supabase = createServiceClient();
   // Every ticket, paged. A capped read would hand back a file that looks

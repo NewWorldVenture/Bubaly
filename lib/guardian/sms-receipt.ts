@@ -16,7 +16,9 @@ const inputSchema = z.object({
   to: z.string().regex(/^\+[1-9]\d{7,14}$/), body: z.string().max(4096),
 }).strict();
 const decisionSchema = z.object({
-  status: z.enum(['received', 'blocked']), contact_id: uuid.nullable(), from_name: z.string().nullable(),
+  // `escalated`: the pipeline detected an emergency from a sender the family
+  // has not blocked. Durable here so a retried delivery still escalates.
+  status: z.enum(['received', 'blocked', 'escalated']), contact_id: uuid.nullable(), from_name: z.string().nullable(),
   trust_level_at_time: z.enum(['immediate_family', 'close_family', 'trusted_friend', 'known_contact', 'unknown', 'suspected_spam', 'blocked']),
   routing_mode_used: z.enum(['immediate_ring', 'immediate_ai_summary', 'ai_handle_first', 'voicemail_first', 'silent_handling', 'blocked']),
   routing_rule_id: uuid.nullable(), ai_decision_reason: z.string(), scam_detected: z.boolean(),
@@ -191,6 +193,20 @@ function onlyRow(raw: unknown): Record<string, unknown> {
     || !result.data[0] || typeof result.data[0] !== 'object' || Array.isArray(result.data[0])) return unavailable();
   return result.data[0] as Record<string, unknown>;
 }
+/**
+ * How many notifications one communication may carry before completion refuses
+ * to reason about it: the text's own notice, a screened call's, an emergency
+ * escalation's push. Fails closed past this.
+ */
+const RELATED_NOTIFICATIONS = 10;
+/** Every row of a relation read, or unavailable: a page the count says is partial is not the relation. */
+function relatedRows(raw: unknown): Array<Record<string, unknown>> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return unavailable();
+  const result = raw as { data: unknown; error: unknown; count: number | null };
+  if (result.error || !Array.isArray(result.data) || result.count !== result.data.length
+    || result.data.some(row => !row || typeof row !== 'object' || Array.isArray(row))) return unavailable();
+  return result.data as Array<Record<string, unknown>>;
+}
 
 /** Completion follows the processed callback, never merely a saved decision. */
 async function verifyCompletion(client: Client, receipt: GuardianSmsReceipt, signal: AbortSignal): Promise<void> {
@@ -209,18 +225,31 @@ async function verifyCompletion(client: Client, receipt: GuardianSmsReceipt, sig
     || !sameDecision(comm as GuardianSmsDecision, decision)
     || event.event_id !== input.smsSid || event.callback_type !== 'inbound_sms' || event.status !== 'processed'
     || event.error !== null || !timestamp(event.received_at) || !timestamp(event.processed_at)) return unavailable();
-  const blocked = decision.status === 'blocked' || decision.routing_mode_used === 'blocked'
-    || decision.scam_detected && decision.scam_confidence >= 80;
+  // The same test sms-processing applies before it notifies: an emergency is
+  // announced whatever its scam score; everything blocked is not announced.
+  const emergency = decision.status === 'escalated';
+  const blocked = !emergency && (decision.status === 'blocked' || decision.routing_mode_used === 'blocked'
+    || decision.scam_detected && decision.scam_confidence >= 80);
   if (blocked) return;
-  // Query the relation, not only the deterministic ID: an existing matching
-  // notification from before recovery must not cause a second family alert.
-  const notification = onlyRow(await request(signal, () => client.from('notifications')
+  // The receipt's own notification, read on the relation rather than only by
+  // the deterministic ID: a matching notification written before recovery (or
+  // before the ID scheme) still counts as this one, and must not cause a second
+  // family alert. But only a row carrying THIS notice's title is this one. Other
+  // notifications legitimately share the communication — an emergency
+  // escalation's push, a screened call's "📞 Call from …" — and reading one of
+  // them as a mismatched copy of this notice failed every completion for ever.
+  const preview = input.body.length > 100 ? `${input.body.slice(0, 100)}…` : input.body;
+  const sender = decision.from_name ?? formatPhone(input.from);
+  const title = (emergency ? `🚨 Emergency text from ${sender}` : `💬 Text from ${sender}`).trim();
+  const related = relatedRows(await request(signal, () => client.from('notifications')
     .select('id,family_id,user_id,type,title,body,related_type,related_id', { count: 'exact' })
     .eq('family_id', input.familyId).eq('related_type', 'guardian_communications').eq('related_id', communicationId)
-    .limit(2).retry(false).abortSignal(signal)));
-  const preview = input.body.length > 100 ? `${input.body.slice(0, 100)}…` : input.body;
+    .limit(RELATED_NOTIFICATIONS).retry(false).abortSignal(signal)));
+  const mine = related.filter(row => row.title === title);
+  if (mine.length !== 1) return unavailable();
+  const notification = mine[0];
   if (!uuid.safeParse(notification.id).success || notification.family_id !== input.familyId || notification.user_id !== null
-    || notification.type !== 'system' || notification.title !== `💬 Text from ${decision.from_name ?? formatPhone(input.from)}`.trim()
+    || notification.type !== 'system' || notification.title !== title
     || notification.body !== (preview.trim() || null) || notification.related_type !== 'guardian_communications'
     || notification.related_id !== communicationId) return unavailable();
 }

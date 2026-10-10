@@ -22,6 +22,9 @@ export async function captureDocument(scope: ServiceScope, input: { captureId: s
   if (!scope.familyId || !scope.userId || scope.actorKind !== 'member' || !UUID.test(input.captureId)) {
     return { ok: false, reason: 'invalid_file', retryable: false };
   }
+  // Guests are view-only (roles.ts, 0464): filing paperwork into the
+  // household's action queue is a write they do not have.
+  if (scope.role === 'guest') return { ok: false, reason: 'access_denied', retryable: false };
   if (input.file && input.file.size > MAX_DOCUMENT_BYTES) return { ok: false, reason: 'too_large', retryable: false };
   const id = capturedDocumentId(scope.familyId, scope.userId, input.captureId);
   let saved = false;
