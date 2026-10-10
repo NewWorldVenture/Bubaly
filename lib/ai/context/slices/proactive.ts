@@ -32,10 +32,23 @@ const MAX_SIGNALS = 8;
  * mention budgets, bills or documents. Those areas are manager-only (§4,
  * `SLICE_ACCESS`), so for anyone else an item that touches them is dropped
  * here — the same rule the money and documents slices enforce by not loading.
+ *
+ * Every form of each word is spelled out. The filter matches WHOLE words, so a
+ * stem never matches (`\bfinanc\b` matched nothing: there is no boundary
+ * inside "financial") and a singular misses its plural ("documents",
+ * "transactions", "accounts", "passports" and "subscriptions" all reached a
+ * child's prompt). Tax is listed exactly, so a taxi to the airport is not
+ * withheld (AI-001).
  */
-const MANAGER_ONLY_RE = /\b(budget|bill|bills|spend|spending|money|financ|transaction|account|salary|income|document|passport|insurance|tax|vault|subscription)\b/i;
+const MANAGER_ONLY_RE = new RegExp(`\\b(?:${[
+  'budgets?', 'bills?', 'spend(?:s|ing)?', 'spent', 'money', 'financ(?:e|es|ed|ial|ially|ing)',
+  'transactions?', 'accounts?', 'salar(?:y|ies)', 'incomes?', 'documents?', 'passports?', 'insurance',
+  'tax(?:es|ed)?', 'vaults?', 'subscriptions?', 'banks?', 'banking', 'loans?', 'debts?', 'mortgages?',
+  'invest(?:s|ed|ing|ment|ments)?',
+].join('|')})\\b`, 'i');
 
-function managerOnlyText(...parts: (string | null | undefined)[]): boolean {
+/** True when any part names a manager-only area. Exported for its tests. */
+export function managerOnlyText(...parts: (string | null | undefined)[]): boolean {
   return MANAGER_ONLY_RE.test(parts.filter(Boolean).join(' '));
 }
 
