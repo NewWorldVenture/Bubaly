@@ -8,8 +8,13 @@
 // so an ordinary phone photo — and every video — was refused with a 413 before
 // the action ran, despite the 50 MB the action itself allowed.
 //
-// Shared by the form (which checks before uploading) and the action (which
-// checks what Storage actually holds), so the two cannot drift.
+// Shared by the form (which checks before uploading) and the action, so the two
+// cannot drift. What the action checks is the content type and size Storage
+// RECORDED for the object: a stored-MIME allowlist. A caller writing straight
+// to Storage chooses that content type, so this is not byte-level verification
+// of the file; it decides how the object is served (Storage serves the stored
+// type), which is what keeps an SVG or HTML page from being stored as proof by
+// this path. The bucket's own allowed_mime_types is still unset (SEC-002 R1).
 
 export const PROOF_BUCKET = 'chore-proof';
 export const MAX_PROOF_FILES = 4;
@@ -32,9 +37,13 @@ export const MAX_VISION_BYTES = 5 * 1024 * 1024;
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 
-/** A storage-safe file name: the last 100 characters, anything odd replaced. */
+/**
+ * A storage-safe file name: anything odd replaced, runs of dots collapsed (so
+ * `bed..jpg` is `bed.jpg` and every name this makes satisfies isProofPathFor,
+ * which refuses `..`), the last 100 characters.
+ */
 export function proofFileName(name: string): string {
-  const safe = name.replace(/[^a-zA-Z0-9.\-_]/g, '_').slice(-100);
+  const safe = name.replace(/[^a-zA-Z0-9.\-_]/g, '_').replace(/\.{2,}/g, '.').slice(-100);
   return safe || 'proof';
 }
 

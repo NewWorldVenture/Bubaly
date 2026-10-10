@@ -14,6 +14,7 @@ import { applyCompletionRewards, logChoreEvent } from '@/lib/chores/server';
 import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 import { assertAIAccess } from '@/lib/server/ai-access';
 import { familyDetailsBaseSchema } from '@/lib/validation';
+import { releaseUnreferencedProof } from '@/lib/chores/proof-cleanup';
 import {
   PROOF_BUCKET, MAX_PROOF_FILES, MAX_VISION_BYTES, VISION_TYPES, isProofPathFor, proofFileProblem,
 } from '@/lib/chores/proof-media';
@@ -33,10 +34,9 @@ function intVal(fd: FormData, k: string): number | null {
 
 type ChoreSupabase = Awaited<ReturnType<typeof createServer>>;
 
-async function cleanupProofMedia(supabase: ChoreSupabase, paths: string[]): Promise<void> {
-  if (!paths.length) return;
-  const { error } = await supabase.storage.from(BUCKET).remove(paths);
-  if (error) console.error('[chore proof] media cleanup failed', error);
+/** Releases only what no submission references, checked now (lib/chores/proof-cleanup). */
+async function cleanupProofMedia(supabase: ChoreSupabase, familyId: string, paths: string[]): Promise<void> {
+  await releaseUnreferencedProof(supabase, familyId, paths);
 }
 
 async function cleanupSubmission(
@@ -56,7 +56,7 @@ async function cleanupSubmission(
       submissionId, familyId, error: error?.message ?? 'no rows deleted',
     });
   }
-  await cleanupProofMedia(supabase, paths);
+  await cleanupProofMedia(supabase, familyId, paths);
 }
 
 async function restoreAssignmentState(
@@ -162,13 +162,24 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
   // The proof media is already in Storage: the form uploads it straight to the
   // child's own folder (0376), because a server action's body is capped at 1 MB
   // and a phone photo or video is not. Only paths arrive here. Each must be one
-  // object in THIS assignment's member folder, and what Storage holds — its
-  // real type and size, not the browser's claim — must be proof media.
+  // object in THIS assignment's member folder that no earlier submission holds,
+  // and the type and size Storage recorded for it must be proof media (a
+  // stored-MIME allowlist; see lib/chores/proof-media). A refusal releases only
+  // objects nothing references, so a replayed or duplicated path never costs an
+  // earlier submission its proof.
   const submitted = formData.getAll('media_path').map((value) => String(value));
   const ownPaths = submitted.filter((path) => isProofPathFor(path, familyId, assignment.member_id));
   if (ownPaths.length !== submitted.length || submitted.length > MAX_PROOF_FILES || new Set(submitted).size !== submitted.length) {
-    await cleanupProofMedia(supabase, ownPaths);
+    await cleanupProofMedia(supabase, familyId, ownPaths);
     return { ok: false, error: t('actions.couldNotUploadProofMedia') };
+  }
+  if (submitted.length) {
+    const { data: holders, error: holdersError } = await supabase.from('chore_submissions')
+      .select('id').eq('family_id', familyId).overlaps('media_paths', submitted).limit(1);
+    if (holdersError || holders?.length) {
+      // Already some submission's proof, or unknowable: refuse, and remove nothing.
+      return { ok: false, error: t('actions.couldNotUploadProofMedia') };
+    }
   }
   const mediaPaths: string[] = [];
   const images: { media_type: string; data: string }[] = [];
@@ -177,7 +188,7 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
     const mediaType = stored?.contentType ?? (stored?.metadata as { mimetype?: string } | undefined)?.mimetype ?? '';
     const size = stored?.size ?? Number((stored?.metadata as { size?: number } | undefined)?.size ?? 0);
     if (infoError || !stored || proofFileProblem({ type: mediaType, size })) {
-      await cleanupProofMedia(supabase, submitted);
+      await cleanupProofMedia(supabase, familyId, submitted);
       return { ok: false, error: t('actions.couldNotUploadProofMedia') };
     }
     mediaPaths.push(path);
@@ -203,7 +214,7 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
     })
     .select('id').single();
   if (subErr || !submission) {
-    await cleanupProofMedia(supabase, mediaPaths);
+    await cleanupProofMedia(supabase, familyId, mediaPaths);
     return { ok: false, error: t('actions.couldNotSaveYourSubmission') };
   }
 
@@ -224,6 +235,12 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
   } catch {
     await cleanupSubmission(supabase, familyId, submission.id, mediaPaths);
     return { ok: false, error: t('actions.couldNotReviewYourProof') };
+  }
+  // The reviewer judged only what it was shown. A video, an image over 5 MB or
+  // a photo that could not be read was not shown, so however well the rest
+  // scored, a parent looks at the whole proof before anything is approved.
+  if (images.length < mediaPaths.length && !verdict.needs_parent_review) {
+    verdict = { ...verdict, needs_parent_review: true };
   }
 
   // The AI verdict, the auto-approve payout, and every manager-decision status

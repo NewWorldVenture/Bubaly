@@ -23,6 +23,7 @@ let account: OwnedAccount | null = null;
 let external: string[] = [];
 let assignmentId = '';
 let memberId = '';
+let child: { userId: string; email: string; password: string; memberId: string } | null = null;
 
 const admin = () => createClient(requireLocalOrigin(provider), serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
 
@@ -34,16 +35,46 @@ function photo(bytes: number): Buffer {
   return b;
 }
 
-async function signIn(page: Page, to: string) {
+async function signIn(page: Page, to: string, who: { email: string; password: string } = account!) {
   await page.goto(`/login?redirect=${encodeURIComponent(to)}`, { waitUntil: 'domcontentloaded' });
-  await page.locator('input[name="email"]').fill(account!.email);
-  await page.locator('input[name="password"]').fill(account!.password);
+  await page.locator('input[name="email"]').fill(who.email);
+  await page.locator('input[name="password"]').fill(who.password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.waitForURL((url) => url.pathname === to, { timeout: 60_000 });
 }
 
-async function storedProof() {
-  const { data, error } = await admin().storage.from('chore-proof').list(`${account!.familyId}/${memberId}`);
+/** A child member of the fixture household, with their own sign-in. */
+async function addChild() {
+  const db = admin();
+  const email = `chore-proof-child-${crypto.randomUUID()}@example.test`;
+  const password = `Ck1!${crypto.randomUUID()}`;
+  const created = await db.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { full_name: 'Proof Child' } });
+  if (created.error || !created.data.user) throw new Error('Chore proof E2E could not create its child account.');
+  const userId = created.data.user.id;
+  child = { userId, email, password, memberId: '' };
+  const member = await db.from('family_members').insert({
+    family_id: account!.familyId, user_id: userId, role: 'child', display_name: 'Proof Child', is_active: true,
+  }).select('id').single();
+  if (member.error || !member.data) throw new Error(`Chore proof E2E could not add its child (${member.error?.code ?? 'no row'}).`);
+  const prefs = await db.from('user_preferences').upsert({
+    user_id: userId, active_family_id: account!.familyId, notification_prefs: { onboardingComplete: true },
+  }, { onConflict: 'user_id' });
+  if (prefs.error) throw new Error('Chore proof E2E could not set the child household.');
+  child.memberId = member.data.id;
+  return child;
+}
+
+async function assignTo(member: string) {
+  const db = admin();
+  const chore = await db.from('chores').insert({ family_id: account!.familyId, title: 'Tidy your room', proof_required: 'photo' }).select('id').single();
+  if (chore.error || !chore.data) throw new Error('Chore proof E2E could not create the child chore.');
+  const assignment = await db.from('chore_assignments').insert({ family_id: account!.familyId, chore_id: chore.data.id, member_id: member }).select('id').single();
+  if (assignment.error || !assignment.data) throw new Error('Chore proof E2E could not assign the child chore.');
+  return assignment.data.id;
+}
+
+async function storedProof(member = memberId) {
+  const { data, error } = await admin().storage.from('chore-proof').list(`${account!.familyId}/${member}`);
   if (error) throw new Error(`could not list proof objects (${error.message})`);
   return data ?? [];
 }
@@ -76,10 +107,13 @@ test.describe('chore proof: a phone-sized photo reaches a stored submission', ()
 
   test.afterEach(async () => {
     try {
-      const objects = account ? await storedProof() : [];
-      if (objects.length) await admin().storage.from('chore-proof').remove(objects.map((o) => `${account!.familyId}/${memberId}/${o.name}`));
+      for (const member of [memberId, child?.memberId].filter(Boolean) as string[]) {
+        const objects = account ? await storedProof(member) : [];
+        if (objects.length) await admin().storage.from('chore-proof').remove(objects.map((o) => `${account!.familyId}/${member}/${o.name}`));
+      }
+      if (child) await admin().auth.admin.deleteUser(child.userId);
       await account?.dispose();
-    } finally { account = null; }
+    } finally { account = null; child = null; }
     expect(external, 'requests that left this machine').toEqual([]);
   });
 
@@ -101,6 +135,25 @@ test.describe('chore proof: a phone-sized photo reaches a stored submission', ()
     const { data: submissions, error } = await admin().from('chore_submissions').select('media_paths, kind, status, member_id').eq('assignment_id', assignmentId);
     expect(error).toBeNull();
     expect(submissions).toEqual([{ media_paths: [path], kind: 'photo', status: expect.any(String), member_id: memberId }]);
+  });
+
+  test('a child signed in as themselves uploads into their own folder and submits', async ({ page }) => {
+    // The parent test above proves the path a manager takes; this is the
+    // child's own session, through 0376's own-folder write policy.
+    const kid = await addChild();
+    const childAssignment = await assignTo(kid.memberId);
+    const to = `/kids/submit/${childAssignment}`;
+    await signIn(page, to, kid);
+    await page.locator('input[type="file"][name="media"]').setInputFiles({ name: 'room.jpg', mimeType: 'image/jpeg', buffer: photo(2 * 1024 * 1024) });
+    await page.getByRole('button', { name: 'Submit my work' }).click();
+
+    await expect(page.getByText('Sent! 🎉')).toBeVisible({ timeout: 60_000 });
+    const objects = await storedProof(kid.memberId);
+    expect(objects).toHaveLength(1);
+    const path = `${account!.familyId}/${kid.memberId}/${objects[0].name}`;
+    const { data } = await admin().from('chore_submissions').select('media_paths, member_id, created_by').eq('assignment_id', childAssignment);
+    expect(data).toEqual([{ media_paths: [path], member_id: kid.memberId, created_by: kid.userId }]);
+    expect(await storedProof(memberId), 'nothing written to the parent folder').toEqual([]);
   });
 
   test('a file that is not a photo or video is refused before anything is uploaded', async ({ page }) => {

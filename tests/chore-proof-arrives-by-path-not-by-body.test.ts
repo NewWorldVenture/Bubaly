@@ -29,6 +29,8 @@ const harness = vi.hoisted(() => ({
   objects: new Map<string, { contentType: string; size: number; bytes?: Uint8Array<ArrayBuffer> }>(),
   removed: [] as string[],
   reviewed: [] as { media_type: string; data: string }[][],
+  approve: false,
+  failDownload: new Set<string>(),
   memberId: 'member-kid',
   role: 'child',
 }));
@@ -52,11 +54,14 @@ vi.mock('@/lib/chores/ai', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/chores/ai')>()),
   validateChoreSubmission: async (_scope: unknown, input: { images?: { media_type: string; data: string }[] }) => {
     harness.reviewed.push(input.images ?? []);
-    return {
-      status: 'needs_review', quality_score: 50, confidence: 0.5, recommended_reward_type: 'none',
-      recommended_reward_amount: 0, kid_feedback: 'ok', parent_summary: 'ok', detected_issues: [],
-      safety_flags: [], needs_parent_review: true, model: 'test', is_fallback: true,
-    };
+    // `approve`: the reviewer is satisfied with what it was shown.
+    return harness.approve
+      ? { status: 'approved', quality_score: 95, confidence: 0.9, recommended_reward_type: 'none',
+        recommended_reward_amount: 0, kid_feedback: 'great', parent_summary: 'done', detected_issues: [],
+        safety_flags: [], needs_parent_review: false, model: 'test', is_fallback: false }
+      : { status: 'needs_review', quality_score: 50, confidence: 0.5, recommended_reward_type: 'none',
+        recommended_reward_amount: 0, kid_feedback: 'ok', parent_summary: 'ok', detected_issues: [],
+        safety_flags: [], needs_parent_review: true, model: 'test', is_fallback: true };
   },
 }));
 
@@ -69,6 +74,7 @@ function withStorage(db: InMemorySupabase) {
         : { data: null, error: { message: 'Object not found' } };
     },
     download: async (path: string) => {
+      if (harness.failDownload.has(path)) return { data: null, error: { message: 'download failed' } };
       const o = harness.objects.get(path);
       return o?.bytes ? { data: new Blob([o.bytes]), error: null } : { data: null, error: { message: 'Object not found' } };
     },
@@ -100,6 +106,8 @@ beforeEach(() => {
   harness.objects.clear();
   harness.removed = [];
   harness.reviewed = [];
+  harness.approve = false;
+  harness.failDownload = new Set();
   harness.memberId = KID;
   harness.role = 'child';
   db = createInMemorySupabase();
@@ -186,15 +194,132 @@ describe('a path outside this assignment’s member folder is refused before any
   });
 });
 
+describe('a refusal never costs an earlier submission its proof', () => {
+  const held = kidPath(UUID, 'old.jpg');
+  beforeEach(() => {
+    store(held, { contentType: 'image/jpeg', size: 10, bytes: new Uint8Array([1]) });
+    db.seed('chore_submissions', [{ id: 'sub-old', family_id: FAMILY, assignment_id: 'assign-1', member_id: KID, media_paths: [held], status: 'approved' }]);
+  });
+
+  it('refuses a path an earlier submission holds, and leaves it in place', async () => {
+    expect(await submit([held])).toEqual({ ok: false, error: UPLOAD_FAILED });
+    expect(harness.removed).toEqual([]);
+    expect(harness.objects.has(held)).toBe(true);
+    expect(db.table('chore_submissions')).toHaveLength(1);
+  });
+
+  it('refuses the same held path twice ([P,P]) without removing it', async () => {
+    expect(await submit([held, held])).toEqual({ ok: false, error: UPLOAD_FAILED });
+    expect(harness.removed).toEqual([]);
+    expect(harness.objects.has(held)).toBe(true);
+  });
+
+  it('a held path beside a new one is refused; only the new, unreferenced upload is released', async () => {
+    const fresh = kidPath(UUID2, 'new.jpg');
+    store(fresh, { contentType: 'image/svg+xml', size: 10 });
+    expect(await submit([fresh, fresh])).toEqual({ ok: false, error: UPLOAD_FAILED });
+    expect(harness.removed).toEqual([fresh]);
+    expect(harness.objects.has(held)).toBe(true);
+  });
+
+  it('a later retry that fails after its own row was written removes its own upload, never the earlier proof', async () => {
+    const fresh = kidPath(UUID2, 'retry.jpg');
+    store(fresh, { contentType: 'image/jpeg', size: 10, bytes: new Uint8Array([2]) });
+    // Fail the AI-verdict write, which rolls back this attempt's submission row.
+    const real = db.from.bind(db);
+    harness.db = new Proxy(harness.db as object, {
+      get: (target, prop) => (prop === 'from'
+        ? (table: string) => (table === 'chore_ai_validations'
+          ? { insert: async () => ({ error: { message: 'refused' } }) }
+          : real(table))
+        : Reflect.get(target, prop)),
+    });
+    const res = await submit([fresh]);
+    expect(res.ok).toBe(false);
+    expect(harness.removed).toEqual([fresh]);
+    expect(harness.objects.has(held)).toBe(true);
+    expect(db.table('chore_submissions').map((r) => r.id)).toEqual(['sub-old']);
+  });
+});
+
+describe('a retry that resends earlier proof and then fails keeps that proof', () => {
+  it('the held object survives a retry whose own row is rolled back', async () => {
+    const held = kidPath(UUID, 'old.jpg');
+    store(held, { contentType: 'image/jpeg', size: 10, bytes: new Uint8Array([1]) });
+    db.seed('chore_submissions', [{ id: 'sub-old', family_id: FAMILY, assignment_id: 'assign-1', member_id: KID, media_paths: [held], status: 'needs_improvement' }]);
+    const real = db.from.bind(db);
+    harness.db = new Proxy(harness.db as object, {
+      get: (target, prop) => (prop === 'from'
+        ? (table: string) => (table === 'chore_ai_validations'
+          ? { insert: async () => ({ error: { message: 'refused' } }) }
+          : real(table))
+        : Reflect.get(target, prop)),
+    });
+    expect((await submit([held])).ok).toBe(false);
+    expect(harness.objects.has(held)).toBe(true);
+    expect(harness.removed).toEqual([]);
+  });
+});
+
+describe('the reviewer approves only what it saw: anything unseen goes to a parent', () => {
+  const a = kidPath(UUID, 'a.jpg');
+  const b = kidPath(UUID2, 'b.jpg');
+  beforeEach(() => {
+    db.table('chores')[0].proof_required = 'before_after';
+    harness.approve = true;
+  });
+  const validation = () => db.table('chore_ai_validations')[0];
+
+  it('control: both photos seen, an approving verdict stays as the reviewer gave it', async () => {
+    store(a, { contentType: 'image/jpeg', size: 10, bytes: new Uint8Array([1]) });
+    store(b, { contentType: 'image/jpeg', size: 10, bytes: new Uint8Array([2]) });
+    expect(await submit([a, b])).toEqual({ ok: true });
+    expect(harness.reviewed[0]).toHaveLength(2);
+    expect(validation()).toMatchObject({ status: 'approved', needs_parent_review: false });
+  });
+
+  it('one photo over 5 MB: the verdict is held for a parent', async () => {
+    store(a, { contentType: 'image/jpeg', size: 10, bytes: new Uint8Array([1]) });
+    store(b, { contentType: 'image/jpeg', size: 6 * 1024 * 1024, bytes: new Uint8Array([2]) });
+    expect(await submit([a, b])).toEqual({ ok: true });
+    expect(harness.reviewed[0]).toHaveLength(1);
+    expect(validation()).toMatchObject({ needs_parent_review: true });
+    expect(db.table('chore_submissions')[0].status).toBe('parent_review');
+  });
+
+  it('one photo that could not be read: the verdict is held for a parent', async () => {
+    store(a, { contentType: 'image/jpeg', size: 10, bytes: new Uint8Array([1]) });
+    store(b, { contentType: 'image/jpeg', size: 10, bytes: new Uint8Array([2]) });
+    harness.failDownload.add(b);
+    expect(await submit([a, b])).toEqual({ ok: true });
+    expect(harness.reviewed[0]).toHaveLength(1);
+    expect(validation()).toMatchObject({ needs_parent_review: true });
+    expect(db.table('chore_submissions')[0].status).toBe('parent_review');
+  });
+
+  it('a video beside a photo: the verdict is held for a parent', async () => {
+    store(a, { contentType: 'image/jpeg', size: 10, bytes: new Uint8Array([1]) });
+    store(b, { contentType: 'video/mp4', size: 10 });
+    expect(await submit([a, b])).toEqual({ ok: true });
+    expect(validation()).toMatchObject({ needs_parent_review: true });
+  });
+});
+
 describe('the form sends paths, never the files', () => {
   const form = readFileSync('app/(app)/kids/submit/[assignmentId]/submit-form.tsx', 'utf8');
-  it('uploads each file to the proof bucket and appends only its path', () => {
-    expect(form).toMatch(/createClient\(\)\.storage\.from\(PROOF_BUCKET\)/);
-    expect(form).toMatch(/fd\.append\('media_path', path\)/);
+  const attempt = readFileSync('lib/chores/proof-submit.ts', 'utf8');
+  it('uploads through the attempt, which appends only each stored path', () => {
+    expect(form).toMatch(/submitProofAttempt\(/);
+    expect(form).toMatch(/client\.storage\.from\(PROOF_BUCKET\)\.upload\(path, file/);
+    expect(attempt).toMatch(/form\.append\('media_path', path\)/);
   });
   it('does not hand the form element’s own FormData (which carries the files) to the action', () => {
     expect(form).not.toMatch(/submitProofAction\(\s*new FormData\(/);
     expect(form).not.toMatch(/submitProofAction\(form\)/);
-    expect(form).toMatch(/const fd = new FormData\(\);/);
+    expect(form).toMatch(/submit: \(fd\) => submitProofAction\(fd\)/);
+  });
+  it('releases uploads only through the reference-checked helper', () => {
+    expect(form).toMatch(/release: \(paths\) => releaseUnreferencedProof\(client, familyId, paths\)/);
+    expect(form).not.toMatch(/\.remove\(/);
   });
 });

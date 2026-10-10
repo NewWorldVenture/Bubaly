@@ -6,9 +6,9 @@ import { Camera, PartyPopper, Loader2, Send } from 'lucide-react';
 import { submitProofAction } from '@/app/(app)/missions/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { createClient } from '@/lib/supabase/client';
-import {
-  MAX_PROOF_BYTES, MAX_PROOF_FILES, PROOF_BUCKET, newProofObjectId, proofFileProblem, proofObjectPath,
-} from '@/lib/chores/proof-media';
+import { MAX_PROOF_BYTES, MAX_PROOF_FILES, PROOF_BUCKET, newProofObjectId, proofFileProblem } from '@/lib/chores/proof-media';
+import { releaseUnreferencedProof } from '@/lib/chores/proof-cleanup';
+import { submitProofAttempt } from '@/lib/chores/proof-submit';
 
 export function SubmitProofForm({ assignmentId, proofKind, familyId, memberId }: {
   assignmentId: string; proofKind: string; familyId: string; memberId: string;
@@ -40,34 +40,26 @@ export function SubmitProofForm({ assignmentId, proofKind, familyId, memberId }:
       if (problem === 'size') { setError(t('kidsSubmitSubmitForm.thatFileIsTooBig', { limit: MAX_PROOF_BYTES / (1024 * 1024) })); return; }
     }
     // The files go straight to Storage, into this child's own proof folder
-    // (0376), and the action gets only their paths. A server action's body is
+    // (0376), and the action gets only their paths: a server action's body is
     // capped at 1 MB, so sending the files through it refused an ordinary phone
-    // photo — and every video — before the action could run.
-    const fd = new FormData();
-    fd.set('assignment_id', assignmentId);
+    // photo — and every video — before the action could run. What happens to
+    // the uploads when something fails is decided in lib/chores/proof-submit.
     const note = form.get('note');
-    if (typeof note === 'string') fd.set('note', note);
     start(async () => {
-      const storage = createClient().storage.from(PROOF_BUCKET);
-      const uploaded: string[] = [];
-      for (const file of files) {
-        const path = proofObjectPath(familyId, memberId, newProofObjectId(), file.name);
-        const { error: uploadError } = await storage.upload(path, file, { contentType: file.type, upsert: false })
-          .catch((thrown: unknown) => ({ error: thrown }));
-        if (uploadError) {
-          // Nothing was submitted, so nothing will refer to what did upload.
-          if (uploaded.length) await storage.remove(uploaded).catch(() => undefined);
-          setError(t('actions.couldNotUploadProofMedia'));
-          return;
-        }
-        uploaded.push(path);
-        fd.append('media_path', path);
-      }
-      // Past this point the server owns the uploads: a refusal removes them
-      // there, and a lost response may still have recorded the submission.
-      const res = await submitProofAction(fd).catch(() => ({ ok: false, error: undefined }));
-      if (res.ok) { setDone(true); setTimeout(() => router.push('/kids'), 2200); }
-      else setError(res.error ?? t('submitForm.somethingWentWrongTryAgain'));
+      const client = createClient();
+      const outcome = await submitProofAttempt(
+        { assignmentId, familyId, memberId, note: typeof note === 'string' ? note : null, files },
+        {
+          upload: (path, file) => client.storage.from(PROOF_BUCKET).upload(path, file, { contentType: file.type, upsert: false }),
+          release: (paths) => releaseUnreferencedProof(client, familyId, paths),
+          submit: (fd) => submitProofAction(fd),
+          newId: newProofObjectId,
+        },
+      );
+      if (outcome.kind === 'sent') { setDone(true); setTimeout(() => router.push('/kids'), 2200); return; }
+      if (outcome.kind === 'upload_failed') setError(t('actions.couldNotUploadProofMedia'));
+      else if (outcome.kind === 'refused') setError(outcome.error ?? t('submitForm.somethingWentWrongTryAgain'));
+      else setError(t('submitForm.somethingWentWrongTryAgain'));
     });
   }
 
