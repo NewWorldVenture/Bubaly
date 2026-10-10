@@ -121,6 +121,7 @@ jobs:
             'a child changed or reached the front of the insurance card a parent saved' \
             'a guest changed or reached the bytes behind a household document' \
             "a child changed or reached a sensitive document's file" \
+            "a child changed or reached an insurance card image stored under the family id without hyphens" \
             "another family's rows stopped a parent of the family using its own file"; do
             if ! grep -qF "$expected" <<<"$out"; then
               echo "::error::the held probe failed on the released schema, but not on: $expected"

@@ -32,8 +32,11 @@
 -- What this does, functions and policies only (no table, trigger or data):
 --
 --   1. document_object_is_restricted counts only rows of the object's own
---      family, the first folder of its path. A row planted by another family no
---      longer hides the file. Nothing of the object's own family is loosened:
+--      family: the first folder of its path, cast to uuid exactly as the
+--      policies cast it (document_object_family), so every spelling of a family
+--      id the policies accept (upper case, braces, no hyphens) is the same
+--      family here; a path whose first folder is not a uuid fails closed. A row
+--      planted by another family no longer hides the file. Nothing of the object's own family is loosened:
 --      every path the app writes is {family}/…, 0007 has only ever let a member
 --      upload under their own family's folder, and a row of that family is
 --      counted exactly as before.
@@ -72,9 +75,14 @@
 -- lib/storage/confirm-removal.ts already reads as "not removed" (SEC-015). An
 -- upload is refused with storage-api's row-level security error.
 --
--- HELD: proposed as 0499 (the first number above 0498; requested on #771 in
--- comment 6094859264, not yet confirmed) in supabase/reserved/ until every
--- number below it has landed. Proven by
+-- HELD: 0499, the first number above 0498, requested on #771 in comment
+-- 6094859264 and confirmed as a held source and probe reservation in #981
+-- comment 6094986591 (not an installation or production security approval).
+-- That review found the first cut compared the path's TEXT with the family id,
+-- so a valid non-canonical uuid prefix (braces, no hyphens) passed the
+-- policies' membership cast and missed both row helpers, the sensitive read
+-- guard included; document_object_family is the fix. It stays in
+-- supabase/reserved/ until every number below it has landed. Proven by
 -- docs/audit/reserved/a-stored-file-answers-to-its-own-familys-rows-check.sql
 -- and .github/workflows/stored-file-rows-runtime.yml. Not applied to production
 -- by an agent; recorded in docs/PENDING_PROD_MIGRATIONS.md.
@@ -89,11 +97,39 @@ begin
      or to_regprocedure('public.is_sensitive_document(boolean, text)') is null then
     raise exception '0499 needs family_role, can_manage_family and is_sensitive_document';
   end if;
-  if to_regclass('public.insurance_policies') is null or to_regclass('storage.objects') is null then
-    raise exception '0499 needs public.insurance_policies and storage.objects';
+  if to_regclass('public.insurance_policies') is null or to_regclass('storage.objects') is null
+     or to_regprocedure('storage.foldername(text)') is null then
+    raise exception '0499 needs public.insurance_policies, storage.objects and storage.foldername';
   end if;
 end
 $$;
+
+-- 0. The object's family, read exactly as the bucket's policies read it:
+--    the first folder cast to uuid. Every spelling the cast accepts (upper
+--    case, braces, no hyphens) resolves to the same family, so a row is matched
+--    on the uuid and never on the path's text. A first folder that is not a
+--    uuid, or no folder, resolves to null, and both helpers below then refuse
+--    (fail closed). The policies' own cast raises on such a name before either
+--    helper matters; this keeps the helpers closed on their own as well.
+create or replace function public.document_object_family(p_object_name text)
+returns uuid
+language plpgsql
+stable
+set search_path = public, pg_temp
+as $$
+begin
+  return ((storage.foldername(p_object_name))[1])::uuid;
+exception when invalid_text_representation then
+  return null;
+end
+$$;
+
+comment on function public.document_object_family(text) is
+  'The family a documents-bucket object belongs to: the first folder of its name cast to uuid, exactly as the bucket''s policies cast it, or null when that folder is missing or not a uuid (0499).';
+
+revoke all on function public.document_object_family(text) from public;
+revoke all on function public.document_object_family(text) from anon;
+grant execute on function public.document_object_family(text) to authenticated;
 
 -- 1. Only the object's own family's rows restrict it.
 create or replace function public.document_object_is_restricted(p_object_name text)
@@ -103,14 +139,17 @@ stable
 security definer
 set search_path = public, pg_temp
 as $$
-  select exists (
-    select 1
-    from public.documents d
-    where d.storage_path = p_object_name
-      and d.family_id::text = lower(split_part(p_object_name, '/', 1))
-      and public.is_sensitive_document(d.is_secure, d.category)
-      and not public.can_manage_family(d.family_id)
-  );
+  select case
+    when public.document_object_family(p_object_name) is null then true
+    else exists (
+      select 1
+      from public.documents d
+      where d.storage_path = p_object_name
+        and d.family_id = public.document_object_family(p_object_name)
+        and public.is_sensitive_document(d.is_secure, d.category)
+        and not public.can_manage_family(d.family_id)
+    )
+  end;
 $$;
 
 comment on function public.document_object_is_restricted(text) is
@@ -124,20 +163,23 @@ stable
 security definer
 set search_path = public, pg_temp
 as $$
-  select exists (
-    select 1
-    from public.insurance_policies p
-    where p_object_name in (p.front_image_path, p.back_image_path)
-      and p.family_id::text = lower(split_part(p_object_name, '/', 1))
-      and not public.can_manage_family(p.family_id)
-  )
-  or exists (
-    select 1
-    from public.documents d
-    where d.storage_path = p_object_name
-      and d.family_id::text = lower(split_part(p_object_name, '/', 1))
-      and public.family_role(d.family_id) = 'guest'
-  );
+  select case
+    when public.document_object_family(p_object_name) is null then true
+    else exists (
+      select 1
+      from public.insurance_policies p
+      where p_object_name in (p.front_image_path, p.back_image_path)
+        and p.family_id = public.document_object_family(p_object_name)
+        and not public.can_manage_family(p.family_id)
+    )
+    or exists (
+      select 1
+      from public.documents d
+      where d.storage_path = p_object_name
+        and d.family_id = public.document_object_family(p_object_name)
+        and public.family_role(d.family_id) = 'guest'
+    )
+  end;
 $$;
 
 comment on function public.document_object_write_is_refused(text) is

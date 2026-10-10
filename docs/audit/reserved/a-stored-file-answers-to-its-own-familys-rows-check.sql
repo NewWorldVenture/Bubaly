@@ -11,11 +11,17 @@
 --     (0464's rule at the bytes);
 --   * nobody without the right uploads at a sensitive document's path;
 --   * a row planted by ANOTHER family neither hides the file nor blocks its own
---     family's writes.
+--     family's writes;
+--   * all of this holds for an object stored under a family id spelt any way
+--     the policies' uuid cast accepts (braces, no hyphens, upper case), and a
+--     first folder that is not a uuid fails closed.
 --
 -- What this probe asserts, through PostgREST's role on storage.objects (the
 -- statements storage-api runs under the caller's RLS), for each of the six
--- roles of one family and one parent of another family, on six objects:
+-- roles of one family and one parent of another family, on nine objects (six
+-- under the canonical family id; a sensitive document, an insurance card image
+-- and a household document under its braces, no-hyphen and upper-case
+-- spellings):
 --
 --   read (r), replace in place (u), move the file away from its path (m),
 --   move another file onto the path (o), remove (d) and upload at the path (i),
@@ -77,6 +83,11 @@ insert into public.family_members (family_id, user_id, display_name, role, is_ac
   ('00000000-0000-4000-8499-0000000000f1','00000000-0000-4000-8499-0000000000a4','Kid','child',true),
   ('00000000-0000-4000-8499-0000000000f1','00000000-0000-4000-8499-0000000000a5','Nanny','caregiver',true),
   ('00000000-0000-4000-8499-0000000000f1','00000000-0000-4000-8499-0000000000a6','Grandma','guest',true);
+-- The teen is also a guest of the other family, so a guest rule read from that
+-- family's planted row would refuse the teen on this family's file: that is
+-- what makes the write helper's own-family binding on documents rows load-bearing.
+insert into public.family_members (family_id, user_id, display_name, role, is_active) values
+  ('00000000-0000-4000-8499-0000000000f2','00000000-0000-4000-8499-0000000000a3','Visiting teen','guest',true);
 insert into storage.buckets (id, name, public) values ('documents','documents',false) on conflict (id) do nothing;
 
 -- The family's files, each beside the row the app writes for it.
@@ -91,6 +102,18 @@ insert into public.documents (family_id, title, category, storage_path, is_secur
    '00000000-0000-4000-8499-0000000000f1/identity/1700000000005-passport.pdf',true,'00000000-0000-4000-8499-0000000000a1'),
   ('00000000-0000-4000-8499-0000000000f1','Boiler manual','manual',
    '00000000-0000-4000-8499-0000000000f1/home/1700000000006-manual.pdf',false,'00000000-0000-4000-8499-0000000000a1');
+-- The same three kinds of row, each naming an object stored under a family id
+-- spelt the way the uuid cast accepts but the canonical text is not: braces,
+-- no hyphens, upper case. The policies' membership cast reads each as this
+-- family, so the row helpers must too.
+insert into public.documents (family_id, title, category, storage_path, is_secure, created_by) values
+  ('00000000-0000-4000-8499-0000000000f1','Passport (braces)','identity',
+   '{00000000-0000-4000-8499-0000000000f1}/identity/1700000000007-passport.pdf',true,'00000000-0000-4000-8499-0000000000a1'),
+  ('00000000-0000-4000-8499-0000000000f1','Dryer warranty (upper case)','warranty',
+   '00000000-0000-4000-8499-0000000000F1/home/1700000000009-warranty.pdf',false,'00000000-0000-4000-8499-0000000000a1');
+insert into public.insurance_policies (family_id, insurer, front_image_path) values
+  ('00000000-0000-4000-8499-0000000000f1','Acme Dental',
+   '000000000000400084990000000000f1/insurance/1700000000008-front.png');
 insert into public.tax_documents (family_id, tax_year, category, name, storage_path) values
   ('00000000-0000-4000-8499-0000000000f1',2025,'w2','W-2',
    '00000000-0000-4000-8499-0000000000f1/tax/2025/1700000000004-w2.pdf');
@@ -101,7 +124,10 @@ insert into storage.objects (bucket_id, name, owner)
     '00000000-0000-4000-8499-0000000000f1/home/1700000000003-warranty.pdf',
     '00000000-0000-4000-8499-0000000000f1/tax/2025/1700000000004-w2.pdf',
     '00000000-0000-4000-8499-0000000000f1/identity/1700000000005-passport.pdf',
-    '00000000-0000-4000-8499-0000000000f1/home/1700000000006-manual.pdf']) as n;
+    '00000000-0000-4000-8499-0000000000f1/home/1700000000006-manual.pdf',
+    '{00000000-0000-4000-8499-0000000000f1}/identity/1700000000007-passport.pdf',
+    '000000000000400084990000000000f1/insurance/1700000000008-front.png',
+    '00000000-0000-4000-8499-0000000000F1/home/1700000000009-warranty.pdf']) as n;
 
 do $$
 declare
@@ -116,6 +142,7 @@ declare
   got      text;
   verb     text;
   k        int;
+  i_closed boolean;
   looser   boolean;
   tighter  boolean;
   n        int;
@@ -156,12 +183,19 @@ begin
         ('warranty', '00000000-0000-4000-8499-0000000000f1/home/1700000000003-warranty.pdf',   'the bytes behind a household document'),
         ('w2',       '00000000-0000-4000-8499-0000000000f1/tax/2025/1700000000004-w2.pdf',     'a tax file (control: its row is any member''s)'),
         ('passport', '00000000-0000-4000-8499-0000000000f1/identity/1700000000005-passport.pdf','a sensitive document''s file'),
-        ('manual',   '00000000-0000-4000-8499-0000000000f1/home/1700000000006-manual.pdf',     'a household document another family''s rows name')
+        ('manual',   '00000000-0000-4000-8499-0000000000f1/home/1700000000006-manual.pdf',     'a household document another family''s rows name'),
+        ('passport-braces', '{00000000-0000-4000-8499-0000000000f1}/identity/1700000000007-passport.pdf', 'a sensitive document''s file stored under {family id}'),
+        ('front-nohyphen',  '000000000000400084990000000000f1/insurance/1700000000008-front.png',      'an insurance card image stored under the family id without hyphens'),
+        ('warranty-upper',  '00000000-0000-4000-8499-0000000000F1/home/1700000000009-warranty.pdf',       'the bytes behind a household document stored under the upper-case family id')
       ) as o(key, path, what) loop
 
       exp := case obj.key when 'front' then who.e_front when 'back' then who.e_back
                           when 'warranty' then who.e_warranty when 'w2' then who.e_w2
-                          when 'passport' then who.e_passport else who.e_manual end;
+                          when 'passport' then who.e_passport
+                          when 'passport-braces' then who.e_passport
+                          when 'front-nohyphen' then who.e_front
+                          when 'warranty-upper' then who.e_warranty
+                          else who.e_manual end;
 
       -- Each verb in its own rolled-back subtransaction. A refusal is either a
       -- filter (0 rows: USING) or 42501 (a WITH CHECK); both count as refused.
@@ -229,6 +263,47 @@ begin
     end loop;
   end loop;
 
+  -- Malformed: a first folder that is not a uuid fails closed. The object is
+  -- added only here, in its own rolled-back subtransaction, so no other cell
+  -- above evaluates a policy over it.
+  begin
+    insert into storage.objects (bucket_id, name, owner)
+      values ('documents', 'not-a-family/1700000000010-note.pdf', '00000000-0000-4000-8499-0000000000a1');
+    perform set_config('role','authenticated', true);
+    perform set_config('request.jwt.claim.sub', '00000000-0000-4000-8499-0000000000a1', true);
+    perform set_config('request.jwt.claims', json_build_object('sub','00000000-0000-4000-8499-0000000000a1','role','authenticated')::text, true);
+    begin
+      select count(*)::text into got from storage.objects where bucket_id = 'documents' and name = 'not-a-family/1700000000010-note.pdf';
+    exception when others then got := 'error';
+    end;
+    if got not in ('0', 'error') then
+      failures := array_append(failures, format('a parent read an object whose first folder is not a family id (%s)', got));
+    end if;
+    begin
+      insert into storage.objects (bucket_id, name, owner)
+        values ('documents', 'not-a-family/1700000000011-new.pdf', '00000000-0000-4000-8499-0000000000a1');
+      got := 'landed';
+    exception when others then got := 'refused';
+    end;
+    if got = 'landed' then
+      failures := array_append(failures, 'a parent uploaded under a first folder that is not a family id');
+    end if;
+    perform set_config('role','postgres', true);
+    if installed then
+      -- Dynamic, so this block also compiles where the helper does not exist.
+      execute 'select public.document_object_is_restricted($1)
+                  and public.document_object_write_is_refused($1)
+                  and public.document_object_is_restricted($2)'
+         into i_closed using 'not-a-family/x.pdf', 'no-folder.pdf';
+      if not coalesce(i_closed, false) then
+        failures := array_append(failures, 'the row helpers do not fail closed on a path whose first folder is not a family id');
+      end if;
+    end if;
+    raise exception using errcode = 'P0R01';
+  exception when sqlstate 'P0R01' then null;
+  end;
+  perform set_config('role','postgres', true);
+
   if installed then
     -- M1. Without the clause on the delete policy, the child's delete lands.
     begin
@@ -282,7 +357,7 @@ begin
     --     family's parent.
     begin
       execute replace(pg_get_functiondef('public.document_object_write_is_refused(text)'::regprocedure),
-                      'and p.family_id::text = lower(split_part(p_object_name, ''/'', 1))', '');
+                      'and p.family_id = public.document_object_family(p_object_name)', '');
       perform set_config('role','authenticated', true);
       perform set_config('request.jwt.claim.sub', '00000000-0000-4000-8499-0000000000a1', true);
       perform set_config('request.jwt.claims', json_build_object('sub','00000000-0000-4000-8499-0000000000a1','role','authenticated')::text, true);
@@ -299,7 +374,7 @@ begin
     -- M3. 0303's restriction (any family's row) hides the family's own file.
     begin
       execute replace(pg_get_functiondef('public.document_object_is_restricted(text)'::regprocedure),
-                      'and d.family_id::text = lower(split_part(p_object_name, ''/'', 1))', '');
+                      'and d.family_id = public.document_object_family(p_object_name)', '');
       perform set_config('role','authenticated', true);
       perform set_config('request.jwt.claim.sub', '00000000-0000-4000-8499-0000000000a1', true);
       perform set_config('request.jwt.claims', json_build_object('sub','00000000-0000-4000-8499-0000000000a1','role','authenticated')::text, true);
@@ -341,7 +416,7 @@ begin
   if array_length(failures, 1) is not null then
     raise exception E'a stored file does not answer to its own family''s rows:\n  - %', array_to_string(failures, E'\n  - ');
   end if;
-  raise notice 'a-stored-file-answers-to-its-own-familys-rows: OK (insurance card images: only a parent or adult replaces, moves, removes or re-uploads them, every role still reads them; a household document''s bytes: everyone but the guest writes them; tax files: unchanged, every role; a sensitive file: only a manager reads, writes or uploads at its path; another family''s planted rows neither hid the family''s file nor blocked its parent or child; another family''s parent reaches nothing; mutation controls M1-M4 each turned a refusal back; four policies, every write half carrying the rule)';
+  raise notice 'a-stored-file-answers-to-its-own-familys-rows: OK (insurance card images: only a parent or adult replaces, moves, removes or re-uploads them, every role still reads them; a household document''s bytes: everyone but the guest writes them; tax files: unchanged, every role; a sensitive file: only a manager reads, writes or uploads at its path; another family''s planted rows neither hid the family''s file nor blocked its parent or child; the same held for files stored under braces, no-hyphen and upper-case family ids, and a non-uuid first folder failed closed; another family''s parent reaches nothing; mutation controls M1-M4 each turned a refusal back; four policies, every write half carrying the rule)';
 end $$;
 
 rollback;

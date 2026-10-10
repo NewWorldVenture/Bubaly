@@ -112,7 +112,7 @@ source allocations are not evidence that production applied any migration.
 | 0496 confirmed, held | `0496_a_childs_xp_is_awarded_by_a_parent.sql` | Only a manager or the service role can award a child XP or rewrite streaks through 0341's functions. Requested for #981 on #771 (comment 6089394563); confirmed as a held source and probe reservation in #981 comment 6092383149, which is not an installation approval. |
 | 0497 confirmed, held | `0497_a_childs_wallet_and_guardian_number_stay_in_one_family.sql` | 0311's same-family guard on Guardian profiles, gift links, pay handles, child wallets and medication schedules. Requested for #981 on #771 (comment 6092501825); confirmed as a source-only reservation in #981 comment 6092625435, which is not an installation approval. |
 | 0498 confirmed, held | `0498_a_guest_cannot_feed_the_calendar_or_rewrite_a_grocery_list.sql` | 0464's guest guard on `calendar_feeds` and `grocery_lists`. Requested for #981 on #771 (comment 6094699645); confirmed as a held source and probe reservation in #981 comment 6094770726, which is not an installation or production approval. |
-| 0499 proposed, held | `0499_a_stored_file_answers_to_its_own_familys_rows.sql` | The `documents` bucket's upload, update and delete policies follow the row of the object's own family that names the file: insurance card images (managers), a household document's bytes (not a guest), a sensitive document's path (managers); another family's rows no longer count. Requested for #981 on #771 (comment 6094859264); not yet confirmed. |
+| 0499 confirmed, held | `0499_a_stored_file_answers_to_its_own_familys_rows.sql` | The `documents` bucket's upload, update and delete policies follow the row of the object's own family that names the file: insurance card images (managers), a household document's bytes (not a guest), a sensitive document's path (managers); another family's rows no longer count, and the family is read with the policies' own uuid cast. Requested for #981 on #771 (comment 6094859264); confirmed as a held source and probe reservation in #981 comment 6094986591, which is not an installation approval. |
 | 0500 proposed, held | `0500_a_reward_request_is_the_rewards_own_snapshot.sql` | 0308's ticket guard completed: a reward request names a reward of its own family at that reward's price and title, and keeps them (the foreign key's set-null on a deleted reward excepted); 0428's token-economy guard also checks the title. Requested for #981 on #771 (comment 6094977772, economy scope 6095050742); not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
@@ -4472,11 +4472,12 @@ Leaving `grocery_lists` unwired in the source fails exactly its five lines.
 rename a grocery list through PostgREST and confirm 42501; then do both as a
 test child and confirm they land.
 
-## `0499` (proposed, held) — a stored file did not answer to the row that names it
+## `0499` (confirmed, held) — a stored file did not answer to the row that names it
 
 `supabase/reserved/0499_a_stored_file_answers_to_its_own_familys_rows.sql` —
-**held**: proposed as `0499`, the first number above `0498`, for #981. It was
-requested on #771 in comment 6094859264 and is not yet confirmed. Its probe is
+**held**: `0499`, the first number above `0498`, for #981. It was requested on
+#771 in comment 6094859264 and confirmed as a held source and probe reservation
+in #981 comment 6094986591, which is not an installation approval. Its probe is
 held with it in `docs/audit/reserved/`.
 
 **Severity: medium (integrity of health and household records; a narrow
@@ -4504,8 +4505,15 @@ Measured on a replay of every runnable migration, one row each, rolled back:
 
 0499 changes functions and policies only, with no table, trigger or data
 change:
-1. `document_object_is_restricted` counts only rows of the object's own family
-   (the first folder of its path).
+1. `document_object_is_restricted` counts only rows of the object's own family.
+   That family is read by a new helper, `document_object_family(name)`, exactly
+   as the policies read it: the first folder cast to uuid. Braces, no hyphens
+   and upper case all resolve to the same family, and a first folder that is
+   not a uuid resolves to null, which both row helpers refuse (fail closed).
+   The review of the first cut (6094986591) found it compared the path's text
+   instead, so a sensitive document stored under `{family id}` became
+   readable and writable by every non-manager; the probe now stores real
+   objects under each spelling.
 2. A new SECURITY DEFINER helper, `document_object_write_is_refused(name)`,
    bound the same way, is true when an `insurance_policies` row of that family
    names the object and the caller cannot manage the family, or a `documents`
@@ -4543,15 +4551,21 @@ six files (read, replace, move away, move onto, remove, upload):
 - everyone but the guest writes a household document's bytes;
 - tax files are unchanged for every role;
 - only a manager reads, writes or uploads at a sensitive document's path;
-- another family's planted rows neither hide the file nor block its family;
+- another family's planted rows neither hide the file nor block its family,
+  including for a member who is a guest of that other family;
+- the same holds for a sensitive document, an insurance card image and a
+  household document stored under braces, no-hyphen and upper-case spellings
+  of the family id, and a first folder that is not a uuid fails closed;
 - four mutation controls (the delete policy without the clause, the update
   policy's USING half without it, and each function without its own-family
   binding) each turn a refusal back into a landing.
 
-Seven source mutations were checked locally: removing the guest clause, the
-insurance clause, the restricted function's binding, the upload policy's
-sensitivity check, or the clause from the update USING, update CHECK or delete
-policy each turns the probe red with the matching line. 184 of 184 released
+Source mutations checked locally, each turning the probe red with the
+matching line: removing the guest clause, the insurance clause, the upload
+policy's sensitivity check, or the clause from the update USING, update CHECK
+or delete policy; removing either function's own-family binding (each of the
+three); comparing the family as text (the first cut); and letting a malformed
+first folder resolve to a family or count as unrestricted. 184 of 184 released
 probes pass with and without 0499.
 
 **After approved release:** as a test child, try to replace and to remove a
