@@ -156,6 +156,74 @@ test.describe('chore proof: a phone-sized photo reaches a stored submission', ()
     expect(await storedProof(memberId), 'nothing written to the parent folder').toEqual([]);
   });
 
+  /**
+   * Holds the form's upload to Storage until `go()`, so the attempt is under
+   * way when the child leaves; for a video the upload is the long part.
+   * `answer` resolves with the action's response, wherever it was posted.
+   */
+  async function holdUpload(page: Page) {
+    let go!: () => void;
+    const gate = new Promise<void>((resolve) => { go = resolve; });
+    let reached = false;
+    await page.route('**/storage/v1/object/chore-proof/**', async (route) => {
+      if (route.request().method() !== 'POST') return route.continue();
+      reached = true;
+      await gate;
+      await route.continue();
+    });
+    const answer = page.waitForResponse((r) => r.request().method() === 'POST' && Boolean(r.request().headers()['next-action']), { timeout: 60_000 });
+    return { go, answer, reached: () => reached };
+  }
+
+  /**
+   * Leaves the submit page by the app's own navigation while the attempt is
+   * held, then lets the attempt go. The navigation is a transition, and React
+   * commits it together with the form's own pending one, so the page changes
+   * when the attempt has answered — the moment the form used to arm its 2.2 s
+   * redirect to /kids — and the form unmounts in that commit.
+   */
+  async function leaveForDashboard(page: Page, go: () => void) {
+    await page.locator('a[href="/dashboard"]').first().click();
+    go();
+    await page.waitForURL((url) => url.pathname === '/dashboard', { timeout: 60_000 });
+  }
+
+  test('leaving mid-attempt: the proof is still recorded, and the late answer neither shows nor sends the child back', async ({ page }) => {
+    await signIn(page, `/kids/submit/${assignmentId}`);
+    await page.locator('input[type="file"][name="media"]').setInputFiles({ name: 'bed.jpg', mimeType: 'image/jpeg', buffer: photo(256 * 1024) });
+    const upload = await holdUpload(page);
+    await page.getByRole('button', { name: 'Submit my work' }).click();
+    await expect.poll(upload.reached, { timeout: 30_000 }).toBe(true);
+    await leaveForDashboard(page, upload.go);
+    expect((await upload.answer).status()).toBe(200);
+    // Past the 2.2 s the form waits before sending a child to /kids.
+    await page.waitForTimeout(3_500);
+    expect(new URL(page.url()).pathname, 'the late success did not navigate').toBe('/dashboard');
+    await expect(page.getByText('Sent! 🎉')).toHaveCount(0);
+    // The attempt completed without the form: the submission and its proof.
+    const objects = await storedProof();
+    expect(objects).toHaveLength(1);
+    const { data } = await admin().from('chore_submissions').select('media_paths').eq('assignment_id', assignmentId);
+    expect(data).toEqual([{ media_paths: [`${account!.familyId}/${memberId}/${objects[0].name}`] }]);
+  });
+
+  test('leaving mid-attempt, which the action then refuses: the attempt still releases its upload, and the page shows nothing of it', async ({ page }) => {
+    await signIn(page, `/kids/submit/${assignmentId}`);
+    await page.locator('input[type="file"][name="media"]').setInputFiles({ name: 'bed.jpg', mimeType: 'image/jpeg', buffer: photo(256 * 1024) });
+    const upload = await holdUpload(page);
+    await page.getByRole('button', { name: 'Submit my work' }).click();
+    await expect.poll(upload.reached, { timeout: 30_000 }).toBe(true);
+    // The chore goes away before the action runs, so the action refuses it.
+    const removed = await admin().from('chore_assignments').delete().eq('id', assignmentId);
+    expect(removed.error).toBeNull();
+    await leaveForDashboard(page, upload.go);
+    expect((await upload.answer).status()).toBe(200);
+    await expect.poll(async () => (await storedProof()).length, { timeout: 15_000, message: 'the refused attempt released its upload' }).toBe(0);
+    await page.waitForTimeout(1_000);
+    expect(new URL(page.url()).pathname).toBe('/dashboard');
+    await expect(page.getByText('Chore not found.')).toHaveCount(0);
+  });
+
   test('a file that is not a photo or video is refused before anything is uploaded', async ({ page }) => {
     await signIn(page, `/kids/submit/${assignmentId}`);
     await page.locator('input[type="file"][name="media"]').setInputFiles({

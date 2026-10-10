@@ -22,7 +22,7 @@ describe('chore proof persistence boundaries', () => {
     const code = source();
 
     expect(code).toContain('if (subErr || !submission)');
-    expect(code).toContain('await cleanupProofMedia(supabase, familyId, mediaPaths);');
+    expect(code).toContain('await cleanupProofMedia(supabase, familyId, mediaPaths, { claimed: true });');
   });
 
   it('cleans the submission and media when validation or assignment persistence fails', () => {

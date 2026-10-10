@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Camera, PartyPopper, Loader2, Send } from 'lucide-react';
 import { submitProofAction } from '@/app/(app)/missions/actions';
@@ -19,6 +19,21 @@ export function SubmitProofForm({ assignmentId, proofKind, familyId, memberId }:
   const [done, setDone] = useState(false);
   const [previews, setPreviews] = useState<string[]>([]);
   const router = useRouter();
+  // An attempt runs to its outcome whether or not this form is still on
+  // screen: what it uploaded is kept or released by lib/chores/proof-submit,
+  // not by the form. What stops when the form goes is the form's own part: a
+  // late answer after the child has moved on shows nothing here and does not
+  // send them back to /kids, and a pending redirect is cancelled.
+  const onScreen = useRef(false);
+  const redirect = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    onScreen.current = true;
+    return () => {
+      onScreen.current = false;
+      if (redirect.current) clearTimeout(redirect.current);
+      redirect.current = null;
+    };
+  }, []);
 
   const needsMedia = proofKind !== 'none';
   const accept = proofKind === 'video' ? 'video/*' : 'image/*,video/*';
@@ -56,7 +71,12 @@ export function SubmitProofForm({ assignmentId, proofKind, familyId, memberId }:
           newId: newProofObjectId,
         },
       );
-      if (outcome.kind === 'sent') { setDone(true); setTimeout(() => router.push('/kids'), 2200); return; }
+      if (!onScreen.current) return;
+      if (outcome.kind === 'sent') {
+        setDone(true);
+        redirect.current = setTimeout(() => { redirect.current = null; if (onScreen.current) router.push('/kids'); }, 2200);
+        return;
+      }
       if (outcome.kind === 'upload_failed') setError(t('actions.couldNotUploadProofMedia'));
       else if (outcome.kind === 'refused') setError(outcome.error ?? t('submitForm.somethingWentWrongTryAgain'));
       else setError(t('submitForm.somethingWentWrongTryAgain'));

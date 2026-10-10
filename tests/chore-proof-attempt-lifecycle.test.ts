@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { submitProofAttempt, type ProofSubmitDeps } from '@/lib/chores/proof-submit';
-import { releaseUnreferencedProof } from '@/lib/chores/proof-cleanup';
+import { proofClaimPath, releaseUnreferencedProof } from '@/lib/chores/proof-cleanup';
 import { isProofPathFor, proofFileName, proofObjectPath } from '@/lib/chores/proof-media';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 
@@ -91,31 +91,56 @@ describe('submitProofAttempt', () => {
 describe('releaseUnreferencedProof', () => {
   const held = `${FAMILY}/${KID}/${ids[0]}-old.jpg`;
   const fresh = `${FAMILY}/${KID}/${ids[1]}-new.jpg`;
-  function client(removeResult: { error: unknown } = { error: null }, failRead = false) {
+  function client(removeResult: { error: unknown } = { error: null }, failRead = false, claims = new Set<string>()) {
     const db = createInMemorySupabase();
     db.seed('chore_submissions', [{ id: 's1', family_id: FAMILY, member_id: KID, media_paths: [held] }]);
     const removed: string[][] = [];
+    // Storage's create-if-absent: a claim that exists is refused.
+    const bucket = {
+      upload: async (p: string) => (claims.has(p) ? { data: null, error: { message: 'The resource already exists' } } : (claims.add(p), { data: { path: p }, error: null })),
+      remove: async (p: string[]) => {
+        const proof = p.filter((x) => !x.includes('/claims/'));
+        p.filter((x) => x.includes('/claims/')).forEach((x) => claims.delete(x));
+        if (!proof.length) return { error: null };
+        removed.push(proof);
+        return removeResult;
+      },
+    };
     const c = new Proxy(db as object, {
       get: (t, prop) => {
-        if (prop === 'storage') return { from: () => ({ remove: async (p: string[]) => { removed.push(p); return removeResult; } }) };
+        if (prop === 'storage') return { from: () => bucket };
         if (prop === 'from' && failRead) return () => ({ select: () => ({ eq: () => ({ overlaps: async () => ({ data: null, error: { message: 'down' } }) }) }) });
         return Reflect.get(t, prop);
       },
     });
-    return { c: c as never, removed };
+    return { c: c as never, removed, claims };
   }
 
-  it('removes only what no submission references', async () => {
-    const { c, removed } = client();
+  it('removes only what no submission references, and lets go of its claims', async () => {
+    const { c, removed, claims } = client();
     expect(await releaseUnreferencedProof(c, FAMILY, [held, fresh, fresh])).toEqual([fresh]);
     expect(removed).toEqual([[fresh]]);
+    expect([...claims]).toEqual([]);
+  });
+
+  it('keeps a path someone else holds the claim on (a submission recording it, or a release removing it)', async () => {
+    const { c, removed, claims } = client({ error: null }, false, new Set([proofClaimPath(fresh)]));
+    expect(await releaseUnreferencedProof(c, FAMILY, [fresh])).toEqual([]);
+    expect(removed).toEqual([]);
+    expect([...claims], 'the other holder’s claim is not touched').toEqual([proofClaimPath(fresh)]);
+  });
+
+  it('a claim is not a proof path, so it can never be submitted as proof', () => {
+    expect(proofClaimPath(fresh)).toBe(`${FAMILY}/${KID}/claims/${ids[1]}-new.jpg`);
+    expect(isProofPathFor(proofClaimPath(fresh), FAMILY, KID)).toBe(false);
   });
 
   it('removes nothing when it cannot tell what is referenced', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const { c, removed } = client({ error: null }, true);
+    const { c, removed, claims } = client({ error: null }, true);
     expect(await releaseUnreferencedProof(c, FAMILY, [fresh])).toEqual([]);
     expect(removed).toEqual([]);
+    expect([...claims]).toEqual([]);
   });
 
   it('reports nothing removed when Storage refuses the removal', async () => {

@@ -2,7 +2,7 @@
 
 import { getTranslations } from '@/lib/i18n/server';
 import { revalidatePath } from 'next/cache';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireUserContext, type UserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
@@ -14,7 +14,8 @@ import { applyCompletionRewards, logChoreEvent } from '@/lib/chores/server';
 import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 import { assertAIAccess } from '@/lib/server/ai-access';
 import { familyDetailsBaseSchema } from '@/lib/validation';
-import { releaseUnreferencedProof } from '@/lib/chores/proof-cleanup';
+import type { Tables } from '@/lib/database.types';
+import { claimProof, releaseUnreferencedProof, unclaimProof } from '@/lib/chores/proof-cleanup';
 import {
   PROOF_BUCKET, MAX_PROOF_FILES, MAX_VISION_BYTES, VISION_TYPES, isProofPathFor, proofFileProblem,
 } from '@/lib/chores/proof-media';
@@ -34,9 +35,14 @@ function intVal(fd: FormData, k: string): number | null {
 
 type ChoreSupabase = Awaited<ReturnType<typeof createServer>>;
 
-/** Releases only what no submission references, checked now (lib/chores/proof-cleanup). */
-async function cleanupProofMedia(supabase: ChoreSupabase, familyId: string, paths: string[]): Promise<void> {
-  await releaseUnreferencedProof(supabase, familyId, paths);
+/**
+ * Releases only what no submission references, checked now (lib/chores/proof-cleanup).
+ * `claimed`: whether this action already holds the paths' claims. Inside
+ * submitClaimedProof it does, and a release that tried to claim them again
+ * would be refused and keep everything.
+ */
+async function cleanupProofMedia(supabase: ChoreSupabase, familyId: string, paths: string[], { claimed }: { claimed: boolean }): Promise<void> {
+  await releaseUnreferencedProof(supabase, familyId, paths, { claimed });
 }
 
 async function cleanupSubmission(
@@ -56,7 +62,7 @@ async function cleanupSubmission(
       submissionId, familyId, error: error?.message ?? 'no rows deleted',
     });
   }
-  await cleanupProofMedia(supabase, familyId, paths);
+  await cleanupProofMedia(supabase, familyId, paths, { claimed: true });
 }
 
 async function restoreAssignmentState(
@@ -170,9 +176,42 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
   const submitted = formData.getAll('media_path').map((value) => String(value));
   const ownPaths = submitted.filter((path) => isProofPathFor(path, familyId, assignment.member_id));
   if (ownPaths.length !== submitted.length || submitted.length > MAX_PROOF_FILES || new Set(submitted).size !== submitted.length) {
-    await cleanupProofMedia(supabase, familyId, ownPaths);
+    await cleanupProofMedia(supabase, familyId, ownPaths, { claimed: false });
     return { ok: false, error: t('actions.couldNotUploadProofMedia') };
   }
+
+  // From here until it returns, this action holds the claim on every path it
+  // was given (lib/chores/proof-cleanup): no release can remove one between
+  // the checks below and the row that records it, and no other submission can
+  // record it. A path someone else holds is refused, and nothing is removed.
+  const claimed = await claimProof(supabase, submitted);
+  if (claimed.length !== submitted.length) {
+    await unclaimProof(supabase, claimed);
+    return { ok: false, error: t('actions.couldNotUploadProofMedia') };
+  }
+  try {
+    return await submitClaimedProof({ t, ctx, supabase, familyId, tz, assignment, chore, proofKind, note, submitted });
+  } finally {
+    await unclaimProof(supabase, claimed);
+  }
+}
+
+type ClaimedProof = {
+  t: Awaited<ReturnType<typeof getTranslations>>;
+  ctx: UserContext;
+  supabase: ChoreSupabase;
+  familyId: string;
+  tz: string;
+  assignment: Tables<'chore_assignments'>;
+  chore: Tables<'chores'>;
+  proofKind: string;
+  note: string | null;
+  submitted: string[];
+};
+
+/** The rest of submitProofAction, run while it holds the claim on every path in `submitted`. */
+async function submitClaimedProof({ t, ctx, supabase, familyId, tz, assignment, chore, proofKind, note, submitted }: ClaimedProof): Promise<{ ok: boolean; error?: string }> {
+  const assignmentId = assignment.id;
   if (submitted.length) {
     const { data: holders, error: holdersError } = await supabase.from('chore_submissions')
       .select('id').eq('family_id', familyId).overlaps('media_paths', submitted).limit(1);
@@ -188,7 +227,7 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
     const mediaType = stored?.contentType ?? (stored?.metadata as { mimetype?: string } | undefined)?.mimetype ?? '';
     const size = stored?.size ?? Number((stored?.metadata as { size?: number } | undefined)?.size ?? 0);
     if (infoError || !stored || proofFileProblem({ type: mediaType, size })) {
-      await cleanupProofMedia(supabase, familyId, submitted);
+      await cleanupProofMedia(supabase, familyId, submitted, { claimed: true });
       return { ok: false, error: t('actions.couldNotUploadProofMedia') };
     }
     mediaPaths.push(path);
@@ -214,7 +253,7 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
     })
     .select('id').single();
   if (subErr || !submission) {
-    await cleanupProofMedia(supabase, familyId, mediaPaths);
+    await cleanupProofMedia(supabase, familyId, mediaPaths, { claimed: true });
     return { ok: false, error: t('actions.couldNotSaveYourSubmission') };
   }
 
@@ -237,9 +276,11 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
     return { ok: false, error: t('actions.couldNotReviewYourProof') };
   }
   // The reviewer judged only what it was shown. A video, an image over 5 MB or
-  // a photo that could not be read was not shown, so however well the rest
-  // scored, a parent looks at the whole proof before anything is approved.
-  if (images.length < mediaPaths.length && !verdict.needs_parent_review) {
+  // a photo that could not be read was not shown, so whatever it concluded
+  // from the rest — approved, rejected or anything between — a parent looks at
+  // the whole proof: it is neither auto-approved nor decided without them.
+  const unseen = images.length < mediaPaths.length;
+  if (unseen && !verdict.needs_parent_review) {
     verdict = { ...verdict, needs_parent_review: true };
   }
 
@@ -300,7 +341,8 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
       return { ok: false, error: t('actions.couldNotFinishTheChore2') };
     }
   } else {
-    const subStatus = verdict.status === 'needs_improvement' ? 'needs_improvement'
+    const subStatus = unseen ? 'parent_review'
+      : verdict.status === 'needs_improvement' ? 'needs_improvement'
       : verdict.status === 'rejected' ? 'rejected' : verdict.status === 'approved' ? 'parent_review' : 'parent_review';
     if (!await setSubmissionStatus(service, familyId, submission.id, subStatus)) {
       await restoreAssignmentState(supabase, familyId, assignment);
