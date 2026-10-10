@@ -14,12 +14,10 @@ export default async function AssistantPage() {
   await requireFeature('/dashboard/assistant');
   const t = await getTranslations();
   // The module's own heading is an h2 because it also renders inside the AI
-  // orb on other pages; the route's h1 lives here, for screen readers. Its
-  // data-scroll-below-topbar asks app/globals.css to stop scrolls below the
-  // sticky top bar on this page (between lg and 2xl), and on no other.
+  // orb on other pages; the route's h1 lives here, for screen readers.
   return (
     <>
-      <h1 data-scroll-below-topbar className="sr-only">{t('navShared.aiAssistant')}</h1>
+      <h1 className="sr-only">{t('navShared.aiAssistant')}</h1>
       <AssistantModule />
     </>
   );

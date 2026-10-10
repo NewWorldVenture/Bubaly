@@ -235,23 +235,66 @@ test.describe('assistant: the composer and the workspace either side of lg and 2
     });
   }
 
-  test('the scroll padding is the assistant page\'s, between lg and 2xl, and no other page\'s', async ({ page }) => {
-    // app/globals.css stops scrolls below the sticky top bar only where the
-    // two-column layout can make this page taller than the window.
-    const padding = () => page.evaluate(() => getComputedStyle(document.documentElement).scrollPaddingTop);
+  test('scrolls stop clear of the app\'s fixed chrome, on this page and every other, at every width', async ({ page }) => {
+    // app/globals.css keeps a scroll from leaving anything under the sticky
+    // top bar, or under the tab bar and the floating buttons at the bottom
+    // (WCAG 2.4.11). It was this page's alone between lg and 2xl (#985); the
+    // keyboard walk found the same on nine other pages.
+    const padding = () => page.evaluate(() => {
+      const s = getComputedStyle(document.documentElement);
+      return [s.scrollPaddingTop, s.scrollPaddingBottom];
+    });
     await page.setViewportSize({ width: 1280, height: 800 });
     await signIn(page, '/dashboard/assistant');
-    await expect(page.locator('h1[data-scroll-below-topbar]')).toHaveCount(1);
-    for (const [width, expected] of [[1280, '72px'], [1024, '72px'], [1535, '72px'], [1536, 'auto'], [1600, 'auto'], [1023, 'auto'], [390, 'auto']] as const) {
+    for (const [width, expected] of [[1280, ['72px', '152px']], [1024, ['72px', '152px']], [1600, ['72px', '152px']], [1023, ['72px', '200px']], [640, ['72px', '200px']], [639, ['64px', '200px']], [390, ['64px', '200px']]] as const) {
       await page.setViewportSize({ width, height: 800 });
-      await expect.poll(padding, { message: `${width}px` }).toBe(expected);
+      await expect.poll(padding, { message: `${width}px` }).toEqual(expected);
     }
-    // Leaving by the app's own navigation, the marker goes with the page.
+    // Another page, by the app's own navigation: the same.
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.locator('a[href="/dashboard/calendar"]:visible').first().click();
     await page.waitForURL((url) => url.pathname === '/dashboard/calendar');
-    await expect(page.locator('[data-scroll-below-topbar]')).toHaveCount(0);
-    expect(await padding()).toBe('auto');
+    expect(await padding()).toEqual(['72px', '152px']);
+    // A page without the app shell scrolls as it did.
+    await page.goto('/pricing');
+    await expect.poll(padding).toEqual(['auto', 'auto']);
+  });
+
+  test('Tab never leaves a control under the top bar or the floating buttons', async ({ page }) => {
+    // Three of the pages the keyboard walk caught at 1280x720: a control
+    // under the top bar (reasoning, documents) and a link under the AI orb
+    // (family COO). Every Tab stop must show at least its own centre.
+    // The page scrolls smoothly; judge each stop where the scroll ends.
+    const covered = () => page.evaluate(async () => {
+      for (let still = 0, last = -1, frames = 0; still < 3 && frames < 120; frames += 1) {
+        await new Promise(requestAnimationFrame);
+        still = scrollY === last ? still + 1 : 0;
+        last = scrollY;
+      }
+      const el = document.activeElement as HTMLElement | null;
+      if (!el || el === document.body) return null;
+      const r = el.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) return null;
+      const x = Math.min(Math.max(r.left + r.width / 2, 0), innerWidth - 1);
+      const y = Math.min(Math.max(r.top + r.height / 2, 0), innerHeight - 1);
+      const top = document.elementFromPoint(x, y);
+      if (!top || top === el || el.contains(top) || top.contains(el)) return null;
+      const chrome = (top as HTMLElement).closest('.app-topbar, nav.fixed, .fixed');
+      return chrome ? `${el.tagName.toLowerCase()} "${(el.getAttribute('aria-label') ?? el.textContent ?? '').trim().slice(0, 30)}" under ${chrome.className.toString().slice(0, 40)}` : null;
+    });
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await signIn(page, '/dashboard/reasoning');
+    for (const route of ['/dashboard/reasoning', '/dashboard/documents', '/dashboard/family-coo']) {
+      if (new URL(page.url()).pathname !== route) await page.goto(route);
+      await page.evaluate(() => { (document.activeElement as HTMLElement | null)?.blur(); window.scrollTo(0, 0); });
+      const hidden: string[] = [];
+      for (let i = 0; i < 70; i += 1) {
+        await page.keyboard.press('Tab');
+        const c = await covered();
+        if (c) hidden.push(`${route} stop ${i + 1}: ${c}`);
+      }
+      expect(hidden, `${route}: focus stops hidden under fixed chrome`).toEqual([]);
+    }
   });
 
   test('1024px, a conversation opened from the history: its docked composer works, and "New chat" brings back a working hero', async ({ page }) => {
