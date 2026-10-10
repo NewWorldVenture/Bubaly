@@ -113,6 +113,7 @@ source allocations are not evidence that production applied any migration.
 | 0497 confirmed, held | `0497_a_childs_wallet_and_guardian_number_stay_in_one_family.sql` | 0311's same-family guard on Guardian profiles, gift links, pay handles, child wallets and medication schedules. Requested for #981 on #771 (comment 6092501825); confirmed as a source-only reservation in #981 comment 6092625435, which is not an installation approval. |
 | 0498 confirmed, held | `0498_a_guest_cannot_feed_the_calendar_or_rewrite_a_grocery_list.sql` | 0464's guest guard on `calendar_feeds` and `grocery_lists`. Requested for #981 on #771 (comment 6094699645); confirmed as a held source and probe reservation in #981 comment 6094770726, which is not an installation or production approval. |
 | 0499 proposed, held | `0499_a_stored_file_answers_to_its_own_familys_rows.sql` | The `documents` bucket's upload, update and delete policies follow the row of the object's own family that names the file: insurance card images (managers), a household document's bytes (not a guest), a sensitive document's path (managers); another family's rows no longer count. Requested for #981 on #771 (comment 6094859264); not yet confirmed. |
+| 0500 proposed, held | `0500_a_reward_request_is_the_rewards_own_snapshot.sql` | 0308's ticket guard completed: a reward request names a reward of its own family at that reward's price and title, and keeps them (the foreign key's set-null on a deleted reward excepted). Requested for #981 on #771 (comment 6094977772); not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4557,6 +4558,75 @@ probes pass with and without 0499.
 test insurance card image through the Storage API and confirm both are
 refused; then do both as a test parent and confirm they land. As a test guest,
 try to remove the file behind an ordinary test document and confirm it stays.
+
+## `0500` (proposed, held) — a child could forge the reward request a parent approves
+
+`supabase/reserved/0500_a_reward_request_is_the_rewards_own_snapshot.sql` —
+**held**: proposed as `0500`, the first number above `0499`, for #981. It was
+requested on #771 in comment 6094977772 and is not yet confirmed. Its probe is
+held with it in `docs/audit/reserved/`.
+
+**Severity: medium (the parent approves a request whose title and price the
+child wrote). Deploy order: any.** 0308 made a redemption carry the shelf's
+price, and its header says that refuses a child's "5000-point reward for 1
+point". Its guard looked the reward up by `reward_id` alone, returned early
+when `reward_id` was null and on an UPDATE that left `cost_points` alone, and
+never read `reward_title`, which is what `rewards-module` shows the parent.
+Measured as an active child, with "New bike" at 5000 and "Sticker" at 1:
+- a ticket naming no reward, titled "New bike", at 1 point: landed;
+- a ticket naming another family's 1-point reward: landed;
+- the family's own sticker titled "New bike": landed;
+- a real bike request re-priced to 1 point by clearing `reward_id`: 1 row;
+- a real sticker request retitled "New bike": 1 row.
+
+Each reaches the parent's queue as "Kid wants New bike · 1 pts", the same as a
+real request, and one approval spends 1 point on it.
+
+0500 replaces the body of 0308's `reward_redemption_cost_guard`, with the same
+name and trigger, still SECURITY DEFINER. For a signed-in caller:
+- **INSERT:** `reward_id` must name a reward of the ticket's family;
+  `cost_points` must be its price (0308's sentence) and `reward_title` its
+  title.
+- **UPDATE:** those three stay. The foreign key's `ON DELETE SET NULL` after
+  the reward is deleted is the one change allowed, so the ticket keeps the
+  title and price it was made with (0028). Decisions, withdrawals and notes
+  are untouched.
+
+The service role and session-less writers (seeds) stay exempt.
+`requestRedemptionAction`, the only writer, already writes exactly this, so
+nothing legitimate changes. A parent renaming or re-pricing a reward in the
+instant between that action's read and its insert now gets a refusal; 0308
+already refused the re-pricing half of that race.
+
+**Released probe changed with it:** `docs/audit/reward-redemption-decision-check.sql`
+wrote every ticket with `reward_id` null so 0308's guard would stay silent. It
+now names a real reward of each family at that reward's title and price, which
+keeps the guard silent on both schemas. It passes with and without 0500.
+
+**Proof:** `.github/workflows/reward-snapshot-runtime.yml` replays every
+runnable migration. It requires the held probe
+`docs/audit/reserved/a-reward-request-is-the-rewards-own-snapshot-check.sql`
+to fail on the released schema with the forged requests landing, applies 0500
+twice, and requires the probe to pass. It then re-runs the released probes that
+write redemptions. The passing run shows:
+- the real requests land;
+- each forgery is refused with 0500's sentences (23514), or with 0308's for
+  the re-priced bike;
+- the child's own pending requests cannot be cleared, re-priced, retitled or
+  re-pointed;
+- a withdrawal and a parent's approval still land, and deleting a reward
+  leaves its ticket as made;
+- the service role and a session-less writer are exempt;
+- four mutation controls each let a forgery back in.
+
+Five source mutations were checked locally: removing the family clause, the
+title check, the update refusal or the delete allowance, or restoring 0308's
+null early return. Each turns the probe red with the matching line. 184 of 184
+released probes pass with and without 0500.
+
+**After approved release:** as a test child, try to insert a redemption with
+no `reward_id` through PostgREST and confirm 23514; then request a real reward
+through the app and confirm it lands.
 
 ## `0471` and `0474` — the admin digest's delivery store, and a removed admin is not sent it
 
