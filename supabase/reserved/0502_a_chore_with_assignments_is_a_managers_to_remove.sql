@@ -18,15 +18,20 @@
 -- 0439's balance guard), so one child erases a sibling's earned points, or
 -- clears every open chore on the board, by deleting chores instead.
 --
--- This adds a BEFORE DELETE OR UPDATE OF family_id trigger on chores: a
--- signed-in caller who does not manage the chore's own family may delete it,
--- or move it to another family, only while it has no assignments. The move
--- matters because chores' update policy is family membership on both sides:
--- measured on the first cut, a child of this family who is a parent of
--- another moved the chore there (1 row), deleted it as that family's manager
--- (1 row), and the sibling's approved assignment went with it. 0374 already reserves every
--- assignment delete to a manager, so nothing a child could not remove directly
--- goes with the chore. The application's only chore deletes are rollbacks of a
+-- This adds a BEFORE DELETE OR UPDATE OF family_id trigger on chores. A
+-- signed-in caller who does not manage the chore's own family:
+--   * may delete it only while it has no assignments. The DELETE's row lock
+--     waits for an assignment insert in flight, so the check sees it;
+--   * may not move it to another family at all. Chores' update policy is
+--     family membership on both sides: on the first cut a child of this family
+--     who is a parent of another moved the chore there (1 row), deleted it as
+--     that family's manager (1 row), and the sibling's approved assignment went
+--     with it. A second cut refused that move only when an assignment was
+--     visible, but a family_id change does not wait for an assignment insert
+--     still in flight (owner review 6097190516), so the move is refused
+--     whatever the session sees. Nothing in the application moves a chore.
+-- 0374 already reserves every assignment delete to a manager, so nothing a
+-- child could not remove directly goes with the chore. The application's only chore deletes are rollbacks of a
 -- chore the same call has just created, after its assignment insert failed
 -- (missions' createChoreAction, lib/services/tasks, the assistant tool), so the
 -- chore has no assignments and the rollback still lands. Managers, the service
@@ -42,9 +47,12 @@
 -- Nothing in the application writes any of those six (0461), so today that
 -- cascade erases nothing.
 --
--- HELD: proposed as 0502 (the first number above 0501; requested on #771 in
--- comment 6097049650, not yet confirmed) in supabase/reserved/ until every
--- number below it has landed. Proven by
+-- HELD: 0502, the first number above 0501, requested on #771 in comment
+-- 6097049650 and confirmed as a held source and probe reservation in #981
+-- comment 6097190516 (no installation or production policy approval). It stays
+-- in supabase/reserved/ until every number below it has landed. Proven also
+-- by docs/audit/reserved/a-chore-move-cannot-race-an-assignment-check.sql, a
+-- two-session test of the insert-first and move-first timings. Proven by
 -- docs/audit/reserved/a-chore-with-assignments-is-a-managers-to-remove-check.sql
 -- and .github/workflows/chore-cascade-runtime.yml. Not applied to production by
 -- an agent; recorded in docs/PENDING_PROD_MIGRATIONS.md.
@@ -79,21 +87,36 @@ begin
      or public.can_manage_family(old.family_id) then
     return case when tg_op = 'DELETE' then old else new end;
   end if;
-  -- A family being deleted takes its chores: by the time the cascade reaches a
-  -- chore, the family row is gone.
-  if tg_op = 'DELETE' and not exists (select 1 from public.families f where f.id = old.family_id) then
-    return old;
-  end if;
-  if exists (select 1 from public.chore_assignments a where a.chore_id = old.id) then
-    raise exception 'A chore with assignments can only be removed or moved out of its family by a family manager'
+  -- A move out of the family is refused outright, whatever this session can
+  -- see. A family_id change is a non-key update: its row lock does not wait for
+  -- an assignment insert still in flight on this chore (that insert's foreign
+  -- key holds only KEY SHARE), so "no assignment visible" is not a safe answer
+  -- for a move (#981 review 6097190516). Nothing in the application moves a
+  -- chore between families.
+  if tg_op = 'UPDATE' then
+    raise exception 'A chore can only be moved out of its family by a family manager'
       using errcode = '42501';
   end if;
-  return case when tg_op = 'DELETE' then old else new end;
+  -- A family being deleted takes its chores: by the time the cascade reaches a
+  -- chore, the family row is gone.
+  if not exists (select 1 from public.families f where f.id = old.family_id) then
+    return old;
+  end if;
+  -- A DELETE locks the chore row FOR UPDATE before this trigger runs, which
+  -- waits for any in-flight assignment insert's KEY SHARE; this statement then
+  -- sees that assignment once it is committed. So an empty-looking chore is
+  -- really empty here, and the application's rollback of a chore it just
+  -- created still lands.
+  if exists (select 1 from public.chore_assignments a where a.chore_id = old.id) then
+    raise exception 'A chore with assignments can only be removed by a family manager'
+      using errcode = '42501';
+  end if;
+  return old;
 end
 $$;
 
 comment on function public.chore_with_assignments_is_a_managers_to_remove() is
-  'Refuses (42501) a signed-in caller who does not manage the chore''s own family deleting a chore that has assignments, or moving it to another family (from where a manager there could delete it), since the ON DELETE CASCADE would remove assignments 0374 reserves to a manager (0502). Managers of the chore''s family, the service role, session-less writers and a family deletion cascade are unaffected.';
+  'Refuses (42501) a signed-in caller who does not manage the chore''s own family deleting a chore that has assignments, or moving a chore to another family at all (from where a manager there could delete it, and a move does not wait for an assignment insert in flight), since the ON DELETE CASCADE would remove assignments 0374 reserves to a manager (0502). Managers of the chore''s family, the service role, session-less writers and a family deletion cascade are unaffected.';
 
 revoke all on function public.chore_with_assignments_is_a_managers_to_remove() from public;
 

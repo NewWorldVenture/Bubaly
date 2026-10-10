@@ -1,10 +1,12 @@
 name: Chore cascade SQL runtime
 
-# The held 0502 (supabase/reserved/) adds a BEFORE DELETE guard on chores: a
-# signed-in non-manager deletes a chore only while it has no assignments. 0374
+# The held 0502 (supabase/reserved/) adds a BEFORE DELETE OR UPDATE OF
+# family_id guard on chores: a signed-in non-manager deletes a chore only while
+# it has no assignments, and does not move one to another family at all. 0374
 # made deleting an assignment a manager's only, but chores stayed deletable by
 # any member and chore_assignments.chore_id cascades, which RLS does not gate,
-# so a child erased a sibling's approved points by deleting the chore. Neither
+# so a child erased a sibling's approved points by deleting the chore, or by
+# moving it to a family where they are a parent and deleting it there. Neither
 # the Database job's replay nor `supabase db push` reads supabase/reserved/, and
 # the Database job's probe glob does not read docs/audit/reserved/, so nothing
 # else in CI exercises it. This job replays every runnable migration with the
@@ -13,11 +15,15 @@ name: Chore cascade SQL runtime
 #   1. runs the held probe on that released schema and requires it to FAIL on
 #      the defect, so a green step 3 is the migration's and not a probe that
 #      can no longer see anything;
-#   2. applies the held migration twice (it is re-runnable);
-#   3. runs the probe again and requires it to pass;
-#   4. re-runs the released chore probes over the added trigger.
+#   2. runs the two-session race probe there and requires it to FAIL on the
+#      insert-first and move-first timings (owner review 6097190516);
+#   3. applies the held migration twice (it is re-runnable);
+#   4. runs both probes again and requires them to pass; the race probe's own
+#      negative control there swaps in the second cut's "refuse only if an
+#      assignment is visible" move rule and requires the race to reproduce;
+#   5. re-runs the released chore probes over the added trigger.
 #
-# When 0502 is released into supabase/migrations/, its probe moves back to
+# When 0502 is released into supabase/migrations/, its probes move back to
 # docs/audit/ (the Database job then runs it) and this workflow is retired with
 # it. Throwaway database only; agents must not apply migrations to production.
 
@@ -28,6 +34,7 @@ on:
       - '.github/workflows/chore-cascade-runtime.yml'
       - 'supabase/reserved/0502_a_chore_with_assignments_is_a_managers_to_remove.sql'
       - 'docs/audit/reserved/a-chore-with-assignments-is-a-managers-to-remove-check.sql'
+      - 'docs/audit/reserved/a-chore-move-cannot-race-an-assignment-check.sql'
       - 'docs/audit/chore-price-check.sql'
       - 'docs/audit/chore-assignment-owner-check.sql'
       - 'docs/audit/chore-assignment-delete-is-a-managers-check.sql'
@@ -42,6 +49,7 @@ on:
       - '.github/workflows/chore-cascade-runtime.yml'
       - 'supabase/reserved/0502_a_chore_with_assignments_is_a_managers_to_remove.sql'
       - 'docs/audit/reserved/a-chore-with-assignments-is-a-managers-to-remove-check.sql'
+      - 'docs/audit/reserved/a-chore-move-cannot-race-an-assignment-check.sql'
       - 'docs/audit/chore-price-check.sql'
       - 'docs/audit/chore-assignment-owner-check.sql'
       - 'docs/audit/chore-assignment-delete-is-a-managers-check.sql'
@@ -127,6 +135,26 @@ jobs:
             fi
           done
 
+      - name: The released schema lets a chore move race an assignment insert
+        shell: bash
+        run: |
+          set -euo pipefail
+          status=0
+          out="$(psql -X -v ON_ERROR_STOP=1 -q -f docs/audit/reserved/a-chore-move-cannot-race-an-assignment-check.sql 2>&1)" || status=$?
+          printf '%s\n' "$out"
+          if [ "$status" -eq 0 ]; then
+            echo '::error::the race probe passed on the released schema, so it can no longer see the defect 0502 repairs'
+            exit 1
+          fi
+          for expected in \
+            "real A (insert first): the child moved the chore while the assignment insert was open (UPDATE 1), then deleted it there (DELETE 1); the sibling's approved assignment left: 0" \
+            "real B (move first): the child's move landed (UPDATE 1), the assignment insert beside it INSERT 0 1, and after the child deleted the chore there the sibling's approved assignment left: 0"; do
+            if ! grep -qF "$expected" <<<"$out"; then
+              echo "::error::the race probe failed on the released schema, but not on: $expected"
+              exit 1
+            fi
+          done
+
       - name: Apply the held migration, twice
         run: |
           psql -X -v ON_ERROR_STOP=1 -q -f supabase/reserved/0502_a_chore_with_assignments_is_a_managers_to_remove.sql
@@ -139,6 +167,14 @@ jobs:
           out="$(psql -X -v ON_ERROR_STOP=1 -q -f docs/audit/reserved/a-chore-with-assignments-is-a-managers-to-remove-check.sql 2>&1)"
           printf '%s\n' "$out"
           grep -qF 'a-chore-with-assignments-is-a-managers-to-remove: OK' <<<"$out"
+
+      - name: A chore move cannot race an assignment (two sessions)
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$(psql -X -v ON_ERROR_STOP=1 -q -f docs/audit/reserved/a-chore-move-cannot-race-an-assignment-check.sql 2>&1)"
+          printf '%s\n' "$out"
+          grep -qF 'a-chore-move-cannot-race-an-assignment: OK' <<<"$out"
 
       - name: The released chore probes still hold over the added trigger
         shell: bash
