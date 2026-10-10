@@ -11,8 +11,13 @@ import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => ({ entitlement: null as unknown, throws: false }));
+// The feature gate reads the whole entitlement; this family is open and Free.
 vi.mock('@/lib/server/plan', () => ({
   resolveFamilyPlanLevel: async () => { if (h.throws) throw new Error('plan read failed'); return 0; },
+  resolveFamilyEntitlement: async () => {
+    if (h.throws) throw new Error('plan read failed');
+    return { effectiveLevel: 0, closed: false, locked: false, inTrial: false, trialEndsAt: null };
+  },
 }));
 vi.mock('@/lib/server/feature-tiers', () => ({
   getFeatureTiersByHref: async () => ({ '/dashboard/autopilot': 'plus', '/dashboard/briefing': 'plus', '/dashboard/off': 'off' }),

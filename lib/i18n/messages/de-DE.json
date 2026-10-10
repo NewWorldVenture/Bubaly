@@ -16844,6 +16844,6 @@
   "mobileAssistant.conflictFamilyOther": "{count} Familienhinweise",
   "mobileAssistant.conflictCounts": "{personal} · {family}",
   "mobileAssistant.conflictMobileFamilyLine": "Hinweis zur Familienbelegung: {titles} überschneiden sich {when}. Importierte Belegungen gelten für die Familie; sie zeigen nicht, wer doppelt verplant ist.",
-  "aiAccess.accountClosed": "Das Konto Ihrer Familie ist geschlossen. Öffnen Sie es wieder, um Bubaly erneut zu nutzen.",
-  "aiAccess.trialEnded": "Ihr kostenloser Testzeitraum ist abgelaufen. Wählen Sie einen Tarif, um Bubaly weiter zu nutzen."
+  "accountStanding.accountClosed": "Das Konto Ihrer Familie ist geschlossen. Öffnen Sie es wieder, um Bubaly erneut zu nutzen.",
+  "accountStanding.trialEnded": "Ihr kostenloser Testzeitraum ist abgelaufen. Wählen Sie einen Tarif, um Bubaly weiter zu nutzen."
 }

@@ -16844,6 +16844,6 @@
   "mobileAssistant.conflictFamilyOther": "{count} avis familiaux",
   "mobileAssistant.conflictCounts": "{personal} · {family}",
   "mobileAssistant.conflictMobileFamilyLine": "Avis d’occupation familiale : {titles} se chevauchent {when}. L’occupation importée s’applique à la famille ; elle n’indique pas qui a deux engagements simultanés.",
-  "aiAccess.accountClosed": "Le compte de votre famille est fermé. Rouvrez-le pour utiliser à nouveau Bubaly.",
-  "aiAccess.trialEnded": "Votre essai gratuit est terminé. Choisissez un forfait pour continuer à utiliser Bubaly."
+  "accountStanding.accountClosed": "Le compte de votre famille est fermé. Rouvrez-le pour utiliser à nouveau Bubaly.",
+  "accountStanding.trialEnded": "Votre essai gratuit est terminé. Choisissez un forfait pour continuer à utiliser Bubaly."
 }

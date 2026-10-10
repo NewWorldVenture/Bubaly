@@ -24,7 +24,8 @@ import { tierToLevel } from '@/lib/features/tiers';
 import { getResolvedFeatureTiers } from '@/lib/server/feature-tiers';
 import { ensureActiveFamily } from '@/lib/server/ensure-family';
 import { resolveFamilyEntitlement } from '@/lib/server/plan';
-import { getTranslations } from '@/lib/i18n/server';
+import { refusedStanding, type RefusedStanding } from '@/lib/server/entitlement';
+import { refusedStandingDenial } from '@/lib/server/account-standing';
 import { createServer } from '@/lib/supabase/server';
 import { getUserContext, type UserContext } from '@/lib/supabase/auth';
 import { extractBearerToken, getBearerUserContext } from '@/lib/supabase/bearer';
@@ -131,16 +132,14 @@ export async function assertAIAccess(
   }
 
   let planLevel: number;
-  let closed = false;
-  let locked = false;
+  let standing: RefusedStanding | null = null;
   try {
     if (superAdmin) {
       planLevel = 2;
     } else {
       const entitlement = await resolveFamilyEntitlement(opts.db, familyId);
       planLevel = entitlement.effectiveLevel;
-      closed = entitlement.closed;
-      locked = entitlement.locked;
+      standing = refusedStanding(entitlement);
     }
   } catch (error) {
     console.error('[ai-access] plan level read failed', error);
@@ -151,14 +150,7 @@ export async function assertAIAccess(
   // monthly allowance. The paywall that is meant to stop them is drawn by
   // `app/(app)/layout.tsx` over the web screens only; this is what stops the
   // routes, and the phone app, which has no paywall of its own.
-  if (closed) {
-    const t = await getTranslations();
-    return { ok: false, status: 403, code: 'account_closed', error: t('aiAccess.accountClosed') };
-  }
-  if (locked) {
-    const t = await getTranslations();
-    return { ok: false, status: 403, code: 'plan_required', needLevel: 1, error: t('aiAccess.trialEnded') };
-  }
+  if (standing) return { ok: false, ...(await refusedStandingDenial(standing)) };
   const need = tier === 'off' ? 0 : tierToLevel(tier);
   if (planLevel < need) {
     return {

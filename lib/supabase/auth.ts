@@ -234,10 +234,14 @@ export async function requirePlanLevel(minLevel: 1 | 2): Promise<UserContext> {
   return ctx;
 }
 
+/** Where every plan and account-standing refusal on a page is sent. */
+const BILLING_PATH = '/dashboard/billing';
+
 /**
  * Feature-aware page guard. Resolves the feature's effective tier from the
  * admin's Tier & Features settings (override → code default), then enforces it:
  *   off  → notFound() (super-admins still pass, to preview)
+ *   closed / trial ended → redirect to billing (see below)
  *   else → redirect to billing when the family's plan is below the tier's level.
  * `key` is the feature's route, e.g. '/dashboard/chores'.
  */
@@ -253,5 +257,13 @@ export async function requireFeature(key: string): Promise<UserContext> {
   const entitlement = await resolveFeatureEntitlement(supabase, ctx.active.familyId, key);
   if (entitlement.allowed) return ctx;
   if (entitlement.reason === 'off') notFound();
-  redirect(`/dashboard/billing?upgrade=1&need=${entitlement.needLevel}`);
+  if (entitlement.reason === 'closed' || entitlement.reason === 'trial_ended') {
+    // A closed or trial-ended family is refused every feature. Billing is where
+    // it is sent, and where `app/(app)/layout.tsx` draws its gate with the way
+    // back (reopen the account, or choose a plan), so the billing page itself
+    // must never refuse it: that would redirect billing to billing.
+    if (key === BILLING_PATH) return ctx;
+    redirect(entitlement.reason === 'closed' ? BILLING_PATH : `${BILLING_PATH}?upgrade=1&need=${entitlement.needLevel}`);
+  }
+  redirect(`${BILLING_PATH}?upgrade=1&need=${entitlement.needLevel}`);
 }

@@ -57,6 +57,23 @@ export function computeEntitlement(input: {
   return { effectiveLevel: 0, locked: true, closed: false, inTrial: false, trialEndsAt };
 }
 
+/**
+ * Whether the family is shut out of the whole app, whatever its level says.
+ *
+ * A closed family and one whose trial ended unpaid both have effective level 0,
+ * the same number as an open Free family, so a gate that compares levels alone
+ * lets them through to every Free-tier feature. Every server gate asks this as
+ * well. `closed` wins: the family chose to lock the account, and choosing a
+ * plan would not open it.
+ */
+export type RefusedStanding = 'closed' | 'trial_ended';
+
+export function refusedStanding(entitlement: Pick<Entitlement, 'closed' | 'locked'>): RefusedStanding | null {
+  if (entitlement.closed) return 'closed';
+  if (entitlement.locked) return 'trial_ended';
+  return null;
+}
+
 const UNLOCKED_FALLBACK: Entitlement = {
   effectiveLevel: 0, locked: false, closed: false, inTrial: false, trialEndsAt: null,
 };

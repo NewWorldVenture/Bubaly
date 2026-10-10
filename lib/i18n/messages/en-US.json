@@ -16844,6 +16844,6 @@
   "mobileAssistant.conflictFamilyOther": "{count} family advisories",
   "mobileAssistant.conflictCounts": "{personal} · {family}",
   "mobileAssistant.conflictMobileFamilyLine": "Family occupancy advisory: {titles} overlap {when}. Imported occupancy applies to the family; it does not identify who is double-booked.",
-  "aiAccess.accountClosed": "Your family's account is closed. Reopen it to use Bubaly again.",
-  "aiAccess.trialEnded": "Your free trial has ended. Choose a plan to keep using Bubaly."
+  "accountStanding.accountClosed": "Your family's account is closed. Reopen it to use Bubaly again.",
+  "accountStanding.trialEnded": "Your free trial has ended. Choose a plan to keep using Bubaly."
 }

@@ -1,7 +1,8 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { resolveFamilyPlanLevel } from '@/lib/server/plan';
+import { resolveFamilyEntitlement } from '@/lib/server/plan';
+import { refusedStanding, type RefusedStanding } from '@/lib/server/entitlement';
 import { getFeatureTiersByHref } from '@/lib/server/feature-tiers';
 import { tierToLevel } from '@/lib/features/tiers';
 import type { FeatureTier } from '@/lib/constants/feature-catalog';
@@ -31,14 +32,21 @@ type DB = SupabaseClient<Database>;
 export type FeatureEntitlement =
   | { allowed: true; planLevel: number }
   | { allowed: false; reason: 'off'; needLevel: number; planLevel: number }
-  | { allowed: false; reason: 'plan'; needLevel: number; planLevel: number };
+  | { allowed: false; reason: 'plan'; needLevel: number; planLevel: number }
+  | { allowed: false; reason: RefusedStanding; needLevel: number; planLevel: number };
 
 /**
  * `href` is the feature's route key, e.g. '/dashboard/autopilot'.
  *
- * An href that is not in the feature catalog is NOT gated — it resolves to
- * allowed, matching `requireFeature`'s long-standing behaviour for routes that
- * predate the catalog.
+ * An href that is not in the feature catalog is not gated BY TIER — it resolves
+ * to allowed, matching `requireFeature`'s long-standing behaviour for routes
+ * that predate the catalog.
+ *
+ * A closed family, and one whose trial ended unpaid, are refused EVERY href,
+ * Free-tier and uncatalogued ones included (`reason` 'closed' / 'trial_ended').
+ * Both have plan level 0, the same as an open Free family, so comparing levels
+ * alone handed them every Free-tier feature. Only 'off' is answered before
+ * them, so a switched-off feature is never confirmed to exist.
  *
  * THROWS when the family's plan cannot be read. That is deliberate and is the
  * single most important thing about this function: an unreadable plan is not an
@@ -84,14 +92,23 @@ export async function resolveFeatureEntitlement(
   href: string,
   tiers?: Record<string, FeatureTier>,
 ): Promise<FeatureEntitlement> {
-  const [planLevel, byHref] = await Promise.all([
-    resolveFamilyPlanLevel(db, familyId),
+  const [entitlement, byHref] = await Promise.all([
+    resolveFamilyEntitlement(db, familyId),
     tiers ? Promise.resolve(tiers) : getFeatureTiersByHref(db, { onUnavailable: 'throw' }),
   ]);
+  const planLevel = entitlement.effectiveLevel;
 
   const tier = byHref[href];
-  if (tier === undefined) return { allowed: true, planLevel };
   if (tier === 'off') return { allowed: false, reason: 'off', needLevel: 0, planLevel };
+
+  const standing = refusedStanding(entitlement);
+  if (standing) {
+    const tierLevel = tier === undefined ? 0 : tierToLevel(tier);
+    // A trial-ended family needs at least Family Basic to unlock anything.
+    return { allowed: false, reason: standing, needLevel: standing === 'trial_ended' ? Math.max(1, tierLevel) : tierLevel, planLevel };
+  }
+
+  if (tier === undefined) return { allowed: true, planLevel };
 
   const needLevel = tierToLevel(tier);
   if (planLevel < needLevel) return { allowed: false, reason: 'plan', needLevel, planLevel };
