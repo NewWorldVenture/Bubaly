@@ -39,6 +39,7 @@ import { useBillingSubscription } from '@/lib/hooks/use-billing-subscription';
 import { SelectedPlanReview } from '@/components/billing/selected-plan-review';
 import { isReviewPlan, parseReviewSelection, type ReviewPlan } from '@/lib/billing/review-selection';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
+import { settleAction } from '@/lib/ui/settle-action';
 import { useToast } from '@/components/ui/toast';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { Badge } from '@/components/ui/badge';
@@ -1000,7 +1001,8 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   // ── CRUD helpers ────────────────────────────────────────────────────────
   async function deleteTransaction(id: string) {
     if (!(await askConfirm({ title: tr('billing.deleteTransactionQ'), body: tr('confirm.cannotBeUndone') }))) return;
-    const res = await deleteTransactionAction(id);
+    const res = await settleAction(() => deleteTransactionAction(id), tr('actions.couldNotRemoveThatTransaction'), toastError, refreshTransactions);
+    if (!res) return;
     if (!res.ok) return reportRefusal(res, toastError);
     success(tr('billingModule.transactionRemoved'));
     void refreshTransactions();
@@ -1008,7 +1010,8 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
 
   async function deleteBudget(id: string) {
     if (!(await askConfirm({ title: tr('billing.deleteBudgetQ'), body: tr('confirm.cannotBeUndone') }))) return;
-    const res = await deleteBudgetAction(id);
+    const res = await settleAction(() => deleteBudgetAction(id), tr('actions.couldNotRemoveThatBudget'), toastError, refreshBudgets);
+    if (!res) return;
     if (!res.ok) return reportRefusal(res, toastError);
     success(tr('billingModule.budgetRemoved'));
     void refreshBudgets();
@@ -1057,7 +1060,8 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
 
   async function deleteGoal(id: string) {
     if (!(await askConfirm({ title: tr('billing.deleteGoalQ'), body: tr('confirm.cannotBeUndone') }))) return;
-    const res = await deleteSavingsGoalAction(id);
+    const res = await settleAction(() => deleteSavingsGoalAction(id), tr('actions.couldNotRemoveThatSavings'), toastError, refreshGoals);
+    if (!res) return;
     if (!res.ok) return reportRefusal(res, toastError);
     success(tr('billingModule.goalRemoved'));
     void refreshGoals();

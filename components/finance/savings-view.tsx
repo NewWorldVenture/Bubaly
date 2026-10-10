@@ -7,6 +7,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { contributeToGoalAction, createSavingsGoalAction, deleteSavingsGoalAction } from '@/app/(app)/dashboard/billing/actions';
 import { reportRefusal } from '@/lib/auth/step-up-client';
+import { settleAction } from '@/lib/ui/settle-action';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -49,7 +50,8 @@ export function SavingsView() {
   }
   async function remove(id: string) {
     if (!confirm(t('savingsView.deleteThisGoal'))) return;
-    const res = await deleteSavingsGoalAction(id);
+    const res = await settleAction(() => deleteSavingsGoalAction(id), t('actions.couldNotRemoveThatSavings'), toastError, refresh);
+    if (!res) return;
     if (!res.ok) reportRefusal(res, toastError); else success(t('savingsView.deleted'));
   }
 

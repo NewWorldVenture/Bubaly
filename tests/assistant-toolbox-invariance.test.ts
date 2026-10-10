@@ -40,7 +40,7 @@ const scope = {
 /** The exact merge lib/ai/assistant-engine.ts performs, in the same order. */
 function mergedToolbox(): string[] {
   const assistantTools = buildAssistantTools(db, {
-    familyId: 'fam-1', userId: 'auth-user-1', memberId: 'member-1',
+    familyId: 'fam-1', userId: 'auth-user-1', role: 'parent', memberId: 'member-1',
     members: [{ id: 'member-1', display_name: 'Emma' }], tz: 'UTC',
   });
   const actionTools = buildActionTools({ supabase: db, familyId: 'fam-1', userId: 'auth-user-1' });
