@@ -16,6 +16,24 @@ const PREFIX = `${TOOL}:`;
 const CURSOR_KEY = `${PREFIX}cursor`;
 const MAX_ATTEMPTS = 5;
 /**
+ * The urgent text goes to a number from text an outside sender wrote, so it is
+ * budgeted per family: anyone can mail the family address, and without a cap a
+ * flood of distinct "urgent" messages was one Twilio SMS each. Over budget, the
+ * message is still filed and alerted in-app; only the SMS is withheld. Counted
+ * from `locked_at` (set when a receipt is claimed for a send), but only for
+ * receipts whose SMS may actually have gone out: a claim whose send came back
+ * misconfigured, retryable or rejected sent nothing, and counting it let an
+ * outage or a run of Twilio rejections use up the budget (and the same-sender
+ * window) so later messages were never texted at all.
+ */
+const SMS_MAY_HAVE_GONE_OUT = ['dispatching', 'accepted', 'unknown'] as const;
+export const URGENT_SMS_PER_HOUR = 5;
+export const URGENT_SMS_PER_DAY = 20;
+/** Repeated urgent messages from one sender inside this window share one SMS. */
+export const URGENT_SMS_SAME_SENDER_WINDOW_MS = 10 * 60_000;
+/** The write that records an external send's result gets its own deadline. */
+const POST_SEND_WRITE_MS = 5000;
+/**
  * What a receipt will accept, EXPORTED so callers bound their input to the same
  * numbers instead of guessing them.
  *
@@ -86,15 +104,27 @@ export async function captureInboundWithUrgency(admin: Admin, input: Intake): Pr
       from: input.from ?? null, to: input.to ?? null, subject: input.subject ?? null, body: input.body,
       summary: (input.aiSummary ?? input.body).slice(0, 1000), intent: 'urgent' });
     const existing = await findInboundMessage(admin, { ...input, providerRef });
-    const outputs: Outputs = { version: 1, revision: randomUUID(), phase: existing ? 'legacy_unknown' : 'queued',
-      notificationDone: false, drain: !existing, retryAt: null, destination: null, providerSid: null, providerStatus: null };
+    // Only a row that was itself filed URGENT can have been escalated without a
+    // receipt (the inline send that predates receipts). A row filed non-urgent
+    // was never escalated by anyone — e.g. the first delivery's concierge timed
+    // out and fell back to a non-urgent intent, and this redelivery says
+    // 'urgent' — so it is queued against that row, not parked as legacy forever.
+    let legacy = false;
+    if (existing) {
+      const row = await admin.from('family_inbox_messages').select('id,family_id,ai_intent')
+        .eq('id', existing).eq('family_id', input.familyId).abortSignal(AbortSignal.timeout(5000)).maybeSingle();
+      if (row.error || !row.data || row.data.id !== existing || row.data.family_id !== input.familyId) throw new Error('Inbound intent read failed');
+      legacy = row.data.ai_intent === 'urgent';
+    }
+    const outputs: Outputs = { version: 1, revision: randomUUID(), phase: legacy ? 'legacy_unknown' : 'queued',
+      notificationDone: false, drain: !legacy, retryAt: null, destination: null, providerSid: null, providerStatus: null };
     const t = await getTranslations();
     const saved = await admin.from('ai_tool_calls').insert({ id: expected.id, family_id: input.familyId, tool_name: TOOL,
       idempotency_key: expected.key, actor_kind: 'system', requested_by: null, requested_by_member_id: null,
       run_id: null, plan_step_id: null, request_id: null, conversation_id: null, message_id: null,
-      inputs, outputs, state: existing ? 'failed' : 'reserved', attempt: 0,
+      inputs, outputs, state: legacy ? 'failed' : 'reserved', attempt: 0,
       resource_table: 'family_inbox_messages', resource_id: existing,
-      error: existing ? t('contactUrgent.legacyUnknown') : null,
+      error: legacy ? t('contactUrgent.legacyUnknown') : null,
     }).select('id').abortSignal(AbortSignal.timeout(5000));
     if (saved.error && saved.error.code !== '23505') throw new Error('Urgent receipt persistence failed');
     receipt = await readReceipt(admin, expected.id, input.familyId);
@@ -133,6 +163,28 @@ async function ensureNotification(admin: Admin, receipt: Receipt, messageId: str
     .eq('id', id).abortSignal(signal).maybeSingle();
   if (found.error || !found.data || found.data.family_id !== receipt.family_id || found.data.user_id !== null ||
       found.data.related_type !== 'contact_center' || found.data.related_id !== messageId) throw new Error('Urgent notification identity invalid');
+}
+
+/** True when this receipt's SMS would exceed the family's urgent-SMS budget or repeat a recent sender's. */
+async function smsBudgetExhausted(admin: Admin, receipt: Receipt, now: Date, signal: AbortSignal): Promise<boolean> {
+  const since = new Date(now.getTime() - 86_400_000).toISOString();
+  const recent = await admin.from('ai_tool_calls').select('id,family_id,inputs,outputs,locked_at')
+    .eq('family_id', receipt.family_id).eq('tool_name', TOOL).neq('id', receipt.id).gte('locked_at', since)
+    .in('outputs->>phase', [...SMS_MAY_HAVE_GONE_OUT])
+    .order('locked_at', { ascending: false }).limit(URGENT_SMS_PER_DAY).abortSignal(signal);
+  if (recent.error || !Array.isArray(recent.data)) throw new Error('Urgent budget read failed');
+  // The phase is re-checked here too, so the count never depends on the
+  // filter alone; the limit above is applied to already-filtered rows.
+  const sent = recent.data.filter(row => row.family_id === receipt.family_id && row.locked_at !== null &&
+    (SMS_MAY_HAVE_GONE_OUT as readonly unknown[]).includes((row.outputs as { phase?: unknown } | null)?.phase));
+  if (sent.length >= URGENT_SMS_PER_DAY) return true;
+  const claimedSince = (ms: number) => sent.filter(row => Date.parse(row.locked_at!) >= now.getTime() - ms);
+  if (claimedSince(3_600_000).length >= URGENT_SMS_PER_HOUR) return true;
+  const sender = receipt.inputs.from?.trim().toLowerCase();
+  return !!sender && claimedSince(URGENT_SMS_SAME_SENDER_WINDOW_MS).some(row => {
+    const from = (row.inputs as { from?: unknown } | null)?.from;
+    return typeof from === 'string' && from.trim().toLowerCase() === sender;
+  });
 }
 
 /** Durable capture succeeds independently from provider availability; callers still run planner recovery. */
@@ -189,6 +241,11 @@ export async function attemptUrgentDelivery(admin: Admin, id: string, familyId: 
       return 'pending';
     }
     if (receipt.attempt >= MAX_ATTEMPTS) return 'rejected';
+    if (await smsBudgetExhausted(admin, receipt, now, signal)) {
+      const done = await transition(admin, receipt, { ...receipt.outputs, phase: 'in_app_only', drain: !notificationDone },
+        { state: notificationDone ? 'succeeded' : 'reserved', error: 'contactUrgent.smsBudget' }, signal);
+      return done && notificationDone ? 'in_app_only' : 'failed';
+    }
     const t = await getTranslations();
     const body = t('contactUrgent.smsPrefix', { summary: receipt.inputs.summary });
     if (signal.aborted) return 'failed';
@@ -202,17 +259,24 @@ export async function attemptUrgentDelivery(admin: Admin, id: string, familyId: 
     if (!claimed) return 'pending';
     const result = await sendSmsWithReceipt(destination, body, signal);
     let outputs: Outputs = { ...claimed.outputs, phase: 'unknown', drain: !notificationDone };
-    let state: Receipt['state'] = 'reserved', error: string | null = 'contactUrgent.smsUnknown';
+    let state: Receipt['state'] = 'reserved', error: string | null = 'contactUrgent.smsUnknown', attempt = claimed.attempt;
     if (result.kind === 'accepted') {
       outputs = { ...outputs, phase: 'accepted', providerSid: result.messageSid, providerStatus: result.providerStatus as Outputs['providerStatus'] };
       state = notificationDone ? 'succeeded' : 'reserved'; error = null;
+    } else if (result.kind === 'misconfigured') {
+      // Refused credentials sent nothing: wait for configuration like the
+      // pre-send check above, without spending one of the message's attempts.
+      outputs = { ...outputs, phase: 'queued', drain: true, retryAt: new Date(now.getTime() + 300_000).toISOString() };
+      state = 'failed'; error = 'contactUrgent.smsUnavailable'; attempt = receipt.attempt;
     } else if ((result.kind === 'retryable' || result.kind === 'unconfigured') && claimed.attempt < MAX_ATTEMPTS) {
       outputs = { ...outputs, phase: 'queued', drain: true, retryAt: new Date(now.getTime() + Math.min(60, 2 ** claimed.attempt) * 60_000).toISOString() };
       state = 'failed'; error = 'contactUrgent.smsUnavailable';
     } else if (result.kind === 'rejected' || result.kind === 'retryable' || result.kind === 'unconfigured') {
       outputs = { ...outputs, phase: 'rejected' }; state = 'failed'; error = 'contactUrgent.smsRejected';
     }
-    const finished = await transition(admin, claimed, outputs, { state, error }, signal);
+    // A fresh deadline: the shared one may have run out during the send, and an
+    // aborted write here would strand an accepted SMS in 'dispatching' for good.
+    const finished = await transition(admin, claimed, outputs, { state, error, attempt }, AbortSignal.timeout(POST_SEND_WRITE_MS));
     // Persistence loss deliberately leaves dispatching held; never infer a safe resend.
     if (!finished) return 'unknown';
     if (!notificationDone) return 'failed';
