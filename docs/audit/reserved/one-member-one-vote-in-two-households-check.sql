@@ -13,8 +13,9 @@
 --
 --   1. control: their vote in Mom's house as their Mom's-house member lands;
 --   2. the same vote again under their Dad's-house member id is refused BY THE
---      GUARD (42501, reference_shares_family's own sentence), and Mom's house
---      still holds exactly one of their votes;
+--      GUARD: 42501 with reference_shares_family's own sentence for that
+--      table's column ("<table>.member_id points at a row in another family"),
+--      matched exactly; and Mom's house still holds exactly one of their votes;
 --   3. UPDATE of their own vote's member_id to the Dad's-house member is
 --      refused by the guard, and the vote is unchanged;
 --   4. UPDATE of their own vote's family_id to Dad's house is refused by the
@@ -23,12 +24,15 @@
 -- and, once for the class:
 --
 --   5. control: the same child still votes once in Dad's own poll, as their
---      Dad's-house member (one vote in each household);
---   6. control: the service role and a session-less writer are exempt;
+--      Dad's-house member (one vote in each household), counted;
+--   6. control: the service role (carrying a user id, so only the guard's
+--      service-role branch can exempt it) and, separately, a session-less
+--      writer with a null auth.uid() each store the very row the guard refuses
+--      (counted);
 --   7. each of the four is wired to 0311's helper, exactly;
 --   8. NEGATIVE CONTROL: with the poll-vote trigger disabled inside the
---      transaction, the second vote lands. That proves the fixture reaches the
---      defect.
+--      transaction, the second vote lands as exactly one row. That proves the
+--      fixture reaches the defect.
 --
 -- Everything is rolled back.
 --
@@ -79,7 +83,7 @@ declare
   dad      constant uuid := '00000000-0000-4000-8501-0000000000f2';
   at_mom   constant uuid := '00000000-0000-4000-8501-0000000000c1';
   at_dad   constant uuid := '00000000-0000-4000-8501-0000000000c2';
-  guard    constant text := '42501: % points at a row in another family';
+  guard    text;
   failures text[] := '{}';
   t        record;
   got      text;
@@ -100,6 +104,9 @@ begin
        'insert into public.event_rsvps (event_id, family_id, member_id, status) values (''00000000-0000-4000-8501-0000000000d4'', %L, %L, ''accepted'') returning id',
        'event_id = ''00000000-0000-4000-8501-0000000000d4''')
     ) as v(tbl, what, ins, target) loop
+
+    -- reference_shares_family's own sentence, for this table's own column.
+    guard := format('42501: %s.member_id points at a row in another family', t.tbl);
 
     perform set_config('role','authenticated', true);
     perform set_config('request.jwt.claim.sub', '00000000-0000-4000-8501-0000000000a4', true);
@@ -124,8 +131,8 @@ begin
     end;
     if got = 'landed' then
       failures := array_append(failures, format('%s: the child cast %s a second time in Mom''s house under their Dad''s-house member', t.tbl, t.what));
-    elsif got not like guard then
-      failures := array_append(failures, format('%s: the second vote was refused, but not by the guard (%s)', t.tbl, got));
+    elsif got is distinct from guard then
+      failures := array_append(failures, format('%s: the second vote was refused, but not with the guard''s own sentence for %s.member_id (%s)', t.tbl, t.tbl, got));
     end if;
 
     -- 3. Re-pointing their own vote at the Dad's-house member.
@@ -139,7 +146,7 @@ begin
         when sqlstate 'P0R01' then null;
         when others then got := sqlstate || ': ' || sqlerrm;
       end;
-      if got not like guard then
+      if got is distinct from guard then
         failures := array_append(failures, format('%s: the child moved their own vote onto their Dad''s-house member (%s)', t.tbl, got));
       end if;
       -- 4. Moving it into Dad's house.
@@ -152,7 +159,7 @@ begin
         when sqlstate 'P0R01' then null;
         when others then got := sqlstate || ': ' || sqlerrm;
       end;
-      if got not like guard then
+      if got is distinct from guard then
         failures := array_append(failures, format('%s: the child moved their own vote into Dad''s house (%s)', t.tbl, got));
       end if;
     end if;
@@ -175,29 +182,58 @@ begin
     failures := array_append(failures, format('CONTROL: the child could not vote in Dad''s own poll as their member there (%s: %s)', sqlstate, sqlerrm));
   end;
   perform set_config('role','postgres', true);
+  select count(*) into n from public.family_poll_votes
+   where family_id = dad and option_id = '00000000-0000-4000-8501-0000000000e9' and member_id = at_dad;
+  if n <> 1 then
+    failures := array_append(failures, format('CONTROL: Dad''s poll holds %s of the child''s votes as their member there, not 1', n));
+  end if;
 
-  -- 6. The service role and a session-less writer are exempt.
+  -- 6. The exemptions, each counted and each on its own: the service role
+  --    (its role and claims, with a user id so auth.uid() is not null), and a
+  --    session-less writer (no JWT at all, so auth.uid() is null: a migration,
+  --    seed or backfill). Each writes
+  --    the very row the guard refuses a signed-in caller: an RSVP in Mom's house
+  --    naming the Dad's-house member.
   begin
+    -- A user id rides along, so auth.uid() is NOT null here: only the guard's
+    -- service-role branch can exempt this write, never its null-uid branch.
     perform set_config('role','service_role', true);
-    perform set_config('request.jwt.claim.sub', '', true);
-    perform set_config('request.jwt.claims', json_build_object('role','service_role')::text, true);
+    perform set_config('request.jwt.claim.sub', '00000000-0000-4000-8501-0000000000a4', true);
+    perform set_config('request.jwt.claims', json_build_object('sub','00000000-0000-4000-8501-0000000000a4','role','service_role')::text, true);
+    if auth.uid() is null then
+      failures := array_append(failures, 'CONTROL (service role): auth.uid() is null, so this does not separate the service-role exemption from the null-uid one');
+    end if;
     insert into public.event_rsvps (event_id, family_id, member_id, status)
       values ('00000000-0000-4000-8501-0000000000d4', mom, at_dad, 'maybe');
+    perform set_config('role','postgres', true);
+    select count(*) into n from public.event_rsvps
+     where event_id = '00000000-0000-4000-8501-0000000000d4' and family_id = mom and member_id = at_dad;
+    if n <> 1 then
+      failures := array_append(failures, format('CONTROL (service role): its foreign RSVP stored %s rows, not 1', n));
+    end if;
     raise exception using errcode = 'P0R01';
   exception
     when sqlstate 'P0R01' then null;
-    when others then failures := array_append(failures, format('CONTROL: the service role was refused (%s: %s)', sqlstate, sqlerrm));
+    when others then failures := array_append(failures, format('CONTROL (service role): refused (%s: %s)', sqlstate, sqlerrm));
   end;
   begin
     perform set_config('role','postgres', true);
     perform set_config('request.jwt.claim.sub', '', true);
     perform set_config('request.jwt.claims', '', true);
+    if auth.uid() is not null then
+      failures := array_append(failures, 'CONTROL (session-less writer): auth.uid() is not null, so this is not the null-uid case');
+    end if;
     insert into public.event_rsvps (event_id, family_id, member_id, status)
       values ('00000000-0000-4000-8501-0000000000d4', mom, at_dad, 'maybe');
+    select count(*) into n from public.event_rsvps
+     where event_id = '00000000-0000-4000-8501-0000000000d4' and family_id = mom and member_id = at_dad;
+    if n <> 1 then
+      failures := array_append(failures, format('CONTROL (session-less writer, null uid): its foreign RSVP stored %s rows, not 1', n));
+    end if;
     raise exception using errcode = 'P0R01';
   exception
     when sqlstate 'P0R01' then null;
-    when others then failures := array_append(failures, format('CONTROL: a session-less writer was refused (%s: %s)', sqlstate, sqlerrm));
+    when others then failures := array_append(failures, format('CONTROL (session-less writer, null uid): refused (%s: %s)', sqlstate, sqlerrm));
   end;
   perform set_config('role','postgres', true);
 
@@ -230,8 +266,10 @@ begin
       exception when others then got := sqlstate || ': ' || sqlerrm;
       end;
       perform set_config('role','postgres', true);
-      if got is distinct from 'landed' then
-        failures := array_append(failures, format('NEGATIVE CONTROL: with the guard disabled the second vote still did not land (%s), so this fixture cannot see the defect', got));
+      select count(*) into n from public.family_poll_votes
+       where family_id = mom and option_id = '00000000-0000-4000-8501-0000000000e1' and member_id = at_dad;
+      if got is distinct from 'landed' or n <> 1 then
+        failures := array_append(failures, format('NEGATIVE CONTROL: with the guard disabled the second vote did not land as one row (%s; %s rows), so this fixture cannot see the defect', got, n));
       end if;
       raise exception using errcode = 'P0R01';
     exception when sqlstate 'P0R01' then null;
@@ -242,7 +280,7 @@ begin
   if array_length(failures, 1) is not null then
     raise exception E'a member of two families votes twice:\n  - %', array_to_string(failures, E'\n  - ');
   end if;
-  raise notice 'one-member-one-vote-in-two-households: OK (as a child of two households, in Mom''s house: a poll vote, a dinner ballot, a watchlist vote and an RSVP each landed once as their member there; the same again under their Dad''s-house member, re-pointing their own vote at it, and moving their own vote into Dad''s house were each refused by reference_shares_family (42501, its own sentence), and Mom''s house holds one of each; they still vote in Dad''s own poll as their member there; the service role and a session-less writer are exempt; all four tables run the guard; negative control: with the poll-vote guard disabled the second vote landed)';
+  raise notice 'one-member-one-vote-in-two-households: OK (as a child of two households, in Mom''s house: a poll vote, a dinner ballot, a watchlist vote and an RSVP each landed once as their member there; the same again under their Dad''s-house member, re-pointing their own vote at it, and moving their own vote into Dad''s house were each refused with reference_shares_family''s own sentence for that table''s member_id (42501, matched exactly), and Mom''s house holds one of each; they still vote in Dad''s own poll as their member there (1 row); the service role and, separately, a null-uid session-less writer each stored the refused row (1 row each); all four tables run the guard; negative control: with the poll-vote guard disabled the second vote landed (1 row))';
 end $$;
 
 rollback;

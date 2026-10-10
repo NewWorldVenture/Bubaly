@@ -37,9 +37,12 @@
 -- safety_check_ins, sleep_checkins, sleep_logs, symptom_logs. Each is one more
 -- line of this loop if the owner wants it.
 --
--- HELD: proposed as 0501 (the first number above 0500; requested on #771 in
--- comment 6095180270, not yet confirmed) in supabase/reserved/ until every
--- number below it has landed. Proven by
+-- HELD: 0501, the first number above 0500, requested on #771 in comment
+-- 6095180270 and confirmed as a held source and probe reservation for these
+-- four bindings in #981 comment 6095247473 (no installation or production
+-- change approval; unrelated poll/option/event/title references, rows already
+-- written and the sixteen tables above stay outside it). It stays in
+-- supabase/reserved/ until every number below it has landed. Proven by
 -- docs/audit/reserved/one-member-one-vote-in-two-households-check.sql and
 -- .github/workflows/one-member-one-vote-runtime.yml. Not applied to production
 -- by an agent; recorded in docs/PENDING_PROD_MIGRATIONS.md.

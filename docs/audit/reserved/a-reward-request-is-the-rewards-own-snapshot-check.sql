@@ -35,7 +35,8 @@
 --   5. control: a parent deleting the reward leaves its pending ticket with the
 --      title and price it was made with and reward_id null (ON DELETE SET
 --      NULL, 0028's history);
---   6. control: the service role and a session-less writer (seeds) are exempt;
+--   6. control: the service role (carrying a user id) and, separately, a
+--      session-less writer with a null auth.uid() are each exempt (counted);
 --   7. MUTATION CONTROLS, only where 0500 is installed, each in a rolled-back
 --      subtransaction: with 0308's early return for a null reward_id put back
 --      A lands; without the title check D lands; without the update refusal C
@@ -280,28 +281,47 @@ begin
   end;
   perform set_config('role','postgres', true);
 
-  -- 6. The service role and a session-less writer are exempt.
+  -- 6. The exemptions, each counted and each on its own. The service role
+  --    carries a user id, so auth.uid() is NOT null and only the guard's
+  --    service-role branch can exempt it; the session-less writer (a seed or
+  --    backfill) has no JWT at all, so only the null-uid branch can. Each writes
+  --    a ticket naming no reward, the shape the guard refuses a signed-in user.
   begin
     perform set_config('role','service_role', true);
-    perform set_config('request.jwt.claim.sub', '', true);
-    perform set_config('request.jwt.claims', json_build_object('role','service_role')::text, true);
+    perform set_config('request.jwt.claim.sub', '00000000-0000-4000-8500-0000000000a4', true);
+    perform set_config('request.jwt.claims', json_build_object('sub','00000000-0000-4000-8500-0000000000a4','role','service_role')::text, true);
+    if auth.uid() is null then
+      failures := array_append(failures, 'CONTROL (service role): auth.uid() is null, so this does not separate the service-role exemption from the null-uid one');
+    end if;
     insert into public.reward_redemptions (family_id, reward_id, member_id, reward_title, cost_points, status)
       values (fam, null, kid, 'Backfilled', 3, 'requested');
+    perform set_config('role','postgres', true);
+    select count(*) into n from public.reward_redemptions where family_id = fam and reward_title = 'Backfilled' and reward_id is null;
+    if n <> 1 then
+      failures := array_append(failures, format('CONTROL (service role): its ticket stored %s rows, not 1', n));
+    end if;
     raise exception using errcode = 'P0R01';
   exception
     when sqlstate 'P0R01' then null;
-    when others then failures := array_append(failures, format('CONTROL: the service role was refused (%s: %s)', sqlstate, sqlerrm));
+    when others then failures := array_append(failures, format('CONTROL (service role): refused (%s: %s)', sqlstate, sqlerrm));
   end;
   begin
     perform set_config('role','postgres', true);
     perform set_config('request.jwt.claim.sub', '', true);
     perform set_config('request.jwt.claims', '', true);
+    if auth.uid() is not null then
+      failures := array_append(failures, 'CONTROL (session-less writer): auth.uid() is not null, so this is not the null-uid case');
+    end if;
     insert into public.reward_redemptions (family_id, reward_id, member_id, reward_title, cost_points, status)
       values (fam, null, kid, 'Seeded', 3, 'requested');
+    select count(*) into n from public.reward_redemptions where family_id = fam and reward_title = 'Seeded' and reward_id is null;
+    if n <> 1 then
+      failures := array_append(failures, format('CONTROL (session-less writer, null uid): its ticket stored %s rows, not 1', n));
+    end if;
     raise exception using errcode = 'P0R01';
   exception
     when sqlstate 'P0R01' then null;
-    when others then failures := array_append(failures, format('CONTROL: a session-less writer was refused (%s: %s)', sqlstate, sqlerrm));
+    when others then failures := array_append(failures, format('CONTROL (session-less writer, null uid): refused (%s: %s)', sqlstate, sqlerrm));
   end;
   perform set_config('role','postgres', true);
 
