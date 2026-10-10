@@ -5,6 +5,7 @@ import type { Database } from '@/lib/database.types';
 import { runDecisionPipeline } from './pipeline';
 import { detectScamWithAI } from './scam-ai';
 import { formatPhone } from './phone';
+import { shouldRingImmediately } from './trust';
 import { claimGuardianSms, finishGuardianSms, releaseGuardianSms, type GuardianSmsLease } from './sms-intake';
 import { captureGuardianSmsReceipt, readGuardianSmsReceipt, readGuardianSmsReceiptById, saveGuardianSmsDecision,
   markGuardianSmsCompleted, guardianSmsReceiptId, type GuardianSmsReceipt, type GuardianSmsReceiptInput, type GuardianSmsDecision } from './sms-receipt';
@@ -19,6 +20,14 @@ export type GuardianSmsProcessingResult = 'completed' | 'busy' | 'unavailable';
 type SignedInput = Pick<GuardianSmsReceiptInput, 'smsSid' | 'from' | 'to' | 'body'>;
 type Destination = { id: string; family_id: string; member_id: string; guardian_phone: string; is_active: boolean };
 const TOTAL_MS = 45_000;
+/**
+ * The emergency escalation texts AND calls every manager (two Twilio requests
+ * per manager, 15 s deadline each) around five database round-trips, so the
+ * step's default 5 s budget was a timeout waiting to happen: the alerts kept
+ * going out detached while the route answered 503 and Twilio retried into the
+ * escalation's own claim. Bounded by the message's total budget either way.
+ */
+const ESCALATION_MS = 30_000;
 const MAX_DECISION_FILTER_CHARS = 4096;
 /** How long a filed "add to contacts?" suggestion keeps the same sender from being suggested again. */
 const SUGGESTION_MEMORY_MS = 60 * 24 * 60 * 60 * 1000;
@@ -109,13 +118,16 @@ async function retain(client: Client, input: GuardianSmsReceiptInput, id: string
   return row;
 }
 
+type InboundCap = { sender: boolean; family: boolean };
+const UNDER_CAP: InboundCap = { sender: false, family: false };
+
 /**
- * Whether this sender, or this family, is past its rolling inbound cap. The
- * count includes the message being processed (it was retained first). A count
- * that cannot be read is not a reason to stop analysing messages, so it reads
- * as under the cap.
+ * Whether this sender, and whether this family, is past its rolling inbound
+ * cap. The count includes the message being processed (it was retained
+ * first). A count that cannot be read is not a reason to stop analysing
+ * messages, so it reads as under the cap.
  */
-async function overInboundCap(client: Client, input: GuardianSmsReceiptInput, signal: AbortSignal): Promise<boolean> {
+async function overInboundCap(client: Client, input: GuardianSmsReceiptInput, signal: AbortSignal): Promise<InboundCap> {
   const since = new Date(Date.now() - GUARDIAN_INBOUND_WINDOW_MS).toISOString();
   const count = async (sender: boolean): Promise<number> => {
     try {
@@ -129,7 +141,7 @@ async function overInboundCap(client: Client, input: GuardianSmsReceiptInput, si
     } catch { return 0; }
   };
   const [fromSender, forFamily] = await Promise.all([count(true), count(false)]);
-  return fromSender > GUARDIAN_INBOUND_SENDER_CAP || forFamily > GUARDIAN_INBOUND_FAMILY_CAP;
+  return { sender: fromSender > GUARDIAN_INBOUND_SENDER_CAP, family: forFamily > GUARDIAN_INBOUND_FAMILY_CAP };
 }
 
 async function processOwned(client: Client, input: GuardianSmsReceiptInput, lease: GuardianSmsLease,
@@ -179,8 +191,16 @@ async function processOwned(client: Client, input: GuardianSmsReceiptInput, leas
     // And none past the rolling cap, which is what kept a blocked or spamming
     // sender from buying one LLM request per text.
     const settled = decision.routingMode === 'blocked' || (decision.scamDetected === true && decision.spamScore >= 80);
-    const throttled = !settled && await overInboundCap(client, input, signal);
-    const scam = settled || throttled
+    const cap = settled ? UNDER_CAP : await overInboundCap(client, input, signal);
+    // Past either cap the pattern detector decides alone, whoever is texting:
+    // that is the bound on model spend. But only a sender the family has not
+    // vouched for is HELD. A contact at a ring-through trust level (immediate
+    // family, close family, trusted friend) is who the Guardian number exists
+    // to let through, and their eleventh text in an hour is still a text from
+    // them. The family-wide flood cap holds for everyone.
+    const modelCapped = cap.sender || cap.family;
+    const throttled = cap.family || (cap.sender && !shouldRingImmediately(decision.trustLevel));
+    const scam = settled || modelCapped
       ? { isScam: decision.scamDetected === true, scamType: decision.scamType ?? null,
         confidence: decision.scamDetected === true && Number.isFinite(decision.spamScore) ? Math.min(100, Math.max(0, decision.spamScore)) : 0 }
       : await smsStep(signal, current => detectScamWithAI(input.body, input.from, `Family ID: ${input.familyId}`, current), 15_000);
@@ -292,7 +312,7 @@ async function processOwned(client: Client, input: GuardianSmsReceiptInput, leas
       familyId: input.familyId, commId: receipt.communicationId, escalationType: 'urgent_personal', severity: 'critical',
       description: `Emergency text from ${fields.from_name ?? formatPhone(input.from)}: "${input.body.slice(0, 300)}"`,
       ...(input.from ? { callerNumber: input.from.slice(0, 64) } : {}),
-    }));
+    }), ESCALATION_MS);
     if (escalation.kind === 'claim_unavailable' || escalation.kind === 'read_failed') return unavailable();
     if (escalation.kind !== 'delivered' && escalation.kind !== 'duplicate') {
       console.error('[guardian-sms] emergency escalation did not reach a manager', { familyId: input.familyId, communicationId: receipt.communicationId, outcome: escalation.kind });

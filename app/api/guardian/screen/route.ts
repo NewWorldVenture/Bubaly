@@ -2,7 +2,7 @@
 // Twilio Gather callback — called each time the caller speaks during AI screening.
 // Continues the conversation or ends it with a decision.
 
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { screeningTurn, summarizeScreening, type ScreeningTurn, type ScreeningDecision } from '@/lib/guardian/ai-screen';
@@ -383,21 +383,31 @@ async function notifyFamily(
   // answered by the escalation's own claim instead of alarming twice. Logged,
   // never raised — the caller is still on the line.
   if (opts.urgency === 'emergency') {
-    try {
-      const escalation = await escalateGuardianEmergency(supabase, {
-        familyId,
-        commId: opts.commId,
-        escalationType: 'emergency_call',
-        severity: 'critical',
-        description: `Emergency call from ${opts.callerName}: ${opts.summary}`.slice(0, 4096),
-        ...(opts.callerNumber ? { callerNumber: opts.callerNumber.slice(0, 64) } : {}),
-      });
-      if (escalation.kind !== 'delivered' && escalation.kind !== 'duplicate') {
-        console.error('[guardian/screen] emergency escalation did not reach a manager', { familyId, commId: opts.commId, outcome: escalation.kind });
+    const escalate = async () => {
+      try {
+        const escalation = await escalateGuardianEmergency(supabase, {
+          familyId,
+          commId: opts.commId,
+          escalationType: 'emergency_call',
+          severity: 'critical',
+          description: `Emergency call from ${opts.callerName}: ${opts.summary}`.slice(0, 4096),
+          ...(opts.callerNumber ? { callerNumber: opts.callerNumber.slice(0, 64) } : {}),
+        });
+        if (escalation.kind !== 'delivered' && escalation.kind !== 'duplicate') {
+          console.error('[guardian/screen] emergency escalation did not reach a manager', { familyId, commId: opts.commId, outcome: escalation.kind });
+        }
+      } catch (error) {
+        console.error('[guardian/screen] emergency escalation threw', { familyId, commId: opts.commId, error });
       }
-    } catch (error) {
-      console.error('[guardian/screen] emergency escalation threw', { familyId, commId: opts.commId, error });
-    }
+    };
+    // Twilio gives this webhook 15 seconds for its TwiML, and the fan-out is
+    // two Twilio requests per manager with 15-second deadlines each: awaited
+    // here, it could outlive the response and drop the live call. `after()`
+    // runs it once the TwiML has gone out, inside the same invocation (the
+    // precedent is lib/reasoning/auto-refresh.ts). It throws outside a request
+    // scope — a direct call, or a test — and then the escalation runs inline:
+    // there is no cron backstop for an emergency, so it is never skipped.
+    try { after(escalate); } catch { await escalate(); }
   }
 }
 

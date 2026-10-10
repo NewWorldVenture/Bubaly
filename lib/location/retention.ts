@@ -16,6 +16,7 @@
 
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { describeActionError } from '@/lib/supabase/errors';
 
 /** Days a location event (arrived/left) is kept at all. */
 export const LOCATION_EVENT_RETENTION_DAYS = 90;
@@ -23,8 +24,10 @@ export const LOCATION_EVENT_RETENTION_DAYS = 90;
 type Failure = { step: string; message: string };
 export type LocationForgetResult = { ok: true } | { ok: false; failures: Failure[] };
 
-const failureOf = (step: string, error: { message?: string } | null): Failure[] =>
-  error ? [{ step, message: error.message ?? 'unknown error' }] : [];
+// Described, not repeated: a failure here is logged by the callers and counted
+// by the cron's response, and the raw Postgres string belongs in neither.
+const failureOf = (step: string, error: unknown): Failure[] =>
+  error ? [{ step, message: describeActionError(error, 'The location record could not be updated.') }] : [];
 
 /** Blank everything a removed member's rows say about where they were. */
 export async function forgetMemberLocation(

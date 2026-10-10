@@ -19,8 +19,15 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
 
-const seam = vi.hoisted(() => ({ service: vi.fn(), scam: vi.fn(), notify: vi.fn(), turn: vi.fn(), sms: [] as string[], calls: [] as string[] }));
+const seam = vi.hoisted(() => ({ service: vi.fn(), scam: vi.fn(), notify: vi.fn(), turn: vi.fn(), after: vi.fn(), sms: [] as string[], calls: [] as string[] }));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: seam.service }));
+// Next's `after()`: outside a request scope (every test here) it throws, and
+// the screening route then runs the escalation inline. One test stands in for
+// a request scope and holds the task, the way Next does until the response is out.
+vi.mock('next/server', async (original) => ({
+  ...await original<typeof import('next/server')>(),
+  after: (task: () => Promise<void>) => seam.after(task),
+}));
 vi.mock('@/lib/guardian/scam-ai', () => ({ detectScamWithAI: seam.scam }));
 vi.mock('@/lib/services/notifications', () => ({ notify: seam.notify }));
 vi.mock('@/lib/guardian/ai-screen', () => ({ screeningTurn: seam.turn, summarizeScreening: async () => 'Caller says grandpa collapsed.' }));
@@ -71,6 +78,8 @@ beforeEach(() => {
   vi.stubEnv('NODE_ENV', 'production'); vi.stubEnv('NEXT_PUBLIC_APP_URL', ORIGIN); vi.stubEnv('TWILIO_AUTH_TOKEN', TOKEN);
   vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('live transport is prohibited in this fixture'); }));
   seam.sms.length = 0; seam.calls.length = 0;
+  seam.after.mockReset();
+  seam.after.mockImplementation(() => { throw new Error('`after` was called outside a request scope.'); });
   db = createInMemorySupabase({
     uniques: { guardian_callback_events: [['event_id']], notifications: [['id']], ai_tool_calls: [['id']], guardian_escalations: [['id']] },
     defaults: { guardian_callback_events: { status: 'processing', processed_at: null, error: null } },
@@ -172,16 +181,46 @@ describe('an emergency WhatsApp', () => {
 });
 
 describe('a screened call the AI classifies as an emergency', () => {
-  it('escalates to the managers\' phones instead of only writing an in-app row', async () => {
+  const EMERGENCY_TURN = {
+    responseText: 'Stay on the line.',
+    decision: { action: 'voicemail', risk: 'safe', urgency: 'emergency', intent: 'personal', summary: 'Caller says grandpa collapsed.', callerName: 'Neighbour' },
+  };
+
+  it('answers Twilio before the managers are texted and called, and still reaches them once the TwiML is out', async () => {
     db.seed('guardian_communications', [{ id: COMM, family_id: FAMILY, member_id: CHILD, status: 'screening', from_number: CALLER }]);
     db.seed('guardian_screening_sessions', [{ id: SESSION, family_id: FAMILY, communication_id: COMM, twilio_call_sid: CALL, caller_number: CALLER, turn: 0, status: 'active', messages: [] }]);
-    seam.turn.mockResolvedValue({
-      responseText: 'Stay on the line.',
-      decision: { action: 'voicemail', risk: 'safe', urgency: 'emergency', intent: 'personal', summary: 'Caller says grandpa collapsed.', callerName: 'Neighbour' },
-    });
+    seam.turn.mockResolvedValue(EMERGENCY_TURN);
+    // A request scope: Next holds the task until the response has been sent.
+    const held: Array<() => Promise<void>> = [];
+    seam.after.mockImplementation((task: () => Promise<void>) => { held.push(task); });
     const { POST } = await import('@/app/api/guardian/screen/route');
     const res = await POST(signed('/api/guardian/screen', { CallSid: CALL, SpeechResult: 'Grandpa collapsed, please hurry.' }, `?sessionId=${SESSION}&turn=1`));
     expect(res.status).toBe(200);
+    expect(await res.text()).toMatch(/<Record/);
+    // The defect: Twilio's 15-second clock ran through two Twilio requests per
+    // manager before the TwiML went out. Now the TwiML is out first, with the
+    // in-app row already written, and nothing has reached a phone yet.
+    expect(held).toHaveLength(1);
+    expect(notifications().some((row) => String(row.title).startsWith('🚨 Emergency call from'))).toBe(true);
+    expect(seam.sms).toEqual([]);
+    expect(seam.calls).toEqual([]);
+    expect(escalations()).toEqual([]);
+    await held[0]();
+    expect(escalations()).toHaveLength(1);
+    expect(escalations()[0]).toMatchObject({ escalation_type: 'emergency_call', communication_id: COMM, notified_member_ids: [PARENT], sms_sent: true, call_attempted: true });
+    expect(seam.sms).toEqual([PARENT_PHONE]);
+    expect(seam.calls).toEqual([PARENT_PHONE]);
+  });
+
+  it('escalates to the managers\' phones instead of only writing an in-app row (inline, outside a request scope)', async () => {
+    db.seed('guardian_communications', [{ id: COMM, family_id: FAMILY, member_id: CHILD, status: 'screening', from_number: CALLER }]);
+    db.seed('guardian_screening_sessions', [{ id: SESSION, family_id: FAMILY, communication_id: COMM, twilio_call_sid: CALL, caller_number: CALLER, turn: 0, status: 'active', messages: [] }]);
+    seam.turn.mockResolvedValue(EMERGENCY_TURN);
+    const { POST } = await import('@/app/api/guardian/screen/route');
+    const res = await POST(signed('/api/guardian/screen', { CallSid: CALL, SpeechResult: 'Grandpa collapsed, please hurry.' }, `?sessionId=${SESSION}&turn=1`));
+    expect(res.status).toBe(200);
+    // `after()` threw (no request scope), so the escalation ran before the response.
+    expect(seam.after).toHaveBeenCalledOnce();
     // The defect: an in-app notification with user_id null, and nothing else.
     expect(notifications().some((row) => String(row.title).startsWith('🚨 Emergency call from'))).toBe(true);
     expect(escalations()).toHaveLength(1);

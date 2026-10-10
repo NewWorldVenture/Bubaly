@@ -11,6 +11,7 @@ import { runDecisionPipeline } from '@/lib/guardian/pipeline';
 import { detectScamWithAI } from '@/lib/guardian/scam-ai';
 import { twilioRefusal, verifyTwilioRequest } from '@/lib/server/twilio-ingress';
 import { formatPhone } from '@/lib/guardian/phone';
+import { shouldRingImmediately } from '@/lib/guardian/trust';
 import { claimGuardianCallback, isValidGuardianEventId, markGuardianCallbackProcessed, releaseGuardianCallback } from '@/lib/guardian/callbacks';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { escalateGuardianEmergency } from '@/lib/guardian/escalate';
@@ -20,11 +21,15 @@ export const runtime = 'nodejs';
 
 const MAX_TWILIO_BODY_BYTES = 64 * 1024;
 
+type InboundCap = { sender: boolean; family: boolean };
+const UNDER_CAP: InboundCap = { sender: false, family: false };
+
 /**
- * Whether this sender, or this family, is past the rolling inbound cap (the
- * same caps as the SMS lane). A count that cannot be read reads as under it.
+ * Whether this sender, and whether this family, is past the rolling inbound
+ * cap (the same caps as the SMS lane). A count that cannot be read reads as
+ * under it.
  */
-async function overInboundCap(supabase: ReturnType<typeof createServiceClient>, familyId: string, from: string | null): Promise<boolean> {
+async function overInboundCap(supabase: ReturnType<typeof createServiceClient>, familyId: string, from: string | null): Promise<InboundCap> {
   const since = new Date(Date.now() - GUARDIAN_INBOUND_WINDOW_MS).toISOString();
   const count = async (sender: boolean): Promise<number> => {
     try {
@@ -37,7 +42,7 @@ async function overInboundCap(supabase: ReturnType<typeof createServiceClient>, 
   };
   const [fromSender, forFamily] = await Promise.all([count(true), count(false)]);
   // The current message is not recorded yet, so it is the one past `>=`.
-  return fromSender >= GUARDIAN_INBOUND_SENDER_CAP || forFamily >= GUARDIAN_INBOUND_FAMILY_CAP;
+  return { sender: fromSender >= GUARDIAN_INBOUND_SENDER_CAP, family: forFamily >= GUARDIAN_INBOUND_FAMILY_CAP };
 }
 
 /** Strip Twilio's `whatsapp:` channel prefix, leaving a bare E.164 number. */
@@ -127,9 +132,15 @@ export async function POST(req: NextRequest) {
   // answer cannot change anything (the sender is already blocked, or the
   // pattern detector is already sure), and none past the rolling per-sender /
   // per-family cap, so a spamming sender cannot buy one LLM request per text.
+  // Past the per-sender cap only a sender the family has not vouched for is
+  // HELD: a contact at a ring-through trust level (immediate family, close
+  // family, trusted friend) is still delivered, as in the SMS lane. The
+  // family-wide flood cap holds for everyone.
   const settled = decision.routingMode === 'blocked' || (decision.scamDetected && decision.spamScore >= 80);
-  const throttled = !settled && await overInboundCap(supabase, familyId, from);
-  const scamResult = settled || throttled
+  const cap = settled ? UNDER_CAP : await overInboundCap(supabase, familyId, from);
+  const modelCapped = cap.sender || cap.family;
+  const throttled = cap.family || (cap.sender && !shouldRingImmediately(decision.trustLevel));
+  const scamResult = settled || modelCapped
     ? { isScam: decision.scamDetected, scamType: decision.scamType, confidence: decision.scamDetected ? Math.min(100, Math.max(0, decision.spamScore)) : 0 }
     : await detectScamWithAI(body, from, `Family ID: ${familyId}`);
   const emergency = decision.shouldEscalate;

@@ -12,6 +12,11 @@
 // recorded as blocked with the reason, and the family is not pinged. The
 // decision is durable: a redelivery of a capped message completes against the
 // saved `blocked` rather than recounting the window.
+//
+// The per-sender cap holds only a sender the family has not vouched for. A
+// contact at a ring-through trust level (immediate family, close family,
+// trusted friend) is who the number exists to let through: past the cap they
+// lose the model call, never the delivery. The family-wide cap holds for all.
 import { createHmac } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -38,11 +43,16 @@ const PROFILE = '33333333-3333-4333-8333-333333333333';
 const GUARDIAN = '+15555550100';
 const SENDER = '+15555550199';
 const OTHER = '+15555550188';
+const CONTACT = '44444444-4444-4444-8444-444444444444';
+const VOUCHED = ['immediate_family', 'close_family', 'trusted_friend'] as const;
 
 const routine = (overrides: Record<string, unknown> = {}) => ({
   contactId: null, contactName: null, trustLevel: 'unknown', routingMode: 'voicemail_first', spamScore: 0, scamDetected: false, scamType: null,
   ruleId: null, reason: 'No rules matched', shouldEscalate: false, emergencyKeywords: false, memberProfile: null, ...overrides,
 });
+/** The pipeline's answer for a sender who is a saved contact at a ring-through trust level. */
+const vouched = (trustLevel: string, contactName = 'Grandma') =>
+  routine({ trustLevel, routingMode: 'immediate_ring', contactId: CONTACT, contactName, reason: `${contactName} rings through.` });
 
 let db: InMemorySupabase;
 const client = () => db as unknown as SupabaseClient<Database>;
@@ -174,6 +184,48 @@ describe('an inbound SMS', () => {
     expect(db.table('notifications')).toEqual([]);
   });
 
+  describe('from a contact the family vouched for', () => {
+    beforeEach(() => db.seed('guardian_contacts', [{ id: CONTACT, family_id: FAMILY, phone: SENDER, name: 'Grandma', trust_level: 'immediate_family' }]));
+
+    it.each(VOUCHED)('the eleventh text in an hour from %s is still announced; only the model call is capped', async (trustLevel) => {
+      priorMessages(GUARDIAN_INBOUND_SENDER_CAP, SENDER, 'sms_inbound');
+      seam.pipeline.mockResolvedValue(vouched(trustLevel));
+      expect(await sms(sid(8), SENDER)).toBe('completed');
+      // The defect: written `blocked` with the cap reason, and never announced.
+      expect(commFor(sid(8))).toMatchObject({ status: 'received', trust_level_at_time: trustLevel, contact_id: CONTACT, from_name: 'Grandma', body: 'Dentist appointment tomorrow' });
+      expect(String(commFor(sid(8))?.ai_decision_reason)).not.toMatch(/hourly message cap/);
+      expect(db.table('notifications')).toHaveLength(1);
+      expect(db.table('notifications')[0]).toMatchObject({ title: '💬 Text from Grandma' });
+      // Model spend stays bounded whoever is texting.
+      expect(seam.scam).not.toHaveBeenCalled();
+      // A redelivery completes against the saved `received`, announcing nobody twice.
+      expect(await sms(sid(8), SENDER)).toBe('completed');
+      expect(commFor(sid(8))).toMatchObject({ status: 'received' });
+      expect(db.table('notifications')).toHaveLength(1);
+      expect(db.table('guardian_callback_events')).toEqual([expect.objectContaining({ event_id: sid(8), status: 'processed' })]);
+    });
+
+    it('a saved contact who is only known, not vouched for, is still held past the cap', async () => {
+      priorMessages(GUARDIAN_INBOUND_SENDER_CAP, SENDER, 'sms_inbound');
+      seam.pipeline.mockResolvedValue(routine({ trustLevel: 'known_contact', routingMode: 'ai_handle_first', contactId: CONTACT, contactName: 'Plumber' }));
+      expect(await sms(sid(9), SENDER)).toBe('completed');
+      expect(seam.scam).not.toHaveBeenCalled();
+      expect(commFor(sid(9))).toMatchObject({ status: 'blocked', trust_level_at_time: 'known_contact' });
+      expect(String(commFor(sid(9))?.ai_decision_reason)).toMatch(/hourly message cap/);
+      expect(db.table('notifications')).toEqual([]);
+    });
+
+    it('the family cap still holds for them', async () => {
+      for (let i = 0; i < GUARDIAN_INBOUND_FAMILY_CAP / 5; i += 1) priorMessages(5, `+1555000${String(i).padStart(4, '0')}`, 'sms_inbound', 2000 + i * 5);
+      seam.pipeline.mockResolvedValue(vouched('immediate_family'));
+      expect(await sms(sid(10), SENDER)).toBe('completed');
+      expect(seam.scam).not.toHaveBeenCalled();
+      expect(commFor(sid(10))).toMatchObject({ status: 'blocked', trust_level_at_time: 'immediate_family' });
+      expect(String(commFor(sid(10))?.ai_decision_reason)).toMatch(/hourly message cap/);
+      expect(db.table('notifications')).toEqual([]);
+    });
+  });
+
   it('counts only this hour', async () => {
     db.seed('guardian_communications', Array.from({ length: GUARDIAN_INBOUND_SENDER_CAP + 5 }, (_, i) => ({
       id: `bbbbbbbb-0000-4000-8000-${i.toString(16).padStart(12, '0')}`, family_id: FAMILY, member_id: MEMBER, comm_type: 'sms_inbound', direction: 'inbound',
@@ -210,5 +262,31 @@ describe('an inbound WhatsApp', () => {
     expect(seam.scam).toHaveBeenCalledOnce();
     expect(seam.notify).toHaveBeenCalledOnce();
     expect(commFor(sid(13))).toMatchObject({ status: 'received' });
+  });
+
+  describe('from a contact the family vouched for', () => {
+    beforeEach(() => db.seed('guardian_contacts', [{ id: CONTACT, family_id: FAMILY, phone: SENDER, name: 'Grandma', trust_level: 'close_family' }]));
+
+    it.each(VOUCHED)('the eleventh in an hour from %s is still announced; only the model call is capped', async (trustLevel) => {
+      priorMessages(GUARDIAN_INBOUND_SENDER_CAP, SENDER, 'whatsapp_inbound');
+      seam.pipeline.mockResolvedValue(vouched(trustLevel));
+      expect((await whatsapp(sid(14), SENDER)).status).toBe(200);
+      expect(seam.scam).not.toHaveBeenCalled();
+      // The defect: recorded `blocked`, and the family never told.
+      expect(seam.notify).toHaveBeenCalledOnce();
+      expect(seam.notify.mock.calls[0][1]).toMatchObject({ title: '💚 WhatsApp from Grandma', body: 'hello?' });
+      expect(commFor(sid(14))).toMatchObject({ status: 'received', trust_level_at_time: trustLevel, contact_id: CONTACT });
+      expect(String(commFor(sid(14))?.ai_decision_reason)).not.toMatch(/hourly message cap/);
+    });
+
+    it('the family cap still holds for them', async () => {
+      for (let i = 0; i < GUARDIAN_INBOUND_FAMILY_CAP / 5; i += 1) priorMessages(5, `+1555000${String(i).padStart(4, '0')}`, 'whatsapp_inbound', 2000 + i * 5);
+      seam.pipeline.mockResolvedValue(vouched('immediate_family'));
+      expect((await whatsapp(sid(15), SENDER)).status).toBe(200);
+      expect(seam.scam).not.toHaveBeenCalled();
+      expect(seam.notify).not.toHaveBeenCalled();
+      expect(commFor(sid(15))).toMatchObject({ status: 'blocked', trust_level_at_time: 'immediate_family' });
+      expect(String(commFor(sid(15))?.ai_decision_reason)).toMatch(/hourly message cap/);
+    });
   });
 });
