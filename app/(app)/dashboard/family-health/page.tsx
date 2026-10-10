@@ -17,6 +17,8 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 export const dynamic = 'force-dynamic';
 
+const NIL_UUID = '00000000-0000-0000-0000-000000000000';
+
 export default async function FamilyHealthPage() {
   const t = await getTranslations();
   const ctx = await requireFeature('/dashboard/family-health');
@@ -33,11 +35,19 @@ export default async function FamilyHealthPage() {
 
   // Health data is sensitive — surfaced only to managers in summary form here.
   const manager = isManager(ctx.active.role);
+  // F-G09: a non-manager sees the prescriptions written for THEM, as on the
+  // Medications page and in the health coach. 0465 would make the database say
+  // so and is not applied, so until it is a child's read of `medications`
+  // returns every member's rows, and this list showed a babysitter or a teen
+  // each sibling's and parent's medicine and dose. No member row asks for the
+  // nil UUID, which matches nothing, never everything.
+  const ownMedsOnly = manager ? null : (ctx.active.member?.id ?? NIL_UUID);
+  const activeMeds = supabase.from('medications').select('*').eq('family_id', familyId).eq('is_active', true);
 
   const [membersRes, apptsRes, medsRes, profilesRes, providersRes] = await Promise.all([
     settle(supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true)),
     settle(supabase.from('appointments').select('*').eq('family_id', familyId).gte('starts_at', now).lte('starts_at', in30).order('starts_at').limit(8)),
-    settle(supabase.from('medications').select('*').eq('family_id', familyId).eq('is_active', true).limit(12)),
+    settle((ownMedsOnly ? activeMeds.eq('member_id', ownMedsOnly) : activeMeds).limit(12)),
     manager ? settle(supabase.from('medical_profiles').select('member_id, allergies, blood_type, conditions').eq('family_id', familyId)) : Promise.resolve({ data: [], error: null }),
     settle(supabase.from('health_providers').select('id, name, specialty, phone').eq('family_id', familyId).limit(8)),
   ]);
