@@ -27,39 +27,102 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-const SAFE_LINK = new Set(['safeWebLink', 'safeSocialLink']);
+// The shared web-link guards, by the module that exports them. A call counts
+// only when its name is bound by an import of that name from that module — a
+// local function that happens to be called safeWebLink does not.
+const GUARDS: Record<string, string> = { safeWebLink: '@/lib/utils/safe-link', safeSocialLink: '@/lib/social/links' };
 // A template may interpolate only after a scheme (and, for https, a host and
 // a path or query separator) written out in the source.
 const FIXED_TEMPLATE_HEAD = /^(tel:|mailto:|https:\/\/[a-z0-9.-]+[/?])/;
 
-/** The nearest `const name = …` in a block enclosing `at`, declared before it. */
-function constInitializer(name: string, at: ts.Node): ts.Expression | null {
-  for (let scope: ts.Node | undefined = at.parent; scope; scope = scope.parent) {
-    if (!ts.isBlock(scope) && !ts.isSourceFile(scope)) continue;
-    for (const statement of scope.statements) {
-      if (statement.pos >= at.pos) break;
-      if (!ts.isVariableStatement(statement) || !(statement.declarationList.flags & ts.NodeFlags.Const)) continue;
-      for (const d of statement.declarationList.declarations) {
-        if (ts.isIdentifier(d.name) && d.name.text === name) return d.initializer ?? null;
+const bindsName = (name: ts.BindingName, wanted: string): boolean =>
+  ts.isIdentifier(name) ? name.text === wanted
+    : name.elements.some((e) => !ts.isOmittedExpression(e) && bindsName(e.name, wanted));
+
+/** `var` declarations anywhere in a function body, outside nested functions: they bind at function scope. */
+function hoistedVars(body: ts.Node, wanted: string, out: ts.Node[]) {
+  const visit = (node: ts.Node) => {
+    if (ts.isFunctionLike(node) || ts.isClassLike(node)) return;
+    if (ts.isVariableDeclarationList(node) && !(node.flags & (ts.NodeFlags.Let | ts.NodeFlags.Const))) {
+      for (const d of node.declarations) if (bindsName(d.name, wanted)) out.push(d);
+    }
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(body, visit);
+}
+
+/** Every declaration of `wanted` that `scope` itself introduces. */
+function bindingsIn(scope: ts.Node, wanted: string): ts.Node[] {
+  const out: ts.Node[] = [];
+  if (ts.isFunctionLike(scope)) {
+    for (const p of scope.parameters) if (bindsName(p.name, wanted)) out.push(p);
+    if ((ts.isFunctionExpression(scope) || ts.isClassExpression(scope)) && scope.name?.text === wanted) out.push(scope);
+    const body = (scope as ts.FunctionLikeDeclaration).body;
+    if (body) hoistedVars(body, wanted, out);
+  } else if (ts.isBlock(scope) || ts.isSourceFile(scope) || ts.isModuleBlock(scope) || ts.isCaseBlock(scope)) {
+    const statements = ts.isCaseBlock(scope) ? scope.clauses.flatMap((c) => [...c.statements]) : scope.statements;
+    for (const st of statements) {
+      if (ts.isVariableStatement(st) && st.declarationList.flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) {
+        for (const d of st.declarationList.declarations) if (bindsName(d.name, wanted)) out.push(d);
+      } else if ((ts.isFunctionDeclaration(st) || ts.isClassDeclaration(st) || ts.isEnumDeclaration(st)) && st.name?.text === wanted) {
+        out.push(st);
+      } else if (ts.isImportDeclaration(st) && st.importClause) {
+        const { name, namedBindings } = st.importClause;
+        if (name?.text === wanted) out.push(name);
+        if (namedBindings && ts.isNamespaceImport(namedBindings) && namedBindings.name.text === wanted) out.push(namedBindings);
+        if (namedBindings && ts.isNamedImports(namedBindings)) for (const el of namedBindings.elements) if (el.name.text === wanted) out.push(el);
       }
     }
+    if (ts.isSourceFile(scope)) hoistedVars(scope, wanted, out);
+  } else if ((ts.isForStatement(scope) || ts.isForOfStatement(scope) || ts.isForInStatement(scope))
+    && scope.initializer && ts.isVariableDeclarationList(scope.initializer)) {
+    for (const d of scope.initializer.declarations) if (bindsName(d.name, wanted)) out.push(d);
+  } else if (ts.isCatchClause(scope) && scope.variableDeclaration && bindsName(scope.variableDeclaration.name, wanted)) {
+    out.push(scope.variableDeclaration);
+  }
+  return out;
+}
+
+/**
+ * The declaration an identifier actually refers to: the bindings of the
+ * nearest enclosing scope that declares the name. More than one, or none in
+ * the file, is reported as no single binding.
+ */
+function resolve(id: ts.Identifier): ts.Node | null {
+  for (let scope: ts.Node | undefined = id.parent; scope; scope = scope.parent) {
+    const found = bindingsIn(scope, id.text);
+    if (found.length) return found.length === 1 ? found[0] : null;
   }
   return null;
 }
 
+/** True when `id` is bound by `import { <name> } from '<module>'` for one of the shared guards. */
+function isGuard(id: ts.Identifier): boolean {
+  const module = GUARDS[id.text];
+  const binding = module ? resolve(id) : null;
+  if (!binding || !ts.isImportSpecifier(binding) || (binding.propertyName ?? binding.name).text !== id.text) return false;
+  const decl = binding.parent.parent.parent;
+  return ts.isStringLiteral(decl.moduleSpecifier) && decl.moduleSpecifier.text === module;
+}
+
 /**
  * Whether what window.open is given is a literal or a value already through the
- * shared web-link rule. Anything else — a stored field, a parameter, a `let`,
- * a concatenation (even after a literal prefix), a conditional — is not.
+ * shared web-link rule. An identifier is followed to the binding it actually
+ * refers to, and is safe only if that is a plain `const name = <safe>` declared
+ * before the use; a nearer parameter, `let`, `var`, destructuring, catch or loop
+ * binding stops the search, as does anything else — a stored field, a
+ * concatenation (even after a literal prefix), a conditional, another call.
  */
 function isSafeOpenTarget(node: ts.Expression, depth = 0): boolean {
   if (ts.isParenthesizedExpression(node) || ts.isNonNullExpression(node) || ts.isAsExpression(node)) return isSafeOpenTarget(node.expression, depth);
   if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return true;
   if (ts.isTemplateExpression(node)) return FIXED_TEMPLATE_HEAD.test(node.head.text);
-  if (ts.isCallExpression(node)) return ts.isIdentifier(node.expression) && SAFE_LINK.has(node.expression.text);
+  if (ts.isCallExpression(node)) return ts.isIdentifier(node.expression) && isGuard(node.expression);
   if (ts.isIdentifier(node) && depth === 0) {
-    const init = constInitializer(node.text, node);
-    return !!init && isSafeOpenTarget(init, depth + 1);
+    const d = resolve(node);
+    return !!d && ts.isVariableDeclaration(d) && ts.isIdentifier(d.name)
+      && !!(d.parent.flags & ts.NodeFlags.Const) && !ts.isForOfStatement(d.parent.parent) && !ts.isForInStatement(d.parent.parent)
+      && d.end <= node.pos && !!d.initializer && isSafeOpenTarget(d.initializer, depth + 1);
   }
   return false;
 }
@@ -112,7 +175,8 @@ describe('window.open opens only a literal or a web link', () => {
 });
 
 describe('what the ratchet refuses and accepts', () => {
-  const one = (src: string) => windowOpens([{ path: 'x.tsx', src }]).map((o) => o.safe);
+  const IMPORTS = "import { safeWebLink } from '@/lib/utils/safe-link';\nimport { safeSocialLink } from '@/lib/social/links';\n";
+  const one = (src: string) => windowOpens([{ path: 'x.tsx', src: IMPORTS + src }]).map((o) => o.safe);
 
   it.each([
     ['a variable named href bound to a stored field', 'const href = item.permalink; window.open(href);'],
@@ -138,6 +202,41 @@ describe('what the ratchet refuses and accepts', () => {
     ['a fixed-host template', 'window.open(`https://maps.google.com?q=${encodeURIComponent(address)}`, "_blank");'],
   ])('accepts %s', (_label, src) => {
     expect(one(src)).toEqual([true]);
+  });
+
+  // An outer safe const and an inner binding of the same name: the call sees the inner one.
+  const OUTER = 'const href = safeSocialLink(p);\n';
+  it.each([
+    ['a parameter', 'function go(href: string) { window.open(href); }'],
+    ['an arrow parameter', 'const go = (href: string) => window.open(href);'],
+    ['a destructured parameter', 'function go({ href }: { href: string }) { window.open(href); }'],
+    ['an inner let', 'function go() { let href = item.permalink; window.open(href); }'],
+    ['an inner var, declared after the call', 'function go() { window.open(href); if (x) { var href = item.permalink; } }'],
+    ['an inner destructured const', 'function go() { const { href } = item; window.open(href); }'],
+    ['an inner const bound to a stored field', 'function go() { const href = item.permalink; window.open(href); }'],
+    ['a catch binding', 'try { run(); } catch (href) { window.open(href); }'],
+    ['a for-of binding', 'for (const href of links) { window.open(href); }'],
+  ])('refuses an outer safe const shadowed by %s', (_label, inner) => {
+    expect(one(OUTER + inner)).toEqual([false]);
+  });
+
+  it('accepts the outer safe const when nothing shadows it, and an inner safe const over an outer unsafe one', () => {
+    expect(one(OUTER + 'function go() { window.open(href); }')).toEqual([true]);
+    expect(one('const href = item.permalink;\nfunction go() { const href = safeSocialLink(p); window.open(href); }')).toEqual([true]);
+  });
+
+  it('refuses a const used before it is declared', () => {
+    expect(one('function go() { window.open(href); const href = safeSocialLink(p); }')).toEqual([false]);
+  });
+
+  it('counts a guard only when it is the shared one, imported from its module', () => {
+    const open = 'window.open(safeWebLink(row.url)!);';
+    expect(windowOpens([{ path: 'x.tsx', src: open }]).map((o) => o.safe), 'not imported at all').toEqual([false]);
+    expect(windowOpens([{ path: 'x.tsx', src: 'const safeWebLink = (u: string) => u;\n' + open }]).map((o) => o.safe), 'a local look-alike').toEqual([false]);
+    expect(windowOpens([{ path: 'x.tsx', src: "import { safeWebLink } from './elsewhere';\n" + open }]).map((o) => o.safe), 'another module').toEqual([false]);
+    expect(windowOpens([{ path: 'x.tsx', src: "import { passThrough as safeWebLink } from '@/lib/utils/safe-link';\n" + open }]).map((o) => o.safe), 'a renamed import').toEqual([false]);
+    expect(one('function go(safeWebLink: (u: string) => string) { ' + open + ' }'), 'shadowed by a parameter').toEqual([false]);
+    expect(one(open), 'the shared guard').toEqual([true]);
   });
 
   it('ignores window.open written in a comment', () => {
