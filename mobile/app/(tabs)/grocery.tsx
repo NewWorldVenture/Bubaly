@@ -37,13 +37,16 @@ export default function GroceryScreen() {
     }
   };
 
+  // Until this family's list has loaded there is no list id to add to, and a
+  // null one means "create a list" — a second one, if the family already has one.
+  const listLoaded = list.data !== null;
   const add = async () => {
     const name = draft.trim();
-    if (!name || !familyId || !session) return;
+    if (!name || !familyId || !session || !list.data) return;
     setAdding(true);
     setActionError(null);
     try {
-      await addGroceryItem(supabase, { familyId, listId: list.data?.listId ?? null, name, userId: session.user.id });
+      await addGroceryItem(supabase, { familyId, listId: list.data.listId, name, userId: session.user.id });
       setDraft('');
       await list.refresh();
     } catch (e) {
@@ -72,7 +75,7 @@ export default function GroceryScreen() {
                 <View style={{ flex: 1 }}>
                   <Field placeholder="Add an item…" value={draft} onChangeText={setDraft} returnKeyType="done" onSubmitEditing={add} accessibilityLabel="New grocery item" />
                 </View>
-                <Button title="Add" onPress={add} loading={adding} disabled={!draft.trim()} />
+                <Button title="Add" onPress={add} loading={adding} disabled={!draft.trim() || !listLoaded} />
               </View>
               {actionError ? <AppText color={colors.danger}>{actionError}</AppText> : null}
             </View>
