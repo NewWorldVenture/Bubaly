@@ -11,6 +11,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { generateHandoffCode, type LocationKind } from '@/lib/marketplace/handoff';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
+import { removePickupFromCalendar } from '@/lib/marketplace/pickup-server';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -59,27 +60,6 @@ async function loadOrderRole(orderId: string) {
       : order?.buyer_member === ctx.active.member.id ? 'buyer'
         : null;
   return { ctx, sb, order, orderError, role };
-}
-
-/**
- * Take a pickup's event off the family calendar. A pickup that is off must not
- * stay there: the daily notifications run (lib/server/notifications.ts) turns
- * every event in the next 48 hours into a reminder for the family, and a pickup
- * arranged again lands beside it at its new time.
- *
- * The pickup's own state is the answer the person gets, so a failure here is
- * logged rather than returned: the calendar is the family's copy of it, and the
- * event can still be deleted there.
- */
-async function removePickupFromCalendar(
-  sb: Awaited<ReturnType<typeof createServer>>, familyId: string, eventId: string | null | undefined,
-): Promise<void> {
-  if (!eventId) return;
-  const { data: removed, error } = await sb.from('calendar_events').delete()
-    .eq('id', eventId).eq('family_id', familyId).select('id');
-  if (error || wroteNoRows(removed)) {
-    console.error('[marketplace-handoff] the pickup stayed on the family calendar', error ?? { eventId });
-  }
 }
 
 /** Propose (or re-propose) a pickup. Upserts the single handoff for the order. */

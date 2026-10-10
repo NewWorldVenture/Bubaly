@@ -9,6 +9,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
+import { cancelOrderPickup } from '@/lib/marketplace/pickup-server';
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -176,6 +177,10 @@ export async function setOrderStatusAction(orderId: string, status: string): Pro
     .select('id');
   if (error) return actionFailure('update the order', t('marketplace.couldNotUpdateTheOrder'), error);
   if (wroteNoRows(advanced)) return { ok: false, error: t('actions.orderNotFound') };
+  // An order that is off takes its pickup with it. The Orders page stops
+  // showing the pickup once the order is cancelled, so nothing else would ever
+  // take it — or its family-calendar event — down.
+  if (status === 'cancelled') await cancelOrderPickup(supabase, orderId, ctx.active.familyId);
   revalidatePath(`${MARKETPLACE}/orders`);
   return { ok: true };
 }
