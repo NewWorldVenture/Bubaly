@@ -70,6 +70,16 @@ export function formatCents(cents: number | null | undefined, locale: LocaleCode
 }
 
 /**
+ * An offer's amount as the owner deciding on it reads it, or '' for an offer
+ * that names none. Accepting records the order at the offer's amount when it
+ * has one (marketplace_accept_offer: `coalesce(offer.amount_cents, price)`), so
+ * every place an owner accepts an offer shows it.
+ */
+export function offerAmountLabel(amountCents: number | null | undefined, locale: LocaleCode): string {
+  return amountCents ? formatCents(amountCents, locale) : '';
+}
+
+/**
  * The unit a money INPUT shows beside the number, as the reader writes it: the
  * symbol Intl prints for the marketplace currency in `locale`, and whether it
  * goes before the number or after it — "$" before in en-US, "$" after in de-DE

@@ -20,7 +20,7 @@ import { ReportButton } from '@/components/marketplace/report-button';
 import { priceBand, assessPrice, dealLabel, bandSummary, type Comp } from '@/lib/marketplace/price-coach';
 import { computeTrustScore, ratingSummary, TRUST_BAND_LABEL_KEYS } from '@/lib/marketplace/trust';
 import {
-  KIND_LABELS, CATEGORY_LABELS, CONDITION_LABELS, priceLabel, formatCents,
+  KIND_LABELS, CATEGORY_LABELS, CONDITION_LABELS, priceLabel, offerAmountLabel,
   type ListingKind, type ListingCategory, type RentPeriod,
 } from '@/lib/marketplace/listings';
 import { cn } from '@/lib/utils/cn';
@@ -137,7 +137,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
         id: o.id,
         name: nameOf(o.member_id),
         kindLabel: OFFER_KIND_LABEL[o.kind] ?? 'Offer',
-        amount: o.amount_cents ? formatCents(o.amount_cents, locale.code) : '',
+        amount: offerAmountLabel(o.amount_cents, locale.code),
         message: o.message ?? '',
       }))
     : [];

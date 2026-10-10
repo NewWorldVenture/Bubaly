@@ -24,7 +24,7 @@ import { removeMarketplacePhotoPath, removeMarketplacePhotoUrl } from '@/lib/sto
 import {
   KIND_LABELS, KIND_ORDER, CATEGORY_LABELS, CONDITION_LABELS, RENT_PERIOD_LABELS,
   kindHasPrice, priceLabel, dollarsToCents, filterListings, availableCount,
-  canOffer, isOwner, openOffersFor,
+  canOffer, isOwner, openOffersFor, offerAmountLabel,
   type ListingKind, type ListingCategory, type ListingCondition, type RentPeriod, type ListingLike,
 } from '@/lib/marketplace/listings';
 import type { Tables } from '@/lib/database.types';
@@ -475,7 +475,11 @@ export function MarketplaceModule({
               <li key={o.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface/50 p-3">
                 <Avatar name={memberName(o.member_id)} size={28} />
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium text-fg">{memberName(o.member_id)}</div>
+                  <div className="text-sm font-medium text-fg">
+                    {memberName(o.member_id)}
+                    {/* Accepting records the order at this amount when there is one. */}
+                    {o.amount_cents ? <span className="font-normal text-muted"> · {offerAmountLabel(o.amount_cents, locale.code)}</span> : null}
+                  </div>
                   {o.message && <p className="truncate text-xs text-muted">{o.message}</p>}
                 </div>
                 <Button size="sm" onClick={() => offersFor && acceptOffer(offersFor, o as Offer)} className="h-7 gap-1 text-xs"><Check className="h-3.5 w-3.5" /> {t('marketplace.accept')}</Button>
