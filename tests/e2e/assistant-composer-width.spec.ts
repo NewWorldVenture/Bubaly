@@ -261,16 +261,35 @@ test.describe('assistant: the composer and the workspace either side of lg and 2
   });
 
   /**
-   * Tabs through `route` and returns each stop's name and, if it was hidden,
-   * what hid it: judged where the smooth scroll ends, by what is painted at
-   * the stop's centre.
+   * Opens `route` (asserting it is that page, by its own heading), tags every
+   * control named in `named` (each instance, so a repeated label cannot be
+   * satisfied by its first), then tabs `stops` times. Each stop is judged once
+   * the smooth scroll settles: what fixed chrome, if any, is painted at its
+   * centre, and, for a tagged control, whether it is strictly visible: real
+   * size, its own centre inside the viewport (no clamping), and the hit test
+   * there landing on the control.
    */
-  async function tabStops(page: Page, route: string, stops: number) {
+  async function tabStops(page: Page, route: string, heading: string, named: readonly string[], stops: number) {
     await page.goto(route);
-    // The page itself, not a redirect or an error page.
     expect(new URL(page.url()).pathname).toBe(route);
+    await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
+    const tags = await page.evaluate((labels) => {
+      const out: string[] = [];
+      for (const label of labels) {
+        let i = 0;
+        for (const el of Array.from(document.querySelectorAll<HTMLElement>('a[href], button, select, input'))) {
+          const name = (el.getAttribute('aria-label') ?? el.textContent ?? '').trim().replace(/\s+/g, ' ');
+          if (name !== label) continue;
+          el.dataset.namedStop = `${label}#${i}`;
+          out.push(el.dataset.namedStop);
+          i += 1;
+        }
+      }
+      return out;
+    }, named);
+    for (const label of named) expect(tags.some((t) => t.startsWith(`${label}#`)), `${route} has "${label}"`).toBe(true);
     await page.evaluate(() => { (document.activeElement as HTMLElement | null)?.blur(); window.scrollTo(0, 0); });
-    const seen: { name: string; hiddenBy: string | null }[] = [];
+    const seen: { name: string; tag: string | null; strictlyVisible: boolean; hiddenBy: string | null }[] = [];
     for (let i = 0; i < stops; i += 1) {
       await page.keyboard.press('Tab');
       seen.push(await page.evaluate(async () => {
@@ -280,50 +299,70 @@ test.describe('assistant: the composer and the workspace either side of lg and 2
           last = scrollY;
         }
         const el = document.activeElement as HTMLElement | null;
-        if (!el || el === document.body) return { name: '', hiddenBy: null };
+        if (!el || el === document.body) return { name: '', tag: null, strictlyVisible: false, hiddenBy: null };
         const name = (el.getAttribute('aria-label') ?? el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 40);
+        const tag = el.dataset.namedStop ?? null;
         const r = el.getBoundingClientRect();
-        if (r.width < 1 || r.height < 1) return { name, hiddenBy: null };
-        const x = Math.min(Math.max(r.left + r.width / 2, 0), innerWidth - 1);
-        const y = Math.min(Math.max(r.top + r.height / 2, 0), innerHeight - 1);
-        const top = document.elementFromPoint(x, y);
-        if (!top || top === el || el.contains(top) || top.contains(el)) return { name, hiddenBy: null };
-        const chrome = (top as HTMLElement).closest('.app-topbar, nav.fixed, .fixed');
-        return { name, hiddenBy: chrome ? chrome.className.toString().slice(0, 40) : null };
+        const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+        const inView = r.width > 0 && r.height > 0 && cx >= 0 && cy >= 0 && cx < innerWidth && cy < innerHeight;
+        const hit = inView ? document.elementFromPoint(cx, cy) : null;
+        const strictlyVisible = !!hit && (hit === el || el.contains(hit));
+        let hiddenBy: string | null = null;
+        if (r.width >= 1 && r.height >= 1) {
+          const x = Math.min(Math.max(cx, 0), innerWidth - 1), y = Math.min(Math.max(cy, 0), innerHeight - 1);
+          const top = document.elementFromPoint(x, y);
+          if (top && top !== el && !el.contains(top) && !top.contains(el)) {
+            const chrome = (top as HTMLElement).closest('.app-topbar, nav.fixed, .fixed');
+            hiddenBy = chrome ? chrome.className.toString().slice(0, 40) : null;
+          }
+        }
+        return { name, tag, strictlyVisible, hiddenBy };
       }));
+    }
+    // Every tagged control was a stop, and strictly visible there.
+    const reached = new Map(seen.filter((s) => s.tag).map((s) => [s.tag!, s.strictlyVisible]));
+    for (const tag of tags) {
+      expect(reached.has(tag), `${route}: Tab reached "${tag}"`).toBe(true);
+      expect(reached.get(tag), `${route}: "${tag}" visible at its own centre`).toBe(true);
     }
     return seen;
   }
 
   test('Tab never leaves a control under the top bar or the floating buttons', async ({ page }) => {
-    // Three of the pages the keyboard walk caught at 1280x720: a control
-    // under the top bar (reasoning, documents) and a link under the AI orb
-    // (family COO). Every Tab stop must show at least its own centre.
-    test.setTimeout(90_000);
+    // Three of the pages the keyboard walk caught at 1280x720, with the
+    // controls it caught: "Change language" under the top bar (reasoning),
+    // "Upload Files" and "Create New Folder" under it (documents), and "View
+    // all" under the AI orb (family COO).
+    test.setTimeout(120_000);
     await page.setViewportSize({ width: 1280, height: 720 });
     await signIn(page, '/dashboard/reasoning');
-    for (const route of ['/dashboard/reasoning', '/dashboard/documents', '/dashboard/family-coo']) {
-      const seen = await tabStops(page, route, 70);
+    for (const [route, heading, named] of [
+      ['/dashboard/reasoning', 'Family Reasoning', ['Change language']],
+      ['/dashboard/documents', 'Files', ['Upload Files', 'Create New Folder']],
+      ['/dashboard/family-coo', 'Family COO', ['View all']],
+    ] as const) {
+      const seen = await tabStops(page, route, heading, named, 80);
       expect(seen.filter((s) => s.hiddenBy).map((s) => `${route}: "${s.name}" under ${s.hiddenBy}`)).toEqual([]);
     }
   });
 
   test('390x844: the controls the tab bar and the AI orb hid on main are reached, and visible', async ({ page }) => {
-    // On main, at this size: family COO's "View all" under the orb and
-    // "Change language" under the tab bar; dental's "Add Dentist" under the
-    // orb and "Add visit" under the tab bar. Each must be reached by Tab, so
-    // the walk cannot pass by stopping short, and none may be hidden.
-    test.setTimeout(90_000);
+    // On main, at this size: family COO's "View all" links under the orb and
+    // "Change language" under the tab bar; dental's "Add Dentist" buttons
+    // under the orb and "Add visit" under the tab bar. The floating buttons
+    // must be there for that to mean anything.
+    test.setTimeout(120_000);
     await page.setViewportSize({ width: 390, height: 844 });
     await signIn(page, '/dashboard/family-coo');
-    for (const [route, named] of [
-      ['/dashboard/family-coo', ['View all', 'Change language']],
-      ['/dashboard/dental', ['Add Dentist', 'Add visit']],
+    for (const [route, heading, named] of [
+      ['/dashboard/family-coo', 'Family COO', ['View all', 'Change language']],
+      ['/dashboard/dental', 'Dental', ['Add Dentist', 'Add visit']],
     ] as const) {
-      const seen = await tabStops(page, route, 30);
-      for (const name of named) {
-        expect(seen.some((s) => s.name.startsWith(name)), `${route}: Tab reached "${name}"`).toBe(true);
-      }
+      await page.goto(route);
+      await expect(page.getByRole('button', { name: 'Ask the AI assistant' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Quick capture' })).toBeVisible();
+      await expect(page.locator('nav.fixed')).toBeVisible();
+      const seen = await tabStops(page, route, heading, named, 60);
       expect(seen.filter((s) => s.hiddenBy).map((s) => `${route}: "${s.name}" under ${s.hiddenBy}`)).toEqual([]);
     }
   });
