@@ -663,6 +663,8 @@
   "actions.youCanTBuyYour": "Non puoi acquistare l’annuncio della tua famiglia.",
   "actions.youCanTMakeAn": "Non puoi fare una proposta sull’annuncio della tua famiglia.",
   "actions.youCanTPlaceA": "Non puoi fare offerte con questo account.",
+  "actions.youAlreadyLeadThisAuction": "Sei già il miglior offerente: un’altra offerta alzerebbe solo il tuo prezzo.",
+  "actions.yourMaxAlreadyCoversThat": "Sei già il miglior offerente e il tuo massimo copre già questo importo. Inserisci un massimo più alto per aumentarlo.",
   "actions.youCanTRemoveYour": "Non puoi rimuovere il tuo accesso di super-amministratore.",
   "actions.youCanTReportYour": "Non puoi segnalare l’annuncio della tua famiglia.",
   "actions.youDoNotHavePermission": "Non hai il permesso di pubblicare post.",

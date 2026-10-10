@@ -664,6 +664,8 @@
   "actions.youCanTBuyYour": "Não pode comprar o anúncio da sua própria família.",
   "actions.youCanTMakeAn": "Não pode fazer uma proposta num anúncio da sua própria família.",
   "actions.youCanTPlaceA": "Não pode licitar com esta conta.",
+  "actions.youAlreadyLeadThisAuction": "Já é o licitante mais alto, por isso licitar de novo só aumentaria o seu próprio preço.",
+  "actions.yourMaxAlreadyCoversThat": "Já é o licitante mais alto e o seu máximo já cobre este valor. Introduza um máximo mais alto para o aumentar.",
   "actions.youCanTRemoveYour": "Não pode remover o seu próprio acesso de superadministrador.",
   "actions.youCanTReportYour": "Não pode denunciar o anúncio da sua própria família.",
   "actions.youDoNotHavePermission": "Não tem permissão para publicar.",

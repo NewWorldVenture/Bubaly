@@ -68,12 +68,17 @@ export async function submitGiftPledgeAction(input: {
   // retried submission does not notify twice. Not urgent: a gift sitting in the
   // wallet at 3am is still there at 8am, and nothing about it needs a parent
   // awake. A failure is best-effort as before; the gift is already recorded.
+  //
+  // To the parents and adults only, and without the giver's name: that name is
+  // free text from someone who has not signed in, and a 'family' notice is one
+  // row every member reads — a child included — before any parent has looked
+  // at the gift. The name and message are shown to a manager in /wallet/gift.
   const scope = await systemScopeForFamily(supabase, link.family_id);
   if (scope) {
     await notify(scope, {
-      recipients: 'family',
+      recipients: 'managers',
       type: 'system',
-      title: `🎁 ${giverName} sent a gift`,
+      title: '🎁 A gift is waiting for approval',
       body: 'Approve it in Family Wallet to add it to your child’s wallet.',
       relatedType: 'gift_payments',
       relatedId: link.id,

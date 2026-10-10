@@ -149,6 +149,12 @@ export async function addFundsAction(input: { childWalletId: string; amountCents
   const split = normalizeSplit(rule?.split as Partial<Split> | null);
   const parts = allocate(amount, split);
   const bucketByKind = new Map((buckets ?? []).map((b) => [b.kind, b.id]));
+  // A wallet whose buckets were never written (activation commits the wallet
+  // and its buckets separately) must not take money: a credit with no bucket
+  // is in the ledger and in no balance. The same refusal creditChildWallet makes.
+  const missingBucket = (['spend', 'save', 'give', 'invest'] as const)
+    .some((k) => parts[k] > 0 && !bucketByKind.get(k));
+  if (missingBucket) return { ok: false, error: t('actions.couldNotProvisionWalletBuckets') };
 
   const rows = (['spend', 'save', 'give', 'invest'] as const)
     .filter((k) => parts[k] > 0)

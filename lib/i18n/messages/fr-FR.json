@@ -663,6 +663,8 @@
   "actions.youCanTBuyYour": "Vous ne pouvez pas acheter l’annonce de votre propre famille.",
   "actions.youCanTMakeAn": "Vous ne pouvez pas faire une offre sur une annonce de votre propre famille.",
   "actions.youCanTPlaceA": "Vous ne pouvez pas enchérir avec ce compte.",
+  "actions.youAlreadyLeadThisAuction": "Vous êtes déjà le meilleur enchérisseur : enchérir à nouveau ne ferait qu’augmenter votre propre prix.",
+  "actions.yourMaxAlreadyCoversThat": "Vous êtes déjà le meilleur enchérisseur et votre maximum couvre déjà ce montant. Saisissez un maximum plus élevé pour l’augmenter.",
   "actions.youCanTRemoveYour": "Vous ne pouvez pas supprimer votre propre accès super-administrateur.",
   "actions.youCanTReportYour": "Vous ne pouvez pas signaler l’annonce de votre propre famille.",
   "actions.youDoNotHavePermission": "Vous n’avez pas l’autorisation de publier.",

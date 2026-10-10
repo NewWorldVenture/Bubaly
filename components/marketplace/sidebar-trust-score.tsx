@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { settleAll } from '@/lib/supabase/settle';
+import { readFamilyOrders } from '@/lib/marketplace/schema-compat';
 import { useApp } from '@/components/app/app-context';
 import { computeTrustScore, TRUST_BAND_LABEL_KEYS, type TrustScore } from '@/lib/marketplace/trust';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -30,7 +31,9 @@ export function SidebarTrustScore() {
         const sb = createClient();
         const [reviews, orders, listings] = await settleAll([
           sb.from('marketplace_reviews').select('rating').eq('family_id', familyId).eq('reviewee_member', selfId),
-          sb.from('marketplace_orders').select('status, buyer_member, seller_member').eq('family_id', familyId),
+          // Either party's family, so an order this member won from another
+          // household counts too (lib/marketplace/schema-compat.ts).
+          readFamilyOrders(familyId, (scope) => scope(sb.from('marketplace_orders').select('status, buyer_member, seller_member'))),
           sb.from('marketplace_listings').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('member_id', selfId),
         ]);
         if (!active) return;
