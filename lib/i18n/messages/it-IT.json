@@ -6189,6 +6189,7 @@
   "familyModule.familyProfileUpdated": "Profilo famiglia aggiornato",
   "familyModule.memberRemoved": "Membro rimosso",
   "familyModule.removedButLoginStillActive": "Il membro è stato rimosso, ma non è stato possibile disconnettere il suo accesso con PIN. Contatta l’assistenza per disattivarlo.",
+  "familyModule.removedButLocationStillVisible": "Il membro è stato rimosso, ma non è stato possibile cancellare la sua ultima posizione, che potrebbe essere ancora visibile sulla mappa della famiglia.",
   "familyModule.pasteAnImageUrlFor": "Incolla l’URL di un’immagine per la copertina della tua famiglia.",
   "familyModule.showFewer": "Mostra meno",
   "familyModule.unknownTimeZone": "Fuso orario sconosciuto. Usa un nome come America/Chicago.",

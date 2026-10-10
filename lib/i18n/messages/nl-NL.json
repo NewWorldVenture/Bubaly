@@ -6189,6 +6189,7 @@
   "familyModule.familyProfileUpdated": "Gezinsprofiel bijgewerkt",
   "familyModule.memberRemoved": "Lid verwijderd",
   "familyModule.removedButLoginStillActive": "Het lid is verwijderd, maar de pincode-login kon niet worden afgemeld. Neem contact op met support om deze uit te schakelen.",
+  "familyModule.removedButLocationStillVisible": "Het lid is verwijderd, maar de laatste locatie kon niet worden gewist en is mogelijk nog zichtbaar op de familiekaart.",
   "familyModule.pasteAnImageUrlFor": "Plak een afbeeldings-URL voor je gezinsomslag.",
   "familyModule.showFewer": "Minder tonen",
   "familyModule.unknownTimeZone": "Onbekende tijdzone. Gebruik een naam zoals America/Chicago.",

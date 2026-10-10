@@ -144,7 +144,7 @@ export async function POST(req: NextRequest) {
     }
     calledMemberId = (comm as { member_id?: string | null } | null)?.member_id ?? null;
   }
-  const profiles = supabase.from('guardian_member_profiles').select('*').eq('family_id', sess.family_id);
+  const profiles = supabase.from('guardian_member_profiles').select('*').eq('family_id', sess.family_id).eq('is_active', true);
   const { data: profileRows, error: profileError } = await (calledMemberId ? profiles.eq('member_id', calledMemberId) : profiles).limit(2);
   if (profileError) {
     console.error('[guardian/screen] member profile read failed; letting Twilio fall back', { sessionId, error: profileError.message });
@@ -155,9 +155,11 @@ export async function POST(req: NextRequest) {
   const memberProfile = profileRows?.length === 1 ? profileRows[0] : null;
 
   const { data: memberData } = memberProfile
-    // Inside the session's family: a profile naming another family's member
-    // must not dial them (see inbound/voice).
-    ? await supabase.from('family_members').select('display_name, phone').eq('id', (memberProfile as { member_id: string }).member_id).eq('family_id', sess.family_id).maybeSingle()
+    // Inside the session's family, and still in it: a profile naming another
+    // family's member must not dial them (see inbound/voice), and a removed
+    // member keeps a phone on file that must not be dialled either — the
+    // removal does not deactivate their Guardian profile.
+    ? await supabase.from('family_members').select('display_name, phone').eq('id', (memberProfile as { member_id: string }).member_id).eq('family_id', sess.family_id).eq('is_active', true).maybeSingle()
     : { data: null };
   const memberName = (memberData as { display_name?: string } | null)?.display_name ?? 'the family member';
 

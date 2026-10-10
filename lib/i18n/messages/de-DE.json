@@ -6189,6 +6189,7 @@
   "familyModule.familyProfileUpdated": "Familienprofil aktualisiert",
   "familyModule.memberRemoved": "Mitglied entfernt",
   "familyModule.removedButLoginStillActive": "Das Mitglied wurde entfernt, aber seine PIN-Anmeldung konnte nicht abgemeldet werden. Bitte wende dich an den Support, um sie zu deaktivieren.",
+  "familyModule.removedButLocationStillVisible": "Das Mitglied wurde entfernt, aber sein letzter Standort konnte nicht gelöscht werden und wird möglicherweise noch auf der Familienkarte angezeigt.",
   "familyModule.pasteAnImageUrlFor": "Fügen Sie eine Bild-URL für Ihr Familien-Titelbild ein.",
   "familyModule.showFewer": "Weniger anzeigen",
   "familyModule.unknownTimeZone": "Unbekannte Zeitzone. Verwende einen Namen wie America/Chicago.",

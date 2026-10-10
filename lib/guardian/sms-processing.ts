@@ -22,9 +22,11 @@ type Destination = { id: string; family_id: string; member_id: string; guardian_
 const TOTAL_MS = 45_000;
 /**
  * The emergency escalation texts AND calls every manager (two Twilio requests
- * per manager, 15 s deadline each) around five database round-trips, so the
- * step's default 5 s budget was a timeout waiting to happen: the alerts kept
- * going out detached while the route answered 503 and Twilio retried into the
+ * of up to 15 s each, fanned out together) around five database round-trips,
+ * so the step's default 5 s budget was a timeout waiting to happen. The step's
+ * signal is handed to the escalation and from there into every Twilio request,
+ * so when this budget runs out the sends stop with it — they used to keep going
+ * out detached while the route answered 503 and Twilio retried into the
  * escalation's own claim. Bounded by the message's total budget either way.
  */
 const ESCALATION_MS = 30_000;
@@ -118,18 +120,24 @@ async function retain(client: Client, input: GuardianSmsReceiptInput, id: string
   return row;
 }
 
-type InboundCap = { sender: boolean; family: boolean };
-const UNDER_CAP: InboundCap = { sender: false, family: false };
+type InboundCap = { sender: boolean; family: boolean; unreadable: boolean };
+const UNDER_CAP: InboundCap = { sender: false, family: false, unreadable: false };
+/** A count that could not be read: the model call is withheld, the delivery is not. */
+const UNREADABLE_CAP: InboundCap = { sender: false, family: false, unreadable: true };
 
 /**
  * Whether this sender, and whether this family, is past its rolling inbound
  * cap. The count includes the message being processed (it was retained
- * first). A count that cannot be read is not a reason to stop analysing
- * messages, so it reads as under the cap.
+ * first). A count that cannot be read used to read as zero — under the cap —
+ * which bought the model call exactly when the database was slow or refusing,
+ * so the cap was a cap only while the count worked. It now reads as
+ * unreadable: the model call is withheld (the pattern detector decides alone)
+ * and nothing else changes — the message is still recorded and, unless the
+ * pipeline said otherwise, still announced.
  */
 async function overInboundCap(client: Client, input: GuardianSmsReceiptInput, signal: AbortSignal): Promise<InboundCap> {
   const since = new Date(Date.now() - GUARDIAN_INBOUND_WINDOW_MS).toISOString();
-  const count = async (sender: boolean): Promise<number> => {
+  const count = async (sender: boolean): Promise<number | null> => {
     try {
       const result = resultEnvelope(await smsStep(signal, current => {
         let query = table(client, 'guardian_communications').select('id', { count: 'exact', head: true })
@@ -137,11 +145,12 @@ async function overInboundCap(client: Client, input: GuardianSmsReceiptInput, si
         if (sender) query = input.from === null ? query.is('from_number', null) : query.eq('from_number', input.from);
         return query.retry(false).abortSignal(current);
       }));
-      return !result.error && typeof result.count === 'number' ? result.count : 0;
-    } catch { return 0; }
+      return !result.error && typeof result.count === 'number' ? result.count : null;
+    } catch { return null; }
   };
   const [fromSender, forFamily] = await Promise.all([count(true), count(false)]);
-  return { sender: fromSender > GUARDIAN_INBOUND_SENDER_CAP, family: forFamily > GUARDIAN_INBOUND_FAMILY_CAP };
+  if (fromSender === null || forFamily === null) return UNREADABLE_CAP;
+  return { sender: fromSender > GUARDIAN_INBOUND_SENDER_CAP, family: forFamily > GUARDIAN_INBOUND_FAMILY_CAP, unreadable: false };
 }
 
 async function processOwned(client: Client, input: GuardianSmsReceiptInput, lease: GuardianSmsLease,
@@ -192,13 +201,14 @@ async function processOwned(client: Client, input: GuardianSmsReceiptInput, leas
     // sender from buying one LLM request per text.
     const settled = decision.routingMode === 'blocked' || (decision.scamDetected === true && decision.spamScore >= 80);
     const cap = settled ? UNDER_CAP : await overInboundCap(client, input, signal);
-    // Past either cap the pattern detector decides alone, whoever is texting:
-    // that is the bound on model spend. But only a sender the family has not
-    // vouched for is HELD. A contact at a ring-through trust level (immediate
-    // family, close family, trusted friend) is who the Guardian number exists
-    // to let through, and their eleventh text in an hour is still a text from
-    // them. The family-wide flood cap holds for everyone.
-    const modelCapped = cap.sender || cap.family;
+    // Past either cap — or with a cap that could not be read — the pattern
+    // detector decides alone, whoever is texting: that is the bound on model
+    // spend. But only a sender the family has not vouched for is HELD. A
+    // contact at a ring-through trust level (immediate family, close family,
+    // trusted friend) is who the Guardian number exists to let through, and
+    // their eleventh text in an hour is still a text from them. The family-wide
+    // flood cap holds for everyone; an unreadable count holds nobody.
+    const modelCapped = cap.sender || cap.family || cap.unreadable;
     const throttled = cap.family || (cap.sender && !shouldRingImmediately(decision.trustLevel));
     const scam = settled || modelCapped
       ? { isScam: decision.scamDetected === true, scamType: decision.scamType ?? null,
@@ -305,17 +315,28 @@ async function processOwned(client: Client, input: GuardianSmsReceiptInput, leas
   if (emergency) {
     // Text and call the managers. Keyed on the communication, so a retried
     // delivery is answered by the escalation's own claim instead of alarming
-    // twice. A storage failure before anything was sent asks Twilio to retry;
-    // an escalation that reached nobody is recorded (and logged) there.
+    // twice. The step's signal goes in with it, so the fan-out stops at the
+    // step's deadline instead of running on detached.
     await fence();
-    const escalation = await smsStep(signal, () => escalateGuardianEmergency(client, {
+    const escalation = await smsStep(signal, current => escalateGuardianEmergency(client, {
       familyId: input.familyId, commId: receipt.communicationId, escalationType: 'urgent_personal', severity: 'critical',
       description: `Emergency text from ${fields.from_name ?? formatPhone(input.from)}: "${input.body.slice(0, 300)}"`,
       ...(input.from ? { callerNumber: input.from.slice(0, 64) } : {}),
-    }), ESCALATION_MS);
-    if (escalation.kind === 'claim_unavailable' || escalation.kind === 'read_failed') return unavailable();
-    if (escalation.kind !== 'delivered' && escalation.kind !== 'duplicate') {
-      console.error('[guardian-sms] emergency escalation did not reach a manager', { familyId: input.familyId, communicationId: receipt.communicationId, outcome: escalation.kind });
+    }, { signal: current }), ESCALATION_MS);
+    // A storage failure before anything was sent, an escalation that reached
+    // nobody, and one cut off before anyone was confirmed reached all ask for
+    // a retry the same way: the lease is released as `error`, the route answers
+    // 503, and the receipt stays `decided`, so Twilio's redelivery or the
+    // recovery cron re-runs this step. `undelivered` used to be logged and the
+    // message completed — the one answer after which nothing would ever try
+    // again. The escalation's own claim and stable ids keep the retry from
+    // texting twice; an alert that DID reach someone is `delivered`, never
+    // retried, and `record_failed` means the alerts went out and only the
+    // record did not.
+    if (escalation.kind === 'claim_unavailable' || escalation.kind === 'read_failed'
+      || escalation.kind === 'undelivered' || escalation.kind === 'interrupted') return unavailable();
+    if (escalation.kind === 'record_failed') {
+      console.error('[guardian-sms] emergency escalation went out but could not be recorded', { familyId: input.familyId, communicationId: receipt.communicationId });
     }
   }
   await fence();

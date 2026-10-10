@@ -150,6 +150,15 @@ beforeEach(() => {
         if (failure === 'saved-read') return error();
         return selected(communication && matches(communication, url) ? [communication] : [], url, init);
       }
+      if (table === 'guardian_communications' && method === 'HEAD') {
+        // The inbound cap's count (`select('id', { count: 'exact', head: true })`).
+        // PostgREST answers a HEAD with no body and the total in content-range.
+        // This used to fall through to the throw below, and the cap read a
+        // count it could not get as zero; it now withholds the model call, so
+        // the fixture has to answer the question the way the server does.
+        const counted = communication && matches(communication, url) ? [communication] : [];
+        return new Response(null, { status: 200, headers: { 'content-range': `*/${counted.length}` } });
+      }
       if (table === 'guardian_communications' && method === 'POST') {
         if (failure === 'communication') return error();
         if (communication) return Response.json({ code: '23505', message: 'Synthetic unique SMS SID' }, { status: 409 });

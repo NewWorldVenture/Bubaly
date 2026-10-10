@@ -41,6 +41,10 @@ export async function POST(req: NextRequest) {
     // Nobody was reached by SMS or call. Not `ok`: the claim was given back so
     // the caller's retry is processed rather than answered as a duplicate.
     case 'undelivered': return NextResponse.json({ ok: false, delivered: false, pushSent: outcome.pushSent, notifiedCount: 0 }, { status: 503 });
+    // Cut off by the caller's deadline before anyone was confirmed reached:
+    // the same answer. (This route passes no deadline, so it sees this only if
+    // the escalation itself did; the inbound lanes do pass one.)
+    case 'interrupted': return NextResponse.json({ ok: false, delivered: false, pushSent: outcome.pushSent, notifiedCount: 0 }, { status: 503 });
     case 'delivered': {
       const { pushSent, smsSent, callAttempted, notifiedCount } = outcome;
       return NextResponse.json({ ok: true, pushSent, smsSent, callAttempted, notifiedCount });

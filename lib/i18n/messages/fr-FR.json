@@ -6189,6 +6189,7 @@
   "familyModule.familyProfileUpdated": "Profil familial mis à jour",
   "familyModule.memberRemoved": "Membre supprimé",
   "familyModule.removedButLoginStillActive": "Le membre a été retiré, mais sa connexion par code PIN n’a pas pu être fermée. Contactez l’assistance pour la désactiver.",
+  "familyModule.removedButLocationStillVisible": "Le membre a été retiré, mais sa dernière position n’a pas pu être effacée et peut encore apparaître sur la carte familiale.",
   "familyModule.pasteAnImageUrlFor": "Collez l’URL d’une image pour la couverture de votre famille.",
   "familyModule.showFewer": "Afficher moins",
   "familyModule.unknownTimeZone": "Fuseau horaire inconnu. Utilisez un nom comme America/Chicago.",
