@@ -6,8 +6,8 @@
 //
 // Auth: fail-closed. Requires CONTACT_CENTER_INBOUND_SECRET, presented as the
 // x-inbound-secret header, as the password of HTTP Basic credentials, or as
-// ?key= (see `authorized`). Without the secret set, rejects in production so the
-// endpoint is never an open relay; permitted in dev for local testing.
+// ?key= (see `authorized`). Without the secret set it rejects every request, in
+// every build, so the endpoint is never an open relay (SEC-002).
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
