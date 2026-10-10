@@ -109,6 +109,7 @@ source allocations are not evidence that production applied any migration.
 | 0493 held | `0493_ai_copy_private_read_and_quota.sql` | Private AI copies and count-only usage; missing receipt refuses capped-Free requests. |
 | 0494 held | `0494_sync_atomic_pull.sql` | Service-only admission and atomic item/map creation; missing RPC preserves cursor and refuses writes. |
 | 0495 held | `0495_a_member_invited_back_gets_what_the_invite_grants.sql` | A returning member gets the invite's role; an active member's role is unchanged; a kid login cannot accept another family's invite. Reserved for #981 above every preserved allocation (confirmed in #981 comment 6089092821). |
+| 0496 proposed, held | `0496_a_childs_xp_is_awarded_by_a_parent.sql` | Only a manager or the service role can award a child XP or rewrite streaks through 0341's functions. Requested for #981 on #771 (comment 6089394563); not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4297,6 +4298,43 @@ as a guest, accept as them, and confirm they cannot open family settings. Then
 invite a test kid login's address from another test family and confirm the
 kid's acceptance is refused. Confirm a test adult who is not anyone's kid login
 can still accept an invitation.
+
+## `0496` (proposed, held) — a child could award themselves XP
+
+`supabase/reserved/0496_a_childs_xp_is_awarded_by_a_parent.sql` —
+**held**: proposed as `0496`, the first number above `0495`, for #981. It was
+requested on #771 in comment 6089394563 and is not yet confirmed. It stays
+outside `supabase/migrations/` until every number below it has landed. Its
+probe is held with it in `docs/audit/reserved/`.
+
+**Severity: medium (integrity of the chore game; no money moves). Deploy
+order: any.** 0354 made `kid_progress` writes manager-only, because "a child
+could simply write their own level 50 and every badge"; a child's direct
+`UPDATE` now changes nothing. But 0341 had moved every award into two
+`SECURITY DEFINER` functions, which RLS does not reach, and their caller check
+was still 00430's `is_family_member`. Measured on a replay of every runnable
+migration, as a child's session: `kid_progress_apply_completion(family, own
+member, 999999, today)` answered `ok: true`, level 141, and
+`kid_progress_revert_completion` let the same child set their own current and
+longest streak (to 365 in the probe's fixture). A teen could do the same. Badges are awarded from those levels and
+streaks on the next real approval.
+
+0496 changes only that predicate in both functions, to 0354's
+`can_manage_family`, beside the existing service-role branch. Their only caller
+is `lib/chores/server.ts`, reached from `finalizeApproval`: with the service
+client on auto-approval and with a manager's session in
+`approveSubmissionAction`, after `isManager`. So no legitimate award changes.
+
+**Proof:** `.github/workflows/kid-progress-award-runtime.yml` replays every
+runnable migration, requires the held probe
+`docs/audit/reserved/a-childs-xp-is-awarded-by-a-parent-check.sql` to fail on
+the defect, applies 0496 twice, and requires the probe to pass. The probe's
+controls: a parent's award and the service path's still land, another family's
+child is still refused, and under 0341's predicate the child's self-award lands.
+
+**After approved release:** as a test child, call
+`kid_progress_apply_completion` for your own member and confirm `forbidden`;
+then approve a test chore as a parent and confirm the XP lands.
 
 ## `0471` and `0474` — the admin digest's delivery store, and a removed admin is not sent it
 
