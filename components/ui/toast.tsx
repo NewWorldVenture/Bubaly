@@ -90,6 +90,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const paused = useRef(false);
   const hovered = useRef(false);
   const focusIn = useRef(false);
+  // Where focus came from when it entered the stack, and which notice takes
+  // it when the focused one is dismissed (focus recovery, below).
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const recoverTo = useRef<number | null>(null);
+  // Set only when a control holding focus is removed (a dismissed notice, an
+  // unmounted "+N"), so recovery never mistakes an ordinary focus move — whose
+  // blur React handles while focus is briefly on the page — for a lost one.
+  const lostFocus = useRef(false);
+  const moreFocused = useRef(false);
   // The notice whose control holds focus. Below lg it stays on screen even
   // when it is not the newest — a notice arriving, or the window crossing
   // below lg, must not hide the control the reader is on (it would keep focus
@@ -114,7 +123,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     const pending = timers.current.get(id);
     if (pending) clearTimeout(pending);
     timers.current.delete(id);
-    setToasts((t) => t.filter((x) => x.id !== id));
+    if (typeof document !== 'undefined' && stackRef.current?.querySelector(`[data-toast-id="${id}"]`)?.contains(document.activeElement)) {
+      lostFocus.current = true;
+    }
+    setToasts((t) => {
+      // If focus is on this notice, the one that takes its place takes focus.
+      const at = t.findIndex((x) => x.id === id);
+      recoverTo.current = (t[at + 1] ?? t[at - 1])?.id ?? null;
+      return t.filter((x) => x.id !== id);
+    });
   }, []);
 
   const schedule = useCallback((id: number, ms: number) => {
@@ -217,6 +234,40 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     if (expanded && toasts.length <= 1) setExpanded(false);
   }, [queueMode, expanded, toasts, schedule]);
 
+  // A focused Dismiss or Undo that takes its notice with it, or a focused "+N"
+  // that goes with the mode or the list, leaves no blur behind: focus falls to
+  // the page while the stack still holds it, and its clocks never resume.
+  // After each change, if that is what happened, focus goes on to the notice
+  // that took the removed one's place (else the newest on screen) — the reader
+  // is still working through the stack — or, with none left, back to where it
+  // came from, and the hold is released.
+  useEffect(() => {
+    if (moreFocused.current && !moreRef.current) {
+      moreFocused.current = false;
+      lostFocus.current = true;
+    }
+    if (!lostFocus.current) return;
+    lostFocus.current = false;
+    if (!focusIn.current || typeof document === 'undefined') return;
+    const stack = stackRef.current;
+    if (!stack || stack.contains(document.activeElement)) return;
+    const shown = Array.from(stack.querySelectorAll<HTMLElement>('[data-toast]:not([data-queued])'));
+    const card = shown.find((c) => Number(c.getAttribute('data-toast-id')) === recoverTo.current) ?? shown[shown.length - 1];
+    recoverTo.current = null;
+    const next = card?.querySelector<HTMLElement>('[data-toast-dismiss]');
+    if (next) {
+      next.focus();
+      return;
+    }
+    focusIn.current = false;
+    setFocusedId(null);
+    const back = returnFocus.current;
+    returnFocus.current = null;
+    if (back?.isConnected) back.focus();
+    if (expandedRef.current) setExpanded(false);
+    if (!hovered.current) resumeAll();
+  }, [toasts, queueMode, expanded, focusedId, resumeAll]);
+
   // Memoised, so the context value keeps its identity across the re-render that
   // showing a toast causes. Without this every toast handed all consumers a new
   // `toast`/`success`/`error`, and any consumer that used one as an effect
@@ -231,8 +282,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   // holding focus. A queued notice keeps its live region and its actions in
   // the accessibility tree, visually hidden and out of the tab order, which
   // "+N" is the way back into; coming on screen later changes only its class.
-  // (That it is announced once, and that a screen reader can act on it, is
-  // what the markup is for; it has not been verified with a screen reader.)
+  // What a screen reader announces from this, and whether it can act on a
+  // queued notice, has not been verified with one: the markup is the intent,
+  // not the evidence.
   const newestId = toasts[toasts.length - 1]?.id;
   const isQueued = (t: Toast) => queueMode && !expanded && t.id !== newestId && t.id !== focusedId;
   const hidden = toasts.filter(isQueued).length;
@@ -279,7 +331,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         ref={stackRef}
         onMouseEnter={() => { hovered.current = true; pauseAll(); }}
         onMouseLeave={() => leave('pointer')}
-        onFocusCapture={(e?: React.FocusEvent) => { focusIn.current = true; pauseAll(); setFocusedId(noticeIdOf(e?.target)); }}
+        onFocusCapture={(e?: React.FocusEvent) => {
+          // Entering from outside: remember where from, to hand focus back.
+          const from = e?.relatedTarget;
+          if (typeof HTMLElement !== 'undefined' && from instanceof HTMLElement && !stackRef.current?.contains(from)) returnFocus.current = from;
+          focusIn.current = true;
+          pauseAll();
+          setFocusedId(noticeIdOf(e?.target));
+        }}
         onBlurCapture={(e?: React.FocusEvent) => leave('focus', e?.relatedTarget)}
         onKeyDown={(e) => {
           if (e.key !== 'Escape' || !expandedRef.current) return;
@@ -300,6 +359,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             data-toast-more
             aria-expanded={expanded}
             aria-label={plural('toast.more', expanded ? toasts.length - 1 : hidden)}
+            onFocus={() => { moreFocused.current = true; }}
+            onBlur={() => { moreFocused.current = false; }}
             onClick={() => setExpanded((open) => !open)}
             className="pointer-events-auto inline-flex min-h-8 items-center gap-1 rounded-full popover-surface px-3 py-1 text-xs font-semibold shadow-glass coarse:min-h-11"
           >
@@ -344,6 +405,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 </button>
               )}
               <button
+                data-toast-dismiss
                 tabIndex={queued ? -1 : undefined}
                 onClick={() => dismiss(t.id)}
                 className="text-muted hover:text-fg"

@@ -314,7 +314,7 @@ describe('one live element per notice, from when it is pushed', () => {
     expect(view.shown).toEqual(['Added']);
   });
 
-  it('a queued notice coming on screen is the same element, so nothing is announced again', () => {
+  it('a queued notice coming on screen is the same element: no live element is added (announcement itself unverified)', () => {
     const { api } = render();
     api.success('One');
     api.success('Two');

@@ -534,6 +534,94 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
             expect(await hitAt(page, oldest)).toBe('Dismiss');
           });
 
+          // ── Focus that goes with a removed control (#986, 6095395366) ──
+          // A focused Dismiss or Undo takes its own notice with it, and a
+          // focused "+N" goes with the mode; neither leaves a blur behind. The
+          // stack must hand focus on (or back) and not stay held.
+          const visibleDismiss = (page: Page) => cards(page).last().getByRole('button', { name: 'Dismiss' });
+          /** Marks the element that has focus now, to find it again. */
+          const markFocus = (page: Page) => page.evaluate(() => { document.activeElement?.setAttribute('data-probe-origin', ''); });
+          /** Moves focus out of the stack by Shift+Tab, as a reader would. */
+          async function tabOutOfStack(page: Page) {
+            for (let i = 0; i < 10; i += 1) {
+              const inside = await page.evaluate(() => !!document.activeElement?.closest('[data-toast], [data-toast-more]'));
+              if (!inside) return;
+              await page.keyboard.press('Shift+Tab');
+            }
+            throw new Error('focus did not leave the stack');
+          }
+          /** One plain notice, raised and the dialog closed, with the pointer away: it must leave on its own. */
+          async function expectDrains(page: Page) {
+            const { dialog } = await openNewContactAgain(page);
+            await dialog.getByRole('textbox', { name: 'Full name' }).press('Enter');
+            await expect(alertsReading(page, COPY.nameRequired)).toHaveCount(1);
+            await page.keyboard.press('Escape');
+            await expect(dialog).toBeHidden();
+            await page.mouse.move(5, 5);
+            // LIFETIME.plain is 4.2 s: held, it would still be here.
+            await expect(cards(page), 'the stack is not held: the new notice leaves on its own').toHaveCount(0, { timeout: 8_000 });
+          }
+          async function openNewContactAgain(page: Page) {
+            await page.getByRole('button', { name: 'Add Contact', exact: true }).first().click();
+            const dialog = page.getByRole('dialog', { name: 'New Contact' });
+            await expect(dialog).toBeVisible();
+            return { dialog };
+          }
+
+          test('a focused Dismiss that takes its notice hands focus to the next; with none left, back where it came from; and the stack is not left held', async ({ page }) => {
+            await threeRefusals(page);
+            await page.mouse.move(5, 5);
+            await markFocus(page);
+            // Into the stack by keyboard: "+2", then the notice on screen.
+            await more(page).focus();
+            await page.keyboard.press('Tab');
+            await expect(visibleDismiss(page)).toBeFocused();
+            for (const left of [2, 1]) {
+              await page.keyboard.press('Enter');
+              await expect(cards(page)).toHaveCount(1);
+              await expect.soft(visibleDismiss(page), `${left} left: the next notice's Dismiss holds focus`).toBeFocused();
+              expect(await hitAt(page, visibleDismiss(page))).toBe('Dismiss');
+            }
+            await page.keyboard.press('Enter');
+            await expect(cards(page)).toHaveCount(0);
+            await expect.soft(page.locator('[data-probe-origin]'), 'focus back where it came from').toBeFocused();
+            await expectDrains(page);
+          });
+
+          test('a focused "+N" that goes away crossing lg hands focus to the newest notice; leaving lets every notice count down', async ({ page }) => {
+            await threeRefusals(page);
+            await page.mouse.move(5, 5);
+            await more(page).focus();
+            await page.setViewportSize({ width: 1280, height: 800 });
+            await expect(cards(page)).toHaveCount(3);
+            await expect(more(page)).toHaveCount(0);
+            await expect.soft(visibleDismiss(page), 'focus went on to the newest notice').toBeFocused();
+            await tabOutOfStack(page);
+            await page.mouse.move(5, 5);
+            // LIFETIME.plain is 4.2 s; all three count from when focus left.
+            await expect(cards(page), 'the stack is not held').toHaveCount(0, { timeout: 8_000 });
+          });
+
+          test('a focused Undo that takes its notice, with none left on screen, hands focus back and leaves nothing held', async ({ page }) => {
+            await signIn(page, '/dashboard/contacts');
+            await page.getByRole('button', { name: 'Quick capture' }).click();
+            const capture = page.getByRole('dialog', { name: 'Quick capture' });
+            await capture.getByRole('textbox', { name: 'Task' }).fill('Probe focused undo');
+            await capture.getByRole('button', { name: 'Save', exact: true }).click();
+            await expect(capture).toBeHidden();
+            await page.mouse.move(5, 5);
+            await markFocus(page);
+            const undo = cards(page).last().getByRole('button', { name: 'Undo' });
+            await undo.focus();
+            await page.keyboard.press('Enter');
+            // The Undo notice is gone and no other is on screen yet (its
+            // confirmation comes when the server answers): focus goes back,
+            // and the confirmation is not held — it leaves on its own.
+            await expect(page.getByRole('status').filter({ hasText: /undone|removed/i })).toHaveCount(1);
+            await expect.soft(page.locator('[data-probe-origin]'), 'focus back where it came from').toBeFocused();
+            await expect(cards(page), 'the stack is not held').toHaveCount(0, { timeout: 8_000 });
+          });
+
           test('crossing lg: the queue opens into the desktop stack and closes back, with nothing lost or doubled', async ({ page }) => {
             await threeRefusals(page);
             await cards(page).first().hover();
