@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Target, Plus, Trash2, TrendingUp } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -43,7 +43,14 @@ export function SavingsView() {
     // `current_amount + delta` from what the page last rendered, so two parents
     // each adding the same amount at once both wrote the same figure and one of
     // the contributions vanished. The service applies it under a compare-and-set.
-    const res = await contributeToGoalAction(g.id, delta);
+    let res: Awaited<ReturnType<typeof contributeToGoalAction>>;
+    try {
+      res = await contributeToGoalAction(g.id, delta);
+    } catch {
+      // No answer is not "it failed": the contribution may have committed. Say
+      // so and leave the modal open rather than throwing an unhandled rejection.
+      return toastError(t('actions.couldNotUpdateThatSavings'));
+    }
     if (!res.ok) reportRefusal(res, toastError); else success(t('savingsView.updated'));
     setContribute(null);
   }
@@ -144,16 +151,29 @@ function GoalModal({ familyId, userId, onClose }: { familyId: string; userId: st
   );
 }
 
-function ContributeModal({ goal, onAdd, onClose }: { goal: Goal; onAdd: (delta: number) => void; onClose: () => void }) {
+function ContributeModal({ goal, onAdd, onClose }: { goal: Goal; onAdd: (delta: number) => Promise<void>; onClose: () => void }) {
   const t = useTranslations();
   const [amt, setAmt] = useState('');
+  // A contribution is a DELTA with no idempotency key, so a second press while
+  // the first is in flight (a double-click, Enter twice) used to post it twice
+  // and over-fund the goal. The ref closes the window before React re-renders
+  // the disabled button; the state is what the person sees.
+  const [saving, setSaving] = useState(false);
+  const inFlight = useRef(false);
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (inFlight.current) return;
+    inFlight.current = true; setSaving(true);
+    try { await onAdd(Math.abs(parseFloat(amt) || 0)); }
+    finally { inFlight.current = false; setSaving(false); }
+  }
   return (
     <Modal open onClose={onClose} title={t('itemAction.addTo', { name: goal.name })}>
-      <form onSubmit={(e) => { e.preventDefault(); onAdd(Math.abs(parseFloat(amt) || 0)); }} className="space-y-4">
+      <form onSubmit={submit} className="space-y-4">
         <Field label={t('savings.amount')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={amt} onChange={(e) => setAmt(e.target.value)} placeholder="50" required autoFocus />}</Field>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="outline" onClick={onClose}>{t('savings.cancel')}</Button>
-          <Button type="submit" disabled={!amt}>{t('savings.addFunds')}</Button>
+          <Button type="submit" loading={saving} disabled={!amt || saving}>{t('savings.addFunds')}</Button>
         </div>
       </form>
     </Modal>

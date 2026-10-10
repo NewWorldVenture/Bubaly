@@ -9,6 +9,10 @@ const mocks = vi.hoisted(() => ({ createServer: vi.fn(), requireUserContext: vi.
 vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.createServer }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.requireUserContext }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
+// The step-up gate on the household-money tables has its own test
+// (the-wallet-hub-asks-for-the-code-before-money.test.ts); this fake client has
+// no auth.mfa, so here the session is one that may change money.
+vi.mock('@/lib/auth/require-aal2', () => ({ aal2Verdict: async () => ({ action: 'allow' }) }));
 
 const FAMILY = 'session-family';
 const USER = 'session-user';

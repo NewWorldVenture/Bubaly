@@ -499,6 +499,26 @@ export type BudgetLine = {
 };
 
 /**
+ * One budget per category: the oldest row (created_at, then id), which is the
+ * one `updateBudget` edits. Without a unique index a family can hold duplicate
+ * "Groceries" rows (legacy forms, or two saves racing), and every duplicate
+ * line summed the SAME transactions, so `totalSpent` counted that spend twice
+ * and the stale twin kept reporting its old limit.
+ */
+function canonicalBudgets(rows: BudgetRow[]): BudgetRow[] {
+  const first = new Map<string, BudgetRow>();
+  const older = (a: BudgetRow, b: BudgetRow) =>
+    a.created_at !== b.created_at ? a.created_at < b.created_at : a.id < b.id;
+  for (const row of rows) {
+    const key = row.category.trim().toLowerCase();
+    const held = first.get(key);
+    if (!held || older(row, held)) first.set(key, row);
+  }
+  const keep = new Set([...first.values()].map((r) => r.id));
+  return rows.filter((r) => keep.has(r.id));
+}
+
+/**
  * Every budget against what was actually spent in its window. The window is
  * judged at the last day of `month` (or today when the month is the current
  * one) so a weekly budget reports the week that matters for that month.
@@ -527,7 +547,7 @@ export async function budgetVsActual(
     console.error('[service:finances] budgets read failed', error);
     return fail(describeDbError(error, 'Could not load your budgets.'), { code: SERVICE_CODES.db });
   }
-  const rows = budgets ?? [];
+  const rows = canonicalBudgets(budgets ?? []);
   if (rows.length === 0) return ok({ month, budgets: [], totalLimit: 0, totalSpent: 0, overCount: 0 });
 
   // One read covering the widest window any budget needs (the year for a
@@ -675,19 +695,24 @@ export async function updateBudget(
   }
   const amount = toDollars(toCents(input.amount));
 
-  const { data: existing, error: readError } = await scope.db
+  // `budgets` has no unique index on the category (only idx_budgets_family,
+  // 0006), so a family can hold two "Groceries" rows: legacy forms wrote them,
+  // and two saves racing this read-then-insert both miss and both insert.
+  // Every reader therefore needs ONE answer to "which row is the Groceries
+  // budget?", and it is the OLDEST — the same rule `budgetVsActual` applies
+  // when it collapses duplicates. `.limit(1)` with no order handed back an
+  // arbitrary one, so an edit could land on a row the overview then ignored.
+  const canonical = () => scope.db
     .from('budgets')
     .select('*')
     .eq('family_id', scope.familyId)
     .ilike('category', escapeLike(category))
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
     .limit(1)
     .maybeSingle();
-  if (readError) {
-    console.error('[service:finances] budget lookup failed', readError);
-    return fail(describeDbError(readError, 'Could not check the existing budget.'), { code: SERVICE_CODES.db });
-  }
 
-  if (existing) {
+  const applyTo = async (existing: BudgetRow): Promise<ServiceResult<{ budget: BudgetRow; created: boolean; previousAmount: number | null }>> => {
     const { data, error } = await scope.db
       .from('budgets')
       .update({ amount, ...(input.period ? { period: input.period } : {}) })
@@ -707,7 +732,14 @@ export async function updateBudget(
       href: '/dashboard/finances',
     });
     return ok({ budget: data, created: false, previousAmount: toDollars(toCents(existing.amount)) });
+  };
+
+  const { data: existing, error: readError } = await canonical();
+  if (readError) {
+    console.error('[service:finances] budget lookup failed', readError);
+    return fail(describeDbError(readError, 'Could not check the existing budget.'), { code: SERVICE_CODES.db });
   }
+  if (existing) return applyTo(existing);
 
   const { data, error } = await scope.db
     .from('budgets')
@@ -718,6 +750,29 @@ export async function updateBudget(
     console.error('[service:finances] budget insert failed', error);
     return fail(describeDbError(error, 'Could not create that budget.'), { code: SERVICE_CODES.db });
   }
+
+  // Without a unique index the insert cannot fail on a race, so the race is
+  // settled after it: read the canonical row again, and when it is not ours a
+  // concurrent save created this category first. Ours is the duplicate — remove
+  // it and set the amount on theirs, so the family keeps one budget. (A unique
+  // index on (family_id, lower(btrim(category))) is what makes this airtight;
+  // it needs a migration that first merges the duplicates already stored.)
+  const { data: winner, error: winnerError } = await canonical();
+  if (winnerError) {
+    console.error('[service:finances] budget duplicate check failed', winnerError);
+  } else if (winner && winner.id !== data.id) {
+    const { error: dropError } = await scope.db
+      .from('budgets')
+      .delete()
+      .eq('id', data.id)
+      .eq('family_id', scope.familyId);
+    if (dropError) {
+      console.error('[service:finances] duplicate budget cleanup failed', dropError);
+    } else {
+      return applyTo(winner);
+    }
+  }
+
   await recordActivitySafely(scope, {
     agent: 'finances',
     action: 'create',
@@ -992,6 +1047,22 @@ export async function createSavingsGoal(scope: ServiceScope, input: CreateSaving
           return fail(describeDbError(error, 'Could not check for an existing goal.'), { code: SERVICE_CODES.db });
         }
         return ok(data ?? null);
+      },
+      // The probe above matches by NAME, not by this call's key — savings_goals
+      // has no idempotency_key column — so what it finds may be an older goal
+      // the family set up long before this request ("Emergency fund", $2,000),
+      // not the row a retry of THIS call wrote. Handing that back as a success
+      // told a parent who approved a $10,000 target that it had started, while
+      // the old $2,000 goal was what stood. A found goal is only this save when
+      // the money on it is what this call would have written; otherwise the
+      // answer is "that goal already exists", and nothing was changed.
+      changedRetry: {
+        drift: (found) => [
+          ...(toCents(found.target_amount) !== toCents(target) ? ['target_amount'] : []),
+          ...(toCents(found.current_amount) !== toCents(current) ? ['current_amount'] : []),
+        ],
+        message: (found) => `A savings goal called ${found.name} already exists, with a target of ${formatDollars(toCents(found.target_amount))} and ${formatDollars(toCents(found.current_amount))} saved. Nothing was changed; update that goal or choose a different name.`,
+        id: (found) => found.id,
       },
     },
     async () => {
