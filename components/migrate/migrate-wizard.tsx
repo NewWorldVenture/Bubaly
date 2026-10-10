@@ -14,6 +14,7 @@ import {
 import type { ExistingMember, ResolutionPlan } from '@/lib/migrate/resolve';
 import { commitImport, prepareImport, type ImportResult } from '@/app/(app)/dashboard/migrate/actions';
 import { cn } from '@/lib/utils/cn';
+import { newSubmissionId } from '@/lib/utils/submission-id';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { useFormat } from '@/components/i18n/use-format';
 
@@ -58,6 +59,10 @@ export function MigrateWizard() {
   const [result, setResult] = useState<ImportResult | null>(null);
   const [plan, setPlan] = useState<ResolutionPlan | null>(null);
   const [members, setMembers] = useState<ExistingMember[]>([]);
+  // One id per commit, held across a retry whose answer never arrived (that
+  // attempt may have landed) and dropped once the server answers: any answer,
+  // success or failure, means the server already claimed it.
+  const submissionRef = useRef<string | null>(null);
   // Reviewer overrides, keyed `${kind}:${index}` so an untouched item keeps the
   // proposal rather than being pinned to whatever it was when the plan loaded.
   const [assignments, setAssignments] = useState<Record<string, string>>({});
@@ -140,8 +145,10 @@ export function MigrateWizard() {
     if (!source || total === 0 || !plan) return;
     start(async () => {
       setError(null);
+      submissionRef.current ??= newSubmissionId();
       const res = await commitImport({
         source: source.key,
+        submissionId: submissionRef.current,
         events: preview.events.map((e, i) => ({
           ...e,
           category: plan.events[i]?.category ?? null,
@@ -167,6 +174,7 @@ export function MigrateWizard() {
           skip: skipped('contact', i, plan.contacts[i]?.duplicate ?? false),
         })),
       });
+      submissionRef.current = null;
       if (res.ok) { setResult(res); setStep('done'); router.refresh(); }
       else setError(res.error);
     });

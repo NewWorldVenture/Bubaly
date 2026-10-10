@@ -24,6 +24,11 @@ function makeStore(seed: Record<string, Row[]>) {
     Object.entries(filters).every(([key, value]) => {
       if (key.startsWith('in:')) return (value as unknown[]).includes(row[key.slice(3)]);
       if (key.startsWith('or:') || key.startsWith('gt:') || key.startsWith('lt:')) return true;
+      // The `family:families!inner(closed_at)` embed's filter: open families only.
+      if (key.startsWith('family.')) {
+        const family = (tables.families ?? []).find((f) => f.id === row.family_id);
+        return family !== undefined && (family[key.slice('family.'.length)] ?? null) === value;
+      }
       return row[key] === value;
     });
   const from = (table: string) => {

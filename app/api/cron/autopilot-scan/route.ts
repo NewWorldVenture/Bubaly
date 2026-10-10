@@ -71,8 +71,13 @@ export async function GET(req: NextRequest) {
     // it runs at 06:30 UTC, which is 23:30 the previous day in Los Angeles,
     // so a Greenwich "today" here is the wrong day for the whole US west
     // coast on every single run.
+    //
+    // OPEN families only (families.closed_at). The entitlement check below
+    // already answers level 0 for a closed family, but that skips it only
+    // while Autopilot's tier needs a paid level: an admin setting the tier to
+    // 'free' (or a tier map without the href) would scan closed accounts again.
     const { rows: families, error } = await readAll((from, to) => supabase
-      .from('families').select('id, timezone').order('id').range(from, to), { max: 5000 });
+      .from('families').select('id, timezone').is('closed_at', null).order('id').range(from, to), { max: 5000 });
     if (error) throw error;
 
     // Read once for the whole pass rather than per family. An unreadable tier
