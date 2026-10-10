@@ -19,7 +19,7 @@ const sdk = fs.readFileSync(path.join(
 const messages: Record<string, string> = JSON.parse(fs.readFileSync('lib/i18n/messages/en-US.json', 'utf8'));
 const sources = Object.fromEntries([
   'components/finance/bill-payment-modal.tsx', 'components/ui/modal.tsx',
-  'components/ui/input.tsx', 'components/ui/button.tsx', 'components/ui/toast.tsx',
+  'components/ui/input.tsx', 'components/ui/button.tsx', 'components/ui/toast.tsx', 'lib/hooks/use-media-query.ts',
   'lib/a11y/use-dialog-behavior.ts', 'lib/finance/hub.ts',
   'lib/finance/bill-schedule.ts', 'lib/finance/recurring.ts', 'lib/finance/bills.ts', 'lib/supabase/errors.ts',
   // The shared bills reader loads the actual counted reader and its closed graph.
@@ -127,7 +127,7 @@ async function fixture(page: Page, rendered = bill(), outcome: Outcome = 'saved'
       react: React, 'react-dom': window.ReactDOM,
       'lucide-react': new Proxy({}, { get: () => () => null }),
       '@/lib/utils/cn': { cn: (...values) => values.filter(value => typeof value === 'string').join(' ') },
-      '@/components/i18n/locale-provider': { useTranslations: () => tr },
+      '@/components/i18n/locale-provider': { useTranslations: () => tr, usePlural: () => (key, count) => tr(key + (count === 1 ? '.one' : '.other')).replace('{count}', String(count)) },
       '@/components/i18n/use-format': { useFamilyClock: () => ({ todayKey: () => '2026-03-28' }) },
       '@/lib/supabase/client': { createClient: () => sb },
       '@capacitor/core': { Capacitor: { isNativePlatform: () => false } },

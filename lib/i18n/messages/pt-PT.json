@@ -14220,6 +14220,8 @@
   "timetableModule.pickAFamilyMember": "Escolha um membro da família",
   "timetableModule.subjectIsRequired": "A disciplina é obrigatória",
   "toast.dismiss": "Dispensar",
+  "toast.more.one": "Mais {count} aviso",
+  "toast.more.other": "Mais {count} avisos",
   "todos.addTask": "Adicionar tarefa",
   "todos.assignTo": "Atribuir a",
   "todos.assignedToOthers": "Atribuído a outros",

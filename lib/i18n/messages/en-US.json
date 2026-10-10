@@ -14427,6 +14427,8 @@
   "timetableModule.pickAFamilyMember": "Pick a family member",
   "timetableModule.subjectIsRequired": "Subject is required",
   "toast.dismiss": "Dismiss",
+  "toast.more.one": "{count} more notice",
+  "toast.more.other": "{count} more notices",
   "todos.addTask": "Add Task",
   "todos.assignTo": "Assign to",
   "todos.assignedToOthers": "Assigned to Others",

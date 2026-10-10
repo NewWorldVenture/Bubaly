@@ -14221,6 +14221,8 @@
   "timetableModule.pickAFamilyMember": "Elige un miembro de la familia",
   "timetableModule.subjectIsRequired": "La asignatura es obligatoria",
   "toast.dismiss": "Descartar",
+  "toast.more.one": "{count} aviso más",
+  "toast.more.other": "{count} avisos más",
   "todos.addTask": "Añadir tarea",
   "todos.assignTo": "Asignar a",
   "todos.assignedToOthers": "Asignado a otras personas",

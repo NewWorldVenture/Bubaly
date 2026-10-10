@@ -1,9 +1,10 @@
 'use client';
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
-import { useTranslations } from '@/components/i18n/locale-provider';
-import { CheckCircle2, AlertTriangle, Info, X } from 'lucide-react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { usePlural, useTranslations } from '@/components/i18n/locale-provider';
+import { CheckCircle2, AlertTriangle, ChevronDown, Info, X } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { useMediaQuery } from '@/lib/hooks/use-media-query';
 
 type ToastTone = 'success' | 'error' | 'info';
 /** Optional one-tap action shown in the toast, e.g. "Undo". */
@@ -52,10 +53,37 @@ function hapticFor(tone: ToastTone) {
  *  copy of these numbers that can drift away from them. */
 export const LIFETIME = { action: 7000, plain: 4200 } as const;
 
+const windowFor = (t: Toast) => (t.action ? LIFETIME.action : LIFETIME.plain);
+
+/**
+ * Below lg the notices form a queue rather than a stack (A11Y-001, approved on
+ * #778): three notices stacked over a phone's page covered its own controls
+ * (at 360px, "Add First Contact" and the contact dialog's relationship chips).
+ * In queue mode one notice shows at a time, the newest not yet dismissed;
+ * older ones wait in arrival order with no clock running and each gets a full
+ * window when it shows; "+N" expands the whole stack, so every Dismiss and Undo
+ * stays reachable by pointer and keyboard. From lg nothing changes.
+ */
+export const QUEUE_QUERY = '(max-width: 1023px)';
+
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const tr = useTranslations();
+  const plural = usePlural();
   const [toasts, setToasts] = useState<Toast[]>([]);
   const counter = useRef(0);
+  // Queue mode (below lg) and whether its "+N" list is open. Read through refs
+  // by the callbacks below, which keep their identity across renders.
+  const queueMode = useMediaQuery(QUEUE_QUERY);
+  const [expanded, setExpanded] = useState(false);
+  const queueRef = useRef(queueMode);
+  queueRef.current = queueMode;
+  const expandedRef = useRef(expanded);
+  expandedRef.current = expanded;
+  // Held by hover or focus on the stack (pauseAll / resumeAll).
+  const paused = useRef(false);
+  const hovered = useRef(false);
+  const stackRef = useRef<HTMLDivElement>(null);
+  const moreRef = useRef<HTMLButtonElement>(null);
   // The pending dismissal for each toast, so it can be PAUSED.
   //
   // WCAG 2.2.1 (Timing Adjustable): a time limit on content has to be
@@ -87,6 +115,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   /** Hold every toast open while the stack is hovered or holds focus. */
   const pauseAll = useCallback(() => {
+    paused.current = true;
     for (const pending of timers.current.values()) clearTimeout(pending);
     timers.current.clear();
   }, []);
@@ -95,19 +124,68 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
    *  read or to tab towards Undo needs time to act, not the 300ms they had
    *  left. */
   const resumeAll = useCallback(() => {
+    paused.current = false;
     setToasts((current) => {
-      for (const t of current) schedule(t.id, t.action ? LIFETIME.action : LIFETIME.plain);
+      if (!queueRef.current) {
+        for (const t of current) schedule(t.id, windowFor(t));
+      } else if (!expandedRef.current && current.length) {
+        // In queue mode only the notice on screen counts down.
+        const newest = current[current.length - 1];
+        schedule(newest.id, windowFor(newest));
+      }
       return current;
     });
   }, [schedule]);
+
+  /** Leaving the stack: an open "+N" list closes once neither pointer nor focus is in it. */
+  const leave = useCallback((kind: 'pointer' | 'focus', next?: EventTarget | null) => {
+    if (kind === 'pointer') hovered.current = false;
+    // Focus moving between the stack's own buttons is not leaving it.
+    if (kind === 'focus' && typeof Node !== 'undefined' && next instanceof Node && stackRef.current?.contains(next)) return;
+    if (expandedRef.current) {
+      const focusInside = typeof document !== 'undefined' && !!stackRef.current?.contains(document.activeElement);
+      const stillHere = kind === 'pointer' ? focusInside : hovered.current;
+      if (stillHere) return;
+      setExpanded(false);
+    }
+    resumeAll();
+  }, [resumeAll]);
 
   const push = useCallback((message: string, tone: ToastTone = 'info', action?: ToastAction) => {
     const id = ++counter.current;
     hapticFor(tone);
     setToasts((t) => [...t, { id, tone, message, action }]);
-    // Actionable toasts linger a little longer so there's time to tap them.
-    schedule(id, action ? LIFETIME.action : LIFETIME.plain);
+    if (!queueRef.current) {
+      // Actionable toasts linger a little longer so there's time to tap them.
+      schedule(id, action ? LIFETIME.action : LIFETIME.plain);
+      return;
+    }
+    // Queue mode: the new notice is the one on screen, so it alone counts down;
+    // the one it displaces gets a full window again when it shows. Not while
+    // the stack is held: a notice that arrives under a pointer or focus waits.
+    for (const pending of timers.current.values()) clearTimeout(pending);
+    timers.current.clear();
+    if (!paused.current && !expandedRef.current) schedule(id, action ? LIFETIME.action : LIFETIME.plain);
   }, [schedule]);
+
+  // Keep the clocks matching what is on screen when the mode, the list or the
+  // "+N" state changes: in queue mode the newest notice alone, unless held or
+  // expanded; back from lg every notice, unless held, each with a full window.
+  useEffect(() => {
+    if (!queueMode) {
+      if (!paused.current) for (const t of toasts) if (!timers.current.has(t.id)) schedule(t.id, windowFor(t));
+      return;
+    }
+    const newest = toasts[toasts.length - 1];
+    for (const [id, pending] of timers.current) {
+      if (expanded || paused.current || id !== newest?.id) {
+        clearTimeout(pending);
+        timers.current.delete(id);
+      }
+    }
+    if (newest && !expanded && !paused.current && !timers.current.has(newest.id)) schedule(newest.id, windowFor(newest));
+    if (expanded && toasts.length <= 1) setExpanded(false);
+  }, [queueMode, expanded, toasts, schedule]);
 
   // Memoised, so the context value keeps its identity across the re-render that
   // showing a toast causes. Without this every toast handed all consumers a new
@@ -158,21 +236,50 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           below — the countdown stops as focus lands on the Undo button inside,
           which is the path a keyboard user actually takes. */}
       <div
-        onMouseEnter={pauseAll}
-        onMouseLeave={resumeAll}
+        ref={stackRef}
+        onMouseEnter={() => { hovered.current = true; pauseAll(); }}
+        onMouseLeave={() => leave('pointer')}
         onFocusCapture={pauseAll}
-        onBlurCapture={resumeAll}
+        onBlurCapture={(e?: React.FocusEvent) => leave('focus', e?.relatedTarget)}
+        onKeyDown={(e) => {
+          if (e.key !== 'Escape' || !expandedRef.current) return;
+          setExpanded(false);
+          moreRef.current?.focus();
+        }}
         className="pointer-events-none fixed inset-x-0 bottom-[calc(5rem+var(--safe-bottom))] z-[100] flex flex-col items-center gap-2 pl-4 pr-[calc(4.75rem+var(--safe-right))] lg:inset-x-auto lg:right-4 lg:bottom-40 lg:items-end lg:px-0"
       >
-        {toasts.map((t) => {
+        {queueMode && toasts.length > 1 && (
+          <button
+            ref={moreRef}
+            type="button"
+            aria-expanded={expanded}
+            aria-label={plural('toast.more', toasts.length - 1)}
+            onClick={() => setExpanded((open) => !open)}
+            className="pointer-events-auto inline-flex min-h-8 items-center gap-1 rounded-full popover-surface px-3 py-1 text-xs font-semibold shadow-glass coarse:min-h-11"
+          >
+            {expanded ? <ChevronDown className="h-4 w-4" aria-hidden /> : `+${toasts.length - 1}`}
+          </button>
+        )}
+        {toasts.map((t, index) => {
           const Icon = ICONS[t.tone];
+          // Queued (below lg, all but the newest, "+N" closed): still its own
+          // live region, inserted and so announced when it was pushed, and
+          // still in the accessibility tree with its actions, so a screen
+          // reader can reach a queued Undo; visually hidden and out of the tab
+          // order, which "+N" is the way back into. Coming on screen later
+          // changes only its class, so it is not announced a second time.
+          const queued = queueMode && !expanded && index < toasts.length - 1;
           return (
             <div
               key={t.id}
+              data-toast
+              data-queued={queued || undefined}
               role={t.tone === 'error' ? 'alert' : 'status'}
               aria-live={t.tone === 'error' ? 'assertive' : 'polite'}
               className={cn(
-                'pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl popover-surface px-4 py-3 text-sm shadow-glass animate-fade-in lg:max-w-56',
+                queued
+                  ? 'sr-only'
+                  : 'pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl popover-surface px-4 py-3 text-sm shadow-glass animate-fade-in lg:max-w-56',
                 t.tone === 'success' && 'border-success/30',
                 t.tone === 'error' && 'border-danger/30',
               )}
@@ -188,6 +295,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               <span className="flex-1">{t.message}</span>
               {t.action && (
                 <button
+                  tabIndex={queued ? -1 : undefined}
                   onClick={() => { t.action!.onClick(); dismiss(t.id); }}
                   className="shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold text-brand-text hover:bg-brand/10"
                 >
@@ -195,6 +303,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 </button>
               )}
               <button
+                tabIndex={queued ? -1 : undefined}
                 onClick={() => dismiss(t.id)}
                 className="text-muted hover:text-fg"
                 aria-label={tr('toast.dismiss')}
