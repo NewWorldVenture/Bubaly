@@ -9,13 +9,15 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
+import { settleAll } from '@/lib/supabase/settle';
 import { readFamilyOrders } from '@/lib/marketplace/schema-compat';
 
-type Result = { ok: true } | { ok: false; error: string };
+type Failure = { ok: false; error: string };
+type Result = { ok: true } | Failure;
 
 const MARKETPLACE = '/marketplace';
 
-function actionFailure(operation: string, message: string, error: unknown): Result {
+function actionFailure(operation: string, message: string, error: unknown): Failure {
   console.error(`[marketplace-action] ${operation} failed`, error);
   return { ok: false, error: describeActionError(error, message) };
 }
@@ -279,4 +281,54 @@ export async function makeOfferAction(listingId: string): Promise<Result> {
   revalidatePath(`${MARKETPLACE}/item/${listingId}`);
   revalidatePath(`${MARKETPLACE}/browse`);
   return { ok: true };
+}
+
+// ── The rail's Trust Score card ──────────────────────────────────────────────
+
+export type TrustScoreInputsResult =
+  | { ok: true; memberId: string; ratingsReceived: number[]; ordersCompleted: number; listingsPosted: number }
+  | Failure;
+
+/**
+ * What the Trust Score card scores for the active member: the ratings they
+ * received, the exchanges they completed on either side, and the listings they
+ * posted (components/marketplace/sidebar-trust-score.tsx runs the pure engine
+ * on these).
+ *
+ * Read here and not in the browser. The order read asks for buyer_family_id,
+ * and a database without the proposed economy SQL answers that with a 400
+ * before readFamilyOrders falls back to the seller-family read. On the server
+ * that 400 is a response to a fetch, handled and warned about once. In the
+ * browser Chromium also prints "Failed to load resource: the server responded
+ * with a status of 400" to the console — and the rail is on every marketplace
+ * page, so that one probe put a console error on all of them.
+ */
+export async function readTrustScoreInputsAction(): Promise<TrustScoreInputsResult> {
+  const t = await getTranslations();
+  const ctx = await requireUserContext();
+  const supabase = await createServer();
+  const familyId = ctx.active.familyId;
+  const memberId = ctx.active.member.id;
+
+  const [reviews, orders, listings] = await settleAll([
+    supabase.from('marketplace_reviews').select('rating').eq('family_id', familyId).eq('reviewee_member', memberId),
+    // Either party's family, so an exchange this member won from another
+    // household counts too (lib/marketplace/schema-compat.ts).
+    readFamilyOrders(familyId, (scope) => scope(supabase.from('marketplace_orders').select('status, buyer_member, seller_member'))),
+    supabase.from('marketplace_listings').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('member_id', memberId),
+  ]);
+  // A failed read is said, not scored: a zero baseline is a real-looking number
+  // the family would take as their standing.
+  const failure = reviews.error ?? orders.error ?? listings.error;
+  if (failure) return actionFailure('read the trust score', t('sidebarTrustScore.couldNotLoad'), failure);
+
+  return {
+    ok: true,
+    memberId,
+    ratingsReceived: (reviews.data ?? []).map((r) => r.rating),
+    ordersCompleted: (orders.data ?? []).filter(
+      (o) => o.status === 'completed' && (o.buyer_member === memberId || o.seller_member === memberId),
+    ).length,
+    listingsPosted: listings.count ?? 0,
+  };
 }

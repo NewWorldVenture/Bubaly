@@ -1,14 +1,15 @@
 'use client';
 
 // The "Your Trust Score" card at the bottom of the marketplace rail (matches the
-// design). Computed CLIENT-side from the member's live reviews + completed orders
-// + listings via the same pure engine the server uses — best-effort, so a
-// pre-0151 database just renders the "Building" baseline.
+// design). Scored CLIENT-side by the same pure engine the server uses, from the
+// member's live reviews + completed orders + listings — which the server reads
+// (readTrustScoreInputsAction): the order read probes for a column the proposed
+// economy SQL adds, and a browser making that probe gets a 400 that Chromium
+// reports as a console error on every marketplace page, fallback or not.
+// Best-effort, so a pre-0151 database just renders the "Building" baseline.
 
 import { useEffect, useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
-import { settleAll } from '@/lib/supabase/settle';
-import { readFamilyOrders } from '@/lib/marketplace/schema-compat';
+import { readTrustScoreInputsAction } from '@/app/(app)/marketplace/actions';
 import { useApp } from '@/components/app/app-context';
 import { computeTrustScore, TRUST_BAND_LABEL_KEYS, type TrustScore } from '@/lib/marketplace/trust';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -28,30 +29,23 @@ export function SidebarTrustScore() {
     let active = true;
     (async () => {
       try {
-        const sb = createClient();
-        const [reviews, orders, listings] = await settleAll([
-          sb.from('marketplace_reviews').select('rating').eq('family_id', familyId).eq('reviewee_member', selfId),
-          // Either party's family, so an order this member won from another
-          // household counts too (lib/marketplace/schema-compat.ts).
-          readFamilyOrders(familyId, (scope) => scope(sb.from('marketplace_orders').select('status, buyer_member, seller_member'))),
-          sb.from('marketplace_listings').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('member_id', selfId),
-        ]);
-        if (!active) return;
-        if (reviews.error || orders.error || listings.error) {
-          console.error('[marketplace] trust score read failed', reviews.error ?? orders.error ?? listings.error);
+        const result = await readTrustScoreInputsAction();
+        // A late answer, or one for the account this card no longer shows,
+        // changes nothing here; the effect for the current account has its own.
+        if (!active || (result.ok && result.memberId !== selfId)) return;
+        if (!result.ok) {
+          // The server logged the read that failed; the card says so below.
           setFailed(true);
           return;
         }
         setFailed(false);
-        const ratings = (reviews.data ?? []).map((r) => r.rating as number);
-        const completed = (orders.data ?? []).filter(
-          (o) => o.status === 'completed' && (o.buyer_member === selfId || o.seller_member === selfId),
-        ).length;
-        const count = listings.count ?? 0;
-        setListed(count);
-        setTrust(computeTrustScore({ ratingsReceived: ratings, ordersCompleted: completed, listingsPosted: count }));
-      } catch (error) {
-        console.error('[marketplace] trust score read threw', error);
+        setListed(result.listingsPosted);
+        setTrust(computeTrustScore({
+          ratingsReceived: result.ratingsReceived, ordersCompleted: result.ordersCompleted, listingsPosted: result.listingsPosted,
+        }));
+      } catch {
+        // The action could not be reached (network, a session that ended):
+        // said, not scored, like any other failed read.
         if (active) setFailed(true);
       }
     })();
