@@ -170,12 +170,16 @@ test.describe('presentations that stay dark in the light theme keep their shades
     // Every remappable class inside it renders its own original shade.
     const ORIGINAL: Record<string, string> = {
       'text-amber-200': AMBER_200, 'text-amber-300': 'rgb(252, 211, 77)', 'text-amber-400': AMBER_400,
+      'text-amber-500': 'rgb(245, 158, 11)', 'text-amber-600': 'rgb(217, 119, 6)',
       'text-emerald-200': 'rgb(167, 243, 208)', 'text-emerald-300': EMERALD_300, 'text-emerald-400': EMERALD_400,
+      'text-emerald-500': 'rgb(16, 185, 129)', 'text-emerald-600': 'rgb(5, 150, 105)',
     };
     const rendered = await kitchen.evaluate((root) => Array.from(root.querySelectorAll<HTMLElement>('*'))
-      .flatMap((el) => Array.from(el.classList).filter((c) => /^text-(amber|emerald)-(200|300|400)$/.test(c))
+      .flatMap((el) => Array.from(el.classList).filter((c) => /^text-(amber|emerald)-(200|300|400|500|600)$/.test(c))
         .map((cls) => ({ cls, color: getComputedStyle(el).color }))));
     expect(rendered.length, 'remappable palette text inside Kitchen Mode').toBeGreaterThan(0);
+    // The due reminder's "Don't forget" heading is a 600: the boundary holds for those too.
+    expect(rendered.map((r) => r.cls)).toContain('text-amber-600');
     for (const { cls, color: shade } of rendered) expect(shade, cls).toBe(ORIGINAL[cls]);
   });
 });
