@@ -16844,5 +16844,6 @@
   "mobileAssistant.conflictFamilyOther": "{count} Familienhinweise",
   "mobileAssistant.conflictCounts": "{personal} · {family}",
   "mobileAssistant.conflictMobileFamilyLine": "Hinweis zur Familienbelegung: {titles} überschneiden sich {when}. Importierte Belegungen gelten für die Familie; sie zeigen nicht, wer doppelt verplant ist.",
-  "handoff.pickupChangedRefresh": "Diese Abholung wurde gerade geändert. Aktualisiere die Seite, um den aktuellen Stand zu sehen."
+  "handoff.pickupChangedRefresh": "Diese Abholung wurde gerade geändert. Aktualisiere die Seite, um den aktuellen Stand zu sehen.",
+  "marketplace.onlyTheSellerFinishesAnOrder": "Nur die Person, die das verkauft oder verliehen hat, kann es als zurückgegeben oder abgeschlossen markieren."
 }

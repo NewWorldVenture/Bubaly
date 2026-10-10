@@ -16844,5 +16844,6 @@
   "mobileAssistant.conflictFamilyOther": "{count} avvisi familiari",
   "mobileAssistant.conflictCounts": "{personal} · {family}",
   "mobileAssistant.conflictMobileFamilyLine": "Avviso di occupazione familiare: {titles} si sovrappongono {when}. L’occupazione importata riguarda la famiglia; non identifica chi ha due impegni contemporanei.",
-  "handoff.pickupChangedRefresh": "Questo ritiro è appena cambiato. Aggiorna la pagina per vedere a che punto è."
+  "handoff.pickupChangedRefresh": "Questo ritiro è appena cambiato. Aggiorna la pagina per vedere a che punto è.",
+  "marketplace.onlyTheSellerFinishesAnOrder": "Solo chi l’ha venduto o prestato può segnarlo come restituito o completato."
 }

@@ -16844,5 +16844,6 @@
   "mobileAssistant.conflictFamilyOther": "{count} avisos familiares",
   "mobileAssistant.conflictCounts": "{personal} · {family}",
   "mobileAssistant.conflictMobileFamilyLine": "Aviso de ocupação familiar: {titles} sobrepõem-se {when}. A ocupação importada aplica-se à família; não identifica quem tem dois compromissos simultâneos.",
-  "handoff.pickupChangedRefresh": "Esta recolha acabou de mudar. Atualize a página para ver em que ponto está."
+  "handoff.pickupChangedRefresh": "Esta recolha acabou de mudar. Atualize a página para ver em que ponto está.",
+  "marketplace.onlyTheSellerFinishesAnOrder": "Só quem o vendeu ou emprestou pode marcá-lo como devolvido ou concluído."
 }

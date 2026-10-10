@@ -188,7 +188,7 @@ export default async function MarketplaceOrdersPage() {
                   </p>
                 )}
                 <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                  <OrderControls orderId={o.id} status={o.status} />
+                  <OrderControls orderId={o.id} status={o.status} viewerRole={role} />
                   {o.status === 'completed' && !reviewed.has(o.id) && <ReviewForm orderId={o.id} />}
                   {o.status === 'completed' && reviewed.has(o.id) && (
                     <p className="text-xs text-muted">{t('orders.youReviewedThisExchange')}</p>

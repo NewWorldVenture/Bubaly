@@ -16844,5 +16844,6 @@
   "mobileAssistant.conflictFamilyOther": "{count} gezinsadviezen",
   "mobileAssistant.conflictCounts": "{personal} · {family}",
   "mobileAssistant.conflictMobileFamilyLine": "Advies over gezinsbezetting: {titles} overlappen {when}. Geïmporteerde bezetting geldt voor het gezin; deze geeft niet aan wie dubbel is ingepland.",
-  "handoff.pickupChangedRefresh": "Deze ophaling is net gewijzigd. Vernieuw de pagina om te zien hoe het ervoor staat."
+  "handoff.pickupChangedRefresh": "Deze ophaling is net gewijzigd. Vernieuw de pagina om te zien hoe het ervoor staat.",
+  "marketplace.onlyTheSellerFinishesAnOrder": "Alleen degene die dit heeft verkocht of uitgeleend, kan het als teruggebracht of afgerond markeren."
 }

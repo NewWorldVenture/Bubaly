@@ -10,6 +10,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { cancelOrderPickup } from '@/lib/marketplace/pickup-server';
+import { SELLER_ONLY_ORDER_STEPS } from '@/lib/marketplace/order-lifecycle';
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -144,7 +145,7 @@ export async function setOrderStatusAction(orderId: string, status: string): Pro
 
   const { data: order, error: orderError } = await supabase
     .from('marketplace_orders')
-    .select('id, status')
+    .select('id, status, seller_member')
     .eq('id', orderId)
     .eq('family_id', ctx.active.familyId)
     .maybeSingle();
@@ -156,6 +157,12 @@ export async function setOrderStatusAction(orderId: string, status: string): Pro
     // Said so in the viewer's language, and without echoing `status`, which the
     // caller supplies. (I18N-002)
     return { ok: false, error: t('marketplace.orderStepNoLongerAvailable') };
+  }
+  // Returned and complete are the seller's word (the lender's, on a rent or a
+  // borrow). RLS lets either party write the row, so this is where it is
+  // decided; the Orders page offers those steps to the seller alone.
+  if (SELLER_ONLY_ORDER_STEPS.has(status) && order.seller_member !== ctx.active.member.id) {
+    return { ok: false, error: t('marketplace.onlyTheSellerFinishesAnOrder') };
   }
 
   // CLAIM the transition rather than assuming it. The status was validated

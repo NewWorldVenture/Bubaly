@@ -16844,5 +16844,6 @@
   "mobileAssistant.conflictFamilyOther": "{count} avis familiaux",
   "mobileAssistant.conflictCounts": "{personal} · {family}",
   "mobileAssistant.conflictMobileFamilyLine": "Avis d’occupation familiale : {titles} se chevauchent {when}. L’occupation importée s’applique à la famille ; elle n’indique pas qui a deux engagements simultanés.",
-  "handoff.pickupChangedRefresh": "Ce retrait vient d’être modifié. Actualisez la page pour voir où il en est."
+  "handoff.pickupChangedRefresh": "Ce retrait vient d’être modifié. Actualisez la page pour voir où il en est.",
+  "marketplace.onlyTheSellerFinishesAnOrder": "Seule la personne qui l’a vendu ou prêté peut le marquer comme rendu ou terminé."
 }
