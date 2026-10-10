@@ -65,7 +65,7 @@ export const memorySlice: SliceDefinition = {
     const now = scope.now ?? new Date();
     const visible = memories.data.facts
       .filter((f) => !isExpiredFact(f, now))
-      .filter((f) => canManage || !isSensitiveMemory({ category: f.category, key: f.label, content: f.value }));
+      .filter((f) => canManage || !isSensitiveMemory({ category: f.category, key: f.label, content: f.value, notes: f.notes }));
     const data: MemorySliceData = {
       facts: visible.slice(0, MAX_FACTS).map((f) => ({
         id: f.id, category: f.category, label: f.label, value: f.value, member: memberName(env, f.member_id), pinned: f.is_pinned,

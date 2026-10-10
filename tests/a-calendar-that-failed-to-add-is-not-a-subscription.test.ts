@@ -48,6 +48,8 @@ vi.mock('@/lib/analytics/activation-server', () => ({ recordActivationServer: mo
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }));
 
 import { addCalendarFeed } from '@/app/(app)/dashboard/sync/feeds/actions';
+import { APPLY_SYNC_FUNCTION, CLAIM_STALE_MS, TAKEN_OVER_MESSAGE } from '@/lib/server/calendar-feeds';
+import { applyCalendarFeedSync } from './helpers/calendar-feed-apply';
 import { feedAddedMessage } from '@/lib/calendar/feeds';
 import { getTranslations } from '@/lib/i18n/server';
 
@@ -104,6 +106,7 @@ let db: InMemorySupabase;
 
 function household(): InMemorySupabase {
   return createInMemorySupabase({
+    rpc: { [APPLY_SYNC_FUNCTION]: applyCalendarFeedSync },
     uniques: {
       calendar_feeds: FEED_UNIQUES,
       calendar_events: [['feed_id', 'external_uid']],
@@ -224,7 +227,7 @@ describe('a calendar whose first sync fails', () => {
     expect(subscriptions()).toHaveLength(1);
   });
 
-  it('is kept when another member’s add of the same URL synced it while this first fetch was still out', async () => {
+  it('is kept when a stale first sync loses its claim to another member who successfully syncs it', async () => {
     // The row is visible from its insert until the rollback — the whole first
     // fetch, up to its 15 s timeout — so a second add of the URL finds it and
     // syncs it. Undoing "the row I created" must not undo that member's import.
@@ -240,14 +243,16 @@ describe('a calendar whose first sync fails', () => {
     const [created, ...none] = subscriptions();
     expect(none).toEqual([]);
 
+    // Only a stale claim can be taken over; an ordinary concurrent sync is busy.
+    created.updated_at = new Date(Date.now() - CLAIM_STALE_MS - 60_000).toISOString();
     const second = await addCalendarFeed({ name: 'Kids school', url: PASTED });
     expect(second).toEqual({ ok: true, imported: 2, alreadySubscribedAs: 'School' });
 
     answerFirstFetch(unreachable());
     const firstResult = await first;
 
-    // The first add's own sync did fail, and the calendar IS in the list.
-    expect(firstResult).toEqual({ ok: false, error: savedButNotSynced(PROVIDER_DOWN) });
+    // The old worker cannot stamp a failure over the new holder's successful import.
+    expect(firstResult).toEqual({ ok: false, error: TAKEN_OVER_MESSAGE });
     expect(subscriptions().map((f) => f.id)).toEqual([created.id]);
     expect(importedEvents().map((e) => [e.feed_id, e.external_uid]).sort()).toEqual([
       [created.id, 'sports-day@school.example'],

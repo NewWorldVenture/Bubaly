@@ -11,7 +11,10 @@
 // assertion depends on the host's TZ. CI runs this file under TZ=UTC and
 // TZ=America/Los_Angeles; it was also run under Asia/Tokyo and Etc/GMT+12.
 import { describe, expect, it, vi } from 'vitest';
+import { createClient } from '@supabase/supabase-js';
+import type { Database } from '@/lib/database.types';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
+import { orPredicate } from './helpers/in-memory-supabase';
 
 const LA = 'America/Los_Angeles';
 const TOKYO = 'Asia/Tokyo';
@@ -22,50 +25,29 @@ const TOKYO = 'Asia/Tokyo';
 const NOW = new Date('2026-09-21T16:00:00Z');
 
 // ─────────────────────────────────────────────────────────────────────────────
-// A Supabase stand-in. It implements only what signals.ts chains, and it
-// filters with the same semantics PostgREST does, so the day keys and the
-// instant bounds the module computes are what actually select the rows.
+// Installed SDK with synthetic PostgREST responses. Actual URL filters and
+// exact counts support the complete calendar reader's OR/order/range queries.
 type Row = Record<string, unknown>;
 
-/** Order two column values: instants and bare dates by time, anything else as text. */
-function compare(a: unknown, b: unknown): number {
-  const left = Date.parse(String(a));
-  const right = Date.parse(String(b));
-  if (Number.isFinite(left) && Number.isFinite(right)) return left - right;
-  return String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0;
-}
-
 function fakeDb(tables: Record<string, Row[]>) {
-  return {
-    from(table: string) {
-      const rows = tables[table] ?? [];
-      const predicates: ((row: Row) => boolean)[] = [];
-      let counting = false;
-      const query = {
-        select(_columns: string, options?: { count?: string; head?: boolean }) {
-          counting = Boolean(options?.count);
-          return query;
-        },
-        eq(column: string, value: unknown) { predicates.push((r) => r[column] === value); return query; },
-        in(column: string, values: unknown[]) { predicates.push((r) => values.includes(r[column])); return query; },
-        gte(column: string, value: unknown) { predicates.push((r) => compare(r[column], value) >= 0); return query; },
-        lte(column: string, value: unknown) { predicates.push((r) => compare(r[column], value) <= 0); return query; },
-        gt(column: string, value: unknown) { predicates.push((r) => compare(r[column], value) > 0); return query; },
-        lt(column: string, value: unknown) { predicates.push((r) => compare(r[column], value) < 0); return query; },
-        then<TResult1, TResult2 = never>(
-          onFulfilled?: ((value: { data: Row[] | null; count: number | null; error: null }) => TResult1 | PromiseLike<TResult1>) | null,
-          onRejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
-        ): PromiseLike<TResult1 | TResult2> {
-          const matched = rows.filter((row) => predicates.every((p) => p(row)));
-          const result = counting
-            ? { data: null, count: matched.length, error: null as null }
-            : { data: matched, count: null, error: null as null };
-          return Promise.resolve(result).then(onFulfilled, onRejected);
-        },
-      };
-      return query;
-    },
-  };
+  return createClient<Database>('https://signals-clock.synthetic.invalid', 'synthetic-key', {
+    auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: async (input, init) => {
+      const url = new URL(String(input)), method = init?.method ?? 'GET';
+      expect(url.origin).toBe('https://signals-clock.synthetic.invalid'); expect(['GET', 'HEAD']).toContain(method);
+      const table = url.pathname.split('/').at(-1)!;
+      let rows = [...(tables[table] ?? [])];
+      for (const [key, value] of url.searchParams) {
+        if (['select', 'order', 'offset', 'limit'].includes(key)) continue;
+        rows = rows.filter(orPredicate(key === 'or' ? value.slice(1, -1) : `${key}.${value}`));
+      }
+      rows.sort((a, b) => String(a.starts_at ?? a.id).localeCompare(String(b.starts_at ?? b.id)) || String(a.id).localeCompare(String(b.id)));
+      const offset = Number(url.searchParams.get('offset') ?? 0), limit = Number(url.searchParams.get('limit') ?? 1000);
+      const page = rows.slice(offset, offset + limit);
+      return new Response(method === 'HEAD' ? null : JSON.stringify(page), { headers: { 'Content-Type': 'application/json',
+        'Content-Range': `${offset}-${Math.max(offset, offset + page.length - 1)}/${rows.length}`,
+      } });
+    } },
+  });
 }
 
 const state: { tables: Record<string, Row[]> } = { tables: {} };
@@ -74,7 +56,7 @@ vi.mock('@/lib/supabase/server', () => ({
   createServer: async () => fakeDb(state.tables),
 }));
 
-const FAMILY = 'fam-1';
+const FAMILY = '10000000-0000-4000-8000-000000000001';
 const f = (row: Row): Row => ({ family_id: FAMILY, ...row });
 
 /**
@@ -94,7 +76,12 @@ function household(): Record<string, Row[]> {
       f({ starts_at: '2026-09-22T05:00:00Z' }),
       // 03:00 on the 22nd in LA (tomorrow); 19:00 on the 22nd in Tokyo (today).
       f({ starts_at: '2026-09-22T10:00:00Z' }),
-    ],
+    ].map((row, index) => ({ id: `40000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+      title: `Native clock fixture ${index + 1}`, description: null, location: null, all_day: false,
+      ends_at: new Date(Date.parse(String(row.starts_at)) + 3_600_000).toISOString(), recurrence: 'none', recurrence_until: null,
+      category: 'general', assignee_id: null, feed_id: null, external_uid: null, onboarding_key: null, idempotency_key: null,
+      created_by: null, source_recurrence: null, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z', ...row,
+    })),
     appointments: [
       f({ id: 'ap-1', starts_at: '2026-09-21T10:00:00Z' }),
       f({ id: 'ap-2', starts_at: '2026-09-22T05:00:00Z' }),

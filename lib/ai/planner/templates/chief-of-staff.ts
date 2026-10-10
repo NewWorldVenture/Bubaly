@@ -24,7 +24,7 @@
 //
 // Not deterministic: with nothing to fill, the skeleton is a readiness sweep
 // with no actions, and a routine that wants that has `what_am_i_forgetting`.
-import { localTime, mondayOf, shiftDay, type WorkflowTemplate } from './index';
+import { calendarSearchTime, localTime, mondayOf, shiftDay, type WorkflowTemplate } from './index';
 
 /** The reads every act step of an area waits for. */
 const READS_BY_AREA = {
@@ -55,7 +55,7 @@ export const chiefOfStaffTemplate: WorkflowTemplate = {
   ],
   steps: [
     // ── Reads: independent, run together ────────────────────────────────
-    { key: 'events', stepType: 'retrieve', toolName: 'calendar.searchEvents', description: 'Read the coming week', input: (ctx) => ({ from: ctx.nowIso, to: localTime(shiftDay(ctx.todayKey, 7), 23, 59), limit: 100 }) },
+    { key: 'events', stepType: 'retrieve', toolName: 'calendar.searchEvents', description: 'Read the coming week', input: (ctx) => ({ from: ctx.nowIso, to: calendarSearchTime(ctx.todayKey, 23, 59, ctx.tz, 7), limit: 100 }) },
     { key: 'conflicts', stepType: 'retrieve', toolName: 'calendar.findConflicts', description: 'Look for overlaps', input: (ctx) => ({ from: ctx.nowIso, to: localTime(shiftDay(ctx.todayKey, 7), 23, 59) }) },
     { key: 'homework', stepType: 'retrieve', toolName: 'school.listHomeworkDue', description: 'Check homework due', input: (ctx) => ({ from: ctx.nowIso, to: localTime(shiftDay(ctx.todayKey, 7), 23, 59) }), optional: true },
     { key: 'practices', stepType: 'retrieve', toolName: 'sports.listPracticesBetween', description: 'Check practices and games', input: (ctx) => ({ from: ctx.nowIso, to: localTime(shiftDay(ctx.todayKey, 7), 23, 59) }), optional: true },

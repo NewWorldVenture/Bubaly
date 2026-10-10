@@ -9,25 +9,32 @@ import { listPracticesBetween, listTeams } from '@/lib/services/sports';
 import { weekParity } from '@/lib/school/timetable';
 import type { ServiceScope } from '@/lib/services/types';
 
-type Call = { table: string; kind: 'select'; filters: Record<string, unknown> };
-type Reply = { data: unknown; error: unknown };
+type Call = { table: string; kind: 'select'; filters: Record<string, unknown>; limit?: number; range?: [number, number]; orders: string[] };
+type Reply = { data: unknown; error: unknown; count?: number | null };
 
 function makeDb(respond: (call: Call) => Reply) {
   const calls: Call[] = [];
   const from = (table: string) => {
-    const call: Call = { table, kind: 'select', filters: {} };
+    const call: Call = { table, kind: 'select', filters: {}, orders: [] };
     calls.push(call);
     const b: Record<string, unknown> = {};
-    const chain = () => b;
+    let counted = false;
     const filter = (column: string, value: unknown) => { call.filters[column] = value; return b; };
     Object.assign(b, {
-      select: chain, order: chain, limit: chain,
+      select: (_columns: string, options?: { count?: string }) => { counted = options?.count === 'exact'; return b; },
+      order: (column: string) => { call.orders.push(column); return b; },
+      limit: (limit: number) => { call.limit = limit; return b; },
+      range: (from: number, to: number) => { call.range = [from, to]; return b; },
+      or: (value: string) => filter('or', value),
       eq: filter, is: filter, in: filter,
       neq: (c: string, v: unknown) => filter(`neq:${c}`, v),
       lte: (c: string, v: unknown) => filter(`lte:${c}`, v),
       gte: (c: string, v: unknown) => filter(`gte:${c}`, v),
       not: (c: string, op: string, v: unknown) => filter(`not:${c}:${op}`, v),
-      then: (resolve: (value: Reply) => void) => resolve(respond(call)),
+      then: (resolve: (value: Reply & { count: number | null }) => void) => {
+        const reply = respond(call);
+        return resolve({ ...reply, count: reply.count !== undefined ? reply.count : counted && Array.isArray(reply.data) ? reply.data.length : null });
+      },
     });
     return b;
   };
@@ -50,6 +57,46 @@ describe('resolveWindow', () => {
 });
 
 describe('school', () => {
+  describe.each([
+    ['events', listEventsBetween, 'starts_at'],
+    ['homework', listHomeworkDue, 'due_at'],
+  ] as const)('%s requested prefix', (_name, read, dateColumn) => {
+    it('reads through a lower server cap and keeps every page scoped and stably ordered', async () => {
+      const rows = Array.from({ length: 6 }, (_, n) => ({ id: `row-${n}` }));
+      const { db, calls } = makeDb((call) => {
+        const start = call.range?.[0] ?? 0;
+        const end = call.range?.[1] ?? (call.limit ?? 200) - 1;
+        return { data: rows.slice(start, Math.min(start + 2, end + 1)), count: rows.length, error: null };
+      });
+      const result = await read(scopeWith(db), { limit: 5, memberId: 'member-2' });
+      expect(result).toMatchObject({ ok: true, data: rows.slice(0, 5) });
+      expect(calls).toHaveLength(3);
+      for (const call of calls) {
+        expect(call.filters).toMatchObject({ family_id: 'fam-1', member_id: 'member-2' });
+        expect(call.filters[`gte:${dateColumn}`]).toBe(NOW.toISOString());
+        expect(call.orders).toEqual([dateColumn, 'id']);
+        if (dateColumn === 'due_at') expect(call.filters.status).toEqual(['assigned', 'in_progress']);
+      }
+    });
+
+    it.each(['changed count', 'read error', 'repeated page', 'empty page'])('refuses a partial result after %s', async (failure) => {
+      let page = 0;
+      const { db } = makeDb(() => {
+        page++;
+        if (page === 1) return { data: [{ id: 'first' }], count: 3, error: null };
+        if (failure === 'read error') return { data: null, count: null, error: { message: 'unavailable' } };
+        return { data: failure === 'empty page' ? [] : [{ id: failure === 'repeated page' ? 'first' : 'second' }], count: failure === 'changed count' ? 4 : 3, error: null };
+      });
+      expect(await read(scopeWith(db))).toMatchObject({ ok: false, code: 'db' });
+    });
+
+    it('preserves a healthy one-page limited result', async () => {
+      const { db, calls } = makeDb(() => ({ data: [{ id: 'first' }], count: 3, error: null }));
+      expect(await read(scopeWith(db), { limit: 1 })).toMatchObject({ ok: true, data: [{ id: 'first' }] });
+      expect(calls).toHaveLength(1);
+    });
+  });
+
   it('reads school events in the window for the family and optionally one child', async () => {
     const { db, calls } = makeDb(() => ({ data: [], error: null }));
     const res = await listEventsBetween(scopeWith(db), { from: '2026-09-07T00:00:00Z', to: '2026-09-14T00:00:00Z', memberId: 'member-2' });
@@ -119,9 +166,11 @@ describe('sports', () => {
       'series@2026-09-15T21:00:00.000Z',
     ]);
     expect(res.data[0].ends_at).toBe('2026-09-08T22:00:00.000Z');
-    // Both reads are family-scoped; the series read looks back a year so an old start still repeats.
+    // Both reads are family-scoped; a series has no arbitrary age cutoff.
     expect(calls.every((c) => c.filters.family_id === 'fam-1')).toBe(true);
-    expect(calls.find((c) => c.filters['neq:recurrence'] === 'none')?.filters['gte:starts_at']).toBe('2025-09-20T00:00:00.000Z');
+    const seriesRead = calls.find((c) => c.filters['neq:recurrence'] === 'none');
+    expect(seriesRead?.filters['gte:starts_at']).toBeUndefined();
+    expect(seriesRead?.filters.or).toBe('recurrence_until.is.null,recurrence_until.gt.2026-09-07T00:00:00.000Z');
   });
 
   it('stops a series at recurrence_until', async () => {

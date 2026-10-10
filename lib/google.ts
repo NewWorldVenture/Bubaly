@@ -1,6 +1,7 @@
 // Google OAuth helpers for Calendar integration
 
-import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
+import { validDay } from '@/lib/onboarding/ics-time';
+import { readBoundedResponseText, readBoundedResponseJson } from '@/lib/server/bounded-response-body';
 import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 
 export const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -159,21 +160,63 @@ export async function getValidAccessToken(token: GoogleToken): Promise<{ token: 
   return { token: refreshed, accessToken: refreshed.accessToken };
 }
 
-export async function fetchGoogleCalendarEvents(accessToken: string, timeMin: string, timeMax: string) {
-  const params = new URLSearchParams({
-    calendarId: 'primary',
-    timeMin,
-    timeMax,
-    singleEvents: 'true',
-    orderBy: 'startTime',
-    maxResults: '250',
-  });
-  const res = await fetchWithDeadline(`${GOOGLE_CALENDAR_URL}/calendars/primary/events?${params}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  }, 15_000);
-  if (!res.ok) throw new Error(`Google Calendar API error: ${res.status}`);
-  const data = await readBoundedResponseJson<{ items: GoogleCalendarEvent[] }>(res, 2 * 1024 * 1024);
-  return data.items ?? [];
+/** Provider pages are not a snapshot transaction. Refuse any ambiguous/incomplete
+ * collection before the caller can publish native copies. */
+export const GOOGLE_CALENDAR_READ_LIMITS = { page: 250, events: 10_000, pages: 1000, pageBytes: 2 * 1024 * 1024, bytes: 16 * 1024 * 1024 } as const;
+
+function record(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+function calendarInstant(value: unknown): value is string {
+  if(typeof value !== 'string')return false;
+  const match=/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/.exec(value);
+  return !!match && validDay(match[1]) && +match[2]<24 && +match[3]<60 && +match[4]<60
+    && (match[5]==='Z'||+match[5].slice(1,3)<24&&+match[5].slice(4,6)<60) && Number.isFinite(Date.parse(value));
+}
+function calendarEvent(value: unknown): value is GoogleCalendarEvent {
+  if(!record(value)||typeof value.id!=='string'||!value.id.trim()||value.id.length>1024
+    ||!record(value.start)||!record(value.end))return false;
+  for(const field of ['summary','description','location'])if(value[field]!==undefined&&typeof value[field]!=='string')return false;
+  // Cancelled/unknown provider records cannot become active native copies.
+  if(value.status!==undefined&&value.status!=='confirmed'&&value.status!=='tentative')return false;
+  const start=value.start, end=value.end;
+  if(start.date!==undefined)return typeof start.date==='string'&&validDay(start.date)
+    && typeof end.date==='string'&&validDay(end.date)&&end.date>start.date&&start.dateTime===undefined&&end.dateTime===undefined;
+  return start.date===undefined&&end.date===undefined&&calendarInstant(start.dateTime)&&calendarInstant(end.dateTime)
+    && Date.parse(end.dateTime)>=Date.parse(start.dateTime);
+}
+
+export async function fetchGoogleCalendarEvents(accessToken: string, timeMin: string, timeMax: string): Promise<GoogleCalendarEvent[]> {
+  if(!calendarInstant(timeMin)||!calendarInstant(timeMax)||Date.parse(timeMin)>=Date.parse(timeMax))throw new Error('Invalid Google calendar window');
+  const params = new URLSearchParams({ calendarId: 'primary', timeMin, timeMax, singleEvents: 'true', orderBy: 'startTime', maxResults: String(GOOGLE_CALENDAR_READ_LIMITS.page) });
+  const events:GoogleCalendarEvent[]=[], ids=new Set<string>(), tokens=new Set<string>();
+  const deadline=AbortSignal.timeout(60_000);
+  let bytes=0;
+  for(let page=0;page<GOOGLE_CALENDAR_READ_LIMITS.pages;page++){
+    deadline.throwIfAborted();
+    const res = await fetchWithDeadline(`${GOOGLE_CALENDAR_URL}/calendars/primary/events?${params}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.any([deadline,AbortSignal.timeout(15_000)]),
+    }, 15_000);
+    if (!res.ok) throw new Error(`Google Calendar API error: ${res.status}`);
+    const bounded=await readBoundedResponseText(res,Math.min(GOOGLE_CALENDAR_READ_LIMITS.pageBytes,GOOGLE_CALENDAR_READ_LIMITS.bytes-bytes));
+    deadline.throwIfAborted();
+    if(!bounded.ok)throw new Error('Google calendar response exceeded its read budget or was unreadable');
+    bytes+=new TextEncoder().encode(bounded.text).byteLength;
+    const data:unknown=JSON.parse(bounded.text);
+    if(!record(data)||data.kind!=='calendar#events'||'error' in data||data.items!==undefined&&!Array.isArray(data.items))throw new Error('Malformed Google calendar page');
+    const items=data.items??[];
+    if(!Array.isArray(items)||items.length>GOOGLE_CALENDAR_READ_LIMITS.page||events.length+items.length>GOOGLE_CALENDAR_READ_LIMITS.events)throw new Error('Google calendar event bound exceeded');
+    for(const event of items){
+      if(!calendarEvent(event)||ids.has(event.id))throw new Error('Malformed or repeated Google calendar event');
+      ids.add(event.id);events.push(event);
+    }
+    const token=data.nextPageToken;
+    if(token===undefined)return events;
+    if(typeof token!=='string'||!token.trim()||token.length>4096||tokens.has(token))throw new Error('Malformed or repeated Google calendar page token');
+    tokens.add(token);params.set('pageToken',token);
+  }
+  throw new Error('Google calendar page bound exceeded');
 }
 
 export type GoogleToken = {

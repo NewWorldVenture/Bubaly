@@ -14,13 +14,13 @@ export interface ClassLike {
 }
 
 /**
- * Which alternating week a date falls in. Uses ISO week number parity from a
- * fixed epoch so it's stable across the year: even ISO week → 'a', odd → 'b'.
+ * Which alternating week a UTC calendar date falls in. Uses a fixed
+ * Monday-aligned epoch: even week index → 'a', odd → 'b'.
  */
 export function weekParity(date: Date): 'a' | 'b' {
   // Days since Unix epoch (UTC), shifted so Monday starts the week.
   const dayMs = 86_400_000;
-  const days = Math.floor(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) / dayMs);
+  const days = Math.floor(date.getTime() / dayMs);
   // Epoch (1970-01-01) was a Thursday; align to Monday-based week index.
   const weekIndex = Math.floor((days + 3) / 7);
   return weekIndex % 2 === 0 ? 'a' : 'b';
@@ -43,6 +43,7 @@ export function slotStartMinutes(timeSlot: string | null): number {
   let h = Number(m[1]);
   const min = Number(m[2]);
   const ap = m[3]?.toLowerCase();
+  if (min > 59 || (ap ? h < 1 || h > 12 : h > 23)) return 24 * 60 + 1;
   if (ap === 'pm' && h < 12) h += 12;
   if (ap === 'am' && h === 12) h = 0;
   return h * 60 + min;

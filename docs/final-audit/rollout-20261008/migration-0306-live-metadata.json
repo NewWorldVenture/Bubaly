@@ -1,0 +1,408 @@
+{
+  "columns": [
+    {
+      "type": "uuid",
+      "table": "allowance_rules",
+      "column": "id",
+      "default": "gen_random_uuid()",
+      "nullable": "NO"
+    },
+    {
+      "type": "uuid",
+      "table": "allowance_rules",
+      "column": "family_id",
+      "default": null,
+      "nullable": "NO"
+    },
+    {
+      "type": "uuid",
+      "table": "allowance_rules",
+      "column": "child_wallet_id",
+      "default": null,
+      "nullable": "NO"
+    },
+    {
+      "type": "int8",
+      "table": "allowance_rules",
+      "column": "amount_cents",
+      "default": null,
+      "nullable": "NO"
+    },
+    {
+      "type": "allowance_cadence",
+      "table": "allowance_rules",
+      "column": "cadence",
+      "default": "'weekly'::allowance_cadence",
+      "nullable": "NO"
+    },
+    {
+      "type": "jsonb",
+      "table": "allowance_rules",
+      "column": "split",
+      "default": null,
+      "nullable": "YES"
+    },
+    {
+      "type": "bool",
+      "table": "allowance_rules",
+      "column": "is_active",
+      "default": "true",
+      "nullable": "NO"
+    },
+    {
+      "type": "date",
+      "table": "allowance_rules",
+      "column": "next_run_on",
+      "default": null,
+      "nullable": "YES"
+    },
+    {
+      "type": "date",
+      "table": "allowance_rules",
+      "column": "last_run_on",
+      "default": null,
+      "nullable": "YES"
+    },
+    {
+      "type": "uuid",
+      "table": "allowance_rules",
+      "column": "created_by",
+      "default": null,
+      "nullable": "YES"
+    },
+    {
+      "type": "timestamptz",
+      "table": "allowance_rules",
+      "column": "created_at",
+      "default": "now()",
+      "nullable": "NO"
+    },
+    {
+      "type": "timestamptz",
+      "table": "allowance_rules",
+      "column": "updated_at",
+      "default": "now()",
+      "nullable": "NO"
+    },
+    {
+      "type": "uuid",
+      "table": "invest_assets",
+      "column": "id",
+      "default": "gen_random_uuid()",
+      "nullable": "NO"
+    },
+    {
+      "type": "text",
+      "table": "invest_assets",
+      "column": "symbol",
+      "default": null,
+      "nullable": "NO"
+    },
+    {
+      "type": "text",
+      "table": "invest_assets",
+      "column": "name",
+      "default": null,
+      "nullable": "NO"
+    },
+    {
+      "type": "text",
+      "table": "invest_assets",
+      "column": "kind",
+      "default": "'fund'::text",
+      "nullable": "NO"
+    },
+    {
+      "type": "text",
+      "table": "invest_assets",
+      "column": "emoji",
+      "default": "'📈'::text",
+      "nullable": "NO"
+    },
+    {
+      "type": "text",
+      "table": "invest_assets",
+      "column": "description",
+      "default": null,
+      "nullable": "YES"
+    },
+    {
+      "type": "int8",
+      "table": "invest_assets",
+      "column": "price_cents",
+      "default": null,
+      "nullable": "NO"
+    },
+    {
+      "type": "text",
+      "table": "invest_assets",
+      "column": "risk_level",
+      "default": "'medium'::text",
+      "nullable": "NO"
+    },
+    {
+      "type": "bool",
+      "table": "invest_assets",
+      "column": "is_active",
+      "default": "true",
+      "nullable": "NO"
+    },
+    {
+      "type": "int4",
+      "table": "invest_assets",
+      "column": "sort_order",
+      "default": "0",
+      "nullable": "NO"
+    },
+    {
+      "type": "timestamptz",
+      "table": "invest_assets",
+      "column": "updated_at",
+      "default": "now()",
+      "nullable": "NO"
+    },
+    {
+      "type": "timestamptz",
+      "table": "invest_assets",
+      "column": "created_at",
+      "default": "now()",
+      "nullable": "NO"
+    },
+    {
+      "type": "uuid",
+      "table": "invest_orders",
+      "column": "id",
+      "default": "gen_random_uuid()",
+      "nullable": "NO"
+    },
+    {
+      "type": "uuid",
+      "table": "invest_orders",
+      "column": "family_id",
+      "default": null,
+      "nullable": "NO"
+    },
+    {
+      "type": "uuid",
+      "table": "invest_orders",
+      "column": "child_wallet_id",
+      "default": null,
+      "nullable": "NO"
+    },
+    {
+      "type": "uuid",
+      "table": "invest_orders",
+      "column": "asset_id",
+      "default": null,
+      "nullable": "NO"
+    },
+    {
+      "type": "invest_order_side",
+      "table": "invest_orders",
+      "column": "side",
+      "default": null,
+      "nullable": "NO"
+    },
+    {
+      "type": "numeric",
+      "table": "invest_orders",
+      "column": "shares",
+      "default": null,
+      "nullable": "NO"
+    },
+    {
+      "type": "int8",
+      "table": "invest_orders",
+      "column": "price_cents",
+      "default": null,
+      "nullable": "NO"
+    },
+    {
+      "type": "int8",
+      "table": "invest_orders",
+      "column": "amount_cents",
+      "default": null,
+      "nullable": "NO"
+    },
+    {
+      "type": "invest_order_status",
+      "table": "invest_orders",
+      "column": "status",
+      "default": "'pending'::invest_order_status",
+      "nullable": "NO"
+    },
+    {
+      "type": "uuid",
+      "table": "invest_orders",
+      "column": "txn_id",
+      "default": null,
+      "nullable": "YES"
+    },
+    {
+      "type": "uuid",
+      "table": "invest_orders",
+      "column": "requested_by",
+      "default": null,
+      "nullable": "YES"
+    },
+    {
+      "type": "uuid",
+      "table": "invest_orders",
+      "column": "decided_by",
+      "default": null,
+      "nullable": "YES"
+    },
+    {
+      "type": "timestamptz",
+      "table": "invest_orders",
+      "column": "decided_at",
+      "default": null,
+      "nullable": "YES"
+    },
+    {
+      "type": "timestamptz",
+      "table": "invest_orders",
+      "column": "created_at",
+      "default": "now()",
+      "nullable": "NO"
+    },
+    {
+      "type": "timestamptz",
+      "table": "invest_orders",
+      "column": "updated_at",
+      "default": "now()",
+      "nullable": "NO"
+    }
+  ],
+  "triggers": [
+    {
+      "name": "trg_allowance_rules_updated_at",
+      "table": "allowance_rules",
+      "definition": "CREATE TRIGGER trg_allowance_rules_updated_at BEFORE UPDATE ON public.allowance_rules FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+    },
+    {
+      "name": "trg_set_updated_at",
+      "table": "allowance_rules",
+      "definition": "CREATE TRIGGER trg_set_updated_at BEFORE UPDATE ON public.allowance_rules FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+    },
+    {
+      "name": "trg_invest_assets_updated_at",
+      "table": "invest_assets",
+      "definition": "CREATE TRIGGER trg_invest_assets_updated_at BEFORE UPDATE ON public.invest_assets FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+    },
+    {
+      "name": "trg_set_updated_at",
+      "table": "invest_assets",
+      "definition": "CREATE TRIGGER trg_set_updated_at BEFORE UPDATE ON public.invest_assets FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+    },
+    {
+      "name": "trg_invest_orders_updated_at",
+      "table": "invest_orders",
+      "definition": "CREATE TRIGGER trg_invest_orders_updated_at BEFORE UPDATE ON public.invest_orders FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+    },
+    {
+      "name": "trg_set_updated_at",
+      "table": "invest_orders",
+      "definition": "CREATE TRIGGER trg_set_updated_at BEFORE UPDATE ON public.invest_orders FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+    }
+  ],
+  "functions": [
+    {
+      "name": "invest_decide_order",
+      "definition": "CREATE OR REPLACE FUNCTION public.invest_decide_order(p_order_id uuid, p_approve boolean)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\ndeclare\r\n  v_order record;\r\n  v_bucket uuid;\r\n  v_balance bigint;\r\n  v_txn_id uuid;\r\n  v_holding_id uuid;\r\n  v_existing_shares numeric;\r\n  v_existing_avg bigint;\r\n  v_has_holding boolean := false;\r\n  v_new_shares numeric;\r\n  v_new_avg bigint;\r\nbegin\r\n  if auth.uid() is null then\r\n    return jsonb_build_object('ok', false, 'reason', 'unauthenticated');\r\n  end if;\r\n\r\n  select id, family_id, child_wallet_id, asset_id, side, shares, price_cents,\r\n         amount_cents, status\r\n    into v_order\r\n    from public.invest_orders\r\n   where id = p_order_id\r\n   for update;\r\n  if not found then\r\n    return jsonb_build_object('ok', false, 'reason', 'not_found');\r\n  end if;\r\n\r\n  if not public.can_manage_family(v_order.family_id) then\r\n    return jsonb_build_object('ok', false, 'reason', 'forbidden');\r\n  end if;\r\n  if v_order.status <> 'pending' then\r\n    return jsonb_build_object('ok', false, 'reason', 'already_decided');\r\n  end if;\r\n\r\n  if not p_approve then\r\n    update public.invest_orders\r\n       set status = 'rejected', decided_by = auth.uid(), decided_at = now()\r\n     where id = v_order.id;\r\n    return jsonb_build_object('ok', true, 'status', 'rejected');\r\n  end if;\r\n\r\n  select id into v_bucket\r\n    from public.wallet_buckets\r\n   where family_id = v_order.family_id\r\n     and child_wallet_id = v_order.child_wallet_id\r\n     and kind = 'invest'\r\n   for update;\r\n  if v_bucket is null then\r\n    return jsonb_build_object('ok', false, 'reason', 'missing_invest_bucket');\r\n  end if;\r\n\r\n  -- Serialize against concurrent wallet movements for this investment bucket.\r\n  perform 1\r\n    from public.wallet_transactions\r\n   where family_id = v_order.family_id\r\n     and bucket_id = v_bucket\r\n     and status in ('completed', 'processing')\r\n   for update;\r\n  select coalesce(sum(case when direction = 'credit' then amount_cents else -amount_cents end), 0)::bigint\r\n    into v_balance\r\n    from public.wallet_transactions\r\n   where family_id = v_order.family_id\r\n     and bucket_id = v_bucket\r\n     and status in ('completed', 'processing');\r\n\r\n  select id, shares, avg_cost_cents\r\n    into v_holding_id, v_existing_shares, v_existing_avg\r\n    from public.invest_holdings\r\n   where family_id = v_order.family_id\r\n     and child_wallet_id = v_order.child_wallet_id\r\n     and asset_id = v_order.asset_id\r\n   for update;\r\n  v_has_holding := found;\r\n\r\n  if v_order.side = 'buy' then\r\n    if v_order.amount_cents > v_balance then\r\n      return jsonb_build_object('ok', false, 'reason', 'insufficient_cash');\r\n    end if;\r\n    v_new_shares := coalesce(v_existing_shares, 0) + v_order.shares;\r\n    v_new_avg := round((coalesce(v_existing_shares, 0) * coalesce(v_existing_avg, 0)\r\n      + v_order.shares * v_order.price_cents) / nullif(v_new_shares, 0));\r\n  elsif not v_has_holding or v_existing_shares < v_order.shares then\r\n    return jsonb_build_object('ok', false, 'reason', 'insufficient_shares');\r\n  end if;\r\n\r\n  insert into public.wallet_transactions\r\n    (family_id, child_wallet_id, bucket_id, type, status, direction,\r\n     amount_cents, description, related_type, related_id, created_by, approved_by,\r\n     metadata)\r\n  values\r\n    (v_order.family_id, v_order.child_wallet_id, v_bucket, 'adjustment', 'completed',\r\n     case when v_order.side = 'buy' then 'debit' else 'credit' end,\r\n     v_order.amount_cents,\r\n     case when v_order.side = 'buy' then 'Invest: bought shares' else 'Invest: sold shares' end,\r\n     'invest_orders', v_order.id, auth.uid(), auth.uid(),\r\n     jsonb_build_object('side', v_order.side, 'shares', v_order.shares))\r\n  returning id into v_txn_id;\r\n\r\n  if v_order.side = 'buy' then\r\n    if v_has_holding then\r\n      update public.invest_holdings\r\n         set shares = v_new_shares, avg_cost_cents = v_new_avg\r\n       where id = v_holding_id;\r\n    else\r\n      insert into public.invest_holdings\r\n        (family_id, child_wallet_id, asset_id, shares, avg_cost_cents)\r\n      values\r\n        (v_order.family_id, v_order.child_wallet_id, v_order.asset_id,\r\n         v_order.shares, v_order.price_cents);\r\n    end if;\r\n  else\r\n    update public.invest_holdings\r\n       set shares = greatest(0, v_existing_shares - v_order.shares)\r\n     where id = v_holding_id;\r\n  end if;\r\n\r\n  update public.invest_orders\r\n     set status = 'filled', txn_id = v_txn_id, decided_by = auth.uid(), decided_at = now()\r\n   where id = v_order.id;\r\n  insert into public.wallet_audit_logs\r\n    (family_id, actor_user_id, action, entity_type, entity_id, detail)\r\n  values\r\n    (v_order.family_id, auth.uid(), 'invest_' || v_order.side, 'invest_orders',\r\n     v_order.id, v_order.side || ' ' || v_order.shares || ' shares');\r\n\r\n  return jsonb_build_object('ok', true, 'status', 'filled', 'txn_id', v_txn_id);\r\nend;\r\n$function$\n"
+    }
+  ],
+  "constraints": [
+    {
+      "name": "allowance_rules_amount_cents_check",
+      "table": "allowance_rules",
+      "definition": "CHECK ((amount_cents >= 0))"
+    },
+    {
+      "name": "allowance_rules_child_wallet_id_fkey",
+      "table": "allowance_rules",
+      "definition": "FOREIGN KEY (child_wallet_id) REFERENCES child_wallets(id) ON DELETE CASCADE"
+    },
+    {
+      "name": "allowance_rules_created_by_fkey",
+      "table": "allowance_rules",
+      "definition": "FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "allowance_rules_family_id_fkey",
+      "table": "allowance_rules",
+      "definition": "FOREIGN KEY (family_id) REFERENCES families(id) ON DELETE CASCADE"
+    },
+    {
+      "name": "allowance_rules_pkey",
+      "table": "allowance_rules",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "invest_assets_pkey",
+      "table": "invest_assets",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "invest_assets_price_cents_check",
+      "table": "invest_assets",
+      "definition": "CHECK ((price_cents > 0))"
+    },
+    {
+      "name": "invest_assets_symbol_key",
+      "table": "invest_assets",
+      "definition": "UNIQUE (symbol)"
+    },
+    {
+      "name": "invest_orders_amount_cents_check",
+      "table": "invest_orders",
+      "definition": "CHECK ((amount_cents > 0))"
+    },
+    {
+      "name": "invest_orders_asset_id_fkey",
+      "table": "invest_orders",
+      "definition": "FOREIGN KEY (asset_id) REFERENCES invest_assets(id) ON DELETE CASCADE"
+    },
+    {
+      "name": "invest_orders_child_wallet_id_fkey",
+      "table": "invest_orders",
+      "definition": "FOREIGN KEY (child_wallet_id) REFERENCES child_wallets(id) ON DELETE CASCADE"
+    },
+    {
+      "name": "invest_orders_decided_by_fkey",
+      "table": "invest_orders",
+      "definition": "FOREIGN KEY (decided_by) REFERENCES auth.users(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "invest_orders_family_id_fkey",
+      "table": "invest_orders",
+      "definition": "FOREIGN KEY (family_id) REFERENCES families(id) ON DELETE CASCADE"
+    },
+    {
+      "name": "invest_orders_pkey",
+      "table": "invest_orders",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "invest_orders_price_cents_check",
+      "table": "invest_orders",
+      "definition": "CHECK ((price_cents > 0))"
+    },
+    {
+      "name": "invest_orders_requested_by_fkey",
+      "table": "invest_orders",
+      "definition": "FOREIGN KEY (requested_by) REFERENCES auth.users(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "invest_orders_shares_check",
+      "table": "invest_orders",
+      "definition": "CHECK ((shares > (0)::numeric))"
+    },
+    {
+      "name": "invest_orders_txn_id_fkey",
+      "table": "invest_orders",
+      "definition": "FOREIGN KEY (txn_id) REFERENCES wallet_transactions(id) ON DELETE SET NULL"
+    }
+  ],
+  "observed_at": "2026-10-08T01:32:18.513588+00:00"
+}

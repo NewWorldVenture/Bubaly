@@ -35,7 +35,7 @@ import type { MetricCount } from '@/lib/metric/count';
 import { buildConciergeDigest, type ConciergeDigest, type ConciergeSnapshot } from '@/lib/concierge/digest';
 import { rankNeedsAttention, type NeedItem } from '@/lib/home/needs-attention';
 import { mergeCompletedByBubaly, type AiActivityRow, type CompletedEvidence, type CompletedItem, type CompletedRunRow } from '@/lib/home/today';
-import { buildFirstBrief, type BriefEvent, type FirstBrief } from '@/lib/onboarding/first-brief';
+import { buildFirstBrief, briefEventReferenceSchema, qualifyBriefEvents, type BriefEvent, type FirstBrief } from '@/lib/onboarding/first-brief';
 import { notificationAction } from '@/lib/notifications/actions';
 import { isDigestNotification } from '@/lib/notifications/priority';
 import type { DinnerIdea } from '@/lib/onboarding/dinner-ideas';
@@ -168,7 +168,17 @@ export const briefSchema = z.object({
   headline: z.string(),
   calendar: z.object({
     now: z.string(), headline: z.string(), todayCount: z.number(), weekCount: z.number(),
-    timeline: z.array(z.object({ title: z.string(), start: z.string(), end: z.string().nullable(), allDay: z.boolean(), location: z.string().nullable(), timeLabel: z.string() })),
+    timeline: z.array(z.object({ title: z.string(), start: z.string(), end: z.string().nullable(), allDay: z.boolean(), location: z.string().nullable(), timeLabel: z.string(),
+      kind:z.enum(['native','source']).optional(),transparency:z.enum(['opaque','transparent']).optional(),
+      actualStartsAt:z.string().optional(),actualEndsAt:z.string().nullable().optional(),startDate:z.string().nullable().optional(),endDate:z.string().nullable().optional(),
+      reference:briefEventReferenceSchema.optional(),occurrenceKey:z.string().min(1).max(65_536).optional(),
+      originalStart:z.string().min(1).max(8192).optional(),originalEnd:z.string().min(1).max(8192).nullable().optional(),
+    }).strict()).superRefine((items, context) => {
+      try {
+        const qualified = qualifyBriefEvents(items.map(item => ({...item,start:item.originalStart ?? item.start,end:item.originalEnd === undefined ? item.end : item.originalEnd})));
+        if (qualified.length !== items.length) throw new Error('Invalid timeline occurrence');
+      } catch { context.addIssue({code:'custom',message:'Invalid briefing timeline metadata'}); }
+    }),
     conflicts: z.array(z.object({}).passthrough()),
     actions: z.array(z.object({}).passthrough()),
     opportunities: z.array(z.object({}).passthrough()),

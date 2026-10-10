@@ -1,0 +1,374 @@
+{
+  "project_ref": "ltcxlbipiihclxwioyqj",
+  "observed_date": "2026-10-08",
+  "source_commit": "190a93147",
+  "source": "scripts/audit-supabase-schema.mjs SCHEMA_CHECKS",
+  "method": "Catalog-only SELECT; does not verify REST exposure or role behavior",
+  "checks": 52,
+  "complete": 11,
+  "incomplete": 41,
+  "missing_tables": 34,
+  "results": [
+    {
+      "label": "ai_conversations.runtime_columns",
+      "migration": "0250_ai_runtime_core.sql",
+      "table_present": true,
+      "missing_columns": [
+        "state",
+        "prompt_version"
+      ]
+    },
+    {
+      "label": "ai_messages.runtime_columns",
+      "migration": "0250_ai_runtime_core.sql",
+      "table_present": true,
+      "missing_columns": [
+        "structured_content",
+        "model",
+        "usage",
+        "request_id",
+        "sender_member_id"
+      ]
+    },
+    {
+      "label": "ai_plan_steps",
+      "migration": "0250_ai_runtime_core.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "ai_plans",
+      "migration": "0250_ai_runtime_core.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "ai_request_context",
+      "migration": "0250_ai_runtime_core.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "ai_requests",
+      "migration": "0250_ai_runtime_core.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "ai_requests.runtime_columns",
+      "migration": "0255_ai_runtime_lockdown.sql",
+      "table_present": false,
+      "missing_columns": [
+        "client_request_id"
+      ]
+    },
+    {
+      "label": "ai_run_events",
+      "migration": "0250_ai_runtime_core.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "ai_tool_calls",
+      "migration": "0250_ai_runtime_core.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "approval_requests.runtime_columns",
+      "migration": "0251_ai_trust_hardening.sql",
+      "table_present": true,
+      "missing_columns": [
+        "request_id",
+        "run_id",
+        "plan_step_id",
+        "plan_step_ids",
+        "consequences",
+        "evidence",
+        "edited_payload",
+        "payload_kind",
+        "reviewed_by",
+        "review_note"
+      ]
+    },
+    {
+      "label": "bedtime_routines",
+      "migration": "0243_sleep_coach.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "career_profiles",
+      "migration": "0247_career_hub.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "contact_interactions",
+      "migration": "0170_contact_interactions.sql",
+      "table_present": true,
+      "missing_columns": []
+    },
+    {
+      "label": "crm_contact_profile",
+      "migration": "0171_crm_contact_profile.sql",
+      "table_present": true,
+      "missing_columns": []
+    },
+    {
+      "label": "crm_lead_scores",
+      "migration": "0172_crm_lead_scores.sql",
+      "table_present": true,
+      "missing_columns": []
+    },
+    {
+      "label": "declutter_missions",
+      "migration": "0244_declutter.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "declutter_sessions",
+      "migration": "0244_declutter.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "declutter_zones",
+      "migration": "0244_declutter.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "family_automation_rules.runtime_columns",
+      "migration": "0259_routine_schedules.sql",
+      "table_present": true,
+      "missing_columns": [
+        "schedule_kind",
+        "schedule_expr",
+        "anchor_key",
+        "offset_days",
+        "at_hour",
+        "next_run_at",
+        "said",
+        "source_request_id"
+      ]
+    },
+    {
+      "label": "family_automation_runs.runtime_columns",
+      "migration": "0250_ai_runtime_core.sql",
+      "table_present": true,
+      "missing_columns": [
+        "request_id",
+        "plan_id",
+        "requested_by_member_id",
+        "state",
+        "current_step_id",
+        "run_after",
+        "lease_owner",
+        "lease_expires_at",
+        "attempt",
+        "max_attempts",
+        "idempotency_key",
+        "cancel_requested_at",
+        "paused_at"
+      ]
+    },
+    {
+      "label": "guardian_callback_events",
+      "migration": "0181_guardian_callback_replay.sql",
+      "table_present": true,
+      "missing_columns": []
+    },
+    {
+      "label": "home_briefs.runtime_columns",
+      "migration": "0258_home_briefs_kind.sql",
+      "table_present": true,
+      "missing_columns": [
+        "kind",
+        "handled",
+        "delivered_at"
+      ]
+    },
+    {
+      "label": "home_locations",
+      "migration": "0242_home_inventory.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "home_projects",
+      "migration": "0246_home_projects.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "independence_milestones",
+      "migration": "0175_independence_milestones.sql",
+      "table_present": true,
+      "missing_columns": []
+    },
+    {
+      "label": "inventory_items",
+      "migration": "0242_home_inventory.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "inventory_moves",
+      "migration": "0242_home_inventory.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "job_applications",
+      "migration": "0247_career_hub.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "language_goals",
+      "migration": "0248_language_practice.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "language_sessions",
+      "migration": "0248_language_practice.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "marketplace_circles",
+      "migration": "0176_marketplace_circles.sql",
+      "table_present": true,
+      "missing_columns": []
+    },
+    {
+      "label": "money_timeline_insights",
+      "migration": "0168_money_timeline_insights.sql",
+      "table_present": true,
+      "missing_columns": []
+    },
+    {
+      "label": "move_boxes",
+      "migration": "0245_move_planner.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "move_tasks",
+      "migration": "0245_move_planner.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "moves",
+      "migration": "0245_move_planner.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "outfit_logs",
+      "migration": "0240_closet_outfits.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "outfits",
+      "migration": "0240_closet_outfits.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "paperwork_items",
+      "migration": "0169_paperwork_items.sql",
+      "table_present": true,
+      "missing_columns": []
+    },
+    {
+      "label": "project_materials",
+      "migration": "0246_home_projects.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "project_quotes",
+      "migration": "0246_home_projects.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "resend_webhook_events",
+      "migration": "0180_resend_webhook_dedup.sql",
+      "table_present": true,
+      "missing_columns": []
+    },
+    {
+      "label": "resume_versions",
+      "migration": "0247_career_hub.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "routine_runs",
+      "migration": "0259_routine_schedules.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "sleep_checkins",
+      "migration": "0243_sleep_coach.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "sleep_logs",
+      "migration": "0243_sleep_coach.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "stripe_webhook_events.claim_columns",
+      "migration": "0189_reconcile_stripe_webhook_claims.sql",
+      "table_present": true,
+      "missing_columns": []
+    },
+    {
+      "label": "vocab_cards",
+      "migration": "0248_language_practice.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "wardrobe_items",
+      "migration": "0240_closet_outfits.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "watch_sessions",
+      "migration": "0241_family_watchlist.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "watchlist_titles",
+      "migration": "0241_family_watchlist.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "watchlist_votes",
+      "migration": "0241_family_watchlist.sql",
+      "table_present": false,
+      "missing_columns": []
+    },
+    {
+      "label": "workload_snapshots",
+      "migration": "0174_workload_snapshots.sql",
+      "table_present": true,
+      "missing_columns": []
+    }
+  ]
+}

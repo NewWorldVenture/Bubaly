@@ -11,6 +11,7 @@
 // Weather, then Grocery, then Reminders before a Saturday tournament, the moment
 // card assembles the whole checklist and each item is a single tap.
 
+import { allDayDate } from '@/lib/calendar/day';
 import { createFormat } from '@/lib/utils/format';
 import { dayKeyInZone } from '@/lib/schedule/zoned';
 import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
@@ -229,10 +230,22 @@ function dayIndexInZone(ms: number, tz: string): number {
  * An all-day `starts_at` with NO zone designator and no time but midnight
  * (`YYYY-MM-DD` or `YYYY-MM-DDT00:00[:00[.000]]`) is a calendar DATE, not an
  * instant: the synthetic birthday events (lib/moments/birthdays.ts) carry
- * exactly that shape. Rows the database stores are timestamptz and always carry
- * an offset, so they never match and keep their instant meaning.
+ * exactly that shape.
+ *
+ * An all-day row the database stores carries an offset, and it is a date too:
+ * it is stored at that date's Greenwich midnight (lib/calendar/day.ts
+ * allDayDate). Reading it as an instant put 5 July's row on 4 July in Los
+ * Angeles and labelled it "Today", while the moment's own dedupe key
+ * (lib/moments/notify.ts) already said the 5th.
  */
 const CALENDAR_DATE = /^(\d{4}-\d{2}-\d{2})(?:T00:00(?::00(?:\.0+)?)?)?$/;
+const HAS_ZONE = /(?:Z|[+-]\d{2}:?\d{2})$/i;
+
+function allDayCalendarDate(startsAt: string): string | undefined {
+  const naive = CALENDAR_DATE.exec(startsAt)?.[1];
+  if (naive) return naive;
+  return HAS_ZONE.test(startsAt) ? allDayDate(startsAt) || undefined : undefined;
+}
 
 /** Human "when" label for a moment, e.g. "in 2 hours", "Tomorrow", "Sat 9:00 AM". */
 export function momentWhen(
@@ -265,7 +278,7 @@ export function momentWhen(
   // midnight, which in the family's zone can be the day before or after
   // (#728 review 5374669346: a UTC phone, a Los Angeles family, tomorrow's
   // birthday labelled "Today").
-  const date = allDay ? CALENDAR_DATE.exec(startsAt)?.[1] : undefined;
+  const date = allDay ? allDayCalendarDate(startsAt) : undefined;
   if (date) {
     const todayIndex = timeZone
       ? dayIndexInZone(now.getTime(), timeZone)

@@ -132,7 +132,7 @@ export async function SiteFooter() {
       {/* Bottom legal bar */}
       <div className="border-t border-border/60">
         <div className="mx-auto flex max-w-[1440px] flex-col items-center justify-between gap-3 px-5 py-5 text-[11px] text-muted sm:flex-row sm:px-8 lg:px-10">
-          <p>{t('siteFooter.copyright', { year: new Date().getFullYear() })}</p>
+          <p>{t('siteFooter.copyright', { year: new Date().getUTCFullYear() })}</p>
 
           <nav aria-label={t('siteFooter.legalNavLabel')} className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
             <Link href="/privacy" className="transition hover:text-fg">{t('siteFooter.privacy')}</Link>

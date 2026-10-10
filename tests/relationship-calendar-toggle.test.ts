@@ -75,8 +75,9 @@ describe('adding it to the calendar', () => {
     const event = events()[0]!;
     expect(event.title).toBe('Our anniversary');
     expect(event.all_day).toBe(true);
-    // Noon UTC, so the day is stable across time zones.
-    expect(event.starts_at).toBe('2026-11-14T12:00:00.000Z');
+    // Canonical civil DATE storage is independent of the household timezone.
+    expect(event.starts_at).toBe('2026-11-14T00:00:00.000Z');
+    expect(event.ends_at).toBe('2026-11-15T00:00:00.000Z');
     // Recurring dates become yearly events.
     expect(event.recurrence).toBe('yearly');
     expect(event.location).toBe('The little Italian place');
@@ -173,5 +174,32 @@ describe('a caller who is not signed in', () => {
       Object.assign(new Error('NEXT_REDIRECT'), { digest: 'NEXT_REDIRECT;replace;/login;307;' }),
     );
     await expect(toggleDateOnCalendarAction('date-1')).rejects.toThrow('NEXT_REDIRECT');
+  });
+});
+
+describe('relationship DATE write boundary', () => {
+  it.each([
+    ['America/New_York', '2026-03-08', '2026-03-09'],
+    ['America/New_York', '2026-11-01', '2026-11-02'],
+    ['Asia/Tokyo', '2026-03-08', '2026-03-09'],
+    ['Asia/Tokyo', '2026-11-01', '2026-11-02'],
+  ])('creates and removes canonical DATE in %s on %s', async (timezone, day, next) => {
+    const context = await mocks.requireUserContext();
+    context.active.family.timezone = timezone;
+    db.table('relationship_dates')[0]!.event_date = day;
+    const result = await toggleDateOnCalendarAction('date-1');
+    expect(result.ok, result.ok ? '' : result.error).toBe(true);
+    expect(events()).toHaveLength(1);
+    expect(events()[0]).toMatchObject({ starts_at: `${day}T00:00:00.000Z`, ends_at: `${next}T00:00:00.000Z`, all_day: true, recurrence: 'yearly' });
+    expect(theDate().calendar_event_id).toBe(events()[0]!.id);
+    expect(await toggleDateOnCalendarAction('date-1')).toMatchObject({ ok: true, onCalendar: false });
+    expect(events()).toHaveLength(0);
+    expect(theDate().calendar_event_id).toBeNull();
+  });
+  it.each(['2026-02-30', '9999-12-31'])('refuses invalid stored DATE %s before creating or linking', async (day) => {
+    db.table('relationship_dates')[0]!.event_date = day;
+    expect(await toggleDateOnCalendarAction('date-1')).toMatchObject({ ok: false });
+    expect(events()).toHaveLength(0);
+    expect(theDate().calendar_event_id).toBeNull();
   });
 });

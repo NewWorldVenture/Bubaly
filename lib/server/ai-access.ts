@@ -88,8 +88,8 @@ function monthStartIso(now: Date): string {
 /**
  * May this caller file a concierge request right now?
  *
- * `db` is the caller's RLS-bound client: `ai_requests` is readable by every
- * family member, so the count needs no service role. Super-admins bypass the
+ * `db` is the caller's RLS-bound client. A protected count-only RPC includes
+ * all household usage while private request rows stay hidden. Super-admins bypass the
  * tier the same way `requireFeature` lets them preview an `off` feature.
  */
 export async function assertAIAccess(
@@ -163,21 +163,21 @@ async function monthlyAllowance(
   const allowance = superAdmin ? null : AI_MONTHLY_ALLOWANCE[level];
   if (allowance === null) return { ok: true, planLevel, monthlyUsed: null, monthlyAllowance: null };
 
-  const { count, error } = await opts.db
-    .from('ai_requests')
-    .select('id', { count: 'exact', head: true })
-    .eq('family_id', familyId)
-    .gte('created_at', monthStartIso(opts.now ?? new Date()));
-  if (error) {
-    // Fail closed: an allowance that cannot be checked is not an allowance.
-    console.error('[ai-access] monthly usage read failed', error);
-    return { ok: false, status: 403, code: 'unavailable', error: 'Bubaly could not check this month\'s usage. Try again in a moment.' };
+  let count: unknown;
+  let countError: unknown;
+  try {
+    const result = await opts.db.rpc('count_family_ai_requests_month', {
+      p_family_id: familyId,
+      p_month_start: monthStartIso(opts.now ?? new Date()),
+    });
+    count = result.data;
+    countError = result.error;
+  } catch (error) {
+    countError = error;
   }
-  // A response with no error and no count is not a count of zero: it is a
-  // meter that did not answer. Reading it as zero let a family that had spent
-  // its month call the model again. Refused the same way as a failed read.
-  if (typeof count !== 'number' || !Number.isFinite(count) || count < 0) {
-    console.error('[ai-access] monthly usage read returned no count', { count });
+  if (countError || typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0) {
+    // Fail closed: an allowance that cannot be checked is not an allowance.
+    console.error('[ai-access] monthly usage read failed', countError ?? { error: 'invalid count receipt' });
     return { ok: false, status: 403, code: 'unavailable', error: 'Bubaly could not check this month\'s usage. Try again in a moment.' };
   }
   const used = count;

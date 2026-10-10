@@ -39,9 +39,10 @@ const today = new Intl.DateTimeFormat('en-CA', {
 
 type Aal = { currentLevel: string; nextLevel: string };
 
-function household(aal: Aal = { currentLevel: 'aal1', nextLevel: 'aal1' }) {
+function household(aal: Aal = { currentLevel: 'aal1', nextLevel: 'aal1' }, maxRows?: number) {
   const db = createInMemorySupabase({
     userId: 'user-parent',
+    maxRows,
     rpc: { rate_limit_hit: () => [{ allowed: true, retry_after: 0 }] },
   });
   // The guard reads the level from the session; the fake has no session.
@@ -52,13 +53,42 @@ function household(aal: Aal = { currentLevel: 'aal1', nextLevel: 'aal1' }) {
     { id: 'mem-parent', family_id: FAMILY, user_id: 'user-parent', display_name: 'Jordan', role: 'parent', is_active: true, birthday: null, color: 'teal', avatar_url: null },
     { id: 'mem-teen', family_id: FAMILY, user_id: 'user-teen', display_name: 'Sam', role: 'teen', is_active: true, birthday: '2011-04-02', color: 'amber', avatar_url: null },
   ]);
-  db.seed('calendar_events', [{ id: 'ev-1', family_id: FAMILY, title: 'Soccer', starts_at: `${today}T15:00:00Z`, ends_at: `${today}T16:00:00Z`, category: 'sports', assignee_id: 'mem-teen' }]);
+  db.seed('calendar_events', [{ id: 'ev-1', family_id: FAMILY, title: 'Soccer', all_day: false, starts_at: `${today}T15:00:00Z`, ends_at: `${today}T16:00:00Z`, category: 'sports', assignee_id: 'mem-teen' }]);
   db.seed('transactions', [{ id: 'tx-1', family_id: FAMILY, name: 'Groceries', merchant: 'Market', amount: 84.2, category: 'food', date: today, type: 'expense', member_id: null, account_id: null }]);
   db.seed('documents', [
     { id: 'doc-1', family_id: FAMILY, title: 'School calendar', category: 'school', mime_type: 'application/pdf', size_bytes: 10, expires_at: null, member_id: null, asset_id: null, is_secure: false, storage_path: `${FAMILY}/a.pdf` },
     { id: 'doc-2', family_id: FAMILY, title: 'Passports', category: 'identity', mime_type: 'application/pdf', size_bytes: 10, expires_at: null, member_id: null, asset_id: null, is_secure: true, storage_path: `${FAMILY}/b.pdf` },
   ]);
   return db;
+}
+
+function seedRoutines(db: InMemorySupabase, count: number) {
+  const rows = Array.from({ length: count }, (_, i) => ({
+    id: `00000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}`,
+    family_id: FAMILY, name: `Routine ${i + 1}`, action_config: { prompt: `Request ${i + 1}` },
+    is_enabled: i % 2 === 0, schedule_kind: 'cron', schedule_expr: '0 17 * * 0',
+    said: 'every Sunday at 5pm', next_run_at: null, created_at: '2026-09-01T00:00:00Z',
+  }));
+  db.seed('family_automation_rules', [
+    ...rows,
+    { ...rows[0], id: 'foreign-rule', family_id: 'other-family', schedule_kind: 'cron', name: 'Foreign marker' },
+    { ...rows[0], id: 'unscheduled-rule', family_id: FAMILY, schedule_kind: null, name: 'Unscheduled marker' },
+  ]);
+  return rows;
+}
+
+function failSecondRoutinePage(db: InMemorySupabase) {
+  const realFrom = db.from.bind(db);
+  let routineReads = 0;
+  db.from = ((table: string) => {
+    if (table === 'family_automation_rules' && ++routineReads === 2) {
+      // Use the existing failing builder without changing the first page.
+      const failedDb = createInMemorySupabase();
+      failing(failedDb, table, { code: '57014', message: 'synthetic later-page timeout' });
+      return failedDb.from(table);
+    }
+    return realFrom(table);
+  }) as typeof db.from;
 }
 
 function scopeFor(db: InMemorySupabase, role: 'parent' | 'teen'): ServiceScope {
@@ -126,6 +156,55 @@ describe('buildFamilyExport', () => {
   let errorSpy: ReturnType<typeof vi.spyOn>;
   beforeEach(() => { errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {}); });
   afterEach(() => vi.restoreAllMocks());
+
+  it.each([3, 101, 501])('exports all A/B-week classes within its declared cap (%i saved)', async count => {
+    const db = household(undefined, 37);
+    const classes = Array.from({ length: count }, (_, i) => ({
+      id: `class-${String(i).padStart(4, '0')}`, family_id: FAMILY, member_id: 'mem-teen',
+      subject: `Subject ${String(i).padStart(4, '0')}`, teacher: null, room: null,
+      day_of_week: 1, time_slot: '09:00', week_pattern: ['a', 'b', 'all'][i % 3],
+    }));
+    db.seed('school_classes', [...classes, { ...classes[0], id: 'foreign-class', family_id: 'other-family' }]);
+    const built = await buildFamilyExport(scopeFor(db, 'parent'));
+    expect(built.ok).toBe(true);
+    if (!built.ok) throw new Error('export failed');
+    const school = built.data.sections.find(section => section.key === 'school')!;
+    const exported = (school.data as { classes: { id: string }[] }).classes;
+    expect(exported.map(row => row.id)).toEqual(classes.slice(0, 500).map(row => row.id));
+    expect(school).toMatchObject({ count: Math.min(count, 500), limit: 500, truncated: count >= 500 });
+  });
+
+  it('refuses a school export when the class roster cannot be read', async () => {
+    const db = household();
+    failing(db, 'school_classes', { code: '57014', message: 'synthetic class read failure' });
+    expect(await buildFamilyExport(scopeFor(db, 'parent'))).toEqual({
+      ok: false, failed: [{ key: 'school', error: expect.any(String) }],
+    });
+  });
+
+  it.each([0, 101, 500, 1001])('exports all %i scheduled routines, including paused ones, through a server cap', async (count) => {
+    // A deliberately small server cap catches pagination that assumes a
+    // short page means the table is exhausted. IDs, not insertion offsets,
+    // keep pages stable when timestamps are identical.
+    const db = household(undefined, 37);
+    const rows = seedRoutines(db, count);
+    const built = await buildFamilyExport(scopeFor(db, 'parent'));
+    expect(built.ok).toBe(true);
+    if (!built.ok) throw new Error('export failed');
+    const section = built.data.sections.find((s) => s.key === 'routines')!;
+    expect(section).toMatchObject({ count, limit: null, truncated: false });
+    expect((section.data as { id: string }[]).map((r) => r.id)).toEqual(rows.map((r) => r.id));
+    expect(new Set((section.data as { id: string }[]).map((r) => r.id)).size).toBe(count);
+  });
+
+  it('refuses a partial export when a later routine page fails', async () => {
+    const db = household();
+    seedRoutines(db, 501);
+    failSecondRoutinePage(db);
+    expect(await buildFamilyExport(scopeFor(db, 'parent'))).toEqual({
+      ok: false, failed: [{ key: 'routines', error: expect.any(String) }],
+    });
+  });
 
   it('builds a parent\'s export through the services: finances present, both documents listed, nothing withheld', async () => {
     const db = household();
@@ -206,6 +285,35 @@ describe('GET /api/privacy/export', () => {
     mocks.createServer.mockResolvedValue(db);
     mocks.ledgerWriter.mockImplementation(async (fallback: unknown) => fallback);
   }
+
+  it.each(['parent', 'teen'] as const)('downloads every routine for a %s and records the full count', async (role) => {
+    const db = household(undefined, 1000);
+    const rows = seedRoutines(db, 1251);
+    wire(db, ctxFor(role, `user-routine-export-${role}`));
+    const response = await GET();
+    expect(response.status).toBe(200);
+    const body = JSON.parse(await response.text());
+    const section = body.sections.find((s: { key: string }) => s.key === 'routines');
+    expect(section).toMatchObject({ count: 1251, limit: null, truncated: false });
+    expect(section.data.map((r: { id: string }) => r.id)).toEqual(rows.map((r) => r.id));
+    expect(db.table('trust_audit_logs')).toHaveLength(1);
+    const context = db.table('trust_audit_logs')[0].context as { sections: Record<string, number>; truncated: string[] };
+    expect(context.sections.routines).toBe(1251);
+    expect(context.truncated).not.toContain('routines');
+    expect(body.withheld).toEqual(role === 'parent' ? [] : ['finances']);
+  });
+
+  it('sends no attachment or download audit when a later routine page fails', async () => {
+    const db = household();
+    seedRoutines(db, 501);
+    failSecondRoutinePage(db);
+    wire(db, ctxFor('parent', 'user-routine-page-failure'));
+    const response = await GET();
+    expect(response.status).toBe(502);
+    expect(response.headers.get('Content-Disposition')).toBeNull();
+    expect(await response.json()).toEqual({ error: 'export_failed', failed: ['routines'], retryable: true });
+    expect(db.table('trust_audit_logs')).toHaveLength(0);
+  });
 
   it('refuses a signed-out caller', async () => {
     wire(household(), null);

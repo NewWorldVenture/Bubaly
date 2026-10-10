@@ -11,7 +11,7 @@
 import { confirmFact, forgetFact } from '@/lib/services/memory';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { translate } from '@/lib/i18n/messages';
-import { scopeFromUserContext } from '@/lib/services/scope';
+import { dayKeyInTz, scopeFromUserContext } from '@/lib/services/scope';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { learnPlaybook, type PlaybookSignal } from '@/lib/playbook/learn';
@@ -30,9 +30,14 @@ const TRAVEL_KIND_STYLE: Record<string, string> = {
   domestic: 'Domestic trips', staycation: 'Staycations', camping: 'Camping trips',
 };
 
-/** Season name from a YYYY-MM-DD date (northern-hemisphere buckets). */
+/**
+ * Season name from a YYYY-MM-DD date (northern-hemisphere buckets). The month is
+ * read off the DATE's own digits: `new Date('YYYY-MM-DD')` is UTC midnight, and
+ * `.getMonth()` on it is the host's month, which west of Greenwich is the
+ * month before on every 1st.
+ */
 function travelSeason(date: string): string {
-  const m = new Date(date).getMonth(); // 0-11
+  const m = Number(date.slice(5, 7)) - 1; // 0-11
   if (m <= 1 || m === 11) return 'Winter';
   if (m <= 4) return 'Spring';
   if (m <= 7) return 'Summer';
@@ -136,7 +141,9 @@ export async function refreshPlaybookAction(): Promise<Result> {
   for (const e of events ?? []) {
     const key = (e.title ?? '').trim().toLowerCase();
     if (!key || !e.starts_at) continue;
-    const yr = new Date(e.starts_at).getFullYear();
+    // The year a tradition fell in on the FAMILY's calendar: a New Year's Eve
+    // party at 9pm in California is next year on a UTC host.
+    const yr = Number(dayKeyInTz(new Date(e.starts_at), tz).slice(0, 4));
     const cur = byTitle.get(key) ?? { title: e.title!, years: new Set<number>(), earliest: e.starts_at, yearly: false };
     cur.years.add(yr);
     if (e.starts_at < cur.earliest) cur.earliest = e.starts_at;

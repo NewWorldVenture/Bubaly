@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseIcs, toBriefEvents, demoBriefEvents, parseIcsDate } from '@/lib/onboarding/ics';
+import { parseIcs, parseIcsResult, toBriefEvents, demoBriefEvents, parseIcsDate } from '@/lib/onboarding/ics';
 import { buildFirstBrief } from '@/lib/onboarding/first-brief';
 
 const SAMPLE = `BEGIN:VCALENDAR
@@ -119,5 +119,46 @@ describe('demoBriefEvents', () => {
   it('does not silently generate another day for an invalid supplied zone or clock', () => {
     expect(() => demoBriefEvents(new Date('2026-09-10T00:00:00Z'), 'Invalid/Zone')).toThrow(RangeError);
     expect(() => demoBriefEvents(new Date('invalid'), 'America/New_York')).toThrow(RangeError);
+  });
+});
+
+
+describe('native paste admission preserves supported semantics', () => {
+  const event = (uid: string, metadata = '') => ['BEGIN:VEVENT', ...(uid ? ['UID:' + uid] : []), 'SUMMARY:safe', 'DTSTART:20261008T180000Z', 'DTEND:20261008T190000Z', metadata, 'END:VEVENT'].join('\n');
+  const calendar = (...events: string[]) => ['BEGIN:VCALENDAR', 'VERSION:2.0', ...events, 'END:VCALENDAR'].join('\n');
+  it.each(['', 'TRANSP:OPAQUE', 'TRANSP:opaque'])('admits supported busy events: %s', metadata => {
+    const result = parseIcsResult(calendar(event('safe', metadata)));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.events.map(row => row.uid)).toEqual(['safe']);
+  });
+  it.each(['TRANSP:TRANSPARENT', 'TRANSP:transparent', 'TRANSP:UNKNOWN', 'TRANSP:OPAQUE\nTRANSP:TRANSPARENT', 'TRANSP;X-UNKNOWN=VALUE:OPAQUE', 'STATUS:UNKNOWN', 'STATUS:CONFIRMED\nSTATUS:CANCELLED', 'STATUS;X-UNKNOWN=VALUE:CONFIRMED'])('refuses the whole mixed calendar before losing metadata: %s', metadata => {
+    expect(parseIcsResult(calendar(event('safe-prefix'), event('unsupported', metadata))).ok).toBe(false);
+  });
+  it.each(['STATUS:CANCELLED', 'STATUS:cancelled\nTRANSP:TRANSPARENT', 'STATUS:CANCELLED\nTRANSP:OPAQUE'])('omits valid cancelled components: %s', metadata => {
+    const result = parseIcsResult(calendar(event('cancelled', metadata), event('safe')));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.events.map(row => row.uid)).toEqual(['safe']);
+  });
+  it('omits a bare cancellation without inventing a start', () => {
+    const result = parseIcsResult(calendar('BEGIN:VEVENT\nUID:cancelled\nSTATUS:CANCELLED\nEND:VEVENT', event('safe')));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.events.map(row => row.uid)).toEqual(['safe']);
+  });
+  it.each(['TRANSP:UNKNOWN', 'TRANSP:OPAQUE\nTRANSP:TRANSPARENT', 'TRANSP;X-UNKNOWN=VALUE:OPAQUE'])('still refuses malformed cancelled metadata: %s', metadata => {
+    expect(parseIcsResult(calendar(event('cancelled', 'STATUS:CANCELLED\n' + metadata), event('safe'))).ok).toBe(false);
+  });
+  it.each([false, true])('refuses same-UID revisions without reviving a live sibling (reverse=%s)', reverse => {
+    const rows = [event('same'), event('same', 'STATUS:CANCELLED')];
+    expect(parseIcsResult(calendar(...(reverse ? rows.reverse() : rows))).ok).toBe(false);
+  });
+  it('keeps original component indices for legacy missing UID events', () => {
+    const result = parseIcsResult(calendar(event('cancelled', 'STATUS:CANCELLED'), event('')));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.events[0].uid).toBe('ics-1');
+  });
+  it('does not treat nested alarm properties as parent event metadata', () => {
+    const result = parseIcsResult(calendar(event('safe', 'BEGIN:VALARM\nTRANSP:TRANSPARENT\nSTATUS:CANCELLED\nEND:VALARM')));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.events.map(row => row.uid)).toEqual(['safe']);
   });
 });

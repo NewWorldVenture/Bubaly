@@ -7,6 +7,7 @@ import type { Metadata } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { OG_SIZE, OG_CONTENT_TYPE, OG_ALT } from '@/lib/og/social-image';
+import { statesARetiredClaim } from '@/lib/marketing/retired-claims';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 
@@ -18,7 +19,28 @@ function anonClient() {
   );
 }
 
-export async function getSeoPage(path: string): Promise<{ title: string | null; description: string | null; canonical: string | null } | null> {
+type SeoPage = { title: string | null; description: string | null; canonical: string | null };
+
+/**
+ * An editorial title or description that states a claim the site has retired
+ * is not used: the page's code-authored value is. Production's /mobile row
+ * still described "an installable app with native iOS and Android companions"
+ * after the catalogue copy was corrected, and the store overrides the code.
+ */
+function withoutRetiredClaims(page: SeoPage | null): SeoPage | null {
+  if (!page) return page;
+  return {
+    ...page,
+    title: statesARetiredClaim(page.title) ? null : page.title,
+    description: statesARetiredClaim(page.description) ? null : page.description,
+  };
+}
+
+export async function getSeoPage(path: string): Promise<SeoPage | null> {
+  return withoutRetiredClaims(await readSeoPage(path));
+}
+
+async function readSeoPage(path: string): Promise<SeoPage | null> {
   try {
     // Optional editorial overrides must not hold a public navigation open
     // through the SDK's retry backoff. Both stores share one total budget.

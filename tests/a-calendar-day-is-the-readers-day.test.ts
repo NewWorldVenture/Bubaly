@@ -75,7 +75,7 @@ describe('the calendar module keys its columns and its events in one frame', () 
     // are keyed by `clock.dayKeyOf`, the family's day of the instant — the same
     // frame on both sides, which is the invariant this file exists for.
     expect(source).toMatch(/\bwallKey\(/);
-    expect(source).toContain('clock.dayKeyOf(e.starts_at)');
+    expect(source).toContain('bucketCalendarDisplaySpans(filtered,gridFirstDay,gridEndDay,clock.timeZone)');
   });
 });
 

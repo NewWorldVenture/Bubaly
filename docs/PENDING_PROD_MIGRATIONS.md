@@ -1,59 +1,143 @@
 # Production release status and historical feature inventory
 
-> **Status correction, 2026-10-03** (blocked-rows eligibility review;
-> evidence in `docs/final-audit/blocked-rows-eligibility-20261003.md`).
-> The connectivity paragraph below is historical. The `Supabase production
-> migrations` workflow links again: run 84 on main `d25e39ea` (2026-10-02
-> 12:11 UTC) passed `supabase link`, `supabase migration list --linked` and
-> `node scripts/audit-production-migration-state.mjs --enforce-history`,
-> reading **192 ledger rows, `0001`–`0176`**, 444 public tables, 1,002
-> policies, `requiresBaselineReview: false`, and every money table "closed by
-> restrictive guard". So the ledger no longer records only `0001`–`0003`,
-> `0004` is recorded, and the replay-from-`0004` procedure in LB-016 §4.3 no
-> longer applies (DEPLOY-003 is moot on that point). The blocker is `0177`
-> (PROD-DB-0177): before the 2026-09-27 dispatch-only gate a push to main ran
-> the apply step itself, and every such run (64, `35465574540`, 2026-09-19,
-> and the ledger's `533554be` / `7e54596d` / `671c5f6a`) was cancelled inside
-> `0177`'s single `DO` block by the 120 s statement timeout (`SQLSTATE 57014`)
-> after its `families(created_by)` cleanup was skipped on
-> `family_model_dirty_family_id_fkey`, so nothing from `0177` on is applied.
-> No `workflow_dispatch` with `apply=true` has been run.
-> "Apply ordered migrations" runs only on `workflow_dispatch` with
-> `apply=true`; a push to main verifies and never applies. Run 84's own
-> failure is the later schema-verification step, HTTP 401 from PostgREST on
-> all 52 checks: PostgREST rejects the `SUPABASE_SERVICE_ROLE_KEY` the workflow
-> holds, so that repository secret needs replacing; the owner's action.
+## Candidate code versus production evidence — 2026-10-08
 
-**Current status (2026-09-05; main `01881fb279589d7a90acb8302817bb385fbe036d`).**
-**This baseline is stale — see "Migrations added since this document's stated
-baseline" at the end for the thirty-one migrations (`0255`-`0285`) that landed after
-it, three of which gate features already deployed in the app.**
-**Connectivity NO LONGER works, as of 2026-09-13.** The `Supabase production
-migrations` workflow fails before it reads anything, at `supabase link`:
+The next candidate batch repairs ongoing Home/Kids/Display/briefing spans,
+complete meal-library inputs, schedule-only bill recovery and failed calendar
+export completeness probes. It preserves the same allocation map and rollout
+holds. The receipt below belongs to the earlier published head; current batch
+validation is recorded separately in `finalaudit.md` and does not establish
+production acceptance.
 
-```
-Authorization failed for the access token and project ref pair:
-"Your account does not have the necessary privileges to access this endpoint."
-```
+`finalaudit.md` is the current audit ledger. Main remains
+`82f2db1fcd0dca59179d2b391a76acfd459e480b`; #969 is the sole open PR.
+Its published `b1f36efea` includes complete calendar/sidebar and bill reads,
+owner-bound callback repairs, and complete meal-calendar dinner intervals.
+The frozen local matrix passes 2,083 cases in each of three time zones, plus
+web TypeScript/lint and 23 synthetic finance browser checks. Hosted acceptance
+for that head is separate and still running; these receipts do not qualify a
+main merge, actual provider execution or production deployment.
 
-Every apply and verify step after it is **skipped**, so no migration reaches
-production and the audit below cannot refresh itself. This is a regression, not
-the long-standing ledger gate: the 2026-09-07 run got *past* `link` and read the
-real catalogue (441 tables, 978 policies). Something changed for
-`SUPABASE_ACCESS_TOKEN` or `SUPABASE_PROJECT_REF` between those dates — the
-token was rotated or revoked, or its account lost access to the project.
+The candidate also contains a guarded source-calendar archive, parser,
+coherent snapshot reader, subscribed-feed publication path and web/mobile
+span rendering. `CALENDAR_SOURCE_ARCHIVE_ENABLED` remains **false** in code.
+Its disabled legacy feed path still refuses unsupported timed/complex series;
+that restriction is not a description of what the guarded archive can parse.
+Remaining source consumers, alternate ingress/export and existing-data repair
+remain incomplete. Held0490 storage/publication tests do not activate the
+source model or establish production schema/ACL/FK acceptance.
 
-Fixing that alone is **not sufficient**: the baseline gate below still throws by
-design until `0004` is recorded, and repairing the ledger is a credentialed
-operator action (§4). Expect two steps, in that order.
+Preserve the owner's allocation map below. No resequencing, filler or held
+migration promotion is authorized by local/hosted green checks. The retained
+192-entry ledger/high-water0176 observation is neither a contiguous migration
+history nor permission to replay all missing versions. Offline rollout remains
+`REVIEW_REQUIRED_NOT_APPLY_READY`; Production Ready remains **NO**.
 
-The secret names are `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`,
-`SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_ANON_KEY`; never include their values
-in this document, logs, or reports. Production's migration ledger records only
-`0001-0003` despite existing schema. A missing ledger entry does **not** establish
-that the corresponding schema or feature is absent.
+## Current rollout review update — 2026-10-08 01:42 UTC
 
-## Wallet mint boundary — the finding, and what closes it
+The [prepared bill/chat/source metadata preflight](final-audit/messaging-bill-readonly-preflight.sql)
+now includes all reserved0490 source tables, public RPC overloads and private
+helpers, plus explicit missing-object rows and effective role/default ACLs.
+The earlier production snapshot did not query the new archive/read objects;
+their absence or safety remains unverified. The expanded query has **13 synthetic
+PostgreSQL 17.10 controls** in the [local fixture receipt](final-audit/source-catalog-preflight-fixture-20261008.json).
+Reproduce only against a new owned local cluster with
+`node scripts/verify-source-catalog-preflight.mjs --bin "C:/Program Files/PostgreSQL/17/bin"`.
+The verifier accepts no connection URL or external host and stops its own cluster.
+This proves prepared-query coverage and observable unsafe grant controls, not
+production schema compatibility, safe privileges or permission to apply0490.
+
+[Review package](final-audit/rollout-20261008/README.md): fresh metadata confirms missing allowance manager/reference and investment decision/economics guards. Aggregate-only preflight finds existing family/wallet and investment amount inconsistencies; the counts and qualifications are retained without individual records. Source0304/0306/0311/0447 are pinned review inputs, not an apply list. An unallocated composite-reference candidate passes an isolated structural PostgreSQL fixture while preserving historical rows; it remains outside every apply workflow. Data provenance/disposition, full dependency/role/trigger rehearsal and separate production approval remain required. No production write, migration allocation change or financial action occurred. Earlier observations below remain historical.
+
+## Read-only catalog observation — 2026-10-08
+
+The Supabase connector successfully read Bubaly metadata at 00:12 UTC; the
+earlier HTTP 401 reports remain historical evidence for their access path.
+The exact [SELECT](final-audit/catalog-snapshot-20261008.sql) and
+[receipt](final-audit/catalog-snapshot-20261008.json) are retained. No application
+rows were read or written, and no production configuration or DDL changed.
+
+- The migration ledger has 192 entries and lexical high-water `0176`. None of
+  `0254`, `0475`, `0476`, `0488`, `0490`, `0492`, `0493`, `0494` is recorded.
+  This is not proof that their schema changes are absent: the wallet guards
+  below demonstrate catalog/ledger divergence.
+- All four held runtime functions are absent: `calendar_feed_apply_sync`,
+  `count_family_ai_requests_month`, `ensure_sync_pull_container`, and
+  `create_sync_pull_item`. `bills.due_day` is absent too. Existing rollout holds
+  remain necessary; no allocation is promoted.
+- `wallet_transactions` has RLS enabled and all three restrictive authenticated
+  manager write guards. Their expressions call `can_manage_family(family_id)`;
+  that helper checks `auth.uid()`, active membership, and parent/adult role.
+  The old permissive member policy remains, but its presence alone does not
+  demonstrate the child-mint vulnerability while these restrictive guards apply.
+  This supersedes the unresolved-expression/current-missing-guard implication
+  in the historical wallet narrative below, without claiming a live write test.
+- `anon` retains INSERT/UPDATE/DELETE table grants, unlike the repository probe's
+  expected grant closure. All observed wallet policies target `authenticated`,
+  and `anon` does not inherit that role; grants alone do not establish an RLS
+  bypass. Grant reconciliation still needs separately reviewed production work.
+- `family-media` remains public. This observation does not authorize changing it.
+
+This bounded snapshot is not full production catalog/ACL/FK acceptance, a
+deployment receipt, or permission to replay migrations against the ledger.
+
+The subsequent [declared-schema catalog check](final-audit/schema-prerequisites-20261008.json)
+projects all 52 repository `SCHEMA_CHECKS` into a metadata-only
+[SELECT](final-audit/schema-prerequisites-20261008.sql): **11 complete, 41
+incomplete**, comprising **34 absent tables** and missing runtime columns on six
+existing tables (plus the separate column check on absent `ai_requests`). Missing
+tables include the six AI runtime tables, feature tables introduced in 0240–0248,
+and `routine_runs`. Existing AI conversation/message, approval, automation
+rule/run and home-brief tables lack the requested runtime columns. The receipt
+lists every exact name. This is actual schema absence, not an authentication
+failure. The authorized audit cannot remedy it by applying held production DDL.
+No REST exposure, full FK/ACL acceptance, live CRUD or migration replay is inferred.
+
+## Current allocation and rollout holds — 2026-10-07
+
+The owner confirmed preservation of main's allocation map. Messaging occupies
+0475–0476. No other candidate is promoted into the runnable sequence. These
+source allocations are not evidence that production applied any migration.
+
+| Generation | Source file | Release dependency |
+|---|---|---|
+| 0475 | `0475_messaging_conversation_privacy_and_delivery.sql` | Original recorded audience unions; separate empty Family Chat; actor locks, idempotent send and participant operations. |
+| 0476 | `0476_messaging_notifications_preferences.sql` | Typed notification keys, private mute preferences and participant delivery. |
+| 0488 held | `0488_a_month_end_bill_keeps_its_day.sql` | Nullable original bill anchors; older-schema writes refuse losing a chosen anchor. |
+| 0490 held | `0490_a_calendar_feed_sync_writes_only_while_it_holds_its_claim.sql` | Atomic fenced feed writes; missing RPC refuses writes. |
+| 0492 held | `0492_approval_requests_private_read.sql` | Requester/manager approval reads; production policies unverified. |
+| 0493 held | `0493_ai_copy_private_read_and_quota.sql` | Private AI copies and count-only usage; missing receipt refuses capped-Free requests. |
+| 0494 held | `0494_sync_atomic_pull.sql` | Service-only admission and atomic item/map creation; missing RPC preserves cursor and refuses writes. |
+
+Held files remain in `supabase/reserved/`; normal migration replay and
+`supabase db push` do not load them. Reserved gaps must be fulfilled by their
+actual owners before promotion. No filler migrations or resequencing.
+Failure controls do not prove held privacy policies or production RPCs exist.
+Actual catalog, ACL, FK and migration-ledger acceptance remain rollout gates.
+The production migration workflow checks `--require-runnable-rpcs` before an
+explicit apply request; held dependencies stop SQL application. Metadata-only
+verification remains available. This does not configure Vercel deployment gates.
+Complete source-consumer integration and production acceptance remain open.
+With the source capability disabled, legacy feed snapshots with timed/complex recurrence, exception identities or
+EXDATE/RDATE refuse before event writes or deletions. Only singles, bare
+cancelled masters and verified all-day exact DAILY/WEEKLY rules are admitted.
+Existing stored lossy series are not repaired by that refusal; reviewed source
+metadata and data reconciliation are still needed. The guarded archive
+foundation described above is not enabled by this candidate.
+
+#970 merged into main at `82f2db1fcd0dca59179d2b391a76acfd459e480b`.
+Current #969 composition repairs newly reviewed bill regressions and selects
+reviewed #971 messaging/calendar changes without editing its author branch.
+Prior cfa receipts certify that historical source, not this new composition.
+See `finalaudit.md` for evidence and production holds.
+
+## Historical wallet mint finding — superseded live-policy inference
+
+The 2026-10-08 resolved metadata observation above supersedes this section's
+earlier live vulnerability and apply-only remedy inference. Restrictive manager
+guards were observed despite the absent0254 ledger entry. The synthetic probes
+below remain evidence for their tested policy shapes, not evidence of current
+production exploitation, complete grant closure or permission to apply SQL.
 
 A production metadata audit reported that `public.wallet_transactions` still
 carries a **permissive INSERT policy** alongside the intended manager-only one:
@@ -62,9 +146,11 @@ the shape that lets any family member — a child account included — submit a
 policy hashes rather than expressions, so the exact live condition is still
 unverified, and nothing in it showed exploitation or money movement.
 
-**The fix already exists in this repository: `0254_wallet_write_policy_drift.sql`.
-It is unapplied, and applying it is the whole of the remedy.** Nothing new needs
-writing.
+`0254_wallet_write_policy_drift.sql` contains the repository's restrictive-guard
+repair. Its version is absent from the retained ledger; its guard effects were
+nevertheless observed in the live catalog. Reconcile the catalog and ledger
+before proposing any application; an absent ledger entry alone does not prove
+the repair is unapplied or make replay the whole remedy.
 
 Why 0254 is sufficient even though its `drop policy` list is a list of *known
 names* — a stray policy under some other name would survive those drops:
@@ -4052,3 +4138,136 @@ access to equal the page's guest row: 8 findings before, 0 after.
 **After applying:** as a guest, open the calendar and try to add an event. It
 should be refused with the permission message. As a parent, add and delete one,
 which should succeed.
+
+## Numbering from `0475` on — retired holes, and the order a release applies
+
+Production applies migrations with `supabase db push`, in version order, and
+the CLI refuses a file numbered below the last version the remote ledger
+records unless it is given `--include-all`, which the production workflow does
+not pass. So a number below main's high-water mark that no file holds cannot
+be released after a higher one. Branches had been reserving such numbers ahead
+of landing, and they collided: #834 and #890 both held `0475`/`0476`, #958
+waited on `0477` behind them, and `0482`–`0490` were spread over branches that
+each had to wait on the lower ones. All of those PRs closed unmerged.
+
+As of 2026-10-04 the 43 holes at or below `0474` are **retired**
+(`RETIRED_MIGRATION_VERSIONS` in `scripts/audit-migration-versions.mjs`): no
+file may take one, and the reservations that left them — `0465`–`0470`,
+`0472`, `0473` among them — are released. Above `0474` the sequence has no
+gaps. `npm run db:audit:migrations` fails on either. Nothing below changes
+what is already applied: the retained production observation contains192
+entries with lexical high-water `0176`, not proof of a contiguous `0001`–`0176`
+history or complete correspondence between catalog and ledger.
+
+**Owner decision, 2026-10-04: existing allocations above `0474` are
+preserved.** It is recorded on #771 (5985652062) and was confirmed in the Claude
+session on #970. A branch that holds a reserved number keeps it; the number is
+not reassigned to whichever branch lands first. The preserved map:
+
+| Number | Holder |
+|---|---|
+| 0475, 0476 | messaging (#834): `messaging_conversation_privacy_and_delivery`, `messaging_notifications_preferences` |
+| 0477 | Surge (#892) |
+| 0478 | Meals atomic slot writes |
+| 0479 | Daniel |
+| 0480 | Surge |
+| 0481 | Meals delegated actor |
+| 0482, 0483 | Daniel |
+| 0484, 0485 | Support |
+| 0486 | voice read |
+| 0487 | card hold |
+| 0488 | bill anchor: `a_month_end_bill_keeps_its_day` |
+| 0489 | notification once per occurrence |
+| 0490 | calendar feed claim: `a_calendar_feed_sync_writes_only_while_it_holds_its_claim` |
+
+Still unresolved: #958's `0477` and the two `0491` candidates. Closing those PRs
+did not release the numbers.
+
+A migration whose reserved number is above the next free one cannot be released
+yet, for two reasons:
+- the guard refuses a skipped generation;
+- `supabase db push` refuses an out-of-order one.
+
+Such a file is **held** in `supabase/reserved/`, and its probe in
+`docs/audit/reserved/`. Neither the replay nor `db push` reads those
+directories. The file moves into `supabase/migrations/` under its reserved
+number when the sequence reaches it. Code that uses a held migration must work
+without it. `0488` is held this way; its entry is below.
+
+### Published branch candidates that are not on main (2026-10-04)
+
+Retiring a hole does not delete anything. These migration files remain on their branches as published candidates, read from all 604 branches on 2026-10-04. Several of them collide with each other. None is on main, and if one lands it takes the next free number then. Names are given without the file extension.
+
+| Number | Candidate | Branches |
+|---|---|---|
+| 0465 | a_child_reads_only_their_own_prescriptions | claude/f-g09-child-prescriptions |
+| 0466 | a_members_language_is_kept_on_their_profile | claude/i18n-001-member-language |
+| 0472 | a_babysitter_payment_names_its_own_familys_sitter_and_event | claude/babysitter-payment-reference-guard-7q6vtf |
+| 0475 | meal_plan_slot_writes_are_atomic | codex/meal-atomic-writes-20261003 |
+| 0475 | messaging_conversation_privacy_and_delivery | claude/f19-messaging-composition-45d8k6, codex/chat-834-ci-replay-repair-20261003, codex/chat-canonical-history-20261003, codex/chat-messaging-goal-20261002 |
+| 0476 | meal_plan_delegated_actor_rpcs | codex/meal-atomic-writes-20261003 |
+| 0476 | messaging_notifications_preferences | claude/f19-messaging-composition-45d8k6, codex/chat-834-ci-replay-repair-20261003, codex/chat-canonical-history-20261003, codex/chat-messaging-goal-20261002 |
+| 0477 | ai_requests_admission_is_atomic | claude/f19-atomic-admission-45d8k6 |
+| 0477 | family_memory_sensitive_text_read_rls | codex/family-facts-private-text-20261004 |
+| 0478 | meal_plan_slot_writes_are_atomic | claude/notifications-on-meals-composition-20261004, codex/final-meal-composition-20261003, codex/meal-receipt-row-lock-20261003, codex/meal-stable-retry-ui-20261003 |
+| 0479 | a_run_with_no_attempts_left_is_abandoned_not_reclaimed | claude/ai-runs-claim-ceiling-20261003, claude/ai-runs-human-restart-budget-20261003 |
+| 0480 | a_request_text_is_its_requesters | claude/ai-request-text-privacy-45d8k6 |
+| 0482 | a_series_remembers_the_occurrences_it_gave_up | claude/calendar-recurrence-exceptions-20261003, claude/google-sync-exception-dates-20261003, claude/outlook-series-mirror-20261003, claude/outlook-series-push-20261003 |
+| 0483 | a_mirrored_series_remembers_the_occurrences_its_source_gave_up | claude/google-sync-exception-dates-20261003, claude/outlook-series-mirror-20261003, claude/outlook-series-push-20261003 |
+| 0484 | a_card_refund_is_credited_once | claude/card-hold-reconcile-7q6vtf, claude/card-hold-settles-7q6vtf, claude/card-hold-timeout-release-7q6vtf, claude/issuing-refund-credits-7q6vtf |
+| 0485 | a_card_capture_is_debited_once | claude/card-hold-reconcile-7q6vtf, claude/card-hold-settles-7q6vtf, claude/card-hold-timeout-release-7q6vtf, claude/issuing-refund-credits-7q6vtf |
+| 0486 | voice_history_is_the_speakers_and_link_logs_are_managers | claude/voice-link-privacy-45d8k6 |
+| 0487 | a_card_hold_follows_what_was_captured | claude/card-hold-reconcile-7q6vtf, claude/card-hold-settles-7q6vtf, claude/card-hold-timeout-release-7q6vtf |
+| 0488 | a_month_end_bill_keeps_its_day | claude/a-paid-recurring-bill-comes-due-again-20261003, claude/a-subscriptions-next-charge-rolls-on-20261003 |
+| 0489 | a_notification_is_written_once_per_occurrence | claude/a-notification-is-written-once-per-occurrence-20261004, claude/notifications-on-meals-composition-20261004 |
+| 0490 | a_calendar_feed_sync_writes_only_while_it_holds_its_claim | claude/apple-sync-series-master-20261003, claude/calendar-feed-fidelity-20261003, claude/calendar-recurrence-exceptions-20261003, claude/google-sync-exception-dates-20261003, claude/outlook-series-mirror-20261003, claude/outlook-series-push-20261003 |
+| 0491 | a_card_hold_and_a_top_up_do_not_deadlock | claude/wallet-lock-order-45d8k6 |
+| 0491 | preserve_recurring_bill_anchor | codex/audit-goal-followups-20261004 |
+
+The colliding pairs are 0475 (meal-plan slot writes, messaging privacy), 0476 (meal-plan delegated actors, messaging notifications), 0477 (AI request admission, family-memory text) and 0491. Two published candidates hold 0491, neither allocation confirmed: #964 at 6e250a00b928970982855fc1e856ea6d5ceba09d (card hold and top-up deadlock, closed unmerged) and draft #969 at 854a990bd24906976231024eeb6c5943ae977da7 (recurring bill anchor). #969 also covers the month-end bill and calendar items below.
+
+Historical evidence, superseded: a landing map proposed in the Claude session on 2026-10-04 would have renumbered the month-end bill, calendar feed and messaging migrations to 0475, 0476, 0477 and 0478 (from 0488, 0490 and 0475/0476). The owner did not adopt it; the decision above preserves the original reservations. Under it, messaging lands as `0475`/`0476`, and the bill anchor (`0488`) and feed claim (`0490`) are held in `supabase/reserved/` until their turn.
+
+## `0471` and `0474` — the admin digest's delivery store, and a removed admin is not sent it
+
+`supabase/migrations/0471_an_admin_digest_reaches_each_admin_once.sql`,
+`supabase/migrations/0474_a_removed_admin_is_not_sent_the_digest.sql`
+
+**Severity: low until a route uses it. Deploy order: `0471`, then `0474`.**
+`0471` creates `admin_digest_deliveries` and the four functions behind
+`lib/admin/digest-delivery.ts` (freeze, claim, begin send, complete): one row
+per (occurrence, recipient), frozen before anything is sent, so a second tick
+or a retry does not send the digest again. `0474` extends `0471` without
+rewriting it: eligibility (the code allowlist plus `super_admins`) is decided
+at dispatch admission inside `admin_digest_begin_send`, and a recipient no
+longer eligible becomes the terminal status `withdrawn` instead of being sent
+a digest frozen before their removal. Both are proven in CI's Database job by
+`docs/audit/an-admin-digest-reaches-each-admin-once-check.sql` and
+`docs/audit/a-removed-admin-is-not-sent-the-digest-check.sql`.
+
+**After applying:** nothing visible changes until the digest route is
+switched to the per-recipient engine; the route keeps its current behaviour.
+
+## `0488` (reserved, held) — a month-end bill lost its day to a short month (#932)
+
+`supabase/reserved/0488_a_month_end_bill_keeps_its_day.sql` — **held**: reserved as `0488`, not
+in `supabase/migrations/` until `0475`–`0487` have landed, so neither the replay
+nor `db push` applies it. Its probe is held with it in `docs/audit/reserved/`.
+
+**Rollout hold:** older-schema payments cannot retain an anchor through a
+clamped month. The nullable checked `bills.due_day` column has no default or
+historical backfill; null means the original day is unknown. Month-based
+legacy dates on days28–30 require an explicit day. A stale snapshot or absent
+row stamp refuses before mutation. A missing due_day column may retry only
+when the resulting date itself keeps a proven original anchor; it never
+silently adopts the short month's last day as a new recurring schedule.
+
+The dialog keeps a user's explicit choice, but refuses a payment if the old
+schema would lose that choice. Applying held0488 is required to persist
+month-end anchors durably. The reserved probe checks the column and constraint;
+synthetic browser/unit controls check the actual callbacks and stale-write
+behavior. Neither is production compatibility evidence.
+
+**After approved release:** verify the actual column/default/check and rollout
+prerequisites, then test a31st-day bill through February and back to March31
+using synthetic data in the designated acceptance environment.

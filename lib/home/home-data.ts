@@ -4,7 +4,7 @@
 
 import type { MemberRole } from '@/lib/constants/roles';
 import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
-import { ageOn } from '@/lib/utils/birthday';
+import { ageOnDay } from '@/lib/members/age';
 import { addDaysToDayKey, weekStartDayKey } from '@/lib/services/scope';
 
 // ── Finances ────────────────────────────────────────────────────────────────
@@ -50,9 +50,14 @@ const SHORT_ROLE: Record<MemberRole, string> = {
   parent: 'Parent', adult: 'Adult', teen: 'Teen', child: 'Child', caregiver: 'Caregiver', guest: 'Guest',
 };
 
-/** Whole-year age from an ISO birthday, or null if missing/unparseable. */
-export function ageFromBirthday(birthday: string | null | undefined, now: Date): number | null {
-  const age = ageOn(birthday, now);
+/**
+ * Whole-year age from an ISO birthday on the day `todayKey` names, or null if
+ * missing/unparseable. A day KEY, not an instant: the home page renders on a UTC
+ * host, where `new Date()`'s calendar is Greenwich's and a child's birthday
+ * caption changed seven hours before her day did.
+ */
+export function ageFromBirthday(birthday: string | null | undefined, todayKey: string): number | null {
+  const age = ageOnDay(birthday, todayKey);
   return age !== null && age >= 0 && age < 150 ? age : null;
 }
 
@@ -63,10 +68,10 @@ export function ageFromBirthday(birthday: string | null | undefined, now: Date):
 export function memberTagline(
   m: { user_id: string | null; role: string; birthday: string | null },
   currentUserId: string,
-  now: Date,
+  todayKey: string,
 ): string {
   if (m.user_id && m.user_id === currentUserId) return 'Me';
-  const age = ageFromBirthday(m.birthday, now);
+  const age = ageFromBirthday(m.birthday, todayKey);
   if (age !== null && age < 25) return `${age} yrs`;
   return SHORT_ROLE[m.role as MemberRole] ?? 'Member';
 }

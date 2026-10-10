@@ -1,0 +1,47 @@
+{
+  "database": "PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+  "scope": "Local disposable PostgreSQL with harmless function stubs. Exact existing migration0456 tested; no real wallet/bid bodies or production functions invoked.",
+  "migration": {
+    "path": "supabase/migrations/0456_service_only_functions_are_service_only.sql",
+    "sha256": "b0fe35f4acc68dd6b57781086c7c4b9ef7f01b9e1c02e1bed350ffc19ddf4c7d"
+  },
+  "fixture": {
+    "path": "docs/final-audit/rollout-20261008/0456-acl.fixture.sql",
+    "sha256": "5ce3ff40174f05b2fca28376baf1bfa34c732b057d0e7fb328c21890c651979c"
+  },
+  "before": [
+    {
+      "function": "public.wallet_reserve_card_auth(uuid,uuid,bigint,text,text)",
+      "anon": true,
+      "authenticated": true,
+      "service": true
+    },
+    {
+      "function": "public.marketplace_place_bid_unchecked(uuid,uuid,uuid,bigint)",
+      "anon": true,
+      "authenticated": true,
+      "service": true
+    }
+  ],
+  "after": [
+    {
+      "function": "public.wallet_reserve_card_auth(uuid,uuid,bigint,text,text)",
+      "anon": false,
+      "authenticated": false,
+      "service": true
+    },
+    {
+      "function": "public.marketplace_place_bid_unchecked(uuid,uuid,uuid,bigint)",
+      "anon": false,
+      "authenticated": false,
+      "service": true
+    }
+  ],
+  "checks": {
+    "transactionRollback": true,
+    "repeatApplication": true,
+    "actualAnonAndAuthenticatedDenial": true,
+    "serviceRoleStubCalls": true,
+    "inheritedGrantRefusalAndRollback": true
+  }
+}

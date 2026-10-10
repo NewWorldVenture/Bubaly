@@ -107,7 +107,10 @@ beforeEach(() => {
   vi.stubEnv('OPENAI_API_KEY', 'test-key-not-a-real-secret');
   fetchSpy = vi.fn(async () => { throw new Error('a test tried the network'); });
   vi.stubGlobal('fetch', fetchSpy);
-  db = createInMemorySupabase();
+  db = createInMemorySupabase({ rpc: {
+    count_family_ai_requests_month: (args, store) => store.table('ai_requests')
+      .filter(row => row.family_id === args.p_family_id).length,
+  } });
   harness.db = db;
   harness.role = 'parent';
   harness.familyId = FAMILY;

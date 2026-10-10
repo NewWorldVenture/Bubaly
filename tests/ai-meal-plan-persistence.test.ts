@@ -67,6 +67,11 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('AI planner through the shared persistence service', () => {
+  it('a malformed calendar interval refuses before provider or meal writes and preserves the existing plan',async()=>{
+    db.seed('calendar_events',[{id:'broken-event',family_id:FAMILY,title:'Broken',starts_at:'2026-09-14T04:00:00Z',ends_at:'invalid',all_day:false,recurrence:'none',recurrence_until:null}]);
+    const beforePlans=structuredClone(db.table('meal_plans')),beforeMeals=structuredClone(db.table('meals'));
+    expect((await POST(request())).status).toBe(503);expect(mocks.complete).not.toHaveBeenCalled();expect(db.table('meal_plans')).toEqual(beforePlans);expect(db.table('meals')).toEqual(beforeMeals);
+  });
   it('saves exact sparse slots and recipe ingredients without changing other meals or families', async () => {
     const response = await POST(request({ familyId: OTHER, userId: 'user-two' }));
     expect(response.status).toBe(200);

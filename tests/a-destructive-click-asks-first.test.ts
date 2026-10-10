@@ -14,12 +14,12 @@
 // a named list fails loudly both when a new site appears AND when a listed one is
 // fixed without being struck off.
 import { readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import ts from 'typescript';
 
 const files = () =>
-  execSync("git ls-files 'app/**/*.tsx' 'components/**/*.tsx'", { encoding: 'utf8' })
+  execFileSync('git', ['ls-files', 'app/**/*.tsx', 'components/**/*.tsx'], { encoding: 'utf8' })
     .split('\n')
     .filter(Boolean);
 

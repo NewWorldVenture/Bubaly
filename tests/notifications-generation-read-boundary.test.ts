@@ -11,7 +11,8 @@ function chain(result: { data: unknown; error: unknown }) {
     select: () => c, eq: () => c, neq: () => c, gte: () => c, lte: () => c, in: () => c,
     is: () => c, not: () => c, or: () => c, ilike: () => c, order: () => c, limit: () => c, range: () => c,
     maybeSingle: () => Promise.resolve(result),
-    then: (onF: (v: unknown) => unknown) => Promise.resolve(result).then(onF),
+    // A collection answer carries its count, as PostgREST's Content-Range does.
+    then: (onF: (v: unknown) => unknown) => Promise.resolve(Array.isArray(result.data) ? { ...result, count: result.data.length } : result).then(onF),
   };
   return c;
 }
@@ -73,6 +74,13 @@ describe('generateFamilyNotifications source read boundary', () => {
     const supabase = fakeSupabase(new Set());
 
     await expect(generateFamilyNotifications(supabase, 'fam-1')).resolves.toBe(0);
+  });
+
+  it('logs a failed conflict category independently so another sweep can retry it', async () => {
+    const err=vi.spyOn(console,'error').mockImplementation(()=>{});
+    await expect(generateFamilyNotifications(fakeSupabase(new Set(['calendar_events'])), 'fam-1')).resolves.toBe(0);
+    expect(err).toHaveBeenCalledWith('[notifications] conflict read failed', expect.objectContaining({familyId:'fam-1'}));
+    await expect(generateFamilyNotifications(fakeSupabase(new Set()), 'fam-1')).resolves.toBe(0);
   });
 
   it('does not log when all source reads succeed', async () => {

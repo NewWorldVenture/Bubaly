@@ -93,7 +93,7 @@ describe('the six surfaces read through the shared occurrences read', () => {
     'app/(app)/dashboard/family-digital-twin/actions.ts',
   ])('%s no longer reads calendar_events by its first start alone', (file) => {
     const src = readFileSync(join(ROOT, file), 'utf8');
-    expect(src).toContain('readCalendarOccurrences(');
+    expect(src).toMatch(/read(?:Display)?CalendarOccurrences\(/);
     expect(src, 'a bare calendar_events read crept back').not.toMatch(/from\('calendar_events'\)/);
   });
 });

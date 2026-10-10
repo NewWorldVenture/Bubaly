@@ -208,7 +208,7 @@ function walk(dir: string, out: string[] = []): string[] {
     if (entry === 'node_modules' || entry === '.next') continue;
     const path = join(dir, entry);
     if (statSync(path).isDirectory()) walk(path, out);
-    else if (/\.(ts|tsx)$/.test(entry)) out.push(path);
+    else if (/\.(ts|tsx)$/.test(entry)) out.push(path.replace(/\\/g, '/'));
   }
   return out;
 }

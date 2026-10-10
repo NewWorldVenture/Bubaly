@@ -113,8 +113,14 @@ export const TRADES: { value: string; label: string }[] = [
 
 export type Season = 'spring' | 'summer' | 'fall' | 'winter';
 
-export function currentSeason(date = new Date()): Season {
-  const m = date.getMonth(); // 0-11
+/**
+ * The season a day falls in. Takes the FAMILY's day key (YYYY-MM-DD) from a
+ * server caller — `new Date().getMonth()` there was the HOST's month, which on
+ * a UTC host is next month from the evening of the 31st in California — or a
+ * Date from a browser, whose local month is the reader's own.
+ */
+export function currentSeason(date: Date | string = new Date()): Season {
+  const m = typeof date === 'string' ? Number(date.slice(5, 7)) - 1 : date.getMonth(); // 0-11
   if (m <= 1 || m === 11) return 'winter';
   if (m <= 4) return 'spring';
   if (m <= 7) return 'summer';

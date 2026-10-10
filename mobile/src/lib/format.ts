@@ -16,8 +16,8 @@ function partsFor(date: Date, tz: string, options: Intl.DateTimeFormatOptions): 
 /** `YYYY-MM-DD` for the given instant in `tz` (device-local fallback). */
 export function dayKey(date: Date, tz: string): string {
   const p = partsFor(date, tz, { year: 'numeric', month: '2-digit', day: '2-digit' });
-  if (p) return `${p.year}-${p.month}-${p.day}`;
-  const y = date.getFullYear();
+  if (p) return `${p.year.padStart(4, '0')}-${p.month}-${p.day}`;
+  const y = String(date.getFullYear()).padStart(4, '0');
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
@@ -27,11 +27,36 @@ export function shiftDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * DAY_MS);
 }
 
+/** Advance a Gregorian family DATE, independently of a day's elapsed length. */
+export function nextDayKey(key: string): string {
+  return new Date(Date.parse(`${key}T12:00:00Z`) + DAY_MS).toISOString().slice(0, 10);
+}
+
+/** Bounded search for the next family date, including skipped midnights/dates. */
+export function nextFamilyDayDelay(now: Date, timezone: string): number {
+  const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' });
+  const keyAt = (instant: number) => {
+    const parts = Object.fromEntries(formatter.formatToParts(new Date(instant)).map(p => [p.type, p.value]));
+    return `${parts.year.padStart(4, '0')}-${parts.month}-${parts.day}`;
+  };
+  const start = now.getTime();
+  const today = keyAt(start);
+  let before = start;
+  let after = start + 3 * DAY_MS;
+  if (keyAt(after) <= today) throw new RangeError('Family date boundary unavailable');
+  while (after - before > 1) {
+    const middle = before + Math.floor((after - before) / 2);
+    if (keyAt(middle) <= today) before = middle;
+    else after = middle;
+  }
+  return Math.max(1, after - start);
+}
+
 /** "Today", "Tomorrow", or "Sat, Sep 6". */
 export function dayLabel(date: Date, tz: string, now = new Date()): string {
   const key = dayKey(date, tz);
   if (key === dayKey(now, tz)) return 'Today';
-  if (key === dayKey(shiftDays(now, 1), tz)) return 'Tomorrow';
+  if (key === nextDayKey(dayKey(now, tz))) return 'Tomorrow';
   const p = partsFor(date, tz, { weekday: 'short', month: 'short', day: 'numeric' });
   return p ? `${p.weekday}, ${p.month} ${p.day}` : key;
 }

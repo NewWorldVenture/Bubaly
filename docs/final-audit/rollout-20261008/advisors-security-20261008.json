@@ -1,0 +1,1506 @@
+{
+  "projectRef": "ltcxlbipiihclxwioyqj",
+  "source": "Supabase get_advisors, read-only; normalized metadata, not verified vulnerabilities or measured performance impact.",
+  "groups": [
+    {
+      "name": "rls_enabled_no_policy",
+      "title": "RLS Enabled No Policy",
+      "level": "INFO",
+      "count": 55,
+      "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+      "findings": [
+        {
+          "metadata": {
+            "name": "ab_events",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "ab_experiments",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "admin_integrations",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "admin_notifications",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "affiliates",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "app_settings",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "backlinks",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "blog_post_likes",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "blog_subscribers",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "case_studies",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "child_login_throttle",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "competitors",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "crm_deals",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "crm_lead_scores",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "crm_quotes",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "demo_email_uses",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "guardian_callback_events",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "keyword_intel",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "loyalty_settings",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketing_ad_campaigns",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketing_assets",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketing_audit_logs",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketing_automation_runs",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketing_automation_workflows",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketing_campaigns",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketing_content_items",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketing_email_campaigns",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketing_exit_intent",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketing_form_submissions",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketing_forms",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketing_funnels",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketing_landing_pages",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketing_personalization_rules",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketing_push_campaigns",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketing_segments",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketing_seo_keywords",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketing_settings",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketing_sms_campaigns",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketing_social_posts",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketing_suppressions",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketing_videos",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "mkt_consent_events",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "mkt_sessions",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "mkt_touchpoints",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "mkt_visitors",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "rate_limits",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "reputation_settings",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "resend_webhook_events",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "stripe_settings",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "stripe_webhook_events",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "super_admins",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "survey_responses",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "surveys",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "system_backups",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "testimonials",
+            "type": "table",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        }
+      ]
+    },
+    {
+      "name": "function_search_path_mutable",
+      "title": "Function Search Path Mutable",
+      "level": "WARN",
+      "count": 8,
+      "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0011_function_search_path_mutable",
+      "findings": [
+        {
+          "metadata": {
+            "name": "set_updated_at",
+            "type": "function",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "sync_album_photo_count",
+            "type": "function",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "update_conversation_last_message",
+            "type": "function",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "__seed_existing_count",
+            "type": "function",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "update_updated_at_column",
+            "type": "function",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "touch_family_operating_index",
+            "type": "function",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "set_support_ticket_updated_at",
+            "type": "function",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "blog_image_license",
+            "type": "function",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        }
+      ]
+    },
+    {
+      "name": "extension_in_public",
+      "title": "Extension in Public",
+      "level": "WARN",
+      "count": 2,
+      "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0014_extension_in_public",
+      "findings": [
+        {
+          "metadata": {
+            "name": "pg_trgm",
+            "type": "extension",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "moddatetime",
+            "type": "extension",
+            "schema": "public"
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        }
+      ]
+    },
+    {
+      "name": "anon_security_definer_function_executable",
+      "title": "Public Can Execute SECURITY DEFINER Function",
+      "level": "WARN",
+      "count": 44,
+      "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable",
+      "findings": [
+        {
+          "metadata": {
+            "name": "accept_invite",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_token text",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "can_manage_family",
+            "schema": "public",
+            "language": "sql",
+            "arguments": "p_family_id uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "claim_marketing_generation_jobs",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_limit integer",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "economy_decide_redemption",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_redemption_id uuid, p_approve boolean, p_note text",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "enqueue_marketing_page_generation",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "family_role",
+            "schema": "public",
+            "language": "sql",
+            "arguments": "p_family_id uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "feedback_bump_comment_count",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "feedback_bump_vote_count",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "grocery_from_meal_plan",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_family_id uuid, p_from date, p_to date, p_list_id uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "guardian_review_suggestion",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_suggestion_id uuid, p_decision text, p_note text",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "handle_new_family",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "handle_new_user",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "invest_decide_order",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_order_id uuid, p_approve boolean",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "is_family_admin",
+            "schema": "public",
+            "language": "sql",
+            "arguments": "p_family_id uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "is_family_member",
+            "schema": "public",
+            "language": "sql",
+            "arguments": "p_family_id uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "is_marketplace_circle_family_member",
+            "schema": "public",
+            "language": "sql",
+            "arguments": "p_circle_id uuid, p_family_id uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "is_marketplace_circle_member",
+            "schema": "public",
+            "language": "sql",
+            "arguments": "p_circle_id uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "is_super_admin",
+            "schema": "public",
+            "language": "sql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "mark_model_dirty",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_accept_offer",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_offer uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_buy_now",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_listing_id uuid, p_buyer_member_id uuid, p_buyer_family_id uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_close_auction",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_listing_id uuid, p_now timestamp with time zone",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_complete_handoff",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_order_id uuid, p_code text",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_create_circle",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_family uuid, p_name text, p_emoji text",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_decline_offer",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_offer uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_join_circle",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_family uuid, p_code text",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_leave_circle",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_family uuid, p_circle uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_log_price_change",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_member_id",
+            "schema": "public",
+            "language": "sql",
+            "arguments": "p_family_id uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_negotiation_offer",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_listing uuid, p_buyer_member uuid, p_buyer_family uuid, p_amount bigint, p_message text",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_negotiation_respond",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_negotiation uuid, p_action text, p_amount bigint, p_message text",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_offer_flip_pending",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_place_bid",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_listing_id uuid, p_bidder_member_id uuid, p_bidder_family_id uuid, p_max_cents bigint",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_place_bid_unchecked",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_listing_id uuid, p_bidder_member_id uuid, p_bidder_family_id uuid, p_max_cents bigint",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_set_listing_status",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_listing uuid, p_status text",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "public_stats",
+            "schema": "public",
+            "language": "sql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "rate_limit_hit",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_key text, p_limit integer, p_window_seconds integer",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "rls_auto_enable",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "social_has_permission",
+            "schema": "public",
+            "language": "sql",
+            "arguments": "p_family_id uuid, p_permission text",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "social_role_for",
+            "schema": "public",
+            "language": "sql",
+            "arguments": "p_family_id uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "social_write_audit",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "sync_log_change",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "validate_marketplace_negotiation_round",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "wallet_reserve_card_auth",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_family uuid, p_child_wallet uuid, p_amount bigint, p_auth_id text, p_description text",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        }
+      ]
+    },
+    {
+      "name": "authenticated_security_definer_function_executable",
+      "title": "Signed-In Users Can Execute SECURITY DEFINER Function",
+      "level": "WARN",
+      "count": 48,
+      "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "findings": [
+        {
+          "metadata": {
+            "name": "accept_invite",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_token text",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "can_manage_family",
+            "schema": "public",
+            "language": "sql",
+            "arguments": "p_family_id uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "claim_marketing_generation_jobs",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_limit integer",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "economy_decide_redemption",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_redemption_id uuid, p_approve boolean, p_note text",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "enqueue_marketing_page_generation",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "family_role",
+            "schema": "public",
+            "language": "sql",
+            "arguments": "p_family_id uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "feedback_bump_comment_count",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "feedback_bump_vote_count",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "grocery_from_meal_plan",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_family_id uuid, p_from date, p_to date, p_list_id uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "guardian_review_suggestion",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_suggestion_id uuid, p_decision text, p_note text",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "handle_new_family",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "handle_new_user",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "invest_decide_order",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_order_id uuid, p_approve boolean",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "is_family_admin",
+            "schema": "public",
+            "language": "sql",
+            "arguments": "p_family_id uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "is_family_member",
+            "schema": "public",
+            "language": "sql",
+            "arguments": "p_family_id uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "is_marketplace_circle_family_member",
+            "schema": "public",
+            "language": "sql",
+            "arguments": "p_circle_id uuid, p_family_id uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "is_marketplace_circle_member",
+            "schema": "public",
+            "language": "sql",
+            "arguments": "p_circle_id uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "is_super_admin",
+            "schema": "public",
+            "language": "sql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "mark_model_dirty",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_accept_offer",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_offer uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_buy_now",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_listing_id uuid, p_buyer_member_id uuid, p_buyer_family_id uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_close_auction",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_listing_id uuid, p_now timestamp with time zone",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_complete_handoff",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_order_id uuid, p_code text",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_create_circle",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_family uuid, p_name text, p_emoji text",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_decline_offer",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_offer uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_join_circle",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_family uuid, p_code text",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_leave_circle",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_family uuid, p_circle uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_log_price_change",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_member_id",
+            "schema": "public",
+            "language": "sql",
+            "arguments": "p_family_id uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_negotiation_offer",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_listing uuid, p_buyer_member uuid, p_buyer_family uuid, p_amount bigint, p_message text",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_negotiation_respond",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_negotiation uuid, p_action text, p_amount bigint, p_message text",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_offer_flip_pending",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_place_bid",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_listing_id uuid, p_bidder_member_id uuid, p_bidder_family_id uuid, p_max_cents bigint",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "marketplace_set_listing_status",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_listing uuid, p_status text",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "public_stats",
+            "schema": "public",
+            "language": "sql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "rate_limit_hit",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_key text, p_limit integer, p_window_seconds integer",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "rls_auto_enable",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "social_has_permission",
+            "schema": "public",
+            "language": "sql",
+            "arguments": "p_family_id uuid, p_permission text",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "social_role_for",
+            "schema": "public",
+            "language": "sql",
+            "arguments": "p_family_id uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "social_write_audit",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "sync_log_change",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "validate_marketplace_negotiation_round",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "wallet_approve_gift",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_family_id uuid, p_gift_payment_id uuid, p_actor_id uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "wallet_decide_allowance",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_family_id uuid, p_approval_id uuid, p_decision text, p_note text, p_actor_id uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "wallet_decide_spend",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_family_id uuid, p_approval_id uuid, p_decision text, p_note text, p_actor_id uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "wallet_fund_goal",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_family_id uuid, p_goal_id uuid, p_amount bigint, p_actor_id uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "wallet_reserve_card_auth",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_family uuid, p_child_wallet uuid, p_amount bigint, p_auth_id text, p_description text",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        },
+        {
+          "metadata": {
+            "name": "wallet_transfer",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_family_id uuid, p_from_child_wallet_id uuid, p_to_child_wallet_id uuid, p_amount bigint, p_note text, p_actor_id uuid",
+            "security_definer": true
+          },
+          "observedAt": "2026-10-08T01:51:58.637Z"
+        }
+      ]
+    },
+    {
+      "name": "auth_leaked_password_protection",
+      "title": "Leaked Password Protection Disabled",
+      "level": "WARN",
+      "count": 1,
+      "remediation": "https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection",
+      "findings": [
+        {
+          "metadata": {
+            "type": "auth",
+            "entity": "Auth"
+          }
+        }
+      ]
+    }
+  ]
+}

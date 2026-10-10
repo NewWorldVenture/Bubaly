@@ -1,0 +1,763 @@
+{
+  "projectRef": "ltcxlbipiihclxwioyqj",
+  "observedAt": "2026-10-08T01:22:00Z",
+  "scope": "Read-only catalog; extracted money tables and command/role-aware policies. Timestamp approximate to minute.",
+  "tables": [
+    {
+      "rls": true,
+      "name": "allowance_rules"
+    },
+    {
+      "rls": true,
+      "name": "bills"
+    },
+    {
+      "rls": true,
+      "name": "budgets"
+    },
+    {
+      "rls": true,
+      "name": "child_wallets"
+    },
+    {
+      "rls": true,
+      "name": "family_wallets"
+    },
+    {
+      "rls": true,
+      "name": "financial_accounts"
+    },
+    {
+      "rls": true,
+      "name": "savings_goals"
+    },
+    {
+      "rls": true,
+      "name": "transactions"
+    },
+    {
+      "rls": true,
+      "name": "wallet_buckets"
+    },
+    {
+      "rls": true,
+      "name": "wallet_rules"
+    },
+    {
+      "rls": true,
+      "name": "wallet_transactions"
+    }
+  ],
+  "moneyWritePolicies": [
+    {
+      "name": "Members manage allowance_rules",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "allowance_rules",
+      "command": "ALL",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "Members can manage bills",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "bills",
+      "command": "ALL",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "bills_delete",
+      "roles": [
+        "public"
+      ],
+      "table": "bills",
+      "command": "DELETE",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "bills_insert",
+      "roles": [
+        "public"
+      ],
+      "table": "bills",
+      "command": "INSERT",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "bills_manager_delete_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "bills",
+      "command": "DELETE",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "bills_manager_insert_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "bills",
+      "command": "INSERT",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "bills_manager_update_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "bills",
+      "command": "UPDATE",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "bills_update",
+      "roles": [
+        "public"
+      ],
+      "table": "bills",
+      "command": "UPDATE",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "Members can manage budgets",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "budgets",
+      "command": "ALL",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "budgets_delete",
+      "roles": [
+        "public"
+      ],
+      "table": "budgets",
+      "command": "DELETE",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "budgets_insert",
+      "roles": [
+        "public"
+      ],
+      "table": "budgets",
+      "command": "INSERT",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "budgets_manager_delete_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "budgets",
+      "command": "DELETE",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "budgets_manager_insert_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "budgets",
+      "command": "INSERT",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "budgets_manager_update_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "budgets",
+      "command": "UPDATE",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "budgets_update",
+      "roles": [
+        "public"
+      ],
+      "table": "budgets",
+      "command": "UPDATE",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "Members manage child_wallets",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "child_wallets",
+      "command": "ALL",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "child_wallets_manager_delete_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "child_wallets",
+      "command": "DELETE",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "child_wallets_manager_insert_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "child_wallets",
+      "command": "INSERT",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "child_wallets_manager_update_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "child_wallets",
+      "command": "UPDATE",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "child_wallets_mng_delete",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "child_wallets",
+      "command": "DELETE",
+      "permissive": true,
+      "managerGated": true
+    },
+    {
+      "name": "child_wallets_mng_insert",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "child_wallets",
+      "command": "INSERT",
+      "permissive": true,
+      "managerGated": true
+    },
+    {
+      "name": "child_wallets_mng_update",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "child_wallets",
+      "command": "UPDATE",
+      "permissive": true,
+      "managerGated": true
+    },
+    {
+      "name": "Members manage family_wallets",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "family_wallets",
+      "command": "ALL",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "family_wallets_manager_delete_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "family_wallets",
+      "command": "DELETE",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "family_wallets_manager_insert_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "family_wallets",
+      "command": "INSERT",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "family_wallets_manager_update_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "family_wallets",
+      "command": "UPDATE",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "family_wallets_mng_delete",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "family_wallets",
+      "command": "DELETE",
+      "permissive": true,
+      "managerGated": true
+    },
+    {
+      "name": "family_wallets_mng_insert",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "family_wallets",
+      "command": "INSERT",
+      "permissive": true,
+      "managerGated": true
+    },
+    {
+      "name": "family_wallets_mng_update",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "family_wallets",
+      "command": "UPDATE",
+      "permissive": true,
+      "managerGated": true
+    },
+    {
+      "name": "Members can manage financial_accounts",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "financial_accounts",
+      "command": "ALL",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "financial_accounts_delete",
+      "roles": [
+        "public"
+      ],
+      "table": "financial_accounts",
+      "command": "DELETE",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "financial_accounts_insert",
+      "roles": [
+        "public"
+      ],
+      "table": "financial_accounts",
+      "command": "INSERT",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "financial_accounts_manager_delete_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "financial_accounts",
+      "command": "DELETE",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "financial_accounts_manager_insert_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "financial_accounts",
+      "command": "INSERT",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "financial_accounts_manager_update_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "financial_accounts",
+      "command": "UPDATE",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "financial_accounts_update",
+      "roles": [
+        "public"
+      ],
+      "table": "financial_accounts",
+      "command": "UPDATE",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "Members can manage savings_goals",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "savings_goals",
+      "command": "ALL",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "savings_goals_delete",
+      "roles": [
+        "public"
+      ],
+      "table": "savings_goals",
+      "command": "DELETE",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "savings_goals_insert",
+      "roles": [
+        "public"
+      ],
+      "table": "savings_goals",
+      "command": "INSERT",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "savings_goals_manager_delete_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "savings_goals",
+      "command": "DELETE",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "savings_goals_manager_insert_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "savings_goals",
+      "command": "INSERT",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "savings_goals_manager_update_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "savings_goals",
+      "command": "UPDATE",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "savings_goals_update",
+      "roles": [
+        "public"
+      ],
+      "table": "savings_goals",
+      "command": "UPDATE",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "Members can manage transactions",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "transactions",
+      "command": "ALL",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "transactions_delete",
+      "roles": [
+        "public"
+      ],
+      "table": "transactions",
+      "command": "DELETE",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "transactions_insert",
+      "roles": [
+        "public"
+      ],
+      "table": "transactions",
+      "command": "INSERT",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "transactions_manager_delete_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "transactions",
+      "command": "DELETE",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "transactions_manager_insert_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "transactions",
+      "command": "INSERT",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "transactions_manager_update_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "transactions",
+      "command": "UPDATE",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "transactions_update",
+      "roles": [
+        "public"
+      ],
+      "table": "transactions",
+      "command": "UPDATE",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "Members manage wallet_buckets",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "wallet_buckets",
+      "command": "ALL",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "wallet_buckets_manager_delete_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "wallet_buckets",
+      "command": "DELETE",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "wallet_buckets_manager_insert_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "wallet_buckets",
+      "command": "INSERT",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "wallet_buckets_manager_update_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "wallet_buckets",
+      "command": "UPDATE",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "wallet_buckets_mng_delete",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "wallet_buckets",
+      "command": "DELETE",
+      "permissive": true,
+      "managerGated": true
+    },
+    {
+      "name": "wallet_buckets_mng_insert",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "wallet_buckets",
+      "command": "INSERT",
+      "permissive": true,
+      "managerGated": true
+    },
+    {
+      "name": "wallet_buckets_mng_update",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "wallet_buckets",
+      "command": "UPDATE",
+      "permissive": true,
+      "managerGated": true
+    },
+    {
+      "name": "Members manage wallet_rules",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "wallet_rules",
+      "command": "ALL",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "wallet_rules_manager_delete_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "wallet_rules",
+      "command": "DELETE",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "wallet_rules_manager_insert_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "wallet_rules",
+      "command": "INSERT",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "wallet_rules_manager_update_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "wallet_rules",
+      "command": "UPDATE",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "wallet_rules_mng_delete",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "wallet_rules",
+      "command": "DELETE",
+      "permissive": true,
+      "managerGated": true
+    },
+    {
+      "name": "wallet_rules_mng_insert",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "wallet_rules",
+      "command": "INSERT",
+      "permissive": true,
+      "managerGated": true
+    },
+    {
+      "name": "wallet_rules_mng_update",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "wallet_rules",
+      "command": "UPDATE",
+      "permissive": true,
+      "managerGated": true
+    },
+    {
+      "name": "Members manage wallet_transactions",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "wallet_transactions",
+      "command": "ALL",
+      "permissive": true,
+      "managerGated": false
+    },
+    {
+      "name": "wallet_transactions_manager_delete_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "wallet_transactions",
+      "command": "DELETE",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "wallet_transactions_manager_insert_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "wallet_transactions",
+      "command": "INSERT",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "wallet_transactions_manager_update_guard",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "wallet_transactions",
+      "command": "UPDATE",
+      "permissive": false,
+      "managerGated": true
+    },
+    {
+      "name": "wallet_transactions_mng_delete",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "wallet_transactions",
+      "command": "DELETE",
+      "permissive": true,
+      "managerGated": true
+    },
+    {
+      "name": "wallet_transactions_mng_insert",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "wallet_transactions",
+      "command": "INSERT",
+      "permissive": true,
+      "managerGated": true
+    },
+    {
+      "name": "wallet_transactions_mng_update",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "wallet_transactions",
+      "command": "UPDATE",
+      "permissive": true,
+      "managerGated": true
+    }
+  ]
+}

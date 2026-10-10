@@ -1,5 +1,5 @@
-import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { at, between } from './helpers/source-order';
 
@@ -142,24 +142,59 @@ describe('onboarding ensures its trial subscription without failing over one tha
 
 const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' ')).replace(/^[^\S\n]*\/\/.*$/gm, '');
 
+function sourceFiles(dir: string, out: string[] = []): string[] {
+  for (const entry of readdirSync(dir)) {
+    if (entry === 'node_modules' || entry.startsWith('.')) continue;
+    const path = join(dir, entry);
+    if (statSync(path).isDirectory()) sourceFiles(path, out);
+    else if (/\.(ts|tsx)$/.test(entry)) out.push(path.replace(/\\/g, '/'));
+  }
+  return out;
+}
+
+// Match the original grep prefix exactly, including trailing comments/statements.
+const hasServerDirective = (source: string) => /^'use server'/m.test(source);
+
+function refusedReadMatches(source: string, creates: boolean): string[] {
+  const lines = strip(source).split('\n');
+  const found: string[] = [];
+  lines.forEach((line, i) => {
+    const match = line.match(/const \{ data: (\w+) \} = await/);
+    // auth.getUser() remains the verified fail-closed sign-in exception (C1-S9-42).
+    if (!match || match[1] === 'auth') return;
+    const window = lines.slice(creates ? i : i + 1, i + 14).join('\n');
+    if (creates
+      ? /\.(insert|upsert)\(/.test(window) && new RegExp(`if \\(!(${match[1]}|\\w+Id)\\b`).test(window)
+      : new RegExp(`if \\(!${match[1]}\\b`).test(window)) found.push(match[1]);
+  });
+  return found;
+}
+
 describe('the class is closed with two ratchets (C1-S9-75)', () => {
+  it('detects forbidden reads and preserves the server directive prefix scope', () => {
+    expect(hasServerDirective("'use server';\r\nexport async function action() {}")).toBe(true);
+    expect(hasServerDirective("'use server'; // action module\nexport async function action() {}")).toBe(true);
+    expect(hasServerDirective("'use server'; export async function action() {}")).toBe(true);
+    expect(hasServerDirective("// 'use server'\nconst text = 'use server';")).toBe(false);
+    expect(refusedReadMatches("const { data: row } = await db.select();\nif (!row) return 'not found';", false)).toEqual(['row']);
+    expect(refusedReadMatches("const { data: row } = await db.select();\nif (!row) await db.insert({});", true)).toEqual(['row']);
+    expect(refusedReadMatches("const { data: row, error } = await db.select();\nif (!row) await db.insert({});", true)).toEqual([]);
+  });
   it('no server action answers "not found" from a read that bound only `data`', () => {
-    const files = execSync("grep -rl \"^'use server'\" app lib --include=*.ts --include=*.tsx", { encoding: 'utf8' }).trim().split('\n');
+    const files = [...sourceFiles('app'), ...sourceFiles('lib')].filter(file => hasServerDirective(readFileSync(file, 'utf8')));
+    expect(files.length).toBeGreaterThan(0);
+    expect(files).toContain('app/(app)/dashboard/moment-actions.ts');
     const found: string[] = [];
     for (const f of files) {
-      const lines = strip(readFileSync(f, 'utf8')).split('\n');
-      lines.forEach((l, i) => {
-        const m = l.match(/const \{ data: (\w+) \} = await/);
-        if (!m || m[1] === 'auth') return; // auth.getUser(): verified fail-closed under C1-S9-42
-        const window = lines.slice(i + 1, i + 14).join('\n');
-        if (new RegExp(`if \\(!${m[1]}\\b`).test(window)) found.push(`${f}::${m[1]}`);
-      });
+      for (const name of refusedReadMatches(readFileSync(f, 'utf8'), false)) found.push(`${f}::${name}`);
     }
     expect(found, 'bind the error and say "could not", not "not found"').toEqual([]);
   });
 
   it('no get-or-create in app/ or lib/ creates on a read that bound only `data`', () => {
-    const files = execSync("git ls-files 'app/**/*.ts' 'app/**/*.tsx' 'lib/**/*.ts'", { encoding: 'utf8' }).trim().split('\n');
+    const files = [...sourceFiles('app'), ...sourceFiles('lib')];
+    expect(files.length).toBeGreaterThan(0);
+    expect(files).toContain('app/api/ab/track/route.ts');
     const accepted = new Set([
       // Analytics beacon, triaged under C1-S9-37: a failed experiment lookup
       // answers `{ recorded: false }`, which is true. Its insert is the event,
@@ -168,13 +203,7 @@ describe('the class is closed with two ratchets (C1-S9-75)', () => {
     ]);
     const found: string[] = [];
     for (const f of files) {
-      const lines = strip(readFileSync(f, 'utf8')).split('\n');
-      lines.forEach((l, i) => {
-        const m = l.match(/const \{ data: (\w+) \} = await/);
-        if (!m || m[1] === 'auth') return; // auth.getUser(): a sign-in check, not a get-or-create (C1-S9-42)
-        const window = lines.slice(i, i + 14).join('\n');
-        if (/\.(insert|upsert)\(/.test(window) && new RegExp(`if \\(!(${m[1]}|\\w+Id)\\b`).test(window)) found.push(`${f}::${m[1]}`);
-      });
+      for (const name of refusedReadMatches(readFileSync(f, 'utf8'), true)) found.push(`${f}::${name}`);
     }
     expect(found.filter((k) => !accepted.has(k)).sort(), 'bind the read error before creating').toEqual([]);
     expect([...accepted].filter((k) => !found.includes(k)), 'an accepted entry that no longer occurs').toEqual([]);

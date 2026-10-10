@@ -133,11 +133,30 @@ describe('each page renders through the formatter bound to the family\'s zone', 
   it('home: the Coming Up badge, a due day and a photo day', () => {
     const src = code('app/(app)/home/page.tsx');
     expect(src).toContain("const { fmtTime, fmtDate, fmtMoney } = createFormat(locale.code, (key, params) => translate(catalogue, key, params), tz);");
-    expect(src).toContain("fmtDate(e.starts_at, 'MMM')");
-    expect(src).toContain("fmtDate(e.starts_at, 'd')");
+    expect(src).toContain("fmtDate(e.all_day ? e.displayDay : e.displayStartsAt, 'MMM')");
+    expect(src).toContain("fmtDate(e.all_day ? e.displayDay : e.displayStartsAt, 'd')");
     expect(src, 'the badge day number read the host\'s calendar').not.toContain('d.getDate()');
     expect(src).toContain("fmtDate(t.due_date, 'MMM d')");
     expect(src).toContain("fmtDate(p.taken_at || p.created_at, 'MMM d')");
+  });
+  it('home: the actual badge expression keeps a civil DATE and dates a clipped instant in the family zone', () => {
+    const src = code('app/(app)/home/page.tsx');
+    // Extract the expression the page renders, rather than a second copy of
+    // its conditional. Either an all-day or timed regression must fail.
+    const expressions = ['MMM', 'd'].map((pattern) => {
+      const expression = src.match(new RegExp(`\\{(fmtDate\\(e\\.all_day \\? e\\.displayDay : e\\.displayStartsAt, '${pattern}'\\))\\}`))?.[1];
+      expect(expression, `actual ${pattern} badge expression`).toBeTruthy();
+      return new Function('e', 'fmtDate', `return ${expression};`) as (
+        event: { all_day: boolean; displayDay: string; displayStartsAt: string },
+        fmtDate: ReturnType<typeof createFormat>['fmtDate'],
+      ) => string;
+    });
+    const event = { all_day: false, displayDay: '2026-10-05', displayStartsAt: '2026-10-05T02:00:00.000Z' };
+    const badge = (allDay: boolean, zone: string) => expressions.map((render) => render({ ...event, all_day: allDay }, createFormat('en-US', undefined, zone).fmtDate));
+    expect(badge(false, LA)).toEqual(['Oct', '4']);
+    expect(badge(false, 'Pacific/Kiritimati')).toEqual(['Oct', '5']);
+    expect(badge(true, LA)).toEqual(['Oct', '5']);
+    expect(badge(true, 'Pacific/Kiritimati')).toEqual(['Oct', '5']);
   });
   it('conflicts: both ends and the same-day decision', () => {
     const src = code('app/(app)/dashboard/conflicts/page.tsx');
@@ -174,12 +193,10 @@ describe('each page renders through the formatter bound to the family\'s zone', 
 });
 
 // ── The ratchet ─────────────────────────────────────────────────────────────
-// Server files (no 'use client') under the family-facing app tree and the email
-// templates. The admin tree is excluded ON PURPOSE and for now: its ~8 sites are
-// the next unit, and the case at the end fails the moment that exclusion stops
-// excluding anything, so it cannot outlive its reason.
+// Server files (no 'use client') under the whole app tree — the admin pages
+// included, which answer in an explicit zone (lib/admin/clock.ts) — and the
+// email templates.
 const ROOTS = ['app/(app)', 'lib/emails'];
-const EXCLUDED = ['app/(app)/admin'];
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -223,17 +240,16 @@ function hostZoneRenders(src: string, label = ''): string[] {
   return out;
 }
 
-const serverFiles = ROOTS.flatMap((root) => walk(join(ROOT, root)))
+const inScope = ROOTS.flatMap((root) => walk(join(ROOT, root)))
   .map((f) => f.slice(ROOT.length + 1).split('\\').join('/'))
   .filter((rel) => !/^\s*['"]use client['"]/m.test(read(rel)));
-const inScope = serverFiles.filter((rel) => !EXCLUDED.some((ex) => rel.startsWith(`${ex}/`)));
-const excluded = serverFiles.filter((rel) => EXCLUDED.some((ex) => rel.startsWith(`${ex}/`)));
 
 describe('no family-facing server page or email renders a date in the host\'s zone', () => {
   it('finds the server files (a scan that finds none proves nothing)', () => {
     expect(inScope.length).toBeGreaterThan(100);
     expect(inScope).toContain('app/(app)/home/page.tsx');
     expect(inScope).toContain('lib/emails/weekly-digest.tsx');
+    expect(inScope).toContain('app/(app)/admin/reports/page.tsx');
     expect(inScope.some((f) => f.endsWith('-actions.ts'))).toBe(true);
   });
   it('recognises every shape it claims to, and nothing it does not', () => {
@@ -261,9 +277,5 @@ describe('no family-facing server page or email renders a date in the host\'s zo
   it('every Date render in scope names a timeZone or goes through the bound formatter', () => {
     const offenders = inScope.flatMap((rel) => hostZoneRenders(stripComments(read(rel)), `${rel}:`));
     expect(offenders, 'bind getFormat(tz) / createFormat(…, tz) and use fmtDate, or pass timeZone: tz (an explicit UTC for a DATE-only value)').toEqual([]);
-  });
-  it('the admin tree is excluded on purpose, and the exclusion still excludes something — delete both when its unit lands', () => {
-    const offenders = excluded.flatMap((rel) => hostZoneRenders(stripComments(read(rel)), `${rel}:`));
-    expect(offenders.length).toBeGreaterThan(0);
   });
 });

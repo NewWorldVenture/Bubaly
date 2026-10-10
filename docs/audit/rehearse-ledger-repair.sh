@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
-# ── Rehearse the LB-016 §4 ledger repair against production's actual condition ─
+# ── Legacy full-schema migration replay stress (not current production state) ──
 #
-# LB-016 §4.1 rests on one claim:
+# This is a historical replay stress scenario associated with LB-016 §4.1:
 #
-#   "the ledger does not need to be *told* what is applied; it repairs itself by
-#    letting `supabase db push` run from 0004, where the already-applied
-#    migrations no-op and the genuinely missing ones land."
+#   a full synthetic schema carries a deliberately reset 0001-0003 ledger and
+#   each later migration is replayed to find non-idempotent migrations.
 #
-# That claim has never been tested. It is the whole basis of the repair, it is
-# executed against production in a maintenance window, and if it is wrong the
-# operator discovers that mid-window with the app down.
+# It tests replay behavior only. It does not describe the linked production
+# ledger or authorize a production replay. The linked audit in run 84
+# (2026-10-02) recorded versions 0001-0176.
 #
-# This rehearses it. It reproduces production's condition exactly — a database
-# carrying the FULL schema but a ledger holding only 0001-0003 — and then
-# replays every migration from 0004 the way `supabase db push` does: in version
-# order, each in its own transaction, recording a ledger row for each success.
+# This retains that historical recovery scenario as a generic idempotency stress
+# test: a database carrying the FULL schema with its ledger reset to 0001-0003.
+# It is not the current production history. The linked audit in run 84 (2026-10-02)
+# recorded 0001-0176; a normal forward push from that ledger does not replay 0004.
+# The stress test still replays each later migration in version order, in its own
+# transaction, and records a ledger row for each success.
 #
 # It answers three questions with evidence rather than assertion:
 #   1. Does every already-applied migration genuinely no-op?
@@ -27,7 +28,7 @@
 # CI runs it as the last step of the Database job, against that job's own
 # service container, so every pull request re-proves the repair still works.
 #
-#   bash docs/audit/verify-pg.sh up          # full schema, as production has
+#   bash docs/audit/verify-pg.sh up          # full synthetic schema fixture
 #   bash docs/audit/rehearse-ledger-repair.sh
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -68,9 +69,9 @@ if ! psql -tAc 'select 1' >/dev/null 2>&1; then
 fi
 
 tables_before=$(psql -tAc "select count(*) from information_schema.tables where table_schema='public';")
-echo "== harness carries $tables_before public tables (production's condition: schema ahead of ledger) =="
+echo "== harness carries $tables_before public tables (full-schema replay stress) =="
 
-# ── Production's condition: the full schema, a ledger holding only 0001-0003 ──
+# ── Legacy stress condition: full schema, ledger reset to 0001-0003 ───────────
 psql -q <<'SQL'
 create schema if not exists supabase_migrations;
 drop table if exists supabase_migrations.schema_migrations;
@@ -81,7 +82,7 @@ create table supabase_migrations.schema_migrations (
 );
 insert into supabase_migrations.schema_migrations (version) values ('0001'), ('0002'), ('0003');
 SQL
-echo "== ledger seeded with 0001-0003 only, exactly as production reports =="
+echo "== ledger reset to 0001-0003 for legacy replay stress (not current production history) =="
 echo
 
 # ── Replay from 0004, the way `supabase db push` does ────────────────────────

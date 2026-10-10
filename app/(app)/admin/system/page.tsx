@@ -11,6 +11,8 @@ import { checkDatabase, checkStorage, checkAuth, checkStripe, checkEmail, type H
 import { PLANS } from '@/lib/constants/plans';
 import { fmtMoney } from '@/lib/utils/format';
 import { getTranslations } from '@/lib/i18n/server';
+import { getFormat } from '@/lib/utils/format-server';
+import { ADMIN_ZONE } from '@/lib/admin/clock';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -43,6 +45,9 @@ function HealthRow({ check }: { check: HealthCheck }) {
 
 export default async function AdminSystemPage() {
   const t = await getTranslations();
+  // "Checked at" names its zone; a bare `toLocaleString()` was the host's zone
+  // in the host's locale, and an operator could not tell which.
+  const { fmtDate } = await getFormat(ADMIN_ZONE);
   const supabase = createServiceClient();
 
   const [
@@ -105,7 +110,7 @@ export default async function AdminSystemPage() {
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminSystem.systemOverview')}</h1>
           <p className="mt-1 text-sm text-muted">{t('adminSystem.liveConnectivityChecksAndRealUsage')}</p>
         </div>
-        <span className="text-xs text-muted">{t('adminSystem.checked')} {new Date().toLocaleString()}</span>
+        <span className="text-xs text-muted">{t('adminSystem.checked')} {fmtDate(new Date(), 'MMM d, yyyy h:mm:ss a z')}</span>
       </div>
 
       <div className="grid-stats">

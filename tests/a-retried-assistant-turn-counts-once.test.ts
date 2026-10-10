@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
 // F19, owner review 5393250792 on #788: a retried or accidentally repeated
@@ -54,10 +54,17 @@ class Query {
   private op: 'select' | 'insert' | 'update' | 'upsert' = 'select';
   private payload: unknown = null;
   private head = false;
+  private counted = false;
   private ordered: { col: string; asc: boolean } | null = null;
   private max: number | null = null;
   constructor(private readonly name: string) {}
-  select(_cols?: string, opts?: { head?: boolean }) { if (this.op === 'select') this.head = Boolean(opts?.head); return this; }
+  // A requested exact count is answered for every select, not only a head-only
+  // one: the calendar read (lib/calendar/occurrences) refuses a window whose
+  // one-off count it cannot see, as PostgREST would give it.
+  select(_cols?: string, opts?: { head?: boolean; count?: 'exact' }) {
+    if (this.op === 'select') { this.head = Boolean(opts?.head); this.counted = opts?.count === 'exact'; }
+    return this;
+  }
   insert(rows: Row | Row[]) { this.op = 'insert'; this.payload = Array.isArray(rows) ? rows : [rows]; return this; }
   upsert(rows: Row | Row[]) { this.op = 'upsert'; this.payload = Array.isArray(rows) ? rows : [rows]; return this; }
   update(patch: Row) { this.op = 'update'; this.payload = patch; return this; }
@@ -119,16 +126,27 @@ class Query {
       return { data: hit, error: null };
     }
     if (this.head) return { data: null, error: null, count: hit.length };
+    const total = hit.length;
     if (this.ordered) {
       const { col, asc } = this.ordered;
       hit = [...hit].sort((a, b) => (String(a[col]) < String(b[col]) ? -1 : String(a[col]) > String(b[col]) ? 1 : 0) * (asc ? 1 : -1));
     }
     if (this.max !== null) hit = hit.slice(0, this.max);
-    return { data: hit, error: null };
+    return this.counted ? { data: hit, error: null, count: total } : { data: hit, error: null };
   }
 }
 
-const db = { from: (name: string) => new Query(name), auth: { getUser: async () => ({ data: { user: state.user } }) } };
+const db = {
+  from: (name: string) => new Query(name),
+  // The monthly allowance counts through main's count-only RPC
+  // (supabase/reserved/0493): the family's ai_requests rows in the UTC month.
+  rpc: async (name: string, args: Record<string, unknown>) => {
+    if (name !== 'count_family_ai_requests_month') return { data: null, error: { message: `no fake for ${name}` } };
+    const start = String(args.p_month_start);
+    return { data: tableOf('ai_requests').filter((r) => r.family_id === args.p_family_id && String(r.created_at) >= start).length, error: null };
+  },
+  auth: { getUser: async () => ({ data: { user: state.user } }) },
+};
 
 const ctx = () => ({
   user: state.user,
@@ -247,6 +265,14 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => { vi.restoreAllMocks(); });
+
+// Both routes' module graphs are loaded once, outside any one test's timeout: a
+// cold transform of /api/ai took most of the first test's 20 s on its own, and a
+// request still running when that test timed out wrote into the next one's table.
+beforeAll(async () => {
+  await import('@/app/api/ai/route');
+  await import('@/app/api/ai/chat/route');
+}, 120_000);
 
 describe('a retried assistant send is one turn', () => {
   it('the retry of the turn that reached 10 of 10 replays its answer; it is not refused, counted or re-run', async () => {

@@ -1254,7 +1254,10 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
         // The run acts with the requester's role as it is NOW, so a demotion
         // between invocations takes effect on the very next slice.
         role: actor.data.role ?? 'system',
-        actorKind: 'ai',
+        // A validated ownerless routine is a system actor. Member-owned runs
+        // remain AI acting for the requester checked above.
+        actorKind: actor.data.memberId === null && actor.data.userId === null && actor.data.role === null
+          ? 'system' : 'ai',
         tz: actor.data.timezone,
         runId: run.id,
         requestId: run.request_id,

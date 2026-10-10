@@ -4,7 +4,7 @@
 // Three modes: (A) provider not configured → explicit unavailable state, (B) setup
 // needed → guided 3-step onboarding wizard, (C) live → manage per-child cards
 // with instant freeze, spend controls, and physical-card ordering.
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   CreditCard, ShieldCheck, Snowflake, Sparkles, Loader2, SlidersHorizontal,
@@ -29,6 +29,7 @@ import {
 import { CardRevealModal } from '@/components/wallet/card-reveal-modal';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { currencyUnit } from '@/lib/marketplace/listings';
+import { useApp } from '@/components/app/app-context';
 
 export type CardChild = { id: string; name: string; color: string | null };
 export type IssuedCard = {
@@ -37,6 +38,42 @@ export type IssuedCard = {
   spendLimitCents: number | null; spendWindow: string; blockedCategories: string[];
 };
 type Caps = { connectOnboarding: boolean; issuing: boolean; physicalCards: boolean };
+
+// Pending card operations, held outside any one mounted view. A view left and
+// re-entered before its request answered used to start with no claims and the
+// same stale props, so a second freeze or a second card order went out while
+// the first was still in flight. Claims now live here under their owner: the
+// signed-in actor and the active family the page was rendered for (useApp(),
+// fixed for the life of a mount; another account or family remounts the app
+// with its own identity). The same person returning to the same family sees the
+// operation still pending; another account or family never does. Without that
+// identity a mounted view keeps a private owner, the old per-view behaviour. A
+// claim is released under the owner that made it, when its request settles,
+// mounted or not. Audit JIMMY-SUPPORT-CARD-RETRY-20261001 (A).
+const NO_PENDING: ReadonlySet<string> = new Set();
+const pendingByOwner = new Map<string, ReadonlySet<string>>();
+const pendingListeners = new Set<() => void>();
+let privateOwners = 0;
+
+function subscribePending(listener: () => void) {
+  pendingListeners.add(listener);
+  return () => { pendingListeners.delete(listener); };
+}
+
+function pendingFor(owner: string): ReadonlySet<string> {
+  return pendingByOwner.get(owner) ?? NO_PENDING;
+}
+
+function setPending(owner: string, keys: ReadonlySet<string>) {
+  if (keys.size > 0) pendingByOwner.set(owner, keys);
+  else pendingByOwner.delete(owner);
+  for (const listener of [...pendingListeners]) listener();
+}
+
+/** The signed-in actor and family that own a claim, or null when either is unknown. */
+function pendingOwner(userId: string | null | undefined, familyId: string | null | undefined): string | null {
+  return userId && familyId ? JSON.stringify([userId, familyId]) : null;
+}
 
 export function MoneyCardsView({
   capabilities, accountReady, onboardingStarted, justCompletedSetup,
@@ -50,8 +87,13 @@ export function MoneyCardsView({
   const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
-  const [busy, setBusy] = useState<ReadonlySet<string>>(() => new Set());
-  const busyRef = useRef(new Set<string>());
+  const [privateOwner] = useState(() => `view:${++privateOwners}`);
+  const { userId, familyId } = useApp();
+  const owner = pendingOwner(userId, familyId) ?? privateOwner;
+  const busy = useSyncExternalStore(subscribePending, () => pendingFor(owner), () => NO_PENDING);
+  // Keys this mounted view claimed itself; its own handlers reconcile those.
+  const claimedHere = useRef(new Set<string>());
+  const seenPending = useRef<ReadonlySet<string>>(busy);
   const [expanded, setExpanded] = useState<{ cardId: string; instance: number } | null>(null);
   const [orderingCard, setOrderingCard] = useState<{ child: CardChild; instance: number } | null>(null);
   const controlsInstance = useRef(0);
@@ -64,6 +106,17 @@ export function MoneyCardsView({
     formsMounted.current = true;
     return () => { formsMounted.current = false; };
   }, []);
+
+  // A claim this view inherited (left by a view that was unmounted while its
+  // request ran) has settled. The unmounted form presents nothing, and the
+  // props here predate the change, so re-read before the control is used again.
+  useEffect(() => {
+    const released = [...seenPending.current].filter((key) => !busy.has(key));
+    seenPending.current = busy;
+    const inherited = released.filter((key) => !claimedHere.current.has(key));
+    for (const key of released) claimedHere.current.delete(key);
+    if (inherited.length > 0) router.refresh();
+  }, [busy, router]);
 
   function closeOrder() {
     orderInstance.current += 1;
@@ -90,12 +143,18 @@ export function MoneyCardsView({
   function claimPending(keys: string[]) {
     // Claim synchronously: a retained callback can run again before React has
     // committed disabled buttons. Independent operations keep their own keys.
-    if (keys.some((key) => busyRef.current.has(key))) return null;
-    for (const key of keys) busyRef.current.add(key);
-    setBusy(new Set(busyRef.current));
+    const claimedBy = owner;
+    const held = pendingFor(claimedBy);
+    if (keys.some((key) => held.has(key))) return null;
+    for (const key of keys) claimedHere.current.add(key);
+    setPending(claimedBy, new Set([...held, ...keys]));
+    let released = false;
     return () => {
-      for (const key of keys) busyRef.current.delete(key);
-      setBusy(new Set(busyRef.current));
+      if (released) return;
+      released = true;
+      const remaining = new Set(pendingFor(claimedBy));
+      for (const key of keys) remaining.delete(key);
+      setPending(claimedBy, remaining);
     };
   }
 

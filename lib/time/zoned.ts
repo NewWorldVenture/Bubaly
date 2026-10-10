@@ -18,6 +18,16 @@
 export type LocalParts = { year: number; month: number; day: number; hour: number; minute: number };
 
 export const MINUTES_PER_DAY = 24 * 60;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Date.UTC treats years00–99 as1900–1999. Preserve the supplied Gregorian
+ * year while retaining the same calendar overflow behavior for days/minutes. */
+function utcMilliseconds(year: number, monthIndex: number, day: number, hour = 0, minute = 0): number {
+  const date = new Date(0);
+  date.setUTCFullYear(year, monthIndex, day);
+  date.setUTCHours(hour, minute, 0, 0);
+  return date.getTime();
+}
 
 export function isValidTimezone(timezone: string): boolean {
   try {
@@ -34,19 +44,25 @@ function formatterFor(timezone: string): Intl.DateTimeFormat {
   if (!dtf) {
     dtf = new Intl.DateTimeFormat('en-US', {
       timeZone: timezone, hour12: false,
-      year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+      era: 'short', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
     });
     partsCache.set(timezone, dtf);
   }
   return dtf;
 }
 
-/** The wall-clock reading an observer in `timezone` sees at `instant`. */
-export function localPartsAt(instant: Date, timezone: string): LocalParts {
+function formattedPartsAt(instant: Date, timezone: string): Record<string, string> {
   const parts: Record<string, string> = {};
   for (const part of formatterFor(timezone).formatToParts(instant)) parts[part.type] = part.value;
+  return parts;
+}
+
+/** The wall-clock reading an observer in `timezone` sees at `instant`. */
+export function localPartsAt(instant: Date, timezone: string): LocalParts {
+  const parts = formattedPartsAt(instant, timezone);
   return {
-    year: Number(parts.year),
+    // Intl numbers BC years from one; Date uses astronomical year zero.
+    year: parts.era === 'BC' ? 1 - Number(parts.year) : Number(parts.year),
     month: Number(parts.month),
     day: Number(parts.day),
     // 'en-US' with hour12:false renders midnight as 24 in some ICU versions.
@@ -73,16 +89,25 @@ export function dayKeyIn(instant: Date, timezone: string): string {
   try {
     const p = localPartsAt(instant, timezone);
     const pad = (n: number) => String(n).padStart(2, '0');
-    return `${p.year}-${pad(p.month)}-${pad(p.day)}`;
+    return `${String(p.year).padStart(4, '0')}-${pad(p.month)}-${pad(p.day)}`;
   } catch {
     return instant.toISOString().slice(0, 10);
   }
 }
 
+/** Internal exact civil clock; public LocalParts intentionally stays minute-only. */
+function wallMillisecondsAt(instant: Date, timezone: string): number {
+  const parts = formattedPartsAt(instant, timezone);
+  const year = parts.era === 'BC' ? 1 - Number(parts.year) : Number(parts.year);
+  const wall = new Date(0);
+  wall.setUTCFullYear(year, Number(parts.month) - 1, Number(parts.day));
+  wall.setUTCHours(Number(parts.hour) % 24, Number(parts.minute), Number(parts.second), instant.getUTCMilliseconds());
+  return wall.getTime();
+}
+
 /** Zone offset in ms at a given instant (positive east of UTC). */
 function offsetMsAt(instant: Date, timezone: string): number {
-  const p = localPartsAt(instant, timezone);
-  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute) - instant.getTime();
+  return wallMillisecondsAt(instant, timezone) - instant.getTime();
 }
 
 /**
@@ -101,13 +126,13 @@ export function zonedLocalToInstant(
 ): Date | null {
   const hour = Math.floor(minutes / 60);
   const minute = minutes % 60;
-  const naive = Date.UTC(year, month - 1, day, hour, minute);
+  const naive = utcMilliseconds(year, month - 1, day, hour, minute);
   let ts = naive - offsetMsAt(new Date(naive), timezone);
   ts = naive - offsetMsAt(new Date(ts), timezone);
   const check = localPartsAt(new Date(ts), timezone);
   const matches = check.year === year && check.month === month && check.day === day
     && check.hour === hour && check.minute === minute;
-  return matches ? new Date(ts) : null;
+  return matches && wallMillisecondsAt(new Date(ts), timezone) === naive ? new Date(ts) : null;
 }
 
 /**
@@ -128,9 +153,54 @@ export function instantForLocalTime(
   return null;
 }
 
+/**
+ * The instant for a local time as RFC 5545 §3.3.5 reads it — the rule for a
+ * calendar's DATE-TIME with a TZID, and so for anything stepped on a calendar's
+ * wall clock (a recurring event's next occurrence).
+ *
+ *   - A reading the zone shows TWICE (the hour repeated when the clocks go
+ *     back) is the FIRST of the two instants: TZID=Europe/London:20261025T013000
+ *     is 00:30Z (01:30 BST), not 01:30Z (01:30 GMT); America/New_York
+ *     2026-11-01 01:30 is 05:30Z (EDT).
+ *   - A reading the zone SKIPS (the hour lost when the clocks go forward) is
+ *     interpreted with the UTC offset in force BEFORE the gap:
+ *     TZID=America/Chicago:20260308T023000 is 08:30Z (02:30 at CST's -6, which
+ *     the clock shows as 03:30 CDT), not 08:00Z; Australia/Sydney 2026-10-04
+ *     02:30 is 16:30Z on the 3rd (02:30 at AEST's +10, shown as 03:30 AEDT).
+ *
+ * That is NOT what `instantForLocalTime` does, deliberately: an ad or a daily
+ * routine set for 02:30 posts at 03:00, the first minute that exists. A
+ * calendar event published at 02:30 keeps its duration and its distance from
+ * the rest of the night, as every RFC 5545 reader does. Both live here so the
+ * two rules are named apart rather than one standing in for the other.
+ *
+ * The offsets in force within two days either side of the reading are the
+ * candidates (that covers half-hour zones and date-line changes); a reading
+ * one or more of them produce exactly is the earliest such instant, and a
+ * reading none produces is a gap, resolved with the offset of the latest
+ * candidate that reads before it. Null only for a reading no zone rule can
+ * place (an unusable zone throws, as `localPartsAt` does).
+ */
+export function instantForIcsLocalTime(
+  year: number, month: number, day: number, minutes: number, timezone: string,
+): Date | null {
+  const wall = utcMilliseconds(year, month - 1, day, Math.floor(minutes / 60), minutes % 60);
+  if (!Number.isFinite(wall)) return null;
+  const reads = (instant: number) => wallMillisecondsAt(new Date(instant), timezone);
+  const offsets = new Set([-2, -1, 0, 1, 2].map((days) => offsetMsAt(new Date(wall + days * DAY_MS), timezone)));
+  const candidates = [...offsets].map((offset) => wall - offset).sort((a, b) => a - b);
+  const exact = candidates.find((instant) => reads(instant) === wall);
+  if (exact !== undefined) return new Date(exact);
+  // A gap: the latest candidate that still reads before the requested time is
+  // on the near side of it, and its offset is the one in force before the gap.
+  const before = candidates.filter((instant) => reads(instant) < wall).at(-1);
+  if (before === undefined) return instantForLocalTime(year, month, day, minutes, timezone);
+  return new Date(wall - offsetMsAt(new Date(before), timezone));
+}
+
 /** Days in a month, so "the 31st" means the 28th/29th/30th where that is the end. */
 export function daysInMonth(year: number, month: number): number {
-  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return new Date(utcMilliseconds(year, month, 0)).getUTCDate();
 }
 
 /**
@@ -160,12 +230,15 @@ export function daysInMonth(year: number, month: number): number {
  */
 export function asWallClockUtc(instant: Date, timezone: string): Date {
   const p = localPartsAt(instant, timezone);
-  return new Date(Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, 0, 0));
+  return new Date(utcMilliseconds(p.year, p.month - 1, p.day, p.hour, p.minute));
 }
 
 export function asWallClockIn(instant: Date, timezone: string): Date {
   const p = localPartsAt(instant, timezone);
-  return new Date(p.year, p.month - 1, p.day, p.hour, p.minute, 0, 0);
+  const date = new Date(0);
+  date.setFullYear(p.year, p.month - 1, p.day);
+  date.setHours(p.hour, p.minute, 0, 0);
+  return date;
 }
 
 /**
@@ -214,7 +287,7 @@ export function startOfLocalDay(instant: Date, timezone: string): Date {
 export function startOfNextLocalDay(instant: Date, timezone: string): Date {
   try {
     const p = localPartsAt(instant, timezone);
-    const nextDay = new Date(Date.UTC(p.year, p.month - 1, p.day + 1));
+    const nextDay = new Date(utcMilliseconds(p.year, p.month - 1, p.day + 1));
     const next = instantForLocalTime(
       nextDay.getUTCFullYear(), nextDay.getUTCMonth() + 1, nextDay.getUTCDate(), 0, timezone,
     );

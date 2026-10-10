@@ -12,6 +12,7 @@
 // Amounts are DOLLARS (numeric), matching the finance tables (see hub.ts).
 
 import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+import { BillScheduleConfirmationRequired, billAnchorDay, billCadence, MONTH_BASED_CADENCES } from './bill-schedule';
 
 export interface TimelineBill {
   name: string;
@@ -23,6 +24,7 @@ export interface TimelineBill {
   category: string | null;
   /** The money leaves on its own — the bill is covered, nothing to do. */
   autopay?: boolean;
+  due_day?: number | null;
 }
 
 export interface TimelineGoal {
@@ -175,17 +177,20 @@ export function isoWeekStart(d: Date): string {
   return ymd(t);
 }
 
-function addMonthsUTC(d: Date, n: number): Date {
+function addMonthsUTC(d: Date, n: number, anchorDay: number): Date {
   const t = new Date(d.getTime());
   const targetMonth = t.getUTCMonth() + n;
+  t.setUTCDate(1);
   t.setUTCMonth(targetMonth);
+  const lastDay = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
+  t.setUTCDate(Math.min(anchorDay, lastDay));
   return t;
 }
 
 const RECURRENCE_STEP_DAYS: Record<string, number> = { weekly: 7, biweekly: 14, fortnightly: 14 };
 
 /** The dates a (possibly recurring) commitment lands on inside [now, horizonEnd]. */
-function expandDates(first: Date, recurrence: string | null | undefined, now: Date, horizonEnd: Date): string[] {
+function expandDates(first: Date, recurrence: string | null | undefined, now: Date, horizonEnd: Date, anchorDay = first.getUTCDate()): string[] {
   const out: string[] = [];
 
   if (!recurrence) {
@@ -217,16 +222,16 @@ function expandDates(first: Date, recurrence: string | null | undefined, now: Da
       const per = monthly ? 1 : quarterly ? 3 : 12;
       const months = (from.getUTCFullYear() - cursor.getUTCFullYear()) * 12 + (from.getUTCMonth() - cursor.getUTCMonth());
       const steps = Math.floor(months / per);
-      if (steps > 0) cursor = addMonthsUTC(cursor, steps * per);
+      if (steps > 0) cursor = addMonthsUTC(cursor, steps * per, anchorDay);
     }
   }
 
   let guard = 0;
   while (cursor <= horizonEnd && guard++ < 400) {
     if (cursor >= startOfDay(now)) out.push(ymd(cursor));
-    if (monthly) cursor = addMonthsUTC(cursor, 1);
-    else if (quarterly) cursor = addMonthsUTC(cursor, 3);
-    else if (yearly) cursor = addMonthsUTC(cursor, 12);
+    if (monthly) cursor = addMonthsUTC(cursor, 1, anchorDay);
+    else if (quarterly) cursor = addMonthsUTC(cursor, 3, anchorDay);
+    else if (yearly) cursor = addMonthsUTC(cursor, 12, anchorDay);
     else if (stepDays) cursor = new Date(cursor.getTime() + stepDays * DAY);
     else break; // unknown cadence → treat as single
   }
@@ -235,7 +240,11 @@ function expandDates(first: Date, recurrence: string | null | undefined, now: Da
 
 /** Expand a recurring bill's occurrences within [now, horizonEnd]. */
 function expandOccurrences(bill: TimelineBill, now: Date, horizonEnd: Date): string[] {
-  return expandDates(parseDate(bill.due_date), bill.is_recurring ? bill.recurrence : null, now, horizonEnd);
+  const cadence = billCadence(bill);
+  if (bill.is_recurring && !cadence) throw new BillScheduleConfirmationRequired();
+  const day = cadence && MONTH_BASED_CADENCES.has(cadence) ? billAnchorDay({ ...bill, due_date: bill.due_date.slice(0, 10) }) : null;
+  if (cadence && MONTH_BASED_CADENCES.has(cadence) && day === null) throw new BillScheduleConfirmationRequired('Confirm the recurring bill day of month before building the forecast.');
+  return expandDates(parseDate(bill.due_date), cadence, now, horizonEnd, day ?? undefined);
 }
 
 function startOfDay(d: Date): Date {
@@ -248,8 +257,8 @@ function round2(n: number): number {
 
 /** Approx monthly cost of a recurring bill (0 for one-offs). */
 export function monthlyEquivalent(bill: TimelineBill): number {
-  if (!bill.is_recurring || !bill.recurrence) return 0;
-  return monthlyEquivalentOf(bill.amount, bill.recurrence);
+  const cadence = billCadence(bill);
+  return cadence ? monthlyEquivalentOf(bill.amount, cadence) : 0;
 }
 
 function monthlyEquivalentOf(amount: number, recurrence: string): number {
@@ -339,7 +348,7 @@ export function buildCashflowTimeline(input: BuildTimelineInput): CashflowTimeli
   const recurringBillNames = new Set<string>();
   for (const bill of input.bills) {
     const amount = round2(bill.amount);
-    const recurring = bill.is_recurring && Boolean(bill.recurrence);
+    const recurring = bill.is_recurring;
     // 'paid' means the money for THAT due date already left, so that one
     // occurrence never hits the projection. For a one-off bill that is the
     // whole bill and there is nothing left to forecast. A RECURRING bill still

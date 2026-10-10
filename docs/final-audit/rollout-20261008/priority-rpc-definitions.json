@@ -1,0 +1,76 @@
+{
+  "projectRef": "ltcxlbipiihclxwioyqj",
+  "scope": "Read-only function definitions and effective EXECUTE privileges; none of these functions was invoked.",
+  "functions": [
+    {
+      "name": "__seed_existing_count",
+      "arguments": "p_table regclass, p_where text",
+      "returns": "integer",
+      "security_definer": false,
+      "settings": null,
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "definition": "CREATE OR REPLACE FUNCTION public.__seed_existing_count(p_table regclass, p_where text DEFAULT NULL::text)\n RETURNS integer\n LANGUAGE plpgsql\nAS $function$\r\nDECLARE\r\n  v_count integer;\r\nBEGIN\r\n  IF p_where IS NULL OR length(trim(p_where)) = 0 THEN\r\n    EXECUTE format('SELECT count(*) FROM %s', p_table) INTO v_count;\r\n  ELSE\r\n    EXECUTE format('SELECT count(*) FROM %s WHERE %s', p_table, p_where) INTO v_count;\r\n  END IF;\r\n  RETURN COALESCE(v_count, 0);\r\nEND\r\n$function$\n"
+    },
+    {
+      "name": "claim_marketing_generation_jobs",
+      "arguments": "p_limit integer",
+      "returns": "SETOF marketing_generation_jobs",
+      "security_definer": true,
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "definition": "CREATE OR REPLACE FUNCTION public.claim_marketing_generation_jobs(p_limit integer DEFAULT 10)\n RETURNS SETOF marketing_generation_jobs\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\nbegin\r\n  update public.marketing_generation_jobs\r\n  set status = case when attempts >= max_attempts then 'dead_letter' else 'queued' end,\r\n      locked_at = null,\r\n      run_after = now(),\r\n      error = coalesce(error, 'Recovered after a stale worker lock.')\r\n  where status = 'running'\r\n    and locked_at is not null\r\n    and locked_at < now() - interval '15 minutes';\r\n\r\n  return query\r\n  with candidates as (\r\n    select id\r\n    from public.marketing_generation_jobs\r\n    where status = 'queued' and run_after <= now()\r\n    order by priority desc, created_at\r\n    for update skip locked\r\n    limit greatest(1, least(coalesce(p_limit, 10), 50))\r\n  )\r\n  update public.marketing_generation_jobs j\r\n  set status = 'running', attempts = j.attempts + 1, locked_at = now(), started_at = now(), updated_at = now()\r\n  from candidates c\r\n  where j.id = c.id\r\n  returning j.*;\r\nend;\r\n$function$\n"
+    },
+    {
+      "name": "enqueue_marketing_page_generation",
+      "arguments": "",
+      "returns": "trigger",
+      "security_definer": true,
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "definition": "CREATE OR REPLACE FUNCTION public.enqueue_marketing_page_generation()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\nbegin\r\n  insert into public.marketing_generation_jobs\r\n    (job_type, target_type, target_id, target_path, idempotency_key, payload, created_by)\r\n  values\r\n    ('regenerate_page', 'marketing_page', new.id, new.path,\r\n     format('marketing-page:%s:v:%s', new.id, new.version),\r\n     jsonb_build_object('page_id', new.id, 'path', new.path, 'version', new.version), new.updated_by)\r\n  on conflict (idempotency_key) do nothing;\r\n  return new;\r\nend;\r\n$function$\n"
+    },
+    {
+      "name": "marketplace_place_bid_unchecked",
+      "arguments": "p_listing_id uuid, p_bidder_member_id uuid, p_bidder_family_id uuid, p_max_cents bigint",
+      "returns": "jsonb",
+      "security_definer": true,
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": false,
+      "definition": "CREATE OR REPLACE FUNCTION public.marketplace_place_bid_unchecked(p_listing_id uuid, p_bidder_member_id uuid, p_bidder_family_id uuid, p_max_cents bigint)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\ndeclare\r\n  v_listing   record;\r\n  v_now       timestamptz := now();\r\n  v_increment bigint;\r\n  v_min_bid   bigint;\r\n  v_new_visible bigint;\r\n  v_extended  boolean := false;\r\nbegin\r\n  -- Lock the listing so two bids can't race on the same current price.\r\n  select * into v_listing from public.marketplace_listings\r\n    where id = p_listing_id for update;\r\n  if not found then return jsonb_build_object('ok', false, 'reason', 'not_found'); end if;\r\n  if v_listing.sale_format <> 'auction' then return jsonb_build_object('ok', false, 'reason', 'not_auction'); end if;\r\n  if v_listing.status <> 'available' then return jsonb_build_object('ok', false, 'reason', 'not_available'); end if;\r\n  if v_listing.auction_ends_at is null or v_now >= v_listing.auction_ends_at then\r\n    return jsonb_build_object('ok', false, 'reason', 'ended');\r\n  end if;\r\n  if v_listing.auction_starts_at is not null and v_now < v_listing.auction_starts_at then\r\n    return jsonb_build_object('ok', false, 'reason', 'not_started');\r\n  end if;\r\n  -- Can't bid on your own listing.\r\n  if v_listing.family_id = p_bidder_family_id then\r\n    return jsonb_build_object('ok', false, 'reason', 'own_listing');\r\n  end if;\r\n\r\n  -- Tiered minimum increment (eBay-like), based on current price.\r\n  v_increment := case\r\n    when v_listing.current_bid_cents < 100 then 5\r\n    when v_listing.current_bid_cents < 500 then 25\r\n    when v_listing.current_bid_cents < 2500 then 50\r\n    when v_listing.current_bid_cents < 10000 then 100\r\n    when v_listing.current_bid_cents < 25000 then 250\r\n    when v_listing.current_bid_cents < 100000 then 500\r\n    else 1000 end;\r\n\r\n  -- Minimum acceptable max: at/above starting bid on the first bid, otherwise\r\n  -- one increment over the current price.\r\n  if v_listing.bid_count = 0 then\r\n    v_min_bid := greatest(v_listing.starting_bid_cents, 1);\r\n  else\r\n    v_min_bid := v_listing.current_bid_cents + v_increment;\r\n  end if;\r\n  if p_max_cents < v_min_bid then\r\n    return jsonb_build_object('ok', false, 'reason', 'too_low', 'min_cents', v_min_bid);\r\n  end if;\r\n\r\n  -- Proxy resolution.\r\n  if v_listing.bid_count = 0 then\r\n    -- First bid: visible price = starting bid.\r\n    v_new_visible := greatest(v_listing.starting_bid_cents, v_increment);\r\n    if v_new_visible > p_max_cents then v_new_visible := p_max_cents; end if;\r\n  elsif p_max_cents > v_listing.highest_max_cents then\r\n    -- New leader: reveal just enough to beat the previous leader's max.\r\n    v_new_visible := least(p_max_cents, v_listing.highest_max_cents + v_increment);\r\n    -- Mark the old leader outbid.\r\n    update public.marketplace_bids set status = 'outbid'\r\n      where listing_id = p_listing_id and status = 'active';\r\n  else\r\n    -- Bid doesn't beat the standing proxy: the leader auto-covers it. The\r\n    -- visible price rises to one increment over this challenger (capped by the\r\n    -- leader's max), the leader stays in front, and we record the loss.\r\n    v_new_visible := least(v_listing.highest_max_cents, p_max_cents + v_increment);\r\n    insert into public.marketplace_bids\r\n      (listing_id, family_id, bidder_member_id, bidder_family_id, amount_cents, max_cents, status)\r\n      values (p_listing_id, v_listing.family_id, p_bidder_member_id, p_bidder_family_id, p_max_cents, p_max_cents, 'outbid');\r\n    update public.marketplace_listings\r\n      set current_bid_cents = v_new_visible, bid_count = bid_count + 1, updated_at = v_now\r\n      where id = p_listing_id;\r\n    return jsonb_build_object('ok', true, 'leading', false, 'current_cents', v_new_visible);\r\n  end if;\r\n\r\n  -- Record the winning (leading) bid + promote the bidder to highest.\r\n  insert into public.marketplace_bids\r\n    (listing_id, family_id, bidder_member_id, bidder_family_id, amount_cents, max_cents, status)\r\n    values (p_listing_id, v_listing.family_id, p_bidder_member_id, p_bidder_family_id, v_new_visible, p_max_cents, 'active');\r\n\r\n  -- Anti-snipe: a bid inside the window pushes the end out.\r\n  if v_listing.auction_ends_at - v_now < make_interval(mins => v_listing.anti_snipe_minutes) then\r\n    v_extended := true;\r\n  end if;\r\n\r\n  update public.marketplace_listings set\r\n    current_bid_cents = v_new_visible,\r\n    bid_count = bid_count + 1,\r\n    highest_bidder_member_id = p_bidder_member_id,\r\n    highest_bidder_family_id = p_bidder_family_id,\r\n    highest_max_cents = p_max_cents,\r\n    auction_ends_at = case when v_extended\r\n      then v_now + make_interval(mins => v_listing.anti_snipe_minutes) else auction_ends_at end,\r\n    updated_at = v_now\r\n  where id = p_listing_id;\r\n\r\n  return jsonb_build_object('ok', true, 'leading', true,\r\n    'current_cents', v_new_visible, 'extended', v_extended);\r\nend $function$\n"
+    },
+    {
+      "name": "rate_limit_hit",
+      "arguments": "p_key text, p_limit integer, p_window_seconds integer",
+      "returns": "TABLE(allowed boolean, retry_after integer)",
+      "security_definer": true,
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "definition": "CREATE OR REPLACE FUNCTION public.rate_limit_hit(p_key text, p_limit integer, p_window_seconds integer)\n RETURNS TABLE(allowed boolean, retry_after integer)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\ndeclare\n  v_window_start timestamptz := to_timestamp(floor(extract(epoch from now()) / p_window_seconds) * p_window_seconds);\n  v_count integer;\nbegin\n  insert into public.rate_limits (bucket_key, window_start, count)\n  values (p_key, v_window_start, 1)\n  on conflict (bucket_key, window_start)\n  do update set count = public.rate_limits.count + 1, updated_at = now()\n  returning count into v_count;\n\n  if v_count > p_limit then\n    return query select false,\n      greatest(1, ceil(extract(epoch from (v_window_start + make_interval(secs => p_window_seconds)) - now())))::integer;\n  else\n    return query select true, 0;\n  end if;\nend;\n$function$\n"
+    },
+    {
+      "name": "wallet_reserve_card_auth",
+      "arguments": "p_family uuid, p_child_wallet uuid, p_amount bigint, p_auth_id text, p_description text",
+      "returns": "boolean",
+      "security_definer": true,
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "definition": "CREATE OR REPLACE FUNCTION public.wallet_reserve_card_auth(p_family uuid, p_child_wallet uuid, p_amount bigint, p_auth_id text, p_description text)\n RETURNS boolean\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\ndeclare\n  v_bucket    uuid;\n  v_spendable bigint;\nbegin\n  -- Nothing to reserve → approve (e.g. $0 auth / balance check).\n  if p_amount is null or p_amount <= 0 then\n    return true;\n  end if;\n\n  -- Lock the child's SPEND bucket so concurrent authorizations for the same\n  -- child serialize here (each sees the prior hold before deciding).\n  select id into v_bucket\n    from public.wallet_buckets\n   where family_id = p_family and child_wallet_id = p_child_wallet and kind = 'spend'\n   for update;\n  if v_bucket is null then\n    return false;  -- no spend bucket → cannot fund → decline\n  end if;\n\n  -- Idempotency: a hold already exists for this authorization (ret, re-delivery).\n  if exists (\n    select 1 from public.wallet_transactions\n     where stripe_ref = p_auth_id and type = 'card_spend' and status = 'processing'\n  ) then\n    return true;\n  end if;\n\n  -- Spendable = completed + processing (holds already reduce this).\n  select coalesce(sum(case when direction = 'credit' then amount_cents else -amount_cents end), 0)\n    into v_spendable\n    from public.wallet_transactions\n   where family_id = p_family and bucket_id = v_bucket and status in ('completed', 'processing');\n\n  if p_amount > v_spendable then\n    return false;  -- insufficient funds\n  end if;\n\n  insert into public.wallet_transactions\n    (family_id, child_wallet_id, bucket_id, type, status, direction, amount_cents, description, stripe_ref, metadata)\n  values\n    (p_family, p_child_wallet, v_bucket, 'card_spend', 'processing', 'debit', p_amount,\n     coalesce(nullif(p_description, ''), 'Card hold'), p_auth_id,\n     jsonb_build_object('source', 'issuing', 'kind', 'hold'));\n\n  return true;\nend $function$\n"
+    }
+  ]
+}

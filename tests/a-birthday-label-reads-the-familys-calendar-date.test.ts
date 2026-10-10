@@ -61,12 +61,14 @@ describe('a birthday DATE is the family\'s calendar date, on any device', () => 
   });
 });
 
-describe('qualified instants keep their meaning', () => {
-  it('an all-day row stored as an instant (with a zone) is still read as that instant', () => {
+describe('a timed instant keeps its meaning; a stored all-day row is its date', () => {
+  it('an all-day row stored with a zone is the date it is stored on, not that instant on the family\'s clock', () => {
     onDevice('UTC');
-    // 00:00Z on 5 July is 4 July 17:00 in Los Angeles: the family's Today.
-    expect(wrapperLabel(LA, '2026-07-04T12:00:00Z', '2026-07-05T00:00:00Z', true)).toBe('Today');
-    expect(wrapperLabel(LA, '2026-07-04T12:00:00Z', '2026-07-05T00:00:00+00:00', true)).toBe('Today');
+    // An all-day row is stored at its date's Greenwich midnight (lib/calendar/day.ts):
+    // 00:00Z on 5 July is the 5th, though it is 4 July 17:00 in Los Angeles.
+    expect(wrapperLabel(LA, '2026-07-04T12:00:00Z', '2026-07-05T00:00:00Z', true)).toBe('Tomorrow');
+    expect(wrapperLabel(LA, '2026-07-04T12:00:00Z', '2026-07-05T00:00:00+00:00', true)).toBe('Tomorrow');
+    expect(wrapperLabel(LA, '2026-07-04T12:00:00Z', '2026-07-04T00:00:00Z', true)).toBe('Today');
   });
 
   it('a timed event formats in the family\'s zone', () => {

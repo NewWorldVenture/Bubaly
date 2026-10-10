@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { syncFeed } from '@/lib/server/calendar-feeds';
+import { SYNCING_STATUS, syncFeed } from '@/lib/server/calendar-feeds';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import { normalizeFeedUrl, FEED_COLORS, type FeedColor } from '@/lib/calendar/feeds';
 import { recordActivationServer } from '@/lib/analytics/activation-server';
@@ -15,7 +15,7 @@ import { describeActionError } from '@/lib/supabase/errors';
  * the family already had instead of adding one — it carries that row's name,
  * because the name and colour typed on this add were not applied to it.
  */
-type ActionResult = { ok: true; imported?: number; alreadySubscribedAs?: string } | { ok: false; error: string };
+type ActionResult = { ok: true; imported?: number; sourceGroups?: number; alreadySubscribedAs?: string } | { ok: false; error: string };
 
 type FeedRef = { id: string; family_id: string; url: string; name: string };
 
@@ -130,18 +130,22 @@ export async function addCalendarFeed(input: { name: string; url: string; color?
     // then matches nothing, the row and its events stay, and this add answers
     // feedSavedButNotSynced — true: the calendar is in the list and this
     // attempt to sync it failed.
-    // Not closed: the other add's events upserted but its final stamp not yet
-    // landed. This delete then takes the row and those events, the stamp
-    // updates nothing without an error (stampFeed does not count rows), and
-    // that member is told it synced. That window is one round trip wide.
+    // One sync of a feed runs at a time (syncFeed's claim; review on #908), and
+    // that closes the two gaps this used to have. A sync refused as `busy` ran
+    // nothing: another member's sync holds the row and will fill it or stamp
+    // its own failure, so there is nothing of ours to undo. And a row another
+    // sync has claimed since ours failed — its events upserted, its final stamp
+    // not yet landed — is not unsynced-and-abandoned, so the delete leaves a
+    // `syncing` row alone, and this add answers feedSavedButNotSynced.
     let leftBehind = false;
-    if (createdHere) {
+    if (createdHere && !result.busy && !result.takenOver) {
       const { data: removed, error: removeError } = await supabase
         .from('calendar_feeds')
         .delete()
         .eq('id', feed.id)
         .eq('family_id', familyId)
         .is('last_synced_at', null)
+        .neq('last_status', SYNCING_STATUS)
         .select('id');
       if (removeError || (removed ?? []).length !== 1) {
         console.error(
@@ -162,8 +166,9 @@ export async function addCalendarFeed(input: { name: string; url: string; color?
   await recordActivationServer({ userId: ctx.user.id, familyId, milestone: 'calendar_imported', signupAtIso: ctx.active.family.created_at });
   revalidatePath('/dashboard/settings');
   revalidatePath('/dashboard/calendar');
-  if (!createdHere) return { ok: true, imported: result.imported, alreadySubscribedAs: feed.name };
-  return { ok: true, imported: result.imported };
+  const sourceMetadata = result.sourceGroups === undefined ? {} : { sourceGroups: result.sourceGroups };
+  if (!createdHere) return { ok: true, imported: result.imported, ...sourceMetadata, alreadySubscribedAs: feed.name };
+  return { ok: true, imported: result.imported, ...sourceMetadata };
 }
 
 /** Manually re-syncs one feed. */
@@ -184,7 +189,7 @@ export async function syncCalendarFeed(feedId: string): Promise<ActionResult> {
   revalidatePath('/dashboard/settings');
   revalidatePath('/dashboard/calendar');
   if (!result.ok) return { ok: false, error: result.error };
-  return { ok: true, imported: result.imported };
+  return { ok: true, imported: result.imported, ...(result.sourceGroups === undefined ? {} : { sourceGroups: result.sourceGroups }) };
 }
 
 /** Removes a feed; its imported events cascade-delete via the FK. */

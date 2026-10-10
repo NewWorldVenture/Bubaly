@@ -39,6 +39,20 @@ describe('Google event mapping', () => {
     expect(googleEventToRow(ev)!.cancelled).toBe(true);
   });
 
+  it('keeps identity-only deletions without inventing an event time', () => {
+    expect(googleEventToRow({ id: 'deleted', status: 'cancelled', etag: 'deleted-etag' }))
+      .toMatchObject({ external_id: 'deleted', cancelled: true, status: 'cancelled',
+        starts_at: '', ends_at: null, recurrence_rule: null, etag: 'deleted-etag' });
+  });
+
+  it('does not parse optional obsolete timing on deleted records', () => {
+    expect(googleEventToRow({ id: 'deleted', status: 'cancelled', start: { dateTime: 'obsolete' } })?.cancelled).toBe(true);
+  });
+
+  it('refuses a deletion with no usable identity', () => {
+    expect(googleEventToRow({ id: '', status: 'cancelled' })).toBeNull();
+  });
+
   it('returns null when there is no usable start', () => {
     expect(googleEventToRow({ id: 'g5', summary: 'x' })).toBeNull();
   });

@@ -1,23 +1,23 @@
 import type { Db } from './db';
 import { completionPatch } from './chores-core';
-import { shiftDays } from './format';
+import { dayKey } from './format';
+import { config } from './config';
+import { supabase as sessionClient } from './supabase';
+import { buildCalendarRequest, parseCalendarReply, type CalendarOwner, type CalendarReply } from './calendar-core';
 
-export type EventRow = {
-  id: string; title: string; starts_at: string; ends_at: string | null; all_day: boolean;
-  location: string | null; category: string;
-};
+export type { EventRow } from './calendar-core';
 
-export async function fetchUpcomingEvents(supabase: Db, familyId: string, days = 14, now = new Date()): Promise<EventRow[]> {
-  const { data, error } = await supabase
-    .from('calendar_events')
-    .select('id, title, starts_at, ends_at, all_day, location, category')
-    .eq('family_id', familyId)
-    .gte('starts_at', shiftDays(now, -0.5).toISOString())
-    .lte('starts_at', shiftDays(now, days).toISOString())
-    .order('starts_at', { ascending: true })
-    .limit(100);
+export async function fetchUpcomingEvents(owner: CalendarOwner, days = 14, signal?: AbortSignal, now = new Date()): Promise<CalendarReply> {
+  const { data, error } = await sessionClient.auth.getSession();
   if (error) throw error;
-  return (data ?? []) as EventRow[];
+  if (!data.session || data.session.user.id !== owner.userId || signal?.aborted) throw new Error('Calendar account changed.');
+  // The server derives the actual family timezone; request starts on that
+  // family's date supplied by the caller rather than the travelling device.
+  const fromDay = dayKey(now, owner.timezone ?? 'UTC');
+  const { url, init } = buildCalendarRequest(config.apiUrl, data.session.access_token, owner, fromDay, days, signal);
+  const response = await fetch(url, init);
+  if (!response.ok) throw new Error(response.status === 409 ? 'Calendar account changed.' : 'Calendar unavailable. Please try again.');
+  return parseCalendarReply(await response.json(), owner, { fromDay, days });
 }
 
 export type ChoreRow = {

@@ -1,0 +1,146 @@
+name: Messaging participant SQL contract
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: messaging-sql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  postgres-contract:
+    name: PostgreSQL messaging roles and concurrent writes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+          POSTGRES_PASSWORD: messaging-ci-only-not-a-production-secret
+          PGDATA: /var/lib/postgresql/data/pgdata
+        ports:
+          - '127.0.0.1:55443:5432'
+        options: >-
+          --log-driver none
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGPASSWORD: messaging-ci-only-not-a-production-secret
+      PGCONNECT_TIMEOUT: '5'
+    steps:
+      - name: Check out the candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Require the dedicated disposable PostgreSQL service
+        env:
+          MESSAGING_PG_CONTAINER: ${{ job.services.postgres.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$CI" == true && "$GITHUB_ACTIONS" == true ]]
+          [[ "$MESSAGING_PG_CONTAINER" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$(docker inspect --type container --format '{{.Id}}' "$MESSAGING_PG_CONTAINER")" == "$MESSAGING_PG_CONTAINER" ]]
+          [[ "$(docker inspect --type container --format '{{.Config.Image}}' "$MESSAGING_PG_CONTAINER")" == postgres:17 ]]
+          [[ "$(docker inspect --type container --format '{{.State.Running}}' "$MESSAGING_PG_CONTAINER")" == true ]]
+          [[ "$(docker inspect --type container --format '{{.HostConfig.LogConfig.Type}}' "$MESSAGING_PG_CONTAINER")" == none ]]
+          docker inspect --type container --format '{{range .Config.Env}}{{println .}}{{end}}' "$MESSAGING_PG_CONTAINER" \
+            | grep -Fxq 'PGDATA=/var/lib/postgresql/data/pgdata'
+          [[ "$(docker port "$MESSAGING_PG_CONTAINER" 5432/tcp)" == '127.0.0.1:55443' ]]
+          [[ "$(docker exec "$MESSAGING_PG_CONTAINER" psql -X -qAt -U postgres -d postgres -c 'show server_version_num')" =~ ^17[0-9]{4}$ ]]
+
+      - name: Use the declared Node release
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install PostgreSQL clients
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+          for client in psql createdb dropdb; do
+            command -v "$client"
+          done
+          psql --version
+
+      - name: Exercise actual SQL roles and separate concurrent sessions
+        shell: bash
+        run: |
+          set -euo pipefail
+          messaging_pg_bin="$(dirname "$(command -v psql)")"
+          [[ -x "$messaging_pg_bin/createdb" && -x "$messaging_pg_bin/dropdb" ]]
+          # The runner independently compares SHOW data_directory with this
+          # fixed service path before creating any fresh synthetic database.
+          node scripts/verify-messaging-preserve-access.mjs \
+            --postgres-bin "$messaging_pg_bin" \
+            --port 55443 \
+            --expected-data-dir /var/lib/postgresql/data/pgdata
+
+      - name: Keep private approval drafts to requesters and reviewers
+        shell: bash
+        run: |
+          set -euo pipefail
+          approval_pg_bin="$(dirname "$(command -v psql)")"
+          [[ -x "$approval_pg_bin/createdb" && -x "$approval_pg_bin/dropdb" ]]
+          # Recheck the same dedicated service's exact directory and loopback
+          # port before creating a fresh DB. Run both corrected and old-policy
+          # controls; this step does not depend on opt-in Vitest tests.
+          node scripts/verify-approval-private-read.mjs \
+            --postgres-bin "$approval_pg_bin" \
+            --port 55443 \
+            --expected-server-port 5432 \
+            --expected-data-dir /var/lib/postgresql/data/pgdata
+
+      - name: Keep stored AI copies private and count household quota safely
+        shell: bash
+        run: |
+          set -euo pipefail
+          ai_copy_pg_bin="$(dirname "$(command -v psql)")"
+          [[ -x "$ai_copy_pg_bin/createdb" && -x "$ai_copy_pg_bin/dropdb" ]]
+          # The standalone runner verifies this service again, applies reserved 0493
+          # twice and requires both old-policy disclosure controls to fail.
+          node scripts/verify-ai-copy-private-read.mjs \
+            --postgres-bin "$ai_copy_pg_bin" \
+            --port 55443 \
+            --expected-server-port 5432 \
+            --expected-data-dir /var/lib/postgresql/data/pgdata
+
+      - name: Persist standard sync pull items and mappings atomically
+        shell: bash
+        run: |
+          set -euo pipefail
+          sync_pull_pg_bin="$(dirname "$(command -v psql)")"
+          [[ -x "$sync_pull_pg_bin/createdb" && -x "$sync_pull_pg_bin/dropdb" ]]
+          # Recheck this dedicated service, replay actual sync/membership SQL,
+          # and prove old separate-write failures plus paired deletion races.
+          node scripts/verify-sync-atomic-pull.mjs \
+            --postgres-bin "$sync_pull_pg_bin" \
+            --port 55443 \
+            --expected-server-port 5432 \
+            --expected-data-dir /var/lib/postgresql/data/pgdata
+
+      - name: Publish complete calendar source groups under the live feed claim
+        shell: bash
+        run: |
+          set -euo pipefail
+          calendar_feed_pg_bin="$(dirname "$(command -v psql)")"
+          [[ -x "$calendar_feed_pg_bin/createdb" && -x "$calendar_feed_pg_bin/dropdb" ]]
+          # Reserved0490 stays unapplied in production. This independently
+          # admitted disposable service proves the candidate SQL contract.
+          node scripts/verify-calendar-feed-publication.mjs \
+            --postgres-bin "$calendar_feed_pg_bin" \
+            --port 55443 \
+            --expected-server-port 5432 \
+            --expected-data-dir /var/lib/postgresql/data/pgdata

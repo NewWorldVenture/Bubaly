@@ -194,7 +194,11 @@ export function useFamilyClock(): FamilyClock {
 /** A `YYYY-MM-DD` day key as the local-calendar Date the date-only helpers read. */
 export function calendarDayOfKey(key: string): Date {
   const [y, m, d] = key.split('-').map(Number);
-  return new Date(y, m - 1, d);
+  if (!Number.isInteger(y) || y < 1 || y > 9999) return new Date(y, m - 1, d);
+  const date = new Date(0);
+  date.setFullYear(y, m - 1, d);
+  date.setHours(0, 0, 0, 0);
+  return date;
 }
 
 /**

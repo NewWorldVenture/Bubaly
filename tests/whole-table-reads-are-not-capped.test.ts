@@ -41,6 +41,49 @@ function ids(prefix: string, n: number): string[] {
   return Array.from({ length: n }, (_, i) => `${prefix}-${String(i).padStart(5, '0')}`);
 }
 
+/** A factored builder is complete only when the actual counted reader uses
+ * that same builder for both its first page and every subsequent range.
+ * Recognise this narrow contract rather than exempting a filename or table.
+ */
+function isCountedFactory(source: string, chainAt: number, chain: string): boolean {
+  const factory = /const\s+(\w+)\s*=\s*\(\s*\)\s*=>\s*\w+\.$/.exec(source.slice(0, chainAt));
+  if (!factory || !/count:\s*'exact'/.test(chain) || !chain.includes(".order('id')")) return false;
+  if (!/import\s*\{[^}]*\breadCountedRows\b[^}]*\}\s*from\s*'@\/lib\/calendar\/occurrences'/.test(source)) return false;
+  const name = factory[1];
+  const reader = new RegExp('readCountedRows(?:<[^>]+>)?\\(\\s*\\(\\)\\s*=>\\s*'
+    + name + '\\(\\)\\.limit\\(([0-9_]+)\\),\\s*\\((\\w+),\\s*(\\w+)\\)\\s*=>\\s*'
+    + name + '\\(\\)\\.range\\(\\2,\\s*\\3\\),\\s*([0-9_]+),');
+  const call = reader.exec(source.slice(chainAt + chain.length));
+  return !!call && Number(call[1].replaceAll('_', '')) > 0 && Number(call[4].replaceAll('_', '')) > 0;
+}
+
+describe('the counted-builder guard refuses incomplete substitutes', () => {
+  const complete = `import { readCountedRows } from '@/lib/calendar/occurrences';
+    const query = () => db.from('calendar_feeds').select('id', { count: 'exact' }).order('id');
+    await readCountedRows<{ id: string }>(
+      () => query().limit(1000), (from, to) => query().range(from, to), 1_000_000, 'feeds');`;
+  const accepts = (source: string) => {
+    const start = source.indexOf("from('calendar_feeds')");
+    const end = source.indexOf(';', start);
+    return isCountedFactory(source, start, source.slice(start, end));
+  };
+
+  it('recognises the complete same-builder count and pagination contract', () => {
+    expect(accepts(complete)).toBe(true);
+  });
+
+  it.each([
+    ['missing exact count', (source: string) => source.replace("count: 'exact'", "count: 'planned'")],
+    ['missing stable identity order', (source: string) => source.replace(".order('id')", '')],
+    ['missing counted reader', (source: string) => source.replaceAll('readCountedRows', 'readOnce')],
+    ['missing page range', (source: string) => source.replace('query().range(from, to)', 'query().limit(1000)')],
+    ['different builder for later pages', (source: string) => source.replace('query().range(from, to)', 'other().range(from, to)')],
+    ['unbounded safety maximum', (source: string) => source.replace('1_000_000', 'Infinity')],
+  ])('rejects %s', (_label, change) => {
+    expect(accepts(change(complete))).toBe(false);
+  });
+});
+
 describe('the fake enforces the cap it is given', () => {
   it('answers an unbounded select with at most maxRows, and no error', async () => {
     const db = capped();
@@ -324,13 +367,13 @@ describe('no delivery-contract read is left unbounded', () => {
     // wraps onto the next. So take each `from('<table>')` through to the `;`
     // that ends its statement and judge the whole chain.
     const marker = `from('${table}')`;
-    const chains: string[] = [];
+    const chains: { at: number; chain: string }[] = [];
     for (let at = source.indexOf(marker); at !== -1; at = source.indexOf(marker, at + 1)) {
       const end = source.indexOf(';', at);
-      chains.push(source.slice(at, end === -1 ? source.length : end));
+      chains.push({ at, chain: source.slice(at, end === -1 ? source.length : end) });
     }
     expect(chains.length).toBeGreaterThan(0);
-    for (const chain of chains) {
+    for (const { at, chain } of chains) {
       // Either the read pages (`.range(from, to)`, normally inside a `readAll`
       // callback) or it is not an unbounded read at all: a write chain, or a
       // read already bounded to one owner's rows by an explicit `.limit()`.
@@ -338,7 +381,8 @@ describe('no delivery-contract read is left unbounded', () => {
       // Bounded means the response cannot reach the cap: it pages (`.range()`),
       // it asks for a fixed few (`.limit()`), or it is a `readInChunks`
       // callback, whose batch of at most 100 ids can never match 1,000 rows.
-      const isBounded = chain.includes('.range(') || chain.includes('.limit(') || /\.in\('[a-z_]+', chunk\)/.test(chain);
+      const isBounded = chain.includes('.range(') || chain.includes('.limit(') || /\.in\('[a-z_]+', chunk\)/.test(chain)
+        || isCountedFactory(source, at, chain);
       expect(isWrite || isBounded, `unbounded read of ${table}: ${chain.replace(/\s+/g, ' ').slice(0, 160)}`).toBe(true);
     }
   });

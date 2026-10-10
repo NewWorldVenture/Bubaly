@@ -264,7 +264,12 @@ describe('Daily Brief response validation', () => {
   });
 });
 
-function queryResult(data: unknown[]) {
+function queryResult(data: unknown[], calendar = false) {
+  if (calendar) {
+    const db = createInMemorySupabase();
+    db.seed('calendar_events', data as Record<string, unknown>[]);
+    return db.from('calendar_events');
+  }
   const promise = Promise.resolve({ data, error: null });
   const query: Record<string, unknown> = { then: promise.then.bind(promise) };
   // `or` and `update` joined the list when the brief started folding the quiet
@@ -279,7 +284,8 @@ function queryResult(data: unknown[]) {
 
 describe('Daily Brief route schema boundary', () => {
   const now = new Date('2026-09-05T12:00:00.000Z');
-  const event = { title: 'Soccer practice', starts_at: '2026-09-05T15:00:00.000Z', ends_at: null, location: null, category: 'sports', assignee_id: 'child' };
+  const event = { id: 'soccer', family_id: 'family', recurrence: 'none', recurrence_until: null, all_day: false,
+    title: 'Soccer practice', starts_at: '2026-09-05T15:00:00.000Z', ends_at: null, location: null, category: 'sports', assignee_id: 'child' };
   const digest = {
     items: [
       { domain: 'bill', urgency: 'overdue', title: 'Electric bill', detail: 'Due yesterday' },
@@ -343,7 +349,7 @@ describe('Daily Brief route schema boundary', () => {
     mocks.createServer.mockResolvedValue({ from: mocks.from });
     mocks.from.mockImplementation((table: string) => queryResult(table === 'family_members'
       ? [{ id: 'child', display_name: 'Sam', role: 'child' }]
-      : table === 'calendar_events' ? [event] : []));
+      : table === 'calendar_events' ? [event] : [], table === 'calendar_events'));
     mocks.enforceAIRateLimit.mockResolvedValue({ ok: true });
     mocks.isAIConfigured.mockResolvedValue(true);
     mocks.resolveProvider.mockResolvedValue({ complete: mocks.complete });
@@ -368,7 +374,7 @@ describe('Daily Brief route schema boundary', () => {
     const schoolQuery = queryResult([]);
     mocks.from.mockImplementation((table: string) => table === 'school_events' ? schoolQuery : queryResult(
       table === 'family_members' ? [{ id: 'child', display_name: 'Sam', role: 'child' }]
-        : table === 'calendar_events' ? [{ ...event, starts_at: '2026-09-06T00:30:00.000Z' }] : [],
+        : table === 'calendar_events' ? [{ ...event, starts_at: '2026-09-06T00:30:00.000Z' }] : [], table === 'calendar_events',
     ));
     if (providerResult !== 'success') {
       vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -436,7 +442,7 @@ describe('Daily Brief route schema boundary', () => {
       table === 'family_members' ? memberIds.map((id) => ({ id, display_name: 'Sam', role: 'child' }))
         : table === 'school_events' ? schoolEvents
         : table === 'sports_events' ? sportsEvents
-        : table === 'calendar_events' ? [event] : [],
+        : table === 'calendar_events' ? [event] : [], table === 'calendar_events',
     ));
 
     const response = await requestBriefing();
@@ -476,15 +482,15 @@ describe('Daily Brief route schema boundary', () => {
     // path), was told their day was clear when two things overlapped.
     mocks.isAIConfigured.mockResolvedValue(false);
     const clash = [
-      { title: 'Soccer practice', starts_at: '2026-09-05T15:00:00.000Z', ends_at: '2026-09-05T16:30:00.000Z', location: null, category: 'sports', assignee_id: 'child' },
-      { title: 'Dentist', starts_at: '2026-09-05T16:00:00.000Z', ends_at: '2026-09-05T17:00:00.000Z', location: null, category: 'medical', assignee_id: 'child' },
+      { ...event, ends_at: '2026-09-05T16:30:00.000Z' },
+      { ...event, id: 'dentist', title: 'Dentist', starts_at: '2026-09-05T16:00:00.000Z', ends_at: '2026-09-05T17:00:00.000Z', category: 'medical' },
     ];
     mocks.from.mockImplementation((table: string) => queryResult(
       table === 'family_members' ? [{ id: 'child', display_name: 'Sam', role: 'child' }]
         : table === 'calendar_events' ? clash
         : table === 'meal_plans' ? [{ plan_date: '2026-09-05', meal_type: 'dinner', meals: { name: 'Tacos' } }]
         : table === 'school_events' ? [{ title: 'Bring a costume', starts_at: '2026-09-05T13:00:00.000Z', event_type: 'other', notes: null, member_id: 'child' }]
-        : [],
+        : [], table === 'calendar_events',
     ));
 
     const res = await requestBriefing();
@@ -521,9 +527,9 @@ describe('the day the brief covers is the family’s day', () => {
     });
     const db = createInMemorySupabase();
     db.seed('calendar_events', [
-      { ...event, family_id: 'family', title: 'Tonight', starts_at: '2026-09-06T06:30:00.000Z', all_day: false },
-      { ...event, family_id: 'family', title: 'Tomorrow', starts_at: '2026-09-06T07:00:00.000Z', all_day: false },
-      { ...event, family_id: 'other', title: 'Other family', starts_at: '2026-09-06T06:30:00.000Z', all_day: false },
+      { ...event, id: 'tonight', title: 'Tonight', starts_at: '2026-09-06T06:30:00.000Z' },
+      { ...event, id: 'tomorrow', title: 'Tomorrow', starts_at: '2026-09-06T07:00:00.000Z' },
+      { ...event, id: 'foreign', family_id: 'other', title: 'Other family', starts_at: '2026-09-06T06:30:00.000Z' },
     ]);
     mocks.from.mockImplementation((table: string) => db.from(table));
     mocks.isAIConfigured.mockResolvedValue(false);
@@ -570,7 +576,7 @@ describe('what Bubaly claims to have done', () => {
         table === 'family_members' ? [{ id: 'child', display_name: 'Sam', role: 'child' }]
           : table === 'calendar_events' ? [event]
           : table === 'family_automation_runs' ? rows
-          : [],
+          : [], table === 'calendar_events',
       ));
     }
 
@@ -645,7 +651,7 @@ describe('what Bubaly claims to have done', () => {
 
   it('preserves the sparse-data fallback and its nullable stress reason', async () => {
     mocks.isAIConfigured.mockResolvedValue(false);
-    mocks.from.mockImplementation(() => queryResult([]));
+    mocks.from.mockImplementation((table: string) => queryResult([], table === 'calendar_events'));
     const emptyDigest = { items: [], counts: { overdue: 0, today: 0, soon: 0, total: 0 }, byDomain: [], headline: 'All caught up' };
     mocks.buildConciergeDigest.mockReturnValue(emptyDigest);
     const response = await requestBriefing();

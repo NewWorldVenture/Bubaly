@@ -11,7 +11,8 @@ describe('buildCalendarEventForDate', () => {
       family_id: 'fam-1', created_by: 'user-1', title: 'Our anniversary',
       category: 'general', all_day: true, recurrence: 'yearly',
     });
-    expect(ev.starts_at).toBe('2018-07-01T12:00:00.000Z');
+    expect(ev.starts_at).toBe('2018-07-01T00:00:00.000Z');
+    expect(ev.ends_at).toBe('2018-07-02T00:00:00.000Z');
   });
 
   it('uses the birthday category', () => {
@@ -30,5 +31,23 @@ describe('buildCalendarEventForDate', () => {
     );
     expect(ev.recurrence).toBe('none');
     expect(ev.location).toBe('Bistro');
+  });
+});
+
+describe('canonical relationship DATE boundaries', () => {
+  it.each([
+    ['0001-01-01', '0001-01-02'],
+    ['2026-01-31', '2026-02-01'],
+    ['2024-02-29', '2024-03-01'],
+    ['2026-12-31', '2027-01-01'],
+    ['9999-12-30', '9999-12-31'],
+  ])('stores %s through exclusive %s', (day, next) => {
+    const event = buildCalendarEventForDate({ kind: 'anniversary', title: 'Synthetic', eventDate: day, recursAnnually: false }, 'family', null);
+    expect(event.starts_at).toBe(`${day}T00:00:00.000Z`);
+    expect(event.ends_at).toBe(`${next}T00:00:00.000Z`);
+    expect(event.all_day).toBe(true);
+  });
+  it.each(['0000-01-01', '2026-02-29', '2026-13-01', '2026-02-30', '9999-12-31', '2026-10-08T12:00:00Z', ' 2026-10-08'])('refuses invalid or unrepresentable DATE %s', (eventDate) => {
+    expect(() => buildCalendarEventForDate({ kind: 'birthday', title: 'Synthetic', eventDate, recursAnnually: true }, 'family', null)).toThrow(RangeError);
   });
 });

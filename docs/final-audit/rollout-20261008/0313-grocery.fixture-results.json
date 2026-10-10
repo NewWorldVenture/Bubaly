@@ -1,0 +1,36 @@
+{
+  "database": "PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+  "scope": "Fresh local PostgreSQL, four minimal tables, synthetic two-family data and a one-user membership stub. Exact captured grocery body and unchanged0311/0313 migration bytes. The other0311 tables are absent and their wiring is skipped; this is not a full schema/role rehearsal.",
+  "files": [
+    {
+      "path": "docs/final-audit/rollout-20261008/0313-grocery.fixture.mjs",
+      "sha256": "9158490ae200020d2266ab527a3a0d4f713a217d8df6ed8597b989dbbe6038d5"
+    },
+    {
+      "path": "docs/final-audit/rollout-20261008/grocery-rpc-boundary.json",
+      "sha256": "5867b43b3cbde0982ee694681570f9e199bcde4666a76afcc6ed88373dbd9497"
+    },
+    {
+      "path": "supabase/migrations/0311_family_scoped_references.sql",
+      "sha256": "134917dc6bf393689f1d4c8526a042f8d982dde340dc23162bdf1d44487eecb6"
+    },
+    {
+      "path": "supabase/migrations/0313_meal_plan_groceries_stay_in_one_family.sql",
+      "sha256": "cffc709e6c768de4f6dde9a620c0a01c8563eacb741456d0204efbabf8159906"
+    }
+  ],
+  "checks": {
+    "baselineOtherFamilyMealHiddenByRls": true,
+    "baselineDefinerCopiesForeignMeal": true,
+    "baselineSuppliedForeignListAccepted": true,
+    "missingHelperRefusesStandalone0313AndRollsBack": true,
+    "transactionRollbackRestoresBodyAndRemovesHelperAndTriggers": true,
+    "repeatApplication": true,
+    "existingCrossFamilyPlanPreserved": true,
+    "fixedRpcCopiesOnlyOwnFamilyMeal": true,
+    "suppliedForeignListRefusedBeforeWrite": true,
+    "futureCrossFamilyPlanAndItemRefused": true,
+    "healthySameFamilyWrites": true,
+    "unauthenticatedRefused": true
+  }
+}

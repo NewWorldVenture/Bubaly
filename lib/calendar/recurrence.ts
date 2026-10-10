@@ -1,3 +1,4 @@
+import { parseExactInstant, formatExactInstant, exactInstantMilliseconds, compareExactInstants } from './exact-instant';
 // lib/calendar/recurrence.ts — pure, unit-tested recurring-event expansion.
 //
 // calendar_events stores a recurrence rule ('none'|'daily'|'weekly'|'monthly'|
@@ -17,8 +18,9 @@
 // changed — and a late-evening one crossed into the neighbouring local day,
 // where a "what's on today" query then missed it entirely.
 import {
-  daysInMonth, instantForLocalTime, localPartsAt, type LocalParts,
+  daysInMonth, instantForIcsLocalTime, localPartsAt, type LocalParts,
 } from '@/lib/time/zoned';
+import { familyFetchRange } from '@/lib/calendar/day';
 
 export interface RecurrableEvent {
   id: string;
@@ -33,8 +35,14 @@ export interface RecurrableEvent {
 const MAX_OCCURRENCES = 500;
 
 const DAY_MS = 86_400_000;
+function calendarDate(year: number, month: number, day: number): Date {
+  const date = new Date(0);
+  // Date.UTC remaps years00–99 into1900–1999; setUTCFullYear does not.
+  date.setUTCFullYear(year, month - 1, day);
+  return date;
+}
 const dayNumber = (year: number, month: number, day: number) =>
-  Math.floor(Date.UTC(year, month - 1, day) / DAY_MS);
+  Math.floor(calendarDate(year, month, day).getTime() / DAY_MS);
 
 /**
  * The local date of the n-th occurrence.
@@ -57,7 +65,7 @@ function steppedLocalDate(
     case 'weekly': {
       // Pure calendar arithmetic in UTC — no zone and no DST is involved in
       // "the date seven days after this one".
-      const shifted = new Date(Date.UTC(base.year, base.month - 1, base.day + (freq === 'daily' ? n : n * 7)));
+      const shifted = calendarDate(base.year, base.month, base.day + (freq === 'daily' ? n : n * 7));
       return { year: shifted.getUTCFullYear(), month: shifted.getUTCMonth() + 1, day: shifted.getUTCDate() };
     }
     case 'monthly': {
@@ -106,48 +114,124 @@ function firstStep(base: LocalParts, freq: string, windowStart: Date, timezone: 
  */
 export function expandEventsInZone<T extends RecurrableEvent>(
   events: T[], windowStart: Date, windowEnd: Date, timezone: string,
+  overlap = false,
+  options: { requireComplete?: boolean; windowFrom?: string; windowTo?: string } = {},
 ): T[] {
+  const incomplete = (reason: string) => new RangeError(`${reason}; the calendar window cannot be read whole`);
+  if (!Number.isFinite(windowStart.getTime()) || !Number.isFinite(windowEnd.getTime()) || windowEnd < windowStart) {
+    if (options.requireComplete) throw incomplete('Invalid recurrence window');
+    return [];
+  }
+  const windowFrom = options.windowFrom ? parseExactInstant(options.windowFrom) : BigInt(windowStart.getTime()) * 1_000_000n;
+  const windowTo = options.windowTo ? parseExactInstant(options.windowTo) : BigInt(windowEnd.getTime()) * 1_000_000n;
+  if (windowTo < windowFrom) throw incomplete('Invalid recurrence window');
+  const exact = (value: string) => {
+    try { return parseExactInstant(value); }
+    catch (error) { if (options.requireComplete) throw error; return BigInt(new Date(value).getTime()) * 1_000_000n; }
+  };
   const out: T[] = [];
   for (const e of events) {
     const start = new Date(e.starts_at);
-    if (Number.isNaN(start.getTime())) continue;
+    if (Number.isNaN(start.getTime())) {
+      if (options.requireComplete) throw incomplete('Invalid recurring event start');
+      continue;
+    }
 
+    const startExact = exact(e.starts_at);
     if (!e.recurrence || e.recurrence === 'none') {
-      if (start >= windowStart && start < windowEnd) out.push(e);
+      if (startExact >= windowFrom && startExact < windowTo) out.push(e);
       continue;
     }
 
     const until = e.recurrence_until ? new Date(e.recurrence_until) : null;
-    const seriesEnd = until && until < windowEnd ? until : windowEnd;
+    if (options.requireComplete && until && !Number.isFinite(until.getTime())) throw incomplete('Invalid recurrence cutoff');
+    const untilExact = e.recurrence_until && until && Number.isFinite(until.getTime()) ? exact(e.recurrence_until) : null;
+    const seriesEnd = untilExact !== null && untilExact < windowTo ? untilExact : windowTo;
     const durationMs = e.ends_at ? new Date(e.ends_at).getTime() - start.getTime() : null;
+    if (options.requireComplete && durationMs !== null && !Number.isFinite(durationMs)) throw incomplete('Invalid recurring event end');
+    const durationExact = e.ends_at && durationMs !== null && Number.isFinite(durationMs) ? exact(e.ends_at) - startExact : null;
+    if (options.requireComplete && durationExact !== null && durationExact < 0n) throw incomplete('Invalid recurring event interval');
+    const remainder = startExact - BigInt(start.getTime()) * 1_000_000n;
     const base = localPartsAt(start, timezone);
     const minutes = base.hour * 60 + base.minute;
     const subMinuteMs = start.getUTCSeconds() * 1000 + start.getUTCMilliseconds();
-    const from = firstStep(base, e.recurrence, windowStart, timezone);
+    // An explicit point is still a calendar occurrence, but occupies no
+    // interval. Only a missing/invalid negative end keeps the legacy estimate.
+    const busyDuration = durationExact !== null && durationExact >= 0n ? durationExact : 3_600_000_000_000n;
+    const searchStart = overlap ? new Date(exactInstantMilliseconds(windowFrom - busyDuration)) : windowStart;
+    const from = firstStep(base, e.recurrence, searchStart, timezone);
 
-    for (let i = 0; i < MAX_OCCURRENCES; i += 1) {
+    // A complete reader must distinguish the budget from the end of a series.
+    // Inspect, but never emit, the next valid step. At most eight years separate
+    // leap days around a non-leap century; monthly gaps are shorter.
+    let reachedEnd = false;
+    const steps = MAX_OCCURRENCES + (options.requireComplete ? 8 : 0);
+    for (let i = 0; i < steps; i += 1) {
       const local = steppedLocalDate(base, e.recurrence, from + i);
-      if (local === undefined) break;   // a frequency we do not know
+      if (local === undefined) {
+        if (options.requireComplete) throw incomplete('Unsupported recurrence frequency');
+        break;
+      }
       if (local === null) continue;     // a day-of-month this month does not have
-      // The local time itself may not exist on the morning the clocks jump;
-      // instantForLocalTime moves it to the first minute that does, so a 2:30am
-      // event happens at 3:00 rather than vanishing for that day.
-      const cursor = instantForLocalTime(local.year, local.month, local.day, minutes, timezone);
+      // The local time may not exist on the night the clocks jump, or may
+      // happen twice on the night they fall back. RFC 5545 §3.3.5 decides, as
+      // the ICS readers that import these series do (instantForIcsLocalTime):
+      // a time shown twice is its FIRST instant, and a skipped time takes the
+      // offset in force BEFORE the gap — a weekly 2:30am in Chicago is 08:30Z
+      // on 8 March 2026 (shown as 3:30 CDT), keeping its place in the night,
+      // rather than vanishing for that day or sliding to 3:00.
+      // The seed already names an exact instant, including which side of a
+      // fall-back fold the user saved. Resolving its wall clock again can move
+      // that first occurrence an hour earlier and out of its query window.
+      const isSeed = from + i === 0;
+      const cursor = isSeed ? new Date(start) : instantForIcsLocalTime(local.year, local.month, local.day, minutes, timezone);
       if (!cursor) continue;
       // Keep source precision within the resolver-selected local minute.
-      cursor.setTime(cursor.getTime() + subMinuteMs);
-      if (cursor >= seriesEnd) break;   // the sequence is monotone in n
-      if (cursor >= windowStart) {
+      if (!isSeed) cursor.setTime(cursor.getTime() + subMinuteMs);
+      const cursorExact = isSeed ? startExact : BigInt(cursor.getTime()) * 1_000_000n + remainder;
+      if (cursorExact >= seriesEnd) {
+        reachedEnd = true;
+        break; // the sequence is monotone in n
+      }
+      if (i >= MAX_OCCURRENCES) throw incomplete('Recurrence expansion exceeds its 500-step work limit');
+      if (overlap && busyDuration > 0n ? cursorExact + busyDuration > windowFrom : cursorExact >= windowFrom) {
+        // Derived occurrence clocks are lossless UTC projections. The stored
+        // master remains untouched, including its original timestamp spelling.
         out.push({
           ...e,
-          starts_at: cursor.toISOString(),
-          ends_at: durationMs !== null ? new Date(cursor.getTime() + durationMs).toISOString() : null,
+          starts_at: formatExactInstant(cursorExact),
+          ends_at: durationExact !== null ? formatExactInstant(cursorExact + durationExact) : null,
         });
       }
     }
+    if (options.requireComplete && !reachedEnd) throw incomplete('Recurrence expansion could not establish the end of the window');
   }
-  out.sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+  out.sort((a, b) => compareExactInstants(a.starts_at, b.starts_at));
   return out;
+}
+
+/**
+ * Expand `events` into the occurrences ON the family dates [fromDay, toDay)
+ * (`YYYY-MM-DD`, `toDay` exclusive): timed rows stepped on the family's wall
+ * clock and kept when they start between the family's midnights; all-day rows
+ * stepped by calendar date and kept when their own date (the UTC date their
+ * instant is stored on, lib/calendar/day.ts) is one of those dates.
+ *
+ * `expandEventsInZone` over the family's midnights is right for a timed row and
+ * wrong for an all-day one: an all-day Saturday is stored at Saturday 00:00Z,
+ * which is Friday afternoon in Los Angeles, so a week window from Monday 00:00
+ * Los Angeles time dropped Monday's all-day rows and kept the next Monday's.
+ */
+export function expandForFamily<T extends RecurrableEvent & { all_day?: boolean | null }>(
+  events: T[], fromDay: string, toDay: string, timezone: string,
+): T[] {
+  const range = familyFetchRange(fromDay, toDay, timezone);
+  const timed = events.filter((e) => !e.all_day);
+  const allDay = events.filter((e) => e.all_day);
+  return [
+    ...expandEventsInZone(timed, range.timedFrom, range.timedTo, timezone),
+    ...expandEventsInZone(allDay, range.allDayFrom, range.allDayTo, 'UTC'),
+  ].sort((a, b) => compareExactInstants(a.starts_at, b.starts_at));
 }
 
 function runtimeTimezone(): string {

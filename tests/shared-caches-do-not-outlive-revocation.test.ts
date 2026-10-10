@@ -50,7 +50,7 @@ const sharedCacheHeaders: Header[] = routes(API).flatMap((file) => {
   return values
     .filter((value) => /\bpublic\b/.test(value) && /s-maxage=/.test(value))
     .map((value) => ({
-      file: relative(ROOT, file),
+      file: relative(ROOT, file).replaceAll('\\', '/'),
       value,
       sMaxAge: Number(/s-maxage=(\d+)/.exec(value)?.[1] ?? NaN) || null,
     }));

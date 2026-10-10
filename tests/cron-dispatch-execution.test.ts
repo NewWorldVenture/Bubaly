@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { SCHEDULES, isSubDaily } from '../scripts/cron-dispatch.mjs';
+import { OCCURRENCE_SAFE_DAILY, SCHEDULES, isSubDaily } from '../scripts/cron-dispatch.mjs';
 
 const SCRIPT = resolve('scripts/cron-dispatch.mjs');
 const SECRET = 'unit-test-cron-secret-do-not-log';
@@ -14,10 +14,10 @@ const FIXED_TICK_ROUTES = [
 const SINGLE = [...AT, '--route', '/api/cron/notifications'];
 /** The previous successful tick: about three hours before AT, the median gap GitHub actually delivers. */
 const SINCE = '2026-09-12T08:58:00Z';
-/** Sub-daily and due in (08:58, 12:05]: the fixed six plus the seven a five-minute window would have lost. */
+/** Sub-daily and due in (08:58, 12:05]: the fixed six plus the eight a five-minute window would have lost. */
 const CATCH_UP_ROUTES = [
   ...FIXED_TICK_ROUTES,
-  '/api/cron/checkout-abandoned', '/api/cron/family-routines', '/api/cron/feedback-github-sync',
+  '/api/cron/checkout-abandoned', '/api/cron/claude-fleet', '/api/cron/family-routines', '/api/cron/feedback-github-sync',
   '/api/cron/journey-recovery', '/api/cron/library-feeds', '/api/cron/marketing-social', '/api/cron/push-scan',
 ].sort();
 const SUB_DAILY_ROUTES = Object.entries(SCHEDULES).filter(([, expr]) => isSubDaily(expr)).map(([route]) => route).sort();
@@ -184,13 +184,20 @@ describe('cron dispatcher CLI catch-up from the previous tick', () => {
     expect(calls(result.output)).toEqual(FIXED_TICK_ROUTES.map(route => `https://cron.invalid${route}`));
   });
 
-  it('clamps a boundary older than the cap: every sub-daily route is called exactly once and no daily one at all', () => {
+  it('clamps a boundary older than the cap: every sub-daily route is called exactly once, no daily one — except the occurrence-safe digest, whose 12:30 the day-long window holds', () => {
     const result = cli(AT, { CRON_SINCE: '2026-09-01T00:00:00Z' });
     expect(result.status).toBe(0);
     expect(result.output).toContain('(window 1440 min from 2026-09-11T12:05:00.000Z; catch-up capped at 1440 min (CRON_SINCE 2026-09-01T00:00:00.000Z))');
-    expect(SUB_DAILY_ROUTES).toHaveLength(17);
-    expect(calls(result.output)).toEqual(SUB_DAILY_ROUTES.map(route => `https://cron.invalid${route}`));
-    expect(result.output).not.toContain('/api/cron/admin-digest');
+    expect(SUB_DAILY_ROUTES).toHaveLength(18);
+    // admin-digest is daily, and the only daily route the catch-up calls again: a second
+    // call within its occurrence sends nothing more (OCCURRENCE_SAFE_DAILY). 2026-09-11 12:30
+    // is inside (2026-09-11 12:05, 2026-09-12 12:05], so it is called — once.
+    expect([...OCCURRENCE_SAFE_DAILY]).toEqual(['/api/cron/admin-digest']);
+    expect(calls(result.output)).toEqual([...SUB_DAILY_ROUTES, '/api/cron/admin-digest'].sort().map(route => `https://cron.invalid${route}`));
+    expect(calls(result.output).filter(url => url.endsWith('/api/cron/admin-digest'))).toHaveLength(1);
+    // The other daily routes in that window are still Vercel's.
+    expect(result.output).not.toContain('/api/cron/notifications');
+    expect(result.output).not.toContain('/api/cron/calendar-feeds');
   });
 
   it('keeps a dry run with a boundary credential-free and lists the catch-up routes', () => {

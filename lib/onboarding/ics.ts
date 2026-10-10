@@ -109,8 +109,16 @@ function eventTime(item: IcsProperty, zones: IcsZones, floatingTimezone?: string
   return { at: zones.resolve(wall, selectedZone), allDay: false, day: wall.day, wall, zone: selectedZone, floating: !zone, utc: false };
 }
 
-function parseEvent(component: IcsComponent, index: number, zones: IcsZones, floatingTimezone?: string): { event: ParsedIcsEvent; floating: boolean } {
+function parseEvent(component: IcsComponent, index: number, zones: IcsZones, floatingTimezone?: string): { event: ParsedIcsEvent | null; floating: boolean } {
   if (component.properties.some(item => ['RDATE', 'EXDATE', 'RECURRENCE-ID', 'EXRULE'].includes(item.name))) return invalid('unsupportedRecurrence');
+  // Paste previews become native copies, which cannot represent free events.
+  // Qualify only immediate VEVENT properties, including cancelled components.
+  const transparency = property(component, 'TRANSP');
+  const status = property(component, 'STATUS');
+  if (transparency && (Object.keys(transparency.params).length || !['OPAQUE', 'TRANSPARENT'].includes(transparency.value.toUpperCase()))) return invalid('invalidCalendar');
+  if (status && (Object.keys(status.params).length || !['CONFIRMED', 'TENTATIVE', 'CANCELLED'].includes(status.value.toUpperCase()))) return invalid('invalidCalendar');
+  if (status?.value.toUpperCase() === 'CANCELLED') return { event: null, floating: false };
+  if (transparency?.value.toUpperCase() === 'TRANSPARENT') return invalid('invalidCalendar');
   const start = eventTime(property(component, 'DTSTART', true)!, zones, floatingTimezone);
   const endProperty = property(component, 'DTEND');
   const durationProperty = property(component, 'DURATION');
@@ -160,10 +168,17 @@ export function parseIcsResult(text: string, options: { floatingTimezone?: strin
     if (components.length > 1000) return invalid('tooManyEvents');
     const zones = new IcsZones(calendar.children.filter(component => component.name === 'VTIMEZONE'));
     const events: ParsedIcsEvent[] = [];
+    const sourceUids = new Set<string>();
     let floating = false;
-    for (const component of components) {
-      const parsed = parseEvent(component, events.length, zones, options.floatingTimezone);
-      events.push(parsed.event); floating ||= parsed.floating;
+    for (const [index, component] of components.entries()) {
+      // Listed occurrences are native copies, not revision reconciliation.
+      // Never revive an older live component by silently discarding its cancel.
+      const uid = property(component, 'UID')?.value.trim();
+      if (uid && sourceUids.has(uid)) return invalid('invalidCalendar');
+      if (uid) sourceUids.add(uid);
+      const parsed = parseEvent(component, index, zones, options.floatingTimezone);
+      if (parsed.event) events.push(parsed.event);
+      floating ||= parsed.floating;
     }
     zones.verify();
     return { ok: true, events, disclosure: { ...(floating ? { floatingTimezone: options.floatingTimezone } : {}), recurring: events.some(event => !!event.rrule) } };

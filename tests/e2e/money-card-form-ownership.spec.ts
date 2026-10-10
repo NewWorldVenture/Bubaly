@@ -57,6 +57,8 @@ async function fixture(page: Page) {
       '@/components/wallet/card-reveal-modal': { CardRevealModal: () => null },
       '@/components/i18n/locale-provider': { useLocale: () => ({ code: 'en-US' }), useTranslations: () => (key, values) => values?.name ? key + ':' + values.name : key },
       '@/lib/marketplace/listings': { currencyUnit: () => ({ before: true, symbol: '$' }) },
+      // No known identity: each mounted view keeps its own claims, as before.
+      '@/components/app/app-context': { useApp: () => ({ userId: null, familyId: null }) },
     };
     function load(id) {
       if (Object.hasOwn(mocks, id)) return mocks[id];

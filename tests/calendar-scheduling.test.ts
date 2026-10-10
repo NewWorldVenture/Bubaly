@@ -41,6 +41,15 @@ describe('mergeIntervals', () => {
 });
 
 describe('busyIntervals', () => {
+  it('does not turn saved points into occupied intervals or split a continuous free gap', () => {
+    const points = [8, 9, 10].map(hour => ({ starts_at: at(hour), ends_at: at(hour), context: 'family' as const }));
+    expect(busyIntervals(points, undefined, ZONE)).toEqual([]);
+    const slots = findFreeSlots(points, {
+      tz: ZONE, windowStart: base + H(8), windowEnd: base + H(10), durationMin: 120,
+      workingHours: { startHour: 8, endHour: 10 }, maxSuggestions: 1,
+    });
+    expect(slots).toEqual([{ start: base + H(8), end: base + H(10) }]);
+  });
   it('defaults a no-end event to 30 minutes and filters by context', () => {
     const events = [
       { starts_at: at(9), ends_at: at(10), context: 'work' as const },
@@ -177,4 +186,51 @@ describe('a working day belongs to the family, not the host', () => {
     }
     expect(Math.min(...openings), 'no slot opens at 9am after the clocks change').toBe(9);
   });
+});
+
+
+import { vi, beforeEach as fractionalBeforeEach, afterEach as fractionalAfterEach } from 'vitest';
+import { parseExactInstant } from '@/lib/calendar/exact-instant';
+
+describe('fractional scheduling inputs retain exact decimal units', () => {
+  fractionalBeforeEach(() => { vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-08T08:00:00Z')); });
+  fractionalAfterEach(() => { vi.restoreAllMocks(); });
+
+
+
+
+const options={windowStart:Date.parse('2026-10-08T09:00:00Z'),windowEnd:Date.parse('2026-10-08T11:00:00Z'),durationMin:15,tz:'UTC',maxSuggestions:1};
+const precise=[{starts_at:'2026-10-08T09:00:00.000001Z',ends_at:'2026-10-08T09:01:00.000001Z',all_day:false}];
+for(const rows of [[],precise]) {
+ it(`preserves decimal fractional minutes with ${rows.length} precise busy rows`,()=>{
+  const [slot]=findFreeSlots(rows,{...options,durationMin:15.000001});
+  expect(slot.exactInterval).toBeDefined();
+  expect(parseExactInstant(slot.exactInterval!.end)-parseExactInstant(slot.exactInterval!.start)).toBe(900000060000n);
+ });
+ it(`preserves scientific minutes with ${rows.length} precise busy rows`,()=>{
+  const [slot]=findFreeSlots(rows,{...options,durationMin:1e-7});
+  expect(parseExactInstant(slot.exactInterval!.end)-parseExactInstant(slot.exactInterval!.start)).toBe(6000n);
+ });
+ for(const value of [1e-12,Number.NaN,Infinity,0,-1]) {
+  it(`refuses unsupported duration ${String(value)} with ${rows.length} busy rows`,()=>expect(findFreeSlots(rows,{...options,durationMin:value})).toEqual([]));
+  it(`refuses unsupported granularity ${String(value)} with ${rows.length} busy rows`,()=>expect(findFreeSlots(rows,{...options,granularityMin:value})).toEqual([]));
+ }
+ it(`preserves fractional granularity with ${rows.length} busy rows`,()=>{
+  const [slot]=findFreeSlots(rows,{...options,granularityMin:1.000001});
+  expect(slot.exactInterval).toBeDefined();
+  expect(parseExactInstant(slot.exactInterval!.start)%60000060000n).toBe(0n);
+ });
+}
+it('integer output remains original numeric-only shape',()=>expect(findFreeSlots([],{...options})).toEqual([{start:Date.parse('2026-10-08T09:00:00Z'),end:Date.parse('2026-10-08T09:15:00Z')}]));
+it('integer-ms decimal duration uses exact rational ticks without multiplication noise',()=>{
+ const [slot]=findFreeSlots([],{...options,durationMin:1.001});
+ expect(slot).toEqual({start:Date.parse('2026-10-08T09:00:00Z'),end:Date.parse('2026-10-08T09:00:00Z')+60060});
+});
+it('integer-ms decimal grid uses exact rational ticks without multiplication noise',()=>{
+ const [slot]=findFreeSlots([],{...options,granularityMin:1.001});
+ expect(slot.start%60060).toBe(0);
+ expect(Number.isSafeInteger(slot.start)).toBe(true);
+ expect(slot.end-slot.start).toBe(900000);
+ expect(slot.exactInterval).toBeUndefined();
+});
 });

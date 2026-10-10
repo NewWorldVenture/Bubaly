@@ -7,6 +7,7 @@ import { unstable_cache } from 'next/cache';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { localeFallbackChain } from '@/lib/i18n/messages';
+import { statesARetiredClaim } from '@/lib/marketing/retired-claims';
 
 export type AeoQuestion = {
   /** Empty for questions that came from a page payload rather than a table row;
@@ -58,6 +59,17 @@ function toPayloadQuestions(value: unknown, fallbackPath: string): AeoQuestion[]
   });
 }
 
+/**
+ * A question the public pages may show: it has an answer, and neither half
+ * states a claim the site has retired. The rows are editorial and were seeded
+ * before the 2026-10-04 correction, so a row that still says "native iOS and
+ * Android companions" is dropped here rather than rendered (and cited in
+ * FAQPage structured data) because nobody has edited it yet.
+ */
+function renderable(q: AeoQuestion): boolean {
+  return q.answer.trim().length > 0 && !statesARetiredClaim(q.question, q.answer);
+}
+
 function toQuestion(r: Row): AeoQuestion {
   const meta = (r.metadata ?? {}) as Record<string, unknown>;
   return {
@@ -92,7 +104,7 @@ export async function readPublishedAeoQuestions(
       return { questions: [], available: false };
     }
     return {
-      questions: (data ?? []).map(toQuestion).filter((q) => q.answer.trim().length > 0),
+      questions: (data ?? []).map(toQuestion).filter(renderable),
       available: true,
     };
   } catch (error) {
@@ -127,7 +139,7 @@ export async function readAeoQuestionsForCategory(category: string, limit = 4): 
       console.error('[marketing-aeo] category questions read failed', error);
       return { questions: [], available: false };
     }
-    let rows = (data ?? []).map(toQuestion).filter((q) => q.answer.trim().length > 0);
+    let rows = (data ?? []).map(toQuestion).filter(renderable);
     let available = true;
     if (rows.length < limit) {
       const extra = await readPublishedAeoQuestions(limit * 2, signal);
@@ -254,7 +266,7 @@ export async function readAeoQuestionsForPath(path: string, limit = 6): Promise<
       .abortSignal(signal)
       .limit(limit);
     if (!rowsError) {
-      const questions = (rows ?? []).map(toQuestion).filter((q) => q.answer.trim().length > 0);
+      const questions = (rows ?? []).map(toQuestion).filter(renderable);
       // A successful empty result is authoritative: deleting or unpublishing
       // an answer must remove it publicly instead of resurrecting stale JSON.
       return { questions, available: true };
@@ -279,7 +291,7 @@ export async function readAeoQuestionsForPath(path: string, limit = 6): Promise<
     const questions = toPayloadQuestions(
       payload && typeof payload === 'object' ? (payload as Record<string, unknown>).questions : payload,
       path,
-    );
+    ).filter(renderable);
     return { questions: questions.slice(0, limit), available: !error || Boolean(data) };
   } catch (error) {
     console.error('[marketing-aeo] path questions read failed', error);

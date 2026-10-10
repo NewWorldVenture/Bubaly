@@ -1,0 +1,11 @@
+{
+  "projectRef": "ltcxlbipiihclxwioyqj",
+  "scope": "Read-only aggregate counts only; no individual records, identifiers, monetary values or writes.",
+  "observed_at": "2026-10-08 01:33:11.435946+00",
+  "investment_orders": 1000,
+  "pending_orders": 125,
+  "inconsistent_order_amounts": 500,
+  "inconsistent_pending_amounts": 0,
+  "cross_family_order_wallets": 500,
+  "cross_family_allowance_wallets": 500
+}

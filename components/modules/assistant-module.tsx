@@ -23,7 +23,8 @@ import { ConversationPane } from '@/components/assistant/conversation-pane';
 import { ResultPane, cardId, type ConversationMessage } from '@/components/assistant/result-pane';
 import { ContextRail, type ActivityItem, type GlanceItem, type UpcomingEvent } from '@/components/assistant/context-rail';
 import { createClient } from '@/lib/supabase/client';
-import { settleAll } from '@/lib/supabase/settle';
+import { readAssistantRailCalendar } from '@/lib/calendar/assistant-rail';
+import { settle, settleAll } from '@/lib/supabase/settle';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import { cn } from '@/lib/utils/cn';
@@ -33,7 +34,12 @@ import { MicButton } from '@/components/voice/mic-button';
 import type { MicStatus } from '@/lib/voice/mic-flow';
 import { VOICE_MODES } from '@/lib/ai/voice';
 import { parsePrefillQuery } from '@/lib/ai/prefill';
-import { parseAssistantStreamEvent, runStatusCard, structuredContentFrom, type ResultCard } from '@/lib/ai/result-cards';
+import { runStatusCard, structuredContentFrom, type ResultCard } from '@/lib/ai/result-cards';
+import {
+  AssistantConversationActivity, assistantConversationKey, chronologicalMessages,
+  consumeAssistantStream, readAssistantConversation, rememberAssistantConversation,
+} from '@/lib/ai/conversation-session';
+import { MAX_AI_CHAT_MESSAGE_CHARS } from '@/lib/ai/chat-request';
 import { usePlural, useTranslations } from '@/components/i18n/locale-provider';
 
 // Quick-suggestion chips shown above an active conversation. Each holds a
@@ -65,7 +71,10 @@ const TRY_ASKING = [
 ];
 
 type ChatAction = { name: string; ok: boolean; summary: string };
-type Message = ConversationMessage & { actions?: ChatAction[]; runIds?: string[] };
+type Message = ConversationMessage & { actions?: ChatAction[]; runIds?: string[]; error?: string; retryText?: string };
+const MESSAGE_PAGE_SIZE = 100;
+const CONVERSATION_PAGE_SIZE = 25;
+type HistoryCursor = { id: string; created_at: string };
 
 function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -104,11 +113,18 @@ export function withRunCards(cards: ResultCard[], runIds: string[]): ResultCard[
 }
 
 export function AssistantModule() {
+  const { userId, familyId, selfMember, role } = useApp();
+  // A changed identity remounts before paint: old text/cards/drafts never get a
+  // render under the next household while waiting for an effect to clear them.
+  return <AssistantSession key={`${userId}:${familyId}:${selfMember?.id ?? ''}:${role}`} />;
+}
+
+function AssistantSession() {
   const clock = useFamilyClock();
   const { fmtRelative } = useFormat();
   const t = useTranslations();
   const plural = usePlural();
-  const { family, selfMember, role } = useApp();
+  const { family, selfMember, role, userId } = useApp();
   const firstName = (selfMember?.display_name ?? '').trim().split(' ')[0];
   const canDecide = isManager(role);
   const desktop = useDesktop();
@@ -135,16 +151,27 @@ export function AssistantModule() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [convId, setConvId] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const stored = sessionStorage.getItem('assistant-conv-id');
-      if (stored && stored.includes('-')) return stored; // valid UUID
-      const id = newConversationId();
-      sessionStorage.setItem('assistant-conv-id', id);
-      return id;
-    }
-    return newConversationId();
-  });
+  const [convId, setConvId] = useState(newConversationId);
+  const storageKey = assistantConversationKey(userId, family.id);
+  const remember = (id: string) => {
+    try { rememberAssistantConversation(window.sessionStorage, storageKey, id); } catch { /* Storage may be disabled. */ }
+  };
+  const [activityGuard] = useState(() => new AssistantConversationActivity());
+  const mounted = useRef(true);
+  const activeId = useRef(convId);
+  const drafts = useRef(new Map<string, string>());
+  const pendingSend = useRef<{ controller: AbortController; replyId: string } | null>(null);
+  const pendingThread = useRef(false);
+  const listRequest = useRef(0);
+  const railRequest = useRef(0);
+  const listAbort = useRef<AbortController | null>(null);
+  const railAbort = useRef<AbortController | null>(null);
+  const [threadLoading, setThreadLoading] = useState(false);
+  const [threadRetryId, setThreadRetryId] = useState<string | null>(null);
+  const [historyCursor, setHistoryCursor] = useState<HistoryCursor | null>(null);
+  const [hasOlder, setHasOlder] = useState(false);
+  const [listLoading, setListLoading] = useState(false);
+  const [hasMoreConversations, setHasMoreConversations] = useState(false);
   const [conversations, setConversations] = useState<{ id: string; title: string; updated_at: string }[]>([]);
   const [conversationsError, setConversationsError] = useState<string | null>(null);
   const [threadError, setThreadError] = useState<string | null>(null);
@@ -168,6 +195,24 @@ export function AssistantModule() {
   const [railError, setRailError] = useState<string | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollAfterChange = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    activityGuard.activate();
+    return () => {
+      mounted.current = false;
+      activityGuard.dispose();
+      listAbort.current?.abort();
+      railAbort.current?.abort();
+    };
+  }, [activityGuard]);
+
+  function setDraft(value: string) {
+    if (!mounted.current || activeId.current !== convId) return;
+    drafts.current.set(activeId.current, value);
+    setInput(value);
+  }
 
   // True once the user has sent at least one message → switch hero → chat thread.
   const hasConversation = messages.some((m) => m.role === 'user');
@@ -175,7 +220,11 @@ export function AssistantModule() {
   // Load the context rail. Every read captures its error: a failed count is
   // shown as an error the person can retry, never as a confident zero.
   const loadRail = useCallback(async () => {
-    if (!family?.id) return;
+    if (!family?.id || !mounted.current) return;
+    const request = ++railRequest.current;
+    railAbort.current?.abort();
+    const abort = new AbortController();
+    railAbort.current = abort;
     const supabase = createClient();
     // The FAMILY's day and fortnight, as instants (TIME-003).
     const now = new Date();
@@ -183,20 +232,21 @@ export function AssistantModule() {
     const end = clock.dayStart(1, now);
     const in14 = clock.dayStart(14, now);
     setRailLoading(true);
+    const calendarRead = readAssistantRailCalendar(supabase, family.id, clock.timeZone, start, end, in14, abort.signal);
+    const todayCalendarRead = calendarRead.then(result => ({ data: result.data?.today ?? null, error: result.error }));
+    const upcomingCalendarRead = calendarRead.then(result => ({ data: result.data?.upcoming ?? null, error: result.error }));
 
     const [todayRes, choresRes, upcomingRes, remindersRes, medsRes] = await settleAll([
-      supabase.from('calendar_events').select('id, title, starts_at, all_day, created_at')
-        .eq('family_id', family.id).gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString()),
+      todayCalendarRead,
       supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
-        .eq('family_id', family.id).in('status', ['todo', 'in_progress']),
-      supabase.from('calendar_events').select('id, title, starts_at, all_day')
-        .eq('family_id', family.id).gte('starts_at', end.toISOString()).lte('starts_at', in14.toISOString())
-        .order('starts_at').limit(4),
+        .eq('family_id', family.id).in('status', ['todo', 'in_progress']).abortSignal(abort.signal),
+      upcomingCalendarRead,
       supabase.from('reminders').select('id', { count: 'exact', head: true })
-        .eq('family_id', family.id).eq('is_done', false).lte('remind_at', end.toISOString()),
+        .eq('family_id', family.id).eq('is_done', false).lte('remind_at', end.toISOString()).abortSignal(abort.signal),
       supabase.from('medications').select('id', { count: 'exact', head: true })
-        .eq('family_id', family.id).eq('is_active', true),
+        .eq('family_id', family.id).eq('is_active', true).abortSignal(abort.signal),
     ]);
+    if (!mounted.current || request !== railRequest.current || abort.signal.aborted) return;
     setRailLoading(false);
     const failed = [todayRes.error, choresRes.error, upcomingRes.error, remindersRes.error, medsRes.error].find(Boolean);
     if (failed) {
@@ -212,7 +262,10 @@ export function AssistantModule() {
       { icon: Bell, value: String(remindersRes.count ?? 0), label: t('assistantModule.glance.remindersDue') },
       { icon: Pill, value: String(medsRes.count ?? 0), label: t('assistantModule.glance.activeMeds') },
     ]);
-    setUpcoming(upcomingRes.data ?? []);
+    setUpcoming((upcomingRes.data ?? []).map(e => ({
+      ...e,
+      occurrenceKey: JSON.stringify([e.id, e.starts_at]),
+    })));
     setActivity(todayEvts.slice(0, 3).map((e, i) => ({
       icon: CalendarDays,
       text: t('assistantModule.addedToCalendar', { title: e.title }),
@@ -224,7 +277,8 @@ export function AssistantModule() {
   useEffect(() => { void loadRail(); }, [loadRail]);
 
   useEffect(() => {
-    if (hasConversation) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (hasConversation && scrollAfterChange.current) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    scrollAfterChange.current = true;
   }, [messages, hasConversation]);
 
   // The plan pane, once looked at, has no unseen cards.
@@ -234,63 +288,127 @@ export function AssistantModule() {
   // that question immediately, then strips it from the URL so a refresh/back
   // doesn't resend. Runs once.
   const prefillSent = useRef(false);
-  useEffect(() => {
-    if (prefillSent.current || typeof window === 'undefined') return;
-    const q = parsePrefillQuery(window.location.search);
-    if (!q) return;
-    prefillSent.current = true;
-    const url = new URL(window.location.href);
-    url.searchParams.delete('q');
-    window.history.replaceState({}, '', url.toString());
-    void send(q);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load the conversation list, and rehydrate the active conversation's messages.
-  const loadConversations = useCallback(async () => {
-    if (!family?.id) return;
+  const loadConversations = useCallback(async (offset = 0) => {
+    if (!family?.id || !mounted.current) return;
+    const request = ++listRequest.current;
+    listAbort.current?.abort();
+    const abort = new AbortController();
+    listAbort.current = abort;
+    setListLoading(true);
     const supabase = createClient();
-    const { data, error } = await supabase.from('ai_conversations')
-      .select('id, title, updated_at').eq('family_id', family.id)
-      .order('updated_at', { ascending: false }).limit(25);
+    const { data, error } = await settle(supabase.from('ai_conversations')
+      .select('id, title, updated_at').eq('family_id', family.id).eq('user_id', userId)
+      .order('updated_at', { ascending: false }).order('id', { ascending: false })
+      .range(offset, offset + CONVERSATION_PAGE_SIZE - 1).abortSignal(abort.signal));
+    if (!mounted.current || request !== listRequest.current) return;
+    setListLoading(false);
     // Keep the prior conversation history on a transient read failure instead of
     // clobbering the sidebar to an empty "no conversations" list.
     setConversationsError(error ? describeDbError(error, t('assistantModule.couldNotLoadYourConversations')) : null);
     if (error) return;
-    setConversations(data ?? []);
-  }, [family?.id, t]);
+    if (offset === 0) setConversations(data ?? []);
+    else setConversations(previous => [...new Map([...previous, ...(data ?? [])].map(row => [row.id, row])).values()]);
+    setHasMoreConversations((data?.length ?? 0) === CONVERSATION_PAGE_SIZE);
+  }, [family?.id, userId, t]);
 
-  const loadConversation = useCallback(async (id: string) => {
+  const loadConversation = async (id: string, older = false, resume = false) => {
+    if (!mounted.current || (older && pendingThread.current)) return;
+    if (!older) {
+      activityGuard.invalidate();
+      pendingSend.current = null;
+      setLoading(false);
+      voice.stopSpeaking();
+      setMicStatus('idle');
+      setVoiceError(null);
+    }
+    const ticket = activityGuard.begin();
+    pendingThread.current = true;
+    setThreadLoading(true);
+    setThreadRetryId(id);
     const supabase = createClient();
-    const { data, error } = await supabase.from('ai_messages')
-      .select('role, content, tool_results, structured_content').eq('conversation_id', id)
-      .order('created_at', { ascending: true }).limit(200);
+    try {
+    // RLS protects the read too, but absence is not an empty thread: the stored
+    // id can have been deleted on another device or belong to a former session.
+    const ownership = await settle(supabase.from('ai_conversations').select('id')
+      .eq('id', id).eq('family_id', family.id).eq('user_id', userId)
+      .abortSignal(ticket.controller.signal).maybeSingle());
+    if (!ticket.current()) return;
+    if (ownership.error) { setThreadError(describeDbError(ownership.error, t('assistantModule.couldNotOpenThatConversation'))); return; }
+    if (!ownership.data) {
+      if (resume) newChat();
+      else setThreadError(t('ai.conversationNotFound'));
+      return;
+    }
+    let query = supabase.from('ai_messages')
+      .select('id, role, content, created_at, tool_results, structured_content')
+      .eq('conversation_id', id).eq('family_id', family.id)
+      .order('created_at', { ascending: false }).order('id', { ascending: false })
+      .limit(MESSAGE_PAGE_SIZE + 1).abortSignal(ticket.controller.signal);
+    if (older && historyCursor) query = query.or(`created_at.lt.${historyCursor.created_at},and(created_at.eq.${historyCursor.created_at},id.lt.${historyCursor.id})`);
+    const { data, error } = await settle(query);
+    if (!ticket.current()) return;
     // A failed message read must not masquerade as an empty conversation (a fresh
     // greeting) — that hides real history. Leave the current view intact so the
     // user can retry rather than switching into a misleading blank thread.
     setThreadError(error ? describeDbError(error, t('assistantModule.couldNotOpenThatConversation')) : null);
     if (error) return;
+    const page = (data ?? []).slice(0, MESSAGE_PAGE_SIZE);
+    const last = page.at(-1);
+    setHasOlder((data?.length ?? 0) > MESSAGE_PAGE_SIZE);
+    setHistoryCursor(last ? { id: last.id, created_at: last.created_at } : null);
+    activeId.current = id;
     setConvId(id);
-    if (typeof window !== 'undefined') sessionStorage.setItem('assistant-conv-id', id);
-    if (wroteNoRows(data)) { setMessages(greeting()); return; }
-    setMessages(data.map((m) => {
+    remember(id);
+    setThreadRetryId(null);
+    setInput(drafts.current.get(id) ?? '');
+    setHighlightId(null);
+    setUnseenCards(0);
+    const loaded = chronologicalMessages(page).map((m) => {
       const structured = structuredContentFrom(m.structured_content);
       return {
         role: m.role === 'assistant' ? 'assistant' : 'user',
         content: m.content,
-        id: generateId(),
+        id: m.id,
         actions: Array.isArray(m.tool_results)
           ? (m.tool_results as { ok?: boolean; summary?: string; error?: string }[]).map((r) => ({ name: '', ok: r?.ok !== false, summary: r?.summary ?? r?.error ?? 'Done' }))
           : undefined,
         cards: m.role === 'assistant' ? withRunCards(structured.cards, structured.runIds) : undefined,
         runIds: structured.runIds,
+        ...(m.role === 'assistant' && structured.responseError ? { error: structured.responseError } : {}),
       } as Message;
-    }));
-  }, [firstName]); // eslint-disable-line react-hooks/exhaustive-deps
+    });
+    scrollAfterChange.current = !older;
+    setMessages(previous => ticket.current()
+      ? older ? [...new Map([...loaded, ...previous].map(message => [message.id, message])).values()]
+        : loaded.length ? loaded : greeting()
+      : previous);
+    } finally {
+      if (ticket.current()) { pendingThread.current = false; setThreadLoading(false); }
+      ticket.finish();
+    }
+  };
 
   function newChat() {
+    if (!mounted.current) return;
+    activityGuard.invalidate();
+    pendingSend.current = null;
+    pendingThread.current = false;
+    setLoading(false);
+    setThreadLoading(false);
+    setThreadError(null);
+    setThreadRetryId(null);
+    setHistoryCursor(null);
+    setHasOlder(false);
+    setUnseenCards(0);
+    voice.stopSpeaking();
+    setMicStatus('idle');
+    setVoiceError(null);
     const id = newConversationId();
+    activeId.current = id;
     setConvId(id);
-    if (typeof window !== 'undefined') sessionStorage.setItem('assistant-conv-id', id);
+    remember(id);
     setMessages(greeting());
     setInput('');
     setHighlightId(null);
@@ -298,14 +416,15 @@ export function AssistantModule() {
   }
 
   async function deleteConversation(id: string) {
-    if (!confirm(t('assistantModule.deleteThisConversation'))) return;
+    if (!mounted.current || !confirm(t('assistantModule.deleteThisConversation'))) return;
     // 0255 ("ai runtime lockdown") narrows writes on ai_conversations, and RLS
     // FILTERS a delete rather than refusing it — so without the readback a
     // removal the policy blocked answered `error: null` and the row was dropped
     // from the list on screen while staying in the table. `family_id` answers a
     // different question from the readback: whose conversation it was.
-    const { data: removed, error } = await createClient().from('ai_conversations').delete()
-      .eq('id', id).eq('family_id', family.id).select('id');
+    const { data: removed, error } = await settle(createClient().from('ai_conversations').delete()
+      .eq('id', id).eq('family_id', family.id).eq('user_id', userId).select('id'));
+    if (!mounted.current) return;
     if (error) {
       console.error('[assistant] conversation delete failed', error);
       setConversationsError(describeDbError(error, t('assistantModule.couldNotDeleteThatConversation')));
@@ -313,14 +432,17 @@ export function AssistantModule() {
     }
     if (wroteNoRows(removed)) { setConversationsError(t('assistantModule.couldNotDeleteThatConversation')); return; }
     setConversations((prev) => prev.filter((c) => c.id !== id));
-    if (id === convId) newChat();
+    drafts.current.delete(id);
+    if (id === activeId.current) newChat();
   }
 
   async function renameConversation(id: string, current: string) {
-    const title = window.prompt(t('assistantModule.renameConversation'), current || '')?.trim();
+    if (!mounted.current) return;
+    const title = window.prompt(t('assistantModule.renameConversation'), current || '')?.trim().slice(0, 80);
     if (!title || title === current) return;
-    const { data: renamed, error } = await createClient().from('ai_conversations')
-      .update({ title: title.slice(0, 80) }).eq('id', id).eq('family_id', family.id).select('id');
+    const { data: renamed, error } = await settle(createClient().from('ai_conversations')
+      .update({ title }).eq('id', id).eq('family_id', family.id).eq('user_id', userId).select('id'));
+    if (!mounted.current) return;
     if (error) {
       console.error('[assistant] conversation rename failed', error);
       setConversationsError(describeDbError(error, t('assistantModule.couldNotRenameThatConversation')));
@@ -333,29 +455,55 @@ export function AssistantModule() {
   useEffect(() => { void loadConversations(); }, [loadConversations]);
   // On first mount, rehydrate the stored conversation (or greet for a new one).
   useEffect(() => {
-    const stored = typeof window !== 'undefined' ? sessionStorage.getItem('assistant-conv-id') : null;
-    if (stored && stored.includes('-')) void loadConversation(stored);
-    else setMessages(greeting());
+    if (prefillSent.current) return;
+    const q = parsePrefillQuery(window.location.search);
+    if (q) {
+      // StrictMode's mount cleanup happens before this microtask. Only the live
+      // mount may consume the link, so its probe mount cannot send then abort it.
+      const ticket = activityGuard.begin();
+      queueMicrotask(() => {
+        if (!ticket.current()) { ticket.finish(); return; }
+        ticket.finish();
+        prefillSent.current = true;
+        const url = new URL(window.location.href);
+        url.searchParams.delete('q');
+        window.history.replaceState({}, '', url.toString());
+        // A deep-linked request starts its own conversation instead of joining a
+        // saved thread whose async rehydration might overwrite the new response.
+        remember(activeId.current);
+        void send(q);
+      });
+      return;
+    }
+    let stored: string | null = null;
+    try { stored = readAssistantConversation(window.sessionStorage, storageKey); } catch { /* Storage denied. */ }
+    if (stored) void loadConversation(stored, false, true);
+    else { remember(activeId.current); setMessages(greeting()); }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function send(text?: string) {
     const msg = (text ?? input).trim();
-    if (!msg || loading) return;
-    setInput('');
+    if (!msg || !mounted.current || activeId.current !== convId || pendingSend.current || pendingThread.current) return;
+    if (msg.length > MAX_AI_CHAT_MESSAGE_CHARS) { setThreadError(t('validation.messageTooLong', { max: MAX_AI_CHAT_MESSAGE_CHARS })); return; }
+    const conversationId = activeId.current;
+    const ticket = activityGuard.begin();
+    setDraft('');
+    setThreadError(null);
     setHighlightId(null);
 
     const userMsg: Message = { role: 'user', content: msg, id: generateId() };
     const turnKey = crypto.randomUUID();
     const replyId = generateId();
+    pendingSend.current = { controller: ticket.controller, replyId };
     // Add the user turn + an empty assistant bubble we fill as the stream arrives.
     setMessages((prev) => [...prev, userMsg, { role: 'assistant', content: '', id: replyId, actions: [], cards: [], runIds: [] }]);
     setLoading(true);
 
     const patchReply = (fn: (m: Message) => Message) =>
-      setMessages((prev) => prev.map((m) => (m.id === replyId ? fn(m) : m)));
+      setMessages((prev) => ticket.current() ? prev.map((m) => (m.id === replyId ? fn(m) : m)) : prev);
     const addCard = (card: ResultCard) => {
       patchReply((m) => ({ ...m, cards: [...(m.cards ?? []), card] }));
-      setUnseenCards((n) => n + 1);
+      setUnseenCards((n) => ticket.current() ? n + 1 : n);
     };
 
     try {
@@ -363,34 +511,22 @@ export function AssistantModule() {
         method: 'POST',
         // One key per send, kept by any retry of it: the server answers a repeat
         // with the saved reply instead of counting a second turn (F19).
-        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', 'Idempotency-Key': turnKey },
-        body: JSON.stringify({ conversationId: convId, message: msg }),
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', 'X-Bubaly-Family-Id': family.id, 'Idempotency-Key': turnKey },
+        body: JSON.stringify({ conversationId, message: msg }),
+        signal: ticket.controller.signal,
       });
+      if (!ticket.current()) return;
       if (!res.ok || !res.body) {
         const err = await res.json().catch(() => ({ error: t('assistantModule.sorryIHadTroubleWith') })) as { error?: string };
-        patchReply((m) => ({ ...m, content: err.error ?? t('assistantModule.sorryIHadTroubleWith') }));
+        patchReply((m) => ({ ...m, error: err.error ?? t('assistantModule.sorryIHadTroubleWith'), retryText: msg }));
         return;
       }
-      // Parse the SSE stream: delta (text), action (line), card, run, error, done.
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = '';
       let finalText = '';
+      let failed = false;
       // The turn's request id: the spoken answer rides on this exchange (F19).
       let exchangeId: string | null = null;
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const parts = buf.split('\n\n');
-        buf = parts.pop() ?? '';
-        for (const part of parts) {
-          const line = part.split('\n').find((l) => l.startsWith('data:'));
-          if (!line) continue;
-          let raw: unknown;
-          try { raw = JSON.parse(line.slice(5).trim()); } catch { continue; }
-          const ev = parseAssistantStreamEvent(raw);
-          if (!ev) continue;
+      const result = await consumeAssistantStream(res.body, (ev) => {
+          if (!ticket.current()) return;
           if (ev.type === 'delta' && ev.text) { finalText += ev.text; patchReply((m) => ({ ...m, content: m.content + ev.text })); }
           else if (ev.type === 'action') patchReply((m) => ({ ...m, actions: [...(m.actions ?? []), { name: ev.name, ok: ev.ok, summary: ev.summary }] }));
           else if (ev.type === 'card') addCard(ev.card);
@@ -398,19 +534,45 @@ export function AssistantModule() {
             patchReply((m) => ({ ...m, runIds: [...new Set([...(m.runIds ?? []), ev.runId])] }));
             addCard(runStatusCard({ runId: ev.runId, status: ev.status, summary: ev.summary }));
           }
-          else if (ev.type === 'error') patchReply((m) => ({ ...m, content: m.content || ev.error }));
-          else if (ev.type === 'done') { finalText = ev.content || finalText; exchangeId = ev.requestId; patchReply((m) => ({ ...m, content: m.content || (ev.content || 'Done.') })); }
-        }
+          else if (ev.type === 'error') { failed = true; patchReply((m) => ({ ...m, error: ev.error })); }
+          else if (ev.type === 'done') {
+            finalText = ev.content || finalText;
+            exchangeId = ev.requestId;
+            if (!ev.persisted) failed = true;
+            patchReply((m) => ({ ...m, content: ev.content || m.content,
+              ...(!ev.persisted ? { error: m.error || t('mobileAssistant.notSaved') } : {}) }));
+          }
+      }, ticket.controller.signal);
+      if (!ticket.current()) return;
+      if (!result.completed) {
+        failed = true;
+        patchReply((m) => ({ ...m, error: m.error || t('assistantModule.session.interrupted') }));
       }
       // Speak the reply aloud when voice output is enabled on this device.
-      if (finalText.trim() && voice.shouldSpeak()) void voice.speak(finalText, exchangeId);
+      if (!failed && finalText.trim() && voice.shouldSpeak()) void voice.speak(finalText, exchangeId);
     } catch (error) {
+      if (!ticket.current()) return;
       console.error('[assistant] request failed', error);
-      patchReply((m) => ({ ...m, content: m.content || t('assistantModule.somethingWentWrong') }));
+      patchReply((m) => ({ ...m, error: t('assistantModule.session.interrupted') }));
     } finally {
-      setLoading(false);
-      void loadConversations(); // titles/order update after the turn persists
+      if (ticket.current()) {
+        pendingSend.current = null;
+        setLoading(false);
+        void loadConversations();
+      }
+      ticket.finish();
     }
+  }
+
+  function stopResponse() {
+    const pending = pendingSend.current;
+    if (!pending || !mounted.current) return;
+    pending.controller.abort();
+    pendingSend.current = null;
+    setLoading(false);
+    setMessages(previous => previous.map(message => message.id === pending.replyId
+      ? { ...message, error: t('assistantModule.session.stopped') } : message));
+    voice.stopSpeaking();
   }
 
   /** A chip in the thread points at its card: on a phone that means the Plan tab. */
@@ -425,12 +587,12 @@ export function AssistantModule() {
 
   // Shared composer props (used by both the hero and the docked input bar).
   const composerProps = {
-    input, setInput, loading, voice, voiceError, micStatus,
+    input, setInput: setDraft, loading: loading || threadLoading, voice, voiceError, micStatus,
     onSend: () => void send(),
     // A spoken request is sent exactly like a typed one.
     onTranscript: (text: string) => void send(text),
-    onMicStatus: setMicStatus,
-    onVoiceError: setVoiceError,
+    onMicStatus: (status: MicStatus) => { if (mounted.current && activeId.current === convId && !pendingThread.current) setMicStatus(status); },
+    onVoiceError: (message: string | null) => { if (mounted.current && activeId.current === convId && !pendingThread.current) setVoiceError(message); },
     dismissVoiceError: () => setVoiceError(null),
   };
 
@@ -448,13 +610,12 @@ export function AssistantModule() {
         ); })}
       </div>
 
-      {threadError && (
-        <div role="alert" className="mt-3 rounded-xl border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">
-          {threadError}
-        </div>
-      )}
-
       <div className="mt-7 flex-1 space-y-6 overflow-y-auto overscroll-contain pb-4">
+        {hasOlder && (
+          <button type="button" disabled={threadLoading} onClick={() => void loadConversation(convId, true)} className="focus-ring min-h-11 rounded-lg border border-border px-3 py-2 text-xs text-brand-text disabled:opacity-50">
+            {t('assistantModule.session.loadEarlier')}
+          </button>
+        )}
         {messages.map((msg) =>
           msg.role === 'assistant' ? (
             <div key={msg.id} className="assistant-message-enter flex gap-3">
@@ -462,7 +623,7 @@ export function AssistantModule() {
                 <Sparkles className="h-4 w-4 text-brand-text" aria-hidden />
               </div>
               <div className="min-w-0 max-w-[480px] space-y-2">
-                <div className="rounded-2xl border border-border bg-surface/40 p-4 text-sm leading-6 whitespace-pre-wrap">
+                {(msg.content || !msg.error) && <div className="rounded-2xl border border-border bg-surface/40 p-4 text-sm leading-6 whitespace-pre-wrap">
                   {msg.content
                     ? msg.content
                     : ((msg.actions && msg.actions.length > 0) || (msg.cards && msg.cards.length > 0))
@@ -472,7 +633,18 @@ export function AssistantModule() {
                           {[0, 1, 2].map((i) => <span key={i} className="h-2 w-2 animate-bounce rounded-full bg-brand motion-reduce:animate-none" style={{ animationDelay: `${i * 0.15}s` }} />)}
                         </span>
                       )}
-                </div>
+                </div>}
+                {msg.error && (
+                  <div role="alert" className="rounded-xl border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">
+                    <p>{msg.error}</p>
+                    <button type="button" disabled={loading || threadLoading} onClick={() => void loadConversation(convId)} className="focus-ring mt-2 min-h-11 rounded-lg border border-current px-2 disabled:opacity-50">
+                      {t('assistantModule.session.reviewSaved')}
+                    </button>
+                    {msg.retryText && <button type="button" disabled={loading || threadLoading} onClick={() => setDraft(msg.retryText!)} className="focus-ring ml-2 min-h-11 rounded-lg border border-current px-2 disabled:opacity-50">
+                      {t('assistantModule.session.editRetry')}
+                    </button>}
+                  </div>
+                )}
                 {msg.actions && msg.actions.length > 0 && (
                   <ul className="flex flex-wrap gap-1.5" aria-label={t('assistant.whatBubalyDid')}>
                     {msg.actions.map((a, i) => (
@@ -518,7 +690,7 @@ export function AssistantModule() {
 
       {/* Docked input bar */}
       <div className="mt-4 pb-[env(safe-area-inset-bottom)]">
-        <Composer variant="bar" {...composerProps} />
+        <Composer key={`${convId}:${threadLoading}`} variant="bar" {...composerProps} />
         <p className="mt-3 text-center text-xs text-muted">{t('assistant.aiCanMakeMistakesPleaseDouble')}</p>
       </div>
     </>
@@ -532,7 +704,7 @@ export function AssistantModule() {
       </p>
 
       <div className="mt-6 w-full max-w-2xl">
-        <Composer variant="hero" {...composerProps} />
+        <Composer key={`${convId}:${threadLoading}`} variant="hero" {...composerProps} />
       </div>
 
       <div className="mt-6 w-full max-w-3xl">
@@ -543,7 +715,7 @@ export function AssistantModule() {
               key={id}
               type="button"
               onClick={() => void send(t(popularKey(id, 'prompt')))}
-              disabled={loading}
+              disabled={loading || threadLoading}
               className="ai-suggest-card group flex items-start gap-2.5 p-3 text-left disabled:opacity-50"
             >
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand-text transition group-hover:bg-brand/20">
@@ -629,6 +801,17 @@ export function AssistantModule() {
         </div>
       </div>
 
+      {threadError && (
+        <div role="alert" className="rounded-xl border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">
+          <p>{threadError}</p>
+          {threadRetryId && <button type="button" onClick={() => void loadConversation(threadRetryId)} className="focus-ring mt-2 min-h-11 rounded-lg border border-current px-2">{t('mobileAssistant.retry')}</button>}
+        </div>
+      )}
+      {threadLoading && <p role="status" className="text-sm text-muted">{t('assistantModule.session.loading')}</p>}
+      {loading && <button type="button" onClick={stopResponse} className="focus-ring inline-flex min-h-11 items-center gap-2 self-start rounded-lg border border-border px-3 text-sm text-fg">
+        <Square className="h-4 w-4" aria-hidden /> {t('assistantModule.session.stop')}
+      </button>}
+
       <AssistantWorkspace
         pane={pane}
         onPaneChange={setPane}
@@ -639,6 +822,10 @@ export function AssistantModule() {
             conversations={conversations}
             activeId={convId}
             error={conversationsError}
+            loading={listLoading && conversations.length === 0}
+            hasMore={hasMoreConversations}
+            loadingMore={listLoading}
+            onLoadMore={() => void loadConversations(conversations.length)}
             onSelect={(id) => void loadConversation(id)}
             onNew={newChat}
             onRename={(id, current) => void renameConversation(id, current)}

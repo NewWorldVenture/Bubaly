@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { RETIRED_CLAIMS } from '@/lib/marketing/retired-claims';
 
 // Every public-site source that carries copy or sample data. Files that a
 // later stage of the public-site plan creates are listed already and skipped
@@ -8,6 +9,9 @@ import { describe, expect, it } from 'vitest';
 // app/(marketing)/security/page.tsx joined with the Trust Center stage, which
 // is what removed the claims that page used to carry.
 const FILES = [
+  // The generator that seeded the admin stores (0229). Its rows still feed
+  // public pages, so what it would write is held to the same list.
+  'scripts/generate-marketing-seed.mjs',
   'components/marketing/visual-mocks.tsx',
   'components/marketing/reference-showcases.tsx',
   'components/marketing/hero-outcomes.tsx',
@@ -28,6 +32,12 @@ const FILES = [
   'app/(marketing)/security/page.tsx',
   'app/(marketing)/ai/page.tsx',
   'app/(marketing)/mobile/page.tsx',
+  'app/(marketing)/faq/page.tsx',
+  'components/marketing/faq-explorer.tsx',
+  'app/(marketing)/pricing/pricing-content.tsx',
+  'lib/marketing/value.ts',
+  'app/(marketing)/terms/page.tsx',
+  'app/(marketing)/privacy/page.tsx',
 ];
 
 const catalogue = JSON.parse(
@@ -62,7 +72,7 @@ const shipped = [...files.matchAll(/'([a-zA-Z][\w]*\.[\w]+)'/g)]
  * reference it would ship it. Scoped to the public-site namespaces for the
  * same reason `shipped` is scoped to the files.
  */
-const MARKETING_KEY_PREFIXES = ['homeHero.', 'handledProof.', 'heroOutcomes.', 'firstBrief.', 'decisionsBand.', 'kitchenMode.', 'switching.', 'socialProof.', 'pricingValue.', 'trustCenter.', 'security.', 'featuresPage.', 'featureCards.', 'mobile.', 'root.meta', 'structuredData.'];
+const MARKETING_KEY_PREFIXES = ['homeHero.', 'handledProof.', 'heroOutcomes.', 'firstBrief.', 'decisionsBand.', 'kitchenMode.', 'switching.', 'socialProof.', 'pricingValue.', 'trustCenter.', 'security.', 'featuresPage.', 'featureCards.', 'mobile.', 'root.meta', 'structuredData.', 'faq.', 'faqExplorer.', 'pricingContent.', 'planOutcomes.', 'offlineBanner.'];
 const marketingCopy = Object.entries(catalogue)
   .filter(([key]) => MARKETING_KEY_PREFIXES.some((prefix) => key.startsWith(prefix)))
   .map(([key, value]) => `${key}: ${value}`)
@@ -98,6 +108,10 @@ const FORBIDDEN = [
   /\$\d[^\n]{0,60}(Cozi|FamilyWall|OurHome|FamCal|Skylight)/,
   /(nanny|babysitter|housekeeper|personal assistant)[^\n]{0,40}(\$|per hour|an hour)/i,
   /(\$|per hour|an hour)[^\n]{0,40}(nanny|babysitter|housekeeper)/i,
+  // Retired 2026-10-04, each because the code says otherwise. One list, shared
+  // with the readers of the admin-edited stores, which refuse a row that still
+  // states one (lib/marketing/retired-claims.ts says why each is retired).
+  ...RETIRED_CLAIMS,
 ];
 
 describe('public marketing claims', () => {

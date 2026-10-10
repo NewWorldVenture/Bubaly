@@ -60,7 +60,7 @@ export const ROOT_CHROME_SCOPE = ['a11y', 'error', 'globalError', 'root', 'logo'
 /** The public marketing site, /blog and the hosted form and landing routes. */
 export const MARKETING_SCOPE = [
   ...ROOT_CHROME_SCOPE,
-  'blogBlogSearch', 'blogHeartButton', 'blogTableOfContents', 'fFormRenderer', 'faqTabs',
+  'blogBlogSearch', 'blogHeartButton', 'blogTableOfContents', 'fFormRenderer', 'faqExplorer',
   'formRenderer', 'handledProof', 'pricingValue', 'subscribe', 'tableOfContents',
   // The shared chrome this surface mounts, which tests/i18n-client-scope.test.ts
   // could not see until its entry globs were fixed: a git pathspec `**\/`

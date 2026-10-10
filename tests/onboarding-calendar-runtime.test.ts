@@ -520,3 +520,19 @@ describe('selected pricing continuation at the real onboarding boundaries', () =
     expect(db.table('families')[0].name).toBe('Ada family');
   });
 });
+
+const pasted=(...events:string[])=>['BEGIN:VCALENDAR','VERSION:2.0',...events,'END:VCALENDAR'].join('\n');
+const event=(uid:string,extra='')=>['BEGIN:VEVENT','UID:'+uid,'SUMMARY:'+uid,'DTSTART:20261008T180000Z','DTEND:20261008T190000Z',extra,'END:VEVENT'].join('\n');
+it.each(['TRANSP:TRANSPARENT','TRANSP:UNKNOWN','TRANSP:OPAQUE\nTRANSP:TRANSPARENT','TRANSP;X-UNKNOWN=VALUE:OPAQUE'])('actual preview refuses unsupported whole paste before native work: %s',async metadata=>{
+ const result=await previewCalendarImportAction({source:'paste',timezone:'UTC',icsText:pasted(event('safe-prefix'),event('unsupported-last',metadata))});
+ expect(result.ok).toBe(false);expect(db.table('calendar_events')).toEqual([]);expect(db.table('onboarding_imports')).toEqual([]);expect(mock.saveProfile).not.toHaveBeenCalled();
+});
+it('actual preview-to-finalization must not revive cancelled input beside a live sibling',async()=>{
+ const preview=await previewCalendarImportAction({source:'paste',timezone:'UTC',icsText:pasted(event('safe-live'),event('cancelled','STATUS:CANCELLED'))});expect(preview.ok).toBe(true);if(!preview.ok||!preview.data)throw Error('Preview unavailable');
+ const payload=buildFinalizePayload({...emptyDraft({name:'Ada',familyName:'Ada family',timezone:'UTC'}),importSource:'paste',importedEvents:preview.data.events});
+ const result=await finalizeOnboardingAction(payload,{userId,familyId});expect(result.ok).toBe(true);expect(db.table('calendar_events').map(row=>row.title)).toEqual(['safe-live']);expect(db.table('onboarding_imports')[0].event_count).toBe(1);
+});
+it.each(['','TRANSP:OPAQUE'])('actual healthy opaque paste still previews and persists: %s',async metadata=>{
+ const preview=await previewCalendarImportAction({source:'paste',timezone:'UTC',icsText:pasted(event('safe-live',metadata))});expect(preview.ok).toBe(true);if(!preview.ok||!preview.data)throw Error('Preview unavailable');
+ const result=await finalizeOnboardingAction(buildFinalizePayload({...emptyDraft({name:'Ada',familyName:'Ada family',timezone:'UTC'}),importSource:'paste',importedEvents:preview.data.events}),{userId,familyId});expect(result.ok).toBe(true);expect(db.table('calendar_events').map(row=>row.title)).toEqual(['safe-live']);
+});

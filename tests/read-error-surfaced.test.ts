@@ -30,9 +30,17 @@ function sources(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-/** Call sites in one file that never read the error the hook handed them. */
-function droppedIn(file: string): number[] {
-  const src = readFileSync(file, 'utf8');
+/** A destructured error must also be read after its binding. */
+function readsBoundError(fields: string, src: string): boolean {
+  const aliased = /\berror\s*:\s*(\w+)/.exec(fields);
+  const shorthand = /(^|[,{\s])error\s*(,|$|\})/.test(fields);
+  if (!aliased && !shorthand) return false;
+  const name = aliased ? aliased[1] : 'error';
+  return (src.match(new RegExp(`\\b${name}\\b`, 'g')) ?? []).length >= 2;
+}
+
+/** Call sites in one source that never read the error the hook handed them. */
+function droppedInSource(src: string): number[] {
   if (!/=\s*useRealtimeQuery/.test(src)) return [];
   // Several pages collect their queries into one array and test the group:
   //   const readError = readQueries.some((query) => query.error)
@@ -44,25 +52,50 @@ function droppedIn(file: string): number[] {
     if (!/=\s*useRealtimeQuery/.test(line)) return;
     const destructured = /const\s*\{([^}]*)\}\s*=\s*useRealtimeQuery/.exec(line);
     if (destructured) {
-      const fields = destructured[1];
-      const aliased = /\berror\s*:\s*(\w+)/.exec(fields);
-      const shorthand = /(^|[,{\s])error\s*(,|$|\})/.test(fields);
-      if (!aliased && !shorthand) { dropped.push(index + 1); return; }
-      const name = aliased ? aliased[1] : 'error';
-      // One occurrence is the binding itself; a second means something reads it.
-      if ((src.match(new RegExp(`\\b${name}\\b`, 'g')) ?? []).length < 2) dropped.push(index + 1);
+      if (!readsBoundError(destructured[1], src)) dropped.push(index + 1);
       return;
     }
     const whole = /const\s+(\w+)\s*=\s*useRealtimeQuery/.exec(line);
-    if (whole && !new RegExp(`\\b${whole[1]}\\.error\\b`).test(src)) dropped.push(index + 1);
+    if (whole) {
+      const direct = new RegExp(`\\b${whole[1]}\\.error\\b`).test(src);
+      // Keeping the complete query lets a consumer mask retained data after a
+      // failure. Its separately destructured error is still the same read.
+      const bindings = new RegExp(`const\\s*\\{([^}]*)\\}\\s*=\\s*${whole[1]}\\b`, 'g');
+      const indirect = [...src.matchAll(bindings)].some(binding => readsBoundError(binding[1], src));
+      if (!direct && !indirect) dropped.push(index + 1);
+    }
   });
   return dropped;
+}
+
+function droppedIn(file: string): number[] {
+  return droppedInSource(readFileSync(file, 'utf8'));
 }
 
 const FILES = [...sources('components'), ...sources('app'), ...sources('lib')]
   .filter((file) => /=\s*useRealtimeQuery/.test(readFileSync(file, 'utf8')));
 
 describe('a read that fails can say so', () => {
+  it.each([
+    'const { data, error } = useRealtimeQuery(); if (error) return ErrorState(error);',
+    'const { data, error: readError } = useRealtimeQuery(); if (readError) return ErrorState(readError);',
+    'const query = useRealtimeQuery(); if (query.error) return ErrorState(query.error);',
+    'const query = useRealtimeQuery(); const { data, error } = query; if (error) return ErrorState(error);',
+    'const query = useRealtimeQuery();\nconst { error: readError, refresh } = query;\nif (readError) return ErrorState(readError);',
+  ])('recognizes a consumed error from its actual query: %s', source => {
+    expect(droppedInSource(source)).toEqual([]);
+  });
+  it.each([
+    'const { data } = useRealtimeQuery(); return data;',
+    'const { data, error } = useRealtimeQuery(); return data;',
+    'const query = useRealtimeQuery(); const { data } = query; return data;',
+    'const query = useRealtimeQuery(); const { data, error } = query; return data;',
+    'const query = useRealtimeQuery(); const { error: readError } = query; return query.data;',
+    'const query = useRealtimeQuery(); const { error } = anotherQuery; if (error) return ErrorState(error);',
+    'const query = useRealtimeQuery(); const { error } = queryWithSimilarName; if (error) return ErrorState(error);',
+  ])('still rejects missing, unconsumed or unrelated errors: %s', source => {
+    expect(droppedInSource(source)).toEqual([1]);
+  });
   it('found the call sites it is supposed to be checking', () => {
     // A walk that quietly found nothing would pass every case below.
     const calls = FILES.reduce(

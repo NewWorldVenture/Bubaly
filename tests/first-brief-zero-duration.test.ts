@@ -29,6 +29,8 @@ describe('explicit zero-duration calendar entries', () => {
     expect(brief.todayCount).toBe(2);
     expect(brief.conflicts).toEqual([]);
     expect(brief.opportunities.some(item => item.id === 'conflicts')).toBe(false);
+    expect(brief.timeSavedMinutes).toBe(0);
+    expect(brief.actions).toEqual([]);
   });
 
   it('retains a real interval overlap alongside a point entry', () => {

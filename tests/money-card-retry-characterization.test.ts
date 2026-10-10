@@ -347,25 +347,33 @@ describe('card issuance reaching the server more than once', () => {
     expect(mirrorCards()[0].stripe_card_id).not.toBe(orphan.id);
   });
 
-  it('reproduces: virtual and physical ordered together for a child with no cardholder — one is refused at the cardholder step', async () => {
+  it('reproduces: virtual and physical ordered together for a child with no cardholder share one cardholder, and the same-millisecond card key refuses one', async () => {
     // The view claims `issue-<child>` for Virtual and `physical-<child>` for the
     // order dialog, so one mounted view can dispatch both at once.
     provider.cardholderBarrier(2);
     const [virtual, physical] = await Promise.all([issueCardAction(VIRTUAL), issueCardAction(PHYSICAL)]);
 
-    expect([virtual.ok, physical.ok].sort()).toEqual([false, true]);
-    const refused = virtual.ok ? physical : virtual;
-    // The parent reads "already exists" for a card that was never created.
-    expect(refused).toEqual({ ok: false, error: DUPLICATE_TEXT });
     // Both reached the provider with the same stable key and got ONE cardholder;
-    // the second mirror insert hit UNIQUE (family_id, member_id).
+    // the second mirror insert met UNIQUE (family_id, member_id) and adopted that
+    // exact row (ensureCardholder, repair C), so neither is refused there.
     expect(provider.log.cardholderKeys).toEqual(['cardholder-member-a', 'cardholder-member-a']);
     expect(provider.cardholders).toHaveLength(1);
     expect(db.table('stripe_cardholders')).toHaveLength(1);
+    expect(console.error).not.toHaveBeenCalledWith('[money-action] issue the card failed',
+      expect.objectContaining({ message: expect.stringContaining('Failed to persist cardholder') }));
+
+    // Both then carry `card-<wallet>-<ms>`. In one millisecond that is one key
+    // with different parameters, which the provider refuses (as in the case
+    // above), so one order is still refused: at the card step, with the
+    // action's own text. Attempt identity (B) is the fix for that.
+    expect(provider.log.cardKeys).toEqual([`card-wallet-a-${T0}`, `card-wallet-a-${T0}`]);
+    expect([virtual.ok, physical.ok].sort()).toEqual([false, true]);
+    const refused = virtual.ok ? physical : virtual;
+    expect(refused).toEqual({ ok: false, error: 'translated:money.couldNotIssueTheCard' });
+    expect(console.error).toHaveBeenCalledWith('[money-action] issue the card failed',
+      expect.objectContaining({ message: expect.stringContaining('idempotency_error') }));
     expect(provider.cards.size).toBe(1);
     expect(mirrorCards()).toHaveLength(1);
-    expect(console.error).toHaveBeenCalledWith('[money-action] issue the card failed',
-      expect.objectContaining({ message: expect.stringContaining('Failed to persist cardholder: duplicate key') }));
 
     // Ordered again once the first settled, the refused type is issued.
     vi.setSystemTime(T0 + 1);

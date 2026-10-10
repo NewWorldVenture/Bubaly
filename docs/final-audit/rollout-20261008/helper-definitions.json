@@ -1,0 +1,12 @@
+[
+  {
+    "name": "mark_model_dirty",
+    "arguments": "",
+    "definition": "CREATE OR REPLACE FUNCTION public.mark_model_dirty()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\ndeclare\n  v_family uuid;\nbegin\n  v_family := coalesce((case when tg_op = 'DELETE' then old.family_id else new.family_id end), null);\n  if v_family is not null then\n    insert into public.family_model_dirty (family_id, dirty, reason, marked_at)\n    values (v_family, true, tg_table_name, now())\n    on conflict (family_id) do update set dirty = true, reason = excluded.reason, marked_at = now();\n  end if;\n  return null; -- AFTER trigger, result ignored\nend $function$\n"
+  },
+  {
+    "name": "set_updated_at",
+    "arguments": "",
+    "definition": "CREATE OR REPLACE FUNCTION public.set_updated_at()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN NEW.updated_at = now(); RETURN NEW; END;\n$function$\n"
+  }
+]

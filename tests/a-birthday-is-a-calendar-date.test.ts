@@ -31,7 +31,10 @@ describe('a birthday is read as the day it names', () => {
   it('an age turns over on the birthday, not the evening before', () => {
     expect(ageOn('2015-03-04', new Date(2026, 2, 3, 20, 0))).toBe(10);
     expect(ageOn('2015-03-04', new Date(2026, 2, 4, 0, 1))).toBe(11);
-    expect(ageFromBirthday('2015-03-04', new Date(2026, 2, 3, 20, 0))).toBe(10);
+    // The home page's helper takes the FAMILY's day key now, so the evening before
+    // is simply the day before (tests/a-server-side-age-and-days-ago-read-the-familys-day.test.ts).
+    expect(ageFromBirthday('2015-03-04', '2026-03-03')).toBe(10);
+    expect(ageFromBirthday('2015-03-04', '2026-03-04')).toBe(11);
   });
 
   it('"Today" is the birthday itself', () => {
@@ -54,7 +57,7 @@ describe('nothing reads a birthday as an instant', () => {
   it('uses parseBirthday / ageOn / nextBirthday, not new Date(birthday)', () => {
     const tree = ['app', 'components', 'lib'].flatMap(files);
     expect(tree.length).toBeGreaterThan(500);
-    const sites = tree.filter((f) => !EXEMPT.has(f))
+    const sites = tree.filter((f) => !EXEMPT.has(f.replaceAll('\\', '/')))
       .filter((f) => /new Date\((\w+\.)?(birthday|birth_date|dob|date_of_birth)\)/.test(readFileSync(f, 'utf8')));
     expect(sites).toEqual([]);
   });

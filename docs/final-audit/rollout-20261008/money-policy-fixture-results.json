@@ -1,0 +1,66 @@
+{
+  "database": "PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+  "scope": "Isolated local PostgreSQL, synthetic schema, no production connection. Metadata screening parity, not a live authorization proof.",
+  "cases": [
+    {
+      "name": "insert_guard_does_not_cover_delete",
+      "fixturePolicies": "create policy open on wallet_transactions for delete to authenticated using(true); create policy guard on wallet_transactions as restrictive for insert to authenticated with check(can_manage_family(family_id));",
+      "expectedOpen": true,
+      "automatedAndBothSqlQueriesAgree": true
+    },
+    {
+      "name": "non_manager_guard",
+      "fixturePolicies": "create policy open on wallet_transactions for insert to authenticated with check(true); create policy guard on wallet_transactions as restrictive for insert to authenticated with check(true);",
+      "expectedOpen": true,
+      "automatedAndBothSqlQueriesAgree": true
+    },
+    {
+      "name": "negated_helper",
+      "fixturePolicies": "create policy open on wallet_transactions for insert to authenticated with check(not can_manage_family(family_id));",
+      "expectedOpen": true,
+      "automatedAndBothSqlQueriesAgree": true
+    },
+    {
+      "name": "or_true_helper",
+      "fixturePolicies": "create policy open on wallet_transactions for insert to authenticated with check(can_manage_family(family_id) or true);",
+      "expectedOpen": true,
+      "automatedAndBothSqlQueriesAgree": true
+    },
+    {
+      "name": "asymmetric_update",
+      "fixturePolicies": "create policy open on wallet_transactions for update to authenticated using(can_manage_family(family_id)) with check(true);",
+      "expectedOpen": true,
+      "automatedAndBothSqlQueriesAgree": true
+    },
+    {
+      "name": "wrong_audience",
+      "fixturePolicies": "create policy open on wallet_transactions for insert to public with check(true); create policy guard on wallet_transactions as restrictive for insert to authenticated with check(can_manage_family(family_id));",
+      "expectedOpen": true,
+      "automatedAndBothSqlQueriesAgree": true
+    },
+    {
+      "name": "matching_guard",
+      "fixturePolicies": "create policy open on wallet_transactions for all to authenticated using(true) with check(true); create policy guard on wallet_transactions as restrictive for all to authenticated using(can_manage_family(family_id));",
+      "expectedOpen": false,
+      "automatedAndBothSqlQueriesAgree": true
+    },
+    {
+      "name": "public_guard",
+      "fixturePolicies": "create policy open on wallet_transactions for insert to authenticated with check(true); create policy guard on wallet_transactions as restrictive for insert to public with check(can_manage_family(family_id));",
+      "expectedOpen": false,
+      "automatedAndBothSqlQueriesAgree": true
+    },
+    {
+      "name": "deny_default",
+      "fixturePolicies": "",
+      "expectedOpen": false,
+      "automatedAndBothSqlQueriesAgree": true
+    },
+    {
+      "name": "restrictive_only",
+      "fixturePolicies": "create policy guard on wallet_transactions as restrictive for insert to authenticated with check(true);",
+      "expectedOpen": false,
+      "automatedAndBothSqlQueriesAgree": true
+    }
+  ]
+}

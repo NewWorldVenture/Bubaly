@@ -12,9 +12,10 @@
 // what the table holds is what the family put there.
 import 'server-only';
 import type { HomeworkStatus, Tables } from '@/lib/database.types';
+import { readCountedRows } from '@/lib/calendar/occurrences';
 import { classOccursInWeek, slotStartMinutes, weekParity } from '@/lib/school/timetable';
 import { describeDbError } from '@/lib/supabase/errors';
-import { scopeNow } from '../scope';
+import { dayKeyInTz, scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
 export type SchoolEventRow = Tables<'school_events'>;
@@ -26,18 +27,30 @@ const MAX_ROWS = 500;
 
 function isoOrNull(value: string | null | undefined): string | null {
   if (!value) return null;
+  // Date.parse normalizes some impossible ISO dates (February 30 becomes March).
+  // Validate the written calendar date before an offset can change its UTC day.
+  const datePart = value.match(/^([+-]\d{6}|\d{4})-\d{2}-\d{2}(?=$|[Tt ])/)?.[0];
+  // Do not fall through to Date.parse's legacy formats when the date grammar
+  // was not recognized (for example a bare trailing Z or a tab separator).
+  if (!datePart) return null;
+  const calendarDate = new Date(`${datePart}T00:00:00.000Z`);
+  if (!Number.isFinite(calendarDate.getTime()) || calendarDate.toISOString().split('T')[0] !== datePart) return null;
   const ms = Date.parse(value);
   return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
 }
 
 /** A window defaulting to the coming week; an inverted window is refused rather than returned empty. */
 export function resolveWindow(scope: ServiceScope, input?: { from?: string | null; to?: string | null }): ServiceResult<{ from: string; to: string }> {
-  const from = isoOrNull(input?.from) ?? scopeNow(scope).toISOString();
-  const to = isoOrNull(input?.to) ?? new Date(Date.parse(from) + WEEK_MS).toISOString();
-  if (input?.from && !isoOrNull(input.from)) return fail('That start time could not be understood.', { code: SERVICE_CODES.invalidInput });
-  if (input?.to && !isoOrNull(input.to)) return fail('That end time could not be understood.', { code: SERVICE_CODES.invalidInput });
-  if (Date.parse(to) < Date.parse(from)) return fail('The end of that window is before its start.', { code: SERVICE_CODES.invalidInput });
-  return ok({ from, to });
+  const explicitFrom = isoOrNull(input?.from);
+  const explicitTo = isoOrNull(input?.to);
+  if (input?.from && !explicitFrom) return fail('That start time could not be understood.', { code: SERVICE_CODES.invalidInput });
+  if (input?.to && !explicitTo) return fail('That end time could not be understood.', { code: SERVICE_CODES.invalidInput });
+  const fromDate = explicitFrom ? new Date(explicitFrom) : scopeNow(scope);
+  if (!Number.isFinite(fromDate.getTime())) return fail('That start time could not be understood.', { code: SERVICE_CODES.invalidInput });
+  const toDate = explicitTo ? new Date(explicitTo) : new Date(fromDate.getTime() + WEEK_MS);
+  if (!Number.isFinite(toDate.getTime())) return fail('That end time is outside the supported date range.', { code: SERVICE_CODES.invalidInput });
+  if (toDate < fromDate) return fail('The end of that window is before its start.', { code: SERVICE_CODES.invalidInput });
+  return ok({ from: fromDate.toISOString(), to: toDate.toISOString() });
 }
 
 export type SchoolWindowInput = { from?: string | null; to?: string | null; memberId?: string | null; limit?: number };
@@ -46,16 +59,22 @@ export type SchoolWindowInput = { from?: string | null; to?: string | null; memb
 export async function listEventsBetween(scope: ServiceScope, input: SchoolWindowInput = {}): Promise<ServiceResult<SchoolEventRow[]>> {
   const window = resolveWindow(scope, input);
   if (!window.ok) return window;
-  let query = scope.db
+  const limit = Math.min(Math.max(input.limit ?? 200, 1), MAX_ROWS);
+  const query = () => {
+    let read = scope.db
     .from('school_events')
-    .select('*')
+    .select('*', { count: 'exact' })
     .eq('family_id', scope.familyId)
     .gte('starts_at', window.data.from)
     .lte('starts_at', window.data.to)
-    .order('starts_at', { ascending: true })
-    .limit(Math.min(Math.max(input.limit ?? 200, 1), MAX_ROWS));
-  if (input.memberId) query = query.eq('member_id', input.memberId);
-  const { data, error } = await query;
+    .order('starts_at', { ascending: true }).order('id');
+    if (input.memberId) read = read.eq('member_id', input.memberId);
+    return read;
+  };
+  const { data, error } = await readCountedRows<SchoolEventRow>(
+    () => query().limit(limit), (from, to) => query().range(from, to),
+    MAX_ROWS, 'school events', limit,
+  );
   if (error) {
     console.error('[service:school] events read failed', error);
     return fail(describeDbError(error, 'Could not load school events.'), { code: SERVICE_CODES.db });
@@ -75,18 +94,24 @@ const OPEN_STATUSES: HomeworkStatus[] = ['assigned', 'in_progress'];
 export async function listHomeworkDue(scope: ServiceScope, input: HomeworkDueInput = {}): Promise<ServiceResult<HomeworkRow[]>> {
   const window = resolveWindow(scope, input);
   if (!window.ok) return window;
-  let query = scope.db
+  const limit = Math.min(Math.max(input.limit ?? 200, 1), MAX_ROWS);
+  const query = () => {
+    let read = scope.db
     .from('homework_assignments')
-    .select('*')
+    .select('*', { count: 'exact' })
     .eq('family_id', scope.familyId)
     .not('due_at', 'is', null)
     .gte('due_at', window.data.from)
     .lte('due_at', window.data.to)
-    .order('due_at', { ascending: true })
-    .limit(Math.min(Math.max(input.limit ?? 200, 1), MAX_ROWS));
-  if (!input.includeDone) query = query.in('status', OPEN_STATUSES);
-  if (input.memberId) query = query.eq('member_id', input.memberId);
-  const { data, error } = await query;
+    .order('due_at', { ascending: true }).order('id');
+    if (!input.includeDone) read = read.in('status', OPEN_STATUSES);
+    if (input.memberId) read = read.eq('member_id', input.memberId);
+    return read;
+  };
+  const { data, error } = await readCountedRows<HomeworkRow>(
+    () => query().limit(limit), (from, to) => query().range(from, to),
+    MAX_ROWS, 'homework assignments', limit,
+  );
   if (error) {
     console.error('[service:school] homework read failed', error);
     return fail(describeDbError(error, 'Could not load homework.'), { code: SERVICE_CODES.db });
@@ -95,7 +120,7 @@ export async function listHomeworkDue(scope: ServiceScope, input: HomeworkDueInp
 }
 
 /**
- * Every class row, with NO week-parity filtering — the roster the school and
+ * Class rows with NO week-parity filtering — the roster the school and
  * sports front desk matches inbound mail against.
  *
  * `listClasses` is the timetable: it drops a class that does not occur in the
@@ -106,14 +131,17 @@ export async function listHomeworkDue(scope: ServiceScope, input: HomeworkDueInp
  *
  * Read-only and family-scoped like the rest of this file; the caller gets a
  * `ServiceResult`, so a failed read is a failure and never an empty roster.
+ * requireComplete reads the whole roster up to 2,000 rows or refuses it;
+ * otherwise the requested result limit is retained for bounded exports.
  */
-export async function listClassRoster(scope: ServiceScope, input: { limit?: number } = {}): Promise<ServiceResult<SchoolClassRow[]>> {
-  const { data, error } = await scope.db
-    .from('school_classes')
-    .select('*')
-    .eq('family_id', scope.familyId)
-    .order('subject', { ascending: true })
-    .limit(Math.min(Math.max(input.limit ?? MAX_ROWS, 1), MAX_ROWS));
+export async function listClassRoster(scope: ServiceScope, input: { limit?: number; requireComplete?: boolean } = {}): Promise<ServiceResult<SchoolClassRow[]>> {
+  const limit = Math.min(Math.max(input.limit ?? MAX_ROWS, 1), MAX_ROWS);
+  const query = () => scope.db.from('school_classes').select('*', { count: 'exact' })
+    .eq('family_id', scope.familyId).order('subject', { ascending: true }).order('id');
+  const { data, error } = await readCountedRows<SchoolClassRow>(
+    () => query().limit(limit), (from, to) => query().range(from, to),
+    input.requireComplete ? 2000 : MAX_ROWS, 'school class roster', input.requireComplete ? undefined : limit,
+  );
   if (error) {
     console.error('[service:school] class roster read failed', error);
     return fail(describeDbError(error, 'Could not load the class roster.'), { code: SERVICE_CODES.db });
@@ -138,20 +166,36 @@ export async function listClasses(scope: ServiceScope, input: ListClassesInput =
   if (input.dayOfWeek != null && (!Number.isInteger(input.dayOfWeek) || input.dayOfWeek < 0 || input.dayOfWeek > 6)) {
     return fail('A weekday is a number from 0 (Sunday) to 6 (Saturday).', { code: SERVICE_CODES.invalidInput });
   }
-  let query = scope.db
-    .from('school_classes')
-    .select('*')
-    .eq('family_id', scope.familyId)
-    .order('day_of_week', { ascending: true, nullsFirst: true })
-    .limit(MAX_ROWS);
-  if (input.memberId) query = query.eq('member_id', input.memberId);
-  const { data, error } = await query;
+  const dateOnly = input.forDate != null && /^\d{4}-\d{2}-\d{2}$/.test(input.forDate);
+  const explicit = isoOrNull(input.forDate);
+  if (input.forDate && (!explicit || (dateOnly
+    ? explicit.slice(0, 10) !== input.forDate
+    : !/[zZ]$|[+-]\d{2}:\d{2}$/.test(input.forDate)))) {
+    return fail('Use a valid calendar date or a timestamp with a timezone.', { code: SERVICE_CODES.invalidInput });
+  }
+  const instant = explicit ? new Date(explicit) : scopeNow(scope);
+  if (!Number.isFinite(instant.getTime())) return fail('That school week could not be understood.', { code: SERVICE_CODES.invalidInput });
+  // A date-only input already names the family's calendar day. An instant must
+  // first be projected into the family zone, especially across Sunday/Monday.
+  const day = dateOnly ? input.forDate : dayKeyInTz(instant, scope.tz);
+  const reference = new Date(`${day}T00:00:00Z`);
+  if (!Number.isFinite(reference.getTime())) return fail('That school week could not be understood.', { code: SERVICE_CODES.invalidInput });
+  const week = weekParity(reference);
+  const query = () => {
+    let read = scope.db.from('school_classes').select('*', { count: 'exact' })
+      .eq('family_id', scope.familyId)
+      .order('day_of_week', { ascending: true, nullsFirst: true }).order('id');
+    if (input.memberId) read = read.eq('member_id', input.memberId);
+    return read;
+  };
+  const { data, error } = await readCountedRows<SchoolClassRow>(
+    () => query().limit(MAX_ROWS), (from, to) => query().range(from, to),
+    2000, 'school timetable rows',
+  );
   if (error) {
     console.error('[service:school] classes read failed', error);
     return fail(describeDbError(error, 'Could not load the school timetable.'), { code: SERVICE_CODES.db });
   }
-  const reference = isoOrNull(input.forDate) ?? scopeNow(scope).toISOString();
-  const week = weekParity(new Date(reference));
   const rows = (data ?? [])
     .filter((c) => classOccursInWeek(c, week))
     .filter((c) => input.dayOfWeek == null || c.day_of_week === null || c.day_of_week === input.dayOfWeek)

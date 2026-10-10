@@ -8,8 +8,9 @@
   "overrides": {
     "next": {
       "postcss": "8.5.28",
-      "sharp": "^0.35.4"
-    }
+      "sharp": "^0.35.5"
+    },
+    "source-map-js": "^1.2.2"
   },
   "scripts": {
     "dev": "next dev --webpack",
@@ -86,15 +87,17 @@
     "@capacitor/share": "^8.0.0",
     "@capacitor/splash-screen": "^8.0.0",
     "@capacitor/status-bar": "^8.0.0",
+    "@libsql/client": "0.17.0",
     "@react-email/render": "^2.1.0",
     "@stripe/stripe-js": "^9.8.0",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.45.0",
     "@types/qrcode": "^1.5.6",
+    "@vercel/sandbox": "3.5.1",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
     "lucide-react": "^0.453.0",
-    "next": "16.3.6",
+    "next": "16.3.8",
     "qrcode": "^1.5.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

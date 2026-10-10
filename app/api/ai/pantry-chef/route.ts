@@ -28,6 +28,7 @@ export async function POST(req: NextRequest) {
   const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
+    const now = new Date();
     const familyId = ctx.active.familyId;
     const userId = ctx.user.id;
     const supabase = await createServer();
@@ -53,7 +54,15 @@ export async function POST(req: NextRequest) {
       const plan = body.addToPlan;
       const title = typeof plan.title === 'string' ? plan.title.trim().slice(0, 200) : '';
       if (!title) return NextResponse.json({ error: t('pantryChef.recipeTitleIsRequired') }, { status: 400 });
-      const planDate = normalizePlanDate(plan.planDate);
+      let planDate: string;
+      try {
+        const timezone = ctx.active.family.timezone;
+        if (typeof timezone !== 'string') throw new RangeError('The household timezone is unavailable.');
+        planDate = normalizePlanDate(plan.planDate, timezone, now);
+      } catch (error) {
+        console.error('[ai/pantry-chef] family dinner date unavailable', error);
+        return NextResponse.json({ error: t('pantryChef.fridgeChefIsUnavailableRight') }, { status: 503 });
+      }
       const ingredients = [...(Array.isArray(plan.have) ? plan.have : []), ...(Array.isArray(plan.need) ? plan.need : [])]
         .filter((n): n is string => typeof n === 'string' && n.trim().length > 0)
         .slice(0, 50)
@@ -148,7 +157,7 @@ export async function POST(req: NextRequest) {
     }
     const model = aiConfig.model && /^(gpt-|o\d|chatgpt-)/i.test(aiConfig.model) ? aiConfig.model : 'gpt-4o';
 
-    const prompt = buildPantryChefPrompt(allergies, new Date(), ctx.active.family.timezone || 'UTC');
+    const prompt = buildPantryChefPrompt(allergies, now, ctx.active.family.timezone || 'UTC');
     // Recorded like every other AI route, so the call counts against the allowance (F19).
     const aiRes = await withAiRequest(
       scopeFromUserContext(ctx, supabase),

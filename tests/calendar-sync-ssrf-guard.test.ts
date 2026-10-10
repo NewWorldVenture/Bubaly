@@ -18,6 +18,13 @@ describe('A-06 calendar ICS sync uses the SSRF-guarded fetcher', () => {
     expect(route).toContain('fetchPublicCalendarText(');
   });
 
+  it('qualifies the complete source through shared parsers before native inserts', () => {
+    expect(route).toContain('parseICSSource(text)');
+    expect(route).toContain('assertFeedRecurrenceAdmission(event)');
+    expect(route).not.toContain('function parseIcsDate');
+    expect(route).not.toContain('function icsRruleToDb');
+  });
+
   it('does not call raw fetch() on a user URL in the sync route', () => {
     // The route must not bypass the guard with a bare fetch(...). (The guarded
     // helper is the only sanctioned network egress for a user-provided ICS URL.)

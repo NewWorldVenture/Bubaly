@@ -124,7 +124,7 @@ export async function loadAiMemoryAction(): Promise<AiMemoryResult> {
       .filter(isAiFact)
       // The same category fence the context slice uses: medical and account
       // details are not shown to someone who could not read them elsewhere.
-      .filter((f) => canManage || !isSensitiveMemory({ category: f.category, key: f.label, content: f.value }))
+      .filter((f) => canManage || !isSensitiveMemory({ category: f.category, key: f.label, content: f.value, notes: f.notes }))
       // Carried across from the inbox by 0265. It used to be thrown away at
       // the moment of acceptance, so this panel could only ever say null for a
       // fact — which is the one place a person is deciding whether to keep it.

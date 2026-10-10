@@ -14,7 +14,7 @@ import { describe, expect, it } from 'vitest';
 
 const page = readFileSync('app/(app)/dashboard/billing/page.tsx', 'utf8');
 const auth = readFileSync('lib/supabase/auth.ts', 'utf8');
-const billing = readFileSync('components/modules/billing-module.tsx', 'utf8');
+const billing = readFileSync('components/modules/billing-module.tsx', 'utf8').replace(/\r\n/g, '\n');
 
 /** Evaluate the page's own routing condition for a query. */
 function showsPlanView(query: Record<string, string>): boolean {

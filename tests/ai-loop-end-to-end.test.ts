@@ -106,6 +106,7 @@ beforeAll(() => {
   db.seed('calendar_events', [{
     family_id: FAMILY, title: 'Soccer practice', starts_at: '2026-09-16T20:00:00Z', ends_at: '2026-09-16T21:30:00Z',
     all_day: false, category: 'sports', location: null, assignee_id: CHILD, description: null, created_by: USER,
+    recurrence: 'none', recurrence_until: null, feed_id: null, external_uid: null, source_recurrence: null, onboarding_key: null, idempotency_key: null,
   }]);
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });

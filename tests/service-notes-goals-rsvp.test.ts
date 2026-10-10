@@ -44,12 +44,17 @@ function makeDb(respond: (call: Call, index: number) => Reply) {
       ilike: (c: string, v: unknown) => filter(`ilike:${c}`, v),
       eq: filter,
       gte: (c: string, v: unknown) => filter(`gte:${c}`, v),
+      lte: (c: string, v: unknown) => filter(`lte:${c}`, v),
+      neq: (c: string, v: unknown) => filter(`neq:${c}`, v),
+      // A calendar window arrives as a PostgREST `or`; a read may add more than one.
+      or: (expression: string) => { call.filters.or = [...((call.filters.or as string[] | undefined) ?? []), expression]; return b; },
       insert: (payload: unknown) => { call.kind = 'insert'; call.payload = payload; return b; },
       update: (payload: unknown) => { call.kind = 'update'; call.payload = payload; return b; },
       upsert: (payload: unknown) => { call.kind = 'upsert'; call.payload = payload; return b; },
       single: () => Promise.resolve(respond(call, index)),
       maybeSingle: () => Promise.resolve(respond(call, index)),
-      then: (resolve: (value: Reply) => void) => resolve(respond(call, index)),
+      // A collection answer carries its count, as PostgREST's Content-Range does.
+      then: (resolve: (value: Reply & { count?: number }) => void) => { const r = respond(call, index); resolve(Array.isArray(r.data) ? { ...r, count: r.data.length } : r); },
     });
     return b;
   };
@@ -211,9 +216,20 @@ describe('rsvpToEvent', () => {
 
     const res = await rsvpToEvent(scopeWith(db), { eventTitle: 'swim', status: 'accepted' });
     expect(res.ok).toBe(true);
-    const lookup = calls.find((c) => c.table === 'calendar_events');
-    expect(lookup?.filters['order:starts_at'], 'must be ascending').toBe(true);
-    expect(lookup?.filters['gte:starts_at'], 'must exclude events that already happened').toBe(NOW.toISOString());
+    // The lookup is the shared series-aware read (lib/calendar/occurrences.ts):
+    // the one-offs from now on, and the series that could still reach now.
+    const lookups = calls.filter((c) => c.table === 'calendar_events');
+    expect(lookups).toHaveLength(2);
+    const [singles, series] = lookups;
+    // Ordered by start and not descending: PostgREST's `order` defaults to ascending.
+    expect(singles.filters).toHaveProperty('order:starts_at');
+    expect(singles.filters['order:starts_at'], 'must not be descending').not.toBe(false);
+    expect(singles.filters.or, 'must exclude events that already happened').toEqual([
+      expect.stringContaining(`starts_at.gte.${NOW.toISOString()}`),
+      'recurrence.is.null,recurrence.eq.none',
+    ]);
+    expect(singles.filters['ilike:title']).toBe('%swim%');
+    expect(series.filters).toMatchObject({ 'neq:recurrence': 'none', 'ilike:title': '%swim%' });
     expect(calls.find((c) => c.table === 'event_rsvps')?.payload).toMatchObject({ event_id: 'evt-1' });
   });
 

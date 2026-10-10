@@ -3,6 +3,26 @@ import { expandEventsInZone, type RecurrableEvent } from '@/lib/calendar/recurre
 import { mapIcsEventToRow } from '@/lib/calendar/feeds';
 const event=(over:Partial<RecurrableEvent>={}):RecurrableEvent=>Object.freeze({id:'synthetic-series',starts_at:'2026-07-01T12:34:00.000Z',ends_at:'2026-07-01T13:34:00.000Z',recurrence:'daily',recurrence_until:null,...over});
 const expand=(e:RecurrableEvent,from='2026-07-01T00:00:00Z',to='2026-07-02T00:00:00Z',zone='UTC')=>expandEventsInZone([e],new Date(from),new Date(to),zone);
+it.each([
+ ['America/New_York','2026-03-01T07:30:42.125001Z','2026-03-08T07:30:42.125001Z'],
+ ['America/New_York','2026-10-25T05:30:42.125001Z','2026-11-01T05:30:42.125001Z'],
+ ['Asia/Tokyo','2026-10-25T05:30:42.125001Z','2026-11-01T05:30:42.125001Z'],
+] as const)('retains PostgreSQL microseconds and elapsed end duration through weekly IANA recurrence in %s', (zone, seed, wanted) => {
+ const end = seed.replace('.125001Z', '.125009Z'), from = wanted.slice(0,10)+'T00:00:00Z', to = wanted.slice(0,10)+'T23:59:59Z';
+ const out = expand(event({ starts_at: seed, ends_at: end, recurrence: 'weekly' }), from, to, zone);
+ expect(out).toHaveLength(1); expect(out[0].starts_at).toBe(wanted); expect(out[0].ends_at).toBe(wanted.replace('.125001Z', '.125009Z'));
+});
+it('honors microsecond recurrence cutoff and exact request window without a rounded extra occurrence', () => {
+ const seed = '2026-07-01T12:34:42.125009Z';
+ const e = event({ starts_at: seed, ends_at: seed.replace('009Z','010Z'), recurrence_until: '2026-07-02T12:34:42.125008Z' });
+ expect(expand(e, '2026-07-01T00:00:00Z', '2026-07-03T00:00:00Z')).toHaveLength(1);
+ const from = '2026-07-01T12:34:42.125001Z', to = '2026-07-01T12:34:42.125008Z';
+ expect(expandEventsInZone([e], new Date(from), new Date(to), 'UTC', false, { requireComplete: true, windowFrom: from, windowTo: to })).toEqual([]);
+});
+it('preserves the exact seed and zero microsecond duration as a point', () => {
+ const seed = '2026-07-01T12:34:42.000001Z', e = event({ starts_at: seed, ends_at: seed });
+ const out = expand(e); expect(out).toHaveLength(1); expect(out[0].starts_at).toBe(seed); expect(out[0].ends_at).toBe(seed);
+});
 it('preserves the accepted seed instant and exact duration with seconds and milliseconds',()=>{
  const e=event({starts_at:'2026-07-01T12:34:42.125Z',ends_at:'2026-07-01T13:34:52.375Z'});
  const out=expand(e);expect(out).toHaveLength(1);expect(out[0].id).toBe(e.id);
@@ -37,10 +57,13 @@ it('retains a minute-aligned wall clock across the documented fall-back',()=>{
  const out=expand(e,'2026-11-04T00:00:00Z','2026-11-05T00:00:00Z','America/New_York');
  expect(out).toHaveLength(1);expect(out[0].starts_at).toBe('2026-11-04T23:00:00.000Z');
 });
-it('retains the documented first-existing-minute spring-gap behavior',()=>{
+// RFC 5545 §3.3.5: a skipped time takes the offset in force BEFORE the gap.
+// 02:30 at EST's -5 is 07:30Z, which New York's clock shows as 03:30 EDT (the
+// walk-forward to 03:00, 07:00Z, was the old rule).
+it('resolves a skipped spring-gap time with the offset in force before the gap',()=>{
  const e=event({starts_at:'2026-03-01T07:30:00.000Z',ends_at:null,recurrence:'weekly'});
  const out=expand(e,'2026-03-08T00:00:00Z','2026-03-09T00:00:00Z','America/New_York');
- expect(out).toHaveLength(1);expect(out[0].starts_at).toBe('2026-03-08T07:00:00.000Z');
+ expect(out).toHaveLength(1);expect(out[0].starts_at).toBe('2026-03-08T07:30:00.000Z');
 });
 it('retains short-month skipping rather than calendar-date sliding',()=>{
  const e=event({starts_at:'2026-01-31T12:34:00.000Z',ends_at:null,recurrence:'monthly'});
@@ -54,10 +77,10 @@ it('retains the unknown-frequency refusal',()=>{
  expect(expand(event({recurrence:'unsupported'}))).toEqual([]);
 });
 
-it('preserves nonzero precision within the first valid minute of the spring gap',()=>{
+it('preserves nonzero precision across the spring gap',()=>{
  const e=event({starts_at:'2026-03-01T07:30:42.125Z',ends_at:null,recurrence:'weekly'});
  const out=expand(e,'2026-03-08T00:00:00Z','2026-03-09T00:00:00Z','America/New_York');
- expect(out).toHaveLength(1);expect(out[0].starts_at).toBe('2026-03-08T07:00:42.125Z');
+ expect(out).toHaveLength(1);expect(out[0].starts_at).toBe('2026-03-08T07:30:42.125Z');
 });
 it.each([
  ['zero','2026-10-25T05:30:00.000Z','2026-11-01T05:30:00.000Z'],
@@ -66,10 +89,21 @@ it.each([
  const out=expand(event({starts_at:seed,ends_at:null,recurrence:'weekly'}),'2026-11-01T00:00:00Z','2026-11-02T00:00:00Z','America/New_York');
  expect(out).toHaveLength(1);expect(out[0].starts_at).toBe(wanted);
 });
-it('retains the existing resolver fold choice even when a zero-second seed names the later fold',()=>{
+it('preserves the explicit seed instant when it names the later fold',()=>{
  const e=event({starts_at:'2026-11-01T06:30:00.000Z',ends_at:null,recurrence:'weekly'});
  const out=expand(e,'2026-11-01T00:00:00Z','2026-11-02T00:00:00Z','America/New_York');
- expect(out).toHaveLength(1);expect(out[0].starts_at).toBe('2026-11-01T05:30:00.000Z');
+ expect(out).toHaveLength(1);expect(out[0].starts_at).toBe(e.starts_at);
+});
+it.each(['daily','weekly','monthly','yearly'])('keeps the later-fold %s seed inside its actual window with exact precision and duration',(recurrence)=>{
+ const e=event({starts_at:'2026-11-01T06:30:42.125Z',ends_at:'2026-11-01T06:50:52.375Z',recurrence});
+ const out=expand(e,'2026-11-01T06:30:42.000Z','2026-11-01T06:30:43.000Z','America/New_York');
+ expect(out).toHaveLength(1);expect(out[0]).toEqual(e);
+ expect(expand(e,'2026-11-01T05:00:00Z','2026-11-01T06:00:00Z','America/New_York')).toEqual([]);
+});
+it('steps later occurrences from the saved wall clock after preserving the later-fold seed',()=>{
+ const e=event({starts_at:'2026-11-01T06:30:42.125Z',ends_at:null,recurrence:'weekly'});
+ const out=expand(e,'2026-11-01T00:00:00Z','2026-11-09T00:00:00Z','America/New_York');
+ expect(out.map(row=>row.starts_at)).toEqual(['2026-11-01T06:30:42.125Z','2026-11-08T06:30:42.125Z']);
 });
 it.each([
  ['monthly','2026-01-15T12:34:42.125Z','2026-01-15T13:34:52.375Z','2026-02-15T00:00:00Z','2026-02-16T00:00:00Z','2026-02-15T12:34:42.125Z','2026-02-15T13:34:52.375Z'],

@@ -86,6 +86,10 @@ const ROOTS = ['app', 'lib', 'components', 'hooks', 'scripts', 'mobile'];
  * finds real usage.
  */
 const GENERATED = new Set(['lib/database.types.ts']);
+// This standalone verifier inspects trigger effects in an explicitly named,
+// disposable PostgreSQL cluster. Those assertions do not wire an application
+// feature to the table. Keep the exclusion exact: other scripts still count.
+const SYNTHETIC_VERIFIERS = new Set(['scripts/verify-sync-atomic-pull.mjs']);
 const IGNORE_DIRS = new Set([
   'node_modules', '.next', '.git', 'out', 'dist', 'coverage',
   'test-results', 'playwright-report', 'ios', 'android', '.expo',
@@ -106,7 +110,13 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-const FILES = ROOTS.flatMap((r) => walk(r)).filter((f) => !GENERATED.has(f));
+function isApplicationCode(file: string): boolean {
+  // Normalize only the exclusion lookup; retain native paths for file reads.
+  const normalized = file.replaceAll('\\', '/');
+  return !GENERATED.has(normalized) && !SYNTHETIC_VERIFIERS.has(normalized);
+}
+
+const FILES = ROOTS.flatMap((r) => walk(r)).filter(isApplicationCode);
 
 /**
  * Bare-name search, the same test AUTHZ-020 used — not `.from('…')` only.
@@ -116,9 +126,11 @@ const FILES = ROOTS.flatMap((r) => walk(r)).filter((f) => !GENERATED.has(f));
  * never be told apart. `\w` covers the underscore, so `\b` sits exactly where a
  * table name ends.
  */
-function referencesOf(table: string): string[] {
+function referencesOf(table: string, files: readonly string[] = FILES,
+  readSource: (file: string) => string = (file) => readFileSync(file, 'utf8'),
+): string[] {
   const pattern = new RegExp(`\\b${table}\\b`);
-  return FILES.filter((f) => pattern.test(readFileSync(f, 'utf8')));
+  return files.filter((f) => pattern.test(readSource(f)));
 }
 
 describe('AUTHZ-020: the sixteen unreferenced tables are still unreferenced', () => {
@@ -134,6 +146,25 @@ describe('AUTHZ-020: the sixteen unreferenced tables are still unreferenced', ()
     for (const used of USED_NEIGHBOURS) {
       expect(referencesOf(used).length, `${used} should be found in the tree`).toBeGreaterThan(0);
     }
+  });
+
+  it.each(['/', '\\'])('still detects application and other script references with %s paths', (separator) => {
+    const path = (file: string) => file.replaceAll('/', separator);
+    const sources = new Map([
+      [path('lib/database.types.ts'), 'sync_change_logs: GeneratedTable;'],
+      [path('scripts/verify-sync-atomic-pull.mjs'), "count('sync_change_logs', syntheticFamily);"],
+      [path('lib/sync/new-feature.ts'), "client.from('sync_change_logs');"],
+      [path('app/api/new-feature/route.ts'), "client.from('sync_change_logs');"],
+      [path('scripts/run-sync.mjs'), 'select * from sync_change_logs;'],
+      [path('scripts/verify-sync-atomic-pull-extra.mjs'), 'select * from sync_change_logs;'],
+    ]);
+    const files = [...sources.keys()].filter(isApplicationCode);
+    expect(referencesOf('sync_change_logs', files, (file) => sources.get(file)!)).toEqual([
+      path('lib/sync/new-feature.ts'), path('app/api/new-feature/route.ts'),
+      path('scripts/run-sync.mjs'), path('scripts/verify-sync-atomic-pull-extra.mjs'),
+    ]);
+    // A longer near-miss name must not create a hit for the protected table.
+    expect(referencesOf('sync_change', files, (file) => sources.get(file)!)).toEqual([]);
   });
 
   it('distinguishes a near-miss from its used sibling', () => {

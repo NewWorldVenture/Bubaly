@@ -9,6 +9,11 @@ import type { ToolSpec } from '@/lib/ai/provider';
 import { buildHomeNeeds } from '@/lib/home/needs-build';
 import { rankNeedsAttention } from '@/lib/home/needs-attention';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
+import { readCalendarBusySource, readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { readCalendarAvailability } from '@/lib/calendar/availability';
+import { addExactMilliseconds, compareExactInstants, exactIntervalOf, formatExactInstant, parseExactInstant } from '@/lib/calendar/exact-instant';
+import { isValidTimezone } from '@/lib/time/zoned';
+import { briefingCalendarBounds, instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import type { ParentApprovalRow, RenewalRow, DocumentRow, NeedsReader } from '@/lib/home/needs-sources';
 import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
 import { reminderAttention } from '@/lib/dashboard/reminder-attention';
@@ -380,10 +385,14 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         const days = Number.isFinite(a.days) ? Math.max(1, Math.min(90, Math.round(a.days as number))) : 7;
         const now = new Date();
         const until = new Date(now.getTime() + days * 86400000).toISOString();
-        const { data, error } = await supabase.from('calendar_events')
-          .select('title, starts_at, ends_at, all_day, location, assignee_id')
-          .eq('family_id', ctx.familyId).gte('starts_at', now.toISOString()).lte('starts_at', until)
-          .order('starts_at').limit(50);
+        // The shared read (lib/calendar/occurrences.ts): every week of a series,
+        // not only the week it was created; today's all-day rows by their own
+        // date; timed rows from now, on the family's clock.
+        const tz = ctx.tz || 'UTC';
+        const { data, error } = await readCalendarOccurrences(supabase, ctx.familyId, instantCalendarBounds(now.toISOString(), until, tz), tz, {
+          columns: ['title', 'starts_at', 'ends_at', 'all_day', 'location', 'assignee_id'],
+          limit: 50,
+        });
         if (error) return toolFailure('load upcoming events', error);
         const byId = new Map(ctx.members.map((m) => [m.id, m.display_name]));
         return { ok: true, events: (data ?? []).map((e) => ({ title: e.title, starts_at: e.starts_at, all_day: e.all_day, location: e.location, who: e.assignee_id ? byId.get(e.assignee_id) ?? null : null })) };
@@ -453,7 +462,13 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
           supabase.from('renewals').select('id, title, expires_at, reminder_days, status, created_at').eq('family_id', ctx.familyId).in('status', ['active', 'expired']).lte('expires_at', in45).limit(50),
           supabase.from('documents').select('id, title, expires_at').eq('family_id', ctx.familyId).not('expires_at', 'is', null).lte('expires_at', in30).limit(50),
           supabase.from('family_reminders').select('id, remind_at, status').eq('family_id', ctx.familyId).eq('status', 'active').not('remind_at', 'is', null).lte('remind_at', todayEnd.toISOString()).limit(100),
-          supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, assignee_id').eq('family_id', ctx.familyId).not('assignee_id', 'is', null).gte('starts_at', now.toISOString()).lte('starts_at', in14).order('starts_at').limit(200),
+          // Series included: a one-off booked over a weekly practice clashes in
+          // the week it is booked, which is almost never the practice's first.
+          readCalendarOccurrences(supabase, ctx.familyId, instantCalendarBounds(now.toISOString(), in14, tz), tz, {
+            columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day', 'assignee_id'],
+            refine: (query) => query.not('assignee_id', 'is', null),
+            limit: 200,
+          }),
           supabase.from('chore_assignments').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('status', 'submitted'),
           supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('is_checked', false),
           supabase.from('todo_items').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('is_done', false),
@@ -496,29 +511,66 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
       execute: async (a) => {
         const date = str(a.date);
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, error: 'date must be YYYY-MM-DD' };
-        // Pull a generous UTC window so the local day is fully covered across offsets.
-        const from = new Date(`${date}T00:00:00Z`); from.setUTCHours(from.getUTCHours() - 14);
-        const to = new Date(`${date}T23:59:59Z`); to.setUTCHours(to.getUTCHours() + 14);
-        const memberId = resolveMember(ctx, a.assignee);
-        let q = supabase.from('calendar_events')
-          .select('title, starts_at, ends_at, all_day, assignee_id')
-          .eq('family_id', ctx.familyId).gte('starts_at', from.toISOString()).lte('starts_at', to.toISOString())
-          .order('starts_at').limit(50);
-        if (memberId) q = q.eq('assignee_id', memberId);
-        const { data, error } = await q;
-        if (error) return toolFailure('find free time', error);
-        const tz = ctx.tz || 'America/New_York';
+        const tz = ctx.tz;
+        if (typeof tz !== 'string' || !tz.trim() || !isValidTimezone(tz)) return toolFailure('find free time', { message: 'Invalid calendar scope' });
+        // The family's day: timed rows between its midnights, all-day rows
+        // dated that day, every series stepped onto it (the complete qualified
+        // availability domain, including ongoing overlaps). A ±14-hour UTC window around the date
+        // read rows by their first start only, so a weekly practice was busy on
+        // the day it was created and free every week after.
+        let bounds: ReturnType<typeof briefingCalendarBounds>;
+        try { bounds = briefingCalendarBounds(date, tz, 0, 1); } catch { return { ok: false, error: 'date must be a real calendar date' }; }
+        let memberId: string | null = null;
+        if (a.assignee != null) {
+          const query = str(a.assignee).toLowerCase();
+          if (!query) return { ok: false, error: 'Choose a family member by name.' };
+          const exact = ctx.members.filter(member => member.display_name.toLowerCase() === query);
+          const matches = exact.length ? exact : ctx.members.filter(member => member.display_name.toLowerCase().includes(query));
+          if (matches.length !== 1) return { ok: false, error: matches.length ? 'That name matches more than one family member. Use their full name.' : 'That family member could not be found.' };
+          memberId = matches[0].id;
+        }
+        const [calendar, school, sports] = await settleAll([
+          readCalendarAvailability(supabase, ctx.familyId, bounds, tz),
+          readCalendarBusySource(supabase, ctx.familyId, 'school_events', bounds.timedFrom, bounds.timedTo, tz),
+          readCalendarBusySource(supabase, ctx.familyId, 'sports_events', bounds.timedFrom, bounds.timedTo, tz),
+        ]);
+        for (const result of [calendar, school, sports]) if (result.error) return toolFailure('find free time', result.error);
+        // Unassigned commitments belong to the whole family, including a
+        // named member's availability. Filter only after complete scoped reads.
+        const selected = (assignee: string | null) => !memberId || !assignee || assignee === memberId;
+        const from = parseExactInstant(bounds.timedFrom), to = parseExactInstant(bounds.timedTo);
+        const otherBlocks = (rows: NonNullable<typeof school.data>, title: string, namespace: string) => rows
+          .filter(event => selected(event.member_id))
+          .map(event => {
+            const start = parseExactInstant(event.starts_at);
+            const end = parseExactInstant(event.ends_at ?? addExactMilliseconds(event.starts_at,3_600_000));
+            return { title, all_day:false, start:formatExactInstant(start>from?start:from), end:formatExactInstant(end<to?end:to), key:JSON.stringify([namespace,event.id,event.starts_at]) };
+          }).filter(event => compareExactInstants(event.end,event.start)>0);
+        const data = [
+          ...(calendar.data ?? []).filter(event => event.occupied && (event.attribution.kind === 'family' || selected(event.attribution.memberId)))
+            .map(event => ({title:event.title,all_day:event.all_day,...exactIntervalOf(event),key:event.occurrenceKey})),
+          ...otherBlocks(school.data ?? [], 'School event', 'school'),
+          ...otherBlocks(sports.data ?? [], 'Sports event', 'sports'),
+        ].sort((a, b) => compareExactInstants(a.start,b.start) || a.key.localeCompare(b.key));
         const fmt = (iso: string | null) => {
           if (!iso) return null;
           try { return new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(iso)); }
           catch { return iso.slice(0, 16); }
         };
-        const onDay = (iso: string) => {
-          try { return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso)) === date; }
-          catch { return iso.slice(0, 10) === date; }
-        };
-        const busy = (data ?? []).filter((e) => onDay(e.starts_at)).map((e) => ({ title: e.title, start: fmt(e.starts_at), end: fmt(e.ends_at), all_day: e.all_day }));
-        return { ok: true, date, time_zone: tz, busy, note: busy.length ? 'These are the busy blocks; open time is the gaps between them.' : 'No events that day — the whole day is free.' };
+        // An all-day row is a DATE stored at its UTC midnight: it is on its own
+        // date, and has no clock time to give (read in the family's zone, a
+        // Saturday all-day row in Los Angeles is "Fri 5:00 PM").
+        const fmtDay = (iso: string) => new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric' }).format(new Date(iso));
+        const busy = (data ?? []).map((e) => {
+          if (e.all_day) return {
+            title: e.title, start: fmtDay(`${date}T00:00:00Z`), end: null, all_day: true,
+            starts_at: bounds.allDayFromDay, ends_at: bounds.allDayToDay,
+          };
+          const startsAt = e.start;
+          const endsAt = e.end;
+          return { title: e.title, start: fmt(startsAt), end: fmt(endsAt), all_day: false, starts_at: startsAt, ends_at: endsAt };
+        });
+        return { ok: true, date, time_zone: tz, busy, note: busy.length ? 'These are the busy blocks; open time is the gaps between them.' : 'No busy blocks that day — the whole day is free.' };
       },
     },
 

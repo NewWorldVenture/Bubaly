@@ -10,11 +10,13 @@ import { isManager } from '@/lib/constants/roles';
 import type { UserContext } from '@/lib/supabase/auth';
 import { Avatar } from '@/components/ui/avatar';
 import { DashboardWeather } from '@/components/dashboard/dashboard-weather';
-import { fmtTime, firstName } from '@/lib/utils/format';
+import { createFormat, firstName } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { dayPhase, phaseGreeting } from '@/lib/home/time-of-day';
-import { dayKeyInTz, zonedDayBoundsMs, addDaysToDayKey, weekStartDayKey } from '@/lib/services/scope';
+import { dayKeyInTz, zonedDayBoundsMs, addDaysToDayKey, weekStartDayKey, scopeFromUserContext } from '@/lib/services/scope';
+import { readCompleteCalendarOccurrences, projectCalendarOccurrences } from '@/lib/services/calendar/search-occurrences';
+import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from '@/lib/calendar/source-capability';
 
 const ACCENT = ['bg-violet-500', 'bg-emerald-500', 'bg-orange-500', 'bg-rose-500', 'bg-blue-500', 'bg-teal-500'];
 const MEAL_EMOJIS: Record<string, string> = { breakfast: '🍳', lunch: '🥗', dinner: '🍽️', snack: '🍎' };
@@ -72,15 +74,22 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
   // A SERVER component, so the locale comes from the request rather than from a
   // hook — useLocale() here is a build error, which is how this was caught.
   const { locale } = await getLocaleContext();
+  // A formatter bound to the FAMILY's zone: the bare `fmtTime` and the
+  // `toLocaleDateString(locale.code, …)` / `d.getDate()` badge rendered each
+  // event's clock and day in the host's zone.
+  const { fmtTime, fmtDate } = createFormat(locale.code, undefined, ctx.active.family.timezone || 'UTC');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   const { start, end, in7, in14, weekStart, weekEnd } = dayBounds(ctx.active.family.timezone || 'UTC');
+  const calendarRead = CALENDAR_SOURCE_ARCHIVE_ENABLED ? Promise.resolve(null)
+    : readCompleteCalendarOccurrences(scopeFromUserContext(ctx, supabase, { tz: ctx.active.family.timezone ?? '' }), {
+      from: start.toISOString(), to: in14.toISOString(),
+    });
 
   const [
-    { data: todayEvents },
+    calendarRes,
     { count: openChores },
     { count: dueTodayCount },
-    { data: upcomingEvents },
     { data: weekPlans },
     { data: members },
     { data: groceryItems },
@@ -90,15 +99,11 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
     { data: overdueReminders },
     { count: unreadMessages },
   ] = await settleAll([
-    supabase.from('calendar_events').select('*').eq('family_id', familyId)
-      .gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString()).order('starts_at').limit(8),
+    calendarRead,
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).in('status', ['todo', 'in_progress']),
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('due_at', start.toISOString().slice(0, 10)).in('status', ['todo', 'in_progress']),
-    supabase.from('calendar_events').select('id, title, starts_at, all_day, location, category')
-      .eq('family_id', familyId).gte('starts_at', end.toISOString()).lte('starts_at', in14.toISOString())
-      .order('starts_at').limit(5),
     supabase.from('meal_plans').select('plan_date, meal_type, meal_id')
       .eq('family_id', familyId)
       .gte('plan_date', weekStart.toISOString().slice(0, 10))
@@ -119,6 +124,19 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
     supabase.from('family_messages').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).not('read_by', 'cs', `{${ctx.active.member.user_id}}`),
   ]);
+  const calendarData = calendarRes && 'ok' in calendarRes && calendarRes.ok ? calendarRes.data : null;
+  const calendarUnavailable = calendarData === null;
+  const calendarEvents = calendarData ? projectCalendarOccurrences(calendarData.occurrences).events : [];
+  const timezone = ctx.active.family.timezone || 'UTC';
+  const todayKey = dayKeyInTz(start, timezone), tomorrowKey = dayKeyInTz(end, timezone), horizonKey = dayKeyInTz(in14, timezone);
+  const todayCalendarEvents = calendarEvents.filter(event => event.all_day
+    ? event.startDate === todayKey
+    : Date.parse(event.starts_at) >= start.getTime() && Date.parse(event.starts_at) < end.getTime());
+  const upcomingCalendarEvents = calendarEvents.filter(event => event.all_day
+    ? event.startDate !== null && event.startDate >= tomorrowKey && event.startDate <= horizonKey
+    : Date.parse(event.starts_at) >= end.getTime() && Date.parse(event.starts_at) <= in14.getTime());
+  const todayEvents = todayCalendarEvents.slice(0, 8);
+  const upcomingEvents = upcomingCalendarEvents.slice(0, 5);
 
   // Resolve real chore titles for the "Tasks Due" list (no embedded join in types).
   const dueChoreIds = [...new Set((dueTasks ?? []).map((t) => t.chore_id))];
@@ -151,8 +169,8 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
   if ((weekPlans?.length ?? 0) > 0 && (groceryItems?.length ?? 0) === 0) {
     suggestions.push({ icon: ShoppingCart, text: tr('familyDashboard.mealsNoGroceries'), cta: tr('familyDashboard.buildList') });
   }
-  if ((upcomingEvents?.length ?? 0) > 0) {
-    suggestions.push({ icon: Calendar, text: upcomingEvents!.length === 1 ? tr('familyDashboard.upcomingEventsOne') : tr('familyDashboard.upcomingEventsMany', { n: upcomingEvents!.length }), cta: tr('familyDashboard.viewCalendar') });
+  if (upcomingCalendarEvents.length > 0) {
+    suggestions.push({ icon: Calendar, text: upcomingCalendarEvents.length === 1 ? tr('familyDashboard.upcomingEventsOne') : tr('familyDashboard.upcomingEventsMany', { n: upcomingCalendarEvents.length }), cta: tr('familyDashboard.viewCalendar') });
   }
   if (birthdayCount > 0) {
     suggestions.push({ icon: Cake, text: birthdayCount === 1 ? tr('familyDashboard.birthdaysOne') : tr('familyDashboard.birthdaysMany', { n: birthdayCount }), cta: tr('familyDashboard.viewMembers') });
@@ -168,8 +186,8 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
   type MealRow = { plan_date: string; meal_type: string; meal_id: string | null };
   const mealMap: Record<number, MealRow> = {};
   for (const p of (weekPlans ?? []) as MealRow[]) {
-    const d = new Date(p.plan_date + 'T00:00:00');
-    const idx = (d.getDay() + 6) % 7;
+    // A DATE's weekday, read in no zone at all (UTC in, UTC out).
+    const idx = (new Date(p.plan_date + 'T00:00:00Z').getUTCDay() + 6) % 7;
     if (!mealMap[idx]) mealMap[idx] = p;
   }
 
@@ -188,7 +206,13 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
-        <StatCard href="/dashboard/calendar" label={tr('familyDashboard.eventsToday')} value={todayEvents?.length ?? 0} icon={Calendar} bg="bg-violet-600" linkLabel={tr('familyDashboard.cta.viewCalendar')} />
+        {calendarUnavailable ? (
+          <div role="status" className="rounded-2xl border border-border bg-surface/40 p-5">
+            <p className="text-xs text-muted">{tr('familyDashboard.eventsToday')}</p>
+            <p className="mt-2 text-sm text-muted">{tr('homeCalendar.todayUnavailable')}</p>
+            <Link href="/dashboard/calendar" className="mt-3 block text-xs font-semibold text-brand-text">{tr('familyDashboard.cta.viewCalendar')} →</Link>
+          </div>
+        ) : <StatCard href="/dashboard/calendar" label={tr('familyDashboard.eventsToday')} value={todayCalendarEvents.length} icon={Calendar} bg="bg-violet-600" linkLabel={tr('familyDashboard.cta.viewCalendar')} />}
         <StatCard href="/dashboard/chores" label={tr('familyDashboard.openTasks')} value={openChores ?? 0} icon={CheckCircle2} bg="bg-emerald-600" linkLabel={tr('familyDashboard.cta.viewTasks')} />
         <StatCard href="/dashboard/chores" label={tr('familyDashboard.dueToday')} value={dueTodayCount ?? 0} icon={ListChecks} bg="bg-orange-500" linkLabel={tr('familyDashboard.cta.viewChores')} />
         <StatCard href="/dashboard/settings#members" label={tr('familyDashboard.birthdaysSoon')} value={birthdayCount} icon={Cake} bg="bg-rose-500" linkLabel={tr('familyDashboard.cta.viewAll')} />
@@ -225,10 +249,10 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
             <h2 className="font-semibold">{tr('familyDashboard.todaysSchedule')}</h2>
             <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text">{tr('familyDashboard.viewCalendar')}</Link>
           </div>
-          {todayEvents && todayEvents.length > 0 ? (
+          {calendarUnavailable ? <p role="status" className="py-10 text-sm text-muted">{tr('homeCalendar.todayUnavailable')}</p> : todayEvents.length > 0 ? (
             <ul className="space-y-3">
               {todayEvents.map((e, i) => (
-                <li key={e.id} className="flex items-center gap-3">
+                <li key={e.occurrenceKey} className="flex items-center gap-3">
                   <span className="w-14 shrink-0 text-xs text-muted tabular-nums">
                     {e.all_day ? 'All Day' : fmtTime(e.starts_at)}
                   </span>
@@ -262,16 +286,15 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
             <h2 className="font-semibold">{tr('familyDashboard.upcomingEvents')}</h2>
             <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text">{tr('familyDashboard.viewAll')}</Link>
           </div>
-          {upcomingEvents && upcomingEvents.length > 0 ? (
+          {calendarUnavailable ? <p role="status" className="py-10 text-sm text-muted">{tr('homeCalendar.upcomingUnavailable')}</p> : upcomingEvents.length > 0 ? (
             <ul className="space-y-3">
               {upcomingEvents.map((e, i) => {
-                const d = new Date(e.starts_at);
                 return (
-                  <li key={e.id} className="flex items-center gap-3">
+                  <li key={e.occurrenceKey} className="flex items-center gap-3">
                     <div className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-lg text-center text-fg', ACCENT[i % ACCENT.length])}>
                       <div>
-                        <p className="text-[9px] font-bold uppercase">{d.toLocaleDateString(locale.code, { month: 'short' })}</p>
-                        <p className="text-base font-black leading-none">{d.getDate()}</p>
+                        <p className="text-[9px] font-bold uppercase">{fmtDate(e.all_day ? e.startDate! : e.starts_at, 'MMM')}</p>
+                        <p className="text-base font-black leading-none">{fmtDate(e.all_day ? e.startDate! : e.starts_at, 'd')}</p>
                       </div>
                     </div>
                     <div className="min-w-0 flex-1">
@@ -302,7 +325,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
             </div>
           </div>
           <p className="mb-4 text-sm text-fg/70">
-            {suggestions.length > 0 ? tr('familyDashboard.suggestionsIntro') : tr('familyDashboard.allOnTrack')}
+            {suggestions.length > 0 ? tr('familyDashboard.suggestionsIntro') : calendarUnavailable ? tr('homeCalendar.upcomingUnavailable') : tr('familyDashboard.allOnTrack')}
           </p>
           {suggestions.length > 0 && (
             <div className="space-y-2.5">
@@ -483,7 +506,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
           </div>
           <ul className="space-y-3">
             {(todayEvents ?? []).slice(0, 3).map((e, i) => (
-              <li key={e.id} className="flex items-start gap-3">
+              <li key={e.occurrenceKey} className="flex items-start gap-3">
                 <div className={cn('mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg', ACCENT[i % ACCENT.length] + '/20')}>
                   <Calendar className={cn('h-4 w-4', ['text-emerald-300', 'text-brand-text', 'text-blue-300'][i])} />
                 </div>
@@ -502,7 +525,8 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
                 </div>
               </li>
             ))}
-            {((todayEvents?.length ?? 0) === 0 && (members?.length ?? 0) === 0) && (
+            {calendarUnavailable && <li role="status" className="py-6 text-sm text-muted">{tr('homeCalendar.todayUnavailable')}</li>}
+            {!calendarUnavailable && ((todayEvents?.length ?? 0) === 0 && (members?.length ?? 0) === 0) && (
               <li className="py-6 text-center text-sm text-muted">{tr('familyDashboard.noRecentActivity')}</li>
             )}
           </ul>

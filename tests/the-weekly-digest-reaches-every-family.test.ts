@@ -60,6 +60,7 @@ vi.mock('@/lib/supabase/server', () => ({
     from: (table: string) => {
       const filters: Row = {};
       let head = false;
+      let exactCount = false;
       const rows = () => {
         const source = table === 'families' ? state.families
           : table === 'family_members' ? state.members
@@ -76,11 +77,13 @@ vi.mock('@/lib/supabase/server', () => ({
         const all = rows();
         const range = filters.range as [number, number] | undefined;
         const page = range ? all.slice(range[0], range[1] + 1) : all;
-        return head ? { data: null, count: page.length, error: null } : { data: page, error: null };
+        return { data: head ? null : page, count: head || exactCount ? all.length : null, error: null };
       };
       const b: Row = {};
       Object.assign(b, {
-        select: (_c?: string, opts?: { head?: boolean }) => { head = Boolean(opts?.head); return b; },
+        select: (_c?: string, opts?: { head?: boolean; count?: 'exact' }) => {
+          head = Boolean(opts?.head); exactCount = opts?.count === 'exact'; return b;
+        },
         order: () => b,
         limit: () => b,
         gte: () => b, lte: () => b,

@@ -1,3 +1,4 @@
+import { parseExactInstant } from '@/lib/calendar/exact-instant';
 // Calendar tools — the family's shared time.
 //
 // Input fields are snake_case and named exactly as the legacy flat tools named
@@ -14,9 +15,13 @@
 // person (high).
 import 'server-only';
 import { z } from 'zod';
+import { addExactMilliseconds } from '@/lib/calendar/exact-instant';
+import { calendarEventDayKey } from '@/lib/calendar/event-dates';
+import { CalendarConflictAdvisorySchema, CalendarConflictSubjectSchema, CalendarConflictReferenceSchema, CalendarExactIntervalSchema, validCalendarIntervalProjection } from '@/lib/ai/result-cards';
 import {
-  createEvent, deleteEvent, findConflicts, findFreeSlots, busyEvenings, rescheduleAfter, rsvpToEvent, searchEvents, updateEvent,
+  normalizeCalendarWriteInstant, createEvent, deleteEvent, findConflicts, findFreeSlots, busyEvenings, rescheduleAfter, rsvpToEvent, updateEvent,
 } from '@/lib/services/calendar';
+import { searchCalendarOccurrences, validateCalendarSearchWindow } from '@/lib/services/calendar/search-occurrences';
 import { scopeNow } from '@/lib/services/scope';
 import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
 import type { EventCategory, RecurrenceFreq } from '@/lib/database.types';
@@ -36,7 +41,7 @@ const eventOutput = z.object({
   category: z.string(),
   location: z.string().nullable(),
   assignee_id: z.string().nullable(),
-  /** Pre-rendered in the family's timezone so every surface says the same words. */
+  /** Civil DATE for all-day events; family timezone for timed events. */
   when: z.string(),
 });
 
@@ -44,11 +49,45 @@ const slotOutput = z.object({
   slots: z.array(z.object({ starts_at: z.string(), ends_at: z.string(), when: z.string() })),
 });
 
+// Search has a separate wire contract: a source occurrence is never an action ID.
+const searchOccurrenceFields = {
+  occurrenceKey: z.string().min(1).max(65_536),
+  reference: CalendarConflictReferenceSchema,
+  title: z.string().nullable(), description: z.string().nullable(), location: z.string().nullable(),
+  starts_at: z.string().datetime({ offset: true }), ends_at: z.string().datetime({ offset: true }).nullable(),
+  all_day: z.boolean(), actualStartsAt: z.string().datetime({ offset: true }),
+  actualEndsAt: z.string().datetime({ offset: true }).nullable(),
+  startDate: z.string().nullable(), endDate: z.string().nullable(),
+  transparency: z.enum(['opaque', 'transparent']), occupied: z.boolean(), point: z.boolean(), estimatedEnd: z.boolean(),
+  interval: z.object({ start: z.number().finite(), end: z.number().finite() }).strict(),
+  exactInterval: CalendarExactIntervalSchema.optional(),
+  displayOrder: z.number().int().nonnegative(), when: z.string(),
+};
+const nativeSearchOutput = z.object({
+  ...searchOccurrenceFields, kind: z.literal('native'), id: z.string().uuid(), eventId: z.string().uuid(),
+  title: z.string(), category: z.string(), assignee_id: z.string().nullable(),
+  feed_id: z.string().nullable(), external_uid: z.string().nullable(),
+  readOnly: z.boolean(), mutable: z.boolean(),
+}).passthrough().refine(row => row.reference.kind === 'native' && row.id === row.eventId && row.id === row.reference.eventId
+  && row.readOnly === (row.feed_id !== null || row.external_uid !== null) && row.mutable === !row.readOnly && validCalendarIntervalProjection(row), 'Invalid native search provenance');
+const sourceSearchOutput = z.object({
+  ...searchOccurrenceFields, kind: z.literal('source'), readOnly: z.literal(true), mutable: z.literal(false),
+}).strict().refine(row => row.reference.kind === 'source' && validCalendarIntervalProjection(row), 'Invalid source search provenance');
+const searchOutput = z.object({
+  events: z.array(nativeSearchOutput), source_events: z.array(sourceSearchOutput),
+  matchedCount: z.number().int().nonnegative(), totalVisibleCount: z.number().int().nonnegative(),
+  returnedCount: z.number().int().nonnegative(), truncated: z.boolean(), horizonEndsAt: z.string().datetime({ offset: true }),
+  filterScope: z.object({ native: z.literal('requested-filters'), sources: z.literal('unmapped-family-context'), sourceMemberCategoryMatched: z.literal(false) }).strict(),
+  window: z.object({ from: z.string(), to: z.string(), bounded: z.literal(true), defaultedFrom: z.boolean(), defaultedTo: z.boolean() }).strict(),
+}).strict().refine(row => row.returnedCount === row.events.length + row.source_events.length
+  && row.matchedCount >= row.returnedCount && row.totalVisibleCount >= row.matchedCount
+  && row.truncated === (row.matchedCount > row.returnedCount), 'Invalid search counts');
+
 export const calendarTools: ToolDefinition[] = [
   defineTool({
     name: 'calendar.createEvent',
     aliases: ['create_calendar_event', 'add_calendar_event'],
-    description: 'Add an event to the family calendar. Times are ISO 8601 in the family timezone.',
+    description: 'Add an event to the family calendar. Timed events use ISO 8601 in the family timezone. All-day events use calendar dates (YYYY-MM-DD) or UTC midnight boundaries; their end date is exclusive.',
     domain: 'calendar',
     capability: 'create',
     risk: 'low',
@@ -57,9 +96,9 @@ export const calendarTools: ToolDefinition[] = [
     activityFrom: 'service',
     input: z.object({
       title: z.string().describe('What the event is'),
-      starts_at: z.string().describe('ISO 8601 start, e.g. 2026-09-12T09:00:00'),
-      ends_at: z.string().nullish().describe('ISO 8601 end; omit for a one-hour default'),
-      all_day: z.boolean().nullish(),
+      starts_at: z.string().describe('Timed ISO 8601 start, e.g. 2026-09-12T09:00:00; for all_day use YYYY-MM-DD or YYYY-MM-DDT00:00:00Z'),
+      ends_at: z.string().nullish().describe('Timed ISO 8601 end; omit for a one-hour default. For all_day use an exclusive later date or UTC midnight; omit for one civil day'),
+      all_day: z.boolean().nullish().describe('Use calendar DATE boundaries, not floating local times, when true'),
       category: z.enum(CATEGORIES).nullish(),
       location: z.string().nullish(),
       description: z.string().nullish(),
@@ -99,7 +138,7 @@ export const calendarTools: ToolDefinition[] = [
         location: event.location,
         assignee_id: event.assignee_id,
         when: event.all_day
-          ? `all day ${describeWhen(event.starts_at, scope.tz, scopeNow(scope))}`
+          ? `all day ${calendarEventDayKey(event, scope.tz)}`
           : describeWhen(event.starts_at, scope.tz, scopeNow(scope)),
       });
     },
@@ -166,7 +205,7 @@ export const calendarTools: ToolDefinition[] = [
       return ok({
         id: event.id, title: event.title, starts_at: event.starts_at, ends_at: event.ends_at,
         all_day: event.all_day, category: event.category, location: event.location, assignee_id: event.assignee_id,
-        when: describeWhen(event.starts_at, scope.tz, scopeNow(scope)),
+        when: event.all_day ? `all day ${calendarEventDayKey(event, scope.tz)}` : describeWhen(event.starts_at, scope.tz, scopeNow(scope)),
       });
     },
   }),
@@ -182,7 +221,7 @@ export const calendarTools: ToolDefinition[] = [
     activityFrom: 'service',
     input: z.object({
       event_id: z.string(),
-      starts_at: z.string().describe('New ISO 8601 start time'),
+      starts_at: z.string().describe('New timed ISO 8601 start; for an all-day event use YYYY-MM-DD or UTC midnight'),
     }),
     output: eventOutput,
     summarize: (_input, output) => `Moved ${output.title} to ${output.when}`,
@@ -195,7 +234,7 @@ export const calendarTools: ToolDefinition[] = [
       return ok({
         id: event.id, title: event.title, starts_at: event.starts_at, ends_at: event.ends_at,
         all_day: event.all_day, category: event.category, location: event.location, assignee_id: event.assignee_id,
-        when: describeWhen(event.starts_at, scope.tz, scopeNow(scope)),
+        when: event.all_day ? `all day ${calendarEventDayKey(event, scope.tz)}` : describeWhen(event.starts_at, scope.tz, scopeNow(scope)),
       });
     },
     verify: async (scope, input, output) => {
@@ -209,7 +248,8 @@ export const calendarTools: ToolDefinition[] = [
         console.error('[tool:calendar.rescheduleEvent] verification read failed', error);
         return fail(describeDbError(error, 'Could not confirm the new time was saved.'), { code: SERVICE_CODES.db });
       }
-      const moved = Boolean(data) && Date.parse(data!.starts_at) === Date.parse(input.starts_at);
+      let moved = false;
+      try { const expected = normalizeCalendarWriteInstant(input.starts_at, scope.tz); moved = Boolean(data) && expected !== null && parseExactInstant(data!.starts_at) === parseExactInstant(expected); } catch { /* Invalid receipts cannot verify a move. */ }
       return ok({ verified: moved, detail: moved ? `${output.title} now starts at ${output.when}.` : 'The event did not move.' });
     },
   }),
@@ -241,42 +281,64 @@ export const calendarTools: ToolDefinition[] = [
   defineTool({
     name: 'calendar.searchEvents',
     aliases: ['list_upcoming_events', 'search_calendar'],
-    description: 'List calendar events in a window, soonest first.',
+    description: 'List native calendar events and read-only imported family context in a bounded window, soonest first. Free annotations and points are visible but do not occupy time. Omitted end defaults to a finite 366-day horizon.',
     domain: 'calendar',
     capability: 'view',
     risk: 'low',
     readOnly: true,
     input: z.object({
-      from: z.string().nullish().describe('ISO 8601 start of the window; defaults to now'),
-      to: z.string().nullish().describe('ISO 8601 end of the window'),
+      from: z.string().nullish().describe('ISO 8601 start with explicit Z or numeric UTC offset; defaults to now'),
+      to: z.string().nullish().describe('ISO 8601 inclusive end with explicit Z or numeric UTC offset; defaults to 366 days after the start'),
       query: z.string().nullish().describe('Match against the event title'),
       assignee: z.string().nullish(),
       assignee_id: z.string().nullish(),
+      category: z.enum(CATEGORIES).nullish(),
       limit: z.number().int().nullish(),
     }),
-    output: z.object({ events: z.array(eventOutput) }),
-    summarize: (_input, output) => (output.events.length === 0
-      ? 'Nothing on the calendar for that window'
-      : `Found ${plural(output.events.length, 'event')}, starting with ${output.events[0].title} at ${output.events[0].when}`),
+    output: searchOutput,
+    summarize: (input, output) => {
+      const rows = [...output.events, ...output.source_events].sort((a, b) => a.displayOrder - b.displayOrder);
+      const annotations = rows.filter(row => !row.occupied).length;
+      const filtered = input.assignee != null || input.assignee_id != null || input.category != null;
+      const parts = rows.length === 0 ? ['No calendar results in this bounded window']
+        : filtered ? [`Found ${plural(output.events.length, 'event')} matching the native filters and ${plural(output.source_events.length, 'imported family context item')} (person/category unmapped)`]
+        : [`Found ${plural(rows.length, 'event')}, starting with ${rows[0].title ?? 'Calendar event'} at ${rows[0].when}`];
+      if (annotations) parts.push(`${plural(rows.length - annotations, 'occupied event')} and ${plural(annotations, 'free or point annotation')} shown; annotations do not occupy time`);
+      if (output.truncated) parts.push(`Showing ${output.returnedCount} of ${output.matchedCount} visible results`);
+      if (output.window.defaultedFrom || output.window.defaultedTo) parts.push(`Bounded search from ${output.window.from} through ${output.horizonEndsAt}`);
+      return parts.join('. ');
+    },
     execute: async (scope, input) => {
+      const now = scopeNow(scope);
+      const from = input.from ?? now.toISOString();
+      let window: ReturnType<typeof validateCalendarSearchWindow>;
+      try {
+        const to = input.to ?? addExactMilliseconds(from, 366 * 86_400_000 - 1);
+        window = validateCalendarSearchWindow(scope, { from, to });
+      } catch {
+        return fail('Choose a valid bounded calendar window and household timezone.', { code: SERVICE_CODES.invalidInput });
+      }
       const assignee = await resolveAssigneeId(scope, input);
       if (!assignee.ok) return assignee;
 
-      const res = await searchEvents(scope, {
-        from: input.from ?? null,
-        to: input.to ?? null,
-        query: input.query ?? null,
-        assigneeId: assignee.data,
+      const res = await searchCalendarOccurrences(scope, {
+        from: window.from, to: window.to,
+        query: input.query ?? undefined,
+        assigneeId: assignee.data ?? undefined,
+        category: input.category ?? undefined,
         limit: input.limit ?? undefined,
       });
       if (!res.ok) return res;
-      const now = scopeNow(scope);
       return ok({
-        events: res.data.map((event) => ({
-          id: event.id, title: event.title, starts_at: event.starts_at, ends_at: event.ends_at,
-          all_day: event.all_day, category: event.category, location: event.location, assignee_id: event.assignee_id,
-          when: describeWhen(event.starts_at, scope.tz, now),
-        })),
+        ...res.data,
+        events: res.data.events.map(event => ({ ...event, when: event.all_day
+          ? `all day ${event.startDate} through ${event.endDate} (exclusive)`
+          : describeWhen(event.actualStartsAt, scope.tz, now) })),
+        source_events: res.data.source_events.map(event => ({ ...event, when: event.all_day
+          ? `all day ${event.startDate} through ${event.endDate} (exclusive)`
+          : describeWhen(event.actualStartsAt, scope.tz, now) })),
+        window: { from: window.from, to: window.to, bounded: true as const,
+          defaultedFrom: input.from == null, defaultedTo: input.to == null },
       });
     },
   }),
@@ -284,7 +346,7 @@ export const calendarTools: ToolDefinition[] = [
   defineTool({
     name: 'calendar.findConflicts',
     aliases: ['find_calendar_conflicts', 'check_conflicts'],
-    description: 'Find double-bookings: one person with two overlapping events.',
+    description: 'Find personal double-bookings and conservative family overlaps involving imported calendars.',
     domain: 'calendar',
     capability: 'view',
     risk: 'low',
@@ -292,13 +354,20 @@ export const calendarTools: ToolDefinition[] = [
     input: z.object({ from: z.string().nullish(), to: z.string().nullish() }),
     output: z.object({
       conflicts: z.array(z.object({
+        kind: z.literal('personal'),
         member_id: z.string().nullable(),
         event_ids: z.array(z.string()),
         titles: z.array(z.string()),
         when: z.string(),
+        occurrenceKeys: z.array(z.string()),
+        references: z.array(CalendarConflictReferenceSchema),
+        subjects: z.array(CalendarConflictSubjectSchema),
       })),
+      advisories: z.array(CalendarConflictAdvisorySchema),
     }),
-    summarize: (_input, output) => (output.conflicts.length === 0
+    summarize: (_input, output) => (output.advisories.length > 0
+      ? `${plural(output.conflicts.length, 'personal clash', 'personal clashes')} and ${plural(output.advisories.length, 'family calendar overlap')} in that window`
+      : output.conflicts.length === 0
       ? 'No double-bookings in that window'
       : `Found ${plural(output.conflicts.length, 'clash', 'clashes')} — first: ${output.conflicts[0].titles.join(' vs ')} ${output.conflicts[0].when}`),
     execute: async (scope, input) => {
@@ -307,14 +376,19 @@ export const calendarTools: ToolDefinition[] = [
       const now = scopeNow(scope);
       return ok({
         conflicts: res.data.conflicts.map((conflict) => {
-          const events = conflict.eventIds.map((id) => res.data.events[id]).filter(Boolean);
+          const subjects = (conflict.occurrenceKeys ?? []).map(key => res.data.subjects[key]);
           return {
+            kind: 'personal' as const,
+            occurrenceKeys: conflict.occurrenceKeys ?? [],
+            references: conflict.references ?? [],
+            subjects,
             member_id: conflict.assigneeId,
             event_ids: conflict.eventIds,
-            titles: events.map((event) => event.title),
+            titles: subjects.map(subject => subject.title ?? 'Calendar event'),
             when: describeWhen(conflict.startsAt, scope.tz, now),
           };
         }),
+        advisories: res.data.advisories.map(advisory => ({ ...advisory, when: describeWhen(advisory.startsAt, scope.tz, now) })),
       });
     },
   }),

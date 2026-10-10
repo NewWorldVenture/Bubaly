@@ -17,9 +17,10 @@ import {
   updateEvent,
 } from '@/lib/services/calendar';
 import type { ServiceScope } from '@/lib/services/types';
+import { createInMemorySupabase } from './helpers/in-memory-supabase';
 
 type Call = { table: string; kind: 'select' | 'insert' | 'update' | 'delete'; filters: Record<string, unknown>; payload?: unknown };
-type Reply = { data: unknown; error: unknown };
+type Reply = { data: unknown; error: unknown; count?: number | null };
 
 /**
  * Chainable PostgREST fake. Every builder is thenable so both terminal styles
@@ -35,9 +36,19 @@ function makeDb(respond: (call: Call) => Reply) {
     const b: Record<string, unknown> = {};
     const chain = () => b;
     const filter = (column: string, value: unknown) => { call.filters[column] = value; return b; };
+    let counted = false;
+    const reply = () => {
+      const result = respond(call);
+      const data = call.filters['neq:recurrence'] === 'none' && Array.isArray(result.data)
+        ? result.data.filter((row) => row.recurrence && row.recurrence !== 'none') : result.data;
+      return { ...result, data, ...(counted ? { count: Array.isArray(data) ? data.length : null } : {}) };
+    };
     Object.assign(b, {
-      select: chain, order: chain, limit: chain, ilike: chain, or: chain,
+      select: (_columns: unknown, options?: { count?: string }) => { counted = options?.count === 'exact'; return b; },
+      order: chain, limit: chain, range: chain, ilike: chain,
+      or: (expression: string) => { call.filters.or = [...((call.filters.or as string[] | undefined) ?? []), expression]; return b; },
       eq: filter, is: filter, in: filter,
+      neq: (c: string, v: unknown) => filter(`neq:${c}`, v),
       lt: (c: string, v: unknown) => filter(`lt:${c}`, v),
       lte: (c: string, v: unknown) => filter(`lte:${c}`, v),
       gte: (c: string, v: unknown) => filter(`gte:${c}`, v),
@@ -45,9 +56,9 @@ function makeDb(respond: (call: Call) => Reply) {
       insert: (payload: unknown) => { call.kind = 'insert'; call.payload = payload; return b; },
       update: (payload: unknown) => { call.kind = 'update'; call.payload = payload; return b; },
       delete: () => { call.kind = 'delete'; return b; },
-      single: () => Promise.resolve(respond(call)),
-      maybeSingle: () => Promise.resolve(respond(call)),
-      then: (resolve: (value: Reply) => void) => resolve(respond(call)),
+      single: () => Promise.resolve(reply()),
+      maybeSingle: () => Promise.resolve(reply()),
+      then: (resolve: (value: Reply) => void) => resolve(reply()),
     });
     return b;
   };
@@ -170,7 +181,7 @@ describe('updateEvent / deleteEvent', () => {
     const { db, calls } = makeDb(() => ({ data: null, error: null }));
     const res = await updateEvent(scopeWith(db), 'event-from-another-family', { title: 'Moved' });
     expect(res).toMatchObject({ ok: false, code: 'not_found' });
-    expect(calls[0].filters).toMatchObject({ id: 'event-from-another-family', family_id: 'fam-1' });
+    expect(calls[0].filters).toMatchObject({ id: 'event-from-another-family', family_id: 'fam-1', feed_id: null, external_uid: null });
   });
 
   it('refuses an empty patch instead of issuing a no-op write', async () => {
@@ -186,6 +197,7 @@ describe('updateEvent / deleteEvent', () => {
     expect(res).toMatchObject({ ok: true, data: { id: 'event-1', title: 'Dentist' } });
     expect(calls[0].kind).toBe('delete');
     expect(calls[0].filters.family_id).toBe('fam-1');
+    expect(calls[0].filters).toMatchObject({ feed_id: null, external_uid: null });
   });
 });
 
@@ -193,7 +205,25 @@ describe('searchEvents', () => {
   it('filters by family and defaults the window to now onwards', async () => {
     const { db, calls } = makeDb(() => ({ data: [EVENT_ROW], error: null }));
     const res = await searchEvents(scopeWith(db), { to: '2026-09-12T00:00:00Z', assigneeId: 'member-2' });
-    expect(res).toMatchObject({ ok: true });
+    expect(res).toMatchObject({ ok: true, data: [EVENT_ROW] });
+    // Two reads — the one-offs by the window, the series that could reach it —
+    // and both are family-scoped and narrowed to the assignee.
+    expect(calls.map((c) => c.table)).toEqual(['calendar_events', 'calendar_events']);
+    for (const call of calls) expect(call.filters).toMatchObject({ family_id: 'fam-1', assignee_id: 'member-2' });
+    const [singles, series] = calls;
+    // The window starts at the scope's `now`, and `to` is inclusive as it always was.
+    expect(singles.filters.or).toEqual([
+      expect.stringContaining(`starts_at.gte.${NOW.toISOString()},starts_at.lt.2026-09-12T00:00:00.001Z`),
+      'recurrence.is.null,recurrence.eq.none',
+    ]);
+    expect(series.filters).toMatchObject({ 'neq:recurrence': 'none', 'lte:starts_at': '2026-09-12T00:00:00.001Z' });
+  });
+
+  it('reads the stored rows, a series once, when asked not to expand', async () => {
+    const { db, calls } = makeDb(() => ({ data: [EVENT_ROW], error: null }));
+    const res = await searchEvents(scopeWith(db), { to: '2026-09-12T00:00:00Z', assigneeId: 'member-2', expandSeries: false });
+    expect(res).toMatchObject({ ok: true, data: [EVENT_ROW] });
+    expect(calls).toHaveLength(1);
     expect(calls[0].filters).toMatchObject({
       family_id: 'fam-1',
       'gte:starts_at': NOW.toISOString(),
@@ -212,22 +242,47 @@ describe('searchEvents', () => {
 describe('findConflicts', () => {
   it('reports one person double-booked and returns the events involved', async () => {
     const overlapping = [
-      { ...EVENT_ROW, id: 'a', title: 'Dentist', starts_at: '2026-09-07T14:00:00.000Z', ends_at: '2026-09-07T15:00:00.000Z' },
-      { ...EVENT_ROW, id: 'b', title: 'Soccer', starts_at: '2026-09-07T14:30:00.000Z', ends_at: '2026-09-07T15:30:00.000Z' },
-      { ...EVENT_ROW, id: 'c', title: 'Later', assignee_id: 'member-3', starts_at: '2026-09-07T18:00:00.000Z', ends_at: '2026-09-07T19:00:00.000Z' },
+      { ...EVENT_ROW, id: '40000000-0000-4000-8000-000000000001', title: 'Dentist', starts_at: '2026-09-07T14:00:00.000Z', ends_at: '2026-09-07T15:00:00.000Z' },
+      { ...EVENT_ROW, id: '40000000-0000-4000-8000-000000000002', title: 'Soccer', starts_at: '2026-09-07T14:30:00.000Z', ends_at: '2026-09-07T15:30:00.000Z' },
+      { ...EVENT_ROW, id: '40000000-0000-4000-8000-000000000003', title: 'Later', assignee_id: 'member-3', starts_at: '2026-09-07T18:00:00.000Z', ends_at: '2026-09-07T19:00:00.000Z' },
     ];
     const { db } = makeDb(() => ({ data: overlapping, error: null }));
     const res = await findConflicts(scopeWith(db), { to: '2026-09-12T00:00:00Z' });
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.data.conflicts).toHaveLength(1);
-      expect(res.data.conflicts[0].eventIds.sort()).toEqual(['a', 'b']);
-      expect(res.data.events.a.title).toBe('Dentist');
+      expect(res.data.conflicts[0].eventIds.sort()).toEqual(['40000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000002']);
+      expect(res.data.events['40000000-0000-4000-8000-000000000001'].title).toBe('Dentist');
     }
   });
 });
 
 describe('findFreeSlots', () => {
+  it('preserves continuous availability through saved native and recurring sports points', async () => {
+    const db = createInMemorySupabase({ maxRows: 1 });
+    db.seed('calendar_events', [{ ...EVENT_ROW, id: '40000000-0000-4000-8000-000000000001', starts_at: '2026-11-01T13:00:00.000Z', ends_at: '2026-11-01T13:00:00.000Z' }]);
+    db.seed('sports_events', [{ id: 'point', family_id: 'fam-1', starts_at: '2026-10-25T13:00:00.000Z', ends_at: '2026-10-25T13:00:00.000Z', member_id: null, recurrence: 'weekly', recurrence_until: null }]);
+    const res = await findFreeSlots(scopeWith(db as unknown as SupabaseClient<Database>), {
+      durationMin: 120, from: '2026-11-01T13:00:00.000Z', to: '2026-11-01T15:00:00.000Z', workingHours: { startHour: 8, endHour: 10 }, limit: 1,
+    });
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.data).toEqual([{ startsAt: '2026-11-01T13:00:00.000Z', endsAt: '2026-11-01T15:00:00.000Z', dayKey: '2026-11-01' }]);
+  });
+  it('avoids an older sports series across the family DST transition with complete capped reads', async () => {
+    const db = createInMemorySupabase({ maxRows: 2 });
+    db.seed('sports_events', [
+      ...Array.from({ length: 5 }, (_, n) => ({ id: `practice-${n}`, family_id: 'fam-1', starts_at: '2026-10-25T12:00:00.000Z', ends_at: '2026-10-25T13:00:00.000Z', member_id: 'member-2', recurrence: 'weekly', recurrence_until: null })),
+      { id: 'other member', family_id: 'fam-1', starts_at: '2026-10-25T13:00:00.000Z', ends_at: '2026-10-25T14:00:00.000Z', member_id: 'member-3', recurrence: 'weekly', recurrence_until: null },
+      { id: 'foreign', family_id: 'foreign', starts_at: '2026-10-25T13:00:00.000Z', ends_at: '2026-10-25T14:00:00.000Z', member_id: 'member-2', recurrence: 'weekly', recurrence_until: null },
+    ]);
+    const res = await findFreeSlots(scopeWith(db as unknown as SupabaseClient<Database>), {
+      durationMin: 60, from: '2026-11-01T04:00:00.000Z', to: '2026-11-02T05:00:00.000Z', memberIds: ['member-2'], limit: 1,
+    });
+    expect(res.ok).toBe(true);
+    // 08:00–09:00 wall time is occupied after the clock changes. Other-family
+    // and other-member practices must not postpone the result another hour.
+    if (res.ok) expect(res.data[0]).toMatchObject({ startsAt: '2026-11-01T14:00:00.000Z', endsAt: '2026-11-01T15:00:00.000Z', dayKey: '2026-11-01' });
+  });
   it('clips to working hours in the family timezone, not the server one', async () => {
     // No commitments at all: the first slot of a New York family's day must be
     // 08:00 local = 12:00Z, never 08:00Z.
@@ -244,14 +299,14 @@ describe('findFreeSlots', () => {
       expect(res.data[0].dayKey).toBe('2026-09-07');
     }
     // Every source is read and every source is family-scoped.
-    expect(calls.map((c) => c.table).sort()).toEqual(['calendar_events', 'school_events', 'sports_events']);
+    expect(calls.map((c) => c.table).sort()).toEqual(['calendar_events', 'calendar_events', 'school_events', 'sports_events', 'sports_events']);
     expect(calls.every((c) => c.filters.family_id === 'fam-1')).toBe(true);
   });
 
   it('treats school and sports commitments as busy', async () => {
     const { db } = makeDb((call) => {
       if (call.table === 'sports_events') {
-        return { data: [{ starts_at: '2026-09-07T12:00:00.000Z', ends_at: '2026-09-07T14:00:00.000Z', member_id: 'member-2' }], error: null };
+        return { data: [{ id: 'sports-1', starts_at: '2026-09-07T12:00:00.000Z', ends_at: '2026-09-07T14:00:00.000Z', member_id: 'member-2' }], error: null };
       }
       return { data: [], error: null };
     });
@@ -279,9 +334,9 @@ describe('busyEvenings', () => {
         return {
           data: [
             // 23:00Z on the 7th = 19:00 local on the 7th → a busy evening.
-            { starts_at: '2026-09-07T23:00:00.000Z', all_day: false },
+            { ...EVENT_ROW, id: '40000000-0000-4000-8000-000000000002', title: 'Evening commitment', ends_at: null, assignee_id: null, starts_at: '2026-09-07T23:00:00.000Z' },
             // 15:00Z on the 8th = 11:00 local → not an evening.
-            { starts_at: '2026-09-08T15:00:00.000Z', all_day: false },
+            { ...EVENT_ROW, id: '40000000-0000-4000-8000-000000000003', title: 'Daytime commitment', ends_at: null, assignee_id: null, starts_at: '2026-09-08T15:00:00.000Z' },
           ],
           error: null,
         };
@@ -297,7 +352,7 @@ describe('rescheduleAfter', () => {
   it('keeps the original duration when moving an event', async () => {
     const { db, calls } = makeDb((call) => (call.kind === 'update'
       ? { data: { ...EVENT_ROW, starts_at: '2026-09-08T16:00:00.000Z' }, error: null }
-      : { data: { id: 'event-1', title: 'Dentist', starts_at: '2026-09-07T14:00:00.000Z', ends_at: '2026-09-07T15:30:00.000Z' }, error: null }));
+      : { data: { id: 'event-1', title: 'Dentist', starts_at: '2026-09-07T14:00:00.000Z', ends_at: '2026-09-07T15:30:00.000Z', all_day: false }, error: null }));
 
     const res = await rescheduleAfter(scopeWith(db), 'event-1', { startsAt: '2026-09-08T16:00:00Z' });
     expect(res.ok).toBe(true);

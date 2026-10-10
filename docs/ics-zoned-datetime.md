@@ -1,0 +1,7 @@
+# Explicit IANA date-times in standard ICS sync
+
+The standard sync parser resolves `DTSTART` and `DTEND` with an explicit IANA `TZID` through the existing pure onboarding clock. Each endpoint uses its own source zone. Repeated wall times select the first occurrence; nonexistent wall times use the offset before the transition, including half-hour and skipped-day changes. These are the rules in [RFC 5545 section 3.3.5](https://www.rfc-editor.org/rfc/rfc5545#section-3.3.5).
+
+UTC values remain absolute instants. DATE values remain calendar dates, encoded at midnight UTC with `allDay: true`; a calendar display-zone hint does not shift them. Quoted parameters and case-insensitive parameter names are understood. Unknown/custom zone names, conflicting UTC/DATE plus TZID parameters, malformed temporal fields, and referenced supplied VTIMEZONE declarations throw instead of producing a successful import at an invented time. This narrow path does not validate arbitrary supplied zone definitions, including definitions bearing familiar IANA names.
+
+Floating date-times retain the legacy naive-as-UTC assumption. This is an unresolved compatibility limitation and does not implement RFC floating-time semantics. Runtime IANA data determines supported explicit zones; no hosted provider acceptance is claimed. Recurrence expansion, EXDATE, RECURRENCE-ID preservation, custom VTIMEZONE support, and export fidelity remain outside this change. Raw RRULE and existing export behavior are unchanged.

@@ -14,7 +14,7 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 import { useFormat } from '@/components/i18n/use-format';
 
 export type GlanceItem = { icon: React.ComponentType<{ className?: string }>; value: string; label: string };
-export type UpcomingEvent = { id: string; title: string; starts_at: string; all_day: boolean };
+export type UpcomingEvent = { id: string; occurrenceKey?: string; title: string; starts_at: string; all_day: boolean };
 export type ActivityItem = { icon: React.ComponentType<{ className?: string }>; text: string; time: string; color: string };
 export type PromptSuggestion = { icon: React.ComponentType<{ className?: string }>; text: string };
 
@@ -63,14 +63,14 @@ export function ContextRail({ glance, upcoming, activity, prompts, loading = fal
             {upcoming.map((e, i) => {
               const d = new Date(e.starts_at);
               return (
-                <li key={e.id} className="flex items-center gap-3 py-2.5">
+                <li key={e.occurrenceKey ?? e.id} className="flex items-center gap-3 py-2.5">
                   <span className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-full text-white', ACCENT_COLORS[i % ACCENT_COLORS.length])}>
                     <CalendarDays className="h-5 w-5" aria-hidden />
                   </span>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold">{e.title}</p>
                     <p className="text-xs text-muted">
-                      {fmtDate(d, 'EEE, MMM d')}
+                      {fmtDate(e.all_day ? e.starts_at.slice(0, 10) : d, 'EEE, MMM d')}
                       {!e.all_day && ` · ${fmtTime(d)}`}
                     </p>
                   </div>

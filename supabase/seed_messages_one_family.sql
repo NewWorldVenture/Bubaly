@@ -3,9 +3,7 @@
 -- for ONE family, so the redesigned /dashboard/messages page renders fully.
 -- ----------------------------------------------------------------------------
 -- WHAT IT DOES
---   1. Re-asserts family-scoped RLS on family_conversations + family_messages
---      (SELECT/INSERT/UPDATE/DELETE via public.is_family_member) — same drift
---      fix as migrations 0105/0106. Safe + idempotent.
+--   1. Uses the schema and access policies installed by migrations unchanged.
 --   2. Ensures a realistic set of conversations for the family, covering every
 --      tab on the page:
 --        • 1 main family group          (tab: Groups / All)
@@ -29,35 +27,21 @@
 -- IDEMPOTENT: every seeded message is tagged sender_avatar='seed:messages' and
 --   deleted before re-insert. Seeded conversations are reused if they already
 --   exist (matched by family_id + name + created_by), so re-running never
---   duplicates and never touches your real (non-seed) conversations.
+--   duplicates tagged messages. Matching conversation metadata, including the
+--   canonical family chat, can be updated. Use a disposable LOCAL database only.
 --
 -- HOW TO RUN (local):
 --   npm run db:seed:messages
 --     -- or --
 --   psql "$SUPABASE_DB_URL" -f supabase/seed_messages_one_family.sql
---   (also runnable by pasting into the Supabase SQL editor and pressing Run)
+--   Never use a production SQL editor or a production connection for this seed.
 --
 -- VERIFY: open /dashboard/messages and hard-refresh. You should see the
 --   conversation list with previews + unread badges, tabs (All/Direct/Groups/
 --   Announcements), a full thread with reactions, and the About panel.
 -- ============================================================================
 
--- 1) RLS repair so the page can READ/WRITE the seeded rows --------------------
-do $$
-declare t text;
-begin
-  foreach t in array array['family_conversations','family_messages'] loop
-    execute format('alter table public.%I enable row level security;', t);
-    execute format('drop policy if exists %1$s_select on public.%1$I', t, t);
-    execute format('create policy %1$s_select on public.%1$I for select using (public.is_family_member(family_id))', t, t);
-    execute format('drop policy if exists %1$s_insert on public.%1$I', t, t);
-    execute format('create policy %1$s_insert on public.%1$I for insert with check (public.is_family_member(family_id))', t, t);
-    execute format('drop policy if exists %1$s_update on public.%1$I', t, t);
-    execute format('create policy %1$s_update on public.%1$I for update using (public.is_family_member(family_id)) with check (public.is_family_member(family_id))', t, t);
-    execute format('drop policy if exists %1$s_delete on public.%1$I', t, t);
-    execute format('create policy %1$s_delete on public.%1$I for delete using (public.is_family_member(family_id))', t, t);
-  end loop;
-end $$;
+-- Seed data never replaces participant, sender, or ownership policies.
 
 -- 2) + 3) Conversations and 520 messages -------------------------------------
 do $$
@@ -65,6 +49,7 @@ declare
   v_fam uuid := coalesce((select f.id from public.families f join auth.users u on u.id=f.created_by where lower(u.email)=lower('newworldventurellc@gmail.com') order by f.created_at limit 1),(select fm.family_id from public.family_members fm where fm.is_active and fm.role not in ('parent','adult') group by fm.family_id order by min(fm.created_at) limit 1),(select id from public.families order by created_at limit 1));  -- reproducible (was a hardcoded prod UUID)
   v_email       text := 'newworldventurellc@gmail.com';
   v_uid         uuid;
+  v_self_mid    uuid;
   v_self_name   text;
   v_family_name text;
 
@@ -171,8 +156,12 @@ begin
   end if;
 
   select name into v_family_name from public.families where id = v_fam;
-  select display_name into v_self_name from public.family_members
+  select id, display_name into v_self_mid, v_self_name from public.family_members
     where family_id = v_fam and user_id = v_uid and is_active limit 1;
+  if v_self_mid is null then
+    raise notice 'Seed skipped: anchor user is not an active member of the target family';
+    return;
+  end if;
   v_self_name := coalesce(v_self_name, 'You');
 
   -- Roster aligned arrays (parents first, then by created_at)
@@ -205,17 +194,18 @@ begin
   -- Ensure themed conversations exist (create once, reuse thereafter).
   for i in 1 .. array_length(c_names, 1) loop
     select id into v_cid from public.family_conversations
-      where family_id = v_fam and name = c_names[i] and created_by = v_uid limit 1;
+      where family_id = v_fam and ((i = 1 and is_family_chat)
+        or (i <> 1 and name = c_names[i] and created_by = v_uid)) limit 1;
     if v_cid is null then
       insert into public.family_conversations
-        (family_id, name, kind, avatar_emoji, description, is_archived, member_ids, participant_ids, created_by)
-      values (v_fam, c_names[i], c_kinds[i], c_emojis[i], c_desc[i], c_arch[i],
-              coalesce(v_account_uids, '{}'), v_member_ids, v_uid)
+        (family_id, name, kind, avatar_emoji, description, is_archived, member_ids, participant_ids, created_by, is_family_chat)
+      values (v_fam, c_names[i], c_kinds[i], c_emojis[i], c_desc[i], false,
+              coalesce(v_account_uids, '{}'), v_member_ids, v_uid, i = 1)
       returning id into v_cid;
     else
       update public.family_conversations
         set kind = c_kinds[i], avatar_emoji = c_emojis[i], description = c_desc[i],
-            is_archived = c_arch[i], participant_ids = v_member_ids,
+            is_archived = false, participant_ids = v_member_ids,
             member_ids = coalesce(v_account_uids, '{}')
         where id = v_cid;
     end if;
@@ -227,12 +217,13 @@ begin
   for i in 1 .. n_members loop
     if v_member_uids[i] is distinct from v_uid then
       select id into v_cid from public.family_conversations
-        where family_id = v_fam and name = v_member_names[i] and kind = 'direct' and created_by = v_uid limit 1;
+        where family_id = v_fam and name = v_member_names[i] and kind = 'direct' and created_by = v_uid
+          and participant_ids @> array[v_self_mid, v_member_ids[i]] and cardinality(participant_ids) = 2 limit 1;
       if v_cid is null then
         insert into public.family_conversations
           (family_id, name, kind, avatar_emoji, is_archived, member_ids, participant_ids, created_by)
         values (v_fam, v_member_names[i], 'direct', null, false,
-                array_remove(ARRAY[v_uid, v_member_uids[i]], null), array[v_member_ids[i]], v_uid)
+                array_remove(ARRAY[v_uid, v_member_uids[i]], null), array[v_self_mid, v_member_ids[i]], v_uid)
         returning id into v_cid;
       end if;
       v_conv_ids := array_append(v_conv_ids, v_cid);
@@ -251,6 +242,11 @@ begin
     -- sender: ~1/3 from the signed-in user (so "You" bubbles appear on the right)
     if (i % 3) = 0 then
       v_sender := v_uid; v_sname := v_self_name;
+    elsif v_convkind = 'direct' then
+      -- A two-person thread must not contain a third household member's send.
+      select m.user_id, m.display_name into v_sender, v_sname from public.family_members m
+        join public.family_conversations c on c.id = v_conv and m.id = any(c.participant_ids)
+        where m.id <> v_self_mid order by m.id limit 1;
     else
       sidx := 1 + (i % n_members);
       v_sender := v_member_uids[sidx]; v_sname := v_member_names[sidx];
@@ -311,6 +307,12 @@ begin
        v_att_url, v_att_name, v_att_mime, v_react, v_read, (i % 60) = 0, v_when);
 
     seeded := seeded + 1;
+  end loop;
+
+  -- Archived conversations retain history but reject new sends. Seed the
+  -- historical rows first, then restore the intended archived state.
+  for i in 1 .. array_length(c_names, 1) loop
+    update public.family_conversations set is_archived = c_arch[i] where id = v_conv_ids[i];
   end loop;
 
   raise notice 'Seeded % messages across % conversations for %', seeded, n_convs, coalesce(v_family_name, v_fam::text);

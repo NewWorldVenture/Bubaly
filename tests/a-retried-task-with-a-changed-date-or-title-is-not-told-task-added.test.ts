@@ -380,6 +380,7 @@ describe('the browser half: when the submission id is spent', () => {
   // `already_saved` again until the page is reloaded, with every service test
   // above still green.
   const stripped = (file: string) => readFileSync(file, 'utf8')
+    .replaceAll('\r\n', '\n')
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
     .split('\n').map((line) => line.replace(/(^|\s)\/\/.*$/, '')).join('\n');
   /** The source from `start` on; a renamed function fails here rather than matching nothing. */

@@ -27,7 +27,7 @@
 // delegates to the shared helper, or when it is under app/(app)/admin — the
 // platform's own operator pages, which the audit treats as en-US throughout.
 import { readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 
 /**
  * The gap→label conversion, in the three spellings this codebase actually uses.
@@ -68,10 +68,10 @@ const SUBMINUTE_LITERAL = /(['"`])(?:just now|now|Just now|Now)\1/;
 // instrument proves it still sees the shape on a planted line.
 export const BARE_TO_LOCALE = /toLocale(?:Date|Time)String\(\s*(?:\)|undefined|\[\s*\])/;
 
-const files = execSync(
-  "git ls-files 'app/**/*.ts' 'app/**/*.tsx' 'components/**/*.ts' 'components/**/*.tsx' 'lib/**/*.ts' 'lib/**/*.tsx'",
+const files = execFileSync(
+  'git', ['ls-files', 'app/**/*.ts', 'app/**/*.tsx', 'components/**/*.ts', 'components/**/*.tsx', 'lib/**/*.ts', 'lib/**/*.tsx'],
   { encoding: 'utf8' },
-).split('\n').filter(Boolean);
+).split(/\r?\n/).map(file => file.replace(/\\/g, '/')).filter(Boolean);
 
 const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 

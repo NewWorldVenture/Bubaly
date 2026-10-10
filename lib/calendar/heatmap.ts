@@ -5,8 +5,15 @@
 // overloaded, which weekday is chronically heaviest, and where the calm
 // pockets are. The calendar module renders this as a compact heat strip.
 import { dayKeyIn, isValidTimezone } from '@/lib/time/zoned';
+import { addDays, allDayDate, familyFetchRange } from '@/lib/calendar/day';
+import type { SourceTransparency } from './source-occurrences';
 
 export interface HeatEvent {
+  kind?: 'native' | 'source';
+  transparency?: SourceTransparency;
+  actualStartsAt?: string;
+  actualEndsAt?: string | null;
+  occurrenceKey?: string;    // Explicit identity; equal-time distinct events stay distinct.
   startsAt: string;          // ISO
   endsAt: string | null;
   allDay: boolean;
@@ -14,8 +21,10 @@ export interface HeatEvent {
 
 export interface HeatDay {
   date: string;              // YYYY-MM-DD
-  count: number;
+  count: number;             // Visible annotations, including free events and points.
+  workloadCount: number;     // Opaque occurrences with positive workload on this date.
   minutes: number;           // scheduled (all-day counts as 8h)
+  estimated: boolean;        // Includes DATE workload or a missing-end duration estimate.
   level: 0 | 1 | 2 | 3 | 4;  // 0 calm → 4 packed
 }
 
@@ -34,12 +43,9 @@ function dayKey(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-function minutesOf(e: HeatEvent): number {
-  if (e.allDay) return ALL_DAY_MINUTES;
-  if (!e.endsAt) return DEFAULT_EVENT_MINUTES;
-  const ms = new Date(e.endsAt).getTime() - new Date(e.startsAt).getTime();
-  if (!isFinite(ms) || ms <= 0) return DEFAULT_EVENT_MINUTES;
-  return Math.min(Math.round(ms / 60000), ALL_DAY_MINUTES * 2);
+function validDateKey(value: string): boolean {
+  const instant = Date.parse(`${value}T00:00:00Z`);
+  return Number.isFinite(instant) && dayKey(new Date(instant)) === value;
 }
 
 /** Level thresholds by scheduled minutes (count breaks ties upward). */
@@ -53,32 +59,63 @@ function levelFor(minutes: number, count: number): 0 | 1 | 2 | 3 | 4 {
 
 /**
  * Build the busyness grid for the `weeks` ending at `today` (inclusive).
- * Events outside the window are ignored; multi-day handling is start-day
- * based (each occurrence lands on its start date, which is how families
- * read a calendar: "what starts that day").
+ * Each occurrence counts once per occupied date. Timed minutes are clipped
+ * to actual family midnights (including 23/25-hour DST dates). DATE workload
+ * remains an explicit eight-hour estimate per civil date, not occupied time.
  *
- * With `timeZone` (the family's, TIME-003) "today" and each start day are that
- * zone's calendar days; without it they are Greenwich's, as before. The grid
- * itself is keyed by date either way, so the arithmetic stays on UTC dates.
+ * With `timeZone` (the family's, TIME-003) "today" and each timed start day are
+ * that zone's calendar days; without it they are Greenwich's, as before. An
+ * all-day row is on its own date in both cases. The grid itself is keyed by
+ * date either way, so the arithmetic stays on UTC dates.
  */
 export function buildHeatmap(events: HeatEvent[], today = new Date(), weeks = 8, timeZone?: string): HeatmapReport {
+  if (!Number.isFinite(today.getTime()) || !Number.isSafeInteger(weeks) || weeks < 1 || weeks > 520) throw new Error('Invalid heatmap window');
   const dayCount = weeks * 7;
-  const zone = timeZone && isValidTimezone(timeZone) ? timeZone : undefined;
-  const todayKey = zone ? dayKeyIn(today, zone) : dayKey(today);
+  const zone = timeZone && isValidTimezone(timeZone) ? timeZone : 'UTC';
+  const todayKey = dayKeyIn(today, zone);
   const end = new Date(`${todayKey}T00:00:00Z`);
   const start = new Date(end.getTime() - (dayCount - 1) * 86400_000);
-  const startKey = dayKey(start);
-
-  const byDay = new Map<string, { count: number; minutes: number }>();
+  const buckets = Array.from({length:dayCount},(_,index) => {
+    const date = dayKey(new Date(start.getTime() + index * 86400_000));
+    const range = familyFetchRange(date,addDays(date,1),zone);
+    return {date,start:range.timedFrom.getTime(),end:range.timedTo.getTime(),count:0,workloadCount:0,minutes:0,estimated:false};
+  });
+  const seen = new Map<string,string>();
   for (const e of events) {
-    const d = new Date(e.startsAt);
-    if (isNaN(d.getTime())) continue;
-    const key = zone ? dayKeyIn(d, zone) : dayKey(d);
-    if (key < startKey || key > todayKey) continue;
-    const cur = byDay.get(key) ?? { count: 0, minutes: 0 };
-    cur.count += 1;
-    cur.minutes += minutesOf(e);
-    byDay.set(key, cur);
+    const transparency = e?.transparency === undefined && e?.kind !== 'source' ? 'opaque' : e?.transparency;
+    if (transparency !== 'opaque' && transparency !== 'transparent') throw new Error('Invalid heatmap transparency');
+    const firstDate = e.allDay ? allDayDate(e.startsAt) : '';
+    const suppliedEndDate = e.allDay && e.endsAt !== null ? allDayDate(e.endsAt) : null;
+    const untilDate = e.allDay && firstDate ? (suppliedEndDate && suppliedEndDate > firstDate ? suppliedEndDate : addDays(firstDate,1)) : '';
+    const first = Date.parse(e.actualStartsAt ?? e.startsAt);
+    const suppliedEnd = e.actualEndsAt !== undefined ? e.actualEndsAt : e.endsAt;
+    const until = suppliedEnd === null ? first + (e.kind === 'source' ? 0 : DEFAULT_EVENT_MINUTES * 60_000) : Date.parse(suppliedEnd);
+    if (e.allDay ? !validDateKey(firstDate) || (suppliedEndDate !== null && (!validDateKey(suppliedEndDate) || suppliedEndDate < firstDate)) : !Number.isFinite(first) || !Number.isFinite(until) || until < first) throw new Error('Invalid heatmap occurrence');
+    // Qualify metadata and identity even when the annotation is free, a point,
+    // or outside the displayed window. Conflicting duplicates cannot vanish.
+    if (e.occurrenceKey !== undefined) {
+      const value = JSON.stringify([e.kind ?? 'native',e.allDay,e.startsAt,e.endsAt,e.actualStartsAt,e.actualEndsAt,transparency]);
+      if (seen.has(e.occurrenceKey)) {
+        if (seen.get(e.occurrenceKey) !== value) throw new Error('Conflicting heatmap occurrence');
+        continue;
+      }
+      seen.set(e.occurrenceKey,value);
+    }
+    for (const day of buckets) {
+      // A skipped civil date (Apia 2011-12-30) has no timed instants. DATE
+      // workload is still explicitly a civil estimate, never elapsed minutes.
+      if (!e.allDay && day.end <= day.start) continue;
+      const minutes = e.allDay ? (firstDate <= day.date && day.date < untilDate ? ALL_DAY_MINUTES : null)
+        : first === until ? (first >= day.start && first < day.end ? 0 : null)
+        : first < day.end && until > day.start ? (Math.min(until,day.end) - Math.max(first,day.start)) / 60_000 : null;
+      if (minutes === null) continue;
+      day.count += 1;
+      if (transparency === 'opaque' && minutes > 0) {
+        day.workloadCount += 1;
+        day.minutes += minutes;
+        day.estimated ||= e.allDay || (e.kind !== 'source' && e.endsAt === null);
+      }
+    }
   }
 
   const days: HeatDay[] = [];
@@ -86,8 +123,8 @@ export function buildHeatmap(events: HeatEvent[], today = new Date(), weeks = 8,
   for (let i = 0; i < dayCount; i++) {
     const d = new Date(start.getTime() + i * 86400_000);
     const key = dayKey(d);
-    const agg = byDay.get(key) ?? { count: 0, minutes: 0 };
-    days.push({ date: key, count: agg.count, minutes: agg.minutes, level: levelFor(agg.minutes, agg.count) });
+    const agg = buckets[i];
+    days.push({ date: key, count: agg.count, workloadCount:agg.workloadCount, minutes: agg.minutes, estimated:agg.estimated, level: levelFor(agg.minutes, agg.workloadCount) });
     weekdayTotals[d.getUTCDay()] += agg.minutes;
   }
 
@@ -97,7 +134,9 @@ export function buildHeatmap(events: HeatEvent[], today = new Date(), weeks = 8,
   const busiestWeekday = anyLoad ? WEEKDAYS[busiestIdx] : null;
 
   let advice: string;
-  if (!anyLoad) {
+  if (!anyLoad && days.some(day => day.count > 0)) {
+    advice = 'Load looks evenly spread — nice.';
+  } else if (!anyLoad) {
     advice = 'A quiet stretch — nothing scheduled in this window.';
   } else if (overloadedDates.length >= 3) {
     advice = `${overloadedDates.length} packed days in the last ${weeks} weeks — ${busiestWeekday}s carry the most. Consider moving flexible commitments to a lighter day.`;

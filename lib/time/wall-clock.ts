@@ -24,7 +24,10 @@ const pad = (n: number) => String(n).padStart(2, '0');
 
 /** A wall reading from civil parts (`month` is 1–12; out-of-range days roll, as `Date.UTC` does). */
 export function wallDate(year: number, month: number, day: number, hour = 0, minute = 0): Date {
-  return new Date(Date.UTC(year, month - 1, day, hour, minute, 0, 0));
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
+  date.setUTCHours(hour, minute, 0, 0);
+  return date;
 }
 
 /** The family's wall clock at `instant`, to the minute. */
@@ -36,13 +39,15 @@ export function wallAt(instant: Date, timezone: string): Date {
 /** A `YYYY-MM-DD` day at `hour:minute` (midnight by default), as a wall reading; an unreadable key reads NaN. */
 export function wallFromKey(key: string, hour = 0, minute = 0): Date {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
-  return m ? wallDate(Number(m[1]), Number(m[2]), Number(m[3]), hour, minute) : new Date(Number.NaN);
+  return m && Number(m[1]) >= 1 ? wallDate(Number(m[1]), Number(m[2]), Number(m[3]), hour, minute) : new Date(Number.NaN);
 }
 
 /** The `YYYY-MM-DD` a wall reading shows. */
 export function wallKey(wall: Date): string {
   if (Number.isNaN(wall.getTime())) return '';
-  return `${wall.getUTCFullYear()}-${pad(wall.getUTCMonth() + 1)}-${pad(wall.getUTCDate())}`;
+  const year = wall.getUTCFullYear();
+  if (year < 1 || year > 9999) return '';
+  return `${String(year).padStart(4, '0')}-${pad(wall.getUTCMonth() + 1)}-${pad(wall.getUTCDate())}`;
 }
 
 export type WallParts = { year: number; month: number; day: number; hour: number; minute: number; weekday: number };
@@ -70,7 +75,7 @@ export function wallMonthStart(wall: Date, months = 0): Date {
 /** Days in the reading's month. */
 export function wallDaysInMonth(wall: Date): number {
   const p = wallParts(wall);
-  return new Date(Date.UTC(p.year, p.month, 0)).getUTCDate();
+  return wallDate(p.year, p.month + 1, 0).getUTCDate();
 }
 
 /** Midnight on the Monday of the reading's week, `weeks` weeks on. */
@@ -88,9 +93,13 @@ export function wallWeekStart(wall: Date, weeks = 0): Date {
 export function wallToInstant(wall: Date, timezone: string): Date {
   if (Number.isNaN(wall.getTime())) return new Date(Number.NaN);
   const p = wallParts(wall);
+  if (p.year < 1 || p.year > 9999) return new Date(Number.NaN);
   try {
     const at = instantForLocalTime(p.year, p.month, p.day, p.hour * 60 + p.minute, timezone);
-    if (at) return new Date(at.getTime() + wall.getUTCSeconds() * 1000 + wall.getUTCMilliseconds());
+    if (at) {
+      const result = new Date(at.getTime() + wall.getUTCSeconds() * 1000 + wall.getUTCMilliseconds());
+      if (result.getUTCFullYear() >= 1 && result.getUTCFullYear() <= 9999) return result;
+    }
   } catch {
     // an unusable zone: fall through
   }
