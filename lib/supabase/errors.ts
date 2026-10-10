@@ -3,6 +3,76 @@
 // network problems from generic errors so the UI can show something honest
 // and actionable instead of a raw Postgres string.
 
+// ── The five classified sentences, in the reader's language (I18N-011) ──────
+//
+// They were English literals, so a German family refused by RLS read English
+// on an otherwise German screen. describeDbError is a plain synchronous
+// function with ~730 callers on both sides of the network, so it cannot take
+// a translator from each of them; the sentences reach the reader two ways:
+//
+//   1. IN THE BROWSER, `LocaleProvider` remembers the five sentences of the
+//      locale it renders, and describeDbError answers in them. Remembered in
+//      an effect, not during render: a server-rendered error is English (the
+//      server has no reader to remember), and the client's first render must
+//      say the same thing or hydration fails.
+//   2. ON THE SCREEN, for a sentence written on the SERVER (a server action's
+//      `{ error }`, already English when it arrives): the toast, ActionError
+//      and a form field's error put each of the five sentences they carry into
+//      the reader's language with their own `t`, server-rendered or not.
+//
+// This file imports nothing, on purpose: a dozen tests load it in a sandbox
+// that refuses any import it does not list, and e2e fixtures mount it by
+// path. en-US.json holds the same five sentences; a test keeps them identical.
+
+export const DB_ERROR_ENGLISH = {
+  'dbError.permission': "You don't have permission to do that. Ask a family admin if you think this is a mistake.",
+  'dbError.conflict': 'That already exists. Try a different value.',
+  'dbError.notFound': 'That item could not be found — it may have already been removed.',
+  'dbError.invalid': 'Some required information is missing or invalid. Please review and try again.',
+  'dbError.network': 'Network problem — check your connection and try again.',
+} as const;
+
+export type DbErrorKey = keyof typeof DB_ERROR_ENGLISH;
+
+const KEYS = Object.keys(DB_ERROR_ENGLISH) as DbErrorKey[];
+
+let remembered: Partial<Record<DbErrorKey, string>> = {};
+
+/**
+ * Called by `LocaleProvider` once it has rendered, in the browser only: the
+ * server serves many readers at once, so a module-level choice there would be
+ * whichever request rendered last. A catalogue without the five keys (a scope
+ * that left them out) changes nothing.
+ */
+export function rememberDbErrorText(messages: Readonly<Record<string, string>>): void {
+  if (typeof window === 'undefined') return;
+  const next: Partial<Record<DbErrorKey, string>> = {};
+  for (const key of KEYS) if (messages[key]) next[key] = messages[key];
+  if (Object.keys(next).length) remembered = next;
+}
+
+/** One of the five sentences, in the browser's remembered language, else English. */
+export function dbErrorText(key: DbErrorKey): string {
+  return remembered[key] ?? DB_ERROR_ENGLISH[key];
+}
+
+/**
+ * Each of the five English sentences inside `text`, put into the reader's
+ * language with `t`. Anything else is left as it was, and so is a sentence
+ * whose key `t` does not hold (it answers with the key itself).
+ */
+export function localizeDbErrorText(text: string, t: (key: string) => string): string {
+  let out = text;
+  for (const key of KEYS) {
+    const english = DB_ERROR_ENGLISH[key];
+    if (!out.includes(english)) continue;
+    const local = t(key);
+    if (local && local !== key) out = out.split(english).join(local);
+  }
+  return out;
+}
+
+
 export type DbErrorLike =
   | { message?: string | null; code?: string | null; details?: string | null }
   | null
@@ -49,22 +119,22 @@ export function describeDbError(error: unknown, fallback = 'Something went wrong
     msg.includes('not allowed') ||
     msg.includes('policy')
   ) {
-    return "You don't have permission to do that. Ask a family admin if you think this is a mistake.";
+    return dbErrorText('dbError.permission');
   }
 
   // Unique / conflict — 23505.
   if (code === '23505' || msg.includes('duplicate key') || msg.includes('already exists')) {
-    return 'That already exists. Try a different value.';
+    return dbErrorText('dbError.conflict');
   }
 
   // Foreign key / not found — 23503 or PostgREST PGRST116 (no rows).
   if (code === '23503' || code === 'PGRST116' || msg.includes('not found') || msg.includes('no rows')) {
-    return 'That item could not be found — it may have already been removed.';
+    return dbErrorText('dbError.notFound');
   }
 
   // Not-null / check constraint — 23502 / 23514.
   if (code === '23502' || code === '23514' || msg.includes('violates check') || msg.includes('null value')) {
-    return 'Some required information is missing or invalid. Please review and try again.';
+    return dbErrorText('dbError.invalid');
   }
 
   // Network / fetch transport.
@@ -76,7 +146,7 @@ export function describeDbError(error: unknown, fallback = 'Something went wrong
     msg.includes('timeout') ||
     msg.includes('aborted')
   ) {
-    return 'Network problem — check your connection and try again.';
+    return dbErrorText('dbError.network');
   }
 
   // Everything above is a message this file WROTE. What is left is the raw
