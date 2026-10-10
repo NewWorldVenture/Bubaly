@@ -545,6 +545,7 @@ jobs:
             !test-results/*a-feedback-image-is-not*/**
             !test-results/*recurring-bill-auth*/**
             !test-results/*dashboard-calendar-auth*/**
+            !test-results/*a-stored-link-is-inert*/**
             !test-results/**/storageState*
             !test-results/**/storage-state*
             !test-results/**/auth.json
