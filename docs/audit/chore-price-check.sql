@@ -478,9 +478,15 @@ begin
     trigger_names text;
     guard_shape boolean;
   begin
+    -- Only triggers that fire on INSERT (4) or UPDATE (16) are counted: every
+    -- refusal above is an insert or an update, and a trigger that fires on
+    -- DELETE alone cannot refuse one. That is the held 0502's
+    -- trg_chore_with_assignments_is_a_managers (BEFORE DELETE), which keeps a
+    -- chore with assignments a manager's to remove.
     select string_agg(tgname, ', ' order by tgname) into trigger_names
       from pg_trigger
-     where tgrelid = 'public.chores'::regclass and not tgisinternal;
+     where tgrelid = 'public.chores'::regclass and not tgisinternal
+       and (tgtype & (4 | 16)) <> 0;
     -- 0464 adds trg_chores_not_a_guests. It cannot be what refused above: its
     -- one raise is keyed on the caller's role in the row's family being
     -- 'guest', and every caller this probe measures is a child, a teen or a

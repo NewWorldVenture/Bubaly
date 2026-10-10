@@ -115,6 +115,7 @@ source allocations are not evidence that production applied any migration.
 | 0499 confirmed, held | `0499_a_stored_file_answers_to_its_own_familys_rows.sql` | The `documents` bucket's upload, update and delete policies follow the row of the object's own family that names the file: insurance card images (managers), a household document's bytes (not a guest), a sensitive document's path (managers); another family's rows no longer count, and the family is read with the policies' own uuid cast. Requested for #981 on #771 (comment 6094859264); confirmed as a held source and probe reservation in #981 comment 6094986591, which is not an installation approval. |
 | 0500 confirmed, held | `0500_a_reward_request_is_the_rewards_own_snapshot.sql` | 0308's ticket guard completed: a reward request names a reward and a member of its own family at that reward's price and title, and keeps them and its family and member (the foreign key's set-null on a deleted reward excepted); 0428's token-economy guard also checks the title. Requested for #981 on #771 (comment 6094977772, economy scope 6095050742); confirmed as a held source and probe reservation in #981 comment 6095082508, which is not an installation or financial approval. |
 | 0501 confirmed, held | `0501_one_member_one_vote_in_two_households.sql` | 0311's same-family guard on `member_id` of `family_poll_votes`, `meal_vote_ballots`, `watchlist_votes` and `event_rsvps`: a member of two families votes once in each. Requested for #981 on #771 (comment 6095180270); confirmed as a held source and probe reservation for these four bindings in #981 comment 6095247473, which is not an installation approval. |
+| 0502 proposed, held | `0502_a_chore_with_assignments_is_a_managers_to_remove.sql` | A signed-in non-manager deletes a chore only while it has no assignments, so its cascade cannot remove assignments 0374 reserves to a manager. Requested for #981 on #771 (comment 6097049650); not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4738,6 +4739,74 @@ Dropping any one table's trigger turns the probe red on that table. 184 of
 families, try to vote in one family's poll under their member id from the
 other family and confirm 42501; then vote as their own member there and
 confirm it lands.
+
+## `0502` (proposed, held) — deleting a chore cleared the assignments 0374 protects
+
+`supabase/reserved/0502_a_chore_with_assignments_is_a_managers_to_remove.sql` —
+**held**: proposed as `0502`, the first number above `0501`, for #981. It was
+requested on #771 in comment 6097049650 and is not yet confirmed. Its probe is
+held with it in `docs/audit/reserved/`.
+
+**Severity: medium (F20, rated High, reopened through a cascade). Deploy
+order: any.** 0374 made deleting a chore assignment a manager's only, closing
+"a child could delete a sibling's approved assignment (and the points with
+it)". F20's ledger row notes that foreign-key cascades are unaffected, and
+they are the way around it: `chores` keeps DELETE for any member and
+`chore_assignments.chore_id` is `ON DELETE CASCADE`, which RLS does not gate.
+Measured as an active child, with a sibling's approved 50-point assignment on a
+chore:
+- deleting the sibling's assignment directly: 0 rows (0374 holds);
+- deleting the chore: 1 row, and the sibling's approved assignment is gone.
+
+Points are summed from approved assignments (`lib/rewards/points.ts`, 0439),
+so a child erases a sibling's earned points or clears the board this way.
+
+0502 adds a BEFORE DELETE guard on `chores`, SECURITY DEFINER so it sees every
+assignment: a signed-in non-manager may delete a chore only while it has no
+assignments (42501, its own sentence). The application deletes chores only to
+roll back one it just created after the assignment insert failed (missions'
+`createChoreAction`, `lib/services/tasks`, the assistant tool), when it has no
+assignments, so those still land. Managers, the service role and session-less
+writers are unchanged. A family deletion still cascades, because by the time
+it reaches a chore the family row is gone; without that branch the admin's own
+family delete is refused, which the probe's control shows.
+
+**Released probe changed with it:** `docs/audit/chore-price-check.sql`
+inventories the triggers on `chores` exactly to attribute its refusals to
+0307. It now counts only triggers that fire on INSERT or UPDATE, the verbs it
+measures; a DELETE-only trigger cannot refuse one. It passes with and without
+0502 and still fails when an extra INSERT or UPDATE trigger is added.
+
+**Recorded, not changed:** `vacations` is member-deletable and cascades into
+six manager-only tables (0347's append-only `vacation_audit_logs` among them),
+but nothing in the application writes any of those six (0461), so today that
+cascade erases nothing.
+
+**Proof:** `.github/workflows/chore-cascade-runtime.yml` replays every runnable
+migration. It requires the held probe
+`docs/audit/reserved/a-chore-with-assignments-is-a-managers-to-remove-check.sql`
+to fail on the released schema with the child's deletes landing, applies 0502
+twice, and requires the probe to pass. It then re-runs the released chore
+probes over the added trigger. The passing run shows:
+- as the child, deleting the chore holding a sibling's approved assignment and
+  the one holding their own open assignment are each refused with the guard's
+  sentence, and both assignments remain;
+- the child still deletes a chore with no assignment (1 row);
+- a parent deletes a chore with its assignment, and the admin deletes the
+  family with all of it (counted);
+- the service role (carrying a user id) and, separately, a null-uid
+  session-less writer each delete a chore with assignments (1 row each);
+- negative control: with the guard disabled, the child's delete takes the
+  sibling's assignment.
+
+Each branch of the guard was removed in turn (the family-deletion branch, the
+manager branch, each exemption, the assignment check) and each turns exactly
+its own control or check red. 184 of 184 released probes pass with and without
+0502.
+
+**After approved release:** as a test child, try to delete a test chore that
+has an assignment through PostgREST and confirm 42501; then delete it as a test
+parent and confirm the chore and its assignment are gone.
 
 ## `0471` and `0474` — the admin digest's delivery store, and a removed admin is not sent it
 
