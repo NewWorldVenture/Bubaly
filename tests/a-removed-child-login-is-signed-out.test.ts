@@ -56,13 +56,18 @@ beforeEach(() => {
     if (!state.users.has(id)) state.users.set(id, { banned_until: null, app_metadata: {} });
     return state.users.get(id)!;
   };
+  // GoTrue reports the address an account was created with. The kid login's
+  // is syntheticChildEmail('emma'): the provenance resetChildPinAction
+  // requires before it sets a password, so a re-add can set the new PIN
+  // (tests/a-pin-reset-needs-a-kid-account.test.ts).
+  const emailOf = (id: string) => (id === KID_USER ? 'child.emma@kids.bubaly.app' : `${id}@example.test`);
   Object.assign(db.auth, {
     // The admin console's actions ask the signed-in session for its assurance
     // level before acting (a password-only session of an admin with an
     // authenticator is refused): this one has entered its code.
     mfa: { getAuthenticatorAssuranceLevel: async () => ({ data: { currentLevel: 'aal2', nextLevel: 'aal2' }, error: null }) },
     admin: {
-    getUserById: async (id: string) => ({ data: { user: { id, user_metadata: state.metadata, ...authUser(id) } }, error: null }),
+    getUserById: async (id: string) => ({ data: { user: { id, email: emailOf(id), user_metadata: state.metadata, ...authUser(id) } }, error: null }),
     updateUserById: async (id: string, attrs: Record<string, unknown>) => {
       if (state.banError && attrs.ban_duration) return { data: { user: null }, error: state.banError };
       const user = authUser(id);

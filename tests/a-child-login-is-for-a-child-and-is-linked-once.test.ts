@@ -52,7 +52,7 @@ describe('createChildLoginAction', () => {
   it.each(['parent', 'adult'])('refuses a PIN login for a %s member, creating nothing', async (role) => {
     db.seed('family_members', [{ id: 'm', family_id: FAMILY, display_name: 'Pat', user_id: null, role, is_active: true }]);
     const result = await createChildLoginAction({ memberId: 'm', username: 'patpat', pin: '1234' });
-    expect(result).toEqual({ ok: false, error: 'childLoginActions.onlyForAMemberWhoIsNot' });
+    expect(result).toEqual({ ok: false, error: 'childLoginActions.aParentOrAdultSignsIn' });
     expect(state.created).toEqual([]);
     expect(db.table('family_members')[0].user_id).toBeNull();
   });

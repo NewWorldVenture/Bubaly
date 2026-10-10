@@ -19,6 +19,9 @@ import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
 const secret = () => process.env.CHILD_LOGIN_SECRET || null;
+/** The app_metadata key that marks a kid login. The held 0495 reads the same
+ *  key from auth.users.raw_app_meta_data; the two must agree. */
+const KID_LOGIN_APP_METADATA_KEY = 'bubaly_kid_login';
 
 /**
  * Undo a partially-created child login, and report whether the undo was
@@ -137,7 +140,7 @@ export async function createChildLoginAction(input: {
   const admin = createServiceClient();
 
   const { data: member, error: memberReadError } = await admin.from('family_members')
-    .select('id, family_id, display_name, user_id, role, is_active')
+    .select('id, family_id, display_name, role, user_id, is_active')
     .eq('id', input.memberId).maybeSingle();
   // A refused read is not an absence: it used to return the "not found" answer below. Audit C1-S9-75.
   if (memberReadError) return { ok: false, error: describeActionError(memberReadError, t('actions.couldNotCheckThatRefresh')) };
@@ -146,13 +149,22 @@ export async function createChildLoginAction(input: {
     // A REMOVED member who still holds this family's child login is re-added
     // rather than refused: removal banned that account (revokeRemovedChildLogin)
     // and left user_id in place, so without this the child could never come back.
-    if (!member.is_active && !isManager(member.role)) return relinkRemovedChildLogin(admin, { ...member, user_id: member.user_id }, input.pin, ctx.user.id);
+    // Only a row that SAYS it is inactive is a removed one, and never a
+    // manager's: the re-add ends in resetChildPinAction, which refuses one.
+    if (member.is_active === false && !isManager(member.role)) return relinkRemovedChildLogin(admin, { ...member, user_id: member.user_id }, input.pin, ctx.user.id);
     return { ok: false, error: t('childLoginActions.thisMemberAlreadyHasA') };
   }
-  // A PIN login is for a child, never a manager: it would be a full manager
-  // account behind four digits its creator knows, and resetChildPinAction
-  // refuses a manager, so that PIN could never be changed afterwards.
-  if (isManager(member.role)) return { ok: false, error: t('childLoginActions.onlyForAMemberWhoIsNot') };
+  // A username and a 4-digit PIN are a child's sign-in. They must not be all
+  // that stands in front of a parent's or adult's account, which can reach the
+  // family's money, its vault and every other member. resetChildPinAction below
+  // already refuses a manager on exactly that ground, and its comment assumed
+  // this action could never create one: "a manager always has [a user_id]".
+  // A manager added without an email (a grandparent, a co-parent placeholder,
+  // a member onboarding created) has none, so this action used to mint a PIN
+  // login onto that row, signing whoever knew the PIN in as a manager, and
+  // then refuse every reset of it. The rule is the reset's rule: a manager
+  // signs in with their own email, through an invite.
+  if (isManager(member.role)) return { ok: false, error: t('childLoginActions.aParentOrAdultSignsIn') };
 
   // `eq` for the same reason the sign-in lookup uses it: `_` is a LIKE wildcard
   // and the username grammar allows it, so `ilike` made this check answer about
@@ -188,6 +200,11 @@ export async function createChildLoginAction(input: {
   const { data: created, error: createErr } = await admin.auth.admin.createUser({
     email, password, email_confirm: true,
     user_metadata: { child: true, family_id: member.family_id, member_id: member.id, username, display_name: member.display_name },
+    // The account's server-owned mark of being a kid login. user_metadata above
+    // is the account holder's to edit; app_metadata is writable only by the
+    // service role, so this is what the held 0495 trusts if the account's
+    // address is ever moved off the synthetic domain.
+    app_metadata: { [KID_LOGIN_APP_METADATA_KEY]: true },
   });
   if (createErr || !created?.user) return { ok: false, error: t('childLoginActions.couldNotCreateTheLogin') };
   const childUserId = created.user.id;
@@ -208,11 +225,12 @@ export async function createChildLoginAction(input: {
   // first login pointing at a member that no longer knew it. Zero rows here
   // means another attempt linked first.
   //
-  // Linking also reactivates a REMOVED local child. Removal drops the row to
-  // `guest` (REMOVED_MEMBER_PATCH), so a reactivated row is put back as the
-  // `child` a PIN login is for, rather than coming back as a guest.
+  // Linking also reactivates a REMOVED local child (a row that says
+  // `is_active = false`). Removal drops the row to `guest`
+  // (REMOVED_MEMBER_PATCH), so a reactivated row is put back as the `child` a
+  // PIN login is for, rather than coming back as a guest.
   const { data: linked, error: linkErr } = await admin.from('family_members')
-    .update({ user_id: childUserId, is_active: true, ...(member.is_active ? {} : { role: 'child' as const }) })
+    .update({ user_id: childUserId, is_active: true, ...(member.is_active === false ? { role: 'child' as const } : {}) })
     .eq('id', member.id).is('user_id', null).select('id');
   if (linkErr || wroteNoRows(linked)) {
     const { error: deleteError } = await admin.auth.admin.deleteUser(childUserId);
@@ -283,9 +301,9 @@ export async function resetChildPinAction(input: { memberId: string; pin: string
   // `family_members` writes are already `can_manage_family`, so its `user_id` is
   // the trustworthy side of the mapping. Deliberately not "fall back to the
   // member row": a DISAGREEMENT is evidence of tampering, so it refuses and says
-  // so. And a manager is refused outright — `createChildLoginAction` cannot give
-  // a login to a member who already has a `user_id`, and a manager always has
-  // one, so no legitimate reset is ever blocked by this.
+  // so. And a manager is refused outright — `createChildLoginAction` refuses to
+  // make a PIN login for one (a manager signs in with their own email), so no
+  // legitimate reset is ever blocked by this.
   const { data: member, error: memberError } = await admin.from('family_members')
     .select('id, family_id, role, user_id').eq('id', input.memberId).maybeSingle();
   if (memberError) {
@@ -299,6 +317,31 @@ export async function resetChildPinAction(input: { memberId: string; pin: string
     console.error('[child-login] refusing a PIN reset whose target does not match the member row', {
       memberId: input.memberId, familyId: ctx.active.familyId,
       roleIsManager: isManager(member.role), userIdMatches: member.user_id === row.user_id,
+    });
+    return { ok: false, error: t('childLoginActions.couldNotResetThePin') };
+  }
+
+  // And WHAT KIND of account it is. The member row and the mapping say whose
+  // row this is; neither says the account is a kid login. A household's parent
+  // can write `child_logins` (0297) for any member who is not a manager and
+  // has their own account (a caregiver, a guest, a teen who signed up with
+  // their own email), and this reset would then replace THAT person's real
+  // password with one derived from a PIN, locking them out of their own
+  // account. The PIN sign-in only ever reaches the account whose address is
+  // syntheticChildEmail(username): createChildLoginAction creates it with the
+  // service role, and a household cannot write anyone's auth address. So that
+  // address, read here from the auth server, is the provenance required
+  // before any credential is touched. Nothing has changed yet if this refuses.
+  const { data: account, error: accountError } = await admin.auth.admin.getUserById(member.user_id);
+  if (accountError || !account?.user) {
+    console.error('[child-login] could not read the account before a PIN reset', {
+      memberId: input.memberId, familyId: ctx.active.familyId, error: accountError?.message ?? 'no user',
+    });
+    return { ok: false, error: t('childLoginActions.couldNotResetThePin') };
+  }
+  if ((account.user.email ?? '').trim().toLowerCase() !== syntheticChildEmail(row.username).toLowerCase()) {
+    console.error('[child-login] refusing a PIN reset for an account that is not this kid login', {
+      memberId: input.memberId, familyId: ctx.active.familyId,
     });
     return { ok: false, error: t('childLoginActions.couldNotResetThePin') };
   }

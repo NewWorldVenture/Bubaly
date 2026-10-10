@@ -9,6 +9,7 @@ import { LoadingBlock } from '@/components/ui/states';
 import { createClient } from '@/lib/supabase/client';
 import { resolveLandingPathAction } from '@/app/(auth)/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { isChildLoginEmail } from '@/lib/onboarding/child-login';
 
 type State =
   | { phase: 'loading' }
@@ -41,6 +42,14 @@ export function JoinInvite() {
         setState({ phase: 'needs-auth', token });
         return;
       }
+      // A kid login stays in the family that made it. Its address is guessable
+      // from the username, so any household can invite it; refuse here, before
+      // the database is asked, rather than enrol a child elsewhere because they
+      // opened a link.
+      if (isChildLoginEmail(auth.user.email)) {
+        setState({ phase: 'error', message: t('joinInvite.aKidLoginCannotJoin') });
+        return;
+      }
       setState({ phase: 'accepting' });
       const { data, error } = await supabase.rpc('accept_invite', { p_token: token });
       if (error || !data) {
@@ -50,6 +59,7 @@ export function JoinInvite() {
         const raised = !error || error.code === 'P0001';
         const message = !raised ? t('joinInvite.couldNotJoinTryAgain')
           : /different email/i.test(error?.message ?? '') ? t('joinInvite.inviteIsForADifferentEmail')
+          : /cannot join another family/i.test(error?.message ?? '') ? t('joinInvite.aKidLoginCannotJoin')
           : t('joinInvite.inviteIsInvalidOrExpired');
         setState({ phase: 'error', message });
         return;
