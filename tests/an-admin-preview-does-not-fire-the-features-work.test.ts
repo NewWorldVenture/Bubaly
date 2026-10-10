@@ -13,6 +13,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const h = vi.hoisted(() => ({ entitlement: null as unknown, throws: false }));
 vi.mock('@/lib/server/plan', () => ({
   resolveFamilyPlanLevel: async () => { if (h.throws) throw new Error('plan read failed'); return 0; },
+  resolveFamilyEntitlement: async () => {
+    if (h.throws) throw new Error('plan read failed');
+    return { effectiveLevel: 0, locked: false, closed: false, inTrial: false, trialEndsAt: null };
+  },
 }));
 vi.mock('@/lib/server/feature-tiers', () => ({
   getFeatureTiersByHref: async () => ({ '/dashboard/autopilot': 'plus', '/dashboard/briefing': 'plus', '/dashboard/off': 'off' }),

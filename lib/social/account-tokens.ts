@@ -49,9 +49,59 @@ async function accountRow(db: Db, actor: XActor, accountId: string, signal?: Abo
   return result.data;
 }
 
+/** An X receipt never outlives its 10-minute flow; the margin keeps an in-flight callback safe. */
+const X_RECEIPT_STALE_MS = 15 * 60_000;
+
+/** Retire this family's X connect receipts that never completed (expired cookie, closed tab). */
+async function sweepStaleXReceipts(db: Db, actor: XActor): Promise<void> {
+  // Only unclaimed receipts: a reconnect target or a claimed new account always
+  // carries provider_account_id, so a connected account can never match. Zero
+  // rows is the ordinary answer (nothing stale); a refused write is logged.
+  const { error } = await db.from('social_accounts').update({ status: 'disconnected', deleted_at: new Date().toISOString(), updated_by: actor.userId })
+    .eq('family_id', actor.familyId).eq('platform', 'x').eq('status', 'pending').is('deleted_at', null).is('provider_account_id', null)
+    .not('metadata->>x_flow', 'is', null).lt('created_at', new Date(Date.now() - X_RECEIPT_STALE_MS).toISOString()).select('id');
+  if (error) console.error('[social-x] could not retire stale connect receipts', { familyId: actor.familyId, error: error.message });
+}
+
+/** Soft-delete one flow's own pending receipt account, pinned to that flow. */
+async function retireXReceiptAccount(db: Db, flow: XFlow): Promise<boolean> {
+  const retired = await db.from('social_accounts').update({ status: 'disconnected', deleted_at: new Date().toISOString(), provider_account_id: null, updated_by: flow.userId })
+    .eq('id', flow.accountId).eq('family_id', flow.familyId).eq('user_id', flow.userId).eq('platform', 'x').eq('status', 'pending')
+    .is('deleted_at', null).contains('metadata', { x_flow: flow.revision }).select('id');
+  return !retired.error && Array.isArray(retired.data) && retired.data.length === 1;
+}
+
+/**
+ * Retire a failed, denied or abandoned flow's own receipt so it does not stay
+ * listed as a pending 'X' account. Unclaimed (`claimed` false): only a receipt
+ * still 'authorizing' is taken, so a duplicate callback cannot retire the flow
+ * a concurrent callback is exchanging. Claimed: the caller owns the exchange;
+ * the account is retired first and only then its token (and any grant) wiped,
+ * so a connected account is never touched.
+ */
+export async function abandonXReceipt(flow: XFlow, claimed: boolean): Promise<void> {
+  const db = createServiceClient();
+  if (!claimed) {
+    const taken = await db.from('social_account_tokens').update({ metadata: { x_state: 'consumed', x_revision: flow.revision } })
+      .eq('id', flow.accountId).eq('family_id', flow.familyId).contains('metadata', { x_state: 'authorizing', x_revision: flow.revision }).select('id');
+    if (taken.error || !Array.isArray(taken.data) || taken.data.length !== 1) return;
+    await retireXReceiptAccount(db, flow);
+    return;
+  }
+  if (!(await retireXReceiptAccount(db, flow))) return;
+  // Pinned to this flow's revision, so zero rows means a newer flow owns the
+  // row and nothing of this one is left to wipe; a refused write is logged.
+  const { error } = await db.from('social_account_tokens').update({ access_token_enc: null, refresh_token_enc: null, provider_account_id: null,
+    metadata: { x_state: 'consumed', x_revision: flow.revision }, updated_by: flow.userId })
+    .eq('id', flow.accountId).eq('family_id', flow.familyId).contains('metadata', { x_revision: flow.revision }).select('id');
+  if (error) console.error('[social-x] could not wipe an abandoned receipt token', { accountId: flow.accountId, error: error.message });
+}
+
 export async function createXReceipt(flow: XFlow, stateHash: string): Promise<void> {
   await requireXActor(flow, 'connect_accounts');
   const db = createServiceClient();
+  // Best effort: a failed sweep must not block a new connect.
+  try { await sweepStaleXReceipts(db, flow); } catch { /* retried on the next connect */ }
   const account = await db.from('social_accounts').insert({
     id: flow.accountId, family_id: flow.familyId, user_id: flow.userId, platform: 'x', status: 'pending',
     display_name: 'X', created_by: flow.userId, metadata: { x_flow: flow.revision },
@@ -61,7 +111,10 @@ export async function createXReceipt(flow: XFlow, stateHash: string): Promise<vo
     id: flow.accountId, account_id: flow.accountId, family_id: flow.familyId, platform: 'x', created_by: flow.userId,
     metadata: { x_state: 'authorizing', x_revision: flow.revision, x_state_hash: stateHash, x_actor: flow.userId },
   }).select('id').single();
-  if (token.error || !token.data) xFailure();
+  if (token.error || !token.data) {
+    try { await retireXReceiptAccount(db, flow); } catch { /* swept on a later connect */ }
+    xFailure();
+  }
 }
 
 async function activeFlowAccount(db: Db, flow: XFlow): Promise<Account> {
@@ -94,10 +147,11 @@ export async function saveXConnection(flow: XFlow, grant: XGrant, identity: { id
   const matches = await db.from('social_accounts').select('*', { count: 'exact' }).eq('family_id', flow.familyId).eq('platform', 'x').eq('provider_account_id', identity.id).limit(2);
   if (matches.error || !matches.data || typeof matches.count !== 'number' || matches.count !== matches.data.length || matches.count > 1) xFailure();
   const target = matches.data[0] ?? pending;
+  let oldToken: Token | null = null;
   if (target.id !== pending.id) {
     // An authorization started before a disconnect cannot undo that disconnect.
     if (target.deleted_at && (!Number.isFinite(Date.parse(target.deleted_at)) || Date.parse(target.deleted_at) >= flow.issuedAt)) xFailure('callbackInvalid');
-    const oldToken = await tokenRow(db, flow, target.id);
+    oldToken = await tokenRow(db, flow, target.id);
     if (oldToken) {
       const old = meta(oldToken);
       // 'refreshing' is included because a rotation that died between claiming
@@ -105,49 +159,117 @@ export async function saveXConnection(flow: XFlow, grant: XGrant, identity: { id
       // member's remedy for a credential in an unknown state IS this reconnect.
       // An in-flight rotation losing to it is correct: its own write is pinned
       // to the revision this claim replaces, so it writes nothing and fails.
-      if (!['ready', 'blocked', 'refreshing'].includes(String(old.x_state)) || typeof old.x_revision !== 'string' || oldToken.provider_account_id !== identity.id) xFailure('reconnectRequired');
+      // 'connecting' is included for the same reason: a reconnect that died
+      // after its claim (and whose restore below could not run) must not
+      // refuse every later reconnect. A live one losing to it writes nothing.
+      if (!['ready', 'blocked', 'refreshing', 'connecting'].includes(String(old.x_state)) || typeof old.x_revision !== 'string' || oldToken.provider_account_id !== identity.id) xFailure('reconnectRequired');
       if (old.x_state === 'blocked' && (typeof old.x_revoked_at !== 'number' || !Number.isFinite(old.x_revoked_at) || old.x_revoked_at >= flow.issuedAt)) xFailure('callbackInvalid');
-      const claim = await db.from('social_account_tokens').update({ metadata: { x_state: 'connecting', x_revision: flow.revision } })
-        .eq('id', target.id).contains('metadata', { x_state: old.x_state, x_revision: old.x_revision }).select('id').single();
-      if (claim.error || !claim.data) xFailure();
-    } else {
-      const inserted = await db.from('social_account_tokens').insert({ id: target.id, account_id: target.id, family_id: flow.familyId, platform: 'x', provider_account_id: identity.id,
-        metadata: { x_state: 'connecting', x_revision: flow.revision }, created_by: flow.userId }).select('id').single();
-      if (inserted.error || !inserted.data) xFailure();
     }
   }
-  const accountPatch = { provider_account_id: identity.id, status: 'pending' as const, deleted_at: null,
-    metadata: { x_flow: flow.revision }, updated_by: flow.userId };
-  let accountWrite = db.from('social_accounts').update(accountPatch).eq('id', target.id).eq('family_id', flow.familyId)
-    .eq('status', target.status).eq('updated_at', target.updated_at);
-  accountWrite = target.deleted_at ? accountWrite.eq('deleted_at', target.deleted_at) : accountWrite.is('deleted_at', null);
-  const claimedAccount = await accountWrite.select('id').single();
-  if (claimedAccount.error || !claimedAccount.data) xFailure();
-
-  const envelope: Envelope = { ...grant, version: 1, accountId: target.id, familyId: flow.familyId, platform: 'x', providerAccountId: identity.id };
-  // Each ciphertext carries its purpose and full authority binding, preventing transplants.
-  const tokenPatch = { provider_account_id: identity.id, access_token_enc: encryptSecret(JSON.stringify({ ...envelope, refreshToken: '' })),
-    refresh_token_enc: encryptSecret(JSON.stringify({ ...envelope, accessToken: '' })), token_type: 'bearer', scope: grant.scopes.join(' '),
-    expires_at: new Date(grant.expiresAt).toISOString(), updated_by: flow.userId, metadata: { x_state: 'ready', x_revision: flow.revision } };
-  const saved = await db.from('social_account_tokens').update(tokenPatch).eq('id', target.id)
-    .contains('metadata', { x_state: target.id === pending.id ? 'exchanging' : 'connecting', x_revision: flow.revision }).select('id').single();
-  if (saved.error || !saved.data) xFailure();
-  if (target.id !== pending.id) {
-    const consumed = await db.from('social_account_tokens').update({ metadata: { x_state: 'consumed', x_revision: flow.revision } })
-      .eq('id', pending.id).contains('metadata', { x_state: 'exchanging', x_revision: flow.revision }).select('id').single();
-    if (consumed.error || !consumed.data) xFailure();
-    const retired = await db.from('social_accounts').update({ status: 'disconnected', deleted_at: new Date().toISOString(), updated_by: flow.userId })
-      .eq('id', pending.id).eq('status', 'pending').is('deleted_at', null).contains('metadata', { x_flow: flow.revision }).select('id').single();
-    if (retired.error || !retired.data) xFailure();
-  }
+  // Every late refusal happens before the first write: once the target is
+  // claimed, only a storage failure can stop the sequence, and that is undone.
   await requireXActor(flow, 'connect_accounts');
   if (flow.expiresAt <= Date.now() || grant.expiresAt <= Date.now() + 30_000) xFailure('callbackInvalid');
-  const connected = await db.from('social_accounts').update({ status: 'connected', health: 'healthy', handle: identity.username,
-    display_name: identity.name, profile_url: `https://x.com/${identity.username}`, scopes: grant.scopes,
-    last_error: null, updated_by: flow.userId }).eq('id', target.id).eq('family_id', flow.familyId).eq('status', 'pending')
-    .is('deleted_at', null).contains('metadata', { x_flow: flow.revision }).select('id').single();
-  if (connected.error || !connected.data) xFailure();
+
+  const progress = { token: false, account: false, saved: false };
+  try {
+    if (target.id !== pending.id) {
+      if (oldToken) {
+        const old = meta(oldToken);
+        const claim = await db.from('social_account_tokens').update({ metadata: { x_state: 'connecting', x_revision: flow.revision } })
+          .eq('id', target.id).contains('metadata', { x_state: old.x_state, x_revision: old.x_revision }).select('id').single();
+        if (claim.error || !claim.data) xFailure();
+      } else {
+        const inserted = await db.from('social_account_tokens').insert({ id: target.id, account_id: target.id, family_id: flow.familyId, platform: 'x', provider_account_id: identity.id,
+          metadata: { x_state: 'connecting', x_revision: flow.revision }, created_by: flow.userId }).select('id').single();
+        if (inserted.error || !inserted.data) xFailure();
+      }
+      progress.token = true;
+    }
+    const accountPatch = { provider_account_id: identity.id, status: 'pending' as const, deleted_at: null,
+      metadata: { x_flow: flow.revision }, updated_by: flow.userId };
+    let accountWrite = db.from('social_accounts').update(accountPatch).eq('id', target.id).eq('family_id', flow.familyId)
+      .eq('status', target.status).eq('updated_at', target.updated_at);
+    accountWrite = target.deleted_at ? accountWrite.eq('deleted_at', target.deleted_at) : accountWrite.is('deleted_at', null);
+    const claimedAccount = await accountWrite.select('id').single();
+    if (claimedAccount.error || !claimedAccount.data) xFailure();
+    progress.account = true;
+
+    const envelope: Envelope = { ...grant, version: 1, accountId: target.id, familyId: flow.familyId, platform: 'x', providerAccountId: identity.id };
+    // Each ciphertext carries its purpose and full authority binding, preventing transplants.
+    const tokenPatch = { provider_account_id: identity.id, access_token_enc: encryptSecret(JSON.stringify({ ...envelope, refreshToken: '' })),
+      refresh_token_enc: encryptSecret(JSON.stringify({ ...envelope, accessToken: '' })), token_type: 'bearer', scope: grant.scopes.join(' '),
+      expires_at: new Date(grant.expiresAt).toISOString(), updated_by: flow.userId, metadata: { x_state: 'ready', x_revision: flow.revision } };
+    const saved = await db.from('social_account_tokens').update(tokenPatch).eq('id', target.id)
+      .contains('metadata', { x_state: target.id === pending.id ? 'exchanging' : 'connecting', x_revision: flow.revision }).select('id').single();
+    if (saved.error || !saved.data) xFailure();
+    progress.saved = true;
+    if (target.id !== pending.id) {
+      const consumed = await db.from('social_account_tokens').update({ metadata: { x_state: 'consumed', x_revision: flow.revision } })
+        .eq('id', pending.id).contains('metadata', { x_state: 'exchanging', x_revision: flow.revision }).select('id').single();
+      if (consumed.error || !consumed.data) xFailure();
+      const retired = await db.from('social_accounts').update({ status: 'disconnected', deleted_at: new Date().toISOString(), updated_by: flow.userId })
+        .eq('id', pending.id).eq('status', 'pending').is('deleted_at', null).contains('metadata', { x_flow: flow.revision }).select('id').single();
+      if (retired.error || !retired.data) xFailure();
+    }
+    const connected = await db.from('social_accounts').update({ status: 'connected', health: 'healthy', handle: identity.username,
+      display_name: identity.name, profile_url: `https://x.com/${identity.username}`, scopes: grant.scopes,
+      last_error: null, updated_by: flow.userId }).eq('id', target.id).eq('family_id', flow.familyId).eq('status', 'pending')
+      .is('deleted_at', null).contains('metadata', { x_flow: flow.revision }).select('id').single();
+    if (connected.error || !connected.data) xFailure();
+  } catch (error) {
+    if (target.id !== pending.id) {
+      try { await restoreXReconnectTarget(db, flow, target, oldToken, progress); } catch { /* the 'connecting' takeover above still lets the next reconnect in */ }
+    }
+    // A new account (target === pending) is retired with its receipt by the caller (abandonXReceipt).
+    throw error;
+  }
   return target.id;
+}
+
+/**
+ * Undo a reconnect that failed part-way, so an existing account is not left
+ * 'pending' or with its credential stuck in 'connecting'. Every write is pinned
+ * to this flow's revision, so it never undoes a newer flow or a refresh.
+ */
+async function restoreXReconnectTarget(db: Db, flow: XFlow, target: Account, oldToken: Token | null,
+  progress: { token: boolean; account: boolean; saved: boolean }): Promise<void> {
+  const wasLive = target.status === 'connected' && !target.deleted_at;
+  // Every write below is a compare-and-set on this flow's revision, so zero
+  // rows is ordinary (a newer flow or a refresh got there first). A REFUSED
+  // write is not: it leaves the account or its credential in the state this
+  // function exists to undo, and the caller swallows the throw, so each is
+  // logged here with what it could not restore.
+  const report = (what: string, error: { message: string } | null) => {
+    if (error) console.error(`[social-x] could not ${what} after a failed reconnect`, { accountId: target.id, error: error.message });
+  };
+  if (progress.token && !progress.saved) {
+    // The old ciphertexts are untouched: hand the row back exactly as it was.
+    if (oldToken) {
+      const { error } = await db.from('social_account_tokens').update({ metadata: oldToken.metadata }).eq('id', target.id).eq('family_id', flow.familyId)
+        .contains('metadata', { x_state: 'connecting', x_revision: flow.revision }).select('id');
+      report('hand the credential row back', error);
+    } else {
+      const { error } = await db.from('social_account_tokens').delete().eq('id', target.id).eq('family_id', flow.familyId)
+        .contains('metadata', { x_state: 'connecting', x_revision: flow.revision }).select('id');
+      report('remove the credential row it inserted', error);
+    }
+  } else if (progress.saved && !wasLive) {
+    // The new grant replaced the old one on an account that will not become
+    // connected: revoke it rather than leave a live credential behind.
+    const { error } = await db.from('social_account_tokens').update({ access_token_enc: null, refresh_token_enc: null,
+      metadata: { x_state: 'blocked', x_revision: randomUUID(), x_revoked_at: Date.now() }, updated_by: flow.userId })
+      .eq('id', target.id).eq('family_id', flow.familyId).contains('metadata', { x_state: 'ready', x_revision: flow.revision }).select('id');
+    report('revoke the grant it saved', error);
+  }
+  // A saved grant on a previously connected account is a valid credential for
+  // the same identity, so restoring 'connected' leaves it publishable.
+  if (progress.account) {
+    const { error } = await db.from('social_accounts').update({ provider_account_id: target.provider_account_id, status: target.status,
+      deleted_at: target.deleted_at, metadata: target.metadata, updated_by: flow.userId })
+      .eq('id', target.id).eq('family_id', flow.familyId).eq('status', 'pending').contains('metadata', { x_flow: flow.revision }).select('id');
+    report('restore the account row', error);
+  }
 }
 
 export async function loadXAccessToken(actor: XActor, accountId: string, providerAccountId: string): Promise<string> {

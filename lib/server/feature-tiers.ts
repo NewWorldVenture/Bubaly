@@ -132,27 +132,77 @@ export async function getFeatureTiersByHref(supabase: DB, options?: FeatureTierR
   return tiersByHref(await getResolvedFeatureTiers(supabase, options));
 }
 
-/** Sets one feature's tier (or clears it back to default when tier === its default). */
-export async function setFeatureTier(supabase: DB, key: string, tier: FeatureTier): Promise<void> {
-  const def = FEATURE_CATALOG_BY_KEY[key];
-  if (!def || !isFeatureTier(tier)) return;
+type SettingsValue = Database['public']['Tables']['app_settings']['Insert']['value'];
 
-  const overrides = await readFeatureOverrides(supabase);
-  if (tier === def.defaultTier) delete overrides[key];
-  else overrides[key] = tier;
+/** How many times a save re-reads and retries after losing a race. */
+const WRITE_ATTEMPTS = 3;
 
-  const { error } = await supabase.from('app_settings').upsert(
-    { key: KEY, value: overrides as Database['public']['Tables']['app_settings']['Insert']['value'] },
-    { onConflict: 'key' },
-  );
-  if (error) throw error;
+/** Another save changed the overrides between this one's read and its write, every attempt. */
+export class FeatureTierConflictError extends Error {
+  constructor() {
+    super('The feature tiers changed while saving. Please try again.');
+    this.name = 'FeatureTierConflictError';
+  }
 }
 
-/** Resets all overrides back to the catalog defaults. */
-export async function resetFeatureTiers(supabase: DB): Promise<void> {
+/**
+ * Sets one feature's tier (or clears it back to default when tier === its default).
+ *
+ * The overrides are one JSON value, so a save is a read-modify-write. It used
+ * to be an unconditional upsert of the whole object, so two overlapping saves
+ * both read the same base and the second silently dropped the first — an
+ * admin's "off" could vanish and the feature reopen for every family. The
+ * write is now conditional on the row's `updated_at` being the one this save
+ * read (optimistic concurrency); a save that lost the race re-reads and
+ * applies its one key to the newer value, and reports a conflict if it keeps
+ * losing. A reset stamps `updated_at` too, so a set that read before a reset
+ * cannot resurrect its override on top of it.
+ *
+ * Returns the tier override that was in place before (null = catalog default).
+ */
+export async function setFeatureTier(
+  supabase: DB,
+  key: string,
+  tier: FeatureTier,
+  actorId: string | null = null,
+): Promise<{ previous: FeatureTier | null }> {
+  const def = FEATURE_CATALOG_BY_KEY[key];
+  if (!def || !isFeatureTier(tier)) return { previous: null };
+
+  for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt += 1) {
+    const { data: row, error: readError } = await supabase
+      .from('app_settings').select('value, updated_at').eq('key', KEY).maybeSingle();
+    if (readError) throw readError;
+    const overrides = sanitizeOverrides(row?.value);
+    const previous = overrides[key] ?? null;
+    if (tier === def.defaultTier) delete overrides[key];
+    else overrides[key] = tier;
+    const write = { value: overrides as SettingsValue, updated_by: actorId, updated_at: new Date().toISOString() };
+
+    if (!row) {
+      // No row yet: insert, and lose to a concurrent insert rather than overwrite it.
+      const { data: inserted, error } = await supabase.from('app_settings')
+        .upsert({ key: KEY, ...write }, { onConflict: 'key', ignoreDuplicates: true }).select('key');
+      if (error) throw error;
+      if ((inserted ?? []).length > 0) return { previous };
+      continue;
+    }
+    const { data: updated, error } = await supabase.from('app_settings')
+      .update(write).eq('key', KEY).eq('updated_at', row.updated_at).select('key');
+    if (error) throw error;
+    if ((updated ?? []).length > 0) return { previous };
+  }
+  throw new FeatureTierConflictError();
+}
+
+/** Resets all overrides back to the catalog defaults. Returns the overrides it cleared. */
+export async function resetFeatureTiers(supabase: DB, actorId: string | null = null): Promise<{ previous: FeatureOverrides }> {
+  const { data: row, error: readError } = await supabase.from('app_settings').select('value').eq('key', KEY).maybeSingle();
+  if (readError) throw readError;
   const { error } = await supabase.from('app_settings').upsert(
-    { key: KEY, value: {} as Database['public']['Tables']['app_settings']['Insert']['value'] },
+    { key: KEY, value: {} as SettingsValue, updated_by: actorId, updated_at: new Date().toISOString() },
     { onConflict: 'key' },
   );
   if (error) throw error;
+  return { previous: sanitizeOverrides(row?.value) };
 }

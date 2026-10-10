@@ -82,7 +82,9 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
   const db = createInMemorySupabase<DB>();
   db.seed('families', [
-    { id: FREE, name: 'Free household', trial_ends_at: '2020-01-01T00:00:00.000Z', closed_at: null },
+    // Grandfathered Free (no trial), so the refusal is the plan tier's. A trial
+    // that ended unpaid is refused as trial_expired instead (locked-family test).
+    { id: FREE, name: 'Free household', trial_ends_at: null, closed_at: null },
     { id: PLUS, name: 'Plus household', trial_ends_at: '2020-01-01T00:00:00.000Z', closed_at: null },
   ]);
   db.seed('subscriptions', [{ family_id: PLUS, plan: 'plus', status: 'active' }]);

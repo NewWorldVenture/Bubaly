@@ -69,12 +69,23 @@ const UNAVAILABLE = { ok: false, reason: 'unavailable', retryable: true };
 beforeEach(() => { vi.spyOn(console, 'error').mockImplementation(() => undefined); });
 
 describe('fresh document link identity', () => {
-  it.each(['parent', 'adult', 'teen', 'child', 'caregiver', 'guest'])('preserves existing %s member access for manual and inbox links', async (role) => {
+  it.each(['parent', 'adult', 'teen', 'child', 'caregiver'])('preserves existing %s member access for manual and inbox links', async (role) => {
     const f = fixture(role);
     expect(await authorizeDocumentLink(context(role), f.db, false)).toEqual({ ok: true });
     expect(f.queries.map((query) => query.table)).toEqual(['family_members', 'user_preferences']);
     expect(f.rpc).not.toHaveBeenCalled();
     expect(await authorizeDocumentLink(context(role), f.db, true)).toEqual({ ok: true });
+  });
+
+  it('refuses a view-only guest for manual and inbox links, before any feature or entitlement read', async () => {
+    // Guests are view-only (roles.ts, 0464); paperwork_items RLS admits any
+    // member, so this check is what keeps a guest from filing paperwork or
+    // making the server fetch a URL they chose.
+    const f = fixture('guest');
+    expect(await authorizeDocumentLink(context('guest'), f.db, false)).toEqual(DENIED);
+    expect(await authorizeDocumentLink(context('guest'), f.db, true)).toEqual(DENIED);
+    expect(f.queries.every((query) => ['family_members', 'user_preferences'].includes(query.table))).toBe(true);
+    expect(f.rpc).not.toHaveBeenCalled();
   });
 
   it('scopes proof queries to the authenticated user and selected household', async () => {

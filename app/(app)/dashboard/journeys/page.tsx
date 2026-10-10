@@ -11,6 +11,9 @@ import {
 import { getTranslations } from '@/lib/i18n/server';
 import { readAll } from '@/lib/supabase/read-all';
 import { AppNotFound } from '@/components/app/app-not-found';
+import { redirect } from 'next/navigation';
+import { superAdminAssurance } from '@/lib/auth/super-admin-assurance';
+import { stepUpPath } from '@/lib/auth/mfa';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -23,6 +26,8 @@ export default async function JourneysPage() {
   const ctx = await requireUserContext();
   // Raw product telemetry is an admin-only view.
   if (!(await isSuperAdmin())) return <AppNotFound backHref="/dashboard" />;
+  // A super-admin-only surface: the same step-up as the admin console.
+  if (!(await superAdminAssurance()).ok) redirect(stepUpPath('/dashboard/journeys'));
 
   const supabase = await createServer();
   // `.limit(5000)` was never 5,000 — PostgREST caps at db-max-rows — and this

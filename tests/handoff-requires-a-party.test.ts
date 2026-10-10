@@ -41,12 +41,14 @@ describe('a hand-off action refuses a family member who is not a party (C3-S4-02
   });
 
   it('every action that loads an order refuses when the caller is not a party', () => {
-    // propose, confirm and cancel. confirm is the one that MINTS the code.
+    // propose, confirm, cancel and complete. confirm is the one that MINTS the
+    // code; complete is the one that closes the order (and a loan) with it, and
+    // its RPC checks only the family, so it goes through the loader too.
     const guards = SOURCE.match(/if \(!role\) return \{ ok: false, error: t\(COMPLETE_REASON\.forbidden\) \};/g) ?? [];
-    expect(guards.length, 'expected the refusal at all three loadOrderRole call sites').toBe(3);
+    expect(guards.length, 'expected the refusal at all four loadOrderRole call sites').toBe(4);
 
     const loaderCalls = SOURCE.match(/await loadOrderRole\(/g) ?? [];
     // The matcher must find the call sites at all, or this rule is vacuous.
-    expect(loaderCalls.length).toBe(3);
+    expect(loaderCalls.length).toBe(4);
   });
 });

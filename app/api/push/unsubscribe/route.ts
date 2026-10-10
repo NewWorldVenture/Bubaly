@@ -5,14 +5,29 @@ import { createServer } from '@/lib/supabase/server';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { MAX_PUSH_REQUEST_BYTES, parsePushDeviceKey } from '@/lib/server/push-request';
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body';
+import { createBearerClient, extractBearerToken } from '@/lib/supabase/bearer';
 
 export const dynamic = 'force-dynamic';
 
 /** Remove this device's push subscription (or disable it) for the signed-in user. */
 export async function POST(req: Request) {
   const t = await getTranslations();
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: t('unsubscribe.unauthorized') }, { status: 401 });
+  // Sign-out detaches this device with the LEAVING session's access token
+  // (lib/push/device-registration.ts): the browser has already cleared the
+  // cookies by the time the request leaves, so cookies cannot carry it. The
+  // bearer client runs under that user's RLS exactly as the cookie client does.
+  const bearer = extractBearerToken(req.headers.get('authorization'));
+  let supabase;
+  let user: { id: string } | null;
+  if (bearer) {
+    supabase = createBearerClient(bearer);
+    const { data, error: authError } = await supabase.auth.getUser(bearer);
+    user = authError ? null : data.user;
+  } else {
+    user = await getUser();
+    supabase = user ? await createServer() : null;
+  }
+  if (!user || !supabase) return NextResponse.json({ error: t('unsubscribe.unauthorized') }, { status: 401 });
 
   const boundedBody = await readBoundedRequestText(req, MAX_PUSH_REQUEST_BYTES);
   if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body too large' : 'Unable to read request body' }, { status: boundedBody.reason === 'too_large' ? 413 : 400 });
@@ -22,7 +37,6 @@ export async function POST(req: Request) {
   const deviceKey = parsePushDeviceKey(body);
   if (!deviceKey) return NextResponse.json({ error: t('unsubscribe.missingEndpointOrToken') }, { status: 400 });
 
-  const supabase = await createServer();
   const limited = await enforceRequestRateLimit(supabase, `push-unsubscribe:${user.id}`, { limit: 30 });
   if (!limited.ok) {
     return NextResponse.json({ error: t('unsubscribe.tooManyPushRemovalAttempts') }, {

@@ -138,6 +138,10 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   // nothing; they use the same key for consistency rather than out of need.
   const renewalMaxKey = addDaysToDayKey(todayKey, 90);
   const signupMaxKey = addDaysToDayKey(todayKey, 7);
+  // `documents.expires_at` is a DATE: bounded by instants, Postgres reads the
+  // UTC date, so a Pacific family's evening skipped a document expiring today
+  // and a Tokyo family's morning still announced yesterday's as "expiring".
+  const documentMaxKey = addDaysToDayKey(todayKey, 14);
 
   // The roster defines audiences for every category. A failed or truncated
   // roster must not turn an unresolved recipient into a family broadcast.
@@ -166,7 +170,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
       supabase.from('school_events').select('id, title, starts_at, member_id, event_type').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
       supabase.from('sports_events').select('id, title, starts_at, member_id, sport, location').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
       supabase.from('reminders').select('id, title, remind_at, member_id, is_done').eq('family_id', familyId).eq('is_done', false).gte('remind_at', nowIso).lte('remind_at', in24),
-      supabase.from('documents').select('id, title, expires_at').eq('family_id', familyId).not('expires_at', 'is', null).gte('expires_at', nowIso).lte('expires_at', in14d),
+      supabase.from('documents').select('id, title, expires_at').eq('family_id', familyId).not('expires_at', 'is', null).gte('expires_at', todayKey).lte('expires_at', documentMaxKey),
       // Renewals within ~90d (per-item reminder window applied in code) and open signups within 7d.
       supabase.from('renewals').select('id, title, expires_at, reminder_days, status').eq('family_id', familyId).eq('status', 'active').gte('expires_at', todayKey).lte('expires_at', renewalMaxKey),
       supabase.from('opportunities').select('id, title, deadline, status').eq('family_id', familyId).in('status', ['interested', 'waitlisted']).not('deadline', 'is', null).gte('deadline', todayKey).lte('deadline', signupMaxKey),

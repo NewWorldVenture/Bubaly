@@ -6,6 +6,7 @@ import { stripeFromKey } from '@/lib/stripe';
 import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { isAdmin } from '@/lib/constants/roles';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+import { refuseWithoutBillingStepUp } from '@/lib/billing/route-step-up';
 
 export async function POST(req: NextRequest) {
   const t = await getTranslations();
@@ -14,6 +15,11 @@ export async function POST(req: NextRequest) {
     if (!isAdmin(ctx.active.role)) {
       return NextResponse.json({ error: t('portal.onlyAParentCanOpen') }, { status: 403 });
     }
+    // The portal shows invoices, changes the card and cancels: the same AAL2
+    // step-up /dashboard/billing enforces, or a password-only session reaches
+    // it by POSTing here directly.
+    const stepUp = await refuseWithoutBillingStepUp(ctx, t);
+    if (stepUp) return stepUp;
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
     // The same key checkout used: Super Admin → Stripe Setup first, then the

@@ -497,8 +497,17 @@ begin
   select coalesce(array_agg(t.tgname order by t.tgname), array[]::text[]) into trg
     from pg_trigger t
    where t.tgrelid = 'public.invites'::regclass and not t.tgisinternal;
-  if trg <> array['trg_set_updated_at'] then
-    raise exception 'INVITE-ESC FAIL: public.invites carries triggers % — the header attributes every refusal above to invites_update alone, and a trigger this file did not account for is a second mechanism its controls were not written for', trg;
+  -- 0482 added trg_invite_terms_are_the_servers_to_set (BEFORE INSERT OR
+  -- UPDATE). For client roles it forces status, invited_by, token and
+  -- accepted_by on INSERT and clamps expires_at; on UPDATE it refuses only a
+  -- change of token or accepted_by, or a status change other than
+  -- pending -> revoked, and otherwise clamps expiry and re-stamps invited_by.
+  -- It does not fix family_id, role or email — the columns the legs above move
+  -- — so the control move still lands and every refusal above is still
+  -- invites_update's (the legs ran green with it in place). Accounted for here
+  -- by name; a third trigger is still a second mechanism.
+  if trg <> array['trg_invite_terms_are_the_servers_to_set', 'trg_set_updated_at'] then
+    raise exception 'INVITE-ESC FAIL: public.invites carries triggers % — the header attributes every refusal above to invites_update alone (with 0482''s terms trigger accounted for), and a trigger this file did not account for is a second mechanism its controls were not written for', trg;
   end if;
 
   select count(*), min(p.polname), min(pg_get_expr(p.polwithcheck, p.polrelid))
@@ -512,5 +521,5 @@ begin
     raise exception 'INVITE-ESC FAIL: invites_update''s WITH CHECK is % — the manager''s caught 42501 above is credited to a WITH CHECK asking can_manage_family(family_id), and that is not what is installed', coalesce(chk, '(absent: Postgres reuses USING for the new row, which is the pre-0298 hole)');
   end if;
 
-  raise notice 'INVITE-ESC OK: the mechanism is what the header says — one trigger on invites (trg_set_updated_at, which raises nothing) and one UPDATE policy, invites_update, with a WITH CHECK asking can_manage_family(family_id)';
+  raise notice 'INVITE-ESC OK: the mechanism is what the header says — two triggers on invites (trg_set_updated_at, which raises nothing, and 0482''s trg_invite_terms_are_the_servers_to_set, which does not touch family_id, role or email) and one UPDATE policy, invites_update, with a WITH CHECK asking can_manage_family(family_id)';
 end $$;

@@ -18,6 +18,12 @@
 -- IN the circle still bids, negotiates, asks, saves, collects and buys, and the
 -- seller's own family still files the in-family offer that flips the listing.
 --
+-- 0483 changed two of the controls, on purpose: a circle member reads a shared
+-- listing through public.marketplace_circle_listings (§8c replaced the whole-row
+-- base-table policy with that view), and Buy-It-Now closes at the first bid
+-- (§6), so the BIN control runs against a second shared auction nobody has bid
+-- on while the bid-carrying one must be refused as bids_placed.
+--
 -- Rolled back: nothing here outlives the assertion.
 \set ON_ERROR_STOP on
 set client_min_messages = warning;
@@ -36,6 +42,7 @@ declare
   circle   uuid := '00000000-0000-4000-8000-0000000d6221';
   auction  uuid := '00000000-0000-4000-8000-0000000d6231';
   sale     uuid := '00000000-0000-4000-8000-0000000d6232';
+  auction2 uuid := '00000000-0000-4000-8000-0000000d6233';
   coll_a   uuid := '00000000-0000-4000-8000-0000000d6241';
   coll_x   uuid := '00000000-0000-4000-8000-0000000d6242';
   mem_s    uuid;
@@ -97,8 +104,14 @@ begin
       'auction', 1000, 5000, now() + interval '1 day');
   insert into public.marketplace_listings (id, family_id, member_id, created_by, title, kind, status, price_cents)
     values (sale, fam_s, mem_s, seller, 'Stroller', 'sell', 'available', 8000);
+  -- A second shared auction nobody bids on, for the Buy-It-Now control: 0483 §6
+  -- closes Buy-It-Now at the first bid, and section 2 bids on `auction`.
+  insert into public.marketplace_listings (id, family_id, member_id, created_by, title, kind, status,
+      sale_format, starting_bid_cents, buy_now_cents, auction_ends_at)
+    values (auction2, fam_s, mem_s, seller, 'Scooter', 'sell', 'available',
+      'auction', 1000, 4000, now() + interval '1 day');
   insert into public.marketplace_listing_shares (listing_id, circle_id, family_id) values
-    (auction, circle, fam_s), (sale, circle, fam_s);
+    (auction, circle, fam_s), (sale, circle, fam_s), (auction2, circle, fam_s);
   insert into public.marketplace_collections (id, family_id, name) values
     (coll_a, fam_a, 'Wish list'), (coll_x, fam_x, 'Wish list');
 
@@ -194,9 +207,19 @@ begin
   perform set_config('request.jwt.claims', json_build_object('sub', alice::text, 'role', 'authenticated')::text, true);
   set local role authenticated;
 
-  select count(*) into n from public.marketplace_listings where id in (auction, sale);
+  -- 0483 §8c moved the cross-family read off the base table: a circle member
+  -- reads a shared listing through public.marketplace_circle_listings (the
+  -- shopper-facing columns), and the whole-row marketplace_listings_circle_read
+  -- policy is gone. Both halves are the control: the view shows both listings,
+  -- the base table shows neither.
+  select count(*) into n from public.marketplace_circle_listings where id in (auction, sale);
   if n <> 2 then
-    raise warning 'CONTROL FAILED: the circle member sees % of the two shared listings', n;
+    raise warning 'CONTROL FAILED: the circle member sees % of the two shared listings through marketplace_circle_listings', n;
+    failures := failures + 1;
+  end if;
+  select count(*) into n from public.marketplace_listings where id in (auction, sale);
+  if n <> 0 then
+    raise warning 'REGRESSION: the circle member reads % whole listing row(s) from marketplace_listings — 0483 §8c replaced that read with the circle view', n;
     failures := failures + 1;
   end if;
 
@@ -260,11 +283,20 @@ begin
     failures := failures + 1;
   end if;
 
-  -- ── 4. and a circle member can still Buy-It-Now ───────────────────────────
+  -- ── 4. Buy-It-Now: closed at the first bid, still open before one ─────────
   perform set_config('request.jwt.claim.sub', alice::text, true);
   perform set_config('request.jwt.claims', json_build_object('sub', alice::text, 'role', 'authenticated')::text, true);
   set local role authenticated;
+  -- `auction` carries Alice's own bid from section 2. 0483 §6 refuses Buy-It-Now
+  -- once any bid exists (buyNowClosedByBids in lib/marketplace/auction.ts),
+  -- under the listing lock.
   res := public.marketplace_buy_now(auction, mem_a, fam_a);
+  if coalesce((res ->> 'ok')::boolean, false) or res ->> 'detail' is distinct from 'bids_placed' then
+    raise warning 'REGRESSION: Buy-It-Now on an auction that already carries a bid was not refused as bids_placed (0483 §6): %', res;
+    failures := failures + 1;
+  end if;
+  -- A shared auction with no bids is still bought outright by a circle member.
+  res := public.marketplace_buy_now(auction2, mem_a, fam_a);
   reset role;
   if coalesce((res ->> 'ok')::boolean, false) is not true then
     raise warning 'REGRESSION: a circle member can no longer Buy-It-Now a shared auction: %', res;

@@ -7,6 +7,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { deleteBudgetAction, setBudgetAction } from '@/app/(app)/dashboard/billing/actions';
 import { reportRefusal } from '@/lib/auth/step-up-client';
+import { settleAction } from '@/lib/ui/settle-action';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -55,7 +56,8 @@ export function BudgetsView() {
 
   async function remove(id: string) {
     if (!confirm(t('budgetsView.deleteThisBudget'))) return;
-    const res = await deleteBudgetAction(id);
+    const res = await settleAction(() => deleteBudgetAction(id), t('actions.couldNotRemoveThatBudget'), toastError, refreshBudgets);
+    if (!res) return;
     if (!res.ok) reportRefusal(res, toastError); else success(t('budgetsView.deleted'));
   }
 

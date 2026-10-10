@@ -14,7 +14,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const resolveFamilyPlanLevel = vi.fn();
 const getResolvedFeatureTiers = vi.fn();
 
-vi.mock('@/lib/server/plan', () => ({ resolveFamilyPlanLevel: (...a: unknown[]) => resolveFamilyPlanLevel(...a) }));
+vi.mock('@/lib/server/plan', () => ({ resolveFamilyPlanLevel: (...a: unknown[]) => resolveFamilyPlanLevel(...a),
+  resolveFamilyEntitlement: async (...a: unknown[]) => ({ effectiveLevel: await (resolveFamilyPlanLevel(...a)), locked: false, closed: false, inTrial: false, trialEndsAt: null }),
+}));
 vi.mock('@/lib/server/feature-tiers', () => ({
   getResolvedFeatureTiers: (...a: unknown[]) => getResolvedFeatureTiers(...a),
   getFeatureTiersByHref: vi.fn(),

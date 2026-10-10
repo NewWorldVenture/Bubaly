@@ -27,11 +27,29 @@ export type ConnectInput = {
 };
 
 /**
+ * The provider account is connected for another family the user still belongs
+ * to. Moving it would strand that family's calendars, so the user is told to
+ * disconnect it there first (the callbacks turn this into
+ * `error=connected_elsewhere`).
+ */
+export class AccountConnectedElsewhereError extends Error {
+  readonly code = 'connected_elsewhere' as const;
+  constructor() {
+    super('This account is already connected for another family');
+    this.name = 'AccountConnectedElsewhereError';
+  }
+}
+
+/**
  * Upserts the account + its encrypted tokens. Idempotent on (user, provider,
  * external_id). If a re-connect omits a refresh token (Google only returns it on
  * first consent), the previously stored refresh token is preserved.
  */
 export async function connectAccount(admin: Admin, input: ConnectInput): Promise<string> {
+  // The external id is the account's identity: without one, every account this
+  // user connects for the provider would share one key and overwrite another's
+  // tokens.
+  if (!input.externalId?.trim()) throw new Error('The provider account could not be identified');
   let onboardingMetadata: Record<string, unknown> | undefined;
   let onboardingExisting: { id: string; updated_at: string } | null = null;
   if (input.onboardingCalendar) {
@@ -44,6 +62,29 @@ export async function connectAccount(admin: Admin, input: ConnectInput): Promise
       !marker || typeof marker !== 'object' || Array.isArray(marker) || marker.version !== 1 || marker.state !== 'preview')) throw new Error('This calendar is already connected outside this setup');
     onboardingMetadata = { ...metadata, onboardingCalendar: { version: 1, state: 'preview' } };
     onboardingExisting = existing.data;
+  } else {
+    // The upsert below is keyed on (user, provider, external_id) and writes
+    // family_id, so reconnecting an account that is already connected for
+    // ANOTHER family would silently move it — and its tokens and connection —
+    // out of that family while its calendars there still point at it. Refuse,
+    // as the onboarding branch above does.
+    const existing = await admin.from('sync_accounts').select('id, family_id')
+      .eq('user_id', input.userId).eq('provider', input.provider).eq('external_id', input.externalId).maybeSingle();
+    if (existing.error) throw new Error('Could not check the existing calendar connection');
+    if (existing.data && existing.data.family_id !== input.familyId) {
+      // The disconnect routes only look in the ACTIVE family, so a user who
+      // has left (or been removed from) the family holding the account could
+      // never release it, and every connect elsewhere would fail forever. That
+      // family is no longer theirs to protect: drop the stale connection —
+      // what a disconnect there would have done — and connect afresh here.
+      const membership = await admin.from('family_members').select('id')
+        .eq('user_id', input.userId).eq('family_id', existing.data.family_id).eq('is_active', true).limit(1);
+      if (membership.error) throw new Error('Could not check the existing calendar connection');
+      if ((membership.data ?? []).length > 0) throw new AccountConnectedElsewhereError();
+      const released = await admin.from('sync_accounts').delete()
+        .eq('id', existing.data.id).eq('user_id', input.userId).eq('family_id', existing.data.family_id).select('id');
+      if (released.error || (released.data ?? []).length !== 1) throw new Error('Could not release the connection left in a former family');
+    }
   }
   const values = {
         user_id: input.userId,

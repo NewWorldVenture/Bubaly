@@ -322,7 +322,11 @@ export async function dispatchPendingPushes(
   const dueAt = (opts.now ?? new Date()).toISOString();
   async function page(size: number, wrap = false) {
     let q = supabase.from('notifications')
-      .select('id, family_id, user_id, title, body, related_type, related_id, created_at')
+      // Rows of OPEN families only (families.closed_at): a closed account's
+      // devices are not buzzed. In the query, before the page limit, so queued
+      // rows of a closed family cannot fill the page ahead of everyone else's.
+      .select('id, family_id, user_id, title, body, related_type, related_id, created_at, family:families!inner(closed_at)')
+      .is('family.closed_at', null)
       .is('pushed_at', null).lte('send_at', dueAt)
       // Chat notices have not opted into external delivery. Filter before the
       // page limit so a busy conversation cannot starve other notifications.

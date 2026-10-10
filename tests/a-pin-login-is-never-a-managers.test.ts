@@ -44,7 +44,8 @@ function fakeAdmin() {
       data: name === 'family_members' && payload === null ? state.member : payload ? [{ id: TARGET_MEMBER }] : null,
       error: null,
     });
-    for (const method of ['select', 'eq', 'insert', 'upsert', 'delete']) chain[method] = () => chain;
+    // `is` too: the member link is a compare-and-set on `user_id IS NULL`.
+    for (const method of ['select', 'eq', 'is', 'insert', 'upsert', 'delete']) chain[method] = () => chain;
     chain.update = (values: Row) => {
       payload = values;
       if (name === 'family_members') state.memberWrites.push(values);

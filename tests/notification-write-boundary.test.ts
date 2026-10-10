@@ -45,7 +45,7 @@ const ALLOWED: Record<string, string> = {
   // through notify() would only be correct with `urgent: true`, which is a
   // no-op against a raw insert. Converting them buys the duplicate guard and
   // nothing else; worth doing, not worth risking a missed emergency to rush.
-  'app/api/guardian/escalate/route.ts': 'a guardian escalation is the alert a family must get at 3am',
+  'lib/guardian/escalate.ts': 'a guardian escalation is the alert a family must get at 3am (the route delegates here; so do the inbound SMS, WhatsApp and screening flows)',
   'app/api/guardian/screen/route.ts': 'the emergency branch of call screening',
   'lib/contact-center/urgent-delivery.ts': 'strict urgent-only durable receipts; deterministic notification primary key prevents duplicate alerts and preserves delivery/read markers on recovery',
   'lib/guardian/sms-notification.ts': 'routine SMS recovery preserves family-local quiet hours; a deterministic receipt ID and exact relation readback prevent overlapping lease owners from duplicating a notification or resetting delivery/read markers',
@@ -107,18 +107,29 @@ describe('a notification that can wake a house goes through notify()', () => {
     expect(voicemailRoute).toContain('beforeWrite: () => requireGuardianVoicemailLease(');
   });
 
-  it('none of the converted three marks itself urgent', () => {
-    // The whole point is that a routine screened message can wait. If one of
-    // these ever needs `urgent`, that is a product decision, not a default.
+  it('none of the converted three marks a routine message urgent', () => {
+    // The whole point is that a routine screened message can wait. The one
+    // product decision made since: an EMERGENCY (the pipeline's shouldEscalate,
+    // from a sender the family has not blocked) does not wait for morning, so
+    // the SMS processor and the WhatsApp route may say `urgent: true` — but only
+    // on that branch, spelled as a conditional on `emergency`, never as a
+    // default on the input.
     for (const file of [
       'app/api/guardian/inbound/sms/route.ts',
-      'lib/guardian/sms-processing.ts',
       'lib/guardian/sms-notification.ts',
-      'app/api/guardian/inbound/whatsapp/route.ts',
       'app/api/guardian/status/voicemail/route.ts',
     ]) {
       expect(readFileSync(file, 'utf8')).not.toMatch(/urgent:\s*true/);
     }
+    for (const file of ['lib/guardian/sms-processing.ts', 'app/api/guardian/inbound/whatsapp/route.ts']) {
+      const src = readFileSync(file, 'utf8');
+      const urgents = src.match(/urgent:\s*true/g) ?? [];
+      expect(urgents, `${file} marks itself urgent somewhere other than the emergency branch`).toHaveLength(1);
+      expect(src).toMatch(/\.\.\.\(emergency \? \{ urgent: true \} : \{\}\)/);
+    }
+    // And the quiet-hours bypass has to exist for that flag to mean anything
+    // on the Guardian path: notifyGuardianSms defers only non-urgent input.
+    expect(readFileSync('lib/guardian/sms-notification.ts', 'utf8')).toMatch(/input\.urgent !== true &&/);
   });
 });
 
