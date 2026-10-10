@@ -66,6 +66,13 @@ const windowFor = (t: Toast) => (t.action ? LIFETIME.action : LIFETIME.plain);
  */
 export const QUEUE_QUERY = '(max-width: 1023px)';
 
+/** The id of the notice a node is in, or null (the "+N" button, or nothing). */
+function noticeIdOf(node: EventTarget | null | undefined): number | null {
+  const card = (node as Element | null | undefined)?.closest?.('[data-toast-id]');
+  const id = card ? Number(card.getAttribute('data-toast-id')) : Number.NaN;
+  return Number.isFinite(id) ? id : null;
+}
+
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const tr = useTranslations();
   const plural = usePlural();
@@ -82,6 +89,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   // Held by hover or focus on the stack (pauseAll / resumeAll).
   const paused = useRef(false);
   const hovered = useRef(false);
+  const focusIn = useRef(false);
+  // The notice whose control holds focus. Below lg it stays on screen even
+  // when it is not the newest — a notice arriving, or the window crossing
+  // below lg, must not hide the control the reader is on (it would keep focus
+  // while visually hidden and out of the tab order).
+  const [focusedId, setFocusedId] = useState<number | null>(null);
   const stackRef = useRef<HTMLDivElement>(null);
   const moreRef = useRef<HTMLButtonElement>(null);
   // The pending dismissal for each toast, so it can be PAUSED.
@@ -137,17 +150,34 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     });
   }, [schedule]);
 
-  /** Leaving the stack: an open "+N" list closes once neither pointer nor focus is in it. */
+  /**
+   * Leaving the stack by pointer or by focus. Below lg (and with "+N" open)
+   * the stack stays held while the other way is still in it: the pointer
+   * leaving does not start the clock under a focused Undo, nor blur under a
+   * resting pointer. Only when neither is in it does an open list close and
+   * the clock resume. (From lg, as before: either leaving resumes.)
+   */
   const leave = useCallback((kind: 'pointer' | 'focus', next?: EventTarget | null) => {
     if (kind === 'pointer') hovered.current = false;
-    // Focus moving between the stack's own buttons is not leaving it.
-    if (kind === 'focus' && typeof Node !== 'undefined' && next instanceof Node && stackRef.current?.contains(next)) return;
-    if (expandedRef.current) {
-      const focusInside = typeof document !== 'undefined' && !!stackRef.current?.contains(document.activeElement);
+    if (kind === 'focus') {
+      // Focus moving between the stack's own buttons is not leaving it.
+      if (typeof Node !== 'undefined' && next instanceof Node && stackRef.current?.contains(next)) {
+        setFocusedId(noticeIdOf(next));
+        return;
+      }
+      focusIn.current = false;
+      setFocusedId(null);
+    }
+    if (queueRef.current || expandedRef.current) {
+      // Focus that went with a removed button left no blur behind: trust the
+      // document over the flag where there is one.
+      const stack = stackRef.current;
+      const focusInside = focusIn.current
+        && (typeof document === 'undefined' || !stack || stack.contains(document.activeElement));
       const stillHere = kind === 'pointer' ? focusInside : hovered.current;
       if (stillHere) return;
-      setExpanded(false);
     }
+    if (expandedRef.current) setExpanded(false);
     resumeAll();
   }, [resumeAll]);
 
@@ -197,6 +227,16 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     error: (m, action) => push(m, 'error', action),
   }), [push]);
 
+  // Queued (below lg, "+N" closed): every notice but the newest and the one
+  // holding focus. A queued notice keeps its live region and its actions in
+  // the accessibility tree, visually hidden and out of the tab order, which
+  // "+N" is the way back into; coming on screen later changes only its class.
+  // (That it is announced once, and that a screen reader can act on it, is
+  // what the markup is for; it has not been verified with a screen reader.)
+  const newestId = toasts[toasts.length - 1]?.id;
+  const isQueued = (t: Toast) => queueMode && !expanded && t.id !== newestId && t.id !== focusedId;
+  const hidden = toasts.filter(isQueued).length;
+
   return (
     <ToastContext.Provider value={api}>
       {children}
@@ -239,40 +279,41 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         ref={stackRef}
         onMouseEnter={() => { hovered.current = true; pauseAll(); }}
         onMouseLeave={() => leave('pointer')}
-        onFocusCapture={pauseAll}
+        onFocusCapture={(e?: React.FocusEvent) => { focusIn.current = true; pauseAll(); setFocusedId(noticeIdOf(e?.target)); }}
         onBlurCapture={(e?: React.FocusEvent) => leave('focus', e?.relatedTarget)}
         onKeyDown={(e) => {
           if (e.key !== 'Escape' || !expandedRef.current) return;
+          // The queue's own Escape: it closes the "+N" list and nothing else.
+          // A dialog underneath answers Escape from a document listener, added
+          // after React's own, so it is stopped here, not just not handled.
+          e.stopPropagation?.();
+          e.nativeEvent?.stopImmediatePropagation?.();
           setExpanded(false);
           moreRef.current?.focus();
         }}
         className="pointer-events-none fixed inset-x-0 bottom-[calc(5rem+var(--safe-bottom))] z-[100] flex flex-col items-center gap-2 pl-4 pr-[calc(4.75rem+var(--safe-right))] lg:inset-x-auto lg:right-4 lg:bottom-40 lg:items-end lg:px-0"
       >
-        {queueMode && toasts.length > 1 && (
+        {queueMode && (expanded ? toasts.length > 1 : hidden > 0) && (
           <button
             ref={moreRef}
             type="button"
+            data-toast-more
             aria-expanded={expanded}
-            aria-label={plural('toast.more', toasts.length - 1)}
+            aria-label={plural('toast.more', expanded ? toasts.length - 1 : hidden)}
             onClick={() => setExpanded((open) => !open)}
             className="pointer-events-auto inline-flex min-h-8 items-center gap-1 rounded-full popover-surface px-3 py-1 text-xs font-semibold shadow-glass coarse:min-h-11"
           >
-            {expanded ? <ChevronDown className="h-4 w-4" aria-hidden /> : `+${toasts.length - 1}`}
+            {expanded ? <ChevronDown className="h-4 w-4" aria-hidden /> : `+${hidden}`}
           </button>
         )}
-        {toasts.map((t, index) => {
+        {toasts.map((t) => {
           const Icon = ICONS[t.tone];
-          // Queued (below lg, all but the newest, "+N" closed): still its own
-          // live region, inserted and so announced when it was pushed, and
-          // still in the accessibility tree with its actions, so a screen
-          // reader can reach a queued Undo; visually hidden and out of the tab
-          // order, which "+N" is the way back into. Coming on screen later
-          // changes only its class, so it is not announced a second time.
-          const queued = queueMode && !expanded && index < toasts.length - 1;
+          const queued = isQueued(t);
           return (
             <div
               key={t.id}
               data-toast
+              data-toast-id={t.id}
               data-queued={queued || undefined}
               role={t.tone === 'error' ? 'alert' : 'status'}
               aria-live={t.tone === 'error' ? 'assertive' : 'polite'}

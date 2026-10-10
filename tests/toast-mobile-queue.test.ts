@@ -6,7 +6,9 @@ import { localeContextValue } from './helpers/render-translated';
 // on screen at a time — the newest not yet dismissed — older ones waiting in
 // arrival order with NO clock running, each given a full window when it
 // shows; "+N" opens the whole stack so every Dismiss and Undo stays reachable;
-// each message is announced once, when it is pushed. From lg nothing changes
+// each notice is one live element from the moment it is pushed. (What a screen
+// reader then announces, and whether it can act on a queued notice, is not
+// something this harness can show; it is unverified.) From lg nothing changes
 // (tests/a-toast-you-can-still-reach-waits.test.ts holds the desktop stack).
 //
 // Same harness as that file: the real component, its real timers, the hooks
@@ -95,6 +97,20 @@ function render() {
     hover: () => (propsOf(stack).onMouseEnter as () => void)(),
     unhover: () => (propsOf(stack).onMouseLeave as () => void)(),
     focus: () => (propsOf(stack).onFocusCapture as () => void)(),
+    /** Focus lands on a button inside the card for `message` (on screen or not). */
+    focusOn: (message: string) => {
+      const card = all.find((c) => textOf(c).includes(message));
+      expect(card, `no card for "${message}"`).toBeTruthy();
+      const id = String(propsOf(card!)['data-toast-id']);
+      const target = { closest: () => ({ getAttribute: () => id }) };
+      (propsOf(stack).onFocusCapture as (e: unknown) => void)({ target });
+    },
+    keyDown: (key: string) => {
+      const stopPropagation = vi.fn();
+      const stopImmediatePropagation = vi.fn();
+      (propsOf(stack).onKeyDown as (e: unknown) => void)({ key, stopPropagation, nativeEvent: { stopImmediatePropagation } });
+      return { stopped: stopPropagation.mock.calls.length > 0 && stopImmediatePropagation.mock.calls.length > 0 };
+    },
     blur: () => (propsOf(stack).onBlurCapture as () => void)(),
     dismiss: (message: string) => {
       const card = cards.find((c) => textOf(c).includes(message));
@@ -274,7 +290,7 @@ describe('"+N" opens every notice, so each Dismiss and Undo can be reached', () 
   });
 });
 
-describe('announced once, when pushed', () => {
+describe('one live element per notice, from when it is pushed', () => {
   it('every notice is its own live region from the moment it arrives, queued ones included, each once', () => {
     const { api } = render();
     api.success('Saved');
@@ -327,5 +343,89 @@ describe('crossing lg', () => {
     const phone = render();
     expect(phone.shown).toEqual(['Three']);
     expect(vi.getTimerCount()).toBe(1);
+  });
+});
+
+describe('focus is never left on a hidden control', () => {
+  it('a notice arriving while a control in the one on screen holds focus leaves that one on screen beside it', () => {
+    const { api } = render();
+    api.success('One');
+    api.success('Two');
+    render().focusOn('Two');
+    api.success('Three');
+    const view = render();
+    expect(view.shown).toEqual(['Two', 'Three']);
+    expect(view.tree.find((n) => n.text === 'Two')).toMatchObject({ queued: false, tabbable: true });
+    expect(propsOf(view.more!)['aria-label']).toBe('1 more notice');
+    expect(textOf(view.more!)).toBe('+1');
+    expect(vi.getTimerCount()).toBe(0);
+    // Once focus has left the stack, it waits again, and only the newest counts.
+    render().blur();
+    const after = render();
+    expect(after.shown).toEqual(['Three']);
+    expect(vi.getTimerCount()).toBe(1);
+  });
+
+  it('crossing below lg with focus on an older notice keeps that notice on screen', () => {
+    mocks.queue = false;
+    const { api } = render();
+    for (const m of ['One', 'Two', 'Three']) api.success(m);
+    render().focusOn('One');
+    mocks.queue = true;
+    const phone = render();
+    expect(phone.shown).toEqual(['One', 'Three']);
+    expect(phone.tree.find((n) => n.text === 'One')).toMatchObject({ queued: false, tabbable: true });
+    expect(phone.tree.find((n) => n.text === 'Two')).toMatchObject({ queued: true, tabbable: false });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe('Escape belongs to the open list', () => {
+  it('the Escape that closes "+N" goes no further, so a dialog underneath stays open; with the list closed it passes', () => {
+    const { api } = render();
+    api.success('One');
+    api.success('Two');
+    (propsOf(render().more!).onClick as () => void)();
+    expect(render().keyDown('Escape').stopped).toBe(true);
+    expect(render().shown).toEqual(['Two']);
+    expect(render().keyDown('Escape').stopped).toBe(false);
+  });
+});
+
+describe('held while either hover or focus is in it', () => {
+  it('the pointer leaving does not resume while focus is in the stack, nor focus leaving while the pointer rests on it', () => {
+    const { api } = render();
+    api.success('One');
+    api.success('Two');
+    render().hover();
+    render().focusOn('Two');
+    render().unhover();
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(AN_AGE);
+    expect(render().shown).toEqual(['Two']);
+    render().blur();
+    render();
+    expect(vi.getTimerCount()).toBe(1);
+
+    render().focusOn('Two');
+    render().hover();
+    render().blur();
+    render();
+    expect(vi.getTimerCount()).toBe(0);
+    render().unhover();
+    render();
+    expect(vi.getTimerCount()).toBe(1);
+  });
+
+  it('from lg, as before this change: either one leaving resumes every notice', () => {
+    mocks.queue = false;
+    const { api } = render();
+    api.success('One');
+    api.success('Two');
+    render().hover();
+    render().focusOn('Two');
+    render().unhover();
+    render();
+    expect(vi.getTimerCount()).toBe(2);
   });
 });

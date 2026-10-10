@@ -238,9 +238,13 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
       // corner buttons, and each toast is at most 14rem (224px) wide; below lg
       // it keeps its mobile place.
 
-      /** Every control a visible toast's box intersects, within `scope`. */
-      const controlsUnderToasts = (page: Page, scope: string) => page.evaluate((within) => {
-        const toasts = Array.from(document.querySelectorAll('.pointer-events-none.fixed > [role="alert"], .pointer-events-none.fixed > [role="status"]'))
+      // Every notice surface a pointer can land on: the cards on screen and,
+      // below lg, the queue's "+N" button above them. A queued notice
+      // (data-queued) is visually hidden and takes no pointer, so it is not one.
+      const SURFACES = '.pointer-events-none.fixed > [data-toast]:not([data-queued]), .pointer-events-none.fixed > [data-toast-more]';
+      /** Every control a notice surface's box intersects, within `scope`. */
+      const controlsUnderToasts = (page: Page, scope: string) => page.evaluate(({ within, selector }) => {
+        const toasts = Array.from(document.querySelectorAll(selector))
           .map((t) => t.getBoundingClientRect());
         const covered: string[] = [];
         for (const el of Array.from(document.querySelectorAll(`${within} button, ${within} input, ${within} a[href], ${within} textarea, ${within} select`))) {
@@ -251,7 +255,7 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
           }
         }
         return covered;
-      }, scope);
+      }, { within: scope, selector: SURFACES });
       // The cards on screen. Below lg a queued notice is still in the stack,
       // visually hidden and marked data-queued (components/ui/toast.tsx), so
       // the cards are the [data-toast] elements without it.
@@ -380,119 +384,171 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
           expect(Math.abs(stackBottom - (844 - 80))).toBeLessThanOrEqual(1);
         });
 
-        // ── Below lg the notices are a queue (approved on #778) ──
-        // One card on screen, the newest; "+N" above it opens them all; queued
-        // notices have no clock running. Each notice is one live element from
-        // the moment it is pushed: a queued one is visually hidden, not
-        // removed, so it is announced once and not again when it is shown.
-        const cards = (page: Page) => page.locator('.pointer-events-none.fixed > [data-toast]:not([data-queued])');
-        /** The notices' own live elements, on screen or queued (Next's route announcer is a role=alert too, so not getByRole). */
-        const noticeAlerts = (page: Page) => page.locator('[data-toast][role="alert"]');
-        const more = (page: Page) => page.getByRole('button', { name: /^\d+ more notices?$/ });
+        test.describe('below lg, the notices queue', () => {
+          // These cases refuse or hold the contact write with page.route, which
+          // can miss a request from a page public/sw.js controls (the corner
+          // cases below say how that showed up). Run here, the worker saved a
+          // refused write once; it has no part in the queue, so it is kept out.
+          test.use({ serviceWorkers: 'block' });
 
-        /** Three refusals from the contact dialog (name required, then the same duplicate twice), dialog closed. */
-        async function threeRefusals(page: Page) {
-          const { dialog } = await openNewContact(page);
-          const name = dialog.getByRole('textbox', { name: 'Full name' });
-          await name.press('Enter');
-          await expect(alertsReading(page, COPY.nameRequired)).toHaveCount(1);
-          await name.fill('Robin Probe');
-          await refuseContactWrites(page);
-          await name.press('Enter');
-          await expect(alertsReading(page, COPY.duplicate)).toHaveCount(1);
-          await name.press('Enter');
-          await expect(alertsReading(page, COPY.duplicate)).toHaveCount(2);
-          await page.keyboard.press('Escape');
-          await expect(dialog).toBeHidden();
-        }
+          // ── Below lg the notices are a queue (approved on #778) ──
+          // One card on screen, the newest; "+N" above it opens them all; queued
+          // notices have no clock running. Each notice is one live element from
+          // the moment it is pushed: a queued one is visually hidden, not
+          // removed, and only its class changes when it is shown. (What a screen
+          // reader announces from that is not verified here.)
+          const cards = (page: Page) => page.locator('.pointer-events-none.fixed > [data-toast]:not([data-queued])');
+          /** The notices' own live elements, on screen or queued (Next's route announcer is a role=alert too, so not getByRole). */
+          const noticeAlerts = (page: Page) => page.locator('[data-toast][role="alert"]');
+          const more = (page: Page) => page.getByRole('button', { name: /^\d+ more notices?$/ });
 
-        test('three refusals queue: the newest on screen, each shown and dismissed in turn, none lost, each announced once', async ({ page }) => {
-          await threeRefusals(page);
-          await expect(cards(page)).toHaveCount(1);
-          await expect(more(page)).toHaveAccessibleName('2 more notices');
-          await expect(more(page)).toHaveAttribute('aria-expanded', 'false');
-          // Announced once each, before any of the queued ones has been on
-          // screen: three live elements, two of them visually hidden.
-          await expect(alertsReading(page, COPY.duplicate)).toHaveCount(2);
-          await expect(alertsReading(page, COPY.nameRequired)).toHaveCount(1);
-          const seen: string[] = [];
-          for (const left of [2, 1, 0]) {
-            const card = cards(page).first();
-            seen.push((await card.locator('span').first().innerText()).trim());
-            const dismiss = card.getByRole('button', { name: 'Dismiss' });
-            expect(await hitAt(page, dismiss)).toBe('Dismiss');
-            await dismiss.click();
-            await expect(cards(page)).toHaveCount(left ? 1 : 0);
-            if (left > 1) await expect(more(page)).toHaveAccessibleName(`${left - 1} more notice${left - 1 === 1 ? '' : 's'}`);
-            else await expect(more(page)).toHaveCount(0);
-            // A notice coming on screen adds no live element: the count only falls.
-            await expect(noticeAlerts(page)).toHaveCount(left);
-          }
-          expect(seen).toEqual([COPY.duplicate, COPY.duplicate, COPY.nameRequired]);
-        });
-
-        test('"+2" by keyboard: it takes focus, Enter opens every notice, each Dismiss takes focus, Escape closes', async ({ page }) => {
-          await threeRefusals(page);
-          await more(page).focus();
-          await expect(more(page)).toBeFocused();
-          await page.keyboard.press('Enter');
-          await expect(more(page)).toHaveAttribute('aria-expanded', 'true');
-          await expect(cards(page)).toHaveCount(3);
-          for (let i = 0; i < 3; i += 1) {
-            await page.keyboard.press('Tab');
-            await expect(cards(page).nth(i).getByRole('button', { name: 'Dismiss' })).toBeFocused();
-            expect(await hitAt(page, cards(page).nth(i).getByRole('button', { name: 'Dismiss' }))).toBe('Dismiss');
-          }
-          await page.keyboard.press('Escape');
-          await expect(more(page)).toHaveAttribute('aria-expanded', 'false');
-          await expect(more(page)).toBeFocused();
-          await expect(cards(page)).toHaveCount(1);
-        });
-
-        test('a queued Undo is not timed out while it waits, and undoes its own capture once shown', async ({ page }) => {
-          // LIFETIME.action is 7s; the waits below outlast it on purpose.
-          test.setTimeout(90_000);
-          await signIn(page, '/dashboard/contacts');
-          const capture = async (text: string) => {
-            await page.getByRole('button', { name: 'Quick capture' }).click();
-            const dialog = page.getByRole('dialog', { name: 'Quick capture' });
-            await dialog.getByRole('textbox', { name: 'Task' }).fill(text);
-            await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+          /** Three refusals from the contact dialog (name required, then the same duplicate twice), dialog closed. */
+          async function threeRefusals(page: Page) {
+            const { dialog } = await openNewContact(page);
+            const name = dialog.getByRole('textbox', { name: 'Full name' });
+            await name.press('Enter');
+            await expect(alertsReading(page, COPY.nameRequired)).toHaveCount(1);
+            await name.fill('Robin Probe');
+            await refuseContactWrites(page);
+            await name.press('Enter');
+            await expect(alertsReading(page, COPY.duplicate)).toHaveCount(1);
+            await name.press('Enter');
+            await expect(alertsReading(page, COPY.duplicate)).toHaveCount(2);
+            await page.keyboard.press('Escape');
             await expect(dialog).toBeHidden();
-          };
-          await capture('Probe queued first');
-          await capture('Probe queued second');
-          await page.mouse.move(5, 5);
-          await expect(cards(page)).toHaveCount(1);
-          await expect(more(page)).toHaveAccessibleName('1 more notice');
-          // Past the visible notice's 7s: it leaves, and the queued one, which
-          // has had no clock running, comes on screen with a whole window.
-          await pause(7_800);
-          await expect(more(page)).toHaveCount(0);
-          await expect(cards(page)).toHaveCount(1);
-          const first = cards(page).first();
-          await expect(first.getByRole('button', { name: 'Undo' })).toBeVisible();
-          await first.getByRole('button', { name: 'Undo' }).click();
-          await expect(page.getByRole('status').filter({ hasText: /undone|removed/i })).toHaveCount(1);
-          const admin = createClient(requireLocalOrigin(provider), serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
-          const { data } = await admin.from('todo_items').select('title').eq('family_id', account!.familyId);
-          expect((data ?? []).map((r) => r.title).sort()).toEqual(['Probe queued second']);
-        });
+          }
 
-        test('crossing lg: the queue opens into the desktop stack and closes back, with nothing lost or doubled', async ({ page }) => {
-          await threeRefusals(page);
-          await cards(page).first().hover();
-          await page.setViewportSize({ width: 1280, height: 800 });
-          // The desktop stack: the same three live elements, all on screen
-          // (none doubled, none queued).
-          await expect(cards(page)).toHaveCount(3);
-          await expect(more(page)).toHaveCount(0);
-          await expect(noticeAlerts(page)).toHaveCount(3);
-          await expect(page.locator('[data-queued]')).toHaveCount(0);
-          await page.setViewportSize({ width: 390, height: 844 });
-          await expect(cards(page)).toHaveCount(1);
-          await expect(more(page)).toHaveAccessibleName('2 more notices');
-          await expect(noticeAlerts(page)).toHaveCount(3);
+          test('three refusals queue: the newest on screen, each shown and dismissed in turn, none lost, each one live element from its push', async ({ page }) => {
+            await threeRefusals(page);
+            await expect(cards(page)).toHaveCount(1);
+            await expect(more(page)).toHaveAccessibleName('2 more notices');
+            await expect(more(page)).toHaveAttribute('aria-expanded', 'false');
+            // Announced once each, before any of the queued ones has been on
+            // screen: three live elements, two of them visually hidden.
+            await expect(alertsReading(page, COPY.duplicate)).toHaveCount(2);
+            await expect(alertsReading(page, COPY.nameRequired)).toHaveCount(1);
+            const seen: string[] = [];
+            for (const left of [2, 1, 0]) {
+              const card = cards(page).first();
+              seen.push((await card.locator('span').first().innerText()).trim());
+              const dismiss = card.getByRole('button', { name: 'Dismiss' });
+              expect(await hitAt(page, dismiss)).toBe('Dismiss');
+              await dismiss.click();
+              await expect(cards(page)).toHaveCount(left ? 1 : 0);
+              if (left > 1) await expect(more(page)).toHaveAccessibleName(`${left - 1} more notice${left - 1 === 1 ? '' : 's'}`);
+              else await expect(more(page)).toHaveCount(0);
+              // A notice coming on screen adds no live element: the count only falls.
+              await expect(noticeAlerts(page)).toHaveCount(left);
+            }
+            expect(seen).toEqual([COPY.duplicate, COPY.duplicate, COPY.nameRequired]);
+          });
+
+          test('"+2" by keyboard: it takes focus, Enter opens every notice, each Dismiss takes focus, Escape closes', async ({ page }) => {
+            await threeRefusals(page);
+            await more(page).focus();
+            await expect(more(page)).toBeFocused();
+            await page.keyboard.press('Enter');
+            await expect(more(page)).toHaveAttribute('aria-expanded', 'true');
+            await expect(cards(page)).toHaveCount(3);
+            for (let i = 0; i < 3; i += 1) {
+              await page.keyboard.press('Tab');
+              await expect(cards(page).nth(i).getByRole('button', { name: 'Dismiss' })).toBeFocused();
+              expect(await hitAt(page, cards(page).nth(i).getByRole('button', { name: 'Dismiss' }))).toBe('Dismiss');
+            }
+            await page.keyboard.press('Escape');
+            await expect(more(page)).toHaveAttribute('aria-expanded', 'false');
+            await expect(more(page)).toBeFocused();
+            await expect(cards(page)).toHaveCount(1);
+          });
+
+          test('a queued Undo is not timed out while it waits, and undoes its own capture once shown', async ({ page }) => {
+            // LIFETIME.action is 7s; the waits below outlast it on purpose.
+            test.setTimeout(90_000);
+            await signIn(page, '/dashboard/contacts');
+            const capture = async (text: string) => {
+              await page.getByRole('button', { name: 'Quick capture' }).click();
+              const dialog = page.getByRole('dialog', { name: 'Quick capture' });
+              await dialog.getByRole('textbox', { name: 'Task' }).fill(text);
+              await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+              await expect(dialog).toBeHidden();
+            };
+            await capture('Probe queued first');
+            await capture('Probe queued second');
+            await page.mouse.move(5, 5);
+            await expect(cards(page)).toHaveCount(1);
+            await expect(more(page)).toHaveAccessibleName('1 more notice');
+            // Past the visible notice's 7s: it leaves, and the queued one, which
+            // has had no clock running, comes on screen with a whole window.
+            await pause(7_800);
+            await expect(more(page)).toHaveCount(0);
+            await expect(cards(page)).toHaveCount(1);
+            const first = cards(page).first();
+            await expect(first.getByRole('button', { name: 'Undo' })).toBeVisible();
+            await first.getByRole('button', { name: 'Undo' }).click();
+            await expect(page.getByRole('status').filter({ hasText: /undone|removed/i })).toHaveCount(1);
+            const admin = createClient(requireLocalOrigin(provider), serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
+            const { data } = await admin.from('todo_items').select('title').eq('family_id', account!.familyId);
+            expect((data ?? []).map((r) => r.title).sort()).toEqual(['Probe queued second']);
+          });
+
+          test('a notice arriving while the one on screen holds focus: the focused one stays on screen and takes its own tap', async ({ page }) => {
+            const { dialog } = await openNewContact(page);
+            const name = dialog.getByRole('textbox', { name: 'Full name' });
+            await name.press('Enter');
+            await expect(alertsReading(page, COPY.nameRequired)).toHaveCount(1);
+            await name.fill('Robin Probe');
+            // The refusal is held until focus is on the notice already on screen.
+            let release!: () => void;
+            const gate = new Promise<void>((resolve) => { release = resolve; });
+            await page.route('**/rest/v1/family_contacts*', async (route) => {
+              if (route.request().method() !== 'POST') return route.continue();
+              await gate;
+              return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ code: '23505', message: 'duplicate key value violates unique constraint', details: null, hint: null }) });
+            });
+            await name.press('Enter');
+            const focused = page.locator('[data-toast]', { hasText: COPY.nameRequired }).getByRole('button', { name: 'Dismiss' });
+            await focused.focus();
+            await expect(focused).toBeFocused();
+            release();
+            await expect(alertsReading(page, COPY.duplicate)).toHaveCount(1);
+            // The new one is on screen, and the focused one stays there with it.
+            await expect(cards(page)).toHaveCount(2);
+            await expect(page.locator('[data-toast]', { hasText: COPY.nameRequired })).not.toHaveAttribute('data-queued');
+            await expect(focused).toBeFocused();
+            expect(await hitAt(page, focused)).toBe('Dismiss');
+            await expect(more(page)).toHaveCount(0);
+          });
+
+          test('crossing below lg with focus on an older notice: it stays on screen, focused, and takes its own tap', async ({ page }) => {
+            await page.setViewportSize({ width: 1280, height: 800 });
+            await threeRefusals(page);
+            await cards(page).last().hover();
+            await expect(cards(page)).toHaveCount(3);
+            const oldest = page.locator('[data-toast]', { hasText: COPY.nameRequired }).getByRole('button', { name: 'Dismiss' });
+            await oldest.focus();
+            await page.setViewportSize({ width: 390, height: 844 });
+            await expect(more(page)).toHaveAccessibleName('1 more notice');
+            await expect(cards(page)).toHaveCount(2);
+            await expect(page.locator('[data-toast]', { hasText: COPY.nameRequired })).not.toHaveAttribute('data-queued');
+            await expect(oldest).toBeFocused();
+            expect(await hitAt(page, oldest)).toBe('Dismiss');
+          });
+
+          test('crossing lg: the queue opens into the desktop stack and closes back, with nothing lost or doubled', async ({ page }) => {
+            await threeRefusals(page);
+            await cards(page).first().hover();
+            await page.setViewportSize({ width: 1280, height: 800 });
+            // The desktop stack: the same three live elements, all on screen
+            // (none doubled, none queued).
+            await expect(cards(page)).toHaveCount(3);
+            await expect(more(page)).toHaveCount(0);
+            await expect(noticeAlerts(page)).toHaveCount(3);
+            await expect(page.locator('[data-queued]')).toHaveCount(0);
+            await page.setViewportSize({ width: 390, height: 844 });
+            await expect(cards(page)).toHaveCount(1);
+            await expect(more(page)).toHaveAccessibleName('2 more notices');
+            await expect(noticeAlerts(page)).toHaveCount(3);
+          });
         });
       }
 
@@ -527,7 +583,7 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
       } as const;
       // The cards on screen (a queued notice below lg is data-queued and visually hidden).
       const TOASTS = '.pointer-events-none.fixed > [data-toast]:not([data-queued])';
-      /** Every visible control outside the stack a toast's box intersects, and what a pointer at each named button's centre lands on ("toast" when it is a toast, with the toast's own button if it is one). */
+      /** Every visible control outside the stack a notice surface's box (a card, or "+N") intersects, and what a pointer at each named button's centre lands on ("toast" when it is in the stack, with the stack's own button if it is one). */
       const cornerReport = (page: Page, names: { capture: string; ai: string }) => page.evaluate(async ({ selector, capture, ai }) => {
         // Where a long notice wraps, and so where its Dismiss falls, waits on
         // the web font.
@@ -559,7 +615,7 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
           return hit && stack?.contains(hit) ? (label ? `toast: ${label}` : 'toast') : label;
         };
         return { covered: [...covered].sort(), capture: pointerAt(capture), ai: pointerAt(ai) };
-      }, { selector: TOASTS, ...names });
+      }, { selector: SURFACES, ...names });
 
       /** Raises `state` from the contact dialog on /dashboard/contacts, holds the notices by hovering them, and closes the dialog. */
       async function raiseNotices(page: Page, state: CornerState, { keepDialog = false } = {}) {
@@ -656,7 +712,7 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
           if (hit && stack?.contains(hit)) intercepted.push(nameOf(el));
         }
         return { covered: covered.sort(), intercepted: intercepted.sort() };
-      }, TOASTS);
+      }, SURFACES);
 
       /** For the named page control: what a pointer at its centre lands on ("toast" inside the stack), and the largest box overlap with a notice, in px. */
       const underNotice = (page: Page, name: string) => page.evaluate(({ selector, name }) => {
@@ -673,7 +729,7 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
         }
         const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
         return { centre: hit && stack?.contains(hit) ? 'toast' : name, overlap, size: [Math.round(b.width), Math.round(b.height)] };
-      }, { selector: TOASTS, name });
+      }, { selector: SURFACES, name });
 
       /**
        * Who takes a tap at a corner button's centre: "toast" for any point
@@ -746,10 +802,11 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
        * dialog's own controls a notice's box covers, and those whose centre a
        * notice takes. The relationship chips stay clear of one long notice at
        * 360 (at a 5rem inset Sonstiges was taken and Freund covered). Three
-       * notices, queued, leave them clear too; the "+2" above the one card
-       * takes the phone field's centre that a short notice alone leaves at
-       * 360. Opened, three cards still take Friend and Other
-       * (DIALOG_OPEN_EXPANDED).
+       * notices, queued, leave them clear too. The "+2" above the one card
+       * is a surface too: at 360 it takes the phone field's centre that a
+       * short notice alone leaves, at 390 it covers the phone field's box
+       * but not its centre. Opened, three cards and "+2" still take Friend
+       * and Other at 360 (DIALOG_OPEN_EXPANDED).
        */
       const DIALOG_OPEN: Record<string, { covered: string[]; intercepted: string[] }> = {
         '360x780 short': { covered: ['Phone'], intercepted: [] },
@@ -757,22 +814,27 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
         '360x780 stacked': { covered: ['Phone'], intercepted: ['Phone'] },
         '390x844 short': { covered: ['Alternate phone'], intercepted: ['Alternate phone'] },
         '390x844 long': { covered: ['Alternative Telefonnummer', 'Telefon'], intercepted: ['Alternative Telefonnummer', 'Telefon'] },
-        '390x844 stacked': { covered: ['Alternate phone'], intercepted: ['Alternate phone'] },
+        '390x844 stacked': { covered: ['Alternate phone', 'Phone'], intercepted: ['Alternate phone'] },
       };
       /**
        * Below lg, three notices with the queue's "+2" opened: every card on
-       * screen again, which is the stacked state as it was before the queue
-       * (#778, 93c306f6/d3b3a51c). Opening it is the reader's choice; these
-       * rows are what that choice costs.
+       * screen again, as the stack was before the queue (#778,
+       * 93c306f6/d3b3a51c), and the "+N" above them, which those rows did not
+       * count. Opening it is the reader's choice; these rows are what that
+       * choice costs.
        */
       const CORNER_EXPANDED: Record<string, CornerRow> = {
-        '390x844 stacked': { covered: ['Change language'], capture: QC, ai: AI },
+        // "+N" above the three cards reaches the top of "Add First Contact"
+        // (UNDER_NOTICE_EXPANDED); the cards alone covered only the language bar.
+        '390x844 stacked': { covered: ['Add First Contact', 'Change language'], capture: QC, ai: AI },
         '360x780 stacked': { covered: ['Add First Contact', 'Change language'], capture: QC, ai: AI },
       };
-      /** `whole`: the control's whole box is under one notice (184x44 on #778; its width follows the font). */
-      const UNDER_NOTICE_EXPANDED: Record<string, { control: string; centre: string; whole: true }> = {
+      /** `overlap`: width x height in px (+-2), or 'whole' when the control's whole box is under one surface (184x44 on #778, 181x44 locally). */
+      const UNDER_NOTICE_EXPANDED: Record<string, { control: string; centre: string; overlap: [number, number] | 'whole' }> = {
         // The whole button is under the notices, and its centre with it.
-        '360x780 stacked': { control: 'Add First Contact', centre: 'toast', whole: true },
+        '360x780 stacked': { control: 'Add First Contact', centre: 'toast', overlap: 'whole' },
+        // The 42x32 "+N" crosses the top 21px of the button; its centre stays clear.
+        '390x844 stacked': { control: 'Add First Contact', centre: 'Add First Contact', overlap: [42, 21] },
       };
       const DIALOG_OPEN_EXPANDED: Record<string, { covered: string[]; intercepted: string[] }> = {
         '360x780 stacked': { covered: ['Friend', 'Other', 'Phone'], intercepted: ['Friend', 'Other', 'Phone'] },
@@ -795,6 +857,15 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
         '360x780 short': { covered: ['Change language', QC], capture: 'toast', ai: AI },
         '360x780 long': { covered: [DE.ai, DE.capture, 'Sprache ändern'], capture: 'toast', ai: 'toast' },
         '360x780 stacked': { covered: ['Add First Contact', AI, 'Change language', QC], capture: 'toast', ai: 'toast' },
+      };
+      /**
+       * The replaced placement with the queue's "+2" opened above the three
+       * cards. #778's rows counted the cards only; where "+N" adds a control,
+       * the row here says so (elsewhere BEFORE stands).
+       */
+      const BEFORE_OPENED: Record<string, CornerRow> = {
+        // "+N" above the cards also reaches "Add First Contact".
+        '390x844 stacked': { covered: ['Add First Contact', AI, 'Change language', QC], capture: 'toast', ai: 'toast' },
       };
       /** The inline style that puts the replaced placement back on the stack, in one page only. */
       const REPLACED_PLACEMENT = (w: number): Record<string, string> => (w >= 1024 ? { bottom: '1.5rem' } : { paddingRight: '1rem' });
@@ -919,13 +990,40 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
                 if (residual) {
                   const under = await underNotice(page, residual.control);
                   expect(under!.centre).toBe(residual.centre);
-                  expect(Math.abs(under!.overlap[0] - under!.size[0]), `overlap width ${under!.overlap[0]} of ${under!.size[0]}`).toBeLessThanOrEqual(2);
-                  expect(Math.abs(under!.overlap[1] - under!.size[1]), `overlap height ${under!.overlap[1]} of ${under!.size[1]}`).toBeLessThanOrEqual(2);
+                  const [w, h] = residual.overlap === 'whole' ? under!.size : residual.overlap;
+                  expect(Math.abs(under!.overlap[0] - w), `overlap width ${under!.overlap[0]} of ${under!.size[0]}`).toBeLessThanOrEqual(2);
+                  expect(Math.abs(under!.overlap[1] - h), `overlap height ${under!.overlap[1]} of ${under!.size[1]}`).toBeLessThanOrEqual(2);
                 }
                 for (let i = 0; i < 3; i += 1) {
                   const dismiss = notices.nth(i).getByRole('button', { name: 'Dismiss' });
                   expect(await hitAt(page, dismiss)).toBe('Dismiss');
                 }
+              });
+            }
+
+            if (w < 1024 && state === 'stacked') {
+              test(`${w}x${h}, stacked, contact dialog open, "+2" opened: the dialog's controls under every notice and "+N", each Dismiss takes its tap`, async ({ page }) => {
+                await page.setViewportSize({ width: w, height: h });
+                await raiseNotices(page, state, { keepDialog: true });
+                const notices = await expandQueue(page, 3);
+                expect(await dialogReport(page)).toEqual(DIALOG_OPEN_EXPANDED[`${w}x${h} ${state}`]);
+                for (let i = 0; i < 3; i += 1) {
+                  expect(await hitAt(page, notices.nth(i).getByRole('button', { name: 'Dismiss' }))).toBe('Dismiss');
+                }
+              });
+
+              test(`${w}x${h}, stacked, contact dialog open: Escape closes the "+2" list and leaves the dialog open; the next Escape is the dialog's`, async ({ page }) => {
+                await page.setViewportSize({ width: w, height: h });
+                await raiseNotices(page, state, { keepDialog: true });
+                await expandQueue(page, 3);
+                const dialog = page.getByRole('dialog', { name: 'New Contact' });
+                await expect(moreNotices(page)).toBeFocused();
+                await page.keyboard.press('Escape');
+                await expect(moreNotices(page)).toHaveAttribute('aria-expanded', 'false');
+                await expect(moreNotices(page)).toBeFocused();
+                await expect(dialog).toBeVisible();
+                await page.keyboard.press('Escape');
+                await expect(dialog).toBeHidden();
               });
             }
 
@@ -952,7 +1050,8 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
               const blocked = await cornerReport(page, names);
               expect(blocked.covered).toContain(names.capture);
               expect(tapped(blocked.capture), 'capture: a notice takes the tap').toBe('toast');
-              expect(matchesCorner(blocked, BEFORE[`${w}x${h} ${state}`])).toBe(true);
+              const beforeRow = (opened && BEFORE_OPENED[`${w}x${h} ${state}`]) || BEFORE[`${w}x${h} ${state}`];
+              expect(matchesCorner(blocked, beforeRow)).toBe(true);
               expect(matchesCorner(blocked, clearRow)).toBe(false);
               await expect(notices).toHaveCount(count);
             });
