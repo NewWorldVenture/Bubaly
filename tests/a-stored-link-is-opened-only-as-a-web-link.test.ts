@@ -98,11 +98,11 @@ function resolve(id: ts.Identifier): ts.Node | null {
 
 /** True when `id` is bound by `import { <name> } from '<module>'` for one of the shared guards. */
 function isGuard(id: ts.Identifier): boolean {
-  const module = GUARDS[id.text];
-  const binding = module ? resolve(id) : null;
+  const source = GUARDS[id.text];
+  const binding = source ? resolve(id) : null;
   if (!binding || !ts.isImportSpecifier(binding) || (binding.propertyName ?? binding.name).text !== id.text) return false;
   const decl = binding.parent.parent.parent;
-  return ts.isStringLiteral(decl.moduleSpecifier) && decl.moduleSpecifier.text === module;
+  return ts.isStringLiteral(decl.moduleSpecifier) && decl.moduleSpecifier.text === source;
 }
 
 /**
