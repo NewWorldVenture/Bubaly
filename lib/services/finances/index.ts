@@ -761,20 +761,24 @@ export async function updateBudget(
   if (winnerError) {
     console.error('[service:finances] budget duplicate check failed', winnerError);
   } else if (winner && winner.id !== data.id) {
-    // Read back: a delete that matched nothing leaves our duplicate in place,
-    // and the answer below is then the budget this call DID create, not the
-    // one it failed to merge into.
+    // The amount this call was asked for lands on the WINNER whatever becomes
+    // of our duplicate: readers select the oldest row, so answering with ours
+    // (`created: true`) would report success while the family's budget still
+    // read the old amount. The delete is read back so the log can say whether
+    // the duplicate is gone or may remain; its outcome never decides the answer.
+    // Only the winner update failing fails the call, and it says so.
     const { data: dropped, error: dropError } = await scope.db
       .from('budgets')
       .delete()
       .eq('id', data.id)
       .eq('family_id', scope.familyId)
       .select('id');
-    if (dropError || wroteNoRows(dropped)) {
-      console.error('[service:finances] duplicate budget cleanup failed', dropError ?? { budgetId: data.id, error: 'no rows deleted' });
-    } else {
-      return applyTo(winner);
+    if (dropError) {
+      console.error('[service:finances] duplicate budget cleanup failed: the duplicate may remain', { budgetId: data.id, winnerId: winner.id, error: dropError });
+    } else if (wroteNoRows(dropped)) {
+      console.error('[service:finances] duplicate budget cleanup matched no row: the duplicate was already gone', { budgetId: data.id, winnerId: winner.id });
     }
+    return applyTo(winner);
   }
 
   await recordActivitySafely(scope, {
