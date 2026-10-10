@@ -10,6 +10,8 @@
 //   * Nobody's history is kept forever: location_events older than the window
 //     are deleted, and any coordinates still on newer ones (written before
 //     events stopped storing them) or on old check-ins are cleared.
+//     Its cron route (app/api/cron/location-retention) is unscheduled pending the
+//     owner's retention decision; until then the sweep runs only by hand.
 //
 // If a database-level guarantee is wanted, the same member rule belongs in a
 // trigger on family_members.is_active going false — reported, not written here.
@@ -58,7 +60,7 @@ export type LocationRetentionResult = {
   ok: boolean; purgedEvents: number; clearedEvents: number; clearedCheckIns: number; failures: Failure[];
 };
 
-/** The scheduled sweep: drop old events, clear coordinates nothing needs. */
+/** The retention sweep: drop old events, clear coordinates nothing needs. */
 export async function enforceLocationRetention(service: SupabaseClient, now = new Date()): Promise<LocationRetentionResult> {
   const cutoff = new Date(now.getTime() - LOCATION_EVENT_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
   const purged = await service.from('location_events').delete().lt('occurred_at', cutoff).select('id');

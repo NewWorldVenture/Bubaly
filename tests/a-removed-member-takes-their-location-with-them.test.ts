@@ -173,10 +173,15 @@ describe('location history retention', () => {
     expect(await enforceLocationRetention(db as unknown as SupabaseClient, now)).toMatchObject({ ok: true, purgedEvents: 0, clearedEvents: 0, clearedCheckIns: 0 });
   });
 
-  it('is scheduled, in both places a schedule lives', () => {
+  it('is held unscheduled pending the owner\'s retention decision, in both places a schedule lives', () => {
+    // The sweep deletes location_events and clears coordinates for good. A
+    // destructive retention sweep must not run from the deployable candidate
+    // until the owner sets a retention policy, so neither scheduler carries it.
+    // The route stays, gated by CRON_SECRET, for a hand run once that policy
+    // exists; tests/cron-schedule-registration.test.ts holds it by name.
     const vercel = JSON.parse(readFileSync('vercel.json', 'utf8')) as { crons: { path: string; schedule: string }[] };
-    expect(vercel.crons.some((cron) => cron.path === '/api/cron/location-retention')).toBe(true);
-    expect(readFileSync('scripts/cron-dispatch.mjs', 'utf8')).toMatch(/'\/api\/cron\/location-retention':\s*'[^']+'/);
+    expect(vercel.crons.some((cron) => cron.path === '/api/cron/location-retention')).toBe(false);
+    expect(readFileSync('scripts/cron-dispatch.mjs', 'utf8')).not.toMatch(/'\/api\/cron\/location-retention':\s*'[^']+'/);
     expect(readFileSync('app/api/cron/location-retention/route.ts', 'utf8')).toContain('enforceLocationRetention(createServiceClient())');
   });
 });
