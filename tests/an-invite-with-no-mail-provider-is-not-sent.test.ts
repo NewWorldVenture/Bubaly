@@ -11,13 +11,13 @@ vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string)
 vi.mock('@/lib/supabase/auth', () => ({
   requireUserContext: async () => ({
     user: { id: 'u' },
-    active: { familyId: 'f', member: { display_name: 'Casey' }, family: { name: 'Rivera family' } },
+    active: { familyId: 'f', role: 'parent', member: { display_name: 'Casey' }, family: { name: 'Rivera family' } },
   }),
 }));
 vi.mock('@/lib/supabase/server', () => ({
   createServer: async () => ({ from: () => {
     const b = { select: () => b, eq: () => b,
-      maybeSingle: async () => ({ data: { id: 'i', email: 'grandma@example.test', token: 't', role: 'adult', status: 'pending' }, error: null }) };
+      maybeSingle: async () => ({ data: { id: 'i', email: 'grandma@example.test', token: 't', role: 'adult', status: 'pending', expires_at: new Date(Date.now() + 86_400_000).toISOString() }, error: null }) };
     return b;
   } }),
   // The family-wide invite limit is evaluated on the service client (API-SWEEP-08);

@@ -8,6 +8,7 @@ import * as React from 'react';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { describeReadError } from '@/lib/supabase/settle';
+import { isManager } from '@/lib/constants/roles';
 
 const MAX_EMAIL_REQUEST_BYTES = 4_096;
 
@@ -15,6 +16,14 @@ export async function POST(req: NextRequest) {
   const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
+    // Only someone who may create an invite may have Bubaly mail one: the same
+    // parent/adult rule as `invites_insert` (can_manage_family). Every member
+    // can READ the family's invites, so without this a child or guest could mail
+    // each of them under their own name, and spend the family's invite budget
+    // below until a parent's real invite was refused.
+    if (!isManager(ctx.active.role)) {
+      return NextResponse.json({ error: t('actions.onlyAParentGuardianCan16') }, { status: 403 });
+    }
     const body = await readBoundedRequestJson(req, MAX_EMAIL_REQUEST_BYTES);
     if (!body.ok) return NextResponse.json({ error: body.reason === 'too_large' ? 'Request body too large.' : 'Invalid request body.' }, { status: body.reason === 'too_large' ? 413 : 400 });
     const { inviteId } = (body.value && typeof body.value === 'object' ? body.value : {}) as { inviteId?: string };
@@ -39,6 +48,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: t('invite.inviteDataIsTemporarilyUnavailable') }, { status: 503 });
     }
     if (!invite) return NextResponse.json({ error: t('invite.inviteNotFound') }, { status: 404 });
+    // A revoked, accepted or expired invite was mailed like a live one and
+    // reported sent; its link can only fail. Refused before the budget is spent.
+    if (invite.status !== 'pending' || !(Date.parse(invite.expires_at) > Date.now())) {
+      return NextResponse.json({ error: t('actions.inviteIsNoLongerPending') }, { status: 409 });
+    }
 
     // The recipient of this mail is a free-text address the inviter chose —
     // components/family/invite-form.tsx inserts the row straight from the
