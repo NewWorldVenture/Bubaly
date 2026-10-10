@@ -13,11 +13,14 @@
 --    assumes. Rows with no document_id (a typed passport number, a file URL)
 --    are not constrained: a unique index treats NULLs as distinct.
 --
---    Pairs already duplicated are collapsed to their earliest row first, so the
---    index can be built on a populated database. Nothing references a
---    vacation_documents row by id except the row itself (0387 checks only that
---    the linked document is readable), so dropping a later duplicate loses no
---    data the earlier row does not carry.
+--    The index is built only over a table in which no pair is already linked
+--    twice. An earlier draft collapsed duplicated pairs to their earliest row
+--    first; at the coordinator's request (2026-10-10) that dedupe is replaced
+--    by a refusal: the preflight vacation_documents_duplicates_refuse() raises
+--    23505 naming the count and a sample of the duplicated pairs, and the
+--    migration stops there having deleted nothing. The owner dedupes by hand
+--    and re-runs. docs/audit/a-trip-links-a-document-once-check.sql proves the
+--    refusal leaves both rows in place and that the clean path builds the index.
 --
 -- 2. paperwork_items (0169) is the household's paperwork queue: forms, renewals,
 --    fees. /family/permissions shows it to a guest as read-only, exactly like
@@ -26,8 +29,9 @@
 --    BEFORE INSERT, UPDATE or DELETE trigger, the same 42501, the same
 --    service-role exemption, the same family_id column check.
 --
--- Idempotent: the dedupe deletes nothing on a second run, the index is
--- IF NOT EXISTS, and the trigger is dropped if it exists before it is created.
+-- Idempotent: the preflight deletes nothing and passes over a table the index
+-- already keeps unique, the index is IF NOT EXISTS, and the trigger is dropped
+-- if it exists before it is created.
 
 -- ── 1. a trip links a document once ─────────────────────────────────────────
 do $$
@@ -38,13 +42,52 @@ begin
 end
 $$;
 
--- Keep the earliest link of each (trip, document) pair; later copies go.
-delete from public.vacation_documents later
- using public.vacation_documents earlier
- where later.vacation_id = earlier.vacation_id
-   and later.document_id = earlier.document_id
-   and later.document_id is not null
-   and (earlier.created_at, earlier.id) < (later.created_at, later.id);
+-- Preflight, fail-closed: a pair linked more than once is reported, with the
+-- count and a sample of the pairs, and the migration stops here having changed
+-- nothing. The owner dedupes by hand and re-runs. A function rather than an
+-- inline block so docs/audit/a-trip-links-a-document-once-check.sql can run
+-- exactly this check against duplicates it seeds.
+create or replace function public.vacation_documents_duplicates_refuse()
+returns void
+language plpgsql
+set search_path = pg_catalog, public, pg_temp
+as $fn$
+declare
+  v_pairs  bigint;
+  v_extra  bigint;
+  v_sample text;
+begin
+  select count(*),
+         coalesce(sum(n) - count(*), 0),
+         string_agg(format('(vacation %s, document %s) x%s', vacation_id, document_id, n), ', '
+                    order by n desc, vacation_id, document_id) filter (where rn <= 5)
+    into v_pairs, v_extra, v_sample
+    from (select vacation_id, document_id, count(*) as n,
+                 row_number() over (order by count(*) desc, vacation_id, document_id) as rn
+            from public.vacation_documents
+           where document_id is not null
+           group by vacation_id, document_id
+          having count(*) > 1) d;
+  if v_pairs > 0 then
+    raise exception using
+      errcode = '23505',
+      message = format('0484: %s (vacation_id, document_id) pair(s) are linked more than once (%s surplus row(s)); the unique index was not built and no row was deleted. Dedupe by hand, then re-run. Sample: %s',
+                       v_pairs, v_extra, v_sample),
+      hint = 'select vacation_id, document_id, count(*) from public.vacation_documents where document_id is not null group by 1, 2 having count(*) > 1';
+  end if;
+end
+$fn$;
+
+comment on function public.vacation_documents_duplicates_refuse() is
+  '0484: raises 23505, naming the count and a sample of the pairs, while any (vacation_id, document_id) is linked more than once; deletes nothing. Run before vacation_documents_vacation_document_key is built.';
+
+revoke all on function public.vacation_documents_duplicates_refuse() from public, anon, authenticated;
+
+do $$
+begin
+  perform public.vacation_documents_duplicates_refuse();
+end
+$$;
 
 create unique index if not exists vacation_documents_vacation_document_key
   on public.vacation_documents (vacation_id, document_id);
@@ -91,6 +134,9 @@ begin
      and i.indexprs is null;
   if v_keys is distinct from 'vacation_id,document_id' then
     raise exception '0484: vacation_documents has no plain unique index on (vacation_id, document_id); found %', coalesce(v_keys, 'none');
+  end if;
+  if to_regprocedure('public.vacation_documents_duplicates_refuse()') is null then
+    raise exception '0484: vacation_documents_duplicates_refuse() (the preflight) is missing';
   end if;
 
   if to_regclass('public.paperwork_items') is not null and not exists (

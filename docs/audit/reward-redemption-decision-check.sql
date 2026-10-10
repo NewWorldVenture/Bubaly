@@ -434,10 +434,9 @@ begin
        ('trg_reward_redemption_cost_guard',       'public.reward_redemption_cost_guard()'::regprocedure),
        ('trg_reward_redemption_decision_guard',   'public.reward_redemption_decision_guard()'::regprocedure),
        ('trg_reward_redemption_zz_balance_guard', 'public.reward_redemption_balance_guard()'::regprocedure),
-       ('trg_reward_redemption_request_shape_guard', 'public.reward_redemption_request_shape_guard()'::regprocedure),
        ('trg_set_updated_at',                     'public.set_updated_at()'::regprocedure));
   if n <> 0 or (select count(*) from pg_trigger t
-                 where t.tgrelid = 'public.reward_redemptions'::regclass and not t.tgisinternal) <> 5 then
+                 where t.tgrelid = 'public.reward_redemptions'::regclass and not t.tgisinternal) <> 4 then
     stale := stale || format('public.reward_redemptions carries a trigger the header does not name (%s)',
       (select string_agg(t.tgname || ' -> ' || t.tgfoid::regprocedure::text, ', ' order by t.tgname)
          from pg_trigger t

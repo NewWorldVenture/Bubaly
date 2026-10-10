@@ -3,10 +3,14 @@
 -- Probes for 0482_who_may_make_unmake_and_invite_a_parent: each forbidden write
 -- the family-membership audit found open (an adult making or unmaking a parent,
 -- moving a member between families, issuing or re-wording a parent invite,
--- forging an invite's terms, resurrecting a revoked invite, accepting an invite
--- whose inviter is gone, a removed child-login founding a family, a family losing
--- its last parent) is REFUSED by 0482's own guards, and every write the app
--- needs still lands with the state it expects.
+-- forging an invite's terms, resurrecting a revoked invite, a removed child-login
+-- founding a family, a family losing its last parent) is REFUSED by 0482's own
+-- guards, and every write the app needs still lands with the state it expects.
+--
+-- accept_invite is not probed here: 0482 leaves 0136's function as it is, since
+-- a returning member's role is the held 0495's to fix and its negative control
+-- (.github/workflows/invite-rejoin-role-runtime.yml) needs the released schema
+-- to still show that defect.
 --
 -- Runs as a superuser against a THROWAWAY database replayed from
 -- supabase/migrations (docs/audit/pg-bootstrap.sh). Everything happens in one
@@ -77,62 +81,60 @@ $$;
 
 -- ── fixtures (as postgres, so every guard is bypassed) ───────────────────────
 insert into auth.users (id, email) values
-  ('a0000000-0000-4000-8000-000000000001', 'p1@probe.test'),
-  ('a0000000-0000-4000-8000-000000000002', 'a1@probe.test'),
-  ('a0000000-0000-4000-8000-000000000003', 'g@probe.test'),
-  ('a0000000-0000-4000-8000-000000000004', 'a2@probe.test'),
-  ('a0000000-0000-4000-8000-000000000005', 'new@probe.test'),
-  ('a0000000-0000-4000-8000-000000000006', 'child.kidd@kids.bubaly.app'),
-  ('a0000000-0000-4000-8000-000000000007', 'outsider@probe.test'),
-  ('a0000000-0000-4000-8000-000000000008', 'p3@probe.test'),
-  ('a0000000-0000-4000-8000-000000000009', 'a3@probe.test'),
-  ('a0000000-0000-4000-8000-00000000000a', 'p4@probe.test'),
-  ('a0000000-0000-4000-8000-00000000000b', 'p5@probe.test'),
-  ('a0000000-0000-4000-8000-00000000000c', 't1@probe.test')
+  ('0482000a-0000-4000-8000-000000000001', 'p1@probe.test'),
+  ('0482000a-0000-4000-8000-000000000002', 'a1@probe.test'),
+  ('0482000a-0000-4000-8000-000000000003', 'g@probe.test'),
+  ('0482000a-0000-4000-8000-000000000004', 'a2@probe.test'),
+  ('0482000a-0000-4000-8000-000000000005', 'new@probe.test'),
+  ('0482000a-0000-4000-8000-000000000006', 'child.kidd@kids.bubaly.app'),
+  ('0482000a-0000-4000-8000-000000000007', 'outsider@probe.test'),
+  ('0482000a-0000-4000-8000-000000000008', 'p3@probe.test'),
+  ('0482000a-0000-4000-8000-000000000009', 'a3@probe.test'),
+  ('0482000a-0000-4000-8000-00000000000a', 'p4@probe.test'),
+  ('0482000a-0000-4000-8000-00000000000b', 'p5@probe.test'),
+  ('0482000a-0000-4000-8000-00000000000c', 't1@probe.test')
 on conflict do nothing;
 
 insert into public.families (id, name) values
-  ('f0000000-0000-4000-8000-00000000000a', 'Probe A'),
-  ('f0000000-0000-4000-8000-00000000000b', 'Probe B'),
-  ('f0000000-0000-4000-8000-00000000000c', 'Probe C'),
-  ('f0000000-0000-4000-8000-00000000000d', 'Probe D');
+  ('0482000f-0000-4000-8000-00000000000a', 'Probe A'),
+  ('0482000f-0000-4000-8000-00000000000b', 'Probe B'),
+  ('0482000f-0000-4000-8000-00000000000c', 'Probe C'),
+  ('0482000f-0000-4000-8000-00000000000d', 'Probe D');
 
 insert into public.family_members (id, family_id, user_id, role, display_name, is_active) values
   -- family A: parent P1, adult A1, child C1 (no login), removed adult G,
-  -- removed adult A2 (sent an invite before removal), removed child K (has a
-  -- child login), teen T1 with a calendar sync
-  ('b0000000-0000-4000-8000-0000000000a1', 'f0000000-0000-4000-8000-00000000000a', 'a0000000-0000-4000-8000-000000000001', 'parent', 'P1', true),
-  ('b0000000-0000-4000-8000-0000000000a2', 'f0000000-0000-4000-8000-00000000000a', 'a0000000-0000-4000-8000-000000000002', 'adult',  'A1', true),
-  ('b0000000-0000-4000-8000-0000000000a3', 'f0000000-0000-4000-8000-00000000000a', null,                                   'child',  'C1', true),
-  ('b0000000-0000-4000-8000-0000000000a4', 'f0000000-0000-4000-8000-00000000000a', 'a0000000-0000-4000-8000-000000000003', 'adult',  'G (removed)', false),
-  ('b0000000-0000-4000-8000-0000000000a5', 'f0000000-0000-4000-8000-00000000000a', 'a0000000-0000-4000-8000-000000000004', 'adult',  'A2 (removed)', false),
-  ('b0000000-0000-4000-8000-0000000000a6', 'f0000000-0000-4000-8000-00000000000a', 'a0000000-0000-4000-8000-000000000006', 'child',  'K (removed)', false),
-  ('b0000000-0000-4000-8000-0000000000a7', 'f0000000-0000-4000-8000-00000000000a', 'a0000000-0000-4000-8000-00000000000c', 'teen',   'T1', true),
+  -- removed adult A2, removed child K (has a child login), teen T1 with a
+  -- calendar sync
+  ('0482000b-0000-4000-8000-0000000000a1', '0482000f-0000-4000-8000-00000000000a', '0482000a-0000-4000-8000-000000000001', 'parent', 'P1', true),
+  ('0482000b-0000-4000-8000-0000000000a2', '0482000f-0000-4000-8000-00000000000a', '0482000a-0000-4000-8000-000000000002', 'adult',  'A1', true),
+  ('0482000b-0000-4000-8000-0000000000a3', '0482000f-0000-4000-8000-00000000000a', null,                                   'child',  'C1', true),
+  ('0482000b-0000-4000-8000-0000000000a4', '0482000f-0000-4000-8000-00000000000a', '0482000a-0000-4000-8000-000000000003', 'adult',  'G (removed)', false),
+  ('0482000b-0000-4000-8000-0000000000a5', '0482000f-0000-4000-8000-00000000000a', '0482000a-0000-4000-8000-000000000004', 'adult',  'A2 (removed)', false),
+  ('0482000b-0000-4000-8000-0000000000a6', '0482000f-0000-4000-8000-00000000000a', '0482000a-0000-4000-8000-000000000006', 'child',  'K (removed)', false),
+  ('0482000b-0000-4000-8000-0000000000a7', '0482000f-0000-4000-8000-00000000000a', '0482000a-0000-4000-8000-00000000000c', 'teen',   'T1', true),
   -- family B: A1 is its parent (so A1 manages both A and B)
-  ('b0000000-0000-4000-8000-0000000000b1', 'f0000000-0000-4000-8000-00000000000b', 'a0000000-0000-4000-8000-000000000002', 'parent', 'A1 in B', true),
+  ('0482000b-0000-4000-8000-0000000000b1', '0482000f-0000-4000-8000-00000000000b', '0482000a-0000-4000-8000-000000000002', 'parent', 'A1 in B', true),
   -- family C: sole parent P3, adult A3
-  ('b0000000-0000-4000-8000-0000000000c1', 'f0000000-0000-4000-8000-00000000000c', 'a0000000-0000-4000-8000-000000000008', 'parent', 'P3', true),
-  ('b0000000-0000-4000-8000-0000000000c2', 'f0000000-0000-4000-8000-00000000000c', 'a0000000-0000-4000-8000-000000000009', 'adult',  'A3', true),
+  ('0482000b-0000-4000-8000-0000000000c1', '0482000f-0000-4000-8000-00000000000c', '0482000a-0000-4000-8000-000000000008', 'parent', 'P3', true),
+  ('0482000b-0000-4000-8000-0000000000c2', '0482000f-0000-4000-8000-00000000000c', '0482000a-0000-4000-8000-000000000009', 'adult',  'A3', true),
   -- family D: two parents
-  ('b0000000-0000-4000-8000-0000000000d1', 'f0000000-0000-4000-8000-00000000000d', 'a0000000-0000-4000-8000-00000000000a', 'parent', 'P4', true),
-  ('b0000000-0000-4000-8000-0000000000d2', 'f0000000-0000-4000-8000-00000000000d', 'a0000000-0000-4000-8000-00000000000b', 'parent', 'P5', true);
+  ('0482000b-0000-4000-8000-0000000000d1', '0482000f-0000-4000-8000-00000000000d', '0482000a-0000-4000-8000-00000000000a', 'parent', 'P4', true),
+  ('0482000b-0000-4000-8000-0000000000d2', '0482000f-0000-4000-8000-00000000000d', '0482000a-0000-4000-8000-00000000000b', 'parent', 'P5', true);
 
 insert into public.child_logins (family_id, member_id, user_id, username) values
-  ('f0000000-0000-4000-8000-00000000000a', 'b0000000-0000-4000-8000-0000000000a6', 'a0000000-0000-4000-8000-000000000006', 'kidd');
+  ('0482000f-0000-4000-8000-00000000000a', '0482000b-0000-4000-8000-0000000000a6', '0482000a-0000-4000-8000-000000000006', 'kidd');
 
 insert into public.invites (id, family_id, email, role, token, status, invited_by) values
-  ('c0000000-0000-4000-8000-000000000001', 'f0000000-0000-4000-8000-00000000000a', 'g@probe.test',   'guest', 'tok-guest-reinvite', 'pending', 'a0000000-0000-4000-8000-000000000001'),
-  ('c0000000-0000-4000-8000-000000000002', 'f0000000-0000-4000-8000-00000000000a', 'new@probe.test', 'adult', 'tok-from-removed',   'pending', 'a0000000-0000-4000-8000-000000000004'),
-  ('c0000000-0000-4000-8000-000000000003', 'f0000000-0000-4000-8000-00000000000a', 'a1@probe.test',  'guest', 'tok-active-member',  'pending', 'a0000000-0000-4000-8000-000000000001'),
-  ('c0000000-0000-4000-8000-000000000004', 'f0000000-0000-4000-8000-00000000000a', 'x@probe.test',   'adult', 'tok-revoked',        'revoked', 'a0000000-0000-4000-8000-000000000001'),
-  ('c0000000-0000-4000-8000-000000000005', 'f0000000-0000-4000-8000-00000000000a', 'y@probe.test',   'adult', 'tok-pending',        'pending', 'a0000000-0000-4000-8000-000000000001');
+  ('0482000c-0000-4000-8000-000000000001', '0482000f-0000-4000-8000-00000000000a', 'g@probe.test',   'guest', 'tok-guest-reinvite', 'pending', '0482000a-0000-4000-8000-000000000001'),
+  ('0482000c-0000-4000-8000-000000000004', '0482000f-0000-4000-8000-00000000000a', 'x@probe.test',   'adult', 'tok-revoked',        'revoked', '0482000a-0000-4000-8000-000000000001'),
+  ('0482000c-0000-4000-8000-000000000005', '0482000f-0000-4000-8000-00000000000a', 'y@probe.test',   'adult', 'tok-pending',        'pending', '0482000a-0000-4000-8000-000000000001');
 
 insert into public.sync_accounts (id, user_id, family_id, provider, external_id, sync_status) values
-  ('d0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-00000000000c', 'f0000000-0000-4000-8000-00000000000a', 'google', 't1@gmail', 'synced');
+  ('0482000d-0000-4000-8000-000000000001', '0482000a-0000-4000-8000-00000000000c', '0482000f-0000-4000-8000-00000000000a', 'google', 't1@gmail', 'synced');
 insert into public.sync_tokens (account_id, user_id, family_id, provider, access_token_enc, refresh_token_enc) values
-  ('d0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-00000000000c', 'f0000000-0000-4000-8000-00000000000a', 'google', 'enc-access', 'enc-refresh');
+  ('0482000d-0000-4000-8000-000000000001', '0482000a-0000-4000-8000-00000000000c', '0482000f-0000-4000-8000-00000000000a', 'google', 'enc-access', 'enc-refresh');
 insert into public.sync_connections (account_id, user_id, family_id, provider, sync_status) values
-  ('d0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-00000000000c', 'f0000000-0000-4000-8000-00000000000a', 'google', 'synced');
+  ('0482000d-0000-4000-8000-000000000001', '0482000a-0000-4000-8000-00000000000c', '0482000f-0000-4000-8000-00000000000a', 'google', 'synced');
 
 set constraints all immediate;
 set constraints all deferred;
@@ -140,184 +142,168 @@ set constraints all deferred;
 \o /dev/null
 -- ── control: RLS is live (an outsider's write matches no row) ───────────────
 select pg_temp.probe('X01 control: outsider promotes a member of family A', 'control', 'NO-OP',
-  pg_temp.who('a0000000-0000-4000-8000-000000000007'),
-  $q$update public.family_members set role = 'parent' where id = 'b0000000-0000-4000-8000-0000000000a2'$q$);
+  pg_temp.who('0482000a-0000-4000-8000-000000000007'),
+  $q$update public.family_members set role = 'parent' where id = '0482000b-0000-4000-8000-0000000000a2'$q$);
 
 -- ── A. family_members ────────────────────────────────────────────────────────
 select pg_temp.probe('A01 adult self-promotes to parent', 'forbidden', 'REFUSED',
-  pg_temp.who('a0000000-0000-4000-8000-000000000002'),
-  $q$update public.family_members set role = 'parent' where id = 'b0000000-0000-4000-8000-0000000000a2'$q$,
-  $q$select role::text from public.family_members where id = 'b0000000-0000-4000-8000-0000000000a2'$q$);
+  pg_temp.who('0482000a-0000-4000-8000-000000000002'),
+  $q$update public.family_members set role = 'parent' where id = '0482000b-0000-4000-8000-0000000000a2'$q$,
+  $q$select role::text from public.family_members where id = '0482000b-0000-4000-8000-0000000000a2'$q$);
 
 select pg_temp.probe('A02 parent promotes an adult to parent', 'allowed', 'ALLOWED',
-  pg_temp.who('a0000000-0000-4000-8000-000000000001'),
-  $q$update public.family_members set role = 'parent' where id = 'b0000000-0000-4000-8000-0000000000a2'$q$,
-  $q$select role::text from public.family_members where id = 'b0000000-0000-4000-8000-0000000000a2'$q$);
+  pg_temp.who('0482000a-0000-4000-8000-000000000001'),
+  $q$update public.family_members set role = 'parent' where id = '0482000b-0000-4000-8000-0000000000a2'$q$,
+  $q$select role::text from public.family_members where id = '0482000b-0000-4000-8000-0000000000a2'$q$);
 
 select pg_temp.probe('A03 adult demotes a parent', 'forbidden', 'REFUSED',
-  pg_temp.who('a0000000-0000-4000-8000-000000000002'),
-  $q$update public.family_members set role = 'adult' where id = 'b0000000-0000-4000-8000-0000000000a1'$q$,
-  $q$select role::text from public.family_members where id = 'b0000000-0000-4000-8000-0000000000a1'$q$);
+  pg_temp.who('0482000a-0000-4000-8000-000000000002'),
+  $q$update public.family_members set role = 'adult' where id = '0482000b-0000-4000-8000-0000000000a1'$q$,
+  $q$select role::text from public.family_members where id = '0482000b-0000-4000-8000-0000000000a1'$q$);
 
 select pg_temp.probe('A04 adult deactivates a parent', 'forbidden', 'REFUSED',
-  pg_temp.who('a0000000-0000-4000-8000-000000000002'),
-  $q$update public.family_members set is_active = false where id = 'b0000000-0000-4000-8000-0000000000a1'$q$,
-  $q$select is_active::text from public.family_members where id = 'b0000000-0000-4000-8000-0000000000a1'$q$);
+  pg_temp.who('0482000a-0000-4000-8000-000000000002'),
+  $q$update public.family_members set is_active = false where id = '0482000b-0000-4000-8000-0000000000a1'$q$,
+  $q$select is_active::text from public.family_members where id = '0482000b-0000-4000-8000-0000000000a1'$q$);
 
 select pg_temp.probe('A05 adult deletes a parent', 'forbidden', 'REFUSED',
-  pg_temp.who('a0000000-0000-4000-8000-000000000002'),
-  $q$delete from public.family_members where id = 'b0000000-0000-4000-8000-0000000000a1'$q$,
-  $q$select count(*)::text || ' parent rows left' from public.family_members where id = 'b0000000-0000-4000-8000-0000000000a1'$q$);
+  pg_temp.who('0482000a-0000-4000-8000-000000000002'),
+  $q$delete from public.family_members where id = '0482000b-0000-4000-8000-0000000000a1'$q$,
+  $q$select count(*)::text || ' parent rows left' from public.family_members where id = '0482000b-0000-4000-8000-0000000000a1'$q$);
 
 select pg_temp.probe('A06 adult renames a parent (not a role change)', 'allowed', 'ALLOWED',
-  pg_temp.who('a0000000-0000-4000-8000-000000000002'),
-  $q$update public.family_members set display_name = 'P1 renamed' where id = 'b0000000-0000-4000-8000-0000000000a1'$q$,
-  $q$select display_name from public.family_members where id = 'b0000000-0000-4000-8000-0000000000a1'$q$);
+  pg_temp.who('0482000a-0000-4000-8000-000000000002'),
+  $q$update public.family_members set display_name = 'P1 renamed' where id = '0482000b-0000-4000-8000-0000000000a1'$q$,
+  $q$select display_name from public.family_members where id = '0482000b-0000-4000-8000-0000000000a1'$q$);
 
 select pg_temp.probe('A07 manager moves a member to another family (family_id)', 'forbidden', 'REFUSED',
-  pg_temp.who('a0000000-0000-4000-8000-000000000002'),
-  $q$update public.family_members set family_id = 'f0000000-0000-4000-8000-00000000000b' where id = 'b0000000-0000-4000-8000-0000000000a3'$q$,
-  $q$select family_id::text from public.family_members where id = 'b0000000-0000-4000-8000-0000000000a3'$q$);
+  pg_temp.who('0482000a-0000-4000-8000-000000000002'),
+  $q$update public.family_members set family_id = '0482000f-0000-4000-8000-00000000000b' where id = '0482000b-0000-4000-8000-0000000000a3'$q$,
+  $q$select family_id::text from public.family_members where id = '0482000b-0000-4000-8000-0000000000a3'$q$);
 
 select pg_temp.probe('A08 adult inserts a parent member row', 'forbidden', 'REFUSED',
-  pg_temp.who('a0000000-0000-4000-8000-000000000002'),
-  $q$insert into public.family_members (family_id, role, display_name) values ('f0000000-0000-4000-8000-00000000000a', 'parent', 'Fake parent')$q$);
+  pg_temp.who('0482000a-0000-4000-8000-000000000002'),
+  $q$insert into public.family_members (family_id, role, display_name) values ('0482000f-0000-4000-8000-00000000000a', 'parent', 'Fake parent')$q$);
 
 select pg_temp.probe('A09 adult inserts a child member row', 'allowed', 'ALLOWED',
-  pg_temp.who('a0000000-0000-4000-8000-000000000002'),
-  $q$insert into public.family_members (family_id, role, display_name) values ('f0000000-0000-4000-8000-00000000000a', 'child', 'New kid')$q$);
+  pg_temp.who('0482000a-0000-4000-8000-000000000002'),
+  $q$insert into public.family_members (family_id, role, display_name) values ('0482000f-0000-4000-8000-00000000000a', 'child', 'New kid')$q$);
 
 select pg_temp.probe('A10 adult removes a child', 'allowed', 'ALLOWED',
-  pg_temp.who('a0000000-0000-4000-8000-000000000002'),
-  $q$update public.family_members set is_active = false where id = 'b0000000-0000-4000-8000-0000000000a3'$q$);
+  pg_temp.who('0482000a-0000-4000-8000-000000000002'),
+  $q$update public.family_members set is_active = false where id = '0482000b-0000-4000-8000-0000000000a3'$q$);
 
 -- ── A. last parent ───────────────────────────────────────────────────────────
 select pg_temp.probe('L01 sole parent demotes self (an adult remains)', 'forbidden', 'REFUSED',
-  pg_temp.who('a0000000-0000-4000-8000-000000000008'),
-  $q$update public.family_members set role = 'adult' where id = 'b0000000-0000-4000-8000-0000000000c1'$q$,
-  $q$select role::text from public.family_members where id = 'b0000000-0000-4000-8000-0000000000c1'$q$);
+  pg_temp.who('0482000a-0000-4000-8000-000000000008'),
+  $q$update public.family_members set role = 'adult' where id = '0482000b-0000-4000-8000-0000000000c1'$q$,
+  $q$select role::text from public.family_members where id = '0482000b-0000-4000-8000-0000000000c1'$q$);
 
 select pg_temp.probe('L02 sole parent deactivates self (an adult remains)', 'forbidden', 'REFUSED',
-  pg_temp.who('a0000000-0000-4000-8000-000000000008'),
-  $q$update public.family_members set is_active = false where id = 'b0000000-0000-4000-8000-0000000000c1'$q$);
+  pg_temp.who('0482000a-0000-4000-8000-000000000008'),
+  $q$update public.family_members set is_active = false where id = '0482000b-0000-4000-8000-0000000000c1'$q$);
 
 select pg_temp.probe('L03 service_role demotes the sole parent', 'forbidden', 'REFUSED',
   null,
-  $q$update public.family_members set role = 'adult' where id = 'b0000000-0000-4000-8000-0000000000c1'$q$);
+  $q$update public.family_members set role = 'adult' where id = '0482000b-0000-4000-8000-0000000000c1'$q$);
 
 select pg_temp.probe('L04 parent demotes a co-parent (one parent remains)', 'allowed', 'ALLOWED',
-  pg_temp.who('a0000000-0000-4000-8000-00000000000a'),
-  $q$update public.family_members set role = 'adult' where id = 'b0000000-0000-4000-8000-0000000000d2'$q$);
+  pg_temp.who('0482000a-0000-4000-8000-00000000000a'),
+  $q$update public.family_members set role = 'adult' where id = '0482000b-0000-4000-8000-0000000000d2'$q$);
 
 select pg_temp.probe('L05 sole parent hands over: promote the adult, then demote self', 'allowed', 'ALLOWED',
-  pg_temp.who('a0000000-0000-4000-8000-000000000008'),
-  $q$update public.family_members set role = 'parent' where id = 'b0000000-0000-4000-8000-0000000000c2';
-     update public.family_members set role = 'adult'  where id = 'b0000000-0000-4000-8000-0000000000c1'$q$,
-  $q$select string_agg(display_name || '=' || role, ',' order by display_name) from public.family_members where family_id = 'f0000000-0000-4000-8000-00000000000c'$q$);
+  pg_temp.who('0482000a-0000-4000-8000-000000000008'),
+  $q$update public.family_members set role = 'parent' where id = '0482000b-0000-4000-8000-0000000000c2';
+     update public.family_members set role = 'adult'  where id = '0482000b-0000-4000-8000-0000000000c1'$q$,
+  $q$select string_agg(display_name || '=' || role, ',' order by display_name) from public.family_members where family_id = '0482000f-0000-4000-8000-00000000000c'$q$);
 
 select pg_temp.probe('L05b demote self first, then try to promote (no longer a parent)', 'forbidden', 'REFUSED',
-  pg_temp.who('a0000000-0000-4000-8000-000000000008'),
-  $q$update public.family_members set role = 'adult'  where id = 'b0000000-0000-4000-8000-0000000000c1';
-     update public.family_members set role = 'parent' where id = 'b0000000-0000-4000-8000-0000000000c2'$q$,
-  $q$select string_agg(display_name || '=' || role, ',' order by display_name) from public.family_members where family_id = 'f0000000-0000-4000-8000-00000000000c'$q$);
+  pg_temp.who('0482000a-0000-4000-8000-000000000008'),
+  $q$update public.family_members set role = 'adult'  where id = '0482000b-0000-4000-8000-0000000000c1';
+     update public.family_members set role = 'parent' where id = '0482000b-0000-4000-8000-0000000000c2'$q$,
+  $q$select string_agg(display_name || '=' || role, ',' order by display_name) from public.family_members where family_id = '0482000f-0000-4000-8000-00000000000c'$q$);
 
 select pg_temp.probe('L06 service_role tears down a whole family roster', 'allowed', 'ALLOWED',
   null,
-  $q$delete from public.family_members where family_id = 'f0000000-0000-4000-8000-00000000000c'$q$);
+  $q$delete from public.family_members where family_id = '0482000f-0000-4000-8000-00000000000c'$q$);
 
 -- ── B. invites ───────────────────────────────────────────────────────────────
 select pg_temp.probe('B01 adult inserts a parent invite', 'forbidden', 'REFUSED',
-  pg_temp.who('a0000000-0000-4000-8000-000000000002'),
-  $q$insert into public.invites (family_id, email, role, invited_by) values ('f0000000-0000-4000-8000-00000000000a', 'mine2@probe.test', 'parent', 'a0000000-0000-4000-8000-000000000002')$q$);
+  pg_temp.who('0482000a-0000-4000-8000-000000000002'),
+  $q$insert into public.invites (family_id, email, role, invited_by) values ('0482000f-0000-4000-8000-00000000000a', 'mine2@probe.test', 'parent', '0482000a-0000-4000-8000-000000000002')$q$);
 
 select pg_temp.probe('B02 adult inserts an adult invite with forged terms', 'allowed (terms forced)', 'ALLOWED; status=pending, invited_by=A1, token<>chosen, expiry<=14d',
-  pg_temp.who('a0000000-0000-4000-8000-000000000002'),
+  pg_temp.who('0482000a-0000-4000-8000-000000000002'),
   $q$insert into public.invites (family_id, email, role, invited_by, status, token, expires_at)
-     values ('f0000000-0000-4000-8000-00000000000a', 'friend@probe.test', 'adult', 'a0000000-0000-4000-8000-000000000001', 'accepted', 'chosen-token', now() + interval '365 days')$q$,
-  $q$select 'status=' || status || ', invited_by=' || case invited_by when 'a0000000-0000-4000-8000-000000000002' then 'A1' when 'a0000000-0000-4000-8000-000000000001' then 'P1' else coalesce(invited_by::text,'null') end
+     values ('0482000f-0000-4000-8000-00000000000a', 'friend@probe.test', 'adult', '0482000a-0000-4000-8000-000000000001', 'accepted', 'chosen-token', now() + interval '365 days')$q$,
+  $q$select 'status=' || status || ', invited_by=' || case invited_by when '0482000a-0000-4000-8000-000000000002' then 'A1' when '0482000a-0000-4000-8000-000000000001' then 'P1' else coalesce(invited_by::text,'null') end
            || ', token=' || case when token = 'chosen-token' then 'chosen' else 'generated(' || length(token) || ')' end
            || ', expiry=' || round(extract(epoch from expires_at - now()) / 86400) || 'd'
        from public.invites where email = 'friend@probe.test'$q$);
 
 select pg_temp.probe('B03 parent inserts a parent invite', 'allowed', 'ALLOWED',
-  pg_temp.who('a0000000-0000-4000-8000-000000000001'),
-  $q$insert into public.invites (family_id, email, role, invited_by) values ('f0000000-0000-4000-8000-00000000000a', 'coparent@probe.test', 'parent', 'a0000000-0000-4000-8000-000000000001')$q$);
+  pg_temp.who('0482000a-0000-4000-8000-000000000001'),
+  $q$insert into public.invites (family_id, email, role, invited_by) values ('0482000f-0000-4000-8000-00000000000a', 'coparent@probe.test', 'parent', '0482000a-0000-4000-8000-000000000001')$q$);
 
 select pg_temp.probe('B04 adult rewrites a pending guest invite to parent', 'forbidden', 'REFUSED',
-  pg_temp.who('a0000000-0000-4000-8000-000000000002'),
-  $q$update public.invites set role = 'parent' where id = 'c0000000-0000-4000-8000-000000000001'$q$,
-  $q$select role::text from public.invites where id = 'c0000000-0000-4000-8000-000000000001'$q$);
+  pg_temp.who('0482000a-0000-4000-8000-000000000002'),
+  $q$update public.invites set role = 'parent' where id = '0482000c-0000-4000-8000-000000000001'$q$,
+  $q$select role::text from public.invites where id = '0482000c-0000-4000-8000-000000000001'$q$);
 
 select pg_temp.probe('B05 adult resurrects a revoked invite', 'forbidden', 'REFUSED',
-  pg_temp.who('a0000000-0000-4000-8000-000000000002'),
-  $q$update public.invites set status = 'pending' where id = 'c0000000-0000-4000-8000-000000000004'$q$,
-  $q$select status::text from public.invites where id = 'c0000000-0000-4000-8000-000000000004'$q$);
+  pg_temp.who('0482000a-0000-4000-8000-000000000002'),
+  $q$update public.invites set status = 'pending' where id = '0482000c-0000-4000-8000-000000000004'$q$,
+  $q$select status::text from public.invites where id = '0482000c-0000-4000-8000-000000000004'$q$);
 
 select pg_temp.probe('B06 adult extends a pending invite by a year', 'allowed (clamped)', 'ALLOWED; expiry<=14d',
-  pg_temp.who('a0000000-0000-4000-8000-000000000002'),
-  $q$update public.invites set expires_at = now() + interval '365 days' where id = 'c0000000-0000-4000-8000-000000000005'$q$,
-  $q$select 'expiry=' || round(extract(epoch from expires_at - now()) / 86400) || 'd' from public.invites where id = 'c0000000-0000-4000-8000-000000000005'$q$);
+  pg_temp.who('0482000a-0000-4000-8000-000000000002'),
+  $q$update public.invites set expires_at = now() + interval '365 days' where id = '0482000c-0000-4000-8000-000000000005'$q$,
+  $q$select 'expiry=' || round(extract(epoch from expires_at - now()) / 86400) || 'd' from public.invites where id = '0482000c-0000-4000-8000-000000000005'$q$);
 
 select pg_temp.probe('B07 adult revokes a pending invite', 'allowed', 'ALLOWED',
-  pg_temp.who('a0000000-0000-4000-8000-000000000002'),
-  $q$update public.invites set status = 'revoked' where id = 'c0000000-0000-4000-8000-000000000005'$q$,
-  $q$select status::text from public.invites where id = 'c0000000-0000-4000-8000-000000000005'$q$);
-
--- ── C. accept_invite ─────────────────────────────────────────────────────────
-select pg_temp.probe('C01 removed adult re-invited as guest accepts', 'outcome', 'ALLOWED; role=guest',
-  pg_temp.who('a0000000-0000-4000-8000-000000000003', 'g@probe.test'),
-  $q$select public.accept_invite('tok-guest-reinvite')$q$,
-  $q$select 'role=' || role || ', active=' || is_active from public.family_members where id = 'b0000000-0000-4000-8000-0000000000a4'$q$);
-
-select pg_temp.probe('C02 invite from a since-removed adult is accepted', 'forbidden', 'REFUSED',
-  pg_temp.who('a0000000-0000-4000-8000-000000000005', 'new@probe.test'),
-  $q$select public.accept_invite('tok-from-removed')$q$,
-  $q$select coalesce(max(role::text), 'no membership') from public.family_members where user_id = 'a0000000-0000-4000-8000-000000000005'$q$);
-
-select pg_temp.probe('C03 active adult accepts a guest invite: role unchanged', 'allowed', 'ALLOWED; role=adult',
-  pg_temp.who('a0000000-0000-4000-8000-000000000002', 'a1@probe.test'),
-  $q$select public.accept_invite('tok-active-member')$q$,
-  $q$select 'role=' || role from public.family_members where id = 'b0000000-0000-4000-8000-0000000000a2'$q$);
+  pg_temp.who('0482000a-0000-4000-8000-000000000002'),
+  $q$update public.invites set status = 'revoked' where id = '0482000c-0000-4000-8000-000000000005'$q$,
+  $q$select status::text from public.invites where id = '0482000c-0000-4000-8000-000000000005'$q$);
 
 -- ── D. removed child / removed member ────────────────────────────────────────
 select pg_temp.probe('D01 removed child-login account founds a family', 'forbidden', 'REFUSED',
-  pg_temp.who('a0000000-0000-4000-8000-000000000006', 'child.kidd@kids.bubaly.app'),
-  $q$insert into public.families (name, created_by) values ('Kid HQ', 'a0000000-0000-4000-8000-000000000006')$q$,
+  pg_temp.who('0482000a-0000-4000-8000-000000000006', 'child.kidd@kids.bubaly.app'),
+  $q$insert into public.families (name, created_by) values ('Kid HQ', '0482000a-0000-4000-8000-000000000006')$q$,
   $q$select coalesce(string_agg(role::text, ','), 'none') from public.family_members m join public.families f on f.id = m.family_id where f.name = 'Kid HQ'$q$);
 
 select pg_temp.probe('D02 ordinary account founds a family', 'allowed', 'ALLOWED',
-  pg_temp.who('a0000000-0000-4000-8000-000000000007', 'outsider@probe.test'),
-  $q$insert into public.families (name, created_by) values ('Outsider HQ', 'a0000000-0000-4000-8000-000000000007')$q$,
+  pg_temp.who('0482000a-0000-4000-8000-000000000007', 'outsider@probe.test'),
+  $q$insert into public.families (name, created_by) values ('Outsider HQ', '0482000a-0000-4000-8000-000000000007')$q$,
   $q$select string_agg(role::text, ',') from public.family_members m join public.families f on f.id = m.family_id where f.name = 'Outsider HQ'$q$);
 
 select pg_temp.probe('D03 parent removes a teen who syncs a calendar', 'outcome', 'ALLOWED; sync rows disabled, tokens cleared',
-  pg_temp.who('a0000000-0000-4000-8000-000000000001'),
-  $q$update public.family_members set is_active = false where id = 'b0000000-0000-4000-8000-0000000000a7'$q$,
-  $q$select 'account=' || (select sync_status from public.sync_accounts where id = 'd0000000-0000-4000-8000-000000000001')
-          || ', connection=' || (select string_agg(sync_status::text, ',') from public.sync_connections where account_id = 'd0000000-0000-4000-8000-000000000001')
-          || ', token=' || (select sync_status || '/' || case when access_token_enc is null and refresh_token_enc is null then 'cleared' else 'present' end from public.sync_tokens where account_id = 'd0000000-0000-4000-8000-000000000001')$q$);
+  pg_temp.who('0482000a-0000-4000-8000-000000000001'),
+  $q$update public.family_members set is_active = false where id = '0482000b-0000-4000-8000-0000000000a7'$q$,
+  $q$select 'account=' || (select sync_status from public.sync_accounts where id = '0482000d-0000-4000-8000-000000000001')
+          || ', connection=' || (select string_agg(sync_status::text, ',') from public.sync_connections where account_id = '0482000d-0000-4000-8000-000000000001')
+          || ', token=' || (select sync_status || '/' || case when access_token_enc is null and refresh_token_enc is null then 'cleared' else 'present' end from public.sync_tokens where account_id = '0482000d-0000-4000-8000-000000000001')$q$);
 
 -- ── service_role is unchanged ────────────────────────────────────────────────
 select pg_temp.probe('S01 service_role promotes an adult to parent', 'allowed', 'ALLOWED',
   null,
-  $q$update public.family_members set role = 'parent' where id = 'b0000000-0000-4000-8000-0000000000a2'$q$);
+  $q$update public.family_members set role = 'parent' where id = '0482000b-0000-4000-8000-0000000000a2'$q$);
 
 select pg_temp.probe('S02 service_role moves a member to another family', 'allowed', 'ALLOWED',
   null,
-  $q$update public.family_members set family_id = 'f0000000-0000-4000-8000-00000000000b' where id = 'b0000000-0000-4000-8000-0000000000a3'$q$);
+  $q$update public.family_members set family_id = '0482000f-0000-4000-8000-00000000000b' where id = '0482000b-0000-4000-8000-0000000000a3'$q$);
 
 select pg_temp.probe('S03 service_role removes a parent where another parent remains', 'allowed', 'ALLOWED',
   null,
-  $q$update public.family_members set is_active = false where id = 'b0000000-0000-4000-8000-0000000000d2'$q$);
+  $q$update public.family_members set is_active = false where id = '0482000b-0000-4000-8000-0000000000d2'$q$);
 
 select pg_temp.probe('S04 service_role writes an invite with its own terms', 'allowed', 'ALLOWED; token/expiry kept',
   null,
-  $q$insert into public.invites (family_id, email, role, token, status, expires_at) values ('f0000000-0000-4000-8000-00000000000a', 'svc@probe.test', 'parent', 'svc-token', 'pending', now() + interval '30 days')$q$,
+  $q$insert into public.invites (family_id, email, role, token, status, expires_at) values ('0482000f-0000-4000-8000-00000000000a', 'svc@probe.test', 'parent', 'svc-token', 'pending', now() + interval '30 days')$q$,
   $q$select 'token=' || token || ', expiry=' || round(extract(epoch from expires_at - now()) / 86400) || 'd' from public.invites where email = 'svc@probe.test'$q$);
 
 select pg_temp.probe('S05 service_role revokes an invite', 'allowed', 'ALLOWED',
   null,
-  $q$update public.invites set status = 'revoked' where id = 'c0000000-0000-4000-8000-000000000001'$q$);
+  $q$update public.invites set status = 'revoked' where id = '0482000c-0000-4000-8000-000000000001'$q$);
 
 \o
 \pset format aligned
@@ -353,8 +339,6 @@ declare
     'B02 adult inserts an adult invite with forged terms', 'status=pending, invited_by=A1, token=generated(48), expiry=14d',
     'B06 adult extends a pending invite by a year', 'expiry=14d',
     'B07 adult revokes a pending invite', 'revoked',
-    'C01 removed adult re-invited as guest accepts', 'role=guest, active=true',
-    'C03 active adult accepts a guest invite: role unchanged', 'role=adult',
     'D02 ordinary account founds a family', 'parent',
     'D03 parent removes a teen who syncs a calendar', 'account=disabled, connection=disabled, token=disabled/cleared',
     'S04 service_role writes an invite with its own terms', 'token=svc-token, expiry=30d');
@@ -376,16 +360,16 @@ begin
       bad := bad || format(E'\n  - %s: expected state %L, got %L', r.name, expected_state ->> r.name, r.state);
     end if;
   end loop;
-  if n <> 36 then
-    bad := bad || format(E'\n  - %s probes ran, 36 expected', n);
+  if n <> 33 then
+    bad := bad || format(E'\n  - %s probes ran, 33 expected', n);
   end if;
-  if (select count(*) from probe_result where kind = 'forbidden') <> 15 then
-    bad := bad || format(E'\n  - %s forbidden probes ran, 15 expected', (select count(*) from probe_result where kind = 'forbidden'));
+  if (select count(*) from probe_result where kind = 'forbidden') <> 14 then
+    bad := bad || format(E'\n  - %s forbidden probes ran, 14 expected', (select count(*) from probe_result where kind = 'forbidden'));
   end if;
   if bad <> '' then
     raise exception '0482 FAILED (who may make, unmake and invite a parent):%', bad;
   end if;
-  raise notice '0482 OK: all 15 forbidden writes refused by 42501/23514, 20 allowed writes landed with the state expected, and the outsider control was filtered to no row';
+  raise notice '0482 OK: all 14 forbidden writes refused by 42501/23514, 18 allowed writes landed with the state expected, and the outsider control was filtered to no row';
 end
 $verdict$;
 

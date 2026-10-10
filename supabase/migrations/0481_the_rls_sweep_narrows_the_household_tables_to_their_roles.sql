@@ -8,10 +8,27 @@
 -- first draft broke an existing probe and how the fixed draft keeps it.
 --
 -- Probe: docs/audit/rls-sweep-check.sql (both directions for every finding).
--- Four existing probes carry fixture or allowlist edits for the narrowing this
+-- Three existing probes carry fixture or allowlist edits for the narrowing this
 -- makes on purpose: a-password-alone-does-not-open-the-familys-vault-check,
--- gated-write-tables-check, health-record-boundary-check and
--- reward-redemption-decision-check.
+-- gated-write-tables-check and health-record-boundary-check.
+--
+-- Three of the sweep's findings are NOT in this file. Each is the subject of a
+-- migration the owner already holds in supabase/reserved/, with a negative-
+-- control workflow that replays the released schema, requires the held probe
+-- to still FAIL on the defect, then applies the held file and requires it to
+-- pass. A guard here would close the hole first and fail that control on the
+-- wrong error, so the released schema behaves exactly as main does for these
+-- three tables, each deferred to its held migration:
+--   kid_progress        held 0496_a_childs_xp_is_awarded_by_a_parent, which fixes
+--                       the same defect in the two 0341 award RPCs
+--                       (kid-progress-award-runtime.yml; its [FIX 5] note went
+--                       with it, so the notes below run 1-4 and 6-9);
+--   calendar_feeds      held 0498_a_guest_cannot_feed_the_calendar_or_rewrite_a_grocery_list,
+--                       0464's guest guard on calendar_feeds and grocery_lists
+--                       (guest-household-runtime.yml);
+--   reward_redemptions  held 0500_a_reward_request_is_the_rewards_own_snapshot,
+--                       the request's shape inside 0308's own guard
+--                       (reward-snapshot-runtime.yml).
 
 
 -- medication_doses (high)
@@ -86,17 +103,6 @@ create policy chore_disputes_submission_is_the_members on public.chore_disputes
         and s.member_id = chore_disputes.member_id
     )
   );
-
--- calendar_feeds (medium)
--- calendar_feeds: a guest views the household calendar but does not subscribe it to new sources (extends 0464)
-do $$
-begin
-  if to_regclass('public.calendar_feeds') is null then return; end if;
-  drop trigger if exists trg_calendar_feeds_not_a_guests on public.calendar_feeds;
-  create trigger trg_calendar_feeds_not_a_guests
-    before insert or update or delete on public.calendar_feeds
-    for each row execute function public.household_write_is_not_a_guests();
-end $$;
 
 -- behavior_logs (medium)
 -- behavior_logs: a manager logs about anyone; any other non-guest member logs only about themselves.
@@ -362,43 +368,6 @@ begin
   end loop;
 end $$;
 
--- kid_progress (medium)
--- kid_progress writes are a manager's or the service role's, including writes made inside SECURITY DEFINER RPCs.
--- A guard trigger runs for definer writes too: auth.uid() still carries the caller's JWT.
-create or replace function public.kid_progress_write_is_a_managers()
-returns trigger language plpgsql set search_path = public, pg_temp as $$
-begin
-  if auth.uid() is null or coalesce(auth.role(), '') = 'service_role' then
-    return case when tg_op = 'DELETE' then old else new end; -- service role / jobs / seeds
-  end if;
-  if (tg_op <> 'INSERT' and not public.can_manage_family(old.family_id))
-     or (tg_op <> 'DELETE' and not public.can_manage_family(new.family_id)) then
-    raise exception 'Only a parent or guardian can change chore progress' using errcode = '42501';
-  end if;
-  return case when tg_op = 'DELETE' then old else new end;
-end $$;
-
-drop trigger if exists trg_kid_progress_manager_write on public.kid_progress;
--- [FIX 5] INSERT OR UPDATE only. As BEFORE ... OR DELETE it fired on the ON DELETE CASCADE from
--- families/family_members, where can_manage_family() is already false for the deleting parent, so deleting
--- a family raised 42501 (checkout-rewards-babysitter-check.sql). Member DELETE stays refused by the
--- restrictive kid_progress_manager_delete_guard below; RI cascades do not consult RLS, and no RPC deletes.
-create trigger trg_kid_progress_manager_write
-  before insert or update on public.kid_progress
-  for each row execute function public.kid_progress_write_is_a_managers();
-
--- Defence in depth on the policy side: restrictive guards so a later permissive policy cannot reopen member writes.
-drop policy if exists kid_progress_manager_insert_guard on public.kid_progress;
-create policy kid_progress_manager_insert_guard on public.kid_progress as restrictive for insert to authenticated
-  with check (public.can_manage_family(family_id));
-drop policy if exists kid_progress_manager_update_guard on public.kid_progress;
-create policy kid_progress_manager_update_guard on public.kid_progress as restrictive for update to authenticated
-  using (public.can_manage_family(family_id)) with check (public.can_manage_family(family_id));
-drop policy if exists kid_progress_manager_delete_guard on public.kid_progress;
-create policy kid_progress_manager_delete_guard on public.kid_progress as restrictive for delete to authenticated
-  using (public.can_manage_family(family_id));
--- (Optionally also change the guard inside both 0341 RPCs from is_family_member(p_family_id) to can_manage_family(p_family_id), so they return 'forbidden' instead of raising.)
-
 -- meal_vote_options (medium)
 do $$
 declare p record;
@@ -477,47 +446,6 @@ begin
     );
 end $$;
 -- (extend the predicate to 'caregiver' as well if the owner rules caregivers see only assigned members)
-
--- reward_redemptions (medium)
--- A member asks for a catalogue reward at its price; only a manager decides.
-create or replace function public.reward_redemption_request_shape_guard()
-returns trigger language plpgsql security definer set search_path = public, pg_temp as $fn$
-declare r record;
-begin
-  if current_user = 'service_role' or coalesce(auth.role(),'') = 'service_role'
-     or auth.uid() is null or public.can_manage_family(new.family_id) then
-    return new;
-  end if;
-  if tg_op = 'INSERT' then
-    if new.reward_id is null then
-      raise exception 'a redemption must name a reward' using errcode = '42501';
-    end if;
-    select title, cost_points into r from public.rewards
-     where id = new.reward_id and family_id = new.family_id;
-    if not found or new.reward_title is distinct from r.title
-       or new.cost_points is distinct from r.cost_points then
-      raise exception 'a redemption carries its reward''s own title and price' using errcode = '42501';
-    end if;
-    if new.decided_by is not null or new.decided_at is not null then
-      raise exception 'a request may not carry a decision' using errcode = '42501';
-    end if;
-    return new;
-  end if;
-  -- UPDATE by a non-manager: withdrawing is the only move (status, plus the updated_at stamp).
-  if new.family_id is distinct from old.family_id or new.member_id is distinct from old.member_id
-     or new.reward_id is distinct from old.reward_id or new.reward_title is distinct from old.reward_title
-     or new.cost_points is distinct from old.cost_points or new.decided_by is distinct from old.decided_by
-     or new.decided_at is distinct from old.decided_at or new.note is distinct from old.note
-     or new.created_at is distinct from old.created_at then
-    raise exception 'a member may only withdraw their own request' using errcode = '42501';
-  end if;
-  return new;
-end $fn$;
-revoke all on function public.reward_redemption_request_shape_guard() from public, anon, authenticated;
-drop trigger if exists trg_reward_redemption_request_shape_guard on public.reward_redemptions;
-create trigger trg_reward_redemption_request_shape_guard
-  before insert or update on public.reward_redemptions
-  for each row execute function public.reward_redemption_request_shape_guard();
 
 -- wishlist_items (medium)
 -- wishlist_items: a wish is its owner's (or a manager's) to write. Claims are first-person.

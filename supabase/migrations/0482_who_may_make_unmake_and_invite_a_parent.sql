@@ -63,9 +63,20 @@
 --   B1  member_role_rank()                              (ROLE_ORDER, roles.ts)
 --   B2  invites_insert / invites_update                 (policy WITH CHECK)
 --   B3  trg_invite_terms_are_the_servers_to_set          (BEFORE I/U, row)
---   C   accept_invite()                                 (replaced whole)
+--   C   accept_invite()                                 NOT here: held 0495's
 --   D1  families_insert + is_child_login_account()
 --   D2  trg_removed_member_keeps_no_sync_link           (AFTER U of is_active / D)
+--
+-- C is not in this file. accept_invite is the subject of the held
+-- 0495_a_member_invited_back_gets_what_the_invite_grants (supabase/reserved/),
+-- whose negative control, .github/workflows/invite-rejoin-role-runtime.yml,
+-- replays the released schema and requires its probe to still show a returning
+-- member keeping their old role before 0495 repairs it. A rewrite here would
+-- close that first and fail the control on the wrong error, so 0136's
+-- accept_invite is left exactly as it is and the returning member's role is
+-- 0495's to fix. The inviter-still-active re-check (an invite stays good after
+-- the person who sent it was removed or demoted below the role it grants) is
+-- a follow-up once 0495 has landed.
 --
 -- Probe: docs/audit/a-parent-is-made-unmade-and-invited-only-by-a-parent-check.sql, which records each
 -- forbidden write succeeding before this file and refused after it.
@@ -93,7 +104,7 @@ as $$
 $$;
 
 comment on function public.member_role_rank(public.member_role) is
-  'Rank of a member_role, 0 = highest, in the order of ROLE_ORDER in lib/constants/roles.ts. Used by invites_insert / invites_update and accept_invite.';
+  'Rank of a member_role, 0 = highest, in the order of ROLE_ORDER in lib/constants/roles.ts. Used by invites_insert / invites_update.';
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- A1. Only a parent makes, unmakes or removes a parent; family_id is fixed.
@@ -253,8 +264,8 @@ create policy invites_update on public.invites for update
 --       may stay or go pending -> revoked, nothing else (no resurrecting an
 --       accepted, revoked or expired invite); expires_at is clamped the same
 --       way; whoever changes role, email or expiry becomes invited_by (they now
---       vouch for it, and accept_invite re-checks the inviter), otherwise
---       invited_by is kept.
+--       vouch for it; accept_invite re-checking the inviter is the follow-up
+--       noted above), otherwise invited_by is kept.
 --     BEFORE triggers run before the policy's WITH CHECK, so the forced values
 --     are what the policy sees.
 -- ════════════════════════════════════════════════════════════════════════════
@@ -316,80 +327,6 @@ drop trigger if exists trg_invite_terms_are_the_servers_to_set on public.invites
 create trigger trg_invite_terms_are_the_servers_to_set
   before insert or update on public.invites
   for each row execute function public.invite_terms_are_the_servers_to_set();
-
--- ════════════════════════════════════════════════════════════════════════════
--- C. accept_invite — replaced whole (0136 is the current definition). Changes:
---    * the inviter must still be an active member of the family whose role is
---      at least the invite's (rank <=). An invite with no inviter (account
---      deleted, invited_by set null) is no longer good either;
---    * reactivating an INACTIVE membership takes the invite's role; an
---      already-active membership is left exactly as it is.
---    Everything else is 0136 verbatim.
--- ════════════════════════════════════════════════════════════════════════════
-create or replace function public.accept_invite(p_token text)
-returns uuid language plpgsql security definer set search_path = public as $$
-declare
-  v_invite public.invites;
-  v_name   text;
-begin
-  select * into v_invite from public.invites
-  where token = p_token
-  for update;
-
-  if not found then
-    raise exception 'Invite is invalid or expired';
-  end if;
-
-  -- Idempotent success: this user already accepted this invite.
-  if v_invite.status = 'accepted' and v_invite.accepted_by = auth.uid() then
-    return v_invite.family_id;
-  end if;
-
-  if v_invite.status <> 'pending' or v_invite.expires_at <= now() then
-    raise exception 'Invite is invalid or expired';
-  end if;
-
-  if lower(v_invite.email) <> lower(coalesce(auth.jwt()->>'email','')) then
-    raise exception 'This invite was issued to a different email';
-  end if;
-
-  -- 0482: the person who sent it must still be able to.
-  if v_invite.invited_by is null or not exists (
-    select 1 from public.family_members m
-     where m.family_id = v_invite.family_id
-       and m.user_id = v_invite.invited_by
-       and m.is_active
-       and public.member_role_rank(m.role) <= public.member_role_rank(v_invite.role)
-  ) then
-    raise exception 'This invite is no longer valid. Ask a parent to send a new one.'
-      using errcode = 'insufficient_privilege';
-  end if;
-
-  select coalesce(full_name, display_name, email) into v_name
-  from public.profiles where id = auth.uid();
-
-  insert into public.family_members (family_id, user_id, role, display_name)
-  values (v_invite.family_id, auth.uid(), v_invite.role, coalesce(v_name,'Member'))
-  on conflict (family_id, user_id) do update
-    set role      = case when public.family_members.is_active
-                         then public.family_members.role
-                         else excluded.role end,
-        is_active = true;
-
-  update public.invites
-    set status = 'accepted', accepted_by = auth.uid(), updated_at = now()
-  where id = v_invite.id;
-
-  update public.user_preferences
-    set active_family_id = v_invite.family_id
-  where user_id = auth.uid() and active_family_id is null;
-
-  return v_invite.family_id;
-end; $$;
-
--- create or replace keeps the existing ACL; restated so the file stands alone.
-revoke all on function public.accept_invite(text) from public, anon;
-grant execute on function public.accept_invite(text) to authenticated;
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- D1. A child-login account does not found a household.

@@ -25,6 +25,12 @@
 --   expense_split_shares  a debtor can still zero their own share_cents (optional trigger, not in the SQL);
 --   member_locations / pets / pet_care_records  the caregiver half is an owner decision (ROLE-SCOPE-001).
 --
+-- Three findings are not asserted here because 0481 defers them to migrations
+-- the owner holds in supabase/reserved/, each with its own held probe and a
+-- negative-control workflow that needs the released schema to still show the
+-- defect: kid_progress (held 0496), calendar_feeds (held 0498) and
+-- reward_redemptions (held 0500).
+--
 -- Rolled back: nothing here outlives the run.
 \set ON_ERROR_STOP on
 
@@ -107,7 +113,6 @@ declare
   ch uuid; asgK uuid; asgS uuid;
   subS_rej uuid; subK_res uuid; subK_rej uuid; subK_rej2 uuid; subK_appr uuid; subK_rej3 uuid; subK_rej4 uuid; subK_pend uuid;
   dS uuid; dR uuid; dK_open uuid;
-  feed uuid;
   split1 uuid; shK uuid; shS uuid; split2 uuid;
   annP uuid; dateP uuid;
   poll uuid; opt1 uuid;
@@ -115,7 +120,6 @@ declare
   voteP uuid; optP1 uuid;
   pet uuid; rec uuid;
   locK uuid; locG uuid;
-  rw uuid; redK uuid; redK2 uuid;
   wS uuid; wP uuid; wS_byC uuid; wS_byK uuid;
   memP uuid;
   F text;
@@ -162,7 +166,6 @@ begin
     values (fam, subK_res, mK, 'resolved', 'Upheld', mP, now()) returning id into dR;
   insert into public.chore_disputes (family_id, submission_id, member_id, status) values (fam, subK_rej2, mK, 'open') returning id into dK_open;
 
-  insert into public.calendar_feeds (family_id, name, url) values (fam, 'School', 'https://example.test/school.ics') returning id into feed;
 
   insert into public.expense_splits (family_id, description, total_cents, paid_by, created_by) values (fam, 'Groceries', 3000, mP, uP) returning id into split1;
   insert into public.expense_split_shares (family_id, split_id, member_id, share_cents) values (fam, split1, mK, 1000) returning id into shK;
@@ -178,8 +181,6 @@ begin
   insert into public.health_visits (family_id, member_id, kind, title, outcome, created_by) values (fam, mS, 'therapy', 'Session', 'Diagnosis text', uP) returning id into visS;
   insert into public.immunizations (family_id, member_id, vaccine, created_by) values (fam, mS, 'MMR', uP) returning id into immS;
 
-  insert into public.kid_progress (family_id, member_id, xp, level) values (fam, mK, 10, 1), (fam, mS, 500, 3);
-
   insert into public.meal_votes (family_id, created_by, title, status) values (fam, uP, 'Friday dinner', 'open') returning id into voteP;
   insert into public.meal_vote_options (vote_id, family_id, label) values (voteP, fam, 'Tacos') returning id into optP1;
 
@@ -189,11 +190,6 @@ begin
   insert into public.member_locations (family_id, member_id, latitude, longitude) values (fam, mK, 51.5, -0.1) returning id into locK;
   insert into public.member_locations (family_id, member_id, latitude, longitude) values (fam, mG, 52.5, -1.1) returning id into locG;
 
-  insert into public.rewards (family_id, title, cost_points) values (fam, 'Movie night', 50) returning id into rw;
-  insert into public.reward_redemptions (family_id, reward_id, member_id, reward_title, cost_points, status)
-    values (fam, rw, mK, 'Movie night', 50, 'requested') returning id into redK;
-  insert into public.reward_redemptions (family_id, reward_id, member_id, reward_title, cost_points, status)
-    values (fam, rw, mK, 'Movie night', 50, 'requested') returning id into redK2;
 
   insert into public.wishlist_items (family_id, member_id, title, created_by) values (fam, mS, 'Bike', uS) returning id into wS;
   insert into public.wishlist_items (family_id, member_id, title, created_by) values (fam, mP, 'Book', uP) returning id into wP;
@@ -238,15 +234,6 @@ begin
   perform pg_temp.sweep_expect(F, 'child disputes their own rejected submission', pg_temp.sweep_try(uK, format('insert into public.chore_disputes (family_id, submission_id, member_id, status) values (%L, %L, %L, ''open'')', fam, subK_rej, mK)), 'ok');
   perform pg_temp.sweep_expect(F, 'child withdraws their own open dispute (the app''s rollback)', pg_temp.sweep_try(uK, format('delete from public.chore_disputes where id = %L', dK_open)), 'ok');
   perform pg_temp.sweep_expect(F, 'parent deletes a dispute', pg_temp.sweep_try(uP, format('delete from public.chore_disputes where id = %L', dS)), 'ok');
-
-  -- ── calendar_feeds (medium) ──────────────────────────────────────────────
-  F := 'calendar_feeds (medium)';
-  perform pg_temp.sweep_expect(F, 'guest subscribes the family to a new calendar', pg_temp.sweep_try(uG, format('insert into public.calendar_feeds (family_id, name, url) values (%L, ''x'', ''https://attacker.example/cal.ics'')', fam)), 'refused');
-  perform pg_temp.sweep_expect(F, 'guest repoints a feed''s url', pg_temp.sweep_try(uG, format('update public.calendar_feeds set url = ''https://attacker.example/cal.ics'' where id = %L', feed)), 'refused');
-  perform pg_temp.sweep_expect(F, 'guest deletes a feed', pg_temp.sweep_try(uG, format('delete from public.calendar_feeds where id = %L', feed)), 'refused');
-  perform pg_temp.sweep_expect(F, 'parent adds a feed', pg_temp.sweep_try(uP, format('insert into public.calendar_feeds (family_id, name, url) values (%L, ''Club'', ''https://example.test/club.ics'')', fam)), 'ok');
-  perform pg_temp.sweep_expect(F, 'parent renames a feed', pg_temp.sweep_try(uP, format('update public.calendar_feeds set name = ''School (new)'' where id = %L', feed)), 'ok');
-  perform pg_temp.sweep_expect(F, 'parent deletes a feed', pg_temp.sweep_try(uP, format('delete from public.calendar_feeds where id = %L', feed)), 'ok');
 
   -- ── behavior_logs (medium; partly closed) ────────────────────────────────
   F := 'behavior_logs (medium)';
@@ -332,14 +319,6 @@ begin
   perform pg_temp.sweep_expect(F, 'parent reads the vaccinations', pg_temp.sweep_count(uP, format('select count(*) from public.immunizations where id = %L', immS)), 'some');
   perform pg_temp.sweep_expect(F, 'the record''s own member reads it', pg_temp.sweep_count(uS, format('select count(*) from public.immunizations where id = %L', immS)), 'some');
 
-  -- ── kid_progress (medium) ────────────────────────────────────────────────
-  F := 'kid_progress (medium)';
-  perform pg_temp.sweep_expect(F, 'child awards themselves a million XP through the RPC', pg_temp.sweep_try(uK, format('select 1 where (public.kid_progress_apply_completion(%L, %L, 1000000, current_date) ->> ''ok'')::boolean', fam, mK)), 'refused');
-  perform pg_temp.sweep_expect(F, 'child takes XP away from a sibling through the RPC', pg_temp.sweep_try(uK, format('select 1 where (public.kid_progress_revert_completion(%L, %L, 400, 0, 0, null, 0, 0, null) ->> ''ok'')::boolean', fam, mS)), 'refused');
-  perform pg_temp.sweep_expect(F, 'child writes their own level directly', pg_temp.sweep_try(uK, format('update public.kid_progress set xp = 999999, level = 50 where member_id = %L', mK)), 'refused');
-  perform pg_temp.sweep_expect(F, 'parent awards XP through the RPC (approval)', pg_temp.sweep_try(uP, format('select 1 where (public.kid_progress_apply_completion(%L, %L, 20, current_date) ->> ''ok'')::boolean', fam, mK)), 'ok');
-  perform pg_temp.sweep_expect(F, 'parent reverts XP through the RPC', pg_temp.sweep_try(uP, format('select 1 where (public.kid_progress_revert_completion(%L, %L, 100, 0, 0, null, 0, 0, null) ->> ''ok'')::boolean', fam, mS)), 'ok');
-
   -- ── meal_vote_options (medium) ───────────────────────────────────────────
   F := 'meal_vote_options (medium)';
   perform pg_temp.sweep_expect(F, 'child renames the leading option', pg_temp.sweep_try(uK, format('update public.meal_vote_options set label = ''Brussels sprouts'' where id = %L', optP1)), 'refused');
@@ -378,15 +357,6 @@ begin
   perform pg_temp.sweep_expect(F, 'guest reads a child''s live location', pg_temp.sweep_count(uG, format('select count(*) from public.member_locations where id = %L', locK)), 'zero');
   perform pg_temp.sweep_expect(F, 'parent reads the child''s location', pg_temp.sweep_count(uP, format('select count(*) from public.member_locations where id = %L', locK)), 'some');
   perform pg_temp.sweep_expect(F, 'guest reads their own location', pg_temp.sweep_count(uG, format('select count(*) from public.member_locations where id = %L', locG)), 'some');
-
-  -- ── reward_redemptions (medium) ──────────────────────────────────────────
-  F := 'reward_redemptions (medium)';
-  perform pg_temp.sweep_expect(F, 'child asks for a reward that is not in the catalogue, for 0 points', pg_temp.sweep_try(uK, format('insert into public.reward_redemptions (family_id, member_id, reward_id, reward_title, cost_points, status) values (%L, %L, null, ''Xbox'', 0, ''requested'')', fam, mK)), 'refused');
-  perform pg_temp.sweep_expect(F, 'child files a request that already names a decider', pg_temp.sweep_try(uK, format('insert into public.reward_redemptions (family_id, member_id, reward_id, reward_title, cost_points, status, decided_by, decided_at) values (%L, %L, %L, ''Movie night'', 50, ''requested'', %L, now())', fam, mK, rw, mP)), 'refused');
-  perform pg_temp.sweep_expect(F, 'child strips the reward and price off their own request', pg_temp.sweep_try(uK, format('update public.reward_redemptions set reward_id = null, cost_points = 0 where id = %L', redK)), 'refused');
-  perform pg_temp.sweep_expect(F, 'child asks for a catalogue reward at its price', pg_temp.sweep_try(uK, format('insert into public.reward_redemptions (family_id, member_id, reward_id, reward_title, cost_points, status) values (%L, %L, %L, ''Movie night'', 50, ''requested'')', fam, mK, rw)), 'ok');
-  perform pg_temp.sweep_expect(F, 'child withdraws their own request', pg_temp.sweep_try(uK, format('update public.reward_redemptions set status = ''cancelled'' where id = %L', redK)), 'ok');
-  perform pg_temp.sweep_expect(F, 'parent turns a request down', pg_temp.sweep_try(uP, format('update public.reward_redemptions set status = ''rejected'', decided_by = %L, decided_at = now() where id = %L', mP, redK2)), 'ok');
 
   -- ── wishlist_items (medium) ──────────────────────────────────────────────
   F := 'wishlist_items (medium)';

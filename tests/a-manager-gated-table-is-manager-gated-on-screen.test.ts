@@ -61,11 +61,7 @@ const MANAGER_ONLY_WRITES = [
   'family_members', 'family_places', 'family_stress_predictions', 'family_wallets', 'financial_accounts',
   'front_desk_settings', 'guardian_communications', 'guardian_routing_rules', 'health_providers',
   'health_visits', 'home_assets', 'household_info', 'immunizations', 'insurance_policies',
-  'invest_holdings', 'invites',
-  // 0481: chore progress is a manager's or the service role's write; the two
-  // 0341 RPCs are its only application writers, so no browser writer today.
-  'kid_progress',
-  'medical_profiles', 'medication_schedules',
+  'invest_holdings', 'invites', 'medical_profiles', 'medication_schedules',
   'medications', 'money_timeline_insights', 'opportunities', 'renewals', 'rewards', 'rides',
   'savings_goals', 'screen_time_limits', 'transactions', 'trip_items', 'trips',
   // AUTHZ-020 (0459): unowned by any feature, so no browser writer today —
