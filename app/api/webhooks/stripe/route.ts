@@ -8,16 +8,48 @@ import { markReferralConverted, rewardConvertedReferral } from '@/lib/referrals/
 import { isNewPaidConversion, isChurn } from '@/lib/billing/conversion';
 import { catalogPlanForPrice } from '@/lib/billing/price-catalog';
 import { rememberStripeCustomer } from '@/lib/billing/customer-ref';
+import { readFamilySubscription } from '@/lib/billing/subscription-row';
 import { recordEvent, markEventProcessed, markEventError } from '@/lib/stripe/webhook';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body';
 import type Stripe from 'stripe';
+import type { Tables } from '@/lib/database.types';
 
 export const runtime = 'nodejs';
 const MAX_WEBHOOK_BODY_BYTES = 256_000;
 
-async function persistSubscription(supabase: ReturnType<typeof createServiceClient>, sub: Stripe.Subscription) {
+type Admin = ReturnType<typeof createServiceClient>;
+const LIVE = ['active', 'trialing', 'past_due'];
+
+/** Best-effort Notification Center entry for a billing state a person has to look at. */
+async function alertBillingAnomaly(supabase: Admin, familyId: string, title: string, body: string, meta: Record<string, unknown>) {
+  try {
+    const { recordAdminNotification } = await import('@/lib/admin/notify');
+    await recordAdminNotification(supabase, {
+      kind: 'info', title, body, url: '/admin/subscriptions',
+      relatedType: 'subscription', relatedId: familyId, meta,
+    });
+  } catch (e) { console.error('[admin-notify] billing anomaly alert failed', e); }
+}
+
+/**
+ * Is the subscription the row records still live in Stripe? A missing one is
+ * not; any other read failure is thrown, so the event is retried rather than
+ * decided on a guess.
+ */
+async function recordedSubscriptionIsLive(stripe: Stripe | null, ref: string): Promise<boolean> {
+  if (!stripe) return true;
+  try {
+    const recorded = await stripe.subscriptions.retrieve(ref);
+    return recorded.id === ref && LIVE.includes(recorded.status);
+  } catch (error) {
+    if ((error as { code?: unknown })?.code === 'resource_missing') return false;
+    throw error;
+  }
+}
+
+async function persistSubscription(supabase: ReturnType<typeof createServiceClient>, sub: Stripe.Subscription, stripe: Stripe | null = null) {
   const familyId = sub.metadata.family_id;
   if (!familyId) return;
 
@@ -42,13 +74,15 @@ async function persistSubscription(supabase: ReturnType<typeof createServiceClie
   }).filter(({ plan }) => plan !== null);
   if (recognized.length > 1) throw new Error('Subscription plan items are ambiguous');
   const { item, plan } = recognized[0] ?? {};
-  if (!plan) throw new Error('Unknown Stripe subscription price');
 
   // Resolve billing_customer_id + the PRIOR subscription state (to detect a
-  // brand-new paid conversion vs. a routine renewal).
+  // brand-new paid conversion vs. a routine renewal). A family may hold more
+  // than one row (0285 could not enforce one); maybeSingle alone failed every
+  // event for such a family forever, so its cancellations never landed. The
+  // row recording THIS subscription is the prior state when there is one.
   const [{ data: bc, error: billingCustomerError }, { data: priorSub, error: priorSubscriptionError }] = await settleAll([
     supabase.from('billing_customers').select('id').eq('family_id', familyId).maybeSingle(),
-    supabase.from('subscriptions').select('plan, status, provider_ref').eq('family_id', familyId).maybeSingle(),
+    readFamilySubscription<Pick<Tables<'subscriptions'>, 'plan' | 'status' | 'provider_ref'>>(() => supabase.from('subscriptions').select('plan, status, provider_ref').eq('family_id', familyId), sub.id),
   ]);
   if (billingCustomerError || priorSubscriptionError) {
     console.error('[stripe webhook] Billing state lookup failed', billingCustomerError ?? priorSubscriptionError);
@@ -60,10 +94,56 @@ async function persistSubscription(supabase: ReturnType<typeof createServiceClie
   // before checkout refused one (PAY-DOUBLE-001). An event about a subscription
   // that has ENDED must not overwrite a DIFFERENT subscription the row records
   // as live, or the family reads as canceled while it is still paying.
-  const LIVE = ['active', 'trialing', 'past_due'];
   if (priorSub?.provider_ref && priorSub.provider_ref !== sub.id
     && LIVE.includes(priorSub.status) && !LIVE.includes(sub.status)) {
     console.warn('[stripe webhook] ignored an ended subscription that is not the family\'s live one', { familyId, ended: sub.id });
+    return;
+  }
+
+  // A SECOND live subscription for a family whose row records a different one
+  // that Stripe still holds live: two checkouts completed (two tabs, a retry).
+  // Overwriting the row would hide whichever subscription it held from
+  // cancel/change-plan while it kept billing, so the row is left as it is and
+  // the duplicate is flagged for a refund instead.
+  if (priorSub?.provider_ref && priorSub.provider_ref !== sub.id
+    && LIVE.includes(priorSub.status) && LIVE.includes(sub.status)
+    && await recordedSubscriptionIsLive(stripe, priorSub.provider_ref)) {
+    console.error('[stripe webhook] a second live subscription for one family was not recorded', { familyId, recorded: priorSub.provider_ref, duplicate: sub.id });
+    await alertBillingAnomaly(supabase, familyId, 'Duplicate live subscription',
+      `Subscription ${sub.id} is live alongside the recorded ${priorSub.provider_ref}. Cancel and refund the duplicate.`,
+      { recorded: priorSub.provider_ref, duplicate: sub.id, status: sub.status });
+    return;
+  }
+
+  if (!plan) {
+    // An unrecognized price (an env price replaced without its old id in
+    // previousIds, or one set in the Stripe dashboard). Mapping it to a plan is
+    // impossible, but a status that ENDS paid access must still land: throwing
+    // here kept a canceled family's row 'active' and its paid level forever.
+    // The plan already stored stays; only a grant or a plan change throws.
+    const priceIds = items.map(item => item.price.id);
+    await alertBillingAnomaly(supabase, familyId, 'Unknown Stripe subscription price',
+      `Subscription ${sub.id} (${sub.status}) is on a price Bubaly does not map to a plan.`,
+      { subscription: sub.id, status: sub.status, prices: priceIds });
+    if (sub.status === 'active' || sub.status === 'trialing') throw new Error('Unknown Stripe subscription price');
+    if (priorSub?.provider_ref !== sub.id) {
+      // Not the subscription the row records, so it grants nothing to revoke.
+      console.warn('[stripe webhook] ignored a non-paying subscription on an unknown price', { familyId, subscription: sub.id });
+      return;
+    }
+    const periodEnd = items.length === 1 ? items[0].current_period_end : null;
+    const revoke = {
+      status: sub.status as 'past_due' | 'canceled' | 'incomplete' | 'incomplete_expired' | 'unpaid',
+      cancel_at_period_end: sub.cancel_at_period_end ?? false,
+      ...(typeof periodEnd === 'number' && Number.isSafeInteger(periodEnd) && periodEnd > 0
+        ? { current_period_end: new Date(periodEnd * 1000).toISOString() } : {}),
+    };
+    const { error: revokeError } = await supabase
+      .from('subscriptions').update(revoke).eq('family_id', familyId).eq('provider_ref', sub.id).select('id');
+    if (revokeError) {
+      console.error('[stripe webhook] Subscription status update failed', revokeError);
+      throw new Error('Subscription persistence failed');
+    }
     return;
   }
 
@@ -226,7 +306,10 @@ export async function POST(req: NextRequest) {
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted': {
-        await persistSubscription(supabase, await currentSubscription(settings, event.data.object as Stripe.Subscription));
+        const fromEvent = event.data.object as Stripe.Subscription;
+        const secretKey = effectiveSecretKey(settings);
+        await persistSubscription(supabase, await currentSubscription(settings, fromEvent),
+          fromEvent.metadata?.family_id && secretKey ? stripeFromKey(secretKey) : null);
         break;
       }
 

@@ -123,7 +123,9 @@ beforeEach(() => {
   // for. (An active trial grants Basic, which is still short of Plus, but
   // leaving it out keeps the assertion about one variable.)
   db.seed('families', [
-    { id: FREE, name: 'Free household', timezone: 'Europe/Berlin', trial_ends_at: '2020-01-01T00:00:00.000Z', closed_at: null },
+    // Grandfathered Free (no trial), so the refusal is the plan tier's. A trial
+    // that ended unpaid is refused as trial_expired instead (locked-family test).
+    { id: FREE, name: 'Free household', timezone: 'Europe/Berlin', trial_ends_at: null, closed_at: null },
     { id: PLUS, name: 'Plus household', timezone: 'Asia/Tokyo', trial_ends_at: '2020-01-01T00:00:00.000Z', closed_at: null },
   ]);
   db.seed('subscriptions', [{ family_id: PLUS, plan: 'plus', status: 'active' }]);

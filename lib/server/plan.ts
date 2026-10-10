@@ -3,7 +3,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { planLevel } from '@/lib/constants/plans';
-import { computeEntitlement } from '@/lib/server/entitlement';
+import { computeEntitlement, PAID_SUBSCRIPTION_STATUSES, type Entitlement } from '@/lib/server/entitlement';
+
+export { lockedEntitlementCode } from '@/lib/server/entitlement';
 
 /**
  * The family's effective subscription level (0 Free / 1 Basic / 2 Plus),
@@ -29,12 +31,27 @@ import { computeEntitlement } from '@/lib/server/entitlement';
  * the service-role client (see above).
  */
 export async function resolveFamilyPlanLevel(
-  _supabase: SupabaseClient,
+  supabase: SupabaseClient,
   familyId: string,
 ): Promise<number> {
+  return (await resolveFamilyEntitlement(supabase, familyId)).effectiveLevel;
+}
+
+/**
+ * The family's whole entitlement — level AND `locked`/`closed` — read the same
+ * robust way as `resolveFamilyPlanLevel` (which is this, narrowed to its level).
+ * A server-side gate needs the lock: a trial-expired family is at level 0 like a
+ * free one, but unlike a free one it may use nothing, and the (app) layout's
+ * overlay is not in front of an API route, a server action or the mobile app.
+ * THROWS when the state cannot be read, exactly as resolveFamilyPlanLevel does.
+ */
+export async function resolveFamilyEntitlement(
+  _supabase: SupabaseClient,
+  familyId: string,
+): Promise<Entitlement> {
   const admin = createServiceClient();
   const [{ data: subs, error: subscriptionsError }, { data: fam, error: familyError }] = await settleAll([
-    admin.from('subscriptions').select('plan, status').eq('family_id', familyId).in('status', ['active', 'trialing']),
+    admin.from('subscriptions').select('plan, status').eq('family_id', familyId).in('status', [...PAID_SUBSCRIPTION_STATUSES]),
     admin.from('families').select('trial_ends_at, closed_at').eq('id', familyId).maybeSingle(),
   ]);
   if (subscriptionsError || familyError || !fam) {
@@ -48,5 +65,5 @@ export async function resolveFamilyPlanLevel(
     paidLevel,
     trialEndsAt: fam?.trial_ends_at ?? null,
     closedAt: fam?.closed_at ?? null,
-  }).effectiveLevel;
+  });
 }

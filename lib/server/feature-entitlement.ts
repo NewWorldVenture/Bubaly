@@ -1,7 +1,8 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { resolveFamilyPlanLevel } from '@/lib/server/plan';
+import { resolveFamilyEntitlement } from '@/lib/server/plan';
+import { lockedEntitlementCode } from '@/lib/server/entitlement';
 import { getFeatureTiersByHref } from '@/lib/server/feature-tiers';
 import { tierToLevel } from '@/lib/features/tiers';
 import type { FeatureTier } from '@/lib/constants/feature-catalog';
@@ -31,7 +32,14 @@ type DB = SupabaseClient<Database>;
 export type FeatureEntitlement =
   | { allowed: true; planLevel: number }
   | { allowed: false; reason: 'off'; needLevel: number; planLevel: number }
-  | { allowed: false; reason: 'plan'; needLevel: number; planLevel: number };
+  | { allowed: false; reason: 'plan'; needLevel: number; planLevel: number }
+  /**
+   * The family's trial ended unpaid, or the account is closed. Its level is 0
+   * like a free family's, but it may use nothing until it subscribes (or
+   * reopens), free-tier features included — the server half of the
+   * TrialPaywallGate the (app) layout shows.
+   */
+  | { allowed: false; reason: 'locked'; code: 'trial_expired' | 'account_closed'; needLevel: number; planLevel: number };
 
 /**
  * `href` is the feature's route key, e.g. '/dashboard/autopilot'.
@@ -84,14 +92,18 @@ export async function resolveFeatureEntitlement(
   href: string,
   tiers?: Record<string, FeatureTier>,
 ): Promise<FeatureEntitlement> {
-  const [planLevel, byHref] = await Promise.all([
-    resolveFamilyPlanLevel(db, familyId),
+  const [entitlement, byHref] = await Promise.all([
+    resolveFamilyEntitlement(db, familyId),
     tiers ? Promise.resolve(tiers) : getFeatureTiersByHref(db, { onUnavailable: 'throw' }),
   ]);
+  const planLevel = entitlement.effectiveLevel;
 
   const tier = byHref[href];
-  if (tier === undefined) return { allowed: true, planLevel };
   if (tier === 'off') return { allowed: false, reason: 'off', needLevel: 0, planLevel };
+  // Before the tier: a locked family is refused free features too.
+  const locked = lockedEntitlementCode(entitlement);
+  if (locked) return { allowed: false, reason: 'locked', code: locked, needLevel: 1, planLevel };
+  if (tier === undefined) return { allowed: true, planLevel };
 
   const needLevel = tierToLevel(tier);
   if (planLevel < needLevel) return { allowed: false, reason: 'plan', needLevel, planLevel };

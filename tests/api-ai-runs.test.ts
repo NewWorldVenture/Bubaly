@@ -120,7 +120,9 @@ vi.mock('@/lib/supabase/bearer', async (importOriginal) => ({
 vi.mock('@/lib/server/ensure-family', () => ({ ensureActiveFamily: async () => false }));
 // `react.cache` is server-only; the tier module is not under test here.
 vi.mock('@/lib/server/feature-tiers', () => ({ getResolvedFeatureTiers: (...a: unknown[]) => getResolvedFeatureTiers(...a) }));
-vi.mock('@/lib/server/plan', () => ({ resolveFamilyPlanLevel: (...a: unknown[]) => resolveFamilyPlanLevel(...a) }));
+vi.mock('@/lib/server/plan', () => ({ resolveFamilyPlanLevel: (...a: unknown[]) => resolveFamilyPlanLevel(...a),
+  resolveFamilyEntitlement: async (...a: unknown[]) => ({ effectiveLevel: await (resolveFamilyPlanLevel(...a)), locked: false, closed: false, inTrial: false, trialEndsAt: null }),
+}));
 vi.mock('@/lib/server/rate-limit', () => ({ rateLimit: () => ({ ok: true }) }));
 vi.mock('@/lib/server/rate-limit-db', () => ({ rateLimitDb: async () => ({ ok: true }) }));
 vi.mock('@/lib/ai/context/intents', async (importOriginal) => ({

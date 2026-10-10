@@ -57,6 +57,22 @@ export function computeEntitlement(input: {
   return { effectiveLevel: 0, locked: true, closed: false, inTrial: false, trialEndsAt };
 }
 
+/**
+ * Subscription statuses that carry their plan's level. `past_due` is Stripe's
+ * retry window after a failed renewal: the family is still subscribed (checkout
+ * refuses them a second subscription, the portal fixes the card), so it keeps
+ * its level until Stripe gives up and the status becomes unpaid/canceled.
+ * Locking it instead trapped the family behind a paywall whose only action,
+ * checkout, answered "already subscribed".
+ */
+export const PAID_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due'] as const;
+
+/** The refusal code for a locked entitlement, or null when it is not locked. */
+export function lockedEntitlementCode(entitlement: Pick<Entitlement, 'locked' | 'closed'>): 'trial_expired' | 'account_closed' | null {
+  if (entitlement.closed) return 'account_closed';
+  return entitlement.locked ? 'trial_expired' : null;
+}
+
 const UNLOCKED_FALLBACK: Entitlement = {
   effectiveLevel: 0, locked: false, closed: false, inTrial: false, trialEndsAt: null,
 };
@@ -79,10 +95,18 @@ export async function resolveEntitlement(
     // page is about to show.
     const activeId = chooseActiveMembership(members, prefs?.active_family_id)!.family_id;
 
-    const [{ data: fam }, { data: subs }] = await settleAll([
+    const [{ data: fam, error: familyError }, { data: subs, error: subscriptionsError }] = await settleAll([
       supabase.from('families').select('trial_ends_at, closed_at').eq('id', activeId).maybeSingle(),
-      supabase.from('subscriptions').select('plan, status').eq('family_id', activeId).in('status', ['active', 'trialing']),
+      supabase.from('subscriptions').select('plan, status').eq('family_id', activeId).in('status', [...PAID_SUBSCRIPTION_STATUSES]),
     ]);
+    // Never an entitlement computed from half the data: a failed families read
+    // read as "grandfathered" (unlocking an expired trial), and a failed
+    // subscriptions read as "unpaid" (locking a paying family). Either way the
+    // documented answer to a read we could not make is the fail-open fallback.
+    if (familyError || subscriptionsError) {
+      console.error('[entitlement] family entitlement read failed', { familyError, subscriptionsError, familyId: activeId });
+      return { ...UNLOCKED_FALLBACK, familyId: activeId };
+    }
 
     const paidLevel = (subs ?? []).reduce((max, s) => Math.max(max, planLevel(s.plan)), 0);
     const ent = computeEntitlement({
