@@ -16,7 +16,10 @@ import { createInMemorySupabase } from './helpers/in-memory-supabase';
  *
  * Bubaly's `list_pending_decisions` read both for whoever was talking to it.
  * A child asking "what needs me?" heard about a sibling's $50 request and was
- * asked to sign off chores they cannot sign off.
+ * asked to sign off chores they cannot sign off. It also read renewals and
+ * expiring documents, which the assistant's own prompt policy keeps to adults
+ * (lib/ai/context/policy.ts: the money and documents slices, §4) and which
+ * Home and Needs You show nobody in this list.
  */
 
 const FAMILY = '00000000-0000-4000-8000-00000000fa11';
@@ -36,6 +39,12 @@ function household() {
     { id: '00000000-0000-4000-8000-0000000000b2', family_id: FAMILY, status: 'submitted' },
   ]);
   db.seed('grocery_items', [{ id: '00000000-0000-4000-8000-0000000000c1', family_id: FAMILY, is_checked: false }]);
+  const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString();
+  db.seed('renewals', [{
+    id: '00000000-0000-4000-8000-0000000000d1', family_id: FAMILY, title: 'Car insurance', expires_at: inDays(5),
+    reminder_days: 14, status: 'active', created_at: '2026-09-01T00:00:00.000Z',
+  }]);
+  db.seed('documents', [{ id: '00000000-0000-4000-8000-0000000000e1', family_id: FAMILY, title: "Dana's passport", expires_at: inDays(10) }]);
   return db;
 }
 
@@ -57,6 +66,8 @@ describe('list_pending_decisions follows the pages\' role rule', () => {
     const titles = await pending('parent', PARENT);
     expect(titles.some((t) => t.includes('$50')), JSON.stringify(titles)).toBe(true);
     expect(titles).toContain('2 chores awaiting approval');
+    expect(titles.some((t) => t.startsWith('Renew Car insurance')), JSON.stringify(titles)).toBe(true);
+    expect(titles.some((t) => t.startsWith("Dana's passport")), JSON.stringify(titles)).toBe(true);
   });
 
   it('an adult manager hears them too', async () => {
@@ -69,6 +80,7 @@ describe('list_pending_decisions follows the pages\' role rule', () => {
     it(`a ${role ?? 'roleless'} caller hears neither, and still hears the rest`, async () => {
       const titles = await pending(role, KID);
       expect(titles.some((t) => t.includes('$50') || /approv/i.test(t)), JSON.stringify(titles)).toBe(false);
+      expect(titles.some((t) => /Car insurance|passport/i.test(t)), JSON.stringify(titles)).toBe(false);
       // Not an empty answer: what any member is shown is still there.
       expect(titles).toContain('Grocery list needs updating');
     });

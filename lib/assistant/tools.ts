@@ -468,14 +468,20 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         // same rule Home, Needs You and the briefing apply. Row-level security
         // lets any member read `parent_approvals` (0251), so this is the line:
         // a child asking "what needs me?" is not told a sibling's request, nor
-        // asked to sign off chores they cannot sign off (AI-001).
+        // asked to sign off chores they cannot sign off (AI-001). Renewals and
+        // expiring documents are adults-only for the same reason the prompt's
+        // money and documents slices are (lib/ai/context/policy.ts, §4).
         const manager = isManager(ctx.role);
         const [appr, ren, docs, dueRem, convEvents, signoff, grocery, todos] = await settleAll([
           manager
             ? supabase.from('parent_approvals').select('id, kind, amount_cents, created_at').eq('family_id', ctx.familyId).eq('status', 'pending').limit(50)
             : Promise.resolve({ data: [] as ParentApprovalRow[], error: null }),
-          supabase.from('renewals').select('id, title, expires_at, reminder_days, status, created_at').eq('family_id', ctx.familyId).in('status', ['active', 'expired']).lte('expires_at', in45).limit(50),
-          supabase.from('documents').select('id, title, expires_at').eq('family_id', ctx.familyId).not('expires_at', 'is', null).lte('expires_at', in30).limit(50),
+          manager
+            ? supabase.from('renewals').select('id, title, expires_at, reminder_days, status, created_at').eq('family_id', ctx.familyId).in('status', ['active', 'expired']).lte('expires_at', in45).limit(50)
+            : Promise.resolve({ data: [] as RenewalRow[], error: null }),
+          manager
+            ? supabase.from('documents').select('id, title, expires_at').eq('family_id', ctx.familyId).not('expires_at', 'is', null).lte('expires_at', in30).limit(50)
+            : Promise.resolve({ data: [] as DocumentRow[], error: null }),
           supabase.from('family_reminders').select('id, remind_at, status').eq('family_id', ctx.familyId).eq('status', 'active').not('remind_at', 'is', null).lte('remind_at', todayEnd.toISOString()).limit(100),
           // Series included: a one-off booked over a weekly practice clashes in
           // the week it is booked, which is almost never the practice's first.
