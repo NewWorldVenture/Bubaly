@@ -4380,11 +4380,14 @@ itself:
 | `gift_links.child_wallet_id` | The public gift page and its AI name that wallet's child. |
 | `pay_handles.child_wallet_id` | It resolves to a gift link, so the same page. |
 | `child_wallets.member_id` | `issueCardAction` sends that member's name to Stripe as the cardholder. |
-| `medication_schedules.medication_id` | The morning brief (notifications cron, service role) embeds `medications(name, …)` through it, so it names another family's medication. A session read hides it; the service-role embed does not. |
+| `medication_schedules.medication_id` | The morning brief (notifications cron, service role) embeds `medications(name, …)` through it. The delivered notification does not carry the name (only the count headline and decision titles), but it counts the other family's dose: "2 due today" for 1. The name sits in the brief's internal digest. A session read hides it; the service-role embed does not. |
 
 As family A's parent under RLS, every one of the five writes landed on the
 replay. For the schedule, A's parent read 0 of B's medications, yet the
-service-role embed returned B's medication name. The Guardian and gift consumers are already fixed in code in #981.
+service-role embed returned B's medication name into the brief's internal
+digest. The emitted notification carries only its effect on the count, as
+`tests/a-foreign-medication-reaches-only-the-briefs-internals.test.ts` pins
+(owner review 6092976873). The Guardian and gift consumers are already fixed in code in #981.
 0497 makes the database refuse the row, using 0311's existing helper and no
 new function. In-app writers use only the family's own members and wallets,
 and the helper exempts the service role and session-less writers (migrations,

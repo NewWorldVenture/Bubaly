@@ -23,9 +23,13 @@
 --     with the service client and sends it to Stripe as the cardholder.
 --   * medication_schedules.medication_id. The morning brief (the notifications
 --     cron, service role) embeds medications(name, ...) through it, so a
---     schedule naming another family's medication put that family's drug name
---     into this family's brief. A session read hides it (RLS on medications);
---     the embed under the service role does not.
+--     schedule naming another family's medication pulled that medication into
+--     this family's brief. The delivered notification carries only the count
+--     headline and decision titles, so the name is not sent. What is emitted is
+--     a wrong count ("2 due today" for 1), with the foreign name in the
+--     brief's internal digest (tests/a-foreign-medication-reaches-only-the-
+--     briefs-internals.test.ts). A session read hides it (RLS on
+--     medications); the embed under the service role does not.
 --
 -- Measured as family A's parent under RLS, every one of the five writes
 -- landed. The first two consumers are already fixed in code (they now read
