@@ -20,8 +20,13 @@ const MAX_ATTEMPTS = 5;
  * budgeted per family: anyone can mail the family address, and without a cap a
  * flood of distinct "urgent" messages was one Twilio SMS each. Over budget, the
  * message is still filed and alerted in-app; only the SMS is withheld. Counted
- * from `locked_at`, which is set only when a receipt is claimed for a send.
+ * from `locked_at` (set when a receipt is claimed for a send), but only for
+ * receipts whose SMS may actually have gone out: a claim whose send came back
+ * misconfigured, retryable or rejected sent nothing, and counting it let an
+ * outage or a run of Twilio rejections use up the budget (and the same-sender
+ * window) so later messages were never texted at all.
  */
+const SMS_MAY_HAVE_GONE_OUT = ['dispatching', 'accepted', 'unknown'] as const;
 export const URGENT_SMS_PER_HOUR = 5;
 export const URGENT_SMS_PER_DAY = 20;
 /** Repeated urgent messages from one sender inside this window share one SMS. */
@@ -163,13 +168,17 @@ async function ensureNotification(admin: Admin, receipt: Receipt, messageId: str
 /** True when this receipt's SMS would exceed the family's urgent-SMS budget or repeat a recent sender's. */
 async function smsBudgetExhausted(admin: Admin, receipt: Receipt, now: Date, signal: AbortSignal): Promise<boolean> {
   const since = new Date(now.getTime() - 86_400_000).toISOString();
-  const recent = await admin.from('ai_tool_calls').select('id,family_id,inputs,locked_at')
+  const recent = await admin.from('ai_tool_calls').select('id,family_id,inputs,outputs,locked_at')
     .eq('family_id', receipt.family_id).eq('tool_name', TOOL).neq('id', receipt.id).gte('locked_at', since)
+    .in('outputs->>phase', [...SMS_MAY_HAVE_GONE_OUT])
     .order('locked_at', { ascending: false }).limit(URGENT_SMS_PER_DAY).abortSignal(signal);
   if (recent.error || !Array.isArray(recent.data)) throw new Error('Urgent budget read failed');
-  if (recent.data.length >= URGENT_SMS_PER_DAY) return true;
-  const claimedSince = (ms: number) => recent.data.filter(row => row.family_id === receipt.family_id && row.locked_at !== null &&
-    Date.parse(row.locked_at) >= now.getTime() - ms);
+  // The phase is re-checked here too, so the count never depends on the
+  // filter alone; the limit above is applied to already-filtered rows.
+  const sent = recent.data.filter(row => row.family_id === receipt.family_id && row.locked_at !== null &&
+    (SMS_MAY_HAVE_GONE_OUT as readonly unknown[]).includes((row.outputs as { phase?: unknown } | null)?.phase));
+  if (sent.length >= URGENT_SMS_PER_DAY) return true;
+  const claimedSince = (ms: number) => sent.filter(row => Date.parse(row.locked_at!) >= now.getTime() - ms);
   if (claimedSince(3_600_000).length >= URGENT_SMS_PER_HOUR) return true;
   const sender = receipt.inputs.from?.trim().toLowerCase();
   return !!sender && claimedSince(URGENT_SMS_SAME_SENDER_WINDOW_MS).some(row => {

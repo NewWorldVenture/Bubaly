@@ -40,6 +40,7 @@ export async function finishEmailReply(admin: Admin, input: { familyId: string; 
   const { id } = identity(input.familyId, input.providerRef);
   const done = await admin.from('ai_tool_calls').update({
     outputs: { version: 1, phase: sent ? 'sent' : 'not_sent' }, state: sent ? 'succeeded' : 'failed', finished_at: new Date().toISOString(),
-  }).eq('id', id).eq('family_id', input.familyId).eq('tool_name', TOOL).abortSignal(AbortSignal.timeout(5000));
-  if (done.error) console.error('[contact-center] email reply receipt update failed');
+  }).eq('id', id).eq('family_id', input.familyId).eq('tool_name', TOOL)
+    .abortSignal(AbortSignal.timeout(5000)).select('id').maybeSingle();
+  if (done.error || done.data?.id !== id) console.error('[contact-center] email reply receipt update failed');
 }

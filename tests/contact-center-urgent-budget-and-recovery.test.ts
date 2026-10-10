@@ -66,6 +66,58 @@ describe('urgent SMS budget', () => {
     expect(mocks.send).toHaveBeenCalledTimes(2);
   });
 
+  it('a same-sender follow-up during an outage is still texted once credentials work', async () => {
+    mocks.send.mockResolvedValueOnce({ kind: 'misconfigured' });
+    expect(await run({ providerRef: 'outage-a' })).toBe('pending');
+    // Credentials are fixed; A is still waiting for its retry, so nothing has
+    // reached this sender yet and B must not be collapsed onto A's attempt.
+    expect(await run({ providerRef: 'outage-b' })).toBe('accepted');
+    expect(receipt('outage-b')).toMatchObject({ state: 'succeeded', outputs: { phase: 'accepted', providerSid: SID } });
+    // A then drains and shares B's SMS: the sender got exactly one text.
+    expect(await drainUrgentDeliveries(admin(), { now: new Date(Date.now() + 360_000) })).toMatchObject({ in_app_only: 1, accepted: 0 });
+    expect(mocks.send).toHaveBeenCalledTimes(2);
+    expect(receipt('outage-a')).toMatchObject({ state: 'succeeded', error: 'Translated: contactUrgent.smsBudget', outputs: { phase: 'in_app_only' } });
+  });
+
+  it('an outage backlog larger than the hourly budget is held for retry, not demoted to in-app only', async () => {
+    mocks.send.mockResolvedValue({ kind: 'misconfigured' });
+    for (let index = 0; index <= URGENT_SMS_PER_HOUR; index++) {
+      expect(await run({ providerRef: `backlog-${index}`, from: `sender-${index}@example.com` })).toBe('pending');
+    }
+    expect(db.table('ai_tool_calls').every(row => (row.outputs as { phase: string; drain: boolean }).phase === 'queued' &&
+      (row.outputs as { drain: boolean }).drain)).toBe(true);
+    mocks.send.mockResolvedValue({ kind: 'accepted', messageSid: SID, providerStatus: 'queued' });
+    // Once credentials work the budget is spent on texts actually sent.
+    expect(await drainUrgentDeliveries(admin(), { limit: 20, now: new Date(Date.now() + 600_000) }))
+      .toMatchObject({ accepted: URGENT_SMS_PER_HOUR, in_app_only: 1, pending: 0 });
+  });
+
+  it('sends Twilio rejected or asked to retry do not use up the budget', async () => {
+    for (let index = 0; index < URGENT_SMS_PER_HOUR; index++) {
+      mocks.send.mockResolvedValueOnce({ kind: 'rejected', code: 'provider_rejected' });
+      expect(await run({ providerRef: `rejected-${index}`, from: `rejected-${index}@example.com` })).toBe('rejected');
+    }
+    mocks.send.mockResolvedValueOnce({ kind: 'retryable', code: 'rate_limited' });
+    expect(await run({ providerRef: 'retry', from: 'retry@example.com' })).toBe('pending');
+    expect(await run({ providerRef: 'genuine', from: 'genuine@example.com' })).toBe('accepted');
+    expect(receipt('genuine')).toMatchObject({ outputs: { phase: 'accepted', providerSid: SID } });
+  });
+
+  it('sends that were accepted or whose outcome is unknown still exhaust the budget (control)', async () => {
+    for (let index = 0; index < URGENT_SMS_PER_HOUR; index++) {
+      if (index % 2) mocks.send.mockResolvedValueOnce({ kind: 'unknown' });
+      await run({ providerRef: `spent-${index}`, from: `spent-${index}@example.com` });
+    }
+    expect(await run({ providerRef: 'spent-over', from: 'spent-over@example.com' })).toBe('in_app_only');
+    expect(mocks.send).toHaveBeenCalledTimes(URGENT_SMS_PER_HOUR);
+  });
+
+  it('an unknown send outcome still collapses a same-sender repeat (control)', async () => {
+    mocks.send.mockResolvedValueOnce({ kind: 'unknown' });
+    expect(await run({ providerRef: 'unknown-1', from: 'repeat@example.com' })).toBe('unknown');
+    expect(await run({ providerRef: 'unknown-2', from: 'repeat@example.com' })).toBe('in_app_only');
+  });
+
   it('a family under the budget still texts (control)', async () => {
     expect(await run()).toBe('accepted');
     expect(mocks.send).toHaveBeenCalledOnce();
