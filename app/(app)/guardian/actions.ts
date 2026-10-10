@@ -68,6 +68,39 @@ async function reviewResult(data: unknown): Promise<ActionResult> {
   return { ok: false, error: messages[String(result.reason)] ?? 'Could not review the Guardian suggestion.' };
 }
 
+type ServerClient = Awaited<ReturnType<typeof createServer>>;
+
+/**
+ * Whether a member id the caller supplied names an active member of THEIR
+ * family. The database ties guardian_member_profiles / contacts / rules to
+ * family_members only by id (a plain FK), and RLS checks only the row's own
+ * family_id, so a manager of family A could otherwise attach family B's child
+ * to A's Guardian number — and the voice webhook would put callers through to
+ * that child. Answers the refusal to return, or null when the id is good.
+ */
+async function foreignMember(supabase: ServerClient, familyId: string, memberId: string): Promise<ActionResult<never> | null> {
+  const t = await getTranslations();
+  const { data, error } = await supabase.from('family_members')
+    .select('id, family_id').eq('id', memberId).eq('family_id', familyId).eq('is_active', true).limit(1);
+  if (error) return actionFailure('check the Guardian member', t('actions.familyMemberNotFound'), error);
+  if (!Array.isArray(data) || data.length !== 1 || data[0].id !== memberId || data[0].family_id !== familyId) {
+    return { ok: false, error: t('actions.familyMemberNotFound') };
+  }
+  return null;
+}
+
+/** The same check for a contact a rule is conditioned on. */
+async function foreignContact(supabase: ServerClient, familyId: string, contactId: string): Promise<ActionResult<never> | null> {
+  const t = await getTranslations();
+  const { data, error } = await supabase.from('guardian_contacts')
+    .select('id, family_id').eq('id', contactId).eq('family_id', familyId).limit(1);
+  if (error) return actionFailure('check the Guardian contact', t('actions.contactNotFound'), error);
+  if (!Array.isArray(data) || data.length !== 1 || data[0].id !== contactId || data[0].family_id !== familyId) {
+    return { ok: false, error: t('actions.contactNotFound') };
+  }
+  return null;
+}
+
 // ── Contacts ────────────────────────────────────────────────────────────────
 
 export async function upsertContactAction(input: {
@@ -85,6 +118,10 @@ export async function upsertContactAction(input: {
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
   const userId = ctx.user.id;
+  if (input.member_id) {
+    const refused = await foreignMember(supabase, familyId, input.member_id);
+    if (refused) return refused;
+  }
 
   const payload = {
     family_id: familyId,
@@ -209,6 +246,8 @@ export async function upsertMemberProfileAction(
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
+  const refused = await foreignMember(supabase, familyId, input.member_id);
+  if (refused) return refused;
 
   const payload = guardianProfilePayload(input, familyId);
 
@@ -278,6 +317,11 @@ export async function assignGuardianPhoneAction(input: {
     }
   }
 
+  // The member must be this family's: the profile row is created here if it
+  // does not exist, and the voice webhook dials whoever it names.
+  const refused = await foreignMember(supabase, familyId, input.member_id);
+  if (refused) return refused;
+
   // Guard against assigning the same Guardian number to two members.
   if (phone) {
     const { data: clash, error: clashError } = await supabase.from('guardian_member_profiles')
@@ -343,6 +387,14 @@ export async function createRuleAction(input: {
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
   const userId = ctx.user.id;
+  if (input.member_id) {
+    const refused = await foreignMember(supabase, familyId, input.member_id);
+    if (refused) return refused;
+  }
+  if (input.condition_contact_id) {
+    const refused = await foreignContact(supabase, familyId, input.condition_contact_id);
+    if (refused) return refused;
+  }
 
   const { data, error } = await supabase.from('guardian_routing_rules')
     .insert({

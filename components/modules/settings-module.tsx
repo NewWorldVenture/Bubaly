@@ -28,6 +28,7 @@ import {
   DASHBOARD_VIEWS, dashboardLabel, dashboardIcon, DASHBOARD_DESCRIPTION_KEYS, type DashboardView,
 } from '@/lib/constants/dashboards';
 import { setDefaultDashboardAction, updateMyProfileAction } from '@/app/(app)/actions';
+import { forgetRemovedMemberLocationAction } from '@/app/(app)/family/member-removal-actions';
 import { splitFullName } from '@/lib/onboarding/profile';
 import { cn } from '@/lib/utils/cn';
 import { CalendarSyncPanel } from '@/components/dashboard/calendar-sync-panel';
@@ -192,6 +193,8 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
       .update({ is_active: false }).eq('id', memberId).eq('family_id', family.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(updated)) return toastError(t('errors.thatChangeWasNotSaved'));
+    // Their last position and location history leave with them.
+    await forgetRemovedMemberLocationAction(memberId).catch(() => undefined);
     success(t('settingsModule.memberRemoved'));
     window.location.reload();
   }

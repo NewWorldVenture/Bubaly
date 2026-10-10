@@ -13,10 +13,32 @@ import { twilioRefusal, verifyTwilioRequest } from '@/lib/server/twilio-ingress'
 import { formatPhone } from '@/lib/guardian/phone';
 import { claimGuardianCallback, isValidGuardianEventId, markGuardianCallbackProcessed, releaseGuardianCallback } from '@/lib/guardian/callbacks';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
+import { escalateGuardianEmergency } from '@/lib/guardian/escalate';
+import { GUARDIAN_INBOUND_CAP_REASON, GUARDIAN_INBOUND_FAMILY_CAP, GUARDIAN_INBOUND_SENDER_CAP, GUARDIAN_INBOUND_WINDOW_MS } from '@/lib/guardian/inbound-caps';
 
 export const runtime = 'nodejs';
 
 const MAX_TWILIO_BODY_BYTES = 64 * 1024;
+
+/**
+ * Whether this sender, or this family, is past the rolling inbound cap (the
+ * same caps as the SMS lane). A count that cannot be read reads as under it.
+ */
+async function overInboundCap(supabase: ReturnType<typeof createServiceClient>, familyId: string, from: string | null): Promise<boolean> {
+  const since = new Date(Date.now() - GUARDIAN_INBOUND_WINDOW_MS).toISOString();
+  const count = async (sender: boolean): Promise<number> => {
+    try {
+      let query = supabase.from('guardian_communications').select('id', { count: 'exact', head: true })
+        .eq('family_id', familyId).eq('comm_type', 'whatsapp_inbound').gte('started_at', since);
+      if (sender) query = from === null ? query.is('from_number', null) : query.eq('from_number', from);
+      const { count: n, error } = await query;
+      return !error && typeof n === 'number' ? n : 0;
+    } catch { return 0; }
+  };
+  const [fromSender, forFamily] = await Promise.all([count(true), count(false)]);
+  // The current message is not recorded yet, so it is the one past `>=`.
+  return fromSender >= GUARDIAN_INBOUND_SENDER_CAP || forFamily >= GUARDIAN_INBOUND_FAMILY_CAP;
+}
 
 /** Strip Twilio's `whatsapp:` channel prefix, leaving a bare E.164 number. */
 function stripChannel(addr: string | null): string | null {
@@ -101,8 +123,16 @@ export async function POST(req: NextRequest) {
     return new NextResponse('Guardian routing unavailable', { status: 503 });
   }
 
-  // Deep scam analysis on the message body.
-  const scamResult = await detectScamWithAI(body, from, `Family ID: ${familyId}`);
+  // Deep scam analysis on the message body — but no model call where the
+  // answer cannot change anything (the sender is already blocked, or the
+  // pattern detector is already sure), and none past the rolling per-sender /
+  // per-family cap, so a spamming sender cannot buy one LLM request per text.
+  const settled = decision.routingMode === 'blocked' || (decision.scamDetected && decision.spamScore >= 80);
+  const throttled = !settled && await overInboundCap(supabase, familyId, from);
+  const scamResult = settled || throttled
+    ? { isScam: decision.scamDetected, scamType: decision.scamType, confidence: decision.scamDetected ? Math.min(100, Math.max(0, decision.spamScore)) : 0 }
+    : await detectScamWithAI(body, from, `Family ID: ${familyId}`);
+  const emergency = decision.shouldEscalate;
 
   // Create communication record.
   //
@@ -128,12 +158,14 @@ export async function POST(req: NextRequest) {
     trust_level_at_time: decision.trustLevel,
     routing_mode_used: decision.routingMode,
     routing_rule_id: decision.ruleId,
-    ai_decision_reason: decision.reason,
+    // A routine message past the cap is recorded as `blocked`, and the reason
+    // says why: kept in the inbox, no family alert.
+    ai_decision_reason: throttled ? `${decision.reason} ${GUARDIAN_INBOUND_CAP_REASON}` : decision.reason,
     scam_detected: scamResult.isScam,
     scam_type: scamResult.scamType,
     scam_confidence: scamResult.confidence,
     twilio_sms_sid: smsSid,
-    status: scamResult.isScam && scamResult.confidence >= 80 ? 'blocked' : 'received',
+    status: emergency ? 'escalated' : (scamResult.isScam && scamResult.confidence >= 80) || throttled ? 'blocked' : 'received',
   }).select('id').maybeSingle();
 
   if (commError) {
@@ -156,8 +188,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Blocked / high-confidence spam — silently discard.
-  if (decision.routingMode === 'blocked' || (scamResult.isScam && scamResult.confidence >= 80)) {
+  // Blocked / high-confidence spam — silently discard. Never an emergency from
+  // a sender the family has not blocked (the pipeline does not set
+  // shouldEscalate for a blocked one): a real "help me" can score like a scam.
+  // Past the rolling cap the message is kept in the inbox without a ping.
+  if (!emergency && (decision.routingMode === 'blocked' || (scamResult.isScam && scamResult.confidence >= 80) || throttled)) {
     await markGuardianCallbackProcessed(supabase, smsSid);
     return new NextResponse('', { status: 200 });
   }
@@ -168,19 +203,40 @@ export async function POST(req: NextRequest) {
 
   try {
     // Same shape and same reason as the SMS route: a routine screened message
-    // obeys quiet hours. Not urgent.
+    // obeys quiet hours. An emergency does not wait for morning.
     const scope = await systemScopeForFamily(supabase, familyId);
     if (scope) {
       await notify(scope, {
         recipients: 'family',
         type: 'system',
-        title: `💚 WhatsApp from ${callerDisplay}`,
+        title: emergency ? `🚨 Emergency WhatsApp from ${callerDisplay}` : `💚 WhatsApp from ${callerDisplay}`,
         body: preview,
         relatedType: 'guardian_communications',
         relatedId: comm?.id ?? null,
+        ...(emergency ? { urgent: true } : {}),
       });
     }
   } catch { /* non-fatal */ }
+
+  if (emergency) {
+    // Text and call the managers, keyed on the communication (or, if it was not
+    // recorded, on the message itself) so a redelivery cannot alarm twice.
+    try {
+      const escalation = await escalateGuardianEmergency(supabase, {
+        familyId,
+        ...(comm?.id ? { commId: comm.id as string } : {}),
+        escalationType: 'urgent_personal',
+        severity: 'critical',
+        description: `Emergency WhatsApp from ${callerDisplay}: "${body.slice(0, 300)}"`,
+        ...(from ? { callerNumber: from.slice(0, 64) } : {}),
+      });
+      if (escalation.kind !== 'delivered' && escalation.kind !== 'duplicate') {
+        console.error('[guardian/inbound/whatsapp] emergency escalation did not reach a manager', { familyId, smsSid, outcome: escalation.kind });
+      }
+    } catch (error) {
+      console.error('[guardian/inbound/whatsapp] emergency escalation threw', { familyId, smsSid, error });
+    }
+  }
 
   await markGuardianCallbackProcessed(supabase, smsSid);
   return new NextResponse('', { status: 200 });

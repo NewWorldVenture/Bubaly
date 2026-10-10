@@ -17,6 +17,7 @@ import type { PlanId } from '@/lib/constants/plans';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { isValidTimezone } from '@/lib/time/zoned';
+import { forgetMemberLocation } from '@/lib/location/retention';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -227,6 +228,10 @@ export async function adminRemoveMemberAction(memberId: string): Promise<Result>
   const { data: member, error } = await supabase.from('family_members')
     .update({ is_active: false }).eq('id', memberId).select('family_id, display_name').single();
   if (error) return actionFailure(error, t('actions.couldNotRemoveThatMember'));
+
+  // Their last position and location history leave with them.
+  const forgotten = await forgetMemberLocation(supabase, member.family_id, memberId);
+  if (!forgotten.ok) console.error('[admin-action] removed member location was not cleared', { memberId, failures: forgotten.failures });
 
   await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name } });
   revalidatePath('/admin/users');

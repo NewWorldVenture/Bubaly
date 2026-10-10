@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
+import { forgetRemovedMemberLocationAction } from '@/app/(app)/family/member-removal-actions';
 import { settleAll } from '@/lib/supabase/settle';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
@@ -482,6 +483,8 @@ export function FamilyModule() {
               setRemoveMember(null);
               if (err) { toastError(describeDbError(err)); return; }
               if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
+              // Their last position and location history leave with them.
+              await forgetRemovedMemberLocationAction(removeMember.id).catch(() => undefined);
               success(t('familyModule.memberRemoved')); void refreshMembers();
             }}>{t('family.remove')}</Button>
           </div>

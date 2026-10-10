@@ -19,6 +19,7 @@ import { claimGuardianCallback, isValidGuardianEventId, markGuardianCallbackProc
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import { appBaseUrl } from '@/lib/server/app-url';
+import { escalateGuardianEmergency } from '@/lib/guardian/escalate';
 
 export const runtime = 'nodejs';
 
@@ -230,6 +231,7 @@ export async function POST(req: NextRequest) {
           callerName: decision?.callerName ?? formatPhone(sess.caller_number),
           summary: decision?.summary ?? 'Incoming call transferred.',
           urgency: decision?.urgency ?? 'medium',
+          callerNumber: sess.caller_number,
         });
       }
 
@@ -273,6 +275,7 @@ export async function POST(req: NextRequest) {
         callerName: decision?.callerName ?? formatPhone(sess.caller_number),
         summary,
         urgency: decision?.urgency ?? 'low',
+        callerNumber: sess.caller_number,
       });
     }
 
@@ -353,7 +356,7 @@ async function notifyFamily(
   supabase: ReturnType<typeof createServiceClient>,
   familyId: string,
   memberProfile: { member_id: string } | null,
-  opts: { commId: string; callerName: string; summary: string; urgency: string },
+  opts: { commId: string; callerName: string; summary: string; urgency: string; callerNumber: string | null },
 ) {
   // Non-fatal, but not invisible: the insert RESOLVES with an error rather than
   // throwing, so this catch never saw a failed write and a screened emergency
@@ -373,6 +376,28 @@ async function notifyFamily(
     if (error) console.error('[guardian] screening notification write failed', error);
   } catch (error) {
     console.error('[guardian] screening notification write threw', error);
+  }
+
+  // An emergency the screening AI recognised is not just an in-app row: text
+  // and call the managers. Keyed on the communication, so a retried turn is
+  // answered by the escalation's own claim instead of alarming twice. Logged,
+  // never raised — the caller is still on the line.
+  if (opts.urgency === 'emergency') {
+    try {
+      const escalation = await escalateGuardianEmergency(supabase, {
+        familyId,
+        commId: opts.commId,
+        escalationType: 'emergency_call',
+        severity: 'critical',
+        description: `Emergency call from ${opts.callerName}: ${opts.summary}`.slice(0, 4096),
+        ...(opts.callerNumber ? { callerNumber: opts.callerNumber.slice(0, 64) } : {}),
+      });
+      if (escalation.kind !== 'delivered' && escalation.kind !== 'duplicate') {
+        console.error('[guardian/screen] emergency escalation did not reach a manager', { familyId, commId: opts.commId, outcome: escalation.kind });
+      }
+    } catch (error) {
+      console.error('[guardian/screen] emergency escalation threw', { familyId, commId: opts.commId, error });
+    }
   }
 }
 

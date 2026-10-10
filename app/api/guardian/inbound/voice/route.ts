@@ -109,6 +109,23 @@ export async function POST(req: NextRequest) {
   const familyId = memberProfile.family_id as string;
   const memberId = memberProfile.member_id as string;
 
+  // The profile names a member, but nothing in the database ties that member to
+  // the profile's family (a plain FK to family_members.id), and every member
+  // read below runs with the service role. So check the member really is this
+  // family's before saying their name or putting a caller through to their
+  // phone — the SMS lane refuses the same case in ownsDestination.
+  const { data: owner, error: ownerError } = await supabase.from('family_members')
+    .select('id, family_id, display_name').eq('id', memberId).eq('family_id', familyId).eq('is_active', true).maybeSingle();
+  if (ownerError) {
+    console.error('[guardian-voice] Guardian member lookup failed', { familyId, memberId, error: ownerError });
+    await releaseGuardianCallback(supabase, 'inbound_voice', callSid);
+    return new NextResponse('Guardian routing unavailable', { status: 503 });
+  }
+  if (!owner || (owner as { family_id?: string }).family_id !== familyId) {
+    console.error('[guardian-voice] Guardian number names a member outside its family; refusing the call', { familyId, memberId, to });
+    return finish(wrapTwiml(twimlSay(tr('voice.iMSorryWeRe')), twimlHangup()));
+  }
+
   // Enrich caller ID via Twilio Lookup (best-effort, non-blocking)
   const callerName = await lookupCallerName(from ?? '').catch(() => null);
 
@@ -172,9 +189,8 @@ export async function POST(req: NextRequest) {
   // Route based on pipeline decision
   const { routingMode, memberProfile: profile } = decision;
 
-  // Update member phone for display
-  const memberData = await supabase.from('family_members').select('display_name').eq('id', memberId).maybeSingle();
-  const memberName = (memberData.data as { display_name?: string } | null)?.display_name ?? 'the family';
+  // The member's name for the greeting, from the family-checked row above.
+  const memberName = (owner as { display_name?: string | null }).display_name ?? 'the family';
 
   const { data: familyData } = await supabase.from('families').select('name').eq('id', familyId).maybeSingle();
   const familyName = (familyData as { name?: string } | null)?.name ?? 'the family';
@@ -197,7 +213,7 @@ export async function POST(req: NextRequest) {
     // for a member with no number on file, which is a different situation, and
     // it is preserved. Logged rather than failed, because a screened call still
     // reaches the family and a 503 would drop it. Audit C1-S9-43.
-    const { data: member, error: memberError } = await supabase.from('family_members').select('phone').eq('id', memberId).maybeSingle();
+    const { data: member, error: memberError } = await supabase.from('family_members').select('phone').eq('id', memberId).eq('family_id', familyId).maybeSingle();
     if (memberError) {
       console.error('[guardian/inbound/voice] member phone read failed; trusted caller will be screened instead of connected', {
         familyId, memberId, callSid, error: memberError.message,
