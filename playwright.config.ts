@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { OUTBOUND_PROVIDER_KEYS_OFF } from './scripts/e2e-server-env.mjs';
 
 // E2E smoke tests live in tests/e2e/*.spec.ts. Unit tests (vitest) use
 // tests/**/*.test.ts, so the two suites never collide.
@@ -73,6 +74,7 @@ export default defineConfig({
       NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? 'dummy-anon-key',
       SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY ?? 'dummy-service-role-key',
       NEXT_PUBLIC_APP_URL: baseURL,
+      ...OUTBOUND_PROVIDER_KEYS_OFF,
     },
   },
 });

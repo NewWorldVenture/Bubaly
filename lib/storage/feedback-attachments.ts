@@ -1,12 +1,10 @@
 import type { SupabaseBrowser } from '@/lib/supabase/types';
 import { removeConfirmed } from '@/lib/storage/confirm-removal';
 
-import { FEEDBACK_ATTACHMENTS_BUCKET, feedbackAttachmentPathFromUrl } from './feedback-attachment-url';
+import { FEEDBACK_ATTACHMENTS_BUCKET, feedbackAttachmentObjectPath } from './feedback-attachment-url';
 
 export { FEEDBACK_ATTACHMENTS_BUCKET, feedbackAttachmentPathFromUrl } from './feedback-attachment-url';
 export const FEEDBACK_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
  * The storage path for a stored attachment value, whether it is a bare path or
@@ -20,13 +18,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
  * a path that escapes its folder — returns null rather than something to sign.
  */
 export function feedbackAttachmentPath(value: string, expectedOrigin?: string): string | null {
-  const raw = value.trim();
-  if (!raw) return null;
-  if (raw.includes('://')) return feedbackAttachmentPathFromUrl(raw, expectedOrigin);
-  const parts = raw.split('/');
-  if (parts.length < 2 || !UUID.test(parts[0])) return null;
-  if (parts.some((part) => !part || part === '.' || part === '..')) return null;
-  return raw;
+  // One reading of a stored value, shared with the submit check
+  // (lib/feedback/board.ts), which cannot import this client-side module.
+  return feedbackAttachmentObjectPath(value, expectedOrigin);
 }
 export async function removeFeedbackAttachmentPath(
   supabase: SupabaseBrowser,
