@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (byMember.size === 0) {
-    return NextResponse.json({ sent: 0, message: 'No pending assignments' });
+    return NextResponse.json({ sent: 0, message: t('choreReminders.noPendingAssignments') });
   }
 
   // Fetch family names
@@ -133,7 +133,7 @@ export async function GET(req: NextRequest) {
     if (!openFamilyIds.has(bucket.familyId)) byMember.delete(memberId);
   }
   if (byMember.size === 0) {
-    return NextResponse.json({ sent: 0, message: 'No pending assignments' });
+    return NextResponse.json({ sent: 0, message: t('choreReminders.noPendingAssignments') });
   }
   const familyNameById = new Map(families.map((f) => [f.id, f.name]));
   const familyZoneById = new Map(families.map((f) => [f.id, f.timezone || 'UTC']));

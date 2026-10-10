@@ -53,7 +53,7 @@ function readForm(formData: FormData) {
 
 async function requireAdmin(): Promise<{ userId: string } | { error: string }> {
   if (!await isSuperAdmin()) return { error: 'Not authorized.' };
-  if (!(await superAdminAssurance()).ok) return { error: 'Enter your two-step code before using the admin console.' };
+  if (!(await superAdminAssurance()).ok) return { error: (await getTranslations())('actions.adminConsoleNeedsYourCode') };
   const user = await getUser();
   if (!user) return { error: 'Not signed in.' };
   return { userId: user.id };

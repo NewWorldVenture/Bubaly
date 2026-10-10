@@ -2,6 +2,8 @@
 
 import { headers } from 'next/headers';
 import { getTranslations } from '@/lib/i18n/server';
+import { SOURCE_MESSAGES } from '@/lib/i18n/messages';
+import { translate } from '@/lib/i18n/translate';
 import { createServiceClient } from '@/lib/supabase/server';
 import { clampGiftAmountCents } from '@/lib/wallet/gift';
 import { clientIp } from '@/lib/server/rate-limit';
@@ -73,13 +75,18 @@ export async function submitGiftPledgeAction(input: {
   // free text from someone who has not signed in, and a 'family' notice is one
   // row every member reads — a child included — before any parent has looked
   // at the gift. The name and message are shown to a manager in /wallet/gift.
+  //
+  // Worded from the catalogue in the SOURCE locale, as the approval reminders
+  // are (lib/services/approvals): one row is stored for every manager and no
+  // member stores a language choice yet (I18N-001). The giver's request locale
+  // — `t` above — is the wrong reader for a notice the FAMILY reads.
   const scope = await systemScopeForFamily(supabase, link.family_id);
   if (scope) {
     await notify(scope, {
       recipients: 'managers',
       type: 'system',
-      title: '🎁 A gift is waiting for approval',
-      body: 'Approve it in Family Wallet to add it to your child’s wallet.',
+      title: translate(SOURCE_MESSAGES, 'actions.aGiftIsWaitingForApproval'),
+      body: translate(SOURCE_MESSAGES, 'actions.approveItInFamilyWalletTo'),
       relatedType: 'gift_payments',
       relatedId: link.id,
     });

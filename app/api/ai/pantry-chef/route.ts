@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
 
     // A model call: it counts against the family's monthly AI allowance and is
     // recorded as an ai_requests row like every other one.
-    const access = await assertAIAccess(ctx, { db: supabase, now, featureKey: FRIDGE_CHEF_FEATURE_KEY, label: 'Fridge Chef' });
+    const access = await assertAIAccess(ctx, { db: supabase, now, featureKey: FRIDGE_CHEF_FEATURE_KEY, label: t('pantryChef.fridgeChef') });
     if (!access.ok) return accessDeniedResponse(access);
 
     // Read the family's allergies with the service client so the safety filter
@@ -172,7 +172,7 @@ export async function POST(req: NextRequest) {
     const model = aiConfig.model && /^(gpt-|o\d|chatgpt-)/i.test(aiConfig.model) ? aiConfig.model : 'gpt-4o';
 
     const prompt = buildPantryChefPrompt(allergies, now, ctx.active.family.timezone || 'UTC');
-    return await withAiRequest(scopeFromUserContext(ctx, supabase), { feature: 'kitchen.fridge_chef', text: 'Fridge Chef photo' }, async (obs) => {
+    return await withAiRequest(scopeFromUserContext(ctx, supabase), { feature: 'kitchen.fridge_chef', text: t('pantryChef.fridgeChefPhoto') }, async (obs) => {
       const aiRes = await fetchWithDeadline('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
