@@ -1,5 +1,6 @@
 import 'server-only';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { configuredSecret } from '@/lib/server/configured-secret';
 
 // Signed unsubscribe tokens so the public unsubscribe link can't be forged or
 // enumerated. Token = HMAC-SHA256(email) using a server secret.
@@ -21,7 +22,8 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 // valid unsubscribe key for ever once a real signing secret exists.
 const DEV_SECRET = 'bubaly-dev-unsub-secret';
 
-const isSet = (value: string | undefined): value is string => typeof value === 'string' && value.trim() !== '';
+// A value copied from .env.example is not set: it would sign links anyone can forge.
+const isSet = (value: string | undefined): value is string => configuredSecret(value) !== null;
 
 /** The secrets a mailed link may have been signed with, in signing order. */
 function signingSecrets(): string[] {

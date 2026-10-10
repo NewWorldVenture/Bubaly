@@ -1,6 +1,7 @@
 // lib/health/status.ts — pure, dependency-free helpers behind the /api/health
 // readiness endpoint. Kept separate from the route so the decision logic is unit
 // testable without a live network or Supabase project.
+import { configuredSecret } from '@/lib/server/configured-secret';
 
 /**
  * Environment variables the app CANNOT boot/serve requests without. These are the
@@ -112,8 +113,8 @@ export const FEATURE_ENV = [
  */
 export function checkFeatureEnv(env: Record<string, string | undefined>): EnvCheck {
   const missing = FEATURE_ENV.filter((name) => {
-    const value = env[name];
-    return value === undefined || value.trim() === '';
+    // A value copied from .env.example is as missing as an absent one.
+    return configuredSecret(env[name]) === null;
   });
   return { ok: missing.length === 0, missing };
 }
@@ -124,8 +125,8 @@ export function checkFeatureEnv(env: Record<string, string | undefined>): EnvChe
  */
 export function checkRequiredEnv(env: Record<string, string | undefined>): EnvCheck {
   const missing = REQUIRED_ENV.filter((name) => {
-    const value = env[name];
-    return value === undefined || value.trim() === '';
+    // A value copied from .env.example is as missing as an absent one.
+    return configuredSecret(env[name]) === null;
   });
   return { ok: missing.length === 0, missing };
 }

@@ -14,6 +14,7 @@ import { reserveChildLoginAttempt } from '@/lib/auth/child-throttle-store';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { createClient as createPasswordClient } from '@supabase/supabase-js';
+import { configuredSecret } from '@/lib/server/configured-secret';
 
 /** Where a just-signed-in user should land: the admin console for super
  *  admins, the Grandparent Portal for a guest (M28 — the role extended-family
@@ -78,7 +79,7 @@ export async function childSignInAction(input: { username: string; pin: string }
   { ok: true; tokens: { access_token: string; refresh_token: string } } | { ok: false; error: string }
 > {
   const t = await getTranslations();
-  const sec = process.env.CHILD_LOGIN_SECRET || null;
+  const sec = configuredSecret(process.env.CHILD_LOGIN_SECRET);
   if (!sec) return { ok: false, error: t('actions.kidSignInIsnT') };
 
   const payload = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;

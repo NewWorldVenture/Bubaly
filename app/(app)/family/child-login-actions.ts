@@ -14,10 +14,11 @@ import { normalizeUsername, isValidUsername, syntheticChildEmail } from '@/lib/o
 import { deriveChildPassword } from '@/lib/onboarding/child-password';
 import { logAudit } from '@/lib/server/audit';
 import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
+import { configuredSecret } from '@/lib/server/configured-secret';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
-const secret = () => process.env.CHILD_LOGIN_SECRET || null;
+const secret = () => configuredSecret(process.env.CHILD_LOGIN_SECRET);
 /** The app_metadata key that marks a kid login. The held 0495 reads the same
  *  key from auth.users.raw_app_meta_data; the two must agree. */
 const KID_LOGIN_APP_METADATA_KEY = 'bubaly_kid_login';

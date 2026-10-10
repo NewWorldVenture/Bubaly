@@ -16,6 +16,7 @@ import {
 } from '@/lib/stripe/webhook';
 import { syncConnectedAccount } from '@/lib/stripe/connect';
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body';
+import { configuredSecret } from '@/lib/server/configured-secret';
 
 export const runtime = 'nodejs';
 const MAX_WEBHOOK_BODY_BYTES = 256_000;
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest) {
   if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Payload too large' : 'Unable to read payload' }, { status: boundedBody.reason === 'too_large' ? 413 : 400 });
   const body = boundedBody.text;
   const sig = req.headers.get('stripe-signature') ?? '';
-  const secret = process.env.STRIPE_MONEY_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET || '';
+  const secret = configuredSecret(process.env.STRIPE_MONEY_WEBHOOK_SECRET) ?? configuredSecret(process.env.STRIPE_WEBHOOK_SECRET) ?? '';
   if (!secret) return NextResponse.json({ error: t('money.webhookNotConfigured') }, { status: 503 });
 
   let event: Stripe.Event;

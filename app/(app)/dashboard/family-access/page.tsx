@@ -8,6 +8,7 @@ import { isManager } from '@/lib/constants/roles';
 import { ChildAccessManager, type AccessMember } from '@/components/family/child-access-manager';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
+import { configuredSecret } from '@/lib/server/configured-secret';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -56,7 +57,7 @@ export default async function FamilyAccessPage() {
       username: usernameByMember.get(m.id) ?? null,
     }));
 
-  const configured = !!process.env.CHILD_LOGIN_SECRET;
+  const configured = configuredSecret(process.env.CHILD_LOGIN_SECRET) !== null;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 pb-28">

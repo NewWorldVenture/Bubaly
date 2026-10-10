@@ -12,24 +12,27 @@
 // shape lib/sync/feed-token.ts and the Resend webhook already use, and the
 // length of a secret is not the secret.
 import { timingSafeEqual } from 'node:crypto';
+import { configuredSecret } from '@/lib/server/configured-secret';
 
 /**
  * True only when both values are present and identical.
  *
  * An absent expectation is never a match: an unset secret must mean "this is
  * disabled", never "everything matches". That is the property every caller
- * here depends on, and the reason this returns false rather than throwing.
+ * here depends on, and the reason this returns false rather than throwing. A
+ * value copied from `.env.example` is absent too (lib/server/configured-secret).
  */
 export function secretsMatch(provided: string | null | undefined, expected: string | null | undefined): boolean {
-  if (!provided || !expected) return false;
+  const real = configuredSecret(expected);
+  if (!provided || !real) return false;
   const a = Buffer.from(provided, 'utf8');
-  const b = Buffer.from(expected, 'utf8');
+  const b = Buffer.from(real, 'utf8');
   if (a.length !== b.length) return false;
   return timingSafeEqual(a, b);
 }
 
 /** `Authorization: Bearer <secret>`, compared in constant time. */
 export function bearerMatches(header: string | null | undefined, secret: string | null | undefined): boolean {
-  if (!secret) return false;
+  if (!configuredSecret(secret)) return false;
   return secretsMatch(header, `Bearer ${secret}`);
 }

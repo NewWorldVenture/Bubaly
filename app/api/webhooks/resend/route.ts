@@ -7,6 +7,7 @@ import { isMissingFunctionError } from '@/lib/supabase/errors';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey, isEventTrigger } from '@/lib/marketing/automation-triggers';
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body';
+import { configuredSecret } from '@/lib/server/configured-secret';
 
 export const runtime = 'nodejs';
 
@@ -19,7 +20,8 @@ const EVENT_TRIGGER: Record<string, 'email_opened' | 'email_clicked'> = {
 // Verify a Svix-signed webhook (Resend uses Svix). Returns true only on a valid
 // signature against RESEND_WEBHOOK_SECRET (whsec_...).
 function verify(body: string, headers: Headers, nowMs = Date.now()): boolean {
-  const secret = process.env.RESEND_WEBHOOK_SECRET;
+  // A value copied from .env.example is no secret: anyone can sign with it.
+  const secret = configuredSecret(process.env.RESEND_WEBHOOK_SECRET);
   if (!secret) return false;
   const id = headers.get('svix-id');
   const ts = headers.get('svix-timestamp');
