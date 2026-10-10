@@ -175,7 +175,7 @@ describe('a child account is never provisioned a family of its own', () => {
     expect(db.tables.families).toHaveLength(1);
   });
 
-  it('recognises the kids address even once its child_logins row is gone', async () => {
+  it('recognises a kid login even once its child_logins row is gone', async () => {
     // A manager can delete the row; a device that was signed in keeps the session.
     seed({ childActive: false });
     db.tables.child_logins = [];

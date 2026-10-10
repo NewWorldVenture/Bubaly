@@ -112,7 +112,13 @@ export async function middleware(req: NextRequest) {
   // HTML login page is not an answer a JSON client can act on. Only a
   // well-formed bearer header opts out under /api/ai or for the exact native
   // calendar GET route; each handler still validates the caller identity.
-  const bearerApi = (path === '/api/ai' || path.startsWith('/api/ai/') || (path === '/api/calendar/occurrences' && req.method === 'GET'))
+  // The exact POST /api/push/unsubscribe is the sign-out push detach
+  // (lib/push/device-registration.ts): it leaves with the LEAVING session's
+  // access token as a bearer and `credentials: 'omit'`, because the cookies are
+  // already cleared, and the route verifies that token itself. No other
+  // /api/push route is opened.
+  const bearerApi = (path === '/api/ai' || path.startsWith('/api/ai/') || (path === '/api/calendar/occurrences' && req.method === 'GET')
+    || (path === '/api/push/unsubscribe' && req.method === 'POST'))
     && /^Bearer\s+\S+$/i.test((req.headers.get('authorization') ?? '').trim());
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

@@ -35,6 +35,7 @@ const exports = () => [adapter.insertEvent, adapter.patchEvent, adapter.deleteEv
 const googleExports = () => [mocks.googleInsertEvent, mocks.googlePatchEvent, mocks.googleDeleteEvent, mocks.googleInsertTask, mocks.googlePatchTask, mocks.googleDeleteTask];
 function seed(direction: string, metadata: unknown = {}, provider = 'microsoft') {
   db.seed('sync_accounts', [{ ...ACCOUNT, provider, sync_direction: direction, metadata }]);
+  db.seed('family_members', [{ id: 'owner-member', family_id: ACCOUNT.family_id, user_id: ACCOUNT.user_id, is_active: true }]);
   db.seed('sync_connections', [{ id: 'connection', account_id: ACCOUNT.id }]);
   db.seed('sync_calendars', [{ id: 'calendar', account_id: ACCOUNT.id, family_id: 'ours', provider, external_id: 'primary', sync_token: null }]);
   db.seed('sync_reminder_lists', [{ id: 'list', account_id: ACCOUNT.id, family_id: 'ours', provider, external_id: provider === 'google' ? '@default' : 'default' }]);
@@ -56,8 +57,6 @@ beforeEach(() => {
     },
   } });
   db.seed('families', [{ id: 'ours', timezone: 'UTC' }]);
-  // A connection syncs only while its owner is an active member of its family.
-  db.seed('family_members', [{ id: 'owner-member', family_id: 'ours', user_id: 'owner', role: 'parent', is_active: true }]);
   mocks.token.mockResolvedValue('access');
   mocks.legacyToken.mockResolvedValue('access');
   mocks.onboarding.mockResolvedValue({ ok: true, data: { imported: 1, exported: 0, skipped: 0, conflicts: 0 } });
@@ -201,6 +200,24 @@ describe('real engine entrypoints respect persisted direction', () => {
     expect((await runProviderSync(db as never, { ...ACCOUNT, family_id: 'theirs' }, adapter)).error).toBeTruthy();
     expect(mocks.token).not.toHaveBeenCalled();
     expect(db.table('sync_jobs')).toEqual([]);
+  });
+  it.each(['generic', 'google'])("refuses a removed owner's account before any provider, token or job work in the %s engine", async (engine) => {
+    seed('two_way', {}, engine === 'google' ? 'google' : 'microsoft');
+    db.table('family_members')[0].is_active = false;
+    const result = engine === 'google' ? await runGoogleSync(db as never, ACCOUNT) : await runProviderSync(db as never, ACCOUNT, adapter);
+    expect(result.error).toBe(getMessages('en-US')['syncPolicy.ownerUnavailable']);
+    expect(mocks.token).not.toHaveBeenCalled();
+    expect(mocks.legacyToken).not.toHaveBeenCalled();
+    expect(adapter.listCalendars).not.toHaveBeenCalled();
+    expect(mocks.googleCalendars).not.toHaveBeenCalled();
+    expect(db.table('sync_jobs')).toEqual([]);
+    for (const action of [...exports(), ...googleExports()]) expect(action).not.toHaveBeenCalled();
+  });
+  it("refuses an owner who is an active member of a DIFFERENT family", async () => {
+    seed('two_way');
+    db.table('family_members')[0].family_id = 'theirs';
+    const result = await loadSyncExecutionPolicy(db as never, ACCOUNT, 'microsoft');
+    expect(result).toMatchObject({ ok: false, code: 'ownerUnavailable' });
   });
   it('returns an honest policy read failure before token access', async () => {
     vi.spyOn(db, 'from').mockImplementation(() => { throw new Error('offline'); });

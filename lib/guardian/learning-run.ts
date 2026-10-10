@@ -5,6 +5,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { analyzeCommunications, type CommSummary, type ContactSummary } from './learning';
+import { isValidTimezone } from '@/lib/time/zoned';
 
 /** How far back the learning loop looks. */
 const LOOKBACK_DAYS = 60;
@@ -29,6 +30,7 @@ export async function runLearningForFamily(
     { data: comms, error: commsError },
     { data: contacts, error: contactsError },
     { data: pending, error: pendingError },
+    { data: family, error: familyError },
   ] = await Promise.all([
     supabase.from('guardian_communications')
       .select('from_number, contact_id, scam_detected, trust_level_at_time, started_at')
@@ -39,26 +41,39 @@ export async function runLearningForFamily(
     supabase.from('guardian_contacts')
       .select('id, phone, name, trust_level, trust_override')
       .eq('family_id', familyId),
+    // Not only the pending queue: a suggestion a parent dismissed (or approved,
+    // or that expired) inside the lookback window is still an answer. Keyed on
+    // pending alone, the next night's run saw the same 60-day history and
+    // filed the dismissed suggestion again, every night.
     supabase.from('guardian_suggestions')
       .select('evidence, suggestion_type, proposed_contact_id, proposed_trust_level')
       .eq('family_id', familyId)
-      .eq('status', 'pending'),
+      .or(`status.eq.pending,created_at.gte.${since}`),
+    // Night-time patterns are counted on the family's own clock.
+    supabase.from('families')
+      .select('id, timezone')
+      .eq('id', familyId)
+      .maybeSingle(),
   ]);
   // Every one of these decides what gets proposed. With communications or
   // contacts missing the analyzer reasons about a family it cannot see; with
-  // the pending queue missing, de-duplication finds nothing and the run files
-  // every open suggestion a second time. Stop instead; both callers report it.
-  if (commsError || contactsError || pendingError) {
+  // the suggestion history missing, de-duplication finds nothing and the run
+  // files every suggestion a second time; with the zone missing, "late night"
+  // means someone else's night. Stop instead; both callers report it.
+  const timezone = (family as { timezone?: unknown } | null)?.timezone;
+  if (commsError || contactsError || pendingError || familyError
+    || typeof timezone !== 'string' || !isValidTimezone(timezone)) {
     throw new Error('Guardian learning could not read the family\'s history');
   }
 
   const drafts = analyzeCommunications({
     communications: (comms ?? []) as unknown as CommSummary[],
     contacts: (contacts ?? []) as unknown as ContactSummary[],
+    timezone,
   });
 
-  // Build the set of dedupeKeys already represented by a pending suggestion.
-  // We reconstruct each pending suggestion's key from its stored evidence/fields.
+  // Build the set of dedupeKeys already represented by a recent suggestion.
+  // We reconstruct each suggestion's key from its stored evidence/fields.
   const existingKeys = new Set<string>();
   for (const p of (pending ?? []) as Array<{
     evidence: Record<string, unknown> | null;

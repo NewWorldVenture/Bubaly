@@ -17,7 +17,7 @@ vi.mock('@/lib/supabase/auth', () => ({
 vi.mock('@/lib/supabase/server', () => ({
   createServer: async () => ({ from: () => {
     const b = { select: () => b, eq: () => b,
-      maybeSingle: async () => ({ data: { id: 'i', email: 'grandma@example.test', token: 't', role: 'adult', status: 'pending', expires_at: new Date(Date.now() + 86_400_000).toISOString() }, error: null }) };
+      maybeSingle: async () => ({ data: { id: 'i', email: 'grandma@example.test', token: 't', role: 'adult', status: 'pending', expires_at: '2999-01-01T00:00:00Z' }, error: null }) };
     return b;
   } }),
   // The family-wide invite limit is evaluated on the service client (API-SWEEP-08);

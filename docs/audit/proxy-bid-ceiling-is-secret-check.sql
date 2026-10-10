@@ -11,8 +11,13 @@
 --
 --   rival reads highest_max_cents / reserve_cents  -> REFUSED
 --   seller reads a bidder's max_cents              -> REFUSED
---   rival reads what the UI shows (price, reserve_met) -> allowed  (control)
---   the bid engine still runs a proxy auction      -> allowed  (control)
+--   rival reads what the UI shows (price, reserve_met) -> allowed  (control,
+--     through public.marketplace_circle_listings: 0483 §8c moved the
+--     cross-family read off the base table, and the view carries no secret)
+--   the bid engine still runs a proxy auction      -> allowed  (control; since
+--     0483 §5b a leader whose max covers the reserve is shown AT the reserve,
+--     so the price stands at $200 after the first bid and $302.50 after the
+--     rival's $300, one $2.50 increment over)
 --
 -- And structurally, because a column grant does not extend to columns added
 -- later: every OTHER column of both tables must stay selectable. A future
@@ -75,6 +80,17 @@ begin
     failures := failures + 1;
   end if;
 
+  -- 0483 §8c: the circle feed view is the cross-family read now; it must carry
+  -- none of the secrets either.
+  select string_agg(column_name, ', ') into leaked
+    from information_schema.columns
+   where table_schema = 'public' and table_name = 'marketplace_circle_listings'
+     and column_name = any (secrets);
+  if leaked is not null then
+    raise warning 'BREACH: marketplace_circle_listings exposes secret auction columns: %', leaked;
+    failures := failures + 1;
+  end if;
+
   -- ── fixture: a seller, two bidders, one circle, one auction ─────────────
   insert into auth.users (id, email) values
     (seller, 'auction-seller@example.test'), (alice, 'auction-alice@example.test'), (bob, 'auction-bob@example.test')
@@ -108,15 +124,24 @@ begin
     raise warning 'CONTROL FAILED: the bid engine did not accept the leading bid: %', res;
     failures := failures + 1;
   end if;
+  -- 0483 §5b: her $500 max covers the $200 reserve, so the visible price is
+  -- raised to the reserve rather than left at the $10 start.
+  if (res ->> 'current_cents')::bigint is distinct from 20000 then
+    raise warning 'CONTROL FAILED: the leader''s max covers the reserve, so 0483 §5b shows the $200 reserve as the price; got %', res ->> 'current_cents';
+    failures := failures + 1;
+  end if;
 
   -- ── 2. Bob, a rival in the circle ───────────────────────────────────────
   reset role;
   perform set_config('request.jwt.claim.sub', bob::text, true);
   perform set_config('request.jwt.claims', json_build_object('sub', bob::text)::text, true);
   set local role authenticated;
-  select count(*) into n from public.marketplace_listings where id = listing;
+  -- 0483 §8c: the rival reads the shared listing through the circle view (the
+  -- whole-row base-table policy is gone); the column revokes on the base table
+  -- below are checked at planning time, so they still answer 42501 with no row.
+  select count(*) into n from public.marketplace_circle_listings where id = listing;
   if n <> 1 then
-    raise warning 'CONTROL FAILED: the rival cannot see the shared listing at all, so a refusal below proves nothing';
+    raise warning 'CONTROL FAILED: the rival cannot see the shared listing through marketplace_circle_listings at all, so a refusal below proves nothing';
     failures := failures + 1;
   end if;
   begin
@@ -132,18 +157,19 @@ begin
   exception when insufficient_privilege then null;
   end;
   begin
-    select reserve_met into v_bool from public.marketplace_listings where id = listing;
-    if v_bool is distinct from false then
-      raise warning 'CONTROL FAILED: reserve_met should be false at $10 against a $200 reserve (got %)', v_bool;
+    select reserve_met into v_bool from public.marketplace_circle_listings where id = listing;
+    if v_bool is distinct from true then
+      raise warning 'CONTROL FAILED: reserve_met should be true once the price stands at the $200 reserve (0483 §5b) (got %)', v_bool;
       failures := failures + 1;
     end if;
   exception when insufficient_privilege then
-    raise warning 'CONTROL FAILED: the rival cannot read reserve_met — the fix took the reserve badge away';
+    raise warning 'CONTROL FAILED: the rival cannot read reserve_met through the circle view — the fix took the reserve badge away';
     failures := failures + 1;
   end;
-  -- Blind now, Bob bids $300: the ordinary proxy outcome, price one increment over.
+  -- Blind now, Bob bids $300: the ordinary proxy outcome, price one increment
+  -- over his bid ($2.50 at a $200 price), the leader still in front.
   res := public.marketplace_place_bid(listing, mem_b, fam_b, 30000);
-  if (res ->> 'ok')::boolean is not true or (res ->> 'leading')::boolean is not false or (res ->> 'current_cents')::bigint <> 30050 then
+  if (res ->> 'ok')::boolean is not true or (res ->> 'leading')::boolean is not false or (res ->> 'current_cents')::bigint <> 30250 then
     raise warning 'CONTROL FAILED: the proxy engine did not auto-cover a lower bid as before: %', res;
     failures := failures + 1;
   end if;
@@ -167,7 +193,7 @@ begin
   begin
     select reserve_met into v_bool from public.marketplace_listings where id = listing;
     if v_bool is distinct from true then
-      raise warning 'CONTROL FAILED: reserve_met should be true at $300.50 against a $200 reserve (got %)', v_bool;
+      raise warning 'CONTROL FAILED: reserve_met should be true at $302.50 against a $200 reserve (got %)', v_bool;
       failures := failures + 1;
     end if;
   exception when insufficient_privilege then

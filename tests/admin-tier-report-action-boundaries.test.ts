@@ -23,7 +23,8 @@ describe('privileged tier and report action boundaries', () => {
 
   it('checks report reads, target rows, and listing withdrawal writes', () => {
     expect(reportActions).toContain('reportError');
-    expect(reportActions).toContain("if (!updated) return { ok: false, error: t('actions.reportNotFoundOrAlready') }");
+    expect(reportActions).toContain('if (error || !updated) {');
+    expect(reportActions).toContain("return { ok: false, error: t('actions.reportNotFoundOrAlready') };");
     expect(reportActions).toContain('listingError');
     expect(reportActions).toContain('withdrawalError');
     expect(reportActions).toContain("if (!withdrawn) return { ok: false, error: t('actions.theReportedListingChangedBefore') }");

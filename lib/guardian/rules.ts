@@ -4,6 +4,7 @@
 
 import type { TrustLevel } from './trust';
 import type { RoutingMode } from './pipeline';
+import { isValidTimezone, localPartsAt } from '@/lib/time/zoned';
 
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0=Sun
 
@@ -115,24 +116,29 @@ export function evaluateRules(rules: GuardianRule[], ctx: RuleMatchContext): Rul
   return { matched: false, rule: null, routingMode: null, reason: 'No rules matched — using profile default' };
 }
 
-/** Build the context object from current call data and family timezone. */
+/**
+ * Build the context object from current call data and the FAMILY's timezone.
+ *
+ * The zone is required. It used to default to America/New_York, so a family
+ * anywhere else had its quiet hours, curfews and day-of-week rules evaluated on
+ * the wrong clock — a 22:00–07:00 screen in Los Angeles ran 19:00–04:00 local.
+ * A missing or unusable zone throws rather than guessing one; the pipeline
+ * treats that as unavailable policy and does not route.
+ */
 export function buildRuleContext(params: {
   contactId: string | null;
   trustLevel: TrustLevel;
   callerPhone: string | null;
   callerName: string | null;
   memberContext: string;
-  timezone?: string;
+  timezone: string;
+  now?: Date;
 }): RuleMatchContext {
-  const tz = params.timezone ?? 'America/New_York';
-  const now = new Date();
-  const localStr = now.toLocaleString('en-US', { timeZone: tz, hour12: false });
-  // Parse "6/25/2026, 14:30:00" format
-  const timePart = localStr.split(', ')[1] ?? '0:0:0';
-  const [hStr, mStr] = timePart.split(':');
-  const localHour = parseInt(hStr ?? '0', 10);
-  const localMinute = parseInt(mStr ?? '0', 10);
-  const dayOfWeek = new Date(now.toLocaleString('en-US', { timeZone: tz })).getDay() as DayOfWeek;
+  const tz = params.timezone;
+  if (typeof tz !== 'string' || !tz || !isValidTimezone(tz)) throw new Error('Guardian rules need a valid family timezone');
+  const local = localPartsAt(params.now ?? new Date(), tz);
+  // The local calendar date's weekday, independent of the host's own zone.
+  const dayOfWeek = new Date(Date.UTC(local.year, local.month - 1, local.day)).getUTCDay() as DayOfWeek;
 
   return {
     contactId: params.contactId,
@@ -140,8 +146,8 @@ export function buildRuleContext(params: {
     callerPhone: params.callerPhone,
     callerName: params.callerName,
     currentContext: params.memberContext,
-    localHour,
-    localMinute,
+    localHour: local.hour,
+    localMinute: local.minute,
     dayOfWeek,
   };
 }

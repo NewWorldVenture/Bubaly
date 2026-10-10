@@ -2,7 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServiceClient } from '@/lib/supabase/server';
 import { autoFamilyName, autoOwnerName, DEFAULT_OWNER_DISPLAY_NAME } from '@/lib/onboarding/family';
-import { isChildLoginEmail } from '@/lib/onboarding/child-login';
+import { isChildLoginAccount } from '@/lib/server/child-account';
 
 // Guarantees an authenticated user always has a family space, so onboarding can
 // never trap them in a redirect loop (sign up → land on the dashboard with an
@@ -71,28 +71,12 @@ export async function ensureActiveFamily(
   }
   if (existing && existing.length > 0) return true;
 
-  // A child's username + PIN login with no active family is a child the family
-  // removed, not a newcomer to welcome. Provisioning made that account the
-  // PARENT of a new family with a trial, on the next page load of any device it
-  // was still signed in on. The kids address settles it without a read; the
-  // `child_logins` row (server-written, manager-only) covers an account whose
-  // address is not the synthetic one. A failed read refuses: the caller's
-  // fallback is the same as for any other provisioning failure.
-  if (isChildLoginEmail(user.email)) {
-    console.error('[ensure-family] a child login has no active family; not provisioning one');
-    return false;
-  }
-  const { data: childLogin, error: childLoginErr } = await admin
-    .from('child_logins')
-    .select('id')
-    .eq('user_id', user.id)
-    .limit(1);
-  if (childLoginErr) {
-    console.error('[ensure-family] child login lookup failed', childLoginErr);
-    return false;
-  }
-  if (childLogin && childLogin.length > 0) {
-    console.error('[ensure-family] a child login has no active family; not provisioning one');
+  // A parent-issued child login with no active membership was REMOVED from
+  // the family that made it. Provisioning it a household of its own would make
+  // the child that household's parent (billing, invites, AI, child logins),
+  // outside every parental control. It gets no family instead.
+  if (await isChildLoginAccount(admin, user)) {
+    console.error('[ensure-family] refusing to provision a family for a child login', { userId: user.id });
     return false;
   }
 

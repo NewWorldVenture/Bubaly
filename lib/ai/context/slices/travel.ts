@@ -4,7 +4,7 @@
 // planner needs the dates and the destination, and that is all it gets.
 import 'server-only';
 import { fenceUntrusted, sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
-import { recallFacts } from '@/lib/services/memory';
+import { recallFactsForContext } from '../recall';
 import { listTrips } from '@/lib/services/trips';
 import { ok } from '@/lib/services/types';
 import type { SliceDefinition } from '../policy';
@@ -26,7 +26,7 @@ export const travelSlice: SliceDefinition = {
   async load(scope, env) {
     const [trips, facts] = await Promise.all([
       listTrips(scope, { limit: MAX_TRIPS }),
-      recallFacts(scope, { limit: 300 }),
+      recallFactsForContext(scope, { limit: 300 }),
     ]);
     if (!trips.ok) return trips;
     if (!facts.ok) return facts;

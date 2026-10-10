@@ -18,14 +18,41 @@
 // job. So the spec list is no longer written down. Every spec under tests/e2e
 // whose fixture loader throws on an unknown id is DISCOVERED below and covered,
 // which means a fixture added tomorrow is guarded the day it lands.
+//
+// Two more ways it went blind, both on PR #989, both fixed here. The
+// notification-email-preference loader spells its refusal 'Unmapped fixture
+// dependency', so the discovery never saw it, and settings-module's new import
+// of @/app/(app)/family/member-actions took fourteen tests down. And a loader
+// that hands a RELATIVE specifier to its source map as written cannot serve
+// './mfa' from lib/auth/step-up-client even when lib/auth/mfa IS listed: the
+// signout fixture had every module and still died, because this walk resolved
+// the relative import for it and assumed the loader would too. It now asks.
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, normalize } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const E2E = 'tests/e2e';
 
-/** The loader's own refusal, in each of the four ways these fixtures spell it. */
-const LOADER_THROW = /throw new Error\(\s*'Unexpected [^']*(?:module|import)/;
+/**
+ * The loader's own refusal, in each of the five ways these fixtures spell it.
+ * `throw Error('Unexpected …` without `new` is left out on purpose: the specs
+ * that write it that way resolve their graph through require.resolve, so they
+ * maintain themselves, and this walk would only raise false alarms on them.
+ */
+const LOADER_THROW = /throw new Error\(\s*'Unexpected [^']*(?:module|import)|throw Error\(\s*'Unmapped fixture dependency/;
+
+/**
+ * Whether the loader in `source` can serve `specifier`, a relative import, by
+ * resolving it against the importer (a `startsWith('./')` rewrite for a
+ * sibling; for a parent path, a `startsWith('../')` rewrite or a real resolver,
+ * since the sibling trick of splicing the importer's directory onto
+ * `name.slice(2)` turns '../x' into '/x'). A loader with neither can still map
+ * the exact specifier by name, which the caller checks through `quoted`.
+ */
+function resolvesRelative(source: string, specifier: string): boolean {
+  if (specifier.startsWith('./')) return /startsWith\('\.\/?'\)/.test(source);
+  return /startsWith\('\.\.\/'\)|startsWith\('\.'\)[^;\n]{0,40}(?:resolve|normalize)\(/.test(source);
+}
 
 /**
  * Fixtures that build their source map by FOLLOWING the import graph, with a
@@ -98,10 +125,30 @@ function harness(spec: string) {
     .map((m) => [m[1], m[2]] as const));
   // Ids the fixture hands back itself, from a `mocks`/`requires` object literal.
   const mockKeys = new Set([...source.matchAll(/'(@\/[^']+)'\s*:/g)].map((m) => m[1]));
+  // A whole prefix answered by a Proxy of inert components, as the notification
+  // fixture does for every @/components/ module it does not list.
+  const prefixes = [...source.matchAll(/startsWith\('(@\/[^']+)'\)\)\s*return new Proxy/g)].map((m) => m[1]);
   // Any id the spec mentions at all. A module that gained a brand-new import is
   // named NOWHERE in the harness, which is the drift this guard exists to catch.
   const quoted = new Set([...source.matchAll(/'([^'\n]+)'/g)].map((m) => m[1]));
-  return { source, listed: new Set(listed), entries: listed, atKeyed, mapped, mockKeys, quoted };
+  return { source, listed: new Set(listed), entries: listed, atKeyed, mapped, mockKeys, prefixes, quoted };
+}
+
+type Harness = ReturnType<typeof harness>;
+
+/**
+ * How the loader in `spec` answers `specifier` (resolved to the file `next`):
+ * 'served' when it can hand the module back, 'unlisted' when nothing in the
+ * harness names it, 'unresolved' when the module is there but the loader
+ * cannot get to it from a relative specifier.
+ */
+function serving(h: Harness, specifier: string, next: string): 'served' | 'unlisted' | 'unresolved' {
+  const id = idFor(next);
+  const byId = (h.atKeyed && h.listed.has(next)) || h.quoted.has(id) || h.quoted.has(specifier)
+    || h.prefixes.some((prefix) => id.startsWith(prefix));
+  if (!byId) return 'unlisted';
+  if (specifier.startsWith('.') && !h.quoted.has(specifier) && !resolvesRelative(h.source, specifier)) return 'unresolved';
+  return 'served';
 }
 
 /** The text of a mock's object literal, or null when it is not one we can read. */
@@ -140,7 +187,8 @@ describe.each(COVERED)('%s provides every module its fixture will load', (name) 
   const spec = join(E2E, name);
 
   it('lists each value import reachable from the files it names', () => {
-    const { listed, entries, atKeyed, mapped, mockKeys, quoted } = harness(spec);
+    const h = harness(spec);
+    const { listed, entries, atKeyed, mapped, mockKeys } = h;
     expect(entries.length, `no source files were parsed out of ${spec}`).toBeGreaterThan(0);
 
     const seen = new Set(entries);
@@ -155,10 +203,15 @@ describe.each(COVERED)('%s provides every module its fixture will load', (name) 
         examined += 1;
         const id = idFor(next);
         // Served from the source list, mocked, or mapped by id — in any of the
-        // three id schemes these fixtures use.
-        const served = (atKeyed && listed.has(next)) || quoted.has(id) || quoted.has(specifier);
-        if (!served) {
+        // three id schemes these fixtures use — and, for a relative import,
+        // reachable through the loader at all.
+        const answer = serving(h, specifier, next);
+        if (answer === 'unlisted') {
           missing.push(`${id}  (imported by ${file}; add '${next}' to the source list, or mock it)`);
+          continue;
+        }
+        if (answer === 'unresolved') {
+          missing.push(`${specifier}  (imported by ${file}; the loader does not resolve relative specifiers — rewrite them against the importer, or map this one to '${id}' by name)`);
           continue;
         }
         if (seen.has(next)) continue;
@@ -182,7 +235,8 @@ describe.each(COVERED)('%s provides every module its fixture will load', (name) 
     // `{ useTranslations }` while four finance views also import `useLocale`,
     // and every one of them died on `useLocale is not a function` — a module
     // graph that was complete and a mock that was not.
-    const { source, listed, entries, atKeyed, mapped, mockKeys, quoted } = harness(spec);
+    const h = harness(spec);
+    const { source, listed, entries, atKeyed, mapped, mockKeys } = h;
     const seen = new Set(entries);
     const queue = [...entries];
     const missing: string[] = [];
@@ -202,7 +256,7 @@ describe.each(COVERED)('%s provides every module its fixture will load', (name) 
             }
           }
         }
-        if (seen.has(next) || !(quoted.has(id) || quoted.has(specifier) || (atKeyed && listed.has(next)))) continue;
+        if (seen.has(next) || serving(h, specifier, next) !== 'served') continue;
         const walks = mapped.get(id) === next || mapped.get(specifier) === next
           || (atKeyed && listed.has(next) && !mockKeys.has(id));
         if (!walks) continue;

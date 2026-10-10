@@ -151,7 +151,22 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options
         return query;
       },
       contains: (key: string, value: unknown) => { filters.push(row => contains(row[key], value)); return query; },
-      is: (key: string, value: unknown) => { filters.push(row => row[key] === value); return query; },
+      is: (key: string, value: unknown) => {
+        // A filter on the `family:families!inner(...)` embed — the dispatcher
+        // skips closed families' rows. A fixture with no `families` table has
+        // only open families in it, which is every fixture written before this.
+        const embedded = /^family\.(\w+)$/.exec(key);
+        if (embedded) {
+          filters.push(row => {
+            if (!tables.families) return true;
+            const family = tables.families.find(f => f.id === row.family_id);
+            return family !== undefined && (family[embedded[1]] ?? null) === value;
+          });
+          return query;
+        }
+        filters.push(row => row[key] === value);
+        return query;
+      },
       not: (key: string, operator: string, value: unknown) => {
         if (operator !== 'is' || value !== null) throw new Error(`Unsupported fixture not filter: ${key}.${operator}.${value}`);
         filters.push(row => row[key] != null);

@@ -8,7 +8,7 @@ import * as React from 'react';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { describeReadError } from '@/lib/supabase/settle';
-import { isManager } from '@/lib/constants/roles';
+import { canInviteWithRole, isManager } from '@/lib/constants/roles';
 
 const MAX_EMAIL_REQUEST_BYTES = 4_096;
 
@@ -16,14 +16,10 @@ export async function POST(req: NextRequest) {
   const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
-    // Only someone who may create an invite may have Bubaly mail one: the same
-    // parent/adult rule as `invites_insert` (can_manage_family). Every member
-    // can READ the family's invites, so without this a child or guest could mail
-    // each of them under their own name, and spend the family's invite budget
-    // below until a parent's real invite was refused.
-    if (!isManager(ctx.active.role)) {
-      return NextResponse.json({ error: t('actions.onlyAParentGuardianCan16') }, { status: 403 });
-    }
+    // Sending an invite is a manager's act. Any member can READ the family's
+    // invites (invites_select), so without this a child or guest could re-mail
+    // any invite and spend the family's shared hourly budget below.
+    if (!isManager(ctx.active.role)) return NextResponse.json({ error: t('invite.invalidInvite') }, { status: 403 });
     const body = await readBoundedRequestJson(req, MAX_EMAIL_REQUEST_BYTES);
     if (!body.ok) return NextResponse.json({ error: body.reason === 'too_large' ? 'Request body too large.' : 'Invalid request body.' }, { status: body.reason === 'too_large' ? 413 : 400 });
     const { inviteId } = (body.value && typeof body.value === 'object' ? body.value : {}) as { inviteId?: string };
@@ -48,10 +44,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: t('invite.inviteDataIsTemporarilyUnavailable') }, { status: 503 });
     }
     if (!invite) return NextResponse.json({ error: t('invite.inviteNotFound') }, { status: 404 });
-    // A revoked, accepted or expired invite was mailed like a live one and
-    // reported sent; its link can only fail. Refused before the budget is spent.
-    if (invite.status !== 'pending' || !(Date.parse(invite.expires_at) > Date.now())) {
-      return NextResponse.json({ error: t('actions.inviteIsNoLongerPending') }, { status: 409 });
+
+    // Only a live invite is mailed. A revoked, accepted or expired row would
+    // otherwise go out as a fresh "Accept invitation" email for a dead link.
+    const expiresAt = invite.expires_at ? Date.parse(invite.expires_at) : NaN;
+    if (invite.status !== 'pending' || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      return NextResponse.json({ error: t('invite.invalidInvite') }, { status: 409 });
+    }
+    // An invite may not outrank its sender: `parent` only from a parent, and
+    // nothing outside INVITABLE_ROLES. invites_insert (0118) is only
+    // can_manage_family, so an adult can write a `parent` row directly; this
+    // route at least refuses to mail it.
+    if (!canInviteWithRole(ctx.active.role, invite.role)) {
+      return NextResponse.json({ error: t('invite.invalidInvite') }, { status: 403 });
     }
 
     // The recipient of this mail is a free-text address the inviter chose —

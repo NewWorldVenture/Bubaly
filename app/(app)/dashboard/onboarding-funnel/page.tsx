@@ -13,6 +13,9 @@ import { loadActivationEvents, loadOnboardingEvents } from '@/lib/analytics/onbo
 import { ThirtyMinuteSummary } from '@/components/analytics/thirty-minute-summary';
 import { getTranslations } from '@/lib/i18n/server';
 import { AppNotFound } from '@/components/app/app-not-found';
+import { redirect } from 'next/navigation';
+import { superAdminAssurance } from '@/lib/auth/super-admin-assurance';
+import { stepUpPath } from '@/lib/auth/mfa';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -24,6 +27,8 @@ export default async function OnboardingFunnelPage() {
   await requireUserContext();
   // Cross-user pre-family telemetry — admin-only, read via the service role.
   if (!(await isSuperAdmin())) return <AppNotFound backHref="/dashboard" />;
+  // Same step-up as the admin console before a service-role, cross-user read.
+  if (!(await superAdminAssurance()).ok) redirect(stepUpPath('/dashboard/onboarding-funnel'));
   const t = await getTranslations();
 
   const supabase = createServiceClient();

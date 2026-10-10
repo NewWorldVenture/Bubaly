@@ -30,7 +30,7 @@ vi.mock('@/lib/supabase/server', () => ({
       const b: Record<string, unknown> = {};
       Object.assign(b, {
         select: () => b, eq: () => b,
-        maybeSingle: async () => ({ data: { id: 'inv-1', email: 'partner@example.test', token: 'tok', role: 'parent', status: 'pending', expires_at: new Date(Date.now() + 86_400_000).toISOString() }, error: null }),
+        maybeSingle: async () => ({ data: { id: 'inv-1', email: 'partner@example.test', token: 'tok', role: 'parent', status: 'pending', expires_at: '2999-01-01T00:00:00Z' }, error: null }),
       });
       return b;
     },

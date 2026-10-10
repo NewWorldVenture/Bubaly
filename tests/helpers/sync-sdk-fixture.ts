@@ -34,8 +34,6 @@ export function syncSdkFixture(events: GEvent[], options: {
 } = {}) {
   const rows: Record<string, Row[]> = {
     sync_accounts: [{ ...ACCOUNT, provider: 'google', sync_direction: options.direction ?? 'import', metadata: {} }],
-    // A connection syncs only while its owner is an active member of its family.
-    family_members: [{ id: 'owner-member', family_id: ACCOUNT.family_id, user_id: ACCOUNT.user_id, role: 'parent', is_active: true }],
     sync_connections: [{ account_id: ACCOUNT.id, health: 'healthy' }],
     sync_calendars: [{ id: 'calendar', account_id: ACCOUNT.id, family_id: ACCOUNT.family_id, user_id: ACCOUNT.user_id, provider: 'google', external_id: 'primary', sync_token: STALE }],
     sync_reminder_lists: [{ id: 'list', account_id: ACCOUNT.id, family_id: ACCOUNT.family_id, user_id: ACCOUNT.user_id, provider: 'google', external_id: '@default' }],
@@ -43,6 +41,8 @@ export function syncSdkFixture(events: GEvent[], options: {
     sync_external_mappings: [{ id: 'mapping', family_id: ACCOUNT.family_id, account_id: ACCOUNT.id, provider: 'google', item_type: 'event', external_id: 'deleted', local_id: 'local', metadata: {} },
       { id: 'foreign-map', family_id: 'another-family', account_id: 'another-account', provider: 'google', item_type: 'event', external_id: 'foreign-only', local_id: 'foreign-local', metadata: {} }],
     sync_jobs: [], sync_job_runs: [], sync_provider_errors: [], sync_reminders: [],
+    // The account owner is an active member (loadSyncExecutionPolicy checks).
+    family_members: [{ id: 'owner-member', family_id: ACCOUNT.family_id, user_id: ACCOUNT.user_id, is_active: true }],
   };
   rows.sync_calendar_events.push({ id: 'foreign-local', family_id: 'another-family', deleted_at: null });
   if (options.tasks?.length) {

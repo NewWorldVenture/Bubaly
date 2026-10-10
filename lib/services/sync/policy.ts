@@ -35,7 +35,8 @@ export function syncExecutionPolicy(row: { sync_direction: unknown; metadata: un
 }
 
 /** Re-read persisted policy instead of trusting the caller's possibly stale
- * account object. The account, family, requester and provider must all match. */
+ * account object. The account, family, requester and provider must all match,
+ * and the requester must still be an active member of that family. */
 export async function loadSyncExecutionPolicy(
   db: ServiceScope['db'], account: SyncAccountIdentity, provider: SyncProviderEnum,
 ): Promise<ServiceResult<SyncExecutionPolicy>> {
@@ -45,14 +46,15 @@ export async function loadSyncExecutionPolicy(
     const result = await db.from('sync_accounts').select('sync_direction,metadata')
       .eq('id', account.id).eq('family_id', account.family_id).eq('user_id', account.user_id).eq('provider', provider).maybeSingle();
     if (result.error || !result.data) throw result.error ?? new Error('Connected account was unavailable');
-    // Removing a member deactivates their row and leaves their connection, so
-    // the scheduled sync went on pushing this family's entries into the
-    // departed member's own calendar and pulling theirs into the family. A
-    // connection syncs only while its owner is an active member of ITS family.
-    const member = await db.from('family_members').select('id')
+    // The owner must still be an ACTIVE member of this family. Removal is a
+    // soft `is_active = false` that leaves sync_accounts in place, and every
+    // caller runs on the service role, so without this a removed member's
+    // calendar went on importing into the household and the household's
+    // events went on exporting to them.
+    const owner = await db.from('family_members').select('id')
       .eq('family_id', account.family_id).eq('user_id', account.user_id).eq('is_active', true).limit(1);
-    if (member.error) throw member.error;
-    if (!member.data?.length) return fail(t('syncPolicy.ownerUnavailable'), { code: 'ownerUnavailable' });
+    if (owner.error) throw owner.error;
+    if (!owner.data?.length) return fail(t('syncPolicy.ownerUnavailable'), { code: 'ownerUnavailable' });
     const policy = syncExecutionPolicy(result.data);
     return policy.ok ? ok(policy.data) : fail(t(`syncPolicy.${policy.code}`), { code: policy.code, retryable: policy.retryable });
   } catch (error) {

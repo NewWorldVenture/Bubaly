@@ -92,7 +92,7 @@ export function WishlistsModule() {
     const fields = { title: form.title.trim(), url: form.url.trim() || null, price: form.price ? Number(form.price) : null, priority: form.priority, notes: form.notes.trim() || null };
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
     const { data: saved, error: err } = form.id
-      ? await sb.from('wishlist_items').update(fields).eq('id', form.id).select('id')
+      ? await sb.from('wishlist_items').update(fields).eq('id', form.id).eq('family_id', familyId).select('id')
       : await sb.from('wishlist_items').insert({ ...fields, family_id: familyId, member_id: selfId!, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
@@ -106,7 +106,7 @@ export function WishlistsModule() {
     if (!(await askConfirm({ title: t('confirm.removeNamed', { name: w.title }), body: t('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
-    const { data: removed, error: err } = await sb.from('wishlist_items').delete().eq('id', w.id).select('id');
+    const { data: removed, error: err } = await sb.from('wishlist_items').delete().eq('id', w.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(removed)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     void refresh();
@@ -119,7 +119,7 @@ export function WishlistsModule() {
     const mine = w.claimed_by === selfId;
     const { data: updated, error: err } = await sb.from('wishlist_items').update(
       mine ? { claimed_by: null, claimed_at: null, is_purchased: false } : { claimed_by: selfId, claimed_at: new Date().toISOString() },
-    ).eq('id', w.id).select('id');
+    ).eq('id', w.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(updated)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(mine ? 'Released' : 'You claimed this gift 🎁');
@@ -127,7 +127,7 @@ export function WishlistsModule() {
 
   async function togglePurchased(w: Wish) {
     const sb = createClient();
-    const { data: updated2, error: err } = await sb.from('wishlist_items').update({ is_purchased: !w.is_purchased }).eq('id', w.id).select('id');
+    const { data: updated2, error: err } = await sb.from('wishlist_items').update({ is_purchased: !w.is_purchased }).eq('id', w.id).eq('family_id', familyId).select('id');
     if (err) toastError(describeDbError(err));
     else if (wroteNoRows(updated2)) toastError(t('errors.thatChangeWasNotSaved'));
   }
