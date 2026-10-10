@@ -10,7 +10,7 @@ name: Kid progress award SQL runtime
 # every runnable migration with the Database job's bootstrap, then:
 #
 #   1. runs the held probe on that released schema and requires it to FAIL on
-#      the defect (a child and a teen award themselves XP), so a green step 3
+#      the defect (a child, teen, caregiver and guest award themselves XP), so a green step 3
 #      is the migration's and not a probe that can no longer see anything;
 #   2. applies the held migration twice (it is re-runnable);
 #   3. runs the probe again and requires it to pass.
@@ -107,7 +107,9 @@ jobs:
           for expected in \
             'a child awarded themselves XP through kid_progress_apply_completion' \
             'a child rewrote their own streak through kid_progress_revert_completion' \
-            'a teen awarded themselves XP through kid_progress_apply_completion'; do
+            'a teen awarded themselves XP through kid_progress_apply_completion' \
+            'a caregiver awarded themselves XP through kid_progress_apply_completion' \
+            'a guest awarded themselves XP through kid_progress_apply_completion'; do
             if ! grep -qF "$expected" <<<"$out"; then
               echo "::error::the held probe failed on the released schema, but not on: $expected"
               exit 1

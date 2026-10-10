@@ -4317,7 +4317,8 @@ was still 00430's `is_family_member`. Measured on a replay of every runnable
 migration, as a child's session: `kid_progress_apply_completion(family, own
 member, 999999, today)` answered `ok: true`, level 141, and
 `kid_progress_revert_completion` let the same child set their own current and
-longest streak (to 365 in the probe's fixture). A teen could do the same. Badges are awarded from those levels and
+longest streak (to 365 in the probe's fixture). A teen, a caregiver and a guest
+of the family could do the same. Badges are awarded from those levels and
 streaks on the next real approval.
 
 0496 changes only that predicate in both functions, to 0354's

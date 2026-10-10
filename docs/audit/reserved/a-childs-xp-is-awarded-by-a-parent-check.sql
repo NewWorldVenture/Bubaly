@@ -14,7 +14,8 @@
 --      ('forbidden') and their row does not move;
 --   2. the same child's kid_progress_revert_completion is refused and their
 --      streak does not move;
---   3. a teen (a member who is not a manager) is refused the same way;
+--   3. a teen, a caregiver and a guest (members who are not managers) are
+--      refused the same way;
 --   4. control: a parent's award lands, as approveSubmissionAction's does;
 --   5. control: the service path (no auth.uid, the auto-approve payout) lands;
 --   6. control: an award for another family's child is still refused;
@@ -39,6 +40,8 @@ insert into auth.users (id, email) values
   ('00000000-0000-4000-8496-0000000000a1','m0496-parent@example.com'),
   ('00000000-0000-4000-8496-0000000000c1','m0496-kid@example.com'),
   ('00000000-0000-4000-8496-0000000000e1','m0496-teen@example.com'),
+  ('00000000-0000-4000-8496-0000000000e2','m0496-caregiver@example.com'),
+  ('00000000-0000-4000-8496-0000000000e3','m0496-guest@example.com'),
   ('00000000-0000-4000-8496-0000000000b1','m0496-other@example.com')
   on conflict do nothing;
 insert into public.families (id, name, created_by) values
@@ -50,10 +53,14 @@ update public.family_members set role = 'parent', is_active = true
 insert into public.family_members (id, family_id, user_id, display_name, role, is_active) values
   ('00000000-0000-4000-8496-0000000000d1','00000000-0000-4000-8496-0000000000f1','00000000-0000-4000-8496-0000000000c1','Kid','child',true),
   ('00000000-0000-4000-8496-0000000000d3','00000000-0000-4000-8496-0000000000f1','00000000-0000-4000-8496-0000000000e1','Teen','teen',true),
+  ('00000000-0000-4000-8496-0000000000d4','00000000-0000-4000-8496-0000000000f1','00000000-0000-4000-8496-0000000000e2','Caregiver','caregiver',true),
+  ('00000000-0000-4000-8496-0000000000d5','00000000-0000-4000-8496-0000000000f1','00000000-0000-4000-8496-0000000000e3','Guest','guest',true),
   ('00000000-0000-4000-8496-0000000000d2','00000000-0000-4000-8496-0000000000f2',null,'Other Kid','child',true);
 insert into public.kid_progress (family_id, member_id, xp, level, current_streak, longest_streak, last_activity) values
   ('00000000-0000-4000-8496-0000000000f1','00000000-0000-4000-8496-0000000000d1', 40, 1, 2, 2, current_date - 1),
-  ('00000000-0000-4000-8496-0000000000f1','00000000-0000-4000-8496-0000000000d3', 40, 1, 2, 2, current_date - 1);
+  ('00000000-0000-4000-8496-0000000000f1','00000000-0000-4000-8496-0000000000d3', 40, 1, 2, 2, current_date - 1),
+  ('00000000-0000-4000-8496-0000000000f1','00000000-0000-4000-8496-0000000000d4', 40, 1, 2, 2, current_date - 1),
+  ('00000000-0000-4000-8496-0000000000f1','00000000-0000-4000-8496-0000000000d5', 40, 1, 2, 2, current_date - 1);
 
 do $$
 declare
@@ -72,10 +79,12 @@ declare
   who    record;
   xp_before int;
 begin
-  -- A child and a teen, each acting as themselves.
+  -- Every member who is not a manager, each acting as themselves.
   for who in select * from (values
       (kid_u,  kid,  'a child'),
-      (teen_u, teen, 'a teen')
+      (teen_u, teen, 'a teen'),
+      ('00000000-0000-4000-8496-0000000000e2'::uuid, '00000000-0000-4000-8496-0000000000d4'::uuid, 'a caregiver'),
+      ('00000000-0000-4000-8496-0000000000e3'::uuid, '00000000-0000-4000-8496-0000000000d5'::uuid, 'a guest')
     ) as w(uid, member, label) loop
     perform set_config('role','authenticated', true);
     perform set_config('request.jwt.claim.sub', who.uid::text, true);
@@ -154,7 +163,7 @@ begin
   if array_length(failures, 1) is not null then
     raise exception E'a child can award their own XP:\n  - %', array_to_string(failures, E'\n  - ');
   end if;
-  raise notice 'a-childs-xp-is-awarded-by-a-parent: OK (a child and a teen are refused by both award functions and their rows do not move; a parent''s award and the service path''s land; another family''s child is still refused; both functions are SECURITY DEFINER without a bare is_family_member check; negative control: under 0341''s check the child''s self-award landed)';
+  raise notice 'a-childs-xp-is-awarded-by-a-parent: OK (a child, a teen, a caregiver and a guest are refused by both award functions and their rows do not move; a parent''s award and the service path''s land; another family''s child is still refused; both functions are SECURITY DEFINER without a bare is_family_member check; negative control: under 0341''s check the child''s self-award landed)';
 end $$;
 
 rollback;
