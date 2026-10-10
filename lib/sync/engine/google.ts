@@ -20,7 +20,7 @@ import {
   googleTaskToReminderRow, reminderRowToGoogleTask, reminderContentHash,
   GoogleApiError,
 } from '@/lib/sync/providers/google';
-import { commitLegacyCalendarCursor, createSyncPullItem, ensureSyncPullContainer, requireSyncWrite } from '@/lib/sync/persistence';
+import { commitLegacyCalendarCursor, createSyncPullItem, ensureSyncPullContainer, pendingAdoption, requireSyncWrite, takeOverPendingAdoption } from '@/lib/sync/persistence';
 import { loadSyncExecutionPolicy, type SyncExecutionPolicy } from '@/lib/services/sync/policy';
 import { refreshOnboardingCalendar } from '@/lib/services/onboarding-calendar';
 import { systemScopeForFamily } from '@/lib/services/scope';
@@ -172,12 +172,16 @@ async function syncCalendar(admin: Admin, account: Account, accessToken: string,
       }
 
       if (mapping) {
+        // An unfinished adoption is not a sync receipt: take it over, refresh
+        // the item from this snapshot and complete the mapping (see persistence).
+        const adopting = pendingAdoption(mapping.metadata);
+        const adoptionFence = adopting ? await takeOverPendingAdoption(admin, account, 'google', 'event', mapping, adopting) : {};
         const { data: local, error: localError } = await admin.from('sync_calendar_events').select('content_hash, updated_at, deleted_at').eq('id', mapping.local_id).eq('family_id', account.family_id).eq('calendar_id', cal.id).maybeSingle();
         if (localError || !local) throw new Error('Sync local event lookup failed');
         const baseHash = (mapping.metadata as { lastHash?: string } | null)?.lastHash ?? null;
         const localHash = local?.content_hash ?? null;
         const verdict = detectConflict({ baseHash, localHash, remoteHash, localUpdatedAt: local?.updated_at, remoteUpdatedAt: ev.updated, remoteDeleted: false, localDeleted: !!local?.deleted_at });
-        if (verdict.conflict) {
+        if (!adopting && verdict.conflict) {
           const { data: conflict, error: conflictError } = await admin.from('sync_conflicts').insert({
             family_id: account.family_id, account_id: account.id, provider: 'google', item_type: 'event',
             local_id: mapping.local_id, external_id: row.external_id, conflict_kind: verdict.kind,
@@ -187,19 +191,20 @@ async function syncCalendar(admin: Admin, account: Account, accessToken: string,
           result.conflicts++;
           continue;
         }
-        if (localHash === remoteHash) { result.skipped++; continue; }
+        if (!adopting && localHash === remoteHash) { result.skipped++; continue; }
         // In two-way sync an unchanged remote snapshot must not erase a local
         // edit. Keep its base hash so the existing push path can export it.
-        if (policy.push && baseHash === remoteHash) { result.skipped++; continue; }
+        if (!adopting && policy.push && baseHash === remoteHash) { result.skipped++; continue; }
         const { data: updatedEvent, error: eventUpdateError } = await admin.from('sync_calendar_events').update({
           title: row.title, description: row.description, location: row.location,
           starts_at: row.starts_at, ends_at: row.ends_at, all_day: row.all_day,
           recurrence_rule: row.recurrence_rule, status: row.status, etag: row.etag,
           content_hash: remoteHash, sync_status: 'synced', last_synced_at: new Date().toISOString(), metadata: REMOTE_META,
-        }).eq('id', mapping.local_id).eq('family_id', account.family_id).eq('calendar_id', cal.id).select('id').maybeSingle();
+          ...(adopting ? { deleted_at: null } : {}),
+        }).eq('id', mapping.local_id).eq('family_id', account.family_id).eq('calendar_id', cal.id).match(adoptionFence).select('id').maybeSingle();
         requireSyncWrite(updatedEvent, eventUpdateError, 'event update');
         const { data: updatedMapping, error: mappingUpdateError } = await admin.from('sync_external_mappings')
-          .update({ external_etag: row.etag, metadata: hashMeta(remoteHash), last_synced_at: new Date().toISOString() })
+          .update({ external_etag: row.etag, metadata: hashMeta(remoteHash), last_synced_at: new Date().toISOString(), ...(adopting ? { sync_status: 'synced' as const } : {}) })
           .eq('id', mapping.id).eq('family_id', account.family_id).eq('account_id', account.id).eq('provider', 'google').eq('item_type', 'event').eq('local_id', mapping.local_id).eq('external_id', mapping.external_id).select('id').maybeSingle();
         requireSyncWrite(updatedMapping, mappingUpdateError, 'event mapping update');
         result.imported++;
@@ -329,20 +334,24 @@ async function syncTasks(admin: Admin, account: Account, accessToken: string, re
         mapping = admitted.mapping;
       }
       if (mapping) {
+        // An unfinished adoption is not a sync receipt: take it over, refresh
+        // the item from this snapshot and complete the mapping (see persistence).
+        const adopting = pendingAdoption(mapping.metadata);
+        const adoptionFence = adopting ? await takeOverPendingAdoption(admin, account, 'google', 'reminder', mapping, adopting) : {};
         const { data: local, error: localError } = await admin.from('sync_reminders').select('content_hash, updated_at, is_completed').eq('id', mapping.local_id).eq('family_id', account.family_id).eq('list_id', list.id).maybeSingle();
         if (localError || !local) throw new Error('Sync local reminder lookup failed');
         const baseHash = (mapping.metadata as { lastHash?: string } | null)?.lastHash ?? null;
         const verdict = detectConflict({ baseHash, localHash: local?.content_hash ?? null, remoteHash, localUpdatedAt: local?.updated_at, remoteUpdatedAt: task.updated, localCompleted: local?.is_completed, remoteCompleted: row.is_completed });
-        if (verdict.conflict) {
+        if (!adopting && verdict.conflict) {
           const { data: conflict, error: conflictError } = await admin.from('sync_conflicts').insert({ family_id: account.family_id, account_id: account.id, provider: 'google', item_type: 'reminder', local_id: mapping.local_id, external_id: row.external_id, conflict_kind: verdict.kind, remote_snapshot: row as unknown as Json, status: 'open' }).select('id').maybeSingle();
           requireSyncWrite(conflict, conflictError, 'reminder conflict persistence');
           result.conflicts++; continue;
         }
-        if ((local?.content_hash ?? null) === remoteHash) { result.skipped++; continue; }
-        if (policy.push && baseHash === remoteHash) { result.skipped++; continue; }
-        const { data: updatedReminder, error: reminderUpdateError } = await admin.from('sync_reminders').update({ title: row.title, notes: row.notes, due_at: row.due_at, is_completed: row.is_completed, completed_at: row.completed_at, content_hash: remoteHash, sync_status: 'synced', last_synced_at: new Date().toISOString(), metadata: REMOTE_META }).eq('id', mapping.local_id).eq('family_id', account.family_id).eq('list_id', list.id).select('id').maybeSingle();
+        if (!adopting && (local?.content_hash ?? null) === remoteHash) { result.skipped++; continue; }
+        if (!adopting && policy.push && baseHash === remoteHash) { result.skipped++; continue; }
+        const { data: updatedReminder, error: reminderUpdateError } = await admin.from('sync_reminders').update({ title: row.title, notes: row.notes, due_at: row.due_at, is_completed: row.is_completed, completed_at: row.completed_at, content_hash: remoteHash, sync_status: 'synced', last_synced_at: new Date().toISOString(), metadata: REMOTE_META, ...(adopting ? { deleted_at: null } : {}) }).eq('id', mapping.local_id).eq('family_id', account.family_id).eq('list_id', list.id).match(adoptionFence).select('id').maybeSingle();
         requireSyncWrite(updatedReminder, reminderUpdateError, 'reminder update');
-        const { data: updatedMapping, error: mappingUpdateError } = await admin.from('sync_external_mappings').update({ metadata: hashMeta(remoteHash), last_synced_at: new Date().toISOString() }).eq('id', mapping.id).eq('family_id', account.family_id).eq('account_id', account.id).eq('provider', 'google').eq('item_type', 'reminder').eq('local_id', mapping.local_id).eq('external_id', mapping.external_id).select('id').maybeSingle();
+        const { data: updatedMapping, error: mappingUpdateError } = await admin.from('sync_external_mappings').update({ metadata: hashMeta(remoteHash), last_synced_at: new Date().toISOString(), ...(adopting ? { sync_status: 'synced' as const } : {}) }).eq('id', mapping.id).eq('family_id', account.family_id).eq('account_id', account.id).eq('provider', 'google').eq('item_type', 'reminder').eq('local_id', mapping.local_id).eq('external_id', mapping.external_id).select('id').maybeSingle();
         requireSyncWrite(updatedMapping, mappingUpdateError, 'reminder mapping update');
         result.imported++;
       }

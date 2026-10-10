@@ -3,7 +3,7 @@ import { googleAdapter } from '@/lib/sync/providers/google-adapter';
 import { runGoogleSync } from '@/lib/sync/engine/google';
 import { runProviderSync } from '@/lib/sync/engine/generic';
 import { resetSyncPullMigrationWarnings } from '@/lib/sync/persistence';
-import { syncSdkFixture, ACCOUNT, STALE } from './helpers/sync-sdk-fixture';
+import { syncSdkFixture, ACCOUNT, NEXT, STALE } from './helpers/sync-sdk-fixture';
 
 vi.mock('@/lib/sync/accounts', async original => ({
   ...await original<typeof import('@/lib/sync/accounts')>(), getValidAccessToken: async () => 'synthetic-access-token',
@@ -126,15 +126,18 @@ for (const engine of ['google', 'generic'] as const) {
       });
 
       // A pull reads the orphan as unmapped and owned by this account, and is
-      // paused before its first write; `atWrite` runs there once.
-      const raced = (atWrite: (orphan: Record<string, unknown>) => Promise<void> | void) => {
+      // paused before its first write (`claim`) or, once its mapping claim has
+      // committed, before its item refresh (`refresh`); `atWrite` runs there once.
+      const raced = (atWrite: (orphan: Record<string, unknown>) => Promise<void> | void,
+        { at = 'claim', direction }: { at?: 'claim' | 'refresh'; direction?: string } = {}) => {
         const remote = kind === 'event' ? { ...event } : { ...task };
         let looked = false, held = false;
         const state = syncSdkFixture(kind === 'event' ? [remote as typeof event] : [], {
-          rpcFailure: 'missing', tasks: kind === 'reminder' ? [remote as typeof task] : [],
+          rpcFailure: 'missing', tasks: kind === 'reminder' ? [remote as typeof task] : [], direction,
           gate: async ({ table: target, method, url }) => {
             if (target === 'sync_external_mappings' && method === 'GET' && url.searchParams.get('local_id') === 'eq.orphan') looked = true;
-            else if (looked && !held && method !== 'GET' && (target === table || target === 'sync_external_mappings')) {
+            else if (looked && !held && method !== 'GET' && (at === 'claim'
+              ? target === table || target === 'sync_external_mappings' : target === table && method === 'PATCH')) {
               held = true;
               await atWrite(state.rows[table].find(row => row.id === 'orphan')!);
             }
@@ -167,6 +170,49 @@ for (const engine of ['google', 'generic'] as const) {
         await pullA;
         expect(rows[table]).toEqual([claimedByB]);
         expect(maps(rows)).toEqual([mappingB]);
+      });
+
+      it(`${kind} a pull paused after its claim commits never removes the association a concurrent pull completed with it`, async () => {
+        let paused!: () => void, resume!: () => void;
+        const atA = new Promise<void>(resolve => { paused = resolve; });
+        const resumed = new Promise<void>(resolve => { resume = resolve; });
+        const { db, rows } = raced(async () => { paused(); await resumed; }, { at: 'refresh' });
+        const pullA = run(db);
+        await atA;
+        expect(maps(rows)).toEqual([expect.objectContaining({ account_id: ACCOUNT.id, local_id: 'orphan' })]);
+
+        // B meets A's claim on the ordinary mapped path and completes with it.
+        expect((await run(db)).error).toBeUndefined();
+        const completedByB = { ...rows[table].find(row => row.id === 'orphan') };
+        expect(completedByB).toMatchObject({ title: kind === 'event' ? event.summary : task.title,
+          user_id: ACCOUNT.user_id, content_hash: expect.stringMatching(/^[a-f0-9]{64}$/) });
+        const mappingB = { ...maps(rows)[0] };
+        expect(mappingB).toMatchObject({ account_id: ACCOUNT.id, local_id: 'orphan', metadata: { lastHash: completedByB.content_hash } });
+
+        resume();
+        expect((await pullA).error).toBeDefined();
+        expect(maps(rows)).toEqual([mappingB]);
+        expect(rows[table]).toEqual([completedByB]);
+        // B finished the adoption as A would have: the item is live again.
+        expect(completedByB.deleted_at).toBeNull();
+        expect(mappingB.sync_status).toBe('synced');
+      });
+
+      it(`${kind} an adoption interrupted after its claim is refreshed and completed by a same-snapshot two-way retry`, async () => {
+        const { db, rows, calls } = raced(() => new Promise<void>(() => {}), { at: 'refresh', direction: 'two_way' });
+        void run(db); // stops for good after its mapping claim commits
+        await vi.waitFor(() => expect(maps(rows)).toEqual([expect.objectContaining({ account_id: ACCOUNT.id, local_id: 'orphan' })]));
+        // Only the calendar has a cursor; the task list is read whole each time.
+        if (kind === 'event') expect(rows.sync_calendars[0].sync_token).toBe(STALE);
+
+        expect((await run(db)).error).toBeUndefined();
+        const items = rows[table];
+        expect(items).toEqual([expect.objectContaining({ id: 'orphan', title: kind === 'event' ? event.summary : task.title,
+          deleted_at: null, user_id: ACCOUNT.user_id, content_hash: expect.stringMatching(/^[a-f0-9]{64}$/), metadata: { origin: 'remote' } })]);
+        expect(maps(rows)).toEqual([expect.objectContaining({ account_id: ACCOUNT.id, local_id: 'orphan', sync_status: 'synced',
+          metadata: { lastHash: items[0].content_hash } })]);
+        expect(calls.filter(call => call.url.origin !== 'https://sync-fixture.invalid' && call.method !== 'GET')).toEqual([]);
+        if (kind === 'event') expect(rows.sync_calendars[0].sync_token).toBe(NEXT);
       });
 
       it(`${kind} an orphan that changes owner after the lookup is never adopted`, async () => {

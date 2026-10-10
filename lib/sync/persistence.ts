@@ -226,31 +226,74 @@ async function createLegacyItem(admin: Admin, account: Account, provider: SyncPr
 type Orphan = { id: string; updated_at: string | null };
 type Fence = { id: string; family_id: string; user_id: string; provider: SyncProviderEnum; external_id: string; updated_at?: string };
 
+/** An adoption claim is published before its item is refreshed, so until it is
+ * completed it is not a sync receipt: it carries no lastHash, and its state is
+ * kept both in the row's sync_status (so writes can be conditional on it) and
+ * in its metadata (which every reader returns, 0494's receipt included).
+ * 'pending' is the claim as adoptLegacyItem published it; 'syncing' is a claim
+ * the mapped pull path took over to finish. A completed mapping has neither. */
+export type PendingAdoption = 'pending' | 'syncing';
+const pendingMeta = (state: PendingAdoption): Json => ({ adoption: state });
+
+/** The unfinished-adoption state of a mapping, or null for a completed one. */
+export function pendingAdoption(metadata: Json | null | undefined): PendingAdoption | null {
+  const state = record(metadata)?.adoption;
+  return state === 'pending' || state === 'syncing' ? state : null;
+}
+
+/** The mapped pull path met an unfinished adoption. It must refresh the item
+ * from the remote snapshot and then complete the mapping (sync_status 'synced'
+ * and the real lastHash), never read it as a receipt. It first takes the
+ * claim over, conditionally on the state it read, so the claimant's release
+ * (which deletes only a row still 'pending') can no longer remove it. A taker
+ * that stops leaves 'syncing', which the next pull takes over again; two pulls
+ * that both read 'syncing' race as two ordinary mapped pulls of one item do. */
+export async function takeOverPendingAdoption(admin: Admin, account: Account, provider: SyncProviderEnum, kind: Kind,
+  mapping: PullMapping, state: PendingAdoption,
+): Promise<{ user_id: string; provider: SyncProviderEnum; external_id: string }> {
+  if (!account.user_id) throw new Error('Sync owner unavailable');
+  const { data, error } = await admin.from('sync_external_mappings')
+    .update({ sync_status: 'syncing', metadata: pendingMeta('syncing') })
+    .match({ id: mapping.id, family_id: account.family_id, account_id: account.id, provider, item_type: kind,
+      local_id: mapping.local_id, external_id: mapping.external_id, sync_status: state })
+    .select('id').maybeSingle();
+  requireSyncWrite(data, error, `${kind} adoption takeover`);
+  // The item refresh that follows is fenced like the adoption's own: still in
+  // this account's mirror and still owned by the account owner.
+  return { user_id: account.user_id, provider, external_id: mapping.external_id };
+}
+
 /** Adopt an orphan claim-first. Two pulls of this account can both read the
  * orphan as unmapped, so neither may write it on that reading alone. Each
  * first inserts this account's mapping for the remote id; 0018's
  * unique (provider, item_type, external_id, account_id) lets exactly one of
  * them commit (and unique (provider, item_type, local_id, account_id) refuses
- * a second mapping of this account naming the same item). Only the winner
- * refreshes the item, and only while it is still in this account's mirror,
- * still owned by the account owner, and unchanged since the lookup
- * (updated_at, which set_updated_at moves on every write), so a newer
- * snapshot or a concurrent edit is never overwritten. The loser changes
- * nothing and the run fails; its next run finds the winner's mapping.
+ * a second mapping of this account naming the same item). The claim is
+ * published PENDING (see pendingAdoption): a pull that meets it on the mapped
+ * path refreshes the item and completes it instead of taking the unrefreshed
+ * item for the snapshot it names, so an interrupted adoption is never consumed
+ * as a completed synchronization. Only the winner refreshes the item, and only
+ * while it is still in this account's mirror, still owned by the account
+ * owner, and unchanged since the lookup (updated_at, which set_updated_at
+ * moves on every write), so a newer snapshot or a concurrent edit is never
+ * overwritten. It then completes the mapping, only while it is still its own
+ * pending claim. The loser changes nothing and the run fails.
  * The mapping id is chosen here, so a claim whose answer is lost after it
- * committed is recognised as ours and completed instead of wedging. If the
- * refresh does not apply, the claim is released (only that mapping row; the
- * item is never deleted) and the run fails; the next run reads the item as it
- * is then. Residual: if the process stops, or the release fails, after the
- * claim commits but before the refresh, the mapping names the unrefreshed item
- * with this snapshot's hash and the mapped update path continues from there. */
+ * committed is recognised as ours instead of wedging. If the refresh does not
+ * apply, the claim is released only while it is still pending: once another
+ * pull has taken it over or completed it, it is that pull's association and
+ * stays. The item is never deleted. A completion that does not apply leaves
+ * the claim unfinished and the run fails; the next pull refreshes the item
+ * and completes the mapping. */
 async function adoptLegacyItem(admin: Admin, account: Account, provider: SyncProviderEnum, kind: Kind,
   externalId: string, orphan: Orphan, mappingFields: { metadata: Json; last_synced_at: string; external_etag?: string | null },
   refresh: (fence: Fence) => PromiseLike<{ data: { id: string } | null; error: unknown }>,
 ): Promise<string> {
   const ours = { id: crypto.randomUUID(), family_id: account.family_id, account_id: account.id, provider, item_type: kind,
     local_id: orphan.id, external_id: externalId };
-  const { error: claimError } = await admin.from('sync_external_mappings').insert({ ...ours, ...mappingFields });
+  const stillPending = { ...ours, sync_status: 'pending' as const };
+  const { error: claimError } = await admin.from('sync_external_mappings')
+    .insert({ ...stillPending, metadata: pendingMeta('pending') });
   if (claimError) {
     const { data: committed, error: recheckError } = await admin.from('sync_external_mappings').select('id').match(ours).maybeSingle();
     if (recheckError || !committed) throw new Error(`Sync ${kind} mapping creation failed`);
@@ -260,9 +303,14 @@ async function adoptLegacyItem(admin: Admin, account: Account, provider: SyncPro
     ...(orphan.updated_at ? { updated_at: orphan.updated_at } : {}),
   });
   if (refreshError || !refreshed) {
-    await admin.from('sync_external_mappings').delete().match(ours);
-    throw new Error(`Sync ${kind} retry scope unavailable`);
+    // Zero rows released is an answer too: another pull took the claim over or
+    // completed it, and it is that pull's association now.
+    const { error: releaseError } = await admin.from('sync_external_mappings').delete().match(stillPending).select('id');
+    throw new Error(releaseError ? `Sync ${kind} adoption release failed` : `Sync ${kind} retry scope unavailable`);
   }
+  const { data: completed, error: completeError } = await admin.from('sync_external_mappings')
+    .update({ ...mappingFields, sync_status: 'synced' }).match(stillPending).select('id').maybeSingle();
+  requireSyncWrite(completed, completeError, `${kind} mapping completion`);
   return ours.id;
 }
 
