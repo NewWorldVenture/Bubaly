@@ -120,6 +120,7 @@ source allocations are not evidence that production applied any migration.
 | 0504 proposed, held | `0504_a_kid_login_mapping_is_the_servers_to_write.sql` | `child_logins` is written only by the server: 0297's manager write policy is dropped and client INSERT/UPDATE/DELETE revoked; the members' read is kept. Decided by the account holder on the lead in #771 comment 6092615411; requested on #771 (comment 6100826185), not yet confirmed. |
 | 0505 proposed, held | `0505_a_listing_others_hold_records_of_is_withdrawn_not_erased.sql` | A signed-in caller's delete of a marketplace listing that has any order, offer, question, bid, negotiation or round, handoff or report is refused; such a listing is withdrawn instead, and nothing other families hold is erased by the cascade. Decided by the account holder on the lead in #771 comment 6097101249; requested on #771 (comment 6100826185), not yet confirmed. |
 | 0506 proposed, held | `0506_a_health_record_is_read_by_a_manager_or_its_own_member.sql` | A row of `symptom_logs`, `health_metrics`, `health_goals`, `health_visits`, `immunizations`, `sleep_logs`, `sleep_checkins` or `nutrition_logs` is read by a manager of its family, the member it is about, or its author, all inside `is_family_member(family_id)`; every other member no longer reads it. Writes unchanged. Decided by the account holder on the lead in #771 comment 6092825901; requested on #771 (comment 6100826185), not yet confirmed. |
+| 0507 proposed, held | `0507_a_kid_login_does_not_start_a_household.sql` | A signed-in kid login (the synthetic kid domain or `app_metadata.bubaly_kid_login`, read from `auth.users` as 0495 does) cannot create a family, so it never becomes the parent of a household of its own; everyone else, the service role and session-less writers create families as before. Found by Support (#771 comment 6100987720); requested on #771 (comment 6101311405), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4746,6 +4747,73 @@ Dropping any one table's trigger turns the probe red on that table. 184 of
 families, try to vote in one family's poll under their member id from the
 other family and confirm 42501; then vote as their own member there and
 confirm it lands.
+
+## `0507` (proposed, held) — a kid login could start a household of its own
+
+`supabase/reserved/0507_a_kid_login_does_not_start_a_household.sql` —
+**held**: proposed as `0507`, the first number above `0506`. Support found it
+and left it for the owner (#771 comment 6100987720). It was claimed, measured
+and requested on #771 in comment 6101311405 and is not yet confirmed.
+
+**Severity: medium (a child reachable by a stranger where its parents cannot
+see). Deploy order: any.** `families_insert` checks only
+`created_by = auth.uid()`, and `on_family_created` files the creator as the
+new household's parent. Measured on a replay of every runnable migration, and
+again with every held migration through 0506 applied, as a kid login that is a
+child in Real Home:
+- it creates a family naming itself: **OK 1**, filed as its **parent**;
+- as that parent it invites a stranger's address as an adult: **OK 1**;
+- the stranger accepts, joins, and reads the kid's membership;
+- Real Home's parent reads **0** of that household.
+
+That is the harm 0495's second rule closes at `accept_invite`, reached through
+family creation. Writing a login onto a member row is already refused, so this
+was the remaining door.
+
+0507 adds `family_is_not_a_kid_logins_to_start`, a BEFORE INSERT row trigger
+on `families`, SECURITY DEFINER with a pinned search_path, not executable by
+PUBLIC. A signed-in caller whose own `auth.users` row is a kid login is refused
+(42501, "A kid login cannot start a family of its own"). The test is exactly
+0495's: the address is on the synthetic kid domain, or `app_metadata` carries
+`bubaly_kid_login: true`. Both are written only by the server.
+`user_metadata` is not read, because its owner can edit it. The service role
+and session-less writers are exempt. Support's onboarding-wizard refusal
+(6100987720 item 2) stays the app-side message.
+
+**Not changed, recorded:** households a kid login has already created are left
+as they are (production data). 0495's residual applies here too: a kid login
+whose address was moved off the domain before the mark existed is not
+recognised.
+
+**Proof:** `.github/workflows/kid-household-runtime.yml` replays every
+runnable migration. It requires the held probe
+`docs/audit/reserved/a-kid-login-does-not-start-a-household-check.sql` to
+fail on the released schema, with each kind of kid login starting a household
+and no control failing. It applies 0507 twice, requires the probe to pass, and
+re-runs seven released probes over family creation and invitations. The
+passing run shows:
+- three kid logins are each refused with the guard's sentence (42501,
+  exact) and belong to no household besides their own family (counted): one
+  on the domain and marked, one known only by the mark, and one known only
+  by its address;
+- Real Home's parent, and an adult whose own `user_metadata` says child,
+  each start a household and are its parent;
+- the service role carrying the kid's user id, and a session-less writer,
+  each create a family;
+- negative control N1 (the guard disabled) lets the kid's household land and
+  its invitation to the stranger be written. Mutation M1 (the guard without
+  its `app_metadata` branch) lets the moved kid login start one.
+
+Source mutations: removing the service-role exemption fails its control.
+Removing the domain branch fails the address-only kid. Removing the null-uid
+exemption changes nothing, since a caller with no session has no account to
+match; it stays for the shape every guard of this family shares. 184 of 184
+released probes pass with 0507 alone and with every held migration through
+0507 applied twice, where all 17 held probes pass.
+
+**After approved release:** as a test kid login, try to create a family
+through the API and confirm 42501; as a test adult, confirm a new family
+still starts with them as its parent.
 
 ## `0506` (proposed, held) — every member read every member's health record
 
