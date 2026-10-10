@@ -225,7 +225,9 @@ describe('a super-admin cannot be banned from the console', () => {
 
   it('control: an ordinary account is banned, and a ban can always be lifted', async () => {
     await expect(admin.adminSetUserBanAction('target', true)).resolves.toEqual({ ok: true });
-    expect(h.authAdmin.updateUserById).toHaveBeenCalledWith('target', { ban_duration: '876000h' });
+    // The ban also clears the removed-child marker, so it is the ADMIN's ban:
+    // re-adding a removed child lifts only a ban that carries the marker.
+    expect(h.authAdmin.updateUserById).toHaveBeenCalledWith('target', { ban_duration: '876000h', app_metadata: { removed_child_ban: false } });
     h.authAdmin.getUserById.mockResolvedValue({ data: { user: { id: 'owner', email: 'daniel.hughen@gmail.com' } }, error: null });
     await expect(admin.adminSetUserBanAction('owner', false)).resolves.toEqual({ ok: true });
   });

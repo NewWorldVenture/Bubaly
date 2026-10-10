@@ -14,7 +14,9 @@ vi.mock('@/lib/supabase/server', () => ({
   createServiceClient: () => ({
     from: () => {
       const b: Record<string, unknown> = {};
-      Object.assign(b, { select: () => b, order: () => b, range: () => Promise.resolve({ data: [], error: null }) });
+      // The families read is paged and filtered to OPEN households
+      // (`.is('closed_at', null)`); the fake answers every page empty.
+      Object.assign(b, { select: () => b, is: () => b, order: () => b, range: () => Promise.resolve({ data: [], error: null }) });
       return b;
     },
   }),

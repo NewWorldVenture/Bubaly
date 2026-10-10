@@ -28,6 +28,9 @@ beforeEach(() => {
   state.ran = [];
   db = createInMemorySupabase();
   state.db = db;
+  // The cron syncs OPEN families only, through `families!inner(closed_at)`:
+  // the household has to exist for its accounts to be read at all.
+  db.seed('families', [{ id: 'fam', closed_at: null }]);
   db.seed('sync_accounts', [
     { id: 'removed', user_id: 'b', family_id: 'fam', provider: 'google', external_id: 'b@x', sync_direction: 'two_way', last_synced_at: null },
     { id: 'member', user_id: 'a', family_id: 'fam', provider: 'google', external_id: 'a@x', sync_direction: 'two_way', last_synced_at: null },
