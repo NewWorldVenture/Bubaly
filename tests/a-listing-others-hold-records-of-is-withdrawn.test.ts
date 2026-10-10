@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { at, between, bodyOf } from './helpers/source-order';
 
 // The held 0505 refuses a seller's hard delete of a listing other families hold
 // records of (an order, an offer, a question, a bid, a negotiation, a report):
@@ -11,12 +12,6 @@ import { describe, expect, it } from 'vitest';
 const MODULE = 'components/modules/marketplace-module.tsx';
 const MIGRATION = 'supabase/reserved/0505_a_listing_others_hold_records_of_is_withdrawn_not_erased.sql';
 
-const at = (src: string, needle: string): number => {
-  const i = src.indexOf(needle);
-  if (i < 0) throw new Error(`not found: ${needle}`);
-  return i;
-};
-
 describe("a listing other families hold records of is withdrawn, not erased", () => {
   const src = readFileSync(MODULE, 'utf8');
   const sql = readFileSync(MIGRATION, 'utf8');
@@ -27,18 +22,17 @@ describe("a listing other families hold records of is withdrawn, not erased", ()
     const pattern = /\/([^/]+)\/\.test\(err\.message/.exec(src.slice(at(src, 'function keptForOthersRecords')))?.[1];
     expect(pattern, 'keptForOthersRecords tests the message against a literal pattern').toBeTruthy();
     expect(new RegExp(pattern!).test(sentence!)).toBe(true);
-    expect(src.slice(at(src, 'function keptForOthersRecords'), at(src, 'function keptForOthersRecords') + 300))
-      .toContain("err.code === '42501'");
+    expect(bodyOf(src, 'function keptForOthersRecords', '\n}')).toContain("err.code === '42501'");
   });
 
   it('withdraws the kept listing before any other error is reported', () => {
-    const remove = src.slice(at(src, 'async function remove('), at(src, 'async function keepWithdrawn('));
+    const remove = between(src, 'async function remove(', 'async function keepWithdrawn(');
     expect(at(remove, 'keptForOthersRecords(err)')).toBeLessThan(at(remove, 'toastError(describeDbError(err))'));
     expect(remove).toContain('await keepWithdrawn(l); return;');
   });
 
   it('keeps every record: withdraws, never deletes, and clears the photo it removed', () => {
-    const keep = src.slice(at(src, 'async function keepWithdrawn('), at(src, 'async function withdraw('));
+    const keep = between(src, 'async function keepWithdrawn(', 'async function withdraw(');
     expect(keep).toContain("sb.rpc('marketplace_set_listing_status', { p_listing: l.id, p_status: 'withdrawn' })");
     expect(keep).not.toContain('.delete(');
     expect(keep).toContain(".update({ photo_url: null })");
