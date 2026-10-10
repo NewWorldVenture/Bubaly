@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, type InMemorySupabase, type Row } from './helpers/in-memory-supabase';
 
@@ -36,7 +37,7 @@ vi.mock('@/lib/i18n/server', async () => {
 
 const { placeBidAction, buyNowAction } = await import('@/app/(app)/marketplace/auctions/actions');
 const { proposeHandoffAction } = await import('@/app/(app)/marketplace/handoff/actions');
-const { setOrderStatusAction } = await import('@/app/(app)/marketplace/actions');
+const { readTrustScoreInputsAction, setOrderStatusAction } = await import('@/app/(app)/marketplace/actions');
 const { readLiveAuctions, readSharedListings, readAuctionState, readCircleTitles } = await import('@/lib/marketplace/circle-reads');
 const { circleColumns, resetMarketplaceSchemaWarnings } = await import('@/lib/marketplace/schema-compat');
 const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
@@ -173,12 +174,90 @@ describe('orders are read by the family on either side (buyer_family_id)', () =>
       'app/(app)/marketplace/orders/page.tsx',
       'app/(app)/marketplace/actions.ts',
       'app/(app)/marketplace/page.tsx',
-      'components/marketplace/sidebar-trust-score.tsx',
     ]) {
       const source = readFileSync(file, 'utf8');
       expect(source, file).toContain('readFamilyOrders(');
       // No order read in these files narrows itself to family_id alone.
       expect(source, file).not.toMatch(/from\('marketplace_orders'\)(?:(?!\.from\()[^;])*?\.select\((?:(?!\.from\()[^;])*?\.eq\('family_id'/);
+    }
+  });
+});
+
+/** Every file under `roots` that is a client component: the browser runs it. */
+function clientComponents(roots: string[]): string[] {
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir)) {
+      const path = join(dir, entry);
+      if (statSync(path).isDirectory()) walk(path);
+      else if (/\.tsx?$/.test(entry) && /^'use client'/.test(readFileSync(path, 'utf8'))) out.push(path);
+    }
+  };
+  roots.forEach(walk);
+  return out;
+}
+
+describe('the rail\'s Trust Score card is read on the server', () => {
+  // The order read asks for buyer_family_id and, on a database without the SQL,
+  // is answered 400 before readFamilyOrders falls back. In Node that is a
+  // response to a fetch and nothing more. In the browser Chromium also prints
+  // "Failed to load resource: the server responded with a status of 400" to
+  // the console, and the rail is on every marketplace page: one browser-side
+  // read in the Trust Score card turned every /marketplace route of the
+  // signed-in sweep red (tests/e2e/every-page-signed-in.spec.ts asserts no
+  // console errors). So the inputs are read by a server action and only
+  // scored in the browser.
+  it('no client component makes the buyer_family_id probe from the browser', () => {
+    const clients = clientComponents(['app', 'components']);
+    expect(clients.length).toBeGreaterThan(100);
+    const probing = clients.filter((file) => {
+      const source = readFileSync(file, 'utf8');
+      return source.includes('@/lib/marketplace/schema-compat') || source.includes('buyer_family_id');
+    });
+    expect(probing, 'read marketplace_orders through a server action instead').toEqual([]);
+  });
+
+  it.each<Schema>(['after', 'before'])('%s the SQL: the member\'s received ratings, completed exchanges on either side, and listings', async (schema) => {
+    const db = database(schema);
+    db.seed('marketplace_orders', [
+      // Won from another household: the seller's family_id, the buyer's buyer_family_id.
+      { id: 'won', family_id: 'fam-seller', buyer_family_id: 'fam-buyer', buyer_member: 'm-self', seller_member: 'm-seller', status: 'completed' },
+      { id: 'sold', family_id: 'fam-buyer', buyer_member: 'm-sibling', seller_member: 'm-self', status: 'completed' },
+      { id: 'open', family_id: 'fam-buyer', buyer_member: 'm-self', seller_member: 'm-sibling', status: 'confirmed' },
+      { id: 'siblings', family_id: 'fam-buyer', buyer_member: 'm-sibling', seller_member: 'm-other', status: 'completed' },
+    ]);
+    db.seed('marketplace_reviews', [
+      { family_id: 'fam-buyer', reviewee_member: 'm-self', rating: 5 },
+      { family_id: 'fam-buyer', reviewee_member: 'm-sibling', rating: 2 },
+    ]);
+    db.seed('marketplace_listings', [
+      { id: 'mine', family_id: 'fam-buyer', member_id: 'm-self' },
+      { id: 'theirs', family_id: 'fam-buyer', member_id: 'm-sibling' },
+    ]);
+    expect(await readTrustScoreInputsAction()).toEqual({
+      ok: true, memberId: 'm-self', ratingsReceived: [5],
+      // Before the SQL the won order is the seller family's alone, as it always was.
+      ordersCompleted: schema === 'after' ? 2 : 1,
+      listingsPosted: 1,
+    });
+    expect(warned('marketplace_orders.buyer_family_id')).toBe(schema === 'before');
+    expect(db.log.map((l) => l.table)).toEqual(schema === 'after'
+      ? ['marketplace_reviews', 'marketplace_orders', 'marketplace_listings']
+      : ['marketplace_reviews', 'marketplace_orders', 'marketplace_listings', 'marketplace_orders']);
+  });
+
+  it('a read that fails is reported, not scored as a baseline', async () => {
+    const db = database('after');
+    const realFrom = db.from.bind(db);
+    (db as unknown as { from: (table: string) => object }).from = (table: string) => table === 'marketplace_reviews'
+      ? missingRelation({ code: '42P01', message: 'relation "public.marketplace_reviews" does not exist', details: null, hint: null })
+      : realFrom(table);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(await readTrustScoreInputsAction()).toEqual({ ok: false, error: expect.any(String) });
+      expect(error).toHaveBeenCalledTimes(1);
+    } finally {
+      error.mockRestore();
     }
   });
 });

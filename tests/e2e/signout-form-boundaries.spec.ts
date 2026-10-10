@@ -88,12 +88,20 @@ async function fixture(page: Page, control: Control = 'plain', locale = 'en-US')
         isBrowserSignedOut: () => p.current === null,
       },
     };
+    // A relative specifier is resolved against the importer, as the bundler
+    // does: lib/auth/step-up-client reads stepUpPath from './mfa', and handing
+    // that id to the loader as written is an 'Unexpected fixture import'.
+    const resolve = (from, child) => {
+      const parts = from.split('/'); parts.pop();
+      for (const segment of child.split('/')) { if (segment === '..') parts.pop(); else if (segment !== '.') parts.push(segment); }
+      return parts.join('/');
+    };
     function load(id) {
       if (id in mocks) return mocks[id];
       if (id in modules) return modules[id];
       if (!(id in sources)) throw new Error('Unexpected fixture import: ' + id);
       const module = { exports: {} }; modules[id] = module.exports;
-      new Function('require', 'module', 'exports', sources[id])(load, module, module.exports);
+      new Function('require', 'module', 'exports', sources[id])(child => load(child.startsWith('.') ? resolve(id, child) : child), module, module.exports);
       return module.exports;
     }
     const controls = {
