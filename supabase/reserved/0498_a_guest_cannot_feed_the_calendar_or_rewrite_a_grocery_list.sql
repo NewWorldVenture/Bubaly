@@ -10,11 +10,16 @@
 --
 --   * calendar_feeds. Its only policy is `ALL` for is_family_member, so a guest
 --     subscribes the family to any ICS URL (measured: 1 row, while the same
---     guest's direct calendar_events insert is refused by 0464). The in-app
---     sync runs on the guest's own session and is refused at calendar_events,
---     but the nightly sync (app/api/cron/calendar-feeds) runs with the service
---     client, which 0464 exempts, and imports that feed's events into the
---     family calendar. The guest writes the calendar after all.
+--     guest's direct calendar_events insert is refused by 0464). What the feed
+--     row then leads to depends on the importer, which this does not touch.
+--     The in-app sync runs on the guest's own session and is refused at
+--     calendar_events. The nightly sync (app/api/cron/calendar-feeds) runs
+--     with the service client, which 0464 exempts, so it can import that
+--     feed's events into the family calendar, but only once the held 0490's
+--     calendar_feed_apply_sync exists (without it, as on this candidate, the
+--     importer refuses every event write), and only if the fetch and parse
+--     succeed and the importer's own requirements are met. The SQL proof here
+--     covers the feed and list rows, not that import chain.
 --   * grocery_lists, the parent of the guarded grocery_items. A guest creates,
 --     renames and deletes lists (measured: 1 row each). Deleting a list that
 --     has items already fails, because the cascade fires the items guard.
@@ -25,9 +30,14 @@
 -- children and caregivers write both tables exactly as before. Only the table
 -- is guarded: the calendar lane's importer and feed actions are not touched.
 --
--- HELD: proposed as 0498 (the first number above 0497; requested on #771 in
--- comment 6094699645, not yet confirmed) in supabase/reserved/ until every
--- number below it has landed. Proven by
+-- RESIDUAL, recorded: feeds a guest already added are not removed. They stay
+-- eligible for a later service-role sync. Cleaning them up, and any importer
+-- follow-on, belongs to the calendar importer's owner; no data is changed here.
+--
+-- HELD: 0498, the first number above 0497, requested on #771 in comment
+-- 6094699645 and confirmed as a held source and probe reservation in #981
+-- comment 6094770726 (not an installation or production approval). It stays
+-- in supabase/reserved/ until every number below it has landed. Proven by
 -- docs/audit/reserved/a-guest-cannot-feed-the-calendar-or-rewrite-a-grocery-list-check.sql
 -- and .github/workflows/guest-household-runtime.yml. Not applied to production
 -- by an agent; recorded in docs/PENDING_PROD_MIGRATIONS.md.

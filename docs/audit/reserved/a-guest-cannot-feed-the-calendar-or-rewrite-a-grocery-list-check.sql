@@ -2,10 +2,11 @@
 --
 -- 0464 refuses a guest's writes on the eight household resources
 -- /family/permissions names. calendar_feeds and grocery_lists sit just outside
--- that list: a guest subscribed the family to any ICS URL (whose events the
--- nightly service-role sync imports into the family calendar) and created,
--- renamed and deleted grocery lists. The held 0498 wires 0464's own guard onto
--- both tables.
+-- that list: a guest subscribed the family to any ICS URL and created, renamed
+-- and deleted grocery lists. The held 0498 wires 0464's own guard onto both
+-- tables. This proves the feed and list rows only. Whether a planted feed's
+-- events reach the calendar depends on the service-role importer (the held
+-- 0490's apply function, a successful fetch and parse), which is not run here.
 --
 -- What this probe asserts, as an active guest of the family through
 -- PostgREST's role, on each of the two tables:

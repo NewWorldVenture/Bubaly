@@ -111,7 +111,7 @@ source allocations are not evidence that production applied any migration.
 | 0495 held | `0495_a_member_invited_back_gets_what_the_invite_grants.sql` | A returning member gets the invite's role; an active member's role is unchanged; a kid login cannot accept another family's invite. Reserved for #981 above every preserved allocation (confirmed in #981 comment 6089092821). |
 | 0496 proposed, held | `0496_a_childs_xp_is_awarded_by_a_parent.sql` | Only a manager or the service role can award a child XP or rewrite streaks through 0341's functions. Requested for #981 on #771 (comment 6089394563); not yet confirmed. |
 | 0497 proposed, held | `0497_a_childs_wallet_and_guardian_number_stay_in_one_family.sql` | 0311's same-family guard on Guardian profiles, gift links, pay handles, child wallets and medication schedules. Requested for #981 on #771 (comment 6092501825); not yet confirmed. |
-| 0498 proposed, held | `0498_a_guest_cannot_feed_the_calendar_or_rewrite_a_grocery_list.sql` | 0464's guest guard on `calendar_feeds` and `grocery_lists`. Requested for #981 on #771 (comment 6094699645); not yet confirmed. |
+| 0498 confirmed, held | `0498_a_guest_cannot_feed_the_calendar_or_rewrite_a_grocery_list.sql` | 0464's guest guard on `calendar_feeds` and `grocery_lists`. Requested for #981 on #771 (comment 6094699645); confirmed as a held source and probe reservation in #981 comment 6094770726, which is not an installation or production approval. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4414,12 +4414,13 @@ boundary probes pass.
 for another test family's member through PostgREST and confirm 42501; then
 save one for your own member and confirm it lands.
 
-## `0498` (proposed, held) — a guest could still feed the calendar and rewrite grocery lists
+## `0498` (confirmed, held) — a guest could still feed the calendar and rewrite grocery lists
 
 `supabase/reserved/0498_a_guest_cannot_feed_the_calendar_or_rewrite_a_grocery_list.sql` —
-**held**: proposed as `0498`, the first number above `0497`, for #981. It was
-requested on #771 in comment 6094699645 and is not yet confirmed. Its probe is
-held with it in `docs/audit/reserved/`.
+**held**: `0498`, the first number above `0497`, for #981. It was requested on
+#771 in comment 6094699645 and confirmed as a held source and probe reservation
+in #981 comment 6094770726. That confirmation is not an installation or
+production approval. Its probe is held with it in `docs/audit/reserved/`.
 
 **Severity: low to medium. Deploy order: any.** 0464 (ROLE-M03) refuses a
 guest's writes on the eight resources `/family/permissions` names. Two tables
@@ -4428,8 +4429,12 @@ sit just outside that list:
   guest subscribed the family to any ICS URL. On the replay that landed 1 row,
   while the same guest's direct event insert was refused. The in-app sync runs
   on the guest's session and is refused at `calendar_events`. The nightly
-  `app/api/cron/calendar-feeds` sync, however, uses the service client, which
-  0464 exempts, and would import that feed's events into the family calendar.
+  `app/api/cron/calendar-feeds` sync uses the service client, which 0464
+  exempts, so it can import that feed's events into the family calendar. It
+  can do so only once the held 0490's `calendar_feed_apply_sync` exists. On
+  this candidate, without it, the importer refuses every event write. It also
+  needs the fetch and parse to succeed and the importer's own requirements to
+  be met. The SQL proof covers the feed and list rows, not that import chain.
 - **`grocery_lists`:** the parent of the guarded `grocery_items`. A guest
   created, renamed and deleted lists (1 row each). Deleting a list that has
   items already failed, through the cascade.
@@ -4439,6 +4444,11 @@ function, and 0464's eight tables do not change. Every other role writes both
 tables as before, and the service role and session-less writers stay exempt.
 Only the tables are guarded; the calendar lane's importer, feed actions and the
 held 0490 are untouched, and 0490's probe passes with and without 0498.
+
+**Residual, recorded:** feeds a guest already added are not removed by 0498 and
+stay eligible for a later service-role sync. Cleaning them up, and any importer
+follow-on, belongs to the calendar importer's owner. No production cleanup is
+done or proposed here.
 
 **Proof:** `.github/workflows/guest-household-runtime.yml` replays every
 runnable migration. It requires the held probe
