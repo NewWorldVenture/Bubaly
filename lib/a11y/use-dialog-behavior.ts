@@ -186,7 +186,12 @@ export function useDialogBehavior(
       const first = items[0];
       const last = items[items.length - 1];
       const active = document.activeElement as HTMLElement;
-      if (e.shiftKey && (active === first || !dialog.contains(active))) {
+      // The dialog element itself counts as the start: it takes focus when the
+      // hook finds nothing focusable, and on a click on its text (it carries
+      // tabIndex -1). From there the browser's Shift+Tab goes to the control
+      // before the dialog, in the page this dialog says is inert.
+      // tests/a-dialog-panel-is-not-a-way-out.test.ts
+      if (e.shiftKey && (active === first || active === dialog || !dialog.contains(active))) {
         e.preventDefault(); last.focus();
       } else if (!e.shiftKey && active === last) {
         e.preventDefault(); first.focus();
