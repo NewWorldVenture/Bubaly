@@ -12,6 +12,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { ButtonLink } from '@/components/ui/button-link';
 import { LoadingBlock, EmptyState, ErrorState } from '@/components/ui/states';
 import { useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { VACATION_KINDS, VACATION_STATUSES, lookup } from '@/lib/vacations/meta';
@@ -129,7 +130,7 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
           <p className="text-sm text-muted">{tr('vacationsList.planCoordinateAndPackForEvery')}</p>
         </div>
         <div className="flex gap-2">
-          <Link href="/dashboard/vacations/calendar"><Button variant="secondary" size="sm"><CalendarDays className="h-4 w-4" /> {tr('vacationsList.calendar')}</Button></Link>
+          <ButtonLink href="/dashboard/vacations/calendar" variant="secondary" size="sm"><CalendarDays className="h-4 w-4" /> {tr('vacationsList.calendar')}</ButtonLink>
           <Button size="sm" onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {tr('vacationsList.newTrip')}</Button>
         </div>
       </div>
