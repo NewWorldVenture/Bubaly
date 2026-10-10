@@ -13,11 +13,19 @@ export const OUTBOUND_PROVIDER_KEYS_OFF = Object.freeze({
   RESEND_API_KEY: '',
 });
 
+// Set beside the blanks, in the one environment scripts/run-e2e.mjs gives
+// both the server it starts and the Playwright run that uses it. A suite that
+// reaches real side effects reads it: with PLAYWRIGHT_EXTERNAL_SERVER=1 and
+// no marker, the server was started some other way, and its environment is
+// unknown. Setting it by hand is an operator's word, not a verification.
+export const MANAGED_SERVER_MARKER = 'E2E_SERVER_PROVIDER_KEYS_BLANKED';
+
 export function e2eServerEnv(base, port) {
   return {
     ...base,
     PLAYWRIGHT_PORT: port,
     PLAYWRIGHT_EXTERNAL_SERVER: '1',
+    [MANAGED_SERVER_MARKER]: '1',
     NEXT_PUBLIC_APP_URL: base.NEXT_PUBLIC_APP_URL ?? `http://localhost:${port}`,
     NEXT_PUBLIC_SUPABASE_URL:
       base.NEXT_PUBLIC_SUPABASE_URL ?? 'https://example.supabase.co',

@@ -3,8 +3,12 @@
 // a snapshot, and that close can reject. Before this, a rejection there (or in
 // any one deletion) skipped every step after it, leaving the account and its
 // grant behind. Every failure here is synthetic.
+import { inspect } from 'node:util';
 import { describe, expect, it, vi } from 'vitest';
 import { cleanUpFeedbackFixture, runEveryStep } from './e2e/helpers/feedback-fixture-cleanup';
+
+/** A synthetic credential every injected failure carries. */
+const SECRET = 'synthetic-credential-not-real-7f3a';
 
 type Fail = Partial<Record<'ideas' | 'list' | 'remove' | 'grant', 'answer' | 'throw'>>;
 
@@ -12,8 +16,8 @@ function fixture(fail: Fail = {}, { closeRejects = false, disposeRejects = false
   const calls: string[] = [];
   const outcome = (what: keyof Fail, value: Record<string, unknown> = {}) => {
     calls.push(what);
-    if (fail[what] === 'throw') return Promise.reject(new Error(`synthetic ${what} threw`));
-    return Promise.resolve({ ...value, error: fail[what] === 'answer' ? { message: `synthetic ${what} failed` } : null });
+    if (fail[what] === 'throw') return Promise.reject(new Error(`synthetic ${what} threw for ${SECRET}`, { cause: { token: SECRET } }));
+    return Promise.resolve({ ...value, error: fail[what] === 'answer' ? { message: `synthetic ${what} failed for ${SECRET}`, details: SECRET } : null });
   };
   const db = {
     from: (table: string) => ({
@@ -31,12 +35,12 @@ function fixture(fail: Fail = {}, { closeRejects = false, disposeRejects = false
   };
   const account = {
     email: 'Synthetic@Example.test', password: 'synthetic-password-not-real', userId: 'user-1', familyId: 'family-1',
-    dispose: vi.fn(async () => { calls.push('dispose'); if (disposeRejects) throw new Error('synthetic dispose failed'); }),
+    dispose: vi.fn(async () => { calls.push('dispose'); if (disposeRejects) throw new Error(`synthetic dispose failed for ${SECRET}`); }),
   };
-  const close = vi.fn(async () => { calls.push('close'); if (closeRejects) throw new Error('synthetic close failed'); });
+  const close = vi.fn(async () => { calls.push('close'); if (closeRejects) throw new Error(`synthetic close failed: password=${SECRET}`); });
   const run = (withAccount = true) => cleanUpFeedbackFixture({
     close, bucket: 'feedback-attachments', run: 'r1', account: withAccount ? account : null,
-    db: () => { if (dbThrows) throw new Error('synthetic client failed'); return db as never; },
+    db: () => { if (dbThrows) throw new Error(`synthetic client failed with key ${SECRET}`); return db as never; },
   });
   return { calls, account, close, run };
 }
@@ -88,10 +92,29 @@ describe('the SEC-007 fixture teardown runs every step', () => {
     expect(f.calls).toEqual(['close', 'ideas']);
   });
 
-  it('never puts a credential in its message', async () => {
-    const f = fixture({ ideas: 'answer', grant: 'answer' }, { closeRejects: true, disposeRejects: true });
-    const error = await failure(f.run());
-    expect(error.message).not.toMatch(/synthetic-password|Synthetic@Example/i);
+  it('reports step names only: no failure\u2019s text, thrown or answered, reaches anything it reports', async () => {
+    for (const [fail, flags] of [
+      [{ ideas: 'answer', list: 'throw', grant: 'answer' }, { closeRejects: true, disposeRejects: true }],
+      [{ ideas: 'throw', remove: 'answer', grant: 'throw' }, {}],
+      [{}, { dbThrows: true, closeRejects: true }],
+    ] as const) {
+      const f = fixture(fail as Fail, flags);
+      const error = await failure(f.run());
+      // Everything a reporter could print: the message, every nested error
+      // with its stack and any cause, and the hidden properties.
+      const reportable = [
+        inspect(error, { depth: Infinity, showHidden: true }),
+        error.stack ?? '',
+        ...error.errors.flatMap((e: Error) => [e.message, e.stack ?? '', inspect(e, { depth: Infinity, showHidden: true })]),
+        JSON.stringify(error, Object.getOwnPropertyNames(error)),
+      ].join('\n');
+      expect(reportable).not.toContain(SECRET);
+      expect(reportable).not.toMatch(/synthetic-password|Synthetic@Example/i);
+      for (const e of error.errors as Error[]) {
+        expect(e.message).toMatch(/ failed$/);
+        expect(e.cause).toBeUndefined();
+      }
+    }
   });
 
   it('runEveryStep resolves when every step does', async () => {

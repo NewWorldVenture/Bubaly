@@ -8,13 +8,21 @@
 // scripts/e2e-server-env.mjs blanks the two providers' keys for the server
 // both entry points start (scripts/run-e2e.mjs and playwright.config.ts). Every
 // value below is synthetic, and no request leaves the test: fetch is stubbed.
+// Only recipient discovery is replaced (a synthetic super admin, so no real
+// address is ever a recipient here); the provider gates are the real ones.
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
-import { OUTBOUND_PROVIDER_KEYS_OFF, e2eServerEnv } from '../scripts/e2e-server-env.mjs';
+import { MANAGED_SERVER_MARKER, OUTBOUND_PROVIDER_KEYS_OFF, e2eServerEnv } from '../scripts/e2e-server-env.mjs';
+
+const SYNTHETIC_ADMIN = 'synthetic-admin@example.test';
+vi.mock('@/lib/constants/super-admins', () => ({
+  superAdminEmails: () => ['synthetic-admin@example.test'],
+  isSuperAdminEmail: (email: string | null | undefined) => email === 'synthetic-admin@example.test',
+}));
 
 const { onFeedbackSubmitted } = await import('@/lib/feedback/notify');
 
@@ -36,7 +44,22 @@ describe('the E2E server environment', () => {
       PLAYWRIGHT_PORT: '3107',
       PLAYWRIGHT_EXTERNAL_SERVER: '1',
       NEXT_PUBLIC_APP_URL: 'http://localhost:3107',
+      [MANAGED_SERVER_MARKER]: '1',
     });
+  });
+
+  it('marks only a server the runner started; the feedback suite refuses an external one without the mark', async () => {
+    const { readFileSync, readdirSync } = await import('node:fs');
+    // Only the runner's helper sets it; the suite reads it.
+    const writers = ['scripts', 'tests/e2e', 'tests/e2e/helpers'].flatMap((dir) => readdirSync(dir).filter((f) => /\.(m?js|ts)$/.test(f))
+      .map((f) => `${dir}/${f}`).filter((f) => readFileSync(f, 'utf8').includes(MANAGED_SERVER_MARKER)));
+    expect(writers.sort()).toEqual(['scripts/e2e-server-env.mjs', 'tests/e2e/a-feedback-image-is-not-a-beacon.spec.ts']);
+    const spec = readFileSync('tests/e2e/a-feedback-image-is-not-a-beacon.spec.ts', 'utf8');
+    expect(spec).toContain(`if (process.env.PLAYWRIGHT_EXTERNAL_SERVER === '1' && process.env.${MANAGED_SERVER_MARKER} !== '1') {`);
+    // It precedes everything the suite does to set up.
+    const beforeEach = spec.slice(spec.indexOf('test.beforeEach('));
+    expect(beforeEach.indexOf(MANAGED_SERVER_MARKER)).toBeLessThan(beforeEach.indexOf('createOwnedAccount('));
+    expect(beforeEach.indexOf(MANAGED_SERVER_MARKER)).toBeLessThan(beforeEach.indexOf('context.route('));
   });
 
   it('is what both entry points start the server with', async () => {
@@ -88,17 +111,22 @@ describe('the E2E server environment', () => {
 describe('a submitted idea, on a server started that way', () => {
   const saved: Record<string, string | undefined> = {};
   let requested: string[];
+  let recipients: string[];
 
   beforeEach(() => {
     for (const k of [...KEYS, 'GITHUB_FEEDBACK_REPO', 'GITHUB_REPO']) saved[k] = process.env[k];
     requested = [];
-    vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
+    recipients = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: unknown, init?: RequestInit) => {
       const url = String(input);
       requested.push(url);
       if (url === `https://api.github.com/repos/${REPO}/issues`) {
         return new Response(JSON.stringify({ number: 7, html_url: `https://github.com/${REPO}/issues/7`, title: 't', state: 'open', state_reason: null, body: null, updated_at: '2026-10-10T00:00:00Z', labels: [] }), { status: 201 });
       }
-      if (url === 'https://api.resend.com/emails') return new Response('{"id":"synthetic"}', { status: 200 });
+      if (url === 'https://api.resend.com/emails') {
+        recipients.push((JSON.parse(String(init?.body)) as { to: string }).to);
+        return new Response('{"id":"synthetic"}', { status: 200 });
+      }
       throw new Error(`unexpected request in a hermetic test: ${url}`);
     }));
     vi.spyOn(console, 'info').mockImplementation(() => {});
@@ -123,9 +151,11 @@ describe('a submitted idea, on a server started that way', () => {
     const hosts = await submit({ ...SYNTHETIC });
     expect(hosts).toContain('api.github.com');
     expect(hosts).toContain('api.resend.com');
+    expect(recipients, 'only the synthetic super admin is ever a recipient').toEqual([SYNTHETIC_ADMIN]);
   });
 
   it('files no issue and sends no mail with the E2E server’s environment', async () => {
     expect(await submit(e2eServerEnv({ ...SYNTHETIC }, '3107'))).toEqual([]);
+    expect(recipients).toEqual([]);
   });
 });

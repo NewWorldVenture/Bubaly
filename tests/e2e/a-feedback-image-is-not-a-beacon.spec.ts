@@ -23,9 +23,12 @@ import { cleanUpFeedbackFixture } from './helpers/feedback-fixture-cleanup';
 //
 // The submit runs onFeedbackSubmitted on the server, which files a GitHub
 // issue and emails the super admins when their keys are set. Browser routing
-// cannot see those requests. The server the runner starts has those keys
-// blanked (scripts/e2e-server-env.mjs), and this suite refuses to start when
-// they, or the other providers' keys, are in its own environment.
+// cannot see those requests. Both launch paths start the server with those
+// keys blanked (scripts/e2e-server-env.mjs). This suite refuses to start when
+// they, or the other providers' keys, are in its own environment, and refuses
+// a server neither path started (PLAYWRIGHT_EXTERNAL_SERVER=1 without the
+// runner's marker): a blank Playwright process says nothing about a server
+// started by hand.
 const enabled = process.env.E2E_AUTHENTICATED === '1';
 const provider = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
@@ -71,6 +74,9 @@ test.describe('SEC-007: feedback screenshots reach the super admin, and nothing 
 
   test.beforeEach(async ({ context }) => {
     // Before any account, row or request.
+    if (process.env.PLAYWRIGHT_EXTERNAL_SERVER === '1' && process.env.E2E_SERVER_PROVIDER_KEYS_BLANKED !== '1') {
+      throw new Error('Feedback E2E refuses a server it did not start: its environment cannot be verified. Run it through scripts/run-e2e.mjs.');
+    }
     if (process.env.GITHUB_TOKEN || process.env.GITHUB_FEEDBACK_TOKEN || process.env.RESEND_API_KEY
       || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.SENDGRID_API_KEY || process.env.TWILIO_ACCOUNT_SID) {
       throw new Error('Feedback E2E refuses external provider credentials.');
