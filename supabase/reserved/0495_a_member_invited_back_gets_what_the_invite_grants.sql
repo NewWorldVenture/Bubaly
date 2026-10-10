@@ -34,13 +34,32 @@
 -- addresses, so a child who opened a stranger's join link while signed in was
 -- enrolled in that household: its adults could message them and assign them
 -- chores, and the child's own parents could not see it. Reproduced on the same
--- replay. The caller is refused when their JWT address is on that domain or
--- they hold a child_logins row (either alone suffices, so neither an address
--- change nor a deleted mapping row reopens it). There is no designed flow for
--- a kid login to belong to a second household; if the owner wants one (two
--- co-parenting households), it should be a parent-to-parent action, not a
--- child's click. The join page refuses such an account before calling this,
--- which protects children while this migration is held.
+-- replay. The caller is refused when either of two facts that only the server
+-- writes says they are a kid login (either alone suffices, so neither an
+-- address change nor a deleted mapping row reopens it):
+--
+--   * their JWT address is on that domain. createChildLoginAction creates
+--     kid logins there with the service role, no household can write another
+--     person's auth address, and an account that moved itself onto the domain
+--     would only be refusing itself.
+--   * a child_logins row maps them to a member row that the SERVER linked to
+--     their login, in that mapping's own family, and that member is not a
+--     parent or adult. A child_logins row alone is not enough: its write
+--     policy (0297) is can_manage_family(family_id) and nothing more, so any
+--     household's parent or adult can write a row carrying ANY user id, and
+--     an unrelated adult would then be refused every invitation they ever
+--     got. family_members.user_id is the corroboration because 0458 makes it
+--     the server's alone to write. The role clause keeps a manager from
+--     marking a co-parent or adult of their own household, whose login the
+--     server did link there; createChildLoginAction never makes a PIN login
+--     for a parent or adult.
+--     user_metadata ({child: true}) is not used: its owner can edit it.
+--
+-- There is no designed flow for a kid login to belong to a second household;
+-- if the owner wants one (two co-parenting households), it should be a
+-- parent-to-parent action, not a child's click. The join page refuses an
+-- account on the synthetic domain before calling this, which protects most
+-- children while this migration is held; it does not stop a direct RPC call.
 --
 -- The comparison reads the EXISTING row inside the conflict arm
 -- (`family_members.is_active` is the row as it was; `excluded` is the proposed
@@ -77,9 +96,16 @@ begin
     raise exception 'Invite is invalid or expired';
   end if;
 
-  -- A kid login stays in the family that made it.
+  -- A kid login stays in the family that made it. Each clause below is
+  -- written by the server alone; see the header for why each is there.
   if right(lower(coalesce(auth.jwt()->>'email','')), length('@kids.bubaly.app')) = '@kids.bubaly.app'
-     or exists (select 1 from public.child_logins cl where cl.user_id = auth.uid()) then
+     or exists (select 1
+                  from public.child_logins cl
+                  join public.family_members fm on fm.id = cl.member_id
+                 where cl.user_id = auth.uid()
+                   and fm.user_id = cl.user_id
+                   and fm.family_id = cl.family_id
+                   and fm.role::text not in ('parent', 'adult')) then
     raise exception 'A kid login cannot join another family';
   end if;
 

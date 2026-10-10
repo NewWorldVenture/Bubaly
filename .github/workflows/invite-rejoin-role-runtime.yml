@@ -2,7 +2,8 @@ name: Invite rejoin role SQL runtime
 
 # The held 0495 (supabase/reserved/) makes a member who is invited back get the
 # role the invite grants, and refuses a kid login's acceptance of another
-# family's invite. Neither the Database job's replay nor `supabase db
+# family's invite, without taking a child_logins row any household can write as
+# proof that someone is a kid. Neither the Database job's replay nor `supabase db
 # push` reads supabase/reserved/, and the Database job's probe glob does not
 # read docs/audit/reserved/, so nothing else in CI exercises it. This job
 # replays every runnable migration with the Database job's bootstrap, then:
@@ -12,7 +13,9 @@ name: Invite rejoin role SQL runtime
 #      parent), so a green step 3 is the migration's and not a probe that can
 #      no longer see anything;
 #   2. applies the held migration twice (it is re-runnable);
-#   3. runs the probe again and requires it to pass.
+#   3. runs the probe again and requires it to pass, which includes taking
+#      each clause of the kid-login guard back out inside its transaction and
+#      requiring the case that clause decides to flip.
 #
 # When 0495 is released into supabase/migrations/, its probe moves back to
 # docs/audit/ (the Database job then runs it) and this workflow is retired with
@@ -107,7 +110,9 @@ jobs:
             'a removed parent invited back as a guest came back as parent' \
             'a removed child invited back as an adult came back as child' \
             'the former parent, invited back as a guest, can manage the family' \
-            'a kid login on its synthetic address joined another family through an invite'; do
+            'a kid login on its synthetic address and holding a child_logins row joined another family through an invite' \
+            'a kid login on its synthetic address with no child_logins row joined another family through an invite' \
+            'a kid login holding a child_logins row under an ordinary address joined another family through an invite'; do
             if ! grep -qF "$expected" <<<"$out"; then
               echo "::error::the held probe failed on the released schema, but not on: $expected"
               exit 1

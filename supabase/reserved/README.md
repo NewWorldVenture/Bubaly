@@ -25,7 +25,7 @@ number with a released migration and never sits below the released sequence.
 | `0492_approval_requests_private_read.sql` | approval privacy | Production policies remain a rollout hold. |
 | `0493_ai_copy_private_read_and_quota.sql` | AI privacy and usage | Missing count RPC refuses capped Free requests. |
 | `0494_sync_atomic_pull.sql` | atomic sync | Missing RPC refuses writes and preserves cursor. |
-| `0495_a_member_invited_back_gets_what_the_invite_grants.sql` | invite rejoin role and kid-login admission (DB-RPC-001; reserved for #981, confirmed in its comment 6089092821) | A removed member who accepts a new invite gets their OLD role back, not the invite's; a parent invited back as a guest is a parent again. A kid login can accept another family's invite (the join page refuses it meanwhile). Proven by `.github/workflows/invite-rejoin-role-runtime.yml`. |
+| `0495_a_member_invited_back_gets_what_the_invite_grants.sql` | invite rejoin role and kid-login admission (DB-RPC-001; reserved for #981, confirmed in its comment 6089092821) | A removed member who accepts a new invite gets their OLD role back, not the invite's; a parent invited back as a guest is a parent again. A kid login can accept another family's invite (the join page refuses one on the synthetic address meanwhile; a direct RPC call is not stopped). A kid login is recognised only by facts the server writes, never by a `child_logins` row on its own. Proven by `.github/workflows/invite-rejoin-role-runtime.yml`. |
 
 Production SQL application uses `--require-runnable-rpcs` to refuse a release
 whose called RPCs exist only in held SQL. Ordinary source checks and read-only

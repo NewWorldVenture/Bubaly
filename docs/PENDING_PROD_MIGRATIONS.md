@@ -4259,16 +4259,34 @@ or adult may write an invite to any address. So a child who opened a
 stranger's join link while signed in was enrolled in that household, where its
 adults could message them and the child's own parents could not see it
 (reproduced on the same replay). 0495 refuses a caller whose address is on
-that domain or who holds a `child_logins` row. The join page already refuses
-such an account before calling the function, which protects children while
-0495 is held. If the owner wants a kid login in two households (co-parenting),
-that should be a parent-to-parent action, not a child's click.
+that domain, or who holds a `child_logins` row that the server's own link
+corroborates: the row's member is in the row's family, `family_members.user_id`
+on it is the caller (0458 makes that column the server's alone to write), and
+that member is not a parent or adult. A bare `child_logins` row is not enough,
+because its write policy lets any household's parent or adult write one naming
+any user id; trusted on its own, it would let a stranger household stop an
+unrelated adult from ever accepting an invitation (shown on the replay: three
+such rows, written through that policy, each blocked an adult under the earlier
+predicate). `user_metadata` is not used; its owner can edit it. The join page
+refuses an account on the synthetic domain before calling the function, which
+protects most children while 0495 is held; it is not protection against a
+direct RPC call, and it cannot see a kid login whose address was changed. If
+the owner wants a kid login in two households (co-parenting), that should be a
+parent-to-parent action, not a child's click.
+
+Remaining limits of the kid rule, recorded rather than smoothed over: a
+household's parent can still demote one of its own adult members to a
+non-manager role and then map them, which blocks that person's invitations
+elsewhere until the row is removed; and a kid login whose address was moved off
+the synthetic domain and whose mapping row was deleted is not recognised.
 
 **Proof:** `.github/workflows/invite-rejoin-role-runtime.yml` replays every
 runnable migration. It then requires the held probe
 `docs/audit/reserved/a-member-invited-back-gets-the-invited-role-check.sql` to
-fail on the defect, applies 0495 twice, and requires the probe to pass. With
-0495 applied, all 182 other boundary probes still pass.
+fail on the defect, applies 0495 twice, and requires the probe to pass. The
+passing run also takes each clause of the kid-login guard back out inside its
+transaction and requires the case that clause alone decides to flip. With 0495
+applied, all 182 other boundary probes still pass.
 
 **Not changed:** SEC-026 (the owner's decision on who may make a parent),
 and explicit `social_access_permissions` rows, which also outlive a removal
@@ -4277,7 +4295,8 @@ and may be elevations or restrictions. Those rows are recorded as a lead.
 **After approved release:** remove a test parent, invite them back
 as a guest, accept as them, and confirm they cannot open family settings. Then
 invite a test kid login's address from another test family and confirm the
-kid's acceptance is refused.
+kid's acceptance is refused. Confirm a test adult who is not anyone's kid login
+can still accept an invitation.
 
 ## `0471` and `0474` — the admin digest's delivery store, and a removed admin is not sent it
 
