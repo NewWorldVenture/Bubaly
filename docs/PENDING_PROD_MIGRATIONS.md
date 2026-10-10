@@ -4560,7 +4560,10 @@ six files (read, replace, move away, move onto, remove, upload):
   including for a member who is a guest of that other family;
 - the same holds for a sensitive document, an insurance card image and a
   household document stored under braces, no-hyphen and upper-case spellings
-  of the family id, and a first folder that is not a uuid fails closed;
+  of the family id, and a first folder that is not a uuid fails closed (a
+  read finds no row or is refused by the policies' own uuid cast, 22P02,
+  exactly; an upload is refused by that cast or a policy; any other error
+  fails the probe);
 - four mutation controls (the delete policy without the clause, the update
   policy's USING half without it, and each function without its own-family
   binding) each turn a refusal back into a landing.

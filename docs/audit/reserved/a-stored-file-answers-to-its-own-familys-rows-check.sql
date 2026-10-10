@@ -14,7 +14,10 @@
 --     family's writes;
 --   * all of this holds for an object stored under a family id spelt any way
 --     the policies' uuid cast accepts (braces, no hyphens, upper case), and a
---     first folder that is not a uuid fails closed.
+--     first folder that is not a uuid fails closed: a read finds no row or is
+--     refused by the cast itself (22P02, exact), and an upload is refused by
+--     that cast or a policy (42501); any other error fails the probe rather
+--     than counting as closed.
 --
 -- What this probe asserts, through PostgREST's role on storage.objects (the
 -- statements storage-api runs under the caller's RLS), for each of the six
@@ -274,21 +277,26 @@ begin
     perform set_config('role','authenticated', true);
     perform set_config('request.jwt.claim.sub', '00000000-0000-4000-8499-0000000000a1', true);
     perform set_config('request.jwt.claims', json_build_object('sub','00000000-0000-4000-8499-0000000000a1','role','authenticated')::text, true);
+    -- Fail closed means exactly one of two answers: no row, or the policies'
+    -- own uuid cast refusing the path (22P02). Any other error is not this
+    -- boundary answering, so it fails the probe rather than counting as closed.
     begin
       select count(*)::text into got from storage.objects where bucket_id = 'documents' and name = 'not-a-family/1700000000010-note.pdf';
-    exception when others then got := 'error';
+    exception when others then got := sqlstate || ': ' || sqlerrm;
     end;
-    if got not in ('0', 'error') then
-      failures := array_append(failures, format('a parent read an object whose first folder is not a family id (%s)', got));
+    if got not in ('0', '22P02: invalid input syntax for type uuid: "not-a-family"') then
+      failures := array_append(failures, format('a parent''s read of an object whose first folder is not a family id was not refused by the path itself (%s)', got));
     end if;
     begin
       insert into storage.objects (bucket_id, name, owner)
         values ('documents', 'not-a-family/1700000000011-new.pdf', '00000000-0000-4000-8499-0000000000a1');
       got := 'landed';
-    exception when others then got := 'refused';
+    exception when others then got := sqlstate || ': ' || sqlerrm;
     end;
     if got = 'landed' then
       failures := array_append(failures, 'a parent uploaded under a first folder that is not a family id');
+    elsif got not like '42501: %' and got <> '22P02: invalid input syntax for type uuid: "not-a-family"' then
+      failures := array_append(failures, format('a parent''s upload under a first folder that is not a family id was not refused by the path or a policy (%s)', got));
     end if;
     perform set_config('role','postgres', true);
     if installed then
@@ -319,7 +327,7 @@ begin
       ) as v(folder) loop
       begin
         got := (t.folder::uuid)::text;
-      exception when others then got := null;
+      exception when invalid_text_representation then got := null;
       end;
       execute 'select public.document_object_family($1)::text' into row_txt using t.folder || '/x.pdf';
       if row_txt is distinct from got then

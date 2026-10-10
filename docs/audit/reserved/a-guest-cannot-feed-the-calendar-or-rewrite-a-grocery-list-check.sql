@@ -57,6 +57,7 @@ insert into public.grocery_lists (id, family_id, name) values
 
 do $$
 declare
+  neg_err text;
   fam      uuid := '00000000-0000-4000-8498-0000000000f1';
   guard    constant text := '42501: A guest can see the household but not change it';
   failures text[] := '{}';
@@ -155,12 +156,13 @@ begin
     perform set_config('role','authenticated', true);
     perform set_config('request.jwt.claim.sub', '00000000-0000-4000-8498-0000000000a6', true);
     perform set_config('request.jwt.claims', json_build_object('sub', '00000000-0000-4000-8498-0000000000a6', 'role', 'authenticated')::text, true);
-    begin insert into public.grocery_lists (family_id, name) values (fam, 'Unguarded guest list'); exception when others then null; end;
+    neg_err := null;
+    begin insert into public.grocery_lists (family_id, name) values (fam, 'Unguarded guest list'); neg_err := 'landed'; exception when others then neg_err := sqlstate || ': ' || sqlerrm; end;
     perform set_config('role','postgres', true);
     alter table public.grocery_lists enable trigger trg_grocery_lists_not_a_guests;
     select count(*) into n from public.grocery_lists where family_id = fam and name = 'Unguarded guest list';
     if n <> 1 then
-      failures := array_append(failures, 'NEGATIVE CONTROL: with the guard disabled the guest''s grocery list still did not land, so this fixture cannot see the defect');
+      failures := array_append(failures, format('NEGATIVE CONTROL: with the guard disabled the guest''s grocery list still did not land, so this fixture cannot see the defect (%s)', neg_err));
     end if;
   end if;
 

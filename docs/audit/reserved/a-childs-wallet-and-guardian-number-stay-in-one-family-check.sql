@@ -67,6 +67,7 @@ insert into public.medications (id, family_id, name, is_active) values
 
 do $$
 declare
+  neg_err text;
   fam_a   uuid := '00000000-0000-4000-8497-0000000000f1';
   fam_b   uuid := '00000000-0000-4000-8497-0000000000f2';
   parent  uuid := '00000000-0000-4000-8497-0000000000a1';
@@ -204,12 +205,13 @@ begin
     perform set_config('role','authenticated', true);
     perform set_config('request.jwt.claim.sub', parent::text, true);
     perform set_config('request.jwt.claims', json_build_object('sub', parent, 'role', 'authenticated')::text, true);
-    begin insert into public.gift_links (family_id, token, child_wallet_id) values (fam_a, 'm0497-unguarded', wal_b); exception when others then null; end;
+    neg_err := null;
+    begin insert into public.gift_links (family_id, token, child_wallet_id) values (fam_a, 'm0497-unguarded', wal_b); neg_err := 'landed'; exception when others then neg_err := sqlstate || ': ' || sqlerrm; end;
     perform set_config('role','postgres', true);
     alter table public.gift_links enable trigger trg_gift_links_child_wallet_id_family;
     select count(*) into n from public.gift_links where token = 'm0497-unguarded';
     if n <> 1 then
-      failures := array_append(failures, 'NEGATIVE CONTROL: with the trigger disabled the foreign gift link still did not land, so this fixture cannot see the defect');
+      failures := array_append(failures, format('NEGATIVE CONTROL: with the trigger disabled the foreign gift link still did not land, so this fixture cannot see the defect (%s)', neg_err));
     end if;
   end if;
 
