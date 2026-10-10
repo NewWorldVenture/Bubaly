@@ -119,6 +119,7 @@ source allocations are not evidence that production applied any migration.
 | 0503 proposed, held | `0503_a_trip_item_stays_with_its_trips_family.sql` | A signed-in caller changes a trip item's family only if they manage both the family it leaves and the family it joins, and an item names only its own family's trip (0311's binding), so a member of two families cannot move the first family's packing items out. Requested on #771 (comments 6097696125 and 6097700163); not yet confirmed. |
 | 0504 proposed, held | `0504_a_kid_login_mapping_is_the_servers_to_write.sql` | `child_logins` is written only by the server: 0297's manager write policy is dropped and client INSERT/UPDATE/DELETE revoked; the members' read is kept. Decided by the account holder on the lead in #771 comment 6092615411; requested on #771 (comment 6100826185), not yet confirmed. |
 | 0505 proposed, held | `0505_a_listing_others_hold_records_of_is_withdrawn_not_erased.sql` | A signed-in caller's delete of a marketplace listing that has any order, offer, question, bid, negotiation or round, handoff or report is refused; such a listing is withdrawn instead, and nothing other families hold is erased by the cascade. Decided by the account holder on the lead in #771 comment 6097101249; requested on #771 (comment 6100826185), not yet confirmed. |
+| 0506 proposed, held | `0506_a_health_record_is_read_by_a_manager_or_its_own_member.sql` | A row of `symptom_logs`, `health_metrics`, `health_goals`, `health_visits`, `immunizations`, `sleep_logs`, `sleep_checkins` or `nutrition_logs` is read by a manager of its family, the member it is about, or its author, all inside `is_family_member(family_id)`; every other member no longer reads it. Writes unchanged. Decided by the account holder on the lead in #771 comment 6092825901; requested on #771 (comment 6100826185), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4745,6 +4746,95 @@ Dropping any one table's trigger turns the probe red on that table. 184 of
 families, try to vote in one family's poll under their member id from the
 other family and confirm 42501; then vote as their own member there and
 confirm it lands.
+
+## `0506` (proposed, held) — every member read every member's health record
+
+`supabase/reserved/0506_a_health_record_is_read_by_a_manager_or_its_own_member.sql`
+— **held**: proposed as `0506`, the first number above `0505`. The account
+holder decided it on the lead in #771 comment 6092825901 ("own record;
+caregivers too"). It was requested on #771 in comment 6100826185 and is not yet
+confirmed.
+
+**Severity: medium (health records read across the household). Deploy order:
+any; the screen changes ship first and change nothing for a manager.**
+`symptom_logs`, `health_metrics`, `health_goals`, `health_visits`,
+`immunizations`, `sleep_logs`, `sleep_checkins` and `nutrition_logs` each read
+with `is_family_member(family_id)` (`nutrition_logs` twice, one policy granted
+to public). So a teen, a child, a caregiver and a guest read every other
+member's symptoms, measurements, goals, visits, vaccinations, sleep and meals.
+`lib/ai/context/policy.ts` already lists all eight as sensitive, and 0438's
+header named `symptom_logs` as "the same per-member shape … a separate
+change". Measured on a replay of every runnable migration, as each of those
+roles: every Health House record about another member, in all eight tables
+(5 to 7 rows each).
+
+0506 drops every permissive policy that reads each table and creates one:
+`is_family_member(family_id) and (can_manage_family(family_id) or
+is_self_member(member_id) or created_by = auth.uid())`. The author term goes
+beyond 0438's rule on purpose: these tables' own update and delete policies
+already treat the author as entitled to their row, and a member who logs a
+symptom or a meal for someone keeps seeing what they wrote (an insert that
+returns its row, as PostgREST's does, needs it). The outer
+`is_family_member(family_id)` stays, so a member who has left reads nothing,
+not even what they wrote. A row with no member (`health_visits`,
+`immunizations` and `nutrition_logs` allow it) is a manager's or its author's.
+Writes are unchanged. A self-check refuses the migration unless each table ends
+with exactly that one read policy.
+
+**App change, shipping with the source:** the sleep coach, the nutrition
+tracker, and the visits and immunisation filters offer a non-manager only their
+own member, as the health module's coach already did
+(`isManager(role) ? members : members.filter((m) => m.user_id === userId)`).
+Every write those screens make sets `created_by`. The AI insights route reads
+through the caller's session, so RLS narrows it; the health coach already
+grounds a non-manager on their own record.
+`tests/a-health-record-is-read-by-a-manager-or-its-own-member.test.ts` pins
+the screens and ties the probe to the migration's predicate.
+
+**Released probes made rule-aware:** `health-record-boundary-check.sql` (0414)
+and `health-record-write-boundary-check.sql` (0430) asserted that a child
+reads the family's health records, which this changes; under 0506 they assert
+the child reads none of a sibling's and does read their own.
+`member-scope-crossing-check.sql`'s attribution pin credits 0506's policy by
+name and exact predicate when it is installed; the stranger's zero is still
+the outer `is_family_member(family_id)`. All three pass with and without 0506.
+
+**Not changed, recorded:** `behavior_logs` and `care_log` (notes about a
+member written by others; whether that member reads them is a separate
+decision) and the medication tables (with the 0465 candidate's owner).
+
+**Proof:** `.github/workflows/health-records-runtime.yml` replays every
+runnable migration. It requires the held probe
+`docs/audit/reserved/a-health-record-is-read-by-a-manager-or-its-own-member-check.sql`
+to fail on the released schema, with the teen, the child, the caregiver and
+the guest each reading other members' records in 8 of 8 tables and no control
+failing. It applies 0506 twice, requires the probe to pass, and re-runs the
+four released probes over these tables. The passing run shows, in every table:
+- the teen, the child, the caregiver and the guest read no record about
+  another member (counted), and each reads their own; the caregiver also reads
+  what they wrote about the ward;
+- the parent and the adult read every record, and the teen reads the record
+  in the household they manage (so the row's family decides);
+- a removed caregiver reads nothing, including what they wrote, and a
+  stranger reads nothing;
+- the service role, with the child's user id and without one, reads every
+  record;
+- the child's own symptom and the caregiver's meal for the ward come back from
+  an insert with returning (OK 1), and the child's night upserts onto their
+  own (OK 1);
+- negative control N1 (the family-wide read put back) lets the child read the
+  ward's record in all eight, and mutation M1 (0506 without its outer
+  `is_family_member`) lets the removed caregiver read what they wrote in all
+  eight.
+
+Source mutations, each failing its own controls: the policy without
+`is_self_member` (the caregiver's own record, and the insert returning) and
+without the author term (each non-manager's own record, and the upsert). 184
+of 184 released probes pass with and without 0506.
+
+**After approved release:** as a test child, open Sleep and Nutrition and
+confirm only their own tab shows; as a test parent, confirm every member's
+records still show.
 
 ## `0505` (proposed, held) — a seller's Remove erased other families' records
 

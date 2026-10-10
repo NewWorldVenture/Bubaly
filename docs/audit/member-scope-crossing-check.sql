@@ -449,6 +449,7 @@ do $$
 declare
   t          text;
   expected   text;
+  want_qual  text;
   n_perm     int;
   n_restr    int;
   got_qual   text;
@@ -464,6 +465,16 @@ begin
     select * from (values ('symptom_logs', 'symptom_logs_read'),
                           ('behavior_logs', 'behavior_logs_select')) as v(t, p)
   loop
+    want_qual := 'is_family_member(family_id)';
+    -- The held 0506 replaces symptom_logs' read with "a manager, the member it
+    -- is about, or its author", still inside is_family_member(family_id): the
+    -- outer conjunct is what a stranger fails, so the zeroes above stay
+    -- attributed to the same predicate. Credited under 0506's name, exactly.
+    if t = 'symptom_logs' and exists (select 1 from pg_policies p
+         where p.schemaname = 'public' and p.tablename = t and p.policyname = 'Members read their own symptom_logs') then
+      expected := 'Members read their own symptom_logs';
+      want_qual := '(is_family_member(family_id) AND (can_manage_family(family_id) OR is_self_member(member_id) OR (created_by = auth.uid())))';
+    end if;
     if not exists (select 1 from pg_class c where c.oid = ('public.' || t)::regclass
                      and c.relrowsecurity and not c.relforcerowsecurity) then
       failures := array_append(failures, format('%s: row security is off or FORCED — the header describes neither', t));
@@ -486,8 +497,8 @@ begin
        and 'authenticated' = any (p.roles::text[]);
     if got_qual is null then
       failures := array_append(failures, format('%s: no permissive SELECT-covering policy named %L granted to authenticated — the policy the header cites has been dropped, renamed or re-scoped; re-derive the attribution', t, expected));
-    elsif got_qual <> 'is_family_member(family_id)' then
-      failures := array_append(failures, format('%s: %L now reads USING (%s), not is_family_member(family_id) — the zeroes above are attributed to a predicate that is no longer the one in force', t, expected, got_qual));
+    elsif got_qual <> want_qual then
+      failures := array_append(failures, format('%s: %L now reads USING (%s), not %s — the zeroes above are attributed to a predicate that is no longer the one in force', t, expected, got_qual, want_qual));
     end if;
 
     select count(*) into n_restr from pg_policies p
@@ -511,7 +522,7 @@ begin
   if array_length(failures, 1) is not null then
     raise exception 'K-01 attribution UNPINNED (the boundary held above, but not for the reason this file credits): %', array_to_string(failures, ' | ');
   end if;
-  raise notice 'OK member-scope (attribution pin): one permissive SELECT-covering policy per table (this branch''s symptom_logs_read and 0377''s behavior_logs_select, both per-command), USING is_family_member(family_id) exactly, no restrictive SELECT policy on either, and the predicate is 0003''s';
+  raise notice 'OK member-scope (attribution pin): one permissive SELECT-covering policy per table (this branch''s symptom_logs_read, or the held 0506''s narrower read inside the same is_family_member(family_id), and 0377''s behavior_logs_select, both per-command), each USING exactly the predicate credited, no restrictive SELECT policy on either, and the predicate is 0003''s';
 end $$;
 
 -- Leave the database exactly as it was found: every row above, and the grant,

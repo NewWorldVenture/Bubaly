@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { MoonStar, Plus, Sparkles, Sunrise, BedDouble, Activity, ListChecks, Pencil, Trash2, Check, TrendingUp, TrendingDown, Minus, ClipboardCheck } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
@@ -43,7 +44,7 @@ export function SleepModule() {
   const todayIso = () => clock.todayKey();
   const t = useTranslations();
   const askConfirm = useConfirm();
-  const { familyId, userId, members, selfMember } = useApp();
+  const { familyId, userId, members, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
 
   const logs = useRealtimeQuery<Log>({
@@ -62,8 +63,14 @@ export function SleepModule() {
     deps: [familyId],
   });
 
+  // Whose nights this screen offers. A manager sees everyone's; anyone else
+  // sees their own, which is all the held 0506 lets them read.
+  const shown = useMemo(
+    () => (isManager(role) ? members : members.filter((m) => m.user_id === userId)),
+    [role, members, userId],
+  );
   const [memberId, setMemberId] = useState('');
-  useEffect(() => { if (!memberId && members.length) setMemberId(selfMember?.id ?? members[0].id); }, [members, selfMember, memberId]);
+  useEffect(() => { if (!memberId && shown.length) setMemberId(selfMember?.id ?? shown[0].id); }, [shown, selfMember, memberId]);
   const [logOpen, setLogOpen] = useState(false);
   const [routineOpen, setRoutineOpen] = useState(false);
   const [checkinOpen, setCheckinOpen] = useState(false);
@@ -124,7 +131,7 @@ export function SleepModule() {
       />
 
       <div className="flex flex-wrap gap-2" role="tablist" aria-label={t('sleep.familyMember')}>
-        {members.map((m) => {
+        {shown.map((m) => {
           const a = ageOn(m.birthday, today);
           return (
             <button key={m.id} role="tab" aria-selected={m.id === memberId} onClick={() => setMemberId(m.id)}

@@ -42,6 +42,8 @@ declare
   blocked    boolean;
   n          int;
   v_status   text;
+  narrowed   boolean := exists (select 1 from pg_policies p where p.schemaname = 'public'
+                                  and p.tablename = 'symptom_logs' and p.policyname = 'Members read their own symptom_logs');
 begin
   -- Re-runnable against a database that already holds a previous run's rows.
   delete from public.symptom_logs   where family_id = fam;
@@ -99,11 +101,16 @@ begin
     raise exception 'a child deleted a sibling''s vaccination record (%)', n;
   end if;
 
-  -- Positive control: Kid B still READS the family's health records, which is
-  -- deliberately unchanged — narrowing reads is an owner decision, still filed.
+  -- Positive control: Kid B still READS the family's health records, which this
+  -- migration left unchanged. Narrowing reads was the owner's decision, taken
+  -- in the held 0506: once that is in force Kid B reads none of a sibling's
+  -- records and does read their own (below).
   select count(*) into n from public.symptom_logs where family_id = fam;
-  if n = 0 then
+  if not narrowed and n = 0 then
     raise exception 'a child can no longer read the family''s health records';
+  end if;
+  if narrowed and n <> 0 then
+    raise exception '0506: a child reads % of a sibling''s symptom log(s)', n;
   end if;
   -- And still records their own. INSERT is unchanged on all nine.
   insert into public.symptom_logs (family_id, member_id, symptom, severity, created_by)
@@ -111,6 +118,10 @@ begin
   get diagnostics n = row_count;
   if n <> 1 then
     raise exception 'a child can no longer record their own symptom (%)', n;
+  end if;
+  select count(*) into n from public.symptom_logs where family_id = fam and member_id = kidB_mid;
+  if n <> 1 then
+    raise exception 'a child cannot read back the symptom they just recorded (%)', n;
   end if;
 
   -- ── As KID A: the SUBJECT of all three rows. This is where A and B part ──

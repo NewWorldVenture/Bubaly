@@ -36,6 +36,7 @@ declare
   us  uuid := 'f0326000-0000-4000-8000-00000000c003';  -- sibling (the subject)
   mp uuid; mk uuid; ms uuid; vis uuid; imm uuid; med uuid;
   n int; txt text; dt date; holes text[] := '{}';
+  narrowed boolean;  -- the held 0506: a non-manager reads their own record
 begin
   insert into public.families (id, name) values (fam, '0414 health records') on conflict do nothing;
   insert into auth.users (id, email) values
@@ -68,6 +69,14 @@ begin
     values (fam, mp, 'medical', 'Annual physical', current_date - 30, up);
   insert into public.immunizations (family_id, member_id, vaccine, date_given, created_by)
     values (fam, mp, 'Influenza (Flu)', current_date - 200, up);
+  -- And a pair about the child themselves, which is what the held 0506 leaves a
+  -- non-manager reading.
+  insert into public.health_visits (family_id, member_id, kind, title, visit_date, created_by)
+    values (fam, mk, 'medical', 'Check-up', current_date - 60, up);
+  insert into public.immunizations (family_id, member_id, vaccine, date_given, created_by)
+    values (fam, mk, 'Tetanus', current_date - 300, up);
+  narrowed := exists (select 1 from pg_policies p where p.schemaname = 'public'
+                        and p.tablename = 'health_visits' and p.policyname = 'Members read their own health_visits');
 
   set local role authenticated;
   perform set_config('request.jwt.claim.sub', uk::text, true);
@@ -122,11 +131,18 @@ begin
   end if;
 
   -- ── Positive controls: what must NOT change ───────────────────────────────
-  -- Reading is the product. Every family member sees the family's health hub.
+  -- Reading is the product. Every family member sees the family's health hub;
+  -- once the held 0506 is in force, a child sees their own record in it.
   select count(*) into n from public.health_visits where family_id = fam;
   if n < 1 then raise exception '0414: the child can no longer READ the family visit history'; end if;
   select count(*) into n from public.immunizations where family_id = fam;
   if n < 1 then raise exception '0414: the child can no longer READ the family vaccination ledger'; end if;
+  if narrowed then
+    select count(*) into n from public.health_visits where family_id = fam and member_id is distinct from mk;
+    if n <> 0 then raise exception '0506: the child reads % visit(s) about another member', n; end if;
+    select count(*) into n from public.immunizations where family_id = fam and member_id is distinct from mk;
+    if n <> 0 then raise exception '0506: the child reads % vaccination(s) about another member', n; end if;
+  end if;
 
   -- 0309 left `medication_doses` — the "I took it" tick — open on purpose and
   -- asserts it as a positive control. Re-asserted here so this migration cannot
