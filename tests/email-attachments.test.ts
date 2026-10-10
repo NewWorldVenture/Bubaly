@@ -11,6 +11,7 @@ import type { AIProvider } from '@/lib/ai/provider';
 import { POST } from '@/app/api/contact-center/email/route';
 import { emailAttachmentId, fileEmailAttachments, MAX_MULTIPART_EMAIL_BYTES } from '@/lib/services/paperwork/email-attachments';
 import { MAX_DOCUMENT_BYTES } from '@/lib/ai/document-text';
+import { familyScopedEmailRef } from '@/lib/contact-center/server';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 
 const state = vi.hoisted(() => ({ db: null as unknown, provider: null as unknown }));
@@ -135,7 +136,7 @@ describe('inbound multipart attachment capture', () => {
     const rows = db.table('paperwork_items');
     expect(rows).toHaveLength(2);
     expect(rows[0]).toMatchObject({ family_id: FAMILY, kind: 'bill_or_payment', raw_text: RECEIPT, sender: 'office@example.com', status: 'needs_action', meta: {
-      source: 'inbound_email_attachment', triage_kind: 'receipt', filename: 'receipt.pdf', provider_ref: 'email-1', subject: 'Documents enclosed', media_type: 'application/pdf', extraction: { method: 'multimodal', truncated: false },
+      source: 'inbound_email_attachment', triage_kind: 'receipt', filename: 'receipt.pdf', provider_ref: familyScopedEmailRef(FAMILY, 'email-1'), subject: 'Documents enclosed', media_type: 'application/pdf', extraction: { method: 'multimodal', truncated: false },
     } });
     expect((rows[0].meta as Record<string, unknown>).inbox_message_id).toBe(db.table('family_inbox_messages')[0].id);
     expect((rows[0].meta as Record<string, unknown>).attachment_sha256).toMatch(/^[a-f0-9]{64}$/);

@@ -4598,6 +4598,7 @@
   "contactUrgent.alertTitle": "Messaggio urgente sulla tua linea familiare",
   "contactUrgent.legacyUnknown": "Questo messaggio precedente non ha una ricevuta di invio. Controlla gli avvisi precedenti prima di inviarlo di nuovo.",
   "contactUrgent.replySaved": "Il tuo messaggio è stato salvato. La famiglia può leggerlo nella propria casella di posta.",
+  "contactUrgent.smsBudget": "Troppi SMS urgenti di recente. Questo messaggio è salvato e segnalato solo nell’app.",
   "contactUrgent.smsPrefix": "Urgente sulla tua linea Bubaly: {summary}",
   "contactUrgent.smsRejected": "L’SMS urgente è stato rifiutato. Controlla il numero alternativo.",
   "contactUrgent.smsUnavailable": "L’SMS urgente è in attesa della configurazione di invio.",

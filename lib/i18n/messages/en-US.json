@@ -4791,6 +4791,7 @@
   "contactUrgent.alertTitle": "Urgent message at your family line",
   "contactUrgent.legacyUnknown": "This older message has no delivery receipt. Check previous alerts before resending.",
   "contactUrgent.replySaved": "Your message is saved. The family can review it in their inbox.",
+  "contactUrgent.smsBudget": "Too many urgent texts recently. This one is saved and alerted in the app only.",
   "contactUrgent.smsPrefix": "Urgent at your Bubaly line: {summary}",
   "contactUrgent.smsRejected": "The urgent text was rejected. Check the fallback number.",
   "contactUrgent.smsUnavailable": "The urgent text is waiting for delivery configuration.",

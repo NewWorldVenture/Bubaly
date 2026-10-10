@@ -4598,6 +4598,7 @@
   "contactUrgent.alertTitle": "Dringend bericht op je gezinslijn",
   "contactUrgent.legacyUnknown": "Dit oudere bericht heeft geen verzendbewijs. Controleer eerdere meldingen voordat je het opnieuw verstuurt.",
   "contactUrgent.replySaved": "Je bericht is opgeslagen. Het gezin kan het in de inbox bekijken.",
+  "contactUrgent.smsBudget": "Te veel dringende sms’jes kort na elkaar. Dit bericht is bewaard en alleen in de app gemeld.",
   "contactUrgent.smsPrefix": "Dringend op je Bubaly-lijn: {summary}",
   "contactUrgent.smsRejected": "Het dringende sms-bericht is geweigerd. Controleer het alternatieve nummer.",
   "contactUrgent.smsUnavailable": "Het dringende sms-bericht wacht op de verzendconfiguratie.",

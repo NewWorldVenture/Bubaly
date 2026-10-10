@@ -18,8 +18,9 @@ import { familyReplySender, sendEmail } from '@/lib/server/email';
 import { parseRecipientLocal, buildBubalyAddress } from '@/lib/contact-center/address';
 import {
   resolveFamilyByEmailLocalResult, getOrCreateChannelResult, recordOutboundMessage,
-  routeInboundToPlanner, fileInboundPaperwork,
+  routeInboundToPlanner, fileInboundPaperwork, familyScopedEmailRef,
 } from '@/lib/contact-center/server';
+import { finishEmailReply, reserveEmailReply } from '@/lib/contact-center/email-reply';
 import { runConcierge } from '@/lib/contact-center/concierge';
 // Aliased: this file already has a MAX_BODY, and it is a different limit —
 // that one bounds the whole REQUEST (1 MB), this one bounds the body FIELD a
@@ -192,7 +193,7 @@ export async function POST(req: NextRequest) {
   let filed: Awaited<ReturnType<typeof captureInboundWithUrgency>>;
   try { filed = await captureInboundWithUrgency(admin, {
     familyId, channel: 'email', from: from ?? undefined, to, subject: subject ?? undefined,
-    body: body || subject || '(no content)', providerRef: messageId ?? undefined,
+    body: body || subject || '(no content)', providerRef: messageId ? familyScopedEmailRef(familyId, messageId) : undefined,
     aiSummary: result.summary, aiIntent: result.intent,
   }); } catch { return new NextResponse('Inbox temporarily unavailable', { status: 503 }); }
   const urgentOutcome = filed.urgentReceiptId ? await attemptUrgentDelivery(admin, filed.urgentReceiptId, familyId) : undefined;
@@ -258,6 +259,10 @@ export async function POST(req: NextRequest) {
   // Auto-reply acknowledges intake; it does not assert that the fallback text arrived.
   if (channel?.ai_concierge_enabled !== false && result.intent !== 'spam' && from) {
     try {
+      // Once per message, not once per delivery: everything above re-runs on a
+      // redelivery, and this is the only step with an effect outside Bubaly.
+      const reservation = { familyId, providerRef: filed.providerRef, messageId: filed.messageId };
+      if (!await reserveEmailReply(admin, reservation)) return NextResponse.json({ ok: true, intent: result.intent, attachments: attachmentResult.results });
       const reply = filed.escalated ? (await getTranslations())('contactUrgent.replySaved') : result.reply;
       // Keep replies on the family's thread while respecting the configured
       // sender domain. The footer and message body are plain text in HTML.
@@ -270,6 +275,7 @@ export async function POST(req: NextRequest) {
         subject: subject ? `Re: ${subject}` : `Message received — ${familyLabel}`,
         html: `<p>${reply.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</p><p style="color:#888;font-size:12px">— ${escapedFamilyLabel} via ${familyAddress}</p>`,
       });
+      await finishEmailReply(admin, reservation, !!sent?.ok && !sent.skipped);
       if (sent.ok && !sent.skipped) {
         await recordOutboundMessage(admin, { familyId, channel: 'email', to: from, body: reply });
       }
