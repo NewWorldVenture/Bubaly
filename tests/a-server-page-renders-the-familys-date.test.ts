@@ -124,7 +124,7 @@ describe('every caller hands the email its family\'s zone', () => {
   });
   it('the chore reminder reads the zone with the family name and passes it per recipient', () => {
     const src = read('app/api/cron/chore-reminders/route.ts');
-    expect(src).toContain("supabase.from('families').select('id, name, timezone').in('id', chunk)");
+    expect(src).toContain("supabase.from('families').select('id, name, timezone, closed_at').in('id', chunk)");
     expect(src).toContain("timeZone: familyZoneById.get(familyId) ?? 'UTC'");
   });
 });

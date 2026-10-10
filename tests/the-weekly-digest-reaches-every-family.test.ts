@@ -68,6 +68,8 @@ vi.mock('@/lib/supabase/server', () => ({
         return source.filter((r) => Object.entries(filters).every(([c, v]) => {
           if (c === 'range') return true;
           if (c === 'roles') return (v as string[]).includes(String(r.role));
+          // `.is(column, null)`: an absent column is null, as in Postgres.
+          if (c.startsWith('is:')) return (r[c.slice(3)] ?? null) === v;
           return r[c] === v;
         }));
       };
@@ -92,6 +94,7 @@ vi.mock('@/lib/supabase/server', () => ({
         // the filters only need to chain.
         neq: () => b, or: () => b,
         eq: (c: string, v: unknown) => { filters[c] = v; return b; },
+        is: (c: string, v: unknown) => { filters[`is:${c}`] = v; return b; },
         in: (c: string, v: unknown[]) => { filters[c === 'role' ? 'roles' : c] = v; return b; },
         range: (from: number, to: number) => { filters.range = [from, to]; return b; },
         maybeSingle: async () => {
