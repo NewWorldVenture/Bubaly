@@ -26,6 +26,7 @@ import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
 import { qualifyBriefEvents, briefEventIsOccupied } from '@/lib/onboarding/first-brief';
 import { readDisplayCalendarOccurrences, type CalendarDisplayOccurrence } from '@/lib/calendar/display-occurrences';
 import { projectCalendarDay, projectCalendarWindow } from '@/lib/calendar/consumer-spans';
+import { openGroceryListIds } from '@/lib/services/groceries';
 
 function normalizeBriefTimezone(candidate: string): string {
   try {
@@ -140,7 +141,12 @@ export async function POST(req: NextRequest) {
       supabase.from('chore_assignments').select('status, due_at, member_id').eq('family_id', familyId).in('status', ['todo', 'in_progress']).lte('due_at', todayEnd),
       supabase.from('school_events').select('title, starts_at, event_type, notes, member_id').eq('family_id', familyId).gte('starts_at', todayStart).lte('starts_at', weekEnd).order('starts_at').limit(10),
       supabase.from('sports_events').select('title, starts_at, sport, team, location, member_id').eq('family_id', familyId).gte('starts_at', todayStart).lte('starts_at', weekEnd).order('starts_at').limit(10),
-      supabase.from('grocery_items').select('name, category').eq('family_id', familyId).eq('is_checked', false).limit(15),
+      // Only items on a list the family has not archived (openGroceryListIds).
+      (async () => {
+        const lists = await openGroceryListIds(supabase, familyId);
+        if (!lists.ok) return { data: null, error: lists.error };
+        return supabase.from('grocery_items').select('name, category').eq('family_id', familyId).in('list_id', lists.ids).eq('is_checked', false).limit(15);
+      })(),
       supabase.from('reminders').select('title, notes, remind_at').eq('family_id', familyId).eq('is_done', false).lte('remind_at', weekEnd).order('remind_at').limit(8),
       supabase.from('meal_plans').select('plan_date, meal_type, meals(name)').eq('family_id', familyId).gte('plan_date', today).lte('plan_date', weekEndKey).order('plan_date').limit(14),
       supabase.from('appointments').select('title, starts_at, provider, location, member_id').eq('family_id', familyId).gte('starts_at', todayStart).lte('starts_at', weekEnd).order('starts_at').limit(6),

@@ -119,6 +119,26 @@ export function categorizeGroceryItem(name: string): string | null {
 export { normalizeName };
 
 /**
+ * The family's shopping lists that are NOT archived, by id, asking both archive
+ * columns (see the header above `AISLES`).
+ *
+ * For readers of `grocery_items` that work across lists, such as the briefings
+ * and Autopilot: an item on an archived list is off the shopping page, and
+ * announcing it sounds authoritative about a list nobody looks at.
+ * `grocery_items.list_id` is NOT NULL (0002), so `.in('list_id', ids)` drops
+ * nothing else.
+ */
+export async function openGroceryListIds(
+  db: ServiceScope['db'],
+  familyId: string,
+): Promise<{ ok: true; ids: string[] } | { ok: false; error: { message: string } }> {
+  const { data, error } = await db.from('grocery_lists').select('id')
+    .eq('family_id', familyId).eq('is_archived', false).is('archived_at', null);
+  if (error) return { ok: false, error };
+  return { ok: true, ids: (data ?? []).map((row) => row.id) };
+}
+
+/**
  * Get-or-create a family's default grocery list, as ONE operation (DATA-007).
  *
  * Every writer that files groceries without naming a list comes through here:

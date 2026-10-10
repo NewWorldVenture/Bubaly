@@ -48,7 +48,8 @@ type Write = { table: string; operation: string };
 
 function failingReadClient(failingTable: string) {
   const writes: Write[] = [];
-  const methods = ['select', 'eq', 'neq', 'in', 'gte', 'lte', 'lt', 'not', 'order', 'limit', 'maybeSingle', 'single'];
+  // `is`: the scan reads the family's open shopping lists (both archive columns) first.
+  const methods = ['select', 'eq', 'neq', 'is', 'in', 'gte', 'lte', 'lt', 'not', 'order', 'limit', 'maybeSingle', 'single'];
   const client = {
     from(table: string) {
       const result: QueryResult = table === failingTable
@@ -97,7 +98,7 @@ function suggestionInsertFailureClient() {
     from(table: string) {
       let operation = 'read';
       const chain: Record<string, unknown> = {};
-      for (const method of ['select', 'eq', 'neq', 'in', 'gte', 'lte', 'lt', 'not', 'order', 'limit', 'maybeSingle', 'single']) {
+      for (const method of ['select', 'eq', 'neq', 'is', 'in', 'gte', 'lte', 'lt', 'not', 'order', 'limit', 'maybeSingle', 'single']) {
         chain[method] = () => chain;
       }
       chain.insert = () => { operation = 'insert'; writes.push({ table, operation }); return chain; };

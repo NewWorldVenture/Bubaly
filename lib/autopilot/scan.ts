@@ -49,7 +49,7 @@ import { addDaysToDayKey, dayKeyInTz, systemScopeForFamily, zonedTimeMs } from '
 import type { ServiceScope } from '@/lib/services/types';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { wroteNoRows } from '@/lib/supabase/errors';
-import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
+import { ensureDefaultGroceryListId, openGroceryListIds } from '@/lib/services/groceries';
 import type { LocaleCode } from '@/lib/i18n/locales';
 
 type DB = SupabaseClient<Database>;
@@ -159,6 +159,10 @@ export async function runAutopilotScan(
   // and let one through at two in the morning.
   let notifyScope: ServiceScope | null = null;
   const { todayKey, in30Key, since8Key, since90Key, horizonEndKey, startIso, in3Iso, since90Iso } = scanWindow(tz, now);
+  // "Still need: X" is only asked about items on a list the family has not
+  // archived; a leftover on an archived list is off the shopping page.
+  const openLists = await openGroceryListIds(supabase, familyId);
+  if (!openLists.ok) throw new Error('Autopilot could not read the required family data');
   const [
     renewalsResult, apptsResult, choreRowsResult,
     membersResult, groceriesResult, apptRemindersResult,
@@ -169,7 +173,7 @@ export async function runAutopilotScan(
     supabase.from('appointments').select('id, title, starts_at, member_id').eq('family_id', familyId).gte('starts_at', startIso).lt('starts_at', in3Iso).limit(50),
     supabase.from('chore_assignments').select('id, due_at, member_id, status, chores(title)').eq('family_id', familyId).in('status', ['todo', 'in_progress']).lt('due_at', startIso).limit(100),
     supabase.from('family_members').select('id, display_name, birthday').eq('family_id', familyId).eq('is_active', true).not('birthday', 'is', null).limit(50),
-    supabase.from('grocery_items').select('id, name, created_at, is_checked').eq('family_id', familyId).eq('is_checked', false).limit(200),
+    supabase.from('grocery_items').select('id, name, created_at, is_checked').eq('family_id', familyId).in('list_id', openLists.ids).eq('is_checked', false).limit(200),
     supabase.from('reminders').select('related_id').eq('family_id', familyId).eq('related_type', 'appointment').eq('is_done', false).limit(200),
     supabase.from('calendar_events').select('id, title, starts_at, ends_at, assignee_id, all_day, location').eq('family_id', familyId).gte('starts_at', startIso).lt('starts_at', in3Iso).limit(100),
     supabase.from('subscriptions_tracked').select('id, name, cost_cents, cadence, next_charge, last_used, status').eq('family_id', familyId).in('status', ['active', 'trial']).limit(200),
