@@ -14226,6 +14226,8 @@
   "timetableModule.pickAFamilyMember": "Kies een gezinslid",
   "timetableModule.subjectIsRequired": "Het vak is verplicht",
   "toast.dismiss": "Sluiten",
+  "toast.more.one": "Nog {count} melding",
+  "toast.more.other": "Nog {count} meldingen",
   "todos.addTask": "Taak toevoegen",
   "todos.assignTo": "Toewijzen aan",
   "todos.assignedToOthers": "Toegewezen aan anderen",

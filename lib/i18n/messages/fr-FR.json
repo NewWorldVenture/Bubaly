@@ -14228,6 +14228,8 @@
   "timetableModule.pickAFamilyMember": "Choisissez un membre de la famille",
   "timetableModule.subjectIsRequired": "La matière est obligatoire",
   "toast.dismiss": "Ignorer",
+  "toast.more.one": "{count} autre notification",
+  "toast.more.other": "{count} autres notifications",
   "todos.addTask": "Ajouter une tâche",
   "todos.assignTo": "Attribuer à",
   "todos.assignedToOthers": "Attribué à d'autres",

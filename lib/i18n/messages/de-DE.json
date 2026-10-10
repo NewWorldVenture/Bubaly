@@ -14226,6 +14226,8 @@
   "timetableModule.pickAFamilyMember": "Wählen Sie ein Familienmitglied",
   "timetableModule.subjectIsRequired": "Das Fach ist erforderlich",
   "toast.dismiss": "Ausblenden",
+  "toast.more.one": "{count} weitere Mitteilung",
+  "toast.more.other": "{count} weitere Mitteilungen",
   "todos.addTask": "Aufgabe hinzufügen",
   "todos.assignTo": "Zuweisen an",
   "todos.assignedToOthers": "Anderen zugewiesen",
