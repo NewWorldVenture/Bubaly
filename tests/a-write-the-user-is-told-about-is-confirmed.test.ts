@@ -31,10 +31,14 @@ const childLogin = readFileSync('app/(app)/family/child-login-actions.ts', 'utf8
 describe('deleting a wallet row is confirmed before it is reported (C1-S9-16)', () => {
   it('asks for the deleted rows on every branch of the allowlist', () => {
     const body = between(wallet, 'export async function deleteWalletRowAction', 'return { ok: true };');
-    // The five branches are one ternary chain, so they are one statement — the
-    // count has to come from the branches themselves, not from splitting on `;`.
+    // The four direct branches are one ternary chain, so they are one statement
+    // — the count has to come from the branches themselves, not from splitting
+    // on `;`. The fifth table, `transactions`, is removed by the finances
+    // service (which confirms with `.maybeSingle()` and records the activity).
     const deletes = body.match(/\.delete\(\)[^\n]*/g) ?? [];
-    expect(deletes.length, 'the five DELETABLE branches').toBe(5);
+    expect(deletes.length, 'the four direct DELETABLE branches').toBe(4);
+    expect(body).toContain("if (input.table === 'transactions') return deleteHouseholdTransaction(");
+    expect(wallet).toContain('await deleteTransaction(scopeFromUserContext(ctx, supabase), id)');
     for (const d of deletes) {
       expect(d, 'a delete that cannot be confirmed').toContain(".select('id')");
       // And each stays scoped to the acting family.

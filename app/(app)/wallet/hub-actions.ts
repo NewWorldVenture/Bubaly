@@ -19,6 +19,9 @@ import { isManager } from '@/lib/constants/roles';
 import { createServer } from '@/lib/supabase/server';
 import type { AccountType } from '@/lib/database.types';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
+import { deleteTransaction } from '@/lib/services/finances';
+import { scopeFromUserContext } from '@/lib/services/scope';
+import { SERVICE_CODES } from '@/lib/services/types';
 
 type Result = { ok: boolean; error?: string };
 
@@ -156,6 +159,7 @@ export async function deleteWalletRowAction(input: { table: string; id: string }
   // their own wallet cards, passes and rewards is not what 0267 is about.
   if (MANAGER_ONLY_DELETES.has(input.table) && !isManager(ctx.active.role)) return notYours();
   const supabase = await createServer();
+  if (input.table === 'transactions') return deleteHouseholdTransaction(ctx, supabase, input.id);
   // Keep the table allowlist explicit and add the active-family predicate to
   // every branch. RLS remains the defense in depth, but a delete action should
   // never depend on policy drift to avoid cross-family targeting.
@@ -178,9 +182,7 @@ export async function deleteWalletRowAction(input: { table: string; id: string }
       ? await supabase.from('wallet_passes').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id')
       : input.table === 'wallet_rewards'
         ? await supabase.from('wallet_rewards').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id')
-        : input.table === 'financial_accounts'
-          ? await supabase.from('financial_accounts').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id')
-          : await supabase.from('transactions').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
+        : await supabase.from('financial_accounts').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
   const { data: deleted, error } = result;
   if (error) return actionFailure('delete the wallet item', t('hubActions.couldNotDeleteTheWalletItem'), error);
   if (wroteNoRows(deleted)) {
@@ -192,4 +194,29 @@ export async function deleteWalletRowAction(input: { table: string; id: string }
     return { ok: false, error: t('hubActions.couldNotDeleteTheWalletItem') };
   }
   return { ok: true };
+}
+
+/**
+ * A household transaction is removed through the SAME service the billing page
+ * uses, so the role check, the zero-row check and the activity entry ("Deleted
+ * $42.00 — Groceries") are identical on both paths. Deleting it directly here
+ * left the family's history with a transaction that vanished without a record
+ * of who removed it.
+ */
+async function deleteHouseholdTransaction(
+  ctx: Awaited<ReturnType<typeof requireUserContext>>,
+  supabase: Awaited<ReturnType<typeof createServer>>,
+  id: string,
+): Promise<Result> {
+  const removed = await deleteTransaction(scopeFromUserContext(ctx, supabase), id);
+  if (removed.ok) return { ok: true };
+  if (removed.code === SERVICE_CODES.denied) return notYours();
+  if (removed.code === SERVICE_CODES.notFound) {
+    console.error('[wallet] delete matched no row', { table: 'transactions', familyId: ctx.active.familyId });
+  }
+  // A database failure was already logged by the service. Its description can
+  // carry a codeless raw message, so the hub answers in its own sentence, as it
+  // does for every other table.
+  const t = await getTranslations();
+  return { ok: false, error: t('hubActions.couldNotDeleteTheWalletItem') };
 }
