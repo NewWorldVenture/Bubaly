@@ -277,6 +277,7 @@ describe('who may remove a task', () => {
   }
 
   beforeEach(() => {
+    db.seed('family_members', [{ id: 'member-2', family_id: FAMILY }, { id: 'member-3', family_id: FAMILY }]);
     db.seed('todo_items', [
       { id: 'parents', family_id: FAMILY, list_id: LIST, title: 'Renew passports', created_by: MEMBER, assigned_to_id: 'member-3' },
       { id: 'kids-own', family_id: FAMILY, list_id: LIST, title: 'Tidy desk', created_by: 'member-2' },
@@ -298,11 +299,27 @@ describe('who may remove a task', () => {
     expect(has('kids-assigned')).toBe(true);
   });
 
-  it('a teen may remove one they created or that is assigned to them', async () => {
-    actAs('teen');
+  it('a child may remove one they created', async () => {
+    actAs('child');
     expect((await deleteTodoAction('kids-own')).ok).toBe(true);
-    expect((await deleteTodoAction('kids-assigned')).ok).toBe(true);
-    expect(has('kids-own') || has('kids-assigned')).toBe(false);
+    expect(has('kids-own')).toBe(false);
+  });
+
+  it.each(['child', 'teen'])('a %s cannot remove a parent’s task assigned to them', async (role) => {
+    // Authorship only. `assigned_to_id` is not ownership: updateTodoAction lets
+    // any member set it, so accepting it let a teen make any task "theirs".
+    actAs(role);
+    expect((await deleteTodoAction('kids-assigned')).ok).toBe(false);
+    expect(has('kids-assigned')).toBe(true);
+  });
+
+  it('a teen who reassigns a parent’s task to themselves still cannot remove it', async () => {
+    actAs('teen');
+    expect((await updateTodoAction('parents', { assigneeId: 'member-2' })).ok).toBe(true);
+    expect(db.table('todo_items').find((r) => r.id === 'parents')?.assigned_to_id).toBe('member-2');
+
+    expect((await deleteTodoAction('parents')).ok).toBe(false);
+    expect(has('parents')).toBe(true);
   });
 
   it('an adult may remove any of the family’s', async () => {

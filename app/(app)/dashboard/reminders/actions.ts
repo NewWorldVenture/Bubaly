@@ -140,8 +140,12 @@ export async function createReminderAction(input: CreateReminderActionInput): Pr
  * guest or caregiver view-only. Neither the service (id + family_id) nor the
  * RLS (`is_family_member` for all) agreed, so any active member could delete a
  * parent's medication or bill reminder. A manager may remove any; a teen or
- * child only one they created, are assigned, or that is about them; a guest or
- * caregiver none.
+ * child only one they created; a guest or caregiver none.
+ *
+ * Authorship only: `assigned_to_id` and `member_id` are not ownership. Any
+ * member can rewrite them (the reminder modal updates family_reminders
+ * directly), so accepting them let a child reassign a parent's reminder to
+ * themselves and then delete it. `created_by` references auth.users (0014).
  */
 async function canDeleteReminder(
   scope: ReturnType<typeof scopeFromUserContext>,
@@ -149,17 +153,15 @@ async function canDeleteReminder(
 ): Promise<boolean> {
   if (isManager(scope.role)) return true;
   if (scope.role !== 'teen' && scope.role !== 'child') return false;
+  if (!scope.userId) return false;
   const { data } = await scope.db
     .from('family_reminders')
-    .select('created_by, assigned_to_id, member_id')
+    .select('created_by')
     .eq('id', reminderId)
     .eq('family_id', scope.familyId)
     .maybeSingle();
   if (!data) return false;
-  return (
-    (!!scope.userId && (data.created_by === scope.userId || data.assigned_to_id === scope.userId))
-    || (!!scope.memberId && data.member_id === scope.memberId)
-  );
+  return data.created_by === scope.userId;
 }
 
 export async function deleteReminderAction(reminderId: string): Promise<ReminderActionResult> {

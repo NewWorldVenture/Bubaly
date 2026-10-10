@@ -184,8 +184,12 @@ export async function completeTodoAction(todoId: string, done: boolean): Promise
  * all, so any active member — a guest ("view limited shared events only") or a
  * caregiver ("view only the areas assigned to them") included — could delete
  * every family task. A manager may remove any; a teen or child only one they
- * created or that is assigned to them; a guest or caregiver none.
- * `todo_items.created_by` and `assigned_to_id` both reference family_members.
+ * created; a guest or caregiver none.
+ *
+ * Authorship only: `assigned_to_id` is not ownership. updateTodoAction lets any
+ * member set it, so accepting it let a teen reassign a parent's task to
+ * themselves and then delete it. `todo_items.created_by` references
+ * family_members (0015), so it is compared with the caller's member id.
  */
 async function canDeleteTodo(
   scope: Awaited<ReturnType<typeof todoScope>>['scope'],
@@ -196,12 +200,12 @@ async function canDeleteTodo(
   if (!scope.memberId) return false;
   const { data } = await scope.db
     .from('todo_items')
-    .select('created_by, assigned_to_id')
+    .select('created_by')
     .eq('id', todoId)
     .eq('family_id', scope.familyId)
     .maybeSingle();
   if (!data) return false;
-  return data.created_by === scope.memberId || data.assigned_to_id === scope.memberId;
+  return data.created_by === scope.memberId;
 }
 
 export async function deleteTodoAction(todoId: string): Promise<TodoActionResult> {

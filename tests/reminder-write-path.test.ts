@@ -257,11 +257,32 @@ describe('who may remove a reminder', () => {
     expect(has('kids-own')).toBe(true);
   });
 
-  it('a child may remove one they created or that is about them', async () => {
+  it('a child may remove one they created', async () => {
     actAs('child');
     expect((await deleteReminderAction('kids-own')).ok).toBe(true);
-    expect((await deleteReminderAction('about-kid')).ok).toBe(true);
-    expect(has('kids-own') || has('about-kid')).toBe(false);
+    expect(has('kids-own')).toBe(false);
+  });
+
+  it('a child cannot remove a parent’s reminder that is about them', async () => {
+    // Authorship only. `member_id` and `assigned_to_id` are not ownership: any
+    // member can rewrite them (the reminder modal updates family_reminders
+    // directly), so accepting them let a child make any reminder "theirs".
+    actAs('child');
+    expect((await deleteReminderAction('about-kid')).ok).toBe(false);
+    expect(has('about-kid')).toBe(true);
+  });
+
+  it('a teen who reassigns a parent’s reminder to themselves still cannot remove it', async () => {
+    actAs('teen');
+    // The same write the reminder modal makes (components/modules/reminders-module.tsx).
+    const { error } = await db.from('family_reminders')
+      .update({ assigned_to_id: 'user-2', member_id: 'member-2' })
+      .eq('id', 'parents').eq('family_id', FAMILY);
+    expect(error).toBeNull();
+    expect(db.table('family_reminders').find((r) => r.id === 'parents')).toMatchObject({ assigned_to_id: 'user-2', member_id: 'member-2' });
+
+    expect((await deleteReminderAction('parents')).ok).toBe(false);
+    expect(has('parents')).toBe(true);
   });
 
   it('an adult may remove any of the family’s', async () => {
