@@ -1,5 +1,5 @@
 import type { Db } from './db';
-import { completionPatch } from './chores-core';
+import { completionPatch, OPEN_CHORE_STATUSES } from './chores-core';
 import { dayKey } from './format';
 import { config } from './config';
 import { supabase as sessionClient } from './supabase';
@@ -38,10 +38,27 @@ export async function fetchOpenChores(supabase: Db, familyId: string): Promise<C
   return (data ?? []) as unknown as ChoreRow[];
 }
 
-/** Submit a chore for approval (members may not approve their own work). */
-export async function completeChore(supabase: Db, assignment: ChoreRow): Promise<void> {
-  const { error } = await supabase.from('chore_assignments').update(completionPatch()).eq('id', assignment.id);
+/** Thrown when a write the screen asked for did not change a row. */
+export class WriteNotAppliedError extends Error {
+  constructor(message: string) { super(message); this.name = 'WriteNotAppliedError'; }
+}
+
+/**
+ * Submit a chore for approval (members may not approve their own work).
+ *
+ * Under RLS a refused UPDATE is not an error — zero rows, no error — and
+ * chore_assignments UPDATE is own-assignment-or-manager (0374), while this tab
+ * lists every family chore. So the write asks for its row back and a missing
+ * one is a failure, not a success. It also only moves an OPEN chore: a list
+ * loaded before the chore was approved, rejected or finished elsewhere must not
+ * turn that decision back into "submitted".
+ */
+export async function completeChore(supabase: Db, assignment: ChoreRow, familyId: string): Promise<void> {
+  const { data, error } = await supabase.from('chore_assignments').update(completionPatch())
+    .eq('id', assignment.id).eq('family_id', familyId).in('status', [...OPEN_CHORE_STATUSES])
+    .select('id').maybeSingle();
   if (error) throw error;
+  if (!data) throw new WriteNotAppliedError('That chore was already updated, or isn’t yours to mark done.');
 }
 
 export type GroceryItemRow = { id: string; name: string; quantity: string | null; is_checked: boolean; created_at: string };
@@ -61,9 +78,12 @@ export async function fetchGroceryList(supabase: Db, familyId: string): Promise<
   return { listId: list.id, items: (data ?? []) as GroceryItemRow[] };
 }
 
-export async function setGroceryChecked(supabase: Db, id: string, isChecked: boolean): Promise<void> {
-  const { error } = await supabase.from('grocery_items').update({ is_checked: isChecked }).eq('id', id);
+/** Same confirmation as completeChore: an item removed elsewhere is not "checked". */
+export async function setGroceryChecked(supabase: Db, id: string, isChecked: boolean, familyId: string): Promise<void> {
+  const { data, error } = await supabase.from('grocery_items').update({ is_checked: isChecked })
+    .eq('id', id).eq('family_id', familyId).select('id').maybeSingle();
   if (error) throw error;
+  if (!data) throw new WriteNotAppliedError('That item was changed or removed on another device.');
 }
 
 export async function addGroceryItem(supabase: Db, args: { familyId: string; listId: string | null; name: string; userId: string }): Promise<string> {

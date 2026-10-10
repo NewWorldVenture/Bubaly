@@ -10,7 +10,7 @@ import { useAsyncData } from '../../src/hooks/use-async-data';
 import { useAuth } from '../../src/lib/auth';
 import { isOpenChore, statusLabel } from '../../src/lib/chores-core';
 import { dueLabel } from '../../src/lib/format';
-import { completeChore, fetchOpenChores, type ChoreRow } from '../../src/lib/queries';
+import { completeChore, fetchOpenChores, WriteNotAppliedError, type ChoreRow } from '../../src/lib/queries';
 import { supabase } from '../../src/lib/supabase';
 import { useTheme } from '../../src/theme/theme';
 
@@ -24,13 +24,16 @@ export default function ChoresScreen() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const markDone = async (row: ChoreRow) => {
+    if (!familyId) return;
     setBusyId(row.id);
     setActionError(null);
     try {
-      await completeChore(supabase, row);
+      await completeChore(supabase, row, familyId);
       chores.setData((prev) => (prev ?? []).map((c) => (c.id === row.id ? { ...c, status: 'submitted' } : c)));
     } catch (e) {
       setActionError(e instanceof Error ? e.message : 'Could not update that chore.');
+      // The row on screen is not what the database holds; show what it does.
+      if (e instanceof WriteNotAppliedError) void chores.refresh();
     } finally {
       setBusyId(null);
     }

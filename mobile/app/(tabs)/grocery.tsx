@@ -26,10 +26,11 @@ export default function GroceryScreen() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const toggle = async (item: GroceryItemRow) => {
+    if (!familyId) return;
     const next = !item.is_checked;
     list.setData((prev) => (prev ? { ...prev, items: prev.items.map((i) => (i.id === item.id ? { ...i, is_checked: next } : i)) } : prev));
     try {
-      await setGroceryChecked(supabase, item.id, next);
+      await setGroceryChecked(supabase, item.id, next, familyId);
     } catch (e) {
       list.setData((prev) => (prev ? { ...prev, items: prev.items.map((i) => (i.id === item.id ? { ...i, is_checked: !next } : i)) } : prev));
       setActionError(e instanceof Error ? e.message : 'Could not update that item.');
