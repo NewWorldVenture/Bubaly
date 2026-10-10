@@ -4819,21 +4819,35 @@ added trigger. The passing runs show:
   chore there, or an empty chore, is refused with the move sentence and all
   three stay home, while a title edit still lands;
 - in two sessions (the child; the parent filing an approved 50-point
-  assignment for the sibling), each timing on its own chore:
-  - insert first: with the insert open, the child's move is refused with the
-    move sentence; after the insert commits, the assignment is there with its
-    chore at home (counted);
-  - move first: the move is refused at once, and the parent's insert then lands
-    at home (counted);
+  assignment for the sibling), each timing on its own chore. Every step is
+  recorded with its exact outcome (`OK <rows>`, or the SQLSTATE, constraint
+  and message), and each timing's whole sequence must equal the expected one,
+  so an unexpected error anywhere is a failure (owner review 6097308389):
+  - insert first: with the insert open (OK 1), the child's move is refused
+    with 42501 and the move sentence; after the insert commits, one approved
+    assignment is there with its chore at home (counted);
+  - move first: the move is refused the same way at once, and the parent's
+    insert then lands (OK 1) at home (counted);
   - with an insert open, the child's delete of the empty-looking chore is shown
-    waiting on a lock (`pg_locks`), then refused with the delete sentence, and
-    the assignment stays;
+    waiting on a lock (`pg_locks`), then refused with 42501 and the delete
+    sentence, and the assignment stays;
   - the rollback shape still works: the child's delete of an empty chore
-    commits (1 row), the parent's insert waits on it and then fails on the
-    foreign key, and no assignment is left behind;
+    commits (OK 1); the parent's insert waits on it, then fails with 23503 on
+    `chore_assignments_chore_id_fkey`, exactly; no assignment or chore is left;
   - negative control: with the second cut's "refuse only if visible" move rule
-    swapped in, both timings reproduce the race, and the sibling's assignment is
-    deleted; the real guard is restored and checked before the verdict;
+    swapped in, both timings must reproduce the race step for step. The insert
+    and every commit succeed, one approved assignment exists with its chore in
+    the other family before anything is deleted, the delete there is OK 1, and
+    nothing is left afterwards. The real guard is then restored and compared
+    byte for byte. The workflow also breaks only that control's insert fixtures
+    three ways (an unknown member, a member of the other family, a status that
+    is not one); each turns the control red and nothing else;
+  - cleanup: the fixtures, including the four synthetic auth users, are removed
+    at the start and the end and verified gone. An error inside the
+    negative-control block restores the guard and removes the fixtures through
+    its autocommitting connection before re-raising. A run killed inside that
+    block leaves a marker that the next run reverses first. Disposable
+    databases only;
 - the child still deletes a chore with no assignment (1 row);
 - a parent deletes a chore with its assignment, and the admin deletes the
   family with all of it (counted);

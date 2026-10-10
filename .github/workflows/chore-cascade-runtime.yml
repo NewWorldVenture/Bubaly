@@ -20,8 +20,12 @@ name: Chore cascade SQL runtime
 #   3. applies the held migration twice (it is re-runnable);
 #   4. runs both probes again and requires them to pass; the race probe's own
 #      negative control there swaps in the second cut's "refuse only if an
-#      assignment is visible" move rule and requires the race to reproduce;
-#   5. re-runs the released chore probes over the added trigger.
+#      assignment is visible" move rule and requires the race to reproduce
+#      step for step;
+#   5. breaks only the negative control's insert fixtures, three ways, and
+#      requires the race probe to turn red on that control alone each time
+#      (owner review 6097308389);
+#   6. re-runs the released chore probes over the added trigger.
 #
 # When 0502 is released into supabase/migrations/, its probes move back to
 # docs/audit/ (the Database job then runs it) and this workflow is retired with
@@ -147,8 +151,8 @@ jobs:
             exit 1
           fi
           for expected in \
-            "real A (insert first): the child moved the chore while the assignment insert was open (UPDATE 1), then deleted it there (DELETE 1); the sibling's approved assignment left: 0" \
-            "real B (move first): the child's move landed (UPDATE 1), the assignment insert beside it INSERT 0 1, and after the child deleted the chore there the sibling's approved assignment left: 0"; do
+            "real A (insert first): with the assignment insert open, the child moved the chore into the family where they are a parent (OK 1) and deleted it there (OK 1); the sibling's approved assignment left: 0" \
+            "real B (move first): with the move open, the parent's approved assignment landed beside it (OK 1); the child deleted the chore in the family where they are a parent (OK 1); the sibling's approved assignment left: 0"; do
             if ! grep -qF "$expected" <<<"$out"; then
               echo "::error::the race probe failed on the released schema, but not on: $expected"
               exit 1
@@ -174,6 +178,56 @@ jobs:
           set -euo pipefail
           out="$(psql -X -v ON_ERROR_STOP=1 -q -f docs/audit/reserved/a-chore-move-cannot-race-an-assignment-check.sql 2>&1)"
           printf '%s\n' "$out"
+          grep -qF 'a-chore-move-cannot-race-an-assignment: OK' <<<"$out"
+
+      - name: The race probe's negative control needs the assignment to land
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Owner review 6097308389: each mutation breaks ONLY the second-cut
+          # run's insert fixtures (its call line), so no assignment can land
+          # there. The negative control must turn red on both timings, and the
+          # real guard's timings must stay green.
+          probe=docs/audit/reserved/a-chore-move-cannot-race-an-assignment-check.sql
+          line="call pg_temp.c0502_timings('second-cut', '00000000-0000-4000-8502-0000000006d5', '00000000-0000-4000-8502-0000000006d6', '00000000-0000-4000-8502-0000000006c3', 'approved', false);"
+          [ "$(grep -cF "$line" "$probe")" -eq 1 ]
+          for mutation in \
+            "unknown member|${line/0000000006c3/0000000006c9}" \
+            "member of the other family|${line/0000000006c3/0000000006c5}" \
+            "status that is not one|${line/approved/bogus}"; do
+            name="${mutation%%|*}"
+            mutated="$RUNNER_TEMP/race-mutation.sql"
+            LINE="$line" REPLACEMENT="${mutation#*|}" python3 -c '
+          import os, sys
+          s = open(sys.argv[1]).read()
+          assert s.count(os.environ["LINE"]) == 1
+          open(sys.argv[2], "w").write(s.replace(os.environ["LINE"], os.environ["REPLACEMENT"]))' "$probe" "$mutated"
+            if cmp -s "$probe" "$mutated"; then
+              echo "::error::the $name mutation changed nothing"
+              exit 1
+            fi
+            status=0
+            out="$(psql -X -v ON_ERROR_STOP=1 -q -f "$mutated" 2>&1)" || status=$?
+            printf '== %s\n%s\n' "$name" "$out"
+            if [ "$status" -eq 0 ]; then
+              echo "::error::the race probe stayed green with the second-cut insert fixtures broken ($name)"
+              exit 1
+            fi
+            for expected in \
+              "NEGATIVE CONTROL: under the second cut's rule, insert-first did not reproduce the race" \
+              "NEGATIVE CONTROL: under the second cut's rule, move-first did not reproduce the race"; do
+              if ! grep -qF "$expected" <<<"$out"; then
+                echo "::error::the $name mutation failed, but not on: $expected"
+                exit 1
+              fi
+            done
+            if grep -qE '^  - (real |the real guard|cleanup)' <<<"$out"; then
+              echo "::error::the $name mutation failed outside the negative control"
+              exit 1
+            fi
+          done
+          # The mutations left nothing behind: the unmutated probe still passes.
+          out="$(psql -X -v ON_ERROR_STOP=1 -q -f "$probe" 2>&1)"
           grep -qF 'a-chore-move-cannot-race-an-assignment: OK' <<<"$out"
 
       - name: The released chore probes still hold over the added trigger
