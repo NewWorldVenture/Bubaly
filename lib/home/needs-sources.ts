@@ -5,6 +5,7 @@
 
 import type { NeedItem, NeedUrgency } from './needs-attention';
 import { runPagePath } from '@/lib/ai/chat-request';
+import { inAppHref } from '@/lib/auth/redirect';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { formatCents } from '@/lib/wallet/ledger';
 
@@ -154,16 +155,35 @@ export function awaitingRunToNeed(r: AwaitingRunRow): NeedItem | null {
 
 export type RecommendationRow = { id: string; title: string; priority?: string | null; cta_href?: string | null; created_at: string };
 
+/** Where a recommendation with no link of its own goes: the page that lists them. */
+const RECOMMENDATIONS_HREF = '/dashboard/autonomous-family-management';
+/**
+ * Where one whose stored link would leave the app goes instead: the list of
+ * every decision — the same place the morning brief already sends it
+ * (lib/briefing/decisions.ts), so Home and the brief agree.
+ */
+const DECISIONS_HREF = '/dashboard/needs-you';
+
 /**
  * A pending `family_ai_recommendations` row (the household chose "recommend,
  * don't act" — §11 level 1) → a normal-urgency item with one-tap accept/dismiss.
+ *
+ * `cta_href` is free text on a row any member can write (RLS is
+ * `is_family_member` for INSERT and UPDATE, and the generic record action
+ * whitelists the column), and this item is shown to a parent on Home, on
+ * Needs you and in the brief as Bubaly's own suggestion. Passed through raw,
+ * a child could put "Confirm your card — urgent" in front of a parent linking
+ * to https://evil.example. The brief refused that; Home did not. So an href
+ * that would leave the app is not rendered: the item keeps its place and opens
+ * the decisions list instead.
  */
 export function recommendationToNeed(r: RecommendationRow): NeedItem {
+  const own = r.cta_href?.trim();
   return {
     id: `recommendation:${r.id}`,
     kind: 'recommendation',
     title: r.title,
-    href: r.cta_href?.trim() || '/dashboard/autonomous-family-management',
+    href: !own ? RECOMMENDATIONS_HREF : inAppHref(own) ?? DECISIONS_HREF,
     urgency: r.priority === 'high' ? 'urgent' : 'normal',
     createdAt: r.created_at,
   };

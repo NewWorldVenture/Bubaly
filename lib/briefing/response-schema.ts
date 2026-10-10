@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { inAppHref } from '@/lib/auth/redirect';
 
 export const MAX_BRIEFING_RESPONSE_BYTES = 64 * 1024;
 export const BRIEFING_RESPONSE_LIMITS = {
@@ -95,14 +96,20 @@ export type BriefingResponse = z.infer<typeof BriefingResponseSchema>;
 // brief off because one summary ran long would fail the page over data the
 // inbox renders in full.
 
-/** A same-origin path. A decision deep-links into the app and nowhere else. */
-const APP_PATH = /^\/(?!\/)/;
-const appPath = z.string().regex(APP_PATH);
-
-/** True for a same-origin path — the only kind of href a decision may carry. */
+/**
+ * True for a same-origin path — the only kind of href a decision may carry. A
+ * decision deep-links into the app and nowhere else.
+ *
+ * This was `/^\/(?!\/)/`, which refuses `//host` and passes `/\host`: a
+ * browser treats that backslash as a slash and lands on https://host/. A
+ * recommendation's `cta_href` is free text any member can write, so the one
+ * spelling the regex missed was the one a member could plant. The rule is now
+ * the sign-in redirect's (lib/auth/redirect `inAppHref`), not a second copy.
+ */
 export function isAppPath(href: string): boolean {
-  return APP_PATH.test(href);
+  return inAppHref(href) === href;
 }
+const appPath = z.string().refine(isAppPath, 'A decision links only to a path inside the app.');
 
 /** One decision — the `NeedItem` shape of `lib/home/needs-attention.ts`, pinned. */
 export const BriefDecisionSchema = z.object({
