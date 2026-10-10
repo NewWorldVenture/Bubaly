@@ -116,6 +116,7 @@ source allocations are not evidence that production applied any migration.
 | 0500 confirmed, held | `0500_a_reward_request_is_the_rewards_own_snapshot.sql` | 0308's ticket guard completed: a reward request names a reward and a member of its own family at that reward's price and title, and keeps them and its family and member (the foreign key's set-null on a deleted reward excepted); 0428's token-economy guard also checks the title. Requested for #981 on #771 (comment 6094977772, economy scope 6095050742); confirmed as a held source and probe reservation in #981 comment 6095082508, which is not an installation or financial approval. |
 | 0501 confirmed, held | `0501_one_member_one_vote_in_two_households.sql` | 0311's same-family guard on `member_id` of `family_poll_votes`, `meal_vote_ballots`, `watchlist_votes` and `event_rsvps`: a member of two families votes once in each. Requested for #981 on #771 (comment 6095180270); confirmed as a held source and probe reservation for these four bindings in #981 comment 6095247473, which is not an installation approval. |
 | 0502 confirmed, held | `0502_a_chore_with_assignments_is_a_managers_to_remove.sql` | A signed-in caller who does not manage the chore's family deletes it only while it has no assignments, and does not move it to another family at all, so its cascade cannot remove assignments 0374 reserves to a manager. Requested for #981 on #771 (comment 6097049650); confirmed as a held source and probe reservation in #981 comment 6097190516, which is not an installation or production policy approval. |
+| 0503 proposed, held | `0503_a_trip_item_stays_with_its_trips_family.sql` | A signed-in caller changes a trip item's family only if they manage both the family it leaves and the family it joins, and an item names only its own family's trip (0311's binding), so a member of two families cannot move the first family's packing items out. Requested on #771 (comments 6097696125 and 6097700163); not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4742,6 +4743,88 @@ Dropping any one table's trigger turns the probe red on that table. 184 of
 families, try to vote in one family's poll under their member id from the
 other family and confirm 42501; then vote as their own member there and
 confirm it lands.
+
+## `0503` (proposed, held) — a trip item left its family through a move
+
+`supabase/reserved/0503_a_trip_item_stays_with_its_trips_family.sql` — **held**:
+proposed as `0503`, the first number above `0502`. It was requested on #771 in
+comments 6097696125 and 6097700163 and is not yet confirmed. Its probe is held
+with it in `docs/audit/reserved/`.
+
+**Severity: medium (a manager-only delete bypassed). Deploy order: any.**
+`trip_items` is manager-only to delete (restrictive), and
+`trip_item_content_guard` lets only a family manager change an item's content,
+family included. The guard authorises with `can_manage_family(NEW.family_id)`
+only, though, and the update policy is `is_family_member(family_id)` on both
+halves. Measured as a teen of Trip House who is a parent of their own house:
+- deleting a packing item: 0 rows; rewriting its label in place: refused;
+- moving it to their own house, relabelled, family only, or together with a
+  trip of their own house: 1 row each. Trip House then holds none of them.
+
+Binding `trip_id` alone (0311) does not close it: the last move takes a trip of
+the new family with it.
+
+0503 adds two things to `trip_items`:
+- **`trip_item_family_change_guard`**, BEFORE UPDATE OF family_id, SECURITY
+  DEFINER. A signed-in caller changes an item's family only if they manage both
+  the family it leaves and the family it joins (42501, its own sentence), the
+  shape `home_asset_manager_field_guard` already has.
+- **0311's own `reference_shares_family('trip_id', 'trips')`**, BEFORE INSERT
+  OR UPDATE OF trip_id, family_id, as 0497 and 0501 wire it. An item names only
+  its own family's trip, so even a manager of both families moves an item
+  together with a trip of the new family.
+
+The service role and session-less writers are exempt. Nothing in the
+application moves a trip item or names another family's trip; ticking an item
+done still lands for every member. `trips` are already manager-only to update
+on both halves.
+
+**Recorded, not changed** (the 6097700163 census): the other seven guards that
+ask only the new family are bounded on their tables:
+- `chores` by 0502;
+- `reward_redemptions` by 0500;
+- `chore_assignments` by 0311;
+- `economy_redemptions` and `invest_orders` by manager-only update RLS on both
+  halves;
+- `chore_disputes` and `chore_submissions` by owner-only rows;
+- `family_playbook_suggestions` by sensitive-row visibility.
+
+**Proof:** `.github/workflows/trip-item-family-runtime.yml` replays every
+runnable migration. It requires the held probe
+`docs/audit/reserved/a-trip-item-stays-with-its-trips-family-check.sql` to fail
+on the released schema with the teen's three moves and the manager's
+cross-family moves landing. It applies 0503 twice, requires the probe to pass,
+and re-runs the released probes over `trip_items` and 0311's references. The
+passing run shows:
+- the teen still ticks an item done (OK 1);
+- the teen's three moves are each refused with the move guard's sentence
+  (42501, exact), and Trip House holds all three items unchanged (counted);
+- a manager of both families moves an item together with a trip of the new
+  family (OK 1);
+- that manager's move keeping Trip House's trip, and their insert against the
+  other family's trip, are each refused with 0311's sentence for
+  `trip_items.trip_id`;
+- Trip House's parent files against its own trip (OK 1);
+- the service role (with a user id) and, separately, a null-uid writer each
+  move an item (1 row each);
+- both triggers are wired exactly;
+- mutation M1 (the guard without its old-family clause) and negative controls
+  N1 and N2 (each trigger disabled) each let the refused write land.
+
+Source mutations checked locally, each turning exactly its own lines red:
+- the move guard's trigger removed;
+- the binding removed;
+- the guard asking only the new family;
+- the service-role exemption removed;
+- the null-uid exemption removed.
+
+184 of 184 released probes pass with and without 0503, and the combined held
+stack (0488–0503) applies in order, twice.
+
+**After approved release:** as a test teen who is a parent of a second test
+family, try to move a test trip item there through PostgREST and confirm 42501;
+then move it as a parent of both families together with a trip of the second
+family and confirm it lands.
 
 ## `0502` (confirmed, held) — deleting a chore cleared the assignments 0374 protects
 
