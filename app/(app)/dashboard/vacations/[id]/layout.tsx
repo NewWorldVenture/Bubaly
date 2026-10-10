@@ -22,7 +22,12 @@ export default async function TripLayout({
   // `notFound()` is a statement that this trip does not exist, and it is a
   // LAYOUT — so a refused read 404s every page under the trip at once. Kept for
   // a trip that really is gone. Audit C1-S9-45.
-  const { data: trip, error: tripError } = await supabase.from('vacations').select('*').eq('id', id).maybeSingle();
+  //
+  // Filtered to the ACTIVE family, not just any family the reader belongs to:
+  // every section under this layout inserts with the active family's id, so a
+  // dual-family member opening family B's trip here would have written A's id
+  // onto B's rows. Another family's trip is not found from this family.
+  const { data: trip, error: tripError } = await supabase.from('vacations').select('*').eq('id', id).eq('family_id', ctx.active.familyId).maybeSingle();
   if (tripError) {
     console.error('[vacations/layout] trip read failed', { id, error: tripError.message });
     return (

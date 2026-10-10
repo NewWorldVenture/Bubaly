@@ -11,6 +11,7 @@
 // still owns and the UI says exactly that.
 
 import { revalidatePath } from 'next/cache';
+import { isManager } from '@/lib/constants/roles';
 import { getTranslations } from '@/lib/i18n/server';
 import { notify } from '@/lib/services/notifications';
 import { scopeFromUserContext } from '@/lib/services/scope';
@@ -93,6 +94,13 @@ export async function reportDisruptionAction(input: DisruptionActionInput): Prom
   }
 
   const ctx = await requireUserContext();
+  // Re-flowing the shared itinerary and paging the whole family about it is a
+  // manager's act — `notify` writes for the family with the service role, so
+  // the role has to be checked HERE, before any write, not left to RLS. Same
+  // rule as the confirmation import and the school desk.
+  if (!isManager(ctx.active.role)) {
+    return { ok: false, error: t('vacationDisruption.parentsOnly') };
+  }
   const supabase = await createServer();
   const scope = scopeFromUserContext(ctx, supabase);
 
@@ -100,12 +108,13 @@ export async function reportDisruptionAction(input: DisruptionActionInput): Prom
   const res = await reportTripDisruption(scope, input.vacationId, request);
   if (!res.ok) return { ok: false, error: res.error };
 
-  const { plan, applied, booking } = res.data;
+  const { plan, applied, booking, alreadyApplied } = res.data;
 
   // The family hears about it only when something actually changed. A
-  // "nothing moved" report is not news.
+  // "nothing moved" report is not news, and neither is a report the itinerary
+  // already carries — a retry must not page everyone a second time.
   let notified = false;
-  if (!plan.noop) {
+  if (!plan.noop && !alreadyApplied) {
     const sent = await notify(scope, {
       recipients: 'family',
       type: 'system',

@@ -26,18 +26,29 @@ export type ForecastDay = {
   weather_code: number | null;
 };
 
-/** Daily forecast between start/end (Open-Meteo supports ~16 days out). */
-export async function fetchForecast(lat: number, lon: number, start?: string | null, end?: string | null): Promise<ForecastDay[]> {
+/** How far ahead Open-Meteo forecasts; a trip starting later than this has no forecast yet. */
+export const FORECAST_HORIZON_DAYS = 15;
+
+/**
+ * Daily forecast between start/end (Open-Meteo supports ~16 days out).
+ *
+ * A trip that starts beyond the horizon gets NO days — not the default
+ * week-from-today Open-Meteo answers when the dates are left off. That week
+ * used to be cached under the trip and read as its weather by the packing
+ * list, the readiness card and the recommendations, a month early.
+ */
+export async function fetchForecast(lat: number, lon: number, start?: string | null, end?: string | null, now: Date = new Date()): Promise<ForecastDay[]> {
   const params = new URLSearchParams({
     latitude: String(lat),
     longitude: String(lon),
     daily: 'temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,weathercode,wind_speed_10m_max',
     timezone: 'auto',
   });
-  // Open-Meteo only forecasts ~16 days ahead; only pass dates if within range.
   if (start && end) {
-    const within = new Date(start).getTime() <= Date.now() + 1000 * 60 * 60 * 24 * 15;
-    if (within) { params.set('start_date', start); params.set('end_date', end); }
+    const within = new Date(start).getTime() <= now.getTime() + 1000 * 60 * 60 * 24 * FORECAST_HORIZON_DAYS;
+    if (!within) return [];
+    params.set('start_date', start);
+    params.set('end_date', end);
   }
   const res = await fetchWithDeadline(`https://api.open-meteo.com/v1/forecast?${params}`, { headers: { accept: 'application/json' } });
   if (!res.ok) throw new Error(`Open-Meteo error ${res.status}`);

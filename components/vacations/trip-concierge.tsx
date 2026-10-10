@@ -72,22 +72,28 @@ export function TripConcierge({ vacationId }: { vacationId: string }) {
     setBusy(false);
   }
 
-  async function autoBuild() {
+  async function autoBuild(rebuild = false) {
     setBuilding(true);
     try {
-      const res = await fetch('/api/vacations/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'build', vacationId }) });
+      const res = await fetch('/api/vacations/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'build', vacationId, ...(rebuild ? { rebuild: true } : {}) }) });
       const data = await res.json();
+      // The route refuses to stack a second plan on a trip that has one (409);
+      // a person decides whether the existing plan is replaced.
+      if (res.status === 409 && !rebuild) {
+        if (confirm(t('tripConcierge.rebuildExistingPlan'))) return await autoBuild(true);
+        return;
+      }
       if (!res.ok) toastError(data.error || 'Build failed');
       else success(t('trips.conciergeAdded', { activities: data.added.activities, items: data.added.items, budget: data.added.budget, packing: data.added.packing }));
     } catch { toastError(t('tripConcierge.networkError')); }
-    setBuilding(false);
+    finally { setBuilding(false); }
   }
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 text-lg font-semibold"><Sparkles className="h-5 w-5 text-brand-text" /> {t('tripConcierge.aiVacationConcierge')}</h2>
-        <Button size="sm" variant="secondary" onClick={autoBuild} loading={building}><Wand2 className="h-4 w-4" /> {t('tripConcierge.autoBuildTrip')}</Button>
+        <Button size="sm" variant="secondary" onClick={() => void autoBuild()} loading={building}><Wand2 className="h-4 w-4" /> {t('tripConcierge.autoBuildTrip')}</Button>
       </div>
 
       <TripConfirmationImport vacationId={vacationId} />

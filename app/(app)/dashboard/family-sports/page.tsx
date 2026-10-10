@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { Trophy, CalendarClock, Users, MapPin, Flag } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
@@ -20,7 +20,9 @@ const RESULT_STYLE: Record<string, string> = { win: 'text-emerald-300', loss: 't
 
 export default async function FamilySportsPage() {
   const tr = await getTranslations();
-  const ctx = await requireUserContext();
+  // Family+ in the sidebar, Family+ at the door — the same gate the School Hub
+  // sits behind, so a URL cannot reach what the plan does not include.
+  const ctx = await requireFeature('/dashboard/family-sports');
   // The family's zone, not the server's. These were the bare exports, which
   // format in the RUNTIME's zone — UTC on Vercel — so this page printed
   // Greenwich's clock and Greenwich's Today to a family that is not there.

@@ -25,6 +25,8 @@ export const sportsTools: ToolDefinition[] = [
     capability: 'view',
     risk: 'low',
     readOnly: true,
+    // Names each child's coach — private to the adults.
+    sensitiveRead: true,
     input: z.object({ include_inactive: z.boolean().nullish(), ...memberInput }),
     output: z.object({
       teams: z.array(z.object({ id: z.string(), sport: z.string(), team_name: z.string(), season: z.string().nullable(), coach: z.string().nullable(), is_active: z.boolean(), member_id: z.string().nullable() })),
@@ -47,6 +49,8 @@ export const sportsTools: ToolDefinition[] = [
     capability: 'view',
     risk: 'low',
     readOnly: true,
+    // Where and when each child will be — private to the adults.
+    sensitiveRead: true,
     input: z.object({
       from: z.string().nullish().describe('ISO 8601'),
       to: z.string().nullish().describe('ISO 8601'),

@@ -45,7 +45,7 @@ import type { ServiceScope } from '@/lib/services/types';
 import { createServiceClient } from '@/lib/supabase/server';
 import { describeActionError, describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import {
-  HIGH_STAKES_AI_DOMAINS, riskToDecision, riskTierStance, toolTags,
+  HIGH_STAKES_AI_DOMAINS, RESTRICTED_READ_ROLES, riskToDecision, riskTierStance, toolTags,
   type Capability, type Decision, type TrustRole,
 } from '@/lib/trust/engine';
 import { approvalDedupeKey, evaluateTrust, fileOrReusePendingApproval, roleOf } from '@/lib/trust/server';
@@ -331,12 +331,17 @@ type Gate =
 /**
  * Everything between "the arguments are valid" and "the service may run".
  *
- * Read-only tools skip the gate unless their domain is one where a read is
- * itself sensitive (finances, medical, documents…), in which case they are
- * evaluated as `view` and the view-sensitivity rule in `riskToDecision`
- * applies. No read tool is in such a domain today; the guard is live so that
- * the first one that arrives is gated by construction rather than by someone
- * remembering.
+ * Read-only tools skip the gate for a parent, an adult or the system — the
+ * roles `riskToDecision`'s view rule never denies — unless their domain is one
+ * where a read is itself high-stakes (finances, medical, documents…). For a
+ * restricted-read role (teen, child, caregiver, guest) EVERY read is evaluated
+ * as `view`: the view-sensitivity rule denies a read in a domain the role
+ * treats as sensitive, and any tool marked `sensitiveRead` regardless of
+ * domain. The early allow used to apply to every read in a non-high-stakes
+ * domain, and 'travel' and 'education' hold reads that are anything but
+ * harmless — bills due during a trip, each traveller's passport expiry, a
+ * child's teacher, coach and practice location — so a guest's assistant
+ * answered with all of it.
  */
 async function gate(
   scope: ServiceScope,
@@ -345,11 +350,22 @@ async function gate(
   opts: ExecuteToolOptions,
 ): Promise<Gate> {
   if (opts.skipTrust) return { kind: 'allow' };
-  if (tool.readOnly && !HIGH_STAKES_AI_DOMAINS.includes(tool.domain)) return { kind: 'allow' };
-
-  const actorKind = scope.actorKind === 'member' ? 'member' : 'ai_agent';
   const role = trustRoleFor(scope.role);
+  const actorKind = scope.actorKind === 'member' ? 'member' : 'ai_agent';
   const actorId = actorKind === 'member' ? (scope.memberId ?? scope.userId ?? 'unknown') : 'bubaly';
+  if (tool.readOnly && !HIGH_STAKES_AI_DOMAINS.includes(tool.domain)) {
+    // The view rule is pure, so it is asked first without a query: it has
+    // nothing to say for a parent, an adult or the system, nor for a
+    // restricted role reading a harmless domain, and those reads stay as cheap
+    // as they were. Only a read it WOULD deny goes through the full gate below,
+    // where a household's own grant or policy for that domain can still win.
+    const privateRead = RESTRICTED_READ_ROLES.includes(role) && riskToDecision({
+      risk: tool.risk, actor: { kind: actorKind, id: actorId, role }, domain: tool.domain, capability: 'view',
+      explicitAllow: false, sensitiveRead: tool.sensitiveRead === true,
+    }) !== null;
+    if (!privateRead) return { kind: 'allow' };
+  }
+
   const capability: Capability = actorKind === 'ai_agent' && !tool.readOnly ? 'automate' : tool.capability;
   const confidence = opts.confidence ?? 0.85;
   const title = approvalTitle(tool, input);
@@ -427,6 +443,7 @@ async function gate(
       capability,
       behavior,
       explicitAllow: false,
+      sensitiveRead: tool.sensitiveRead === true,
     });
     // Safety rail: a tier must never release work that already has an approval
     // waiting on a person. (`riskToDecision` cannot produce that today; this

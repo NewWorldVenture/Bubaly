@@ -20,7 +20,7 @@ import type { Tables } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
 import { keyedProbe, sameId, sameInstant, withIdempotency, type KeyedCreateOptions } from '../idempotency';
-import { scopeNow } from '../scope';
+import { scopeNow, zonedTimeMs } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
 export type FamilyReminder = Tables<'family_reminders'>;
@@ -69,6 +69,29 @@ function reminderDrift(stored: FamilyReminder, wanted: ReminderContent): string[
   return drift;
 }
 
+const NAIVE_REMIND_AT = /^(\d{4}-\d{2}-\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+
+/**
+ * A `remindAt` as an instant. A zone-less value — the school desk's
+ * `${date}T09:00:00` for a permission slip or a fee, a template's
+ * `localTime(dayKey, 7, 0)` — is a reading on the FAMILY's clock, as the
+ * sibling calendar service already treats the same strings. `Date.parse`
+ * resolved it on the HOST's clock (UTC on Vercel), so a 9am reminder fired at
+ * 2am in Los Angeles and 11am in Berlin. A bare date is the family's midnight
+ * of that day; an offset or `Z` is kept as written.
+ */
+function resolveRemindAt(value: string, tz: string): string | null {
+  const naive = NAIVE_REMIND_AT.exec(value.trim());
+  if (naive) {
+    const [, day, hour = '00', minute = '00', second = '00'] = naive;
+    if (Number(hour) > 23 || Number(minute) > 59 || Number(second) > 59) return null;
+    const ms = zonedTimeMs(day, Number(hour), Number(minute), tz);
+    return Number.isFinite(ms) ? new Date(ms + Number(second) * 1000).toISOString() : null;
+  }
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+}
+
 export async function createReminder(
   scope: ServiceScope,
   input: CreateReminderInput,
@@ -79,9 +102,8 @@ export async function createReminder(
 
   let remindAt: string | null = null;
   if (input.remindAt) {
-    const ms = Date.parse(input.remindAt);
-    if (!Number.isFinite(ms)) return fail('That reminder time could not be understood.', { code: SERVICE_CODES.invalidInput });
-    remindAt = new Date(ms).toISOString();
+    remindAt = resolveRemindAt(input.remindAt, scope.tz);
+    if (!remindAt) return fail('That reminder time could not be understood.', { code: SERVICE_CODES.invalidInput });
   }
 
   const kind = input.kind && KINDS.includes(input.kind) ? input.kind : 'time';

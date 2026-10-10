@@ -1,6 +1,9 @@
 import { NextRequest } from 'next/server';
 import { entitledServiceClient } from './helpers/entitled-service-client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+// Every activity and itinerary item the builder writes carries its marker in
+// `notes`, which is how a rebuild later tells its own rows from the family's.
+import { CONCIERGE_PLAN_MARKER as MARKER } from '@/lib/vacations/ai-output';
 
 const mocks = vi.hoisted(() => ({
   requireUserContext: vi.fn(), createServer: vi.fn(), enforceAIRateLimit: vi.fn(),
@@ -164,12 +167,12 @@ describe('vacation builder validates before persistence', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true, added: { activities: 2, items: 2, budget: 1, packing: 1 } });
     expect(mocks.writes.find((w) => w.table === 'vacation_activities')?.rows).toEqual([
-      { family_id: 'family-1', vacation_id: 'trip-1', name: 'Museum', category: 'culture', location: 'Downtown', family_friendly: false, cost_cents: 1250, created_by: 'user-1' },
-      { family_id: 'family-1', vacation_id: 'trip-1', name: 'Park', category: null, location: null, family_friendly: true, cost_cents: 0, created_by: 'user-1' },
+      { family_id: 'family-1', vacation_id: 'trip-1', name: 'Museum', category: 'culture', location: 'Downtown', family_friendly: false, cost_cents: 1250, notes: MARKER, created_by: 'user-1' },
+      { family_id: 'family-1', vacation_id: 'trip-1', name: 'Park', category: null, location: null, family_friendly: true, cost_cents: 0, notes: MARKER, created_by: 'user-1' },
     ]);
     expect(mocks.writes.find((w) => w.table === 'vacation_itinerary_items')?.rows).toEqual([
-      { family_id: 'family-1', vacation_id: 'trip-1', day_id: 'vacation_itinerary_days-1', day_part: 'morning', kind: 'activity', title: 'Museum', created_by: 'user-1' },
-      { family_id: 'family-1', vacation_id: 'trip-1', day_id: 'vacation_itinerary_days-3', day_part: 'all_day', kind: 'reminder', title: 'Check bags', created_by: 'user-1' },
+      { family_id: 'family-1', vacation_id: 'trip-1', day_id: 'vacation_itinerary_days-1', day_part: 'morning', kind: 'activity', title: 'Museum', notes: MARKER, created_by: 'user-1' },
+      { family_id: 'family-1', vacation_id: 'trip-1', day_id: 'vacation_itinerary_days-3', day_part: 'all_day', kind: 'reminder', title: 'Check bags', notes: MARKER, created_by: 'user-1' },
     ]);
     expect(mocks.writes.find((w) => w.table === 'vacation_budgets')?.rows).toEqual([
       { family_id: 'family-1', vacation_id: 'trip-1', category: 'food', planned_cents: 2550, created_by: 'user-1' },
@@ -206,7 +209,7 @@ describe('vacation builder validates before persistence', () => {
     mocks.complete.mockResolvedValue({ text: '{"activities":[{"name":"Park"}]}' });
     expect((await POST(request())).status).toBe(200);
     expect(mocks.writes.find((w) => w.table === 'vacation_activities')?.rows).toEqual([
-      { family_id: 'family-1', vacation_id: 'trip-1', name: 'Park', category: null, location: null, family_friendly: true, cost_cents: null, created_by: 'user-1' },
+      { family_id: 'family-1', vacation_id: 'trip-1', name: 'Park', category: null, location: null, family_friendly: true, cost_cents: null, notes: MARKER, created_by: 'user-1' },
     ]);
   });
 
