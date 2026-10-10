@@ -14,6 +14,10 @@
 --   1. as the child, deleting "Mow the lawn" and "Feed the cat" is refused by
 --      the guard (42501, its own sentence, matched exactly), and both chores
 --      and both assignments remain (counted);
+--   1b. as the child, who is also a parent of another family, moving either
+--      of those chores there (from where they could delete it as that
+--      family's manager) is refused the same way and the chore stays home;
+--      editing a chore's title still lands;
 --   2. control: the child still deletes "New chore" (1 row);
 --   3. control: a parent deletes "Mow the lawn", and its assignment goes with
 --      it (counted);
@@ -23,7 +27,8 @@
 --      service-role branch can exempt it) and, separately, a session-less
 --      writer with a null auth.uid() each delete a chore with assignments
 --      (counted);
---   6. the guard is wired: an enabled BEFORE DELETE row trigger on chores;
+--   6. the guard is wired: an enabled BEFORE DELETE OR UPDATE OF family_id row
+--      trigger on chores;
 --   7. NEGATIVE CONTROL: with the guard disabled inside the transaction, the
 --      child's delete of "Mow the lawn" lands and the sibling's approved
 --      assignment is gone. That proves the fixture reaches the defect.
@@ -54,6 +59,17 @@ update public.family_members set role = 'parent', is_active = true
 insert into public.family_members (id, family_id, user_id, display_name, role, is_active) values
   ('00000000-0000-4000-8502-0000000002c3','00000000-0000-4000-8502-0000000002f1','00000000-0000-4000-8502-0000000002a3','Sibling','teen',true),
   ('00000000-0000-4000-8502-0000000002c4','00000000-0000-4000-8502-0000000002f1','00000000-0000-4000-8502-0000000002a4','Child','child',true);
+-- The child is also a PARENT of another family: from there, a chore moved in
+-- could be deleted as that family's manager.
+insert into auth.users (id, email) values
+  ('00000000-0000-4000-8502-0000000002b1','c0502-elsewhere@example.com') on conflict do nothing;
+insert into public.families (id, name, created_by) values
+  ('00000000-0000-4000-8502-0000000002f2','Where the child is a parent','00000000-0000-4000-8502-0000000002b1')
+  on conflict do nothing;
+update public.family_members set role = 'parent', is_active = true
+ where user_id = '00000000-0000-4000-8502-0000000002b1';
+insert into public.family_members (family_id, user_id, display_name, role, is_active) values
+  ('00000000-0000-4000-8502-0000000002f2','00000000-0000-4000-8502-0000000002a4','Child (a parent there)','parent',true);
 insert into public.chores (id, family_id, title) values
   ('00000000-0000-4000-8502-0000000002d1','00000000-0000-4000-8502-0000000002f1','Mow the lawn'),
   ('00000000-0000-4000-8502-0000000002d2','00000000-0000-4000-8502-0000000002f1','Feed the cat'),
@@ -69,7 +85,8 @@ declare
   mow      constant uuid := '00000000-0000-4000-8502-0000000002d1';
   cat      constant uuid := '00000000-0000-4000-8502-0000000002d2';
   fresh    constant uuid := '00000000-0000-4000-8502-0000000002d3';
-  guard    constant text := '42501: A chore with assignments can only be removed by a family manager';
+  guard    constant text := '42501: A chore with assignments can only be removed or moved out of its family by a family manager';
+  elsewhere constant uuid := '00000000-0000-4000-8502-0000000002f2';
   failures text[] := '{}';
   t        record;
   got      text;
@@ -102,6 +119,52 @@ begin
       failures := array_append(failures, format('%s: its assignment is gone after the child''s attempt', t.what));
     end if;
   end loop;
+
+  -- 1b. Moving either chore into the family where the child is a parent, from
+  --     where they could delete it as that family's manager, is refused too,
+  --     and the chore stays home (counted). Editing an ordinary field of the
+  --     same chore still lands (the guard is only about leaving the family).
+  for t in select * from (values
+      (mow, 'the chore holding a sibling''s approved 50-point assignment', '00000000-0000-4000-8502-0000000002e1'::uuid),
+      (cat, 'the chore holding their own open assignment',                 '00000000-0000-4000-8502-0000000002e2'::uuid)
+    ) as v(chore, what, assignment) loop
+    begin
+      perform set_config('role','authenticated', true);
+      perform set_config('request.jwt.claim.sub', '00000000-0000-4000-8502-0000000002a4', true);
+      perform set_config('request.jwt.claims', json_build_object('sub','00000000-0000-4000-8502-0000000002a4','role','authenticated')::text, true);
+      update public.chores set family_id = elsewhere where id = t.chore;
+      get diagnostics n = row_count;
+      got := format('%s row(s)', n);
+      raise exception using errcode = 'P0R01';
+    exception
+      when sqlstate 'P0R01' then null;
+      when others then got := sqlstate || ': ' || sqlerrm;
+    end;
+    perform set_config('role','postgres', true);
+    if got is distinct from guard then
+      failures := array_append(failures, format('a child moved %s into the family where they are a parent (%s)', t.what, got));
+    end if;
+    select count(*) into n from public.chores where id = t.chore and family_id = fam;
+    if n <> 1 then
+      failures := array_append(failures, format('%s: not at home after the child''s attempt to move it', t.what));
+    end if;
+  end loop;
+  begin
+    perform set_config('role','authenticated', true);
+    perform set_config('request.jwt.claim.sub', '00000000-0000-4000-8502-0000000002a4', true);
+    perform set_config('request.jwt.claims', json_build_object('sub','00000000-0000-4000-8502-0000000002a4','role','authenticated')::text, true);
+    update public.chores set title = 'Feed the cat (twice)' where id = cat;
+    get diagnostics n = row_count;
+    perform set_config('role','postgres', true);
+    if n <> 1 then
+      failures := array_append(failures, format('CONTROL: the child''s title edit of a chore with assignments changed %s rows, not 1', n));
+    end if;
+    raise exception using errcode = 'P0R01';
+  exception
+    when sqlstate 'P0R01' then null;
+    when others then failures := array_append(failures, format('CONTROL: the child could not edit a chore''s title (%s: %s)', sqlstate, sqlerrm));
+  end;
+  perform set_config('role','postgres', true);
 
   -- 2. The rollback shape: a chore with no assignment.
   begin
@@ -209,8 +272,11 @@ begin
                   where tr.tgrelid = 'public.chores'::regclass
                     and tr.tgname = 'trg_chore_with_assignments_is_a_managers'
                     and tr.tgenabled <> 'D'
-                    and (tr.tgtype & 2) = 2 and (tr.tgtype & 1) = 1 and (tr.tgtype & 8) = 8) then
-    failures := array_append(failures, 'chores carries no enabled BEFORE DELETE row guard for its assignments');
+                    and (tr.tgtype & 2) = 2 and (tr.tgtype & 1) = 1 and (tr.tgtype & 8) = 8
+                    and (tr.tgtype & 16) = 16
+                    and (select array_agg(a.attname::text) from pg_attribute a
+                          where a.attrelid = tr.tgrelid and a.attnum = any (tr.tgattr::int2[])) = array['family_id']) then
+    failures := array_append(failures, 'chores carries no enabled BEFORE DELETE OR UPDATE OF family_id row guard for its assignments');
   end if;
 
   -- 7. NEGATIVE CONTROL.
@@ -240,7 +306,7 @@ begin
   if array_length(failures, 1) is not null then
     raise exception E'a chore''s delete clears assignments its deleter could not:\n  - %', array_to_string(failures, E'\n  - ');
   end if;
-  raise notice 'a-chore-with-assignments-is-a-managers-to-remove: OK (as a child: deleting the chore holding a sibling''s approved 50-point assignment and the one holding their own open assignment were each refused with the guard''s own sentence (42501), and both assignments remain; the child still deletes a chore with no assignment (1 row); a parent deletes a chore with its assignment, and the admin deletes the family with all of it; the service role (with a user id) and, separately, a null-uid session-less writer each delete a chore with assignments (1 row each); the guard is an enabled BEFORE DELETE row trigger; negative control: with it disabled the child''s delete took the sibling''s assignment)';
+  raise notice 'a-chore-with-assignments-is-a-managers-to-remove: OK (as a child: deleting the chore holding a sibling''s approved 50-point assignment and the one holding their own open assignment were each refused with the guard''s own sentence (42501), and both assignments remain; moving either chore into the family where the child is a parent was refused the same way and both stayed home, while a title edit still landed; the child still deletes a chore with no assignment (1 row); a parent deletes a chore with its assignment, and the admin deletes the family with all of it; the service role (with a user id) and, separately, a null-uid session-less writer each delete a chore with assignments (1 row each); the guard is an enabled BEFORE DELETE OR UPDATE OF family_id row trigger; negative control: with it disabled the child''s delete took the sibling''s assignment)';
 end $$;
 
 rollback;

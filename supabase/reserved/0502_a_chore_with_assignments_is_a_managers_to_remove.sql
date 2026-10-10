@@ -18,8 +18,13 @@
 -- 0439's balance guard), so one child erases a sibling's earned points, or
 -- clears every open chore on the board, by deleting chores instead.
 --
--- This adds a BEFORE DELETE trigger on chores: a signed-in non-manager may
--- delete a chore only while it has no assignments. 0374 already reserves every
+-- This adds a BEFORE DELETE OR UPDATE OF family_id trigger on chores: a
+-- signed-in caller who does not manage the chore's own family may delete it,
+-- or move it to another family, only while it has no assignments. The move
+-- matters because chores' update policy is family membership on both sides:
+-- measured on the first cut, a child of this family who is a parent of
+-- another moved the chore there (1 row), deleted it as that family's manager
+-- (1 row), and the sibling's approved assignment went with it. 0374 already reserves every
 -- assignment delete to a manager, so nothing a child could not remove directly
 -- goes with the chore. The application's only chore deletes are rollbacks of a
 -- chore the same call has just created, after its assignment insert failed
@@ -62,35 +67,39 @@ security definer
 set search_path = public, pg_temp
 as $$
 begin
+  -- An update that keeps the chore in its family is none of this guard's.
+  if tg_op = 'UPDATE' and new.family_id is not distinct from old.family_id then
+    return new;
+  end if;
   -- The trusted server (service role, or a migration/seed with no session) and
-  -- a family manager remove chores as before.
+  -- a manager OF THE CHORE'S OWN FAMILY remove or move chores as before.
   if current_user = 'service_role'
      or coalesce(auth.role(), '') = 'service_role'
      or auth.uid() is null
      or public.can_manage_family(old.family_id) then
-    return old;
+    return case when tg_op = 'DELETE' then old else new end;
   end if;
   -- A family being deleted takes its chores: by the time the cascade reaches a
   -- chore, the family row is gone.
-  if not exists (select 1 from public.families f where f.id = old.family_id) then
+  if tg_op = 'DELETE' and not exists (select 1 from public.families f where f.id = old.family_id) then
     return old;
   end if;
   if exists (select 1 from public.chore_assignments a where a.chore_id = old.id) then
-    raise exception 'A chore with assignments can only be removed by a family manager'
+    raise exception 'A chore with assignments can only be removed or moved out of its family by a family manager'
       using errcode = '42501';
   end if;
-  return old;
+  return case when tg_op = 'DELETE' then old else new end;
 end
 $$;
 
 comment on function public.chore_with_assignments_is_a_managers_to_remove() is
-  'Refuses (42501) a signed-in non-manager deleting a chore that has assignments, whose ON DELETE CASCADE would otherwise remove assignments 0374 reserves to a manager (0502). Managers, the service role, session-less writers and a family deletion cascade are unaffected.';
+  'Refuses (42501) a signed-in caller who does not manage the chore''s own family deleting a chore that has assignments, or moving it to another family (from where a manager there could delete it), since the ON DELETE CASCADE would remove assignments 0374 reserves to a manager (0502). Managers of the chore''s family, the service role, session-less writers and a family deletion cascade are unaffected.';
 
 revoke all on function public.chore_with_assignments_is_a_managers_to_remove() from public;
 
 drop trigger if exists trg_chore_with_assignments_is_a_managers on public.chores;
 create trigger trg_chore_with_assignments_is_a_managers
-  before delete on public.chores
+  before delete or update of family_id on public.chores
   for each row execute function public.chore_with_assignments_is_a_managers_to_remove();
 
 do $$
@@ -102,8 +111,9 @@ begin
                     and t.tgenabled <> 'D'
                     and (t.tgtype & 2) = 2      -- BEFORE
                     and (t.tgtype & 1) = 1      -- ROW
-                    and (t.tgtype & 8) = 8) then -- DELETE
-    raise exception '0502: chores does not carry the enabled BEFORE DELETE row guard';
+                    and (t.tgtype & 8) = 8      -- DELETE
+                    and (t.tgtype & 16) = 16) then -- UPDATE (of family_id)
+    raise exception '0502: chores does not carry the enabled BEFORE DELETE OR UPDATE row guard';
   end if;
   if not exists (select 1 from pg_proc f
                   where f.oid = 'public.chore_with_assignments_is_a_managers_to_remove()'::regprocedure

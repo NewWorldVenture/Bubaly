@@ -115,7 +115,7 @@ source allocations are not evidence that production applied any migration.
 | 0499 confirmed, held | `0499_a_stored_file_answers_to_its_own_familys_rows.sql` | The `documents` bucket's upload, update and delete policies follow the row of the object's own family that names the file: insurance card images (managers), a household document's bytes (not a guest), a sensitive document's path (managers); another family's rows no longer count, and the family is read with the policies' own uuid cast. Requested for #981 on #771 (comment 6094859264); confirmed as a held source and probe reservation in #981 comment 6094986591, which is not an installation approval. |
 | 0500 confirmed, held | `0500_a_reward_request_is_the_rewards_own_snapshot.sql` | 0308's ticket guard completed: a reward request names a reward and a member of its own family at that reward's price and title, and keeps them and its family and member (the foreign key's set-null on a deleted reward excepted); 0428's token-economy guard also checks the title. Requested for #981 on #771 (comment 6094977772, economy scope 6095050742); confirmed as a held source and probe reservation in #981 comment 6095082508, which is not an installation or financial approval. |
 | 0501 confirmed, held | `0501_one_member_one_vote_in_two_households.sql` | 0311's same-family guard on `member_id` of `family_poll_votes`, `meal_vote_ballots`, `watchlist_votes` and `event_rsvps`: a member of two families votes once in each. Requested for #981 on #771 (comment 6095180270); confirmed as a held source and probe reservation for these four bindings in #981 comment 6095247473, which is not an installation approval. |
-| 0502 proposed, held | `0502_a_chore_with_assignments_is_a_managers_to_remove.sql` | A signed-in non-manager deletes a chore only while it has no assignments, so its cascade cannot remove assignments 0374 reserves to a manager. Requested for #981 on #771 (comment 6097049650); not yet confirmed. |
+| 0502 proposed, held | `0502_a_chore_with_assignments_is_a_managers_to_remove.sql` | A signed-in caller who does not manage the chore's family deletes it, or moves it to another family, only while it has no assignments, so its cascade cannot remove assignments 0374 reserves to a manager. Requested for #981 on #771 (comment 6097049650); not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4761,9 +4761,14 @@ chore:
 Points are summed from approved assignments (`lib/rewards/points.ts`, 0439),
 so a child erases a sibling's earned points or clears the board this way.
 
-0502 adds a BEFORE DELETE guard on `chores`, SECURITY DEFINER so it sees every
-assignment: a signed-in non-manager may delete a chore only while it has no
-assignments (42501, its own sentence). The application deletes chores only to
+0502 adds a BEFORE DELETE OR UPDATE OF family_id guard on `chores`, SECURITY
+DEFINER so it sees every assignment: a signed-in caller who does not manage the
+chore's own family may delete it, or move it to another family, only while it
+has no assignments (42501, its own sentence). The move matters: `chores`'
+update policy is membership on both sides, and on the first cut (`e55bc1e74`)
+a child of this family who is a parent of another moved the chore there
+(1 row), deleted it as that family's manager (1 row), and the sibling's
+approved assignment went with it. The probe now runs that person. The application deletes chores only to
 roll back one it just created after the assignment insert failed (missions'
 `createChoreAction`, `lib/services/tasks`, the assistant tool), when it has no
 assignments, so those still land. Managers, the service role and session-less
@@ -4773,9 +4778,11 @@ family delete is refused, which the probe's control shows.
 
 **Released probe changed with it:** `docs/audit/chore-price-check.sql`
 inventories the triggers on `chores` exactly to attribute its refusals to
-0307. It now counts only triggers that fire on INSERT or UPDATE, the verbs it
-measures; a DELETE-only trigger cannot refuse one. It passes with and without
-0502 and still fails when an extra INSERT or UPDATE trigger is added.
+0307. It now counts only triggers that can fire on its own statements: INSERT
+triggers, and UPDATE triggers with no column list or one naming a column it
+updates (title, points, cash). A trigger on DELETE, or on UPDATE OF
+`family_id` only, cannot refuse one. It passes with and without 0502 and still
+fails when an extra INSERT trigger or UPDATE OF a price column is added.
 
 **Recorded, not changed:** `vacations` is member-deletable and cascades into
 six manager-only tables (0347's append-only `vacation_audit_logs` among them),
@@ -4791,6 +4798,9 @@ probes over the added trigger. The passing run shows:
 - as the child, deleting the chore holding a sibling's approved assignment and
   the one holding their own open assignment are each refused with the guard's
   sentence, and both assignments remain;
+- as the same child, who is also a parent of another family, moving either
+  chore there is refused the same way and both stay home, while a title edit
+  still lands;
 - the child still deletes a chore with no assignment (1 row);
 - a parent deletes a chore with its assignment, and the admin deletes the
   family with all of it (counted);
@@ -4801,7 +4811,9 @@ probes over the added trigger. The passing run shows:
 
 Each branch of the guard was removed in turn (the family-deletion branch, the
 manager branch, each exemption, the assignment check) and each turns exactly
-its own control or check red. 184 of 184 released probes pass with and without
+its own control or check red; asking for a manager of the NEW family instead
+of the chore's own (the first cut's shape) fails the two move lines, and the
+first cut itself fails them too. 184 of 184 released probes pass with and without
 0502.
 
 **After approved release:** as a test child, try to delete a test chore that
