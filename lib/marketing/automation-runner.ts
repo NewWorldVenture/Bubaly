@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { runSteps, type Step } from '@/lib/marketing/automation-steps';
+import { emailsSent, recordedActions, runSteps, type Step } from '@/lib/marketing/automation-steps';
 import { readInChunks } from '@/lib/supabase/chunked-in';
 import { getMarketingCustomersWithError, type MarketingCustomer } from '@/lib/marketing/customers';
 import { wroteNoRows } from '@/lib/supabase/errors';
@@ -90,11 +90,11 @@ export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: numb
     // batches of a hundred, so the answer cannot reach the cap and the map is
     // complete for every subject it is consulted about.
     const { data: prior, error: priorError } = await readInChunks<
-      { id: string; subject_key: string | null; status: string }, { message: string }
+      { id: string; subject_key: string | null; status: string; metadata: unknown }, { message: string }
     >(
       subjects.map((c) => c.familyId),
       (chunk) => supabase.from('marketing_automation_runs')
-        .select('id, subject_key, status').eq('workflow_id', flow.id).in('subject_key', chunk),
+        .select('id, subject_key, status, metadata').eq('workflow_id', flow.id).in('subject_key', chunk),
     );
     if (priorError) throw new Error('Could not load automation run history.');
     const priorBySubject = new Map(prior.filter((r) => r.subject_key).map((r) => [r.subject_key as string, r]));
@@ -107,12 +107,15 @@ export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: numb
       if (existing?.status === 'completed' || existing?.status === 'running') continue;
 
       let runId: string;
+      // What the failed attempt already did, so its retry does not repeat a send.
+      let previous: string[] = [];
       if (existing?.status === 'failed') {
         const { data: claimed, error: claimError } = await supabase.from('marketing_automation_runs')
           .update({ status: 'running' }).eq('id', existing.id).eq('status', 'failed').select('id').maybeSingle();
         if (claimError) throw new Error('Could not claim the failed automation run.');
         if (!claimed) continue;
         runId = claimed.id;
+        previous = recordedActions(existing.metadata);
       } else {
         const { data: reserved, error: reserveError } = await supabase.from('marketing_automation_runs').insert({
           workflow_id: flow.id, status: 'running', subject_key: c.familyId,
@@ -128,12 +131,12 @@ export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: numb
 
       let actions: string[];
       try {
-        actions = await runSteps(steps, { email: c.ownerEmail, name: c.name }, fallback);
+        actions = await runSteps(steps, { email: c.ownerEmail, name: c.name }, fallback, previous);
       } catch (error) {
         console.error('[marketing automation] scheduled steps failed', error);
         actions = ['automation:failed'];
       }
-      summary.emails += actions.filter((a) => a === 'send_email').length;
+      summary.emails += emailsSent(actions, previous);
       const failed = actions.some((action) => action.includes(':failed') || action.includes(':skipped') || action.includes(':unsupported'));
       // Status-guarded, so zero rows means the run was moved on (a reaper marked
       // it failed) while its steps ran. The steps DID run — the emails went — so

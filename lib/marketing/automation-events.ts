@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { runSteps, type Step } from '@/lib/marketing/automation-steps';
+import { emailsSent, recordedActions, runSteps, type Step } from '@/lib/marketing/automation-steps';
 import { EVENT_DEFAULT_COPY, type EventTrigger } from '@/lib/marketing/automation-triggers';
 import { wroteNoRows } from '@/lib/supabase/errors';
 
@@ -60,19 +60,22 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
     if (reserveErr) continue; // best-effort event path; callers must not block user requests
 
     let runId = reserved?.[0]?.id ?? null;
+    // What a failed attempt already did, so its retry does not repeat a send.
+    let previous: string[] = [];
     if (!runId) {
       const { data: existing, error: existingError } = await supabase.from('marketing_automation_runs')
-        .select('id, status').eq('workflow_id', flow.id).eq('subject_key', params.subjectKey).maybeSingle();
+        .select('id, status, metadata').eq('workflow_id', flow.id).eq('subject_key', params.subjectKey).maybeSingle();
       if (existingError || !existing || existing.status !== 'failed') continue;
       const { data: claimed, error: claimError } = await supabase.from('marketing_automation_runs')
         .update({ status: 'running' }).eq('id', existing.id).eq('status', 'failed').select('id').maybeSingle();
       if (claimError || !claimed) continue;
       runId = claimed.id;
+      previous = recordedActions(existing.metadata);
     }
     const steps = Array.isArray(flow.steps) ? (flow.steps as unknown as Step[]) : [];
     let actions: string[];
     try {
-      actions = await runSteps(steps, { email: params.email ?? null, name: params.name ?? null }, fallback);
+      actions = await runSteps(steps, { email: params.email ?? null, name: params.name ?? null }, fallback, previous);
     } catch (error) {
       console.error('[marketing automation] event-driven steps failed', error);
       actions = ['automation:failed'];
@@ -100,7 +103,7 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
     if (workflowError) throw new Error('Could not update the automation run count.');
 
     result.workflows++;
-    result.emails += actions.filter((a) => a === 'send_email').length;
+    result.emails += emailsSent(actions, previous);
     if (failed) result.failures++;
   }
 
