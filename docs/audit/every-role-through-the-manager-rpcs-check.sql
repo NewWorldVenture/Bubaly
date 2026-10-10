@@ -203,14 +203,17 @@ begin
       end;
       calls := calls + 1;
       -- The function's OWN refusal: an answer of 'forbidden'/'unauthenticated',
-      -- or, for the two that raise, their own 42501 sentence.
-      own_refusal := (raised is null and coalesce(r::jsonb->>'reason', '') in ('forbidden', 'unauthenticated'))
-        or (c.gate_raise is not null and raised like c.gate_raise);
+      -- or, for the two that raise, their own 42501 sentence. Every term is
+      -- coalesced: a normal return leaves `raised` null, `raised like …` is
+      -- then null, and a null here would skip every assertion below (owner
+      -- review 6092845682 caught exactly that false green).
+      own_refusal := coalesce(raised is null and coalesce(r::jsonb->>'reason', '') in ('forbidden', 'unauthenticated'), false)
+        or coalesce(c.gate_raise is not null and raised like c.gate_raise, false);
       -- Past the gate: any answer that is not a refusal, or, for the two that
       -- raise, any error that is not a 42501 (they fail later on the unknown
       -- move or the empty source).
       admitted := not own_refusal
-        and (raised is null or (c.gate_raise is not null and raised not like '42501:%'));
+        and (raised is null or coalesce(c.gate_raise is not null and raised not like '42501:%', false));
       if a.manages and not admitted then
         failures := array_append(failures, format('the %s was refused by %s (%s)', a.label, c.fn, coalesce(raised, r)));
       elsif not a.manages and admitted then
@@ -231,16 +234,28 @@ begin
   end if;
 
   -- MUTATION CONTROLS: loosen one row-first and one gate-first gate to
-  -- is_family_member; the child must then get past each.
+  -- is_family_member, and make both raise-style gates RETURN NORMALLY for a
+  -- non-manager. The child must then be classified as past each gate, by the
+  -- same expressions the matrix uses.
   for c in select * from (values
       -- Not economy_decide_redemption: its decision-guard trigger refuses a
       -- non-manager's status change on its own (42501), a second layer that
       -- holds even with the RPC's gate loosened. guardian_suggestions has none.
       ('public.guardian_review_suggestion(uuid,text,text)', 'can_manage_family(v_suggestion.family_id)', 'is_family_member(v_suggestion.family_id)',
-       format('select public.guardian_review_suggestion(%L::uuid, %L, null)::text', '00000000-0000-4000-8a11-0000000000e3', 'dismissed')),
+       format('select public.guardian_review_suggestion(%L::uuid, %L, null)::text', '00000000-0000-4000-8a11-0000000000e3', 'dismissed'), null::text),
       ('public.wallet_transfer(uuid,uuid,uuid,bigint,text,uuid)', 'can_manage_family(p_family_id)', 'is_family_member(p_family_id)',
-       format('select public.wallet_transfer(%L::uuid, %L::uuid, %L::uuid, 100, %L, %L::uuid)::text', fam, wallet, nowhere, 'mutation', '00000000-0000-4000-8a11-0000000000a4'))
-    ) as x(sig, gate, loose, sql) loop
+       format('select public.wallet_transfer(%L::uuid, %L::uuid, %L::uuid, 100, %L, %L::uuid)::text', fam, wallet, nowhere, 'mutation', '00000000-0000-4000-8a11-0000000000a4'), null::text),
+      ('public.move_recalculate_date(uuid,uuid,uuid,date,jsonb,uuid)',
+       $g$RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'authorization';$g$,
+       $g$RETURN '{"probe": "returned past the gate"}'::jsonb;$g$,
+       format('select public.move_recalculate_date(%L::uuid, %L::uuid, %L::uuid, current_date)::text', fam, nowhere, '00000000-0000-4000-8a11-0000000000d4'),
+       '42501: authorization'),
+      ('public.vacation_import_confirmation(uuid,uuid,uuid,jsonb,jsonb,jsonb,uuid)',
+       $g$RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'An active parent or adult membership is required';$g$,
+       $g$RETURN '{"probe": "returned past the gate"}'::jsonb;$g$,
+       format('select public.vacation_import_confirmation(%L::uuid, %L::uuid, %L::uuid, %L::jsonb, %L::jsonb)::text', fam, nowhere, '00000000-0000-4000-8a11-0000000000d4', '{}', '{}'),
+       '42501: An %member%required')
+    ) as x(sig, gate, loose, sql, gate_raise) loop
     original_def := pg_get_functiondef(c.sig::regprocedure);
     if position(c.gate in original_def) = 0 then
       failures := array_append(failures, format('PROBE DRIFT: %s no longer contains %s, so its mutation control measures nothing', c.sig, c.gate));
@@ -259,15 +274,24 @@ begin
       when others then raised := sqlstate || ': ' || sqlerrm;
     end;
     execute original_def;
-    if raised is not null or coalesce(r::jsonb->>'reason', '') in ('forbidden', 'unauthenticated') then
-      failures := array_append(failures, format('MUTATION CONTROL: with %s loosened to is_family_member the child was still refused (%s), so this matrix cannot see a weakened gate', c.sig, coalesce(raised, r)));
+    own_refusal := coalesce(raised is null and coalesce(r::jsonb->>'reason', '') in ('forbidden', 'unauthenticated'), false)
+      or coalesce(c.gate_raise is not null and raised like c.gate_raise, false);
+    admitted := not own_refusal
+      and (raised is null or coalesce(c.gate_raise is not null and raised not like '42501:%', false));
+    if admitted is distinct from true then
+      failures := array_append(failures, format('MUTATION CONTROL: with %s''s gate loosened the child was not classified as past it (%s), so this matrix cannot see a weakened gate', c.sig, coalesce(raised, r)));
     end if;
   end loop;
 
+  -- Affirmative: the matrix's own verdicts are never null, so no assertion
+  -- above could have been skipped.
+  if own_refusal is null or admitted is null then
+    failures := array_append(failures, 'CONTROL: a classification was null, so assertions may have been skipped');
+  end if;
   if array_length(failures, 1) is not null then
     raise exception E'a manager-only RPC answers the wrong role:\n  - %', array_to_string(failures, E'\n  - ');
   end if;
-  raise notice 'every-role-through-the-manager-rpcs: OK (99 calls: the parent and the adult got past the gate of all eleven manager RPCs; the teen, child, caregiver, guest, a removed parent, a parent of another family and anon were refused at it; can_manage_family, is_family_admin, is_family_member, family_role, social_role_for and social_has_permission(publish_posts) answered as designed for all nine actors; mutation controls: with guardian_review_suggestion''s and wallet_transfer''s gates loosened to is_family_member the child got past both)';
+  raise notice 'every-role-through-the-manager-rpcs: OK (99 calls: the parent and the adult got past the gate of all eleven manager RPCs; the teen, child, caregiver, guest, a removed parent, a parent of another family and anon were refused at it; can_manage_family, is_family_admin, is_family_member, family_role, social_role_for and social_has_permission(publish_posts) answered as designed for all nine actors; mutation controls: with guardian_review_suggestion''s and wallet_transfer''s gates loosened to is_family_member, and move_recalculate_date''s and vacation_import_confirmation''s gates made to return normally, the child was classified as past all four)';
 end $$;
 
 rollback;
