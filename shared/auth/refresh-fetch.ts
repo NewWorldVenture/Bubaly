@@ -23,10 +23,16 @@ export function createSessionRefreshFetch(supabaseUrl: string, fetchImpl: typeof
         const value: unknown = await response.clone().json();
         if (value && typeof value === 'object' && !Array.isArray(value)) {
           const session = value as Record<string, unknown>;
+          const now = Date.now() / 1000;
+          const durationExpiry = typeof session.expires_in === 'number' ? now + session.expires_in : Number.NaN;
+          const expiresAt = session.expires_at === undefined ? durationExpiry : session.expires_at;
           if (typeof session.access_token === 'string' && session.access_token.trim()
             && typeof session.refresh_token === 'string' && session.refresh_token.trim()
             && typeof session.token_type === 'string' && session.token_type.trim()
-            && typeof session.expires_in === 'number' && Number.isFinite(session.expires_in) && session.expires_in > 0) return response;
+            && typeof session.expires_in === 'number' && Number.isFinite(session.expires_in) && session.expires_in > 0
+            && typeof expiresAt === 'number' && expiresAt > now
+            && Number.isFinite(new Date(expiresAt * 1000).getTime())
+            && Number.isFinite(new Date(durationExpiry * 1000).getTime())) return response;
         }
       } catch { /* truncated or unreadable response; keep the saved session */ }
     }
