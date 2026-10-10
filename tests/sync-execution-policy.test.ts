@@ -56,6 +56,8 @@ beforeEach(() => {
     },
   } });
   db.seed('families', [{ id: 'ours', timezone: 'UTC' }]);
+  // A connection syncs only while its owner is an active member of its family.
+  db.seed('family_members', [{ id: 'owner-member', family_id: 'ours', user_id: 'owner', role: 'parent', is_active: true }]);
   mocks.token.mockResolvedValue('access');
   mocks.legacyToken.mockResolvedValue('access');
   mocks.onboarding.mockResolvedValue({ ok: true, data: { imported: 1, exported: 0, skipped: 0, conflicts: 0 } });

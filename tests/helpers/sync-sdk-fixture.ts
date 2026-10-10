@@ -21,6 +21,8 @@ export function syncSdkFixture(events: GEvent[], options: {
 } = {}) {
   const rows: Record<string, Row[]> = {
     sync_accounts: [{ ...ACCOUNT, provider: 'google', sync_direction: options.direction ?? 'import', metadata: {} }],
+    // A connection syncs only while its owner is an active member of its family.
+    family_members: [{ id: 'owner-member', family_id: ACCOUNT.family_id, user_id: ACCOUNT.user_id, role: 'parent', is_active: true }],
     sync_connections: [{ account_id: ACCOUNT.id, health: 'healthy' }],
     sync_calendars: [{ id: 'calendar', account_id: ACCOUNT.id, family_id: ACCOUNT.family_id, provider: 'google', external_id: 'primary', sync_token: STALE }],
     sync_reminder_lists: [{ id: 'list', account_id: ACCOUNT.id, family_id: ACCOUNT.family_id, provider: 'google', external_id: '@default' }],

@@ -45,6 +45,14 @@ export async function loadSyncExecutionPolicy(
     const result = await db.from('sync_accounts').select('sync_direction,metadata')
       .eq('id', account.id).eq('family_id', account.family_id).eq('user_id', account.user_id).eq('provider', provider).maybeSingle();
     if (result.error || !result.data) throw result.error ?? new Error('Connected account was unavailable');
+    // Removing a member deactivates their row and leaves their connection, so
+    // the scheduled sync went on pushing this family's entries into the
+    // departed member's own calendar and pulling theirs into the family. A
+    // connection syncs only while its owner is an active member of ITS family.
+    const member = await db.from('family_members').select('id')
+      .eq('family_id', account.family_id).eq('user_id', account.user_id).eq('is_active', true).limit(1);
+    if (member.error) throw member.error;
+    if (!member.data?.length) return fail(t('syncPolicy.ownerUnavailable'), { code: 'ownerUnavailable' });
     const policy = syncExecutionPolicy(result.data);
     return policy.ok ? ok(policy.data) : fail(t(`syncPolicy.${policy.code}`), { code: policy.code, retryable: policy.retryable });
   } catch (error) {
