@@ -140,7 +140,12 @@ export function syncSdkFixture(events: GEvent[], options: {
     const selected = tableRows.filter(row => [...url.searchParams].every(([column, value]) => {
       if (column === 'select' || column === 'limit') return true;
       if (!value.startsWith('eq.')) throw new Error(`Unexpected synthetic filter: ${column}=${value}`);
-      return String(row[column]) === value.slice(3);
+      // A JSON path (metadata->adoption->>token) compares the text at that path;
+      // SQL NULL (an absent key) equals nothing.
+      const [base, ...path] = column.split(/->>?/);
+      const found = path.reduce<unknown>((at, key) => at !== null && typeof at === 'object' ? (at as Row)[key] : undefined, row[base]);
+      if (path.length && (found === undefined || found === null)) return false;
+      return String(found) === value.slice(3);
     }));
     let result = url.searchParams.has('limit') ? selected.slice(0, Number(url.searchParams.get('limit'))) : selected;
     if (method === 'PATCH') {

@@ -215,6 +215,107 @@ for (const engine of ['google', 'generic'] as const) {
         if (kind === 'event') expect(rows.sync_calendars[0].sync_token).toBe(NEXT);
       });
 
+      // An orphan adopted and recovered by several pulls. The nth item refresh
+      // (an item write carrying remote content) first runs stages[n]; every
+      // generation token a takeover writes to the mapping is recorded.
+      const staged = (stages: (() => Promise<void>)[]) => {
+        const remote: Record<string, unknown> = kind === 'event' ? { ...event } : { ...task };
+        let refreshes = 0;
+        const tokens: string[] = [];
+        const state = syncSdkFixture(kind === 'event' ? [remote as typeof event] : [], {
+          rpcFailure: 'missing', tasks: kind === 'reminder' ? [remote as typeof task] : [],
+          gate: async ({ table: target, method, body }) => {
+            const adoption = (body?.metadata as { adoption?: { token?: unknown } } | undefined)?.adoption;
+            if (target === 'sync_external_mappings' && method === 'PATCH' && typeof adoption?.token === 'string') tokens.push(adoption.token);
+            if (target === table && method === 'PATCH' && body?.title !== undefined) await stages[refreshes++]?.();
+          },
+        });
+        state.rows.sync_external_mappings = state.rows.sync_external_mappings.filter(row => row.item_type !== kind);
+        state.rows[table] = [{ id: 'orphan', ...container, family_id: ACCOUNT.family_id, user_id: ACCOUNT.user_id,
+          provider: 'google', external_id: external, title: 'Stale partial write', content_hash: 'stale', deleted_at: '2026-05-01T00:00:00Z',
+          updated_at: '2026-05-01T00:00:00.000Z' }];
+        return { ...state, remote, tokens, refreshes: () => refreshes };
+      };
+      const hang = () => new Promise<void>(() => {});
+      const pause = () => {
+        let paused!: () => void, resume!: () => void;
+        const at = new Promise<void>(resolve => { paused = resolve; });
+        const resumed = new Promise<void>(resolve => { resume = resolve; });
+        return { at, resume: () => resume(), stage: async () => { paused(); await resumed; } };
+      };
+      const cancelRemote = (remote: Record<string, unknown>) =>
+        Object.assign(remote, kind === 'event' ? { status: 'cancelled' } : { deleted: true });
+      const SEEDED_DELETION = '2026-05-01T00:00:00Z';
+
+      it(`${kind} a cancellation after the claim keeps its receipt and association; the paused claimant fails`, async () => {
+        const a = pause();
+        const { db, rows, remote } = staged([a.stage]);
+        const pullA = run(db);
+        await a.at; // A's pending claim committed; A is paused before its item refresh
+        expect(maps(rows)).toEqual([expect.objectContaining({ account_id: ACCOUNT.id, local_id: 'orphan', sync_status: 'pending' })]);
+
+        cancelRemote(remote);
+        expect((await run(db)).error).toBeUndefined();
+        const cancelledByB = { ...rows[table].find(row => row.id === 'orphan') };
+        expect(cancelledByB.deleted_at).toEqual(expect.any(String));
+        expect(cancelledByB.deleted_at).not.toBe(SEEDED_DELETION);
+        const mappingB = { ...maps(rows)[0] };
+        expect(mappingB).toMatchObject({ account_id: ACCOUNT.id, local_id: 'orphan', sync_status: 'synced', metadata: {} });
+
+        a.resume();
+        expect((await pullA).error).toBeDefined();
+        expect(maps(rows)).toEqual([mappingB]);
+        expect(rows[table]).toEqual([cancelledByB]);
+      });
+
+      it(`${kind} a stale 'syncing' recovery never revives an item a newer pull cancelled`, async () => {
+        const r = pause();
+        const { db, rows, remote, refreshes } = staged([hang, hang, r.stage]);
+        void run(db); // A claims, then stops for good before its refresh
+        await vi.waitFor(() => expect(refreshes()).toBe(1));
+        void run(db); // S takes the claim over, then stops for good before its refresh
+        await vi.waitFor(() => expect(refreshes()).toBe(2));
+        expect(maps(rows)).toEqual([expect.objectContaining({ local_id: 'orphan', sync_status: 'syncing' })]);
+        const recovery = run(db); // R recovers the stale 'syncing' claim
+        await r.at;
+
+        cancelRemote(remote);
+        expect((await run(db)).error).toBeUndefined();
+        const cancelledByC = { ...rows[table].find(row => row.id === 'orphan') };
+        expect(cancelledByC.deleted_at).toEqual(expect.any(String));
+        expect(cancelledByC.deleted_at).not.toBe(SEEDED_DELETION);
+        const mappingC = { ...maps(rows)[0] };
+        expect(mappingC).toMatchObject({ local_id: 'orphan', sync_status: 'synced' });
+
+        r.resume();
+        expect((await recovery).error).toBeDefined();
+        expect(rows[table]).toEqual([cancelledByC]);
+        expect(maps(rows)).toEqual([mappingC]);
+      });
+
+      it(`${kind} two recoveries of one claim take distinct generations and only one completes`, async () => {
+        const r1 = pause();
+        const { db, rows, remote, tokens, refreshes } = staged([hang, r1.stage]);
+        void run(db); // A claims, then stops for good before its refresh
+        await vi.waitFor(() => expect(refreshes()).toBe(1));
+        const first = run(db); // R1 takes the claim over and pauses before its refresh
+        await r1.at;
+
+        remote[kind === 'event' ? 'summary' : 'title'] = 'Newer remote snapshot';
+        expect((await run(db)).error).toBeUndefined(); // R2 takes it over from R1 and completes
+        const completedByR2 = { ...rows[table].find(row => row.id === 'orphan') };
+        expect(completedByR2).toMatchObject({ title: 'Newer remote snapshot', deleted_at: null });
+        const mappingR2 = { ...maps(rows)[0] };
+        expect(mappingR2).toMatchObject({ local_id: 'orphan', sync_status: 'synced', metadata: { lastHash: completedByR2.content_hash } });
+        expect(tokens).toHaveLength(2);
+        expect(new Set(tokens).size).toBe(2);
+
+        r1.resume();
+        expect((await first).error).toBeDefined();
+        expect(rows[table]).toEqual([completedByR2]);
+        expect(maps(rows)).toEqual([mappingR2]);
+      });
+
       it(`${kind} an orphan that changes owner after the lookup is never adopted`, async () => {
         const { db, rows } = raced(orphan => { orphan.user_id = 'someone-else'; });
         expect((await run(db)).error).toBeDefined();
