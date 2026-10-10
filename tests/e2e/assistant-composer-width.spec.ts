@@ -260,40 +260,71 @@ test.describe('assistant: the composer and the workspace either side of lg and 2
     await expect.poll(padding).toEqual(['auto', 'auto']);
   });
 
+  /**
+   * Tabs through `route` and returns each stop's name and, if it was hidden,
+   * what hid it: judged where the smooth scroll ends, by what is painted at
+   * the stop's centre.
+   */
+  async function tabStops(page: Page, route: string, stops: number) {
+    await page.goto(route);
+    // The page itself, not a redirect or an error page.
+    expect(new URL(page.url()).pathname).toBe(route);
+    await page.evaluate(() => { (document.activeElement as HTMLElement | null)?.blur(); window.scrollTo(0, 0); });
+    const seen: { name: string; hiddenBy: string | null }[] = [];
+    for (let i = 0; i < stops; i += 1) {
+      await page.keyboard.press('Tab');
+      seen.push(await page.evaluate(async () => {
+        for (let still = 0, last = -1, frames = 0; still < 3 && frames < 120; frames += 1) {
+          await new Promise(requestAnimationFrame);
+          still = scrollY === last ? still + 1 : 0;
+          last = scrollY;
+        }
+        const el = document.activeElement as HTMLElement | null;
+        if (!el || el === document.body) return { name: '', hiddenBy: null };
+        const name = (el.getAttribute('aria-label') ?? el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 40);
+        const r = el.getBoundingClientRect();
+        if (r.width < 1 || r.height < 1) return { name, hiddenBy: null };
+        const x = Math.min(Math.max(r.left + r.width / 2, 0), innerWidth - 1);
+        const y = Math.min(Math.max(r.top + r.height / 2, 0), innerHeight - 1);
+        const top = document.elementFromPoint(x, y);
+        if (!top || top === el || el.contains(top) || top.contains(el)) return { name, hiddenBy: null };
+        const chrome = (top as HTMLElement).closest('.app-topbar, nav.fixed, .fixed');
+        return { name, hiddenBy: chrome ? chrome.className.toString().slice(0, 40) : null };
+      }));
+    }
+    return seen;
+  }
+
   test('Tab never leaves a control under the top bar or the floating buttons', async ({ page }) => {
     // Three of the pages the keyboard walk caught at 1280x720: a control
     // under the top bar (reasoning, documents) and a link under the AI orb
     // (family COO). Every Tab stop must show at least its own centre.
-    // The page scrolls smoothly; judge each stop where the scroll ends.
-    const covered = () => page.evaluate(async () => {
-      for (let still = 0, last = -1, frames = 0; still < 3 && frames < 120; frames += 1) {
-        await new Promise(requestAnimationFrame);
-        still = scrollY === last ? still + 1 : 0;
-        last = scrollY;
-      }
-      const el = document.activeElement as HTMLElement | null;
-      if (!el || el === document.body) return null;
-      const r = el.getBoundingClientRect();
-      if (r.width < 1 || r.height < 1) return null;
-      const x = Math.min(Math.max(r.left + r.width / 2, 0), innerWidth - 1);
-      const y = Math.min(Math.max(r.top + r.height / 2, 0), innerHeight - 1);
-      const top = document.elementFromPoint(x, y);
-      if (!top || top === el || el.contains(top) || top.contains(el)) return null;
-      const chrome = (top as HTMLElement).closest('.app-topbar, nav.fixed, .fixed');
-      return chrome ? `${el.tagName.toLowerCase()} "${(el.getAttribute('aria-label') ?? el.textContent ?? '').trim().slice(0, 30)}" under ${chrome.className.toString().slice(0, 40)}` : null;
-    });
+    test.setTimeout(90_000);
     await page.setViewportSize({ width: 1280, height: 720 });
     await signIn(page, '/dashboard/reasoning');
     for (const route of ['/dashboard/reasoning', '/dashboard/documents', '/dashboard/family-coo']) {
-      if (new URL(page.url()).pathname !== route) await page.goto(route);
-      await page.evaluate(() => { (document.activeElement as HTMLElement | null)?.blur(); window.scrollTo(0, 0); });
-      const hidden: string[] = [];
-      for (let i = 0; i < 70; i += 1) {
-        await page.keyboard.press('Tab');
-        const c = await covered();
-        if (c) hidden.push(`${route} stop ${i + 1}: ${c}`);
+      const seen = await tabStops(page, route, 70);
+      expect(seen.filter((s) => s.hiddenBy).map((s) => `${route}: "${s.name}" under ${s.hiddenBy}`)).toEqual([]);
+    }
+  });
+
+  test('390x844: the controls the tab bar and the AI orb hid on main are reached, and visible', async ({ page }) => {
+    // On main, at this size: family COO's "View all" under the orb and
+    // "Change language" under the tab bar; dental's "Add Dentist" under the
+    // orb and "Add visit" under the tab bar. Each must be reached by Tab, so
+    // the walk cannot pass by stopping short, and none may be hidden.
+    test.setTimeout(90_000);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signIn(page, '/dashboard/family-coo');
+    for (const [route, named] of [
+      ['/dashboard/family-coo', ['View all', 'Change language']],
+      ['/dashboard/dental', ['Add Dentist', 'Add visit']],
+    ] as const) {
+      const seen = await tabStops(page, route, 30);
+      for (const name of named) {
+        expect(seen.some((s) => s.name.startsWith(name)), `${route}: Tab reached "${name}"`).toBe(true);
       }
-      expect(hidden, `${route}: focus stops hidden under fixed chrome`).toEqual([]);
+      expect(seen.filter((s) => s.hiddenBy).map((s) => `${route}: "${s.name}" under ${s.hiddenBy}`)).toEqual([]);
     }
   });
 
