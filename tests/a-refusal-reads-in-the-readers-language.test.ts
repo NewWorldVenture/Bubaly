@@ -17,8 +17,8 @@ import {
 // sentences, from ~700 call sites. A German family refused by RLS read
 // "You don't have permission to do that…" on an otherwise German screen. The
 // sentences are catalogue keys now, and they reach the reader two ways:
-//   - in the browser, describeDbError answers in the language LocaleProvider
-//     last rendered;
+//   - in the browser, describeDbError answers in the language of the latest
+//     LocaleProvider still mounted;
 //   - a sentence written on the server (a server action's `{ error }`) is put
 //     into the reader's language where it is shown: the toast, ActionError and
 //     a form field's error.
@@ -36,12 +36,16 @@ const REFUSALS: Record<DbErrorKey, unknown> = {
   'dbError.network': new TypeError('Failed to fetch'),
 };
 
+/** What a test registered, to take out again afterwards, as unmounting does. */
+const mounted: (() => void)[] = [];
+const remember = (messages: Record<string, string>) => { const leave = rememberDbErrorText(messages); mounted.push(leave); return leave; };
+
 /** A browser for the length of one test: rememberDbErrorText only listens there. */
 function inBrowser(run: () => void) {
   const had = 'window' in globalThis;
   if (!had) (globalThis as { window?: unknown }).window = globalThis;
   try { run(); } finally {
-    rememberDbErrorText(getMessages('en-US'));
+    for (const leave of mounted.splice(0).reverse()) leave();
     if (!had) delete (globalThis as { window?: unknown }).window;
   }
 }
@@ -63,6 +67,25 @@ describe('the five sentences are in every full catalogue', () => {
     }
   });
 
+  // localizeDbErrorText finds a sentence by its exact words, in any language
+  // it has seen, and swaps in the receiving reader's. That holds only while
+  // each of the 35 sentences (five keys, seven catalogues) names one key and
+  // none sits inside another's: otherwise a swap could rewrite part of a
+  // different sentence.
+  it('each of the 35 sentences is one key’s, and none is inside another', () => {
+    const all = (['en-US', ...FULL] as const).flatMap((locale) => {
+      const raw = JSON.parse(readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8')) as Record<string, string>;
+      return KEYS.map((key) => ({ locale, key, sentence: raw[key] }));
+    });
+    expect(all).toHaveLength(35);
+    for (const a of all) {
+      for (const b of all) {
+        if (a.sentence === b.sentence) expect(b.key, `${a.locale} ${a.key} = ${b.locale} ${b.key}`).toBe(a.key);
+        else expect(b.sentence.includes(a.sentence), `${a.locale} ${a.key} inside ${b.locale} ${b.key}`).toBe(false);
+      }
+    }
+  });
+
   it('every surface carries them, so the toast can translate on a public page too', () => {
     expect(ROOT_CHROME_SCOPE).toContain('dbError');
     for (const scope of [ROOT_CHROME_SCOPE, MARKETING_SCOPE, AUTH_SCOPE, PUBLIC_LINK_SCOPE, SURVEY_SCOPE]) {
@@ -80,7 +103,7 @@ describe('describeDbError answers in the reader’s language in the browser', ()
 
   it('in a German browser it is German, for describeActionError too', () => {
     inBrowser(() => {
-      rememberDbErrorText(de);
+      remember(de);
       for (const key of KEYS) {
         expect(describeDbError(REFUSALS[key], 'fallback'), key).toBe(de[key]);
         expect(describeActionError(REFUSALS[key], 'fallback'), key).toBe(de[key]);
@@ -92,12 +115,33 @@ describe('describeDbError answers in the reader’s language in the browser', ()
 
   it('follows a change of language, and a catalogue without the sentences changes nothing', () => {
     inBrowser(() => {
-      rememberDbErrorText(de);
-      rememberDbErrorText({ 'toast.dismiss': 'Schließen' });
+      remember(de);
+      remember({ 'toast.dismiss': 'Schließen' });
       expect(describeDbError(REFUSALS['dbError.conflict'])).toBe(de['dbError.conflict']);
-      rememberDbErrorText(getMessages('fr-FR'));
+      remember(getMessages('fr-FR'));
       expect(describeDbError(REFUSALS['dbError.conflict'])).toBe(getMessages('fr-FR')['dbError.conflict']);
     });
+  });
+
+  it('a nested provider that goes away leaves the one around it current, in whichever order they go', () => {
+    const fr = getMessages('fr-FR');
+    const refused = REFUSALS['dbError.permission'];
+    inBrowser(() => {
+      remember(fr);
+      const leaveGerman = remember(de);
+      expect(describeDbError(refused)).toBe(de['dbError.permission']);
+      leaveGerman();
+      expect(describeDbError(refused)).toBe(fr['dbError.permission']);
+    });
+    inBrowser(() => {
+      // The outer one going first (a remount above) leaves the inner one current.
+      const leaveFrench = remember(fr);
+      remember(de);
+      leaveFrench();
+      expect(describeDbError(refused)).toBe(de['dbError.permission']);
+    });
+    // Every provider gone: English, as on the server.
+    inBrowser(() => expect(describeDbError(refused)).toBe(DB_ERROR_ENGLISH['dbError.permission']));
   });
 });
 

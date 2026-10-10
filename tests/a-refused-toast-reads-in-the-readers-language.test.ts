@@ -15,7 +15,9 @@ import { localeOrDefault } from '@/lib/i18n/locales';
 // useRef hold slots, the context is the reader's, and effects run only where a
 // test says the component has committed.
 
-const mocks = vi.hoisted(() => ({ slots: [] as unknown[], cursor: 0, context: null as unknown, runEffects: false }));
+const mocks = vi.hoisted(() => ({
+  slots: [] as unknown[], cursor: 0, context: null as unknown, runEffects: false, cleanups: [] as (() => void)[],
+}));
 
 vi.mock('react', async (original) => ({
   ...await original<typeof import('react')>(),
@@ -33,13 +35,17 @@ vi.mock('react', async (original) => ({
   },
   useCallback: (fn: unknown) => fn,
   useMemo: (factory: () => unknown) => factory(),
-  useEffect: (effect: () => void) => { if (mocks.runEffects) effect(); },
+  useEffect: (effect: () => void | (() => void)) => {
+    if (!mocks.runEffects) return;
+    const cleanup = effect();
+    if (cleanup) mocks.cleanups.push(cleanup);
+  },
   useContext: () => mocks.context,
 }));
 
 const { ToastProvider } = await import('@/components/ui/toast');
 const { LocaleProvider } = await import('@/components/i18n/locale-provider');
-const { describeDbError, rememberDbErrorText } = await import('@/lib/supabase/errors');
+const { describeDbError } = await import('@/lib/supabase/errors');
 
 type Props = Record<string, unknown> & { children?: ReactNode };
 const propsOf = (el: ReactElement): Props => el.props as Props;
@@ -105,7 +111,8 @@ describe('LocaleProvider gives describeDbError the reader’s sentences once it 
 
   afterEach(() => {
     mocks.runEffects = false;
-    rememberDbErrorText(getMessages('en-US'));
+    // Unmount: each effect's cleanup, latest first.
+    for (const cleanup of mocks.cleanups.splice(0).reverse()) cleanup();
     delete (globalThis as { window?: unknown }).window;
   });
 
@@ -122,6 +129,9 @@ describe('LocaleProvider gives describeDbError the reader’s sentences once it 
     mocks.runEffects = true;
     provide();
     expect(describeDbError(refused)).toBe(german);
+    // And it takes the sentences with it when it unmounts.
+    for (const cleanup of mocks.cleanups.splice(0).reverse()) cleanup();
+    expect(describeDbError(refused)).toBe(DB_ERROR_ENGLISH['dbError.permission']);
   });
 
   it('never on the server, where it would be whichever request rendered last', () => {

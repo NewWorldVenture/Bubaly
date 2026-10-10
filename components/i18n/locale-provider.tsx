@@ -74,7 +74,9 @@ export function LocaleProvider({
     [locale, source, messages, zone],
   );
   // describeDbError's five sentences, for the browser's later refusals. After
-  // commit, so the hydrating render says what the server said (I18N-011).
+  // commit, so the hydrating render says what the server said; and taken out
+  // again on unmount, so a nested provider that goes away leaves the one
+  // around it current (I18N-011).
   useEffect(() => rememberDbErrorText(messages), [messages]);
 
   return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>;

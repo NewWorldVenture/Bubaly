@@ -9,7 +9,9 @@ import { reactBrowserScripts } from './helpers/react-browser';
 // be German; the same toast, field and ActionError, still holding it, must turn
 // French when the reader switches to French; and a sentence written on the
 // server (English) must follow whichever provider receives it, a nested one
-// included, without leaning on the provider that registered last.
+// included; and a nested provider that goes away must leave the one around it
+// current. (This drives the components and the registry; it does not
+// exercise hydration, or the toast's focus and queue behaviour.)
 
 const { react, reactDom } = reactBrowserScripts('development');
 const sources = Object.fromEntries([
@@ -32,7 +34,7 @@ const ENGLISH = JSON.parse(fs.readFileSync('lib/i18n/messages/en-US.json', 'utf8
 declare global {
   interface Window {
     __refusal: {
-      render: (locale: string, messages: Record<string, string>, nested?: { locale: string; messages: Record<string, string> } | null) => void;
+      render: (locale: string, nested?: string | null) => void; describe: () => string; registered: string[];
       refuse: () => void; serverRefusal: (english: string) => void; unmount: () => void; errors: string[];
     };
   }
@@ -47,7 +49,10 @@ async function start(page: Page) {
   await page.addScriptTag({ content: reactDom });
   await page.addScriptTag({ content: `(() => {
     const sources = ${JSON.stringify(sources)};
-    const h = window.__refusal = { errors: [] };
+    // One object per catalogue for the page's whole life: a provider handed the
+    // same object again does not register again, as in the app.
+    const catalogues = ${JSON.stringify({ 'de-DE': DE, 'fr-FR': FR })};
+    const h = window.__refusal = { errors: [], registered: [] };
     const mocks = {
       react: window.React,
       'lucide-react': new Proxy({}, { get: () => () => null }),
@@ -66,7 +71,16 @@ async function start(page: Page) {
     const { ToastProvider, useToast } = load('@/components/ui/toast');
     const { Field, Input } = load('@/components/ui/input');
     const { ActionError } = load('@/components/ui/action-error');
-    const { describeDbError } = load('@/lib/supabase/errors');
+    const errorsModule = load('@/lib/supabase/errors');
+    const { describeDbError } = errorsModule;
+    // Record each registration a provider makes, by catalogue.
+    const remember = errorsModule.rememberDbErrorText;
+    errorsModule.rememberDbErrorText = (messages) => {
+      h.registered.push(Object.keys(catalogues).find((k) => catalogues[k] === messages) || 'other');
+      return remember(messages);
+    };
+    const RLS = { code: '42501', message: 'new row violates row-level security policy' };
+    h.describe = () => describeDbError(RLS, 'fallback');
     const { localeOrDefault } = load('@/lib/i18n/locales');
     const e = React.createElement;
 
@@ -76,7 +90,7 @@ async function start(page: Page) {
       const [error, setError] = React.useState(null);
       const { error: toastError } = useToast();
       h.refuse = () => {
-        const text = describeDbError({ code: '42501', message: 'new row violates row-level security policy' }, 'fallback');
+        const text = describeDbError(RLS, 'fallback');
         ReactDOM.flushSync(() => setError(text));
         ReactDOM.flushSync(() => toastError(text));
       };
@@ -89,11 +103,11 @@ async function start(page: Page) {
       return e('div', { id: 'nested' }, e(Field, { label: 'Nested', error: text }, (id) => e(Input, { id })));
     }
     const root = ReactDOM.createRoot(document.getElementById('root'));
-    h.render = (locale, messages, nested) => ReactDOM.flushSync(() => root.render(
-      e(LocaleProvider, { locale: localeOrDefault(locale), source: 'default', messages },
+    h.render = (locale, nested) => ReactDOM.flushSync(() => root.render(
+      e(LocaleProvider, { locale: localeOrDefault(locale), source: 'default', messages: catalogues[locale] },
         e(ToastProvider, null,
           e(Form),
-          nested ? e(LocaleProvider, { locale: localeOrDefault(nested.locale), source: 'default', messages: nested.messages },
+          nested ? e(LocaleProvider, { locale: localeOrDefault(nested), source: 'default', messages: catalogues[nested] },
             e(Nested, { text: ${JSON.stringify(ENGLISH)} })) : null))));
     h.unmount = () => ReactDOM.flushSync(() => root.unmount());
   })();` });
@@ -103,42 +117,58 @@ async function start(page: Page) {
 
 const field = (page: Page) => page.locator('form [role="alert"]').first();
 const action = (page: Page) => page.locator('#action [role="alert"]');
-/** The toast stack's messages: whatever is inside the live region, not the form. */
-const toastText = (page: Page) => page.locator('[aria-live]').filter({ hasNotText: 'Title' });
+/** The toasts in the stack, oldest first. */
+const toasts = (page: Page) => page.locator('[data-toast]');
 
 test.describe('a refusal follows the reader’s language', () => {
   test('written in German, it is German; the reader switches to French, and the same toast, field and ActionError turn French', async ({ page }) => {
     const errors = await start(page);
-    await page.evaluate((m) => window.__refusal.render('de-DE', m), DE);
+    await page.evaluate(() => window.__refusal.render('de-DE'));
     // The provider registers after it commits; the refusal comes after that.
     await page.evaluate(() => window.__refusal.refuse());
     await expect(field(page)).toHaveText(DE['dbError.permission']);
     await expect(action(page)).toHaveText(DE['dbError.permission']);
-    await expect(toastText(page)).toContainText(DE['dbError.permission']);
+    await expect(toasts(page)).toHaveCount(1);
+    await expect(toasts(page)).toContainText(DE['dbError.permission']);
 
-    await page.evaluate((m) => window.__refusal.render('fr-FR', m), FR);
+    await page.evaluate(() => window.__refusal.render('fr-FR'));
     await expect(field(page)).toHaveText(FR['dbError.permission']);
     await expect(action(page)).toHaveText(FR['dbError.permission']);
-    await expect(toastText(page)).toContainText(FR['dbError.permission']);
-    await expect(toastText(page)).not.toContainText(DE['dbError.permission']);
+    await expect(toasts(page)).toHaveCount(1);
+    await expect(toasts(page)).toContainText(FR['dbError.permission']);
+    await expect(toasts(page)).not.toContainText(DE['dbError.permission']);
     // The toast is still the toast: a live region, a labelled dismiss control in the reader's language.
     await expect(page.getByRole('button', { name: FR['toast.dismiss'] })).toBeVisible();
     expect(errors).toEqual([]);
   });
 
-  test('a sentence written on the server follows the provider that receives it, a nested one included, and an unmounted one leaves nothing behind', async ({ page }) => {
+  test('a nested provider that registered last, removed without the outer one registering again, leaves the reader French', async ({ page }) => {
     const errors = await start(page);
-    // A French page with a German subtree: each shows the server's English in its own language.
-    await page.evaluate(({ fr, de }) => window.__refusal.render('fr-FR', fr, { locale: 'de-DE', messages: de }), { fr: FR, de: DE });
+    await page.evaluate(() => window.__refusal.render('fr-FR'));
+    expect(await page.evaluate(() => window.__refusal.describe())).toBe(FR['dbError.permission']);
+
+    // A later commit mounts a German provider inside: it registers last.
+    await page.evaluate(() => window.__refusal.render('fr-FR', 'de-DE'));
+    expect(await page.evaluate(() => window.__refusal.registered)).toEqual(['fr-FR', 'de-DE']);
+    expect(await page.evaluate(() => window.__refusal.describe())).toBe(DE['dbError.permission']);
+    // A sentence written on the server follows whichever provider shows it.
     await page.evaluate((english) => window.__refusal.serverRefusal(english), ENGLISH);
-    await expect(toastText(page)).toContainText(FR['dbError.permission']);
+    await expect(toasts(page)).toHaveCount(1);
+    await expect(toasts(page)).toContainText(FR['dbError.permission']);
     await expect(page.locator('#nested [role="alert"]')).toHaveText(DE['dbError.permission']);
-    // The nested provider (which registered last) goes away; the outer one still answers in French.
-    await page.evaluate((fr) => window.__refusal.render('fr-FR', fr, null), FR);
+
+    // The German one goes; the outer provider's catalogue is the same object,
+    // so it does not register again (the record proves it).
+    await page.evaluate(() => window.__refusal.render('fr-FR'));
     await expect(page.locator('#nested')).toHaveCount(0);
+    expect(await page.evaluate(() => window.__refusal.registered)).toEqual(['fr-FR', 'de-DE']);
+    // Its entry went with it: describeDbError is French again, and so is a new refusal.
+    expect(await page.evaluate(() => window.__refusal.describe())).toBe(FR['dbError.permission']);
     await page.evaluate(() => window.__refusal.refuse());
     await expect(field(page)).toHaveText(FR['dbError.permission']);
-    await page.evaluate(() => window.__refusal.unmount());
+    await expect(toasts(page)).toHaveCount(2);
+    await expect(toasts(page).last()).toContainText(FR['dbError.permission']);
+    await expect(toasts(page).filter({ hasText: DE['dbError.permission'] })).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 });

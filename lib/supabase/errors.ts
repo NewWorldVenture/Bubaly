@@ -10,9 +10,10 @@
 // function with ~730 callers on both sides of the network, so it cannot take
 // a translator from each of them; the sentences reach the reader two ways:
 //
-//   1. IN THE BROWSER, `LocaleProvider` remembers the five sentences of the
-//      locale it renders, and describeDbError answers in them. Remembered in
-//      an effect, not during render: a server-rendered error is English (the
+//   1. IN THE BROWSER, each mounted `LocaleProvider` registers the five
+//      sentences of the locale it renders, and describeDbError answers in the
+//      latest one's. Registered in an effect (and taken out in its cleanup)
+//      rather than during render: a server-rendered error is English (the
 //      server has no reader to remember), and the client's first render must
 //      say the same thing or hydration fails.
 //   2. ON THE SCREEN, for a sentence written on the SERVER (a server action's
@@ -36,7 +37,13 @@ export type DbErrorKey = keyof typeof DB_ERROR_ENGLISH;
 
 const KEYS = Object.keys(DB_ERROR_ENGLISH) as DbErrorKey[];
 
-let remembered: Partial<Record<DbErrorKey, string>> = {};
+/**
+ * The sentences of every LocaleProvider mounted in the browser, in the order
+ * they committed; the latest is the one describeDbError answers in. A provider
+ * that unmounts takes its own entry out, so a nested one that goes away leaves
+ * the one around it current again.
+ */
+const registrations: Partial<Record<DbErrorKey, string>>[] = [];
 
 /**
  * Every language the five sentences have been seen in, sentence → key. Only
@@ -57,22 +64,28 @@ function learn(lookup: (key: DbErrorKey) => string | undefined): void {
 }
 
 /**
- * Called by `LocaleProvider` once it has rendered, in the browser only: the
+ * Called by `LocaleProvider` once it has committed, in the browser only: the
  * server serves many readers at once, so a module-level choice there would be
  * whichever request rendered last. A catalogue without the five keys (a scope
- * that left them out) changes nothing.
+ * that left them out) changes nothing. Returns the provider's way out, for its
+ * effect's cleanup.
  */
-export function rememberDbErrorText(messages: Readonly<Record<string, string>>): void {
-  if (typeof window === 'undefined') return;
+export function rememberDbErrorText(messages: Readonly<Record<string, string>>): () => void {
+  if (typeof window === 'undefined') return () => {};
   learn((key) => messages[key]);
-  const next: Partial<Record<DbErrorKey, string>> = {};
-  for (const key of KEYS) if (messages[key]) next[key] = messages[key];
-  if (Object.keys(next).length) remembered = next;
+  const entry: Partial<Record<DbErrorKey, string>> = {};
+  for (const key of KEYS) if (messages[key]) entry[key] = messages[key];
+  if (!Object.keys(entry).length) return () => {};
+  registrations.push(entry);
+  return () => {
+    const at = registrations.lastIndexOf(entry);
+    if (at >= 0) registrations.splice(at, 1);
+  };
 }
 
-/** One of the five sentences, in the browser's remembered language, else English. */
+/** One of the five sentences, in the latest mounted provider's language, else English. */
 export function dbErrorText(key: DbErrorKey): string {
-  return remembered[key] ?? DB_ERROR_ENGLISH[key];
+  return registrations[registrations.length - 1]?.[key] ?? DB_ERROR_ENGLISH[key];
 }
 
 /**
