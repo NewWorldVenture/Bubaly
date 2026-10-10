@@ -167,13 +167,16 @@ export async function syncIdeaToGithub(admin: Admin, idea: IdeaForIssue): Promis
     console.error('[feedback-notify] GitHub issue create failed', e);
     // No issue exists, so give the claim back for the next pass to file it.
     // Conditional on our own stamp: a worker that took over an expired claim
-    // owns the idea now. A release that fails only waits out the lease.
-    const { error: releaseError } = await admin.from('feedback_ideas')
+    // owns the idea now, so zero rows (that, or the idea was deleted) is not a
+    // failure. A release that errors only waits out the lease.
+    const { data: released, error: releaseError } = await admin.from('feedback_ideas')
       .update({ github_synced_at: null })
       .eq('id', idea.id)
       .is('github_issue_number', null)
-      .eq('github_synced_at', claimStamp);
+      .eq('github_synced_at', claimStamp)
+      .select('id');
     if (releaseError) console.error('[feedback-notify] GitHub issue claim release failed', { ideaId: idea.id, error: releaseError });
+    else if (wroteNoRows(released)) console.warn('[feedback-notify] GitHub issue claim was no longer ours to release', { ideaId: idea.id });
     return { ok: false, skipped: false, error: e instanceof Error ? e.message : 'GitHub error' };
   }
   try {
