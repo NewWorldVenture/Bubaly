@@ -55,7 +55,7 @@ async function saveRow(
   // cannot match zero rows. That asymmetry is why only one branch grows a
   // `.select()`. Audit C1-S9-46.
   const { data, error } = id
-    ? await supabase.from(table as 'vehicles').update(row as never).eq('id', id).eq('family_id', familyId).select('id')
+    ? await supabase.from(table as 'vehicles').update(row as never).eq('id', id).eq('family_id', familyId).is('deleted_at', null).select('id')
     : await supabase.from(table as 'vehicles').insert({ ...row, family_id: familyId, created_by: userId } as never);
   if (error) throw refusalError(describeActionError(error, label), refusalForError(error));
   if (id && wroteNoRows(data)) throw refusalError(label, 'notSaved');

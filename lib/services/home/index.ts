@@ -216,6 +216,8 @@ export async function saveContractor(scope: ServiceScope, input: SaveContractorI
       .update(patch)
       .eq('id', targetId)
       .eq('family_id', scope.familyId)
+      // A deleted contractor is not edited back into a hidden row: it is not found.
+      .is('deleted_at', null)
       .select('*')
       .maybeSingle();
     if (error) {
