@@ -8,6 +8,7 @@ import type { GEvent, GTask } from '@/lib/sync/providers/google';
 type Row = Record<string, unknown>;
 type Call = { url: URL; method: string; body: Row | null };
 export const ACCOUNT = { id: 'account', family_id: 'family', user_id: 'owner', external_id: 'synthetic@example.invalid' };
+const ITEM_TABLES = new Set(['sync_calendar_events', 'sync_reminders']);
 export const NEXT = 'next-synthetic-cursor';
 export const STALE = 'prior-synthetic-cursor';
 export const CANCELLED_INSTANCE = { id: 'deleted', status: 'cancelled', recurringEventId: 'series',
@@ -28,6 +29,8 @@ export function syncSdkFixture(events: GEvent[], options: {
   rpcFailure?: SyncRpcFailure; rawMappingFailure?: boolean; committedMappingFailure?: boolean; malformedReceipt?: boolean; uncertainReceipt?: boolean; racedFields?: Row;
   tasks?: GTask[]; zeroLiveWrite?: boolean; moveBeforeLiveWrite?: boolean;
   moveMappingBeforeWrite?: boolean; zeroPushWrite?: boolean;
+  /** Awaited before each synthetic database request is applied, so a test can pause one pull mid-flight. */
+  gate?: (call: { table: string; method: string; url: URL; body: Row | null }) => Promise<void> | void;
 } = {}) {
   const rows: Record<string, Row[]> = {
     sync_accounts: [{ ...ACCOUNT, provider: 'google', sync_direction: options.direction ?? 'import', metadata: {} }],
@@ -47,6 +50,9 @@ export function syncSdkFixture(events: GEvent[], options: {
       provider: 'google', item_type: 'reminder', external_id: 'remote-task', local_id: 'local-task', metadata: {} });
   }
   const calls: Call[] = [];
+  // The set_updated_at trigger: every item write gets a new, later updated_at.
+  let clock = Date.parse('2026-06-01T00:00:00Z');
+  const tick = () => new Date(clock += 1000).toISOString();
   const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), {
     status, headers: { 'Content-Type': 'application/json' },
   });
@@ -122,6 +128,7 @@ export function syncSdkFixture(events: GEvent[], options: {
       return json(options.malformedReceipt ? { created, mapping: { ...mapping, family_id: 'another-family' } } : { created, mapping });
     }
     const table = url.pathname.slice('/rest/v1/'.length);
+    await options.gate?.({ table, method, url, body });
     const tableRows = rows[table];
     if (!tableRows) throw new Error(`Unexpected synthetic table: ${table}`);
     if (table === 'sync_calendar_events' && method === 'PATCH' && body?.title && options.moveBeforeLiveWrite) {
@@ -143,11 +150,17 @@ export function syncSdkFixture(events: GEvent[], options: {
         if (options.failedDelete) return json({ code: '42501', message: 'Synthetic deletion refused', details: null, hint: null }, 403);
         if (options.zeroDelete) return json(null);
       }
-      result.forEach(row => Object.assign(row, body));
+      result.forEach(row => Object.assign(row, body, ITEM_TABLES.has(table) ? { updated_at: tick() } : {}));
     } else if (method === 'POST') {
       if (!body) throw new Error('Synthetic insert body missing');
       if (table === 'sync_external_mappings' && (options.rpcFailure === 'mapping' || options.rawMappingFailure)) return json({ code: '42501', message: 'Synthetic mapping refused' }, 403);
-      result = [{ id: `${table}-${tableRows.length}`, ...body }];
+      // 0018's unique (provider, item_type, external_id, account_id) and
+      // (provider, item_type, local_id, account_id).
+      if (table === 'sync_external_mappings' && tableRows.some(row => row.provider === body.provider && row.item_type === body.item_type
+        && row.account_id === body.account_id && (row.external_id === body.external_id || row.local_id === body.local_id))) {
+        return json({ code: '23505', message: 'duplicate key value violates unique constraint', details: null, hint: null }, 409);
+      }
+      result = [{ id: `${table}-${tableRows.length}`, ...(ITEM_TABLES.has(table) ? { updated_at: tick() } : {}), ...body }];
       tableRows.push(...result);
       // The INSERT commits, but the answer is lost: the client reports a network error.
       if (table === 'sync_external_mappings' && options.committedMappingFailure) throw new TypeError('fetch failed');

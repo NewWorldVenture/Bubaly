@@ -164,15 +164,21 @@ async function ensureLegacyContainer(admin: Admin, account: Account, provider: S
  * item then would leave a mapping naming a missing row, which wedges every
  * later pull. If the mapping did commit, the next run finds it; if it did not,
  * the next run finds the unmapped item for this remote id in this account's
- * mirror and adopts it (live, as the RPC inserts it) instead of inserting a
- * second one. An item another mapping already claims, one owned by someone
- * else, or more than one candidate, fails closed. */
+ * mirror and adopts it (live, as the RPC inserts it; see adoptLegacyItem)
+ * instead of inserting a second one. An item another mapping already claims,
+ * one owned by someone else, or more than one candidate, fails closed. */
 async function createLegacyItem(admin: Admin, account: Account, provider: SyncProviderEnum,
   kind: Kind, containerId: string, externalId: string, fields: Json, hash: string,
 ): Promise<{ created: true; mapping: PullMapping }> {
   const row = record(fields) ?? {};
   const now = () => new Date().toISOString();
-  const orphanId = await findUnmappedLegacyItem(admin, account, provider, kind, containerId, externalId);
+  const metadata: Json = { lastHash: hash };
+  const mappingFields = {
+    ...(kind === 'event' ? { external_etag: (row as { etag?: string | null }).etag } : {}), metadata, last_synced_at: now(),
+  };
+  const orphan = await findUnmappedLegacyItem(admin, account, provider, kind, containerId, externalId);
+  const adopted = (mappingId: string) => ({ created: true as const,
+    mapping: { id: mappingId, family_id: account.family_id, local_id: orphan!.id, external_id: externalId, metadata } });
   let localId: string;
   if (kind === 'event') {
     const event = row as { uid?: string | null; title: string; description?: string | null; location?: string | null;
@@ -183,14 +189,15 @@ async function createLegacyItem(admin: Admin, account: Account, provider: SyncPr
       status: event.status, etag: event.etag, content_hash: hash, sync_status: 'synced' as const,
       last_synced_at: now(), metadata: REMOTE_META,
     };
-    const { data: written, error: writeError } = orphanId
-      ? await admin.from('sync_calendar_events').update({ ...content, deleted_at: null })
-        .eq('id', orphanId).eq('calendar_id', containerId).eq('family_id', account.family_id)
-        .eq('provider', provider).eq('external_id', externalId).select('id').maybeSingle()
-      : await admin.from('sync_calendar_events').insert({
-        calendar_id: containerId, family_id: account.family_id, user_id: account.user_id, provider,
-        external_id: externalId, ...content,
-      }).select('id').single();
+    if (orphan) {
+      return adopted(await adoptLegacyItem(admin, account, provider, kind, externalId, orphan, mappingFields, async fence =>
+        admin.from('sync_calendar_events').update({ ...content, deleted_at: null })
+          .match({ ...fence, calendar_id: containerId }).select('id').maybeSingle()));
+    }
+    const { data: written, error: writeError } = await admin.from('sync_calendar_events').insert({
+      calendar_id: containerId, family_id: account.family_id, user_id: account.user_id, provider,
+      external_id: externalId, ...content,
+    }).select('id').single();
     localId = requireSyncWrite(written, writeError, 'event creation').id;
   } else {
     const reminder = row as { title: string; notes?: string | null; due_at?: string | null; is_completed?: boolean; completed_at?: string | null };
@@ -198,35 +205,78 @@ async function createLegacyItem(admin: Admin, account: Account, provider: SyncPr
       title: reminder.title, notes: reminder.notes, due_at: reminder.due_at, is_completed: reminder.is_completed, completed_at: reminder.completed_at,
       content_hash: hash, sync_status: 'synced' as const, last_synced_at: now(), metadata: REMOTE_META,
     };
-    const { data: written, error: writeError } = orphanId
-      ? await admin.from('sync_reminders').update({ ...content, deleted_at: null })
-        .eq('id', orphanId).eq('list_id', containerId).eq('family_id', account.family_id)
-        .eq('provider', provider).eq('external_id', externalId).select('id').maybeSingle()
-      : await admin.from('sync_reminders').insert({
-        list_id: containerId, family_id: account.family_id, user_id: account.user_id, provider, external_id: externalId, ...content,
-      }).select('id').single();
+    if (orphan) {
+      return adopted(await adoptLegacyItem(admin, account, provider, kind, externalId, orphan, mappingFields, async fence =>
+        admin.from('sync_reminders').update({ ...content, deleted_at: null })
+          .match({ ...fence, list_id: containerId }).select('id').maybeSingle()));
+    }
+    const { data: written, error: writeError } = await admin.from('sync_reminders').insert({
+      list_id: containerId, family_id: account.family_id, user_id: account.user_id, provider, external_id: externalId, ...content,
+    }).select('id').single();
     localId = requireSyncWrite(written, writeError, 'reminder creation').id;
   }
-  const metadata: Json = { lastHash: hash };
   const { data: mappingRow, error: mappingInsertError } = await admin.from('sync_external_mappings').insert({
     family_id: account.family_id, account_id: account.id, provider, item_type: kind, local_id: localId, external_id: externalId,
-    ...(kind === 'event' ? { external_etag: (row as { etag?: string | null }).etag } : {}),
-    metadata, last_synced_at: now(),
+    ...mappingFields,
   }).select('id').maybeSingle();
   const mapping = requireSyncWrite(mappingRow, mappingInsertError, `${kind} mapping creation`);
   return { created: true, mapping: { id: mapping.id, family_id: account.family_id, local_id: localId, external_id: externalId, metadata } };
 }
 
+type Orphan = { id: string; updated_at: string | null };
+type Fence = { id: string; family_id: string; user_id: string; provider: SyncProviderEnum; external_id: string; updated_at?: string };
+
+/** Adopt an orphan claim-first. Two pulls of this account can both read the
+ * orphan as unmapped, so neither may write it on that reading alone. Each
+ * first inserts this account's mapping for the remote id; 0018's
+ * unique (provider, item_type, external_id, account_id) lets exactly one of
+ * them commit (and unique (provider, item_type, local_id, account_id) refuses
+ * a second mapping of this account naming the same item). Only the winner
+ * refreshes the item, and only while it is still in this account's mirror,
+ * still owned by the account owner, and unchanged since the lookup
+ * (updated_at, which set_updated_at moves on every write), so a newer
+ * snapshot or a concurrent edit is never overwritten. The loser changes
+ * nothing and the run fails; its next run finds the winner's mapping.
+ * The mapping id is chosen here, so a claim whose answer is lost after it
+ * committed is recognised as ours and completed instead of wedging. If the
+ * refresh does not apply, the claim is released (only that mapping row; the
+ * item is never deleted) and the run fails; the next run reads the item as it
+ * is then. Residual: if the process stops, or the release fails, after the
+ * claim commits but before the refresh, the mapping names the unrefreshed item
+ * with this snapshot's hash and the mapped update path continues from there. */
+async function adoptLegacyItem(admin: Admin, account: Account, provider: SyncProviderEnum, kind: Kind,
+  externalId: string, orphan: Orphan, mappingFields: { metadata: Json; last_synced_at: string; external_etag?: string | null },
+  refresh: (fence: Fence) => PromiseLike<{ data: { id: string } | null; error: unknown }>,
+): Promise<string> {
+  const ours = { id: crypto.randomUUID(), family_id: account.family_id, account_id: account.id, provider, item_type: kind,
+    local_id: orphan.id, external_id: externalId };
+  const { error: claimError } = await admin.from('sync_external_mappings').insert({ ...ours, ...mappingFields });
+  if (claimError) {
+    const { data: committed, error: recheckError } = await admin.from('sync_external_mappings').select('id').match(ours).maybeSingle();
+    if (recheckError || !committed) throw new Error(`Sync ${kind} mapping creation failed`);
+  }
+  const { data: refreshed, error: refreshError } = await refresh({
+    id: orphan.id, family_id: account.family_id, user_id: account.user_id as string, provider, external_id: externalId,
+    ...(orphan.updated_at ? { updated_at: orphan.updated_at } : {}),
+  });
+  if (refreshError || !refreshed) {
+    await admin.from('sync_external_mappings').delete().match(ours);
+    throw new Error(`Sync ${kind} retry scope unavailable`);
+  }
+  return ours.id;
+}
+
 /** An item a failed earlier attempt left in this account's mirror without its
- * mapping. The caller only gets here when this account has no mapping for the
- * remote id, so any mapping that names the item belongs to something else. */
+ * mapping. The caller only gets here when this account had no mapping for the
+ * remote id, so any mapping that names the item belongs to something else.
+ * This is only a reading: adoptLegacyItem claims the item before writing it. */
 async function findUnmappedLegacyItem(admin: Admin, account: Account, provider: SyncProviderEnum,
   kind: Kind, containerId: string, externalId: string,
-): Promise<string | null> {
+): Promise<Orphan | null> {
   const { data: found, error: findError } = kind === 'event'
-    ? await admin.from('sync_calendar_events').select('id, user_id')
+    ? await admin.from('sync_calendar_events').select('id, user_id, updated_at')
       .eq('calendar_id', containerId).eq('family_id', account.family_id).eq('provider', provider).eq('external_id', externalId).limit(2)
-    : await admin.from('sync_reminders').select('id, user_id')
+    : await admin.from('sync_reminders').select('id, user_id, updated_at')
       .eq('list_id', containerId).eq('family_id', account.family_id).eq('provider', provider).eq('external_id', externalId).limit(2);
   if (findError || !found) throw new Error(`Sync ${kind} retry lookup failed`);
   if (found.length === 0) return null;
@@ -237,7 +287,8 @@ async function findUnmappedLegacyItem(admin: Admin, account: Account, provider: 
     .eq('item_type', kind).eq('local_id', found[0].id).limit(1);
   if (claimError || !claims) throw new Error(`Sync ${kind} retry lookup failed`);
   if (claims.length > 0) throw new Error(`Sync ${kind} retry scope unavailable`);
-  return found[0].id;
+  // updated_at is NOT NULL in the schema; a row without one only gets the ownership fence.
+  return { id: found[0].id, updated_at: typeof found[0].updated_at === 'string' ? found[0].updated_at : null };
 }
 
 /** Without 0494, the previous production cursor write: as soon as the calendar

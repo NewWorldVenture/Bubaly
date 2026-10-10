@@ -125,6 +125,78 @@ for (const engine of ['google', 'generic'] as const) {
           .toEqual([expect.objectContaining({ account_id: ACCOUNT.id, local_id: 'orphan', metadata: { lastHash: items[0].content_hash } })]);
       });
 
+      // A pull reads the orphan as unmapped and owned by this account, and is
+      // paused before its first write; `atWrite` runs there once.
+      const raced = (atWrite: (orphan: Record<string, unknown>) => Promise<void> | void) => {
+        const remote = kind === 'event' ? { ...event } : { ...task };
+        let looked = false, held = false;
+        const state = syncSdkFixture(kind === 'event' ? [remote as typeof event] : [], {
+          rpcFailure: 'missing', tasks: kind === 'reminder' ? [remote as typeof task] : [],
+          gate: async ({ table: target, method, url }) => {
+            if (target === 'sync_external_mappings' && method === 'GET' && url.searchParams.get('local_id') === 'eq.orphan') looked = true;
+            else if (looked && !held && method !== 'GET' && (target === table || target === 'sync_external_mappings')) {
+              held = true;
+              await atWrite(state.rows[table].find(row => row.id === 'orphan')!);
+            }
+          },
+        });
+        state.rows.sync_external_mappings = state.rows.sync_external_mappings.filter(row => row.item_type !== kind);
+        state.rows[table] = [{ id: 'orphan', ...container, family_id: ACCOUNT.family_id, user_id: ACCOUNT.user_id,
+          provider: 'google', external_id: external, title: 'Stale partial write', content_hash: 'stale', deleted_at: '2026-05-01T00:00:00Z',
+          updated_at: '2026-05-01T00:00:00.000Z' }];
+        return { ...state, remote: remote as { summary?: string; title?: string } };
+      };
+      const maps = (rows: Record<string, Record<string, unknown>[]>) =>
+        rows.sync_external_mappings.filter(row => row.item_type === kind && (row.external_id === external || row.local_id === 'orphan'));
+
+      it(`${kind} a pull paused before adopting never overwrites the newer snapshot a concurrent pull claimed`, async () => {
+        let paused!: () => void, resume!: () => void;
+        const atA = new Promise<void>(resolve => { paused = resolve; });
+        const resumed = new Promise<void>(resolve => { resume = resolve; });
+        const { db, rows, remote } = raced(async () => { paused(); await resumed; });
+        const pullA = run(db);
+        await atA;
+        remote[kind === 'event' ? 'summary' : 'title'] = 'Newer remote snapshot';
+        expect((await run(db)).error).toBeUndefined();
+        const claimedByB = { ...rows[table].find(row => row.id === 'orphan') };
+        expect(claimedByB).toMatchObject({ title: 'Newer remote snapshot', deleted_at: null, user_id: ACCOUNT.user_id });
+        const [mappingB] = maps(rows);
+        expect(mappingB).toMatchObject({ account_id: ACCOUNT.id, local_id: 'orphan', metadata: { lastHash: claimedByB.content_hash } });
+
+        resume();
+        await pullA;
+        expect(rows[table]).toEqual([claimedByB]);
+        expect(maps(rows)).toEqual([mappingB]);
+      });
+
+      it(`${kind} an orphan that changes owner after the lookup is never adopted`, async () => {
+        const { db, rows } = raced(orphan => { orphan.user_id = 'someone-else'; });
+        expect((await run(db)).error).toBeDefined();
+        expect(rows[table]).toEqual([expect.objectContaining({ id: 'orphan', user_id: 'someone-else', title: 'Stale partial write',
+          content_hash: 'stale', deleted_at: '2026-05-01T00:00:00Z' })]);
+        expect(maps(rows)).toEqual([]);
+      });
+
+      it(`${kind} an orphan edited after the lookup keeps that edit`, async () => {
+        const { db, rows } = raced(orphan => { Object.assign(orphan, { title: 'Concurrent edit', updated_at: '2026-05-02T00:00:00.000Z' }); });
+        expect((await run(db)).error).toBeDefined();
+        expect(rows[table]).toEqual([expect.objectContaining({ id: 'orphan', user_id: ACCOUNT.user_id, title: 'Concurrent edit', content_hash: 'stale' })]);
+        expect(maps(rows)).toEqual([]);
+      });
+
+      it(`${kind} an adoption whose mapping write commits but reports an error is not wedged`, async () => {
+        const options: Parameters<typeof syncSdkFixture>[1] = { committedMappingFailure: true };
+        const { db, rows } = fixture(options);
+        rows[table].push({ id: 'orphan', ...container, family_id: ACCOUNT.family_id, user_id: ACCOUNT.user_id,
+          provider: 'google', external_id: external, title: 'Stale partial write', deleted_at: null });
+        await run(db);
+        options.committedMappingFailure = false;
+        expect((await run(db)).error).toBeUndefined();
+        expect(rows[table]).toEqual([expect.objectContaining({ id: 'orphan', title: kind === 'event' ? event.summary : task.title, deleted_at: null })]);
+        expect(rows.sync_external_mappings.filter(row => row.item_type === kind && row.external_id === external))
+          .toEqual([expect.objectContaining({ account_id: ACCOUNT.id, local_id: 'orphan' })]);
+      });
+
       it(`${kind} an unmapped item owned by someone else is never adopted`, async () => {
         const { db, rows } = fixture();
         rows[table].push({ id: 'foreign', ...container, family_id: ACCOUNT.family_id, user_id: 'someone-else',
