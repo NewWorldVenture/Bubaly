@@ -299,6 +299,21 @@ export async function saveAllowanceRuleAction(input: {
   const amount = Math.trunc(input.amountCents);
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: t('actions.enterAnAllowanceGreaterThan') };
 
+  // A NEW rule names its wallet, and that wallet has to be this family's, read
+  // back here as saveWalletRuleAction does. The insert below stamps the ACTIVE
+  // family on whatever wallet id the screen sent, so a parent in two
+  // households who switched in another tab saved a rule into one pointing at
+  // the other's child: shown on neither allowance page, never paid (the credit
+  // finds no buckets for it, a manual run stops at it), failed by the nightly
+  // cron every night. 0311 is the database's half and is not applied
+  // everywhere. An edit never changes a rule's wallet, so it reads none.
+  if (!input.id) {
+    const { data: cw, error: walletError } = await supabase.from('child_wallets')
+      .select('id').eq('id', input.childWalletId).eq('family_id', familyId).maybeSingle();
+    if (walletError) return actionFailure(walletError, t('actions.couldNotLoadThatChild'));
+    if (!cw) return { ok: false, error: t('actions.childWalletNotFound') };
+  }
+
   // Schedule from the family's calendar day: a parent setting up an allowance
   // on Sunday evening in California would otherwise have it dated from Monday.
   const next = nextRunDate(dayKeyInTz(new Date(), ctx.active.family.timezone || 'UTC'), input.cadence);
@@ -503,6 +518,16 @@ export async function createGoalAction(input: {
   if (!Number.isFinite(target) || target <= 0) return { ok: false, error: t('actions.setATargetGreaterThan') };
 
   const supabase = await createServer();
+  // A child's goal is for a child of THIS family; see saveAllowanceRuleAction.
+  // One stamped with the active family over another household's wallet is
+  // listed with no child and can never be funded (wallet_fund_goal answers
+  // wallet_not_found), and no database guard covers wallet_goals' reference.
+  if (input.childWalletId) {
+    const { data: cw, error: walletError } = await supabase.from('child_wallets')
+      .select('id').eq('id', input.childWalletId).eq('family_id', ctx.active.familyId).maybeSingle();
+    if (walletError) return actionFailure(walletError, t('actions.couldNotLoadThatChild'));
+    if (!cw) return { ok: false, error: t('actions.childWalletNotFound') };
+  }
   const { error } = await supabase.from('wallet_goals').insert({
     family_id: ctx.active.familyId, child_wallet_id: input.childWalletId ?? null,
     title, kind: input.kind ?? 'custom', target_cents: target, target_date: input.targetDate ?? null, created_by: ctx.user.id,

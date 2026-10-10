@@ -61,6 +61,9 @@ beforeEach(() => {
   patches = [];
   db.seed('families', [{ id: FAMILY, trial_ends_at: null, closed_at: null }]);
   db.seed('subscriptions', [{ family_id: FAMILY, plan: 'basic', status: 'active' }]);
+  // The wallet a NEW rule is saved for is read back in this family
+  // (tests/an-allowance-or-goal-is-for-a-child-in-this-family.test.ts).
+  db.seed('child_wallets', [{ id: 'wallet-c', family_id: FAMILY }]);
   db.seed('allowance_rules', [
     { id: 'rule-paused', family_id: FAMILY, child_wallet_id: 'wallet-a', amount_cents: 500, cadence: 'weekly', is_active: false, next_run_on: '2026-08-15', last_run_on: '2026-08-08', created_by: 'user-other' },
     { id: 'rule-active', family_id: FAMILY, child_wallet_id: 'wallet-b', amount_cents: 1_000, cadence: 'weekly', is_active: true, next_run_on: '2026-09-30', last_run_on: '2026-09-23', created_by: 'user-other' },
