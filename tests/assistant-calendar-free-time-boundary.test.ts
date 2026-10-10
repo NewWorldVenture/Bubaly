@@ -20,7 +20,7 @@ async function run(rows: ReturnType<typeof row>[], date = '2026-10-10', tz = 'UT
     };
     return Reflect.get(target, key);
   } });
-  const tool = buildAssistantTools(scoped as unknown as SupabaseClient<Database>, { familyId: family, userId: 'synthetic-user', memberId: null, members: options.members ?? [], tz }).find(t => t.name === 'find_free_time')!;
+  const tool = buildAssistantTools(scoped as unknown as SupabaseClient<Database>, { familyId: family, userId: 'synthetic-user', memberId: null, role: 'parent', members: options.members ?? [], tz }).find(t => t.name === 'find_free_time')!;
   return await tool.execute({ date, ...args }) as { ok: boolean; busy?: Array<{ title: string; start: string; end: string | null; all_day: boolean; starts_at: string; ends_at: string | null }>; note?: string; error?: string };
 }
 describe('actual assistant free-time tool complete overlap boundary', () => {
@@ -148,7 +148,7 @@ describe('assistant availability actual SDK transport completeness', () => {
         } });
       } },
     });
-    const tool = buildAssistantTools(db, { familyId: family, userId: 'synthetic-user', memberId: null, members: [], tz: 'UTC' }).find(t => t.name === 'find_free_time')!;
+    const tool = buildAssistantTools(db, { familyId: family, userId: 'synthetic-user', memberId: null, role: 'parent', members: [], tz: 'UTC' }).find(t => t.name === 'find_free_time')!;
     const result = await tool.execute({ date: '2026-10-10' }) as { ok: boolean; busy?: unknown[]; note?: string };
     expect(sawSeries).toBe(true); expect(result.ok).toBe(mode === 'series');
     if (mode === 'series') expect(result.busy).toMatchObject([{ title: 'Sports event', starts_at: '2026-10-10T10:00:00.000Z', ends_at: '2026-10-10T11:00:00.000Z' }]);
@@ -184,7 +184,7 @@ describe('assistant availability actual SDK transport completeness', () => {
         } });
       } },
     });
-    const tool = buildAssistantTools(db, { familyId: family, userId: 'synthetic-user', memberId: null, members: [], tz: 'UTC' }).find(t => t.name === 'find_free_time')!;
+    const tool = buildAssistantTools(db, { familyId: family, userId: 'synthetic-user', memberId: null, role: 'parent', members: [], tz: 'UTC' }).find(t => t.name === 'find_free_time')!;
     const result = await tool.execute({ date: '2026-10-10' }) as { ok: boolean; busy?: unknown[]; note?: string };
     expect(result.ok).toBe(!missingCount);
     if (missingCount) { expect(result).not.toHaveProperty('busy'); expect(result.note).toBeUndefined(); }

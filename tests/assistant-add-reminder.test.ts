@@ -23,6 +23,7 @@ const ctx: AssistantCtx = {
   userId: 'user-1',
   // The acting person's roster id, which is a different key from `userId`.
   memberId: 'mem-self',
+  role: 'parent',
   members: [{ id: 'mem-emma', display_name: 'Emma' }],
   tz: 'America/New_York',
 };

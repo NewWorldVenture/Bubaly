@@ -172,7 +172,7 @@ describe('complete sports series busy intervals through actual SDK', () => {
       weekly('selected', { member_id: 'sam' }), weekly('family'), weekly('other', { member_id: 'alex' }),
       weekly('expired', { member_id: 'sam', recurrence_until: '2025-01-01T00:00:00.000Z' }),
     ]);
-    const tool = buildAssistantTools(db, { familyId: family, userId: 'synthetic-user', memberId: null, members: [{ id: 'sam', display_name: 'Sam' }, { id: 'alex', display_name: 'Alex' }], tz: 'UTC' }).find(t => t.name === 'find_free_time')!;
+    const tool = buildAssistantTools(db, { familyId: family, userId: 'synthetic-user', memberId: null, role: 'parent', members: [{ id: 'sam', display_name: 'Sam' }, { id: 'alex', display_name: 'Alex' }], tz: 'UTC' }).find(t => t.name === 'find_free_time')!;
     const result = await tool.execute({ date: '2026-10-10', assignee: 'Sam' }) as { ok: boolean; busy: unknown[]; note: string };
     expect(result.ok).toBe(true); expect(result.busy).toHaveLength(2);
     expect(result.busy).toMatchObject([{ title: 'Sports event', starts_at: '2026-10-10T10:00:00.000Z' }, { title: 'Sports event', starts_at: '2026-10-10T10:00:00.000Z' }]);

@@ -23,6 +23,7 @@ import { escapeLike } from '@/lib/supabase/escape-like';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
 import { ensureTodoListId } from '@/lib/services/tasks';
+import { isManager } from '@/lib/constants/roles';
 
 type DB = SupabaseClient<Database>;
 
@@ -57,6 +58,12 @@ export type AssistantCtx = {
    * unattributed task is a far better outcome than a refusal.
    */
   memberId: string | null;
+  /**
+   * The acting person's family role (`family_members.role`). Required, so no
+   * caller can forget it: a tool that answers differently for a manager than
+   * for a child reads it here, and a null role is never a manager.
+   */
+  role: string | null;
   members: { id: string; display_name: string }[];
   /** Family time zone (IANA), used to format times for availability answers. */
   tz?: string;
@@ -457,8 +464,16 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         const in14 = new Date(now.getTime() + 14 * 86400000).toISOString();
         const in30 = new Date(now.getTime() + 30 * 86400000).toISOString();
         const in45 = new Date(now.getTime() + 45 * 86400000).toISOString();
+        // Money approvals and chores awaiting sign-off are a MANAGER's — the
+        // same rule Home, Needs You and the briefing apply. Row-level security
+        // lets any member read `parent_approvals` (0251), so this is the line:
+        // a child asking "what needs me?" is not told a sibling's request, nor
+        // asked to sign off chores they cannot sign off (AI-001).
+        const manager = isManager(ctx.role);
         const [appr, ren, docs, dueRem, convEvents, signoff, grocery, todos] = await settleAll([
-          supabase.from('parent_approvals').select('id, kind, amount_cents, created_at').eq('family_id', ctx.familyId).eq('status', 'pending').limit(50),
+          manager
+            ? supabase.from('parent_approvals').select('id, kind, amount_cents, created_at').eq('family_id', ctx.familyId).eq('status', 'pending').limit(50)
+            : Promise.resolve({ data: [] as ParentApprovalRow[], error: null }),
           supabase.from('renewals').select('id, title, expires_at, reminder_days, status, created_at').eq('family_id', ctx.familyId).in('status', ['active', 'expired']).lte('expires_at', in45).limit(50),
           supabase.from('documents').select('id, title, expires_at').eq('family_id', ctx.familyId).not('expires_at', 'is', null).lte('expires_at', in30).limit(50),
           supabase.from('family_reminders').select('id, remind_at, status').eq('family_id', ctx.familyId).eq('status', 'active').not('remind_at', 'is', null).lte('remind_at', todayEnd.toISOString()).limit(100),
@@ -469,7 +484,9 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
             refine: (query) => query.not('assignee_id', 'is', null),
             limit: 200,
           }),
-          supabase.from('chore_assignments').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('status', 'submitted'),
+          manager
+            ? supabase.from('chore_assignments').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('status', 'submitted')
+            : Promise.resolve({ count: 0, error: null }),
           supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('is_checked', false),
           supabase.from('todo_items').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('is_done', false),
         ]);

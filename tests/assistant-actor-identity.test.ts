@@ -65,6 +65,7 @@ const ctx = (over: Partial<AssistantCtx> = {}): AssistantCtx => ({
   familyId: 'fam-1',
   userId: 'auth-user-uuid',
   memberId: 'teen-1',
+  role: 'teen',
   members: ROSTER,
   tz: 'America/New_York',
   ...over,

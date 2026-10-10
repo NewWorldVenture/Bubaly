@@ -80,7 +80,7 @@ afterEach(() => vi.restoreAllMocks());
 const clock={from:'2026-10-08T17:00:00Z',to:'2026-10-08T20:00:00Z'};
 function scope(db:ReturnType<typeof sdk>['db'],tz='UTC'){return{db,familyId:FAMILY,userId:MEMBER,memberId:MEMBER,role:'parent' as const,actorKind:'member' as const,tz,now:new Date('2026-10-01T00:00:00Z')};}
 async function assistant(probe:ReturnType<typeof sdk>,date=day,tz:string|undefined='UTC',assignee?:string){
-  const tool=buildAssistantTools(probe.db,{familyId:FAMILY,userId:MEMBER,memberId:MEMBER,members:[{id:MEMBER,display_name:'Selected member'}],tz}).find(t=>t.name==='find_free_time')!;
+  const tool=buildAssistantTools(probe.db,{familyId:FAMILY,userId:MEMBER,memberId:MEMBER,role:'parent',members:[{id:MEMBER,display_name:'Selected member'}],tz}).find(t=>t.name==='find_free_time')!;
   return await tool.execute({date,...(assignee?{assignee}:{})}) as {ok:boolean;busy?:{title:string;starts_at:string;ends_at:string;all_day:boolean}[];note?:string};
 }
 
@@ -260,7 +260,7 @@ describe('availability complete domain, attribution and clock controls',()=>{
     const probe=sdk({value});const result=await assistant(probe);expect(result.ok).toBe(false);expect(result.busy).toBeUndefined();expect(result.note).toBeUndefined();expect(await findFreeSlots(scope(probe.db),{...clock,durationMin:30})).toMatchObject({ok:false});expect(await busyEvenings(scope(probe.db),clock)).toMatchObject({ok:false});expect(probe.calls.some(call=>call.url.pathname.endsWith('/calendar_events'))).toBe(false);
   });
   it.each([undefined,'','Mars/Olympus'])('refuses explicit invalid zone %s before any transport',async tz=>{
-    const probe=sdk();const tool=buildAssistantTools(probe.db,{familyId:FAMILY,userId:MEMBER,memberId:MEMBER,members:[],tz}).find(t=>t.name==='find_free_time')!;expect(await tool.execute({date:day})).toMatchObject({ok:false});
+    const probe=sdk();const tool=buildAssistantTools(probe.db,{familyId:FAMILY,userId:MEMBER,memberId:MEMBER,role:'parent',members:[],tz}).find(t=>t.name==='find_free_time')!;expect(await tool.execute({date:day})).toMatchObject({ok:false});
     const badScope={...scope(probe.db),tz} as unknown as Parameters<typeof findFreeSlots>[0];expect(await findFreeSlots(badScope,{...clock,durationMin:30})).toMatchObject({ok:false});expect(await busyEvenings(badScope,clock)).toMatchObject({ok:false});expect(probe.calls).toEqual([]);
   });
 });
