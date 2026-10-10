@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { at } from './helpers/source-order';
 import { describe, expect, it } from 'vitest';
 import {
   REMOVED_MEMBER_PATCH, assignableMemberRoles, canInviteWithRole, canRemoveMember,
@@ -52,9 +53,7 @@ describe('an invite cannot outrank the person sending it', () => {
 
   it('the invite form checks it before writing the row', () => {
     const src = readFileSync('components/family/invite-form.tsx', 'utf8');
-    const check = src.indexOf('if (!canInviteWithRole(actorRole, role))');
-    expect(check).toBeGreaterThan(-1);
-    expect(check).toBeLessThan(src.indexOf(".from('invites').insert("));
+    expect(at(src, 'if (!canInviteWithRole(actorRole, role))')).toBeLessThan(at(src, ".from('invites').insert("));
   });
 });
 

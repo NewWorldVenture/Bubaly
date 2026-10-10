@@ -18,22 +18,23 @@ type RemoveResult = { ok: true; loginRevocation: ChildLoginRevocation } | { ok: 
  * so fm_update (manager-gated) stays the boundary, and RLS filtering it to zero
  * rows is still reported as not saved.
  */
-export async function removeFamilyMemberAction(input: { memberId: string; familyId: string }): Promise<RemoveResult> {
+export async function removeFamilyMemberAction(input: { memberId: string }): Promise<RemoveResult> {
   const t = await getTranslations();
   const notSaved = { ok: false as const, error: t('errors.thatChangeWasNotSaved') };
+  // The family comes from the authenticated context, never from the caller.
   const ctx = await requireUserContext();
-  const actor = ctx.memberships.find((m) => m.familyId === input.familyId);
-  if (!actor) return notSaved;
+  const actor = ctx.active;
+  const familyId = actor.familyId;
 
   const supabase = await createServer();
   const { data: target, error: readError } = await supabase.from('family_members')
-    .select('id, family_id, role, user_id').eq('id', input.memberId).eq('family_id', input.familyId).maybeSingle();
+    .select('id, family_id, role, user_id').eq('id', input.memberId).eq('family_id', familyId).maybeSingle();
   if (readError) return { ok: false, error: describeActionError(readError, t('errors.thatChangeWasNotSaved')) };
   // Only a parent may remove a parent (see canRemoveMember).
   if (!target || !canRemoveMember(actor.role, target.role)) return notSaved;
 
   const { data: rows, error } = await supabase.from('family_members')
-    .update(REMOVED_MEMBER_PATCH).eq('id', target.id).eq('family_id', input.familyId).select('id');
+    .update(REMOVED_MEMBER_PATCH).eq('id', target.id).eq('family_id', familyId).select('id');
   if (error) return { ok: false, error: describeActionError(error, t('errors.thatChangeWasNotSaved')) };
   if (wroteNoRows(rows)) return notSaved;
 

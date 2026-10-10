@@ -13,7 +13,7 @@ import { emailSchema } from '@/lib/validation';
 import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { stripeFromKey } from '@/lib/stripe';
 import { REMOVED_MEMBER_PATCH, type MemberRole } from '@/lib/constants/roles';
-import { revokeRemovedChildLogin } from '@/lib/server/child-account';
+import { REMOVED_CHILD_BAN_MARKER, revokeRemovedChildLogin } from '@/lib/server/child-account';
 import type { PlanId } from '@/lib/constants/plans';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
@@ -546,7 +546,11 @@ export async function adminSetUserBanAction(userId: string, banned: boolean): Pr
 
   const supabase = createServiceClient();
   // 'none' lifts a ban; a long duration is an effectively-indefinite ban (reversible).
-  const { error } = await supabase.auth.admin.updateUserById(userId, { ban_duration: banned ? '876000h' : 'none' });
+  // Clearing the removal marker makes this ban (or unban) the admin's: re-adding
+  // a removed child never lifts a ban that does not carry it.
+  const { error } = await supabase.auth.admin.updateUserById(userId, {
+    ban_duration: banned ? '876000h' : 'none', app_metadata: { [REMOVED_CHILD_BAN_MARKER]: false },
+  });
   if (error) return actionFailure(error, t('actions.couldNotUpdateThatUser'));
 
   await adminAuditLog({ familyId: null, action: banned ? 'ban' : 'unban', resource: 'users', resourceId: userId });

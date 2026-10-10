@@ -478,7 +478,7 @@ export function FamilyModule() {
               // to remove was reported as removed and stayed in the family. The
               // server action reports that as not saved, and also switches off a
               // removed child's PIN login, which only the service role can do.
-              const res = await removeFamilyMemberAction({ memberId: removeMember.id, familyId }).catch(() => null);
+              const res = await removeFamilyMemberAction({ memberId: removeMember.id }).catch(() => null);
               setRemoveMember(null);
               if (!res) { toastError(t('errors.thatChangeWasNotSaved')); return; }
               if (!res.ok) { toastError(res.error); return; }

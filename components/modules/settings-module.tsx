@@ -189,7 +189,7 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
     // The `window.location.reload()` below made that especially convincing — the
     // member came back, with no message saying why. The server action also
     // switches off a removed child's PIN login.
-    const res = await removeFamilyMemberAction({ memberId, familyId: family.id }).catch(() => null);
+    const res = await removeFamilyMemberAction({ memberId }).catch(() => null);
     if (!res) return toastError(t('errors.thatChangeWasNotSaved'));
     if (!res.ok) return toastError(res.error);
     // Said before the reload, and as an error: the member is gone from the

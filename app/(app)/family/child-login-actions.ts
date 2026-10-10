@@ -13,6 +13,7 @@ import { isValidPin } from '@/lib/onboarding/pin';
 import { normalizeUsername, isValidUsername, syntheticChildEmail } from '@/lib/onboarding/child-login';
 import { deriveChildPassword } from '@/lib/onboarding/child-password';
 import { logAudit } from '@/lib/server/audit';
+import { liftRemovedChildBan } from '@/lib/server/child-account';
 import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
@@ -80,6 +81,45 @@ async function rollbackChildLogin(
   return complete;
 }
 
+/**
+ * Re-add a removed member through the child login they already have: put the
+ * row back as an active `child`, lift the removal ban, and set the new PIN
+ * (through resetChildPinAction) on the EXISTING username, which is returned. Only for an account that is this
+ * member's child login; anything else gets the old "already has a login".
+ */
+async function relinkRemovedChildLogin(
+  admin: ReturnType<typeof createServiceClient>,
+  member: { id: string; family_id: string; user_id: string },
+  pin: string, actorId: string,
+): Promise<Result<{ username: string }>> {
+  const t = await getTranslations();
+  const { data: login, error: loginError } = await admin.from('child_logins').select('username')
+    .eq('family_id', member.family_id).eq('member_id', member.id).eq('user_id', member.user_id).maybeSingle();
+  if (loginError) return { ok: false, error: describeActionError(loginError, t('actions.couldNotCheckThatRefresh')) };
+  if (!login) return { ok: false, error: t('childLoginActions.thisMemberAlreadyHasA') };
+
+  // Reactivate first: if anything after this fails the account stays banned,
+  // which is the safe way round. Compare-and-set on the same user and on
+  // still being inactive, so a concurrent change is not overwritten.
+  const { data: reactivated, error: reactivateError } = await admin.from('family_members')
+    .update({ is_active: true, role: 'child' }).eq('id', member.id).eq('user_id', member.user_id).eq('is_active', false).select('id');
+  if (reactivateError || wroteNoRows(reactivated)) return { ok: false, error: t('childLoginActions.couldNotLinkTheLogin') };
+
+  const lifted = await liftRemovedChildBan(admin, member);
+  if (lifted === 'failed') return { ok: false, error: t('childLoginActions.couldNotFinishSettingUp') };
+
+  // The member is active again, so the ordinary reset sets the new PIN, with
+  // its own tamper checks and lockout clear.
+  const reset = await resetChildPinAction({ memberId: member.id, pin });
+  if (!reset.ok) return reset;
+
+  await logAudit(admin, {
+    familyId: member.family_id, actorId, action: 'update',
+    resource: 'child_logins', resourceId: member.id, metadata: { relinked: true, ban: lifted },
+  });
+  return { ok: true, data: { username: login.username } };
+}
+
 /** Give a child member a username + 4-digit PIN login. Manager only. */
 export async function createChildLoginAction(input: {
   memberId: string; username: string; pin: string;
@@ -102,7 +142,13 @@ export async function createChildLoginAction(input: {
   // A refused read is not an absence: it used to return the "not found" answer below. Audit C1-S9-75.
   if (memberReadError) return { ok: false, error: describeActionError(memberReadError, t('actions.couldNotCheckThatRefresh')) };
   if (!member || member.family_id !== ctx.active.familyId) return { ok: false, error: t('childLoginActions.memberNotFoundInYour') };
-  if (member.user_id) return { ok: false, error: t('childLoginActions.thisMemberAlreadyHasA') };
+  if (member.user_id) {
+    // A REMOVED member who still holds this family's child login is re-added
+    // rather than refused: removal banned that account (revokeRemovedChildLogin)
+    // and left user_id in place, so without this the child could never come back.
+    if (!member.is_active && !isManager(member.role)) return relinkRemovedChildLogin(admin, { ...member, user_id: member.user_id }, input.pin, ctx.user.id);
+    return { ok: false, error: t('childLoginActions.thisMemberAlreadyHasA') };
+  }
   // A PIN login is for a child, never a manager: it would be a full manager
   // account behind four digits its creator knows, and resetChildPinAction
   // refuses a manager, so that PIN could never be changed afterwards.

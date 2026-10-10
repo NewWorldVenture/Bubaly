@@ -34,6 +34,17 @@ export type ChildLoginRevocation = 'none' | 'revoked' | 'failed';
 const REMOVED_CHILD_BAN_DURATION = '876000h';
 
 /**
+ * Set in the auth user's app_metadata (which only the service role can write)
+ * when THIS removal path bans an account, so liftRemovedChildBan lifts only
+ * those bans and never one a super-admin placed. adminSetUserBanAction clears
+ * it whenever it bans or unbans, so an admin decision always owns the ban.
+ */
+export const REMOVED_CHILD_BAN_MARKER = 'removed_child_ban';
+
+const bannedNow = (bannedUntil: string | null | undefined) =>
+  !!bannedUntil && Number.isFinite(Date.parse(bannedUntil)) && Date.parse(bannedUntil) > Date.now();
+
+/**
  * After a member is removed, switch off their child login if they have one.
  *
  * Removal is a soft `is_active = false` and leaves the auth user in place. The
@@ -67,7 +78,12 @@ export async function revokeRemovedChildLogin(
     }
     const isChild = (logins?.length ?? 0) > 0 || authUser?.user?.user_metadata?.child === true;
     if (!isChild) return 'none';
-    const { error: banError } = await admin.auth.admin.updateUserById(userId, { ban_duration: REMOVED_CHILD_BAN_DURATION });
+    // Already banned by someone else (an admin): leave that ban, and its lack
+    // of a marker, exactly as it is, so re-adding the child cannot lift it.
+    if (bannedNow(authUser?.user?.banned_until) && authUser?.user?.app_metadata?.[REMOVED_CHILD_BAN_MARKER] !== true) return 'revoked';
+    const { error: banError } = await admin.auth.admin.updateUserById(userId, {
+      ban_duration: REMOVED_CHILD_BAN_DURATION, app_metadata: { [REMOVED_CHILD_BAN_MARKER]: true },
+    });
     if (banError) {
       console.error('[child-account] could not sign out a removed child login', { memberId: member.id, error: banError.message });
       return 'failed';
@@ -75,6 +91,47 @@ export async function revokeRemovedChildLogin(
     return 'revoked';
   } catch (error) {
     console.error('[child-account] could not sign out a removed child login', { memberId: member.id, error });
+    return 'failed';
+  }
+}
+
+/** What re-adding a member did to a removal ban: lifted it, found none of ours, or could not tell. */
+export type ChildBanLift = 'lifted' | 'none' | 'failed';
+
+/**
+ * Lift the ban revokeRemovedChildLogin placed, when a removed child-login
+ * member is re-added. Only for an account that IS this member's child login
+ * (a child_logins row for this family, member and user) and only when the ban
+ * carries REMOVED_CHILD_BAN_MARKER — an admin's ban is never lifted here.
+ */
+export async function liftRemovedChildBan(
+  admin: SupabaseClient<Database>,
+  member: { id: string; family_id: string; user_id: string | null },
+): Promise<ChildBanLift> {
+  if (!member.user_id) return 'none';
+  const userId = member.user_id;
+  try {
+    const [{ data: logins, error: loginError }, { data: authUser, error: userError }] = await Promise.all([
+      admin.from('child_logins').select('id').eq('family_id', member.family_id).eq('member_id', member.id).eq('user_id', userId).limit(1),
+      admin.auth.admin.getUserById(userId),
+    ]);
+    if (loginError || userError) {
+      console.error('[child-account] could not check a re-added member\'s removal ban', {
+        memberId: member.id, error: (loginError ?? userError)?.message,
+      });
+      return 'failed';
+    }
+    if (!logins?.length || authUser?.user?.app_metadata?.[REMOVED_CHILD_BAN_MARKER] !== true) return 'none';
+    const { error } = await admin.auth.admin.updateUserById(userId, {
+      ban_duration: 'none', app_metadata: { [REMOVED_CHILD_BAN_MARKER]: false },
+    });
+    if (error) {
+      console.error('[child-account] could not lift a re-added child\'s removal ban', { memberId: member.id, error: error.message });
+      return 'failed';
+    }
+    return 'lifted';
+  } catch (error) {
+    console.error('[child-account] could not lift a re-added child\'s removal ban', { memberId: member.id, error });
     return 'failed';
   }
 }
