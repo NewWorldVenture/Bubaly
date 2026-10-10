@@ -13,6 +13,9 @@ const sources = Object.fromEntries([
   'components/app/trial-paywall-gate.tsx', 'components/ui/modal.tsx', 'components/ui/button.tsx', 'components/ui/card.tsx',
   'lib/hooks/use-lock-body-scroll.ts', 'lib/auth/mfa.ts', 'lib/auth/redirect.ts', 'lib/constants/roles.ts', 'lib/security/app-lock.ts',
   'lib/a11y/use-dialog-behavior.ts', 'lib/supabase/settle.ts',
+  // trial-paywall-gate routes a refused close through reportRefusal, which
+  // sends an aal1 session to the step-up page; it reads its path from lib/auth/mfa.
+  'lib/auth/step-up-client.ts',
   // trial-paywall-gate prints the yearly price through formatCents in the
   // reader's locale (AQ-01); PLAN_CURRENCY comes from the mocked lib/marketing/value.
   'lib/wallet/ledger.ts',

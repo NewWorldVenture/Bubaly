@@ -20,6 +20,9 @@ const sources = Object.fromEntries([
   'lib/calendar/source-capability.ts', 'lib/calendar/exact-instant.ts', 'lib/onboarding/ics-time.ts', 'lib/calendar/day.ts', 'lib/briefing/calendar-window.ts',
   'lib/time/zoned.ts', 'lib/time/local-day.ts', 'lib/time/wall-clock.ts', 'lib/i18n/locales.ts',
   'lib/supabase/errors.ts', 'lib/schedule/zoned.ts', 'lib/auth/step-up-client.ts', 'lib/auth/mfa.ts',
+  // billing-module settles its delete through settleAction, so a rejected
+  // server-action call is reported and the list re-read, not lost.
+  'lib/ui/settle-action.ts',
   'lib/auth/redirect.ts', 'lib/constants/roles.ts', 'lib/constants/plans.ts', 'lib/constants/feature-catalog.ts',
   'lib/billing/plans.ts', 'lib/billing/review-selection.ts', 'lib/wallet/ledger.ts',
   'lib/utils/calendar-date.ts', 'lib/utils/birthday.ts',
