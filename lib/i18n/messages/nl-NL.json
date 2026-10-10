@@ -5680,6 +5680,7 @@
   "doOneThing.overdueDetail": "Je volgende acties op volgorde — begin bij de eerste.",
   "doOneThing.overdueLabel": "Werk weg wat te laat is",
   "doOneThing.title": "Doe nu één ding",
+  "documentCapture.access_denied": "Je huidige toegang tot het huishouden staat deze import niet toe.",
   "documentCapture.choose": "Bestand kiezen",
   "documentCapture.context_changed": "Je account of actieve huishouden is gewijzigd. Kies het bestand opnieuw in het juiste huishouden.",
   "documentCapture.description": "Upload een pdf, foto of tekstbestand van maximaal 4 MB. De vastgelegde tekst wordt opgeslagen bij Papierwerk om te controleren.",

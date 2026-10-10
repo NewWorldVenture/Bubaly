@@ -1,5 +1,5 @@
 export const CAPTURE_DOCUMENT_BYTES = 4 * 1024 * 1024;
-export type DocumentCaptureReason = 'needs_file' | 'unsupported' | 'invalid_file' | 'too_large' | 'provider_unavailable' | 'empty_document' | 'unavailable' | 'context_changed' | 'step_up';
+export type DocumentCaptureReason = 'access_denied' | 'needs_file' | 'unsupported' | 'invalid_file' | 'too_large' | 'provider_unavailable' | 'empty_document' | 'unavailable' | 'context_changed' | 'step_up';
 export type DocumentCaptureResult =
   | { ok: true; data: { id: string; partial: boolean } }
   | { ok: false; reason: DocumentCaptureReason; retryable: boolean; saved?: boolean; stepUp?: string };
@@ -9,7 +9,7 @@ function readResult(value: unknown): DocumentCaptureResult {
   const result = value as DocumentCaptureResult;
   if (result.ok === true && typeof result.data?.id === 'string' && /^[a-f0-9-]{36}$/i.test(result.data.id) && typeof result.data.partial === 'boolean') return result;
   if (result.ok === false && result.reason === 'step_up' && typeof result.stepUp === 'string' && result.stepUp.startsWith('/auth/step-up?')) return result;
-  if (result.ok === false && typeof result.retryable === 'boolean' && ['needs_file', 'unsupported', 'invalid_file', 'too_large', 'provider_unavailable', 'empty_document', 'unavailable', 'context_changed'].includes(result.reason)) return result;
+  if (result.ok === false && typeof result.retryable === 'boolean' && ['access_denied', 'needs_file', 'unsupported', 'invalid_file', 'too_large', 'provider_unavailable', 'empty_document', 'unavailable', 'context_changed'].includes(result.reason)) return result;
   throw new Error('Capture response is incomplete');
 }
 

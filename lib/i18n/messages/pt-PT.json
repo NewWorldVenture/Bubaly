@@ -5681,6 +5681,7 @@
   "doOneThing.overdueDetail": "As suas próximas ações por ordem — comece pela primeira.",
   "doOneThing.overdueLabel": "Resolva o que está atrasado",
   "doOneThing.title": "Faça uma coisa agora",
+  "documentCapture.access_denied": "O seu acesso atual ao agregado familiar não permite esta importação.",
   "documentCapture.choose": "Escolher ficheiro",
   "documentCapture.context_changed": "A sua conta ou o agregado ativo mudou. Selecione novamente o ficheiro no agregado correto.",
   "documentCapture.description": "Carregue um PDF, uma fotografia ou um ficheiro de texto até 4 MB. O texto capturado é guardado em Documentação para revisão.",

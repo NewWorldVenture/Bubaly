@@ -5874,6 +5874,7 @@
   "doOneThing.overdueDetail": "Your ranked next actions — start with the first one.",
   "doOneThing.overdueLabel": "Clear what is overdue",
   "doOneThing.title": "Do one thing now",
+  "documentCapture.access_denied": "Your current household access does not allow this import.",
   "documentCapture.choose": "Choose a file",
   "documentCapture.context_changed": "Your account or active household changed. Select the file again in the correct household.",
   "documentCapture.description": "Upload a PDF, photo, or text file up to 4 MB. The captured text is saved to Paperwork for review.",
