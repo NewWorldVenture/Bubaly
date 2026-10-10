@@ -125,6 +125,19 @@ export async function childSignInAction(input: { username: string; pin: string }
   const row = rows?.[0];
   if (!row) return { ok: false, error: t('actions.thatUsernameOrPinIsn') };
 
+  // Removing a child from the family deactivates their member row and leaves
+  // this login in place, so the PIN kept signing in, and the account with no
+  // family was then provisioned one as its parent. A login whose child is no
+  // longer an active member is retired: it answers exactly as an unknown
+  // username, before any password request, so it is not an oracle either.
+  const { data: memberships, error: membershipError } = await admin.from('family_members')
+    .select('id').eq('user_id', row.user_id).eq('is_active', true).limit(1);
+  if (membershipError) {
+    console.error('[child-login] membership lookup failed', membershipError);
+    return { ok: false, error: t('actions.kidSignInIsTemporarily') };
+  }
+  if (!memberships?.length) return { ok: false, error: t('actions.thatUsernameOrPinIsn') };
+
   let passwordClient: ReturnType<typeof createPasswordClient> | null = null;
   try {
     const configuration = [process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY].map(value => {

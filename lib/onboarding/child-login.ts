@@ -23,8 +23,18 @@ export function suggestUsername(displayName: string): string {
   return base.length >= 2 ? base.slice(0, 20) : 'kiddo';
 }
 
+const CHILD_EMAIL_DOMAIN = '@kids.bubaly.app';
+
 /** The synthetic, never-emailed address for a child's auth user. Deterministic
  *  from the username, so sign-in can resolve it without storing the email. */
 export function syntheticChildEmail(username: string): string {
-  return `child.${username}@kids.bubaly.app`;
+  return `child.${username}${CHILD_EMAIL_DOMAIN}`;
+}
+
+/** True for an address on the synthetic kids domain `syntheticChildEmail`
+ *  mints: the account is a child's username + PIN login, never a grown-up who
+ *  could own a family. Nobody can receive mail there, so nobody can confirm a
+ *  change of address onto it. */
+export function isSyntheticChildEmail(email: string | null | undefined): boolean {
+  return (email ?? '').trim().toLowerCase().endsWith(CHILD_EMAIL_DOMAIN);
 }

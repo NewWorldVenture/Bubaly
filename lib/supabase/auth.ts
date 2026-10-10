@@ -7,6 +7,7 @@ import { resolveFeatureEntitlement } from '@/lib/server/feature-entitlement';
 import { ensureActiveFamily } from '@/lib/server/ensure-family';
 import { isRetryableAuthError } from '@/lib/auth/session';
 import { chooseActiveMembership } from '@/lib/auth/active-membership';
+import { isSyntheticChildEmail } from '@/lib/onboarding/child-login';
 import type { MemberRole } from '@/lib/constants/roles';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Tables } from '@/lib/database.types';
@@ -188,7 +189,7 @@ export async function getUserContext(): Promise<UserContext | { needsFamily: tru
   };
 }
 
-/** Guard for app pages: redirects to /login or /onboarding as needed. */
+/** Guard for app pages: redirects to /login, /kid-login or /onboarding as needed. */
 export async function requireUserContext(): Promise<UserContext> {
   const ctx = await getUserContext();
   if (!ctx) redirect('/login');
@@ -198,6 +199,11 @@ export async function requireUserContext(): Promise<UserContext> {
     // dashboard (with an "Invite your family" card), not a mandatory wizard.
     const supabase = await createServer();
     const { data: auth } = await supabase.auth.getUser();
+    // A child's PIN login with no family is a child the family removed. It is
+    // neither a newcomer to provision (that made it a family's parent) nor one
+    // to hand the wizard (which does the same with more steps): it goes back to
+    // the kid sign-in, which now refuses that login.
+    if (isSyntheticChildEmail(auth.user?.email)) redirect('/kid-login');
     if (auth.user) {
       const ok = await ensureActiveFamily(supabase, auth.user);
       if (ok) {

@@ -2,6 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServiceClient } from '@/lib/supabase/server';
 import { autoFamilyName, autoOwnerName, DEFAULT_OWNER_DISPLAY_NAME } from '@/lib/onboarding/family';
+import { isSyntheticChildEmail } from '@/lib/onboarding/child-login';
 
 // Guarantees an authenticated user always has a family space, so onboarding can
 // never trap them in a redirect loop (sign up → land on the dashboard with an
@@ -69,6 +70,31 @@ export async function ensureActiveFamily(
     return false;
   }
   if (existing && existing.length > 0) return true;
+
+  // A child's username + PIN login with no active family is a child the family
+  // removed, not a newcomer to welcome. Provisioning made that account the
+  // PARENT of a new family with a trial, on the next page load of any device it
+  // was still signed in on. The kids address settles it without a read; the
+  // `child_logins` row (server-written, manager-only) covers an account whose
+  // address is not the synthetic one. A failed read refuses: the caller's
+  // fallback is the same as for any other provisioning failure.
+  if (isSyntheticChildEmail(user.email)) {
+    console.error('[ensure-family] a child login has no active family; not provisioning one');
+    return false;
+  }
+  const { data: childLogin, error: childLoginErr } = await admin
+    .from('child_logins')
+    .select('id')
+    .eq('user_id', user.id)
+    .limit(1);
+  if (childLoginErr) {
+    console.error('[ensure-family] child login lookup failed', childLoginErr);
+    return false;
+  }
+  if (childLogin && childLogin.length > 0) {
+    console.error('[ensure-family] a child login has no active family; not provisioning one');
+    return false;
+  }
 
   const { data: profile, error: profileErr } = await admin
     .from('profiles')
