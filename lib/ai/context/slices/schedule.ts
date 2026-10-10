@@ -7,7 +7,7 @@ import { fenceUntrusted, sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
 import { findConflicts } from '@/lib/services/calendar';
 import { searchCalendarOccurrences, validateCalendarSearchWindow, type NativeSearchOccurrence, type SourceSearchOccurrence, type SearchCalendarOccurrencesResult } from '@/lib/services/calendar/search-occurrences';
 import type { CalendarConflictAdvisory, CalendarConflictSubject } from '@/lib/calendar/conflict-advisories';
-import { recallFacts } from '@/lib/services/memory';
+import { recallFactsForContext } from './recall';
 import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { settle } from '@/lib/supabase/settle';
@@ -59,7 +59,7 @@ export const scheduleSlice: SliceDefinition = {
     const [events, conflicts, facts, routines] = await Promise.all([
       searchCalendarOccurrences(scope, { from: window.from, to: window.to, limit: MAX_EVENTS }),
       findConflicts(scope, window),
-      recallFacts(scope, { category: 'preference', limit: 200 }),
+      recallFactsForContext(scope, { category: 'preference', limit: 200 }),
       settle(scope.db
         .from('family_routines')
         .select('id, title, time_of_day, days_of_week, member_id')

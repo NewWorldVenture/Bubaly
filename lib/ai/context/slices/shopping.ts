@@ -5,7 +5,7 @@
 import 'server-only';
 import { fenceUntrusted, sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
 import { listOpen, pantryList } from '@/lib/services/groceries';
-import { recallFacts } from '@/lib/services/memory';
+import { recallFactsForContext } from './recall';
 import { ok } from '@/lib/services/types';
 import type { SliceDefinition } from '../policy';
 import { dayKeyLabel, joinNatural } from '../render';
@@ -32,7 +32,7 @@ export const shoppingSlice: SliceDefinition = {
     const [open, pantry, facts] = await Promise.all([
       listOpen(scope, { limit: MAX_OPEN_ITEMS }),
       pantryList(scope, { expiringWithinDays: 5 }),
-      recallFacts(scope, { category: 'preference', limit: 200 }),
+      recallFactsForContext(scope, { category: 'preference', limit: 200 }),
     ]);
     if (!open.ok) return open;
     if (!pantry.ok) return pantry;
