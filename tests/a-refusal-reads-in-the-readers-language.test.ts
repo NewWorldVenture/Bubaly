@@ -113,6 +113,16 @@ describe('a sentence written on the server is shown in the reader’s language',
     expect(localizeDbErrorText(english, (key) => key)).toBe(english);
   });
 
+  it('a sentence kept from a language the reader has left is put into the new one', () => {
+    const fr = getMessages('fr-FR');
+    const german = de['dbError.notFound'];
+    // Shown once under German (a toast or a field rendering it), then the reader switches.
+    expect(localizeDbErrorText(german, (key) => de[key] ?? key)).toBe(german);
+    expect(localizeDbErrorText(german, (key) => fr[key] ?? key)).toBe(fr['dbError.notFound']);
+    // And back: French is known now too.
+    expect(localizeDbErrorText(fr['dbError.notFound'], (key) => de[key] ?? key)).toBe(german);
+  });
+
   it('a form field shows it in German', () => {
     const html = renderTranslated(createElement(Field, { label: 'Titel', error: english, children: () => null }), 'de-DE');
     expect(html).toContain(escape(de['dbError.permission']));

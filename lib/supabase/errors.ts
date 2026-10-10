@@ -39,6 +39,24 @@ const KEYS = Object.keys(DB_ERROR_ENGLISH) as DbErrorKey[];
 let remembered: Partial<Record<DbErrorKey, string>> = {};
 
 /**
+ * Every language the five sentences have been seen in, sentence → key. Only
+ * ever added to: English from the start, then each catalogue a provider renders
+ * and each translator a display point uses. A refusal a toast or a field is
+ * still holding, written while the reader was German, keeps its identity here,
+ * so when the reader switches to French it is shown in French. The language a
+ * sentence is SHOWN in is always the receiving component's own `t`; this only
+ * says which of the five it is.
+ */
+const known = new Map<string, DbErrorKey>(KEYS.map((key) => [DB_ERROR_ENGLISH[key], key]));
+
+function learn(lookup: (key: DbErrorKey) => string | undefined): void {
+  for (const key of KEYS) {
+    const sentence = lookup(key);
+    if (sentence && sentence !== key) known.set(sentence, key);
+  }
+}
+
+/**
  * Called by `LocaleProvider` once it has rendered, in the browser only: the
  * server serves many readers at once, so a module-level choice there would be
  * whichever request rendered last. A catalogue without the five keys (a scope
@@ -46,6 +64,7 @@ let remembered: Partial<Record<DbErrorKey, string>> = {};
  */
 export function rememberDbErrorText(messages: Readonly<Record<string, string>>): void {
   if (typeof window === 'undefined') return;
+  learn((key) => messages[key]);
   const next: Partial<Record<DbErrorKey, string>> = {};
   for (const key of KEYS) if (messages[key]) next[key] = messages[key];
   if (Object.keys(next).length) remembered = next;
@@ -57,17 +76,18 @@ export function dbErrorText(key: DbErrorKey): string {
 }
 
 /**
- * Each of the five English sentences inside `text`, put into the reader's
- * language with `t`. Anything else is left as it was, and so is a sentence
- * whose key `t` does not hold (it answers with the key itself).
+ * Each of the five sentences inside `text`, in whatever language it was
+ * written (English from a server action, or a language the reader has since
+ * left), put into `t`'s language. Anything else is left as it was, and so is a
+ * sentence whose key `t` does not hold (it answers with the key itself).
  */
 export function localizeDbErrorText(text: string, t: (key: string) => string): string {
+  learn(t);
   let out = text;
-  for (const key of KEYS) {
-    const english = DB_ERROR_ENGLISH[key];
-    if (!out.includes(english)) continue;
+  for (const [sentence, key] of known) {
+    if (!out.includes(sentence)) continue;
     const local = t(key);
-    if (local && local !== key) out = out.split(english).join(local);
+    if (local && local !== key && local !== sentence) out = out.split(sentence).join(local);
   }
   return out;
 }
