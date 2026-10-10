@@ -34,6 +34,7 @@ import { ALREADY_SAVED, makeKey } from '@/lib/services/idempotency';
 import { dayKeyInTz, scopeFromUserContext, zonedTimeMs } from '@/lib/services/scope';
 import { isSubmissionId } from '@/lib/utils/submission-id';
 import { describeActionError } from '@/lib/supabase/errors';
+import { isManager } from '@/lib/constants/roles';
 
 const PATH = '/dashboard/reminders';
 
@@ -131,6 +132,36 @@ export async function createReminderAction(input: CreateReminderActionInput): Pr
   }
 }
 
+/**
+ * Who may remove a reminder.
+ *
+ * The permission matrix (/family/permissions, supabase/seed.sql) gives
+ * `can_delete` on reminders to managers only, and ROLE_DESCRIPTIONS calls a
+ * guest or caregiver view-only. Neither the service (id + family_id) nor the
+ * RLS (`is_family_member` for all) agreed, so any active member could delete a
+ * parent's medication or bill reminder. A manager may remove any; a teen or
+ * child only one they created, are assigned, or that is about them; a guest or
+ * caregiver none.
+ */
+async function canDeleteReminder(
+  scope: ReturnType<typeof scopeFromUserContext>,
+  reminderId: string,
+): Promise<boolean> {
+  if (isManager(scope.role)) return true;
+  if (scope.role !== 'teen' && scope.role !== 'child') return false;
+  const { data } = await scope.db
+    .from('family_reminders')
+    .select('created_by, assigned_to_id, member_id')
+    .eq('id', reminderId)
+    .eq('family_id', scope.familyId)
+    .maybeSingle();
+  if (!data) return false;
+  return (
+    (!!scope.userId && (data.created_by === scope.userId || data.assigned_to_id === scope.userId))
+    || (!!scope.memberId && data.member_id === scope.memberId)
+  );
+}
+
 export async function deleteReminderAction(reminderId: string): Promise<ReminderActionResult> {
   const t = await getTranslations();
   if (!reminderId) return { ok: false, error: t('actions.thatReminderCouldNotBe') };
@@ -140,6 +171,9 @@ export async function deleteReminderAction(reminderId: string): Promise<Reminder
   const scope = scopeFromUserContext(ctx, supabase);
 
   try {
+    if (!(await canDeleteReminder(scope, reminderId))) {
+      return { ok: false, error: t('actions.onlyAParentGuardianCan16') };
+    }
     const result = await deleteReminder(scope, reminderId);
     if (!result.ok) return { ok: false, error: result.error };
 

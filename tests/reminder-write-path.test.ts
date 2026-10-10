@@ -219,3 +219,54 @@ describe('removing a reminder', () => {
     await expect(deleteReminderAction('some-id')).rejects.toThrow('NEXT_REDIRECT');
   });
 });
+
+describe('who may remove a reminder', () => {
+  // /family/permissions (seed.sql) grants can_delete on reminders to parents; a
+  // guest or caregiver is view-only. The action used to take any active member.
+  function actAs(role: string, userId = 'user-2', memberId = 'member-2') {
+    mocks.requireUserContext.mockResolvedValue({
+      user: { id: userId },
+      active: {
+        familyId: FAMILY, role,
+        family: { name: 'Family One', timezone: 'America/New_York' },
+        member: { id: memberId },
+      },
+    });
+  }
+
+  beforeEach(() => {
+    db.seed('family_reminders', [
+      { id: 'parents', family_id: FAMILY, title: 'Pay the electricity bill', remind_at: '2026-09-20T09:00:00.000Z', created_by: 'user-1' },
+      { id: 'kids-own', family_id: FAMILY, title: 'Bring library book', remind_at: '2026-09-20T09:00:00.000Z', created_by: 'user-2' },
+      { id: 'about-kid', family_id: FAMILY, title: 'Take inhaler', remind_at: '2026-09-20T09:00:00.000Z', created_by: 'user-1', member_id: 'member-2' },
+    ]);
+  });
+
+  const has = (id: string) => db.table('family_reminders').some((r) => r.id === id);
+
+  it.each(['guest', 'caregiver', 'child', 'teen'])('a %s cannot remove a parent’s reminder', async (role) => {
+    actAs(role);
+    const result = await deleteReminderAction('parents');
+    expect(result.ok).toBe(false);
+    expect(has('parents')).toBe(true);
+  });
+
+  it.each(['guest', 'caregiver'])('a %s cannot remove even one they created', async (role) => {
+    actAs(role);
+    expect((await deleteReminderAction('kids-own')).ok).toBe(false);
+    expect(has('kids-own')).toBe(true);
+  });
+
+  it('a child may remove one they created or that is about them', async () => {
+    actAs('child');
+    expect((await deleteReminderAction('kids-own')).ok).toBe(true);
+    expect((await deleteReminderAction('about-kid')).ok).toBe(true);
+    expect(has('kids-own') || has('about-kid')).toBe(false);
+  });
+
+  it('an adult may remove any of the family’s', async () => {
+    actAs('adult');
+    expect((await deleteReminderAction('parents')).ok).toBe(true);
+    expect(has('parents')).toBe(false);
+  });
+});
