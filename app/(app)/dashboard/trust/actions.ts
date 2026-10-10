@@ -30,6 +30,19 @@ function actionFailure(error: unknown, fallback: string): Result {
   return { ok: false, error: describeActionError(error, fallback) };
 }
 
+/**
+ * Apply compare-and-set fences to a write INSIDE the statement that reads its
+ * rows back. The fences below depend on what was read (an open row, or this
+ * caller's own abandoned claim), and a builder assembled across statements —
+ * `let q = …update(…); if (…) q = q.eq(…); await q.select('id')` — is a write
+ * the guards read as unconfirmed, because each judges the statement holding
+ * the `.update(` on its own (tests/a-filtered-delete-is-not-a-deletion). One
+ * statement: the write, its fences, and `.select('id')`.
+ */
+function fenced<Q>(write: Q, ...fences: Array<(write: Q) => Q>): Q {
+  return fences.reduce((q, fence) => fence(q), write);
+}
+
 const EFFECTS = ['allow', 'deny', 'require_approval', 'auto_approve'] as const;
 
 const SUBJECT_KINDS = ['role', 'member', 'ai', 'everyone'] as const;
@@ -256,19 +269,19 @@ export async function acceptPolicySuggestionAction(input: { suggestionId: string
     // (trust_policies has no unique index to stop the second); an accept also
     // used to overwrite a dismissal or an archive that landed in between. Only
     // the accept whose claim matches a row may write.
-    let claim = supabase.from('autopilot_suggestions')
-      .update({ status: 'approved', resolved_at: new Date().toISOString(), resolved_by: ctx.user.id })
-      .eq('id', suggestion.id).eq('family_id', familyId);
-    // Re-taking an abandoned claim is fenced on the claim time read too: each
-    // claim stamps a new one, so of two retries only the first matches.
-    if (staleClaim) {
-      claim = claim.eq('status', 'approved').eq('resolved_by', ctx.user.id);
-      claim = suggestion.resolved_at ? claim.eq('resolved_at', suggestion.resolved_at) : claim.is('resolved_at', null);
-    } else {
-      claim = claim.eq('status', 'open');
-    }
-    if (suggestion.updated_at) claim = claim.eq('updated_at', suggestion.updated_at);
-    const { data: claimed, error: claimError } = await claim.select('id');
+    const { data: claimed, error: claimError } = await fenced(
+      supabase.from('autopilot_suggestions')
+        .update({ status: 'approved', resolved_at: new Date().toISOString(), resolved_by: ctx.user.id })
+        .eq('id', suggestion.id).eq('family_id', familyId),
+      // Re-taking an abandoned claim is fenced on the claim time read too: each
+      // claim stamps a new one, so of two retries only the first matches.
+      (write) => (staleClaim
+        ? (suggestion.resolved_at
+          ? write.eq('status', 'approved').eq('resolved_by', ctx.user.id).eq('resolved_at', suggestion.resolved_at)
+          : write.eq('status', 'approved').eq('resolved_by', ctx.user.id).is('resolved_at', null))
+        : write.eq('status', 'open')),
+      (write) => (suggestion.updated_at ? write.eq('updated_at', suggestion.updated_at) : write),
+    ).select('id');
     if (claimError) return actionFailure(claimError, t('actions.couldNotCreateThatPolicy'));
     if (wroteNoRows(claimed)) return { ok: false, error: t('actions.thatSuggestionIsNoLongerOpen') };
     const saved = await savePolicyAction({
@@ -289,11 +302,16 @@ export async function acceptPolicySuggestionAction(input: { suggestionId: string
       enabled: true,
     });
     if (!saved.ok) {
-      // Release the claim so the offer is still there to accept.
-      const { error: releaseError } = await supabase.from('autopilot_suggestions')
+      // Release the claim so the offer is still there to accept. Fenced on this
+      // caller's claim and read back: a release that matched nothing (a dismissal
+      // or an archive landed in between) is logged, not reported — the policy
+      // error is what the manager reads either way.
+      const { data: released, error: releaseError } = await supabase.from('autopilot_suggestions')
         .update({ status: 'open', resolved_at: null, resolved_by: null })
-        .eq('id', suggestion.id).eq('family_id', familyId).eq('status', 'approved').eq('resolved_by', ctx.user.id);
-      if (releaseError) console.error('[trust] suggestion claim release failed', { suggestionId: suggestion.id, error: releaseError });
+        .eq('id', suggestion.id).eq('family_id', familyId).eq('status', 'approved').eq('resolved_by', ctx.user.id).select('id');
+      if (releaseError || wroteNoRows(released)) {
+        console.error('[trust] suggestion claim release failed', { suggestionId: suggestion.id, error: releaseError ?? 'no rows updated' });
+      }
       return saved;
     }
   }
@@ -313,11 +331,10 @@ export async function acceptPolicySuggestionAction(input: { suggestionId: string
   // A concurrent accept that already finished this exact resolution is success.
   const alreadyExecuted = async () => (await supabase.from('autopilot_suggestions')
     .select('status').eq('id', suggestion.id).eq('family_id', familyId).maybeSingle()).data?.status === 'executed';
-  let resolve = supabase.from('autopilot_suggestions')
+  const { data: resolved, error: resolveError } = await fenced(supabase.from('autopilot_suggestions')
     .update({ status: 'executed', resolved_at: new Date().toISOString(), resolved_by: ctx.user.id })
-    .eq('id', suggestion.id).eq('family_id', familyId).eq('status', fromStatus);
-  if (alreadyHeld && suggestion.updated_at) resolve = resolve.eq('updated_at', suggestion.updated_at);
-  const { data: resolved, error: resolveError } = await resolve.select('id');
+    .eq('id', suggestion.id).eq('family_id', familyId).eq('status', fromStatus),
+  (write) => (alreadyHeld && suggestion.updated_at ? write.eq('updated_at', suggestion.updated_at) : write)).select('id');
   if (resolveError) return actionFailure(resolveError, t('actions.thePolicyWasSavedButTheSuggestion'));
   // When the policy was already held, this call wrote nothing: say so instead.
   if (wroteNoRows(resolved) && !await alreadyExecuted()) {

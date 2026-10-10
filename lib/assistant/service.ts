@@ -577,8 +577,11 @@ async function discardEmptyList(
     const { data: items, error: itemsError } = await supabase
       .from(itemTable).select('id').eq('family_id', link.family_id).eq('list_id', list.id).limit(1);
     if (itemsError || (items ?? []).length > 0) return;
-    const { error } = await supabase.from(table).delete().eq('id', list.id).eq('family_id', link.family_id);
+    // Read back, so a delete that matched nothing (a list already gone, or a
+    // policy that filtered it) is logged rather than taken for a cleanup.
+    const { data: removed, error } = await supabase.from(table).delete().eq('id', list.id).eq('family_id', link.family_id).select('id');
     if (error) console.error(`[assistant] ${table} cleanup failed`, error);
+    else if (wroteNoRows(removed)) console.error(`[assistant] ${table} cleanup removed nothing`, { listId: list.id });
   } catch (err) {
     console.error(`[assistant] ${table} cleanup failed`, err);
   }

@@ -55,10 +55,12 @@ const X_RECEIPT_STALE_MS = 15 * 60_000;
 /** Retire this family's X connect receipts that never completed (expired cookie, closed tab). */
 async function sweepStaleXReceipts(db: Db, actor: XActor): Promise<void> {
   // Only unclaimed receipts: a reconnect target or a claimed new account always
-  // carries provider_account_id, so a connected account can never match.
-  await db.from('social_accounts').update({ status: 'disconnected', deleted_at: new Date().toISOString(), updated_by: actor.userId })
+  // carries provider_account_id, so a connected account can never match. Zero
+  // rows is the ordinary answer (nothing stale); a refused write is logged.
+  const { error } = await db.from('social_accounts').update({ status: 'disconnected', deleted_at: new Date().toISOString(), updated_by: actor.userId })
     .eq('family_id', actor.familyId).eq('platform', 'x').eq('status', 'pending').is('deleted_at', null).is('provider_account_id', null)
     .not('metadata->>x_flow', 'is', null).lt('created_at', new Date(Date.now() - X_RECEIPT_STALE_MS).toISOString()).select('id');
+  if (error) console.error('[social-x] could not retire stale connect receipts', { familyId: actor.familyId, error: error.message });
 }
 
 /** Soft-delete one flow's own pending receipt account, pinned to that flow. */
@@ -87,9 +89,12 @@ export async function abandonXReceipt(flow: XFlow, claimed: boolean): Promise<vo
     return;
   }
   if (!(await retireXReceiptAccount(db, flow))) return;
-  await db.from('social_account_tokens').update({ access_token_enc: null, refresh_token_enc: null, provider_account_id: null,
+  // Pinned to this flow's revision, so zero rows means a newer flow owns the
+  // row and nothing of this one is left to wipe; a refused write is logged.
+  const { error } = await db.from('social_account_tokens').update({ access_token_enc: null, refresh_token_enc: null, provider_account_id: null,
     metadata: { x_state: 'consumed', x_revision: flow.revision }, updated_by: flow.userId })
     .eq('id', flow.accountId).eq('family_id', flow.familyId).contains('metadata', { x_revision: flow.revision }).select('id');
+  if (error) console.error('[social-x] could not wipe an abandoned receipt token', { accountId: flow.accountId, error: error.message });
 }
 
 export async function createXReceipt(flow: XFlow, stateHash: string): Promise<void> {
@@ -230,28 +235,40 @@ export async function saveXConnection(flow: XFlow, grant: XGrant, identity: { id
 async function restoreXReconnectTarget(db: Db, flow: XFlow, target: Account, oldToken: Token | null,
   progress: { token: boolean; account: boolean; saved: boolean }): Promise<void> {
   const wasLive = target.status === 'connected' && !target.deleted_at;
+  // Every write below is a compare-and-set on this flow's revision, so zero
+  // rows is ordinary (a newer flow or a refresh got there first). A REFUSED
+  // write is not: it leaves the account or its credential in the state this
+  // function exists to undo, and the caller swallows the throw, so each is
+  // logged here with what it could not restore.
+  const report = (what: string, error: { message: string } | null) => {
+    if (error) console.error(`[social-x] could not ${what} after a failed reconnect`, { accountId: target.id, error: error.message });
+  };
   if (progress.token && !progress.saved) {
     // The old ciphertexts are untouched: hand the row back exactly as it was.
     if (oldToken) {
-      await db.from('social_account_tokens').update({ metadata: oldToken.metadata }).eq('id', target.id).eq('family_id', flow.familyId)
+      const { error } = await db.from('social_account_tokens').update({ metadata: oldToken.metadata }).eq('id', target.id).eq('family_id', flow.familyId)
         .contains('metadata', { x_state: 'connecting', x_revision: flow.revision }).select('id');
+      report('hand the credential row back', error);
     } else {
-      await db.from('social_account_tokens').delete().eq('id', target.id).eq('family_id', flow.familyId)
+      const { error } = await db.from('social_account_tokens').delete().eq('id', target.id).eq('family_id', flow.familyId)
         .contains('metadata', { x_state: 'connecting', x_revision: flow.revision }).select('id');
+      report('remove the credential row it inserted', error);
     }
   } else if (progress.saved && !wasLive) {
     // The new grant replaced the old one on an account that will not become
     // connected: revoke it rather than leave a live credential behind.
-    await db.from('social_account_tokens').update({ access_token_enc: null, refresh_token_enc: null,
+    const { error } = await db.from('social_account_tokens').update({ access_token_enc: null, refresh_token_enc: null,
       metadata: { x_state: 'blocked', x_revision: randomUUID(), x_revoked_at: Date.now() }, updated_by: flow.userId })
       .eq('id', target.id).eq('family_id', flow.familyId).contains('metadata', { x_state: 'ready', x_revision: flow.revision }).select('id');
+    report('revoke the grant it saved', error);
   }
   // A saved grant on a previously connected account is a valid credential for
   // the same identity, so restoring 'connected' leaves it publishable.
   if (progress.account) {
-    await db.from('social_accounts').update({ provider_account_id: target.provider_account_id, status: target.status,
+    const { error } = await db.from('social_accounts').update({ provider_account_id: target.provider_account_id, status: target.status,
       deleted_at: target.deleted_at, metadata: target.metadata, updated_by: flow.userId })
       .eq('id', target.id).eq('family_id', flow.familyId).eq('status', 'pending').contains('metadata', { x_flow: flow.revision }).select('id');
+    report('restore the account row', error);
   }
 }
 

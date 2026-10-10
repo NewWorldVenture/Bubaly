@@ -72,9 +72,10 @@ export async function closeAccountAction(): Promise<Result> {
         continue;
       }
       // Stripe — the thing that bills — is resumed; the webhook reconciles a
-      // local row this write misses.
-      const { error: syncError } = await admin.from('subscriptions').update({ cancel_at_period_end: false }).eq('id', s.id);
-      if (syncError) console.error('[account-action] subscription sync write failed after resume', { subscriptionId: s.id, error: syncError });
+      // local row this write misses. Read back for the log: a row it did not
+      // reach is a billing page out of step until the webhook lands.
+      const { data: synced, error: syncError } = await admin.from('subscriptions').update({ cancel_at_period_end: false }).eq('id', s.id).select('id');
+      if (syncError || wroteNoRows(synced)) console.error('[account-action] subscription sync write failed after resume', { subscriptionId: s.id, error: syncError ?? 'no rows updated' });
     }
     return resumedAll;
   };
@@ -93,9 +94,9 @@ export async function closeAccountAction(): Promise<Result> {
     cancelled.push({ id: s.id, provider_ref: s.provider_ref! });
     // The webhook reconciles the local row as well; this keeps the billing page
     // honest in the meantime. A failed sync is logged, not fatal: Stripe — the
-    // thing that bills — has already changed.
-    const { error: syncError } = await admin.from('subscriptions').update({ cancel_at_period_end: true }).eq('id', s.id);
-    if (syncError) console.error('[account-action] subscription sync write failed after cancel', syncError);
+    // thing that bills — has already changed. Read back for the same log.
+    const { data: synced, error: syncError } = await admin.from('subscriptions').update({ cancel_at_period_end: true }).eq('id', s.id).select('id');
+    if (syncError || wroteNoRows(synced)) console.error('[account-action] subscription sync write failed after cancel', { subscriptionId: s.id, error: syncError ?? 'no rows updated' });
   }
 
   // Closing an account has retention and billing consequences the family is
@@ -185,8 +186,9 @@ async function resumeSubscriptionsTheCloseCancelled(
       restored = false;
       continue;
     }
-    const { error: syncError } = await admin.from('subscriptions').update({ cancel_at_period_end: false }).eq('id', s.id);
-    if (syncError) console.error('[account-action] subscription sync write failed after resume', { subscriptionId: s.id, error: syncError });
+    // Read back for the log, as above: Stripe has already resumed billing.
+    const { data: synced, error: syncError } = await admin.from('subscriptions').update({ cancel_at_period_end: false }).eq('id', s.id).select('id');
+    if (syncError || wroteNoRows(synced)) console.error('[account-action] subscription sync write failed after resume', { subscriptionId: s.id, error: syncError ?? 'no rows updated' });
   }
   return restored;
 }

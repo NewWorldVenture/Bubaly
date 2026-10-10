@@ -28,7 +28,7 @@ import 'server-only';
 import { readAllPages } from '@/lib/supabase/read-all-pages';
 import type { BudgetPeriod, Json, Tables, TransactionType } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
 import { withIdempotency } from '../idempotency';
 import { dayKeyInTz, scopeNow } from '../scope';
@@ -761,13 +761,17 @@ export async function updateBudget(
   if (winnerError) {
     console.error('[service:finances] budget duplicate check failed', winnerError);
   } else if (winner && winner.id !== data.id) {
-    const { error: dropError } = await scope.db
+    // Read back: a delete that matched nothing leaves our duplicate in place,
+    // and the answer below is then the budget this call DID create, not the
+    // one it failed to merge into.
+    const { data: dropped, error: dropError } = await scope.db
       .from('budgets')
       .delete()
       .eq('id', data.id)
-      .eq('family_id', scope.familyId);
-    if (dropError) {
-      console.error('[service:finances] duplicate budget cleanup failed', dropError);
+      .eq('family_id', scope.familyId)
+      .select('id');
+    if (dropError || wroteNoRows(dropped)) {
+      console.error('[service:finances] duplicate budget cleanup failed', dropError ?? { budgetId: data.id, error: 'no rows deleted' });
     } else {
       return applyTo(winner);
     }
