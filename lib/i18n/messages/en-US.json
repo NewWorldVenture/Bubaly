@@ -16843,5 +16843,6 @@
   "mobileAssistant.conflictFamilyOne": "{count} family advisory",
   "mobileAssistant.conflictFamilyOther": "{count} family advisories",
   "mobileAssistant.conflictCounts": "{personal} · {family}",
-  "mobileAssistant.conflictMobileFamilyLine": "Family occupancy advisory: {titles} overlap {when}. Imported occupancy applies to the family; it does not identify who is double-booked."
+  "mobileAssistant.conflictMobileFamilyLine": "Family occupancy advisory: {titles} overlap {when}. Imported occupancy applies to the family; it does not identify who is double-booked.",
+  "handoff.pickupChangedRefresh": "This pickup changed a moment ago. Refresh to see where it stands."
 }

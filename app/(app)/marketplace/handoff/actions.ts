@@ -62,7 +62,7 @@ async function loadOrderRole(orderId: string) {
   return { ctx, sb, order, orderError, role };
 }
 
-/** Propose (or re-propose) a pickup. Upserts the single handoff for the order. */
+/** Propose (or re-propose) a pickup: the order's single handoff, first or again. */
 export async function proposeHandoffAction(input: {
   orderId: string; meetAtIso?: string | null; locationLabel: string; locationKind?: LocationKind; notes?: string;
 }): Promise<Result> {
@@ -74,15 +74,43 @@ export async function proposeHandoffAction(input: {
   if (['completed', 'cancelled'].includes(order.status)) return { ok: false, error: t('actions.thisOrderIsClosed') };
   if (!input.locationLabel?.trim()) return { ok: false, error: t('actions.pickOrTypeAMeetup') };
 
-  const { error } = await sb.from('marketplace_handoffs').upsert({
-    order_id: order.id, family_id: order.family_id, listing_id: order.listing_id,
+  // This was an upsert on `order_id` that never looked at what it replaced.
+  // Reschedule is offered while a pickup is proposed, so pressed on a screen
+  // that had not caught up with the other party confirming it, it put the
+  // pickup back to `proposed`, cleared the code they were holding and unlinked
+  // its calendar event. Read it, and rewrite only what may be rewritten.
+  const { data: current, error: currentError } = await sb.from('marketplace_handoffs')
+    .select('id, status, calendar_event_id').eq('order_id', order.id).eq('family_id', order.family_id).maybeSingle();
+  if (currentError) return actionFailure('load the pickup', t('handoff.couldNotLoadThePickup'), currentError);
+  if (current && current.status !== 'proposed' && current.status !== 'cancelled') {
+    return { ok: false, error: t('handoff.pickupChangedRefresh') };
+  }
+
+  const proposal = {
     proposed_by: ctx.active.member.id, proposer_role: role,
     meet_at: input.meetAtIso ?? null, location_label: input.locationLabel.trim(),
     location_kind: input.locationKind ?? 'public_spot', status: 'proposed',
     confirm_code: null, confirmed_at: null, completed_at: null, calendar_event_id: null,
     notes: input.notes?.trim() || null,
-  }, { onConflict: 'order_id' });
-  if (error) return actionFailure('propose the pickup', t('handoff.couldNotProposeThePickup'), error);
+  };
+  if (!current) {
+    // `order_id` is unique, so a first pickup the other party arranged a moment
+    // earlier makes this a 23505 rather than a second row or an overwrite.
+    const { error } = await sb.from('marketplace_handoffs').insert({
+      order_id: order.id, family_id: order.family_id, listing_id: order.listing_id, ...proposal,
+    });
+    if (error?.code === '23505') return { ok: false, error: t('handoff.pickupChangedRefresh') };
+    if (error) return actionFailure('propose the pickup', t('handoff.couldNotProposeThePickup'), error);
+  } else {
+    // Guarded on the status it was read in: one confirmed in between matches nothing.
+    const { data: proposed, error } = await sb.from('marketplace_handoffs').update(proposal)
+      .eq('id', current.id).eq('family_id', order.family_id).eq('status', current.status).select('id');
+    if (error) return actionFailure('propose the pickup', t('handoff.couldNotProposeThePickup'), error);
+    if (wroteNoRows(proposed)) return { ok: false, error: t('handoff.pickupChangedRefresh') };
+    // A pickup cancelled before cancelling took its event down can still link
+    // one; arranged again, that is the old time left on the calendar.
+    if (current.status === 'cancelled') await removePickupFromCalendar(sb, order.family_id, current.calendar_event_id);
+  }
 
   revalidatePath('/marketplace/orders');
   return { ok: true };

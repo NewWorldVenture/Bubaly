@@ -16843,5 +16843,6 @@
   "mobileAssistant.conflictFamilyOne": "{count} aviso familiar",
   "mobileAssistant.conflictFamilyOther": "{count} avisos familiares",
   "mobileAssistant.conflictCounts": "{personal} · {family}",
-  "mobileAssistant.conflictMobileFamilyLine": "Aviso de ocupación familiar: {titles} se solapan {when}. La ocupación importada se aplica a la familia; no identifica quién tiene una doble reserva."
+  "mobileAssistant.conflictMobileFamilyLine": "Aviso de ocupación familiar: {titles} se solapan {when}. La ocupación importada se aplica a la familia; no identifica quién tiene una doble reserva.",
+  "handoff.pickupChangedRefresh": "Esta recogida acaba de cambiar. Actualiza la página para ver en qué punto está."
 }

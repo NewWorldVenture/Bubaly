@@ -16843,5 +16843,6 @@
   "mobileAssistant.conflictFamilyOne": "{count} Familienhinweis",
   "mobileAssistant.conflictFamilyOther": "{count} Familienhinweise",
   "mobileAssistant.conflictCounts": "{personal} · {family}",
-  "mobileAssistant.conflictMobileFamilyLine": "Hinweis zur Familienbelegung: {titles} überschneiden sich {when}. Importierte Belegungen gelten für die Familie; sie zeigen nicht, wer doppelt verplant ist."
+  "mobileAssistant.conflictMobileFamilyLine": "Hinweis zur Familienbelegung: {titles} überschneiden sich {when}. Importierte Belegungen gelten für die Familie; sie zeigen nicht, wer doppelt verplant ist.",
+  "handoff.pickupChangedRefresh": "Diese Abholung wurde gerade geändert. Aktualisiere die Seite, um den aktuellen Stand zu sehen."
 }

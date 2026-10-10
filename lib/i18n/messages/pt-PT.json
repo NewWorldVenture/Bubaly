@@ -16843,5 +16843,6 @@
   "mobileAssistant.conflictFamilyOne": "{count} aviso familiar",
   "mobileAssistant.conflictFamilyOther": "{count} avisos familiares",
   "mobileAssistant.conflictCounts": "{personal} · {family}",
-  "mobileAssistant.conflictMobileFamilyLine": "Aviso de ocupação familiar: {titles} sobrepõem-se {when}. A ocupação importada aplica-se à família; não identifica quem tem dois compromissos simultâneos."
+  "mobileAssistant.conflictMobileFamilyLine": "Aviso de ocupação familiar: {titles} sobrepõem-se {when}. A ocupação importada aplica-se à família; não identifica quem tem dois compromissos simultâneos.",
+  "handoff.pickupChangedRefresh": "Esta recolha acabou de mudar. Atualize a página para ver em que ponto está."
 }
