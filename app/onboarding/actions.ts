@@ -38,6 +38,7 @@ import { finishConnectedCalendar, enableConnectedCalendar, validateConnectedCale
 import type { ServiceScope } from '@/lib/services/types';
 import type { OnboardingOwner } from '@/lib/onboarding/owner';
 import { verifyOnboardingOwner } from '@/lib/onboarding/verify-owner';
+import { isChildLoginEmail } from '@/lib/onboarding/child-login';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -370,6 +371,9 @@ export async function finalizeOnboardingAction(input: {
   const { data: auth, error: authError } = await supabase.auth.getUser();
   if (authError) return { ok: false, error: t('actions.couldNotFinishSettingUp2') };
   if (!auth.user) return { ok: false, error: t('actions.notSignedIn') };
+  // A kid login belongs to the family whose parent made it. With no family
+  // (the parent removed the child) the wizard made it the PARENT of a new one.
+  if (isChildLoginEmail(auth.user.email)) return { ok: false, error: t('onboardingWizard.aKidLoginCannotSetUpAFamily') };
 
   if (!await verifyOnboardingOwner(supabase, auth.user.id, expectedOwner)) return { ok: false, error: t('onboardingWizard.contextChanged') };
 

@@ -10568,6 +10568,7 @@
   "onboardingWizard.yourInformationIsProtectedWithTop": "Vos informations sont protégées par une sécurité de premier niveau.",
   "onboardingWizard.yourName": "Votre nom",
   "onboardingWizard.youreAllSet": "Tout est prêt,",
+  "onboardingWizard.aKidLoginCannotSetUpAFamily": "Ceci est une connexion enfant. Elle appartient à ta propre famille, elle ne peut donc pas en créer une nouvelle. Demande à tes parents.",
   "orderControls.cancel": "Annuler",
   "orderControls.howDidItGo": "Comment ça s'est passé ?",
   "orderControls.leaveAReview": "Laisser un avis",

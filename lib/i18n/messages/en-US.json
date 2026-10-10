@@ -10732,6 +10732,7 @@
   "onboardingWizard.yourInformationIsProtectedWithTop": "Your information is protected with top-level security.",
   "onboardingWizard.yourName": "Your name",
   "onboardingWizard.youreAllSet": "You’re all set,",
+  "onboardingWizard.aKidLoginCannotSetUpAFamily": "This is a kid login. It belongs to your own family, so it can't set up a new one. Ask your parent.",
   "orderControls.cancel": "Cancel",
   "orderControls.howDidItGo": "How did it go?",
   "orderControls.leaveAReview": "Leave a review",

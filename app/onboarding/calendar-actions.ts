@@ -16,6 +16,7 @@ import type { ServiceScope } from '@/lib/services/types';
 import { isReviewPlan, type ReviewPlan } from '@/lib/billing/review-selection';
 import { onboardingOwnerSchema, type OnboardingOwner } from '@/lib/onboarding/owner';
 import { verifyOnboardingOwner } from '@/lib/onboarding/verify-owner';
+import { isChildLoginEmail } from '@/lib/onboarding/child-login';
 
 const startSchema = z.object({ provider: onboardingCalendarProvider, family: createFamilySchema,
   displayName: z.string().trim().min(1).max(60) });
@@ -31,6 +32,8 @@ export async function startCalendarConnectionAction(input: z.infer<typeof startS
     const db = await createServer();
     const auth = await db.auth.getUser();
     if (auth.error || !auth.data.user) return { ok: false as const, error: t('connectedCalendar.unavailable') };
+    // Connecting claims a family with the caller as its parent; a kid login never owns one.
+    if (isChildLoginEmail(auth.data.user.email)) return { ok: false as const, error: t('onboardingWizard.aKidLoginCannotSetUpAFamily') };
     if (!await verifyOnboardingOwner(db, auth.data.user.id, hint.data.expectedOwner)) return { ok: false as const, error: t('onboardingWizard.contextChanged') };
     const scope: ServiceScope = { db: createServiceClient(), familyId: '', userId: auth.data.user.id, role: 'parent', actorKind: 'member', memberId: null, tz: family.timezone };
     await assertOnboardingCalendarAccess(scope);
