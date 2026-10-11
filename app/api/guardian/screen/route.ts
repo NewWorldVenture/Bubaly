@@ -20,7 +20,7 @@ import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import { appBaseUrl } from '@/lib/server/app-url';
 import { escalateGuardianEmergency } from '@/lib/guardian/escalate';
-import type { GuardianEscalationInput } from '@/lib/guardian/escalation';
+import { guardianEscalationDescription, type GuardianEscalationInput } from '@/lib/guardian/escalation';
 import { oweGuardianEscalation } from '@/lib/guardian/escalation-owed';
 
 export const runtime = 'nodejs';
@@ -394,7 +394,7 @@ async function notifyFamily(
       commId: opts.commId,
       escalationType: 'emergency_call',
       severity: 'critical',
-      description: `Emergency call from ${opts.callerName}: ${opts.summary}`.slice(0, 4096),
+      description: guardianEscalationDescription(`Emergency call from ${opts.callerName}: ${opts.summary}`),
       ...(opts.callerNumber ? { callerNumber: opts.callerNumber.slice(0, 64) } : {}),
     };
     const escalate = async () => {

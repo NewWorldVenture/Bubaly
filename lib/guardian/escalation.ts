@@ -1,12 +1,37 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 
+/**
+ * The longest description an escalation carries. The internal route refuses a
+ * longer one, and everything that rebuilds an escalation from what was stored
+ * takes nothing longer back: the retry sweep from its record, the sweep from a
+ * work item, a WhatsApp redelivery from its message's mark.
+ */
+export const GUARDIAN_ESCALATION_DESCRIPTION_MAX = 4096;
+
+/**
+ * An inbound lane's escalation description, cut to what every reader of it
+ * takes back. It names the caller, and for a contact that is whatever the
+ * family typed (guardian_contacts.name has no bound). Past the bound it was
+ * written and then never read again: the sweep could not rebuild the record,
+ * the work item could not be landed, and a WhatsApp redelivery could not parse
+ * its mark — so an emergency that reached nobody at first was never sent.
+ * Cut before the escalation is keyed, so the key a reader rebuilds is the one
+ * it was raised under, and never through the middle of a surrogate pair, so
+ * what is stored is well-formed text.
+ */
+export function guardianEscalationDescription(text: string): string {
+  if (text.length <= GUARDIAN_ESCALATION_DESCRIPTION_MAX) return text;
+  const cut = text.slice(0, GUARDIAN_ESCALATION_DESCRIPTION_MAX);
+  return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut;
+}
+
 export const guardianEscalationSchema = z.object({
   familyId: z.string().uuid(),
   commId: z.string().uuid().optional(),
   escalationType: z.enum(['emergency_call', 'medical', 'police', 'fire', 'child_safety', 'urgent_personal']),
   severity: z.enum(['high', 'critical']),
-  description: z.string().trim().min(1).max(4096),
+  description: z.string().trim().min(1).max(GUARDIAN_ESCALATION_DESCRIPTION_MAX),
   callerNumber: z.string().trim().max(64).optional(),
 });
 

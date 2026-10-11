@@ -12,6 +12,7 @@ import { captureGuardianSmsReceipt, readGuardianSmsReceipt, readGuardianSmsRecei
 import { guardianSmsScope, notifyGuardianSms } from './sms-notification';
 import { smsStep } from './sms-deadline';
 import { escalateGuardianEmergency } from './escalate';
+import { guardianEscalationDescription } from './escalation';
 import { GUARDIAN_INBOUND_CAP_REASON, GUARDIAN_INBOUND_FAMILY_CAP, GUARDIAN_INBOUND_SENDER_CAP, GUARDIAN_INBOUND_WINDOW_MS } from './inbound-caps';
 
 type Client = SupabaseClient<Database>;
@@ -316,11 +317,15 @@ async function processOwned(client: Client, input: GuardianSmsReceiptInput, leas
     // Text and call the managers. Keyed on the communication, so a retried
     // delivery is answered by the escalation's own claim instead of alarming
     // twice. The step's signal goes in with it, so the fan-out stops at the
-    // step's deadline instead of running on detached.
+    // step's deadline instead of running on detached. The description is cut
+    // to what the retry sweep reads back: it names the contact, whose name
+    // nothing bounds, and a record with a longer one could not be rebuilt, so
+    // an emergency that reached nobody at first — completed here, its retry
+    // left to the sweep — was never sent.
     await fence();
     const escalation = await smsStep(signal, current => escalateGuardianEmergency(client, {
       familyId: input.familyId, commId: receipt.communicationId, escalationType: 'urgent_personal', severity: 'critical',
-      description: `Emergency text from ${fields.from_name ?? formatPhone(input.from)}: "${input.body.slice(0, 300)}"`,
+      description: guardianEscalationDescription(`Emergency text from ${fields.from_name ?? formatPhone(input.from)}: "${input.body.slice(0, 300)}"`),
       ...(input.from ? { callerNumber: input.from.slice(0, 64) } : {}),
     }, { signal: current }), ESCALATION_MS);
     // A storage failure before anything was sent, one cut off before anyone

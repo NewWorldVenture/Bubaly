@@ -52,6 +52,18 @@
 //     move past ones that could not be landed: ten of those took every slot
 //     on every tick, and a newer one behind them was never landed.
 //
+// And one the fix for 8 made:
+//
+// 11. A WhatsApp emergency's description was not capped, and it carries the
+//     contact's name, which is not capped either. Past 4096 characters the
+//     mark, the record and the work item were all written in a shape their
+//     readers refuse: the sweep counted the record unavailable on every tick,
+//     and every late redelivery took the mark it could not parse for a failed
+//     read, gave its claim back and answered 503 — for ever. Nobody was ever
+//     texted or called. The description is capped now, as the screening
+//     route's always was, and a mark on file that cannot be parsed is told
+//     apart from one that could not be read: only the second is retried.
+//
 // Everything here goes through the real callers: the WhatsApp and screening
 // webhooks, and the recovery cron route the dispatcher calls.
 import { createHmac } from 'node:crypto';
@@ -825,5 +837,160 @@ describe('owed escalations that cannot be landed', () => {
     // And the ones that cannot be landed are still tried in their turn.
     expect(second.body.escalations.unavailable).toBe(9);
     expect(owedItems().filter((item) => item.state === 'reserved')).toHaveLength(10);
+  });
+});
+
+describe('a WhatsApp emergency from a contact whose name is longer than an escalation can carry', () => {
+  const CONTACT = '77777777-7777-4777-8777-777777777777';
+  // guardian_contacts.name is a text column, and the action that writes it
+  // (app/(app)/guardian/actions.ts) bounds it nowhere.
+  const LONG_NAME = 'N'.repeat(4200);
+  const markOf = (smsSid: string) => db.table('ai_tool_calls').find((row) => row.tool_name === 'guardian.whatsapp_escalation_key' && row.idempotency_key === `guardian.whatsapp_escalation_key:v1:${smsSid}`);
+  beforeEach(() => db.seed('guardian_contacts', [{ id: CONTACT, family_id: FAMILY, phone: CALLER, name: LONG_NAME, trust_level: 'known_contact', spam_score: 0 }]));
+
+  /** The first delivery: its message not recorded, so escalated under its text, and nobody reachable at first. */
+  async function escalatedUnderItsTextReachingNobody() {
+    fail('guardian_communications', 'insert', 1);
+    seam.telephony.down = true;
+    expect((await whatsapp()).status).toBe(503);
+    expect(communications()).toEqual([]);
+    expect(escalations()).toEqual([expect.objectContaining({ communication_id: null, notified_member_ids: [], sms_sent: false })]);
+    const description = String(escalations()[0].description);
+    expect(description.startsWith(`Emergency WhatsApp from ${'N'.repeat(100)}`)).toBe(true);
+    expect(markOf(WA_SID)?.inputs).toMatchObject({ version: 1, smsSid: WA_SID, input: { description } });
+    expect(callback(WA_SID)).toMatchObject({ status: 'error' });
+    seam.telephony.down = false;
+  }
+  /** Within what the sweep and the mark's reader take back. */
+  const readableBack = (description: unknown) => expect(String(description).length).toBeLessThanOrEqual(4096);
+
+  it('the sweep reaches the parent once, and late redeliveries are acknowledged rather than answered 503 for ever', async () => {
+    await escalatedUnderItsTextReachingNobody();
+    // The defect: the record's description was past what the sweep reads
+    // back, so it was counted unavailable here and on every tick after.
+    const { status, body } = await tick();
+    expect(body.escalations).toMatchObject({ examined: 1, delivered: 1, unavailable: 0 });
+    expect(status).toBe(200);
+    expect(seam.sent).toEqual([PARENT_PHONE]);
+    expect(seam.called).toEqual([PARENT_PHONE]);
+
+    // Three late redeliveries. The defect: each read a mark it could not
+    // parse as a read that failed, gave its claim back and answered 503 —
+    // and the next one did the same.
+    for (let delivery = 1; delivery <= 3; delivery += 1) {
+      if (callback(WA_SID)) age(WA_SID, 11 * MIN);
+      expect((await whatsapp()).status, `redelivery ${delivery}`).toBe(200);
+    }
+    expect(callback(WA_SID)).toMatchObject({ status: 'processed' });
+    expect(seam.sent, 'texted once').toEqual([PARENT_PHONE]);
+    expect(seam.called, 'called once').toEqual([PARENT_PHONE]);
+    expect(escalations()).toEqual([expect.objectContaining({ communication_id: null, notified_member_ids: [PARENT] })]);
+    expect(seam.notify, 'the family was told once').toHaveBeenCalledOnce();
+    expect((await tick()).body.escalations).toMatchObject({ examined: 0, unavailable: 0 });
+    readableBack(escalations()[0].description);
+    readableBack((markOf(WA_SID)?.inputs as { input: { description: string } }).input.description);
+  });
+
+  it('redelivered before the sweep runs: the redelivery joins its escalation and reaches the parent once', async () => {
+    await escalatedUnderItsTextReachingNobody();
+    age(WA_SID, 11 * MIN);
+    // The defect: 503 and the claim given back, on this delivery and on every
+    // one after it, while the sweep could not read the record either. The
+    // parent was never texted or called.
+    expect((await whatsapp()).status).toBe(200);
+    expect(communications()).toHaveLength(1);
+    expect(seam.sent).toEqual([PARENT_PHONE]);
+    expect(seam.called).toEqual([PARENT_PHONE]);
+    expect(escalations()).toEqual([expect.objectContaining({ communication_id: null, notified_member_ids: [PARENT] })]);
+    expect(callback(WA_SID)).toMatchObject({ status: 'processed' });
+    expect((await tick()).body.escalations).toMatchObject({ examined: 0, unavailable: 0 });
+    expect(seam.sent, 'texted once').toEqual([PARENT_PHONE]);
+    expect(seam.notify).toHaveBeenCalledOnce();
+    readableBack(escalations()[0].description);
+  });
+
+  it('with its record refused as well: the work item it leaves can be landed, and the next tick reaches the parent once', async () => {
+    fail('guardian_communications', 'insert', 1);
+    fail('guardian_escalations', 'upsert');
+    seam.telephony.down = true;
+    expect((await whatsapp()).status).toBe(503);
+    expect(escalations()).toEqual([]);
+    expect(owedItems()).toEqual([expect.objectContaining({ state: 'reserved' })]);
+
+    heal();
+    seam.telephony.down = false;
+    // The defect: the work item carried the whole description, which the
+    // sweep cannot land, so it was counted unavailable on every tick.
+    const { status, body } = await tick();
+    expect(body.escalations).toMatchObject({ recovered: 1, examined: 1, delivered: 1, unavailable: 0 });
+    expect(status).toBe(200);
+    expect(seam.sent).toEqual([PARENT_PHONE]);
+    expect(seam.called).toEqual([PARENT_PHONE]);
+    expect(escalations()).toEqual([expect.objectContaining({ communication_id: null, notified_member_ids: [PARENT] })]);
+    expect(owedItems()).toEqual([expect.objectContaining({ state: 'succeeded' })]);
+    readableBack((owedItems()[0].inputs as { input: { description: string } }).input.description);
+  });
+
+  it('cut where a character spans the bound: the whole character goes, never half of it', async () => {
+    // "Emergency WhatsApp from " is 24 units, so the ambulance's two UTF-16
+    // units sit at 4095 and 4096, across the bound.
+    db.table('guardian_contacts')[0].name = `${'N'.repeat(4071)}🚑${'N'.repeat(50)}`;
+    await escalatedUnderItsTextReachingNobody();
+    const description = String(escalations()[0].description);
+    expect(description).toBe(`Emergency WhatsApp from ${'N'.repeat(4071)}`);
+    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(description), 'no lone surrogate').toBe(false);
+    expect((await tick()).body.escalations).toMatchObject({ examined: 1, delivered: 1, unavailable: 0 });
+    expect(seam.sent).toEqual([PARENT_PHONE]);
+  });
+});
+
+describe('a late WhatsApp redelivery whose sid\'s mark is on file but cannot be parsed', () => {
+  const markOf = (smsSid: string) => db.table('ai_tool_calls').find((row) => row.tool_name === 'guardian.whatsapp_escalation_key' && row.idempotency_key === `guardian.whatsapp_escalation_key:v1:${smsSid}`);
+
+  /** The first delivery: its message not recorded, so escalated under its text, and nobody reachable at first. */
+  async function escalatedUnderItsTextReachingNobody() {
+    fail('guardian_communications', 'insert', 1);
+    seam.telephony.down = true;
+    expect((await whatsapp()).status).toBe(503);
+    expect(escalations()).toEqual([expect.objectContaining({ id: guardianEscalationRecordId(byContent), communication_id: null, notified_member_ids: [] })]);
+    expect(markOf(WA_SID)).toBeDefined();
+    seam.telephony.down = false;
+    age(WA_SID, 11 * MIN);
+  }
+
+  it('is not given back for ever: it goes on under the text the first delivery was escalated under, and reaches the parent once', async () => {
+    await escalatedUnderItsTextReachingNobody();
+    // The mark is there, in a shape this code cannot read back: written by
+    // another version, or — as the route used to write it — with a
+    // description past what its reader takes.
+    markOf(WA_SID)!.inputs = { version: 1, smsSid: WA_SID, input: { ...byContent, description: 'x'.repeat(5000) } };
+
+    // The defect: a mark that could not be parsed was taken for a read that
+    // failed, so the claim was given back and the delivery answered 503 — and
+    // a retry reads the same mark, so every delivery did, and nobody was
+    // texted or called.
+    expect((await whatsapp()).status).toBe(200);
+    expect(callback(WA_SID)).toMatchObject({ status: 'processed' });
+    expect(seam.sent).toEqual([PARENT_PHONE]);
+    expect(seam.called).toEqual([PARENT_PHONE]);
+    // The text-keyed escalation the first delivery raised, not a second one
+    // under the communication this delivery did record.
+    expect(communications()).toHaveLength(1);
+    expect(escalations()).toEqual([expect.objectContaining({ id: guardianEscalationRecordId(byContent), communication_id: null, notified_member_ids: [PARENT] })]);
+    expect(seam.notify, 'the family was told by the first delivery, and not again').toHaveBeenCalledOnce();
+    expect((await tick()).body.escalations).toMatchObject({ examined: 0 });
+    expect(seam.sent).toEqual([PARENT_PHONE]);
+  });
+
+  it('while a mark that could not be READ still gives the claim back for a retry', async () => {
+    await escalatedUnderItsTextReachingNobody();
+    fail('ai_tool_calls', 'select', 1);
+    expect((await whatsapp()).status).toBe(503);
+    expect(callback(WA_SID), 'given back for the retry').toBeUndefined();
+    expect(seam.sent).toEqual([]);
+    expect((await whatsapp()).status).toBe(200);
+    expect(seam.sent).toEqual([PARENT_PHONE]);
+    expect(seam.called).toEqual([PARENT_PHONE]);
+    expect(escalations()).toEqual([expect.objectContaining({ id: guardianEscalationRecordId(byContent), notified_member_ids: [PARENT] })]);
   });
 });

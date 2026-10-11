@@ -47,7 +47,7 @@ import 'server-only';
 import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ESCALATION_SENT_UNRECORDED, escalateGuardianEmergency, type GuardianEscalationOutcome } from './escalate';
-import { guardianEscalationEventId, type GuardianEscalationInput } from './escalation';
+import { GUARDIAN_ESCALATION_DESCRIPTION_MAX, guardianEscalationEventId, type GuardianEscalationInput } from './escalation';
 import { landOwedGuardianEscalations } from './escalation-owed';
 
 /** How far back a record that reached nobody is still re-attempted. */
@@ -113,7 +113,7 @@ function inputFrom(row: Record<string, unknown>): GuardianEscalationInput | null
   if (typeof family_id !== 'string' || !UUID.test(family_id)) return null;
   if (communication_id !== null && communication_id !== undefined && (typeof communication_id !== 'string' || !UUID.test(communication_id))) return null;
   if (!TYPES.includes(escalation_type as typeof TYPES[number]) || !SEVERITIES.includes(severity as typeof SEVERITIES[number])) return null;
-  if (typeof description !== 'string' || !description.trim() || description.length > 4096) return null;
+  if (typeof description !== 'string' || !description.trim() || description.length > GUARDIAN_ESCALATION_DESCRIPTION_MAX) return null;
   if (caller_number !== null && caller_number !== undefined && (typeof caller_number !== 'string' || caller_number.length > 64)) return null;
   return {
     familyId: family_id,

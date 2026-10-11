@@ -31,7 +31,7 @@
 import 'server-only';
 import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { guardianEscalationEventId, guardianEscalationRecordId, guardianEscalationStableId, type GuardianEscalationInput } from './escalation';
+import { GUARDIAN_ESCALATION_DESCRIPTION_MAX, guardianEscalationEventId, guardianEscalationRecordId, guardianEscalationStableId, type GuardianEscalationInput } from './escalation';
 
 export const GUARDIAN_ESCALATION_OWED_TOOL = 'guardian.escalation_owed';
 
@@ -46,7 +46,7 @@ const storedSchema = z.object({
     commId: uuid.optional(),
     escalationType: z.enum(['emergency_call', 'medical', 'police', 'fire', 'child_safety', 'urgent_personal']),
     severity: z.enum(['high', 'critical']),
-    description: z.string().min(1).max(4096),
+    description: z.string().min(1).max(GUARDIAN_ESCALATION_DESCRIPTION_MAX),
     callerNumber: z.string().max(64).optional(),
   }).strict(),
   pushSent: z.boolean(),
@@ -163,8 +163,17 @@ export type GuardianTextKeyedEscalation =
   /** No delivery of this message has escalated it under its text. */
   | { kind: 'none' }
   /**
-   * That could not be read, or the mark could not be trusted. Not "none": the
-   * caller chooses no identity from it, and gives its claim back for a retry.
+   * An earlier delivery did escalate it under its text — the mark is on file —
+   * and the mark cannot be parsed as this code writes one (another version's
+   * shape, or a description past the bound, as the route used to write it).
+   * Not "unreadable": a retry reads the same mark, so giving a claim back for
+   * one only answers 503 for ever. The caller keys the escalation on the text,
+   * as that delivery did.
+   */
+  | { kind: 'unparseable' }
+  /**
+   * The mark could not be read: the query failed. Not "none": the caller
+   * chooses no identity from it, and gives its claim back for a retry.
    */
   | { kind: 'unreadable' };
 
@@ -173,18 +182,24 @@ export type GuardianTextKeyedEscalation =
  * nothing else — escalated it under its text, and as what.
  */
 export async function guardianEscalationKeyedOnText(client: SupabaseClient, familyId: string, smsSid: string): Promise<GuardianTextKeyedEscalation> {
+  let data: unknown;
   try {
-    const { data, error } = await client.from('ai_tool_calls')
+    const read = await client.from('ai_tool_calls')
       .select('inputs').eq('family_id', familyId).eq('idempotency_key', textKeyIdempotency(smsSid))
       .eq('tool_name', GUARDIAN_WHATSAPP_TEXT_KEY_TOOL).limit(1);
-    if (error || !Array.isArray(data)) return { kind: 'unreadable' };
-    if (!data.length) return { kind: 'none' };
-    const mark = textKeySchema.safeParse((data[0] as { inputs?: unknown }).inputs);
-    if (!mark.success || mark.data.smsSid !== smsSid || mark.data.input.familyId !== familyId || mark.data.input.commId) return { kind: 'unreadable' };
-    return { kind: 'text', input: mark.data.input };
+    if (read.error || !Array.isArray(read.data)) return { kind: 'unreadable' };
+    data = read.data;
   } catch {
     return { kind: 'unreadable' };
   }
+  const rows = data as Array<{ inputs?: unknown }>;
+  if (!rows.length) return { kind: 'none' };
+  // Read, and on file. From here nothing is a failed read: a mark that cannot
+  // be parsed, or that names another message, family or a communication,
+  // stays so however often it is read.
+  const mark = textKeySchema.safeParse(rows[0]?.inputs);
+  if (!mark.success || mark.data.smsSid !== smsSid || mark.data.input.familyId !== familyId || mark.data.input.commId) return { kind: 'unparseable' };
+  return { kind: 'text', input: mark.data.input };
 }
 
 export type OwedLandingCounts = { landed: number; unavailable: number };

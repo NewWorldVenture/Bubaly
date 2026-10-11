@@ -15,7 +15,7 @@ import { shouldRingImmediately } from '@/lib/guardian/trust';
 import { claimGuardianCallback, isValidGuardianEventId, markGuardianCallbackError, markGuardianCallbackProcessed, releaseGuardianCallback } from '@/lib/guardian/callbacks';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { escalateGuardianEmergency, type GuardianEscalationOutcome } from '@/lib/guardian/escalate';
-import type { GuardianEscalationInput } from '@/lib/guardian/escalation';
+import { guardianEscalationDescription, type GuardianEscalationInput } from '@/lib/guardian/escalation';
 import { guardianEscalationKeyedOnText, markGuardianEscalationKeyedOnText } from '@/lib/guardian/escalation-owed';
 import { GUARDIAN_INBOUND_CAP_REASON, GUARDIAN_INBOUND_FAMILY_CAP, GUARDIAN_INBOUND_SENDER_CAP, GUARDIAN_INBOUND_WINDOW_MS } from '@/lib/guardian/inbound-caps';
 import { wroteNoRows } from '@/lib/supabase/errors';
@@ -313,7 +313,8 @@ export async function POST(req: NextRequest) {
   // joined to the earlier one by its text — found settled, and silenced.
   // An identity is never chosen from a read that failed: a communication that
   // could not be read back (above) or a mark that could not be read (here)
-  // gives the claim back for a retry instead.
+  // gives the claim back for a retry instead. A mark that WAS read and cannot
+  // be parsed is not that: a retry reads the same mark.
   let escalationInput: GuardianEscalationInput | null = null;
   let escalatedBefore = false;
   if (emergency) {
@@ -321,7 +322,11 @@ export async function POST(req: NextRequest) {
       familyId,
       escalationType: 'urgent_personal',
       severity: 'critical',
-      description: `Emergency WhatsApp from ${callerDisplay}: "${body.slice(0, 300)}"`,
+      // Cut to what the mark's reader and the retry sweep take back: the
+      // caller's name is the contact's, which nothing bounds, and a longer
+      // description left a mark no redelivery could parse and a record the
+      // sweep could not rebuild — an emergency nobody reached was never sent.
+      description: guardianEscalationDescription(`Emergency WhatsApp from ${callerDisplay}: "${body.slice(0, 300)}"`),
       ...(from ? { callerNumber: from.slice(0, 64) } : {}),
     };
     const earlier = await guardianEscalationKeyedOnText(supabase, familyId, smsSid);
@@ -338,6 +343,21 @@ export async function POST(req: NextRequest) {
     }
     if (earlier.kind === 'text') {
       escalationInput = earlier.input;
+      escalatedBefore = true;
+    } else if (earlier.kind === 'unparseable') {
+      // An earlier delivery escalated this message under its text, and what
+      // it wrote down cannot be parsed (another version's shape, or a
+      // description past the bound, as this route used to write). Every retry
+      // reads the same mark, so giving the claim back for one answered 503 on
+      // every delivery, and the managers were never texted or called. So this
+      // delivery keys the escalation on its text, as the first one did, and
+      // never on its communication: the same message gives the same text, so
+      // it joins that escalation. (Only a description past the bound comes out
+      // differently now — and that escalation's record could not be rebuilt
+      // either, so nothing else would ever have sent it.) The family was told
+      // by the first delivery, which wrote the mark just before its notice.
+      console.error('[guardian/inbound/whatsapp] an earlier delivery of this message was escalated under its text and its mark cannot be parsed; escalating under the text again', { familyId, smsSid });
+      escalationInput = byContent;
       escalatedBefore = true;
     } else if (commId) {
       escalationInput = { ...byContent, commId };
