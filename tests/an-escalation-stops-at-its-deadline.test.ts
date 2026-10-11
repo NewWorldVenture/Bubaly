@@ -25,7 +25,7 @@ import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
-import { at } from './helpers/source-order';
+import { at, between } from './helpers/source-order';
 
 const seam = vi.hoisted(() => ({ sms: vi.fn(), call: vi.fn() }));
 vi.mock('@/lib/guardian/twilio', async (original) => ({
@@ -220,7 +220,7 @@ describe('the callers hand the escalation their deadline', () => {
 
   it('twilioFetch combines the caller\'s signal with its own ceiling instead of replacing it', () => {
     const source = readFileSync('lib/guardian/twilio.ts', 'utf8');
-    const body = source.slice(at(source, 'async function twilioFetch('), at(source, 'export function isTwilioConfigured'));
+    const body = between(source, 'async function twilioFetch(', 'export function isTwilioConfigured');
     expect(body).toContain('signal?: AbortSignal');
     expect(body).toMatch(/AbortSignal\.any\(\[signal, AbortSignal\.timeout\(15_000\)\]\)/);
   });

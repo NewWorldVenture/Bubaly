@@ -78,7 +78,7 @@ export async function forgetMemberLocation(
  */
 async function clearRemovedMemberLocations(service: SupabaseClient): Promise<{ cleared: number; failures: Failure[] }> {
   const stale = () => service.from('member_locations')
-    .select('member_id, member:family_members!inner(is_active)')
+    .select('member_id, family_id, member:family_members!inner(is_active)')
     .eq('member.is_active', false)
     .limit(REMOVED_MEMBER_SWEEP_LIMIT);
   const [sharing, positioned] = await Promise.all([
@@ -89,18 +89,27 @@ async function clearRemovedMemberLocations(service: SupabaseClient): Promise<{ c
     ...failureOf('read removed members still sharing (member_locations)', sharing.error),
     ...failureOf('read removed members with a position (member_locations)', positioned.error),
   ];
-  const ids = new Set<string>();
+  // Grouped by the row's own family and cleared family by family: a member id
+  // is unique in member_locations, but every member-keyed write in this schema
+  // also names its household (tests/member-scoped-reads-name-their-family).
+  const byFamily = new Map<string, Set<string>>();
   for (const rows of [sharing.error ? [] : sharing.data ?? [], positioned.error ? [] : positioned.data ?? []]) {
-    for (const row of rows as Array<{ member_id?: unknown }>) if (typeof row.member_id === 'string') ids.add(row.member_id);
+    for (const row of rows as Array<{ member_id?: unknown; family_id?: unknown }>) {
+      if (typeof row.member_id !== 'string' || typeof row.family_id !== 'string') continue;
+      const ids = byFamily.get(row.family_id) ?? new Set<string>();
+      ids.add(row.member_id);
+      byFamily.set(row.family_id, ids);
+    }
   }
-  if (ids.size === 0) return { cleared: 0, failures };
-  const cleared = await service.from('member_locations')
+  if (byFamily.size === 0) return { cleared: 0, failures };
+  const results = await Promise.all([...byFamily].map(([familyId, ids]) => service.from('member_locations')
     .update(CLEARED_POSITION)
+    .eq('family_id', familyId)
     .in('member_id', [...ids])
-    .select('member_id');
+    .select('member_id')));
   return {
-    cleared: cleared.error ? 0 : cleared.data?.length ?? 0,
-    failures: [...failures, ...failureOf('clear removed members (member_locations)', cleared.error)],
+    cleared: results.reduce((n, r) => n + (r.error ? 0 : r.data?.length ?? 0), 0),
+    failures: [...failures, ...results.flatMap((r) => failureOf('clear removed members (member_locations)', r.error))],
   };
 }
 
