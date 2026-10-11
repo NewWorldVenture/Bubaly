@@ -26,7 +26,10 @@ describe('Guardian emergency escalation boundary', () => {
   });
 
   it('claims before telephony side effects and resolves parent phones through user_id', () => {
-    const source = readFileSync(resolve(root, 'app/api/guardian/escalate/route.ts'), 'utf8');
+    // The escalation itself lives in lib/guardian/escalate.ts; the route parses
+    // the request and delegates to it.
+    const source = readFileSync(resolve(root, 'lib/guardian/escalate.ts'), 'utf8');
+    expect(readFileSync(resolve(root, 'app/api/guardian/escalate/route.ts'), 'utf8')).toContain('escalateGuardianEmergency(');
     expect(source).toContain('claimGuardianCallback');
     expect(source).toContain('markGuardianCallbackError');
     expect(source).toContain('markGuardianCallbackProcessed');

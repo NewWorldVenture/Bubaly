@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ErrorState, EmptyState, LoadingBlock } from '@/components/ui/states';
 import { useFormat } from '@/components/i18n/use-format';
-import { weatherCodeMeta, cToF, tripWeatherAdvice, type WeatherDayLike } from '@/lib/vacations/weather';
+import { weatherCodeMeta, cToF, forecastDaysWithin, tripWeatherAdvice, type WeatherDayLike } from '@/lib/vacations/weather';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -34,7 +34,9 @@ export function TripWeather({ vacationId }: { vacationId: string }) {
   const [location, setLocation] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const days = useMemo(() => [...snapshots].sort((a, b) => a.forecast_date.localeCompare(b.forecast_date)), [snapshots]);
+  // Only the days inside the trip: a snapshot cached before the trip came into
+  // the forecast horizon is this week's weather, not the trip's.
+  const days = useMemo(() => forecastDaysWithin([...snapshots].sort((a, b) => a.forecast_date.localeCompare(b.forecast_date)), trip?.start_date, trip?.end_date), [snapshots, trip]);
   const advice = useMemo(() => tripWeatherAdvice(days as WeatherDayLike[]), [days]);
 
   async function refresh() {
@@ -45,7 +47,10 @@ export function TripWeather({ vacationId }: { vacationId: string }) {
       const res = await fetch('/api/vacations/weather', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ vacationId, location: loc }) });
       const data = await res.json();
       if (!res.ok) toastError(data.error || 'Failed to fetch weather');
-      else success(data.note || t('tripWeather.updatedFor', { location: data.location }));
+      else {
+        success(data.note || t('tripWeather.updatedFor', { location: data.location }));
+        void snapshotsQuery.refresh();
+      }
     } catch { toastError(t('tripWeather.networkError')); }
     setBusy(false);
   }

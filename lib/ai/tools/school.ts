@@ -93,6 +93,11 @@ export const schoolTools: ToolDefinition[] = [
     capability: 'view',
     risk: 'low',
     readOnly: true,
+    // Names a child's teacher and room. A `sensitiveRead`: this TOOL is refused
+    // to a teen, child, caregiver or guest requester. The `activities` context
+    // slice still gives household members (not guests) each class's subject,
+    // day and slot, without teacher or room; RLS shows the rows in the app.
+    sensitiveRead: true,
     input: z.object({
       day_of_week: z.number().int().nullish().describe('0 = Sunday … 6 = Saturday'),
       for_date: z.string().nullish().describe('ISO 8601 date inside the week to resolve A/B classes for; defaults to now'),

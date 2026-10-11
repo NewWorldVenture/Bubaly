@@ -730,11 +730,11 @@ export function CalendarModule() {
           <div className="flex-1 space-y-1 p-4">
             {/* All-day events */}
             {mobileDayAllDay.map(e => (
-              <div key={e.occurrenceKey} data-calendar-day={mobileDayStr} data-occurrence-key={e.occurrenceKey} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className={cn('focus-ring cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}>
-                <div className="text-[10px] font-semibold uppercase tracking-wide opacity-70">{tr('calendar.allDay')}</div>
+              <div key={e.occurrenceKey} data-calendar-day={mobileDayStr} data-occurrence-key={e.occurrenceKey} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className={cn('focus-ring cursor-pointer rounded-lg border p-3 transition hover:shadow-md', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}>
+                <div className="text-[10px] font-semibold uppercase tracking-wide">{tr('calendar.allDay')}</div>
                 <div className="text-sm font-semibold">{e.title ?? '—'}</div>
                 {e.assignee_id && memberById.get(e.assignee_id) && (
-                  <div className="mt-1 flex items-center gap-1.5 text-xs opacity-70">
+                  <div className="mt-1 flex items-center gap-1.5 text-xs">
                     <Avatar name={memberById.get(e.assignee_id)!.display_name} color={memberById.get(e.assignee_id)!.color} size={14} />
                     {memberById.get(e.assignee_id)!.display_name}
                   </div>
@@ -750,7 +750,7 @@ export function CalendarModule() {
               const e = span.occurrence;
               const member = e.assignee_id ? memberById.get(e.assignee_id) : null;
               return (
-                <div key={e.occurrenceKey} data-calendar-day={span.day} data-occurrence-key={e.occurrenceKey} data-calendar-start={span.actualStartsAt} data-calendar-end={span.actualEndsAt} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className={cn('focus-ring cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}>
+                <div key={e.occurrenceKey} data-calendar-day={span.day} data-occurrence-key={e.occurrenceKey} data-calendar-start={span.actualStartsAt} data-calendar-end={span.actualEndsAt} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className={cn('focus-ring cursor-pointer rounded-lg border p-3 transition hover:shadow-md', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-semibold">
                       {fmtTime(span.actualStartsAt)}
@@ -759,9 +759,9 @@ export function CalendarModule() {
                     {member && <Avatar name={member.display_name} color={member.color} size={18} />}
                   </div>
                   <div className="mt-1 text-sm font-semibold">{e.title ?? '—'}</div>
-                  {member && <div className="mt-0.5 text-xs opacity-70">{member.display_name}</div>}
+                  {member && <div className="mt-0.5 text-xs">{member.display_name}</div>}
                   {e.location && (
-                    <div className="mt-1 flex items-center gap-1 text-xs opacity-70"><MapPin className="h-3 w-3" />{e.location}</div>
+                    <div className="mt-1 flex items-center gap-1 text-xs"><MapPin className="h-3 w-3" />{e.location}</div>
                   )}
                 </div>
               );
@@ -842,16 +842,16 @@ export function CalendarModule() {
                         if (top < 0 || top > HOURS.length * HOUR_HEIGHT) return null;
                         return (
                           <div key={span.segmentKey} data-calendar-day={span.day} data-occurrence-key={e.occurrenceKey} data-calendar-start={span.actualStartsAt} data-calendar-end={span.actualEndsAt} style={{ top, height, left: 2, right: 2 }} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0}
-                            className={cn('focus-ring absolute z-10 overflow-hidden rounded-md border p-1.5 text-[10px] cursor-pointer hover:brightness-110 transition', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}
+                            className={cn('focus-ring absolute z-10 overflow-hidden rounded-md border p-1.5 text-[10px] cursor-pointer hover:shadow-md transition', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}
                             title={e.title ?? ''}>
                             <div className="flex items-start justify-between gap-1">
                               <span className="font-semibold leading-tight truncate">{fmtTime(span.actualStartsAt)}</span>
                               {height > 30 && member && <Avatar name={member.display_name} color={member.color} size={14} />}
                             </div>
                             {height > 24 && <div className="mt-0.5 truncate font-medium leading-tight">{e.title ?? '—'}</div>}
-                            {height > 42 && member && <div className="mt-0.5 truncate text-[9px] opacity-70">{member.display_name}</div>}
+                            {height > 42 && member && <div className="mt-0.5 truncate text-[9px]">{member.display_name}</div>}
                             {height > 54 && e.location && (
-                              <div className="mt-0.5 flex items-center gap-0.5 text-[9px] opacity-70"><MapPin className="h-2 w-2" />{e.location}</div>
+                              <div className="mt-0.5 flex items-center gap-0.5 text-[9px]"><MapPin className="h-2 w-2" />{e.location}</div>
                             )}
                           </div>
                         );

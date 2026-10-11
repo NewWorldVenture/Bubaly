@@ -83,10 +83,10 @@ export function EventScheduleInsights({ eventId }: { eventId: string }) {
               <li key={i.id} className={cn('flex items-center gap-3 rounded-xl border px-3 py-2', SEVERITY_CLS[i.severity])}>
                 <Icon className="h-4 w-4 shrink-0" aria-hidden />
                 <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide opacity-80">{t(meta.labelKey)}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide">{t(meta.labelKey)}</p>
                   <p className="text-sm">{t(i.reasonKey, i.params)}</p>
                   {i.kind === 'leave_by' && state.data.leaveBy && (
-                    <p className="text-xs opacity-80">
+                    <p className="text-xs">
                       {state.data.leaveBy.source === 'drive_time' ? t('eventDetail.fromASavedDeparturePlan') : t('eventDetail.estimatedFromTheEventType')}
                     </p>
                   )}

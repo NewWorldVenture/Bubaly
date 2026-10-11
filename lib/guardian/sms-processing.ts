@@ -5,11 +5,15 @@ import type { Database } from '@/lib/database.types';
 import { runDecisionPipeline } from './pipeline';
 import { detectScamWithAI } from './scam-ai';
 import { formatPhone } from './phone';
+import { shouldRingImmediately } from './trust';
 import { claimGuardianSms, finishGuardianSms, releaseGuardianSms, type GuardianSmsLease } from './sms-intake';
 import { captureGuardianSmsReceipt, readGuardianSmsReceipt, readGuardianSmsReceiptById, saveGuardianSmsDecision,
   markGuardianSmsCompleted, guardianSmsReceiptId, type GuardianSmsReceipt, type GuardianSmsReceiptInput, type GuardianSmsDecision } from './sms-receipt';
 import { guardianSmsScope, notifyGuardianSms } from './sms-notification';
 import { smsStep } from './sms-deadline';
+import { escalateGuardianEmergency } from './escalate';
+import { guardianEscalationDescription } from './escalation';
+import { GUARDIAN_INBOUND_CAP_REASON, GUARDIAN_INBOUND_FAMILY_CAP, GUARDIAN_INBOUND_SENDER_CAP, GUARDIAN_INBOUND_WINDOW_MS } from './inbound-caps';
 
 type Client = SupabaseClient<Database>;
 type Options = { signal?: AbortSignal };
@@ -17,7 +21,19 @@ export type GuardianSmsProcessingResult = 'completed' | 'busy' | 'unavailable';
 type SignedInput = Pick<GuardianSmsReceiptInput, 'smsSid' | 'from' | 'to' | 'body'>;
 type Destination = { id: string; family_id: string; member_id: string; guardian_phone: string; is_active: boolean };
 const TOTAL_MS = 45_000;
+/**
+ * The emergency escalation texts AND calls every manager (two Twilio requests
+ * of up to 15 s each, fanned out together) around five database round-trips,
+ * so the step's default 5 s budget was a timeout waiting to happen. The step's
+ * signal is handed to the escalation and from there into every Twilio request,
+ * so when this budget runs out the sends stop with it — they used to keep going
+ * out detached while the route answered 503 and Twilio retried into the
+ * escalation's own claim. Bounded by the message's total budget either way.
+ */
+const ESCALATION_MS = 30_000;
 const MAX_DECISION_FILTER_CHARS = 4096;
+/** How long a filed "add to contacts?" suggestion keeps the same sender from being suggested again. */
+const SUGGESTION_MEMORY_MS = 60 * 24 * 60 * 60 * 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ROUTING_MODES = ['immediate_ring', 'immediate_ai_summary', 'ai_handle_first', 'voicemail_first', 'silent_handling', 'blocked'];
 const TRUST_LEVELS = ['immediate_family', 'close_family', 'trusted_friend', 'known_contact', 'unknown', 'suspected_spam', 'blocked'];
@@ -105,6 +121,39 @@ async function retain(client: Client, input: GuardianSmsReceiptInput, id: string
   return row;
 }
 
+type InboundCap = { sender: boolean; family: boolean; unreadable: boolean };
+const UNDER_CAP: InboundCap = { sender: false, family: false, unreadable: false };
+/** A count that could not be read: the model call is withheld, the delivery is not. */
+const UNREADABLE_CAP: InboundCap = { sender: false, family: false, unreadable: true };
+
+/**
+ * Whether this sender, and whether this family, is past its rolling inbound
+ * cap. The count includes the message being processed (it was retained
+ * first). A count that cannot be read used to read as zero — under the cap —
+ * which bought the model call exactly when the database was slow or refusing,
+ * so the cap was a cap only while the count worked. It now reads as
+ * unreadable: the model call is withheld (the pattern detector decides alone)
+ * and nothing else changes — the message is still recorded and, unless the
+ * pipeline said otherwise, still announced.
+ */
+async function overInboundCap(client: Client, input: GuardianSmsReceiptInput, signal: AbortSignal): Promise<InboundCap> {
+  const since = new Date(Date.now() - GUARDIAN_INBOUND_WINDOW_MS).toISOString();
+  const count = async (sender: boolean): Promise<number | null> => {
+    try {
+      const result = resultEnvelope(await smsStep(signal, current => {
+        let query = table(client, 'guardian_communications').select('id', { count: 'exact', head: true })
+          .eq('family_id', input.familyId).eq('comm_type', 'sms_inbound').gte('started_at', since);
+        if (sender) query = input.from === null ? query.is('from_number', null) : query.eq('from_number', input.from);
+        return query.retry(false).abortSignal(current);
+      }));
+      return !result.error && typeof result.count === 'number' ? result.count : null;
+    } catch { return null; }
+  };
+  const [fromSender, forFamily] = await Promise.all([count(true), count(false)]);
+  if (fromSender === null || forFamily === null) return UNREADABLE_CAP;
+  return { sender: fromSender > GUARDIAN_INBOUND_SENDER_CAP, family: forFamily > GUARDIAN_INBOUND_FAMILY_CAP, unreadable: false };
+}
+
 async function processOwned(client: Client, input: GuardianSmsReceiptInput, lease: GuardianSmsLease,
   trusted: GuardianSmsReceipt | null, allowCapture: boolean, signal: AbortSignal): Promise<GuardianSmsProcessingResult> {
   await ownsDestination(client, input, signal);
@@ -147,7 +196,25 @@ async function processOwned(client: Client, input: GuardianSmsReceiptInput, leas
       callerPhone: input.from, callerName: null, familyId: input.familyId, memberId: input.memberId, initialTranscript: input.body,
     }));
     await fence();
-    const scam = await smsStep(signal, current => detectScamWithAI(input.body, input.from, `Family ID: ${input.familyId}`, current), 15_000);
+    // No model call where the answer cannot change anything: the family has
+    // already blocked this sender, or the pattern detector is already sure.
+    // And none past the rolling cap, which is what kept a blocked or spamming
+    // sender from buying one LLM request per text.
+    const settled = decision.routingMode === 'blocked' || (decision.scamDetected === true && decision.spamScore >= 80);
+    const cap = settled ? UNDER_CAP : await overInboundCap(client, input, signal);
+    // Past either cap — or with a cap that could not be read — the pattern
+    // detector decides alone, whoever is texting: that is the bound on model
+    // spend. But only a sender the family has not vouched for is HELD. A
+    // contact at a ring-through trust level (immediate family, close family,
+    // trusted friend) is who the Guardian number exists to let through, and
+    // their eleventh text in an hour is still a text from them. The family-wide
+    // flood cap holds for everyone; an unreadable count holds nobody.
+    const modelCapped = cap.sender || cap.family || cap.unreadable;
+    const throttled = cap.family || (cap.sender && !shouldRingImmediately(decision.trustLevel));
+    const scam = settled || modelCapped
+      ? { isScam: decision.scamDetected === true, scamType: decision.scamType ?? null,
+        confidence: decision.scamDetected === true && Number.isFinite(decision.spamScore) ? Math.min(100, Math.max(0, decision.spamScore)) : 0 }
+      : await smsStep(signal, current => detectScamWithAI(input.body, input.from, `Family ID: ${input.familyId}`, current), 15_000);
     if (!ROUTING_MODES.includes(decision.routingMode) || !TRUST_LEVELS.includes(decision.trustLevel)
       || (decision.contactId !== null && !validId(decision.contactId)) || (decision.ruleId !== null && !validId(decision.ruleId))
       || (decision.contactName !== null && typeof decision.contactName !== 'string') || typeof decision.reason !== 'string'
@@ -156,9 +223,16 @@ async function processOwned(client: Client, input: GuardianSmsReceiptInput, leas
     const confidence = Math.floor(scam.confidence);
     const fields: GuardianSmsDecision = {
       contact_id: decision.contactId, from_name: decision.contactName, trust_level_at_time: decision.trustLevel,
-      routing_mode_used: decision.routingMode, routing_rule_id: decision.ruleId, ai_decision_reason: decision.reason,
+      routing_mode_used: decision.routingMode, routing_rule_id: decision.ruleId,
+      // A routine message past the cap is held as `blocked`, and the record
+      // says why: that is what keeps the family unpinged on a flood, and the
+      // one durable answer a retried delivery (which cannot recount the window)
+      // completes against.
+      ai_decision_reason: throttled ? `${decision.reason} ${GUARDIAN_INBOUND_CAP_REASON}` : decision.reason,
       scam_detected: scam.isScam, scam_type: scam.scamType, scam_confidence: confidence,
-      status: scam.isScam && confidence >= 80 ? 'blocked' : 'received',
+      // An emergency from a sender the family has not blocked is never
+      // discarded on a scam score: a real "help me" can read like a scam.
+      status: decision.shouldEscalate === true ? 'escalated' : (scam.isScam && confidence >= 80) || throttled ? 'blocked' : 'received',
     };
     await fence();
     receipt = await saveGuardianSmsDecision(client, receipt, fields, { signal });
@@ -194,15 +268,19 @@ async function processOwned(client: Client, input: GuardianSmsReceiptInput, leas
         .eq('family_id', input.familyId).eq('id', comm!.contact_id!).retry(false).abortSignal(current));
     } catch { /* Optional contact recency cannot establish message completion. */ }
   }
-  const blocked = fields.status === 'blocked' || fields.routing_mode_used === 'blocked' || fields.scam_detected && fields.scam_confidence >= 80;
+  const emergency = fields.status === 'escalated';
+  const blocked = !emergency && (fields.status === 'blocked' || fields.routing_mode_used === 'blocked' || fields.scam_detected && fields.scam_confidence >= 80);
   if (!blocked) {
     const scope = await smsStep(signal, current => guardianSmsScope(client, input.familyId, current));
     if (!scope || scope.familyId !== input.familyId) return unavailable();
     await fence();
+    const sender = fields.from_name ?? formatPhone(input.from);
     const notified = await smsStep(signal, current => notifyGuardianSms(scope, {
-      recipients: 'family', type: 'system', title: `💬 Text from ${fields.from_name ?? formatPhone(input.from)}`,
+      recipients: 'family', type: 'system', title: emergency ? `🚨 Emergency text from ${sender}` : `💬 Text from ${sender}`,
       body: input.body.length > 100 ? `${input.body.slice(0, 100)}…` : input.body,
       relatedType: 'guardian_communications', relatedId: receipt.communicationId, once: true,
+      // Quiet hours hold a routine text until morning; they must not hold this.
+      ...(emergency ? { urgent: true } : {}),
     }, { receiptId: receipt.id, signal: current, beforeWrite: async () => { await fence(); await exactDecision(); } }), 15_000);
     if (!notified.ok || !Number.isInteger(notified.data.created) || !Number.isInteger(notified.data.duplicates)
       || notified.data.created < 0 || notified.data.duplicates < 0 || notified.data.created + notified.data.duplicates !== 1
@@ -214,9 +292,15 @@ async function processOwned(client: Client, input: GuardianSmsReceiptInput, leas
           .eq('family_id', input.familyId).eq('from_number', input.from!).retry(false).abortSignal(current)));
         if (!count.error && typeof count.count === 'number' && count.count >= 3) {
           const messageCount = count.count;
+          // Keyed on THIS sender: any one update_trust row used to stop every
+          // other repeat sender from ever being suggested (and two of them made
+          // maybeSingle fail). A dismissed suggestion for this sender is
+          // remembered for the same window the learning run looks back over.
+          const remembered = new Date(Date.now() - SUGGESTION_MEMORY_MS).toISOString();
           const existing = resultEnvelope(await smsStep(signal, current => table(client, 'guardian_suggestions').select('id')
-            .eq('family_id', input.familyId).eq('suggestion_type', 'update_trust').maybeSingle().retry(false).abortSignal(current)));
-          if (!existing.error && !existing.data) {
+            .eq('family_id', input.familyId).eq('suggestion_type', 'update_trust').eq('evidence->>phone', input.from!)
+            .or(`status.eq.pending,created_at.gte.${remembered}`).limit(1).retry(false).abortSignal(current)));
+          if (!existing.error && Array.isArray(existing.data) && existing.data.length === 0) {
             await fence();
             await exactDecision();
             await smsStep(signal, current => table(client, 'guardian_suggestions').insert({
@@ -227,6 +311,50 @@ async function processOwned(client: Client, input: GuardianSmsReceiptInput, leas
           }
         }
       } catch { /* Optional suggestions never establish receipt or completion. */ }
+    }
+  }
+  if (emergency) {
+    // Text and call the managers. Keyed on the communication, so a retried
+    // delivery is answered by the escalation's own claim instead of alarming
+    // twice. The step's signal goes in with it, so the fan-out stops at the
+    // step's deadline instead of running on detached. The description is cut
+    // to what the retry sweep reads back: it names the contact, whose name
+    // nothing bounds, and a record with a longer one could not be rebuilt, so
+    // an emergency that reached nobody at first — completed here, its retry
+    // left to the sweep — was never sent.
+    await fence();
+    const escalation = await smsStep(signal, current => escalateGuardianEmergency(client, {
+      familyId: input.familyId, commId: receipt.communicationId, escalationType: 'urgent_personal', severity: 'critical',
+      description: guardianEscalationDescription(`Emergency text from ${fields.from_name ?? formatPhone(input.from)}: "${input.body.slice(0, 300)}"`),
+      ...(input.from ? { callerNumber: input.from.slice(0, 64) } : {}),
+    }, { signal: current }), ESCALATION_MS);
+    // A storage failure before anything was sent, one cut off before anyone
+    // was confirmed reached, and one that reached nobody AND could not be
+    // recorded all ask for a retry the same way: the lease is released as
+    // `error`, the route answers 503, and the receipt stays `decided`, so
+    // Twilio's redelivery or the recovery cron re-runs this step. That is the
+    // lane's own retry, for storage, and it has no deadline of its own.
+    //
+    // An escalation that reached nobody but IS on record is not that. It
+    // completes here, and the retry sweep on the recovery cron (lib/guardian/
+    // escalation-retry.ts) re-attempts it from its record until a manager is
+    // reached, the escalation is acknowledged, or its window passes. Answering
+    // 503 for it instead made the whole lane re-run on every recovery tick with
+    // no end — the sweep is bounded, the receipt drain is not — and when the
+    // cause was permanent (no manager with a phone on file) the recovery cron
+    // was red for as long. That case is now `unreachable`, which nothing
+    // retries: nobody could be told, and a retry would find the same. The
+    // escalation's own claim and stable ids keep every retry from texting
+    // twice; an alert that DID reach someone is `delivered`, never retried, and
+    // `record_failed` means the alerts went out and only the record did not.
+    if (escalation.kind === 'claim_unavailable' || escalation.kind === 'read_failed' || escalation.kind === 'interrupted') return unavailable();
+    if (escalation.kind === 'undelivered' && !escalation.recorded) return unavailable();
+    if (escalation.kind === 'undelivered') {
+      console.error('[guardian-sms] emergency escalation reached no manager; left for the retry sweep', { familyId: input.familyId, communicationId: receipt.communicationId });
+    } else if (escalation.kind === 'unreachable') {
+      console.error('[guardian-sms] emergency escalation had nobody to text or call; recorded with nobody reached', { familyId: input.familyId, communicationId: receipt.communicationId });
+    } else if (escalation.kind === 'record_failed') {
+      console.error('[guardian-sms] emergency escalation went out but could not be recorded', { familyId: input.familyId, communicationId: receipt.communicationId });
     }
   }
   await fence();

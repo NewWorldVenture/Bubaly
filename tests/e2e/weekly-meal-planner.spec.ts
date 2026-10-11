@@ -211,7 +211,7 @@ async function fixture(page: Page, options: { familyId?: string; timezone?: stri
       react:React, 'react-dom':ReactDOM, 'lucide-react':window.LucideReact,
       'next/link':{default:({children,...props})=>h('a',props,children)},
       '@/components/app/app-context':{useApp:()=>({familyId:p.familyId,userId:'user-A',family:{id:p.familyId,name:p.familyId,timezone:p.timezone},members:[],selfMember:null,role:'parent',planLevel:2})},
-      '@/components/i18n/locale-provider':{useTranslations:()=>translate,useLocale:()=> ({code:'en-US'}),useFamilyTimeZone:()=>undefined},
+      '@/components/i18n/locale-provider':{useTranslations:()=>translate,usePlural:()=>(key,count,vars={})=>translate(key+(count===1?'.one':'.other'),{...vars,count}),useLocale:()=> ({code:'en-US'}),useFamilyTimeZone:()=>undefined},
       '@/components/ui/toast':{useToast:()=>({success:message=>p.notices.push({kind:'success',message}),error:message=>p.notices.push({kind:'error',message})})},
       '@capacitor/core':{Capacitor:{isNativePlatform:()=>false}}, '@capacitor/haptics':{},
       '@/components/ai/ai-insight':{AiInsight:()=>null},
@@ -922,6 +922,7 @@ test('saved meal picker follows alphabetical library order',async({page})=>{
  {id:'a',family_id:'family-A',name:'Apple dinner',ingredients:[],meal_type:'dinner',image_url:null,recipe_url:null},
  ]});await slot(page).click();await expect(dialog(page).getByRole('button',{name:/Apple dinner|Zucchini dinner/})).toHaveText(['🍽️Apple dinner','🍽️Zucchini dinner']);
 });
+const groceryRow=(page:Page)=>page.locator('.module-main').getByRole('checkbox',{name:/Synthetic rice/});
 async function groceryToggleFixture(page:Page,mode:GroceryToggleMode='success') {
  await fixture(page);
  await page.evaluate(mode=>{
@@ -930,28 +931,32 @@ async function groceryToggleFixture(page:Page,mode:GroceryToggleMode='success') 
   window.dispatchEvent(new Event('online'));
  },mode);
  await page.getByRole('button',{name:'Groceries',exact:true}).click();
- await expect(page.locator('.module-main').getByRole('button',{name:/Synthetic rice/})).toBeVisible();
+ // A groceries-tab row is a checkbox that says whether it is checked (A11Y-001),
+ // so it is found by that role and its state is read from the accessibility tree.
+ await expect(groceryRow(page)).toBeVisible();await expect(groceryRow(page)).not.toBeChecked();
 }
 test('check then uncheck survives actual query reload',async({page})=>{
- await groceryToggleFixture(page);const item=page.locator('.module-main').getByRole('button',{name:/Synthetic rice/});
- await item.click();await expect(item.getByText('Synthetic rice',{exact:true})).toHaveClass(/line-through/);
+ await groceryToggleFixture(page);const item=groceryRow(page);
+ await item.click();await expect(item.getByText('Synthetic rice',{exact:true})).toHaveClass(/line-through/);await expect(item).toBeChecked();
  expect(await page.evaluate(()=>window.__weeklyMeals.tables.grocery_items[0].is_checked)).toBe(true);
- await item.click();await expect(item.getByText('Synthetic rice',{exact:true})).not.toHaveClass(/line-through/);
+ await item.click();await expect(item.getByText('Synthetic rice',{exact:true})).not.toHaveClass(/line-through/);await expect(item).not.toBeChecked();
  expect(await page.evaluate(()=>window.__weeklyMeals.tables.grocery_items[0].is_checked)).toBe(false);
 });
 test('reported refusal gives feedback without changing the item',async({page})=>{
- await groceryToggleFixture(page,'refuse');await page.locator('.module-main').getByRole('button',{name:/Synthetic rice/}).click();
+ await groceryToggleFixture(page,'refuse');await groceryRow(page).click();
  await expect.poll(async()=> (await notices(page)).length).toBe(1);expect(await page.evaluate(()=>window.__weeklyMeals.tables.grocery_items[0].is_checked)).toBe(false);
+ await expect(groceryRow(page)).not.toBeChecked();
 });
 for(const mode of ['transport','lost-response'] as const)test(`${mode} failure gives feedback and contains the rejection`,async({page})=>{
- await groceryToggleFixture(page,mode);await page.locator('.module-main').getByRole('button',{name:/Synthetic rice/}).click();
+ await groceryToggleFixture(page,mode);await groceryRow(page).click();
  await expect.poll(async()=> (await notices(page)).length).toBe(1);
  expect(await page.evaluate(()=>window.__weeklyMeals.errors)).toEqual([]);expect(await notices(page,'success')).toEqual([]);
  expect(await page.evaluate(()=>window.__weeklyMeals.groceryCheckCalls)).toEqual([{id:'rice',checked:true}]);
  expect(await page.evaluate(()=>window.__weeklyMeals.tables.grocery_items[0].is_checked)).toBe(mode==='lost-response');
+ if(mode==='transport')await expect(groceryRow(page)).not.toBeChecked();
  if(mode==='lost-response'){
   await page.evaluate(()=>window.dispatchEvent(new Event('online')));
-  await expect(page.locator('.module-main').getByText('Synthetic rice',{exact:true})).toHaveClass(/line-through/);
+  await expect(page.locator('.module-main').getByText('Synthetic rice',{exact:true})).toHaveClass(/line-through/);await expect(groceryRow(page)).toBeChecked();
   expect(await page.evaluate(()=>window.__weeklyMeals.groceryCheckCalls?.length)).toBe(1);
  }
 });
@@ -983,7 +988,7 @@ test('cap-two reads expose oldest unchecked item beyond 80 in the full grocery t
   window.dispatchEvent(new Event('online'));
  });
  await page.getByRole('button',{name:'Groceries',exact:true}).click();
- await expect(page.locator('.module-main').getByRole('button',{name:'Synthetic grocery 080',exact:true})).toBeVisible();
+ await expect(page.locator('.module-main').getByRole('checkbox',{name:'Synthetic grocery 080',exact:true})).toBeVisible();
  expect(await page.evaluate(()=>window.__weeklyMeals.reads.some(r=>r.table==='grocery_items'&&r.offset===80&&r.exact))).toBe(true);
  expect(await calls(page)).toEqual([]);
 });

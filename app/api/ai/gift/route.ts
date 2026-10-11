@@ -65,14 +65,16 @@ export async function POST(req: NextRequest) {
 
   if (link.child_wallet_id) {
     const [{ data: cw }, { data: goal }] = await settleAll([
-      supabase.from('child_wallets').select('member_id').eq('id', link.child_wallet_id).maybeSingle(),
+      // Inside the link's own family, as on the gift page: a link naming another
+      // family's wallet must not hand that child's name to the model.
+      supabase.from('child_wallets').select('member_id').eq('id', link.child_wallet_id).eq('family_id', link.family_id).maybeSingle(),
       supabase.from('wallet_goals')
         .select('title, saved_cents, target_cents')
         .eq('family_id', link.family_id).eq('child_wallet_id', link.child_wallet_id).eq('status', 'active')
         .order('target_cents', { ascending: false }).limit(1).maybeSingle(),
     ]);
     if (cw?.member_id) {
-      const { data: m } = await supabase.from('family_members').select('display_name').eq('id', cw.member_id).maybeSingle();
+      const { data: m } = await supabase.from('family_members').select('display_name').eq('id', cw.member_id).eq('family_id', link.family_id).maybeSingle();
       if (m?.display_name) childName = m.display_name.split(' ')[0] || m.display_name;
     }
     if (goal) { goalTitle = goal.title; goalSavedCents = goal.saved_cents; goalTargetCents = goal.target_cents; }

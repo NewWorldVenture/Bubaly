@@ -34,7 +34,7 @@ import {
   serializeDraftState, parseDraftState, DRAFT_STORAGE_KEY,
   type OnboardingStep, type OnboardingDraft,
 } from '@/lib/onboarding/flow';
-import { finalizeOnboardingAction, previewCalendarImportAction } from '@/app/onboarding/actions';
+import { finalizeOnboardingAction, previewCalendarImportAction, type UnsentInvite } from '@/app/onboarding/actions';
 import { buildFirstBrief, type FirstBrief } from '@/lib/onboarding/first-brief';
 import { formatFirstBrief } from '@/lib/onboarding/first-brief-display';
 import { pickFirstThing } from '@/lib/outcomes/launcher';
@@ -105,8 +105,9 @@ export function OnboardingWizard({ initialName = '', initialLastName = '', calen
   const saving = savingOwner === screenOwner;
   // The server-computed first brief (timeline · clashes · dinner ideas · time
   // saved), returned by finalize and shown on the celebration screen.
-  const [doneResult, setDoneResult] = useState<{ owner: typeof calendarOwner; brief: FirstBrief | null } | null>(null);
+  const [doneResult, setDoneResult] = useState<{ owner: typeof calendarOwner; brief: FirstBrief | null; unsentInvites: UnsentInvite[] } | null>(null);
   const doneBrief = doneResult?.owner === calendarOwner ? doneResult.brief : null;
+  const doneUnsentInvites = doneResult?.owner === calendarOwner ? doneResult.unsentInvites : [];
   // Bound to the exact owner and event array; never enters draft storage or Finish.
   const [calendarNotice, setCalendarNotice] = useState<{
     owner: typeof calendarOwner; events: OnboardingDraft['importedEvents']; disclosure: IcsImportDisclosure;
@@ -192,7 +193,7 @@ export function OnboardingWizard({ initialName = '', initialLastName = '', calen
     const res = await finalizeOnboardingAction(buildFinalizePayload(draft), expectedOwner);
     if (!mounted.current || currentScreen.current !== screenOwner) return;
     if (!res.ok) { toastError(res.error ?? tr('actions.couldNotFinishSettingUp2')); return; }
-    setDoneResult({ owner: calendarOwner, brief: res.data?.brief ?? null });
+    setDoneResult({ owner: calendarOwner, brief: res.data?.brief ?? null, unsentInvites: res.data?.unsentInvites ?? [] });
     trackOnboarding('done', 'completed');
     try { sessionStorage.removeItem(DRAFT_STORAGE_KEY); } catch { /* ignore */ }
     setStep('done');
@@ -258,7 +259,7 @@ export function OnboardingWizard({ initialName = '', initialLastName = '', calen
         {step === 'about' && <AboutPanel draft={draft} update={update} />}
         {step === 'members' && <MembersPanel draft={draft} update={update} />}
         {step === 'pin' && <PinPanel draft={draft} update={update} firstName={firstName} />}
-        {step === 'done' && <DonePanel draft={draft} firstName={firstName} brief={doneBrief}
+        {step === 'done' && <DonePanel draft={draft} firstName={firstName} brief={doneBrief} unsentInvites={doneUnsentInvites}
           onReview={isReviewPlan(reviewPlan) ? () => { if (mounted.current && currentScreen.current === screenOwner) { router.push(reviewBillingPath(reviewPlan)); router.refresh(); } } : undefined}
           onGo={() => { if (mounted.current && currentScreen.current === screenOwner) { router.push('/dashboard'); router.refresh(); } }} />}
       </div>
@@ -765,7 +766,7 @@ function PinPanel({ draft, update, firstName }: { draft: OnboardingDraft; update
 }
 
 // ─── Step 6: Done ─────────────────────────────────────────────────────────────
-function DonePanel({ draft, firstName, brief, onGo, onReview }: { draft: OnboardingDraft; firstName: string; brief: FirstBrief | null; onGo: () => void; onReview?: () => void }) {
+function DonePanel({ draft, firstName, brief, unsentInvites, onGo, onReview }: { draft: OnboardingDraft; firstName: string; brief: FirstBrief | null; unsentInvites: UnsentInvite[]; onGo: () => void; onReview?: () => void }) {
   const tr = useTranslations();
   const locale = useLocale();
   const briefHeadline = brief ? formatFirstBrief(brief, { locale: locale.code, t: tr }).headline : '';
@@ -843,6 +844,8 @@ function DonePanel({ draft, firstName, brief, onGo, onReview }: { draft: Onboard
         ))}
       </div>
 
+      {unsentInvites.length > 0 && <UnsentInvites invites={unsentInvites} />}
+
       {/* M30 — one real next step instead of "go explore". Seeded from the brief
           that was just computed, so it points at the day they can already see. */}
       <div className="mt-6">
@@ -863,6 +866,48 @@ function DonePanel({ draft, firstName, brief, onGo, onReview }: { draft: Onboard
       )}
 
       <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-muted"><ShieldCheck className="h-3.5 w-3.5" /> {tr('onboardingWizard.yourInformationIsProtectedWithTop')}</p>
+    </div>
+  );
+}
+
+/**
+ * Invites finalize saved but did not email (the per-run cap, a limiter, or a
+ * failed send). They used to be dropped silently; each gets a Send button that
+ * goes through /api/email/invite and its limiter.
+ */
+function UnsentInvites({ invites }: { invites: UnsentInvite[] }) {
+  const tr = useTranslations();
+  const { error: toastError } = useToast();
+  const [sent, setSent] = useState<Record<string, boolean>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  async function send(invite: UnsentInvite) {
+    if (busy) return;
+    setBusy(invite.id);
+    try {
+      const res = await fetch('/api/email/invite', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inviteId: invite.id }),
+      });
+      if (res.ok) setSent((prev) => ({ ...prev, [invite.id]: true }));
+      else toastError(tr('invite.failedToSendInvite'));
+    } catch {
+      toastError(tr('invite.failedToSendInvite'));
+    } finally {
+      setBusy(null);
+    }
+  }
+  return (
+    <div className="mt-6 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-left" data-testid="unsent-invites">
+      <p className="flex items-center gap-2 text-sm font-semibold"><Mail className="h-4 w-4 text-amber-600" /> {tr('onboardingWizard.invitesNotEmailed')}</p>
+      <ul className="mt-2 space-y-1.5">
+        {invites.map((invite) => (
+          <li key={invite.id} className="flex items-center justify-between gap-3 text-sm">
+            <span className="min-w-0 truncate">{invite.email}</span>
+            {sent[invite.id]
+              ? <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-emerald-600"><Check className="h-3.5 w-3.5" /> {tr('onboardingWizard.inviteEmailed')}</span>
+              : <Button size="sm" variant="secondary" disabled={busy !== null} onClick={() => void send(invite)}>{tr('onboardingWizard.sendInviteEmail')}</Button>}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

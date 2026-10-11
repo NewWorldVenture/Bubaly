@@ -1,9 +1,10 @@
 import 'server-only';
 import { Resolver } from 'node:dns/promises';
 import { request as httpsRequest, Agent, type RequestOptions } from 'node:https';
-import { BlockList, isIP } from 'node:net';
+import { isIP } from 'node:net';
 import type { LookupFunction } from 'node:net';
 import { canonicalDocumentUrl } from '@/lib/capture/document-link';
+import { isPublicAddress } from '@/lib/server/public-address';
 import { documentType, MAX_DOCUMENT_BYTES, type DocumentInput } from '@/lib/ai/document-text';
 
 export const PUBLIC_DOCUMENT_TIMEOUT_MS = 15_000;
@@ -12,22 +13,8 @@ type FetchReason = 'invalid_url' | 'blocked' | 'unsupported' | 'too_large' | 'un
 export class PublicDocumentError extends Error {
   constructor(readonly reason: FetchReason, readonly retryable = false) { super(reason); }
 }
-const blocked = new BlockList();
-for (const [address, prefix] of [
-  ['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['169.254.0.0', 16],
-  ['172.16.0.0', 12], ['192.0.0.0', 24], ['192.0.2.0', 24], ['192.88.99.0', 24], ['192.168.0.0', 16],
-  ['198.18.0.0', 15], ['198.51.100.0', 24], ['203.0.113.0', 24], ['224.0.0.0', 3],
-] as const) blocked.addSubnet(address, prefix, 'ipv4');
-blocked.addAddress('168.63.129.16', 'ipv4'); // Azure platform endpoint despite its public-looking address.
-for (const [address, prefix] of [['2001::', 23], ['2001:db8::', 32], ['2002::', 16], ['3fff::', 20]] as const) blocked.addSubnet(address, prefix, 'ipv6');
-const globalV6 = new BlockList();
-globalV6.addSubnet('2000::', 3, 'ipv6');
-export function isPublicDocumentAddress(address: string): boolean {
-  const family = isIP(address);
-  if (family === 4) return !blocked.check(address, 'ipv4');
-  // Only ordinary global unicast; this excludes mapped IPv4, NAT64, local and multicast forms.
-  return family === 6 && globalV6.check(address, 'ipv6') && !blocked.check(address, 'ipv6');
-}
+/** The shared address policy (lib/server/public-address.ts), under the name its callers use. */
+export const isPublicDocumentAddress = isPublicAddress;
 
 /**
  * Every address a host resolves to, with the unroutable ones rejected.

@@ -79,11 +79,13 @@ async function fixture(page: Page) {
       '@/lib/supabase/client':{createClient:()=>({from:(table)=>{if(table!=='profiles')throw Error('Unexpected unrelated data read');return profileQuery}})},
       '@/lib/hooks/use-realtime-query':{useRealtimeQuery:()=>({data:[],loading:inbox==='loading',error:inbox==='error'?'Synthetic inbox unavailable':null,refresh:async()=>{}})},
       '@/lib/supabase/settle':{settle:async result=>result},
-      '@/lib/supabase/errors':{describeDbError:()=> 'Synthetic error',wroteNoRows:rows=>!rows?.length},
+      '@/lib/supabase/errors':{describeDbError:()=> 'Synthetic error',wroteNoRows:rows=>!rows?.length,localizeDbErrorText:text=>text},
       '@/lib/referrals/core':{DEFAULT_REFERRAL_CONFIG:{}},
       '@/lib/utils/phone':{guessDialCodeFromPhone:()=>'+1',extractLocalNumber:value=>value,COUNTRY_DIAL_CODES:[{dialCode:'+1',code:'US'}]},
       '@/lib/notifications/actions':{notificationAction:()=>({href:'#',isFallback:true})},
       '@/app/(app)/actions':{setDefaultDashboardAction:noop,updateMyProfileAction:noop},
+      // The Family tab's removal button; nothing here reaches it, so it refuses.
+      '@/app/(app)/family/member-actions':{removeFamilyMemberAction:async()=>{throw Error('Unexpected member removal')}},
       '@/app/(app)/dashboard/approvals-actions':{decideApproval:noop},
       '@/app/(app)/dashboard/chores/actions':{setChoreStatusAction:noop},
       '@/app/(app)/settings/notification-actions':{

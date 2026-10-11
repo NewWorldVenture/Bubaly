@@ -146,6 +146,13 @@ function discardConnection(connection: ApnsConnection) {
   connection.session.destroy();
 }
 
+function retireConnection(connection: ApnsConnection) {
+  if (apnsConnection === connection) apnsConnection = undefined;
+  clearTimeout(connection.idle);
+  try { if (!connection.session.closed && !connection.session.destroyed) connection.session.close(); }
+  catch { discardConnection(connection); }
+}
+
 function connectionFor(config: ApnsConfig): ApnsConnection {
   const identity = fingerprint(config);
   if (apnsConnection && (apnsConnection.fingerprint !== identity || apnsConnection.session.closed || apnsConnection.session.destroyed)) {
@@ -156,7 +163,13 @@ function connectionFor(config: ApnsConfig): ApnsConnection {
     const connection: ApnsConnection = { fingerprint: identity, session, failures: new Set() };
     apnsConnection = connection;
     session.on('error', () => discardConnection(connection));
-    session.once('goaway', () => discardConnection(connection));
+    // GOAWAY is ordinary APNs operation, and streams up to its last-stream-id
+    // may already have been accepted. Failing them here left `pushed_at` null,
+    // so the next dispatch sent the same notification to the device again.
+    // Stop handing the session out and close it gracefully instead: open
+    // streams finish (or time out) on their own, and Node fails any stream the
+    // peer did not process. 'close' then settles whatever is left.
+    session.once('goaway', () => retireConnection(connection));
     session.once('close', () => {
       if (apnsConnection === connection) apnsConnection = undefined;
       clearTimeout(connection.idle);

@@ -1,9 +1,9 @@
 // Messaging on production's schema, which has not taken 0475/0476.
 //
-// Harmless preferences may fall back only when their EXACT object is missing;
-// privacy-sensitive reads and writes refuse missing schema. The helper
-// says so once in the console, naming the migration. Anything else — a
-// different object, a different error — is the failure it is.
+// A path falls back to the previous production behaviour only when its EXACT
+// object is missing (owner decision; see tests/messaging-without-0475.test.ts).
+// The helper says so once in the console, naming the migration. Anything
+// else — a different object, a different error — is the failure it is.
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -23,6 +23,8 @@ describe('a missing object is recognised only by its own name and code', () => {
     [S.messageIdempotencyKey, { code: 'PGRST204', message: "Could not find the 'idempotency_key' column of 'family_messages' in the schema cache" }],
     [S.messageIdempotencyKey, { code: '42703', message: 'column family_messages.idempotency_key does not exist' }],
     [S.isFamilyChat, { code: '42703', message: 'column "is_family_chat" of relation "family_conversations" does not exist' }],
+    [S.findFamilyMessage, { code: 'PGRST202', message: 'Could not find the function public.find_family_message(p_content, p_conversation_id) in the schema cache' }],
+    [S.sendFamilyMessage, { code: 'PGRST202', message: 'Could not find the function public.send_family_message(p_content, p_family_id) in the schema cache' }],
   ];
   it.each(cases)('%o is missing for %o', (object, error) => {
     expect(isMissingSchemaObject(error, object)).toBe(true);
@@ -46,6 +48,13 @@ describe('a missing object is recognised only by its own name and code', () => {
     expect(isMissingSchemaObject({ code: '42501', message: 'permission denied for function ensure_family_conversation' }, S.ensureFamilyConversation)).toBe(false);
     expect(isMissingSchemaObject({ message: 'fetch failed' }, S.ensureFamilyConversation)).toBe(false);
     expect(isMissingSchemaObject(null, S.ensureFamilyConversation)).toBe(false);
+  });
+
+  it('also reads the name from details or hint, still only with the matching code', () => {
+    expect(isMissingSchemaObject({ code: 'PGRST202', message: 'Could not find the function in the schema cache', details: 'public.toggle_family_message_reaction(p_emoji, p_message_id)' }, S.toggleReaction)).toBe(true);
+    expect(isMissingSchemaObject({ code: '42883', message: 'function does not exist', hint: 'No function matches public.family_conversation_overview(uuid).' }, S.conversationOverview)).toBe(true);
+    expect(isMissingSchemaObject({ code: '42501', message: 'permission denied', details: 'public.toggle_family_message_reaction' }, S.toggleReaction)).toBe(false);
+    expect(isMissingSchemaObject({ code: 'PGRST202', message: 'Could not find the function', details: 'public.toggle_family_message_reaction_v2' }, S.toggleReaction)).toBe(false);
   });
 
   it('maps every object to the migration that adds it', () => {

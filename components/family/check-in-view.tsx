@@ -93,7 +93,7 @@ export function CheckInView() {
             const meta = CHECK_IN_STATUS[s];
             return (
               <button key={s} onClick={() => checkIn(s)} disabled={busy !== null}
-                className={cn('flex flex-col items-center gap-1 rounded-xl border border-border p-3 text-sm font-semibold transition hover:border-brand/40 hover:bg-elevated disabled:opacity-50', busy === s && 'opacity-60')}>
+                className={cn('flex flex-col items-center gap-1 rounded-xl border border-border p-3 text-sm font-semibold transition hover:border-brand/40 hover:bg-elevated disabled:opacity-50')}>
                 <span className="text-xl">{meta.emoji}</span>
                 {meta.label}
               </button>
@@ -125,7 +125,7 @@ export function CheckInView() {
                     {c.latitude != null && <a href={`https://maps.google.com/?q=${c.latitude},${c.longitude}`} target="_blank" rel="noreferrer" className="ml-1 inline-flex items-center gap-0.5 text-brand-text"><MapPin className="h-3 w-3" /> map</a>}
                   </p>
                 </div>
-                {mine && <button onClick={() => remove(c)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={t('checkInView.delete')}><Trash2 className="h-4 w-4" /></button>}
+                {mine && <button onClick={() => remove(c)} className="rounded-lg p-1.5 text-muted opacity-100 sm:opacity-0 transition hover:text-danger sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100" aria-label={t('checkInView.delete')}><Trash2 className="h-4 w-4" /></button>}
               </div>
             );
           })}

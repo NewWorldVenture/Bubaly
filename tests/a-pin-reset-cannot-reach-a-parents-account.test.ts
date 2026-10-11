@@ -58,6 +58,13 @@ function fakeAdmin() {
           state.passwordSetFor.push(userId);
           return { data: null, error: null };
         },
+        // The account each reset reaches, as the auth server reports it: the
+        // kid login createChildLoginAction made for 'jordan'. Whether a reset
+        // may proceed for an account that is NOT a kid login is
+        // tests/a-pin-reset-needs-a-kid-account.test.ts's question.
+        getUserById: async (userId: string) => ({
+          data: { user: { id: userId, email: 'child.jordan@kids.bubaly.app' } }, error: null,
+        }),
       },
     },
   };

@@ -36,6 +36,8 @@ function fixture({advances=false,inactive=false,receiptError=false,generation=''
     if(table==='push_deliveries'&&receiptError&&method==='GET')return reply({code:'XX000',message:'Synthetic receipt refusal'},500);
     const matches=(row:any)=>[...url.searchParams].every(([key,raw])=>{
       if(['select','order','limit','offset','on_conflict'].includes(key))return true;
+      // The `family:families!inner(closed_at)` embed's filter: every family here is open.
+      if(key.startsWith('family.'))return raw==='is.null';
       if(key==='or') { if(raw.includes('related_type.is.null')) return row.related_type==null || row.related_type!=='family_message'; const wrap=raw.includes('created_at.lt.'); const keyCursor={id:raw.match(/id\.(?:lte|gt)\.([^),]+)/)![1]}; const equalTime=row.created_at===now.toISOString();return wrap?(row.created_at<now.toISOString()||(equalTime&&row.id<=keyCursor.id)):(row.created_at>now.toISOString()||(equalTime&&row.id>keyCursor.id));}
       const [op,...parts]=raw.split('.');const value=parts.join('.');
       if(op==='eq')return String(row[key])===value;if(op==='is')return value==='null'?row[key]===null:false;

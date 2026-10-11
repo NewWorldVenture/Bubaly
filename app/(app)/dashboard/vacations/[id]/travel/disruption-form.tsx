@@ -61,15 +61,8 @@ export function DisruptionForm({ vacationId }: { vacationId: string }) {
         outcome,
         delayMinutes: outcome === 'delayed' ? Number(delay) : 0,
       });
-      if (res.ok) {
-        setResult(res);
-        // The report moved the booking and the plans. Leaving it selected made
-        // the same press a SECOND delay on top of the first; choosing it again
-        // is now a deliberate "it slipped further".
-        setChoice('');
-      } else {
-        setIssue(res.error);
-      }
+      if (res.ok) setResult(res);
+      else setIssue(res.error);
     } catch {
       setIssue(t('vacationDisruption.couldNotReport'));
     } finally {
@@ -145,7 +138,12 @@ export function DisruptionForm({ vacationId }: { vacationId: string }) {
   );
 }
 
-function DisruptionReceipt({ result }: { result: Success }) {
+/**
+ * What a submit did. Exported for the test that renders it: a REPEAT of a
+ * report the itinerary already carries moves nothing, and the receipt has to
+ * say that instead of listing a second move that never happened.
+ */
+export function DisruptionReceipt({ result }: { result: Success }) {
   const t = useTranslations();
   const reasonLabel = (reason: string) => {
     if (reason === 'cancelled') return t('vacationDisruption.reasonCancelled');
@@ -161,7 +159,9 @@ function DisruptionReceipt({ result }: { result: Success }) {
     <div className="mt-4 space-y-4 rounded-xl border border-border bg-elevated/40 px-4 py-3">
       <div>
         <h3 className="text-sm font-semibold">{t('vacationDisruption.movedHeading')}</h3>
-        {result.shifted.length === 0 ? (
+        {result.alreadyApplied ? (
+          <p className="mt-1 text-sm text-muted">{t('vacationDisruption.alreadyOnItinerary')}</p>
+        ) : result.shifted.length === 0 ? (
           <p className="mt-1 text-sm text-muted">{t('vacationDisruption.nothingMoved')}</p>
         ) : (
           <ul className="mt-1 space-y-1 text-sm">
@@ -206,7 +206,9 @@ function DisruptionReceipt({ result }: { result: Success }) {
       <p className="text-xs text-muted">
         {result.recorded ? t('vacationDisruption.recorded') : t('vacationDisruption.notRecorded')}
         {' '}
-        {result.notified ? t('vacationDisruption.familyNotified') : t('vacationDisruption.familyNotNotified')}
+        {result.notified
+          ? t('vacationDisruption.familyNotified')
+          : result.previouslyNotified ? t('vacationDisruption.familyAlreadyNotified') : t('vacationDisruption.familyNotNotified')}
       </p>
     </div>
   );

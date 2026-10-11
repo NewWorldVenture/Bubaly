@@ -38,8 +38,26 @@ import { finishConnectedCalendar, enableConnectedCalendar, validateConnectedCale
 import type { ServiceScope } from '@/lib/services/types';
 import type { OnboardingOwner } from '@/lib/onboarding/owner';
 import { verifyOnboardingOwner } from '@/lib/onboarding/verify-owner';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+import { isChildLoginAccount } from '@/lib/server/child-account';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
+
+/** An invite finalize created but did not email (see ONBOARDING_INVITE_EMAIL_CAP). */
+export type UnsentInvite = { id: string; email: string };
+
+/**
+ * The most invite EMAILS one finalize may send. The schema admits 30 drafted
+ * members, and every invite used to mail a caller-chosen address from
+ * Bubaly's sender with a caller-chosen family name in the subject, with no
+ * limiter at all — so a fresh account was a 30-message spam relay. Invite
+ * rows past the cap (or refused by a limiter, or rejected by the mail
+ * provider) are still created but NOT emailed. Finalize returns them as
+ * `unsentInvites`, and the Done screen offers a Send button for each, which
+ * goes through /api/email/invite and its own limiter. Nothing else re-sends
+ * them.
+ */
+const ONBOARDING_INVITE_EMAIL_CAP = 5;
 
 function onboardingFailure(operation: string, error: unknown, fallback: string): { ok: false; error: string } {
   console.error(`[onboarding] ${operation} failed`, error);
@@ -359,7 +377,7 @@ export async function finalizeOnboardingAction(input: {
   >;
   appearance?: { color?: string; age?: number | null; avatarUrl?: string; pin?: string };
   calendarImport?: { source: string; events: BriefEvent[]; receipt?: string };
-}, expectedOwner?: OnboardingOwner): Promise<Result<{ familyId: string; brief?: FirstBrief }>> {
+}, expectedOwner?: OnboardingOwner): Promise<Result<{ familyId: string; brief?: FirstBrief; unsentInvites?: UnsentInvite[] }>> {
   const t = await getTranslations();
   const parsed = finalizeOnboardingSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid onboarding data' };
@@ -411,7 +429,7 @@ export async function finalizeOnboardingAction(input: {
   let familyId: string;
   let newFamily = false; // set when this run creates a brand-new family (a signup)
   const { data: existingMembership, error: membershipLookupError } = await admin
-    .from('family_members').select('family_id')
+    .from('family_members').select('family_id, role')
     .eq('user_id', auth.user.id).eq('is_active', true)
     .order('created_at').limit(1).maybeSingle();
   if (membershipLookupError) return onboardingFailure('membership lookup', membershipLookupError, 'Could not check your family setup.');
@@ -428,6 +446,22 @@ export async function finalizeOnboardingAction(input: {
         return { ok: true, data: { familyId: existingMembership.family_id, brief: buildFirstBrief(calendarImport.events, new Date(), [], family.timezone) } };
       }
       return { ok: true, data: { familyId: existingMembership.family_id } };
+    }
+    // ADOPT only the caller's own first family. The oldest active membership
+    // is not necessarily that: an auto-provisioned user who later joined
+    // another household as a guest and deactivated their own row would
+    // otherwise have that household renamed and be upserted into it as a
+    // PARENT with the service role below. The same three facts
+    // prepareCalendarFamily / verifyOnboardingOwner already insist on: the
+    // marker names this family, the caller is its parent, and they created it.
+    if (progress?.family_id !== existingMembership.family_id || existingMembership.role !== 'parent') {
+      return { ok: false, error: t('onboardingWizard.contextChanged') };
+    }
+    {
+      const { data: adoptable, error: adoptableError } = await admin
+        .from('families').select('created_by').eq('id', existingMembership.family_id).maybeSingle();
+      if (adoptableError) return onboardingFailure('adopted family owner check', adoptableError, t('actions.couldNotFinishSettingUp2'));
+      if (adoptable?.created_by !== auth.user.id) return { ok: false, error: t('onboardingWizard.contextChanged') };
     }
     // Preserve the pre-existing marker long enough to make the resume decision
     // above, then claim this request as the active wizard run.
@@ -453,6 +487,9 @@ export async function finalizeOnboardingAction(input: {
       return onboardingFailure('auto-provisioned family update', new Error('no rows updated'), t('actions.couldNotFinishSettingUp2'));
     }
   } else {
+    // A child login without an active membership was removed from its family;
+    // it must not mint a household of its own as that household's parent.
+    if (await isChildLoginAccount(admin, auth.user)) return { ok: false, error: t('onboardingWizard.contextChanged') };
     // Claim first-family creation under a per-user database lock. This keeps
     // double-submit/retry requests on one family even before the membership
     // trigger is visible to a later request.
@@ -593,6 +630,8 @@ export async function finalizeOnboardingAction(input: {
   // sending a duplicate email on replay.
   // Who the invite is from, for the email's subject and body.
   const inviterName = profile.firstName.trim() || DEFAULT_OWNER_DISPLAY_NAME;
+  let inviteEmailsSent = 0;
+  const unsentInvites: UnsentInvite[] = [];
   for (const [index, m] of members.entries()) {
     if (m.kind !== 'invite') continue;
     const { data: invite, error: inviteErr } = await admin
@@ -604,7 +643,7 @@ export async function finalizeOnboardingAction(input: {
         invited_by: auth.user.id,
         onboarding_key: onboardingItemKey(runKey, 'invite', index, m),
       }, { onConflict: 'family_id,onboarding_key', ignoreDuplicates: true })
-      .select('token')
+      .select('id, token')
       .maybeSingle();
     if (inviteErr) {
       return inviteErr
@@ -627,6 +666,16 @@ export async function finalizeOnboardingAction(input: {
       token = existingInvite.token;
     }
     if (!invite) continue;
+    // Bounded per call, per user and per family (the same family bucket
+    // /api/email/invite spends). The invite row above stands either way.
+    // An invite not mailed here is returned, so the Done screen can say so.
+    const unsent = { id: invite.id, email: m.email };
+    if (inviteEmailsSent >= ONBOARDING_INVITE_EMAIL_CAP) { unsentInvites.push(unsent); continue; }
+    const userLimited = await enforceRequestRateLimit(admin, `email:onboarding-invite:${auth.user.id}`, { limit: ONBOARDING_INVITE_EMAIL_CAP, windowMs: 3_600_000 });
+    if (!userLimited.ok) { unsentInvites.push(unsent); continue; }
+    const familyLimited = await enforceRequestRateLimit(admin, `email:invite:${familyId}`, { limit: 20, windowMs: 3_600_000 });
+    if (!familyLimited.ok) { unsentInvites.push(unsent); continue; }
+    inviteEmailsSent++;
     // The branded template every other invite in the product already uses
     // (app/api/email/invite). This site used to build its own two-line HTML
     // string, and an i18n sweep left the calls UNINTERPOLATED inside it:
@@ -638,13 +687,15 @@ export async function finalizeOnboardingAction(input: {
     // "{t('actions.youVeBeenInvitedTo')}" — with the accept link labelled
     // "{t('actions.acceptYourInvite')}". It typechecked, it sent, and the keys
     // existed in all eleven catalogues, so the i18n gate passed too.
-    await sendReactEmail({
+    const sent = await sendReactEmail({
       to: m.email,
       subject: `${inviterName} invited you to join ${family.name} on Bubaly`,
       react: React.createElement(InviteEmail, {
         familyName: family.name, inviterName, token, role: m.role,
       }),
     });
+    // A rejected send, or no mail provider at all, is not a sent invite either.
+    if (!sent?.ok || sent.skipped) unsentInvites.push(unsent);
   }
 
   // 6a. VALUE-FIRST (T1): persist the calendar the user imported in the value step
@@ -910,5 +961,5 @@ export async function finalizeOnboardingAction(input: {
     console.error('[onboarding] family email provisioning failed', e);
   }
 
-  return { ok: true, data: { familyId, brief: finalBrief } };
+  return { ok: true, data: { familyId, brief: finalBrief, ...(unsentInvites.length ? { unsentInvites } : {}) } };
 }

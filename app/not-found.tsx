@@ -1,6 +1,5 @@
-import Link from 'next/link';
 import { getTranslations } from '@/lib/i18n/server';
-import { Button } from '@/components/ui/button';
+import { ButtonLink } from '@/components/ui/button-link';
 
 export default async function NotFound() {
   const t = await getTranslations();
@@ -10,8 +9,8 @@ export default async function NotFound() {
       <h1 className="mt-4 text-2xl font-semibold">{t('notFound.pageNotFound')}</h1>
       <p className="mt-2 max-w-sm text-sm text-muted">{t('notFound.thePageYouReLooking')}</p>
       <div className="mt-6 flex flex-col gap-2 sm:flex-row">
-        <Link href="/dashboard"><Button>{t('notFound.goToDashboard')}</Button></Link>
-        <Link href="/"><Button variant="outline">{t('notFound.backToHome')}</Button></Link>
+        <ButtonLink href="/dashboard">{t('notFound.goToDashboard')}</ButtonLink>
+        <ButtonLink href="/" variant="outline">{t('notFound.backToHome')}</ButtonLink>
       </div>
     </div>
   );

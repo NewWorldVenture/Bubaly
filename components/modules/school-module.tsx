@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables, GradeType } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { type FamilyClock, useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { datetimeLocalToInstant } from '@/lib/time/datetime-local';
 import { wallWeekStart } from '@/lib/time/wall-clock';
 import type { Format } from '@/lib/utils/format';
 import type { LocaleCode } from '@/lib/i18n/locales';
@@ -391,11 +392,14 @@ export function SchoolModule() {
   // ── CRUD handlers ────────────────────────────────────────
   async function saveEvent() {
     if (!eventForm.title || !eventForm.starts_at) return;
+    // The `datetime-local` reading is on the FAMILY's clock, not the device's.
+    const startsAt = datetimeLocalToInstant(eventForm.starts_at, clock.timeZone);
+    if (!startsAt) { toastError(tr('schoolModule.failedToSaveEvent')); return; }
     setSaving(true);
     const sb = createClient();
     const { error: err } = await sb.from('school_events').insert({
       family_id: familyId, title: eventForm.title, event_type: eventForm.event_type,
-      starts_at: new Date(eventForm.starts_at).toISOString(), notes: eventForm.notes || null,
+      starts_at: startsAt, notes: eventForm.notes || null,
       member_id: eventForm.member_id || null, school_name: eventForm.school_name || null, created_by: userId,
     });
     setSaving(false);
@@ -607,7 +611,7 @@ export function SchoolModule() {
                             </td>
                             <td className="px-4 py-3.5 capitalize text-fg">{(e.event_type ?? 'general').replace('_', ' ')}</td>
                             <td className="px-4 py-3.5"><p className="font-medium">{due.label}</p><p className={cn('text-xs', due.urgent ? 'text-orange-400' : 'text-muted')}>{due.sub}</p></td>
-                            <td className="px-4 py-3.5"><button type="button" onClick={() => void removeEvent(e.id, e.title)} aria-label={tr('schoolModule.deleteEventTitle', { title: e.title })} className="text-muted/60 hover:text-danger focus-ring rounded"><Trash2 className="h-4 w-4" /></button></td>
+                            <td className="px-4 py-3.5"><button type="button" onClick={() => void removeEvent(e.id, e.title)} aria-label={tr('schoolModule.deleteEventTitle', { title: e.title })} className="text-muted hover:text-danger focus-ring rounded"><Trash2 className="h-4 w-4" /></button></td>
                           </tr>
                         );
                       })}

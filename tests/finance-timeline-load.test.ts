@@ -3,6 +3,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { loadMoneyTimeline, loadMoneyTimelineInput, planCommitments } from '@/lib/finance/timeline-load';
+import { resetDueDayWarningForTests } from '@/lib/finance/recurring';
+import { BillScheduleConfirmationRequired } from '@/lib/finance/bill-schedule';
 
 // A chainable query stub: every builder method returns the chain and the chain
 // is thenable, resolving to the supplied PostgREST-shaped `{ data, error }`.
@@ -223,6 +225,7 @@ describe('loadMoneyTimelineInput read boundary', () => {
 
   it('a database without 0488 is asked once more without the column, and steps the bill from its due date\'s day', async () => {
     const selects: Record<string, string[]> = {};
+    resetDueDayWarningForTests();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const supabase = fakeSupabase({
       bills: (call) => (call === 1
@@ -280,12 +283,49 @@ describe('bill anchors in the timeline read', () => {
     expect(timeline.weeks.flatMap((week) => week.moments).map((moment) => moment.date)).toEqual(['2026-02-28', '2026-03-31', '2026-04-30']);
   });
 
-  it('reports an incomplete forecast on an older schema with monthly commitments', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+  // Owner decision (0488 held): an older schema forecasts as production did
+  // before 0488 (the due date's own day), where it used to refuse.
+  it('forecasts an older-schema Feb 28 row from its due date\'s day, as before 0488', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     const db = transport(row, { code: 'PGRST204', message: "Could not find the 'due_day' column of 'bills' in the schema cache" });
-    await expect(loadMoneyTimeline(db.client, 'family-1', 'UTC', NOW)).rejects.toThrow(/anchors are unavailable/);
+    const timeline = await loadMoneyTimeline(db.client, 'family-1', 'UTC', new Date('2026-02-23T00:00:00Z'));
     expect(db.selects).toHaveLength(2);
     expect(db.selects[1]).not.toContain('due_day');
+    expect(timeline.weeks.flatMap((week) => week.moments).map((moment) => moment.date)).toEqual(['2026-02-28', '2026-03-28', '2026-04-28']);
+  });
+
+  it.each([
+    { name: 'a bill due on the 30th', over: { due_date: '2026-01-30' }, dates: ['2026-01-30', '2026-02-28'] },
+  ])('loads the older-schema forecast for $name, as before 0488', async ({ over, dates }) => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const db = transport({ ...row, ...over }, { code: '42703', message: 'column bills.due_day does not exist' });
+    const timeline = await loadMoneyTimeline(db.client, 'family-1', 'UTC', NOW);
+    expect(timeline.weeks.flatMap((week) => week.moments).map((moment) => moment.date)).toEqual(dates);
+    expect(timeline.monthlyRecurring).toBe(100);
+  });
+
+  // Not previous production: a recurring bill with a missing or unknown
+  // cadence is never forecast as monthly. Without the column it asks for the
+  // schedule exactly as it does with it.
+  it.each([
+    { due_date: '2026-01-29', recurrence: null },
+    { due_date: '2026-01-15', recurrence: 'every month' },
+    { due_date: '2026-01-15', recurrence: '' },
+  ])('an older-schema bill with cadence $recurrence asks for its schedule instead of stepping monthly', async (over) => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const db = transport({ ...row, ...over }, { code: '42703', message: 'column bills.due_day does not exist' });
+    await expect(loadMoneyTimeline(db.client, 'family-1', 'UTC', NOW)).rejects.toBeInstanceOf(BillScheduleConfirmationRequired);
+    const input = await loadMoneyTimelineInput(transport({ ...row, ...over }, { code: '42703', message: 'column bills.due_day does not exist' }).client, 'family-1', 'UTC', NOW);
+    expect(input.bills[0]).toMatchObject({ recurrence: over.recurrence });
+    expect(input.bills[0]).not.toHaveProperty('due_day');
+  });
+
+  it('with the column, an unknown day or cadence still asks for the schedule', async () => {
+    for (const over of [{ due_date: '2026-01-30', due_day: null }, { due_date: '2026-01-15', due_day: null, recurrence: null }]) {
+      const db = transport({ ...row, ...over });
+      await expect(loadMoneyTimeline(db.client, 'family-1', 'UTC', NOW)).rejects.toBeInstanceOf(BillScheduleConfirmationRequired);
+      expect(db.selects).toHaveLength(1);
+    }
   });
 
   it.each([{ is_recurring: false, recurrence: null }, { is_recurring: true, recurrence: 'weekly' }])('can read an older schema when the bill needs no month anchor', async (over) => {
@@ -331,8 +371,11 @@ describe('complete counted bill reads under a lower server cap', () => {
     expect(db.requests.filter(url => !legacy || !url.searchParams.get('select')!.includes('due_day')).map(url => url.searchParams.get('offset'))).toEqual(['0', '2', '4']);
     expect(db.requests.every(url => url.searchParams.get('order') === 'id.asc')).toBe(true);
   });
-  it('refuses a legacy ambiguous anchor on the later page', async () => {
-    await expect(loadMoneyTimelineInput(capped({ legacy: true, ambiguousLast: true }).client, 'family-1', TZ, NOW)).rejects.toThrow(/anchors are unavailable/);
+  // Owner decision (0488 held): this used to refuse; it now reads as before 0488.
+  it('reads a legacy day-28 anchor on the later page by its due date\'s day', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const result = await loadMoneyTimelineInput(capped({ legacy: true, ambiguousLast: true }).client, 'family-1', TZ, NOW);
+    expect(result.bills.at(-1)).toMatchObject({ due_date: '2026-02-28', recurrence: 'monthly', due_day: 28 });
   });
   it.each([{ missingCount: true }, { changedCount: true }, { duplicate: true }, { emptyLast: true }, { total: 10001 }, { pageError: true }])('refuses an incomplete or unstable read %j', async options => {
     await expect(loadMoneyTimelineInput(capped(options).client, 'family-1', TZ, NOW)).rejects.toBeTruthy();

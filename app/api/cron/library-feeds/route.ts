@@ -33,7 +33,11 @@ export async function GET(req: NextRequest) {
   const supabase = createServiceClient();
   const { data: feeds, error } = await supabase
     .from('library_feeds')
-    .select('id, family_id, feed_url, created_by, last_fetched_at')
+    // Feeds of OPEN families only (families.closed_at). In the query, not after
+    // it: stalest-first and bounded, a closed family's feeds — never fetched
+    // again — would otherwise sit at the head of every batch.
+    .select('id, family_id, feed_url, created_by, last_fetched_at, family:families!inner(closed_at)')
+    .is('family.closed_at', null)
     // NULLS FIRST: a subscription that has never been fetched is the most
     // urgent row in the table, not the least.
     .order('last_fetched_at', { ascending: true, nullsFirst: true })

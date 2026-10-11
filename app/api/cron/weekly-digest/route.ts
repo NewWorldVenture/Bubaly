@@ -61,7 +61,8 @@ export async function GET(req: NextRequest) {
     // `timezone` is selected because the digest prints DATES. Without it every
     // date in this email is Greenwich's, and an email cannot be re-rendered the
     // way a page can be reloaded.
-    (from, to) => supabase.from('families').select('id, name, timezone').order('id').range(from, to),
+    // A closed account (families.closed_at) is not emailed.
+    (from, to) => supabase.from('families').select('id, name, timezone').is('closed_at', null).order('id').range(from, to),
   );
   if (familiesError) {
     console.error('Weekly digest family read error:', familiesError);

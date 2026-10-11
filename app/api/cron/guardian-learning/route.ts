@@ -35,8 +35,11 @@ export async function GET(req: NextRequest) {
     // `.limit(N)` is not a bound — PostgREST caps a response at db-max-rows
     // whatever the client asked for, so this quietly read 1,000. `max` is the
     // same ceiling, honoured by paging to it. See lib/supabase/read-all.ts.
+    // OPEN families only (families.closed_at): a closed account gets no new
+    // suggestions. The expiry sweep above is housekeeping and runs for all.
     const { rows: recent, error: recentError } = await readAll((from, to) => supabase.from('guardian_communications')
-      .select('family_id')
+      .select('family_id, family:families!inner(closed_at)')
+      .is('family.closed_at', null)
       .gte('started_at', since)
       .order('id')
       .range(from, to), { max: 5000 });

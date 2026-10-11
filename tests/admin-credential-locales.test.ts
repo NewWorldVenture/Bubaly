@@ -4,6 +4,13 @@ import { LOCALES } from '@/lib/i18n/locales';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 
 const state = vi.hoisted(() => ({ locale: 'en-US', user: vi.fn(), admin: vi.fn(), createClient: vi.fn(), db: null as unknown }));
+// The admin gates also ask lib/auth/super-admin-assurance whether the session
+// proved its authenticator; this file is not about step-up, so it says yes.
+vi.mock('@/lib/auth/super-admin-assurance', () => ({
+  superAdminAssurance: async () => ({ ok: true }),
+  decideSuperAdminAssurance: () => ({ ok: true }),
+  SUPER_ADMIN_STEP_UP_PATH: '/auth/step-up?next=%2Fadmin',
+}));
 vi.mock('@supabase/supabase-js', () => ({ createClient: state.createClient }));
 vi.mock('@supabase/ssr', () => ({ createServerClient: vi.fn() }));
 vi.mock('@/lib/supabase/auth', () => ({ getUser: state.user, isSuperAdmin: state.admin }));

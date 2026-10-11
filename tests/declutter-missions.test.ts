@@ -70,27 +70,29 @@ describe('weeklyPlan', () => {
 });
 
 describe('streaks, summary, points', () => {
+  // timestamptz values as PostgREST returns them (H6): '+00:00', read on the
+  // family's day — a UTC family here, so the day is the one written.
   const sessions: SessionLike[] = [
-    { started_at: '2026-09-05T08:00:00', minutes: 15, items_removed: 4, member_id: null },
-    { started_at: '2026-09-04T08:00:00', minutes: 10, items_removed: 2, member_id: null },
-    { started_at: '2026-09-03T08:00:00', minutes: 20, items_removed: 6, member_id: null },
-    { started_at: '2026-08-30T08:00:00', minutes: 20, items_removed: 1, member_id: null },
-    { started_at: '2026-07-01T08:00:00', minutes: 60, items_removed: 30, member_id: null },
+    { started_at: '2026-09-05T08:00:00+00:00', minutes: 15, items_removed: 4, member_id: null, missions_done: 0 },
+    { started_at: '2026-09-04T08:00:00+00:00', minutes: 10, items_removed: 2, member_id: null, missions_done: 0 },
+    { started_at: '2026-09-03T08:00:00+00:00', minutes: 20, items_removed: 6, member_id: null, missions_done: 0 },
+    { started_at: '2026-08-30T08:00:00+00:00', minutes: 20, items_removed: 1, member_id: null, missions_done: 0 },
+    { started_at: '2026-07-01T08:00:00+00:00', minutes: 60, items_removed: 30, member_id: null, missions_done: 0 },
   ];
   it('counts consecutive days, allowing today to be pending', () => {
-    expect(sessionStreak(sessions, TODAY)).toBe(3);
-    expect(sessionStreak(sessions.slice(1), TODAY)).toBe(2);
-    expect(sessionStreak([], TODAY)).toBe(0);
+    expect(sessionStreak(sessions, TODAY, 'UTC')).toBe(3);
+    expect(sessionStreak(sessions.slice(1), TODAY, 'UTC')).toBe(2);
+    expect(sessionStreak([], TODAY, 'UTC')).toBe(0);
   });
   it('summarises zones, due counts, week/month totals', () => {
     const zones = [zone({ name: 'a', clutter_score: 4, last_reset_at: '2026-08-20T00:00:00Z' }), zone({ name: 'b', clutter_score: 2, last_reset_at: '2026-09-01T00:00:00Z' }), zone({ name: 'off', is_active: false })];
     const missions = [mission({ id: 'd1', status: 'done', completed_at: '2026-09-04T10:00:00Z', items_removed: 5 }), mission({ id: 'd2', status: 'done', completed_at: '2026-08-01T10:00:00Z', items_removed: 9 }), mission({ id: 'p1' })];
-    const s = declutterSummary(zones, missions, sessions, TODAY);
+    const s = declutterSummary(zones, missions, sessions, TODAY, 'UTC');
     expect(s).toMatchObject({ zones: 2, avgScore: 3, dueZones: 1, doneThisWeek: 1, itemsRemovedMonth: 18, minutesMonth: 65, streak: 3 });
     expect(s.worst?.name).toBe('a');
     expect(s.text).toBe('1 zone due · avg clutter 3/5');
-    expect(declutterSummary([], [], [], TODAY).text).toBe('No zones yet');
-    expect(declutterSummary([zone({ name: 'x', clutter_score: 1 })], [], [], TODAY).text).toBe('Home is in great shape');
+    expect(declutterSummary([], [], [], TODAY, 'UTC').text).toBe('No zones yet');
+    expect(declutterSummary([zone({ name: 'x', clutter_score: 1 })], [], [], TODAY, 'UTC').text).toBe('Home is in great shape');
   });
   it('awards a bonus for items removed', () => {
     expect(missionPoints({ points: 5, items_removed: 0 })).toBe(5);

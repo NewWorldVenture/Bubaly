@@ -125,6 +125,19 @@ describe('readDocument', () => {
     expect(calls.some((c) => c.table === 'agent_activity' && c.kind === 'insert')).toBe(true);
   });
 
+  it('keeps a sensitive title off the family-readable agent feed, and names an ordinary one', async () => {
+    const sensitive = makeDb(() => ({ data: doc({ id: 'd-2', title: 'Divorce decree.pdf', category: 'legal' }), error: null }));
+    expect(await readDocument(scopeWith(sensitive.db, { actorKind: 'ai' }), 'd-2')).toMatchObject({ ok: true });
+    const feed = sensitive.calls.filter((c) => c.table === 'agent_activity' && c.kind === 'insert');
+    expect(feed).toHaveLength(1);
+    expect(JSON.stringify(feed[0].payload)).not.toContain('Divorce');
+    expect(feed[0].payload).toMatchObject({ title: 'Opened a private document' });
+
+    const ordinary = makeDb(() => ({ data: doc({ id: 'd-1', title: 'School calendar' }), error: null }));
+    await readDocument(scopeWith(ordinary.db, { actorKind: 'ai' }), 'd-1');
+    expect(ordinary.calls.find((c) => c.table === 'agent_activity')?.payload).toMatchObject({ title: 'Opened "School calendar"' });
+  });
+
   it('refuses a sensitive document to a teen, a caregiver and a system actor, without signing', async () => {
     for (const role of ['teen', 'caregiver', 'system'] as const) {
       const { db, signed } = makeDb(() => ({ data: doc({ id: 'd-2', category: 'legal' }), error: null }));
@@ -157,6 +170,7 @@ describe('linkToVacation', () => {
   const respond = (existing: unknown) => (call: Call): Reply => {
     if (call.table === 'documents') return { data: doc({ id: 'd-5', title: 'Ava passport', category: 'passport', expires_at: '2028-01-01', member_id: 'member-2' }), error: null };
     if (call.table === 'vacations') return { data: { id: 'v-1', title: 'Paris' }, error: null };
+    if (call.table === 'family_members') return { data: call.filters.id === 'member-2' && call.filters.family_id === 'fam-1' ? { id: 'member-2' } : null, error: null };
     if (call.table === 'vacation_documents' && call.kind === 'select') return { data: existing, error: null };
     if (call.table === 'vacation_documents' && call.kind === 'insert') return { data: { ...(call.payload as object), id: 'vd-1', created_at: '', updated_at: '', file_url: null, number: null, issued_on: null, notes: null }, error: null };
     return { data: null, error: null };
@@ -176,6 +190,41 @@ describe('linkToVacation', () => {
     const res = await linkToVacation(scopeWith(db), { documentId: 'd-5', vacationId: 'v-1' });
     expect(res).toMatchObject({ ok: true, data: { created: false, link: { id: 'vd-0' } } });
     expect(calls.some((c) => c.kind === 'insert')).toBe(false);
+  });
+
+  it('refuses a member id from another household before probing or inserting', async () => {
+    const { db, calls } = makeDb(respond(null));
+    const res = await linkToVacation(scopeWith(db), { documentId: 'd-5', vacationId: 'v-1', memberId: 'other-family-member' });
+    expect(res).toMatchObject({ ok: false, code: 'not_found' });
+    expect(calls.find((c) => c.table === 'family_members')?.filters).toMatchObject({ id: 'other-family-member', family_id: 'fam-1', is_active: true });
+    expect(calls.some((c) => c.table === 'vacation_documents')).toBe(false);
+  });
+
+  it('writes a supplied member id once it is confirmed in this family', async () => {
+    const { db, calls } = makeDb(respond(null));
+    const res = await linkToVacation(scopeWith(db), { documentId: 'd-5', vacationId: 'v-1', memberId: 'member-2' });
+    expect(res).toMatchObject({ ok: true, data: { created: true, link: { member_id: 'member-2' } } });
+    expect(calls.find((c) => c.table === 'family_members')?.filters).toMatchObject({ id: 'member-2', family_id: 'fam-1' });
+  });
+
+  it('treats a lost insert race (unique violation) as the existing link, not a failure', async () => {
+    let probes = 0;
+    const winner = { id: 'vd-9', vacation_id: 'v-1', document_id: 'd-5', kind: 'passport', title: 'Ava passport' };
+    const { db } = makeDb((call) => {
+      if (call.table === 'vacation_documents' && call.kind === 'select') return { data: probes++ === 0 ? null : winner, error: null };
+      if (call.table === 'vacation_documents' && call.kind === 'insert') return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' } };
+      return respond(null)(call);
+    });
+    expect(await linkToVacation(scopeWith(db), { documentId: 'd-5', vacationId: 'v-1' })).toMatchObject({ ok: true, data: { created: false, link: { id: 'vd-9' } } });
+  });
+
+  it('records a sensitive travel document on the agent feed without its title', async () => {
+    const { db, calls } = makeDb(respond(null));
+    expect(await linkToVacation(scopeWith(db, { actorKind: 'ai' }), { documentId: 'd-5', vacationId: 'v-1' })).toMatchObject({ ok: true });
+    const writes = calls.filter((c) => (c.table === 'agent_activity' || c.table === 'audit_logs') && c.kind === 'insert');
+    expect(writes.length).toBeGreaterThan(0);
+    for (const write of writes) expect(JSON.stringify(write.payload)).not.toContain('Ava passport');
+    expect(calls.find((c) => c.table === 'agent_activity')?.payload).toMatchObject({ title: 'Attached a private document to Paris' });
   });
 
   it('refuses a child linking a sensitive document and a foreign trip', async () => {

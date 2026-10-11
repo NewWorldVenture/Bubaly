@@ -27,8 +27,12 @@ describe('scheduled recovery failure contracts', () => {
     // name of a local (`notificationError`), which broke when the route moved to
     // notify() while still counting the failure — the code was right and the
     // test was describing its old shape. Assert the counting instead.
-    expect(auctions).toMatch(/if \(notified\.some\(\(sent\) => !sent\)\) \{\s*\n\s*failed\+\+;/);
-    expect(auctions).toMatch(/if \(!sent\) \{\s*\n\s*failed\+\+;/);
+    // A family with no notice scope is counted apart as `skipped` (it stays
+    // null for the whole retry window); a failed write or a throw is still a
+    // failure. Behaviour: tests/an-auction-notice-that-failed-is-sent-later.
+    expect(auctions).toMatch(/if \(anyFailed\(notified\)\) \{\s*\n\s*failed\+\+;/);
+    expect(auctions).toMatch(/if \(anyFailed\(\[outcome\]\)\) \{\s*\n\s*failed\+\+;/);
+    expect(auctions).toContain("return sent.ok ? 'sent' : 'failed';");
     expect(auctions).toContain('const ok = failed === 0;');
     expect(providers).toContain('auditFailed');
     expect(providers).toContain('const ok = failed === 0 && auditFailed === 0;');

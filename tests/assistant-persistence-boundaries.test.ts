@@ -65,7 +65,7 @@ const ctx: AssistantCtx = {
   userId: 'user-1',
   // Deliberately NOT 'member-1': the roster's first entry is Emma, and the
   // point of this field is that the acting person is not whoever sorts first.
-  memberId: 'member-self',
+  role: 'parent', memberId: 'member-self',
   members: [{ id: 'member-1', display_name: 'Emma' }],
   tz: 'America/New_York',
 };
