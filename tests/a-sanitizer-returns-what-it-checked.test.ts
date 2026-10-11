@@ -164,7 +164,7 @@ describe('a sanitizer returns what it checked (SEC-014)', () => {
         if (entry === 'node_modules' || entry === '.next' || entry.startsWith('.')) continue;
         const full = join(dir, entry);
         if (statSync(full).isDirectory()) walk(full);
-        else if (/\.tsx?$/.test(entry)) files.push(full);
+        else if (/\.tsx?$/.test(entry)) files.push(full.replaceAll('\\', '/'));
       }
     };
     for (const root of ['app', 'components', 'lib']) walk(root);
