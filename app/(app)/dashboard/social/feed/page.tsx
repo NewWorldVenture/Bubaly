@@ -54,7 +54,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
         </div>
         <form className="mt-3 flex gap-2" action="/dashboard/social/feed">
           {platform && <input type="hidden" name="platform" value={platform} />}
-          <input name="q" defaultValue={sp.q ?? ''} placeholder={t('dashboardSocialFeed.searchTheFeed')} className="flex-1 rounded-lg border border-border bg-elevated px-3 py-1.5 text-sm" />
+          <input name="q" defaultValue={sp.q ?? ''} placeholder={t('dashboardSocialFeed.searchTheFeed')} className="min-w-0 flex-1 rounded-lg border border-border bg-elevated px-3 py-1.5 text-sm" />
           <button className="rounded-lg bg-elevated px-3 py-1.5 text-sm font-medium">{t('dashboardSocialFeed.search')}</button>
         </form>
       </Card>

@@ -709,7 +709,7 @@ export function SchoolModule() {
 
         {/* Two-column grid: Class Schedules + Announcements (Overview) */}
         {tab === 'overview' && (
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
             {/* Class Schedules */}
             <div className="rounded-2xl border border-border bg-surface/40 p-5">
               <div className="mb-4 flex items-center justify-between">
