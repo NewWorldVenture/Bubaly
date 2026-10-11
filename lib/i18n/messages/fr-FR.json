@@ -16909,5 +16909,6 @@
   "inventoryModule.itemRemovedButPhotoKept": "Objet supprimé, mais sa photo n’a pas pu être supprimée du stockage.",
   "displayGrid.mealsUnavailable": "Les repas du jour sont indisponibles.",
   "displayGrid.groceryUnavailable": "La liste de courses est indisponible.",
-  "displayGrid.choresUnavailable": "Les tâches sont indisponibles."
+  "displayGrid.choresUnavailable": "Les tâches sont indisponibles.",
+  "closetModule.wearMayAlreadyBeCounted": "Cette tenue n’a peut-être pas été enregistrée, et certains compteurs de port l’incluent peut-être déjà. Vérifiez-les avant de réessayer."
 }

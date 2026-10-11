@@ -16909,5 +16909,6 @@
   "inventoryModule.itemRemovedButPhotoKept": "Oggetto rimosso, ma non è stato possibile eliminare la sua foto dall’archivio.",
   "displayGrid.mealsUnavailable": "I pasti di oggi non sono disponibili.",
   "displayGrid.groceryUnavailable": "La lista della spesa non è disponibile.",
-  "displayGrid.choresUnavailable": "Le faccende non sono disponibili."
+  "displayGrid.choresUnavailable": "Le faccende non sono disponibili.",
+  "closetModule.wearMayAlreadyBeCounted": "Questo outfit potrebbe non essere stato registrato e alcuni contatori di utilizzo potrebbero già includerlo. Controllali prima di riprovare."
 }

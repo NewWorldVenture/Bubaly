@@ -16909,5 +16909,6 @@
   "inventoryModule.itemRemovedButPhotoKept": "Item removed, but its photo could not be deleted from storage.",
   "displayGrid.mealsUnavailable": "Today's meals are unavailable.",
   "displayGrid.groceryUnavailable": "The grocery list is unavailable.",
-  "displayGrid.choresUnavailable": "Chores are unavailable."
+  "displayGrid.choresUnavailable": "Chores are unavailable.",
+  "closetModule.wearMayAlreadyBeCounted": "This outfit may not have been logged, and some wear counts may already include it. Check them before trying again."
 }

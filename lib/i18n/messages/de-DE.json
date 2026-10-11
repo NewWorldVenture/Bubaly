@@ -16909,5 +16909,6 @@
   "inventoryModule.itemRemovedButPhotoKept": "Gegenstand entfernt, aber sein Foto konnte nicht aus dem Speicher gelöscht werden.",
   "displayGrid.mealsUnavailable": "Die heutigen Mahlzeiten sind nicht verfügbar.",
   "displayGrid.groceryUnavailable": "Die Einkaufsliste ist nicht verfügbar.",
-  "displayGrid.choresUnavailable": "Aufgaben sind nicht verfügbar."
+  "displayGrid.choresUnavailable": "Aufgaben sind nicht verfügbar.",
+  "closetModule.wearMayAlreadyBeCounted": "Dieses Outfit wurde möglicherweise nicht erfasst, und einige Tragezähler enthalten es eventuell schon. Prüfe sie, bevor du es erneut versuchst."
 }

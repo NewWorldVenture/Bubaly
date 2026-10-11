@@ -16909,5 +16909,6 @@
   "inventoryModule.itemRemovedButPhotoKept": "Objeto removido, mas não foi possível eliminar a fotografia do armazenamento.",
   "displayGrid.mealsUnavailable": "As refeições de hoje não estão disponíveis.",
   "displayGrid.groceryUnavailable": "A lista de compras não está disponível.",
-  "displayGrid.choresUnavailable": "As tarefas não estão disponíveis."
+  "displayGrid.choresUnavailable": "As tarefas não estão disponíveis.",
+  "closetModule.wearMayAlreadyBeCounted": "Este conjunto pode não ter sido registado, e alguns contadores de utilização podem já o incluir. Verifique-os antes de tentar novamente."
 }

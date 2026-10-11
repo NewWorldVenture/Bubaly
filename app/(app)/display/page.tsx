@@ -233,10 +233,13 @@ async function loadDisplay(
   // kitchen. Without these the wall said "No meals planned", "0 items · List is
   // empty" and "All done" over reads that had not happened, beside calendar
   // tiles that correctly said Unavailable. A meal plan whose dish names could
-  // not be read cannot say what is for dinner either.
+  // not be read cannot say what is for dinner either, and chores whose titles
+  // could not be read cannot say what is due: every one of them reached the
+  // wall as a generic "Chore", with the tile and the banner saying all was
+  // well (HC3).
   const mealsFailed = !!results[4].error || !!mealNamesError;
   const groceryFailed = !!results[5].error || !!results[6].error || typeof groceryCount !== 'number';
-  const choresFailed = !!results[3].error;
+  const choresFailed = !!results[3].error || !!choreTitlesError;
 
   const data: DisplayData = {
     familyName,
@@ -249,7 +252,7 @@ async function loadDisplay(
     members: (members ?? []).map((m) => ({ id: m.id, display_name: m.display_name ?? 'Member', color: m.color, role: m.role })),
     events: eventsFailed?[]:visibleEvents.map(event=>event.kind==='native'?{...event,id:event.reference.eventId}:event),
     upcoming: upcomingFailed?[]:visibleUpcoming.map(event=>event.kind==='native'?{...event,id:event.reference.eventId}:event),
-    chores: (chores ?? []).map((c) => ({ id: c.id, status: c.status, member_id: c.member_id, title: choreTitle.get(c.chore_id) ?? 'Chore' })),
+    chores: choresFailed ? [] : (chores ?? []).map((c) => ({ id: c.id, status: c.status, member_id: c.member_id, title: choreTitle.get(c.chore_id) ?? 'Chore' })),
     meals: mealsFailed ? [] : todaysMeals,
     grocery: groceryFailed ? { items: [], count: 0 } : { items: groceryItems ?? [], count: groceryCount ?? 0 },
     reminders: displayReminders,

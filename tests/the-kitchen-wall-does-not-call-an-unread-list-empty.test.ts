@@ -86,7 +86,7 @@ describe('the page reports the meal, grocery and chore reads', () => {
   });
 
   it.each([
-    ['meal_plans', 'meals'], ['meals', 'meals'], ['grocery_items', 'grocery'], ['chore_assignments', 'chores'],
+    ['meal_plans', 'meals'], ['meals', 'meals'], ['grocery_items', 'grocery'], ['chore_assignments', 'chores'], ['chores', 'chores'],
   ])('a failed %s read marks %s unavailable', async (table, tile) => {
     failed.add(table);
     const data = await load();
@@ -106,6 +106,26 @@ describe('the wall says "unavailable", not empty, for a read that failed', () =>
     expect(html).toContain('Some display data is unavailable. The display will retry automatically.');
     expect(html).not.toContain('No meals planned');
     expect(html).not.toContain('List is empty');
+    expect(html).not.toContain('All done!');
+  });
+
+  // HC3 — the assignments read fine but their titles (the `chores` table) did
+  // not: every assignment reached the wall as a generic "Chore", the tile
+  // listed them, and loadStatus.chores said 'ok', so no banner either.
+  it('chores whose titles could not be read are unavailable, not a list of "Chore"', async () => {
+    const control = wall(await load());
+    expect(control).toContain('Dishes');
+    expect(control).not.toContain('Chores are unavailable.');
+
+    failed.add('chores');
+    const data = await load();
+    const html = wall(data);
+
+    expect(data.loadStatus?.chores).toBe('error');
+    expect(data.chores).toEqual([]);
+    expect(html).toContain('Chores are unavailable.');
+    expect(html).toContain('Some display data is unavailable. The display will retry automatically.');
+    expect(html).not.toContain('>Chore<');
     expect(html).not.toContain('All done!');
   });
 

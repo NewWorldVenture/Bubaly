@@ -16909,5 +16909,6 @@
   "inventoryModule.itemRemovedButPhotoKept": "Item verwijderd, maar de foto kon niet uit de opslag worden verwijderd.",
   "displayGrid.mealsUnavailable": "De maaltijden van vandaag zijn niet beschikbaar.",
   "displayGrid.groceryUnavailable": "De boodschappenlijst is niet beschikbaar.",
-  "displayGrid.choresUnavailable": "Klusjes zijn niet beschikbaar."
+  "displayGrid.choresUnavailable": "Klusjes zijn niet beschikbaar.",
+  "closetModule.wearMayAlreadyBeCounted": "Deze outfit is mogelijk niet vastgelegd, en sommige draagtellers tellen hem misschien al mee. Controleer ze voordat je het opnieuw probeert."
 }

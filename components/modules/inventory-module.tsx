@@ -6,10 +6,12 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { familyMediaPath, releaseFamilyMedia } from '@/lib/storage/family-media';
+import { FormUploads } from '@/lib/storage/form-uploads';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { readInventoryItems } from '@/lib/inventory/read-items';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
+import { writeWasRefused } from '@/lib/supabase/write-outcome';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -406,30 +408,35 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
   onClose: () => void; onSaved: (message: string) => void;
 }) {
   const tr = useTranslations();
-  const { error: toastError } = useToast();
+  const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [photoPath, setPhotoPath] = useState<string | null>(item?.photo_path ?? null);
   // Every object this form put in the bucket. Whatever the saved row does not
   // end up pointing at — a photo replaced before saving, or everything when
-  // the form is closed unsaved — is removed rather than left behind (H2).
-  const uploads = useRef<string[]>([]);
+  // the form is closed unsaved — is removed rather than left behind (H2). But
+  // never while a save in flight can still make the row point at it, and an
+  // upload that lands after the form closed goes as it lands (HC1): see
+  // lib/storage/form-uploads.ts.
+  const session = useRef<FormUploads | null>(null);
+  if (session.current === null) session.current = new FormUploads(item?.photo_path ?? null, releaseUnreferenced);
+  const uploads = session.current;
 
   /** Remove objects nothing points at. Logged, not shown: the save stands either way. */
-  async function releaseUnreferenced(paths: (string | null | undefined)[]) {
+  async function releaseUnreferenced(paths: string[]) {
     const supabase = createClient();
-    for (const path of new Set(paths)) {
-      if (!path) continue;
+    for (const path of paths) {
       const removal = await releaseFamilyMedia(supabase, path, { familyId, folder: 'inventory' });
       if (removal.error) console.error('[inventory] could not remove an unreferenced photo', removal.error);
     }
   }
 
-  /** Close without saving: this form's uploads were never referenced by any row. */
+  /**
+   * Close without saving — Cancel, Escape, the X or the backdrop, all of which
+   * stay live during a save. A save already sent decides what its photo becomes.
+   */
   function abandon() {
-    const unsaved = uploads.current.filter((path) => path !== item?.photo_path);
-    uploads.current = [];
-    void releaseUnreferenced(unsaved);
+    void uploads.dismiss();
     onClose();
   }
 
@@ -440,8 +447,8 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
       const path = familyMediaPath(familyId, 'inventory', file.name);
       const { data: stored, error: upErr } = await createClient().storage.from('family-media').upload(path, file, { upsert: false });
       if (upErr || !stored) { toastError(describeDbError(upErr)); return; }
-      uploads.current.push(stored.path);
-      setPhotoPath(stored.path);
+      // False when the form closed while this was uploading: nothing will save it, so it is already gone.
+      if (uploads.landed(stored.path)) setPhotoPath(stored.path);
     } finally {
       setUploading(false);
     }
@@ -470,18 +477,24 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
       notes: String(f.get('notes') ?? '').trim() || null,
     };
     const supabase = createClient();
+    const settle = uploads.send(photoPath);
     const { data: saved, error } = item
       ? await supabase.from('inventory_items').update(payload).eq('id', item.id).select('id')
       : await supabase.from('inventory_items').insert({ family_id: familyId, created_by: userId, ...payload }).select('id');
     setLoading(false);
-    if (error) return toastError(describeDbError(error));
-    if (wroteNoRows(saved)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // A refused write committed nothing; a lost reply may have, so its photo stays.
+    if (error) { void settle(writeWasRefused(error) ? 'refused' : 'unanswered'); return toastError(describeDbError(error)); }
+    if (wroteNoRows(saved)) { void settle('refused'); return toastError(tr('errors.thatChangeWasNotSaved')); }
     // Only now that the row is confirmed to point at `photoPath`: the photo it
     // used to have (replaced or removed) and any other upload from this form.
-    const superseded = [item?.photo_path, ...uploads.current].filter((path) => path && path !== photoPath);
-    uploads.current = [];
-    await releaseUnreferenced(superseded);
-    onSaved(item ? 'Item updated' : 'Item added');
+    const dismissed = uploads.isClosed;
+    await settle('saved');
+    const message = item ? 'Item updated' : 'Item added';
+    // Dismissed while the request was in flight: the item is saved all the
+    // same, and the toast says so. Not through onSaved, which would close
+    // whatever form is open by now.
+    if (dismissed) return success(message);
+    onSaved(message);
   }
 
   return (
