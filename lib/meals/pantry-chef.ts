@@ -54,12 +54,27 @@ Rules:
 - If the photo shows no food, return [].`;
 }
 
-function coerceStringArray(value: unknown): string[] {
+/**
+ * The longest ingredient or grocery name Fridge Chef will carry, matching the
+ * services it feeds: `addItems` (lib/services/groceries) and `validIngredients`
+ * (lib/services/meals) both refuse a name over 300 characters. A recipe that
+ * carried one into a planned meal made "add this week's plan to the list" fail
+ * for the whole week with "Check the items to add.", so it is dropped here,
+ * where it first arrives.
+ */
+export const MAX_PANTRY_ITEM_CHARS = 300;
+
+/** Trimmed, non-empty strings no longer than the services accept, at most `max` of them. */
+export function boundedNames(value: unknown, max: number): string[] {
   if (!Array.isArray(value)) return [];
   return value
     .map((v) => (typeof v === 'string' ? v.trim() : ''))
-    .filter((v) => v.length > 0)
-    .slice(0, 25);
+    .filter((v) => v.length > 0 && v.length <= MAX_PANTRY_ITEM_CHARS)
+    .slice(0, max);
+}
+
+function coerceStringArray(value: unknown): string[] {
+  return boundedNames(value, 25);
 }
 
 /** Robustly parse the model's reply (fenced or bare JSON) into recipes. */

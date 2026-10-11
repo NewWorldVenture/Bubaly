@@ -16878,5 +16878,12 @@
   "mobileAssistant.conflictFamilyOne": "{count} Familienhinweis",
   "mobileAssistant.conflictFamilyOther": "{count} Familienhinweise",
   "mobileAssistant.conflictCounts": "{personal} · {family}",
-  "mobileAssistant.conflictMobileFamilyLine": "Hinweis zur Familienbelegung: {titles} überschneiden sich {when}. Importierte Belegungen gelten für die Familie; sie zeigen nicht, wer doppelt verplant ist."
+  "mobileAssistant.conflictMobileFamilyLine": "Hinweis zur Familienbelegung: {titles} überschneiden sich {when}. Importierte Belegungen gelten für die Familie; sie zeigen nicht, wer doppelt verplant ist.",
+  "chef.kitchenDataIsTemporarilyUnavailable": "Der Koch konnte Ihre Küche gerade nicht lesen. Bitte versuchen Sie es gleich noch einmal.",
+  "kitchenDashboard.aiChefUnavailableShowingAPlan": "Der KI-Koch konnte gerade nicht antworten – es wird ein Plan aus Ihren eigenen Rezepten und Resten angezeigt. Versuchen Sie es gleich noch einmal.",
+  "closetModule.itemRemovedButPhotoKept": "Artikel entfernt, aber sein Foto konnte nicht aus dem Speicher gelöscht werden.",
+  "inventoryModule.itemRemovedButPhotoKept": "Gegenstand entfernt, aber sein Foto konnte nicht aus dem Speicher gelöscht werden.",
+  "displayGrid.mealsUnavailable": "Die heutigen Mahlzeiten sind nicht verfügbar.",
+  "displayGrid.groceryUnavailable": "Die Einkaufsliste ist nicht verfügbar.",
+  "displayGrid.choresUnavailable": "Aufgaben sind nicht verfügbar."
 }

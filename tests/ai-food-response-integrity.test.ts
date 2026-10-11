@@ -17,6 +17,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.requireUserContext }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.createServer }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: mocks.enforceAIRateLimit }));
+// The route's plan gate (refuseUnlessEntitled, H18) is covered by
+// tests/the-meal-and-recipe-model-endpoints-refuse-like-their-pages.test.ts;
+// this file is about something else, so the gate admits its fixture family.
+vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: async () => null }));
 vi.mock('@/lib/ai/provider', () => ({
   isAIConfigured: mocks.isAIConfigured,
   resolveProvider: mocks.resolveProvider,

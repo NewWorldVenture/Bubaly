@@ -121,6 +121,10 @@ export function LanguageModule() {
     const { data: removed, error } = await createClient().from('vocab_cards').delete().eq('id', c.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // Published without REPLICA IDENTITY FULL, so the family_id-filtered
+    // channel never hears this DELETE: the confirmed delete drops the row from
+    // the screen here, or it stays until a reload (H3).
+    cards.setData((rows) => rows.filter((row) => row.id !== c.id));
     success(tr('languageModule.cardRemoved'));
   }
 
@@ -143,6 +147,10 @@ export function LanguageModule() {
     const { data: removed2, error } = await createClient().from('language_sessions').delete().eq('id', s.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed2)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // Published without REPLICA IDENTITY FULL, so the family_id-filtered
+    // channel never hears this DELETE: the confirmed delete drops the row from
+    // the screen here, or it stays until a reload (H3).
+    sessions.setData((rows) => rows.filter((row) => row.id !== s.id));
     success(tr('languageModule.sessionRemoved'));
   }
 
@@ -158,6 +166,13 @@ export function LanguageModule() {
     const { data: removed3, error } = await createClient().from('language_goals').delete().eq('id', g.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed3)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // Published without REPLICA IDENTITY FULL, so the family_id-filtered
+    // channel never hears this DELETE: the confirmed delete drops the row from
+    // the screen here, or it stays until a reload (H3).
+    // Its sessions and cards went with it (ON DELETE CASCADE, 0248).
+    goals.setData((rows) => rows.filter((row) => row.id !== g.id));
+    sessions.setData((rows) => rows.filter((row) => row.goal_id !== g.id));
+    cards.setData((rows) => rows.filter((row) => row.goal_id !== g.id));
     setGoalId('');
     success(tr('languageModule.goalDeleted'));
   }

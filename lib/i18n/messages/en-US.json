@@ -16878,5 +16878,12 @@
   "mobileAssistant.conflictFamilyOne": "{count} family advisory",
   "mobileAssistant.conflictFamilyOther": "{count} family advisories",
   "mobileAssistant.conflictCounts": "{personal} · {family}",
-  "mobileAssistant.conflictMobileFamilyLine": "Family occupancy advisory: {titles} overlap {when}. Imported occupancy applies to the family; it does not identify who is double-booked."
+  "mobileAssistant.conflictMobileFamilyLine": "Family occupancy advisory: {titles} overlap {when}. Imported occupancy applies to the family; it does not identify who is double-booked.",
+  "chef.kitchenDataIsTemporarilyUnavailable": "The chef couldn't read your kitchen just now. Please try again in a moment.",
+  "kitchenDashboard.aiChefUnavailableShowingAPlan": "The AI chef couldn't answer just now — showing a plan from your own recipes & leftovers. Try again in a moment.",
+  "closetModule.itemRemovedButPhotoKept": "Item removed, but its photo could not be deleted from storage.",
+  "inventoryModule.itemRemovedButPhotoKept": "Item removed, but its photo could not be deleted from storage.",
+  "displayGrid.mealsUnavailable": "Today's meals are unavailable.",
+  "displayGrid.groceryUnavailable": "The grocery list is unavailable.",
+  "displayGrid.choresUnavailable": "Chores are unavailable."
 }

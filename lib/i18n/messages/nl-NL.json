@@ -16878,5 +16878,12 @@
   "mobileAssistant.conflictFamilyOne": "{count} gezinsadvies",
   "mobileAssistant.conflictFamilyOther": "{count} gezinsadviezen",
   "mobileAssistant.conflictCounts": "{personal} · {family}",
-  "mobileAssistant.conflictMobileFamilyLine": "Advies over gezinsbezetting: {titles} overlappen {when}. Geïmporteerde bezetting geldt voor het gezin; deze geeft niet aan wie dubbel is ingepland."
+  "mobileAssistant.conflictMobileFamilyLine": "Advies over gezinsbezetting: {titles} overlappen {when}. Geïmporteerde bezetting geldt voor het gezin; deze geeft niet aan wie dubbel is ingepland.",
+  "chef.kitchenDataIsTemporarilyUnavailable": "De chef kon je keuken nu niet lezen. Probeer het zo meteen opnieuw.",
+  "kitchenDashboard.aiChefUnavailableShowingAPlan": "De AI-chef kon nu niet antwoorden — je ziet een plan uit je eigen recepten en restjes. Probeer het zo meteen opnieuw.",
+  "closetModule.itemRemovedButPhotoKept": "Item verwijderd, maar de foto kon niet uit de opslag worden verwijderd.",
+  "inventoryModule.itemRemovedButPhotoKept": "Item verwijderd, maar de foto kon niet uit de opslag worden verwijderd.",
+  "displayGrid.mealsUnavailable": "De maaltijden van vandaag zijn niet beschikbaar.",
+  "displayGrid.groceryUnavailable": "De boodschappenlijst is niet beschikbaar.",
+  "displayGrid.choresUnavailable": "Klusjes zijn niet beschikbaar."
 }
