@@ -2,10 +2,10 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { usePlural, useTranslations } from '@/components/i18n/locale-provider';
-import { localizeDbErrorText } from '@/lib/supabase/errors';
 import { CheckCircle2, AlertTriangle, ChevronDown, Info, X } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { useMediaQuery } from '@/lib/hooks/use-media-query';
+import { localizeDbErrorText } from '@/lib/supabase/errors';
 
 type ToastTone = 'success' | 'error' | 'info';
 /** Optional one-tap action shown in the toast, e.g. "Undo". */
@@ -395,6 +395,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   t.tone === 'info' && 'text-brand-text',
                 )}
               />
+              {/* A server action's refusal arrives in English (I18N-011). */}
               <span className="flex-1">{localizeDbErrorText(t.message, tr)}</span>
               {t.action && (
                 <button

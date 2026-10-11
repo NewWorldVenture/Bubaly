@@ -81,10 +81,10 @@ export function ConversationPane({ conversations, activeId, loading = false, err
                   <MessageSquare className={cn('h-4 w-4 shrink-0', c.id === activeId ? 'text-brand-text' : 'text-muted')} aria-hidden />
                   <span className="truncate text-xs text-fg/80">{c.title || t('mobileAssistant.newConversation')}</span>
                 </button>
-                <button type="button" onClick={() => onRename(c.id, c.title)} aria-label={t('itemAction.renameTitled', { name: c.title || t('mobileAssistant.newConversation') })} className="focus-ring coarse:min-h-11 coarse:min-w-11 shrink-0 rounded-lg p-1.5 text-muted/60 hover:text-fg">
+                <button type="button" onClick={() => onRename(c.id, c.title)} aria-label={t('itemAction.renameTitled', { name: c.title || t('mobileAssistant.newConversation') })} className="focus-ring coarse:min-h-11 coarse:min-w-11 shrink-0 rounded-lg p-1.5 text-muted hover:text-fg">
                   <Pencil className="h-3.5 w-3.5" aria-hidden />
                 </button>
-                <button type="button" onClick={() => onDelete(c.id)} aria-label={t('itemAction.deleteTitled', { name: c.title || t('mobileAssistant.newConversation') })} className="focus-ring coarse:min-h-11 coarse:min-w-11 shrink-0 rounded-lg p-1.5 text-muted/60 hover:text-danger">
+                <button type="button" onClick={() => onDelete(c.id)} aria-label={t('itemAction.deleteTitled', { name: c.title || t('mobileAssistant.newConversation') })} className="focus-ring coarse:min-h-11 coarse:min-w-11 shrink-0 rounded-lg p-1.5 text-muted hover:text-danger">
                   <Trash2 className="h-3.5 w-3.5" aria-hidden />
                 </button>
               </li>

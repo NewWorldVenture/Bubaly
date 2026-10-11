@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { between, bodyOf } from './helpers/source-order';
 
 const SOURCE_EXTENSIONS = new Set(['.css', '.ts', '.tsx']);
 
@@ -235,6 +236,73 @@ describe('a status role’s text is readable on its own tint', () => {
   }
 });
 
+// The scan above reads one class string at a time, so it cannot see a chip
+// whose ground is ANOTHER element's tint. The reminders list has one: a
+// snoozed reminder's row is bg-warning/5 and an overdue one's bg-danger/5, and
+// the row carries Badges (bg-<role>/15 text-<role>) for its priority and its
+// state. The two tints compound (warning on a danger/5 row read 4.23 over
+// --bg). This reads the row's tints and the Badge's from the source and
+// composes them as the browser does; tests/e2e/a-status-chip-on-a-tinted-row
+// measures the same thing from computed styles.
+//
+// Still unscanned, so a clean run here does not mean every chip is readable:
+// nesting across files (a tinted card in one component, a chip in another),
+// text colour inherited from an ancestor, and class strings split over lines.
+describe('a status chip on a status-tinted reminder row is readable', () => {
+  const css = readFileSync(resolve('app/globals.css'), 'utf8');
+  const reminders = readFileSync(resolve('components/modules/reminders-module.tsx'), 'utf8');
+  const badge = readFileSync(resolve('components/ui/badge.tsx'), 'utf8');
+  const row = bodyOf(reminders, "'group relative flex items-start gap-4 rounded-2xl border p-4 transition'", ')}>');
+  const tones = between(badge, 'const TONES', 'export function Badge');
+
+  /** The row's tint for a state, as the row's cn() writes it. */
+  const rowTint = (role: string) => {
+    const m = row.match(new RegExp(`\\bbg-${role}/(\\d+)\\b`));
+    expect(m, `the reminder row's bg-${role}/NN`).not.toBeNull();
+    return Number(m![1]) / 100;
+  };
+  /** The Badge tone's tint, which sits behind its own text. */
+  const badgeTint = (role: string) => {
+    const m = tones.match(new RegExp(`${role}: 'bg-${role}/(\\d+) text-${role}\\b`));
+    expect(m, `Badge's ${role} tone`).not.toBeNull();
+    return Number(m![1]) / 100;
+  };
+  /** The status tones a row's Badges can take: its state's, and its priority's. */
+  function chipRoles(): string[] {
+    const roles = new Set<string>();
+    for (const m of bodyOf(reminders, 'const PRIORITIES = [', '] as const;').matchAll(/badge: '(\w+)'/g)) roles.add(m[1]);
+    expect(reminders).toContain('<Badge tone={priority.badge');
+    const states = [...reminders.matchAll(/\{(?:snoozed|overdue && !completed) && <Badge tone="(\w+)">/g)];
+    expect(states.map((m) => m[1]), 'the snoozed and overdue Badges').toEqual(['warning', 'danger']);
+    for (const m of states) roles.add(m[1]);
+    return [...roles].filter((r) => ['success', 'warning', 'danger', 'info'].includes(r));
+  }
+
+  it('finds both tinted row states and the chips on them (non-vacuity)', () => {
+    expect(rowTint('warning')).toBeGreaterThan(0);
+    expect(rowTint('danger')).toBeGreaterThan(0);
+    expect(chipRoles().sort()).toEqual(['danger', 'warning']);
+  });
+
+  for (const [theme, selector] of [['light', '.light {'], ['dark', '.dark {']] as const) {
+    it(`${theme}: every chip clears 4.5:1 on every tinted row, over every ground`, () => {
+      const tokens = tokensOf(css, selector);
+      const over = (top: number[], alpha: number, under: number[]) => top.map((v, i) => v * alpha + under[i] * (1 - alpha));
+      const failures: string[] = [];
+      for (const rowRole of ['warning', 'danger']) {
+        for (const chip of chipRoles()) {
+          for (const ground of GROUNDS) {
+            const behind = over(tokens[chip], badgeTint(chip), over(tokens[rowRole], rowTint(rowRole), tokens[ground]));
+            const ratio = contrast(tokens[chip], behind);
+            if (ratio < 4.5) failures.push(`${chip} chip on a ${rowRole} row over --${ground}: ${ratio.toFixed(2)}`);
+          }
+        }
+      }
+      expect(failures).toEqual([]);
+    });
+  }
+});
+
 // Muted text on the brand selection tint. A selected row or an icon tile puts
 // `text-muted` on `bg-brand/10` (the active conversation in messages; the
 // empty-state tiles), where it read 4.32:1 over --bg. The tint is read from
@@ -273,6 +341,38 @@ describe('muted text is readable on the brand selection tint', () => {
         const tint = tokens.brand.map((v, i) => v * alpha + tokens[ground][i] * (1 - alpha));
         const ratio = contrast(tokens.muted, tint);
         if (ratio < 4.5) failures.push(`--muted on --brand/${selectionTint()} over --${ground}: ${ratio.toFixed(2)}`);
+      }
+      expect(failures).toEqual([]);
+    });
+  }
+});
+
+// Muted text inside a status banner. The reminders page's overdue alert is
+// bg-danger/10 with the overdue titles in text-muted beside its danger
+// heading, found by an axe sweep of a seeded household at 4.36:1. A status
+// role's 10% tint is the strongest flat tint a banner puts behind body text,
+// so --muted has to clear 4.5 on each role's, over each ground.
+describe('muted text is readable inside a status banner (a role at 10%)', () => {
+  const css = readFileSync(resolve('app/globals.css'), 'utf8');
+  const reminders = readFileSync(resolve('components/modules/reminders-module.tsx'), 'utf8');
+
+  it('finds the banner that pairs them (non-vacuity)', () => {
+    const banner = reminders.slice(reminders.indexOf('{/* Overdue alert */}'), reminders.indexOf('{/* AI Suggestions panel */}'));
+    expect(banner).toContain('bg-danger/10');
+    expect(banner).toContain('text-muted');
+  });
+
+  for (const [theme, selector] of [['light', '.light {'], ['dark', '.dark {']] as const) {
+    it(`${theme}: --muted clears 4.5:1 on every role at 10%, over every ground`, () => {
+      const tokens = tokensOf(css, selector);
+      const failures: string[] = [];
+      for (const role of ['danger', 'warning', 'success', 'info', 'brand', 'accent']) {
+        for (const ground of GROUNDS) {
+          // Composited in 8-bit steps, as the browser paints it.
+          const tint = tokens[role].map((v, i) => Math.round(v * 0.1 + tokens[ground][i] * 0.9));
+          const ratio = contrast(tokens.muted, tint);
+          if (ratio < 4.5) failures.push(`--muted on --${role}/10 over --${ground}: ${ratio.toFixed(2)}`);
+        }
       }
       expect(failures).toEqual([]);
     });

@@ -40,7 +40,10 @@ function emptyDisplay(familyName: string, now: Date, timezone: unknown): Display
   return {
     familyName,
     timezone: calendar.timezone, dayKey: calendar.dayKey, timezoneFallback: calendar.timezoneFallback,
-    loadStatus: { events: 'error', upcoming: 'error', monthEvents: 'error', reminders: 'error' },
+    loadStatus: {
+      events: 'error', upcoming: 'error', monthEvents: 'error', reminders: 'error',
+      meals: 'error', grocery: 'error', chores: 'error',
+    },
     members: [], events: [], upcoming: [], chores: [], meals: [],
     grocery: { items: [], count: 0 }, reminders: [], birthdays: [],
     notes: [], featured: [], photos: [],
@@ -183,10 +186,12 @@ async function loadDisplay(
   // Resolve chore titles + today's meal names (no embedded joins in types).
   const choreIds = [...new Set((chores ?? []).map((c) => c.chore_id))];
   const mealIds = [...new Set((mealRows ?? []).map((m) => m.meal_id).filter(Boolean) as string[])];
-  const [{ data: choreRows }, { data: meals }] = await Promise.all([
-    choreIds.length ? settle(supabase.from('chores').select('id, title').in('id', choreIds)) : Promise.resolve({ data: [] as { id: string; title: string }[] }),
-    mealIds.length ? settle(supabase.from('meals').select('id, name').in('id', mealIds)) : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+  const [{ data: choreRows, error: choreTitlesError }, { data: meals, error: mealNamesError }] = await Promise.all([
+    choreIds.length ? settle(supabase.from('chores').select('id, title').in('id', choreIds)) : Promise.resolve({ data: [] as { id: string; title: string }[], error: null }),
+    mealIds.length ? settle(supabase.from('meals').select('id, name').in('id', mealIds)) : Promise.resolve({ data: [] as { id: string; name: string }[], error: null }),
   ]);
+  if (choreTitlesError) console.error('[display] query "choreTitles" failed:', choreTitlesError.message);
+  if (mealNamesError) console.error('[display] query "mealNames" failed:', mealNamesError.message);
   // Started AFTER the batch above and awaited immediately, so no promise is in
   // flight across an array literal where a throw could orphan it (§3).
   const handled = await loadHandledToday(supabase, familyId, start, end, untitledRun);
@@ -224,19 +229,32 @@ async function loadDisplay(
     .filter((row): row is { id: string; title: string; remind_at: string } => !!row.remind_at && Date.parse(row.remind_at) < in14.getTime())
     .sort((a, b) => a.remind_at.localeCompare(b.remind_at)).slice(0, 10);
 
+  // A failed meal, grocery or chore read is "unavailable", never an empty
+  // kitchen. Without these the wall said "No meals planned", "0 items · List is
+  // empty" and "All done" over reads that had not happened, beside calendar
+  // tiles that correctly said Unavailable. A meal plan whose dish names could
+  // not be read cannot say what is for dinner either, and chores whose titles
+  // could not be read cannot say what is due: every one of them reached the
+  // wall as a generic "Chore", with the tile and the banner saying all was
+  // well (HC3).
+  const mealsFailed = !!results[4].error || !!mealNamesError;
+  const groceryFailed = !!results[5].error || !!results[6].error || typeof groceryCount !== 'number';
+  const choresFailed = !!results[3].error || !!choreTitlesError;
+
   const data: DisplayData = {
     familyName,
     timezone: calendar.timezone, dayKey: calendar.dayKey, timezoneFallback: calendar.timezoneFallback,
     loadStatus: {
       events: eventsFailed ? 'error' : 'ok', upcoming: upcomingFailed ? 'error' : 'ok',
       monthEvents: monthFailed ? 'error' : 'ok', reminders: results[7].error ? 'error' : 'ok',
+      meals: mealsFailed ? 'error' : 'ok', grocery: groceryFailed ? 'error' : 'ok', chores: choresFailed ? 'error' : 'ok',
     },
     members: (members ?? []).map((m) => ({ id: m.id, display_name: m.display_name ?? 'Member', color: m.color, role: m.role })),
     events: eventsFailed?[]:visibleEvents.map(event=>event.kind==='native'?{...event,id:event.reference.eventId}:event),
     upcoming: upcomingFailed?[]:visibleUpcoming.map(event=>event.kind==='native'?{...event,id:event.reference.eventId}:event),
-    chores: (chores ?? []).map((c) => ({ id: c.id, status: c.status, member_id: c.member_id, title: choreTitle.get(c.chore_id) ?? 'Chore' })),
-    meals: todaysMeals,
-    grocery: { items: groceryItems ?? [], count: groceryCount ?? 0 },
+    chores: choresFailed ? [] : (chores ?? []).map((c) => ({ id: c.id, status: c.status, member_id: c.member_id, title: choreTitle.get(c.chore_id) ?? 'Chore' })),
+    meals: mealsFailed ? [] : todaysMeals,
+    grocery: groceryFailed ? { items: [], count: 0 } : { items: groceryItems ?? [], count: groceryCount ?? 0 },
     reminders: displayReminders,
     birthdays,
     notes: (notes ?? []).map((n) => ({ id: n.id, title: n.title, body: n.body })),
@@ -304,9 +322,9 @@ async function DisplayReconnect() {
           <div className="absolute -right-16 bottom-0 h-80 w-80 rounded-full bg-blue-600/40 blur-3xl" />
         </div>
         <div className="relative">
-          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/40">{t('display.bubalyKitchen')}</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/70">{t('display.bubalyKitchen')}</p>
           <h1 className="mt-3 text-3xl font-black sm:text-4xl">{t('display.oneMoment')}</h1>
-          <p className="mx-auto mt-3 max-w-sm text-sm text-white/55">{t('display.reconnectingToYourFamilySpace')}</p>
+          <p className="mx-auto mt-3 max-w-sm text-sm text-white/70">{t('display.reconnectingToYourFamilySpace')}</p>
         </div>
       </div>
     </>

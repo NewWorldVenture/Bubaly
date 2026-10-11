@@ -56,6 +56,16 @@ export type ToolDefinition<I = unknown, O = unknown> = {
   /** True when the tool cannot change anything. Read tools skip the write gate. */
   readOnly: boolean;
   /**
+   * A read whose OUTPUT is private inside the family even though its `domain`
+   * is not high-stakes: a tool that aggregates bills and passport expiries
+   * under 'travel', or names a child's teacher, coach and practice location
+   * under 'education'. The executor evaluates it as `view` for every
+   * restricted-read role (`RESTRICTED_READ_ROLES`) and `riskToDecision`
+   * denies it by construction, rather than by someone remembering which
+   * reads a guest must not be handed.
+   */
+  sensitiveRead?: boolean;
+  /**
    * A stable key for "this exact call". When two calls produce the same key in
    * one family, the second returns the first one's result instead of writing
    * again. Return null when the call is inherently repeatable.

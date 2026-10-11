@@ -290,7 +290,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
                     </button>
                     {manager && (
                       <button onClick={() => toggleSecure(d.id)} aria-label={t(d.is_secure ? 'filesHubModule.moveShared' : 'filesHubModule.moveVault')}
-                        className="rounded-lg p-1.5 text-muted opacity-0 transition hover:bg-elevated hover:text-fg group-hover:opacity-100">
+                        className="rounded-lg p-1.5 text-muted opacity-100 sm:opacity-0 transition hover:bg-elevated hover:text-fg sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100">
                         {d.is_secure ? <LockOpen className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
                       </button>
                     )}

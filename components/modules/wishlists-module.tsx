@@ -156,7 +156,7 @@ export function WishlistsModule() {
               activeMember === m.id ? 'bg-brand text-white border-brand' : 'bg-surface/50 text-muted border-border hover:text-fg')}>
             <Avatar name={m.display_name} size={18} />
             {m.display_name}{m.id === selfId ? ' (you)' : ''}
-            {countByMember.get(m.id) ? <span className="text-xs opacity-70">· {countByMember.get(m.id)}</span> : null}
+            {countByMember.get(m.id) ? <span className="text-xs font-normal">· {countByMember.get(m.id)}</span> : null}
           </button>
         ))}
       </div>
@@ -179,7 +179,7 @@ export function WishlistsModule() {
             const badge = CLAIM_BADGE[cs];
             const canClaim = canToggleClaim(w as WishLike, selfId);
             return (
-              <div key={w.id} className={cn('rounded-2xl border p-4 flex flex-col', w.is_purchased && !isOwnList ? 'border-border bg-surface/30 opacity-75' : 'border-border bg-surface/50')}>
+              <div key={w.id} className={cn('rounded-2xl border p-4 flex flex-col', w.is_purchased && !isOwnList ? 'border-border bg-surface/30' : 'border-border bg-surface/50')}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-brand/10 text-brand-text flex-shrink-0"><Gift className="h-5 w-5" /></div>
                   <div className="flex items-center gap-1.5">

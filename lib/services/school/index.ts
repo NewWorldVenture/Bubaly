@@ -15,6 +15,7 @@ import type { HomeworkStatus, Tables } from '@/lib/database.types';
 import { readCountedRows } from '@/lib/calendar/occurrences';
 import { classOccursInWeek, slotStartMinutes, weekParity } from '@/lib/school/timetable';
 import { describeDbError } from '@/lib/supabase/errors';
+import { civilDayBounds, familyInstant, parseCivilReading } from '@/lib/time/civil';
 import { dayKeyInTz, scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
@@ -39,10 +40,40 @@ function isoOrNull(value: string | null | undefined): string | null {
   return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
 }
 
+/**
+ * One edge of a read window as an instant.
+ *
+ * The planner's prompt defines times as "ISO 8601 in the family's time zone"
+ * and every school/sports template feeds these reads `localTime(dayKey, h, m)`
+ * — a zone-less `2026-10-12T00:00:00`. `Date.parse` resolved that on the HOST's
+ * clock (UTC on Vercel), so a Los Angeles family's school day ran from 5pm the
+ * evening before to 5pm, a 5:30pm practice was missed and the previous
+ * evening's reported, and a date-only `from`/`to` of one day was a zero-width
+ * window at UTC midnight. A zone-less value is read on the FAMILY's clock by
+ * the one rule `lib/time/civil.ts` states (the calendar's, RFC 5545): a
+ * fraction is still a reading, an impossible date is refused, and a bare date
+ * is that family day from its first instant to its last — the first instant
+ * being 01:00 on a day whose midnight the clocks skip (America/Santiago), where
+ * the old offset arithmetic opened the window at 23:00 the evening before. A
+ * value with an offset or `Z` is kept as written; nothing reaches the host's
+ * clock.
+ */
+function windowInstant(value: string | null | undefined, tz: string, edge: 'start' | 'end'): string | null {
+  if (!value) return null;
+  const reading = parseCivilReading(value);
+  if (reading && !reading.hasTime) {
+    const bounds = civilDayBounds(reading.year, reading.month, reading.day, tz);
+    if (!bounds) return null;
+    return new Date(edge === 'start' ? bounds.start.getTime() : bounds.end.getTime() - 1).toISOString();
+  }
+  const at = familyInstant(value, tz);
+  return at ? at.toISOString() : null;
+}
+
 /** A window defaulting to the coming week; an inverted window is refused rather than returned empty. */
 export function resolveWindow(scope: ServiceScope, input?: { from?: string | null; to?: string | null }): ServiceResult<{ from: string; to: string }> {
-  const explicitFrom = isoOrNull(input?.from);
-  const explicitTo = isoOrNull(input?.to);
+  const explicitFrom = windowInstant(input?.from, scope.tz, 'start');
+  const explicitTo = windowInstant(input?.to, scope.tz, 'end');
   if (input?.from && !explicitFrom) return fail('That start time could not be understood.', { code: SERVICE_CODES.invalidInput });
   if (input?.to && !explicitTo) return fail('That end time could not be understood.', { code: SERVICE_CODES.invalidInput });
   const fromDate = explicitFrom ? new Date(explicitFrom) : scopeNow(scope);

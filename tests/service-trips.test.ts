@@ -24,6 +24,12 @@ type Op = { table: string; kind: 'select' | 'insert' | 'update' | 'delete' | 'up
  * seed rows and assert on what remains afterwards. `failTables` makes a read
  * of those tables return an error, for the fail-closed cases.
  */
+/** Column defaults 0070 gives rows `buildPlan` inserts; its rollback fences on `booked = false`. */
+const COLUMN_DEFAULTS: Record<string, Row> = {
+  vacation_activities: { booked: false },
+  vacation_itinerary_items: { booked: false },
+};
+
 function makeStore(seed: Record<string, Row[]> = {}, opts: { failTables?: string[]; failInsert?: string[] } = {}) {
   const tables = new Map<string, Row[]>(Object.entries(seed).map(([t, rows]) => [t, rows.map((r) => ({ ...r }))]));
   const ops: Op[] = [];
@@ -61,7 +67,7 @@ function makeStore(seed: Record<string, Row[]> = {}, opts: { failTables?: string
         for (const p of payload) {
           const existing = op.kind === 'upsert' ? rows.find((r) => r.vacation_id === p.vacation_id && r.category === p.category) : null;
           if (existing) { Object.assign(existing, p); out.push(existing); continue; }
-          const row = { id: `${table}-${++counter}`, created_at: '2026-09-05T00:00:00Z', updated_at: '2026-09-05T00:00:00Z', ...p };
+          const row = { id: `${table}-${++counter}`, created_at: '2026-09-05T00:00:00Z', updated_at: '2026-09-05T00:00:00Z', ...COLUMN_DEFAULTS[table], ...p };
           rows.push(row);
           out.push(row);
         }
