@@ -102,6 +102,35 @@ describe('a confirmed delete leaves the screen without waiting for an event that
     expect(labelled(after, label)).toBe(0);
   });
 
+  it('inventory: a removed item\'s cascaded moves leave the Recent moves panel instead of turning into "Item: …"', async () => {
+    db.seed('home_locations', [{ id: 'loc-1', name: 'Garage shelf', kind: 'shelf' }, { id: 'loc-2', name: 'Hall closet', kind: 'closet' }]);
+    db.seed('inventory_items', [{ id: 'item-1', name: 'Ski helmet', location_id: 'loc-2' }, { id: 'item-2', name: 'Tent', location_id: 'loc-1' }]);
+    db.seed('inventory_moves', [
+      { id: 'move-1', item_id: 'item-1', from_location_id: 'loc-1', to_location_id: 'loc-2', moved_at: '2026-10-09T12:00:00+00:00', reason: 'tidy' },
+      { id: 'move-2', item_id: 'item-2', from_location_id: 'loc-2', to_location_id: 'loc-1', moved_at: '2026-10-08T12:00:00+00:00', reason: 'camping' },
+    ]);
+    const before = screen(InventoryModule);
+    expect(has(before, t('inventory.recentMoves'))).toBe(true);
+    expect(has(before, 'Ski helmet: Garage shelf → Hall closet')).toBe(true);
+    expect(has(before, 'Tent: Hall closet → Garage shelf')).toBe(true);
+
+    await click(byName(before, t('itemAction.remove', { name: 'Ski helmet' })));
+    // What ON DELETE CASCADE (0242: inventory_moves.item_id) does in the
+    // database. inventory_moves is DELETE-blind like the item itself, so no
+    // event tells the panel either.
+    db.replace('inventory_moves', db.table('inventory_moves').filter((row) => row.item_id !== 'item-1'));
+    const after = screen(InventoryModule);
+
+    expect(db.table('inventory_items').map((row) => row.id)).toEqual(['item-2']);
+    expect(h.toasts.success).toContain(t('inventoryModule.itemRemoved'));
+    // The deleted item's move is gone, not relabelled with the fallback name.
+    expect(has(after, 'Garage shelf → Hall closet')).toBe(false);
+    expect(has(after, 'Item: ')).toBe(false);
+    // Only that item's moves went: the rest of the panel is untouched.
+    expect(has(after, t('inventory.recentMoves'))).toBe(true);
+    expect(has(after, 'Tent: Hall closet → Garage shelf')).toBe(true);
+  });
+
   it('inventory: a deleted location leaves the room list and the item form\'s location picker', async () => {
     db.seed('home_locations', [{ id: 'loc-1', name: 'Garage shelf', kind: 'shelf' }, { id: 'loc-2', name: 'Hall closet', kind: 'closet' }]);
     const label = t('itemAction.delete', { name: 'Garage shelf' });

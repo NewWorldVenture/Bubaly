@@ -122,6 +122,10 @@ export function InventoryModule() {
     // channel never hears this DELETE: the confirmed delete drops the row from
     // the screen here, or it stays until a reload (H3).
     items.setData((rows) => rows.filter((row) => row.id !== item.id));
+    // inventory_moves.item_id is ON DELETE CASCADE (0242), so the database took
+    // this item's moves with it, and that table is DELETE-blind too: drop them
+    // here, or 'Recent moves' keeps them as "Item: …" until a reload (H3).
+    moves.setData((rows) => rows.filter((row) => row.item_id !== item.id));
     // The photo goes with the row, after the row (SEC-015): the family-media
     // bucket serves an object to anyone holding its URL, and nothing points at
     // this one any more (H2).
