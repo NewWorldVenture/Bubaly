@@ -13,7 +13,7 @@
 import 'server-only';
 import { z } from 'zod';
 import {
-  assignChore, assignTodo, completeChoreAssignment, completeTodo, createChore, createTodo,
+  requestChoreAssignment, assignTodo, completeChoreAssignment, completeTodo, createChore, createTodo,
   listOpenChores, searchTodos,
 } from '@/lib/services/tasks';
 import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
@@ -313,7 +313,7 @@ export const taskTools: ToolDefinition[] = [
       // chore nobody does, so this is refused rather than written half-formed.
       if (!assignee.data) return fail('A chore has to be assigned to someone.', { code: SERVICE_CODES.invalidInput });
 
-      const res = await assignChore(scope, { choreId: input.chore_id, memberId: assignee.data, dueAt: input.due_at ?? null });
+      const res = await requestChoreAssignment(scope, { choreId: input.chore_id, memberId: assignee.data, dueAt: input.due_at ?? null });
       if (!res.ok) return res;
       const assignment = res.data;
       return ok({
