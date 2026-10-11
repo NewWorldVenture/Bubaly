@@ -68,7 +68,7 @@ export function HandledTodayTile({ handled, onRetry }: { handled?: HandledToday;
     <div className="flex h-full flex-col">
       <p className="text-4xl font-black text-white">
         {handled.count}
-        <span className="ml-1.5 text-base font-normal text-white/50">{t('displayHandled.finishedToday')}</span>
+        <span className="ml-1.5 text-base font-normal text-white/70">{t('displayHandled.finishedToday')}</span>
       </p>
       {items.length ? (
         <ul className="mt-2 space-y-1.5 text-sm">
@@ -78,12 +78,12 @@ export function HandledTodayTile({ handled, onRetry }: { handled?: HandledToday;
               <Link href={item.href} className="min-w-0 flex-1 truncate text-white/85 hover:text-white">
                 {item.title}
               </Link>
-              <span className="shrink-0 text-[11px] tabular-nums text-white/40">{fmtTime(item.at)}</span>
+              <span className="shrink-0 text-[11px] tabular-nums text-white/70">{fmtTime(item.at)}</span>
             </li>
           ))}
         </ul>
       ) : (
-        <p className="mt-2 text-sm text-white/45">{t('displayHandled.nothingFinishedYet')}</p>
+        <p className="mt-2 text-sm text-white/70">{t('displayHandled.nothingFinishedYet')}</p>
       )}
     </div>
   );

@@ -25,7 +25,7 @@ export function AskTile() {
           heading and prompt chips do not fit a tile and would push the input
           off a small one. */}
       <AskBubaly variant="compact" />
-      <p className="mt-2 text-[11px] text-white/40">{t('displayAsk.everythingIsPreviewed')}</p>
+      <p className="mt-2 text-[11px] text-white/70">{t('displayAsk.everythingIsPreviewed')}</p>
     </div>
   );
 }

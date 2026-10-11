@@ -114,7 +114,7 @@ export function KitchenTimers() {
               className="flex flex-col items-center justify-center gap-0.5 rounded-xl bg-white/10 py-2 transition hover:bg-white/20">
               <span className="text-xl leading-none">{p.emoji}</span>
               <span className="text-[10px] font-semibold text-white">{p.label}</span>
-              <span className="text-[10px] text-white/50">{formatDuration(p.seconds)}</span>
+              <span className="text-[10px] text-white/70">{formatDuration(p.seconds)}</span>
             </button>
           ))}
         </div>
@@ -130,7 +130,7 @@ export function KitchenTimers() {
         >
           <input value={customMin} onChange={(e) => setCustomMin(e.target.value.replace(/\D/g, ''))}
             inputMode="numeric" placeholder="Minutes…" aria-label={tr('kitchenTimers.customTimerMinutes')}
-            className="h-9 w-full min-w-0 flex-1 rounded-lg border border-white/15 bg-black/25 px-2.5 text-sm text-white outline-none placeholder:text-white/40 focus:border-brand" />
+            className="h-9 w-full min-w-0 flex-1 rounded-lg border border-white/15 bg-black/25 px-2.5 text-sm text-white outline-none placeholder:text-white/70 focus:border-brand" />
           <button type="submit" className="h-9 shrink-0 rounded-lg bg-brand px-3 text-sm font-semibold text-white disabled:opacity-50" disabled={!customMin}>{tr('kitchenTimers.start')}</button>
           <button type="button" aria-label={tr('a11y.close')} onClick={() => setPicking(false)} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20"><X className="h-4 w-4" /></button>
         </form>
@@ -142,7 +142,7 @@ export function KitchenTimers() {
     <div className="flex h-full flex-col">
       {active.length === 0 ? (
         <button onClick={() => setPicking(true)}
-          className="flex flex-1 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-white/15 text-white/50 transition hover:border-white/30 hover:text-white">
+          className="flex flex-1 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-white/15 text-white/70 transition hover:border-white/30 hover:text-white">
           <TimerIcon className="h-8 w-8" />
           <span className="text-sm font-semibold">{tr('kitchenTimers.startATimer')}</span>
         </button>

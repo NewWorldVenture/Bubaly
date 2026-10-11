@@ -37,7 +37,7 @@ import { useFormat } from '@/components/i18n/use-format';
 import { WidgetBoundary } from '@/components/ui/widget-boundary';
 
 const KIOSK_FALLBACK = (
-  <div className="flex h-full min-h-[60px] items-center justify-center text-center text-white/30">
+  <div className="flex h-full min-h-[60px] items-center justify-center text-center text-white/70">
     <p className="text-sm">—</p>
   </div>
 );
@@ -189,7 +189,7 @@ function ServiceTile({ href }: { href: string }) {
         <Icon className="h-7 w-7 text-white" />
       </span>
       <span className="max-w-full truncate px-2 text-sm font-bold text-white">{label}</span>
-      <span className="inline-flex items-center gap-1 text-[11px] text-white/45 transition group-hover:text-white/70">
+      <span className="inline-flex items-center gap-1 text-[11px] text-white/70 transition group-hover:text-white/70">
         {tr('displayGrid.open')} <ArrowRight className="h-3 w-3" />
       </span>
     </Link>
@@ -242,7 +242,7 @@ function WidgetBody({ widget, size, data, memberById, now, settings }: {
                 </span>
                 <span className="min-w-0 flex-1 truncate font-medium text-white">{e.title}</span>
                 {isNow && <span className="shrink-0 rounded-full bg-emerald-400/20 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-300">Now</span>}
-                {isNext && !isNow && <span className="shrink-0 text-[11px] text-white/50">{countdownLabel(e.starts_at, now, timezone)}</span>}
+                {isNext && !isNow && <span className="shrink-0 text-[11px] text-white/70">{countdownLabel(e.starts_at, now, timezone)}</span>}
                 {who && <Avatar name={who.display_name} color={who.color} size={24} />}
               </li>
             );
@@ -257,7 +257,7 @@ function WidgetBody({ widget, size, data, memberById, now, settings }: {
         <ul className="space-y-2">
           {data.upcoming.slice(0, tileListLimit(size, 4)).map((e) => (
             <li key={calendarConsumerKey(e)} className="flex items-center gap-3 text-sm">
-              <span className="w-24 shrink-0 text-white/50">{new Date(e.all_day && e.displayDay ? `${e.displayDay}T00:00:00Z` : e.displayStartsAt??e.starts_at).toLocaleDateString(locale, { month: 'short', day: 'numeric', timeZone: e.all_day ? 'UTC' : timezone })}</span>
+              <span className="w-24 shrink-0 text-white/70">{new Date(e.all_day && e.displayDay ? `${e.displayDay}T00:00:00Z` : e.displayStartsAt??e.starts_at).toLocaleDateString(locale, { month: 'short', day: 'numeric', timeZone: e.all_day ? 'UTC' : timezone })}</span>
               <span className="min-w-0 flex-1 truncate font-medium text-white">{e.title}</span>
             </li>
           ))}
@@ -278,7 +278,7 @@ function WidgetBody({ widget, size, data, memberById, now, settings }: {
               <li key={c.id} className="flex items-center gap-2.5">
                 <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', c.status === 'submitted' ? 'bg-amber-400' : 'bg-white/25')} />
                 <span className="min-w-0 flex-1 truncate text-white">{c.title}</span>
-                {who && <span className="shrink-0 text-xs text-white/50">{firstName(who.display_name)}</span>}
+                {who && <span className="shrink-0 text-xs text-white/70">{firstName(who.display_name)}</span>}
               </li>
             );
           })}
@@ -294,7 +294,7 @@ function WidgetBody({ widget, size, data, memberById, now, settings }: {
               <img src={mealImage(m.name, m.type)} alt="" aria-hidden
                 className="h-9 w-9 shrink-0 rounded-lg object-cover ring-1 ring-white/15" />
               <div className="min-w-0">
-                <p className="text-[11px] capitalize leading-tight text-white/50">{MEAL_EMOJIS[m.type] ?? '🍽️'} {m.type}</p>
+                <p className="text-[11px] capitalize leading-tight text-white/70">{MEAL_EMOJIS[m.type] ?? '🍽️'} {m.type}</p>
                 <p className="truncate font-semibold leading-tight text-white">{m.name}</p>
               </div>
             </li>
@@ -305,8 +305,8 @@ function WidgetBody({ widget, size, data, memberById, now, settings }: {
     case 'grocery':
       return (
         <div className="flex h-full flex-col">
-          <p className="text-4xl font-black text-white">{data.grocery.count}<span className="ml-1.5 text-base font-normal text-white/50">items</span></p>
-          <ul className="mt-2 space-y-1 text-sm text-white/60">
+          <p className="text-4xl font-black text-white">{data.grocery.count}<span className="ml-1.5 text-base font-normal text-white/70">items</span></p>
+          <ul className="mt-2 space-y-1 text-sm text-white/70">
             {data.grocery.items.slice(0, tileListLimit(size, 4)).map((g) => <li key={g.id} className="truncate">• {g.name}</li>)}
             {data.grocery.count === 0 && <li>{tr('displayGrid.listIsEmpty')}</li>}
           </ul>
@@ -339,7 +339,7 @@ function WidgetBody({ widget, size, data, memberById, now, settings }: {
       return data.birthdays.length ? (
         <ul className="space-y-2">
           {data.birthdays.map((b) => (
-            <li key={b.name} className="flex items-center gap-2"><Cake className="h-4 w-4 shrink-0 text-rose-300" /><span className="text-white">{b.name}</span><span className="ml-auto text-xs text-white/50">{b.date}</span></li>
+            <li key={b.name} className="flex items-center gap-2"><Cake className="h-4 w-4 shrink-0 text-rose-300" /><span className="text-white">{b.name}</span><span className="ml-auto text-xs text-white/70">{b.date}</span></li>
           ))}
         </ul>
       ) : <Empty icon={Cake} text={tr('displayGrid.noBirthdaysThisWeek')} />;
@@ -348,7 +348,7 @@ function WidgetBody({ widget, size, data, memberById, now, settings }: {
       return data.notes.length ? (
         <ul className="space-y-2 text-sm">
           {data.notes.slice(0, tileListLimit(size, 3)).map((n) => (
-            <li key={n.id}><p className="truncate font-medium text-white">{n.title || 'Note'}</p><p className="truncate text-white/50">{n.body}</p></li>
+            <li key={n.id}><p className="truncate font-medium text-white">{n.title || 'Note'}</p><p className="truncate text-white/70">{n.body}</p></li>
           ))}
         </ul>
       ) : <Empty icon={StickyNote} text={tr('displayGrid.noPinnedNotes')} />;
@@ -358,7 +358,7 @@ function WidgetBody({ widget, size, data, memberById, now, settings }: {
 }
 
 function Empty({ icon: Icon, text }: { icon: typeof Calendar; text: string }) {
-  return <div className="flex h-full flex-col items-center justify-center py-4 text-center text-white/60"><Icon className="h-8 w-8 opacity-60" /><p className="mt-2 text-sm">{text}</p></div>;
+  return <div className="flex h-full flex-col items-center justify-center py-4 text-center text-white/70"><Icon className="h-8 w-8 opacity-60" /><p className="mt-2 text-sm">{text}</p></div>;
 }
 
 
@@ -372,7 +372,7 @@ function MonthCalendar({ cal }: { cal: DisplayData['calendar'] }) {
     <div>
       <p className="mb-2 text-center text-sm font-semibold text-white">{fmtDate(`${cal.year}-${String(cal.month + 1).padStart(2, '0')}-01`, 'MMMM yyyy')}</p>
       <div className="grid grid-cols-7 gap-1 text-center text-[11px]">
-        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <span key={i} className="text-white/40">{d}</span>)}
+        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <span key={i} className="text-white/70">{d}</span>)}
         {cells.map((d, i) => (
           <span key={i} className={cn('relative grid h-7 place-items-center rounded-md text-white/80', d === cal.today && 'bg-brand font-bold text-white', d && d !== cal.today && eventSet.has(d) && 'font-semibold text-white')}>
             {d ?? ''}
@@ -402,7 +402,7 @@ function NowNextStrip({ events, memberById, now, timezone, clock24 }: {
         <span className={cn('shrink-0 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide', tone)}>{label}</span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-2xl font-black text-white">{ev.title}</p>
-          <p className="text-sm text-white/60">
+          <p className="text-sm text-white/70">
             {ev.all_day ? 'All day' : `${displayTime(ev.starts_at, timezone, locale, clock24)} · ${countdownLabel(ev.starts_at, now, timezone)}`}
             {ev.location ? ` · ${ev.location}` : ''}
           </p>
@@ -443,24 +443,24 @@ function SettingsPanel({ settings, onChange }: { settings: DisplaySettings; onCh
         <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white">
           <span className="text-sm">{tr('displayGrid.clock')}</span>
           <div className="flex gap-1 rounded-lg bg-black/20 p-0.5">
-            <button className={cn(seg, !settings.clock24 ? 'bg-brand text-white' : 'text-white/60')} onClick={() => onChange({ clock24: false })}>12h</button>
-            <button className={cn(seg, settings.clock24 ? 'bg-brand text-white' : 'text-white/60')} onClick={() => onChange({ clock24: true })}>24h</button>
+            <button className={cn(seg, !settings.clock24 ? 'bg-brand text-white' : 'text-white/70')} onClick={() => onChange({ clock24: false })}>12h</button>
+            <button className={cn(seg, settings.clock24 ? 'bg-brand text-white' : 'text-white/70')} onClick={() => onChange({ clock24: true })}>24h</button>
           </div>
         </div>
         {/* Temp unit */}
         <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white">
           <span className="text-sm">{tr('displayGrid.temperature')}</span>
           <div className="flex gap-1 rounded-lg bg-black/20 p-0.5">
-            <button className={cn(seg, settings.tempUnit === 'F' ? 'bg-brand text-white' : 'text-white/60')} onClick={() => onChange({ tempUnit: 'F' })}>°F</button>
-            <button className={cn(seg, settings.tempUnit === 'C' ? 'bg-brand text-white' : 'text-white/60')} onClick={() => onChange({ tempUnit: 'C' })}>°C</button>
+            <button className={cn(seg, settings.tempUnit === 'F' ? 'bg-brand text-white' : 'text-white/70')} onClick={() => onChange({ tempUnit: 'F' })}>°F</button>
+            <button className={cn(seg, settings.tempUnit === 'C' ? 'bg-brand text-white' : 'text-white/70')} onClick={() => onChange({ tempUnit: 'C' })}>°C</button>
           </div>
         </div>
         {/* Background: ambient gradient vs family photos */}
         <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white">
           <span className="text-sm">{tr('displayGrid.background')}</span>
           <div className="flex gap-1 rounded-lg bg-black/20 p-0.5">
-            <button className={cn(seg, settings.background === 'gradient' ? 'bg-brand text-white' : 'text-white/60')} onClick={() => onChange({ background: 'gradient' })}>{tr('displayGrid.ambient')}</button>
-            <button className={cn(seg, settings.background === 'photos' ? 'bg-brand text-white' : 'text-white/60')} onClick={() => onChange({ background: 'photos' })}>{tr('displayGrid.photos')}</button>
+            <button className={cn(seg, settings.background === 'gradient' ? 'bg-brand text-white' : 'text-white/70')} onClick={() => onChange({ background: 'gradient' })}>{tr('displayGrid.ambient')}</button>
+            <button className={cn(seg, settings.background === 'photos' ? 'bg-brand text-white' : 'text-white/70')} onClick={() => onChange({ background: 'photos' })}>{tr('displayGrid.photos')}</button>
           </div>
         </div>
         {/* Gradient theme */}
@@ -730,6 +730,12 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
               <div className="absolute -right-16 bottom-0 h-80 w-80 rounded-full blur-3xl" style={{ background: theme.glow }} />
             </div>
           )}
+          {/* The wash's brightest stops (pink-300 at dawn, sky-300 in the
+              morning, orange-400 in the evening) put white text at 1.7-3.7:1,
+              measured from the pixels. The display's own ink over the wash and
+              its glows keeps each theme's hue while every text clears AA
+              (tests/the-kitchen-display-text-is-readable-on-its-ambient-wash). */}
+          {settings.ambient && <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 bg-[#0b1020]/75" />}
         </>
       )}
 
@@ -748,7 +754,7 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
         {/* Header chrome */}
         <header className="flex shrink-0 flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.25em] text-white/50">
+            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.25em] text-white/70">
               <DayIcon className="h-3.5 w-3.5" /> {tr('displayGrid.bubalyKitchen')}
             </p>
             <h1 className="mt-1 truncate text-3xl font-black sm:text-4xl lg:text-5xl">{greeting(part, data.familyName)}</h1>
@@ -826,7 +832,7 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
               sizeClass(tile.size), editing && 'ring-1 ring-brand/50',
             )}>
               {tile.widget !== 'featured' && tile.widget !== 'clock' && tile.widget !== 'service' && (
-                <div className="mb-3 flex shrink-0 items-center gap-2 text-sm font-bold text-white/60">
+                <div className="mb-3 flex shrink-0 items-center gap-2 text-sm font-bold text-white/70">
                   {(() => { const Icon = WIDGETS.find((w) => w.key === tile.widget)?.icon ?? Calendar; return <Icon className="h-4 w-4 shrink-0" />; })()}
                   <span className="truncate">{labelOf(tile.widget as WidgetKey)}</span>
                 </div>
@@ -855,7 +861,7 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
               {editing && (
                 <div className="absolute inset-0 flex flex-col justify-between bg-black/75 p-3 backdrop-blur-sm">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-white/60">{t('displayGrid.tile')}</span>
+                    <span className="text-xs font-semibold text-white/70">{t('displayGrid.tile')}</span>
                     <div className="flex gap-1">
                       <button aria-label={tr('a11y.moveUp')} onClick={() => move(tile.id, -1)} className="rounded p-1 text-white hover:bg-white/10"><ArrowUp className="h-4 w-4" /></button>
                       <button aria-label={tr('a11y.moveDown')} onClick={() => move(tile.id, 1)} className="rounded p-1 text-white hover:bg-white/10"><ArrowDown className="h-4 w-4" /></button>
@@ -863,7 +869,7 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <label className="block text-xs text-white/60">{tr('displayGrid.section')}
+                    <label className="block text-xs text-white/70">{tr('displayGrid.section')}
                       <select
                         value={tile.widget === 'service' ? `service:${tile.href ?? ''}` : tile.widget}
                         onChange={(e) => {
@@ -885,7 +891,7 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
                         </optgroup>
                       </select>
                     </label>
-                    <label className="block text-xs text-white/60">{tr('displayGrid.size')}
+                    <label className="block text-xs text-white/70">{tr('displayGrid.size')}
                       <select value={tile.size} onChange={(e) => update(tile.id, { size: e.target.value as TileSize })} className="mt-1 h-9 w-full rounded-lg border border-white/15 bg-slate-900 px-2 text-sm text-white">
                         {SIZES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
                       </select>
@@ -899,7 +905,7 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
 
         {/* Footer band (padded clear of the hints ticker; hidden on the kiosk
             fit so the grid gets the full viewport — the pencil still edits) */}
-        <p className={cn('mb-12 mt-6 flex items-center justify-center gap-2 text-center text-xs text-white/60', !editing && 'lg:hidden')}>
+        <p className={cn('mb-12 mt-6 flex items-center justify-center gap-2 text-center text-xs text-white/70', !editing && 'lg:hidden')}>
           <Sparkles className="h-3.5 w-3.5" /> {data.familyName} {tr('displayGrid.bubalyKitchenDisplay')}
           {!editing && <button onClick={() => setEditing(true)} className="ml-1 inline-flex items-center gap-1 text-white/80 hover:text-white">{tr('displayGrid.customize')} <ArrowRight className="h-3 w-3" /></button>}
         </p>
