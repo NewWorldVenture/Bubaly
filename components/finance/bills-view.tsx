@@ -168,7 +168,7 @@ export function BillsView({ mode }: { mode: BillsMode }) {
           )}
           <button onClick={() => markPaid(b)} title={b.status === 'paid' ? 'Reopen' : 'Mark paid'}
             className="rounded-lg p-1.5 text-muted/50 transition hover:text-emerald-400">{b.status === 'paid' ? <RotateCcw className="h-4 w-4" /> : <Check className="h-4 w-4" />}</button>
-          <button onClick={() => remove(b.id)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={t('bills.delete')}><Trash2 className="h-4 w-4" /></button>
+          <button onClick={() => remove(b.id)} className="rounded-lg p-1.5 text-muted/40 opacity-100 sm:opacity-0 transition hover:text-danger sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100" aria-label={t('bills.delete')}><Trash2 className="h-4 w-4" /></button>
         </div>}
       </div>
     );

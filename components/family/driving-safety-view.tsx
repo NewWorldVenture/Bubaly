@@ -96,7 +96,7 @@ export function DrivingSafetyView() {
                   <p className={cn('text-2xl font-black tabular-nums', SCORE_TINT[band])}>{t.score}</p>
                   <p className="text-[10px] capitalize text-muted">{band}</p>
                 </div>
-                {canDelete && <button onClick={() => remove(t.id)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={tr('drivingSafetyView.delete')}><Trash2 className="h-4 w-4" /></button>}
+                {canDelete && <button onClick={() => remove(t.id)} className="rounded-lg p-1.5 text-muted/40 opacity-100 sm:opacity-0 transition hover:text-danger sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100" aria-label={tr('drivingSafetyView.delete')}><Trash2 className="h-4 w-4" /></button>}
               </div>
             );
           })}

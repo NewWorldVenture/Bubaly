@@ -294,12 +294,12 @@ export function TodosModule() {
           </div>
         </div>
 
-        <div className="hidden items-center gap-1 opacity-0 transition group-hover:opacity-100 sm:flex">
-          <button onClick={() => setEditingItem(item)} aria-label={tr('todos.editTask')} className="rounded p-1 text-muted hover:text-fg">
+        <div className="flex items-center gap-1 opacity-100 sm:opacity-0 transition sm:group-hover:opacity-100 focus-within:opacity-100 coarse:opacity-100">
+          <button onClick={() => setEditingItem(item)} aria-label={tr('todos.editTask')} className="rounded p-1.5 text-muted hover:text-fg">
             <Pencil className="h-3.5 w-3.5" />
           </button>
           <button onClick={() => deleteItem(item.id)} disabled={isPending(`delete:${item.id}`)} aria-label={tr('todos.deleteTask')}
-            className="rounded p-1 text-muted hover:text-danger disabled:opacity-50">
+            className="rounded p-1.5 text-muted hover:text-danger disabled:opacity-50">
             {isPending(`delete:${item.id}`) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
           </button>
         </div>
