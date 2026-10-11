@@ -276,7 +276,7 @@ export function ShoppingModule() {
                 <span className="text-2xl">{(activeList as Record<string, unknown>).list_icon as string ?? '🛒'}</span>
                 <h2 className="text-xl font-bold">{activeList.name}</h2>
               </div>
-              <div className="ml-auto flex items-center gap-2">
+              <div className="ml-auto flex flex-wrap items-center gap-2">
                 <AiInsight kind="shopping" />
                 {checkedCount > 0 && (
                   <Button variant="outline" size="sm" onClick={() => setBoughtOpen(true)}>
@@ -338,7 +338,7 @@ export function ShoppingModule() {
                       </button>
                     ))}
                   </div>
-                  <div className="ml-auto flex items-center gap-2">
+                  <div className="ml-auto flex flex-wrap items-center gap-2">
                     <Button variant="ghost" size="sm" onClick={copyList} disabled={isPending('copy-list')}>
                       <Copy className="h-3.5 w-3.5" /> {t('shoppingModule.copyList')}
                     </Button>
@@ -430,7 +430,7 @@ export function ShoppingModule() {
               </select>
               <input value={addingText} onChange={(e) => setAddingText(e.target.value)}
                 placeholder={t('shopping.addItem')}
-                className="flex-1 rounded-xl border border-dashed border-border bg-transparent px-4 py-2 text-sm placeholder:text-muted focus:border-brand/50 focus:outline-none transition" />
+                className="min-w-0 flex-1 rounded-xl border border-dashed border-border bg-transparent px-4 py-2 text-sm placeholder:text-muted focus:border-brand/50 focus:outline-none transition" />
               {addingText && <Button type="submit" size="sm" disabled={isPending('add-item')}>Add</Button>}
             </form>
           </>

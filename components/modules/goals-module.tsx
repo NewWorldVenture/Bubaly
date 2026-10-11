@@ -92,7 +92,7 @@ export function GoalsModule() {
       ) : (
         <>
           {active.length > 0 && (
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {active.map((g) => (
                 <GoalCard key={g.id} goal={g} pending={pendingFor(g.id)} onEdit={() => setEditing(g)} onDelete={canDelete ? remove : undefined} onProgress={updateProgress} />
               ))}
@@ -102,7 +102,7 @@ export function GoalsModule() {
           {completed.length > 0 && (
             <div>
               <h2 className="mb-3 text-sm font-semibold text-muted">{t('goals.completed')}</h2>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {completed.map((g) => (
                   <GoalCard key={g.id} goal={g} pending={pendingFor(g.id)} onEdit={() => setEditing(g)} onDelete={canDelete ? remove : undefined} onProgress={updateProgress} />
                 ))}
