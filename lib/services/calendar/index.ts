@@ -81,27 +81,60 @@ function validEventRange(start: string, end: string | null, allDay: boolean, ori
   } catch { return false; }
 }
 
+/** A wall reading of exactly midnight with no zone: "2026-10-15T00:00", ":00" or ":00.000". */
+const ZONELESS_MIDNIGHT = /^(\d{4}-\d{2}-\d{2})T00:00(?::00(?:\.0{1,9})?)?$/;
+
+/**
+ * An all-day bound as the DATE label it names. A zone-less midnight is how a
+ * model told to "use the family time zone" says a day; read on the family's
+ * clock, a Los Angeles "2026-10-15T00:00:00" was 07:00Z — not a whole day — and
+ * a parent's all-day event was refused. With a zone it is an instant the
+ * caller chose, and stays one.
+ */
+function allDayLabelOf(value: string): string {
+  return ZONELESS_MIDNIGHT.exec(value.trim())?.[1] ?? value;
+}
+
+/** Whether an all-day bound landed on the UTC midnight of the date it names (`validEventRange`'s rule). */
+function namesItsDate(normalized: string, original: string): boolean {
+  try {
+    return parseExactInstant(normalized) === parseExactInstant(original.trim().slice(0, 10) + 'T00:00:00Z');
+  } catch { return false; }
+}
+
 /**
  * The `starts_at` / `ends_at` a create writes for these inputs, or the refusal
  * it gives: a zone-less time is read on the family's clock, and an all-day
  * event must be whole UTC-midnight DATE labels with its end after its start.
+ * An all-day bound given as a zone-less midnight is that date; any other time
+ * of day is refused in words that say so (`calendar.allDayNeedsDate`), not as
+ * an event ending before it starts.
  *
  * Exported for the one writer that inserts an event row itself — the chat
  * toolbox's `create_calendar_event` — so its row is the row `createEvent`, and
  * the same request approved and replayed through `calendar.createEvent`, would
  * write. A raw insert stored a Los Angeles 3pm as 15:00Z, and an all-day row
  * whose bounds were not whole days made every calendar read that covered it
- * fail with "Could not load the calendar".
+ * fail with "Could not load the calendar". `t` is the refusal's reader; the
+ * request's locale when omitted.
  */
-export function normalizeEventTimes(
+export async function normalizeEventTimes(
   input: { startsAt: string; endsAt?: string | null; allDay?: boolean },
   timezone: string,
-): ServiceResult<{ startsAt: string; endsAt: string | null }> {
-  const startsAt = normalizeCalendarWriteInstant(input.startsAt, timezone);
+  t?: (key: string) => string,
+): Promise<ServiceResult<{ startsAt: string; endsAt: string | null }>> {
+  const allDay = input.allDay === true;
+  const rawStart = allDay ? allDayLabelOf(input.startsAt) : input.startsAt;
+  const rawEnd = allDay && input.endsAt ? allDayLabelOf(input.endsAt) : input.endsAt ?? null;
+  const startsAt = normalizeCalendarWriteInstant(rawStart, timezone);
   if (!startsAt) return fail('That start time could not be understood.', { code: SERVICE_CODES.invalidInput });
 
-  const endsAt = normalizeCalendarWriteInstant(input.endsAt, timezone);
-  if (invalidOptionalClock(input.endsAt, endsAt) || !validEventRange(startsAt, endsAt, input.allDay ?? false, input.startsAt, input.endsAt ?? null)) {
+  const endsAt = normalizeCalendarWriteInstant(rawEnd, timezone);
+  if (invalidOptionalClock(rawEnd, endsAt)) return fail('An event cannot end before it starts.', { code: SERVICE_CODES.invalidInput });
+  if (allDay && (!namesItsDate(startsAt, rawStart) || (endsAt !== null && rawEnd !== null && !namesItsDate(endsAt, rawEnd)))) {
+    return fail((t ?? await getTranslations())('calendar.allDayNeedsDate'), { code: SERVICE_CODES.invalidInput });
+  }
+  if (!validEventRange(startsAt, endsAt, input.allDay ?? false, rawStart, rawEnd)) {
     return fail('An event cannot end before it starts.', { code: SERVICE_CODES.invalidInput });
   }
   return ok({ startsAt, endsAt });
@@ -161,7 +194,7 @@ export async function createEvent(
   const title = input.title?.trim() ?? '';
   if (!title) return fail('An event needs a title.', { code: SERVICE_CODES.invalidInput });
 
-  const times = normalizeEventTimes(input, scope.tz);
+  const times = await normalizeEventTimes(input, scope.tz);
   if (!times.ok) return times;
   const { startsAt, endsAt } = times.data;
 

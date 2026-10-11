@@ -141,6 +141,32 @@ describe('chat: what the toolbox writes is the instant the family meant (AI18)',
     expect(db.table('calendar_events').map((e) => [e.starts_at, e.ends_at, e.all_day])).toEqual([['2026-10-15T00:00:00.000Z', '2026-10-17T00:00:00.000Z', true]]);
   });
 
+  it.each([LA, TOKYO] as const)('an all-day event the model names as the family’s midnight, with no zone, in %s is that day', async (tz) => {
+    household(tz);
+    const event = chatTool('create_calendar_event', tz);
+    // "Use the family time zone" makes a day "2026-10-15T00:00:00". Read on the
+    // family's clock it was 07:00Z in Los Angeles and the parent's all-day
+    // event was refused; it is the DATE label it names.
+    expect(await event.execute({ title: 'Fair', starts_at: '2026-10-15T00:00:00', all_day: true })).toMatchObject({ ok: true });
+    expect(await event.execute({ title: 'Camp', starts_at: '2026-10-19T00:00', ends_at: '2026-10-21T00:00:00.000', all_day: true })).toMatchObject({ ok: true });
+    expect(db.table('calendar_events').map((e) => [e.title, e.starts_at, e.ends_at, e.all_day])).toEqual([
+      ['Fair', '2026-10-15T00:00:00.000Z', null, true],
+      ['Camp', '2026-10-19T00:00:00.000Z', '2026-10-21T00:00:00.000Z', true],
+    ]);
+  });
+
+  it('says an all-day event needs a date when it is given a time of day, and keeps "cannot end before it starts" for a reversed range', async () => {
+    household(LA);
+    const event = chatTool('create_calendar_event', LA);
+    const needsDate = { ok: false, error: 'An all-day event needs a date, like 2026-10-15, not a time of day.' };
+    expect(await event.execute({ title: 'Fair', starts_at: '2026-10-15T00:00:00-07:00', all_day: true })).toEqual(needsDate);
+    expect(await event.execute({ title: 'Fair', starts_at: '2026-10-15', ends_at: '2026-10-15T23:59:59', all_day: true })).toEqual(needsDate);
+    expect(await event.execute({ title: 'Fair', starts_at: '2026-10-15T09:00:00', all_day: true })).toEqual(needsDate);
+    expect(await event.execute({ title: 'Fair', starts_at: '2026-10-15', ends_at: '2026-10-14', all_day: true }))
+      .toEqual({ ok: false, error: 'An event cannot end before it starts.' });
+    expect(db.table('calendar_events')).toEqual([]);
+  });
+
   it.each([
     [LA, '2026-10-17T00:00:00.000Z'],
     [TOKYO, '2026-10-16T08:00:00.000Z'],
@@ -190,6 +216,12 @@ describe('approval replay: a parent approves exactly the instant chat would have
     const decided = await approveChatWrite(tz, 'add_reminder', { title: 'Call the dentist', remind_at: '2026-10-12T09:00:00' });
     expect(decided).toMatchObject({ ok: true, data: { executed: true } });
     expect(reminders().map((r) => r.remind_at)).toEqual([expected]);
+  });
+
+  it.each([LA, TOKYO] as const)('an approved all-day event at the family’s midnight in %s is that day, as chat stores it', async (tz) => {
+    const decided = await approveChatWrite(tz, 'create_calendar_event', { title: 'Fair', starts_at: '2026-10-15T00:00:00', all_day: true });
+    expect(decided).toMatchObject({ ok: true, data: { executed: true } });
+    expect(db.table('calendar_events').map((e) => [e.starts_at, e.ends_at, e.all_day])).toEqual([['2026-10-15T00:00:00.000Z', null, true]]);
   });
 
   it.each([

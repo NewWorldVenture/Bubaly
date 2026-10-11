@@ -18,6 +18,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
+import { speaksForTheRequester } from '@/lib/ai/tools/first-person';
 import { getTranslations } from '@/lib/i18n/server';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
@@ -352,15 +353,6 @@ function collectDependents(steps: readonly StepRow[], stepId: string): StepRow[]
 export type EditStepResult = { planId: string; version: number; requeuedSteps: number };
 
 /**
- * Tools whose output speaks in the requester's own first person: a family
- * message posted with their name on it, an RSVP answering for them. The run
- * executes as the requester on the service client, which `send_family_message`'s
- * "send only as yourself" lock does not check (0475), so another manager's
- * edit to one of these steps went out AS the requester.
- */
-const SPEAKS_FOR_THE_REQUESTER: ReadonlySet<string> = new Set(['messages.sendFamilyMessage', 'calendar.rsvp']);
-
-/**
  * Change what a step will do, as a new plan version.
  *
  * Plans are versioned rather than edited in place (§13's Edit flow): the family
@@ -403,8 +395,8 @@ export async function editStepInput(
   if (!EDITABLE_STEP_STATES.includes(target.status as StepState)) {
     return fail((await getTranslations())('runs.stepAlreadyRan'), { code: SERVICE_CODES.invalidInput });
   }
-  // Words said in someone's name are theirs to change.
-  if (target.tool_name && SPEAKS_FOR_THE_REQUESTER.has(target.tool_name) && scope.memberId !== run.requested_by_member_id) {
+  // Words said in someone's name are theirs to change (lib/ai/tools/first-person.ts).
+  if (speaksForTheRequester(target.tool_name) && scope.memberId !== run.requested_by_member_id) {
     return fail((await getTranslations())('runs.notYoursToReword'), { code: SERVICE_CODES.denied });
   }
 

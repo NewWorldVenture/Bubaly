@@ -50,6 +50,7 @@ import { ledgerWriter } from '@/lib/trust/ledger';
 import { executeTool } from '@/lib/ai/tools/execute';
 import { markApprovedSchoolSource } from '@/lib/front-desk/school-approval';
 import { getTool } from '@/lib/ai/tools/registry';
+import { editsAreTheRequesters, recordedEditsOf, speaksForTheRequester } from '@/lib/ai/tools/first-person';
 import { savePrivatePurchaseAnswer, scopeForApprovedPurchase } from '@/lib/services/purchases/private-result';
 import { getTranslations } from '@/lib/i18n/server';
 import { kickRun } from '@/lib/ai/runs/continue';
@@ -920,7 +921,13 @@ async function performApproved(
         return ok({ status: decisionLabel, executed: true, resumedRunId: folded.data.resumedRunId, summary });
       }
 
-      const args = edited ?? classified.args;
+      // Words said in the asker's name run as they were filed unless the
+      // ledger shows the edit is the asker's own (lib/ai/tools/first-person.ts):
+      // `edited_payload` is a column any manager may write on a pending row,
+      // so it cannot vouch for itself.
+      const othersWords = edited !== null && speaksForTheRequester(classified.name)
+        && !editsAreTheRequesters(await recordedEditsOf(await ledgerWriter(scope.db), scope.familyId, row.id) ?? [], row.requested_by_member_id);
+      const args = othersWords ? classified.args : edited ?? classified.args;
       // `requested_by_kind` is a column any manager can rewrite on a pending
       // row, so it cannot decide whether the trust gate is skipped. An 'ai' row
       // only counts as Bubaly's when the server's own ledger says so; anything
@@ -1201,6 +1208,20 @@ function storedEdit(row: ApprovalRow, classified: ClassifiedPayload): Record<str
 }
 
 /**
+ * Whether the work this row releases speaks in its asker's first person
+ * (lib/ai/tools/first-person.ts): the tool a `tool` row names, or the tool of
+ * a step the server parked on a `plan_steps` row — found by the steps' own
+ * `approval_id`, as `foldIntoRun` finds what a decision releases.
+ */
+async function speaksForTheAsker(scope: ServiceScope, row: ApprovalRow, classified: ClassifiedPayload): Promise<ServiceResult<boolean>> {
+  if (classified.kind === 'tool') return ok(speaksForTheRequester(classified.name));
+  if (classified.kind !== 'plan_steps') return ok(false);
+  const waiting = await stepsWaitingOn(ledgerClient(scope), scope.familyId, row.id);
+  if (!waiting.ok) return waiting;
+  return ok(waiting.data.some((step) => step.step_type !== 'notify' && speaksForTheRequester(step.tool_name)));
+}
+
+/**
  * Change what an approval would do, then approve the changed version.
  *
  * The edits are merged over the stored arguments so a field the form did not
@@ -1262,6 +1283,24 @@ export async function editAndApprove(
     return fail('Keep at least one thing for Bubaly to do, or decline instead.', { code: SERVICE_CODES.invalidInput });
   }
 
+  // Two deltas, because they answer different questions. `changed` is the
+  // cumulative difference from what Bubaly proposed — what the family is
+  // actually agreeing to. `changedByMe` is this approver's own contribution;
+  // without it the activity line credited one parent with the other's wording.
+  const changed = Object.keys(merged).filter((k) => merged[k] !== original[k]);
+  const changedByMe = Object.keys(merged).filter((k) => merged[k] !== base[k]);
+
+  // Words said in someone's name are theirs to change (lib/ai/tools/first-person.ts).
+  // The approved work runs AS the person who asked — a run step on the service
+  // client, a Bubaly-filed row replayed for its asker — so another manager's
+  // rewording of a family message went out with the asker's name on it.
+  // Approving or declining it exactly as written stays open to every approver.
+  if (changedByMe.length > 0 && memberId !== row.requested_by_member_id) {
+    const firstPerson = await speaksForTheAsker(scope, row, classified);
+    if (!firstPerson.ok) return firstPerson;
+    if (firstPerson.data) return fail((await getTranslations())('approval.notYoursToReword'), { code: SERVICE_CODES.denied });
+  }
+
   const nowIso = scopeNow(scope).toISOString();
   const cleanNote = note?.trim() || null;
   const prior = priorVotes(row);
@@ -1274,12 +1313,6 @@ export async function editAndApprove(
     return fail('This one needs two parents to agree. Ask a parent to approve it.', { code: SERVICE_CODES.denied });
   }
   const votes: Vote[] = [...prior, { member_id: memberId, decision: 'approved', note: cleanNote, at: nowIso, role: scope.role ?? null }];
-  // Two deltas, because they answer different questions. `changed` is the
-  // cumulative difference from what Bubaly proposed — what the family is
-  // actually agreeing to. `changedByMe` is this approver's own contribution;
-  // without it the activity line credited one parent with the other's wording.
-  const changed = Object.keys(merged).filter((k) => merged[k] !== original[k]);
-  const changedByMe = Object.keys(merged).filter((k) => merged[k] !== base[k]);
 
   // An edit is still one vote. A two-parent rule stays a two-parent rule:
   // record the edited payload and this approval, and wait for the rest.

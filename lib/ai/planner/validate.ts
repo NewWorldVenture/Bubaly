@@ -43,7 +43,7 @@
 // drives it with the real registry and hand-built trust inputs.
 import { conformNulls } from '@/lib/ai/schema-to-json';
 import { findDependencyCycle, type StepState } from '@/lib/ai/runs/states';
-import { NOTIFY_TOOL, notifyToolArgs, ownNoticeClears, parseNotifyInput, type NotifyStepInput } from '@/lib/ai/runs/executor';
+import { NOTIFY_TOOL, notifyToolArgs, ownNoticeClears, parseNotifyInput, readAmountCents, type NotifyStepInput } from '@/lib/ai/runs/executor';
 import { isManager } from '@/lib/constants/roles';
 import { parseVerificationSpec } from '@/lib/ai/runs/verify';
 import { getTool } from '@/lib/ai/tools/registry';
@@ -292,19 +292,6 @@ function notifyDecision(input: NotifyStepInput, inputs: ValidationInputs): { eff
   if (decision.effect === 'require_approval') return { effect: 'require_approval', reason: decision.reason };
   if (behavior === 'prepare') return { effect: 'require_approval', reason: 'This household has asked Bubaly to prepare changes and wait for a yes.' };
   return { effect: 'allow', reason: decision.reason };
-}
-
-/** A money amount in the arguments, for `maxAmountCents` policy conditions; null when the tool carries none. */
-function readAmountCents(input: unknown): number | null {
-  if (!input || typeof input !== 'object') return null;
-  const record = input as Record<string, unknown>;
-  for (const key of ['amount_cents', 'amountCents']) {
-    if (typeof record[key] === 'number' && Number.isFinite(record[key])) return Math.round(record[key] as number);
-  }
-  for (const key of ['amount', 'budget', 'target_amount', 'cost']) {
-    if (typeof record[key] === 'number' && Number.isFinite(record[key])) return Math.round((record[key] as number) * 100);
-  }
-  return null;
 }
 
 // ── Follow-ups ──────────────────────────────────────────────────────────────

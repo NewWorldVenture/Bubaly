@@ -27,6 +27,10 @@ vi.mock('@/lib/ai/tools/execute', () => ({
 
 const { createExecutorPort, runGraphWith } = await import('@/lib/ai/runs/executor');
 const { decide } = await import('@/lib/services/approvals');
+const { dryRunGate } = await import('@/lib/ai/planner/validate');
+const { getTool } = await import('@/lib/ai/tools/registry');
+const { loadTrustInputs } = await import('@/lib/trust/server');
+const { DEFAULT_AI_SETTINGS } = await import('@/lib/ai/family-settings');
 
 const FAMILY = '00000000-0000-4000-8000-00000000fd01';
 const DANA = { member: '00000000-0000-4000-8000-00000000de01', user: '00000000-0000-4000-8000-0000000000d1' };
@@ -118,5 +122,54 @@ describe('a planned step held for approval is filed under the family’s own rul
     await runGraphWith(createExecutorPort(client()), RUN, { budgetMs: 60_000 });
 
     expect(db.table('approval_requests')[0]).toMatchObject({ approval_model: 'single', required_approvals: 1, policy_id: null, domain: 'finances' });
+  });
+});
+
+// The Trust form saves a policy with a maximum amount and a priority. "Bubaly
+// may spend small amounts" (allow up to $50, priority 300) outranks "Money needs
+// both of us" — but only for amounts under $50. The planner's dry run reads the
+// step's amount and holds a $900 budget for two parents; the rule the run filed
+// the card under read no amount, so the engine took it as 0, the $50 allow
+// "matched", and the card went out as one approver's — Dana's own yes ran it.
+describe('a rule with an amount condition is read with the step’s amount, as the plan read it', () => {
+  const SMALL_AMOUNTS = {
+    id: '00000000-0000-4000-8000-00000000dc06', family_id: FAMILY, name: 'Bubaly may spend small amounts', domain: 'finances', capability: 'automate',
+    subject_kind: 'ai', effect: 'allow', conditions: { maxAmountCents: 5000 }, approval_model: 'single', required_approvals: 1, priority: 300,
+    enabled: true, created_at: NOW.toISOString(), updated_at: NOW.toISOString(),
+  };
+
+  async function planTimeDecision(amount: number) {
+    const trust = await loadTrustInputs(client(), FAMILY);
+    const tool = getTool('finances.updateBudget')!;
+    return dryRunGate(tool, { category: 'Groceries', amount }, {
+      policies: trust.policies, grants: trust.grants, delegations: trust.delegations, emergencyDomains: trust.emergencyDomains,
+      role: 'parent', now: NOW, tz: 'America/New_York', allowedTools: [tool.name], settings: { ...DEFAULT_AI_SETTINGS, familyId: FAMILY },
+    } as never, 'execute');
+  }
+
+  it('files a $900 budget the plan held for two parents as two parents — the requester alone does not release it', async () => {
+    seed([SMALL_AMOUNTS, TWO_PARENTS]);
+    expect(await planTimeDecision(900)).toMatchObject({ effect: 'require_approval', approvalModel: 'two_parent', policyId: POLICY });
+
+    await runGraphWith(createExecutorPort(client()), RUN, { budgetMs: 60_000 });
+
+    const [row] = db.table('approval_requests');
+    expect(row).toMatchObject({ approval_model: 'two_parent', required_approvals: 2, policy_id: POLICY, domain: 'finances' });
+    const first = await decide(as(DANA), String(row.id), 'approved');
+    expect(first).toMatchObject({ ok: true, data: { status: 'pending', executed: false } });
+    db.table('family_automation_runs')[0].state = 'ready';
+    await runGraphWith(createExecutorPort(client()), RUN, { budgetMs: 60_000 });
+    expect(hoisted.executed).toEqual([]);
+  });
+
+  it('still lets the small-amounts rule speak for an amount under its cap, as the plan does', async () => {
+    seed([SMALL_AMOUNTS, TWO_PARENTS]);
+    db.table('ai_plan_steps')[0].input_json = { category: 'Groceries', amount: 40 };
+    expect(await planTimeDecision(40)).toMatchObject({ effect: 'allow', policyId: SMALL_AMOUNTS.id });
+
+    // Held anyway (the model asked, or a re-plan kept the flag): an ordinary card.
+    await runGraphWith(createExecutorPort(client()), RUN, { budgetMs: 60_000 });
+
+    expect(db.table('approval_requests')[0]).toMatchObject({ approval_model: 'single', required_approvals: 1, policy_id: null });
   });
 });

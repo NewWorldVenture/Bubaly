@@ -36,6 +36,7 @@ import type { Database, Json, NotificationType } from '@/lib/database.types';
 import { backoffDelayMs } from '@/lib/ai/retry';
 import { executeTool } from '@/lib/ai/tools/execute';
 import { getTool } from '@/lib/ai/tools/registry';
+import { editsAreTheRequesters, recordedEditsOf, speaksForTheRequester, type RecordedEdit } from '@/lib/ai/tools/first-person';
 import type { ToolDefinition, ToolOutcome } from '@/lib/ai/tools/types';
 import { isManager } from '@/lib/constants/roles';
 import { getTranslations } from '@/lib/i18n/server';
@@ -119,6 +120,12 @@ export type ApprovalSnapshot = {
   payloadKind: string | null;
   planStepIds: string[] | null;
   editedPayload: unknown;
+  /**
+   * Who the trust ledger says edited the row (`recordedEditsOf`), read when it
+   * carries an edit. Absent means unknown: an edit to words said in the
+   * requester's name is then not run (`approvedArgsFor`).
+   */
+  recordedEdits?: readonly RecordedEdit[];
 };
 
 /**
@@ -135,8 +142,18 @@ export type ApprovalSnapshot = {
  * allow-listed version. `decide()` already refuses that through `storedEdit`
  * for the rows it executes itself; this is the same derivation for the rows
  * the executor performs.
+ *
+ * A step whose words are the requester's own (lib/ai/tools/first-person.ts)
+ * runs an edit only when the ledger shows every edit is theirs. The step runs
+ * as the requester, so anyone else's wording — written to the column directly,
+ * or recorded before `editAndApprove` refused it — would go out in their name;
+ * it is set aside and the step says what they asked to say.
  */
-function approvedArgsFor(approval: ApprovalSnapshot | null): Record<string, unknown> | null {
+function approvedArgsFor(
+  approval: ApprovalSnapshot | null,
+  step: StepSnapshot,
+  requesterMemberId: string | null,
+): Record<string, unknown> | null {
   if (!approval) return null;
   const classified = classifyPayload({
     payload: approval.payload,
@@ -146,7 +163,12 @@ function approvedArgsFor(approval: ApprovalSnapshot | null): Record<string, unkn
     plan_step_ids: approval.planStepIds,
   });
   const effective = effectiveArgsOf(classified, approval.editedPayload);
-  return effective.changed.length > 0 ? effective.args : null;
+  if (effective.changed.length === 0) return null;
+  if (speaksForTheRequester(toolForStep(step)?.name) && !editsAreTheRequesters(approval.recordedEdits ?? [], requesterMemberId)) {
+    console.error('[ai/runs] set aside an edit to words said in the requester’s name that the ledger does not show as theirs', { approval: approval.id, step: step.id });
+    return null;
+  }
+  return effective.args;
 }
 
 /** Everything outside the control flow, in one injectable object. */
@@ -1006,7 +1028,7 @@ async function runStep(
       });
       return { kind: 'progressed' };
     }
-    approvedPayload = approvedArgsFor(approval.data);
+    approvedPayload = approvedArgsFor(approval.data, step, run.requested_by_member_id);
     approved = true;
     await port.appendEvent(run, {
       eventType: 'approval_decided',
@@ -1380,6 +1402,29 @@ function toolForStep(step: StepSnapshot): ToolDefinition | null {
 type ApprovalRule = { domain: string; approvalModel: ApprovalModel; requiredApprovals: number; policyId: string | null };
 
 /**
+ * A money amount in a step's arguments, for `maxAmountCents` policy
+ * conditions; null when the tool carries none.
+ *
+ * One reader for both sides of a held step: the planner's dry run
+ * (lib/ai/planner/validate.ts `dryRunGate`) and the rule its approval is filed
+ * under (`approvalRuleFor`). When only the dry run read it, a "Bubaly may spend
+ * up to $50" allow ranked above "Money needs both of us" matched a $900 budget
+ * at run time — the engine reads a missing amount as 0 — so the step the plan
+ * held for two parents was filed for one, and the requester released it alone.
+ */
+export function readAmountCents(input: unknown): number | null {
+  if (!input || typeof input !== 'object') return null;
+  const record = input as Record<string, unknown>;
+  for (const key of ['amount_cents', 'amountCents']) {
+    if (typeof record[key] === 'number' && Number.isFinite(record[key])) return Math.round(record[key] as number);
+  }
+  for (const key of ['amount', 'budget', 'target_amount', 'cost']) {
+    if (typeof record[key] === 'number' && Number.isFinite(record[key])) return Math.round((record[key] as number) * 100);
+  }
+  return null;
+}
+
+/**
  * The rule a held step's approval is filed under: the family's own.
  *
  * The planner's dry run sees a "two parents" policy and holds the step, but the
@@ -1390,6 +1435,10 @@ type ApprovalRule = { domain: string; approvalModel: ApprovalModel; requiredAppr
  * exactly as the run-time gate would, and a policy that requires approval
  * decides the model, the count and the policy the row is filed under. The
  * domain is the tool's registry domain, not a guess from its name.
+ *
+ * The context carries what the dry run's does — the step's amount included
+ * (`readAmountCents`) — so a policy whose conditions the plan found unmet is
+ * not found met here.
  *
  * A household whose rules cannot be read is not asked on a guess either: the
  * step fails retryably and asks again once the rules can be read.
@@ -1402,6 +1451,7 @@ async function approvalRuleFor(db: SupabaseClient<Database>, scope: ServiceScope
     return fail((await getTranslations())('aiRuns.approvalRulesUnreadable'), { code: SERVICE_CODES.db, retryable: true });
   }
   const capability = !tool || !tool.readOnly ? 'automate' : tool.capability;
+  const amountCents = readAmountCents(step.input_json);
   const decision = evaluateAction({
     // The role the run-time gate evaluates (`trustRoleFor` in execute.ts).
     actor: { kind: 'ai_agent', id: 'bubaly', role: scope.role === 'system' ? 'adult' : roleOf(scope.role) },
@@ -1410,6 +1460,7 @@ async function approvalRuleFor(db: SupabaseClient<Database>, scope: ServiceScope
     context: {
       confidence: 0.85,
       tags: tool ? [...toolTags(tool.name), `op:${tool.capability}`, `risk:${tool.risk}`, `domain:${tool.domain}`] : [`domain:${domain}`],
+      ...(amountCents !== null ? { amountCents } : {}),
     },
     policies: trust.policies,
     grants: trust.grants,
@@ -1629,6 +1680,12 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
         return fail(describeDbError(error, 'Bubaly could not read that approval.'), { code: SERVICE_CODES.db, retryable: true });
       }
       if (!data) return ok(null);
+      // Who edited it, for a step whose words are the requester's own
+      // (`approvedArgsFor`). Unreadable is not "nobody": the step waits.
+      const recordedEdits = data.edited_payload == null ? [] : await recordedEditsOf(db, scope.familyId, approvalId);
+      if (recordedEdits === null) {
+        return fail('Bubaly could not read that approval.', { code: SERVICE_CODES.db, retryable: true });
+      }
       return ok({
         id: data.id,
         status: data.status,
@@ -1636,6 +1693,7 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
         payloadKind: data.payload_kind ?? null,
         planStepIds: data.plan_step_ids ?? null,
         editedPayload: data.edited_payload ?? null,
+        recordedEdits,
       });
     },
     async notifyFamily(scope, input, opts) {
