@@ -10,6 +10,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { z } from 'zod';
 import { createServiceClient } from '@/lib/supabase/server';
 import { isSuperAdmin, getUser } from '@/lib/supabase/auth';
+import { superAdminAssurance } from '@/lib/auth/super-admin-assurance';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import { PLATFORMS } from '@/lib/social/capabilities';
 import {
@@ -52,6 +53,7 @@ function readForm(formData: FormData) {
 
 async function requireAdmin(): Promise<{ userId: string } | { error: string }> {
   if (!await isSuperAdmin()) return { error: 'Not authorized.' };
+  if (!(await superAdminAssurance()).ok) return { error: (await getTranslations())('actions.adminConsoleNeedsYourCode') };
   const user = await getUser();
   if (!user) return { error: 'Not signed in.' };
   return { userId: user.id };

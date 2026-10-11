@@ -16,6 +16,7 @@ import { useApp } from './app-context';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { FamilyDeliveredValue } from '@/components/billing/family-delivered-value';
+import { reportRefusal } from '@/lib/auth/step-up-client';
 
 /**
  * Stripe checkout — same endpoint the billing module uses.
@@ -30,8 +31,11 @@ async function startCheckout(plan: StripePlan, t: (key: string) => string): Prom
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ plan }),
   });
-  const json = (await res.json()) as { url?: string; error?: string; review?: string };
+  const json = (await res.json()) as { url?: string; error?: string; review?: string; stepUp?: string };
   if (json.url) return json.url;
+  // An aal1 session is asked for the two-step code first; the step-up page
+  // brings the family back to where they were.
+  if (json.stepUp) { reportRefusal({ error: json.error ?? '', stepUp: json.stepUp }, () => {}); return null; }
   // Already subscribed: a plan change is reviewed on the billing page and made
   // in place there, never a second Checkout (the server refuses one).
   if (res.status === 409 && json.review?.startsWith('/')) return json.review;

@@ -51,6 +51,11 @@ vi.mock('react', async (original) => ({
   },
   useCallback: (fn: unknown) => fn,
   useMemo: (factory: () => unknown) => factory(),
+  // Effects do not run in this harness. The two that exist only matter below
+  // lg — useMediaQuery's (it stays false, so this is the desktop stack this
+  // file has always tested) and the queue-mode clock reconcile; the queue is
+  // exercised by tests/toast-mobile-queue.test.ts.
+  useEffect: () => {},
   // `useTranslations()` reads a context; hand it the real English catalogue.
   useContext: () => localeContextValue(),
 }));

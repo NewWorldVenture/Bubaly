@@ -129,6 +129,9 @@ function uriLimited(db: InMemorySupabase, limit = URI_LIMIT): { db: DB; longest:
 /** `total` consenting families, of which the last `withdrawn` have opted out. */
 function seedNetwork(db: InMemorySupabase, total: number, withdrawn: number) {
   const all = Array.from({ length: total }, (_, i) => famId(i));
+  // The consent read inner-joins families to skip closed accounts, as the
+  // foreign key guarantees a consent row's family exists.
+  db.seed('families', all.map((id) => ({ id, closed_at: null })));
   db.seed('network_consent', all.map((id, i) => ({
     family_id: id, enabled: i < total - withdrawn, scopes: {},
   })));

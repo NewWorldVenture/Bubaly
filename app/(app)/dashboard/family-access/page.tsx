@@ -47,8 +47,10 @@ export default async function FamilyAccessPage() {
   // Show: members who already have a kid login (→ reset PIN), and managed members
   // with no login yet (user_id null → can be given one). Members who signed up
   // with their own email (user_id set, no child login) manage their own password.
+  // A parent or adult with no login is not offered one: a PIN is a child's
+  // sign-in, and createChildLoginAction refuses a manager.
   const list: AccessMember[] = (members ?? [])
-    .filter((m) => usernameByMember.has(m.id) || m.user_id === null)
+    .filter((m) => usernameByMember.has(m.id) || (m.user_id === null && !isManager(m.role)))
     .map((m) => ({
       id: m.id, display_name: m.display_name, role: m.role, color: m.color,
       username: usernameByMember.get(m.id) ?? null,

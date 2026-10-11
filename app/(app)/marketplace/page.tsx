@@ -22,6 +22,7 @@ import { KIND_LABELS, CATEGORY_LABELS, priceLabel, type ListingKind, type Listin
 import { cn } from '@/lib/utils/cn';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readFamilyOrders } from '@/lib/marketplace/schema-compat';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -115,7 +116,8 @@ export default async function MarketplaceHomePage() {
       settle(sb.from('marketplace_reviews').select('id, listing_id, reviewee_member, rating, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(500))),
     safe<ActivityOrder & { seller_member: string | null; amount_cents: number }>(
       'Orders',
-      settle(sb.from('marketplace_orders').select('id, kind, status, buyer_member, seller_member, listing_id, amount_cents, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(200))),
+      // Either party's family: a won order carries the seller's family_id (readFamilyOrders).
+      settle(readFamilyOrders(familyId, (scope) => scope(sb.from('marketplace_orders').select('id, kind, status, buyer_member, seller_member, listing_id, amount_cents, created_at')).order('created_at', { ascending: false }).limit(200)))),
     safe<{ id: string; name: string; emoji: string | null; description: string | null }>(
       'Collections',
       settle(sb.from('marketplace_collections').select('id, name, emoji, description').eq('family_id', familyId).limit(8))),

@@ -82,6 +82,13 @@ function fakeClient() {
   };
 }
 
+// The admin gates also ask lib/auth/super-admin-assurance whether the session
+// proved its authenticator; this file is not about step-up, so it says yes.
+vi.mock('@/lib/auth/super-admin-assurance', () => ({
+  superAdminAssurance: async () => ({ ok: true }),
+  decideSuperAdminAssurance: () => ({ ok: true }),
+  SUPER_ADMIN_STEP_UP_PATH: '/auth/step-up?next=%2Fadmin',
+}));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 // '@/lib/i18n/server' is deliberately NOT mocked: the refusal is read through
 // the real translator and the real en-US catalogue (outside a request it

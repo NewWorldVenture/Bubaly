@@ -6,8 +6,8 @@
 //
 // Auth: fail-closed. Requires CONTACT_CENTER_INBOUND_SECRET, presented as the
 // x-inbound-secret header, as the password of HTTP Basic credentials, or as
-// ?key= (see `authorized`). Without the secret set, rejects in production so the
-// endpoint is never an open relay; permitted in dev for local testing.
+// ?key= (see `authorized`). Without the secret set it rejects every request, in
+// every build, so the endpoint is never an open relay (SEC-002).
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
@@ -18,8 +18,9 @@ import { familyReplySender, sendEmail } from '@/lib/server/email';
 import { parseRecipientLocal, buildBubalyAddress } from '@/lib/contact-center/address';
 import {
   resolveFamilyByEmailLocalResult, getOrCreateChannelResult, recordOutboundMessage,
-  routeInboundToPlanner, fileInboundPaperwork,
+  routeInboundToPlanner, fileInboundPaperwork, familyScopedEmailRef,
 } from '@/lib/contact-center/server';
+import { finishEmailReply, reserveEmailReply } from '@/lib/contact-center/email-reply';
 import { runConcierge } from '@/lib/contact-center/concierge';
 // Aliased: this file already has a MAX_BODY, and it is a different limit —
 // that one bounds the whole REQUEST (1 MB), this one bounds the body FIELD a
@@ -64,7 +65,12 @@ function basicAuthPassword(authorization: string | null): string | null {
 
 function authorized(req: NextRequest): boolean {
   const secret = process.env.CONTACT_CENTER_INBOUND_SECRET;
-  if (!secret) return process.env.NODE_ENV !== 'production';
+  // No secret, no inbound mail — in every build. This route is a public
+  // callback in middleware.ts, so this check is all that stands in front of
+  // it, and NODE_ENV is not a security decision: a dev or self-hosted server
+  // run without NODE_ENV=production used to accept anyone's mail here (SEC-002;
+  // the Twilio ingress was fixed the same way, lib/server/twilio-ingress.ts).
+  if (!secret) return false;
   const header = req.headers.get('x-inbound-secret');
   const basic = basicAuthPassword(req.headers.get('authorization'));
   const query = new URL(req.url).searchParams.get('key');
@@ -192,7 +198,7 @@ export async function POST(req: NextRequest) {
   let filed: Awaited<ReturnType<typeof captureInboundWithUrgency>>;
   try { filed = await captureInboundWithUrgency(admin, {
     familyId, channel: 'email', from: from ?? undefined, to, subject: subject ?? undefined,
-    body: body || subject || '(no content)', providerRef: messageId ?? undefined,
+    body: body || subject || '(no content)', providerRef: messageId ? familyScopedEmailRef(familyId, messageId) : undefined,
     aiSummary: result.summary, aiIntent: result.intent,
   }); } catch { return new NextResponse('Inbox temporarily unavailable', { status: 503 }); }
   const urgentOutcome = filed.urgentReceiptId ? await attemptUrgentDelivery(admin, filed.urgentReceiptId, familyId) : undefined;
@@ -258,6 +264,10 @@ export async function POST(req: NextRequest) {
   // Auto-reply acknowledges intake; it does not assert that the fallback text arrived.
   if (channel?.ai_concierge_enabled !== false && result.intent !== 'spam' && from) {
     try {
+      // Once per message, not once per delivery: everything above re-runs on a
+      // redelivery, and this is the only step with an effect outside Bubaly.
+      const reservation = { familyId, providerRef: filed.providerRef, messageId: filed.messageId };
+      if (!await reserveEmailReply(admin, reservation)) return NextResponse.json({ ok: true, intent: result.intent, attachments: attachmentResult.results });
       const reply = filed.escalated ? (await getTranslations())('contactUrgent.replySaved') : result.reply;
       // Keep replies on the family's thread while respecting the configured
       // sender domain. The footer and message body are plain text in HTML.
@@ -270,6 +280,7 @@ export async function POST(req: NextRequest) {
         subject: subject ? `Re: ${subject}` : `Message received — ${familyLabel}`,
         html: `<p>${reply.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</p><p style="color:#888;font-size:12px">— ${escapedFamilyLabel} via ${familyAddress}</p>`,
       });
+      await finishEmailReply(admin, reservation, !!sent?.ok && !sent.skipped);
       if (sent.ok && !sent.skipped) {
         await recordOutboundMessage(admin, { familyId, channel: 'email', to: from, body: reply });
       }

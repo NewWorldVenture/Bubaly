@@ -124,10 +124,10 @@ export function AssistantWorkspace({ pane, onPaneChange, conversation, plan, con
       </div>
 
       {/* Desktop: three columns, all visible. */}
-      <div className="hidden min-h-0 flex-1 gap-6 lg:grid lg:grid-cols-[320px_1fr_330px]">
+      <div className="hidden min-h-0 flex-1 gap-6 lg:grid lg:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[320px_1fr_330px]">
         <aside className="flex min-h-0 min-w-0 flex-col" aria-label={t('workspace.conversation')}>{conversation}</aside>
         <section className="min-h-0 min-w-0" aria-label={t('workspace.planAndResults')}>{hero ?? plan}</section>
-        <aside className="min-h-0 min-w-0 space-y-5" aria-label={t('workspace.context')}>{context}</aside>
+        <aside className="min-h-0 min-w-0 space-y-5 lg:col-span-2 2xl:col-span-1" aria-label={t('workspace.context')}>{context}</aside>
       </div>
     </div>
   );

@@ -93,6 +93,7 @@ describe('every chat entry point says who is asking', () => {
     const chat = readFileSync(join(ROOT, 'app/api/ai/chat/route.ts'), 'utf8');
     const engine = readFileSync(join(ROOT, 'lib/ai/assistant-engine.ts'), 'utf8');
     expect(chat).toMatch(/buildAssistantTools\(supabase, \{[^}]*role: ctx\.active\.role/);
-    expect(engine).toMatch(/buildAssistantTools\(supabase, \{[^}]*role: input\.role/);
+    // Not scope.role, which falls back to 'adult' when no role is known.
+    expect(engine).toMatch(/buildAssistantTools\(supabase, \{[^}]*role: acting\?\.role \?\? input\.role \?\? null/);
   });
 });

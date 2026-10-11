@@ -9,11 +9,11 @@ import { POST } from '@/app/api/paperwork/link/route';
 import { importDocumentLink } from '@/lib/capture/document-link';
 
 const state = vi.hoisted(() => ({ db: null as unknown, fetch: vi.fn(), signedIn: true, stepUp: false,
-  familyId: 'family-1', userId: 'parent-1', access: vi.fn(), limited: false }));
+  familyId: 'family-1', userId: 'parent-1', access: vi.fn(), limited: false, role: 'parent' }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => state.db }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: async () => {
   if (!state.signedIn) throw new Error('Signed out');
-  return { user: { id: state.userId }, active: { familyId: state.familyId, role: 'parent', member: { id: 'member-1' }, family: { timezone: 'UTC' } } };
+  return { user: { id: state.userId }, active: { familyId: state.familyId, role: state.role, member: { id: 'member-1' }, family: { timezone: 'UTC' } } };
 } }));
 vi.mock('@/lib/auth/require-aal2', () => ({ aal2Verdict: async () => state.stepUp ? { action: 'step_up', to: '/auth/step-up?next=%2Fcapture%2Flink' } : { action: 'allow' } }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: !state.limited }) }));
@@ -33,7 +33,7 @@ let scope: ServiceScope;
 beforeEach(() => {
   vi.restoreAllMocks(); vi.spyOn(console, 'error').mockImplementation(() => {});
   db = createInMemorySupabase<DB>({ uniques: { paperwork_items: [['id']] } }); state.db = db;
-  state.signedIn = true; state.stepUp = false; state.limited = false; state.familyId = 'family-1'; state.userId = 'parent-1';
+  state.signedIn = true; state.stepUp = false; state.limited = false; state.role = 'parent'; state.familyId = 'family-1'; state.userId = 'parent-1';
   state.access.mockReset().mockResolvedValue({ ok: true });
   state.fetch.mockReset().mockResolvedValue(document());
   scope = { db, familyId: 'family-1', userId: 'parent-1', memberId: 'member-1', role: 'parent', actorKind: 'member', tz: 'UTC' };
@@ -126,6 +126,25 @@ describe('linked-document saved text identity', () => {
     state.access.mockResolvedValueOnce({ ok: true }).mockResolvedValue({ ok: false, reason: 'context_changed', retryable: false });
     const result = await request();
     expect(result.status).toBe(409);
+    expect(db.table('paperwork_items')).toHaveLength(0);
+  });
+});
+
+describe('guests cannot capture linked documents', () => {
+  it('refuses a guest in the route before reading the body, authorizing, fetching or saving', async () => {
+    state.role = 'guest';
+    const response = await request();
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ ok: false, reason: 'access_denied', retryable: false });
+    expect(state.access).not.toHaveBeenCalled();
+    expect(state.fetch).not.toHaveBeenCalled();
+    expect(db.table('paperwork_items')).toHaveLength(0);
+  });
+
+  it('refuses a guest scope in the service, so no caller can skip the route check', async () => {
+    expect(await captureDocumentLink({ ...scope, role: 'guest' }, input)).toEqual({ ok: false, reason: 'access_denied', retryable: false });
+    expect(await captureDocumentLink({ ...scope, role: 'guest' }, { ...input, messageId })).toEqual({ ok: false, reason: 'access_denied', retryable: false });
+    expect(state.fetch).not.toHaveBeenCalled();
     expect(db.table('paperwork_items')).toHaveLength(0);
   });
 });

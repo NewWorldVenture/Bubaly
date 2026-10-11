@@ -10,6 +10,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isValidJoinCode, normalizeJoinCode } from '@/lib/marketplace/community';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
+import { isManager } from '@/lib/constants/roles';
 
 const PATH = '/marketplace/community';
 
@@ -25,6 +26,9 @@ export async function createCircleAction(name: string, emoji?: string): Promise<
   const trimmed = name.trim().slice(0, 60);
   if (!trimmed) return { ok: false, error: t('actions.giveYourCircleAName') };
   const ctx = await requireUserContext();
+  // A circle opens the family's shared listings to other households and lets
+  // them bid, buy and arrange pickups. A parent or adult decides that.
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan16') };
   const sb = await createServer();
   const { data, error } = await sb.rpc('marketplace_create_circle', {
     p_family: ctx.active.familyId, p_name: trimmed, p_emoji: (emoji ?? '').trim().slice(0, 8) || undefined,
@@ -38,6 +42,7 @@ export async function joinCircleAction(code: string): Promise<Result> {
   const t = await getTranslations();
   if (!isValidJoinCode(code)) return { ok: false, error: t('actions.thatCodeDoesnTLook') };
   const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan16') };
   const sb = await createServer();
   const { data, error } = await sb.rpc('marketplace_join_circle', {
     p_family: ctx.active.familyId, p_code: normalizeJoinCode(code),
@@ -67,6 +72,11 @@ export async function shareListingAction(listingId: string, circleId: string): P
   const t = await getTranslations();
   if (!listingId || !circleId) return { ok: false, error: t('actions.invalidShare') };
   const ctx = await requireUserContext();
+  // Sharing puts the listing in front of the circle's other households, who
+  // can then bid on it, buy it and arrange to collect it: the same decision as
+  // creating or joining the circle. Unsharing and leaving only withdraw, and
+  // stay open to every member.
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan16') };
   const sb = await createServer();
   const { error } = await sb.from('marketplace_listing_shares').insert({
     listing_id: listingId, circle_id: circleId, family_id: ctx.active.familyId, created_by: ctx.user.id,

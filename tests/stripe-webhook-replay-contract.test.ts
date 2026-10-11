@@ -45,6 +45,8 @@ describe('Stripe webhook replay contract', () => {
     expect(helper).toContain("if (!debit.ok) throw new Error(debit.error ?? 'Card spend persistence failed');");
     expect(helper).toContain("if (error) throw new Error('Stripe card mapping lookup failed');");
     expect(stripeRoute).toContain("if (!priceId) throw new Error('Subscription price is missing');");
-    expect(stripeRoute).toContain("if (!plan) throw new Error('Unknown Stripe subscription price');");
+    // An unknown price still refuses anything that would GRANT access; a
+    // status that ends access lands without a plan (see the webhook).
+    expect(stripeRoute).toContain("if (sub.status === 'active' || sub.status === 'trialing') throw new Error('Unknown Stripe subscription price');");
   });
 });

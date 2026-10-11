@@ -1,6 +1,21 @@
 -- ── Only a parent mints or revokes an assistant key (SRV-001 m9, 0343) ──────
 --
 -- HOLDS: supabase/migrations/0343_only_a_parent_mints_or_revokes_an_assistant_key.sql
+--        supabase/migrations/0477_an_assistant_key_is_minted_and_revoked_only_by_the_server.sql
+--
+-- 0477 (2026-10-10 assistant-links audit) sits IN FRONT of everything below:
+-- it revoked INSERT and UPDATE on assistant_links from authenticated and anon,
+-- because a parent with their own JWT could mint a key in a co-parent's name,
+-- re-point or un-revoke one, and the key then outlived the parent's removal
+-- (0419 retires only user_id = the departed). Every mint and revoke is the
+-- service-role server action's (dashboard/assistants/actions.ts). So the first
+-- thing this file proves is the grant layer: no client role holds INSERT or
+-- UPDATE, a PARENT's own REST mint and revoke answer 42501 "permission denied
+-- for table", and 0283's DELETE grant stands (0343's delete guard rests on it).
+-- It then hands INSERT and UPDATE back to the client roles INSIDE this rolled-
+-- back transaction, so 0343's row-level guards — the layer that would stand if
+-- a later migration re-issued the grant — are still measured exactly as the
+-- rest of this header describes.
 --
 -- An assistant key (public.assistant_links) is a standing bearer grant over a
 -- household: whoever holds the secret whose SHA-256 is `token_hash` can have
@@ -284,6 +299,53 @@ declare
   parent_row constant uuid := '00000000-0000-4000-8343-0000000000d1';
   service_row constant uuid := '00000000-0000-4000-8343-0000000000d2';
 begin
+  -- ── 0477: minting and rewriting a key is the server's alone ─────────────
+  -- A GRANT refuses before any policy is read, with 42501 "permission denied
+  -- for table". Measured as postgres first, then as the PARENT of FA with
+  -- their own JWT — the role 0343 lets through, and the one 0477 is about.
+  foreach st in array array['anon', 'authenticated'] loop
+    if has_table_privilege(st, 'public.assistant_links', 'INSERT')
+       or has_table_privilege(st, 'public.assistant_links', 'UPDATE') then
+      failures := array_append(failures, format('0477: %s still holds INSERT or UPDATE on public.assistant_links', st));
+    end if;
+  end loop;
+  if not has_table_privilege('authenticated', 'public.assistant_links', 'DELETE') then
+    failures := array_append(failures, '0477: authenticated lost DELETE on public.assistant_links (0283''s grant, which 0343''s delete guard stands on)');
+  end if;
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', parent_u::text, true);
+  perform set_config('request.jwt.claim.role', 'authenticated', true);
+  begin
+    insert into public.assistant_links (id, family_id, user_id, provider, label, token_hash, token_prefix, scopes, created_by)
+      values (parent_row, fam_a, parent_u, 'google', 'Minted over REST by the parent', 'm0343-hash-parent-rest', 'm0343pr', array['ask'], parent_u);
+    failures := array_append(failures, 'a PARENT minted an assistant key over the REST path — 0477 revoked the client INSERT grant');
+  exception when insufficient_privilege then
+    get stacked diagnostics msg = message_text;
+    if msg not like '%permission denied for table assistant_links%' then
+      failures := array_append(failures, format('the parent''s REST mint was refused, but not by the table grant (%s) — 0477''s revoke is not what said no', msg));
+    end if;
+  end;
+  begin
+    update public.assistant_links set revoked_at = now() where id = k1;
+    get diagnostics n = row_count;
+    failures := array_append(failures, format('a PARENT revoked a key over the REST path (%s rows) — 0477 revoked the client UPDATE grant', n));
+  exception when insufficient_privilege then
+    get stacked diagnostics msg = message_text;
+    if msg not like '%permission denied for table assistant_links%' then
+      failures := array_append(failures, format('the parent''s REST revoke was refused, but not by the table grant (%s) — 0477''s revoke is not what said no', msg));
+    end if;
+  end;
+  set local role postgres;
+  if array_length(failures, 1) is not null then
+    raise exception 'assistant key boundary failed (0477): %', array_to_string(failures, ' | ');
+  end if;
+
+  -- With the grant layer proven, hand INSERT and UPDATE back to the client
+  -- roles for the rest of this transaction (rolled back at the end), so 0343's
+  -- row-level guards — the layer that would stand if a later migration
+  -- re-issued the grant — are measured below exactly as written.
+  grant insert, update on public.assistant_links to authenticated, anon;
+
   anon_can_insert := has_table_privilege('anon', 'public.assistant_links', 'INSERT');
 
   -- The control and the attack must differ in the adult's role and nothing
@@ -708,6 +770,7 @@ begin
     raise exception 'assistant key boundary failed: %', array_to_string(failures, ' | ');
   end if;
 
+  raise notice 'OK assistant_links (0477): no client role holds INSERT or UPDATE on assistant_links — a PARENT''s own REST mint and revoke answer permission denied for table — and 0283''s DELETE grant stands; the guards below were measured with the grants handed back inside this rolled-back transaction';
   raise notice 'OK assistant_links (0343): the same adult CAN mint, widen, revoke, un-revoke, delete and move keys in households they parent (control); in the household where they are only an adult the mint and the family_id transplant are refused by 0343''s named guards, the widen/revoke/un-revoke/delete touch 0 rows, and nothing moved';
   if anon_can_insert then
     raise notice 'OK assistant_links (0343): an anon INSERT carrying the adult''s sub lands where the adult parents (control) and is refused by assistant_links_admin_insert_guard where they do not';

@@ -4,6 +4,7 @@ import { settleAll, isCredentialError } from '@/lib/supabase/settle';
 import { createServiceClient, describeConfiguredServiceKey, serviceKeyRemedy } from '@/lib/supabase/server';
 import { AdminShell } from '@/components/admin/admin-shell';
 import { getTranslations } from '@/lib/i18n/server';
+import { superAdminAssurance, SUPER_ADMIN_STEP_UP_PATH } from '@/lib/auth/super-admin-assurance';
 
 // Deliberately NOT nested under dashboard/layout.tsx — the site admin console
 // oversees every family, so it must never require the viewer to belong to one.
@@ -12,6 +13,9 @@ export default async function SiteAdminLayout({ children }: { children: React.Re
   if (!user) redirect('/login?redirect=/admin');
   const superAdmin = await isSuperAdmin();
   if (!superAdmin) redirect('/dashboard');
+  // Same step-up as the family's money pages: a password-only session of an
+  // admin with an authenticator enters the code before the console renders.
+  if (!(await superAdminAssurance()).ok) redirect(SUPER_ADMIN_STEP_UP_PATH);
   const t = await getTranslations();
 
   const supabase = createServiceClient();

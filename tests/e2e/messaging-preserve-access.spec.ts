@@ -11,11 +11,11 @@ import { reactBrowserScripts } from './helpers/react-browser';
 const scripts = reactBrowserScripts('development');
 const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')), 'dist/umd/supabase.js'), 'utf8');
 const sourceFiles = [
-  'components/modules/messages-module.tsx', 'components/ui/toast.tsx',
+  'components/modules/messages-module.tsx', 'components/ui/toast.tsx', 'lib/hooks/use-media-query.ts',
   'components/ui/button.tsx', 'components/ui/input.tsx',
   'components/ui/states.tsx', 'components/ui/states-client.tsx',
   'lib/messages/overview.ts', 'lib/messages/thread-state.ts', 'lib/messages/schema-compat.ts', 'lib/messages/reads.ts',
-  'lib/messages/legacy-schema.ts', 'lib/supabase/escape-like.ts', 'lib/realtime/own-channel.ts',
+  'lib/messages/legacy-schema.ts', 'lib/messages/workspace-paths.ts', 'lib/supabase/escape-like.ts', 'lib/realtime/own-channel.ts',
   'lib/supabase/errors.ts', 'lib/supabase/settle.ts', 'lib/constants/roles.ts',
   'lib/utils/format.ts', 'lib/i18n/locales.ts',
 ];
@@ -288,7 +288,7 @@ async function start(page: Page, config: Config) {
         isTomorrow: () => false },
       '@capacitor/core': { Capacitor: { isNativePlatform: () => false } },
       '@/components/app/app-context': { useApp: () => scope },
-      '@/components/i18n/locale-provider': { useTranslations: () => tr, useLocale: () => ({ code: 'en-US' }) },
+      '@/components/i18n/locale-provider': { useTranslations: () => tr, usePlural: () => (key) => tr(key), useLocale: () => ({ code: 'en-US' }) },
       '@/components/i18n/use-format': { useFormat: () => ({ fmtDate: value => value }),
         useFamilyClock: () => ({ dayKeyOf: value => value.slice(0, 10), todayKey: () => '2026-10-04',
           wallToday: () => new Date('2026-10-04T12:00:00Z'),

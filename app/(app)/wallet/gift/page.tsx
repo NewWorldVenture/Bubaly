@@ -19,10 +19,16 @@ export default async function WalletGiftPage() {
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
+  // A pending gift's giver name and message are an outsider's free text that
+  // no parent has reviewed yet, so they are loaded for parents and adults
+  // only. A child sees a gift once it is approved, in their wallet.
+  const canManage = isManager(ctx.active.role);
 
   const [{ data: links, error: linksError }, { data: pending, error: pendingError }, { data: childWallets, error: childWalletsError }, { data: members, error: membersError }, { data: handles, error: handlesError }] = await settleAll([
     supabase.from('gift_links').select('id, child_wallet_id, token, occasion, is_active, created_at').eq('family_id', familyId).order('created_at', { ascending: false }),
-    supabase.from('gift_payments').select('id, child_wallet_id, giver_name, amount_cents, message, occasion, status, created_at').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }),
+    canManage
+      ? supabase.from('gift_payments').select('id, child_wallet_id, giver_name, amount_cents, message, occasion, status, created_at').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false })
+      : Promise.resolve({ data: [], error: null }),
     supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true),
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId),
     supabase.from('pay_handles').select('id, handle, child_wallet_id').eq('family_id', familyId).order('created_at', { ascending: false }),
@@ -58,8 +64,8 @@ export default async function WalletGiftPage() {
 
   return (
     <div className="space-y-4">
-      <PayHandleManager handles={payHandles} childOptions={childOptions} canManage={isManager(ctx.active.role)} baseUrl={baseUrl} />
-      <GiftView links={linkRows} pending={pendingGifts} childOptions={childOptions} canManage={isManager(ctx.active.role)} />
+      <PayHandleManager handles={payHandles} childOptions={childOptions} canManage={canManage} baseUrl={baseUrl} />
+      <GiftView links={linkRows} pending={canManage ? pendingGifts : []} childOptions={childOptions} canManage={canManage} />
     </div>
   );
 }

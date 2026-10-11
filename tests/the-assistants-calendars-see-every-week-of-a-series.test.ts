@@ -58,7 +58,7 @@ function household() {
 }
 
 const ctx: AssistantCtx = {
-  familyId: FAMILY, userId: PARENT_USER, memberId: PARENT, role: 'parent',
+  familyId: FAMILY, userId: PARENT_USER, role: 'parent', memberId: PARENT,
   members: [{ id: PARENT, display_name: 'Dana' }, { id: KID, display_name: 'Sam' }], tz: LA,
 };
 const tool = (db: ReturnType<typeof household>, name: string) => {

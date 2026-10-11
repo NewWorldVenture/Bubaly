@@ -9,6 +9,7 @@ import { PROVIDERS, PLATFORMS, providerReadiness } from '@/lib/social/capabiliti
 import { CADENCES, describeSchedule } from '@/lib/marketing/recurring-ads';
 import { campaignFinished, scheduleFromRow, type AdRow } from '@/lib/marketing/recurring-ads-runner';
 import { RecurringAdControls, NewRecurringAdForm } from './controls';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 export const metadata: Metadata = { title: 'Marketing · Recurring social ads', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -135,7 +136,7 @@ export default async function RecurringAdsPage() {
                           </Badge>
                           <span className="capitalize">{run.platform}</span>
                           <span className="text-muted">#{run.occurrence + 1} · {fmtDate(run.ran_at)}</span>
-                          {run.permalink_url && <a href={run.permalink_url} className="text-brand-text underline" rel="noreferrer noopener" target="_blank">View</a>}
+                          {run.permalink_url && <a href={safeWebLink(run.permalink_url) ?? undefined} className="text-brand-text underline" rel="noreferrer noopener" target="_blank">View</a>}
                           {run.error_message && <span className="text-muted">{run.error_message}</span>}
                         </li>
                       ))}

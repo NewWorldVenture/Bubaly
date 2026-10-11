@@ -302,7 +302,10 @@ export async function prepareAssistantTurn(input: AssistantTurnInput): Promise<
   // `calendar_createEvent`) are different strings, so `mergeToolSets` could not
   // see them as one tool, and the model would be offered the same capability
   // twice under two names.
-  const assistantTools = buildAssistantTools(supabase, { familyId, userId, memberId: acting?.id ?? null, role: input.role ?? null, members: memberRows, tz: input.tz });
+  // The caller's REAL role, not scope.role: that falls back to 'adult' when
+  // neither the roster nor the request names one, and a role nobody has is
+  // never a manager (AssistantCtx.role).
+  const assistantTools = buildAssistantTools(supabase, { familyId, userId, memberId: acting?.id ?? null, role: acting?.role ?? input.role ?? null, members: memberRows, tz: input.tz });
   const actionTools = buildActionTools({ supabase, familyId, userId });
   const covered = new Set(
     [...assistantTools, ...actionTools]

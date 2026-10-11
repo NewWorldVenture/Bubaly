@@ -17,6 +17,13 @@ const state = vi.hoisted(() => ({
   audits: 0,
 }));
 
+// The admin gates also ask lib/auth/super-admin-assurance whether the session
+// proved its authenticator; this file is not about step-up, so it says yes.
+vi.mock('@/lib/auth/super-admin-assurance', () => ({
+  superAdminAssurance: async () => ({ ok: true }),
+  decideSuperAdminAssurance: () => ({ ok: true }),
+  SUPER_ADMIN_STEP_UP_PATH: '/auth/step-up?next=%2Fadmin',
+}));
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('@/lib/email', () => ({ APP_URL: 'https://www.bubaly.com', sendReactEmail: async () => state.result }));

@@ -35,9 +35,13 @@ export async function GET(req: NextRequest) {
     // `.limit(N)` is not a bound — PostgREST caps a response at db-max-rows
     // whatever the client asked for, so this quietly read 1,000. `max` is the
     // same ceiling, honoured by paging to it. See lib/supabase/read-all.ts.
+    //
+    // Rules of OPEN families only: a closed account (families.closed_at) is not
+    // paid allowances, whatever its subscription row still says.
     const { rows: rules, error } = await readAll((from, to) => supabase
       .from('allowance_rules')
-      .select('id, family_id, child_wallet_id, amount_cents, cadence, split, next_run_on, last_run_on, created_by')
+      .select('id, family_id, child_wallet_id, amount_cents, cadence, split, next_run_on, last_run_on, created_by, family:families!inner(closed_at)')
+      .is('family.closed_at', null)
       .eq('is_active', true)
       .lte('next_run_on', today)
       .order('id')

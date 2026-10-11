@@ -8,15 +8,16 @@
 //        (family_conversation_preferences) and recipient-only chat notices.
 //
 // Production applies migrations by hand, and its ledger is well behind both.
-// The application ships first, so every path that needs one of the new objects
-// must refuse unavailable privacy-sensitive operations. Harmless preferences
-// may use a device-local fallback, with a warning ONCE in the console,
-// naming the migration that would bring it.
+// The application ships first, so until each object exists the path that needs
+// it does what the previous production build (82f2db1) did — the fallbacks live
+// in legacy-schema.ts — with a warning ONCE in the console naming the migration
+// that would bring it. Once the object exists the new path runs unchanged.
 //
 // The recognition is narrow on purpose. A missing-object error counts only when
-// it names exactly the object the caller asked about, so an RPC that exists but
-// fails inside (a missing helper it calls, a permission error, a constraint) is
-// reported as the failure it is instead of being quietly downgraded.
+// it names exactly the object the caller asked about (in its message, details
+// or hint), so an RPC that exists but fails inside (a missing helper it calls,
+// a permission error, a constraint) is reported as the failure it is instead of
+// being quietly downgraded.
 //
 //   function  PGRST202 (PostgREST schema cache) / 42883 undefined_function
 //   table     PGRST205 (PostgREST schema cache) / 42P01 undefined_table
@@ -34,6 +35,17 @@ export type SchemaObject =
   | { kind: 'table'; name: string; migration: MessagingMigration }
   | { kind: 'column'; table: string; name: string; migration: MessagingMigration };
 
+/**
+ * An object to recognise as missing, without the migration that would add it.
+ * isMissingSchemaObject reads only these fields, so a caller outside messaging
+ * (lib/marketplace/schema-compat.ts) names its own objects with this shape.
+ * A view is a `table` here: PostgREST and Postgres answer a missing view with
+ * the same PGRST205 / 42P01.
+ */
+export type SchemaObjectRef =
+  | { kind: 'function' | 'table'; name: string }
+  | { kind: 'column'; table: string; name: string };
+
 /** Every object the messaging paths may find missing, with the migration that adds it. */
 export const MESSAGING_SCHEMA = {
   ensureFamilyConversation: { kind: 'function', name: 'ensure_family_conversation', migration: '0475' },
@@ -41,12 +53,14 @@ export const MESSAGING_SCHEMA = {
   toggleReaction: { kind: 'function', name: 'toggle_family_message_reaction', migration: '0475' },
   markReadThrough: { kind: 'function', name: 'mark_conversation_read_through', migration: '0475' },
   conversationOverview: { kind: 'function', name: 'family_conversation_overview', migration: '0475' },
+  findFamilyMessage: { kind: 'function', name: 'find_family_message', migration: '0475' },
+  sendFamilyMessage: { kind: 'function', name: 'send_family_message', migration: '0475' },
   isFamilyChat: { kind: 'column', table: 'family_conversations', name: 'is_family_chat', migration: '0475' },
   messageIdempotencyKey: { kind: 'column', table: 'family_messages', name: 'idempotency_key', migration: '0475' },
   conversationPreferences: { kind: 'table', name: 'family_conversation_preferences', migration: '0476' },
 } as const satisfies Record<string, SchemaObject>;
 
-const CODES: Record<SchemaObject['kind'], readonly string[]> = {
+const CODES: Record<SchemaObjectRef['kind'], readonly string[]> = {
   function: ['PGRST202', '42883'],
   table: ['PGRST205', '42P01'],
   column: ['PGRST204', '42703'],
@@ -73,14 +87,14 @@ function namesColumn(message: string, table: string, column: string): boolean {
 }
 
 /** True only when `error` says that exactly this object does not exist. */
-export function isMissingSchemaObject(error: unknown, object: SchemaObject): boolean {
+export function isMissingSchemaObject(error: unknown, object: SchemaObject | SchemaObjectRef): boolean {
   if (!error || typeof error !== 'object') return false;
-  const { code, message } = error as { code?: unknown; message?: unknown };
+  const { code, message, details, hint } = error as { code?: unknown; message?: unknown; details?: unknown; hint?: unknown };
   if (typeof code !== 'string' || typeof message !== 'string') return false;
   if (!CODES[object.kind].includes(code)) return false;
-  return object.kind === 'column'
-    ? namesColumn(message, object.table, object.name)
-    : namesIdentifier(message, object.name);
+  return [message, details, hint].some((text) => typeof text === 'string' && (object.kind === 'column'
+    ? namesColumn(text, object.table, object.name)
+    : namesIdentifier(text, object.name)));
 }
 
 function describe(object: SchemaObject): string {

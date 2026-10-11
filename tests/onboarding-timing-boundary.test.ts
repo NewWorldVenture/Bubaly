@@ -11,7 +11,15 @@ import { analyzeOnboarding } from '@/lib/onboarding/ttv-audit';
 const state = vi.hoisted(() => ({ db: null as unknown, admin: true }));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: vi.fn(() => state.db) }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: async () => ({}), isSuperAdmin: async () => state.admin }));
-vi.mock('next/navigation', () => ({ notFound: () => { throw new Error('NOT_FOUND'); } }));
+vi.mock('next/navigation', () => ({
+  notFound: () => { throw new Error('NOT_FOUND'); },
+  redirect: (to: string) => { throw new Error(`REDIRECT:${to}`); },
+}));
+// Both pages now ask for the admin step-up; this suite is about what they render once past it.
+vi.mock('@/lib/auth/super-admin-assurance', () => ({
+  superAdminAssurance: async () => ({ ok: true }),
+  SUPER_ADMIN_STEP_UP_PATH: '/auth/step-up?next=%2Fadmin',
+}));
 vi.mock('@/lib/i18n/server', async () => {
   const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
   return { getTranslations: async () => (key: string, vars?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, vars) };

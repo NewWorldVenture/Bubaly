@@ -69,18 +69,12 @@ export const AI_FACT_SOURCES: MemorySource[] = ['ai_conversation', 'ai_inferred'
  */
 export const SENSITIVE_MEMORY_CATEGORIES: FactCategory[] = ['medical', 'account'];
 
-// Every form of each word is spelled out: the list matches WHOLE words, so a
-// stem never matches. `diagnos`, `therap` and `pregnan` used to be stems, and
-// matched nothing ("diagnosed", "therapist" and "pregnant" have no word
-// boundary inside them), and the singular-only entries missed their plurals:
-// "Mom is pregnant" and "Two prescriptions to refill" were ordinary memories
-// a child was shown (AI-001).
-const SENSITIVE_TERMS = new RegExp(`\\b(?:${[
-  'ssn', 'social security', 'passports? (?:no|numbers?)', 'passwords?', 'passcodes?', 'pins?',
-  'banks?', 'banking', 'routing', 'account numbers?', 'card numbers?', 'credit cards?', 'iban',
-  'allerg(?:y|ies|ic)', 'diagnos(?:e|ed|es|is|ing|tic|tics)', 'prescriptions?', 'prescrib(?:e|ed|es|ing)',
-  'medications?', 'therap(?:y|ies|ist|ists|eutic)', 'hiv', 'pregnan(?:t|cy|cies)', 'salar(?:y|ies)',
-].join('|')})\\b`, 'i');
+// Stems carry `\w*` and nouns their plural: the closing `\b` used to sit
+// straight after `diagnos`, `therap` and `pregnan`, so none of them ever
+// matched a real word ("diagnosis", "therapist", "pregnant"), and "passwords"
+// or "medications" slipped past as non-sensitive. The verb forms count too:
+// "Prescribed antibiotics on Monday" is a prescription (AI-001).
+const SENSITIVE_TERMS = /\b(ssn|social security|passports? (?:no|numbers?)|passwords?|passcodes?|pins?|bank\w*|routing|account numbers?|card numbers?|credit cards?|iban|allerg(?:y|ies|ic)|diagnos\w*|prescriptions?|prescrib\w*|medications?|therap\w*|hiv|pregnan\w*|salary|salaries)\b/i;
 
 /**
  * True when a memory should not be written by the assistant: the category is
@@ -413,7 +407,10 @@ async function rememberConfirmed(
     console.error('[service:memory] fact insert failed', error);
     return fail(describeDbError(error, 'Could not save that memory.'), { code: SERVICE_CODES.db });
   }
-  await recordActivitySafely(scope, { action: 'create', agent: 'memory', title: `Remembered ${input.key}: ${input.content}`, href: '/dashboard/knowledge', memberId: input.memberId });
+  // The label only, never the value: activity rows (agent_activity, audit)
+  // are readable by every family member and outlive `forgetFact`, so a value
+  // written here would survive the forget it was meant to honour.
+  await recordActivitySafely(scope, { action: 'create', agent: 'memory', title: `Remembered ${input.key}`, href: '/dashboard/knowledge', memberId: input.memberId });
   return ok({ kind: 'fact', fact: data, updated: false });
 }
 
@@ -789,6 +786,11 @@ export async function confirmFact(scope: ServiceScope, suggestionId: string): Pr
     }
     return ok({ fact: fact ?? null, alreadyAccepted: true });
   }
+  // A dismissal is permanent (see `forgetFact`): a dismissed card is not
+  // waiting to be confirmed, and only an open one may become a fact.
+  if (suggestion.status !== 'suggested') {
+    return fail('That suggestion was already dismissed.', { code: SERVICE_CODES.invalidInput });
+  }
 
   // Validate the stored timestamp without reformatting it: PostgreSQL can
   // return fractional seconds more precise than the JavaScript clock.
@@ -840,6 +842,10 @@ export async function confirmFact(scope: ServiceScope, suggestionId: string): Pr
     .update({ status: 'accepted', fact_id: fact.id })
     .eq('family_id', scope.familyId)
     .eq('id', suggestionId)
+    // Compare-and-set: two concurrent confirms (or a confirm racing a
+    // dismissal) both read 'suggested'; only one may flip it. The loser
+    // matches no row and takes the rollback below, so one card is one fact.
+    .eq('status', 'suggested')
     .select('id');
   // The fact exists; leaving the card open would let it be confirmed twice —
   // and an accept that matched no row leaves it open exactly as an error does,
@@ -853,7 +859,7 @@ export async function confirmFact(scope: ServiceScope, suggestionId: string): Pr
     return fail(updateError ? describeDbError(updateError, 'Could not confirm that memory.') : 'Could not confirm that memory.', { code: SERVICE_CODES.db });
   }
 
-  await recordActivitySafely(scope, { action: 'confirm', agent: 'memory', title: `Confirmed: ${fact.label} — ${fact.value}`, href: '/dashboard/knowledge', memberId: fact.member_id });
+  await recordActivitySafely(scope, { action: 'confirm', agent: 'memory', title: `Confirmed: ${fact.label}`, href: '/dashboard/knowledge', memberId: fact.member_id });
   return ok({ fact, alreadyAccepted: false });
 }
 

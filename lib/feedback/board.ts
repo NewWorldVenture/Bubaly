@@ -3,7 +3,7 @@
 // label/colour lookups, the roadmap pipeline, and the ranking/toggle helpers the
 // server page and client components share. No Supabase, no React — just data.
 
-import { feedbackAttachmentPathFromUrl } from '@/lib/storage/feedback-attachment-url';
+import { feedbackAttachmentObjectPath } from '@/lib/storage/feedback-attachment-url';
 
 export type FeedbackStatus = 'under_review' | 'planned' | 'in_progress' | 'shipped' | 'declined';
 export type FeedbackCategory =
@@ -152,8 +152,9 @@ export type NormalizedIdea = {
 };
 
 /** Validate + normalize a draft. Returns an error string, or the clean row.
- *  Title is the only required field ("All fields optional" applies to the rest). */
-export function normalizeIdea(draft: IdeaDraft): { ok: false; error: string } | { ok: true; value: NormalizedIdea } {
+ *  Title is the only required field ("All fields optional" applies to the rest).
+ *  `authorId`: the submitter, whose own folder an attachment must be in. */
+export function normalizeIdea(draft: IdeaDraft, { authorId }: { authorId?: string } = {}): { ok: false; error: string } | { ok: true; value: NormalizedIdea } {
   const title = (draft.title ?? '').trim();
   if (!title) return { ok: false, error: 'Give your idea a short title.' };
   if (title.length > TITLE_MAX) return { ok: false, error: `Keep the title under ${TITLE_MAX} characters.` };
@@ -166,12 +167,16 @@ export function normalizeIdea(draft: IdeaDraft): { ok: false; error: string } | 
 
   // The attachment is shown to the super admin, whose browser fetches it. A
   // free-text URL let any signed-in user point that fetch at a server of their
-  // choosing — a beacon that reports when an admin looked, and from where. The
-  // uploader only ever produces this project's own feedback-attachments URL, so
-  // that is the only thing accepted here; the admin view re-checks on render,
-  // because RLS lets a row be inserted without passing through this function.
+  // choosing — a beacon that reports when an admin looked, and from where. So
+  // only an object in this project's feedback-attachments bucket is accepted,
+  // in the submitter's own folder: what the uploader produces, which as of 0450
+  // is the bare `<user>/<object>` path (a check for the old public URL alone
+  // refused every screenshot), or that older public URL. It is stored as the
+  // path. The admin view re-checks on render, because RLS lets a row be
+  // inserted without passing through this function.
   const image = (draft.imageUrl ?? '').trim();
-  if (image && !feedbackAttachmentPathFromUrl(image, process.env.NEXT_PUBLIC_SUPABASE_URL)) {
+  const imagePath = image ? feedbackAttachmentObjectPath(image, process.env.NEXT_PUBLIC_SUPABASE_URL) : null;
+  if (image && (!imagePath || (authorId !== undefined && imagePath.split('/')[0] !== authorId))) {
     return { ok: false, error: 'Attach the screenshot with the upload button rather than a link.' };
   }
   return {
@@ -184,7 +189,7 @@ export function normalizeIdea(draft: IdeaDraft): { ok: false; error: string } | 
       impact: isFeedbackImpact(draft.impact) ? draft.impact : 'helpful',
       audience: isFeedbackAudience(draft.audience) ? draft.audience : 'me',
       kind: isFeedbackKind(draft.kind) ? draft.kind : 'idea',
-      imageUrl: image ? image : null,
+      imageUrl: imagePath,
     },
   };
 }

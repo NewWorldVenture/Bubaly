@@ -22,7 +22,9 @@ function fixture() {
     marketing_push_campaigns: [{ id: 'campaign', title: 'Fixture', status: 'draft', deleted_at: null, recipients: 0, sent: 0, failed: 0, skipped: 0, metadata: { retained: true } }],
     push_devices: [{ id: 'device-a', user_id: 'user-a', enabled: true, provider: 'fcm', token: 'fixture-token-a' }],
     profiles: [{ id: 'user-a', email: 'user@example.test' }],
-    marketing_suppressions: [], family_members: [], family_ai_settings: [], user_preferences: [], notifications: [],
+    marketing_suppressions: [], family_members: [], family_ai_settings: [], notifications: [],
+    // Marketing push is opt-in: the fixture's one account has said yes.
+    user_preferences: [{ user_id: 'user-a', push_enabled: true, notification_prefs: { marketingPush: true } }],
   });
   state.db = f.db;
   return f;
@@ -70,6 +72,7 @@ describe('marketing push outcomes through the actual action, core sender and pag
     const f = fixture();
     f.tables.profiles.push({ id: 'user-b', email: 'second@example.test' });
     f.tables.push_devices.push({ ...f.tables.push_devices[0], id: 'device-b', user_id: 'user-b' });
+    f.tables.user_preferences.push({ user_id: 'user-b', push_enabled: true, notification_prefs: { marketingPush: true } });
     state.send.mockImplementation(async () => {
       // Audience and all consent reads have finished; fail the next user's
       // device query after one real sender path has already accepted a device.
