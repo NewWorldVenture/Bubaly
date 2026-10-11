@@ -601,7 +601,12 @@ describe('planRequest with the scripted provider', () => {
     expect(result.ok && result.data.kind === 'plan' && result.data.requiresApproval).toBe(true);
     const rows = ledger.calls.find((c) => c.table === 'ai_plan_steps' && c.kind === 'insert')!.payload as Row[];
     expect(rows.filter((r) => r.step_type === 'act').every((r) => r.approval_required === true)).toBe(true);
-    expect(rows.filter((r) => r.step_type !== 'act').every((r) => r.approval_required === false)).toBe(true);
+    // A notification is a write too: it is delivered as `notifications.notify`
+    // through the same gate, so under "prepare" it waits like the acts do.
+    const notifies = rows.filter((r) => r.step_type === 'notify');
+    expect(notifies.length).toBeGreaterThan(0);
+    expect(notifies.every((r) => r.approval_required === true)).toBe(true);
+    expect(rows.filter((r) => r.step_type !== 'act' && r.step_type !== 'notify').every((r) => r.approval_required === false)).toBe(true);
     expect(ledger.calls.find((c) => c.table === 'ai_plans' && c.kind === 'insert')!.payload).toMatchObject({ requires_approval: true });
   });
 

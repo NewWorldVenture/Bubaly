@@ -23,7 +23,7 @@ import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '
 import { escapeLike } from '@/lib/supabase/escape-like';
 import { readAllInChunks } from '@/lib/supabase/chunked-in';
 import { makeKey } from '../idempotency';
-import { scopeNow } from '../scope';
+import { familyInstantIso, scopeNow } from '../scope';
 import { choreRepeats, nextChoreDueAt } from '@/lib/chores/respawn';
 import { getTranslations } from '@/lib/i18n/server';
 
@@ -541,6 +541,23 @@ function choreDrift(found: ChoreCreation, wanted: ChoreContent, assigneeId: stri
 }
 
 /**
+ * A chore's due time as the instant it means. A zone-less value — the board's
+ * date box, the planner's `localTime(...)`, the assistant's "Friday 17:00" — is
+ * a reading on the FAMILY's clock. Written raw into the `timestamptz` it was
+ * read in the database's zone (UTC): "Friday 5pm" showed as due at 10am in Los
+ * Angeles and a date-only chore landed on the evening before.
+ *
+ * `createChore` applies it; `tasks.assignChore` applies it before calling
+ * `assignChore`, whose other callers (`createChore`, the respawn) already hand
+ * it an instant.
+ */
+export async function choreDueAt(scope: ServiceScope, value: string | null | undefined): Promise<ServiceResult<string | null>> {
+  if (!value?.trim()) return ok(null);
+  const at = familyInstantIso(value, scope.tz);
+  return at ? ok(at) : fail((await getTranslations())('chores.dueAtUnreadable'), { code: SERVICE_CODES.invalidInput });
+}
+
+/**
  * Create a chore, optionally assigning it in the same call.
  *
  * If the assignment insert fails the chore is deleted again: a chore nobody is
@@ -573,6 +590,9 @@ export async function createChore(
   if (input.points != null && (!Number.isFinite(input.points) || input.points < 0)) {
     return fail('A chore cannot be worth negative points.', { code: SERVICE_CODES.invalidInput });
   }
+  const due = await choreDueAt(scope, input.dueAt);
+  if (!due.ok) return due;
+  const dueAt = due.data;
 
   /** The `chores` columns this create chooses, as the insert below writes them. */
   const choreRow: ChoreContent = {
@@ -581,7 +601,7 @@ export async function createChore(
     points: input.points ?? 10,
     priority: input.priority ?? 'medium',
     recurrence: input.recurrence ?? 'none',
-    due_at: input.dueAt ?? null,
+    due_at: dueAt,
     requires_approval: input.requiresApproval ?? true,
     ...(input.icon !== undefined ? { icon: input.icon } : {}),
   };
@@ -630,7 +650,7 @@ export async function createChore(
         const assigned = await assignChore(scope, {
           choreId: chore.id,
           memberId: input.assigneeId,
-          dueAt: input.dueAt ?? null,
+          dueAt,
           idempotencyKey: key,
         });
         if (!assigned.ok) {
@@ -756,7 +776,7 @@ export async function respawnChoreAssignment(
   scope: ServiceScope,
   input: { assignment: { id: string; chore_id: string; member_id: string; due_at: string | null }; recurrence: string | null | undefined },
 ): Promise<ServiceResult<{ assignment: ChoreAssignment | null; respawned: boolean }>> {
-  const dueAt = nextChoreDueAt(input.assignment.due_at, input.recurrence, scopeNow(scope).toISOString());
+  const dueAt = nextChoreDueAt(input.assignment.due_at, input.recurrence, scopeNow(scope).toISOString(), scope.tz);
   if (!dueAt) return ok({ assignment: null, respawned: false });
 
   const { data: open, error: openError } = await scope.db
@@ -899,7 +919,7 @@ export async function respawnMissingChoreAssignments(
 export async function completeChoreAssignment(scope: ServiceScope, assignmentId: string): Promise<ServiceResult<ChoreAssignment>> {
   const { data: assignment, error: readError } = await scope.db
     .from('chore_assignments')
-    .select('id, chore_id')
+    .select('id, chore_id, member_id, status')
     .eq('id', assignmentId)
     .eq('family_id', scope.familyId)
     .maybeSingle();
@@ -908,6 +928,22 @@ export async function completeChoreAssignment(scope: ServiceScope, assignmentId:
     return fail(describeDbError(readError, 'Could not load that chore.'), { code: SERVICE_CODES.db });
   }
   if (!assignment) return fail('That chore could not be found.', { code: SERVICE_CODES.notFound });
+
+  // 0374's rule, in code: your own assignment, or a manager's decision. The
+  // run executor writes with the service client, which RLS and 0374's
+  // settled-row guard both let through (`auth.uid() is null`), so a teen's
+  // assistant could mark a sibling's chore done — or pull an approved one, and
+  // its points, back to "submitted". `can_manage_family` is parent or adult
+  // (MANAGER_ROLES); a system actor (a cron) is the household itself.
+  const decidesForAnyone = scope.role === 'parent' || scope.role === 'adult' || scope.role === 'system';
+  if (!decidesForAnyone) {
+    if (assignment.member_id !== scope.memberId) {
+      return fail((await getTranslations())('chores.notYourAssignment'), { code: SERVICE_CODES.denied });
+    }
+    if (assignment.status === 'approved') {
+      return fail((await getTranslations())('chores.approvedIsSettled'), { code: SERVICE_CODES.denied });
+    }
+  }
 
   const { data: chore, error: choreError } = await scope.db
     .from('chores')

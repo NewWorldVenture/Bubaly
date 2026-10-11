@@ -30,7 +30,7 @@ import { settle } from '@/lib/supabase/settle';
 import { fail, ok, SERVICE_CODES, type ServiceResult } from '@/lib/services/types';
 import { toCardData, type ApprovalCardData } from '@/lib/services/approvals';
 import { scopeForSystem } from '@/lib/services/scope';
-import { describeProgress, displayRunState, summarizeSteps, type RunState, type StepState } from './states';
+import { describeProgress, displayRunState, EDITABLE_STEP_STATES, summarizeSteps, type RunState, type StepState } from './states';
 import {
   loadRunDetail as loadRunCore, type PlanRow, type RequestRow, type RunEventRow, type RunRow, type StepRow,
 } from './store';
@@ -164,8 +164,8 @@ export type RunView = {
   answered: { question: string; answer: string }[];
 };
 
-/** Step states a manager may still change before they run (or run again). */
-export const EDITABLE_STEP_STATES: readonly StepState[] = ['queued', 'ready', 'awaiting_approval', 'failed', 'blocked', 'cancelled'];
+/** Step states a manager may still change before they run (or run again); one list, shared with `editStepInput`. */
+export { EDITABLE_STEP_STATES };
 
 /** "1.2s · 850 tokens" — the only fields of a `model_call` payload a reader gets. */
 function modelCallMetrics(payload: unknown): string | null {

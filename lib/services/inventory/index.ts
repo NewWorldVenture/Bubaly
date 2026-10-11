@@ -23,14 +23,21 @@ import { recordActivitySafely } from '../activity';
 import { scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { escapeLike } from '@/lib/supabase/escape-like';
+import { readAll } from '@/lib/supabase/read-all';
+import { getTranslations } from '@/lib/i18n/server';
 
 export type InventoryItemRow = Tables<'inventory_items'>;
 export type HomeLocationRow = Tables<'home_locations'>;
 export type InventoryMoveRow = Tables<'inventory_moves'>;
 
-const MAX_ITEMS = 2000;
+// Real ceilings, paged to with `readAll`: PostgREST answers ONE request with at
+// most `db-max-rows` (1,000 on a default project) whatever `.limit()` asks for,
+// so the `.limit(2000)` these replaced searched the 1,000 most recently touched
+// items and answered "Nothing in the inventory matches" for the passport that
+// never moves. Reaching one now fails the read rather than searching a prefix.
+const MAX_ITEMS = 10_000;
 const MAX_LOCATIONS = 500;
-const MAX_MOVES = 2000;
+const MAX_MOVES = 10_000;
 const DEFAULT_LIMIT = 5;
 
 export type InventoryFind = {
@@ -59,35 +66,47 @@ async function readLocations(scope: ServiceScope): Promise<ServiceResult<HomeLoc
   return ok(data ?? []);
 }
 
+/**
+ * Every live item, so a search covers the whole catalogue. A catalogue past
+ * the ceiling is a failed read, never a searched prefix: "nothing matches" has
+ * to mean the catalogue holds no such item.
+ */
 async function readItems(scope: ServiceScope): Promise<ServiceResult<InventoryItemRow[]>> {
-  const { data, error } = await scope.db
+  const { rows, error, truncated } = await readAll<InventoryItemRow>((from, to) => scope.db
     .from('inventory_items')
     .select('*')
     .eq('family_id', scope.familyId)
     .neq('status', 'disposed')
     .order('updated_at', { ascending: false })
-    .limit(MAX_ITEMS);
+    .order('id', { ascending: true })
+    .range(from, to), { max: MAX_ITEMS });
+  if (truncated) {
+    console.error('[service:inventory] items read reached its ceiling', { familyId: scope.familyId, max: MAX_ITEMS });
+    return fail((await getTranslations())('inventory.tooLargeToSearch'), { code: SERVICE_CODES.db });
+  }
   if (error) {
     console.error('[service:inventory] items read failed', error);
     return fail(describeDbError(error, 'Could not load the home inventory.'), { code: SERVICE_CODES.db });
   }
-  return ok(data ?? []);
+  return ok(rows);
 }
 
+/** The whole move history of the hit items: "last confirmed" is only true of a complete one. */
 async function readMovesFor(scope: ServiceScope, itemIds: string[]): Promise<ServiceResult<InventoryMoveRow[]>> {
   if (itemIds.length === 0) return ok([]);
-  const { data, error } = await scope.db
+  const { rows, error, truncated } = await readAll<InventoryMoveRow>((from, to) => scope.db
     .from('inventory_moves')
     .select('*')
     .eq('family_id', scope.familyId)
     .in('item_id', itemIds)
     .order('moved_at', { ascending: false })
-    .limit(MAX_MOVES);
-  if (error) {
-    console.error('[service:inventory] moves read failed', error);
-    return fail(describeDbError(error, 'Could not load the move history.'), { code: SERVICE_CODES.db });
+    .order('id', { ascending: true })
+    .range(from, to), { max: MAX_MOVES });
+  if (error || truncated) {
+    console.error('[service:inventory] moves read failed', error ?? { familyId: scope.familyId, max: MAX_MOVES });
+    return fail(truncated ? 'Could not load the move history.' : describeDbError(error, 'Could not load the move history.'), { code: SERVICE_CODES.db });
   }
-  return ok(data ?? []);
+  return ok(rows);
 }
 
 /** The rooms and containers, for a caller that needs to offer or resolve one. */

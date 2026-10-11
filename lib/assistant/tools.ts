@@ -17,15 +17,18 @@ import { briefingCalendarBounds, instantCalendarBounds } from '@/lib/briefing/ca
 import type { ParentApprovalRow, RenewalRow, DocumentRow, NeedsReader } from '@/lib/home/needs-sources';
 import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
 import { reminderAttention } from '@/lib/dashboard/reminder-attention';
-import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
+import { dayKeyInTz, familyInstantIso, zonedDayBoundsMs } from '@/lib/services/scope';
 import { nextRemindAt } from '@/lib/reminders/details';
 import { escapeLike } from '@/lib/supabase/escape-like';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
 import { ensureTodoListId } from '@/lib/services/tasks';
 import { createGoal } from '@/lib/services/goals';
+import { normalizeEventTimes } from '@/lib/services/calendar';
+import { allDayBoundsAsDates } from '@/lib/assistant/all-day-dates';
+import { reminderInstant } from '@/lib/services/reminders';
 import { SERVICE_CODES } from '@/lib/services/types';
-import { ROLE_ORDER, type MemberRole } from '@/lib/constants/roles';
+import { isManager, ROLE_ORDER, type MemberRole } from '@/lib/constants/roles';
 
 type DB = SupabaseClient<Database>;
 
@@ -119,6 +122,11 @@ async function ensureTodoList(supabase: DB, familyId: string, memberId: string |
 
 export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[] {
   const memberNames = ctx.members.map((m) => m.display_name).join(', ') || 'none';
+  // The family's zone, for every time the model names. The prompt asks it to
+  // speak the family's clock, so what arrives is "2026-06-24T15:00:00" with no
+  // zone — and a raw write of that into a `timestamptz` was read in the
+  // database's zone (UTC), storing a Los Angeles 9am reminder as 09:00Z.
+  const familyTz = ctx.tz || 'UTC';
 
   return [
     {
@@ -128,8 +136,8 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         type: 'object',
         properties: {
           title: { type: 'string', description: 'Event title' },
-          starts_at: { type: 'string', description: 'ISO 8601 start datetime, e.g. 2026-06-24T15:00:00' },
-          ends_at: { type: 'string', description: 'ISO 8601 end datetime (optional)' },
+          starts_at: { type: 'string', description: 'ISO 8601 start datetime in the family time zone, e.g. 2026-06-24T15:00:00; for all_day use YYYY-MM-DD' },
+          ends_at: { type: 'string', description: 'ISO 8601 end datetime (optional). For all_day use the exclusive later date YYYY-MM-DD; omit for one day' },
           all_day: { type: 'boolean' },
           category: { type: 'string', enum: EVENT_CATEGORIES },
           location: { type: 'string' },
@@ -143,9 +151,20 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         const starts_at = str(a.starts_at);
         if (!title || !starts_at) return { ok: false, error: 'title and starts_at are required' };
         const category = EVENT_CATEGORIES.includes(str(a.category)) ? (str(a.category) as Database['public']['Tables']['calendar_events']['Insert']['category']) : 'general';
+        // The times `calendar.createEvent` — and this request approved and
+        // replayed through it — would write: a zone-less time on the family's
+        // clock, and an all-day event as whole-day DATE labels or not at all.
+        // Raw, Postgres read the first as UTC and stored the second as a row
+        // that made every calendar read covering it fail. A zone-less midnight
+        // on an all-day event is the date it names in chat; the trust wrapper
+        // reads it the same way before it files a card (all-day-dates.ts).
+        const all_day = Boolean(a.all_day);
+        const bounds = allDayBoundsAsDates({ all_day, starts_at, ends_at: optStr(a.ends_at) });
+        const times = await normalizeEventTimes({ startsAt: str(bounds.starts_at), endsAt: optStr(bounds.ends_at), allDay: all_day }, familyTz, MODEL_READER.t);
+        if (!times.ok) return { ok: false, error: times.error };
         const { data, error } = await supabase.from('calendar_events').insert({
-          family_id: ctx.familyId, title, starts_at,
-          ends_at: optStr(a.ends_at), all_day: Boolean(a.all_day), category,
+          family_id: ctx.familyId, title, starts_at: times.data.startsAt,
+          ends_at: times.data.endsAt, all_day, category,
           location: optStr(a.location), description: optStr(a.description),
           assignee_id: resolveMember(ctx, a.assignee), created_by: ctx.userId,
         }).select('id').single();
@@ -170,13 +189,17 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         const title = str(a.title);
         if (!title) return { ok: false, error: 'title is required' };
         const points = Number.isFinite(a.points) ? Math.max(0, Math.round(a.points as number)) : 10;
+        // A zone-less due time is on the family's clock, as `tasks.createChore` reads it.
+        const dueText = optStr(a.due_at);
+        const due_at = dueText ? familyInstantIso(dueText, familyTz) : null;
+        if (dueText && !due_at) return { ok: false, error: MODEL_READER.t('chores.dueAtUnreadable') };
         const { data: chore, error } = await supabase.from('chores').insert({
-          family_id: ctx.familyId, title, points, due_at: optStr(a.due_at), created_by: ctx.userId,
+          family_id: ctx.familyId, title, points, due_at, created_by: ctx.userId,
         }).select('id').single();
         if (error) return toolFailure('create the chore', error);
         const memberId = resolveMember(ctx, a.assignee);
         if (memberId) {
-          const { error: assignmentError } = await supabase.from('chore_assignments').insert({ family_id: ctx.familyId, chore_id: chore.id, member_id: memberId, due_at: optStr(a.due_at) });
+          const { error: assignmentError } = await supabase.from('chore_assignments').insert({ family_id: ctx.familyId, chore_id: chore.id, member_id: memberId, due_at });
           if (assignmentError) {
             // A chore this call just created, so zero rows removed is a failed
             // rollback, not an absence. Logged; the failure is already being
@@ -259,10 +282,16 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         const priority = (['low', 'medium', 'high', 'urgent'].includes(str(a.priority)) ? str(a.priority) : 'medium') as Database['public']['Tables']['family_reminders']['Insert']['priority'];
         const recurrence = (['none', 'daily', 'weekdays', 'weekly', 'biweekly', 'monthly', 'yearly'].includes(str(a.recurrence)) ? str(a.recurrence) : 'none') as Database['public']['Tables']['family_reminders']['Insert']['recurrence'];
         const memberId = resolveMember(ctx, a.assignee);
+        // As `reminders.create` stores it: a zone-less time is on the family's
+        // clock. Inserted raw, Postgres read it in its own zone (UTC), so a Los
+        // Angeles 9am reminder rang at 2am — and the same reminder approved and
+        // replayed through `reminders.create` landed seven hours away from it.
+        const remindAt = reminderInstant(remind_at, familyTz);
+        if (!remindAt) return { ok: false, error: MODEL_READER.t('reminders.timeUnreadable') };
         // Writes to family_reminders — the same service shown at /dashboard/reminders,
         // so AI-created reminders appear in the module, notifications, and home dashboard.
         const { error } = await supabase.from('family_reminders').insert({
-          family_id: ctx.familyId, created_by: ctx.userId, title, remind_at, notes: optStr(a.notes),
+          family_id: ctx.familyId, created_by: ctx.userId, title, remind_at: remindAt, notes: optStr(a.notes),
           kind: recurrence === 'none' ? 'time' : 'recurring', priority, recurrence,
           member_id: memberId, ai_suggested: true,
         });
@@ -302,7 +331,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         if (wroteNoRows(completed)) return toolFailure('complete the reminder', 'no rows updated');
         // Recurring → schedule the next occurrence (core columns only, so it's
         // safe regardless of the 0100 detail-columns migration state).
-        const next = r.remind_at && r.recurrence !== 'none' ? nextRemindAt(r.remind_at, r.recurrence) : null;
+        const next = r.remind_at && r.recurrence !== 'none' ? nextRemindAt(r.remind_at, r.recurrence, familyTz) : null;
         if (next) {
           const { error: nextError } = await supabase.from('family_reminders').insert({
             family_id: ctx.familyId, created_by: ctx.userId, title: r.title, notes: r.notes,
@@ -333,8 +362,12 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         required: ['title', 'remind_at'],
       },
       execute: async (a) => {
-        const q = str(a.title); const remind_at = str(a.remind_at);
-        if (!q || !remind_at) return { ok: false, error: 'title and remind_at are required' };
+        const q = str(a.title); const requested = str(a.remind_at);
+        if (!q || !requested) return { ok: false, error: 'title and remind_at are required' };
+        // On the family's clock, as `reminders.snooze` reads the same value
+        // when this move is approved and replayed.
+        const remind_at = reminderInstant(requested, familyTz);
+        if (!remind_at) return { ok: false, error: MODEL_READER.t('reminders.timeUnreadable') };
         const { data: rows, error: lookupError } = await supabase.from('family_reminders')
           .select('id, title').eq('family_id', ctx.familyId).eq('status', 'active').ilike('title', `%${escapeLike(q)}%`)
           .order('remind_at', { ascending: true, nullsFirst: false }).limit(1);
@@ -482,8 +515,16 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         const in14 = new Date(now.getTime() + 14 * 86400000).toISOString();
         const in30 = new Date(now.getTime() + 30 * 86400000).toISOString();
         const in45 = new Date(now.getTime() + 45 * 86400000).toISOString();
+        // Money decisions and chore sign-offs wait on a parent, and only a
+        // parent or adult is shown them — Home, Needs-you and the dashboard all
+        // read them for a manager and pass nothing otherwise. An unknown role
+        // is not a manager.
+        const role = knownRole(ctx.role);
+        const manager = role !== null && isManager(role);
         const [appr, ren, docs, dueRem, convEvents, signoff, grocery, todos] = await settleAll([
-          supabase.from('parent_approvals').select('id, kind, amount_cents, created_at').eq('family_id', ctx.familyId).eq('status', 'pending').limit(50),
+          manager
+            ? supabase.from('parent_approvals').select('id, kind, amount_cents, created_at').eq('family_id', ctx.familyId).eq('status', 'pending').limit(50)
+            : Promise.resolve({ data: [] as ParentApprovalRow[], error: null }),
           supabase.from('renewals').select('id, title, expires_at, reminder_days, status, created_at').eq('family_id', ctx.familyId).in('status', ['active', 'expired']).lte('expires_at', in45).limit(50),
           supabase.from('documents').select('id, title, expires_at').eq('family_id', ctx.familyId).not('expires_at', 'is', null).lte('expires_at', in30).limit(50),
           supabase.from('family_reminders').select('id, remind_at, status').eq('family_id', ctx.familyId).eq('status', 'active').not('remind_at', 'is', null).lte('remind_at', todayEnd.toISOString()).limit(100),
@@ -494,7 +535,9 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
             refine: (query) => query.not('assignee_id', 'is', null),
             limit: 200,
           }),
-          supabase.from('chore_assignments').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('status', 'submitted'),
+          manager
+            ? supabase.from('chore_assignments').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('status', 'submitted')
+            : Promise.resolve({ count: 0, error: null }),
           supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('is_checked', false),
           supabase.from('todo_items').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('is_done', false),
         ]);

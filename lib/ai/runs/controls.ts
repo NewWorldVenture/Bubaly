@@ -18,9 +18,11 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
+import { speaksForTheRequester } from '@/lib/ai/tools/first-person';
+import { getTranslations } from '@/lib/i18n/server';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
-import { canTransitionRun, isTerminalRunState, legacyStatusFor, type RunState, type StepState } from './states';
+import { canTransitionRun, EDITABLE_STEP_STATES, isTerminalRunState, legacyStatusFor, type RunState, type StepState } from './states';
 import {
   appendEvent, ledgerClient, loadPlanSteps, loadRun, savePlan, updateRequest, updateRun, updateStep,
   type PlanStepInput, type RunRow, type StepRow, type StoreOpts,
@@ -386,6 +388,17 @@ export async function editStepInput(
   const steps = loaded.data;
   const target = steps.find((s) => s.id === stepId);
   if (!target) return fail('That step is not part of this run.', { code: SERVICE_CODES.notFound });
+  // An edit changes what a step WILL do. One that already ran (or is running)
+  // has done it, and requeueing it with new words would do it again: the
+  // message sent twice. The run page offers Edit only in these states
+  // (lib/ai/runs/detail.ts); the server now agrees.
+  if (!EDITABLE_STEP_STATES.includes(target.status as StepState)) {
+    return fail((await getTranslations())('runs.stepAlreadyRan'), { code: SERVICE_CODES.invalidInput });
+  }
+  // Words said in someone's name are theirs to change (lib/ai/tools/first-person.ts).
+  if (speaksForTheRequester(target.tool_name) && scope.memberId !== run.requested_by_member_id) {
+    return fail((await getTranslations())('runs.notYoursToReword'), { code: SERVICE_CODES.denied });
+  }
 
   const requeue = new Set([stepId, ...collectDependents(steps, stepId).map((s) => s.id)]);
 
