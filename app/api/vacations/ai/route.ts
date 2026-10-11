@@ -16,6 +16,7 @@ import { suggestPacking } from '@/lib/vacations/packing';
 import { tripNights, dateRange } from '@/lib/vacations/dates';
 import { CONCIERGE_PLAN_MARKER, isConciergePlanRow, parseVacationAIOutput, type VacationAIPlan } from '@/lib/vacations/ai-output';
 import { wroteNoRows } from '@/lib/supabase/errors';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 export const runtime = 'nodejs';
 
@@ -147,8 +148,19 @@ export async function POST(req: NextRequest) {
     // "rebuild" — the same rule `lib/services/trips buildPlan` applies. A lost
     // response followed by a retry, or two tabs, used to stack a second full
     // itinerary on the first and overwrite the family's edited budget lines.
+    //
+    // This read is only the early answer, before a model is paid for. It is
+    // NOT what keeps two requests apart: both can pass it while neither has
+    // written. The claim below, taken after generation, is.
     const hasPlan = (items.data ?? []).length > 0 || a.length > 0;
-    if (hasPlan && body.rebuild !== true) return NextResponse.json({ error: t('ai.tripAlreadyHasAPlan') }, { status: 409 });
+    // `replaces` tells the client which question to ask. A rebuild removes only
+    // the rows the builder stamped (see below); a plan written by hand, by the
+    // assistant before it stamped its rows, or by this route before the stamp
+    // existed has nothing a rebuild can take away — so "Replace it?" would be a
+    // promise the route cannot keep, and the client asks "add alongside?" instead.
+    const replaces = a.some((row) => isConciergePlanRow(row) && !row.booked)
+      || (items.data ?? []).some((row) => isConciergePlanRow(row) && !row.booked);
+    if (hasPlan && body.rebuild !== true) return NextResponse.json({ error: t('ai.tripAlreadyHasAPlan'), code: 'has_plan', replaces }, { status: 409 });
     const range = trip.start_date && trip.end_date ? dateRange(trip.start_date, trip.end_date) : [];
     const system = `You are an expert family travel agent. Produce a realistic, family-friendly plan as STRICT JSON only (no prose, no markdown). Schema:
 {"activities":[{"name":string,"category":string,"location":string,"family_friendly":boolean,"cost":number}],
@@ -178,6 +190,48 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
       return NextResponse.json({ error: t('ai.aiBuilderIsTemporarilyUnavailable') }, { status: 502 });
     }
 
+    // THE CLAIM. Generation takes seconds, and everything read above is that
+    // old. A compare-and-set on the trip row's `updated_at` as it was read
+    // before generation (the 0070 trigger moves it on every update) is the
+    // one write two requests cannot both win: Postgres re-checks the WHERE
+    // against the row the first one left, so a second tab's build or rebuild,
+    // started from the same read, matches nothing and writes nothing. It also
+    // refuses a plan drafted for dates someone changed meanwhile. Zero rows is
+    // the losing side of the race, not a failure to save — answered as a 409.
+    // What it cannot fence without SQL is a request that READ the trip after
+    // another's claim while that other was still writing; the re-read below
+    // closes that to the other's write phase, which a model call outlasts.
+    // The column written is the title AS READ: under the fence it is unchanged
+    // by definition, and the write exists for the trigger's new `updated_at`
+    // (the generated Update type leaves `updated_at` to that trigger).
+    const { data: claimed, error: claimError } = await supabase.from('vacations')
+      .update({ title: trip.title })
+      .eq('id', vacationId).eq('family_id', familyId).eq('updated_at', trip.updated_at)
+      .select('id');
+    if (claimError) {
+      logDatabaseFailure('build claim', claimError);
+      return databaseUnavailable(t('ai.tripDataIsTemporarilyUnavailable'));
+    }
+    if (wroteNoRows(claimed)) return NextResponse.json({ error: t('ai.tripChangedWhileBuilding'), code: 'trip_changed' }, { status: 409 });
+
+    // What the trip holds NOW, after the claim — not only what it held before
+    // the model was called. A first build that finds a plan here was
+    // overtaken; a rebuild takes its candidates from here (see `replaceable`).
+    const fresh = await settleAll([
+      supabase.from('vacation_activities').select('id, booked, notes, updated_at').eq('family_id', familyId).eq('vacation_id', vacationId),
+      supabase.from('vacation_itinerary_items').select('id, booked, notes, updated_at').eq('family_id', familyId).eq('vacation_id', vacationId),
+    ]);
+    const freshError = fresh.find((result) => result.error)?.error;
+    if (freshError) {
+      logDatabaseFailure('build plan re-read', freshError);
+      return databaseUnavailable(t('ai.tripDataIsTemporarilyUnavailable'));
+    }
+    const [freshActivities, freshItems] = [fresh[0].data ?? [], fresh[1].data ?? []];
+    if (body.rebuild !== true && (freshActivities.length > 0 || freshItems.length > 0)) {
+      const overtakenReplaces = [...freshActivities, ...freshItems].some((row) => isConciergePlanRow(row) && !row.booked);
+      return NextResponse.json({ error: t('ai.tripAlreadyHasAPlan'), code: 'has_plan', replaces: overtakenReplaces }, { status: 409 });
+    }
+
     let added = { activities: 0, items: 0, budget: 0, packing: 0 };
     const createdActivityIds: string[] = [];
     const createdDayIds: string[] = [];
@@ -192,10 +246,23 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
     // parent added by hand never carries it; a row a parent has booked since is
     // a commitment, not a suggestion, and stays. Budgets are upserted per
     // category and days are reused per date, so neither stacks.
-    const priorActivities = body.rebuild === true ? a.filter((row) => isConciergePlanRow(row) && !row.booked) : [];
-    const priorItems = body.rebuild === true ? (items.data ?? []).filter((row) => isConciergePlanRow(row) && !row.booked) : [];
-    const removedActivityIds = new Set<string>();
-    const removedItemIds = new Set<string>();
+    //
+    // Each candidate carries the `updated_at` it had when the family asked —
+    // the read before the model was called — so a suggestion someone booked,
+    // un-stamped or edited in another tab during generation no longer matches
+    // its delete and is kept. A stamped row that appeared only since (another
+    // builder's, from the narrow window the claim leaves) is replaced as it now
+    // stands, so two builds do not stack.
+    const replaceable = (fresh: { id: string; booked: boolean; notes: string | null; updated_at: string }[], askedOn: { id: string; updated_at: string }[]) => {
+      const stampAsked = new Map(askedOn.map((row) => [row.id, row.updated_at]));
+      return fresh.filter((row) => isConciergePlanRow(row) && !row.booked).map((row) => ({ id: row.id, updated_at: stampAsked.get(row.id) ?? row.updated_at }));
+    };
+    const priorActivities = body.rebuild === true ? replaceable(freshActivities, a) : [];
+    const priorItems = body.rebuild === true ? replaceable(freshItems, items.data ?? []) : [];
+    // The rows the replace actually deleted, as the database returned them at
+    // that moment — what a rollback puts back. Never the pre-generation read.
+    const removedActivities: NonNullable<typeof activities.data> = [];
+    const removedItems: NonNullable<typeof items.data> = [];
     const originalBudgets = new Map((budgets.data ?? []).map((row) => [row.category, {
       id: row.id,
       planned_cents: row.planned_cents,
@@ -234,21 +301,22 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
       await removeRows('vacation_budgets', createdBudgetIds);
       // A rebuild removed the prior build's rows only after the new plan had
       // landed; failing after that puts back exactly the rows this request
-      // removed, as they were read. Logged, as above. Audit C1-S9-63.
-      const restoreItems = priorItems.filter((row) => removedItemIds.has(row.id));
-      if (restoreItems.length) {
-        const { data: restored, error } = await supabase.from('vacation_itinerary_items').insert(restoreItems.map(asInsert)).select('id');
+      // removed, as the delete returned them — not the read from before the
+      // model was called. Logged, as above; a restore that fails is a lost
+      // suggestion, which is why the replace is fenced to unbooked, stamped,
+      // unchanged rows in the first place. Audit C1-S9-63.
+      if (removedItems.length) {
+        const { data: restored, error } = await supabase.from('vacation_itinerary_items').insert(removedItems.map(asInsert)).select('id');
         if (error) logDatabaseFailure('build rollback vacation_itinerary_items restore', error);
-        else if ((restored?.length ?? 0) !== restoreItems.length) {
-          logDatabaseFailure('build rollback vacation_itinerary_items restore', new Error(`restored ${restored?.length ?? 0} of ${restoreItems.length}`));
+        else if ((restored?.length ?? 0) !== removedItems.length) {
+          logDatabaseFailure('build rollback vacation_itinerary_items restore', new Error(`restored ${restored?.length ?? 0} of ${removedItems.length}`));
         }
       }
-      const restoreActivities = priorActivities.filter((row) => removedActivityIds.has(row.id));
-      if (restoreActivities.length) {
-        const { data: restored, error } = await supabase.from('vacation_activities').insert(restoreActivities.map(asInsert)).select('id');
+      if (removedActivities.length) {
+        const { data: restored, error } = await supabase.from('vacation_activities').insert(removedActivities.map(asInsert)).select('id');
         if (error) logDatabaseFailure('build rollback vacation_activities restore', error);
-        else if ((restored?.length ?? 0) !== restoreActivities.length) {
-          logDatabaseFailure('build rollback vacation_activities restore', new Error(`restored ${restored?.length ?? 0} of ${restoreActivities.length}`));
+        else if ((restored?.length ?? 0) !== removedActivities.length) {
+          logDatabaseFailure('build rollback vacation_activities restore', new Error(`restored ${restored?.length ?? 0} of ${removedActivities.length}`));
         }
       }
       for (const category of changedBudgetCategories) {
@@ -324,22 +392,41 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
     }
     // Rebuild: the prior build's rows go only now, with the whole new plan in —
     // INSERT FIRST, then delete by id, for the reason the recommendations
-    // branch gives. Exactly the rows read above; the ERROR gates the response,
-    // the count does not, since a row gone since the read was already replaced
-    // by someone and is not a failure here. Audit C1-S9-63.
+    // branch gives. Each delete is FENCED at write time, not just chosen by
+    // id: still unbooked, still stamped, and `updated_at` exactly as it was
+    // when the family asked (see `replaceable`; the 0070 trigger moves it on
+    // every edit). A row another tab or parent booked, edited or un-stamped
+    // during generation, or while the new plan was being written, no longer
+    // matches and stays — with its tickets, which the activity delete would
+    // otherwise cascade. One builder insert is one statement, so its rows
+    // share one `updated_at` and this is a delete or two, not one per row.
+    // The ERROR gates the response; a short count is that fence at work, not a
+    // failure. Audit C1-S9-63.
+    const replaceRows = async (
+      table: 'vacation_activities' | 'vacation_itinerary_items',
+      rows: { id: string; updated_at: string }[],
+      into: Record<string, unknown>[],
+    ): Promise<unknown | null> => {
+      const byStamp = new Map<string, string[]>();
+      for (const row of rows) byStamp.set(row.updated_at, [...(byStamp.get(row.updated_at) ?? []), row.id]);
+      for (const [stamp, ids] of byStamp) {
+        const { data: removed, error } = await supabase.from(table).delete()
+          .eq('family_id', familyId).eq('vacation_id', vacationId).in('id', ids)
+          .eq('booked', false).like('notes', `%${escapeLike(CONCIERGE_PLAN_MARKER)}%`).eq('updated_at', stamp)
+          .select('*');
+        if (error) return error;
+        into.push(...(removed ?? []));
+        if ((removed?.length ?? 0) !== ids.length) console.warn(`[vacation-ai] build replace ${table}: ${ids.length - (removed?.length ?? 0)} row(s) changed since the re-read and were kept`);
+      }
+      return null;
+    };
     if (priorActivities.length) {
-      const ids = priorActivities.map((row) => row.id);
-      const { data: removed, error } = await supabase.from('vacation_activities').delete().eq('family_id', familyId).eq('vacation_id', vacationId).in('id', ids).select('id');
+      const error = await replaceRows('vacation_activities', priorActivities, removedActivities);
       if (error) return buildFailure(t('ai.couldNotSaveTheGenerated'), error);
-      for (const row of removed ?? []) removedActivityIds.add(row.id);
-      if (removedActivityIds.size !== ids.length) logDatabaseFailure('build replace vacation_activities', new Error(`removed ${removedActivityIds.size} of ${ids.length}`));
     }
     if (priorItems.length) {
-      const ids = priorItems.map((row) => row.id);
-      const { data: removed, error } = await supabase.from('vacation_itinerary_items').delete().eq('family_id', familyId).eq('vacation_id', vacationId).in('id', ids).select('id');
+      const error = await replaceRows('vacation_itinerary_items', priorItems, removedItems);
       if (error) return buildFailure(t('ai.couldNotSaveTheGenerated'), error);
-      for (const row of removed ?? []) removedItemIds.add(row.id);
-      if (removedItemIds.size !== ids.length) logDatabaseFailure('build replace vacation_itinerary_items', new Error(`removed ${removedItemIds.size} of ${ids.length}`));
     }
     // packing (rule-based, always solid)
     const master =(packing.data ?? []).length ? null : await supabase.from('vacation_packing_lists').insert({ family_id: familyId, vacation_id: vacationId, name: 'Master list', is_master: true, created_by: ctx!.user.id }).select('id').single();
@@ -365,15 +452,12 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
     const message = body.message?.trim();
     if (!message) return NextResponse.json({ error: t('ai.emptyMessage') }, { status: 400 });
 
-    let conversationId = body.conversationId;
-    if (!conversationId) {
-      const { data: convo, error } = await supabase.from('vacation_ai_conversations').insert({ family_id: familyId, vacation_id: vacationId, title: message.slice(0, 60), created_by: ctx.user.id }).select('id').single();
-      if (error) {
-        console.error('Vacation AI conversation write failed:', error);
-        return databaseUnavailable(t('ai.couldNotStartTheTrip'));
-      }
-      conversationId = convo.id;
-    } else {
+    // A FIRST message has no conversation yet, and it gets one only once the
+    // model has answered (below). Creating it here, before the call, left a
+    // conversation titled with the question behind every failed first message
+    // — and the client, never handed its id, made another on each retry.
+    let conversationId = body.conversationId ?? null;
+    if (conversationId) {
       const { data: conversation, error } = await supabase.from('vacation_ai_conversations').select('id').eq('id', conversationId).eq('family_id', familyId).eq('vacation_id', vacationId).maybeSingle();
       if (error) {
         logDatabaseFailure('conversation ownership read', error);
@@ -386,12 +470,16 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
     // appended to it in memory: both rows are persisted only after the model
     // answered. Persisting the user row first left it in the conversation when
     // the provider failed, so a retry fed the model a duplicated question.
-    const { data: history, error: historyError } = await supabase.from('vacation_ai_messages').select('role, content').eq('conversation_id', conversationId).order('created_at', { ascending: true }).limit(19);
-    if (historyError) {
-      logDatabaseFailure('conversation history read', historyError);
-      return databaseUnavailable(t('ai.tripConversationIsTemporarilyUnavailable'));
+    let history: { role: string; content: string }[] = [];
+    if (conversationId) {
+      const { data, error: historyError } = await supabase.from('vacation_ai_messages').select('role, content').eq('family_id', familyId).eq('conversation_id', conversationId).order('created_at', { ascending: true }).limit(19);
+      if (historyError) {
+        logDatabaseFailure('conversation history read', historyError);
+        return databaseUnavailable(t('ai.tripConversationIsTemporarilyUnavailable'));
+      }
+      history = data ?? [];
     }
-    const turns = [...(history ?? []).filter((h) => h.role === 'user' || h.role === 'assistant').map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content })), { role: 'user' as const, content: message }];
+    const turns = [...history.filter((h) => h.role === 'user' || h.role === 'assistant').map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content })), { role: 'user' as const, content: message }];
 
     const budgetSummary = summarizeBudget(budgets.data ?? [], expenses.data ?? []);
     const context = `TRIP CONTEXT
@@ -425,6 +513,15 @@ Itinerary days planned: ${(days.data ?? []).length} | items: ${(items.data ?? []
       return NextResponse.json({ error: t('ai.aiIsTemporarilyUnavailable') }, { status: 502 });
     }
     if (!reply) return NextResponse.json({ error: t('ai.aiIsTemporarilyUnavailable') }, { status: 502 });
+
+    if (!conversationId) {
+      const { data: convo, error } = await supabase.from('vacation_ai_conversations').insert({ family_id: familyId, vacation_id: vacationId, title: message.slice(0, 60), created_by: ctx.user.id }).select('id').single();
+      if (error || !convo) {
+        console.error('Vacation AI conversation write failed:', error);
+        return databaseUnavailable(t('ai.couldNotStartTheTrip'));
+      }
+      conversationId = convo.id;
+    }
 
     const { error: userMessageError } = await supabase.from('vacation_ai_messages').insert({ family_id: familyId, conversation_id: conversationId, role: 'user', content: message, created_by: ctx.user.id }).select('id').single();
     if (userMessageError) {

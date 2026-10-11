@@ -51,7 +51,11 @@ function from(table: string) {
   const reply = () => {
     if (operation && table === mocks.failTable && operation !== 'delete') return { data: null, error: { message: 'Mock persistence failure' } };
     if (!operation) return { data: table === 'vacations' ? mocks.trip : [], error: null };
-    if (operation === 'delete' || operation === 'update') return { data: [], error: null };
+    if (operation === 'delete') return { data: [], error: null };
+    // The build's claim on the trip row (a compare-and-set on `updated_at`,
+    // taken once a valid plan exists and before any family write) wins here;
+    // its losing side is tests/a-trip-rebuild-keeps-what-changed-meanwhile.test.ts.
+    if (operation === 'update') return { data: table === 'vacations' ? [{ id: 'trip-1' }] : [], error: null };
     const rows = (Array.isArray(payload) ? payload : [payload]) as Record<string, unknown>[];
     const data = rows.map((row, index) => ({ ...row, id: `${table}-${index + 1}` }));
     return { data: single ? data[0] : data, error: null };
@@ -193,7 +197,10 @@ describe('vacation builder validates before persistence', () => {
   it('preserves optional sections and rule-based packing for an empty object plan', async () => {
     mocks.complete.mockResolvedValue({ text: '{}' });
     expect(await (await POST(request())).json()).toEqual({ ok: true, added: { activities: 0, items: 0, budget: 0, packing: 1 } });
-    expect(builderWrites().map((w) => w.table)).toEqual(['vacation_packing_lists', 'vacation_packing_items']);
+    // The claim on the trip row comes first, then only the rule-based packing.
+    expect(builderWrites().map((w) => [w.table, w.operation])).toEqual([
+      ['vacations', 'update'], ['vacation_packing_lists', 'insert'], ['vacation_packing_items', 'insert'],
+    ]);
   });
 
   it('rejects itinerary entries on an undated trip before any activity write', async () => {

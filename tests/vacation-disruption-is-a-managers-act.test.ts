@@ -207,7 +207,12 @@ describe('reportDisruptionAction', () => {
     const first = await reportDisruptionAction({ vacationId: 'trip-1', kind: 'flight', bookingId: 'flight-1', outcome: 'delayed', delayMinutes: 120 });
     expect(first).toMatchObject({ ok: true, notified: true, recorded: true, noChange: false });
     expect(holder.notify).toHaveBeenCalledTimes(1);
-    expect(holder.notify.mock.calls[0][1]).toMatchObject({ recipients: 'family', urgent: true, relatedId: 'trip-1' });
+    // The notice is keyed to THIS disruption (its note), under the trip, and
+    // sent `once`: notify() will not repeat it to anyone who already has it —
+    // which is what lets a retry re-send a notice that failed without paging
+    // twice (tests/a-disruption-notice-is-delivered-once.test.ts).
+    const noteId = String(notes(db)[0].id);
+    expect(holder.notify.mock.calls[0][1]).toMatchObject({ recipients: 'family', urgent: true, relatedId: `trip-1:disruption:${noteId}`, once: true });
 
     // The same submit again — a retry after a lost response — pages nobody.
     const again = await reportDisruptionAction({ vacationId: 'trip-1', kind: 'flight', bookingId: 'flight-1', outcome: 'delayed', delayMinutes: 120 });

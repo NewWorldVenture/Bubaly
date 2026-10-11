@@ -135,6 +135,22 @@ describe('fetchForecast does not substitute this week for a trip a month away', 
     expect(mocks.fetchWithDeadline).not.toHaveBeenCalled();
   });
 
+  it('a trip with a start and no end is a one-day trip: beyond the horizon it gets nothing, as a dated trip does', async () => {
+    // It used to skip the horizon check, fetch this week, write it, have the
+    // cleanup delete it again, and report a successful fetch.
+    const days = await realFetchForecast(35.7, 139.7, '2026-11-01', null, now);
+    expect(days).toEqual([]);
+    expect(mocks.fetchWithDeadline).not.toHaveBeenCalled();
+  });
+
+  it('and within the horizon it asks for that one day, not the default week', async () => {
+    mocks.fetchWithDeadline.mockResolvedValue(new Response(JSON.stringify({ daily: { time: ['2026-10-10'], temperature_2m_max: [21] } }), { headers: { 'content-type': 'application/json' } }));
+    await realFetchForecast(35.7, 139.7, '2026-10-10', null, now);
+    const url = new URL(String(mocks.fetchWithDeadline.mock.calls[0][0]));
+    expect(url.searchParams.get('start_date')).toBe('2026-10-10');
+    expect(url.searchParams.get('end_date')).toBe('2026-10-10');
+  });
+
   it('asks for exactly the trip dates when they are within the horizon', async () => {
     mocks.fetchWithDeadline.mockResolvedValue(new Response(JSON.stringify({ daily: { time: ['2026-10-10'], temperature_2m_max: [21] } }), { headers: { 'content-type': 'application/json' } }));
     const days = await realFetchForecast(35.7, 139.7, '2026-10-10', '2026-10-12', now);

@@ -59,8 +59,11 @@ describe('the trip is editable and created with a zone in the UI', () => {
   const overview = readFileSync('components/vacations/trip-overview.tsx', 'utf8');
 
   it('the create form validates and writes a destination time zone, defaulting to the family\'s', () => {
-    expect(list).toContain("const timezone = form.timezone.trim() || clock.timeZone;");
-    expect(list).toContain("if (!isValidTimezone(timezone)) return toastError(tr('vacationsList.unknownTimeZone'));");
+    // Validated by the canonical-name rule (lib/time/zoned.ts canonicalTimezone),
+    // which is stricter than the Intl check it replaced: see
+    // tests/a-trip-zone-is-stored-by-its-iana-name.test.ts.
+    expect(list).toContain("const timezone = typed ? canonicalTimezone(typed) : canonicalDefaultTimezone(clock.timeZone);");
+    expect(list).toContain("if (typed && !timezone) return toastError(tr('vacationsList.unknownTimeZone'));");
     expect(list).toMatch(/is_international: form\.is_international,\s*timezone,/);
   });
 

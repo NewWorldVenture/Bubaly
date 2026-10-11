@@ -7,6 +7,8 @@ import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
 import { INSIGHTS, isInsightKind, MANAGER_ONLY_INSIGHTS, type InsightData, type InsightKind } from '@/lib/ai/insights';
+import { riskToDecision } from '@/lib/trust/engine';
+import { roleOf } from '@/lib/trust/server';
 import { isManager } from '@/lib/constants/roles';
 import { isExpiredFact, isSensitiveMemory } from '@/lib/services/memory';
 import { loadAISettingsFor } from '@/lib/services/ai-settings';
@@ -23,6 +25,23 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 type Rows = Record<string, Record<string, unknown>[]>;
+
+/**
+ * The trust domain an insight READS, for the kinds whose data the assistant's
+ * own read tools keep from some roles. The route refuses a kind when the trust
+ * engine's view rule would refuse a read of its domain to the caller's role —
+ * the rule `school.*`, `sports.*` and `trips.*` already answer to. Without it a
+ * guest was refused `school.listClasses` and `trips.getTrip` and then given a
+ * model summary of the same coaches, practice locations, homework and trip
+ * destinations through this route instead. Not a confidentiality boundary on
+ * its own — RLS still shows these rows in the app — but one rule per role on
+ * every path the assistant answers through.
+ */
+const INSIGHT_READ_DOMAINS: Readonly<Partial<Record<InsightKind, string>>> = {
+  school: 'education',
+  sports: 'education',
+  trips: 'travel',
+};
 
 /**
  * Per-module "AI Assist". Fetches the family's own rows (RLS-scoped) for the
@@ -51,6 +70,16 @@ export async function POST(req: Request) {
   // the very areas the trust engine treats as sensitive for their role — and
   // get a helpful answer.
   if (MANAGER_ONLY_INSIGHTS.has(kind) && !isManager(ctx.active.role)) {
+    return NextResponse.json({ error: t('insights.thatSummaryIsForThe') }, { status: 403 });
+  }
+  // A summary of school, sports or trips answers to the same view rule as the
+  // assistant's read tools for that domain (INSIGHT_READ_DOMAINS above): a
+  // guest is refused all three, a child the trips one.
+  const readDomain = INSIGHT_READ_DOMAINS[kind];
+  if (readDomain && riskToDecision({
+    risk: 'low', actor: { kind: 'member', id: ctx.active.member?.id ?? ctx.user.id, role: roleOf(ctx.active.role) },
+    domain: readDomain, capability: 'view', explicitAllow: false,
+  })) {
     return NextResponse.json({ error: t('insights.thatSummaryIsForThe') }, { status: 403 });
   }
 

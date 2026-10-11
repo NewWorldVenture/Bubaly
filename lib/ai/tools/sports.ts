@@ -25,7 +25,12 @@ export const sportsTools: ToolDefinition[] = [
     capability: 'view',
     risk: 'low',
     readOnly: true,
-    // Names each child's coach — private to the adults.
+    // Names each child's coach. A `sensitiveRead`: this TOOL is refused to a
+    // teen, child, caregiver or guest requester (lib/trust/engine.ts
+    // readSkipsTrustGate). Not a claim that the data is adults-only everywhere:
+    // RLS shows teams to every member in the app, and the assistant's
+    // `activities` context slice (household members, not guests) carries team
+    // names without the coach.
     sensitiveRead: true,
     input: z.object({ include_inactive: z.boolean().nullish(), ...memberInput }),
     output: z.object({
@@ -49,7 +54,11 @@ export const sportsTools: ToolDefinition[] = [
     capability: 'view',
     risk: 'low',
     readOnly: true,
-    // Where and when each child will be — private to the adults.
+    // Where and when each child will be. A `sensitiveRead`: this TOOL is
+    // refused to a teen, child, caregiver or guest requester. The assistant's
+    // `activities` context slice still gives household members (not guests)
+    // practice times and places — deliberately, see lib/ai/context/policy.ts —
+    // and RLS shows the same rows to every member in the app.
     sensitiveRead: true,
     input: z.object({
       from: z.string().nullish().describe('ISO 8601'),

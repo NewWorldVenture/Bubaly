@@ -36,6 +36,12 @@ export const FORECAST_HORIZON_DAYS = 15;
  * week-from-today Open-Meteo answers when the dates are left off. That week
  * used to be cached under the trip and read as its weather by the packing
  * list, the readiness card and the recommendations, a month early.
+ *
+ * A trip with a start and no end is a one-day trip, as `forecastDaysWithin`
+ * and the route's stale-row cleanup already read it. It used to skip the
+ * horizon check and the date range here, so this week was fetched, written,
+ * deleted again by the cleanup, and reported to the family as a successful
+ * fetch. Only an undated trip asks for the default week.
  */
 export async function fetchForecast(lat: number, lon: number, start?: string | null, end?: string | null, now: Date = new Date()): Promise<ForecastDay[]> {
   const params = new URLSearchParams({
@@ -44,11 +50,12 @@ export async function fetchForecast(lat: number, lon: number, start?: string | n
     daily: 'temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,weathercode,wind_speed_10m_max',
     timezone: 'auto',
   });
-  if (start && end) {
+  if (start) {
+    const last = end ?? start;
     const within = new Date(start).getTime() <= now.getTime() + 1000 * 60 * 60 * 24 * FORECAST_HORIZON_DAYS;
     if (!within) return [];
     params.set('start_date', start);
-    params.set('end_date', end);
+    params.set('end_date', last);
   }
   const res = await fetchWithDeadline(`https://api.open-meteo.com/v1/forecast?${params}`, { headers: { accept: 'application/json' } });
   if (!res.ok) throw new Error(`Open-Meteo error ${res.status}`);

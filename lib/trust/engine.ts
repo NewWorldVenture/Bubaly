@@ -116,9 +116,12 @@ export const ROLE_DEFAULTS: Record<TrustRole, RoleDefault> = {
     // here made the one outside-adult role a LESS restricted reader than the
     // family's own children: `riskToDecision`'s view rule only bites on a
     // sensitive domain, so a guest's assistant could read every child's
-    // teacher, timetable, coach, practice location and passport status. A
-    // guest sees the shared calendar, meals, tasks and chores; everything that
-    // names a child's school, health, money, papers or travel is private.
+    // teacher, timetable, coach, practice location and passport status. With
+    // these domains the ASSISTANT refuses a guest: the read tools in them, the
+    // `activities` and `travel` context slices, the school/sports/trips
+    // insight summaries and household search's trip sources. That is the
+    // assistant's rule, not the database's — RLS still shows a guest the same
+    // rows in the app's school, sports and trip pages.
     sensitiveDomains: [
       'medical', 'dental', 'vision', 'mental_health',
       'education', 'school_forms', 'homework',
@@ -474,6 +477,36 @@ export type RiskDecisionInput = {
  * should never have happened cannot be undone afterwards.
  */
 export const RESTRICTED_READ_ROLES: readonly TrustRole[] = ['teen', 'child', 'caregiver', 'guest'];
+
+/**
+ * Whether a READ may skip the trust gate entirely — the one rule both the
+ * tool executor's `gate()` (lib/ai/tools/execute.ts) and the planner's
+ * `dryRunGate()` (lib/ai/planner/validate.ts) apply, so the plan a family
+ * reviews and the run that executes it cannot disagree.
+ *
+ * A read in a high-stakes domain never skips. Otherwise a parent, an adult or
+ * the system skips — the view rule has nothing to say to them — and so does a
+ * restricted-read role (teen, child, caregiver, guest) reading something the
+ * view rule allows. A read the view rule WOULD deny (a role-sensitive domain,
+ * or a tool marked `sensitiveRead`) goes through the full gate, where it is
+ * refused unless a household rule that reaches the AI actor allows it.
+ *
+ * The dry run used to keep the old early allow for every non-high-stakes
+ * read after the executor stopped doing so, so a teen's "plan our week"
+ * passed planning with a practices read the run then denied, and its
+ * dependants failed mid-run instead of being left out at plan time.
+ */
+export function readSkipsTrustGate(
+  tool: { readOnly: boolean; domain: string; risk: RiskDecisionInput['risk']; sensitiveRead?: boolean },
+  actor: Actor,
+): boolean {
+  if (!tool.readOnly || HIGH_STAKES_AI_DOMAINS.includes(tool.domain)) return false;
+  if (!RESTRICTED_READ_ROLES.includes(actor.role)) return true;
+  return riskToDecision({
+    risk: tool.risk, actor, domain: tool.domain, capability: 'view',
+    explicitAllow: false, sensitiveRead: tool.sensitiveRead === true,
+  }) === null;
+}
 
 function isSensitiveDomainFor(role: TrustRole, domain: string): boolean {
   const def = ROLE_DEFAULTS[role];

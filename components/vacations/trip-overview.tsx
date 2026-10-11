@@ -18,7 +18,7 @@ import { ReadinessRing } from './vacations-list';
 import { computeReadiness } from '@/lib/vacations/readiness';
 import { summarizeBudget } from '@/lib/vacations/budget';
 import { forecastDaysWithin, tripWeatherAdvice, type WeatherDayLike } from '@/lib/vacations/weather';
-import { isValidTimezone } from '@/lib/time/zoned';
+import { canonicalDefaultTimezone, canonicalTimezone } from '@/lib/time/zoned';
 import { dateRange, countdownLabel } from '@/lib/vacations/dates';
 import { dollars as dollarsIn, RECO_META } from '@/lib/vacations/meta';
 import type { Tables } from '@/lib/database.types';
@@ -122,9 +122,6 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readiness.score, loading, trip, familyId, vacationId]);
 
-  // Only the forecast days inside the trip: a snapshot cached a month early is
-  // this week's weather at the destination, not the trip's.
-  const weatherAdvice = useMemo(() => tripWeatherAdvice(forecastDaysWithin(weather, trip?.start_date, trip?.end_date) as WeatherDayLike[]), [weather, trip]);
   const openRecos = recos.filter((r) => r.status === 'open').sort((a, b) => b.severity - a.severity);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -137,8 +134,10 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
   const [savingTz, setSavingTz] = useState(false);
   async function saveTimezone() {
     if (!trip || savingTz) return;
-    const timezone = (tzDraft ?? trip.timezone ?? clock.timeZone).trim();
-    if (!isValidTimezone(timezone)) return toastError(tr('tripOverview.unknownTimeZone'));
+    // The proper IANA spelling, or a refusal: the import RPC looks the zone up
+    // by exact name, so a zone Intl merely tolerates is one it refuses.
+    const timezone = tzDraft !== null ? canonicalTimezone(tzDraft) : (canonicalTimezone(trip.timezone) ?? canonicalDefaultTimezone(clock.timeZone));
+    if (!timezone) return toastError(tr('tripOverview.unknownTimeZone'));
     setSavingTz(true);
     try {
       // Under RLS a refused row comes back with no error and zero rows. Audit C1-S9-84.
@@ -261,16 +260,40 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
           {budget.over && <p className="mt-1 text-xs text-rose-300">{tr('tripOverview.overBudgetIn')} {budget.categories.filter((c) => c.over).length} categor{budget.categories.filter((c) => c.over).length === 1 ? 'y' : 'ies'}</p>}
         </Link>
         <Link href={`/dashboard/vacations/${vacationId}/weather`} className="rounded-2xl border border-border bg-surface/40 p-5 transition hover:border-brand/40">
-          <h3 className="flex items-center gap-2 font-semibold"><CloudSun className="h-4 w-4 text-brand-text" /> {tr('tripOverview.weather')}</h3>
-          {weather.length === 0 ? <p className="mt-2 text-sm text-muted">{tr('tripOverview.noForecastYetFetchOneOn')}</p> : (
-            <ul className="mt-2 space-y-1 text-sm">
-              {weatherAdvice.slice(0, 3).map((a, i) => <li key={i} className="text-muted">• {a.text}</li>)}
-              {weatherAdvice.length === 0 && <li className="text-muted">{tr('tripOverview.looksPleasantNoAlerts')}</li>}
-            </ul>
-          )}
+          <TripWeatherGlance weather={weather} startDate={trip?.start_date} endDate={trip?.end_date} />
         </Link>
       </div>
     </div>
   );
 }
 
+/**
+ * The overview's weather card body. Exported for the test that renders it.
+ *
+ * Its empty state and its advice come from the SAME in-trip days, as the
+ * Weather tab's do. The card used to test the unfiltered rows for emptiness
+ * and the filtered ones for advice, so a trip whose only cached snapshots were
+ * a week it is not away on — a forecast cached while it was beyond the
+ * horizon — said "Looks pleasant — no alerts." about weather it had none of,
+ * even when that other week carried a heat warning.
+ */
+export function TripWeatherGlance({ weather, startDate, endDate }: {
+  weather: WeatherDayLike[];
+  startDate: string | null | undefined;
+  endDate: string | null | undefined;
+}) {
+  const tr = useTranslations();
+  const inTrip = useMemo(() => forecastDaysWithin(weather, startDate, endDate), [weather, startDate, endDate]);
+  const advice = useMemo(() => tripWeatherAdvice(inTrip), [inTrip]);
+  return (
+    <>
+      <h3 className="flex items-center gap-2 font-semibold"><CloudSun className="h-4 w-4 text-brand-text" /> {tr('tripOverview.weather')}</h3>
+      {inTrip.length === 0 ? <p className="mt-2 text-sm text-muted">{tr('tripOverview.noForecastYetFetchOneOn')}</p> : (
+        <ul className="mt-2 space-y-1 text-sm">
+          {advice.slice(0, 3).map((a, i) => <li key={i} className="text-muted">• {a.text}</li>)}
+          {advice.length === 0 && <li className="text-muted">{tr('tripOverview.looksPleasantNoAlerts')}</li>}
+        </ul>
+      )}
+    </>
+  );
+}

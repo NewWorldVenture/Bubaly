@@ -16,7 +16,7 @@ import { LoadingBlock, EmptyState, ErrorState } from '@/components/ui/states';
 import { useFormat, useFamilyCalendarToday, useFamilyClock } from '@/components/i18n/use-format';
 import { VACATION_KINDS, VACATION_STATUSES, lookup } from '@/lib/vacations/meta';
 import { countdownLabel, daysUntil, isActive } from '@/lib/vacations/dates';
-import { isValidTimezone } from '@/lib/time/zoned';
+import { canonicalDefaultTimezone, canonicalTimezone } from '@/lib/time/zoned';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -102,8 +102,13 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
     setSaving(true);
     try {
       if (!form?.title.trim()) return toastError(tr('vacationsList.giveYourTripAName'));
-      const timezone = form.timezone.trim() || clock.timeZone;
-      if (!isValidTimezone(timezone)) return toastError(tr('vacationsList.unknownTimeZone'));
+      // Stored by the one rule the trip editor and the service apply: an IANA
+      // name in its proper spelling. What Intl merely tolerates ('asia/tokyo',
+      // 'JST', '+09:00') was stored as typed and then refused by every
+      // confirmation import. A blank field takes the family's own zone.
+      const typed = form.timezone.trim();
+      const timezone = typed ? canonicalTimezone(typed) : canonicalDefaultTimezone(clock.timeZone);
+      if (typed && !timezone) return toastError(tr('vacationsList.unknownTimeZone'));
       const { data, error } = await createClient().from('vacations').insert({
         family_id: familyId, created_by: userId,
         title: form.title.trim(),

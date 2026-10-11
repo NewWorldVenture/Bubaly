@@ -20,7 +20,8 @@ import type { Tables } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
 import { keyedProbe, sameId, sameInstant, withIdempotency, type KeyedCreateOptions } from '../idempotency';
-import { scopeNow, zonedTimeMs } from '../scope';
+import { familyInstant } from '@/lib/time/civil';
+import { scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
 export type FamilyReminder = Tables<'family_reminders'>;
@@ -69,27 +70,21 @@ function reminderDrift(stored: FamilyReminder, wanted: ReminderContent): string[
   return drift;
 }
 
-const NAIVE_REMIND_AT = /^(\d{4}-\d{2}-\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?)?$/;
-
 /**
  * A `remindAt` as an instant. A zone-less value — the school desk's
  * `${date}T09:00:00` for a permission slip or a fee, a template's
- * `localTime(dayKey, 7, 0)` — is a reading on the FAMILY's clock, as the
- * sibling calendar service already treats the same strings. `Date.parse`
- * resolved it on the HOST's clock (UTC on Vercel), so a 9am reminder fired at
- * 2am in Los Angeles and 11am in Berlin. A bare date is the family's midnight
- * of that day; an offset or `Z` is kept as written.
+ * `localTime(dayKey, 7, 0)`, the assistant's `2026-10-12T09:00:00.000` — is a
+ * reading on the FAMILY's clock, by the one rule `lib/time/civil.ts` states
+ * for every such string, the calendar's included: a fraction is still a
+ * reading (it used to miss the pattern and fall through to `Date.parse`, the
+ * HOST's clock — 09:00Z for a Los Angeles 9am), a date that does not exist is
+ * refused rather than rolled into the next month, and the DST gap and fold
+ * resolve as RFC 5545 does. A bare date is the start of the family's day; an
+ * offset or `Z` is kept as written. Nothing else is accepted.
  */
 function resolveRemindAt(value: string, tz: string): string | null {
-  const naive = NAIVE_REMIND_AT.exec(value.trim());
-  if (naive) {
-    const [, day, hour = '00', minute = '00', second = '00'] = naive;
-    if (Number(hour) > 23 || Number(minute) > 59 || Number(second) > 59) return null;
-    const ms = zonedTimeMs(day, Number(hour), Number(minute), tz);
-    return Number.isFinite(ms) ? new Date(ms + Number(second) * 1000).toISOString() : null;
-  }
-  const ms = Date.parse(value);
-  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+  const at = familyInstant(value, tz);
+  return at ? at.toISOString() : null;
 }
 
 export async function createReminder(

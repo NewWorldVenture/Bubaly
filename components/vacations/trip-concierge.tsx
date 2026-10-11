@@ -78,9 +78,14 @@ export function TripConcierge({ vacationId }: { vacationId: string }) {
       const res = await fetch('/api/vacations/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'build', vacationId, ...(rebuild ? { rebuild: true } : {}) }) });
       const data = await res.json();
       // The route refuses to stack a second plan on a trip that has one (409);
-      // a person decides whether the existing plan is replaced.
-      if (res.status === 409 && !rebuild) {
-        if (confirm(t('tripConcierge.rebuildExistingPlan'))) return await autoBuild(true);
+      // a person decides. It says whether a rebuild would REPLACE anything:
+      // only rows the builder stamped can be taken away, so a plan written by
+      // hand or by an older build is added alongside, and the question says so
+      // rather than promising a replacement that will not happen. A 409 to the
+      // rebuild itself (another tab got there first) is an error, not a prompt.
+      if (res.status === 409 && !rebuild && data.code === 'has_plan') {
+        const question = data.replaces === true ? t('tripConcierge.rebuildExistingPlan') : t('tripConcierge.addAlongsideExistingPlan');
+        if (confirm(question)) return await autoBuild(true);
         return;
       }
       if (!res.ok) toastError(data.error || 'Build failed');

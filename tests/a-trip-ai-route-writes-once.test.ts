@@ -15,7 +15,14 @@
 //     the days inside the trip dates may become a weather_warning.
 //   • 'concierge' persisted the user's message before the model call and stored
 //     a canned apology as a successful reply. Nothing is persisted until the
-//     model answered with text; an empty answer is a 502.
+//     model answered with text; an empty answer is a 502. That includes the
+//     conversation row a FIRST message creates: it was written before the model
+//     call, so every failed first message (and every retry of it — the client
+//     is never handed the id) left a conversation titled with the question.
+//   • the 409 says whether a rebuild would replace anything, and the client
+//     asks "Replace it?" only then (the end-to-end case is in
+//     tests/a-trip-rebuild-keeps-what-changed-meanwhile.test.ts).
+import { readFileSync } from 'node:fs';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { entitledServiceClient } from './helpers/entitled-service-client';
@@ -61,9 +68,18 @@ function from(table: string) {
       const rows = mocks.rowsFor[table] ?? [];
       return { data: single ? rows[0] ?? null : rows, error: null };
     }
-    // A delete answers with the ids it was asked for, as PostgREST does to `.select('id')`.
-    if (operation === 'delete') return { data: (Array.isArray(filters['in:id']) ? filters['in:id'] as string[] : []).map((id) => ({ id })), error: null };
-    if (operation === 'update') return { data: [], error: null };
+    // A delete answers with the rows it was asked for, as PostgREST does to
+    // `.select(...)`: the seeded row when there is one (the rebuild restores
+    // exactly what its delete returned), else just the id this request minted.
+    if (operation === 'delete') {
+      const ids = Array.isArray(filters['in:id']) ? filters['in:id'] as string[] : [];
+      const seeded = (mocks.rowsFor[table] ?? []) as { id: string }[];
+      return { data: ids.map((id) => seeded.find((row) => row.id === id) ?? { id }), error: null };
+    }
+    // The build's claim on the trip row (a compare-and-set on `updated_at`)
+    // wins here; its losing side is driven against a real filter in
+    // tests/a-trip-rebuild-keeps-what-changed-meanwhile.test.ts.
+    if (operation === 'update') return { data: table === 'vacations' ? [{ id: 'trip-1' }] : [], error: null };
     const rows = (Array.isArray(payload) ? payload : [payload]) as Record<string, unknown>[];
     const data = rows.map((row, index) => ({ ...row, id: `${table}-${index + 1}` }));
     return { data: single ? data[0] : data, error: null };
@@ -72,6 +88,7 @@ function from(table: string) {
     select: () => query,
     eq: (column: string, value: unknown) => { filters[column] = value; return query; },
     in: (column: string, value: unknown) => { filters[`in:${column}`] = value; return query; },
+    like: (column: string, value: unknown) => { filters[`like:${column}`] = value; return query; },
     order: () => query, limit: () => query, abortSignal: () => query,
     single: () => { single = true; return query; },
     maybeSingle: () => { single = true; return query; },
@@ -166,26 +183,30 @@ describe('recommendations are replaced, never wiped', () => {
 });
 
 describe('an explicit rebuild replaces the builder\'s rows and nothing else', () => {
+  // The builder's insert is one statement, so its rows share one `updated_at`.
+  const BUILT_AT = '2026-09-01T10:00:00.123456+00:00';
+  // Every replace delete is fenced at write time, not just chosen by id.
+  const FENCE = { booked: false, 'like:notes': `%${CONCIERGE_PLAN_MARKER}%`, updated_at: BUILT_AT };
   const deletesOf = (table: string) => familyWrites().filter((w) => w.table === table && w.operation === 'delete');
 
   beforeEach(() => {
     mocks.rowsFor.vacation_activities = [
-      { id: 'act-ai', name: 'Museum', booked: false, notes: CONCIERGE_PLAN_MARKER },
+      { id: 'act-ai', name: 'Museum', booked: false, notes: CONCIERGE_PLAN_MARKER, updated_at: BUILT_AT },
       // Suggested by the builder, booked by a parent since: a commitment now.
-      { id: 'act-booked', name: 'Boat tour', booked: true, notes: CONCIERGE_PLAN_MARKER },
-      { id: 'act-hand', name: 'Visit grandma', booked: false, notes: null },
+      { id: 'act-booked', name: 'Boat tour', booked: true, notes: CONCIERGE_PLAN_MARKER, updated_at: BUILT_AT },
+      { id: 'act-hand', name: 'Visit grandma', booked: false, notes: null, updated_at: BUILT_AT },
     ];
     mocks.rowsFor.vacation_itinerary_items = [
-      { id: 'item-ai', day_id: 'day-1', title: 'Museum', booked: false, notes: CONCIERGE_PLAN_MARKER },
-      { id: 'item-hand', day_id: 'day-1', title: 'Dinner with cousins', booked: false, notes: 'Table for six' },
+      { id: 'item-ai', day_id: 'day-1', title: 'Museum', booked: false, notes: CONCIERGE_PLAN_MARKER, updated_at: BUILT_AT },
+      { id: 'item-hand', day_id: 'day-1', title: 'Dinner with cousins', booked: false, notes: 'Table for six', updated_at: BUILT_AT },
     ];
   });
 
   it('removes exactly the unbooked rows the builder wrote, and only after the whole new plan is in', async () => {
     const res = await post({ action: 'build', rebuild: true });
     expect(res.status).toBe(200);
-    expect(deletesOf('vacation_activities').map((w) => w.filters)).toEqual([{ family_id: 'family-1', vacation_id: 'trip-1', 'in:id': ['act-ai'] }]);
-    expect(deletesOf('vacation_itinerary_items').map((w) => w.filters)).toEqual([{ family_id: 'family-1', vacation_id: 'trip-1', 'in:id': ['item-ai'] }]);
+    expect(deletesOf('vacation_activities').map((w) => w.filters)).toEqual([{ family_id: 'family-1', vacation_id: 'trip-1', 'in:id': ['act-ai'], ...FENCE }]);
+    expect(deletesOf('vacation_itinerary_items').map((w) => w.filters)).toEqual([{ family_id: 'family-1', vacation_id: 'trip-1', 'in:id': ['item-ai'], ...FENCE }]);
     const planWrites = familyWrites().filter((w) => (w.operation === 'insert' || w.operation === 'upsert') && !w.table.startsWith('vacation_packing'));
     expect(planWrites.map((w) => w.table)).toEqual(['vacation_activities', 'vacation_itinerary_days', 'vacation_itinerary_items', 'vacation_budgets']);
     const lastPlanWrite = Math.max(...planWrites.map((w) => w.order));
@@ -270,5 +291,60 @@ describe('the concierge persists a turn only once it has an answer', () => {
     const sent = mocks.complete.mock.calls[0][0].messages as { role: string; content: string }[];
     expect(sent.at(-1)).toEqual({ role: 'user', content: 'Where should we eat?' });
     expect(sent).toHaveLength(3);
+  });
+});
+
+describe('a first message that fails leaves no conversation behind', () => {
+  const conversations = () => familyWrites().filter((w) => w.table === 'vacation_ai_conversations');
+  const messages = () => familyWrites().filter((w) => w.table === 'vacation_ai_messages');
+
+  it('a provider failure on a first message writes no conversation and no message', async () => {
+    mocks.complete.mockRejectedValue(new Error('provider down'));
+    const res = await post({ action: 'concierge', message: 'Where should we eat?' });
+    expect(res.status).toBe(502);
+    expect(conversations()).toEqual([]);
+    expect(messages()).toEqual([]);
+  });
+
+  it('an empty answer, retried, still leaves no conversation', async () => {
+    mocks.complete.mockResolvedValue({ text: '' });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      expect((await post({ action: 'concierge', message: 'Where should we eat?' })).status).toBe(502);
+    }
+    expect(conversations()).toEqual([]);
+  });
+
+  it('an answered first message creates the conversation after the model answered, then the turn, and hands back its id', async () => {
+    let writesBeforeTheModel = -1;
+    mocks.complete.mockImplementation(async () => {
+      writesBeforeTheModel = familyWrites().filter((w) => w.table.startsWith('vacation_ai_')).length;
+      return { text: 'Try the North End.' };
+    });
+    const res = await post({ action: 'concierge', message: 'Where should we eat?' });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ conversationId: 'vacation_ai_conversations-1', reply: 'Try the North End.' });
+    expect(writesBeforeTheModel).toBe(0);
+    expect(conversations().map((w) => (w.rows as { title: string }).title)).toEqual(['Where should we eat?']);
+    expect(messages().map((w) => (w.rows as { conversation_id: string; role: string })))
+      .toEqual([expect.objectContaining({ conversation_id: 'vacation_ai_conversations-1', role: 'user' }), expect.objectContaining({ conversation_id: 'vacation_ai_conversations-1', role: 'assistant' })]);
+  });
+});
+
+describe('the 409 says whether a rebuild would replace anything', () => {
+  it('names the case and whether stamped, unbooked builder rows exist', async () => {
+    mocks.rowsFor.vacation_activities = [{ id: 'a1', name: 'Museum', booked: false, notes: null }];
+    const unstamped = await post({ action: 'build' });
+    expect(unstamped.status).toBe(409);
+    expect(await unstamped.json()).toMatchObject({ code: 'has_plan', replaces: false });
+
+    mocks.rowsFor.vacation_activities = [{ id: 'a1', name: 'Museum', booked: false, notes: CONCIERGE_PLAN_MARKER }];
+    const stamped = await post({ action: 'build' });
+    expect(await stamped.json()).toMatchObject({ code: 'has_plan', replaces: true });
+  });
+
+  it('the client asks "Replace it?" only when the route says a rebuild replaces something, and never re-asks on a lost claim', () => {
+    const src = readFileSync('components/vacations/trip-concierge.tsx', 'utf8');
+    expect(src).toContain("if (res.status === 409 && !rebuild && data.code === 'has_plan') {");
+    expect(src).toContain("data.replaces === true ? t('tripConcierge.rebuildExistingPlan') : t('tripConcierge.addAlongsideExistingPlan')");
   });
 });

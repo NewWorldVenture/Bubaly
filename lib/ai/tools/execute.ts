@@ -45,7 +45,7 @@ import type { ServiceScope } from '@/lib/services/types';
 import { createServiceClient } from '@/lib/supabase/server';
 import { describeActionError, describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import {
-  HIGH_STAKES_AI_DOMAINS, RESTRICTED_READ_ROLES, riskToDecision, riskTierStance, toolTags,
+  readSkipsTrustGate, riskToDecision, riskTierStance, toolTags,
   type Capability, type Decision, type TrustRole,
 } from '@/lib/trust/engine';
 import { approvalDedupeKey, evaluateTrust, fileOrReusePendingApproval, roleOf } from '@/lib/trust/server';
@@ -353,18 +353,20 @@ async function gate(
   const role = trustRoleFor(scope.role);
   const actorKind = scope.actorKind === 'member' ? 'member' : 'ai_agent';
   const actorId = actorKind === 'member' ? (scope.memberId ?? scope.userId ?? 'unknown') : 'bubaly';
-  if (tool.readOnly && !HIGH_STAKES_AI_DOMAINS.includes(tool.domain)) {
-    // The view rule is pure, so it is asked first without a query: it has
-    // nothing to say for a parent, an adult or the system, nor for a
-    // restricted role reading a harmless domain, and those reads stay as cheap
-    // as they were. Only a read it WOULD deny goes through the full gate below,
-    // where a household's own grant or policy for that domain can still win.
-    const privateRead = RESTRICTED_READ_ROLES.includes(role) && riskToDecision({
-      risk: tool.risk, actor: { kind: actorKind, id: actorId, role }, domain: tool.domain, capability: 'view',
-      explicitAllow: false, sensitiveRead: tool.sensitiveRead === true,
-    }) !== null;
-    if (!privateRead) return { kind: 'allow' };
-  }
+  // The view rule is pure, so it is asked first without a query: it has
+  // nothing to say for a parent, an adult or the system, nor for a restricted
+  // role reading a harmless domain, and those reads stay as cheap as they
+  // were. Only a read it WOULD deny goes through the full gate below. The same
+  // helper is the planner's dry run (lib/ai/planner/validate.ts), so a plan
+  // cannot promise a read this refuses.
+  //
+  // What can lift that denial in the full gate is a household rule that
+  // reaches the AI ACTOR every surface here runs as: a trust policy whose
+  // subject is the role, everyone, or the AI. A per-member permission grant,
+  // a delegation, or a policy naming one member does NOT — the engine matches
+  // those to a member actor only — so a parent who wants one teen's assistant
+  // to read the practice schedule has to allow it for the role.
+  if (readSkipsTrustGate(tool, { kind: actorKind, id: actorId, role })) return { kind: 'allow' };
 
   const capability: Capability = actorKind === 'ai_agent' && !tool.readOnly ? 'automate' : tool.capability;
   const confidence = opts.confidence ?? 0.85;
