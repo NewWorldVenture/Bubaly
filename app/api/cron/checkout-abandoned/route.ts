@@ -6,6 +6,7 @@ import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
 import { selectAbandonedSessions } from '@/lib/billing/checkout-abandonment';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 export const runtime = 'nodejs';
 
@@ -50,6 +51,31 @@ export async function GET(req: NextRequest) {
   // one — the defect F-009 closed for the rest of this directory.
   let failed = 0;
   for (const s of abandoned) {
+    // CLAIM the row before nudging anyone, and only from 'pending'. The list
+    // above is a snapshot: a buyer who comes back after the grace window and
+    // pays has the Stripe webhook upsert their session to 'completed' while
+    // this loop is still working through earlier rows (each nudge is a
+    // provider call). Nudging from the snapshot and then marking by session id
+    // alone emailed that buyer a cart-recovery message for the plan they had
+    // just bought, and overwrote 'completed' with 'abandoned'.
+    //
+    // Marked whatever the fire then does, so a row is never re-swept. A
+    // refused claim is counted (Audit C1-S9-63) and nudges nobody: the row is
+    // still 'pending', so the next run claims and nudges it then. Zero rows is
+    // not a failure: the session completed, was claimed by an overlapping run,
+    // or is gone — in every case there is nobody for THIS run to nudge.
+    const { data: claimed, error: markError } = await supabase
+      .from('checkout_sessions')
+      .update({ status: 'abandoned', abandoned_at: new Date().toISOString() })
+      .eq('session_id', s.session_id)
+      .eq('status', 'pending')
+      .select('session_id');
+    if (markError) {
+      failed += 1;
+      console.error(`checkout_abandoned mark failed for ${s.session_id}:`, markError);
+      continue;
+    }
+    if (wroteNoRows(claimed)) continue;
     try {
       await fireAutomationEvent(supabase, {
         trigger: 'checkout_abandoned',
@@ -62,22 +88,6 @@ export async function GET(req: NextRequest) {
     } catch (e) {
       failed += 1;
       console.error(`checkout_abandoned fire failed for ${s.session_id}:`, e);
-    }
-    // Mark abandoned regardless of fire result so we never re-sweep this row —
-    // and notice when that write is refused. Nothing else moves the row off
-    // 'pending', so a lost mark means the session is swept again on every run
-    // until it ages out of the 24h look-back, silently. The fire itself is
-    // deduped on (workflow_id, subject_key), so the re-sweep does not double
-    // send; it is the run's own report that was wrong.
-    // Rows deliberately not checked: on the service role zero rows means the
-    // session row is gone, and a gone row is not swept again. Audit C1-S9-63.
-    const { error: markError } = await supabase
-      .from('checkout_sessions')
-      .update({ status: 'abandoned', abandoned_at: new Date().toISOString() })
-      .eq('session_id', s.session_id);
-    if (markError) {
-      failed += 1;
-      console.error(`checkout_abandoned mark failed for ${s.session_id}:`, markError);
     }
   }
 

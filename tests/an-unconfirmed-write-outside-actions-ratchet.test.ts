@@ -42,7 +42,6 @@ const BASELINE = new Map<string, number>([
   ['app/api/blog/like/route.ts', 1],
   ['app/api/blog/save/route.ts', 1],
   ['app/api/blog/unsubscribe/route.ts', 1],
-  ['app/api/cron/checkout-abandoned/route.ts', 1],
   ['app/api/cron/family-routines/route.ts', 3],
   ['app/api/cron/guardian-learning/route.ts', 1],
   ['app/api/cron/return-reminders/route.ts', 2],
@@ -151,7 +150,9 @@ describe('the unconfirmed-write class outside server actions only shrinks (C1-S9
     // 52 since the merge with main's #581 (Audit C1-S9-92): the AEO retirement.
     // 51 since PR #548 merged main at 2eb62151 (finalaudit.md Q73): the network
     // prune's two branches are one chunked delete.
+    // 50: the abandoned-checkout mark is now a confirmed claim from 'pending'
+    // (a-checkout-paid-mid-sweep-is-not-called-abandoned).
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(51);
+    expect(total).toBe(50);
   });
 });

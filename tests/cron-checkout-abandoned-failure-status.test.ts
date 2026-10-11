@@ -35,13 +35,22 @@ vi.mock('@/lib/supabase/read-all', () => ({
 vi.mock('@/lib/supabase/server', () => ({
   createServiceClient: () => ({
     from: () => {
+      // The mark is a claim — `.eq('session_id', id).eq('status', 'pending')
+      // .select(...)` — so the write resolves at `select`, answering the row it
+      // moved, or the refusal.
       const b: Row = {};
+      let sessionId = '';
       Object.assign(b, {
-        select: () => b, eq: (_c: string, v: unknown) => {
-          state.marked.push(String(v));
-          return state.markFails.has(String(v))
-            ? Promise.resolve({ error: { message: 'could not write checkout_sessions' } })
-            : Promise.resolve({ error: null });
+        select: () => {
+          if (!sessionId) return b;
+          state.marked.push(sessionId);
+          return state.markFails.has(sessionId)
+            ? Promise.resolve({ data: null, error: { message: 'could not write checkout_sessions' } })
+            : Promise.resolve({ data: [{ session_id: sessionId }], error: null });
+        },
+        eq: (c: string, v: unknown) => {
+          if (c === 'session_id') sessionId = String(v);
+          return b;
         },
         update: () => b,
         order: () => b, range: () => b, limit: () => b,
@@ -101,5 +110,7 @@ describe('the abandoned-checkout sweep reports its own failures', () => {
     expect(res.status, 'a session left pending forever was recorded as a clean run').toBe(502);
     // Still marks the second: the failure is that row's, not the sweep's.
     expect(state.marked).toEqual(['cs_1', 'cs_2']);
+    // The refused row was not claimed, so it is nudged by the run that claims it.
+    expect(state.fired).toEqual(['cs_2']);
   });
 });
