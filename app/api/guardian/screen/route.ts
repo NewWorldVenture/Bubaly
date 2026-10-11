@@ -397,7 +397,15 @@ async function notifyFamily(
           description: `Emergency call from ${opts.callerName}: ${opts.summary}`.slice(0, 4096),
           ...(opts.callerNumber ? { callerNumber: opts.callerNumber.slice(0, 64) } : {}),
         });
-        if (escalation.kind !== 'delivered' && escalation.kind !== 'duplicate') {
+        // The TwiML has gone out, so nothing here can ask Twilio for a retry.
+        // An escalation that reached nobody is retried by the sweep on the
+        // Guardian recovery cron from its record — or, when the record could
+        // not be written, from the work item the escalation leaves in its place
+        // (lib/guardian/escalation-owed.ts). Only with neither is it lost, and
+        // that is said here.
+        if ((escalation.kind === 'undelivered' || escalation.kind === 'interrupted') && !escalation.recorded && !escalation.owed) {
+          console.error('[guardian/screen] emergency escalation reached no manager and could not be recorded; nothing will retry it', { familyId, commId: opts.commId, outcome: escalation.kind });
+        } else if (escalation.kind !== 'delivered' && escalation.kind !== 'duplicate') {
           console.error('[guardian/screen] emergency escalation did not reach a manager', { familyId, commId: opts.commId, outcome: escalation.kind });
         }
       } catch (error) {
@@ -410,7 +418,8 @@ async function notifyFamily(
     // runs it once the TwiML has gone out, inside the same invocation (the
     // precedent is lib/reasoning/auto-refresh.ts). It throws outside a request
     // scope — a direct call, or a test — and then the escalation runs inline:
-    // there is no cron backstop for an emergency, so it is never skipped.
+    // the recovery cron's sweep retries an escalation that reached nobody, but
+    // only once it has been attempted and recorded, so it is never skipped.
     try { after(escalate); } catch { await escalate(); }
   }
 }

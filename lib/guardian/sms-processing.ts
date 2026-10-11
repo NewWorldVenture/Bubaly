@@ -334,7 +334,7 @@ async function processOwned(client: Client, input: GuardianSmsReceiptInput, leas
     // completes here, and the retry sweep on the recovery cron (lib/guardian/
     // escalation-retry.ts) re-attempts it from its record until a manager is
     // reached, the escalation is acknowledged, or its window passes. Answering
-    // 503 for it instead made the whole lane re-run every five minutes with
+    // 503 for it instead made the whole lane re-run on every recovery tick with
     // no end — the sweep is bounded, the receipt drain is not — and when the
     // cause was permanent (no manager with a phone on file) the recovery cron
     // was red for as long. That case is now `unreachable`, which nothing

@@ -3217,6 +3217,8 @@
   "graphModule.rebuiltButNotOnScreen": "Votre graphe a été reconstruit, mais cet écran n'a pas pu charger la nouvelle version. Actualisez la page pour la voir.",
   "graphModule.savedButNotOnScreen": "Enregistré, mais cet écran n'a pas pu charger la nouvelle version. Actualisez la page pour la voir.",
   "guardianDashboard.noManagerReachedByPhone": "Aucun parent n’a encore été joint par SMS ou appel.",
+  "guardianEscalation.delayedAlertHours": "ALERTE DIFFÉRÉE : émise pour la première fois le {time} (il y a {hours} h). C’est peut-être déjà terminé.",
+  "guardianEscalation.delayedAlertMinutes": "ALERTE DIFFÉRÉE : émise pour la première fois le {time} (il y a {minutes} min). C’est peut-être déjà terminé.",
   "hardSignals.budgetDrift.monthly": "Vous avez dépensé {spent} sur votre budget mensuel de {limit} pour {category} sur cette période.",
   "hardSignals.budgetDrift.weekly": "Vous avez dépensé {spent} sur votre budget hebdomadaire de {limit} pour {category} sur cette période.",
   "hardSignals.budgetDrift.yearly": "Vous avez dépensé {spent} sur votre budget annuel de {limit} pour {category} sur cette période.",

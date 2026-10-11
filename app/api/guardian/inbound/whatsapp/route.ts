@@ -15,6 +15,8 @@ import { shouldRingImmediately } from '@/lib/guardian/trust';
 import { claimGuardianCallback, isValidGuardianEventId, markGuardianCallbackError, markGuardianCallbackProcessed, releaseGuardianCallback } from '@/lib/guardian/callbacks';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { escalateGuardianEmergency, type GuardianEscalationOutcome } from '@/lib/guardian/escalate';
+import type { GuardianEscalationInput } from '@/lib/guardian/escalation';
+import { guardianEscalationOnFile } from '@/lib/guardian/escalation-owed';
 import { GUARDIAN_INBOUND_CAP_REASON, GUARDIAN_INBOUND_FAMILY_CAP, GUARDIAN_INBOUND_SENDER_CAP, GUARDIAN_INBOUND_WINDOW_MS } from '@/lib/guardian/inbound-caps';
 import { wroteNoRows } from '@/lib/supabase/errors';
 
@@ -206,7 +208,22 @@ export async function POST(req: NextRequest) {
     status: 'screening',
   }).select('id').maybeSingle();
 
-  if (commError) {
+  // The communication this message is, for the family notice and the
+  // escalation key. A redelivery of a message already recorded — the first
+  // delivery's callback reclaimed after ten minutes, or a replay — is refused
+  // by the unique sid, and the row it names is this message's: it used to
+  // leave `comm` null, so the escalation was keyed on its text instead of on
+  // the communication, a new claim was taken, and every manager was texted and
+  // called a second time. Recovered here, the redelivery joins the first
+  // delivery's escalation. The cap, the model call and the decision below
+  // still go only with a row recorded NOW: a redelivery buys no model call.
+  let commId: string | null = (comm?.id as string | undefined) ?? null;
+  if (commError && (commError as { code?: string }).code === '23505') {
+    const { data: existing, error: existingError } = await supabase.from('guardian_communications')
+      .select('id').eq('twilio_sms_sid', smsSid).eq('family_id', familyId).maybeSingle();
+    if (existingError) console.error('[guardian/inbound/whatsapp] a redelivered message\'s communication could not be read', { familyId, smsSid, error: existingError.message });
+    else commId = ((existing as { id?: string } | null)?.id) ?? null;
+  } else if (commError) {
     console.error('[guardian/inbound/whatsapp] could not record the communication; message continues unlogged', {
       familyId, smsSid, error: commError.message,
     });
@@ -274,59 +291,99 @@ export async function POST(req: NextRequest) {
   const callerDisplay = decision.contactName ?? formatPhone(from);
   const preview = body.length > 100 ? `${body.slice(0, 100)}…` : body;
 
-  try {
-    // Same shape and same reason as the SMS route: a routine screened message
-    // obeys quiet hours. An emergency does not wait for morning.
-    const scope = await systemScopeForFamily(supabase, familyId);
-    if (scope) {
-      await notify(scope, {
-        recipients: 'family',
-        type: 'system',
-        title: emergency ? `🚨 Emergency WhatsApp from ${callerDisplay}` : `💚 WhatsApp from ${callerDisplay}`,
-        body: preview,
-        relatedType: 'guardian_communications',
-        relatedId: comm?.id ?? null,
-        ...(emergency ? { urgent: true } : {}),
-      });
-    }
-  } catch { /* non-fatal */ }
-
+  // Which escalation this message is. Keyed on its communication, so every
+  // delivery of the message — a late redelivery included, with the
+  // communication recovered above — claims the same ledger id and lands in the
+  // same record, and the retry sweep, which rebuilds the key from that record,
+  // claims it too. A message whose first delivery could not be recorded (or
+  // could not learn that it had been) was escalated under its text instead; a
+  // later delivery that knows its communication looks for that earlier
+  // escalation first, and joins it rather than switching keys and alarming
+  // every manager again.
+  let escalationInput: GuardianEscalationInput | null = null;
+  let escalatedBefore = false;
   if (emergency) {
-    // Text and call the managers, keyed on the communication (or, if it was not
-    // recorded, on the message itself) so a redelivery cannot alarm twice.
-    let outcome: GuardianEscalationOutcome['kind'] | 'threw';
+    const byContent: GuardianEscalationInput = {
+      familyId,
+      escalationType: 'urgent_personal',
+      severity: 'critical',
+      description: `Emergency WhatsApp from ${callerDisplay}: "${body.slice(0, 300)}"`,
+      ...(from ? { callerNumber: from.slice(0, 64) } : {}),
+    };
+    escalationInput = commId ? { ...byContent, commId } : byContent;
+    if (commId) {
+      const earlier = await guardianEscalationOnFile(supabase, byContent);
+      if (earlier === null) console.error('[guardian/inbound/whatsapp] could not check for an earlier escalation of this message; keyed on its communication', { familyId, smsSid });
+      if (earlier === true) { escalationInput = byContent; escalatedBefore = true; }
+    }
+  }
+
+  // An earlier delivery of this message already told the family (under a
+  // communication that was not recorded then), and its escalation's own
+  // in-app alert stands; a second notice would be the same news twice.
+  if (!escalatedBefore) {
     try {
-      const escalation = await escalateGuardianEmergency(supabase, {
-        familyId,
-        ...(comm?.id ? { commId: comm.id as string } : {}),
-        escalationType: 'urgent_personal',
-        severity: 'critical',
-        description: `Emergency WhatsApp from ${callerDisplay}: "${body.slice(0, 300)}"`,
-        ...(from ? { callerNumber: from.slice(0, 64) } : {}),
-      }, { signal: AbortSignal.any([req.signal, AbortSignal.timeout(ESCALATION_MS)]) });
-      outcome = escalation.kind;
+      // Same shape and same reason as the SMS route: a routine screened message
+      // obeys quiet hours. An emergency does not wait for morning. Said once
+      // per communication, read or not, so a redelivery of a message that was
+      // already announced is not announced again.
+      const scope = await systemScopeForFamily(supabase, familyId);
+      if (scope) {
+        await notify(scope, {
+          recipients: 'family',
+          type: 'system',
+          title: emergency ? `🚨 Emergency WhatsApp from ${callerDisplay}` : `💚 WhatsApp from ${callerDisplay}`,
+          body: preview,
+          relatedType: 'guardian_communications',
+          relatedId: commId,
+          ...(commId ? { once: true } : {}),
+          ...(emergency ? { urgent: true } : {}),
+        });
+      }
+    } catch { /* non-fatal */ }
+  }
+
+  if (emergency && escalationInput) {
+    // Text and call the managers, under the identity settled above, so a
+    // redelivery cannot alarm twice.
+    let escalation: GuardianEscalationOutcome | { kind: 'threw' };
+    try {
+      escalation = await escalateGuardianEmergency(supabase, escalationInput, { signal: AbortSignal.any([req.signal, AbortSignal.timeout(ESCALATION_MS)]) });
     } catch (error) {
       console.error('[guardian/inbound/whatsapp] emergency escalation threw', { familyId, smsSid, error });
-      outcome = 'threw';
+      escalation = { kind: 'threw' };
     }
-    if (outcome === 'undelivered' || outcome === 'interrupted') {
-      // Nobody's phone was reached, and the escalation is on record saying so.
-      // This used to be logged and the callback marked processed with a 200 —
-      // after which nothing anywhere would try again. Now the callback is
-      // parked as `error`, not processed: a redelivery inside ten minutes is
-      // acknowledged without a second record or ping, the 503 says the message
-      // was not handled, and the sweep on the Guardian recovery cron re-attempts
-      // the escalation from its record until a manager is reached.
-      console.error('[guardian/inbound/whatsapp] emergency escalation did not reach a manager; left for the retry sweep', { familyId, smsSid, outcome });
-      await markGuardianCallbackError(supabase, smsSid, 'Emergency escalation reached no manager.');
-      return new NextResponse('Escalation undelivered', { status: 503 });
+    const outcome = escalation.kind;
+    if (escalation.kind === 'undelivered' || escalation.kind === 'interrupted') {
+      if (escalation.recorded || escalation.owed) {
+        // Nobody's phone was reached, and the escalation is on record saying
+        // so (or the work item the sweep lands that record from is). This used
+        // to be logged and the callback marked processed with a 200 — after
+        // which nothing anywhere would try again. Now the callback is parked as
+        // `error`, not processed: a redelivery inside ten minutes is
+        // acknowledged without a second record or ping, the 503 says the
+        // message was not handled, and the sweep on the Guardian recovery cron
+        // re-attempts the escalation from its record until a manager is
+        // reached. A redelivery after the ten minutes is processed again, and
+        // joins the same escalation.
+        console.error('[guardian/inbound/whatsapp] emergency escalation did not reach a manager; left for the retry sweep', { familyId, smsSid, outcome, recorded: escalation.recorded });
+        await markGuardianCallbackError(supabase, smsSid, 'Emergency escalation reached no manager.');
+        return new NextResponse('Escalation undelivered', { status: 503 });
+      }
+      // Nobody reached, and neither the record nor its work item could be
+      // written: no sweep can find this one. Only a redelivery can retry it,
+      // so the callback is given back for one rather than parked.
+      console.error('[guardian/inbound/whatsapp] emergency escalation reached no manager and could not be recorded; releasing the callback for a retry', { familyId, smsSid, outcome });
+      await releaseGuardianCallback(supabase, 'inbound_whatsapp', smsSid);
+      return new NextResponse('Escalation unavailable', { status: 503 });
     }
     if (outcome === 'claim_unavailable' || outcome === 'read_failed' || outcome === 'threw') {
       // Nothing was recorded by the escalation, so no sweep can find it: only
       // a redelivery can retry it. Give the claim back so the redelivery is
       // processed rather than acknowledged; the unique message sid keeps it
-      // from recording the message twice, and the escalation's own claim keeps
-      // it from alarming twice.
+      // from recording the message twice, the communication recovered above
+      // keeps it under the same escalation, whose own claim keeps it from
+      // alarming twice, and the family notice is said once per communication.
       console.error('[guardian/inbound/whatsapp] emergency escalation could not run; releasing the callback for a retry', { familyId, smsSid, outcome });
       await releaseGuardianCallback(supabase, 'inbound_whatsapp', smsSid);
       return new NextResponse('Escalation unavailable', { status: 503 });

@@ -15,13 +15,16 @@
 //
 // Now: every lane is backstopped by retryUndeliveredGuardianEscalations, run
 // from the guardian-sms-recovery cron: it re-attempts every recent
-// unacknowledged escalation whose record says nobody was reached. Stable ids
-// and the escalation's own claim keep each retry from texting twice, and a
-// partial success (one manager reached) is `delivered`, so it is never re-sent.
-// The SMS lane completes a message whose escalation is on record as
-// undelivered and leaves the retry to that sweep (a 503 instead made the whole
-// lane re-run every five minutes with no end, since the receipt drain has no
-// deadline of its own); the WhatsApp route parks its callback as `error` and
+// unacknowledged escalation whose record says nobody was reached — and, when
+// that record could not be written, lands it first from the work item the
+// escalation leaves instead (with neither written, only the lane's own retry
+// remains: tests/an-emergency-retry-alarms-once-in-turn-and-says-it-is-late).
+// Stable ids and the escalation's own claim keep each retry from texting
+// twice, and a partial success (one manager reached) is `delivered`, so it is
+// never re-sent. The SMS lane completes a message whose escalation is on
+// record as undelivered and leaves the retry to that sweep (a 503 instead made
+// the whole lane re-run on every recovery tick with no end, since the receipt
+// drain has no deadline of its own); the WhatsApp route parks its callback as `error` and
 // answers 503, which its claim bounds to ten minutes. And when there was nobody
 // to text or call at all — no manager with a phone on file, or Twilio not
 // configured — the escalation is `unreachable`: recorded with
@@ -494,10 +497,15 @@ describe('the retry sweep', () => {
     expect(await sweep()).toMatchObject({ examined: 0, unavailable: 1 });
   });
 
-  it('runs from the Guardian recovery cron, the one Guardian job the dispatcher already fires every five minutes', () => {
+  it('runs from the Guardian recovery cron, which the dispatcher asks for every five minutes and vercel.json guarantees once a day', () => {
     const route = readFileSync('app/api/cron/guardian-sms-recovery/route.ts', 'utf8');
     expect(route).toContain('retryUndeliveredGuardianEscalations(');
     expect(route).toMatch(/signal:\s*req\.signal/);
+    // Asked for, not delivered: GitHub's ticks have been measured hours apart
+    // (scripts/cron-dispatch.mjs), so the one run that is certain is Vercel's
+    // daily one, and a retry can land hours late (it says so).
     expect(readFileSync('scripts/cron-dispatch.mjs', 'utf8')).toMatch(/'\/api\/cron\/guardian-sms-recovery':\s*'\*\/5 \* \* \* \*'/);
+    const vercel = JSON.parse(readFileSync('vercel.json', 'utf8')) as { crons: { path: string; schedule: string }[] };
+    expect(vercel.crons.find((cron) => cron.path === '/api/cron/guardian-sms-recovery')?.schedule).toMatch(/^\d+ \d+ \* \* \*$/);
   });
 });

@@ -20,9 +20,14 @@
 // back for the row — the retention sweep never touched member_locations, so a
 // removed member's live position stayed on the family map for good. Now the
 // removal says so (a warning, like the one for a PIN login that could not be
-// signed out), and the daily sweep blanks any live row whose member is no
-// longer active.
-import { existsSync, readFileSync } from 'node:fs';
+// signed out). The retention sweep has learned to blank any live row whose
+// member is no longer active — but that sweep is HELD (held/api/cron/
+// location-retention, outside the deployable tree and on no schedule) until
+// the owner's retention decision, so nothing runs the repair: the cases below
+// say what the held sweep WOULD do, and one pins that nothing deployable
+// calls it. Until then the warning is the whole of the answer.
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
@@ -244,9 +249,10 @@ describe('a removal whose location forget failed', () => {
     }
   });
 
-  it('is repaired by the retention sweep: a live row whose member is no longer active is blanked, and an active member\'s is not', async () => {
+  it('the held retention sweep WOULD repair it — nothing runs that sweep until the owner\'s retention decision: a live row whose member is no longer active is blanked, and an active member\'s is not', async () => {
     // The removal happened, the forget did not: the nanny is inactive and her
-    // live row still says where she is.
+    // live row still says where she is. Called directly here; no route,
+    // schedule or workflow calls it (pinned below).
     household(false);
     const { enforceLocationRetention } = await import('@/lib/location/retention');
     const result = await enforceLocationRetention(db as unknown as SupabaseClient);
@@ -261,7 +267,7 @@ describe('a removal whose location forget failed', () => {
     expect(await enforceLocationRetention(db as unknown as SupabaseClient)).toMatchObject({ ok: true, clearedRemovedMembers: 0 });
   });
 
-  it('the sweep also catches a row that stopped sharing but kept its last position', async () => {
+  it('the held sweep would also catch a row that stopped sharing but kept its last position', async () => {
     household(false);
     db.replace('member_locations', db.table('member_locations').map((row) => (row.member_id === C.NANNY ? { ...row, is_sharing: false } : row)));
     const { enforceLocationRetention } = await import('@/lib/location/retention');
@@ -269,7 +275,7 @@ describe('a removal whose location forget failed', () => {
     expect(live(C.NANNY)).toMatchObject(CLEARED);
   });
 
-  it('the sweep reports a refused repair rather than counting it done', async () => {
+  it('the held sweep would report a refused repair rather than counting it done', async () => {
     household(false);
     refuseLocationTable(db);
     const { enforceLocationRetention } = await import('@/lib/location/retention');
@@ -279,5 +285,42 @@ describe('a removal whose location forget failed', () => {
     expect(result.failures.some((f) => /member_locations/.test(f.step))).toBe(true);
     // Described, never the raw Postgres string.
     for (const f of result.failures) expect(f.message).not.toMatch(/canceling statement/);
+  });
+
+  it('the repair stays inside the held sweep: no deployable route, schedule or workflow calls it, and nothing says it runs', () => {
+    // Everything Next builds or a scheduler reaches, outside held/ and tests/.
+    const SKIP = new Set(['node_modules', '.next', '.git', 'held', 'tests', 'supabase', 'coverage', 'dist', 'build', 'mobile']);
+    const walk = (dir: string, out: string[] = []): string[] => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (SKIP.has(entry.name) || (entry.name.startsWith('.') && entry.name !== '.github')) continue;
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) walk(full, out);
+        else if (/\.(ts|tsx|js|mjs|cjs|yml|yaml|json)$/.test(entry.name)) out.push(full);
+      }
+      return out;
+    };
+    const callers = walk('.').map((file) => file.replace(/^\.\//, ''))
+      .filter((file) => /\b(enforceLocationRetention|clearRemovedMemberLocations)\b/.test(readFileSync(file, 'utf8')));
+    // The definition, and nothing else: no route, action, cron, script or workflow.
+    expect(callers).toEqual(['lib/location/retention.ts']);
+    const lib = readFileSync('lib/location/retention.ts', 'utf8');
+    expect(lib, 'the repair is reachable only through the held sweep').not.toMatch(/export\s+(async\s+)?function\s+clearRemovedMemberLocations/);
+    // The one caller of the sweep is the held route, which Next does not route.
+    expect(readFileSync('held/api/cron/location-retention/route.ts', 'utf8')).toContain('enforceLocationRetention(');
+    expect(existsSync('app/api/cron/location-retention')).toBe(false);
+    const vercel = JSON.parse(readFileSync('vercel.json', 'utf8')) as { crons: { path: string }[] };
+    expect(vercel.crons.filter((cron) => /location|retention|removed/.test(cron.path))).toEqual([]);
+    expect(readFileSync('scripts/cron-dispatch.mjs', 'utf8')).not.toMatch(/'\/api\/cron\/location-retention':\s*'/);
+
+    // And nothing claims it runs. Each of these used to promise a daily repair.
+    expect(lib).toContain('PART OF THE HELD SWEEP, and nothing runs');
+    expect(lib).not.toMatch(/The sweep now blanks/);
+    expect(readFileSync('held/api/cron/location-retention/route.ts', 'utf8')).toMatch(/held, it runs\s*\/\/\s*never/);
+    for (const file of ['app/(app)/family/member-actions.ts', 'app/(app)/admin/actions.ts', 'components/modules/family-module.tsx', 'components/modules/settings-module.tsx']) {
+      // Comments wrap, so the words may sit either side of a `//`.
+      const prose = readFileSync(file, 'utf8').replace(/\s*\n\s*\/\/\s*/g, ' ');
+      expect(prose, file).not.toMatch(/daily (retention )?sweep (repairs|catches)/);
+      expect(prose, file).toMatch(/retention sweep that would (blank the live row of any member no longer active )?is held/);
+    }
   });
 });

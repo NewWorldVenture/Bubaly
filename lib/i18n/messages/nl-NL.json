@@ -3217,6 +3217,8 @@
   "graphModule.rebuiltButNotOnScreen": "Je graaf is opnieuw opgebouwd, maar dit scherm kon de nieuwe versie niet laden. Ververs de pagina om hem te zien.",
   "graphModule.savedButNotOnScreen": "Opgeslagen, maar dit scherm kon de nieuwe versie niet laden. Ververs de pagina om hem te zien.",
   "guardianDashboard.noManagerReachedByPhone": "Nog geen ouder bereikt via sms of oproep.",
+  "guardianEscalation.delayedAlertHours": "VERTRAAGDE MELDING: voor het eerst gemeld op {time} ({hours} u geleden). Het kan al voorbij zijn.",
+  "guardianEscalation.delayedAlertMinutes": "VERTRAAGDE MELDING: voor het eerst gemeld op {time} ({minutes} min geleden). Het kan al voorbij zijn.",
   "hardSignals.budgetDrift.monthly": "Je hebt deze periode {spent} uitgegeven van je maandelijkse budget van {limit} voor {category}.",
   "hardSignals.budgetDrift.weekly": "Je hebt deze periode {spent} uitgegeven van je wekelijkse budget van {limit} voor {category}.",
   "hardSignals.budgetDrift.yearly": "Je hebt deze periode {spent} uitgegeven van je jaarlijkse budget van {limit} voor {category}.",

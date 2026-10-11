@@ -250,8 +250,9 @@ export async function adminRemoveMemberAction(memberId: string): Promise<Result<
   // Their last position and location history leave with them. The removal
   // stands if this fails as well; the failure is logged, the audit row says
   // whether the location was cleared, and the console is told — as it is told
-  // about a login that could not be signed out. (The daily retention sweep
-  // repairs the live row of any member no longer active.)
+  // about a login that could not be signed out. (Nothing repairs it on a
+  // schedule: the retention sweep that would blank the live row of any member
+  // no longer active is held and runs nowhere, pending the owner's decision.)
   const forgotten = await forgetMemberLocation(supabase, member.family_id, memberId);
   if (!forgotten.ok) console.error('[admin-action] removed member location was not cleared', { memberId, failures: forgotten.failures });
 

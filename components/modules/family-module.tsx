@@ -486,8 +486,9 @@ export function FamilyModule() {
               if (!res.ok) { toastError(res.error); return; }
               if (res.loginRevocation === 'failed') toastError(t('familyModule.removedButLoginStillActive'));
               // The removal stands, but their last position could not be
-              // cleared and may still be on the family map until the daily
-              // sweep catches it: said, like the login that stayed live.
+              // cleared and may still be on the family map — nothing
+              // scheduled clears it (the retention sweep that would is held):
+              // said, like the login that stayed live.
               else if (!res.locationForgotten) toastError(t('familyModule.removedButLocationStillVisible'));
               else success(t('familyModule.memberRemoved'));
               void refreshMembers();

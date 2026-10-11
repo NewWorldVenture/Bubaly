@@ -3218,6 +3218,8 @@
   "graphModule.rebuiltButNotOnScreen": "O seu grafo foi reconstruído, mas este ecrã não conseguiu carregar a nova versão. Atualize a página para a ver.",
   "graphModule.savedButNotOnScreen": "Guardado, mas este ecrã não conseguiu carregar a nova versão. Atualize a página para a ver.",
   "guardianDashboard.noManagerReachedByPhone": "Nenhum responsável foi ainda contactado por SMS ou chamada.",
+  "guardianEscalation.delayedAlertHours": "ALERTA ATRASADO: emitido pela primeira vez a {time} (há {hours} h). Pode já ter terminado.",
+  "guardianEscalation.delayedAlertMinutes": "ALERTA ATRASADO: emitido pela primeira vez a {time} (há {minutes} min). Pode já ter terminado.",
   "hardSignals.budgetDrift.monthly": "Gastou {spent} do seu orçamento mensal de {limit} para {category} neste período.",
   "hardSignals.budgetDrift.weekly": "Gastou {spent} do seu orçamento semanal de {limit} para {category} neste período.",
   "hardSignals.budgetDrift.yearly": "Gastou {spent} do seu orçamento anual de {limit} para {category} neste período.",

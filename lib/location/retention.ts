@@ -15,11 +15,20 @@
 //     unscheduled, pending the owner's retention decision; until then nothing
 //     runs the sweep.
 //
-// The sweep also re-applies the first rule: a removal whose forget
-// failed (a refused or timed-out write) used to leave the live row behind for
-// good, because nothing ever came back for member_locations — the removed
-// member's last position stayed readable by, and plotted for, the family they
-// left. The sweep now blanks any live row whose member is no longer active.
+// The held sweep would also re-apply the first rule: a removal whose forget
+// failed (a refused or timed-out write) leaves the live row behind, because
+// nothing comes back for member_locations — the removed member's last
+// position stays readable by, and plotted for, the family they left. Written
+// here, enforceLocationRetention blanks any live row whose member is no longer
+// active, family by family. But it is PART OF THE HELD SWEEP, and nothing runs
+// it: no deployable route, no vercel.json entry and no dispatcher schedule
+// calls enforceLocationRetention (tests/a-removed-member-takes-their-location-
+// with-them.test.ts pins that), and it is not to be activated, scheduled or
+// routed on its own ahead of the owner's retention decision. Until then a
+// failed forget is reported to whoever removed the member (the removal's
+// `locationForgotten` / warning), and stays until forgetMemberLocation is run
+// for that member again (forgetRemovedMemberLocationAction, which no screen
+// calls yet); it is NOT repaired on any schedule.
 //
 // If a database-level guarantee is wanted, the same member rule belongs in a
 // trigger on family_members.is_active going false — reported, not written here.
@@ -30,7 +39,7 @@ import { describeActionError } from '@/lib/supabase/errors';
 
 /** Days a location event (arrived/left) is kept at all. */
 export const LOCATION_EVENT_RETENTION_DAYS = 90;
-/** Removed members' live rows the sweep repairs per run; a repair is rare, so this is never reached. */
+/** Removed members' live rows the (held, never run) sweep would repair per run; a repair is rare, so this is never reached. */
 const REMOVED_MEMBER_SWEEP_LIMIT = 500;
 
 type Failure = { step: string; message: string };
@@ -117,7 +126,12 @@ export type LocationRetentionResult = {
   ok: boolean; purgedEvents: number; clearedEvents: number; clearedCheckIns: number; clearedRemovedMembers: number; failures: Failure[];
 };
 
-/** The retention sweep: drop old events, clear coordinates nothing needs, and blank what a removed member left behind. */
+/**
+ * The retention sweep: drop old events, clear coordinates nothing needs, and
+ * blank what a removed member left behind. HELD: only
+ * held/api/cron/location-retention/route.ts calls it, outside the deployable
+ * tree and unscheduled, pending the owner's retention decision.
+ */
 export async function enforceLocationRetention(service: SupabaseClient, now = new Date()): Promise<LocationRetentionResult> {
   const cutoff = new Date(now.getTime() - LOCATION_EVENT_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
   const purged = await service.from('location_events').delete().lt('occurred_at', cutoff).select('id');

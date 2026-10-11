@@ -3217,6 +3217,8 @@
   "graphModule.rebuiltButNotOnScreen": "Ihr Graph wurde neu aufgebaut, aber diese Ansicht konnte die neue Version nicht laden. Aktualisieren Sie die Seite, um sie zu sehen.",
   "graphModule.savedButNotOnScreen": "Gespeichert, aber diese Ansicht konnte die neue Version nicht laden. Aktualisieren Sie die Seite, um sie zu sehen.",
   "guardianDashboard.noManagerReachedByPhone": "Noch kein Elternteil per SMS oder Anruf erreicht.",
+  "guardianEscalation.delayedAlertHours": "VERSPÄTETE WARNUNG: zuerst ausgelöst am {time} (vor {hours} Std.). Möglicherweise ist es schon vorbei.",
+  "guardianEscalation.delayedAlertMinutes": "VERSPÄTETE WARNUNG: zuerst ausgelöst am {time} (vor {minutes} Min.). Möglicherweise ist es schon vorbei.",
   "hardSignals.budgetDrift.monthly": "In diesem Zeitraum wurden {spent} Ihres monatlichen Budgets von {limit} für {category} ausgegeben.",
   "hardSignals.budgetDrift.weekly": "In diesem Zeitraum wurden {spent} Ihres wöchentlichen Budgets von {limit} für {category} ausgegeben.",
   "hardSignals.budgetDrift.yearly": "In diesem Zeitraum wurden {spent} Ihres jährlichen Budgets von {limit} für {category} ausgegeben.",

@@ -3217,6 +3217,8 @@
   "graphModule.rebuiltButNotOnScreen": "Tu grafo se ha reconstruido, pero esta pantalla no ha podido cargar la nueva versión. Actualiza la página para verla.",
   "graphModule.savedButNotOnScreen": "Guardado, pero esta pantalla no ha podido cargar la nueva versión. Actualiza la página para verla.",
   "guardianDashboard.noManagerReachedByPhone": "Aún no se ha contactado a ningún progenitor por SMS ni llamada.",
+  "guardianEscalation.delayedAlertHours": "ALERTA CON RETRASO: emitida por primera vez el {time} (hace {hours} h). Puede que ya haya pasado.",
+  "guardianEscalation.delayedAlertMinutes": "ALERTA CON RETRASO: emitida por primera vez el {time} (hace {minutes} min). Puede que ya haya pasado.",
   "hardSignals.budgetDrift.monthly": "Has gastado {spent} de tu presupuesto mensual de {limit} para {category} en este periodo.",
   "hardSignals.budgetDrift.weekly": "Has gastado {spent} de tu presupuesto semanal de {limit} para {category} en este periodo.",
   "hardSignals.budgetDrift.yearly": "Has gastado {spent} de tu presupuesto anual de {limit} para {category} en este periodo.",

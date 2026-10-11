@@ -7,14 +7,16 @@
 // Notifies every manager (parent + adult) via push + SMS + attempted outbound call.
 
 import 'server-only';
-import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { sendSms, initiateCall, isTwilioConfigured } from '@/lib/guardian/twilio';
 import { formatPhone } from '@/lib/guardian/phone';
 import { claimGuardianCallback, markGuardianCallbackError, markGuardianCallbackProcessed, releaseGuardianCallback } from '@/lib/guardian/callbacks';
-import { guardianEscalationEventId, type GuardianEscalationInput } from '@/lib/guardian/escalation';
+import { guardianEscalationEventId, guardianEscalationStableId as stableId, type GuardianEscalationInput } from '@/lib/guardian/escalation';
+import { oweGuardianEscalation } from '@/lib/guardian/escalation-owed';
 import { appBaseUrl } from '@/lib/server/app-url';
 import { isManager } from '@/lib/constants/roles';
+import { getTranslations } from '@/lib/i18n/server';
+import { isValidTimezone } from '@/lib/time/zoned';
 
 export type GuardianEscalationOutcome =
   /** The claim could not be written; nothing was read or sent. */
@@ -23,7 +25,12 @@ export type GuardianEscalationOutcome =
   | { kind: 'duplicate' }
   /** A read the alert depends on failed before anything was sent; the claim was given back. */
   | { kind: 'read_failed' }
-  /** Alerts went out (or there was nobody to alert) but the escalation row could not be written; the claim is parked as `error`. */
+  /**
+   * Alerts went out (or there was nobody to alert) but the escalation row could
+   * not be written; the claim is parked as `error`, and when somebody WAS told
+   * a narrow second write records who, so the retry sweep does not read the
+   * row as "nobody reached" and text them all again.
+   */
   | { kind: 'record_failed' }
   /**
    * There was nobody to text or call: Twilio is not configured, or no active
@@ -40,9 +47,11 @@ export type GuardianEscalationOutcome =
    * and the claim given back, so the undelivered-escalation sweep on the
    * recovery cron re-attempts it from its record for a bounded time: nothing
    * reached a phone, so a retry cannot text twice. `recorded` says whether the
-   * record landed; the sweep cannot find one that did not.
+   * record landed. When it did not, `owed` says whether the work item the
+   * sweep lands it from (lib/guardian/escalation-owed.ts) did instead; with
+   * neither, only the caller's own retry can come back for it.
    */
-  | { kind: 'undelivered'; pushSent: boolean; notifiedCount: 0; recorded: boolean }
+  | { kind: 'undelivered'; pushSent: boolean; notifiedCount: 0; recorded: boolean; owed: boolean }
   /**
    * The caller's deadline passed (or it cancelled) before any manager was
    * confirmed reached, and no further send was started once it had. Recorded
@@ -51,8 +60,9 @@ export type GuardianEscalationOutcome =
    * refused it, so when a send had started the claim is parked as `error`
    * rather than given back: a retry inside ten minutes is a duplicate, and
    * after that it re-sends. When no send had started the claim is given back.
+   * `recorded` and `owed` as for `undelivered`.
    */
-  | { kind: 'interrupted'; pushSent: boolean; notifiedCount: 0 }
+  | { kind: 'interrupted'; pushSent: boolean; notifiedCount: 0; recorded: boolean; owed: boolean }
   | { kind: 'delivered'; pushSent: boolean; smsSent: boolean; callAttempted: boolean; notifiedCount: number };
 
 export type GuardianEscalationOptions = {
@@ -64,12 +74,54 @@ export type GuardianEscalationOptions = {
    * because the record is what the retry sweep reads.
    */
   signal?: AbortSignal;
+  /**
+   * When the escalation was first raised, for a retry (the sweep passes the
+   * record's `escalated_at`). A retry that much later says so, in the text and
+   * in the call, with the original time and how long ago it was: it can reach
+   * a manager hours after the emergency, and otherwise reads exactly like one
+   * happening now.
+   */
+  originalAt?: string;
 };
 
-/** A stable UUID derived from the escalation's ledger id, so a retry writes the same rows. */
-function stableId(callbackId: string, purpose: string): string {
-  const hex = createHash('sha256').update(`${callbackId}:${purpose}`).digest('hex');
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+/**
+ * The escalation claim's `error` text when the alerts went out and the record
+ * did not land. The retry sweep reads it: such an escalation is never re-sent.
+ */
+export const ESCALATION_SENT_UNRECORDED = 'Unable to record escalation.';
+
+/** How late a retry has to be before the alert says it is delayed. */
+const DELAYED_ALERT_AFTER_MS = 5 * 60_000;
+
+/** `2026-10-11 02:15 BST`: the same in every language, and unambiguous about its zone. */
+function formatOriginalTime(at: number, timeZone: string): string {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZoneName: 'short',
+  }).formatToParts(new Date(at)).map((part) => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute} ${parts.timeZoneName}`;
+}
+
+/**
+ * The line a late retry leads with, or null when the alert is not late. In the
+ * family's own zone when it can be read, otherwise UTC (named either way).
+ */
+async function delayedAlertLine(supabase: SupabaseClient, familyId: string, originalAt: string | undefined): Promise<string | null> {
+  const first = originalAt ? Date.parse(originalAt) : Number.NaN;
+  if (!Number.isFinite(first)) return null;
+  const ageMs = Date.now() - first;
+  if (ageMs < DELAYED_ALERT_AFTER_MS) return null;
+  let timeZone = 'UTC';
+  try {
+    const { data, error } = await supabase.from('families').select('timezone').eq('id', familyId).maybeSingle();
+    const zone = (data as { timezone?: unknown } | null)?.timezone;
+    if (!error && typeof zone === 'string' && isValidTimezone(zone)) timeZone = zone;
+  } catch { /* UTC, named as such. */ }
+  const t = await getTranslations();
+  const time = formatOriginalTime(first, timeZone);
+  const minutes = Math.floor(ageMs / 60_000);
+  return minutes >= 60
+    ? t('guardianEscalation.delayedAlertHours', { time, hours: Math.floor(minutes / 60) })
+    : t('guardianEscalation.delayedAlertMinutes', { time, minutes });
 }
 
 type Reached = { id: string; sms: boolean; call: boolean };
@@ -80,7 +132,7 @@ export async function escalateGuardianEmergency(
   options: GuardianEscalationOptions = {},
 ): Promise<GuardianEscalationOutcome> {
   const { familyId, commId, escalationType, severity, description, callerNumber } = body;
-  const { signal } = options;
+  const { signal, originalAt } = options;
   const callbackId = guardianEscalationEventId(body);
   const claim = await claimGuardianCallback(supabase, 'emergency_escalation', callbackId);
   if (claim === 'unavailable') return { kind: 'claim_unavailable' };
@@ -174,8 +226,9 @@ export async function escalateGuardianEmergency(
   let sendStarted = false;
   if (twilioReady && managers.length) {
     const BASE_URL = appBaseUrl();
-    const smsText = `[Bubaly Emergency Alert]\n${alertTitle}\n${alertBody}\nReply STOP to opt out.`;
-    const twimlUrl = `${BASE_URL}/api/guardian/escalate/twiml?family=${familyId}&msg=${encodeURIComponent(description.slice(0, 200))}`;
+    const delayed = await delayedAlertLine(supabase, familyId, originalAt);
+    const smsText = `[Bubaly Emergency Alert]\n${delayed ? `${delayed}\n` : ''}${alertTitle}\n${alertBody}\nReply STOP to opt out.`;
+    const twimlUrl = `${BASE_URL}/api/guardian/escalate/twiml?family=${familyId}&msg=${encodeURIComponent(`${delayed ? `${delayed} ` : ''}${description.slice(0, 200)}`)}`;
     // Every manager at once, not one after another. Sequentially this was two
     // Twilio requests of up to 15 s each PER manager, so a family with three
     // managers on a slow provider could not finish inside any caller's budget;
@@ -252,8 +305,8 @@ export async function escalateGuardianEmergency(
     // phone on file. A retry would find the same, so this is not left for one:
     // the in-app notice and the dashboard row are what this family gets, the
     // claim is processed, and the callers complete. (Before this answer existed
-    // the case was `undelivered`, and the SMS lane answered 503 for it every
-    // five minutes until a phone was added.) With the record NOT landed as
+    // the case was `undelivered`, and the SMS lane answered 503 for it on
+    // every recovery tick until a phone was added.) With the record NOT landed as
     // well, it falls through to `record_failed` below: the same bounded answer.
     console.error('[guardian] escalation had nobody to text or call; recorded with nobody reached', {
       familyId, callbackId, pushSent, twilioReady, managers: managers.length,
@@ -263,6 +316,11 @@ export async function escalateGuardianEmergency(
   }
 
   if (notifiedIds.length === 0 && reachable) {
+    // The record is what the retry sweep reads. When it did not land the sweep
+    // would never find this escalation, so leave the work item it lands the
+    // record from instead (lib/guardian/escalation-owed.ts).
+    const recorded = !escalationError;
+    const owed = recorded ? false : await oweGuardianEscalation(supabase, body, { pushSent });
     if (interrupted && sendStarted) {
       // Cut off with a send in flight. That send may still have been accepted
       // by Twilio, so the claim is parked rather than given back: the ten
@@ -271,19 +329,21 @@ export async function escalateGuardianEmergency(
       // record above says nobody was confirmed reached, and the sweep that
       // re-attempts such records runs on the recovery cron.
       console.error('[guardian] escalation interrupted before any manager was confirmed reached; holding the claim', {
-        familyId, callbackId, pushSent, recorded: !escalationError,
+        familyId, callbackId, pushSent, recorded, owed,
       });
       await markGuardianCallbackError(supabase, callbackId, 'Escalation interrupted before any manager was reached.');
-      return { kind: 'interrupted', pushSent, notifiedCount: 0 };
+      return { kind: 'interrupted', pushSent, notifiedCount: 0, recorded, owed };
     }
     // Nobody's phone was reached. Not a success: say so, and give the claim
     // back so the retry sweep (or a caller's retry) can try again. The
     // unacknowledged row stays at the top of the Guardian dashboard either way.
     console.error('[guardian] escalation reached no manager by SMS or call; leaving it retryable', {
-      familyId, callbackId, pushSent, recorded: !escalationError, interrupted,
+      familyId, callbackId, pushSent, recorded, owed, interrupted,
     });
     await releaseGuardianCallback(supabase, 'emergency_escalation', callbackId);
-    return interrupted ? { kind: 'interrupted', pushSent, notifiedCount: 0 } : { kind: 'undelivered', pushSent, notifiedCount: 0, recorded: !escalationError };
+    return interrupted
+      ? { kind: 'interrupted', pushSent, notifiedCount: 0, recorded, owed }
+      : { kind: 'undelivered', pushSent, notifiedCount: 0, recorded, owed };
   }
 
   if (escalationError) {
@@ -292,7 +352,21 @@ export async function escalateGuardianEmergency(
     // before an `error` row can be reclaimed is what keeps an immediate retry
     // from texting and calling every manager a second time.
     console.error('[guardian] escalation could not be recorded after alerts went out', { familyId, callbackId, notifiedCount: notifiedIds.length, error: escalationError });
-    await markGuardianCallbackError(supabase, callbackId, 'Unable to record escalation.');
+    await markGuardianCallbackError(supabase, callbackId, ESCALATION_SENT_UNRECORDED);
+    if (notifiedIds.length > 0) {
+      // Ten minutes is not enough when this was the retry sweep's attempt: the
+      // record it read still says nobody was reached, and once this claim can
+      // be reclaimed the next sweep would text and call every manager again.
+      // So record who WAS told, narrowly, on the row that is already there (a
+      // first attempt has none, and this updates nothing). The sweep also
+      // leaves alone a record whose claim carries the mark above, for when
+      // this write fails as well (lib/guardian/escalation-retry.ts).
+      const { error: toldError } = await supabase.from('guardian_escalations')
+        .update({ notified_member_ids: notifiedIds, sms_sent: smsSent, call_attempted: callAttempted, push_sent: pushSent })
+        .eq('id', stableId(callbackId, 'escalation')).eq('family_id', familyId)
+        .select('id');
+      if (toldError) console.error('[guardian] could not record which managers an unrecorded escalation reached', { familyId, callbackId, error: toldError });
+    }
     return { kind: 'record_failed' };
   }
 

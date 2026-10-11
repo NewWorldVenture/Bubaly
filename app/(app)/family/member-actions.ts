@@ -56,8 +56,10 @@ export async function removeFamilyMemberAction(input: { memberId: string }): Pro
   // location_events is append-only for clients (0335). The removal stands if
   // this fails; the failure is logged AND returned, so the screen can say the
   // position may still be on the family map (it used to be logged only, and
-  // the screen toasted "Member removed"). The daily retention sweep repairs
-  // the live row of any member no longer active, so the failure is not for good.
+  // the screen toasted "Member removed"). Nothing repairs it on a schedule:
+  // the retention sweep that would blank the live row of any member no longer
+  // active is held, and runs nowhere, until the owner's retention decision
+  // (lib/location/retention.ts), so saying so is the whole of the answer.
   const forgotten = await forgetMemberLocation(service, familyId, target.id);
   if (!forgotten.ok) console.error('[family] removed member location was not cleared', { familyId, memberId: target.id, failures: forgotten.failures });
   return { ok: true, loginRevocation, locationForgotten: forgotten.ok };
