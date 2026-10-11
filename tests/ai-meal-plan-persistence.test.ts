@@ -12,6 +12,10 @@ vi.mock('@/lib/ai/provider', () => ({
   describeAIError: () => ({ message: 'Generation unavailable' }),
 }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: mocks.limit }));
+// The route's plan gate (refuseUnlessEntitled, H18) is covered by
+// tests/the-meal-and-recipe-model-endpoints-refuse-like-their-pages.test.ts;
+// this file is about something else, so the gate admits its fixture family.
+vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: async () => null }));
 vi.mock('@/lib/ai/observability', () => ({
   withAiRequest: (_scope: unknown, _feature: unknown, run: (observer: { used: () => void }) => Promise<string>) => run({ used: vi.fn() }),
 }));

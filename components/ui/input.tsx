@@ -1,5 +1,7 @@
 import { cloneElement, forwardRef, isValidElement, useId } from 'react';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { localizeDbErrorText } from '@/lib/supabase/errors';
 
 const base =
   'w-full rounded-xl bg-surface/60 border border-input px-3 sm:px-4 text-fg text-sm sm:text-base placeholder:text-muted transition focus-ring disabled:opacity-50';
@@ -102,6 +104,7 @@ export function Field({
   children: (id: string, control: FieldControlProps) => React.ReactNode;
 }) {
   const id = useId();
+  const t = useTranslations();
   const hintId = `${id}hint`;
   const errorId = `${id}error`;
   // The hint is hidden while an error shows (it always was, visually), so it
@@ -128,7 +131,8 @@ export function Field({
       {showHint && <p id={hintId} className="text-xs text-muted">{hint}</p>}
       {error && (
         <p id={errorId} className="text-xs text-danger" role="alert">
-          {error}
+          {/* A server action's refusal arrives in English (I18N-011). */}
+          {localizeDbErrorText(error, t)}
         </p>
       )}
     </div>

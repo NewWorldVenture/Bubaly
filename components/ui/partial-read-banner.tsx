@@ -68,7 +68,7 @@ export function PartialReadBanner({
           ) : (
             <li key={failure.label}>
               {failure.label}{' '}
-              <code className="break-all font-mono text-[0.95em] opacity-80">{failure.detail}</code>
+              <code className="break-all font-mono text-[0.95em]">{failure.detail}</code>
             </li>
           ),
         )}

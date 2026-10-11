@@ -35,7 +35,15 @@ type RecipeLike = {
   allergyFlags?: string[];
 };
 
-export function buildTransformPrompt(recipe: RecipeLike, actionId: RecipeAiActionId): { system: string; user: string } | null {
+/**
+ * How the caller fences untrusted text (§44). Passed in rather than imported:
+ * this module is also imported by the recipes screen for RECIPE_AI_ACTIONS, and
+ * the fence draws its nonce from `node:crypto`, which has no place in a client
+ * bundle. The route hands over `fenceUntrustedBlock` and `UNTRUSTED_CONTENT_RULE`.
+ */
+export type PromptFence = { block: (label: string, text: string, maxChars?: number) => string; rule: string };
+
+export function buildTransformPrompt(recipe: RecipeLike, actionId: RecipeAiActionId, fence?: PromptFence): { system: string; user: string } | null {
   const action = getRecipeAiAction(actionId);
   if (!action) return null;
 
@@ -45,20 +53,27 @@ export function buildTransformPrompt(recipe: RecipeLike, actionId: RecipeAiActio
     'Shape: {"name": string, "description": string, "ingredients": [{"name": string, "quantity": string, "unit": string}], "instructions": [{"step": number, "text": string}], "notes": string, "tags": [string]}.',
     'Keep amounts realistic. Do NOT claim the recipe treats, cures, or prevents any disease.',
     'Be conservative with allergies: if you cannot guarantee a swap is safe, say so in notes.',
+    ...(fence ? [fence.rule] : []),
   ].join('\n');
 
   const ing = recipe.ingredients.map((i) => `- ${[i.quantity, i.unit, i.name].filter(Boolean).join(' ')}`).join('\n');
   const steps = recipe.instructions.map((s) => `${s.step}. ${s.text}`).join('\n');
-  const user = [
-    `TRANSFORM: ${action.instruction}`,
-    `Keep it the same dish family where possible. Put a one-line summary of changes at the start of "notes".`,
-    recipe.allergyFlags?.length ? `Existing allergy flags: ${recipe.allergyFlags.join(', ')}.` : '',
-    '',
+  // The recipe itself is data: a member typed it, or it was imported from a
+  // third-party catalogue (TheMealDB via Discover). The instruction above it is
+  // ours and stays outside the fence; the variant the model writes is saved.
+  const recipeText = [
     `RECIPE: ${recipe.name}${recipe.cuisine ? ` (${recipe.cuisine})` : ''}`,
     recipe.servings ? `Servings: ${recipe.servings}` : '',
+    recipe.allergyFlags?.length ? `Existing allergy flags: ${recipe.allergyFlags.join(', ')}.` : '',
     `Ingredients:\n${ing || '- (none listed)'}`,
     `Instructions:\n${steps || '(none listed)'}`,
   ].filter(Boolean).join('\n');
+  const user = [
+    `TRANSFORM: ${action.instruction}`,
+    `Keep it the same dish family where possible. Put a one-line summary of changes at the start of "notes".`,
+    '',
+    fence ? fence.block('recipe', recipeText, 16_000) : recipeText,
+  ].join('\n');
 
   return { system, user };
 }

@@ -1337,7 +1337,7 @@ function MessagesWorkspace() {
                                 'mb-1 rounded-lg border-l-2 border-brand/60 bg-elevated/60 px-3 py-1.5 text-xs text-muted',
                                 isMine ? 'border-r-2 border-l-0 text-right' : '',
                               )}>
-                                <span className="font-semibold text-brand-text/80">{replyMsg.sender_name}</span>
+                                <span className="font-semibold text-brand-text">{replyMsg.sender_name}</span>
                                 <p className="truncate">{replyMsg.deleted_at ? tr('messages.messageDeleted') : replyMsg.content || previewText(replyMsg, userId)}</p>
                               </div>
                             )}
@@ -1370,14 +1370,14 @@ function MessagesWorkspace() {
                                     aria-disabled={media(msg.attachment_url) ? undefined : true}
                                     className={cn(
                                       'flex min-w-[13rem] items-center gap-3 rounded-xl border p-2.5',
-                                      isMine ? 'border-brand-fg/25 bg-brand-fg/10' : 'border-border bg-surface/50',
+                                      isMine ? 'border-brand-fg/40' : 'border-border bg-surface/50',
                                     )}>
                                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-rose-500/15 text-rose-300">
                                       <FileText className="h-5 w-5" />
                                     </span>
                                     <span className="min-w-0 flex-1">
                                       <span className="block truncate text-sm font-medium">{msg.attachment_name ?? 'File'}</span>
-                                      <span className="block text-[11px] opacity-70">
+                                      <span className="block text-[11px]">
                                         {(msg.attachment_mime?.split('/')[1] ?? 'file').toUpperCase()}
                                       </span>
                                     </span>
@@ -1395,7 +1395,7 @@ function MessagesWorkspace() {
                                 {msg.content && <span className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{msg.content}</span>}
 
                                 {/* Timestamp inside bubble */}
-                                <span className={cn('ml-2 text-[10px] opacity-60', isMine ? 'text-brand-fg' : 'text-muted')}>
+                                <span className={cn('ml-2 text-[10px]', isMine ? 'text-brand-fg' : 'text-muted')}>
                                   {fmtDate(msg.created_at, 'h:mm a')}
                                   {msg.edited_at && <span> · {tr('messagesChat.edited')}</span>}
                                   {isMine && (messageReadByOthers(msg.read_by, msg.sender_id) ? <span title={tr('messagesChat.read')} aria-label={tr('messagesChat.read')}><CheckCheck className="ml-0.5 inline h-3 w-3" /></span> : <span title={tr('messagesChat.sent')} aria-label={tr('messagesChat.sent')}><Check className="ml-0.5 inline h-3 w-3" /></span>)}

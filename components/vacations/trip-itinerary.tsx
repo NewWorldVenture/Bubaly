@@ -87,7 +87,12 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
     if (toAdd.length === 0) { setBusy(false); return toastError(t('tripItinerary.allDaysAlreadyExist')); }
     const { error } = await createClient().from('vacation_itinerary_days').insert(toAdd);
     setBusy(false);
-    if (error) toastError(describeDbError(error)); else success(t('trips.addedDays', { count: toAdd.length }));
+    if (error) toastError(describeDbError(error));
+    else {
+      success(t('trips.addedDays', { count: toAdd.length }));
+      // `vacation_*` tables are not realtime-published; re-read what changed.
+      void daysQuery.refresh();
+    }
   }
 
   async function saveItem(e: React.FormEvent) {
@@ -118,6 +123,7 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
       if (wroteNoRows(saved)) return toastError(t('errors.thatChangeWasNotSaved'));
       success(form.id ? 'Saved' : 'Added');
       setForm(null);
+      void itemsQuery.refresh();
     } finally {
       setSaving(false);
     }
@@ -128,6 +134,7 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
     const { data: removed, error } = await createClient().from('vacation_itinerary_items').delete().eq('id', id).select('id');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved'));
+    else void itemsQuery.refresh();
   }
 
   function editItem(it: Item) {

@@ -57,7 +57,7 @@ export function DisplaySetupCard({
         onClick={onDismiss}
         disabled={dismissing}
         aria-label={t('displaySetupCard.dismiss')}
-        className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full text-white/60 transition hover:bg-white/10 hover:text-white disabled:opacity-50"
+        className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full text-white/70 transition hover:bg-white/10 hover:text-white disabled:opacity-50"
       >
         {dismissing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <X className="h-4 w-4" aria-hidden />}
       </button>
@@ -68,7 +68,7 @@ export function DisplaySetupCard({
         </span>
         <div className="min-w-0">
           <h2 className="text-lg font-bold text-white">{t('displaySetupCard.setUpThisTablet')}</h2>
-          <p className="mt-1 text-sm text-white/60">{t('displaySetupCard.intro')}</p>
+          <p className="mt-1 text-sm text-white/70">{t('displaySetupCard.intro')}</p>
 
           <ul className="mt-3 space-y-1.5 text-sm text-white/75">
             {steps.map((step) => (
@@ -79,12 +79,14 @@ export function DisplaySetupCard({
             ))}
           </ul>
 
-          <p className="mt-3 text-xs font-medium text-white/55">{t(wakeLockLine(wakeLock))}</p>
+          <p className="mt-3 text-xs font-medium text-white/70">{t(wakeLockLine(wakeLock))}</p>
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
+            {/* Hovered at white/20, not /25: white on white/25 in this white/7
+                card read 4.4:1 on the morning wash, white/20 reads 5.0:1. */}
             <Link
               href="/display/setup"
-              className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-white/15 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/25"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-white/15 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
             >
               {t('displaySetupCard.openTheGuide')} <ExternalLink className="h-3.5 w-3.5" aria-hidden />
             </Link>

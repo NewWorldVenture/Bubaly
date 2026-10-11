@@ -248,7 +248,7 @@ export function ShoppingModule() {
                 {isActive && (
                   <button type="button" onClick={() => setEditingList(list)}
                     aria-label={t('shopping.editList')}
-                    className="mr-3 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 rounded p-1 hover:bg-black/10">
+                    className="mr-3 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 rounded p-1.5 hover:bg-black/10">
                     <Pencil className="h-3 w-3" />
                   </button>
                 )}
@@ -384,8 +384,7 @@ export function ShoppingModule() {
                         <div className="divide-y divide-border/40">
                           {catItems.map((item) => (
                             <div key={item.id}
-                              className={cn('group flex items-center gap-3 px-4 py-2.5 hover:bg-elevated/20 transition',
-                                item.is_checked && 'opacity-60')}>
+                              className="group flex items-center gap-3 px-4 py-2.5 hover:bg-elevated/20 transition">
                               <button onClick={() => toggleItem(item)} disabled={isPending(`toggle:${item.id}`)} aria-label={item.is_checked ? t('uiText.uncheckItem') : t('uiText.checkItem')}
                                 className={cn('flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border-2 transition disabled:opacity-60',
                                   item.is_checked ? 'border-success bg-success' : 'border-border hover:border-success/50')}>
@@ -410,7 +409,7 @@ export function ShoppingModule() {
                                 </a>
                               )}
                               <button onClick={() => deleteItem(item.id)} disabled={isPending(`delete:${item.id}`)} aria-label={t('shopping.deleteItem')}
-                                className="rounded p-1 text-muted opacity-0 transition group-hover:opacity-100 hover:text-danger disabled:opacity-50">
+                                className="rounded p-1 text-muted opacity-100 sm:opacity-0 transition sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 hover:text-danger disabled:opacity-50">
                                 {isPending(`delete:${item.id}`) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                               </button>
                             </div>

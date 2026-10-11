@@ -95,6 +95,10 @@ export function SleepModule() {
       .eq('id', log.id).eq('family_id', familyId).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(data)) return toastError(t('errors.thatChangeWasNotSaved'));
+    // Published without REPLICA IDENTITY FULL, so the family_id-filtered
+    // channel never hears this DELETE: the confirmed delete drops the row from
+    // the screen here, or it stays until a reload (H3).
+    logs.setData((rows) => rows.filter((row) => row.id !== log.id));
     success(t('sleepModule.nightRemoved'));
   }
 

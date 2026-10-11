@@ -250,7 +250,9 @@ export function ProjectsModule() {
       )}
       {openProject && (
         <ProjectDetail project={openProject} familyId={familyId} userId={userId} members={members} contractors={contractors.data} materials={materials.data.filter((m) => m.project_id === openProject.id)} quotes={quotes.data.filter((q) => q.project_id === openProject.id)} today={today}
-          onClose={() => setOpenId(null)} onEdit={() => openProjectForm(openProject)} onStatus={(s) => setStatus(openProject, s)} onDelete={() => deleteProject(openProject)} />
+          onClose={() => setOpenId(null)} onEdit={() => openProjectForm(openProject)} onStatus={(s) => setStatus(openProject, s)} onDelete={() => deleteProject(openProject)}
+          onMaterialRemoved={(id) => materials.setData((rows) => rows.filter((row) => row.id !== id))}
+          onQuoteRemoved={(id) => quotes.setData((rows) => rows.filter((row) => row.id !== id))} />
       )}
     </div>
   );
@@ -360,9 +362,11 @@ function ProjectForm({ familyId, userId, members, contractors, project, defaultO
   );
 }
 
-function ProjectDetail({ project, familyId, userId, members, contractors, materials, quotes, today, onClose, onEdit, onStatus, onDelete }: {
+function ProjectDetail({ project, familyId, userId, members, contractors, materials, quotes, today, onClose, onEdit, onStatus, onDelete, onMaterialRemoved, onQuoteRemoved }: {
   project: Project; familyId: string; userId: string; members: { id: string; display_name: string }[]; contractors: Contractor[]; materials: Material[]; quotes: Quote[]; today: Date;
   onClose: () => void; onEdit: () => void; onStatus: (s: HomeProjectStatus) => void; onDelete: () => void;
+  /** A confirmed delete leaves the parent's list here: realtime never delivers it (H3). */
+  onMaterialRemoved: (id: string) => void; onQuoteRemoved: (id: string) => void;
 }) {
   const locale = useLocale();
   const { fmtDate: fmt } = useFormat();
@@ -398,6 +402,10 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
     const { data: removed, error } = await createClient().from('project_materials').delete().eq('id', m.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // Published without REPLICA IDENTITY FULL, so the family_id-filtered
+    // channel never hears this DELETE: the confirmed delete drops the row from
+    // the screen here, or it stays until a reload (H3).
+    onMaterialRemoved(m.id);
     success(tr('projectsModule.materialRemoved'));
   }
 
@@ -444,6 +452,10 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
     const { data: removed, error } = await createClient().from('project_quotes').delete().eq('id', q.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // Published without REPLICA IDENTITY FULL, so the family_id-filtered
+    // channel never hears this DELETE: the confirmed delete drops the row from
+    // the screen here, or it stays until a reload (H3).
+    onQuoteRemoved(q.id);
     success(tr('projectsModule.quoteRemoved'));
   }
 
@@ -534,7 +546,7 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
               {qc.rows.map((q) => {
                 const c = contractorOf(q.contractor_id);
                 return (
-                  <li key={q.id} className={cn('rounded-xl border px-3 py-2', q.status === 'accepted' ? 'border-emerald-500/30 bg-emerald-500/10' : q.isExpired || q.status === 'declined' ? 'border-border/60 bg-surface/30 opacity-75' : 'border-border bg-surface/60')}>
+                  <li key={q.id} className={cn('rounded-xl border px-3 py-2', q.status === 'accepted' ? 'border-emerald-500/30 bg-emerald-500/10' : q.isExpired || q.status === 'declined' ? 'border-border/60 bg-surface/30' : 'border-border bg-surface/60')}>
                     <div className="flex items-start gap-3">
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium">{q.contractor_name}{c?.is_preferred ? ' ⭐' : ''} <span className="font-bold">{q.status === 'requested' ? '' : money(q.amount_cents)}</span>{q.isLowest && q.status !== 'accepted' ? <span className="ml-1 rounded-full bg-brand/15 px-1.5 text-[10px] text-brand-text">lowest</span> : null}{q.vsLowestPct ? <span className="ml-1 text-xs text-muted">+{q.vsLowestPct}%</span> : null}</p>

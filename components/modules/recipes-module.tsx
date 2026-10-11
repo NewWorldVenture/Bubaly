@@ -18,6 +18,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { RECIPE_AI_ACTIONS } from '@/lib/recipes/ai-actions';
+import { markRecipeMade, type TimesMadeStore } from '@/lib/recipes/times-made';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -177,6 +178,11 @@ export function RecipesModule() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? tr('recipesModule.couldNotGenerateVariant'));
+      // The variant is a new family_recipes row, and that table is not
+      // realtime-published: without a read-back the list never showed it, and
+      // a cook who could not find it remixed again — a second paid call and a
+      // duplicate variant.
+      void refresh();
       success(tr('recipesModule.aiVariantSavedToYour'));
       setViewing(null);
     } catch (err) {
@@ -188,12 +194,20 @@ export function RecipesModule() {
 
   async function markMade(r: Recipe) {
     const supabase = createClient();
-    const { data: updated2, error } = await supabase.from('family_recipes').update({
-      times_made: (r.times_made ?? 0) + 1,
-      last_made_at: new Date().toISOString(),
-    }).eq('id', r.id).select('id');
+    // +1 on the LIVE count, not on `r` — the snapshot this modal opened with,
+    // which nothing refreshed: a second tap wrote the same N+1, and two members
+    // marking one recipe lost a cook between them (lib/recipes/times-made.ts).
+    const store: TimesMadeStore = {
+      readTimesMade: (id) => supabase.from('family_recipes').select('times_made').eq('id', id).eq('family_id', familyId).maybeSingle(),
+      writeTimesMade: (id, expected, next, madeAt) => supabase.from('family_recipes')
+        .update({ times_made: next, last_made_at: madeAt }).eq('id', id).eq('family_id', familyId).eq('times_made', expected).select('id'),
+    };
+    const madeAt = new Date().toISOString();
+    const { data: made, error } = await markRecipeMade(store, r.id, madeAt);
     if (error) return toastError(describeDbError(error));
-    if (wroteNoRows(updated2)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    if (!made) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // The open modal shows the count it now has, not the one it opened with.
+    setViewing((current) => (current && current.id === r.id ? { ...current, times_made: made.timesMade, last_made_at: madeAt } : current));
     success(tr('recipesModule.markedAsMadeToday'));
     void refresh();
   }
@@ -361,7 +375,7 @@ export function RecipesModule() {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={safeWebLink(recipe.photo_url) ?? undefined} alt={recipe.name} className="h-full w-full object-cover transition group-hover:scale-105" />
                   ) : (
-                    <div className="flex h-full items-center justify-center text-5xl opacity-30">{cat.emoji}</div>
+                    <div aria-hidden className="flex h-full items-center justify-center text-5xl opacity-30">{cat.emoji}</div>
                   )}
                   {/* Badges */}
                   <div className="absolute left-2 top-2 flex gap-1.5">

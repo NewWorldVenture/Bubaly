@@ -17,9 +17,9 @@ import { Avatar } from '@/components/ui/avatar';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { dailyTotals, groupByMeal, todayKey, MEAL_META, MEALS } from '@/lib/meals/tracker';
+import { dailyTotals, groupByMeal, MEAL_META, MEALS } from '@/lib/meals/tracker';
 import { useTranslations } from '@/components/i18n/locale-provider';
-import { useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 
 type Log = Tables<'nutrition_logs'>;
 
@@ -31,10 +31,16 @@ export function NutritionView() {
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const today = todayKey();
+  // The FAMILY's day, not Greenwich's: `logged_on` is a DATE the family reads
+  // as "today", and the totals below are a day's.
+  const clock = useFamilyClock();
+  const today = clock.todayKey();
   const [member, setMember] = useState<string>(selfMember?.id ?? members[0]?.id ?? '');
   const [form, setForm] = useState(false);
 
+  // nutrition_logs is not in the realtime publication (REALTIME_TABLES), so no
+  // channel ever tells this screen about a write — its own included. Every
+  // confirmed write below reads the list back itself (H8).
   const { data: rows, loading, error, refresh } = useRealtimeQuery<Log>({
     table: 'nutrition_logs', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('nutrition_logs').select('*').eq('family_id', familyId).order('created_at', { ascending: false }).limit(400),
@@ -58,6 +64,7 @@ export function NutritionView() {
       .eq('id', l.id).eq('family_id', familyId).select('id');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved'));
+    else await refresh();
   }
 
   // A genuine read failure must surface + be retryable, not silently render as an
@@ -108,7 +115,7 @@ export function NutritionView() {
                       <p className="truncate text-sm font-semibold">{l.item}</p>
                       <p className="truncate text-xs text-muted">{l.calories} cal · P {Number(l.protein_g)}g · C {Number(l.carbs_g)}g · F {Number(l.fat_g)}g{l.water_ml ? ` · 💧 ${l.water_ml}ml` : ''}</p>
                     </div>
-                    <button onClick={() => remove(l)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={t('nutritionView.delete')}><Trash2 className="h-4 w-4" /></button>
+                    <button onClick={() => remove(l)} className="rounded-lg p-1.5 text-muted opacity-100 sm:opacity-0 transition hover:text-danger sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100" aria-label={t('nutritionView.delete')}><Trash2 className="h-4 w-4" /></button>
                   </div>
                 ))}
               </div>
@@ -117,7 +124,8 @@ export function NutritionView() {
         </div>
       )}
 
-      {form && <LogModal members={members} defaultMember={member} familyId={familyId} userId={userId} onClose={() => setForm(false)} />}
+      {form && <LogModal members={members} defaultMember={member} familyId={familyId} userId={userId} today={today}
+        onLogged={refresh} onClose={() => setForm(false)} />}
     </div>
   );
 }
@@ -131,11 +139,18 @@ function Stat({ label, value, icon: Icon, tint }: { label: string; value: string
   );
 }
 
-function LogModal({ members, defaultMember, familyId, userId, onClose }: { members: Tables<'family_members'>[]; defaultMember: string; familyId: string; userId: string; onClose: () => void }) {
+function LogModal({ members, defaultMember, familyId, userId, today, onLogged, onClose }: {
+  members: Tables<'family_members'>[]; defaultMember: string; familyId: string; userId: string;
+  /** The family's day — the default `logged_on`. */
+  today: string;
+  /** Read the list back, so the entry and the totals show it without a reload. */
+  onLogged: () => Promise<void>;
+  onClose: () => void;
+}) {
   const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
-  const [v, setV] = useState({ member_id: defaultMember, meal: 'breakfast', item: '', calories: '', protein_g: '', carbs_g: '', fat_g: '', water_ml: '', logged_on: todayKey() });
+  const [v, setV] = useState({ member_id: defaultMember, meal: 'breakfast', item: '', calories: '', protein_g: '', carbs_g: '', fat_g: '', water_ml: '', logged_on: today });
 
   const num = (x: string) => { const n = parseFloat(x); return Number.isFinite(n) ? n : 0; };
 
@@ -143,13 +158,15 @@ function LogModal({ members, defaultMember, familyId, userId, onClose }: { membe
     e.preventDefault();
     if (!v.item.trim()) return toastError(t('nutritionView.addAFoodItem'));
     setSaving(true);
-    const { error } = await createClient().from('nutrition_logs').insert({
+    const { data: logged, error } = await createClient().from('nutrition_logs').insert({
       family_id: familyId, member_id: v.member_id || null, logged_on: v.logged_on, meal: v.meal, item: v.item.trim(),
       calories: Math.round(num(v.calories)), protein_g: num(v.protein_g), carbs_g: num(v.carbs_g), fat_g: num(v.fat_g),
       water_ml: Math.round(num(v.water_ml)), created_by: userId,
-    });
+    }).select('id').single();
+    if (error) { setSaving(false); return toastError(describeDbError(error)); }
+    if (!logged) { setSaving(false); return toastError(t('errors.thatChangeWasNotSaved')); }
+    await onLogged();
     setSaving(false);
-    if (error) return toastError(describeDbError(error));
     success(t('nutritionView.logged'));
     onClose();
   }

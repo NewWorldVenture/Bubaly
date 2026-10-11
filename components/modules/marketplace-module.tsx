@@ -319,8 +319,7 @@ export function MarketplaceModule({
               const alreadyOffered = myOpenOffers.has(l.id);
               const offerable = canOffer(l as ListingLike, selfId, offers ?? []);
               return (
-                <div key={l.id} className={cn('flex flex-col overflow-hidden rounded-2xl border border-border bg-surface/50',
-                  l.status === 'claimed' && 'opacity-80')}>
+                <div key={l.id} className="flex flex-col overflow-hidden rounded-2xl border border-border bg-surface/50">
                   <Link href={`/marketplace/item/${l.id}`} className="group block" aria-label={t('itemAction.view', { name: l.title })}>
                   <ListingImage
                     src={l.photo_url}

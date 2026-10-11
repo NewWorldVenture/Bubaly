@@ -294,12 +294,12 @@ export function TodosModule() {
           </div>
         </div>
 
-        <div className="hidden items-center gap-1 opacity-0 transition group-hover:opacity-100 sm:flex">
-          <button onClick={() => setEditingItem(item)} aria-label={tr('todos.editTask')} className="rounded p-1 text-muted hover:text-fg">
+        <div className="flex items-center gap-1 opacity-100 sm:opacity-0 transition sm:group-hover:opacity-100 focus-within:opacity-100 coarse:opacity-100">
+          <button onClick={() => setEditingItem(item)} aria-label={tr('todos.editTask')} className="rounded p-1.5 text-muted hover:text-fg">
             <Pencil className="h-3.5 w-3.5" />
           </button>
           <button onClick={() => deleteItem(item.id)} disabled={isPending(`delete:${item.id}`)} aria-label={tr('todos.deleteTask')}
-            className="rounded p-1 text-muted hover:text-danger disabled:opacity-50">
+            className="rounded p-1.5 text-muted hover:text-danger disabled:opacity-50">
             {isPending(`delete:${item.id}`) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
           </button>
         </div>
@@ -363,7 +363,7 @@ export function TodosModule() {
                   tab === t.id ? 'bg-brand/15 text-brand-text' : 'text-muted hover:bg-elevated hover:text-fg')}>
                 {t.label}
                 <span className={cn('grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-[11px] font-bold',
-                  tab === t.id ? 'bg-brand/25 text-brand-text' : 'bg-elevated text-muted')}>{t.n}</span>
+                  tab === t.id ? 'bg-brand text-brand-fg' : 'bg-elevated text-muted')}>{t.n}</span>
               </button>
             ))}
           </div>
