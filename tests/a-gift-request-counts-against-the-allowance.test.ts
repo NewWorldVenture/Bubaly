@@ -81,6 +81,8 @@ vi.mock('@/lib/server/rate-limit-db', () => ({ rateLimitDb: async () => ({ ok: t
 vi.mock('@/lib/server/plan', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/plan')>()),
   resolveFamilyPlanLevel: async () => state.planLevel,
+  // The same, unlocked family as the whole entitlement the AI gates read.
+  resolveFamilyEntitlement: async () => ({ effectiveLevel: state.planLevel, locked: false, closed: false, inTrial: false, trialEndsAt: null }),
 }));
 vi.mock('@/lib/ai/provider', () => ({
   isAIConfigured: async () => true,

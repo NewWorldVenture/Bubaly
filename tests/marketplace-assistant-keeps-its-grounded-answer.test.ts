@@ -47,6 +47,8 @@ vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => (
 vi.mock('@/lib/server/plan', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/plan')>()),
   resolveFamilyPlanLevel: async () => 0,
+  // The same, unlocked family as the whole entitlement the AI gates read.
+  resolveFamilyEntitlement: async () => ({ effectiveLevel: 0, locked: false, closed: false, inTrial: false, trialEndsAt: null }),
 }));
 vi.mock('@/lib/i18n/server', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/lib/i18n/server')>();

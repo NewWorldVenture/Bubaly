@@ -20,6 +20,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/server/plan', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/plan')>()),
   resolveFamilyPlanLevel: async () => 1,
+  // The same, unlocked family as the whole entitlement the AI gates read.
+  resolveFamilyEntitlement: async () => ({ effectiveLevel: 1, locked: false, closed: false, inTrial: false, trialEndsAt: null }),
 }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.requireUserContext }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.createServer }));

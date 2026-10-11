@@ -25,7 +25,11 @@ vi.mock('@/lib/supabase/auth', () => ({
   effectivePlanLevel: () => 2,
 }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.createServer }));
-vi.mock('@/lib/server/plan', () => ({ resolveFamilyPlanLevel: async () => 2 }));
+vi.mock('@/lib/server/plan', () => ({
+  resolveFamilyPlanLevel: async () => 2,
+  // The same, unlocked family as the whole entitlement the AI gates read.
+  resolveFamilyEntitlement: async () => ({ effectiveLevel: 2, locked: false, closed: false, inTrial: false, trialEndsAt: null }),
+}));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: mocks.enforceAIRateLimit }));
 vi.mock('@/lib/ai/provider', async (importOriginal) => ({
   describeAIError: (await importOriginal<typeof import('@/lib/ai/provider')>()).describeAIError,
