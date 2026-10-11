@@ -80,7 +80,7 @@ test('CI evidence expires after three days, uses a unique attempt name, and igno
   const step = e2eStep(uploadStepName);
   assert.match(step, /^          retention-days: 3$/m);
   assert.match(step, /^          if-no-files-found: ignore$/m);
-  assert.match(step, /^          name: e2e-failure-evidence-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}$/m);
+  assert.match(step, /^          name: e2e-failure-evidence-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}-shard-\$\{\{ matrix\.shard \}\}$/m);
 });
 
 function assertAlwaysCleanup(source = workflow) {

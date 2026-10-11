@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { createRequire } from 'node:module';
+
+const { load } = createRequire(import.meta.url)('js-yaml') as {
+  load(source: string): { jobs: Record<string, {
+    env?: Record<string, string>;
+    strategy?: { matrix?: { timezone?: string[] } };
+    steps?: { run?: string; env?: Record<string, string> }[];
+  }> };
+};
 
 // CI ran the unit suite twice, at TZ=UTC and at TZ=America/Los_Angeles. Both of
 // those are AT or WEST of Greenwich, and that is a blind spot with a SIGN.
@@ -26,7 +35,9 @@ const CI = readFileSync(join(process.cwd(), '.github/workflows/ci.yml'), 'utf8')
 
 /** Every `TZ:` value the CI workflow binds a suite run to. */
 function declaredZones(): string[] {
-  return [...CI.matchAll(/^\s*TZ:\s*([A-Za-z0-9_+\-/]+)\s*$/gm)].map((m) => m[1]);
+  const unit = load(CI).jobs.unit;
+  if (unit?.env?.TZ !== '${{ matrix.timezone }}' || !unit.steps?.some((step) => step.run === 'npm test')) return [];
+  return unit.strategy?.matrix?.timezone ?? [];
 }
 
 /**
@@ -67,12 +78,11 @@ describe('the unit suite is run from both sides of Greenwich', () => {
 
   // The step exists, is a real suite run, and is not pointed at something else.
   it('the eastern zone is bound to an actual `npm test` step', () => {
-    const step = /- name: Unit tests \(east of Greenwich\)\n\s*run: (.+)\n\s*env:\n\s*TZ: (\S+)/.exec(CI);
-    expect(step, 'the "Unit tests (east of Greenwich)" step is gone from ci.yml').not.toBeNull();
-    expect(step![1].trim()).toBe('npm test');
-    expect(offsetMinutes(step![2]),
-      `the east-of-Greenwich step is bound to ${step![2]}, which is not east of Greenwich`,
-    ).toBeGreaterThan(0);
+    const unit = load(CI).jobs.unit;
+    expect(unit, 'the full-suite timezone matrix is gone from ci.yml').toBeDefined();
+    expect(unit.steps?.filter((step) => step.run === 'npm test')).toHaveLength(1);
+    expect(unit.env?.TZ).toBe('${{ matrix.timezone }}');
+    expect(declaredZones().some((zone) => offsetMinutes(zone) > 0)).toBe(true);
   });
 
   // Non-vacuity floor. If the regexes above stopped matching anything, both

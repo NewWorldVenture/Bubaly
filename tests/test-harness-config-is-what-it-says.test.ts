@@ -1,5 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { createRequire } from 'node:module';
+
+const { load } = createRequire(import.meta.url)('js-yaml') as {
+  load(source: string): { jobs: Record<string, {
+    env?: Record<string, string>;
+    strategy?: { matrix?: { timezone?: string[] } };
+    steps?: { run?: string; env?: Record<string, string> }[];
+  }> };
+};
 
 // Three fixes to the test harness itself that nothing held in place. Each one is
 // a line in a config file; each was found because its absence cost something.
@@ -30,7 +39,10 @@ describe('CI runs the suite on a DST-observing host (MAIN-F-F04)', () => {
   // go red where the clocks change. Production and the default job run UTC, so
   // without this step the bug it caught would pass every run again.
   it('has a unit-test step with TZ=America/Los_Angeles', () => {
-    expect(ci).toMatch(/- name: Unit tests \(DST-observing host\)\s+run: npm test\s+env:\s+TZ: America\/Los_Angeles/);
+    const unit = load(ci).jobs.unit;
+    expect(unit.strategy?.matrix?.timezone).toContain('America/Los_Angeles');
+    expect(unit.env?.TZ).toBe('${{ matrix.timezone }}');
+    expect(unit.steps?.filter((step) => step.run === 'npm test')).toHaveLength(1);
   });
 
   it('and the case it exists for is still there', () => {

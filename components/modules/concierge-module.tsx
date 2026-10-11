@@ -227,7 +227,7 @@ export function ConciergeModule() {
                   enterKeyHint="send"
                   placeholder={tr('concierge.tellMeWhatYoudLikeTo')}
                   rows={2}
-                  className="flex-1 resize-none rounded-2xl border border-border bg-surface/60 px-4 py-3 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/30"
+                  className="flex-1 resize-none rounded-2xl border border-border bg-surface/60 px-4 py-3 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand"
                 />
                 <button aria-label={tr('a11y.send')} onClick={() => void sendMessage()} disabled={!input.trim() || sending}
                   className={cn('flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl transition',
@@ -470,7 +470,7 @@ function PlanDetail({ plan, onClose, onDelete, onRefresh }: {
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-wide text-muted mb-1">{t('concierge.status')}</p>
           <select aria-label={t('fieldName.status')} value={editStatus} onChange={e => void updateStatus(e.target.value)}
-            className="w-full rounded-lg border border-border bg-surface/60 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand/30">
+            className="w-full rounded-lg border border-border bg-surface/60 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand">
             {['idea', 'planning', 'booked', 'confirmed', 'completed', 'cancelled'].map(s => (
               <option key={s} value={s} className="capitalize">{s}</option>
             ))}

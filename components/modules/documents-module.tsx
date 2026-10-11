@@ -331,7 +331,7 @@ export function DocumentsModule() {
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder={tr('documents.searchFiles')}
                   aria-label={tr('documents.searchFiles')}
-                  className="h-9 w-40 rounded-xl border border-border bg-surface/60 pl-9 pr-3 text-sm outline-none placeholder:text-muted focus:border-brand/50 sm:w-56"
+                  className="h-9 w-40 rounded-xl border border-border bg-surface/60 pl-9 pr-3 text-sm outline-none placeholder:text-muted focus:border-brand sm:w-56"
                 />
               </div>
             </div>

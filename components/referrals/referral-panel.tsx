@@ -135,7 +135,7 @@ export function ReferralPanel({ code, link, rewardLabel, enabled, alreadyReferre
               value={entry}
               onChange={(e) => setEntry(e.target.value.toUpperCase())}
               placeholder="SMITH-7K4Q"
-              className="h-11 flex-1 rounded-xl border border-border bg-bg px-4 text-sm tracking-widest outline-none focus:border-brand"
+              className="h-11 min-w-0 flex-1 rounded-xl border border-border bg-bg px-4 text-sm tracking-widest outline-none focus:border-brand"
             />
             <button onClick={apply} disabled={pending || !entry.trim()} className="rounded-xl bg-brand px-5 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-60">
               {pending ? t('referralPanel.applying') : t('referralPanel.apply')}
