@@ -122,8 +122,37 @@ async function deliveredDevices(supabase: DB, notificationIds: string[]): Promis
   return { byNotification, store };
 }
 
-async function sendPushDevicesToUser(supabase: DB, userId: string, payload: PushPayload, receipts?: DeliveryReceipts): Promise<PushResult> {
-  const result: PushResult = { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 };
+// Internal read failure flag keeps unknown family access pending even beyond
+// the provider-failure retry window. It is never part of public outcome counts.
+type DeliveryResult = PushResult & { familyReadFailed?: true };
+
+async function activeFamilyRecipient(supabase: DB, familyId: string, userId: string): Promise<boolean> {
+  const { data, error } = await supabase.from('family_members')
+    .select('user_id, family_id, is_active')
+    .eq('family_id', familyId).eq('user_id', userId).eq('is_active', true).limit(1);
+  if (error || !Array.isArray(data)) throw new Error('Push family membership read failed.');
+  if (data.length === 0) return false;
+  const member = data[0];
+  if (data.length !== 1 || !member || typeof member !== 'object' || Array.isArray(member)
+    || member.user_id !== userId || member.family_id !== familyId || member.is_active !== true) {
+    throw new Error('Push family membership reply is invalid.');
+  }
+  return true;
+}
+
+async function sendPushDevicesToUser(supabase: DB, userId: string, payload: PushPayload, receipts?: DeliveryReceipts, familyId?: string): Promise<DeliveryResult> {
+  const result: DeliveryResult = { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 };
+  async function stillPermitted(): Promise<boolean> {
+    if (familyId === undefined) return true;
+    try {
+      if (await activeFamilyRecipient(supabase, familyId, userId)) return true;
+      result.withheld = 1;
+    } catch (error) {
+      result.failed++; result.familyReadFailed = true;
+      console.error('[push] final family membership read failed', { familyId, userId, error });
+    }
+    return false;
+  }
   const { data: devices, error: devicesError } = await supabase
     .from('push_devices')
     .select('id, platform, provider, endpoint, p256dh, auth, token')
@@ -155,6 +184,8 @@ async function sendPushDevicesToUser(supabase: DB, userId: string, payload: Push
           result.skipped++;
           continue;
         }
+        // Recheck after asynchronous endpoint validation, immediately before send.
+        if (!(await stillPermitted())) return result;
         try {
           await webpush.sendNotification(
             { endpoint: d.endpoint, keys: { p256dh: d.p256dh, auth: d.auth } },
@@ -194,6 +225,7 @@ async function sendPushDevicesToUser(supabase: DB, userId: string, payload: Push
         }
       } else if (d.provider === 'fcm' || d.provider === 'apns') {
         if (!d.token) { result.skipped++; continue; }
+        if (!(await stillPermitted())) return result;
         const outcome = await sendNativePush(d.provider, d.token, payload);
         if (outcome === 'sent') { result.sent++; await recordDelivery(supabase, receipts, d.id); }
         else if (outcome === 'unconfigured') result.skipped++;
@@ -235,11 +267,13 @@ async function blockedPushRecipients(supabase: DB, userIds: string[]): Promise<S
 }
 
 /** Private fanout for a batch whose permission reads have already succeeded. */
-async function sendPermittedPushes(supabase: DB, userIds: string[], payload: PushPayload, receipts?: DeliveryReceipts): Promise<PushResult> {
-  const totals: PushResult = { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 };
+async function sendPermittedPushes(supabase: DB, userIds: string[], payload: PushPayload, receipts?: DeliveryReceipts, familyId?: string): Promise<DeliveryResult> {
+  const totals: DeliveryResult = { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 };
   for (const uid of [...new Set(userIds)]) {
-    const r = await sendPushDevicesToUser(supabase, uid, payload, receipts);
+    const r = await sendPushDevicesToUser(supabase, uid, payload, receipts, familyId);
     totals.sent += r.sent; totals.skipped += r.skipped; totals.failed += r.failed; totals.pruned += r.pruned;
+    totals.withheld += r.withheld;
+    if (r.familyReadFailed) totals.familyReadFailed = true;
   }
   return totals;
 }
@@ -392,9 +426,9 @@ export async function dispatchPendingPushes(
     if (cursorWriteError || saved?.key !== cursorKey) throw new Error('Push cursor write failed.');
   }
 
-  // Resolve current family access at delivery, including directly addressed
-  // rows that were queued before a member was removed. Pages are a live read;
-  // membership changes during paging or sending are not atomically enforced.
+  // The roster prepares recipients; queued family sends also recheck each
+  // recipient immediately before contacting a device provider. A change after
+  // that final read is still not atomically fenced against the external send.
   const familyMembers = new Map<string, Set<string>>();
   async function membersOf(familyId: string): Promise<Set<string>> {
     if (familyMembers.has(familyId)) return familyMembers.get(familyId)!;
@@ -443,9 +477,9 @@ export async function dispatchPendingPushes(
       notificationId: n.id,
       delivered: receipts.byNotification.get(n.id) ?? new Set<string>(),
       store: receipts.store,
-    });
+    }, n.family_id);
     totals.sent += r.sent; totals.skipped += r.skipped; totals.failed += r.failed; totals.pruned += r.pruned;
-    totals.withheld += addressed.length - recipients.length;
+    totals.withheld += addressed.length - recipients.length + r.withheld;
     // Missing credentials/invalid registration are not intentional opt-outs.
     // Keep the row pending so a later healthy run can deliver it — but only
     // inside the retry window, so a permanently broken endpoint cannot hold the
@@ -462,7 +496,7 @@ export async function dispatchPendingPushes(
     // repaired; a dead endpoint does not. Expiring those too would silently
     // drop every notification raised during a misconfiguration, and nothing is
     // being sent meanwhile, so none of them can be buzzing anyone twice.
-    const expired = r.failed > 0 && ageMs >= PUSH_RETRY_WINDOW_MS;
+    const expired = r.failed > 0 && !r.familyReadFailed && ageMs >= PUSH_RETRY_WINDOW_MS;
     if (incomplete && !expired) {
       console.warn('[push] delivery incomplete; leaving pushed_at null to retry', {
         notificationId: n.id, failed: r.failed, skipped: r.skipped, ageMs,

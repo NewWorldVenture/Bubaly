@@ -115,9 +115,11 @@ describe('all public push senders enforce consent', () => {
     const f = fixture();
     f.tables.notifications = Array.from({ length: 20 }, (_, index) => ({ ...f.tables.notifications[0], id: notificationId(index + 1) }));
     expect((await dispatchPendingPushes(f.db, { now: NOW })).result.sent).toBe(20);
-    // One active-roster read and one child-role policy read, each with its
-    // empty terminal page, independent of the twenty queued notifications.
-    expect(f.calls.filter(call => call.table === 'family_members').map(call => call.count)).toEqual([1, 0, 1, 0]);
+    // The roster and child-role policy still each finish their empty terminal page.
+    // Every delivery also checks current active membership after those shared reads.
+    const memberReads = f.calls.filter(call => call.table === 'family_members').map(call => call.count);
+    expect(memberReads.slice(0, 4)).toEqual([1, 0, 1, 0]);
+    expect(memberReads.slice(4)).toEqual(Array(20).fill(1));
     expect(f.calls.filter(call => call.table === 'family_ai_settings').map(call => call.count)).toEqual([1, 0]);
     expect(f.calls.filter(call => call.table === 'user_preferences')).toHaveLength(1);
   });
