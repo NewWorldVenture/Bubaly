@@ -29,14 +29,46 @@ import { sourceFiles } from './helpers/hover-reveals';
 const REMOVES = /^(focus:|focus-visible:)?outline-none$/;
 const TEXT_ENTRY = /^(input|textarea)$/;
 
-// A focus style that paints something. A ring needs a width (a colour alone
-// draws nothing); a zero width, none, transparent or a zero alpha paints nothing.
-const paints = (c: string) =>
-  c === 'ring' || /^ring-([1-9]\d*|\[\d+px\])$/.test(c) || c === 'underline' ||
-  (/^(border|bg-|shadow|outline)/.test(c) && !/^outline-offset-|(^|-)(0|none|transparent|inherit|hidden)$|\/0$/.test(c));
-/** Whether `classes` paint something when `prefix` (focus:, focus-visible:, focus-within:) applies; `focus-ring` is the app's own. */
+// What a focus style paints, judged per property as the classes combine. A
+// ring, border or outline needs a width that is not zero (a ring colour alone
+// draws nothing; a border has none unless a class gives it one) and a colour
+// that is not transparent or zero alpha; when the focus classes set no colour,
+// the element's own applies. A zero width, none, transparent or a zero alpha
+// anywhere in a property's focus classes cancels that property.
+const NOTHING = /(^|-)(0|none|transparent|inherit|hidden)$|-\[0(px)?\]$|\/0$/;
+const PROPERTY = /^(ring|border|outline|shadow|bg|underline)(?=$|-)/;
+const PLACEMENT = /^(ring|outline|underline)-offset-|^ring-inset$/;
+const WIDTH: Record<string, RegExp> = {
+  ring: /^ring(-\d+|-\[\d+px\])?$/,
+  border: /^border(-[trblxyse])?(-\d+|-\[\d+px\])?$/,
+  outline: /^outline(-\d+|-\[\d+px\])?$/,
+};
+const STYLE = /^(border|outline)-(solid|dashed|dotted|double)$/;
+const colour = (prop: string, c: string) => !WIDTH[prop].test(c) && !STYLE.test(c);
+
+function paints(focus: string[], own: string[]): boolean {
+  const of = (cs: string[], prop: string) => cs.filter((c) => !PLACEMENT.test(c) && c.match(PROPERTY)?.[1] === prop);
+  return ['ring', 'border', 'outline', 'shadow', 'bg', 'underline'].some((prop) => {
+    // outline-none is `outline: 2px solid transparent`: the outline being
+    // replaced, and a transparent colour under any outline that sets no other.
+    const removed = prop === 'outline' && focus.includes('outline-none') ? ['outline-none'] : [];
+    const set = of(focus, prop).filter((c) => c !== 'outline-none');
+    if (!set.length || set.some((c) => NOTHING.test(c))) return false;
+    if (!(prop in WIDTH)) return true;
+    const base = [...of(own, prop), ...removed];
+    if (prop === 'ring' && !set.some((c) => WIDTH.ring.test(c))) return false;
+    if (prop === 'border' && ![...set, ...base].some((c) => WIDTH.border.test(c) && !NOTHING.test(c))) return false;
+    if (!set.some((c) => colour(prop, c)) && base.some((c) => colour(prop, c) && NOTHING.test(c))) return false;
+    return true;
+  });
+}
+/** Whether `classes` paint something when the `prefixes` (focus: and focus-visible:, or focus-within:) apply; `focus-ring` is the app's own. */
 const paintsOn = (classes: string[], prefixes: string[]) =>
-  classes.some((c) => (prefixes.includes('focus-visible:') && c === 'focus-ring') || prefixes.some((p) => c.startsWith(p) && paints(c.slice(p.length))));
+  (prefixes.includes('focus-visible:') && classes.includes('focus-ring')) ||
+  paints(
+    classes.flatMap((c) => prefixes.filter((p) => c.startsWith(p)).map((p) => c.slice(p.length))),
+    classes.filter((c) => !c.includes(':')),
+  );
 // A dialog takes focus programmatically, as a whole, and says so: role="dialog"
 // or "alertdialog", or aria-modal that is literally true. aria-modal={false}
 // or a bound value is not a dialog's word for it.
@@ -164,8 +196,12 @@ describe('a focused control shows it', () => {
     expect(scan(`<div role="dialog" className="outline-none">x</div>`)).toEqual([]);
     expect(scan(`<div role="alertdialog" aria-modal="true" className="outline-none">x</div>`)).toEqual([]);
     expect(scan(`<div aria-modal className="outline-none">x</div>`)).toEqual([]);
-    expect(scan(`<a className="outline-none focus-visible:outline focus-visible:outline-2">x</a>`)).toEqual([]);
-    expect(scan(`<input className="outline-none focus:border-brand" />`)).toEqual([]);
+    expect(scan(`<a className="outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand">x</a>`)).toEqual([]);
+    expect(scan(`<a className="focus:outline-none focus-visible:outline-2 focus-visible:outline-brand">x</a>`)).toEqual([]);
+    expect(scan(`<a className="outline-none focus-visible:ring-[3px]">x</a>`)).toEqual([]);
+    expect(scan(`<a className="outline-none ring-transparent focus-visible:ring-2 focus-visible:ring-brand">x</a>`)).toEqual([]);
+    expect(scan(`<div className="focus-within:ring-2 focus-within:ring-brand"><input className="outline-none" /></div>`)).toEqual([]);
+    expect(scan(`<input className="border border-border outline-none focus:border-brand" />`)).toEqual([]);
   });
 
   it('the scanner: a replacement that paints nothing, or a dialog that is not one, does not count', () => {
@@ -176,6 +212,20 @@ describe('a focused control shows it', () => {
     expect(scan(`<button className="outline-none focus:border-transparent">x</button>`)).toEqual(['button']);
     expect(scan(`<button className="outline-none focus-visible:outline-0">x</button>`)).toEqual(['button']);
     expect(scan(`<button className="outline-none focus-visible:bg-brand/0">x</button>`)).toEqual(['button']);
+    // A width with nothing to paint, or paint with no width, as the classes combine.
+    expect(scan(`<a className="outline-none focus-visible:ring-[0px]">x</a>`)).toEqual(['a']);
+    expect(scan(`<a className="outline-none focus-visible:ring-2 focus-visible:ring-transparent">x</a>`)).toEqual(['a']);
+    expect(scan(`<a className="outline-none focus-visible:ring-2 focus-visible:ring-brand/0">x</a>`)).toEqual(['a']);
+    expect(scan(`<a className="outline-none focus:ring-2 focus-visible:ring-0">x</a>`)).toEqual(['a']);
+    expect(scan(`<a className="outline-none ring-transparent focus-visible:ring-2">x</a>`)).toEqual(['a']); // the element's own colour
+    expect(scan(`<a className="outline-none focus-visible:outline focus-visible:outline-2">x</a>`)).toEqual(['a']); // outline-none's colour is transparent
+    expect(scan(`<a className="outline-none focus-visible:outline-2 focus-visible:outline-transparent">x</a>`)).toEqual(['a']);
+    expect(scan(`<input className="outline-none focus:border-2 focus:border-transparent" />`)).toEqual(['input']);
+    expect(scan(`<input className="outline-none focus:border-brand" />`)).toEqual(['input']); // a border colour with no border
+    expect(scan(`<div className="focus-within:ring-[0px]"><input className="outline-none" /></div>`)).toEqual(['input']);
+    expect(scan(`<div className="focus-within:ring-2 focus-within:ring-transparent"><input className="outline-none" /></div>`)).toEqual(['input']);
+    expect(scan(`<div className="focus-within:ring-2 focus-within:ring-brand/0"><input className="outline-none" /></div>`)).toEqual(['input']);
+    expect(scan(`<div className="ring-transparent focus-within:ring-2"><input className="outline-none" /></div>`)).toEqual(['input']);
     expect(scan(`<div className="focus-within:outline-none"><input className="outline-none" /></div>`)).toEqual(['input']);
     expect(scan(`<div className="opacity-0 focus-within:opacity-100"><input className="outline-none" /></div>`)).toEqual(['input']);
     expect(scan(`<div className="focus-within:ring-0"><input className="outline-none" /></div>`)).toEqual(['input']);
