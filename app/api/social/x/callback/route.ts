@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations, getLocaleContext } from '@/lib/i18n/server';
-import { XBoundaryError } from '@/lib/social/account-tokens';
-import { finishXAuthorization, readXAuthorization, X_COOKIE, X_CALLBACK_PATH } from '@/lib/social/x-oauth';
+import { XBoundaryError, type XFlow } from '@/lib/social/account-tokens';
+import { abandonXAuthorization, finishXAuthorization, readXAuthorization, X_COOKIE, X_CALLBACK_PATH } from '@/lib/social/x-oauth';
 
 export const runtime = 'nodejs';
 function escapeHtml(value: string): string {
@@ -11,13 +11,18 @@ function escapeHtml(value: string): string {
 export async function GET(request: NextRequest) {
   const t = await getTranslations();
   let response: NextResponse;
+  let flow: XFlow | null = null;
   try {
     const params = request.nextUrl.searchParams;
-    if (params.getAll('state').length !== 1 || params.getAll('code').length !== 1 || params.has('error')) throw new XBoundaryError('socialX.callbackInvalid');
-    const flow = readXAuthorization(request.cookies.get(X_COOKIE)?.value, params.get('state'), request.url);
+    if (params.getAll('state').length !== 1) throw new XBoundaryError('socialX.callbackInvalid');
+    // Read the flow first, so a denied consent (?error=) can still retire its receipt.
+    flow = readXAuthorization(request.cookies.get(X_COOKIE)?.value, params.get('state'), request.url);
+    if (params.getAll('code').length !== 1 || params.has('error')) throw new XBoundaryError('socialX.callbackInvalid');
     await finishXAuthorization(flow, params.get('code')!);
     response = NextResponse.redirect(new URL('/dashboard/social/accounts', flow.redirectUri));
   } catch (error) {
+    // Only an unclaimed receipt is retired here; a claimed one is cleaned up by its own exchange.
+    if (flow) await abandonXAuthorization(flow);
     const message = escapeHtml(t(error instanceof XBoundaryError ? error.key : 'socialX.connectionFailed'));
     const back = escapeHtml(t('dashboardSocialAccountsConnect.backToAccounts'));
     const { locale } = await getLocaleContext();

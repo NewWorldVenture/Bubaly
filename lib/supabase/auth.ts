@@ -257,13 +257,14 @@ export async function requireFeature(key: string): Promise<UserContext> {
   const entitlement = await resolveFeatureEntitlement(supabase, ctx.active.familyId, key);
   if (entitlement.allowed) return ctx;
   if (entitlement.reason === 'off') notFound();
-  if (entitlement.reason === 'closed' || entitlement.reason === 'trial_ended') {
+  if (entitlement.reason === 'locked') {
     // A closed or trial-ended family is refused every feature. Billing is where
     // it is sent, and where `app/(app)/layout.tsx` draws its gate with the way
     // back (reopen the account, or choose a plan), so the billing page itself
-    // must never refuse it: that would redirect billing to billing.
+    // must never refuse it: that would redirect billing to billing. A closed
+    // family is not sent to the upgrade view: a plan would not reopen it.
     if (key === BILLING_PATH) return ctx;
-    redirect(entitlement.reason === 'closed' ? BILLING_PATH : `${BILLING_PATH}?upgrade=1&need=${entitlement.needLevel}`);
+    redirect(entitlement.code === 'account_closed' ? BILLING_PATH : `${BILLING_PATH}?upgrade=1&need=${entitlement.needLevel}`);
   }
   redirect(`${BILLING_PATH}?upgrade=1&need=${entitlement.needLevel}`);
 }

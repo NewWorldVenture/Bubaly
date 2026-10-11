@@ -3,8 +3,6 @@ import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { resolveFeatureEntitlement } from '@/lib/server/feature-entitlement';
-import { refusedStandingResponse } from '@/lib/server/account-standing';
-import type { RefusedStanding } from '@/lib/server/entitlement';
 import { isSuperAdmin } from '@/lib/supabase/auth';
 
 type DB = SupabaseClient<Database>;
@@ -26,9 +24,7 @@ type DB = SupabaseClient<Database>;
  *
  *   404 — every feature it serves is switched off for the whole deployment,
  *         matching the page's `notFound()`.
- *   403 — the family's plan is below it, or the family's account is closed or
- *         its trial ended unpaid (`account_closed` / `plan_required`, worded by
- *         `lib/server/account-standing.ts`). This is a fact about the family.
+ *   403 — the family's plan is below it. This is a fact about the family.
  *   503 — the plan could not be READ. This is a fact about Bubaly, and saying
  *         403 here would tell a paying family to buy what they already own.
  */
@@ -37,13 +33,13 @@ export async function refuseUnlessEntitled(
   familyId: string,
   hrefs: readonly string[],
 ): Promise<NextResponse | null> {
-  const outcomes: { reason: 'off' | 'plan' | RefusedStanding; needLevel: number }[] = [];
+  const outcomes: { reason: 'off' | 'plan' | 'locked'; needLevel: number; code?: 'trial_expired' | 'account_closed' }[] = [];
 
   for (const href of hrefs) {
     try {
       const entitlement = await resolveFeatureEntitlement(db, familyId, href);
       if (entitlement.allowed) return null;
-      outcomes.push({ reason: entitlement.reason, needLevel: entitlement.needLevel });
+      outcomes.push({ reason: entitlement.reason, needLevel: entitlement.needLevel, ...(entitlement.reason === 'locked' ? { code: entitlement.code } : {}) });
     } catch (error) {
       console.error('[route-feature-gate] plan read failed', { href, error });
       return NextResponse.json(
@@ -70,14 +66,24 @@ export async function refuseUnlessEntitled(
     );
   }
 
-  // Closed or trial-ended is the family's standing, the same for every feature,
-  // and it is what the family needs to hear rather than an upgrade.
-  const standing = outcomes.find((o): o is { reason: RefusedStanding; needLevel: number } =>
-    o.reason === 'closed' || o.reason === 'trial_ended');
-  if (standing) return refusedStandingResponse(standing.reason);
-
   if (outcomes.every((o) => o.reason === 'off')) {
     return NextResponse.json({ error: 'Not found.', code: 'feature_off' }, { status: 404 });
+  }
+
+  // A trial that ended unpaid (or a closed account) refuses every feature,
+  // free ones included: the paywall the layout shows has a server half.
+  const locked = outcomes.find((o) => o.reason === 'locked');
+  if (locked) {
+    return NextResponse.json(
+      {
+        error: locked.code === 'account_closed'
+          ? 'This Bubaly account is closed. Reopen it to continue.'
+          : 'Your free trial has ended. Choose Family Basic or Family+ to keep using Bubaly.',
+        code: locked.code ?? 'trial_expired',
+        needLevel: 1,
+      },
+      { status: 403 },
+    );
   }
 
   const needLevel = Math.min(...outcomes.filter((o) => o.reason === 'plan').map((o) => o.needLevel));

@@ -58,8 +58,13 @@ beforeEach(() => {
   state.success.mockReset(); state.error.mockReset();
   // The save reads back its row with .select('id') (Audit C1-S9-85); a mock
   // that resolved at .eq() made the save throw into its catch, and this test,
-  // which asserted only the update call, stayed green.
-  state.update.mockReturnValue({ eq: () => ({ select: () => Promise.resolve({ data: [{ id: 'r1' }], error: null }) }) }); state.db.mockReturnValue({ from: () => ({ update: state.update }) });
+  // which asserted only the update call, stayed green. The update is scoped
+  // by family as well as id (.eq('id', …).eq('family_id', …), the gated-write
+  // rule), so eq() hands back the same builder however many times it is asked.
+  const builder: Record<string, unknown> = {};
+  builder.eq = () => builder;
+  builder.select = () => Promise.resolve({ data: [{ id: 'r1' }], error: null });
+  state.update.mockReturnValue(builder); state.db.mockReturnValue({ from: () => ({ update: state.update }) });
 });
 
 it('hides internal provenance from row/filter chips and the editable tag list, and retains it on an actual edit submission', async () => {

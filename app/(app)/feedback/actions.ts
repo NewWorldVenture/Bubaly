@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
+import { superAdminAssurance } from '@/lib/auth/super-admin-assurance';
 import { normalizeIdea, isFeedbackStatus, type IdeaDraft } from '@/lib/feedback/board';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 
@@ -26,7 +27,7 @@ function authorNameFor(ctx: Awaited<ReturnType<typeof requireUserContext>>): str
 export async function submitIdeaAction(draft: IdeaDraft): Promise<Result & { id?: string }> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
-  const norm = normalizeIdea(draft);
+  const norm = normalizeIdea(draft, { authorId: ctx.user.id });
   if (!norm.ok) return { ok: false, error: norm.error };
 
   const supabase = await createServer();
@@ -116,6 +117,10 @@ export async function setIdeaStatusAction(input: { ideaId: string; status: strin
   const t = await getTranslations();
   await requireUserContext();
   if (!(await isSuperAdmin())) return { ok: false, error: t('actions.onlyTheBubalyTeamCan') };
+  // A service-role write on the strength of an email: the same step-up as the
+  // admin console, so a password-only session of an admin with an
+  // authenticator cannot move the public roadmap.
+  if (!(await superAdminAssurance()).ok) return { ok: false, error: t('actions.teamActionNeedsYourCode') };
   if (!isFeedbackStatus(input.status)) return { ok: false, error: t('actions.unknownStatus') };
 
   const svc = createServiceClient();

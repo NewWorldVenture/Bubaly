@@ -10,6 +10,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useToast } from '@/components/ui/toast';
+import { reportRefusal } from '@/lib/auth/step-up-client';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -112,7 +113,7 @@ export function WalletHub() {
   async function del(table: string, id: string, label: string) {
     if (!(await askConfirm({ title: t('confirm.removeNamed', { name: label }), body: t('confirm.cannotBeUndone') }))) return;
     const res = await deleteWalletRowAction({ table, id });
-    if (!res.ok) return toastError(res.error ?? 'Could not remove');
+    if (!res.ok) return reportRefusal({ error: res.error ?? 'Could not remove', stepUp: res.stepUp }, toastError);
     success(t('walletHub.removed'));
     if (table === 'wallet_cards') refreshCards();
     else if (table === 'wallet_passes') refreshPasses();
@@ -467,7 +468,7 @@ function EmptyBlock({ label, onAdd, addLabel }: { label: string; onAdd: () => vo
 }
 
 // ── Add modals ──────────────────────────────────────────────
-function useAddForm(action: (i: Record<string, unknown>) => Promise<{ ok: boolean; error?: string }>, onClose: () => void, onDone: () => void) {
+function useAddForm(action: (i: Record<string, unknown>) => Promise<{ ok: boolean; error?: string; stepUp?: string }>, onClose: () => void, onDone: () => void) {
   const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
@@ -475,7 +476,7 @@ function useAddForm(action: (i: Record<string, unknown>) => Promise<{ ok: boolea
     setSaving(true);
     const res = await action(values);
     setSaving(false);
-    if (!res.ok) return toastError(res.error ?? 'Could not save');
+    if (!res.ok) return reportRefusal({ error: res.error ?? 'Could not save', stepUp: res.stepUp }, toastError);
     success(t('walletHub.addedToWallet'));
     onDone();
     onClose();

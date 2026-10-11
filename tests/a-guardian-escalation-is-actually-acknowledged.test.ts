@@ -105,8 +105,8 @@ describe('the Guardian learning run', () => {
         const chain: Record<string, unknown> = {};
         const done = Promise.resolve(reply);
         Object.assign(chain, {
-          select: () => chain, eq: () => chain, gte: () => chain, order: () => chain,
-          limit: () => done,
+          select: () => chain, eq: () => chain, gte: () => chain, order: () => chain, or: () => chain,
+          limit: () => done, maybeSingle: () => done,
           then: (a: (v: Reply) => unknown, b: (e: unknown) => unknown) => done.then(a, b),
           insert: (row: unknown) => { inserts.push({ table, row }); return Promise.resolve({ error: table === 'guardian_audit_log' ? { message: 'RLS' } : null }); },
         });

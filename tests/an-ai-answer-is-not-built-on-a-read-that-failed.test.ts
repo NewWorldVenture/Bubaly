@@ -643,10 +643,14 @@ describe('a trusted caller is not screened because a read failed (C1-S9-43)', ()
   });
 
   it('the no-phone-on-file fall-through is preserved', () => {
-    // A member with no number is a different situation from a failed read, and
-    // screening is the right answer for it. Logging must not become a 503 here
-    // either — that would drop a live call to report a routing preference.
-    expect(voice).toContain('// Member has no phone configured — fall through to AI screening');
+    // A member with no number is a different situation from a failed read: the
+    // call falls through rather than failing. For an immediate-ring call that
+    // fall-through ends at the route's default thank-you and hang-up, not at
+    // screening (the comment used to claim screening; owner review 6092527821
+    // had it corrected). Logging must not become a 503 here either — that
+    // would drop a live call to report a routing preference.
+    expect(voice).toContain('// No phone in this family (none configured, or the profile names someone');
+    expect(voice).toContain('// of the modes below and ends at the default thank-you and hang-up.');
     expect(bodyOf(voice, 'if (memberError)', '\n    }')).not.toContain('status: 503');
   });
 });

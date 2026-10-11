@@ -9,10 +9,6 @@ const h = vi.hoisted(() => ({
   writes: [] as { table: string; body: Record<string, unknown> }[],
   forbidden: vi.fn(),
 }));
-// The account-standing gate (a closed or trial-ended family is refused) has its
-// own test, tests/the-free-ai-helpers-refuse-a-closed-or-trial-ended-family.test.ts.
-// The family here is open, so the gate is answered rather than seeded.
-vi.mock('@/lib/server/account-standing', () => ({ refuseClosedOrTrialEnded: async () => null }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: async () => ({ user: { id: 'synthetic-user' }, active: { familyId: 'synthetic-family', family: { timezone: h.zone } } }) }));
 vi.mock('@/lib/supabase/server', () => ({
@@ -25,6 +21,10 @@ vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => {
 } }));
 vi.mock('@/lib/ai/settings', () => ({ getAIConfig: h.forbidden }));
 vi.mock('@/lib/services/groceries', () => ({ ensureDefaultGroceryListId: h.forbidden }));
+// The route's Smart Kitchen gate and AI allowance are covered by
+// tests/fridge-chef-is-a-kitchen-feature.test.ts; this file is about the date.
+vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: async () => null }));
+vi.mock('@/lib/server/ai-access', () => ({ assertAIAccess: h.forbidden, accessDeniedResponse: h.forbidden }));
 import { POST } from '@/app/api/ai/pantry-chef/route';
 
 beforeEach(() => {

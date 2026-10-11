@@ -16,7 +16,7 @@
 // The plan read is the real one (`lib/server/plan.ts`), seeded through the
 // service client it reads with, so these cases exercise the entitlement the
 // rest of the app computes rather than a mocked level.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { resolveFeatureTiers, tiersByHref } from '@/lib/features/tiers';
 
@@ -112,6 +112,11 @@ const ctx = (email = 'parent@example.test') => ({
   active: { familyId: 'fam-1', role: 'parent', family: { name: 'Fam', timezone: 'UTC' } },
 }) as never;
 
+// The first import of a route pulls in every translation catalogue, which can
+// take most of a case's 20s budget on a loaded machine. It is paid here, once,
+// with its own budget, so no case times out on an import.
+beforeAll(async () => { await import('@/app/api/ai/route'); }, 120_000);
+
 beforeEach(() => {
   state.family = { trial_ends_at: null, closed_at: null };
   state.subscriptions = [];
@@ -157,7 +162,7 @@ describe('a family whose trial ended unpaid is refused the assistant', () => {
   it('refuses it as a plan to choose, naming Family Basic, and counts nothing', async () => {
     state.family = { trial_ends_at: PAST, closed_at: null };
     const access = await ask();
-    expect(access).toMatchObject({ ok: false, status: 403, code: 'plan_required', needLevel: 1 });
+    expect(access).toMatchObject({ ok: false, status: 403, code: 'trial_expired', needLevel: 1 });
     expect((access as { error: string }).error).toMatch(/trial/i);
     expect(countCalls).toEqual([]);
   });
@@ -210,7 +215,7 @@ describe('the phone app, which has no paywall, is refused at /api/ai', () => {
     const { POST } = await import('@/app/api/ai/route');
     const res = await POST(post());
     expect(res.status).toBe(403);
-    expect(await res.json()).toMatchObject({ code: 'plan_required', needLevel: 1 });
+    expect(await res.json()).toMatchObject({ code: 'trial_expired', needLevel: 1 });
     expect(prepareAssistantTurn).not.toHaveBeenCalled();
   });
 

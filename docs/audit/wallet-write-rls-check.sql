@@ -232,6 +232,9 @@ declare
   st       text;
   msg      text;
   failures text[] := '{}';
+  -- 0311's reference_shares_family(), read from the catalog for leg B.
+  ref_guard     regprocedure := to_regprocedure('public.reference_shares_family()');
+  ref_guard_42501_only boolean;
 begin
   -- The seed and this block must agree about which family the control lives in,
   -- and the kid must be the adult the note above promises — checked as the
@@ -299,11 +302,32 @@ begin
       -- raises class 23 itself (0306's shape guard does, on invest_orders).
       -- tgtype bits: 1 ROW, 2 BEFORE, 4 INSERT. Not a finding about the guard
       -- — a change of mechanism the leg has to be re-pointed for.
+      --
+      -- Re-pointed for exactly one binding: 0311's reference_shares_family()
+      -- wired by the held 0497 onto child_wallets.member_id -> family_members.
+      -- That one cannot be the class-23 shape. Its source raises only with
+      -- errcode 42501 and carries no class-23 errcode (read from the catalog
+      -- below). And it lets a null reference through before any check, which
+      -- 1b's `(family_id)` insert always leaves null. That null behaviour is
+      -- validated by this leg itself, not assumed: had the trigger refused the
+      -- null member_id, the insert would have raised 42501 before the NOT NULL
+      -- constraint, and the class-23 rule above would already have failed it.
+      -- Any other BEFORE INSERT trigger, or this helper on any other table,
+      -- column or parent, still trips this.
+      select coalesce(bool_and(p.prosrc ~ 'errcode = ''42501''' and p.prosrc !~ 'errcode = ''23'), false)
+        into ref_guard_42501_only
+        from pg_proc p where p.oid = ref_guard;
       select count(*) into n
       from pg_trigger tg
       where tg.tgrelid = to_regclass('public.' || t)
         and not tg.tgisinternal
-        and (tg.tgtype & 2) = 2 and (tg.tgtype & 4) = 4;
+        and (tg.tgtype & 2) = 2 and (tg.tgtype & 4) = 4
+        and not (ref_guard is not null
+                 and tg.tgfoid = ref_guard
+                 and ref_guard_42501_only
+                 and tg.tgrelid = 'public.child_wallets'::regclass
+                 and t = 'child_wallets'
+                 and encode(tg.tgargs, 'escape') = 'member_id\000family_members\000');
       if n <> 0 then
         failures := array_append(failures, format(
           'MECHANISM CHANGED (not a control failure): %s now carries %s BEFORE INSERT trigger(s); leg B cannot tell a class-23 raise from that trigger apart from the row''s own NOT NULL, so 1b''s refusal on %s is unattributed until this leg is re-pointed at the trigger',

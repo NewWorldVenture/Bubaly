@@ -48,7 +48,7 @@ import {
   HIGH_STAKES_AI_DOMAINS, riskToDecision, riskTierStance, toolTags,
   type Capability, type Decision, type TrustRole,
 } from '@/lib/trust/engine';
-import { approvalDedupeKey, evaluateTrust, roleOf } from '@/lib/trust/server';
+import { approvalDedupeKey, evaluateTrust, fileOrReusePendingApproval, roleOf } from '@/lib/trust/server';
 import { behaviorForDomain, DEFAULT_AI_SETTINGS, effectiveRisk } from '@/lib/ai/family-settings';
 import { loadAISettings } from '@/lib/services/ai-settings';
 import { getTranslations } from '@/lib/i18n/server';
@@ -458,6 +458,11 @@ async function gate(
   if (decision.effect === 'deny') return { kind: 'denied', reason: decision.reason };
   if (decision.effect === 'require_approval') {
     if (tool.name === 'finances.advisePurchase' && (!approvalId || !await associatePurchaseRequest(scope, approvalId))) {
+      // The card is already in the parents' queue. Left pending with no
+      // request attached, an approval of it could never be delivered
+      // (scopeForApprovedPurchase refuses a row without request_id), so it is
+      // withdrawn rather than left for a parent to approve into nothing.
+      if (approvalId) await withdrawUnassociatedPurchaseApproval(scope, approvalId);
       const t = await getTranslations();
       return { kind: 'denied', reason: t('purchaseAdvice.privateUnavailable') };
     }
@@ -539,6 +544,24 @@ async function associatePurchaseRequest(scope: ServiceScope, approvalId: string)
   }
 }
 
+/** Cancel a still-pending purchase approval that never got a request attached.
+ * A card that already carries a request (a reused, validly associated one) is
+ * untouched: the fence on `request_id is null` keeps someone else's question. */
+async function withdrawUnassociatedPurchaseApproval(scope: ServiceScope, approvalId: string): Promise<void> {
+  try {
+    const writer = await trustWriter(scope);
+    let query = writer.from('approval_requests')
+      .update({ status: 'cancelled', decided_at: (scope.now ?? new Date()).toISOString() })
+      .eq('id', approvalId).eq('family_id', scope.familyId).eq('requested_by_kind', 'ai')
+      .eq('status', 'pending').is('request_id', null);
+    if (scope.memberId) query = query.eq('requested_by_member_id', scope.memberId);
+    const { error } = await query.select('id');
+    if (error) console.error('[tool-exec] could not withdraw an unassociated purchase approval', { approvalId, error });
+  } catch (error) {
+    console.error('[tool-exec] could not withdraw an unassociated purchase approval', { approvalId, error });
+  }
+}
+
 async function openApproval(
   scope: ServiceScope,
   tool: ToolDefinition,
@@ -562,23 +585,26 @@ async function openApproval(
     payload: { name: tool.name, args: input as Record<string, unknown> },
   });
 
-  const existing = await writer.from('approval_requests')
-    .select('id').eq('family_id', scope.familyId).eq('dedupe_key', dedupeKey).eq('status', 'pending')
-    .limit(1).maybeSingle();
-  if (existing.data?.id) return existing.data.id;
-
-  const { data, error } = await writer
+  const requestedByKind = meta.actorKind === 'ai_agent' ? 'ai' as const : 'member' as const;
+  const payload = { name: tool.name, args: input as Record<string, unknown> } as unknown as Json;
+  // A pending row under this key is reused only when it is this ask — same
+  // filer, same payload. `dedupe_key` is member-writable on a member's own row,
+  // so a key match alone would let a planted row collect Bubaly's audit line
+  // (see `pendingRowIsThisAsk`).
+  const opened = await fileOrReusePendingApproval(writer, scope.familyId, dedupeKey, {
+    requestedByKind, requestedByMemberId: scope.memberId ?? null, domain: tool.domain, capability: meta.capability, payload,
+  }, (key) => writer
     .from('approval_requests')
     .insert({
       family_id: scope.familyId,
       domain: tool.domain,
       capability: meta.capability,
-      requested_by_kind: meta.actorKind === 'ai_agent' ? 'ai' : 'member',
+      requested_by_kind: requestedByKind,
       requested_by_member_id: scope.memberId,
       agent: meta.actorKind === 'ai_agent' ? 'Bubaly' : null,
       title: meta.title ?? tool.name,
       summary: meta.consequences?.[0] ?? tool.description,
-      payload: { name: tool.name, args: input as Record<string, unknown> } as unknown as Json,
+      payload,
       payload_kind: 'tool',
       consequences: (meta.consequences ?? []) as unknown as Json,
       confidence: meta.confidence,
@@ -586,21 +612,12 @@ async function openApproval(
       approval_model: decision.approvalModel ?? 'single',
       required_approvals: decision.requiredApprovals ?? 1,
       status: 'pending',
-      dedupe_key: dedupeKey,
+      dedupe_key: key,
     })
     .select('id')
-    .single();
-  if (data?.id) return data.id;
-  // 23505: a concurrent resend won between the lookup and the insert. Its row is
-  // the answer — returning null here would park the step on an approval that
-  // exists, reported as one that could not be opened.
-  if (error?.code === '23505') {
-    const raced = await writer.from('approval_requests')
-      .select('id').eq('family_id', scope.familyId).eq('dedupe_key', dedupeKey).eq('status', 'pending')
-      .limit(1).maybeSingle();
-    if (raced.data?.id) return raced.data.id;
-  }
-  console.error('[tool-exec] could not open an approval request', error);
+    .single());
+  if (opened.id) return opened.id;
+  console.error('[tool-exec] could not open an approval request', 'error' in opened ? opened.error : null);
   return null;
 }
 

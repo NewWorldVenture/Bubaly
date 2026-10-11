@@ -134,10 +134,15 @@ describe('the call sites this check is meant to cover', () => {
     expect(sites.some((site) => site.file === file && site.table === table)).toBe(true);
   });
 
-  it('checks the feed conflict contract in its held atomic RPC instead of inventing a direct upsert', () => {
+  it('checks the feed conflict contract in its held atomic RPC, and in the pre-0490 upsert it falls back to', () => {
     const source = readFileSync('lib/server/calendar-feeds.ts', 'utf8');
     expect(source).toMatch(/\.rpc\(APPLY_SYNC_FUNCTION,\s*\{\s*p_feed_id:\s*feedId,\s*p_fence:\s*fence,\s*p_upserts:\s*upserts,\s*p_removals:\s*removals/);
-    expect(sites.some(site => site.file === 'lib/server/calendar-feeds.ts' && site.table === 'calendar_events')).toBe(false);
+    // Owner decision (2026-10-09): until held 0490 is applied the sync writes
+    // the way production did before it — one direct upsert, on the target 0285
+    // made inferable. It was asserted absent while a missing RPC refused writes.
+    const fallback = sites.filter(site => site.file === 'lib/server/calendar-feeds.ts' && site.table === 'calendar_events');
+    expect(fallback.map(site => site.target)).toEqual(['feed_id,external_uid']);
+    expect(conflictTargetVerdict(fallback[0].target, readSchema().uniqueIndexes.get('calendar_events') ?? [])).toEqual({ok:true});
     const audit = auditSupabaseQueries();
     const held = audit.reservedDependencies.find(dependency => dependency.file === 'lib/server/calendar-feeds.ts' && dependency.detail === 'calendar_feed_apply_sync');
     expect(held).toMatchObject({migration:'supabase/reserved/0490_a_calendar_feed_sync_writes_only_while_it_holds_its_claim.sql',runnable:false});

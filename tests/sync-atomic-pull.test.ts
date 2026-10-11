@@ -3,6 +3,7 @@ import { googleAdapter } from '@/lib/sync/providers/google-adapter';
 import { eventContentHash, googleEventToRow, googleTaskToReminderRow, reminderContentHash } from '@/lib/sync/providers/google';
 import { runGoogleSync } from '@/lib/sync/engine/google';
 import { runProviderSync } from '@/lib/sync/engine/generic';
+import { resetSyncPullMigrationWarnings } from '@/lib/sync/persistence';
 import { syncSdkFixture, ACCOUNT, NEXT, STALE } from './helpers/sync-sdk-fixture';
 
 vi.mock('@/lib/sync/accounts', async original => ({
@@ -13,7 +14,8 @@ vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string)
 
 const event = { id: 'new-event', summary: 'Synthetic new event', start: { dateTime: '2026-06-21T09:00:00Z' } };
 const task = { id: 'new-task', title: 'Synthetic new reminder' };
-beforeEach(() => vi.spyOn(console, 'error').mockImplementation(() => {}));
+// Each test starts with no RPC remembered as absent from an earlier test.
+beforeEach(() => { resetSyncPullMigrationWarnings(); vi.spyOn(console, 'error').mockImplementation(() => {}); });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 for (const engine of ['google', 'generic'] as const) {
@@ -49,8 +51,29 @@ for (const engine of ['google', 'generic'] as const) {
         expect(rows.sync_calendars[0].sync_token).toBe(STALE);
         expect(rows.sync_job_runs[0].status).toBe('failed');
       });
-      it(`${kind} missing RPC fails visibly without separate-write fallback`, async () => {
+      // Owner decision: until held 0494 is applied, a missing item RPC takes the
+      // previous production writes (item, then mapping) instead of refusing.
+      it(`${kind} missing item RPC (0494 not applied) writes the item and mapping directly, as before`, async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        resetSyncPullMigrationWarnings();
         const { db, rows, calls } = fixture({ rpcFailure: 'item' });
+        expect(await run(db)).toMatchObject({ imported: 1, skipped: 0 });
+        expect(rows[table]).toHaveLength(1);
+        expect(rows[table][0]).toMatchObject({ family_id: ACCOUNT.family_id, user_id: ACCOUNT.user_id, provider: 'google',
+          external_id: kind === 'event' ? 'new-event' : 'new-task', sync_status: 'synced', metadata: { origin: 'remote' },
+          [kind === 'event' ? 'calendar_id' : 'list_id']: kind === 'event' ? 'calendar' : 'list',
+          content_hash: expect.stringMatching(/^[a-f0-9]{64}$/) });
+        expect(rows.sync_external_mappings).toHaveLength(1);
+        expect(rows.sync_external_mappings[0]).toMatchObject({ family_id: ACCOUNT.family_id, account_id: ACCOUNT.id,
+          provider: 'google', item_type: kind, local_id: rows[table][0].id, metadata: { lastHash: rows[table][0].content_hash } });
+        const posts = calls.filter(call => call.method === 'POST' && [table, 'sync_external_mappings'].some(name => call.url.pathname === `/rest/v1/${name}`));
+        expect(posts.map(call => call.url.pathname)).toEqual([`/rest/v1/${table}`, '/rest/v1/sync_external_mappings']);
+        expect(rows.sync_calendars[0].sync_token).toBe(NEXT);
+        expect(rows.sync_job_runs[0].status).toBe('succeeded');
+        expect(warn.mock.calls.flat().join(' ')).toContain('0494_sync_atomic_pull.sql');
+      });
+      it.each(['item-unnamed', 'item-helper'] as const)(`${kind} a non-missing item RPC failure (%s) still fails without direct writes`, async failure => {
+        const { db, rows, calls } = fixture({ rpcFailure: failure });
         expect((await run(db)).error).toContain(`${kind} and mapping creation`);
         expect(rows[table]).toEqual([]);
         expect(calls.some(call => call.method === 'POST' && call.url.pathname === `/rest/v1/${table}`)).toBe(false);
@@ -127,8 +150,47 @@ for (const engine of ['google', 'generic'] as const) {
         expect(rows.sync_calendars[0].sync_token).toBe(STALE);
       });
     }
-    it('missing mirror RPC fails before pulling and never creates a raw mirror', async () => {
-      const { db, rows, calls } = syncSdkFixture([event], { rpcFailure: 'container' });
+    // Owner decision: without 0494 the previous production mirror lookup/insert
+    // applies instead of refusing before the pull.
+    it('missing mirror RPC (0494 not applied) creates the mirrors directly and pulls, as before', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { db, rows, calls } = syncSdkFixture([event], { rpcFailure: 'missing', tasks: [task] });
+      rows.sync_calendars.length = 0;
+      rows.sync_reminder_lists.length = 0;
+      expect(await run(db)).toMatchObject({ imported: 2 });
+      expect(rows.sync_calendars).toEqual([expect.objectContaining({ family_id: ACCOUNT.family_id, user_id: ACCOUNT.user_id,
+        account_id: ACCOUNT.id, provider: 'google', external_id: 'primary', timezone: 'UTC', is_owned_locally: false, sync_token: NEXT })]);
+      expect(rows.sync_reminder_lists).toEqual([expect.objectContaining({ family_id: ACCOUNT.family_id, account_id: ACCOUNT.id,
+        provider: 'google', external_id: '@default', name: 'Google Tasks', is_owned_locally: false })]);
+      expect(rows.sync_calendar_events.find(row => row.external_id === 'new-event')?.calendar_id).toBe(rows.sync_calendars[0].id);
+      expect(rows.sync_reminders.find(row => row.external_id === 'new-task')?.list_id).toBe(rows.sync_reminder_lists[0].id);
+      expect(calls.some(call => call.url.pathname === '/calendar/v3/calendars/primary/events')).toBe(true);
+      expect(rows.sync_job_runs[0].status).toBe('succeeded');
+    });
+    it('missing mirror RPC reuses the existing household mirror and its cursor', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { db, rows, calls } = syncSdkFixture([], { rpcFailure: 'missing' });
+      expect((await run(db)).error).toBeUndefined();
+      expect(rows.sync_calendars).toHaveLength(1);
+      expect(rows.sync_calendars[0]).toMatchObject({ id: 'calendar', sync_token: NEXT });
+      expect(calls.some(call => call.method === 'POST' && ['sync_calendars', 'sync_reminder_lists'].some(name => call.url.pathname === `/rest/v1/${name}`))).toBe(false);
+    });
+    it('without 0494 the cursor advances after the calendar pull, as before, even if the task pull then fails', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { db, rows } = syncSdkFixture([], { rpcFailure: 'missing', tasks: [task], rawMappingFailure: true });
+      rows.sync_external_mappings = rows.sync_external_mappings.filter(row => row.item_type !== 'reminder');
+      expect((await run(db)).error).toContain('reminder mapping creation');
+      expect(rows.sync_calendars[0].sync_token).toBe(NEXT);
+      expect(rows.sync_job_runs[0].status).toBe('failed');
+    });
+    it('a failed direct event write without 0494 keeps the cursor', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { db, rows } = syncSdkFixture([event], { rpcFailure: 'missing', rawMappingFailure: true });
+      expect((await run(db)).error).toContain('event mapping creation');
+      expect(rows.sync_calendars[0].sync_token).toBe(STALE);
+    });
+    it.each(['container-unnamed', 'container-denied'] as const)('a non-missing mirror RPC failure (%s) fails before pulling and never creates a raw mirror', async failure => {
+      const { db, rows, calls } = syncSdkFixture([event], { rpcFailure: failure });
       rows.sync_calendars.length = 0;
       expect((await run(db)).error).toContain('container admission');
       expect(rows.sync_calendars).toEqual([]);

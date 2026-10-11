@@ -294,9 +294,18 @@ describe('only a parent mints or revokes an assistant key', () => {
     expect(databaseAccepts(state, 'delete', asMember('adult'))).toBe(false);
   });
 
-  it('a parent still hands out, revokes and removes keys', () => {
-    for (const cmd of WRITES) {
-      expect(databaseAccepts(state, cmd, asMember('parent')), `parent ${cmd}`).toBe(true);
+  it('a parent still removes a key with their own JWT; minting and revoking are the server’s (0477)', () => {
+    // 0477 revoked INSERT and UPDATE on assistant_links from authenticated and
+    // anon: a parent with their own JWT could mint a key in a co-parent's name,
+    // re-point or un-revoke one, and the key outlived the parent's removal.
+    // Every mint and revoke is the service-role server action's
+    // (dashboard/assistants/actions.ts), which bypasses RLS and these grants.
+    // DELETE keeps 0283's grant, behind 0343's parent-only delete guard.
+    expect(databaseAccepts(state, 'delete', asMember('parent')), 'parent delete').toBe(true);
+    for (const cmd of ['insert', 'update'] as Command[]) {
+      for (const role of ROLE_ORDER) {
+        expect(databaseAccepts(state, cmd, asMember(role)), `${role} ${cmd} over REST`).toBe(false);
+      }
     }
   });
 
@@ -313,9 +322,16 @@ describe('only a parent mints or revokes an assistant key', () => {
     // parent AND adult, and that disagreement WAS the defect. Comparing the two
     // sets is the assertion that cannot drift: widen either side and this fails.
     const fromScreen = ROLE_ORDER.filter((role) => isAdmin(role));
-    for (const cmd of WRITES) {
+    // DELETE is the one write a client role still holds a grant for; the set
+    // the database admits is exactly the set the screen admits.
+    const deleters = ROLE_ORDER.filter((role) => databaseAccepts(state, 'delete', asMember(role)));
+    expect(deleters, 'roles the database lets delete an assistant key').toEqual(fromScreen);
+    // INSERT and UPDATE admit no client role at all since 0477: the screen's
+    // parent-only mint and revoke run through the service-role action, and the
+    // database has nothing a member's own JWT could route around.
+    for (const cmd of ['insert', 'update'] as Command[]) {
       const fromDatabase = ROLE_ORDER.filter((role) => databaseAccepts(state, cmd, asMember(role)));
-      expect(fromDatabase, `roles the database lets ${cmd} an assistant key`).toEqual(fromScreen);
+      expect(fromDatabase, `roles the database lets ${cmd} an assistant key over REST`).toEqual([]);
     }
   });
 
@@ -337,8 +353,14 @@ describe('only a parent mints or revokes an assistant key', () => {
     // Every claim above is false-if-unparsed, so prove the parse happened.
     expect(state.creates, 'create policy statements seen').toBeGreaterThanOrEqual(7);
     expect(state.policies.size, 'policies left in force').toBeGreaterThanOrEqual(7);
-    for (const cmd of WRITES) {
-      expect([...(state.grants.get(cmd) ?? [])], `${cmd} grant holders`).toContain('authenticated');
+    // 0283 granted all three writes to authenticated; 0477 took INSERT and
+    // UPDATE back. The replay must show both halves, or the insert/update
+    // refusals above are a parse that saw nothing.
+    expect([...(state.grants.get('delete') ?? [])], 'delete grant holders').toContain('authenticated');
+    for (const cmd of ['insert', 'update'] as Command[]) {
+      const holders = [...(state.grants.get(cmd) ?? [])];
+      expect(holders, `${cmd} grant holders after 0477`).not.toContain('authenticated');
+      expect(holders, `${cmd} grant holders after 0477`).not.toContain('anon');
     }
     // SELECT is granted per column, which is how the secret stays unreadable.
     const readable = state.columnSelect.get('authenticated') ?? new Set<string>();

@@ -37,6 +37,7 @@ begin
   -- CI replays into a fresh database, but a probe a person cannot run twice is
   -- a probe they stop running.
   delete from public.invites where token like tok || '%';
+  delete from public.invites where family_id in (fam_a, fam_b);
   delete from public.family_members where user_id in (parent_uid, invitee_uid);
   delete from public.families where id in (fam_a, fam_b);
 
@@ -117,9 +118,13 @@ begin
   set local role authenticated;
 
   -- 6. A manager still administers their own invites — revoking a pending one.
+  --    0482 (trg_invite_terms_are_the_servers_to_set) replaces a client-chosen
+  --    token with a server-generated one on INSERT, so the row is found by its
+  --    address, not by the token this statement suggests.
   insert into public.invites (family_id, email, role, token, status, invited_by)
   values (fam_a, 'second@example.test', 'adult', tok || '-2', 'pending', parent_uid);
-  update public.invites set status = 'revoked' where token = tok || '-2';
+  update public.invites set status = 'revoked'
+   where family_id = fam_a and email = 'second@example.test' and status = 'pending';
   get diagnostics n = row_count;
   if n <> 1 then
     raise exception 'a manager can no longer revoke their own pending invite (%)', n;

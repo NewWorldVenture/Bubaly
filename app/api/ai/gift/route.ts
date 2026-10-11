@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { familyRefusedStanding } from '@/lib/server/account-standing';
+import { familyLockedCode } from '@/lib/server/account-standing';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll, describeReadError } from '@/lib/supabase/settle';
@@ -61,14 +61,14 @@ export async function POST(req: NextRequest) {
   // A closed or trial-ended family's link does not spend the model either
   // (lib/server/account-standing.ts). Worded for the giver, who is not the
   // family: what is wrong is the family's account, not the link.
-  let standing;
+  let locked;
   try {
-    standing = await familyRefusedStanding(supabase, link.family_id);
+    locked = await familyLockedCode(supabase, link.family_id);
   } catch (error) {
     console.error('[ai/gift] family standing read failed', { error });
     return NextResponse.json({ error: t('gift.giftDataIsTemporarilyUnavailable') }, { status: 503 });
   }
-  if (standing) return NextResponse.json({ error: t('gift.ideasAreNotAvailableForThisFamily') }, { status: 403 });
+  if (locked) return NextResponse.json({ error: t('gift.ideasAreNotAvailableForThisFamily') }, { status: 403 });
 
   // Resolve the child's first name + their top active goal (kept minimal).
   let childName = 'the child';
@@ -78,14 +78,16 @@ export async function POST(req: NextRequest) {
 
   if (link.child_wallet_id) {
     const [{ data: cw }, { data: goal }] = await settleAll([
-      supabase.from('child_wallets').select('member_id').eq('id', link.child_wallet_id).maybeSingle(),
+      // Inside the link's own family, as on the gift page: a link naming another
+      // family's wallet must not hand that child's name to the model.
+      supabase.from('child_wallets').select('member_id').eq('id', link.child_wallet_id).eq('family_id', link.family_id).maybeSingle(),
       supabase.from('wallet_goals')
         .select('title, saved_cents, target_cents')
         .eq('family_id', link.family_id).eq('child_wallet_id', link.child_wallet_id).eq('status', 'active')
         .order('target_cents', { ascending: false }).limit(1).maybeSingle(),
     ]);
     if (cw?.member_id) {
-      const { data: m } = await supabase.from('family_members').select('display_name').eq('id', cw.member_id).maybeSingle();
+      const { data: m } = await supabase.from('family_members').select('display_name').eq('id', cw.member_id).eq('family_id', link.family_id).maybeSingle();
       if (m?.display_name) childName = m.display_name.split(' ')[0] || m.display_name;
     }
     if (goal) { goalTitle = goal.title; goalSavedCents = goal.saved_cents; goalTargetCents = goal.target_cents; }

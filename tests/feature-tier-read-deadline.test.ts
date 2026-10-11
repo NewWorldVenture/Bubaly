@@ -26,10 +26,9 @@ type DB = SupabaseClient<Database>;
 type Mode = 'healthy' | 'error' | 'stalled' | 'ignores-abort' | 'body' | 'token';
 
 const plan = vi.hoisted(() => ({ level: 0 }));
-// The gates read the whole entitlement; these families are open, at `plan.level`.
 vi.mock('@/lib/server/plan', () => ({
   resolveFamilyPlanLevel: vi.fn(async () => plan.level),
-  resolveFamilyEntitlement: vi.fn(async () => ({ effectiveLevel: plan.level, closed: false, locked: false, inTrial: false, trialEndsAt: null })),
+  resolveFamilyEntitlement: vi.fn(async () => ({ effectiveLevel: plan.level, locked: false, closed: false, inTrial: false, trialEndsAt: null })),
 }));
 vi.mock('@/lib/supabase/auth', () => ({ isSuperAdmin: vi.fn(async () => false) }));
 

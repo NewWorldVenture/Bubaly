@@ -2,7 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { resolveFamilyEntitlement } from '@/lib/server/plan';
-import { refusedStanding, type RefusedStanding } from '@/lib/server/entitlement';
+import { lockedEntitlementCode } from '@/lib/server/entitlement';
 import { getFeatureTiersByHref } from '@/lib/server/feature-tiers';
 import { tierToLevel } from '@/lib/features/tiers';
 import type { FeatureTier } from '@/lib/constants/feature-catalog';
@@ -33,20 +33,20 @@ export type FeatureEntitlement =
   | { allowed: true; planLevel: number }
   | { allowed: false; reason: 'off'; needLevel: number; planLevel: number }
   | { allowed: false; reason: 'plan'; needLevel: number; planLevel: number }
-  | { allowed: false; reason: RefusedStanding; needLevel: number; planLevel: number };
+  /**
+   * The family's trial ended unpaid, or the account is closed. Its level is 0
+   * like a free family's, but it may use nothing until it subscribes (or
+   * reopens), free-tier features included — the server half of the
+   * TrialPaywallGate the (app) layout shows.
+   */
+  | { allowed: false; reason: 'locked'; code: 'trial_expired' | 'account_closed'; needLevel: number; planLevel: number };
 
 /**
  * `href` is the feature's route key, e.g. '/dashboard/autopilot'.
  *
- * An href that is not in the feature catalog is not gated BY TIER — it resolves
- * to allowed, matching `requireFeature`'s long-standing behaviour for routes
- * that predate the catalog.
- *
- * A closed family, and one whose trial ended unpaid, are refused EVERY href,
- * Free-tier and uncatalogued ones included (`reason` 'closed' / 'trial_ended').
- * Both have plan level 0, the same as an open Free family, so comparing levels
- * alone handed them every Free-tier feature. Only 'off' is answered before
- * them, so a switched-off feature is never confirmed to exist.
+ * An href that is not in the feature catalog is NOT gated — it resolves to
+ * allowed, matching `requireFeature`'s long-standing behaviour for routes that
+ * predate the catalog.
  *
  * THROWS when the family's plan cannot be read. That is deliberate and is the
  * single most important thing about this function: an unreadable plan is not an
@@ -100,14 +100,9 @@ export async function resolveFeatureEntitlement(
 
   const tier = byHref[href];
   if (tier === 'off') return { allowed: false, reason: 'off', needLevel: 0, planLevel };
-
-  const standing = refusedStanding(entitlement);
-  if (standing) {
-    const tierLevel = tier === undefined ? 0 : tierToLevel(tier);
-    // A trial-ended family needs at least Family Basic to unlock anything.
-    return { allowed: false, reason: standing, needLevel: standing === 'trial_ended' ? Math.max(1, tierLevel) : tierLevel, planLevel };
-  }
-
+  // Before the tier: a locked family is refused free features too.
+  const locked = lockedEntitlementCode(entitlement);
+  if (locked) return { allowed: false, reason: 'locked', code: locked, needLevel: 1, planLevel };
   if (tier === undefined) return { allowed: true, planLevel };
 
   const needLevel = tierToLevel(tier);

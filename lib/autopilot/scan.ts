@@ -44,7 +44,9 @@ import { computeMemberTraits, type MemberTraits, type MemberHistory } from '@/li
 import { isPolicySuggestionKey } from '@/lib/autopilot/policy-candidates';
 import { runPolicyScan } from '@/lib/autopilot/policy-scan';
 import { archiveStaleSuggestions } from '@/lib/autopilot/history';
+import { draftHasLapsed, reminderIsoFor } from '@/lib/autopilot/reminder-time';
 import { notify } from '@/lib/services/notifications';
+import { sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
 import { addDaysToDayKey, dayKeyInTz, systemScopeForFamily, zonedTimeMs } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
@@ -171,7 +173,7 @@ export async function runAutopilotScan(
     supabase.from('family_members').select('id, display_name, birthday').eq('family_id', familyId).eq('is_active', true).not('birthday', 'is', null).limit(50),
     supabase.from('grocery_items').select('id, name, created_at, is_checked').eq('family_id', familyId).eq('is_checked', false).limit(200),
     supabase.from('reminders').select('related_id').eq('family_id', familyId).eq('related_type', 'appointment').eq('is_done', false).limit(200),
-    supabase.from('calendar_events').select('id, title, starts_at, ends_at, assignee_id, all_day, location').eq('family_id', familyId).gte('starts_at', startIso).lt('starts_at', in3Iso).limit(100),
+    supabase.from('calendar_events').select('id, title, starts_at, ends_at, assignee_id, all_day, location, feed_id, external_uid').eq('family_id', familyId).gte('starts_at', startIso).lt('starts_at', in3Iso).limit(100),
     supabase.from('subscriptions_tracked').select('id, name, cost_cents, cadence, next_charge, last_used, status').eq('family_id', familyId).in('status', ['active', 'trial']).limit(200),
     supabase.from('family_stress_signals').select('member_id, weight, occurred_on').eq('family_id', familyId).eq('status', 'active').gte('occurred_on', since8Key).limit(500),
     supabase.from('medications').select('id, name, member_id, refill_on, refill_reminder_days').eq('family_id', familyId).eq('is_active', true).not('refill_on', 'is', null).limit(200),
@@ -181,9 +183,20 @@ export async function runAutopilotScan(
     // Meal Agent / Family Memory: 90d of dinner history + the next few days' plans.
     supabase.from('meal_plans').select('plan_date, meal_type, meals(name)').eq('family_id', familyId).eq('meal_type', 'dinner').gte('plan_date', since90Key).limit(500),
     supabase.from('family_insurance_policies').select('id, policy_type, insurer, renewal_date').eq('family_id', familyId).eq('is_active', true).not('renewal_date', 'is', null).lte('renewal_date', in30Key).limit(100),
-    // Family Memory: unpurchased wish-list items → gift ideas for upcoming birthdays.
-    supabase.from('wishlist_items').select('member_id, title, priority, is_purchased').eq('family_id', familyId).eq('is_purchased', false).limit(500),
-    supabase.from('autopilot_suggestions').select('id, dedupe_key, status').eq('family_id', familyId).not('dedupe_key', 'like', 'archived:%').limit(500),
+    // Family Memory: wish-list items → gift ideas for upcoming birthdays.
+    // ALL of them, bought or not. The suggestion is about the member whose
+    // birthday it is, it is notified to the whole family (that member too)
+    // and listed on the family's Autopilot screen, so a list with the bought
+    // wishes taken out tells them exactly which gift is already wrapped.
+    // Gift state is never shown to the person the wish belongs to
+    // (lib/purchases/advisor.ts).
+    supabase.from('wishlist_items').select('member_id, title, priority').eq('family_id', familyId).order('id').limit(500),
+    // EVERY live key, paged. Resolved rows keep their key for good, so a busy
+    // family passes any fixed cap; a prior key missing from a capped page was
+    // re-inserted, hit UNIQUE(family_id, dedupe_key), and failed the scan on
+    // every run after its side effect had already been written.
+    readAllAsQuery((from, to) => supabase.from('autopilot_suggestions').select('id, dedupe_key, status')
+      .eq('family_id', familyId).not('dedupe_key', 'like', 'archived:%').order('id').range(from, to), { max: 50_000 }),
   ]);
 
   const readResults = [
@@ -214,7 +227,8 @@ export async function runAutopilotScan(
 
   const remindedAppt = new Set((apptReminders ?? []).map((r) => r.related_id).filter(Boolean) as string[]);
 
-  // Family Memory: top unpurchased wish-list titles per member (high priority first).
+  // Family Memory: top wish-list titles per member (high priority first),
+  // chosen without looking at purchase state — see the read above.
   const prioRank: Record<string, number> = { high: 3, medium: 2, low: 1 };
   const giftsByMember = new Map<string, string[]>();
   for (const w of (wishlist ?? []).slice().sort((a, b) => (prioRank[b.priority] ?? 0) - (prioRank[a.priority] ?? 0))) {
@@ -251,7 +265,13 @@ export async function runAutopilotScan(
     })),
     birthdays: (members ?? []).map((m) => ({ memberId: m.id, name: m.display_name, birthday: m.birthday as string, giftIdeas: giftsByMember.get(m.id) })),
     lingeringGroceries: (groceries ?? []).map((g) => ({ id: g.id, name: g.name, addedAt: g.created_at })),
-    events: (events ?? []).map((e) => ({ id: e.id, title: e.title, startsAt: e.starts_at, endsAt: e.ends_at, memberId: e.assignee_id, allDay: e.all_day, location: e.location })),
+    events: (events ?? []).map((e) => ({
+      // An imported title is someone else's words: one plain, bounded line
+      // before it reaches a card. (Server-side: the engine is also bundled for
+      // the browser, and the sanitizer is not.)
+      id: e.id, title: e.feed_id != null || e.external_uid != null ? sanitizeUntrusted(e.title, 120) : e.title, startsAt: e.starts_at, endsAt: e.ends_at, memberId: e.assignee_id, allDay: e.all_day, location: e.location,
+      external: e.feed_id != null || e.external_uid != null,
+    })),
     subscriptions: (subs ?? []).map((x) => ({ id: x.id, name: x.name, costCents: x.cost_cents, cadence: x.cadence, nextCharge: x.next_charge, lastUsed: x.last_used, status: x.status })),
     stressSignals: (stress ?? []).map((x) => ({ memberId: x.member_id, weight: Number(x.weight), occurredOn: x.occurred_on })),
     medications: (meds ?? []).map((x) => ({ id: x.id, name: x.name, memberId: x.member_id, refillOn: x.refill_on as string, reminderDays: x.refill_reminder_days })),
@@ -299,7 +319,11 @@ export async function runAutopilotScan(
     }
   }
 
-  const drafts = buildSuggestions(snapshot, locale, t, traitsByMember);
+  // A draft whose card has already expired, or an event-tied reminder whose
+  // moment has passed (the "leave by" of a game that started an hour ago), is
+  // not offered, auto-run or announced. Left out of `draftKeys` too, so an
+  // open card for it from an earlier scan is archived below as stale.
+  const drafts = buildSuggestions(snapshot, locale, t, traitsByMember).filter((d) => !draftHasLapsed(d, now, tz));
   const draftKeys = new Set(drafts.map((d) => d.dedupeKey));
   const existingByKey = new Map((existing ?? []).map((e) => [e.dedupe_key, e]));
 
@@ -330,7 +354,17 @@ export async function runAutopilotScan(
       // Nine in the morning means the FAMILY's nine. `${todayKey}T09:00:00Z`
       // is 02:00 in Los Angeles — an auto-created reminder that fires in the
       // middle of the night on the day it was meant to help with.
-      const at = (d.payload.at as string) ?? defaultReminderIso(todayKey, tz);
+      //
+      // And a nine that is still to come: the reminder notifier only picks up
+      // rows whose remind_at is ahead of it, so a past instant (this morning
+      // for a family east of the 06:30 UTC cron, an overdue refill's morning)
+      // was stored, announced as handled, and never delivered.
+      //
+      // Only a reminder about a DAY (renewal, insurance, refill) moves to the
+      // next morning; an event-tied one whose time has gone is not written
+      // (reminderIsoFor), and the draft was already dropped above.
+      const at = reminderIsoFor(d.sourceKind, (d.payload.at as string | undefined) ?? defaultReminderIso(todayKey, tz), now, tz, d.expiresAt);
+      if (!at) continue;
       const relatedType = d.sourceKind === 'appointments' ? 'appointment'
         : d.sourceKind === 'calendar_events' ? 'event' : 'renewal';
       const { data: reminder, error: remErr } = await supabase.from('reminders').insert({
@@ -406,6 +440,13 @@ export async function runAutopilotScan(
         }
       }
       if (cleanupErrors.length > 0) console.error('[autopilot] side-effect cleanup failed', cleanupErrors);
+      // A key that already exists is a prior suggestion this scan did not
+      // see (a concurrent scan wrote it): respect it, as for any prior row,
+      // rather than failing the rest of the family's scan.
+      if ((suggestionError as { code?: string } | null)?.code === '23505' && cleanupErrors.length === 0) {
+        if (status === 'auto_executed') autoExecuted--;
+        continue;
+      }
       throw new Error('Autopilot could not save the suggestion');
     }
 
@@ -428,7 +469,7 @@ export async function runAutopilotScan(
         const sent = await notify(scope, {
           recipients: 'family',
           type: 'system',
-          title: status === 'auto_executed' ? `Autopilot handled: ${d.title}` : d.title,
+          title: status === 'auto_executed' ? `Autopilot handled: ${d.title}` : (d.notificationTitle ?? d.title),
           body: d.detail,
           relatedType: 'autopilot_suggestions',
           relatedId: inserted.id,

@@ -5,8 +5,8 @@ import { createClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 import { isManager } from '@/lib/constants/roles';
 import * as schedule from '@/lib/finance/hub';
-import { saveBillPayment, isMissingBillDueDay } from '@/lib/finance/bills';
-import { writeBillPatch } from '@/lib/finance/recurring';
+import { saveBillPayment, saveBillPaymentBefore0488, isMissingBillDueDay } from '@/lib/finance/bills';
+import { dueDayNotKeptQuestion, isDueDayNotKept, writeBillPatch } from '@/lib/finance/recurring';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { bill } from './helpers/recurring-bill-store';
 
@@ -46,6 +46,7 @@ describe('actual browser-write callbacks and real SDK', () => {
     const canWrite = new Function('canManage', 'currentBillOwner', 'scheduleOwner', `return ${guard};`)(canManage, currentBillOwner, owner);
     const env = { canWrite, createClient: () => db.client, familyId: 'synthetic-family', clock: { todayKey: () => '2026-01-01' },
       billPaidPatch: schedule.billPaidPatch, saveBillPayment, isMissingBillDueDay, wroteNoRows, describeDbError,
+      saveBillPaymentBefore0488, isDueDayNotKept, dueDayNotKeptQuestion, fmtDueDate: (day: string) => day, fmtDate: (day: string) => day, locale: { code: 'en-US' },
       paymentOwner: owner, paymentTicket: { current: 0 }, currentPayment: { current: null }, setPaymentSelection: vi.fn(),
       t: (key: string) => key, tr: (key: string) => key, toastError: vi.fn(), success: vi.fn(), refresh: vi.fn(), refreshBills: vi.fn(), refreshAccounts: vi.fn(),
       confirm: () => true, askConfirm: () => confirmation.promise.then(() => true) };
@@ -109,6 +110,8 @@ describe('actual modal hooks before passive cleanup', () => {
     useTranslations: () => (key: string) => key, useToast: () => ({ success, error }), useApp: () => ({ family: { timezone: 'UTC' } }),
     useFamilyClock: () => ({ todayKey: () => '2026-01-01' }), todayInZone: () => '2026-01-31', createClient: () => db.client,
     saveBillPayment, isMissingBillDueDay, writeBillPatch, describeDbError, wroteNoRows, ...schedule,
+    useLocale: () => ({ code: 'en-US' }), useConfirm: () => async () => false, useFormat: () => ({ fmtDate: (day: string) => day }),
+    dueDayNotKeptQuestion, isDueDayNotKept,
     Modal: () => null, Input: () => null, Field: () => null, Select: () => null, Button: () => null, CATEGORIES: ['Other'], BILL_CATEGORIES: ['Other'] };
     const component = actualFunction(file, name, env);
     const render = () => { cursor = 0; return component({ bill: bill({ due_date: '2026-01-01' }), familyId: 'synthetic-family', userId: 'synthetic-user', open: true, defaultAutopay: false, isCurrent: () => current, onDone: done, onClose: close }); };

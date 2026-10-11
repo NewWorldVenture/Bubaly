@@ -140,9 +140,13 @@ describe('result card components', () => {
 describe('workspace layout', () => {
   const panes = { conversation: React.createElement('p', null, 'CONVERSATION'), plan: React.createElement('p', null, 'PLAN'), context: React.createElement('p', null, 'CONTEXT') };
 
-  it('is three columns on a desktop and a Chat | Plan | Context tablist below it', () => {
+  it('is two columns from lg with the context under them, three from 2xl, and a Chat | Plan | Context tablist below lg', () => {
     const html = render(React.createElement(AssistantWorkspace, { pane: 'plan', onPaneChange: () => undefined, ...panes, counts: { plan: 2 } }));
-    expect(html).toContain('lg:grid-cols-[320px_1fr_330px]');
+    // Three fixed-width columns from lg left the centre column, and the
+    // welcome composer in it, 0px wide at 1024px beside the sidebar (#778).
+    expect(html).toContain('lg:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[320px_1fr_330px]');
+    expect(html).not.toContain('lg:grid-cols-[320px_1fr_330px]');
+    expect(html).toContain('lg:col-span-2 2xl:col-span-1');
     expect(html).toContain('role="tablist"');
     expect(WORKSPACE_PANES.map((p) => p.label)).toEqual(['Chat', 'Plan', 'Context']);
     // Only the active pane is visible on a phone; the others are hidden, not unmounted.

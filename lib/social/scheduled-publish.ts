@@ -245,7 +245,10 @@ export async function runScheduledPublishDrain(options: { now?: Date; signal?: A
   let wrapped = false;
   const visited = new Set<string>();
   for (let page = 0; page < 20 && !signal.aborted; page += 1) {
-    let query = db.from('ai_tool_calls').select('id').eq('tool_name', SCHEDULE_TOOL).contains('outputs', { drain: true }).order('id').limit(1);
+    // Receipts of OPEN families only (families.closed_at): a closed account's
+    // scheduled posts are not published. Its receipts stay queued, untouched.
+    let query = db.from('ai_tool_calls').select('id, family:families!inner(closed_at)').is('family.closed_at', null)
+      .eq('tool_name', SCHEDULE_TOOL).contains('outputs', { drain: true }).order('id').limit(1);
     if (cursor) query = query.gt('id', cursor);
     const rows = await query.abortSignal(scheduleSignal(signal));
     if (rows.error || !rows.data) return scheduleFailure();

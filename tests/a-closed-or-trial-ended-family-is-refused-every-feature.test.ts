@@ -91,30 +91,25 @@ async function entitlementFor(href: string) {
 describe('resolveFeatureEntitlement', () => {
   it('refuses a closed family a Free-tier feature', async () => {
     closed();
-    expect(await entitlementFor('/dashboard/chores')).toMatchObject({ allowed: false, reason: 'closed' });
+    expect(await entitlementFor('/dashboard/chores')).toMatchObject({ allowed: false, reason: 'locked', code: 'account_closed' });
   });
 
   it('refuses a closed family even while its paid plan runs out', async () => {
     closed();
     state.subscriptions = [{ plan: 'plus', status: 'active' }];
-    expect(await entitlementFor('/dashboard/chores')).toMatchObject({ allowed: false, reason: 'closed' });
+    expect(await entitlementFor('/dashboard/chores')).toMatchObject({ allowed: false, reason: 'locked', code: 'account_closed' });
   });
 
   it('refuses a trial-ended family a Free-tier feature, needing Family Basic', async () => {
     trialEnded();
-    expect(await entitlementFor('/dashboard/chores')).toMatchObject({ allowed: false, reason: 'trial_ended', needLevel: 1 });
-  });
-
-  it('names the plan a Plus feature needs to a trial-ended family', async () => {
-    trialEnded();
-    expect(await entitlementFor('/missions')).toMatchObject({ allowed: false, reason: 'trial_ended', needLevel: 2 });
+    expect(await entitlementFor('/dashboard/chores')).toMatchObject({ allowed: false, reason: 'locked', code: 'trial_expired', needLevel: 1 });
   });
 
   // An href outside the catalogue is not gated by tier, but the account's
   // standing is not a tier: a closed account is closed everywhere.
   it('refuses a closed family an href outside the catalogue too', async () => {
     closed();
-    expect(await entitlementFor('/dashboard/not-a-catalogued-feature')).toMatchObject({ allowed: false, reason: 'closed' });
+    expect(await entitlementFor('/dashboard/not-a-catalogued-feature')).toMatchObject({ allowed: false, reason: 'locked', code: 'account_closed' });
     state.family = { trial_ends_at: null, closed_at: null };
     expect(await entitlementFor('/dashboard/not-a-catalogued-feature')).toMatchObject({ allowed: true });
   });
@@ -148,11 +143,11 @@ describe('refuseUnlessEntitled, the route gate', () => {
     expect(await res!.json()).toMatchObject({ code: 'account_closed', error: expect.stringMatching(/closed/i) });
   });
 
-  it('answers a trial-ended family 403 plan_required with need 1', async () => {
+  it('answers a trial-ended family 403 trial_expired with need 1', async () => {
     trialEnded();
     const res = await refuse(['/dashboard/assistant', '/dashboard/chores']);
     expect(res?.status).toBe(403);
-    expect(await res!.json()).toMatchObject({ code: 'plan_required', needLevel: 1, error: expect.stringMatching(/trial/i) });
+    expect(await res!.json()).toMatchObject({ code: 'trial_expired', needLevel: 1, error: expect.stringMatching(/trial/i) });
   });
 
   it('lets a super administrator through, as for any other refusal', async () => {

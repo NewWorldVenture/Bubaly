@@ -15,7 +15,7 @@
 //
 // The gates here are the real ones, with the plan seeded through the service
 // client `lib/server/plan.ts` reads with.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { resolveFeatureTiers, tiersByHref } from '@/lib/features/tiers';
 import type { FeatureTier } from '@/lib/constants/feature-catalog';
@@ -98,6 +98,11 @@ async function chat() {
   return POST(post());
 }
 
+// The first import of a route pulls in every translation catalogue, which can
+// take most of a case's 20s budget on a loaded machine. It is paid here, once,
+// with its own budget, so no case times out on an import.
+beforeAll(async () => { await import('@/app/api/ai/chat/route'); }, 120_000);
+
 beforeEach(() => {
   state.family = { trial_ends_at: null, closed_at: null };
   state.subscriptions = [];
@@ -153,7 +158,7 @@ describe('refused before the model, as /api/ai refuses', () => {
     state.family = { trial_ends_at: PAST, closed_at: null };
     const res = await chat();
     expect(res.status).toBe(403);
-    expect(await res.json()).toMatchObject({ code: 'plan_required', needLevel: 1 });
+    expect(await res.json()).toMatchObject({ code: 'trial_expired', needLevel: 1 });
     expect(isAIConfigured).not.toHaveBeenCalled();
   });
 });

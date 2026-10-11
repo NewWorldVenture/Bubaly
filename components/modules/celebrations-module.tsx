@@ -86,7 +86,7 @@ export function CelebrationsModule() {
     if (!(await askConfirm({ title: t('confirm.deleteNamed', { name: c.title }), body: t('confirm.cannotBeUndone') }))) return;
     const supabase = createClient();
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
-    const { data: removed2, error } = await supabase.from('family_dates').delete().eq('id', c.id.replace(/^d-/, '')).select('id');
+    const { data: removed2, error } = await supabase.from('family_dates').delete().eq('id', c.id.replace(/^d-/, '')).eq('family_id', familyId).select('id');
     if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed2)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('celebrationsModule.removed'));
   }
 

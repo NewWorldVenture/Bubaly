@@ -298,7 +298,8 @@ describe('a refused listing save lets go of nothing it uploaded (C1-S9-85)', () 
     // The save reaches .select('id') through a local `run` helper, which no
     // binding regex can see — so this is checked here, in its own function.
     const helper = bodyOf(src, 'const run = (uStrip: typeof fullUpdate, iStrip: typeof fullInsert) => reminder', ';\n');
-    expect(helper).toContain(".update(uStrip).eq('id', reminder.id).select('id')");
+    // Scoped by family as well as id (the gated-write rule, a-filtered-delete-is-not-a-deletion).
+    expect(helper).toContain(".update(uStrip).eq('id', reminder.id).eq('family_id', familyId).select('id')");
     expect(helper).toContain(".insert(iStrip).select('id')");
     expect(src).toContain('({ data: saved, error } = await run(stripNewCols(fullUpdate), stripNewCols(fullInsert)));');
     expect(at(src, 'let { data: saved, error } = await run(fullUpdate, fullInsert);')).toBeLessThan(at(src, "if (wroteNoRows(saved)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }"));

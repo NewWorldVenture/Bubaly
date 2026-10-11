@@ -80,17 +80,17 @@ function defaultRespond(call: Call): Reply {
 }
 
 describe('notify', () => {
-  it('sends one family-wide row for the whole family', async () => {
+  it('sends the whole family one row per member account, so each has their own read state', async () => {
     const { db, calls } = makeDb(defaultRespond);
     const res = await notify(scopeWith(db), { recipients: 'family', type: 'system', title: 'Dinner is at 6' });
-    expect(res).toMatchObject({ ok: true, data: { created: 1, duplicates: 0, deferred: 0 } });
+    expect(res).toMatchObject({ ok: true, data: { created: 3, duplicates: 0, deferred: 0, skippedMemberIds: ['member-4'] } });
 
     const rows = calls.find((c) => c.table === 'notifications' && c.kind === 'insert')?.payload as Record<string, unknown>[];
-    expect(rows).toHaveLength(1);
-    // notifications.user_id NULL means "the whole family" (0002).
-    expect(rows[0]).toMatchObject({ family_id: 'fam-1', user_id: null, type: 'system', title: 'Dinner is at 6' });
-    // A family-wide send never needs to look up members.
-    expect(calls.some((c) => c.table === 'family_members')).toBe(false);
+    // Not one shared NULL-user row: `is_read` is a single column, so the first
+    // member to read that row cleared it for everyone.
+    expect(rows.map((r) => r.user_id)).toEqual(['auth-user-1', 'auth-user-2', 'auth-user-3']);
+    for (const row of rows) expect(row).toMatchObject({ family_id: 'fam-1', type: 'system', title: 'Dinner is at 6' });
+    expect(calls.find((c) => c.table === 'family_members')?.filters).toMatchObject({ family_id: 'fam-1', is_active: true });
   });
 
   it('resolves managers to the parent and adult accounts only', async () => {
@@ -141,8 +141,9 @@ describe('notify', () => {
       if (call.table === 'notifications' && call.kind === 'select') return { data: [{ user_id: null }], error: null };
       return defaultRespond(call);
     });
+    // A legacy family-wide (NULL user) row is already in every member's list.
     const res = await notify(scopeWith(db), { recipients: 'family', type: 'system', title: 'Dinner is at 6' });
-    expect(res).toMatchObject({ ok: true, data: { created: 0, duplicates: 1 } });
+    expect(res).toMatchObject({ ok: true, data: { created: 0, duplicates: 3 } });
     expect(calls.some((c) => c.table === 'notifications' && c.kind === 'insert')).toBe(false);
   });
 
@@ -342,9 +343,11 @@ describe('notify is unchanged by the priority split', () => {
     expect(res.ok).toBe(true);
     const rows = calls.find((c) => c.table === 'notifications' && c.kind === 'insert')?.payload as Record<string, unknown>[];
     // No `priority` key: the classifier is a function, not a column, and
-    // inventing the column here would fail the insert.
+    // inventing the column here would fail the insert. `sent_at` (0002) is the
+    // email digest's stamp: a 'family' notice settles it at write time so the
+    // per-member rows stay in-app and push only, as the NULL row was.
     expect(Object.keys(rows[0]).sort()).toEqual(
-      ['body', 'family_id', 'related_id', 'related_type', 'send_at', 'title', 'type', 'user_id'],
+      ['body', 'family_id', 'related_id', 'related_type', 'send_at', 'sent_at', 'title', 'type', 'user_id'],
     );
   });
 });

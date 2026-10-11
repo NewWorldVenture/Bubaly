@@ -72,7 +72,8 @@ type LedgerRow = Record<string, unknown> & { id: string; state: string; attempt:
 
 /** An in-memory `ai_tool_calls` with the real unique key, so conflicts behave like 0250. */
 function makeLedger(seed: LedgerRow[] = [], opts: {
-  pendingApproval?: string;
+  /** A pending row already under the dedupe key, as the lookup returns it (every column it reads). */
+  pendingApproval?: Record<string, unknown> & { id: string };
   readBarrier?: number;
   beforeUpdate?: (row: LedgerRow, call: Call) => void;
 } = {}) {
@@ -98,7 +99,7 @@ function makeLedger(seed: LedgerRow[] = [], opts: {
       // lookup always hit, so no card was ever filed — model the real table
       // instead: nothing pending unless a test says so.
       if (call.kind === 'select') {
-        return { data: opts.pendingApproval ? { id: opts.pendingApproval } : null, error: null };
+        return { data: opts.pendingApproval ? { ...opts.pendingApproval } : null, error: null };
       }
       return { data: { id: 'appr-1' }, error: null };
     }
@@ -168,6 +169,14 @@ function makeFamilyDb(options: { policies?: PolicyRow[]; domain?: (call: Call) =
       default: return options.domain?.(call) ?? { data: null, error: null };
     }
   });
+}
+
+/** The row Bubaly's risk tier files for `calendar.deleteEvent {event_id: 'event-1'}` from scopeWith(). */
+function bubalysPendingDelete(over: Record<string, unknown> = {}): Record<string, unknown> & { id: string } {
+  return {
+    id: 'appr-existing', requested_by_kind: 'ai', requested_by_member_id: 'member-1', domain: 'calendar', capability: 'automate',
+    payload: { name: 'calendar.deleteEvent', args: { event_id: 'event-1' } }, ...over,
+  };
 }
 
 function scopeWith(db: SupabaseClient<Database>, extra?: Partial<ServiceScope>): ServiceScope {
@@ -425,7 +434,7 @@ describe('trust gate', () => {
     // cards on the registry path while the chat path was fixed. A parent who
     // sees two identical cards approves both, and the resource is written twice.
     const family = makeFamilyDb({ domain: calendarDomain });
-    const ledger = makeLedger([], { pendingApproval: 'appr-existing' });
+    const ledger = makeLedger([], { pendingApproval: bubalysPendingDelete() });
     ledgerHolder.client = ledger.db;
 
     const outcome = await executeTool(scopeWith(family.db), 'calendar.deleteEvent', { event_id: 'event-1' });
@@ -433,6 +442,35 @@ describe('trust gate', () => {
     expect(outcome).toMatchObject({ status: 'pending_approval', approvalId: 'appr-existing' });
     expect(trustCalls(family).some((c) => c.table === 'approval_requests' && c.kind === 'insert')).toBe(false);
   });
+
+  // `dedupe_key` is member-writable on a member's own row and the key is a hash
+  // of values the asker knows. Reusing any row under the key let an adult plant
+  // a row with a different payload, have Bubaly "reuse" it (writing Bubaly's
+  // ai_agent audit line against it), flip requested_by_kind to 'ai', and
+  // approve their own payload with the trust gate skipped.
+  for (const [label, planted] of [
+    ['a different payload', bubalysPendingDelete({ payload: { name: 'calendar.deleteEvent', args: { event_id: 'event-OTHER' } } })],
+    ['a member filer', bubalysPendingDelete({ requested_by_kind: 'member' })],
+    ['another asker', bubalysPendingDelete({ requested_by_member_id: 'member-2' })],
+  ] as const) {
+    it(`never reuses a row planted under the key with ${label}; files its own`, async () => {
+      const family = makeFamilyDb({ domain: calendarDomain });
+      const ledger = makeLedger([], { pendingApproval: planted });
+      ledgerHolder.client = ledger.db;
+
+      const outcome = await executeTool(scopeWith(family.db), 'calendar.deleteEvent', { event_id: 'event-1' });
+
+      expect(outcome).toMatchObject({ status: 'pending_approval' });
+      expect((outcome as { approvalId?: string }).approvalId).not.toBe('appr-existing');
+      const inserted = trustCalls(family).find((c) => c.table === 'approval_requests' && c.kind === 'insert');
+      expect(inserted?.payload).toMatchObject({ requested_by_kind: 'ai', payload: { name: 'calendar.deleteEvent', args: { event_id: 'event-1' } } });
+      // Filed beside the planted row, so 0273's index cannot refuse it.
+      expect((inserted?.payload as { dedupe_key: unknown }).dedupe_key).toBeNull();
+      // Bubaly's audit line names its own row, never the planted one.
+      const audits = trustCalls(family).filter((c) => c.table === 'trust_audit_logs');
+      expect(audits.some((c) => (c.payload as { approval_id?: string }).approval_id === 'appr-existing')).toBe(false);
+    });
+  }
 
   it('holds a high-risk tool for approval and stores the payload so it can execute later', async () => {
     const family = makeFamilyDb({ domain: calendarDomain });

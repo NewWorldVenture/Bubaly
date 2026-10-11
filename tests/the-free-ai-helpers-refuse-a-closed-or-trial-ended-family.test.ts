@@ -1,7 +1,7 @@
 // The Free-tier AI helpers refuse a closed or trial-ended family.
 //
-// Twelve routes call a model or a voice provider with no feature gate:
-//   - habits, journal, notes, meal plan, nutrition, pantry chef, relationship;
+// Eleven routes call a model or a voice provider with no feature gate:
+//   - habits, journal, notes, meal plan, nutrition, relationship;
 //   - recipe suggest and transform;
 //   - voice transcribe and speak (the phone app's microphone);
 //   - the public gift page's idea helper.
@@ -10,7 +10,9 @@
 // unpaid, is level 0 like Free, and the only thing in its way was the overlay
 // `app/(app)/layout.tsx` draws over the web screens. Calling the route, or
 // opening the phone app, which has no overlay, still spent the deployment's
-// model and voice keys on an account that is meant to be locked.
+// model and voice keys on an account that is meant to be locked. (The pantry
+// chef is a Smart Kitchen feature now, behind `refuseUnlessEntitled`, which
+// refuses a locked family itself.)
 //
 // Refusal only: none of this meters the routes.
 //
@@ -18,7 +20,7 @@
 // service client it reads with. "Reached" means the route got past the gate to
 // the first thing that spends: the rate limiter (a durable row per request) or
 // the provider.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
 type Family = { trial_ends_at: string | null; closed_at: string | null };
@@ -98,7 +100,6 @@ const MEMBER_ROUTES: Array<[string, () => Promise<Handler>]> = [
   ['/api/ai/notes', async () => (await import('@/app/api/ai/notes/route')).POST as Handler],
   ['/api/ai/meals/plan', async () => (await import('@/app/api/ai/meals/plan/route')).POST as Handler],
   ['/api/ai/meals/nutrition', async () => (await import('@/app/api/ai/meals/nutrition/route')).POST as Handler],
-  ['/api/ai/pantry-chef', async () => (await import('@/app/api/ai/pantry-chef/route')).POST as Handler],
   ['/api/ai/relationship', async () => (await import('@/app/api/ai/relationship/route')).POST as Handler],
   ['/api/ai/voice/transcribe', async () => (await import('@/app/api/ai/voice/transcribe/route')).POST as Handler],
   ['/api/ai/voice/speak', async () => (await import('@/app/api/ai/voice/speak/route')).POST as Handler],
@@ -112,6 +113,14 @@ const request = (path: string, body: unknown = {}) => new NextRequest(`http://lo
 const reached = () => enforceAIRateLimit.mock.calls.length + resolveProvider.mock.calls.length > 0;
 
 const PAST = '2020-01-01T00:00:00.000Z';
+
+// The first import of a route pulls in every translation catalogue, which can
+// take most of a case's 20s budget on a loaded machine. It is paid here, once,
+// with its own budget, so no case times out on an import.
+beforeAll(async () => {
+  for (const [, load] of MEMBER_ROUTES) await load();
+  await import('@/app/api/ai/gift/route');
+}, 120_000);
 
 beforeEach(() => {
   state.family = { trial_ends_at: null, closed_at: null };
@@ -138,7 +147,7 @@ describe.each(MEMBER_ROUTES)('%s', (path, load) => {
     state.family = { trial_ends_at: PAST, closed_at: null };
     const res = await (await load())(request(path, BODIES[path]));
     expect(res.status).toBe(403);
-    expect(await res.json()).toMatchObject({ code: 'plan_required', needLevel: 1 });
+    expect(await res.json()).toMatchObject({ code: 'trial_expired', needLevel: 1 });
     expect(reached(), 'the route went on to its work').toBe(false);
   });
 
