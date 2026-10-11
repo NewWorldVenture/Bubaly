@@ -16,9 +16,8 @@ import type { UserContext } from '@/lib/supabase/auth';
 export const GUEST_LANDING = '/dashboard/grandparent-portal';
 
 export const GUEST_WITHHELD_PREFIXES = [
-  // locations
+  // locations (the check-in page stays: it shows a guest only their own)
   '/dashboard/locator',
-  '/dashboard/family/check-in',
   '/dashboard/family/driving-safety',
   // money and cards
   '/dashboard/autopay',

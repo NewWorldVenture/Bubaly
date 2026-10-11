@@ -33,13 +33,21 @@ export function CheckInView() {
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const { data: rows, loading, error, refresh } = useRealtimeQuery<CheckIn>({
-    table: 'safety_check_ins', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('safety_check_ins').select('*').eq('family_id', familyId).order('created_at', { ascending: false }).limit(100),
-  });
   // The held 0516: a parent, an adult or a caregiver reads everyone's
-  // check-ins; anyone else their own.
+  // check-ins; anyone else their own (a guest too: the held 0509 keeps a
+  // guest's own rows). Narrowed before the limit, so a restricted reader's own
+  // check-ins are not crowded out and nobody else's reach their browser; with
+  // no member record of their own there is nothing of theirs to read.
   const seesEveryones = readsEveryonesHistory(role);
+  const selfId = selfMember?.id ?? null;
+  const { data: rows, loading, error, refresh } = useRealtimeQuery<CheckIn>({
+    table: 'safety_check_ins', familyId, deps: [familyId, role, selfId],
+    fetcher: (sb) => {
+      if (!seesEveryones && !selfId) return Promise.resolve({ data: [] as CheckIn[], error: null });
+      const query = sb.from('safety_check_ins').select('*').eq('family_id', familyId);
+      return (seesEveryones ? query : query.eq('member_id', selfId!)).order('created_at', { ascending: false }).limit(100);
+    },
+  });
   const visible = useMemo(() => historyInScope(rows ?? [], role, selfMember?.id), [rows, role, selfMember]);
 
   const [place, setPlace] = useState('');
