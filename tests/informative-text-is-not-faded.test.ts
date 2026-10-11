@@ -65,6 +65,8 @@ describe('informative text is not faded with opacity', () => {
   it('exempts only an element that is certainly inactive or hidden: disabled and aria-hidden written true', () => {
     // Certainly inactive or hidden: not scanned.
     expect(flagged(`<button disabled className="opacity-60">Save</button>`)).toBe(false);
+    expect(flagged(`<Button disabled className="opacity-60">Save</Button>`)).toBe(false);
+    expect(flagged(`<input disabled className="opacity-60" value="Save" />`)).toBe(false); // no text child: never a site
     expect(flagged(`<button disabled={true} className="opacity-60">Save</button>`)).toBe(false);
     expect(flagged(`<span aria-hidden className="opacity-60">Save</span>`)).toBe(false);
     expect(flagged(`<span aria-hidden="true" className="opacity-60">Save</span>`)).toBe(false);
@@ -75,10 +77,37 @@ describe('informative text is not faded with opacity', () => {
     expect(flagged(`<span aria-hidden={false} className="opacity-60">Save</span>`)).toBe(true);
     expect(flagged(`<span aria-hidden="false" className="opacity-60">Save</span>`)).toBe(true);
     expect(flagged(`<span aria-hidden={hidden} className="opacity-60">Save</span>`)).toBe(true);
+    // `disabled` disables nothing on an element that cannot be disabled: the paragraph stays visible.
+    expect(flagged(`<p disabled className="opacity-60">Saved</p>`)).toBe(true);
+    expect(flagged(`<span disabled={true} className="opacity-60">Saved</span>`)).toBe(true);
     // A look is not a state.
     expect(flagged(`<label className="cursor-not-allowed opacity-60">Upload</label>`)).toBe(true);
     // Variants are states or reveals, not fades of the resting text.
     expect(flagged(`<button className="disabled:opacity-50 hover:opacity-80">Save</button>`)).toBe(false);
+  });
+
+  it('resolves a name by its scope: each component’s own const, the nearest binding, wherever it is declared', () => {
+    const lines = (src: string) => fadedText(scanSource('fixture.tsx', src)).map((f) => f.line.replace(/.*>(\w+)<\/p>.*/, '$1'));
+    // Two components, each with its own ROW: only the faded one is found, whichever comes first.
+    expect(lines(`function A() { const ROW = 'opacity-50'; return <p className={ROW}>a</p>; }
+      function B() { const ROW = 'text-sm'; return <p className={ROW}>b</p>; }`)).toEqual(['a']);
+    expect(lines(`function B() { const ROW = 'text-sm'; return <p className={ROW}>b</p>; }
+      function A() { const ROW = 'opacity-50'; return <p className={ROW}>a</p>; }`)).toEqual(['a']);
+    // An inner const shadows the module’s; the module’s still answers outside it.
+    expect(lines(`const ROW = 'opacity-50';
+      function A() { const ROW = 'text-sm'; return <p className={ROW}>a</p>; }
+      function B() { return <p className={ROW}>b</p>; }`)).toEqual(['b']);
+    expect(lines(`const ROW = 'text-sm';
+      function A() { const ROW = 'opacity-50'; return <p className={ROW}>a</p>; }`)).toEqual(['a']);
+    // Declared after the component that uses it: still that const.
+    expect(lines(`function A() { return <p className={ROW}>a</p>; }
+      const ROW = 'opacity-50';`)).toEqual(['a']);
+    // A nearer binding that is not a const of strings is that binding, not the module’s const:
+    // a parameter, a loop variable, a destructured name. Outside the guard, not "clear" by another scope.
+    expect(lines(`const ROW = 'opacity-50'; function A({ ROW }: any) { return <p className={ROW}>a</p>; }`)).toEqual([]);
+    expect(lines(`const ROW = 'opacity-50'; function A(xs: string[]) { return xs.map((ROW) => <p className={ROW}>a</p>); }`)).toEqual([]);
+    // A `?:` of literal strings is read in both arms.
+    expect(lines(`function A({ done }: any) { const ROW = done ? 'line-through opacity-50' : ''; return <p className={ROW}>a</p>; }`)).toEqual(['a']);
   });
 
   it('follows a class held in a same-file const, or a const map of them; not an import or a function', () => {
