@@ -121,10 +121,17 @@
      only, each the first value that reaches 4.5:1 on its strongest tint the
      source puts behind its text, hover states included (success 25%, danger
      20%, warning 15%). Info already passes on its own. White on each as a
-     solid fill rises to 6.0 to 7.2. */
+     solid fill rises to 6.0 to 7.2.
+
+     A chip can also sit inside a row that has its own status tint: a snoozed
+     reminder's row is bg-warning/5 and an overdue one's bg-danger/5, and each
+     carries a warning Badge (bg-warning/15) for its priority or its snooze.
+     The two tints compound to 19.25%, where warning read 4.23 over --bg. So
+     warning is darkened once more, the same way, to the first value that
+     clears 4.5 on that nested ground (4.53). */
   --accent: 169 66 21; /* the status roles' rule for accent too: 3.71 on its 15% tint at 194 75 24, now 4.5 */
   --success: 18 99 73;
-  --warning: 129 93 16;
+  --warning: 123 88 15;
   --danger: 174 39 39;
   --danger-fg: 255 255 255;
   --success-fg: 255 255 255;
