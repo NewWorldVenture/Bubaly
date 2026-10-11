@@ -195,7 +195,8 @@ describe('text on a solid success fill meets WCAG AA', () => {
 describe('a status role’s text is readable on its own tint', () => {
   const css = readFileSync(resolve('app/globals.css'), 'utf8');
   const source = [collectSource(resolve('app')), collectSource(resolve('components'))].join('\n');
-  const STATUS = ['success', 'warning', 'danger', 'info'];
+  // accent too: an accent Badge is `bg-accent/15 text-accent` (3.71:1 before).
+  const STATUS = ['success', 'warning', 'danger', 'info', 'accent'];
 
   /** The strongest `bg-<role>/NN`, in any state (`hover:bg-<role>/25` too), in a class string that also has `text-<role>`. */
   function strongestTint(role: string): number {
@@ -209,7 +210,7 @@ describe('a status role’s text is readable on its own tint', () => {
   }
 
   it('finds the chips (non-vacuity)', () => {
-    for (const role of ['success', 'warning', 'danger']) expect(strongestTint(role), role).toBeGreaterThan(0);
+    for (const role of ['success', 'warning', 'danger', 'accent']) expect(strongestTint(role), role).toBeGreaterThan(0);
     // hover:bg-success/25 behind text-success: economy, wallet, concierge, approvals.
     expect(strongestTint('success')).toBe(25);
   });
@@ -228,6 +229,50 @@ describe('a status role’s text is readable on its own tint', () => {
           const ratio = contrast(tokens[role], tint);
           if (ratio < 4.5) failures.push(`--${role} on its ${Math.round(alpha * 100)}% tint over --${ground}: ${ratio.toFixed(2)}`);
         }
+      }
+      expect(failures).toEqual([]);
+    });
+  }
+});
+
+// Muted text on the brand selection tint. A selected row or an icon tile puts
+// `text-muted` on `bg-brand/10` (the active conversation in messages; the
+// empty-state tiles), where it read 4.32:1 over --bg. The tint is read from
+// the source: the strongest base-state bg-brand/NN in a class string that also
+// has text-muted (a state that changes the text colour with it, like a
+// peer-checked chip turning text-brand-text, is not a muted pairing), and the
+// messages row, whose tint and muted preview are on different elements.
+describe('muted text is readable on the brand selection tint', () => {
+  const css = readFileSync(resolve('app/globals.css'), 'utf8');
+  const source = [collectSource(resolve('app')), collectSource(resolve('components'))].join('\n');
+  const messages = readFileSync(resolve('components/modules/messages-module.tsx'), 'utf8');
+
+  function selectionTint(): number {
+    let max = 0;
+    for (const m of source.matchAll(/(["'`])([^"'`\n]*)\1/g)) {
+      const classes = m[2];
+      if (!/(^|\s)text-muted(\s|$)/.test(classes)) continue;
+      for (const t of classes.matchAll(/(?:^|\s)bg-brand\/(\d+)(?=\s|$)/g)) max = Math.max(max, Number(t[1]));
+    }
+    const row = messages.match(/isActive \? 'bg-brand\/(\d+)'/);
+    expect(row, "messages' active row tint").not.toBeNull();
+    expect(messages).toContain("unread ? 'font-medium text-fg' : 'text-muted'");
+    return Math.max(max, Number(row![1]));
+  }
+
+  it('finds the selection tint (non-vacuity)', () => {
+    expect(selectionTint()).toBe(10);
+  });
+
+  for (const [theme, selector] of [['light', '.light {'], ['dark', '.dark {']] as const) {
+    it(`${theme}: --muted clears 4.5:1 on --brand at that tint, over every ground`, () => {
+      const tokens = tokensOf(css, selector);
+      const alpha = selectionTint() / 100;
+      const failures: string[] = [];
+      for (const ground of GROUNDS) {
+        const tint = tokens.brand.map((v, i) => v * alpha + tokens[ground][i] * (1 - alpha));
+        const ratio = contrast(tokens.muted, tint);
+        if (ratio < 4.5) failures.push(`--muted on --brand/${selectionTint()} over --${ground}: ${ratio.toFixed(2)}`);
       }
       expect(failures).toEqual([]);
     });
