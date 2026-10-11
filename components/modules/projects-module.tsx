@@ -534,7 +534,7 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
               {qc.rows.map((q) => {
                 const c = contractorOf(q.contractor_id);
                 return (
-                  <li key={q.id} className={cn('rounded-xl border px-3 py-2', q.status === 'accepted' ? 'border-emerald-500/30 bg-emerald-500/10' : q.isExpired || q.status === 'declined' ? 'border-border/60 bg-surface/30 opacity-75' : 'border-border bg-surface/60')}>
+                  <li key={q.id} className={cn('rounded-xl border px-3 py-2', q.status === 'accepted' ? 'border-emerald-500/30 bg-emerald-500/10' : q.isExpired || q.status === 'declined' ? 'border-border/60 bg-surface/30' : 'border-border bg-surface/60')}>
                     <div className="flex items-start gap-3">
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium">{q.contractor_name}{c?.is_preferred ? ' ⭐' : ''} <span className="font-bold">{q.status === 'requested' ? '' : money(q.amount_cents)}</span>{q.isLowest && q.status !== 'accepted' ? <span className="ml-1 rounded-full bg-brand/15 px-1.5 text-[10px] text-brand-text">lowest</span> : null}{q.vsLowestPct ? <span className="ml-1 text-xs text-muted">+{q.vsLowestPct}%</span> : null}</p>

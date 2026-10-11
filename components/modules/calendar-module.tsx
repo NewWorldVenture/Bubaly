@@ -731,10 +731,10 @@ export function CalendarModule() {
             {/* All-day events */}
             {mobileDayAllDay.map(e => (
               <div key={e.occurrenceKey} data-calendar-day={mobileDayStr} data-occurrence-key={e.occurrenceKey} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className={cn('focus-ring cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}>
-                <div className="text-[10px] font-semibold uppercase tracking-wide opacity-70">{tr('calendar.allDay')}</div>
+                <div className="text-[10px] font-semibold uppercase tracking-wide">{tr('calendar.allDay')}</div>
                 <div className="text-sm font-semibold">{e.title ?? '—'}</div>
                 {e.assignee_id && memberById.get(e.assignee_id) && (
-                  <div className="mt-1 flex items-center gap-1.5 text-xs opacity-70">
+                  <div className="mt-1 flex items-center gap-1.5 text-xs">
                     <Avatar name={memberById.get(e.assignee_id)!.display_name} color={memberById.get(e.assignee_id)!.color} size={14} />
                     {memberById.get(e.assignee_id)!.display_name}
                   </div>
@@ -759,9 +759,9 @@ export function CalendarModule() {
                     {member && <Avatar name={member.display_name} color={member.color} size={18} />}
                   </div>
                   <div className="mt-1 text-sm font-semibold">{e.title ?? '—'}</div>
-                  {member && <div className="mt-0.5 text-xs opacity-70">{member.display_name}</div>}
+                  {member && <div className="mt-0.5 text-xs">{member.display_name}</div>}
                   {e.location && (
-                    <div className="mt-1 flex items-center gap-1 text-xs opacity-70"><MapPin className="h-3 w-3" />{e.location}</div>
+                    <div className="mt-1 flex items-center gap-1 text-xs"><MapPin className="h-3 w-3" />{e.location}</div>
                   )}
                 </div>
               );
@@ -849,9 +849,9 @@ export function CalendarModule() {
                               {height > 30 && member && <Avatar name={member.display_name} color={member.color} size={14} />}
                             </div>
                             {height > 24 && <div className="mt-0.5 truncate font-medium leading-tight">{e.title ?? '—'}</div>}
-                            {height > 42 && member && <div className="mt-0.5 truncate text-[9px] opacity-70">{member.display_name}</div>}
+                            {height > 42 && member && <div className="mt-0.5 truncate text-[9px]">{member.display_name}</div>}
                             {height > 54 && e.location && (
-                              <div className="mt-0.5 flex items-center gap-0.5 text-[9px] opacity-70"><MapPin className="h-2 w-2" />{e.location}</div>
+                              <div className="mt-0.5 flex items-center gap-0.5 text-[9px]"><MapPin className="h-2 w-2" />{e.location}</div>
                             )}
                           </div>
                         );

@@ -127,7 +127,7 @@ export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
             key={rule.id}
             className={cn(
               'rounded-2xl border transition',
-              rule.is_active ? 'border-border bg-surface/40' : 'border-border/40 bg-surface/20 opacity-60',
+              rule.is_active ? 'border-border bg-surface/40' : 'border-dashed border-border bg-surface/20',
             )}
           >
             <div className="flex items-center gap-3 px-4 py-3">

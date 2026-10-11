@@ -314,7 +314,7 @@ function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; mem
       ) : (
         <div className="space-y-2">
           {policies.map(p => (
-            <div key={p.id} className={cn('rounded-2xl border bg-surface/40 p-4', p.enabled ? 'border-border' : 'border-border/50 opacity-60')}>
+            <div key={p.id} className={cn('rounded-2xl border bg-surface/40 p-4', p.enabled ? 'border-border' : 'border-dashed border-border')}>
               <div className="flex items-start gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -549,7 +549,7 @@ function PermissionsTab({ members, grants, canManage }: { members: Member[]; gra
           <button key={m.id} onClick={() => setSelected(m.id)}
             className={cn('flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition',
               selected === m.id ? 'border-brand/50 bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
-            <Avatar name={m.name} color={m.color ?? undefined} size={18} /> {m.name} <span className="text-[10px] capitalize opacity-70">({m.role})</span>
+            <Avatar name={m.name} color={m.color ?? undefined} size={18} /> {m.name} <span className="text-[10px] font-normal capitalize">({m.role})</span>
           </button>
         ))}
       </div>

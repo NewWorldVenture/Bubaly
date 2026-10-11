@@ -205,8 +205,8 @@ export function CareerModule() {
           {(profiles.data.length > 1) && (
             <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label={tr('career.jobSearch')}>
               {visibleProfiles.map((p) => (
-                <button key={p.id} role="tab" aria-selected={p.id === profileId} onClick={() => setProfileId(p.id)} className={cn('rounded-full border px-3 py-1.5 text-sm transition coarse:min-h-11', p.id === profileId ? 'border-brand bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg', !p.is_active && 'opacity-60')}>
-                  {nameOf(p.member_id)} <span className="text-xs opacity-70">· {p.title}</span>
+                <button key={p.id} role="tab" aria-selected={p.id === profileId} onClick={() => setProfileId(p.id)} className={cn('rounded-full border px-3 py-1.5 text-sm transition coarse:min-h-11', p.id === profileId ? 'border-brand bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg', !p.is_active && 'border-dashed')}>
+                  {nameOf(p.member_id)} <span className="text-xs">· {p.title}</span>
                 </button>
               ))}
               {profiles.data.some((p) => !p.is_active) && <button onClick={() => setShowArchived((v) => !v)} className="text-xs text-muted hover:text-fg">{showArchived ? 'Hide' : 'Show'} {tr('career.pastSearches')}</button>}

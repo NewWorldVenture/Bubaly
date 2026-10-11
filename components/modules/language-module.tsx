@@ -190,8 +190,8 @@ export function LanguageModule() {
           {goals.data.length > 1 && (
             <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label={tr('language.languageGoal')}>
               {visibleGoals.map((g) => (
-                <button key={g.id} role="tab" aria-selected={g.id === goalId} onClick={() => { setGoalId(g.id); setRevealed(false); }} className={cn('rounded-full border px-3 py-1.5 text-sm transition coarse:min-h-11', g.id === goalId ? 'border-brand bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg', !g.is_active && 'opacity-60')}>
-                  {languageMeta(g.language_code).flag} {nameOf(g.member_id)} <span className="text-xs opacity-70">· {g.language_label}</span>
+                <button key={g.id} role="tab" aria-selected={g.id === goalId} onClick={() => { setGoalId(g.id); setRevealed(false); }} className={cn('rounded-full border px-3 py-1.5 text-sm transition coarse:min-h-11', g.id === goalId ? 'border-brand bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg', !g.is_active && 'border-dashed')}>
+                  {languageMeta(g.language_code).flag} {nameOf(g.member_id)} <span className="text-xs">· {g.language_label}</span>
                 </button>
               ))}
               {goals.data.some((g) => !g.is_active) && <button onClick={() => setShowArchived((v) => !v)} className="text-xs text-muted hover:text-fg">{showArchived ? 'Hide' : 'Show'} archived</button>}
@@ -286,7 +286,7 @@ export function LanguageModule() {
             ) : (
               <ul className="grid gap-2 sm:grid-cols-2">
                 {[...myCards].sort((a, b) => a.due_on.localeCompare(b.due_on) || a.term.localeCompare(b.term)).map((c) => (
-                  <li key={c.id} className={cn('flex items-center gap-3 rounded-xl border px-3 py-2', c.is_suspended ? 'border-border/60 bg-surface/30 opacity-70' : 'border-border bg-surface/60')}>
+                  <li key={c.id} className={cn('flex items-center gap-3 rounded-xl border px-3 py-2', c.is_suspended ? 'border-border/60 bg-surface/30' : 'border-border bg-surface/60')}>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm"><span className="font-medium">{c.term}</span> <span className="text-muted">— {c.translation}</span></p>
                       <p className="text-[11px] text-muted">{c.is_suspended ? 'Suspended' : c.due_on <= isoDate(today) ? 'Due now' : `Due ${fmtDate(c.due_on)}`} · {c.repetitions === 0 && c.lapses === 0 ? 'new' : `${c.interval_days}d interval · ease ${c.ease}`}{c.lapses ? ` · ${c.lapses} lapse${c.lapses === 1 ? '' : 's'}` : ''}</p>
