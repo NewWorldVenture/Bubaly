@@ -156,7 +156,7 @@ export function TimetableModule() {
                 className={cn('rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
                   week === w ? 'bg-brand text-white' : 'text-muted hover:text-fg')}>
                 {WEEK_PATTERN_LABELS[w]}
-                {todayWeek === w && <span className="ml-1.5 text-xs opacity-80">(now)</span>}
+                {todayWeek === w && <span className="ml-1.5 text-xs font-normal">(now)</span>}
               </button>
             ))}
           </div>
@@ -187,9 +187,9 @@ export function TimetableModule() {
                             <button onClick={() => remove(c)} aria-label={t('timetable.remove')} className="p-1 rounded-md hover:bg-black/20"><Trash2 className="h-3.5 w-3.5" /></button>
                           </div>
                         </div>
-                        {c.time_slot && <div className="mt-1 flex items-center gap-1 text-xs opacity-90"><Clock className="h-3 w-3" />{c.time_slot}</div>}
-                        {c.room && <div className="mt-0.5 flex items-center gap-1 text-xs opacity-90"><MapPin className="h-3 w-3" />{c.room}</div>}
-                        <div className="mt-1.5 flex items-center gap-1 text-xs opacity-80">
+                        {c.time_slot && <div className="mt-1 flex items-center gap-1 text-xs"><Clock className="h-3 w-3" />{c.time_slot}</div>}
+                        {c.room && <div className="mt-0.5 flex items-center gap-1 text-xs"><MapPin className="h-3 w-3" />{c.room}</div>}
+                        <div className="mt-1.5 flex items-center gap-1 text-xs">
                           <Avatar name={memberName(c.member_id)} size={16} />
                           <span className="truncate">{memberName(c.member_id)}</span>
                         </div>

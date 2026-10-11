@@ -92,7 +92,7 @@ export function AdminNotificationsList({ notifications }: { notifications: Admin
             kind === 'all' ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:bg-elevated',
           )}
         >
-          All <span className="ml-1 opacity-60">{notifications.length}</span>
+          All <span className="ml-1 font-normal">{notifications.length}</span>
         </button>
         {kindChips.map((k) => {
           const meta = adminNoteKindMeta(k);
@@ -106,7 +106,7 @@ export function AdminNotificationsList({ notifications }: { notifications: Admin
                 kind === k ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:bg-elevated',
               )}
             >
-              {meta.label} <span className="ml-1 opacity-60">{counts[k]}</span>
+              {meta.label} <span className="ml-1 font-normal">{counts[k]}</span>
             </button>
           );
         })}

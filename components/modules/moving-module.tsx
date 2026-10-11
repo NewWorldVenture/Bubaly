@@ -268,7 +268,7 @@ export function MovingWorkspace() {
               {moves.data.map((m) => (
                 <button key={m.id} role="tab" aria-selected={m.id === moveId} onClick={() => setMoveId(m.id)}
                   className={cn('rounded-full border px-3 py-1.5 text-sm transition coarse:min-h-11', m.id === moveId ? 'border-brand bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
-                  {m.title} <span className="text-xs opacity-70">· {fmtDate(m.move_date)}</span>
+                  {m.title} <span className="text-xs">· {fmtDate(m.move_date)}</span>
                 </button>
               ))}
             </div>

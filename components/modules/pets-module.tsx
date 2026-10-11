@@ -136,7 +136,7 @@ export function PetsModule() {
                       <Icon className="h-4 w-4 shrink-0" />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-fg">{pet?.name}: {r.title}</p>
-                        <p className="text-xs opacity-90">{r.reason}</p>
+                        <p className="text-xs">{r.reason}</p>
                       </div>
                       {r.urgency === 'overdue' && <AlertTriangle className="h-4 w-4 shrink-0" />}
                     </li>

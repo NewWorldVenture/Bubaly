@@ -168,9 +168,9 @@ export function ConciergeCallsModule({ familyId, initialCalls }: { familyId: str
                   )}
                   {c.outcome && state !== 'needs_person' && (
                     <div className={cn('rounded-xl border p-3', TONE_CLS[tone])}>
-                      <p className="text-xs font-semibold uppercase tracking-wide opacity-80">{t('conciergeCalls.outcome')}</p>
+                      <p className="text-xs font-semibold uppercase tracking-wide">{t('conciergeCalls.outcome')}</p>
                       <p className="mt-1">{c.outcome}</p>
-                      {c.transcript_summary && <p className="mt-1.5 text-xs opacity-80">{c.transcript_summary}</p>}
+                      {c.transcript_summary && <p className="mt-1.5 text-xs">{c.transcript_summary}</p>}
                     </div>
                   )}
 
