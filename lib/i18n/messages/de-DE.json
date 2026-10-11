@@ -12234,6 +12234,7 @@
   "reminders.repeat": "Wiederholen",
   "reminders.searchReminders": "Erinnerungen suchen…",
   "reminders.smartReminders": "Intelligente Erinnerungen",
+  "reminders.snoozeReminder": "Erinnerung zurückstellen",
   "reminders.snoozed": "Zurückgestellt",
   "reminders.snoozedForHours": "Um {count} Std. zurückgestellt",
   "reminders.snoozedForMinutes": "Um {count} Min. zurückgestellt",
