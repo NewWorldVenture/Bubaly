@@ -8,7 +8,7 @@ import { requireAal2 } from '@/lib/auth/require-aal2';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { StatTile, SectionCard, MiniEmpty } from '@/components/family/shell';
-import { ErrorState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { HandleItButton } from '@/components/modules/handle-it-button';
 import { AffordabilityScenario } from '@/components/finance/affordability-scenario';
 import { fmtDate } from '@/lib/utils/format';
@@ -20,6 +20,7 @@ import { buildCashflowTimeline, DEFAULT_BUFFER, money as moneyIn, pretty as pret
 import { BillScheduleConfirmationRequired } from '@/lib/finance/bill-schedule';
 import { EXPLAIN_MONTH_REQUEST } from '@/lib/finance/cfo-prompts';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
+import { readsHouseholdMoney } from '@/lib/finance/household-money';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -47,6 +48,12 @@ export default async function FamilyCfoPage() {
   const money = (n: number) => moneyIn(n, locale.code);
   const pretty = (ymdStr: string) => prettyIn(ymdStr, locale.code);
   const ctx = await requireFeature('/dashboard/family-cfo');
+  // The household's accounts, balances and spending are a parent's or adult's
+  // (the held 0514). Every figure here is built from them, so anyone else is
+  // told whose they are rather than shown a $0 net position.
+  if (!readsHouseholdMoney(ctx.active.role)) {
+    return <EmptyState icon={Wallet} title={tr('householdMoney.keptByParents')} description={tr('householdMoney.keptByParentsBody')} />;
+  }
   await requireAal2(ctx, 'money', '/dashboard/family-cfo');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();

@@ -6,7 +6,7 @@ import type { Database } from '@/lib/database.types';
 // Only auth, display components and the separately qualified forecast read
 // are replaced; summary figures and failure classification are not mocked.
 const h = vi.hoisted(() => ({ db: null as unknown, forecast: vi.fn() }));
-vi.mock('@/lib/supabase/auth', () => ({ requireFeature: async () => ({ active: { familyId: 'family', family: { timezone: 'UTC' } } }) }));
+vi.mock('@/lib/supabase/auth', () => ({ requireFeature: async () => ({ active: { familyId: 'family', role: 'parent', family: { timezone: 'UTC' } } }) }));
 vi.mock('@/lib/auth/require-aal2', () => ({ requireAal2: async () => {} }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => h.db }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key, getLocaleContext: async () => ({ locale: { code: 'en-US' } }) }));
@@ -14,7 +14,7 @@ vi.mock('@/lib/utils/format-server', () => ({ getFormat: async () => ({ fmtMoney
 vi.mock('@/lib/finance/timeline-load', () => ({ loadMoneyTimelineInput: h.forecast }));
 vi.mock('@/components/app/page-header', () => ({ PageHeader: 'PageHeader' }));
 vi.mock('@/components/family/shell', () => ({ StatTile: 'StatTile', SectionCard: 'SectionCard', MiniEmpty: 'MiniEmpty' }));
-vi.mock('@/components/ui/states', () => ({ ErrorState: 'ErrorState' }));
+vi.mock('@/components/ui/states', () => ({ ErrorState: 'ErrorState', EmptyState: 'EmptyState' }));
 vi.mock('@/components/modules/handle-it-button', () => ({ HandleItButton: 'HandleItButton' }));
 vi.mock('@/components/finance/affordability-scenario', () => ({ AffordabilityScenario: 'AffordabilityScenario' }));
 import FamilyCfoPage from '@/app/(app)/dashboard/family-cfo/page';

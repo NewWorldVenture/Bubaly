@@ -24,6 +24,8 @@ const sources = Object.fromEntries([
   // server-action call is reported and the list re-read, not lost.
   'lib/ui/settle-action.ts',
   'lib/auth/redirect.ts', 'lib/constants/roles.ts', 'lib/constants/plans.ts', 'lib/constants/feature-catalog.ts',
+  // The held 0514's rule: who reads the household's accounts and spending.
+  'lib/finance/household-money.ts',
   'lib/billing/plans.ts', 'lib/billing/review-selection.ts', 'lib/wallet/ledger.ts',
   'lib/utils/calendar-date.ts', 'lib/utils/birthday.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
@@ -125,7 +127,10 @@ async function fixture(page: Page, view: 'bills' | 'billing' = 'bills', mode: Mo
   })();` });
   await page.waitForTimeout(50);
   expect(errors, 'The real view must mount without missing fixture modules').toEqual([]);
-  await expect(page.getByText('Synthetic unpaid rent', { exact: true }).first()).toBeVisible();
+  // The held 0514: anyone but a parent or adult is shown the billing module's
+  // plan alone, which says whose the household's money is.
+  if (view === 'billing' && role !== 'parent' && role !== 'adult') await expect(page.getByText(messages['householdMoney.keptByParentsBody'], { exact: true })).toBeVisible();
+  else await expect(page.getByText('Synthetic unpaid rent', { exact: true }).first()).toBeVisible();
   return { actual, errors };
 }
 const dialog = (page: Page) => page.getByRole('dialog', { name: 'Edit schedule' });
@@ -172,10 +177,15 @@ for (const role of ['teen', 'child', 'caregiver', 'guest']) test(`${role} cannot
   await expect(page.getByRole('button', { name: 'Edit schedule' })).toHaveCount(0); expect(proof.actual.writes).toEqual([]); expect(proof.errors).toEqual([]);
 });
 
-for (const view of ['bills', 'billing'] as const) test(`${view} child reads bills but has no manager write controls`, async ({ page }) => {
+for (const view of ['bills', 'billing'] as const) test(`${view} child ${view === 'bills' ? 'reads bills' : 'sees the plan alone'} but has no manager write controls`, async ({ page }) => {
   const proof = await fixture(page, view, 'healthy', 'child');
-  if (view === 'billing') await page.getByRole('button', { name: messages['billingModule.tab.bills'], exact: true }).click();
-  await expect(page.getByText('Synthetic unpaid rent', { exact: true }).first()).toBeVisible();
+  if (view === 'billing') {
+    // The held 0514: the household's accounts and spending are a parent's or
+    // adult's. A child reaches this module only from the plan gate and is
+    // shown the plan alone; the bills stay theirs to read on the Bills page.
+    await expect(page.getByRole('button', { name: messages['billingModule.tab.bills'], exact: true })).toHaveCount(0);
+    await expect(page.getByText('Synthetic unpaid rent', { exact: true })).toHaveCount(0);
+  } else await expect(page.getByText('Synthetic unpaid rent', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: messages['billing.addBill'], exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: messages['bills.addBill'], exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Mark paid|Auto Pay|Delete/i })).toHaveCount(0);

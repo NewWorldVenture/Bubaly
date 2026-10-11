@@ -111,6 +111,7 @@ declare
   info_open uuid;
   taxdoc   uuid;
   paper    uuid;
+  child_paper uuid;
   guards   int;
 begin
   -- Seeded as the table owner, so the rows exist whatever the policies say.
@@ -127,6 +128,11 @@ begin
             (select id from public.family_members where family_id = fam and user_id = child)) returning id into taxdoc;
   insert into public.paperwork_items (family_id, kind, title, status, created_by)
     values (fam, 'school_notice', 'Field trip slip', 'needs_action', enrolled) returning id into paper;
+  -- One the child filed, for 5b: the held 0514 keeps a member's paperwork read
+  -- (and so their update) to what they added, so 5b changes the child's own
+  -- slip and still measures only the step-up role clause, on either schema.
+  insert into public.paperwork_items (family_id, kind, title, status, created_by)
+    values (fam, 'school_notice', 'Club sign-up', 'in_progress', child) returning id into child_paper;
 
   perform set_config('role','authenticated', true);
   perform set_config('request.jwt.claim.role','authenticated', true);
@@ -293,7 +299,7 @@ begin
   update public.household_info set note = 'child' where id = info_open;
   get diagnostics n = row_count;
   if n <> 1 then failures := array_append(failures, format('an ENROLLED CHILD on aal1 was refused a change to an ordinary binder entry the base policy allows (%s rows)', n)); end if;
-  update public.paperwork_items set status = 'needs_action' where id = paper;
+  update public.paperwork_items set status = 'needs_action' where id = child_paper;
   get diagnostics n = row_count;
   if n <> 1 then failures := array_append(failures, format('an ENROLLED CHILD on aal1 had a paperwork update FILTERED (%s rows) — setPaperworkStatusAction lets them through, so the row silently would not change', n)); end if;
   begin

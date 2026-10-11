@@ -10,6 +10,9 @@ import { refuseGuest } from '@/lib/auth/guest-scope';
 import { requireAal2 } from '@/lib/auth/require-aal2';
 import { returnPathWith } from '@/lib/auth/mfa';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
+import { Wallet } from 'lucide-react';
+import { EmptyState } from '@/components/ui/states';
+import { readsHouseholdMoney } from '@/lib/finance/household-money';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -35,6 +38,14 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   // "Manage" links as ?view=manage, and entering a code must not lose either.
   const ctx = await requireUserContext(); refuseGuest(ctx, '/dashboard/billing');
   const params = await searchParams;
+  // The household's accounts, balances and spending are a parent's or adult's
+  // (the held 0514). Anyone else is told whose they are here, except when the
+  // plan gate sent them to see the plan a feature needs (?upgrade=1, or the
+  // plan picker's ?checkout=): BillingModule shows them the plan alone.
+  if (!readsHouseholdMoney(ctx.active.role) && params.upgrade !== '1' && typeof params.checkout !== 'string') {
+    const t = await getTranslations();
+    return <EmptyState icon={Wallet} title={t('householdMoney.keptByParents')} description={t('householdMoney.keptByParentsBody')} />;
+  }
   await requireAal2(ctx, 'money', returnPathWith('/dashboard/billing', params));
 
   // Default = the family Finances dashboard. The full manager (Transactions /

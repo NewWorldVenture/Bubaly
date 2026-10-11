@@ -7,6 +7,7 @@ import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { balanceFromLedger, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
 import { WalletActivation } from '@/components/wallet/wallet-activation';
+import { readFamilyWalletIsActive } from '@/lib/wallet/family-wallet-status';
 import { SendMoneyView, type SendChild } from '@/components/wallet/send-money-view';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
@@ -25,8 +26,7 @@ export default async function SendMoneyPage() {
   const supabase = await createServer();
   const dataWarnings: string[] = [];
 
-  const { data: wallet, error: walletError } = await supabase
-    .from('family_wallets').select('id, is_active').eq('family_id', familyId).maybeSingle();
+  const { data: wallet, error: walletError } = await readFamilyWalletIsActive(familyId);
   if (walletError) {
     console.error('[wallet-send] Wallet read failed', walletError);
     return <ErrorState message={tr('send.couldNotLoadTheFamily')} />;

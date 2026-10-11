@@ -16937,5 +16937,9 @@
   "medicalRecordsModule.onlyYourOwnProviders": "Tu vois tes propres praticiens. Un parent, un adulte ou un aidant voit ceux de tout le foyer.",
   "insuranceModule.onlyPoliciesThatNameYou": "Tu vois les contrats à ton nom. Un parent ou un adulte voit ceux de tout le foyer.",
   "shared.onlyYourOwnRecords": "Tu vois ici tes propres fiches. Un parent ou un adulte voit celles de tout le monde.",
-  "shared.onlyYourOwnMedicalRecords": "Tu vois ici tes propres informations médicales. Un parent, un adulte ou un aidant voit celles de tout le monde."
+  "shared.onlyYourOwnMedicalRecords": "Tu vois ici tes propres informations médicales. Un parent, un adulte ou un aidant voit celles de tout le monde.",
+  "householdMoney.keptByParents": "L'argent du foyer est tenu par les parents de votre famille",
+  "householdMoney.keptByParentsBody": "Les comptes, les soldes et les dépenses du foyer sont réservés à un parent ou à un adulte du foyer. Demandez-leur si vous avez besoin de quelque chose.",
+  "householdMoney.onlyYourOwnSpending": "Tu vois ici les dépenses qui te sont attribuées. Un parent ou un adulte voit les comptes du foyer et toutes ses dépenses.",
+  "householdMoney.onlyWhatYouAdded": "Tu vois ici les fiches que tu as ajoutées. Un parent ou un adulte voit celles de tout le monde."
 }

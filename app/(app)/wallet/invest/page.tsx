@@ -6,6 +6,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { WalletActivation } from '@/components/wallet/wallet-activation';
+import { readFamilyWalletIsActive } from '@/lib/wallet/family-wallet-status';
 import {
   InvestView, type InvestAsset, type InvestChild, type Holding, type PendingOrder,
 } from '@/components/wallet/invest-view';
@@ -26,7 +27,7 @@ export default async function WalletInvestPage() {
   const supabase = await createServer();
   const dataWarnings: string[] = [];
 
-  const { data: wallet, error: walletError } = await supabase.from('family_wallets').select('id, is_active').eq('family_id', familyId).maybeSingle();
+  const { data: wallet, error: walletError } = await readFamilyWalletIsActive(familyId);
   if (walletError) {
     console.error('[wallet-invest] Wallet read failed', walletError);
     return <ErrorState message={tr('invest.couldNotLoadTheFamily')} />;

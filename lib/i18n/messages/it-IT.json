@@ -16937,5 +16937,9 @@
   "medicalRecordsModule.onlyYourOwnProviders": "Vedi i tuoi medici. Un genitore, un adulto o un assistente vede quelli di tutta la famiglia.",
   "insuranceModule.onlyPoliciesThatNameYou": "Vedi le polizze che ti riguardano. Un genitore o un adulto vede quelle di tutta la famiglia.",
   "shared.onlyYourOwnRecords": "Qui vedi le tue voci. Un genitore o un adulto vede quelle di tutti.",
-  "shared.onlyYourOwnMedicalRecords": "Qui vedi i tuoi dati medici. Un genitore, un adulto o un assistente vede quelli di tutti."
+  "shared.onlyYourOwnMedicalRecords": "Qui vedi i tuoi dati medici. Un genitore, un adulto o un assistente vede quelli di tutti.",
+  "householdMoney.keptByParents": "Il denaro di casa è gestito dai genitori della tua famiglia",
+  "householdMoney.keptByParentsBody": "I conti, i saldi e le spese della famiglia sono per un genitore o un adulto della famiglia. Chiedi a uno di loro se ti serve qualcosa.",
+  "householdMoney.onlyYourOwnSpending": "Qui vedi le spese attribuite a te. Un genitore o un adulto vede i conti della famiglia e tutte le sue spese.",
+  "householdMoney.onlyWhatYouAdded": "Qui vedi le voci che hai aggiunto. Un genitore o un adulto vede quelle di tutti."
 }

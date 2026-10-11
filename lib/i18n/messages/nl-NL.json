@@ -16937,5 +16937,9 @@
   "medicalRecordsModule.onlyYourOwnProviders": "Je ziet je eigen zorgverleners. Een ouder, volwassene of verzorger ziet die van het hele huishouden.",
   "insuranceModule.onlyPoliciesThatNameYou": "Je ziet de polissen op jouw naam. Een ouder of volwassene ziet die van het hele huishouden.",
   "shared.onlyYourOwnRecords": "Je ziet hier je eigen gegevens. Een ouder of volwassene ziet die van iedereen.",
-  "shared.onlyYourOwnMedicalRecords": "Je ziet hier je eigen medische gegevens. Een ouder, volwassene of verzorger ziet die van iedereen."
+  "shared.onlyYourOwnMedicalRecords": "Je ziet hier je eigen medische gegevens. Een ouder, volwassene of verzorger ziet die van iedereen.",
+  "householdMoney.keptByParents": "Het huishoudgeld wordt bijgehouden door de ouders in je gezin",
+  "householdMoney.keptByParentsBody": "De rekeningen, saldi en uitgaven van het huishouden zijn voor een ouder of volwassene in het huishouden. Vraag het een van hen als je er iets uit nodig hebt.",
+  "householdMoney.onlyYourOwnSpending": "Je ziet hier de uitgaven die aan jou zijn toegewezen. Een ouder of volwassene ziet de rekeningen van het huishouden en al zijn uitgaven.",
+  "householdMoney.onlyWhatYouAdded": "Je ziet hier de gegevens die jij hebt toegevoegd. Een ouder of volwassene ziet die van iedereen."
 }

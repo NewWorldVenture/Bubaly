@@ -2,6 +2,7 @@ import 'server-only';
 import { createServer } from '@/lib/supabase/server';
 import { settle } from '@/lib/supabase/settle';
 import type { Tables } from '@/lib/database.types';
+import { narrowedToAdder, type MoneyReader } from '@/lib/finance/household-money';
 
 export type Warranty = Tables<'home_warranties'>;
 export type Contractor = Tables<'home_contractors'>;
@@ -30,13 +31,13 @@ export async function getAssets(familyId: string): Promise<Asset[]> {
   return orThrow(res, 'home_assets', familyId);
 }
 
-export async function getWarranties(familyId: string): Promise<Warranty[]> {
+// Warranties are a parent's or adult's, and whoever added one keeps reading it
+// (the held 0514): a non-manager's read is narrowed to what they added.
+export async function getWarranties(familyId: string, reader: MoneyReader): Promise<Warranty[]> {
   const supabase = await createServer();
-  const res = await supabase
-    .from('home_warranties')
-    .select('*')
-    .eq('family_id', familyId)
-    .is('deleted_at', null)
+  const addedBy = narrowedToAdder(reader);
+  const scoped = supabase.from('home_warranties').select('*').eq('family_id', familyId).is('deleted_at', null);
+  const res = await (addedBy ? scoped.eq('created_by', addedBy) : scoped)
     .order('expires_on', { ascending: true, nullsFirst: false });
   return orThrow(res, 'home_warranties', familyId);
 }
@@ -65,11 +66,11 @@ export async function getServiceRecords(familyId: string): Promise<ServiceRecord
   return orThrow(res, 'home_service_records', familyId);
 }
 
-export async function getHomeOverview(familyId: string) {
+export async function getHomeOverview(familyId: string, reader: MoneyReader) {
   const supabase = await createServer();
   const [assets, warranties, openTasks] = await Promise.all([
     getAssets(familyId),
-    getWarranties(familyId),
+    getWarranties(familyId, reader),
     settle(supabase.from('maintenance_tasks').select('id, title, due_at, status, asset_id')
       .eq('family_id', familyId).neq('status', 'done').not('due_at', 'is', null)
       .order('due_at', { ascending: true }).limit(50)),

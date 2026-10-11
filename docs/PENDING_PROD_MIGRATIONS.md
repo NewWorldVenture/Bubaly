@@ -136,6 +136,7 @@ source allocations are not evidence that production applied any migration.
 | 0511 proposed, held | `0511_a_medication_is_read_by_managers_its_member_and_caregivers.sql` | A row of `medications` is read by a manager of its family, the member it is for, or a caregiver, inside `is_family_member(family_id)` (one saved with no member, the form's default, by a manager or a caregiver); a `medication_schedules` row exactly when its medication is. Writes and `medication_doses` unchanged. The autopilot refill names the drug only to those readers. Decided by the account holder (0434's filed read; takes over the closed #674's candidate); requested on #771 (comment 6104294318), not yet confirmed. |
 | 0512 proposed, held | `0512_a_kid_login_is_never_a_parent_or_adult.sql` | A member whose account is a kid login (the synthetic kid address or the server's `bubaly_kid_login` mark; not a mapping alone, for 0495's reason) is refused a parent or adult role when the role or the login changes, and a kid-login mapping is refused for a parent or adult member or an account that is one in any family (42501, every caller). Nothing stored is changed. Decided by the account holder ("refuse until the PIN login is gone"); requested on #771 (comment 6104294318), not yet confirmed. |
 | 0513 proposed, held | `0513_a_removed_member_keeps_no_social_raise.sql` | When a member is removed (`is_active` to false) or their row deleted, their `social_access_permissions` grant in that family is deleted if its social role carries any permission their role's default lacks; a restriction stays. Adds `social_role_permissions(social_role)`, the matrix as a set. Decided by the account holder ("drop raises, keep limits"); requested on #771 (comment 6104294318), not yet confirmed. |
+| 0514 proposed, held | `0514_household_money_is_a_parents_or_adults.sql` | A row of `financial_accounts`, `family_wallets`, `stripe_connected_accounts`, `stripe_financial_accounts`, `billing_customers`, `checkout_sessions` or `babysitter_payments` is read by a manager of its family; a `transactions` row also by the member it is tagged to; a `home_warranties`, `auto_insurance_policies`, `vehicle_registrations` or `paperwork_items` row also by whoever added it; all inside `is_family_member(family_id)`. Writes unchanged. Decided by the account holder (the audit's open sensitive-table finding, household-money group, with the transactions and added-by follow-ups); requested on #771 (comment 6109587749, transactions in 6110569862), not yet confirmed. |
 | 0516 proposed, held | `0516_location_history_is_read_by_managers_the_member_and_caregivers.sql` | A row of `location_events`, `safety_check_ins` or `driving_trips` is read by a manager of its family, the member it is about, or a caregiver, inside `is_family_member(family_id)`. Live location keeps its own rule; writes unchanged. Decided by the account holder (the audit's open sensitive-table finding, location group); requested on #771 (comment 6109587749), not yet confirmed. |
 | 0517 proposed, held | `0517_a_personal_record_is_read_by_managers_and_its_member.sql` | A row of `insurance_policies`, `family_insurance_policies`, `vacation_documents` or `voice_commands` is read by a manager of its family or the member it is about, inside `is_family_member(family_id)`; `vacation_medical_information` and `health_providers` also by a caregiver. The two travel tables' FOR ALL policies are split so their member-wide writes stay exactly as they were. Decided by the account holder (the audit's open sensitive-table finding, personal-records group); requested on #771 (comment 6109587749), not yet confirmed. |
 
@@ -4770,6 +4771,96 @@ Dropping any one table's trigger turns the probe red on that table. 184 of
 families, try to vote in one family's poll under their member id from the
 other family and confirm 42501; then vote as their own member there and
 confirm it lands.
+
+## `0514` (proposed, held) — every member read the household's money
+
+`supabase/reserved/0514_household_money_is_a_parents_or_adults.sql`
+— **held**: requested on #771 in comment 6109587749 (transactions added in
+6110569862). Not yet confirmed.
+
+**Severity: medium (a child read the household's bank balances, every
+purchase, the Stripe account rows and the babysitter payouts). Deploy order:
+any; the screens ship first.** Twelve tables of the household's money and
+money papers read with `is_family_member(family_id)` (`billing_customers`
+also with a manager's read beside it). Measured on a replay through 0485, in
+Coin House: the teen, the child, the caregiver and the guest each read the
+household's row of every managers table, 6 transactions not tagged to them,
+and 5 records added by someone else in each added-by table.
+
+**Database.** One permissive read per table, "Household money is read by a
+parent or adult", inside `is_family_member(family_id)`:
+- `financial_accounts`, `family_wallets`, `stripe_connected_accounts`,
+  `stripe_financial_accounts`, `billing_customers`, `checkout_sessions`,
+  `babysitter_payments`: `can_manage_family(family_id)`;
+- `transactions`: `can_manage_family(family_id) or is_self_member(member_id)`
+  (untagged spending is the managers');
+- `home_warranties`, `auto_insurance_policies`, `vehicle_registrations`,
+  `paperwork_items`: `can_manage_family(family_id) or created_by = auth.uid()`.
+
+No table carried a FOR ALL policy, and every write policy is left as it was
+(the migration refuses to finish if a table's count of write policies
+changes). Postgres applies a table's read to an UPDATE or DELETE that names a
+row, so a member changes or removes an added-by record only when it is theirs.
+The held 0509's guest guards and the paperwork step-up guards are kept.
+
+**App, shipping with the source** (`lib/finance/household-money.ts`, the same
+rule):
+- the Family CFO page, the billing page's finances views and the home page's
+  Family Finances card are a parent's or adult's, and tell anyone else whose
+  they are; the plan view the upgrade gate sends a child to shows the plan
+  alone, without asking for the household's accounts or spending;
+- the payments, budgets and wallet views read a non-manager's own
+  transactions, narrowed before their limits, and say so; the wallet hub does
+  not ask for the accounts;
+- the paperwork inbox, warranties, vehicle registrations and auto insurance
+  read what a non-manager added, narrowed in the query, and say so;
+- whether the family wallet is on is read by the server
+  (`lib/wallet/family-wallet-status.ts`), so a child's wallet pages do not
+  call an active wallet inactive;
+- copy in seven locales.
+
+**Released probes made rule-aware** (each passes with and without 0514):
+- `money-write-boundary-check.sql` expects the teen to read no account under
+  0514, its write wiring loop still holding every write to `can_manage_family`;
+- `wallet-side-table-write-check.sql` expects a child to read no babysitter
+  payment under 0514;
+- `paperwork-stamp-concurrency-check.sql` has the child stamp a slip of their
+  own, and the parent's stamp nothing, under 0514;
+- `a-password-alone-does-not-open-the-familys-vault-check.sql` has the
+  enrolled child change their own paperwork, so 5b stays about the step-up
+  role clause;
+- `wallet-write-rls-check.sql` re-runs 0275, which re-creates the family-wide
+  reads on its ten tables; it now records the reads before and removes any the
+  re-run added, so every probe after it sees the schema it was given.
+
+The held 0509 probe counts the eight guest-guarded tables as already closed to
+a guest under 0514.
+
+**Proof:** `.github/workflows/household-money-runtime.yml` requires the held
+probe `docs/audit/reserved/household-money-is-a-parents-or-adults-check.sql`
+to fail on the released schema on the defect, with no control failing, then
+applies 0514 twice and requires it to pass, then re-runs the fourteen released
+probes over these tables and the held probe once more. The passing run shows:
+- the teen, the child, the caregiver and the guest read no row of a managers
+  table, only the transaction tagged to them and only the records they added
+  (a guest not an auto policy where the held 0509 is installed);
+- the parent and the adult read every row; the teen reads the household they
+  manage;
+- the removed adult and a stranger read nothing;
+- the service role, with and without a user id, reads every row;
+- the child's own paperwork item, the teen's own warranty and a parent's
+  transaction come back from `insert … returning` (`OK 1`); the child changes
+  their own paperwork item (`OK 1`) and not the parent's (`OK 0`);
+- **wiring:** the exact predicate for each rule, the added-by tables'
+  member-wide writes and the money tables' manager ones;
+- **N1** (the family-wide read put back): the child reads the household's row
+  in all twelve;
+- **M1** (a caregiver clause on `transactions`): the caregiver reads the ward's
+  transaction.
+
+**After approved release:** sign a test teen in and confirm the Family CFO and
+billing pages say whose the money is, the payments view lists only their own
+purchases, and the paperwork inbox only what they filed.
 
 ## `0517` (proposed, held) — every member read every member's personal records
 

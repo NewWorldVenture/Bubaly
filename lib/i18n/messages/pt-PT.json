@@ -16937,5 +16937,9 @@
   "medicalRecordsModule.onlyYourOwnProviders": "Vês os teus próprios profissionais. Um pai ou mãe, um adulto ou um cuidador vê os de toda a casa.",
   "insuranceModule.onlyPoliciesThatNameYou": "Vês as apólices em teu nome. Um pai ou mãe ou um adulto vê as de toda a casa.",
   "shared.onlyYourOwnRecords": "Aqui vês os teus próprios registos. Um pai ou mãe ou um adulto vê os de todos.",
-  "shared.onlyYourOwnMedicalRecords": "Aqui vês os teus próprios dados médicos. Um pai ou mãe, um adulto ou um cuidador vê os de todos."
+  "shared.onlyYourOwnMedicalRecords": "Aqui vês os teus próprios dados médicos. Um pai ou mãe, um adulto ou um cuidador vê os de todos.",
+  "householdMoney.keptByParents": "O dinheiro da casa é gerido pelos pais da tua família",
+  "householdMoney.keptByParentsBody": "As contas, os saldos e as despesas da casa são para um pai, uma mãe ou um adulto da casa. Pede a um deles se precisares de alguma coisa.",
+  "householdMoney.onlyYourOwnSpending": "Aqui vês as despesas atribuídas a ti. Um pai ou mãe ou um adulto vê as contas da casa e todas as suas despesas.",
+  "householdMoney.onlyWhatYouAdded": "Aqui vês os registos que adicionaste. Um pai ou mãe ou um adulto vê os de todos."
 }

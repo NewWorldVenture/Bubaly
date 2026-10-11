@@ -8,6 +8,7 @@ import { isManager } from '@/lib/constants/roles';
 import { getMoneyCapabilities } from '@/lib/stripe/capabilities';
 import { syncConnectedAccount } from '@/lib/stripe/connect';
 import { WalletActivation } from '@/components/wallet/wallet-activation';
+import { readFamilyWalletIsActive } from '@/lib/wallet/family-wallet-status';
 import { MoneyCardsView, type CardChild, type IssuedCard } from '@/components/wallet/money-cards-view';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
@@ -31,8 +32,7 @@ export default async function WalletCardsPage({
   const svc = createServiceClient();
   const dataWarnings: string[] = [];
 
-  const { data: wallet, error: walletError } = await supabase
-    .from('family_wallets').select('id, is_active').eq('family_id', familyId).maybeSingle();
+  const { data: wallet, error: walletError } = await readFamilyWalletIsActive(familyId);
   if (walletError) {
     console.error('[wallet-cards] Wallet read failed', walletError);
     return <ErrorState message={t('cards.couldNotLoadTheFamily')} />;

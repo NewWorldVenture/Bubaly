@@ -16937,5 +16937,9 @@
   "medicalRecordsModule.onlyYourOwnProviders": "Du siehst deine eigenen Behandelnden. Eltern, Erwachsene und Betreuungspersonen sehen die des ganzen Haushalts.",
   "insuranceModule.onlyPoliciesThatNameYou": "Du siehst die Policen, in denen du genannt bist. Eltern und Erwachsene sehen die des ganzen Haushalts.",
   "shared.onlyYourOwnRecords": "Du siehst hier deine eigenen Einträge. Eltern und Erwachsene sehen die aller.",
-  "shared.onlyYourOwnMedicalRecords": "Du siehst hier deine eigenen medizinischen Angaben. Eltern, Erwachsene und Betreuungspersonen sehen die aller."
+  "shared.onlyYourOwnMedicalRecords": "Du siehst hier deine eigenen medizinischen Angaben. Eltern, Erwachsene und Betreuungspersonen sehen die aller.",
+  "householdMoney.keptByParents": "Das Haushaltsgeld wird von den Eltern deiner Familie geführt",
+  "householdMoney.keptByParentsBody": "Konten, Kontostände und Ausgaben des Haushalts sind für einen Elternteil oder Erwachsenen des Haushalts. Frag einen von ihnen, wenn du etwas daraus brauchst.",
+  "householdMoney.onlyYourOwnSpending": "Du siehst hier die Ausgaben, die dir zugeordnet sind. Eltern und Erwachsene sehen die Konten des Haushalts und alle seine Ausgaben.",
+  "householdMoney.onlyWhatYouAdded": "Du siehst hier die Einträge, die du hinzugefügt hast. Eltern und Erwachsene sehen die aller."
 }

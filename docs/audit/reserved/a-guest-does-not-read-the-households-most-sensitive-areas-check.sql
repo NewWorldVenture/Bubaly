@@ -22,8 +22,9 @@
 --      (0481's sweep; listed in the probe), in behavior_logs where the held
 --      0510 is installed (a note is read by a manager, its author or a
 --      caregiver) and in medications and their schedules where the held 0511
---      is, and 0509 never takes a guest's own rows away (compared with the 59
---      policies dropped);
+--      is (likewise the tables the held 0514, 0516 and 0517 close), and 0509
+--      never takes a guest's own rows away (compared with the 59 policies
+--      dropped);
 --   3. control: the caregiver and the parent read exactly what they read with
 --      0509's 59 policies taken away (counted per table, so 0509 changes no
 --      one but a guest), and the parent reads every Guest House row;
@@ -222,6 +223,14 @@ declare
                                                 where p.schemaname = 'public' and p.tablename = 'insurance_policies'
                                                   and p.policyname = 'A personal record is read by a manager or its member')
                                   then array['insurance_policies', 'family_insurance_policies', 'health_providers', 'vacation_medical_information']
+                                  else '{}'::text[] end
+                          -- The held 0514: household money is read by a parent or
+                          -- adult (and a transaction by the member it is tagged to).
+                          || case when exists (select 1 from pg_policies p
+                                                where p.schemaname = 'public' and p.tablename = 'financial_accounts'
+                                                  and p.policyname = 'Household money is read by a parent or adult')
+                                  then array['financial_accounts', 'family_wallets', 'transactions', 'stripe_connected_accounts',
+                                             'stripe_financial_accounts', 'billing_customers', 'babysitter_payments', 'auto_insurance_policies']
                                   else '{}'::text[] end;
   installed boolean := to_regprocedure('public.is_family_guest(uuid)') is not null
                        and exists (select 1 from pg_policies p where p.schemaname = 'public'

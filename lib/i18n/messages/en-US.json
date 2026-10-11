@@ -16937,5 +16937,9 @@
   "medicalRecordsModule.onlyYourOwnProviders": "You see your own providers. A parent, adult or caregiver sees the household's.",
   "insuranceModule.onlyPoliciesThatNameYou": "You see the policies that name you. A parent or adult sees the household's.",
   "shared.onlyYourOwnRecords": "You see your own records here. A parent or adult sees everyone's.",
-  "shared.onlyYourOwnMedicalRecords": "You see your own medical details here. A parent, adult or caregiver sees everyone's."
+  "shared.onlyYourOwnMedicalRecords": "You see your own medical details here. A parent, adult or caregiver sees everyone's.",
+  "householdMoney.keptByParents": "Household money is kept by your family's parents",
+  "householdMoney.keptByParentsBody": "The household's accounts, balances and spending are for a parent or adult of the household. Ask one of them if you need something from them.",
+  "householdMoney.onlyYourOwnSpending": "You see the spending tagged to you here. A parent or adult sees the household's accounts and all of its spending.",
+  "householdMoney.onlyWhatYouAdded": "You see the records you added here. A parent or adult sees everyone's."
 }
