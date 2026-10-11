@@ -99,7 +99,7 @@ describe('queued family push recipients', () => {
     });
     expect(transport.native).toHaveBeenCalledTimes(1);
     expect(f.stamps).toEqual([notificationId(1)]);
-    expect(f.calls.filter(call => call.table === 'family_members').map(call => call.count)).toEqual([1, 1, 0, 0]);
+    expect(f.calls.filter(call => call.table === 'family_members').map(call => call.count)).toEqual([1, 1, 0, 0, 1]);
   });
 
   it.each(['returned', 'thrown'])('sends and acknowledges nothing after a %s later roster-page failure', async failure => {
@@ -139,16 +139,19 @@ describe('queued family push recipients', () => {
     expect(transport.native).toHaveBeenCalledTimes(1);
   });
 
-  it('documents the remaining race when membership changes after the roster snapshot', async () => {
+  it('withholds membership revoked after the roster snapshot and before delivery', async () => {
     const f = fixture();
     const from = f.db.from.bind(f.db);
     vi.spyOn(f.db, 'from').mockImplementation((...args) => {
-      // Device lookup follows roster preparation. Revocation here cannot undo
-      // the earlier read: this guard is not an atomic delivery authorization.
+      // Device lookup follows roster preparation. The final membership read
+      // must observe this revocation before contacting the provider.
       if (args[0] === 'push_devices') f.tables.family_members[0].is_active = false;
       return from(...args);
     });
-    expect((await dispatchPendingPushes(f.db, { now: NOW })).result.sent).toBe(1);
+    expect((await dispatchPendingPushes(f.db, { now: NOW })).result).toEqual({
+      sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 1,
+    });
+    expect(transport.native).not.toHaveBeenCalled(); expect(f.tables.push_deliveries).toEqual([]);
     expect(f.tables.family_members[0].is_active).toBe(false);
   });
 });

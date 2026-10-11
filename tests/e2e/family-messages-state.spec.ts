@@ -390,22 +390,24 @@ test('shared archive is explicit and read-only; recorded participants remain imm
   await clean(page);
 });
 
-// Owner decision (reverses the earlier refusal, which blanked the inbox and
-// toasted): until 0475/0476 are applied the workspace does what the previous
-// production build (82f2db1) did — every conversation the read returns is
-// listed, the old family group is reused rather than recreated, previews come
-// from the bounded message scan and receipts from 0163's mark_conversation_read.
-test('without 0475/0476 the workspace lists existing conversations as before the build-out', async ({ page }) => {
+// Original participants keep their history; missing privacy schema must not
+// expose the old groups as Family Chat or silently use non-atomic receipts.
+test('without 0475/0476 the workspace refuses old history and visibly offers retry', async ({ page }) => {
   await fixture(page, { legacy: true });
-  await expect(page.getByRole('button', { name: /^💬 Chat A/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /^💬 Chat B/ })).toBeVisible();
-  await select(page, 'A');
-  await expect(page.getByText('Message from A', { exact: true })).toBeVisible();
-  await expect(composer(page)).toBeVisible();
-  await expect.poll(() => page.evaluate(() => (window as any).__familyChat.reads.map((read: { legacy?: string }) => read.legacy)))
-    .toContain('mark_conversation_read');
-  expect(await page.evaluate(() => (window as any).__familyChat.notices)).toEqual([]);
-  expect(await page.evaluate(() => (window as any).__familyChat.writes)).toEqual([]);
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByRole('alert').getByRole('button')).toBeVisible();
+  await expect(page.getByRole('button', { name: /^💬 Chat A/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^💬 Chat B/ })).toHaveCount(0);
+  await expect(page.getByText('Message from A', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Message from B', { exact: true })).toHaveCount(0);
+  await expect(composer(page)).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => (window as any).__familyChat.notices.length)).toBeGreaterThan(0);
+  const state = await page.evaluate(() => {
+    const p = (window as any).__familyChat;
+    return { reads: p.reads, writes: p.writes, insertIds: p.insertIds,
+      channels: p.channels, readBy: p.rows.map((row: { read_by: string[] }) => row.read_by) };
+  });
+  expect(state).toEqual({ reads: [], writes: [], insertIds: [], channels: [], readBy: [[], []] });
   await clean(page);
 });
 
