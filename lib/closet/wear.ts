@@ -20,6 +20,26 @@
 // inserts the log and increments the counts in a single transaction — which
 // is a migration, not something this file can do. Pinned by
 // tests/a-failed-wear-takes-its-counts-back.test.ts.
+//
+// What a take-back puts back exactly is the COUNT. The last-worn DATE it puts
+// back only as far as one column with no history allows (HD2). A take-back
+// knows the date its own bump read, and that is the right one only while its
+// wear is still the latest on the row — which it can judge only by the count,
+// the one thing the row carries. Two failed taps on one item that overlap
+// (two phones) show where that stops: A lands (4 → 5, today), B lands (5 → 6,
+// and reads A's "today" as the date before it), A is taken back first and has
+// to keep today because B's wear might still commit, and then B puts back the
+// "today" it read. The count is 4 again, no log exists, and the item says it
+// was worn today. Taken back the other way round, or with either tap
+// committing, the date comes out right; a take-back that leaves no wear at
+// all clears the date, so a never-worn item comes out right in both orders.
+// Nor is an equal count proof that the latest wear is ours: if, between our
+// bump and our take-back, one wear was taken back and another landed, the
+// count reads the same, and across midnight the date goes back to a day
+// earlier than the wear that landed. A date that is always right needs a
+// database primitive — the same single transaction, or a last_worn_on
+// derived from outfit_logs — so the closet does not claim it. Pinned by the
+// same test file.
 
 import { wroteNoRows } from '@/lib/supabase/errors';
 
@@ -69,10 +89,13 @@ export async function bumpWearCount(store: WearStore, id: string, wornOn: string
  * Take back one wear that landed, for a tap that failed elsewhere (HC2).
  *
  * The same compare-and-swap as the bump, the other way: -1 on the LIVE count,
- * so a wear another member logged meanwhile stays counted. The date goes back
- * to what it was only while this wear is still the latest on the row; after
- * another member's, the date is theirs and stays. True once the wear is gone
- * (or the item is), false when it could not be taken back.
+ * so a wear another member logged meanwhile stays counted. That count is
+ * exact; the date is not always (HD2, see the header). It goes back to what
+ * this wear's bump read while the count says this wear is still the latest;
+ * it is cleared when no wear is left; otherwise the live date stays, because
+ * a later wear set it and may commit — and if that wear fails too, its own
+ * take-back puts back the date it read, which was this one's. True once the
+ * wear is gone (or the item is), false when it could not be taken back.
  */
 export async function takeBackWear(store: WearStore, wear: LandedWear): Promise<boolean> {
   for (let attempt = 0; attempt < WEAR_BUMP_ATTEMPTS; attempt++) {
@@ -82,7 +105,9 @@ export async function takeBackWear(store: WearStore, wear: LandedWear): Promise<
     if (!read.data) return true;
     const current = read.data.wear_count ?? 0;
     if (current < 1) return true;
-    const lastWorn = current === wear.count ? wear.lastWornBefore : read.data.last_worn_on;
+    // No wear left is an item never worn, whatever date the wears taken back
+    // left behind: the one case besides "ours is the latest" with a known date.
+    const lastWorn = current === wear.count ? wear.lastWornBefore : current === 1 ? null : read.data.last_worn_on;
     const write = await store.writeWearCount(wear.id, current, current - 1, lastWorn);
     if (write.error) return false;
     if (!wroteNoRows(write.data)) return true;

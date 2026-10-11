@@ -24,6 +24,12 @@
 //   - a close while a save is in flight: what that save carries waits for its
 //     answer; everything else goes now;
 //   - an upload that lands after the form closed: removed as it lands.
+//
+// What a save's completion may do to the SCREEN is not decided here. Its
+// clean-up is a storage round trip (or two) during which the form is still
+// open, so the person can dismiss it and open another before the save calls
+// back; a flag read before that await was stale by then, and closed the new
+// form (HD1). The item forms' parents decide it, when the save calls back.
 
 export type SaveOutcome = 'saved' | 'refused' | 'unanswered';
 
@@ -34,6 +40,7 @@ export class FormUploads {
   private inFlight: (string | null)[] = [];
   /** Photos a save may have committed although its reply never came. */
   private unanswered = new Set<string>();
+  /** The form was dismissed, or saved: nothing it uploads from here on will be. */
   private closed = false;
 
   /**
@@ -41,11 +48,6 @@ export class FormUploads {
    * @param release Removes objects nothing can point at; it reports its own failures.
    */
   constructor(private current: string | null, private readonly release: (paths: string[]) => Promise<void>) {}
-
-  /** The form was dismissed, or saved: nothing it uploads from here on will be. */
-  get isClosed(): boolean {
-    return this.closed;
-  }
 
   /** An upload landed. False when the form closed meanwhile: the object is removed, not shown. */
   landed(path: string): boolean {
