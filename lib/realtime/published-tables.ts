@@ -94,6 +94,13 @@ export const DELETE_BLIND_ACCEPTED: ReadonlySet<string> = new Set([
   'relationship_gift_ideas', 'reminder_lists', 'resume_versions', 'sleep_checkins',
   'sleep_logs', 'vocab_cards', 'wardrobe_items', 'watch_sessions',
   'watchlist_titles', 'watchlist_votes',
+  // Deleted only by the location-retention cron, with the service role, once
+  // an arrival/departure event is older than the retention window (0335 keeps
+  // the table append-only for clients). A months-old timeline entry leaving
+  // the screen at the next refetch rather than live is the intended shape.
+  // That cron's route is held under held/ (not deployed) and unscheduled pending
+  // the owner's retention decision, so until then nothing deletes them.
+  'location_events',
 ]);
 
 /**

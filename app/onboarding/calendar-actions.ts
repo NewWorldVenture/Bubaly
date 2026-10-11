@@ -16,6 +16,7 @@ import type { ServiceScope } from '@/lib/services/types';
 import { isReviewPlan, type ReviewPlan } from '@/lib/billing/review-selection';
 import { onboardingOwnerSchema, type OnboardingOwner } from '@/lib/onboarding/owner';
 import { verifyOnboardingOwner } from '@/lib/onboarding/verify-owner';
+import { isChildLoginAccount } from '@/lib/server/child-account';
 
 const startSchema = z.object({ provider: onboardingCalendarProvider, family: createFamilySchema,
   displayName: z.string().trim().min(1).max(60) });
@@ -32,6 +33,8 @@ export async function startCalendarConnectionAction(input: z.infer<typeof startS
     const auth = await db.auth.getUser();
     if (auth.error || !auth.data.user) return { ok: false as const, error: t('connectedCalendar.unavailable') };
     if (!await verifyOnboardingOwner(db, auth.data.user.id, hint.data.expectedOwner)) return { ok: false as const, error: t('onboardingWizard.contextChanged') };
+    // A removed child login must not claim a family of its own (see isChildLoginAccount).
+    if (await isChildLoginAccount(createServiceClient(), auth.data.user)) return { ok: false as const, error: t('connectedCalendar.unavailable') };
     const scope: ServiceScope = { db: createServiceClient(), familyId: '', userId: auth.data.user.id, role: 'parent', actorKind: 'member', memberId: null, tz: family.timezone };
     await assertOnboardingCalendarAccess(scope);
     const prepared = await prepareCalendarFamily(scope, { ...family, displayName });

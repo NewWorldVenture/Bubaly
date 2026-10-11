@@ -36,8 +36,9 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-function wire(role: string) {
+function wire(role: string, memoryEnabled?: boolean) {
   const db = createInMemorySupabase();
+  if (memoryEnabled !== undefined) db.seed('family_ai_settings', [{ family_id: 'family-test', memory_enabled: memoryEnabled }]);
   db.seed('family_members', [{ id: 'member-reader', family_id: 'family-test', display_name: 'Synthetic reader', is_active: true }]);
   const base = { family_id: 'family-test', category: 'other', source: 'user', expires_at: null, value: 'Synthetic value', notes: null };
   db.seed('family_facts', [
@@ -54,8 +55,8 @@ function wire(role: string) {
   mocks.server.mockResolvedValue(db);
 }
 
-async function advisorPrompt(role: string) {
-  wire(role);
+async function advisorPrompt(role: string, memoryEnabled?: boolean) {
+  wire(role, memoryEnabled);
   const response = await POST(new Request('http://synthetic.invalid/api/ai/insights', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ kind: 'purchase_advisor', params: { item: 'blender', question: 'Compare a synthetic household item' } }),
@@ -91,5 +92,20 @@ describe('purchase advisor memory metadata', () => {
     const facts = await advisorPrompt(role);
     expect(facts.map((f) => f.id)).toEqual(['ordinary', 'sensitive-note', 'sensitive-value']);
     expect(facts.find((f) => f.id === 'sensitive-note')?.notes).toContain('SYNTHETIC-NOTE-MARKER');
+  });
+});
+
+describe('purchase advisor honours "Allow memory" off', () => {
+  it.each(['parent', 'child'])('sends no remembered facts to the %s prompt when memory is off', async (role) => {
+    const facts = await advisorPrompt(role, false);
+    expect(facts).toEqual([]);
+    const completionInput = mocks.complete.mock.calls[0][0] as { messages: { role: string; content: string }[] };
+    const prompt = completionInput.messages.find((message) => message.role === 'user')!.content;
+    expect(prompt).not.toContain('Prefer a compact blender');
+  });
+
+  it('keeps remembered facts when memory is explicitly on', async () => {
+    const facts = await advisorPrompt('parent', true);
+    expect(facts.map((f) => f.id)).toContain('ordinary');
   });
 });

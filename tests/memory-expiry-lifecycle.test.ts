@@ -27,6 +27,7 @@ function setup() {
     uniques: { family_playbook_suggestions: [['family_id', 'signature']] },
   });
   db.seed('family_ai_settings', [{ family_id: 'family-1', memory_enabled: true }]);
+  db.seed('family_members', [{ id: 'member-2', family_id: 'family-1', is_active: true }]);
   const scope: ServiceScope = {
     db, familyId: 'family-1', userId: 'user-1', memberId: 'member-1',
     role: 'parent', actorKind: 'member', tz: 'America/New_York', now: NOW,

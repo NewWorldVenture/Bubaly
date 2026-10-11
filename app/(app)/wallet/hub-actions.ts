@@ -12,15 +12,40 @@
 // returns a bare policy error reads as a bug to the person who hit it. This
 // answers with a sentence instead, and says out loud what the file header used
 // to get wrong.
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireUserContext, type UserContext } from '@/lib/supabase/auth';
+import { aal2Verdict } from '@/lib/auth/require-aal2';
 import { todayKeyFor } from '@/lib/services/scope';
 import { getTranslations } from '@/lib/i18n/server';
 import { isManager } from '@/lib/constants/roles';
 import { createServer } from '@/lib/supabase/server';
 import type { AccountType } from '@/lib/database.types';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
+import { deleteTransaction } from '@/lib/services/finances';
+import { scopeFromUserContext } from '@/lib/services/scope';
+import { SERVICE_CODES } from '@/lib/services/types';
 
-type Result = { ok: boolean; error?: string };
+/** `stepUp` is the /auth/step-up path when the refusal was an assurance one. */
+type Result = { ok: boolean; error?: string; stepUp?: string };
+
+const WALLET = '/wallet';
+
+/**
+ * The money step-up, for the two household-money tables.
+ *
+ * `deleteTransactionAction` (app/(app)/dashboard/billing/actions.ts) refuses an
+ * `aal1` session of a manager who enrolled an authenticator, so a stolen
+ * password cannot empty the family's ledger. This file wrote and deleted the
+ * SAME rows with no such check, and the database backstop (0382's restrictive
+ * step-up policies) covers budgets, savings goals and bills only — so a
+ * password-only session reached the identical delete through the wallet hub.
+ * Same verdict, same refusal shape as the billing gate.
+ */
+async function moneyStepUp(ctx: UserContext): Promise<Result | null> {
+  const verdict = await aal2Verdict(ctx, 'money', WALLET);
+  if (verdict.action !== 'step_up') return null;
+  const t = await getTranslations();
+  return { ok: false, error: t('actions.moneyNeedsYourCodeAgain'), stepUp: verdict.to };
+}
 
 function actionFailure(operation: string, message: string, error: unknown): Result {
   console.error(`[wallet-hub] ${operation} failed`, error);
@@ -55,6 +80,8 @@ export async function addAccountAction(input: Record<string, unknown>): Promise<
   const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return notYours();
+  const stepUp = await moneyStepUp(ctx);
+  if (stepUp) return stepUp;
   const name = str(input.name);
   if (!name) return { ok: false, error: t('hubActions.accountNameIsRequired') };
   const type = ACCOUNT_TYPES.includes(input.type as AccountType) ? (input.type as AccountType) : 'checking';
@@ -127,6 +154,8 @@ export async function addTransactionAction(input: Record<string, unknown>): Prom
   const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return notYours();
+  const stepUp = await moneyStepUp(ctx);
+  if (stepUp) return stepUp;
   const name = str(input.name);
   if (!name) return { ok: false, error: t('hubActions.descriptionIsRequired') };
   const supabase = await createServer();
@@ -155,7 +184,13 @@ export async function deleteWalletRowAction(input: { table: string; id: string }
   // Narrowed to the two household-money tables on purpose: a teen tidying
   // their own wallet cards, passes and rewards is not what 0267 is about.
   if (MANAGER_ONLY_DELETES.has(input.table) && !isManager(ctx.active.role)) return notYours();
+  // And the money step-up the billing surface applies to the same delete.
+  if (MANAGER_ONLY_DELETES.has(input.table)) {
+    const stepUp = await moneyStepUp(ctx);
+    if (stepUp) return stepUp;
+  }
   const supabase = await createServer();
+  if (input.table === 'transactions') return deleteHouseholdTransaction(ctx, supabase, input.id);
   // Keep the table allowlist explicit and add the active-family predicate to
   // every branch. RLS remains the defense in depth, but a delete action should
   // never depend on policy drift to avoid cross-family targeting.
@@ -178,9 +213,7 @@ export async function deleteWalletRowAction(input: { table: string; id: string }
       ? await supabase.from('wallet_passes').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id')
       : input.table === 'wallet_rewards'
         ? await supabase.from('wallet_rewards').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id')
-        : input.table === 'financial_accounts'
-          ? await supabase.from('financial_accounts').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id')
-          : await supabase.from('transactions').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
+        : await supabase.from('financial_accounts').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
   const { data: deleted, error } = result;
   if (error) return actionFailure('delete the wallet item', t('hubActions.couldNotDeleteTheWalletItem'), error);
   if (wroteNoRows(deleted)) {
@@ -192,4 +225,29 @@ export async function deleteWalletRowAction(input: { table: string; id: string }
     return { ok: false, error: t('hubActions.couldNotDeleteTheWalletItem') };
   }
   return { ok: true };
+}
+
+/**
+ * A household transaction is removed through the SAME service the billing page
+ * uses, so the role check, the zero-row check and the activity entry ("Deleted
+ * $42.00 — Groceries") are identical on both paths. Deleting it directly here
+ * left the family's history with a transaction that vanished without a record
+ * of who removed it.
+ */
+async function deleteHouseholdTransaction(
+  ctx: Awaited<ReturnType<typeof requireUserContext>>,
+  supabase: Awaited<ReturnType<typeof createServer>>,
+  id: string,
+): Promise<Result> {
+  const removed = await deleteTransaction(scopeFromUserContext(ctx, supabase), id);
+  if (removed.ok) return { ok: true };
+  if (removed.code === SERVICE_CODES.denied) return notYours();
+  if (removed.code === SERVICE_CODES.notFound) {
+    console.error('[wallet] delete matched no row', { table: 'transactions', familyId: ctx.active.familyId });
+  }
+  // A database failure was already logged by the service. Its description can
+  // carry a codeless raw message, so the hub answers in its own sentence, as it
+  // does for every other table.
+  const t = await getTranslations();
+  return { ok: false, error: t('hubActions.couldNotDeleteTheWalletItem') };
 }

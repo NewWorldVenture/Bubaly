@@ -132,7 +132,7 @@ describe('onboarding wiring', () => {
     const { readFileSync } = await import('node:fs');
     const source = readFileSync('app/onboarding/actions.ts', 'utf8');
     const call = source.indexOf('provisionFamilyEmailLocal(');
-    const done = source.indexOf('return { ok: true, data: { familyId, brief: finalBrief } };');
+    const done = source.indexOf('return { ok: true, data: { familyId, brief: finalBrief');
     expect(call).toBeGreaterThan(-1);
     // After every required write, immediately before the success return.
     expect(call).toBeLessThan(done);

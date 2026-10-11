@@ -25,6 +25,8 @@ let db: ReturnType<typeof createInMemorySupabase<DB>>;
  */
 function seedFamily(id: string, opts: { scopes?: Record<string, boolean>; enabled?: boolean; spend?: number; bedtime?: string } = {}) {
   const parent = `${id}-p`; const kidA = `${id}-a`; const kidB = `${id}-b`;
+  // An open family: the consent read inner-joins families and skips closed ones.
+  db.seed('families', [{ id, closed_at: null }]);
   db.seed('network_consent', [{ family_id: id, enabled: opts.enabled ?? true, scopes: opts.scopes ?? { benchmarks: true } }]);
   db.seed('family_members', [
     { id: parent, family_id: id, role: 'parent', birthday: '1985-03-03', is_active: true },
@@ -101,6 +103,7 @@ describe('CONTRIBUTE — one banded row per consenting family', () => {
   });
 
   it('omits the inapplicable metrics for a household without children or tracked spend', async () => {
+    db.seed('families', [{ id: 'solo', closed_at: null }]);
     db.seed('network_consent', [{ family_id: 'solo', enabled: true, scopes: { benchmarks: true } }]);
     db.seed('family_members', [{ id: 'solo-p', family_id: 'solo', role: 'adult', birthday: null, is_active: true }]);
     const result = await runNetworkAggregation(db, NOW);

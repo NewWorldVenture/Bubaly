@@ -46,7 +46,6 @@ const DECLARED: Record<string, string> = {
   'lib/display/ambient.ts': 'the fallback when the display has no zone; the display page passes the family\'s.',
   'lib/capture/parse.ts': 'LOCAL_OPS, one half of an explicit LOCAL/UTC ops pair; the server bridge (parseEventInZone) chooses UTC_OPS on a zone-shifted wall clock.',
   // ── correct as it stands ──
-  'lib/guardian/rules.ts': 'the weekday is read IN the family zone, via the locale-string shift; indirect, but the family\'s.',
   'lib/medications/adherence.ts': 'receives a wall-clock `now` already shifted into the family zone by its caller (asWallClockIn), by contract.',
   'lib/moving/planner.ts': 'dateOnly/isoDate/addDays are local-in, local-out on date strings (the zone cancels); the Date form is fed the family\'s noon by the moving service.',
   'lib/reminders/details.ts': 'rolls a recurrence forward by whole days/months/years on an instant with local setters; on a UTC host a day is 24 hours.',

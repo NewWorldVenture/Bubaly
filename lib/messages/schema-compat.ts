@@ -35,6 +35,17 @@ export type SchemaObject =
   | { kind: 'table'; name: string; migration: MessagingMigration }
   | { kind: 'column'; table: string; name: string; migration: MessagingMigration };
 
+/**
+ * An object to recognise as missing, without the migration that would add it.
+ * isMissingSchemaObject reads only these fields, so a caller outside messaging
+ * (lib/marketplace/schema-compat.ts) names its own objects with this shape.
+ * A view is a `table` here: PostgREST and Postgres answer a missing view with
+ * the same PGRST205 / 42P01.
+ */
+export type SchemaObjectRef =
+  | { kind: 'function' | 'table'; name: string }
+  | { kind: 'column'; table: string; name: string };
+
 /** Every object the messaging paths may find missing, with the migration that adds it. */
 export const MESSAGING_SCHEMA = {
   ensureFamilyConversation: { kind: 'function', name: 'ensure_family_conversation', migration: '0475' },
@@ -49,7 +60,7 @@ export const MESSAGING_SCHEMA = {
   conversationPreferences: { kind: 'table', name: 'family_conversation_preferences', migration: '0476' },
 } as const satisfies Record<string, SchemaObject>;
 
-const CODES: Record<SchemaObject['kind'], readonly string[]> = {
+const CODES: Record<SchemaObjectRef['kind'], readonly string[]> = {
   function: ['PGRST202', '42883'],
   table: ['PGRST205', '42P01'],
   column: ['PGRST204', '42703'],
@@ -76,7 +87,7 @@ function namesColumn(message: string, table: string, column: string): boolean {
 }
 
 /** True only when `error` says that exactly this object does not exist. */
-export function isMissingSchemaObject(error: unknown, object: SchemaObject): boolean {
+export function isMissingSchemaObject(error: unknown, object: SchemaObject | SchemaObjectRef): boolean {
   if (!error || typeof error !== 'object') return false;
   const { code, message, details, hint } = error as { code?: unknown; message?: unknown; details?: unknown; hint?: unknown };
   if (typeof code !== 'string' || typeof message !== 'string') return false;

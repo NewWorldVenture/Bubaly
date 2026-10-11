@@ -8,11 +8,14 @@ const MEMBER = '22222222-2222-4222-8222-222222222222';
 const CONTACT = '33333333-3333-4333-8333-333333333333';
 const RULE = '44444444-4444-4444-8444-444444444444';
 const INPUT = { callerPhone: '+15555550200', callerName: null, familyId: FAMILY, memberId: MEMBER };
-const TABLES = ['guardian_contacts', 'guardian_member_profiles', 'guardian_routing_rules'] as const;
+// Four required reads: the family's own timezone joined the three Guardian
+// tables when rules stopped running on America/New_York for everyone.
+const TABLES = ['guardian_contacts', 'guardian_member_profiles', 'guardian_routing_rules', 'families'] as const;
 type Table = typeof TABLES[number];
 type Row = Record<string, unknown>;
 type Read = { url: URL; signal?: AbortSignal | null; headers: Headers };
-const STAGE = { guardian_contacts: 'contact', guardian_member_profiles: 'profile', guardian_routing_rules: 'rules' } as const;
+const STAGE = { guardian_contacts: 'contact', guardian_member_profiles: 'profile', guardian_routing_rules: 'rules', families: 'timezone' } as const;
+const family = (overrides: Row = {}): Row => ({ id: FAMILY, timezone: 'UTC', ...overrides });
 function contact(overrides: Row = {}): Row {
   return { id: CONTACT, family_id: FAMILY, phone: INPUT.callerPhone, name: 'Synthetic contact', trust_level: 'blocked', spam_score: 90, ...overrides };
 }
@@ -43,7 +46,8 @@ function fixture(overrides: Partial<Record<Table, (read: Read) => Response | Pro
       calls.push(read);
       const table = read.url.pathname.split('/').at(-1) as Table;
       if (!TABLES.includes(table) || (init.method ?? 'GET') !== 'GET') throw new Error('Unexpected policy fixture request');
-      return overrides[table]?.(read) ?? rows([]);
+      // A healthy family row is the default; the three Guardian tables default to verified absence.
+      return overrides[table]?.(read) ?? rows(table === 'families' ? [family()] : []);
     } },
   });
   return { client, calls };
@@ -101,6 +105,15 @@ describe('Guardian policy reads through the installed PostgREST SDK', () => {
     const { client } = fixture({ guardian_member_profiles: () => rows([profile(overrides as Row)]) });
     await expect(runDecisionPipeline(client, INPUT)).rejects.toEqual(new GuardianPolicyUnavailableError('profile'));
   });
+  it.each([
+    ['wrong family', { id: MEMBER }], ['missing zone', { timezone: null }], ['invalid zone', { timezone: 'Mars/Olympus_Mons' }],
+    ['non-string zone', { timezone: 7 }],
+  ])('rejects family %s and routes nothing', async (_label, overrides) => {
+    // The default used to be America/New_York, which is how a Los Angeles
+    // family's 22:00–07:00 screen ran 19:00–04:00 local. No zone, no routing.
+    const { client } = fixture({ families: () => rows([family(overrides as Row)]) });
+    await expect(runDecisionPipeline(client, INPUT)).rejects.toEqual(new GuardianPolicyUnavailableError('timezone'));
+  });
   it('rejects duplicate active profiles', async () => {
     const { client } = fixture({ guardian_member_profiles: () => rows([profile(), profile({ id: RULE })]) });
     await expect(runDecisionPipeline(client, INPUT)).rejects.toEqual(new GuardianPolicyUnavailableError('profile'));
@@ -128,9 +141,10 @@ describe('Guardian policy reads through the installed PostgREST SDK', () => {
   it('preserves verified absence and scopes every required query', async () => {
     const { client, calls } = fixture();
     await expect(runDecisionPipeline(client, INPUT)).resolves.toMatchObject({ routingMode: 'ai_handle_first', trustLevel: 'unknown', memberProfile: null });
-    expect(calls).toHaveLength(3);
+    expect(calls).toHaveLength(4);
     for (const call of calls) {
-      expect(call.url.searchParams.get('family_id')).toBe(`eq.${FAMILY}`);
+      // The family row is keyed on its own id; the Guardian tables on family_id.
+      expect(call.url.pathname.endsWith('families') ? call.url.searchParams.get('id') : call.url.searchParams.get('family_id')).toBe(`eq.${FAMILY}`);
       expect(call.headers.get('prefer')).toContain('count=exact');
       expect(call.signal).toBeInstanceOf(AbortSignal);
     }
@@ -141,8 +155,9 @@ describe('Guardian policy reads through the installed PostgREST SDK', () => {
   it('skips absent caller/member lookups and still verifies family rules', async () => {
     const { client, calls } = fixture({ guardian_routing_rules: () => rows([rule({ member_id: null })]) });
     await expect(runDecisionPipeline(client, { ...INPUT, callerPhone: null, memberId: null })).resolves.toMatchObject({ routingMode: 'blocked', ruleId: RULE });
-    expect(calls).toHaveLength(1);
-    expect(calls[0].url.searchParams.get('or')).toBe('(member_id.is.null)');
+    // The rules and the family's zone: nothing to look up for an absent caller or member.
+    expect(calls.map(call => call.url.pathname.split('/').at(-1)).sort()).toEqual(['families', 'guardian_routing_rules']);
+    expect(calls.find(call => call.url.pathname.endsWith('guardian_routing_rules'))?.url.searchParams.get('or')).toBe('(member_id.is.null)');
   });
   it('preserves healthy blocked contacts and profile context overrides', async () => {
     const first = fixture({ guardian_contacts: () => rows([contact()]) });

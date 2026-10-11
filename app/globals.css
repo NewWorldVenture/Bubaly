@@ -149,6 +149,207 @@
   --device-accent: 168 174 185;
 }
 
+/* The light theme's raw palette text (A11Y-001).
+
+   The semantic tokens above were darkened for light mode, but the app also
+   writes Tailwind's light palette shades straight into class names, about
+   1,400 times: `text-emerald-400`, `text-amber-300`, `hover:text-rose-300`.
+   Those shades were picked against the dark theme. On a light surface they
+   read at 1.2 to 2.8:1 (WCAG asks 4.5:1 for text, 3:1 for large text and
+   icons): "0 taken" on the medications page at 1.86:1, a "low" stress chip at
+   1.27:1. Measured on every signed-in page; see the PR that added this.
+
+   In light mode each hue's 200, 300 and 400 shade, and its hover and
+   group-hover forms, take that hue's darker shade: the lightest one that keeps
+   4.5:1 on white, on --bg and on the hue's own pale chip tint (500 at 20%).
+   tests/light-theme-palette-text-is-readable.test.ts computes those ratios
+   from this block, and fails when a class the source uses has no rule here.
+
+   Specificity is held to what the cascade needs (`:where()` adds none). A
+   base rule has exactly its Tailwind class's specificity and wins by coming
+   after it; every variant (`hover:`, `md:`, …) Tailwind appends at the end of
+   the stylesheet, so `md:text-white` or `hover:text-white` on a
+   `text-emerald-400` element still wins over the remap. The hover and
+   group-hover rules replace such appended variants, so they carry `.light`
+   for one class more than the variant they replace.
+
+   It is the signed-in app's rule. Outside it: the marketing pages, which
+   carry their own light rules below and draw the app's dark screens inside
+   device mock-ups (there the original shades are the readable ones: 22
+   elements would have dropped from 5.3-13.4:1 to 1.6-2.8:1); any element in
+   or under `dark`; and any element in or under `.keep-dark-palette`, which
+   marks a presentation that stays dark in the light theme (the wall display,
+   the full-screen briefing). */
+:where(.light) .text-emerald-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-emerald-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-emerald-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(6 95 70 / var(--tw-text-opacity, 1)); /* emerald-800 */
+}
+.light .hover\:text-emerald-200:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-emerald-300:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-emerald-400:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(6 95 70 / var(--tw-text-opacity, 1)); /* emerald-800 */
+}
+.light .group:hover .group-hover\:text-emerald-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-emerald-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-emerald-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(6 95 70 / var(--tw-text-opacity, 1)); /* emerald-800 */
+}
+:where(.light) .text-emerald-300\/80:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) { color: rgb(6 95 70 / 0.8); }
+:where(.light) .text-emerald-400\/30:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) { color: rgb(6 95 70 / 0.3); }
+:where(.light) .text-emerald-400\/70:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) { color: rgb(6 95 70 / 0.7); }
+:where(.light) .text-green-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-green-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-green-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(22 101 52 / var(--tw-text-opacity, 1)); /* green-800 */
+}
+.light .hover\:text-green-200:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-green-300:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-green-400:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(22 101 52 / var(--tw-text-opacity, 1)); /* green-800 */
+}
+.light .group:hover .group-hover\:text-green-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-green-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-green-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(22 101 52 / var(--tw-text-opacity, 1)); /* green-800 */
+}
+:where(.light) .text-green-400\/50:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) { color: rgb(22 101 52 / 0.5); }
+:where(.light) .text-amber-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-amber-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-amber-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(146 64 14 / var(--tw-text-opacity, 1)); /* amber-800 */
+}
+.light .hover\:text-amber-200:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-amber-300:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-amber-400:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(146 64 14 / var(--tw-text-opacity, 1)); /* amber-800 */
+}
+.light .group:hover .group-hover\:text-amber-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-amber-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-amber-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(146 64 14 / var(--tw-text-opacity, 1)); /* amber-800 */
+}
+:where(.light) .text-amber-200\/70:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) { color: rgb(146 64 14 / 0.7); }
+:where(.light) .text-amber-200\/80:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) { color: rgb(146 64 14 / 0.8); }
+:where(.light) .text-amber-300\/70:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) { color: rgb(146 64 14 / 0.7); }
+:where(.light) .text-amber-300\/80:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) { color: rgb(146 64 14 / 0.8); }
+:where(.light) .text-amber-300\/90:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) { color: rgb(146 64 14 / 0.9); }
+:where(.light) .text-amber-400\/60:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) { color: rgb(146 64 14 / 0.6); }
+:where(.light) .text-yellow-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-yellow-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-yellow-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(133 77 14 / var(--tw-text-opacity, 1)); /* yellow-800 */
+}
+.light .hover\:text-yellow-200:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-yellow-300:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-yellow-400:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(133 77 14 / var(--tw-text-opacity, 1)); /* yellow-800 */
+}
+.light .group:hover .group-hover\:text-yellow-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-yellow-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-yellow-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(133 77 14 / var(--tw-text-opacity, 1)); /* yellow-800 */
+}
+:where(.light) .text-sky-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-sky-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-sky-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(7 89 133 / var(--tw-text-opacity, 1)); /* sky-800 */
+}
+.light .hover\:text-sky-200:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-sky-300:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-sky-400:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(7 89 133 / var(--tw-text-opacity, 1)); /* sky-800 */
+}
+.light .group:hover .group-hover\:text-sky-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-sky-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-sky-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(7 89 133 / var(--tw-text-opacity, 1)); /* sky-800 */
+}
+:where(.light) .text-blue-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-blue-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-blue-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(29 78 216 / var(--tw-text-opacity, 1)); /* blue-700 */
+}
+.light .hover\:text-blue-200:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-blue-300:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-blue-400:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(29 78 216 / var(--tw-text-opacity, 1)); /* blue-700 */
+}
+.light .group:hover .group-hover\:text-blue-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-blue-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-blue-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(29 78 216 / var(--tw-text-opacity, 1)); /* blue-700 */
+}
+:where(.light) .text-teal-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-teal-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-teal-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(17 94 89 / var(--tw-text-opacity, 1)); /* teal-800 */
+}
+.light .hover\:text-teal-200:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-teal-300:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-teal-400:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(17 94 89 / var(--tw-text-opacity, 1)); /* teal-800 */
+}
+.light .group:hover .group-hover\:text-teal-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-teal-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-teal-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(17 94 89 / var(--tw-text-opacity, 1)); /* teal-800 */
+}
+:where(.light) .text-rose-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-rose-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-rose-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(190 18 60 / var(--tw-text-opacity, 1)); /* rose-700 */
+}
+.light .hover\:text-rose-200:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-rose-300:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-rose-400:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(190 18 60 / var(--tw-text-opacity, 1)); /* rose-700 */
+}
+.light .group:hover .group-hover\:text-rose-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-rose-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-rose-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(190 18 60 / var(--tw-text-opacity, 1)); /* rose-700 */
+}
+:where(.light) .text-rose-400\/70:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) { color: rgb(190 18 60 / 0.7); }
+:where(.light) .text-red-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-red-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-red-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(185 28 28 / var(--tw-text-opacity, 1)); /* red-700 */
+}
+.light .hover\:text-red-200:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-red-300:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-red-400:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(185 28 28 / var(--tw-text-opacity, 1)); /* red-700 */
+}
+.light .group:hover .group-hover\:text-red-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-red-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-red-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(185 28 28 / var(--tw-text-opacity, 1)); /* red-700 */
+}
+:where(.light) .text-orange-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-orange-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-orange-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(154 52 18 / var(--tw-text-opacity, 1)); /* orange-800 */
+}
+.light .hover\:text-orange-200:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-orange-300:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-orange-400:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(154 52 18 / var(--tw-text-opacity, 1)); /* orange-800 */
+}
+.light .group:hover .group-hover\:text-orange-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-orange-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-orange-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(154 52 18 / var(--tw-text-opacity, 1)); /* orange-800 */
+}
+:where(.light) .text-lime-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-lime-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-lime-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(63 98 18 / var(--tw-text-opacity, 1)); /* lime-800 */
+}
+.light .hover\:text-lime-200:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-lime-300:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-lime-400:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(63 98 18 / var(--tw-text-opacity, 1)); /* lime-800 */
+}
+.light .group:hover .group-hover\:text-lime-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-lime-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-lime-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(63 98 18 / var(--tw-text-opacity, 1)); /* lime-800 */
+}
+:where(.light) .text-cyan-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-cyan-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-cyan-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(21 94 117 / var(--tw-text-opacity, 1)); /* cyan-800 */
+}
+.light .hover\:text-cyan-200:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-cyan-300:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-cyan-400:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(21 94 117 / var(--tw-text-opacity, 1)); /* cyan-800 */
+}
+.light .group:hover .group-hover\:text-cyan-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-cyan-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-cyan-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(21 94 117 / var(--tw-text-opacity, 1)); /* cyan-800 */
+}
+:where(.light) .text-violet-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-violet-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-violet-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(109 40 217 / var(--tw-text-opacity, 1)); /* violet-700 */
+}
+.light .hover\:text-violet-200:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-violet-300:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-violet-400:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(109 40 217 / var(--tw-text-opacity, 1)); /* violet-700 */
+}
+.light .group:hover .group-hover\:text-violet-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-violet-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-violet-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(109 40 217 / var(--tw-text-opacity, 1)); /* violet-700 */
+}
+:where(.light) .text-violet-300\/80:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) { color: rgb(109 40 217 / 0.8); }
+:where(.light) .text-violet-400\/30:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) { color: rgb(109 40 217 / 0.3); }
+:where(.light) .text-purple-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-purple-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-purple-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(126 34 206 / var(--tw-text-opacity, 1)); /* purple-700 */
+}
+.light .hover\:text-purple-200:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-purple-300:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-purple-400:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(126 34 206 / var(--tw-text-opacity, 1)); /* purple-700 */
+}
+.light .group:hover .group-hover\:text-purple-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-purple-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-purple-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(126 34 206 / var(--tw-text-opacity, 1)); /* purple-700 */
+}
+:where(.light) .text-pink-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-pink-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-pink-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(157 23 77 / var(--tw-text-opacity, 1)); /* pink-800 */
+}
+.light .hover\:text-pink-200:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-pink-300:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-pink-400:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(157 23 77 / var(--tw-text-opacity, 1)); /* pink-800 */
+}
+.light .group:hover .group-hover\:text-pink-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-pink-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-pink-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(157 23 77 / var(--tw-text-opacity, 1)); /* pink-800 */
+}
+:where(.light) .text-indigo-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-indigo-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-indigo-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(67 56 202 / var(--tw-text-opacity, 1)); /* indigo-700 */
+}
+.light .hover\:text-indigo-200:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-indigo-300:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-indigo-400:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(67 56 202 / var(--tw-text-opacity, 1)); /* indigo-700 */
+}
+.light .group:hover .group-hover\:text-indigo-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-indigo-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-indigo-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(67 56 202 / var(--tw-text-opacity, 1)); /* indigo-700 */
+}
+:where(.light) .text-indigo-200\/80:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) { color: rgb(67 56 202 / 0.8); }
+:where(.light) .text-fuchsia-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-fuchsia-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), :where(.light) .text-fuchsia-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(162 28 175 / var(--tw-text-opacity, 1)); /* fuchsia-700 */
+}
+.light .hover\:text-fuchsia-200:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-fuchsia-300:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .hover\:text-fuchsia-400:hover:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(162 28 175 / var(--tw-text-opacity, 1)); /* fuchsia-700 */
+}
+.light .group:hover .group-hover\:text-fuchsia-200:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-fuchsia-300:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)), .light .group:hover .group-hover\:text-fuchsia-400:not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *)) {
+  color: rgb(162 28 175 / var(--tw-text-opacity, 1)); /* fuchsia-700 */
+}
+/* End of the light theme's raw palette text. */
+
+
 * {
   border-color: rgb(var(--border));
 }

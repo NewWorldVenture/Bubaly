@@ -207,8 +207,11 @@ describe('the routine cron only counts what landed (C1-S9-63)', () => {
 
 describe('ai-runs counts a run as returned only when it was (C1-S9-63)', () => {
   it('neither an error nor the state guard declining is counted', () => {
-    expect(aiRuns).toContain(".eq('state', 'executing')\n            .select('id');");
-    expect(aiRuns).toContain('else if (!wroteNoRows(requeued)) returned += 1;');
+    // One requeue, shared by the out-of-tick return and the closed-family
+    // deferral: it answers true only for a write that landed and matched.
+    expect(aiRuns).toContain(".eq('state', 'executing')\n      .select('id');");
+    expect(aiRuns).toContain('return !error && !wroteNoRows(requeued);');
+    expect(aiRuns).toContain('if (await requeue(run, new Date())) returned += 1;');
     expect(code(aiRuns)).not.toMatch(/^\s*returned \+= 1;/m);
   });
 });

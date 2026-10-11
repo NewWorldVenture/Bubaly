@@ -6,7 +6,7 @@ import { rateLimitDb } from '@/lib/server/rate-limit-db';
 import { looksLikeAssistantToken } from '@/lib/assistant/link-token';
 import { classifyAssistantUtterance } from '@/lib/assistant/intent';
 import { ERROR_SPEECH } from '@/lib/assistant/answers';
-import { answerAssistant, recordAssistantEvent, resolveAssistantLink } from '@/lib/assistant/service';
+import { answerAssistant, lookupAssistantLink, recordAssistantEvent } from '@/lib/assistant/service';
 import {
   alexaAccessToken, alexaSilentResponse, alexaSpeechResponse, alexaUtterance,
   ALEXA_NOT_LINKED_SPEECH, type AlexaRequestBody,
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
   // service-role write. That placement is gone for good. A module-scope Map is
   // per-lambda and the caller sets the number of lambdas by sending in
   // parallel, so this one is a cheap pre-filter; the durable per-CALLER limit
-  // is after resolveAssistantLink, where there is a caller to key it on.
+  // is after lookupAssistantLink, where there is a caller to key it on.
   const tooMany = () => NextResponse.json(alexaSpeechResponse('Too many requests right now. Try again shortly.'));
   const rateKey = `assistant-alexa:${clientIp(req.headers)}`;
   if (!rateLimit(rateKey, { limit: 60, windowMs: 60_000 }).ok) return tooMany();
@@ -79,8 +79,13 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = createServiceClient();
-  const link = await resolveAssistantLink(supabase, token);
-  if (!link) return NextResponse.json(alexaSpeechResponse(ALEXA_NOT_LINKED_SPEECH));
+  const found = await lookupAssistantLink(supabase, token);
+  // A read that failed is not "you are not linked": the person holds a key
+  // that may be perfectly good, and the linking prompt would send them to
+  // re-link or mint a new one when trying again was all it needed.
+  if (found.status === 'unavailable') return NextResponse.json(alexaSpeechResponse(ERROR_SPEECH));
+  if (found.status !== 'linked') return NextResponse.json(alexaSpeechResponse(ALEXA_NOT_LINKED_SPEECH));
+  const { link } = found;
 
   // The durable half, keyed on the link rather than the IP, and deliberately
   // placed after BOTH gates this route has — Amazon's signature and the access

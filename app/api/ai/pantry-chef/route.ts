@@ -11,6 +11,19 @@ import {
   annotateAllergens, buildPantryChefPrompt, normalizeAllergies, normalizePlanDate, parsePantryRecipes,
 } from '@/lib/meals/pantry-chef';
 import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
+import { accessDeniedResponse, assertAIAccess } from '@/lib/server/ai-access';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
+
+/**
+ * Fridge Chef is part of Smart Kitchen (its only entry point is the kitchen
+ * dashboard), so it carries that feature's gate. Without it a Free or
+ * trial-expired family could POST photos here directly and each one ran a paid
+ * vision-model call outside the Free plan's monthly AI allowance.
+ */
+const FRIDGE_CHEF_FEATURE_HREF = '/dashboard/kitchen';
+const FRIDGE_CHEF_FEATURE_KEY = 'smart-kitchen';
 
 // Fridge Chef — snap a photo of the fridge/pantry, get allergy-aware dinner
 // ideas, and push the missing ingredients straight to the shared grocery list.
@@ -29,6 +42,9 @@ export async function POST(req: NextRequest) {
     const familyId = ctx.active.familyId;
     const userId = ctx.user.id;
     const supabase = await createServer();
+
+    const refused = await refuseUnlessEntitled(supabase, familyId, [FRIDGE_CHEF_FEATURE_HREF]);
+    if (refused) return refused;
 
     const limited = await enforceAIRateLimit(supabase, `ai-pantry-chef:${userId}`, { limit: 15 });
     if (!limited.ok) return NextResponse.json(
@@ -120,6 +136,11 @@ export async function POST(req: NextRequest) {
     if (!IMAGE_TYPES.includes(mediaType)) return NextResponse.json({ error: t('pantryChef.uploadAPhotoJpgPng') }, { status: 400 });
     if (data.length > 8_000_000) return NextResponse.json({ error: t('pantryChef.photoIsTooLarge5') }, { status: 400 });
 
+    // A model call: it counts against the family's monthly AI allowance and is
+    // recorded as an ai_requests row like every other one.
+    const access = await assertAIAccess(ctx, { db: supabase, now, featureKey: FRIDGE_CHEF_FEATURE_KEY, label: t('pantryChef.fridgeChef') });
+    if (!access.ok) return accessDeniedResponse(access);
+
     // Read the family's allergies with the service client so the safety filter
     // works for every member (medical_profiles is manager-gated to clients); the
     // raw profiles are never returned — only the normalised terms drive the
@@ -151,31 +172,35 @@ export async function POST(req: NextRequest) {
     const model = aiConfig.model && /^(gpt-|o\d|chatgpt-)/i.test(aiConfig.model) ? aiConfig.model : 'gpt-4o';
 
     const prompt = buildPantryChefPrompt(allergies, now, ctx.active.family.timezone || 'UTC');
-    const aiRes = await fetchWithDeadline('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model,
-        max_tokens: 1500,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: `data:${mediaType};base64,${data}` } },
-          ],
-        }],
-      }),
-    }, 60_000);
-    if (!aiRes.ok) {
-      const bounded = await readBoundedResponseText(aiRes, 64 * 1024);
-      console.error('[ai/pantry-chef] OpenAI error', aiRes.status, bounded.ok ? bounded.text : '[provider error response exceeded 64 KiB]');
-      return NextResponse.json({ error: t('pantryChef.couldNotReadThatPhoto') }, { status: 502 });
-    }
-    const aiJson = await readBoundedResponseJson<{ choices?: Array<{ message?: { content?: string } }> }>(aiRes, 1024 * 1024);
-    const text = aiJson.choices?.[0]?.message?.content ?? '[]';
-    const recipes = annotateAllergens(parsePantryRecipes(text), allergies);
+    return await withAiRequest(scopeFromUserContext(ctx, supabase), { feature: 'kitchen.fridge_chef', text: t('pantryChef.fridgeChefPhoto') }, async (obs) => {
+      const aiRes = await fetchWithDeadline('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model,
+          max_tokens: 1500,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              { type: 'image_url', image_url: { url: `data:${mediaType};base64,${data}` } },
+            ],
+          }],
+        }),
+      }, 60_000);
+      if (!aiRes.ok) {
+        const bounded = await readBoundedResponseText(aiRes, 64 * 1024);
+        console.error('[ai/pantry-chef] OpenAI error', aiRes.status, bounded.ok ? bounded.text : '[provider error response exceeded 64 KiB]');
+        obs.failed(new Error(`OpenAI error ${aiRes.status}`));
+        return NextResponse.json({ error: t('pantryChef.couldNotReadThatPhoto') }, { status: 502 });
+      }
+      const aiJson = await readBoundedResponseJson<{ choices?: Array<{ message?: { content?: string } }> }>(aiRes, 1024 * 1024);
+      const text = aiJson.choices?.[0]?.message?.content ?? '[]';
+      obs.used(model);
+      const recipes = annotateAllergens(parsePantryRecipes(text), allergies);
 
-    return NextResponse.json({ recipes, allergiesConsidered: allergies.length });
+      return NextResponse.json({ recipes, allergiesConsidered: allergies.length });
+    });
   } catch (error) {
     console.error('[ai/pantry-chef] request failed', error);
     return NextResponse.json({ error: t('pantryChef.fridgeChefIsUnavailableRight') }, { status: 500 });

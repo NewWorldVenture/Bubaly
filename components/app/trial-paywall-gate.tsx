@@ -17,6 +17,7 @@ import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { SignOutForm } from '@/components/auth/sign-out-form';
 import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
+import { reportRefusal } from '@/lib/auth/step-up-client';
 
 export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null }) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -44,7 +45,17 @@ export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null 
       });
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.url) { window.location.href = json.url as string; return; }
-      if (res.status === 409 && typeof json.review === 'string' && json.review.startsWith('/')) { window.location.href = json.review; return; }
+      if (typeof json.stepUp === 'string') { reportRefusal({ error: json.error || t('trialPaywallGate.couldNotStartCheckoutPlease'), stepUp: json.stepUp }, toastError); return; }
+      if (res.status === 409) {
+        // Stripe already holds a live subscription the local row has not caught
+        // up with. The billing page sits behind this same paywall, so sending
+        // the family there loops; the Stripe portal is where a subscription
+        // (and a failing card) is actually managed.
+        const portal = await fetch('/api/billing/portal', { method: 'POST' }).then(r => r.json()).catch(() => ({}));
+        if (typeof portal.url === 'string') { window.location.href = portal.url; return; }
+        if (typeof portal.stepUp === 'string') { reportRefusal({ error: portal.error || t('trialPaywallGate.couldNotStartCheckoutPlease'), stepUp: portal.stepUp }, toastError); return; }
+        if (typeof json.review === 'string' && json.review.startsWith('/')) { window.location.href = json.review; return; }
+      }
       toastError(json.error || t('trialPaywallGate.couldNotStartCheckoutPlease'));
     } catch {
       toastError(t('trialPaywallGate.couldNotStartCheckoutPlease'));

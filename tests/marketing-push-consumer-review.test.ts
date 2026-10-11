@@ -26,7 +26,9 @@ function fixture() {
       recipients: 0, sent: 0, failed: 0, skipped: 0, metadata: {}, updated_at: '2026-09-12T12:00:00Z' }],
     push_devices: [{ id: 'device-a', user_id: 'user-a', enabled: true, provider: 'fcm', token: 'fixture-token-a' }],
     profiles: [{ id: 'user-a', email: 'user@example.test' }],
-    marketing_suppressions: [], family_members: [], family_ai_settings: [], user_preferences: [], notifications: [],
+    marketing_suppressions: [], family_members: [], family_ai_settings: [], notifications: [],
+    // Marketing push is opt-in: the fixture's one account has said yes.
+    user_preferences: [{ user_id: 'user-a', push_enabled: true, notification_prefs: { marketingPush: true } }],
   });
   state.db = f.db;
   return f;
@@ -40,7 +42,7 @@ afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe('marketing push consumer classification and interpolated units', () => {
   it('does not classify an intentionally withheld audience as a delivery problem', async () => {
-    const f = fixture(); f.tables.user_preferences.push({ user_id: 'user-a', push_enabled: false });
+    const f = fixture(); f.tables.user_preferences[0].push_enabled = false;
     await sendPushCampaignAction('campaign');
     expect(state.send).not.toHaveBeenCalled();
     const row = f.tables.marketing_push_campaigns[0];
@@ -57,7 +59,7 @@ describe('marketing push consumer classification and interpolated units', () => 
     const f = fixture(); state.locale = 'fr-FR';
     f.tables.push_devices.push({ ...f.tables.push_devices[0], id: 'device-b', user_id: 'user-b' });
     f.tables.profiles.push({ id: 'user-b', email: 'second@example.test' });
-    f.tables.user_preferences.push({ user_id: 'user-b', push_enabled: false });
+    f.tables.user_preferences.push({ user_id: 'user-b', push_enabled: false, notification_prefs: { marketingPush: true } });
     await sendPushCampaignAction('campaign');
     expect(state.send).toHaveBeenCalledTimes(1);
     const html = renderToStaticMarkup(await PushPage());
@@ -105,6 +107,7 @@ describe('marketing push outcome retention through the actual action and page', 
     const f = fixture();
     f.tables.profiles.push({ id: 'user-b', email: 'second@example.test' });
     f.tables.push_devices.push({ ...f.tables.push_devices[0], id: 'device-b', user_id: 'user-b' });
+    f.tables.user_preferences.push({ user_id: 'user-b', push_enabled: true, notification_prefs: { marketingPush: true } });
     state.send.mockImplementation(async () => {
       f.thrownFaults.add('push_devices:select');
       return 'sent';

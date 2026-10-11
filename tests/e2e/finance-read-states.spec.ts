@@ -31,6 +31,9 @@ const sources = Object.fromEntries([
   // The family clock (TIME-003): the shared formatter and the zone helpers it reads.
   'components/i18n/use-format.ts', 'lib/time/zoned.ts', 'lib/utils/format.ts',
   'lib/supabase/errors.ts', 'lib/schedule/zoned.ts',
+  // budgets-view and savings-view settle their deletes through settleAction,
+  // so a rejected server-action call is reported and the list re-read.
+  'lib/ui/settle-action.ts',
   // budgets-view and savings-view route a refused money write through
   // reportRefusal, which sends an aal1 session to the step-up page (0382's
   // application half); it reads its path from lib/auth/mfa.

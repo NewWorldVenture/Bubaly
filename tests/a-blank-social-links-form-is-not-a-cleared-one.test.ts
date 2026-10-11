@@ -126,6 +126,13 @@ function from(table: string) {
   return query;
 }
 
+// The admin gates also ask lib/auth/super-admin-assurance whether the session
+// proved its authenticator; this file is not about step-up, so it says yes.
+vi.mock('@/lib/auth/super-admin-assurance', () => ({
+  superAdminAssurance: async () => ({ ok: true }),
+  decideSuperAdminAssurance: () => ({ ok: true }),
+  SUPER_ADMIN_STEP_UP_PATH: '/auth/step-up?next=%2Fadmin',
+}));
 vi.mock('next/cache', () => ({
   unstable_cache: (fn: unknown) => fn,
   revalidateTag: () => {},

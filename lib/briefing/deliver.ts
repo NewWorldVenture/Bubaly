@@ -258,7 +258,8 @@ export async function deliverMorningBriefs(db: DB, now: Date = new Date()): Prom
   // would silently never get a brief while `result.families` reported the job
   // complete. The sibling notification crons page for exactly this reason.
   const { rows: families, error } = await readAll<{ id: string; timezone: string | null }>((from, to) =>
-    db.from('families').select('id, timezone').order('id').range(from, to));
+    // OPEN families only: a closed account (families.closed_at) gets no brief.
+    db.from('families').select('id, timezone').is('closed_at', null).order('id').range(from, to));
   if (error) {
     console.error('[briefing] morning brief families read failed', error);
     result.failed += 1;
