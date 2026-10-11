@@ -93,7 +93,7 @@ export function CheckInView() {
             const meta = CHECK_IN_STATUS[s];
             return (
               <button key={s} onClick={() => checkIn(s)} disabled={busy !== null}
-                className={cn('flex flex-col items-center gap-1 rounded-xl border border-border p-3 text-sm font-semibold transition hover:border-brand/40 hover:bg-elevated disabled:opacity-50', busy === s && 'opacity-60')}>
+                className={cn('flex flex-col items-center gap-1 rounded-xl border border-border p-3 text-sm font-semibold transition hover:border-brand/40 hover:bg-elevated disabled:opacity-50')}>
                 <span className="text-xl">{meta.emoji}</span>
                 {meta.label}
               </button>

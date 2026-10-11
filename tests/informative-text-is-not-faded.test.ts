@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+import { carriesText, contrast, fadedText, GROUNDS, over, scanFiles, scanSource, THEMES, tokensOf } from './helpers/faded-text';
 import { sourceFiles } from './helpers/hover-reveals';
 
 // A11Y-001: text was faded with an `opacity-*` utility to look secondary, done,
@@ -18,82 +19,8 @@ import { sourceFiles } from './helpers/hover-reveals';
 // of faded and unclickable only by mouse: Enter still pressed it, and on
 // "Added to grocery" it would add the items again (addToGrocery has no
 // guard for an item already added).
-
-/** `line`: the source line the element opens on, then its whole opening tag. */
-type Fade = { at: string; file: string; line: string; tag: string; fade: string };
-
-/** Every element with a bare `opacity-N` (0 < N < 100) whose subtree carries text. */
-function fadedText(files: string[]): Fade[] {
-  const found: Fade[] = [];
-  for (const file of files) {
-    const src = readFileSync(file, 'utf8');
-    if (!/opacity-[1-9]/.test(src)) continue;
-    const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-    const lines = src.split('\n');
-    const visit = (node: ts.Node) => {
-      if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
-        const open = ts.isJsxElement(node) ? node.openingElement : node;
-        const attrs = open.attributes.properties.filter(ts.isJsxAttribute);
-        const attr = (name: string) => attrs.find((a) => a.name.getText(sf) === name);
-        const className = attr('className');
-        if (className?.initializer) {
-          const parts: string[] = [];
-          const collect = (x: ts.Node) => {
-            if (ts.isStringLiteral(x) || ts.isNoSubstitutionTemplateLiteral(x)) parts.push(x.text);
-            else if (ts.isTemplateExpression(x)) parts.push(x.head.text, ...x.templateSpans.map((s) => s.literal.text));
-            ts.forEachChild(x, collect);
-          };
-          collect(className.initializer);
-          const classes = parts.join(' ').split(/\s+/);
-          // A bare fade: no variant (hover:, disabled:, sm:, group-hover: … are states or reveals).
-          const fade = classes.find((c) => /^opacity-([1-9]\d?)$/.test(c));
-          const disabled = attr('disabled');
-          const exempt = attr('aria-hidden') || (disabled && disabled.initializer?.getText(sf) !== '{false}') || classes.includes('cursor-not-allowed');
-          if (fade && !exempt && carriesText(node)) {
-            const { line } = sf.getLineAndCharacterOfPosition(open.getStart(sf));
-            found.push({ at: `${file}:${line + 1}`, file, line: `${lines[line]} ${open.getText(sf)}`.replace(/\s+/g, ' ').trim(), tag: open.tagName.getText(sf), fade });
-          }
-        }
-      }
-      ts.forEachChild(node, visit);
-    };
-    visit(sf);
-  }
-  return found;
-}
-
-/** Whether an element renders words or numbers: JSX text, or an expression that is not markup. */
-function carriesText(node: ts.JsxElement | ts.JsxSelfClosingElement): boolean {
-  if (ts.isJsxSelfClosingElement(node)) return false;
-  const content = (x: ts.Expression | undefined): boolean => {
-    if (!x) return false;
-    if (ts.isParenthesizedExpression(x)) return content(x.expression);
-    if (ts.isJsxElement(x) || ts.isJsxFragment(x)) return x.children.some(child);
-    if (ts.isJsxSelfClosingElement(x)) return false;
-    if (ts.isBinaryExpression(x) && x.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) return content(x.right);
-    if (ts.isBinaryExpression(x) && (x.operatorToken.kind === ts.SyntaxKind.BarBarToken || x.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken)) return content(x.left) || content(x.right);
-    if (ts.isConditionalExpression(x)) return content(x.whenTrue) || content(x.whenFalse);
-    if (ts.isCallExpression(x) && ts.isPropertyAccessExpression(x.expression) && x.expression.name.text === 'map') {
-      const fn = x.arguments[0];
-      if (fn && (ts.isArrowFunction(fn) || ts.isFunctionExpression(fn))) {
-        if (!ts.isBlock(fn.body)) return content(fn.body);
-        let any = false;
-        const ret = (n: ts.Node) => { if (ts.isReturnStatement(n)) any ||= content(n.expression); else if (!ts.isFunctionLike(n)) ts.forEachChild(n, ret); };
-        ts.forEachChild(fn.body, ret);
-        return any;
-      }
-    }
-    if (x.kind === ts.SyntaxKind.NullKeyword || x.kind === ts.SyntaxKind.TrueKeyword || x.kind === ts.SyntaxKind.FalseKeyword) return false;
-    if (ts.isIdentifier(x) && x.text === 'undefined') return false;
-    return true; // a string, a name, a count, tr(…), fmtDate(…)
-  };
-  const child = (c: ts.JsxChild): boolean => {
-    if (ts.isJsxText(c)) return /[\p{L}\p{N}]/u.test(c.text);
-    if (ts.isJsxExpression(c)) return content(c.expression);
-    return content(c as ts.Expression);
-  };
-  return node.children.some(child);
-}
+//
+// The scanner, and what it does and does not read, is tests/helpers/faded-text.ts.
 
 // What is still faded on purpose, and why.
 const ALLOWED: { file: string; has: string; why: string }[] = [
@@ -104,8 +31,8 @@ const files = [...sourceFiles('components'), ...sourceFiles('app')];
 
 describe('informative text is not faded with opacity', () => {
   it('finds faded text in the source (non-vacuity), and only the allowed sites', () => {
-    const found = fadedText(files);
-    const allowed = (f: Fade) => ALLOWED.some((a) => f.file === a.file && f.line.includes(a.has));
+    const found = fadedText(scanFiles(files, /opacity-[1-9]/));
+    const allowed = (f: (typeof found)[number]) => ALLOWED.some((a) => f.file === a.file && f.line.includes(a.has));
     expect(found.filter((f) => !allowed(f)).map((f) => `${f.at} <${f.tag}> ${f.fade}: ${f.line}`)).toEqual([]);
     // Each allowance still names a real site.
     for (const a of ALLOWED) {
@@ -114,7 +41,7 @@ describe('informative text is not faded with opacity', () => {
     expect(found.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('the scanner sees through cn(), conditions, && and .map, and skips icons, aria-hidden and disabled', () => {
+  it('what counts as text: through cn(), conditions, && and .map; not an icon', () => {
     const probe = (jsx: string) => {
       const src = `export function P() { return (${jsx}); }`;
       const sf = ts.createSourceFile('p.tsx', src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -130,24 +57,44 @@ describe('informative text is not faded with opacity', () => {
     expect(probe(`<div className="opacity-60">{open && <Icon />}</div>`)).toBe(false);
     expect(probe(`<Icon className="opacity-60" />`)).toBe(false);
   });
+
+  // Through the real scanner: is this faded label found?
+  const flagged = (body: string, prelude = '') =>
+    fadedText(scanSource('fixture.tsx', `${prelude}\nexport function P({ pending, hidden, k }: any) { return (${body}); }`)).length === 1;
+
+  it('exempts only an element that is certainly inactive or hidden: disabled and aria-hidden written true', () => {
+    // Certainly inactive or hidden: not scanned.
+    expect(flagged(`<button disabled className="opacity-60">Save</button>`)).toBe(false);
+    expect(flagged(`<button disabled={true} className="opacity-60">Save</button>`)).toBe(false);
+    expect(flagged(`<span aria-hidden className="opacity-60">Save</span>`)).toBe(false);
+    expect(flagged(`<span aria-hidden="true" className="opacity-60">Save</span>`)).toBe(false);
+    expect(flagged(`<span aria-hidden={true} className="opacity-60">Save</span>`)).toBe(false);
+    // Can render enabled and visible: scanned.
+    expect(flagged(`<button disabled={false} className="opacity-60">Save</button>`)).toBe(true);
+    expect(flagged(`<button disabled={pending} className={cn(pending && 'opacity-60')}>Save</button>`)).toBe(true);
+    expect(flagged(`<span aria-hidden={false} className="opacity-60">Save</span>`)).toBe(true);
+    expect(flagged(`<span aria-hidden="false" className="opacity-60">Save</span>`)).toBe(true);
+    expect(flagged(`<span aria-hidden={hidden} className="opacity-60">Save</span>`)).toBe(true);
+    // A look is not a state.
+    expect(flagged(`<label className="cursor-not-allowed opacity-60">Upload</label>`)).toBe(true);
+    // Variants are states or reveals, not fades of the resting text.
+    expect(flagged(`<button className="disabled:opacity-50 hover:opacity-80">Save</button>`)).toBe(false);
+  });
+
+  it('follows a class held in a same-file const, or a const map of them; not an import or a function', () => {
+    expect(flagged(`<p className={DONE}>Milk</p>`, `const DONE = 'line-through opacity-50';`)).toBe(true);
+    expect(flagged(`<p className={cn('text-sm', TONE[k])}>Milk</p>`, `const TONE = { done: 'opacity-50', open: '' } as const;`)).toBe(true);
+    expect(flagged(`<p className={TONE.done}>Milk</p>`, `const TONE = { done: { row: 'opacity-50' } };`)).toBe(true);
+    // Outside the guard, and stated as such in the helper:
+    expect(flagged(`<p className={DONE}>Milk</p>`, `import { DONE } from './tones';`)).toBe(false);
+    expect(flagged(`<p className={tone(k)}>Milk</p>`, `const tone = (k: string) => (k === 'done' ? 'opacity-50' : '');`)).toBe(false);
+    let reassigned = 'opacity-50'; reassigned += '';
+    expect(flagged(`<p className={DONE}>Milk</p>`, `let DONE = '${reassigned}';`)).toBe(false);
+  });
 });
 
 // The arithmetic behind the fixes: WCAG contrast, tints composited in 8-bit
 // steps as the browser paints them, over the darkest and lightest grounds.
-const css = readFileSync('app/globals.css', 'utf8');
-function tokensOf(selector: string): Record<string, number[]> {
-  const block = css.slice(css.indexOf(selector));
-  const body = block.slice(0, block.indexOf('}'));
-  return Object.fromEntries([...body.matchAll(/--([\w-]+):\s*(\d+) (\d+) (\d+);/g)].map((m) => [m[1], [Number(m[2]), Number(m[3]), Number(m[4])]]));
-}
-const lum = (c: number[]) => {
-  const f = (v: number) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };
-  return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
-};
-const contrast = (a: number[], b: number[]) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
-const over = (top: number[], alpha: number, under: number[]) => top.map((v, i) => Math.round(v * alpha + under[i] * (1 - alpha)));
-const THEMES = [['light', '.light {'], ['dark', '.dark {']] as const;
-const GROUNDS = ['bg', 'surface', 'elevated'] as const;
 const worst = (f: (ground: number[]) => number, t: Record<string, number[]>) => Math.min(...GROUNDS.map((g) => f(t[g])));
 
 describe('the faded text failed, and its full-strength replacement passes', () => {
@@ -200,5 +147,66 @@ describe('a done or selected control says so', () => {
   it('a scanned event says whether it is selected', () => {
     const scan = readFileSync('components/modules/scan-module.tsx', 'utf8');
     expect(scan).toMatch(/onClick=\{\(\) => toggle\(i\)\}\s+aria-pressed=\{selected\.has\(i\)\}/);
+  });
+});
+
+// The calendar chips' who-and-where now inherit the chip's own colour, so the
+// chip's hover is theirs too. It was hover:brightness-110. A filter brightens
+// the element's own layer (its ink, and its 20% tint) but not the page behind
+// the tint, so in the light theme the ink lifts toward the background: rendered
+// in Chromium, medication went from 4.75 to 4.14, general 4.95 to 4.38, school
+// 5.08 to 4.49. The hover is a shadow now, which leaves both colours alone.
+describe('a calendar chip keeps its contrast when hovered', () => {
+  const cal = readFileSync('components/modules/calendar-module.tsx', 'utf8');
+  const css = readFileSync('app/globals.css', 'utf8');
+  const hex = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  /** The light theme's replacement for a raw palette text colour (A11Y-001, #991). */
+  const lightText = (fam: string, shade: string) => {
+    for (const [, sel, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      if (sel.includes(`.text-${fam}-${shade}:`) && sel.includes(':where(.light)') && !/hover|group/.test(sel)) {
+        const m = /rgb\((\d+) (\d+) (\d+)/.exec(body)!;
+        return [Number(m[1]), Number(m[2]), Number(m[3])];
+      }
+    }
+    throw new Error(`no light colour for text-${fam}-${shade}`);
+  };
+  const block = cal.slice(cal.indexOf('const CATEGORY_COLORS'), cal.indexOf('};', cal.indexOf('const CATEGORY_COLORS')));
+  const categories = [...block.matchAll(/(\w+): '([^']+)'/g)].map((m) => [m[1], m[2]] as const);
+  const bright = (c: number[], k: number) => c.map((v) => Math.min(255, Math.round(v * k)));
+
+  /** The chip's ink, and its tint (colour and alpha), in a theme. */
+  async function paint(classes: string, theme: 'light' | 'dark', t: Record<string, number[]>) {
+    const colors = (await import('tailwindcss/colors')).default as unknown as Record<string, Record<string, string>>;
+    const bg = /(?:^| )bg-([a-z]+)(?:-(\d+))?(?:\/(\d+))?(?= |$)/.exec(classes)!;
+    const fg = /(?:^| )text-([a-z-]+?)(?:-(\d+))?(?= |$)/.exec(classes)!;
+    const tint = bg[2] ? hex(colors[bg[1]][bg[2]]) : t[bg[1]];
+    const ink = fg[2] ? (theme === 'light' ? lightText(fg[1], fg[2]) : hex(colors[fg[1]][fg[2]])) : t[fg[1]];
+    return { ink, tint, alpha: bg[3] ? Number(bg[3]) / 100 : 1 };
+  }
+
+  it('no chip brightens on hover; the three chips lift with a shadow', () => {
+    expect(categories).toHaveLength(9); // non-vacuity: every category, "other" included
+    expect(cal).not.toMatch(/hover:brightness-/);
+    expect(cal.match(/cursor-pointer[^']*hover:shadow-md/g)).toHaveLength(3);
+  });
+
+  for (const [theme, selector] of THEMES) {
+    it(`${theme}: every category clears 4.5:1 idle (and so hovered), over every ground`, async () => {
+      const t = tokensOf(selector);
+      for (const [name, classes] of categories) {
+        const { ink, tint, alpha } = await paint(classes, theme, t);
+        for (const g of GROUNDS) expect(contrast(ink, over(tint, alpha, t[g])), `${name} over --${g}`).toBeGreaterThanOrEqual(4.5);
+      }
+    });
+  }
+
+  it('control: the old brightness(1.1), applied to the chip’s own layer, takes three light categories under 4.5 on the page', async () => {
+    const t = tokensOf('.light {');
+    const under: string[] = [];
+    for (const [name, classes] of categories) {
+      const { ink, tint, alpha } = await paint(classes, 'light', t);
+      if (contrast(bright(ink, 1.1), over(bright(tint, 1.1), alpha, t.bg)) < 4.5) under.push(name);
+    }
+    expect(under.sort()).toEqual(['general', 'medication', 'school']);
   });
 });
