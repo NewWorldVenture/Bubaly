@@ -68,7 +68,7 @@ vi.mock('@/lib/supabase/server', () => ({
         return source.filter((r) => Object.entries(filters).every(([c, v]) => {
           if (c === 'range') return true;
           if (c === 'roles') return (v as string[]).includes(String(r.role));
-          return r[c] === v;
+          return (r[c] ?? null) === v;
         }));
       };
       const settle = () => {
@@ -92,6 +92,7 @@ vi.mock('@/lib/supabase/server', () => ({
         // the filters only need to chain.
         neq: () => b, or: () => b,
         eq: (c: string, v: unknown) => { filters[c] = v; return b; },
+        is: (c: string, v: unknown) => { filters[c] = v; return b; },
         in: (c: string, v: unknown[]) => { filters[c === 'role' ? 'roles' : c] = v; return b; },
         range: (from: number, to: number) => { filters.range = [from, to]; return b; },
         maybeSingle: async () => {
@@ -190,6 +191,15 @@ describe('the weekly digest reaches every family', () => {
     const res = await GET(request());
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ sent: 0, failed: 0, skipped: 2 });
+  });
+
+  it('does not email a family that closed its account', async () => {
+    seed(3);
+    state.families[1].closed_at = '2026-10-01T00:00:00.000Z';
+    const res = await GET(request());
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ sent: 2, failed: 0, skipped: 0 });
+    expect(state.sends).not.toContain('parent1@example.test');
   });
 
   it('still answers 200 with nothing to do', async () => {

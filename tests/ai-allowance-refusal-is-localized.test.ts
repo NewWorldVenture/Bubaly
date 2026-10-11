@@ -66,6 +66,9 @@ vi.mock('@/lib/server/feature-tiers', () => ({
 vi.mock('@/lib/server/plan', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/plan')>()),
   resolveFamilyPlanLevel: async () => 0,
+  // Main's assertAIAccess reads the whole entitlement (level and lock); the
+  // same Free, unlocked family as the level above.
+  resolveFamilyEntitlement: async () => ({ effectiveLevel: 0, locked: false, closed: false, inTrial: false, trialEndsAt: null }),
 }));
 vi.mock('@/lib/ai/provider', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/ai/provider')>()),

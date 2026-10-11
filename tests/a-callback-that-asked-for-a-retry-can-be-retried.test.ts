@@ -224,6 +224,9 @@ describe.each(ROUTES)('the Guardian $name callback', (route) => {
 
   it('gives the claim back when the decision pipeline fails, before anything was written', async () => {
     db.seed('guardian_member_profiles', [PROFILE]);
+    // The profile's member, in the profile's family: the voice route now checks
+    // that before it routes (a profile naming another family's member is refused).
+    db.seed('family_members', [{ id: MEMBER, family_id: FAMILY, display_name: 'Synthetic member', is_active: true }]);
     seam.pipeline.mockRejectedValue(new Error('policy read failed'));
     const [res, body] = await deliver(route);
     expect(res.status).toBe(503);

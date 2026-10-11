@@ -11,6 +11,7 @@ import type { AIProvider } from '@/lib/ai/provider';
 import { POST } from '@/app/api/contact-center/email/route';
 import { emailAttachmentId, fileEmailAttachments, MAX_MULTIPART_EMAIL_BYTES } from '@/lib/services/paperwork/email-attachments';
 import { MAX_DOCUMENT_BYTES } from '@/lib/ai/document-text';
+import { familyScopedEmailRef } from '@/lib/contact-center/server';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 
 const state = vi.hoisted(() => ({ db: null as unknown, provider: null as unknown }));
@@ -135,7 +136,7 @@ describe('inbound multipart attachment capture', () => {
     const rows = db.table('paperwork_items');
     expect(rows).toHaveLength(2);
     expect(rows[0]).toMatchObject({ family_id: FAMILY, kind: 'bill_or_payment', raw_text: RECEIPT, sender: 'office@example.com', status: 'needs_action', meta: {
-      source: 'inbound_email_attachment', triage_kind: 'receipt', filename: 'receipt.pdf', provider_ref: 'email-1', subject: 'Documents enclosed', media_type: 'application/pdf', extraction: { method: 'multimodal', truncated: false },
+      source: 'inbound_email_attachment', triage_kind: 'receipt', filename: 'receipt.pdf', provider_ref: familyScopedEmailRef(FAMILY, 'email-1'), subject: 'Documents enclosed', media_type: 'application/pdf', extraction: { method: 'multimodal', truncated: false },
     } });
     expect((rows[0].meta as Record<string, unknown>).inbox_message_id).toBe(db.table('family_inbox_messages')[0].id);
     expect((rows[0].meta as Record<string, unknown>).attachment_sha256).toMatch(/^[a-f0-9]{64}$/);
@@ -168,6 +169,35 @@ describe('inbound multipart attachment capture', () => {
     expect(await second.json()).toMatchObject({ attachments: [{ status: 'filed' }, { status: 'existing' }] });
     expect(db.table('paperwork_items')).toHaveLength(2);
     expect(transcribe).toHaveBeenCalledTimes(3);
+  });
+
+  it.each(['refusal', 'malformed', 'bad_request'] as const)('acknowledges a permanent %s extraction failure instead of 503-looping the webhook', async (kind) => {
+    // Each of these fails the same way on every redelivery. Returning 503 made
+    // the provider redeliver until it gave up, re-billing OCR every time and
+    // never reaching the auto-reply.
+    if (kind === 'refusal') transcribe.mockResolvedValueOnce({ text: '', refusal: 'I cannot help with that' } as never);
+    else if (kind === 'malformed') transcribe.mockResolvedValueOnce({ text: '{"text":null}' });
+    else transcribe.mockRejectedValueOnce(Object.assign(new Error('OpenAI error 400: Invalid file'), { status: 400 }));
+    const first = await deliver([pdf(), png()]);
+    expect(first.status).toBe(200);
+    expect(await first.json()).toMatchObject({ attachments: [{ status: 'skipped', reason: 'provider_unavailable' }, { status: 'filed' }] });
+    expect(db.table('paperwork_items')).toHaveLength(1);
+    expect(transcribe).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['unconfigured', new Error('OpenAI API key is not configured')],
+    ['auth', Object.assign(new Error('OpenAI error 401: Incorrect API key provided'), { status: 401 })],
+    ['model', Object.assign(new Error('OpenAI error 404: The model does not exist'), { status: 404 })],
+  ] as const)('returns 503 for a %s provider failure so the attachment is redelivered, not silently skipped', async (_kind, error) => {
+    transcribe.mockRejectedValueOnce(error);
+    const first = await deliver([pdf(), png()]);
+    expect(first.status).toBe(503);
+    expect(await first.json()).toMatchObject({ ok: false, retryable: true, attachments: [{ status: 'retry', reason: 'provider_unavailable' }, { status: 'filed' }] });
+    expect(db.table('paperwork_items')).toHaveLength(1);
+    const second = await deliver([pdf(), png()]);
+    expect(second.status).toBe(200);
+    expect(db.table('paperwork_items')).toHaveLength(2);
   });
 
   it('fails closed on attachment dedupe read errors before extraction and succeeds on retry', async () => {
@@ -284,7 +314,12 @@ describe('inbound multipart attachment capture', () => {
 
   it('requires an actual blank transcription before treating a document as empty', async () => {
     transcribe.mockResolvedValueOnce({ text: 'null' });
-    expect((await deliver([pdf()])).status).toBe(503);
+    // A null transcription is not a blank document, and it is not saved; it is
+    // also not something a redelivery of the same bytes would fix.
+    const first = await deliver([pdf()]);
+    expect(first.status).toBe(200);
+    expect(await first.json()).toMatchObject({ attachments: [{ status: 'skipped', reason: 'provider_unavailable' }] });
+    expect(db.table('paperwork_items')).toHaveLength(0);
     transcribe.mockResolvedValueOnce({ text: '{"text":"","truncated":false}' });
     const retry = await deliver([pdf()]);
     expect(retry.status).toBe(200);

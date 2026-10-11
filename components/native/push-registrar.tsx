@@ -3,14 +3,17 @@
 import { useEffect } from 'react';
 import { isNative, getPlatform } from '@/lib/native/capacitor';
 import { subscribeWebPush, webPushSupported, VAPID_PUBLIC_KEY } from '@/lib/push/web-client';
+import { rememberPushDevice } from '@/lib/push/device-registration';
 
 async function persist(payload: Record<string, unknown>) {
   try {
-    await fetch('/api/push/subscribe', {
+    const res = await fetch('/api/push/subscribe', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload),
     });
+    // Remembered so sign-out can take this device off the leaving account.
+    if (res.ok) rememberPushDevice(payload as { endpoint?: string; token?: string });
   } catch {
     /* offline / transient — the registrar re-runs on next mount */
   }

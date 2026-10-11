@@ -200,6 +200,13 @@ describe('once the code is entered', () => {
     expect(db.table('paperwork_items').find((r) => r.id === 'paper-1')?.status).toBe('archived');
   });
 
+  it('a guest is refused filing paperwork, in words, and nothing is written', async () => {
+    h.role = 'guest';
+    expect(await actions.addPaperworkAction(fd({ text: 'Permission slip: sign and return by Friday.', sender: 'School' })))
+      .toEqual({ ok: false, error: 'Your account can’t make that change.' });
+    expect(db.table('paperwork_items')).toEqual([SLIP]);
+  });
+
   it('and "Add to calendar" puts the trip on the calendar and stamps the slip', async () => {
     expect(await actions.materializePaperworkActionAction({ itemId: 'paper-1', actionIndex: 0 })).toEqual({ ok: true });
     expect(db.table('calendar_events')).toHaveLength(1);

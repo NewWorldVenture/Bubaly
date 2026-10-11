@@ -11,6 +11,8 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { generateHandoffCode, type LocationKind } from '@/lib/marketplace/handoff';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
+import { isManager } from '@/lib/constants/roles';
+import { readFamilyOrders } from '@/lib/marketplace/schema-compat';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -44,10 +46,14 @@ const COMPLETE_REASON: Record<string, string> = {
 async function loadOrderRole(orderId: string) {
   const ctx = await requireUserContext();
   const sb = await createServer();
-  const { data: order, error: orderError } = await sb
+  // Either side's family: an order from an auction, Buy-It-Now or an accepted
+  // negotiation carries the SELLER's family_id, and the winner's household is
+  // buyer_family_id (proposed economy SQL, section 2). Without that column the
+  // read is the seller-family read it always was (readFamilyOrders).
+  const { data: order, error: orderError } = await readFamilyOrders(ctx.active.familyId, (scope) => scope(sb
     .from('marketplace_orders')
     .select('id, family_id, listing_id, buyer_member, seller_member, status')
-    .eq('id', orderId).eq('family_id', ctx.active.familyId).maybeSingle();
+    .eq('id', orderId)).maybeSingle());
   // Only the two people in the exchange arrange its pickup. Anyone else in the
   // family used to be treated as the buyer here (`seller ? 'seller' : 'buyer'`),
   // so a sibling could propose, confirm - minting the hand-off code - or cancel
@@ -61,15 +67,36 @@ async function loadOrderRole(orderId: string) {
   return { ctx, sb, order, orderError, role };
 }
 
+/**
+ * A child or teen does not arrange to meet another household's adult. Within
+ * the family the two parties are siblings and parents, and nothing changes;
+ * across families (an item won at auction or bought from a circle) only a
+ * parent or adult proposes or confirms the meeting. The counterpart is
+ * outside the family when no active member of the caller's family carries
+ * that id. A failed read refuses rather than guessing "same family".
+ */
+async function minorMeetingOutsider(
+  { ctx, sb, order, role }: Awaited<ReturnType<typeof loadOrderRole>>,
+): Promise<boolean> {
+  if (isManager(ctx.active.role) || !order || !role) return false;
+  const other = role === 'seller' ? order.buyer_member : order.seller_member;
+  if (!other) return true;
+  const { data, error } = await sb.from('family_members').select('id')
+    .eq('id', other).eq('family_id', ctx.active.familyId).maybeSingle();
+  return Boolean(error) || !data;
+}
+
 /** Propose (or re-propose) a pickup. Upserts the single handoff for the order. */
 export async function proposeHandoffAction(input: {
   orderId: string; meetAtIso?: string | null; locationLabel: string; locationKind?: LocationKind; notes?: string;
 }): Promise<Result> {
   const t = await getTranslations();
-  const { ctx, sb, order, orderError, role } = await loadOrderRole(input.orderId);
+  const loaded = await loadOrderRole(input.orderId);
+  const { ctx, sb, order, orderError, role } = loaded;
   if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
   if (!order) return { ok: false, error: t('actions.orderNotFound') };
   if (!role) return { ok: false, error: t(COMPLETE_REASON.forbidden) };
+  if (await minorMeetingOutsider(loaded)) return { ok: false, error: t('actions.onlyAParentGuardianCan16') };
   if (['completed', 'cancelled'].includes(order.status)) return { ok: false, error: t('actions.thisOrderIsClosed') };
   if (!input.locationLabel?.trim()) return { ok: false, error: t('actions.pickOrTypeAMeetup') };
 
@@ -90,12 +117,14 @@ export async function proposeHandoffAction(input: {
 /** The other party confirms the proposal → calendar event + hand-off code. */
 export async function confirmHandoffAction(orderId: string): Promise<Result<{ code: string }>> {
   const t = await getTranslations();
-  const { ctx, sb, order, orderError, role } = await loadOrderRole(orderId);
+  const loaded = await loadOrderRole(orderId);
+  const { ctx, sb, order, orderError, role } = loaded;
   if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
   if (!order) return { ok: false, error: t('actions.orderNotFound') };
   // This action MINTS AND RETURNS the hand-off code, so it is the one a
   // non-party most wanted to reach.
   if (!role) return { ok: false, error: t(COMPLETE_REASON.forbidden) };
+  if (await minorMeetingOutsider(loaded)) return { ok: false, error: t('actions.onlyAParentGuardianCan16') };
 
   const { data: handoff, error: handoffError } = await sb.from('marketplace_handoffs')
     .select('id, proposer_role, status, meet_at, location_label').eq('order_id', orderId).maybeSingle();
@@ -110,8 +139,11 @@ export async function confirmHandoffAction(orderId: string): Promise<Result<{ co
   let calendarEventId: string | null = null;
   if (handoff.meet_at) {
     try {
+      // The confirming party's own calendar: on an order between two
+      // households, order.family_id is the seller's, which the buyer's
+      // family cannot write to.
       const { data: ev } = await sb.from('calendar_events').insert({
-        family_id: order.family_id,
+        family_id: ctx.active.familyId,
         title: `Marketplace pickup${handoff.location_label ? ` · ${handoff.location_label}` : ''}`,
         description: 'Bubaly marketplace hand-off. Bring the item + the hand-off code.',
         location: handoff.location_label, category: 'general',
@@ -163,8 +195,14 @@ export async function cancelHandoffAction(orderId: string): Promise<Result> {
 /** Complete the hand-off in person by entering the code → order completed. */
 export async function completeHandoffAction(input: { orderId: string; code: string }): Promise<Result> {
   const t = await getTranslations();
-  await requireUserContext();
-  const sb = await createServer();
+  // The RPC checks only that the caller is in the order's family, and the
+  // hand-off code is readable family-wide, so a sibling who is neither party
+  // could close someone else's pickup (and end a loan nobody exchanged). The
+  // party check the other three actions make is made here too.
+  const { sb, order, orderError, role } = await loadOrderRole(input.orderId);
+  if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
+  if (!order) return { ok: false, error: t('actions.orderNotFound') };
+  if (!role) return { ok: false, error: t(COMPLETE_REASON.forbidden) };
   const { data, error } = await sb.rpc('marketplace_complete_handoff', {
     p_order_id: input.orderId,
     p_code: input.code,

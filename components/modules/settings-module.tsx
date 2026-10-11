@@ -28,6 +28,7 @@ import {
   DASHBOARD_VIEWS, dashboardLabel, dashboardIcon, DASHBOARD_DESCRIPTION_KEYS, type DashboardView,
 } from '@/lib/constants/dashboards';
 import { setDefaultDashboardAction, updateMyProfileAction } from '@/app/(app)/actions';
+import { removeFamilyMemberAction } from '@/app/(app)/family/member-actions';
 import { splitFullName } from '@/lib/onboarding/profile';
 import { cn } from '@/lib/utils/cn';
 import { CalendarSyncPanel } from '@/components/dashboard/calendar-sync-panel';
@@ -183,15 +184,18 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
 
   async function removeMember(memberId: string) {
     if (!confirm(t('settingsModule.removeThisMemberFromThe'))) return;
-    const supabase = createClient();
     // See family-module: manager-gated, and RLS filters the UPDATE rather than
     // refusing it, so a removal a non-manager attempted was reported as done.
     // The `window.location.reload()` below made that especially convincing — the
-    // member came back, with no message saying why.
-    const { data: updated, error } = await supabase.from('family_members')
-      .update({ is_active: false }).eq('id', memberId).eq('family_id', family.id).select('id');
-    if (error) return toastError(describeDbError(error));
-    if (wroteNoRows(updated)) return toastError(t('errors.thatChangeWasNotSaved'));
+    // member came back, with no message saying why. The server action also
+    // switches off a removed child's PIN login and forgets their location
+    // (their last position and location history leave with them).
+    const res = await removeFamilyMemberAction({ memberId }).catch(() => null);
+    if (!res) return toastError(t('errors.thatChangeWasNotSaved'));
+    if (!res.ok) return toastError(res.error);
+    // Said before the reload, and as an error: the member is gone from the
+    // list, but their login is still live and someone has to know.
+    if (res.loginRevocation === 'failed') { toastError(t('familyModule.removedButLoginStillActive')); return; }
     success(t('settingsModule.memberRemoved'));
     window.location.reload();
   }
@@ -275,7 +279,7 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
               )}
             </Field>
             <Field label={t('settings.email')} hint={t('settingsModule.managedByYourSignIn')}>
-              {(id) => <Input id={id} value={userEmail ?? ''} readOnly className="opacity-60" />}
+              {(id) => <Input id={id} value={userEmail ?? ''} readOnly className="text-muted" />}
             </Field>
           </div>
           <div className="flex justify-end">

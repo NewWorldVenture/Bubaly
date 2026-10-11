@@ -21,6 +21,9 @@ import { NextRequest } from 'next/server';
 
 const state = vi.hoisted(() => ({ stripeBuilt: 0 }));
 
+// The billing routes now ask for the AAL2 step-up (/dashboard/billing's own
+// guard); these cases are about what they do once the session has it.
+vi.mock('@/lib/auth/require-aal2', () => ({ aal2Verdict: async () => ({ action: 'allow' }) }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('@/lib/supabase/auth', () => ({
   getUserContext: async () => null,

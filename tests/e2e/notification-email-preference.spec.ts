@@ -84,6 +84,8 @@ async function fixture(page: Page) {
       '@/lib/utils/phone':{guessDialCodeFromPhone:()=>'+1',extractLocalNumber:value=>value,COUNTRY_DIAL_CODES:[{dialCode:'+1',code:'US'}]},
       '@/lib/notifications/actions':{notificationAction:()=>({href:'#',isFallback:true})},
       '@/app/(app)/actions':{setDefaultDashboardAction:noop,updateMyProfileAction:noop},
+      // The Family tab's removal button; nothing here reaches it, so it refuses.
+      '@/app/(app)/family/member-actions':{removeFamilyMemberAction:async()=>{throw Error('Unexpected member removal')}},
       '@/app/(app)/dashboard/approvals-actions':{decideApproval:noop},
       '@/app/(app)/dashboard/chores/actions':{setChoreStatusAction:noop},
       '@/app/(app)/settings/notification-actions':{

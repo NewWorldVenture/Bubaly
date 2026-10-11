@@ -167,6 +167,23 @@ describe('addFundsAction (ACTION-148C47BB8A22)', () => {
     expect(credits()).toHaveLength(0);
   });
 
+  // Activation writes the wallet and its buckets in separate statements, so a
+  // wallet can exist with no buckets. A top-up used to write its credits with
+  // bucket_id NULL and answer ok: money in the ledger and in no balance.
+  it('refuses a wallet whose buckets were never provisioned, and writes no bucketless credit', async () => {
+    expect(await addFundsAction({ childWalletId: 'wallet-b', amountCents: 1_000 })).toEqual({ ok: false, error: t('actions.couldNotProvisionWalletBuckets') });
+    expect(credits()).toHaveLength(0);
+    expect(audit()).toHaveLength(0);
+    expect(harness.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it('refuses a wallet missing only one bucket the split would credit', async () => {
+    db.seed('wallet_buckets', BUCKETS.filter((k) => k !== 'give').map((kind) => ({ id: `b-${kind}`, family_id: FAMILY, child_wallet_id: 'wallet-b', kind })));
+    expect(await addFundsAction({ childWalletId: 'wallet-b', amountCents: 1_000 })).toEqual({ ok: false, error: t('actions.couldNotProvisionWalletBuckets') });
+    expect(credits().filter((r) => r.bucket_id == null)).toHaveLength(0);
+    expect(credits()).toHaveLength(0);
+  });
+
   it.each([
     ['child_wallets', 'maybeSingle', 'actions.couldNotLoadThatWallet'],
     ['wallet_rules', 'maybeSingle', 'actions.couldNotLoadTheWallet'],

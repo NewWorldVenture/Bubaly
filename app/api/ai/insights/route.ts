@@ -10,6 +10,8 @@ import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provi
 import { INSIGHTS, isInsightKind, MANAGER_ONLY_INSIGHTS, type InsightData, type InsightKind } from '@/lib/ai/insights';
 import { isManager } from '@/lib/constants/roles';
 import { isExpiredFact, isSensitiveMemory } from '@/lib/services/memory';
+import { loadAISettingsFor } from '@/lib/services/ai-settings';
+import type { ServiceScope } from '@/lib/services/types';
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -325,13 +327,21 @@ async function fetchRows(
     // model and echoed to the family. A throw here becomes the route's "could
     // not load data" 500, which is the truth.
     case 'purchase_advisor': {
+      // "Allow memory" off means remembered facts do not reach the model —
+      // the same switch the purchases service and the memory slice honour.
+      // Read strictly: a failed read must not be taken for memory ON.
+      const settings = await loadAISettingsFor(sb as ServiceScope['db'], familyId);
+      if (!settings.ok) throw new Error(`family_ai_settings read failed: ${settings.error}`);
+      const memoryEnabled = settings.data.memoryEnabled;
       const [inventory, locations, assets, wardrobe, wishes, facts] = await Promise.all([
         eq(sb, 'inventory_items', familyId).limit(200),
         eq(sb, 'home_locations', familyId).limit(120),
         eq(sb, 'home_assets', familyId).limit(80),
         eq(sb, 'wardrobe_items', familyId).limit(160),
         eq(sb, 'wishlist_items', familyId).limit(60),
-        eq(sb, 'family_facts', familyId).limit(120),
+        memoryEnabled
+          ? eq(sb, 'family_facts', familyId).limit(120)
+          : Promise.resolve({ data: [] as Record<string, unknown>[], error: null }),
       ]);
       required([
         ['inventory_items', inventory.error],

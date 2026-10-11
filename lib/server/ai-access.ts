@@ -23,7 +23,8 @@ import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { tierToLevel } from '@/lib/features/tiers';
 import { getResolvedFeatureTiers } from '@/lib/server/feature-tiers';
 import { ensureActiveFamily } from '@/lib/server/ensure-family';
-import { resolveFamilyPlanLevel } from '@/lib/server/plan';
+import { resolveFamilyEntitlement, resolveFamilyPlanLevel } from '@/lib/server/plan';
+import { lockedEntitlementCode } from '@/lib/server/entitlement';
 import { AI_MONTHLY_ALLOWANCE } from '@/lib/constants/ai-allowance';
 import { createServer } from '@/lib/supabase/server';
 import { getUserContext, type UserContext } from '@/lib/supabase/auth';
@@ -63,7 +64,7 @@ export type AIAccessDenial = {
   ok: false;
   /** HTTP status the caller should answer with: 404 when the feature is off (never confirm it exists), 403 for plan, 429 for allowance. */
   status: 403 | 404 | 429;
-  code: 'feature_off' | 'plan_required' | 'allowance_exceeded' | 'unavailable';
+  code: 'feature_off' | 'plan_required' | 'allowance_exceeded' | 'unavailable' | 'trial_expired' | 'account_closed';
   error: string;
   /** Plan level the feature needs, for the upgrade link. */
   needLevel?: number;
@@ -172,7 +173,23 @@ export async function assertAIAccess(
 
   let planLevel: number;
   try {
-    planLevel = superAdmin ? 2 : await resolveFamilyPlanLevel(opts.db, familyId);
+    if (superAdmin) planLevel = 2;
+    else {
+      const entitlement = await resolveFamilyEntitlement(opts.db, familyId);
+      // A trial that ended unpaid is level 0 like Free, but it is not Free: it
+      // gets no allowance at all. The (app) layout's paywall is not in front of
+      // this route, nor of the mobile app's bearer requests.
+      const locked = lockedEntitlementCode(entitlement);
+      if (locked) {
+        return {
+          ok: false, status: 403, code: locked, needLevel: 1,
+          error: locked === 'account_closed'
+            ? 'This Bubaly account is closed. Reopen it to continue.'
+            : 'Your free trial has ended. Choose Family Basic or Family+ to keep using Bubaly.',
+        };
+      }
+      planLevel = entitlement.effectiveLevel;
+    }
   } catch (error) {
     console.error('[ai-access] plan level read failed', error);
     return { ok: false, status: 403, code: 'unavailable', error: 'Bubaly could not confirm your plan right now. Try again in a moment.' };

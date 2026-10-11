@@ -6,12 +6,14 @@ import { stripeFromKey, STRIPE_PLANS } from '@/lib/stripe';
 import { canonicalStripePlan, isStripePlanKey, verifyStripePlanPrice } from '@/lib/billing/price-catalog';
 import { rememberStripeCustomer } from '@/lib/billing/customer-ref';
 import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
-import { serviceFeeAddInvoiceItems } from '@/lib/stripe/service-fee';
 import { isAdmin } from '@/lib/constants/roles';
 import { canChangeSubscriptionInPlace } from '@/lib/billing/plans';
 import { reviewBillingPath } from '@/lib/billing/review-selection';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
+import { refuseWithoutBillingStepUp } from '@/lib/billing/route-step-up';
+import { readFamilySubscription } from '@/lib/billing/subscription-row';
+import { createSubscriptionCheckout, stripeCustomerHasLiveSubscription } from '@/lib/billing/subscription-checkout';
 
 const MAX_BILLING_REQUEST_BYTES = 4_096;
 
@@ -24,6 +26,8 @@ export async function POST(req: NextRequest) {
     if (!isAdmin(ctx.active.role)) {
       return NextResponse.json({ error: t('checkout.onlyAParentCanStart') }, { status: 403 });
     }
+    const stepUp = await refuseWithoutBillingStepUp(ctx, t);
+    if (stepUp) return stepUp;
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
 
@@ -76,16 +80,15 @@ export async function POST(req: NextRequest) {
     // plan change belongs to change-plan, which updates the live subscription
     // in place after the billing review. The local row can trail the webhook
     // by seconds, so a known Stripe customer is also asked directly.
-    const { data: localSub, error: localSubError } = await supabase
-      .from('subscriptions').select('status, provider_ref').eq('family_id', familyId).maybeSingle();
+    const { data: localSub, error: localSubError } = await readFamilySubscription(() => supabase
+      .from('subscriptions').select('status, provider_ref').eq('family_id', familyId));
     if (localSubError) {
       console.error('[billing-checkout] Subscription read failed', localSubError);
       return NextResponse.json({ error: t('checkout.billingAccountStatusIsTemporarily') }, { status: 503 });
     }
     let live = canChangeSubscriptionInPlace(localSub);
     if (!live && existing?.customer_ref) {
-      const listed = await stripe.subscriptions.list({ customer: existing.customer_ref, status: 'all', limit: 20 });
-      live = listed.data.some((sub) => canChangeSubscriptionInPlace({ status: sub.status, provider_ref: sub.id }));
+      live = await stripeCustomerHasLiveSubscription(stripe, existing.customer_ref);
     }
     if (live) {
       return NextResponse.json(
@@ -122,38 +125,30 @@ export async function POST(req: NextRequest) {
     // caller-controlled Origin header (only fall back to it when unset in dev).
     const origin = process.env.NEXT_PUBLIC_APP_URL ?? req.headers.get('origin') ?? 'http://localhost:3000';
 
-    const session = await stripe.checkout.sessions.create({
-      customer: customerId,
-      mode: 'subscription',
-      payment_method_types: ['card'],
-      line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${origin}/dashboard/billing?success=1`,
-      cancel_url: `${origin}/dashboard/billing`,
-      metadata: { family_id: familyId, plan: plan ?? null },
-      subscription_data: {
-        metadata: { family_id: familyId },
-        // The Bubaly service fee, added as a one-time charge on the first
-        // invoice (configured in Super Admin → Stripe Setup). Doesn't touch the
-        // recurring plan item, so webhook plan-mapping stays correct.
-        ...(serviceFeeAddInvoiceItems(stripeSettings) ? { add_invoice_items: serviceFeeAddInvoiceItems(stripeSettings) } : {}),
-      },
-      allow_promotion_codes: true,
+    // Reuses the family's open session for this plan (or expires the others)
+    // and carries an idempotency key, so two tabs or a retry cannot leave two
+    // payable sessions that each complete into a billed subscription.
+    const session = await createSubscriptionCheckout(stripe, createServiceClient(), {
+      familyId, customerId, priceId, plan, origin, settings: stripeSettings,
     });
 
     // Record the open checkout so the abandoned-checkout cron can follow up if
     // it's never completed. Best-effort: never block returning the checkout URL.
-    try {
-      const { error: trackingError } = await createServiceClient().from('checkout_sessions').insert({
-        session_id: session.id,
-        family_id: familyId,
-        email: ctx.user.email ?? null,
-        name: ctx.active.family.name ?? null,
-        plan,
-        status: 'pending',
-      });
-      if (trackingError) console.error('[billing-checkout] Checkout tracking write failed', trackingError);
-    } catch (error) {
-      console.error('[billing-checkout] Checkout tracking write failed', error);
+    // A reused session already has its row.
+    if (!session.reused) {
+      try {
+        const { error: trackingError } = await createServiceClient().from('checkout_sessions').insert({
+          session_id: session.id,
+          family_id: familyId,
+          email: ctx.user.email ?? null,
+          name: ctx.active.family.name ?? null,
+          plan,
+          status: 'pending',
+        });
+        if (trackingError) console.error('[billing-checkout] Checkout tracking write failed', trackingError);
+      } catch (error) {
+        console.error('[billing-checkout] Checkout tracking write failed', error);
+      }
     }
 
     return NextResponse.json({ url: session.url });

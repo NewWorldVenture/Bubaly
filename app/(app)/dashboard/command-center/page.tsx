@@ -29,6 +29,13 @@ const HOUR = 3600_000;
 
 type Issue = { icon: typeof AlertTriangle; text: string; href: string; severity: 'high' | 'medium' };
 
+// Whole class names, so Tailwind generates them.
+const SCORE_TONE = {
+  good: { text: 'text-success', stroke: 'stroke-success' },
+  fair: { text: 'text-warning', stroke: 'stroke-warning' },
+  poor: { text: 'text-danger', stroke: 'stroke-danger' },
+} as const;
+
 // Family+ feature — the AI Family Command Center. Every figure is computed from
 // real family data; nothing is fabricated.
 export default async function CommandCenterPage() {
@@ -143,7 +150,11 @@ export default async function CommandCenterPage() {
     Math.min(unassignedEvents.length * 2, 14);
   const score = Math.max(0, 100 - penalties);
   const scoreLabel = score >= 85 ? 'On track' : score >= 60 ? 'Needs attention' : 'Action required';
-  const scoreColor = score >= 85 ? '#22c55e' : score >= 60 ? '#fbbf24' : '#f87171';
+  // The theme's status roles, not Tailwind's 400/500 hex: those were picked
+  // against the dark theme and read 1.6 to 2.7:1 on the light theme's card
+  // (A11Y-001). The tokens hold 4.5:1 on every ground in both themes
+  // (tests/brand-contrast-contract.test.ts).
+  const scoreTone = score >= 85 ? SCORE_TONE.good : score >= 60 ? SCORE_TONE.fair : SCORE_TONE.poor;
 
   const issues: Issue[] = [];
   for (const c of conflicts) issues.push({ icon: CalendarClock, severity: 'high', href: '/dashboard/conflicts', text: t('commandCenter.scheduleConflict', { a: c.a.title, b: c.b.title, time: fmtTime(c.a.starts_at) }) });
@@ -173,8 +184,8 @@ export default async function CommandCenterPage() {
           <div className="flex items-center gap-5">
             <div className="relative h-32 w-32 shrink-0">
               <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
-                <circle cx="60" cy="60" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="12" />
-                <circle cx="60" cy="60" r={r} fill="none" stroke={scoreColor} strokeWidth="12" strokeLinecap="round"
+                <circle cx="60" cy="60" r={r} fill="none" className="stroke-fg/10" strokeWidth="12" />
+                <circle cx="60" cy="60" r={r} fill="none" className={scoreTone.stroke} strokeWidth="12" strokeLinecap="round"
                   strokeDasharray={`${(score / 100) * circ} ${circ}`} />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -183,7 +194,7 @@ export default async function CommandCenterPage() {
               </div>
             </div>
             <div>
-              <p className="text-lg font-bold" style={{ color: scoreColor }}>{scoreLabel}</p>
+              <p className={cn('text-lg font-bold', scoreTone.text)}>{scoreLabel}</p>
               <p className="mt-1 text-sm text-muted">{issues.length === 0 ? 'Everything looks handled for the week.' : `${issues.length} ${issues.length === 1 ? 'item needs' : 'items need'} your attention.`}</p>
             </div>
           </div>

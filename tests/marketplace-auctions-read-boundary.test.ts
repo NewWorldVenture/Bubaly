@@ -6,7 +6,9 @@ const page = fs.readFileSync('app/(app)/marketplace/auctions/page.tsx', 'utf8');
 
 describe('marketplace auctions read boundary', () => {
   it('fails visibly when auction listings cannot be read', () => {
-    expect(page).toContain('const { data, error } = await readWithReserveView<Row[]>(');
+    // readLiveAuctions (lib/marketplace/circle-reads.ts) reads through
+    // readWithReserveView and the circle view, and hands back one error.
+    expect(page).toContain('const { data, error } = await readLiveAuctions(');
     expect(page).toContain('if (error) {');
     expectSays(page, 'auctions.couldNotLoadLiveAuctions', 'Could not load live auctions from Supabase. Refresh and try again.');
     expect(page).toContain('<ErrorState message=');

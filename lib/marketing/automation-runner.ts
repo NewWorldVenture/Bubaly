@@ -64,7 +64,9 @@ export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: numb
 
   const customerResult = await getMarketingCustomersWithError(supabase);
   if (customerResult.error) throw new Error('Could not load marketing customers for automation.');
-  const customers = customerResult.customers;
+  // A family that closed its account (families.closed_at) is not emailed by a
+  // scheduled automation — "we miss your family" to an account they closed.
+  const customers = customerResult.customers.filter((c) => !c.closedAt);
 
   for (const flow of flows) {
     if (!SCHEDULED_TRIGGERS.includes(flow.trigger as ScheduledTrigger)) continue;

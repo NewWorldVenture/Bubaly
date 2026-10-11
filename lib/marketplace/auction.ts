@@ -59,6 +59,16 @@ export function reserveMet(a: Pick<AuctionListing, 'reserveCents' | 'currentBidC
   return a.currentBidCents >= a.reserveCents;
 }
 
+/**
+ * Buy-It-Now closes at the first bid. Past that point a standing bid (or a
+ * leader's hidden max) can already be above the fixed price, and a Buy-It-Now
+ * would undercut the leader and give the seller less than was bid. One rule
+ * for the panel that hides the button and the action that refuses it.
+ */
+export function buyNowClosedByBids(bidCount: number | null | undefined): boolean {
+  return Number(bidCount ?? 0) > 0;
+}
+
 export function isAuction(a: Pick<AuctionListing, 'saleFormat'>): boolean {
   return a.saleFormat === 'auction';
 }

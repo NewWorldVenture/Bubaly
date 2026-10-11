@@ -29,7 +29,8 @@ export function MemberRowActions({ memberId, displayName, role }: { memberId: st
     setBusy(false);
     setOpen(false);
     if (!res.ok) return toastError(res.error);
-    success(t('memberRowActions.removedFromFamily'));
+    if (res.data?.warning) toastError(res.data.warning);
+    else success(t('memberRowActions.removedFromFamily'));
     router.refresh();
   }
 

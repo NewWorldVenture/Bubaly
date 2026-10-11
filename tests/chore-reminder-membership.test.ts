@@ -166,7 +166,7 @@ describe('weekly chore reminder membership through the actual GET and SDK', () =
     ['inactive', false], ['missing active state', undefined], ['null active state', null], ['malformed active state', 'true'],
   ])('does not email a recipient with %s membership', async (_label, active) => {
     h.assignments[0].family_members = member({ is_active: active });
-    expect(await run()).toEqual({ status: 200, body: { sent: 0, message: 'No pending assignments' } });
+    expect(await run()).toEqual({ status: 200, body: { sent: 0, message: 'choreReminders.noPendingAssignments' } });
     expect(h.sends).toEqual([]);
     expect(h.calls.every(call => call.table === 'chore_assignments')).toBe(true);
   });
@@ -236,7 +236,7 @@ describe('weekly chore reminder membership through the actual GET and SDK', () =
 
   it.each([null, [], member({ user_id: null })])('does not email a missing or unlinked member (%j)', async embedded => {
     h.assignments[0].family_members = embedded;
-    expect(await run()).toEqual({ status: 200, body: { sent: 0, message: 'No pending assignments' } });
+    expect(await run()).toEqual({ status: 200, body: { sent: 0, message: 'choreReminders.noPendingAssignments' } });
     expect(h.sends).toEqual([]);
   });
 
@@ -248,7 +248,7 @@ describe('weekly chore reminder membership through the actual GET and SDK', () =
 
   it('preserves an empty successful scan', async () => {
     h.assignments = [];
-    expect(await run()).toEqual({ status: 200, body: { sent: 0, message: 'No pending assignments' } });
+    expect(await run()).toEqual({ status: 200, body: { sent: 0, message: 'choreReminders.noPendingAssignments' } });
     expect(h.sends).toEqual([]);
   });
 

@@ -154,6 +154,25 @@ describe('purchase approval request association', () => {
     expect(db.log.some((query) => query.table === 'inventory_items')).toBe(false);
   });
 
+  it('withdraws the just-opened approval when a transient error stops the association', async () => {
+    db.replace('approval_requests', []);
+    db.seed('trust_policies', [{ id: 'policy', family_id: 'ours', domain: 'finances', capability: 'view', subject_kind: 'ai', enabled: true, effect: 'require_approval', priority: 1, required_approvals: 1 }]);
+    const from = db.from.bind(db);
+    vi.spyOn(db, 'from').mockImplementation((table) => {
+      if (table !== 'ai_requests') return from(table);
+      const chain: Record<string, unknown> = {};
+      for (const m of ['select', 'eq', 'in', 'is', 'limit']) chain[m] = () => chain;
+      chain.then = (ok: (v: unknown) => unknown, ko: (r: unknown) => unknown) =>
+        Promise.resolve({ data: null, error: { code: '08006', message: 'connection reset' } }).then(ok, ko);
+      return chain as never;
+    });
+    expect(await executeTool({ ...scope, actorKind: 'ai' }, 'finances.advisePurchase', { text: 'drill' })).toMatchObject({ status: 'denied' });
+    // Nothing is left in the parents' queue that, once approved, could never be delivered.
+    expect(db.table('approval_requests')).toHaveLength(1);
+    expect(db.table('approval_requests')[0].status).toBe('cancelled');
+    expect(db.table('approval_requests')[0].request_id ?? null).toBeNull();
+  });
+
   it('does not offer private delivery without an owned original request', async () => {
     db.replace('approval_requests', []);
     db.seed('trust_policies', [{ id: 'policy', family_id: 'ours', domain: 'finances', capability: 'view', subject_kind: 'ai', enabled: true, effect: 'require_approval', priority: 1, required_approvals: 1 }]);
