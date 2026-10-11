@@ -370,10 +370,10 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
                 {fmtRelative(note.updated_at)}
               </div>
               <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 coarse:opacity-100 transition" onClick={(e) => e.stopPropagation()}>
-                <button aria-label={t(note.is_pinned ? 'a11y.unpin' : 'a11y.pin')} onClick={() => onTogglePin(note)} className="rounded p-1 text-muted hover:text-brand-text">
+                <button aria-label={t(note.is_pinned ? 'a11y.unpin' : 'a11y.pin')} onClick={() => onTogglePin(note)} className="rounded p-1.5 text-muted hover:text-brand-text">
                   {note.is_pinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
                 </button>
-                <button aria-label={t('a11y.delete')} onClick={async () => { if (await askConfirm({ title: t('notesModule.deleteThisNote'), body: t('confirm.cannotBeUndone') })) onDelete(note.id); }} className="rounded p-1 text-muted hover:text-danger">
+                <button aria-label={t('a11y.delete')} onClick={async () => { if (await askConfirm({ title: t('notesModule.deleteThisNote'), body: t('confirm.cannotBeUndone') })) onDelete(note.id); }} className="rounded p-1.5 text-muted hover:text-danger">
                   <Trash2 className="h-3 w-3" />
                 </button>
               </div>

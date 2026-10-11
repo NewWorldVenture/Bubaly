@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { hoverReveals, revealProblem, sourceFiles } from './helpers/hover-reveals';
@@ -29,6 +30,17 @@ describe('a control revealed on hover also shows on focus and on touch', () => {
   it('every one shows on keyboard focus, on touch and at phone width', () => {
     const problems = reveals.map((r) => [r.at, r.tag, revealProblem(r)]).filter(([, , p]) => p);
     expect(problems).toEqual([]);
+  });
+
+  it('a control this makes visible on a phone is a 24px target there, not 20px', () => {
+    // Shown on touch now, so WCAG 2.5.8 applies: axe at 390 px found the
+    // notes grid card's pin and delete, and the grocery list's "Edit list",
+    // at 20 by 20 (p-1 around a 12px icon). p-1.5 makes them 24.
+    const notes = readFileSync('components/modules/notes-module.tsx', 'utf8');
+    expect(notes).toMatch(/className="rounded p-1\.5 text-muted hover:text-brand-text">\s*\{note\.is_pinned \? <PinOff className="h-3 w-3" \/>/);
+    expect(notes).toMatch(/className="rounded p-1\.5 text-muted hover:text-danger">\s*<Trash2 className="h-3 w-3" \/>/);
+    expect(notes).not.toMatch(/className="rounded p-1 text-muted hover:text-(brand-text|danger)">\s*(\{note\.is_pinned \? <PinOff className="h-3 w-3"|<Trash2 className="h-3 w-3")/);
+    expect(readFileSync('components/modules/shopping-module.tsx', 'utf8')).toMatch(/coarse:opacity-100 rounded p-1\.5 hover:bg-black\/10">\s*<Pencil className="h-3 w-3" \/>/);
   });
 
   it('the check catches each way of getting it wrong', () => {
