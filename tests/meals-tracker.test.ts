@@ -31,7 +31,7 @@ describe('groupByMeal', () => {
 
 describe('todayKey / meta', () => {
   it('todayKey is YYYY-MM-DD', () => {
-    expect(todayKey(new Date('2025-06-01T15:00:00Z'))).toBe('2025-06-01');
+    expect(todayKey('UTC', new Date('2025-06-01T15:00:00Z'))).toBe('2025-06-01');
   });
   it('meal meta has labels', () => {
     expect(MEAL_META.breakfast.label).toBe('Breakfast');

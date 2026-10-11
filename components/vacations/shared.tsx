@@ -12,6 +12,8 @@ import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ErrorState, LoadingBlock, EmptyState } from '@/components/ui/states';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock } from '@/components/i18n/use-format';
+import { datetimeLocalToInstant, instantToDatetimeLocal } from '@/lib/time/datetime-local';
 import { tripLabel } from '@/components/vacations/trip-labels';
 
 // ---- small presentational helpers reused across trip pages ----
@@ -63,8 +65,16 @@ function blankFrom(fields: FieldDef[]): Record<string, string | boolean> {
   return o;
 }
 
-/** Convert the form's string values into a DB row, honoring field types. */
-function toRow(form: Record<string, string | boolean>, fields: FieldDef[]): Record<string, unknown> {
+/**
+ * Convert the form's string values into a DB row, honoring field types.
+ *
+ * A `datetime` field is the naive `YYYY-MM-DDTHH:mm` of a `datetime-local`
+ * input — a reading on the FAMILY's clock. Written raw into a `timestamptz`
+ * column it was resolved in the database's zone (UTC), so a Los Angeles
+ * parent's 2:30 PM flight was stored as 14:30Z and shown as 7:30 AM (TIME-003).
+ * It is resolved into the instant it names in `timeZone` here.
+ */
+export function toRow(form: Record<string, string | boolean>, fields: FieldDef[], timeZone: string): Record<string, unknown> {
   const row: Record<string, unknown> = {};
   for (const f of fields) {
     const v = form[f.name];
@@ -72,19 +82,20 @@ function toRow(form: Record<string, string | boolean>, fields: FieldDef[]): Reco
     const s = (v as string ?? '').trim();
     if (f.type === 'money') row[f.name] = s ? Math.round(parseFloat(s) * 100) : null;
     else if (f.type === 'number') row[f.name] = s ? Math.round(parseFloat(s)) : null;
+    else if (f.type === 'datetime') row[f.name] = s ? datetimeLocalToInstant(s, timeZone) : null;
     else row[f.name] = s || null;
   }
   return row;
 }
 
-/** Hydrate the form from an existing row for editing. */
-function fromRow(row: Row, fields: FieldDef[]): Record<string, string | boolean> {
+/** Hydrate the form from an existing row for editing; a stored instant comes back as the family's wall clock. */
+export function fromRow(row: Row, fields: FieldDef[], timeZone: string): Record<string, string | boolean> {
   const o: Record<string, string | boolean> = { id: row.id };
   for (const f of fields) {
     const v = row[f.name];
     if (f.type === 'checkbox') o[f.name] = !!v;
     else if (f.type === 'money') o[f.name] = v == null ? '' : String((v as number) / 100);
-    else if (f.type === 'datetime') o[f.name] = v ? String(v).slice(0, 16) : '';
+    else if (f.type === 'datetime') o[f.name] = v ? instantToDatetimeLocal(String(v), timeZone) : '';
     else if (f.type === 'time') o[f.name] = v ? String(v).slice(0, 5) : '';
     else o[f.name] = v == null ? '' : String(v);
   }
@@ -108,6 +119,7 @@ export function TripCrudSection<T extends Row>({
   const tr = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
+  const clock = useFamilyClock();
   const memberMap = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
   const { data, loading, error, refresh } = useRealtimeQuery<T>({
@@ -137,7 +149,7 @@ export function TripCrudSection<T extends Row>({
       const req = fields.find((f) => f.required && !String(form[f.name] ?? '').trim());
       if (req) return toastError(t('trips.fieldIsRequired', { field: tripLabel(t, req.label) }));
       const supabase = createClient() as any;
-      const row = toRow(form, fields);
+      const row = toRow(form, fields, clock.timeZone);
       const id = form.id as string;
       // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-84.
       const { data: saved, error } = id
@@ -147,6 +159,9 @@ export function TripCrudSection<T extends Row>({
       if (wroteNoRows(saved)) return toastError(tr('errors.thatChangeWasNotSaved'));
       success(id ? 'Saved' : 'Added');
       setForm(null);
+      // No `vacation_*` table is in the realtime publication, so nothing else
+      // will bring the new row onto the screen: the list is re-read here.
+      void refresh();
     } finally {
       setSaving(false);
     }
@@ -157,7 +172,10 @@ export function TripCrudSection<T extends Row>({
     const { data: removed, error } = await (createClient() as any).from(table).delete().eq('id', id).select('id');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(removed)) toastError(tr('errors.thatChangeWasNotSaved'));
-    else success(t('shared.deleted'));
+    else {
+      success(t('shared.deleted'));
+      void refresh();
+    }
   }
 
   return (
@@ -174,7 +192,7 @@ export function TripCrudSection<T extends Row>({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">{renderRow(row, memberMap)}</div>
                 <div className="flex shrink-0 gap-1">
-                  <button aria-label={t('a11y.edit')} onClick={() => setForm(fromRow(row, fields))} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-4 w-4" /></button>
+                  <button aria-label={t('a11y.edit')} onClick={() => setForm(fromRow(row, fields, clock.timeZone))} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-4 w-4" /></button>
                   <button aria-label={t('a11y.delete')} onClick={() => remove(row.id)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-4 w-4" /></button>
                 </div>
               </div>

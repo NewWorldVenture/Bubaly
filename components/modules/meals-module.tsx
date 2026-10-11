@@ -200,7 +200,14 @@ export function MealsModule() {
       sb.from('meal_vote_options').select('*').eq('vote_id', v.id),
       sb.from('meal_vote_ballots').select('option_id, member_id, choice').eq('vote_id', v.id),
     ]);
-    if (optErr || balErr) console.error('[meals] vote detail read failed', { options: optErr?.message, ballots: balErr?.message });
+    // Same rule as the vote read above: degrade to NO panel. Passing `[]` for a
+    // ballot read that failed drew the family's active vote with every option
+    // at 0 and nobody's pick highlighted — a vote nobody had voted on.
+    if (optErr || balErr) {
+      console.error('[meals] vote detail read failed', { options: optErr?.message, ballots: balErr?.message });
+      setVoteData(null);
+      return;
+    }
     setVoteData({ vote: v, options: options ?? [], ballots: ballots ?? [] });
   }, [familyId]);
   useEffect(() => { void loadVote(); }, [loadVote]);

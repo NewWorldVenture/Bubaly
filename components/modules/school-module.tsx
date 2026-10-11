@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables, GradeType } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { type FamilyClock, useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { datetimeLocalToInstant } from '@/lib/time/datetime-local';
 import { wallWeekStart } from '@/lib/time/wall-clock';
 import type { Format } from '@/lib/utils/format';
 import type { LocaleCode } from '@/lib/i18n/locales';
@@ -391,11 +392,14 @@ export function SchoolModule() {
   // ── CRUD handlers ────────────────────────────────────────
   async function saveEvent() {
     if (!eventForm.title || !eventForm.starts_at) return;
+    // The `datetime-local` reading is on the FAMILY's clock, not the device's.
+    const startsAt = datetimeLocalToInstant(eventForm.starts_at, clock.timeZone);
+    if (!startsAt) { toastError(tr('schoolModule.failedToSaveEvent')); return; }
     setSaving(true);
     const sb = createClient();
     const { error: err } = await sb.from('school_events').insert({
       family_id: familyId, title: eventForm.title, event_type: eventForm.event_type,
-      starts_at: new Date(eventForm.starts_at).toISOString(), notes: eventForm.notes || null,
+      starts_at: startsAt, notes: eventForm.notes || null,
       member_id: eventForm.member_id || null, school_name: eventForm.school_name || null, created_by: userId,
     });
     setSaving(false);

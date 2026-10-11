@@ -105,6 +105,10 @@ export function CareerModule() {
     const { data: removed, error } = await createClient().from('job_applications').delete().eq('id', a.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // Published without REPLICA IDENTITY FULL, so the family_id-filtered
+    // channel never hears this DELETE: the confirmed delete drops the row from
+    // the screen here, or it stays until a reload (H3).
+    apps.setData((rows) => rows.filter((row) => row.id !== a.id));
     success(tr('careerModule.applicationRemoved'));
   }
 
@@ -130,6 +134,10 @@ export function CareerModule() {
     const { data: removed2, error } = await createClient().from('resume_versions').delete().eq('id', r.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed2)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // Published without REPLICA IDENTITY FULL, so the family_id-filtered
+    // channel never hears this DELETE: the confirmed delete drops the row from
+    // the screen here, or it stays until a reload (H3).
+    resumes.setData((rows) => rows.filter((row) => row.id !== r.id));
     success(tr('careerModule.resumeDeleted'));
   }
 
@@ -145,6 +153,14 @@ export function CareerModule() {
     const { data: removed3, error } = await createClient().from('career_profiles').delete().eq('id', p.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed3)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // Published without REPLICA IDENTITY FULL, so the family_id-filtered
+    // channel never hears this DELETE: the confirmed delete drops the row from
+    // the screen here, or it stays until a reload (H3).
+    // Its applications and resumes went with it (ON DELETE CASCADE, 0247), and
+    // their deletes are just as silent.
+    profiles.setData((rows) => rows.filter((row) => row.id !== p.id));
+    apps.setData((rows) => rows.filter((row) => row.profile_id !== p.id));
+    resumes.setData((rows) => rows.filter((row) => row.profile_id !== p.id));
     setProfileId('');
     success(tr('careerModule.profileDeleted'));
   }

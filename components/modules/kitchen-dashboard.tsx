@@ -398,7 +398,7 @@ function ChefModal({ onClose }: { onClose: () => void }) {
   const [request, setRequest] = useState('');
   const [loading, setLoading] = useState(false);
   const [reply, setReply] = useState<ChefReply | null>(null);
-  const [source, setSource] = useState<'ai' | 'fallback' | null>(null);
+  const [source, setSource] = useState<'ai' | 'fallback' | 'unavailable' | null>(null);
 
   async function ask(prompt?: string) {
     const q = (prompt ?? request).trim();
@@ -447,9 +447,16 @@ function ChefModal({ onClose }: { onClose: () => void }) {
 
         {reply && (
           <div className="space-y-4 border-t border-border pt-4">
+            {/* "Not configured" only when the server says so; a provider that
+                failed is a different fact with a different remedy. */}
             {source === 'fallback' && (
               <p className="rounded-lg border border-border bg-surface/40 px-3 py-2 text-[11px] text-muted">
                 {i18nT('kitchenDashboard.aiIsntConfiguredShowingAPlan')}
+              </p>
+            )}
+            {source === 'unavailable' && (
+              <p className="rounded-lg border border-border bg-surface/40 px-3 py-2 text-[11px] text-muted">
+                {i18nT('kitchenDashboard.aiChefUnavailableShowingAPlan')}
               </p>
             )}
             {reply.message && <p className="text-sm font-medium">{reply.message}</p>}

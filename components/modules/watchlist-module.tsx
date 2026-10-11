@@ -122,6 +122,10 @@ export function WatchlistModule() {
     const { data: removed2, error } = await createClient().from('watch_sessions').delete().eq('id', session.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed2)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // Published without REPLICA IDENTITY FULL, so the family_id-filtered
+    // channel never hears this DELETE: the confirmed delete drops the row from
+    // the screen here, or it stays until a reload (H3).
+    sessions.setData((rows) => rows.filter((row) => row.id !== session.id));
   }
 
   const loading = titles.loading || votes.loading || sessions.loading;

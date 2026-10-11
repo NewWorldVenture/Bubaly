@@ -418,8 +418,11 @@ describe('a gift link is not declared dead because a read failed (C1-S9-40)', ()
 
 describe('an AI answer is not generated for a family with no members (C1-S9-40)', () => {
   it('the roster read matches the convention its own neighbour sets', () => {
-    // `fetchRows`, ten lines below, already 500s when it cannot load. This read
-    // dropped its error and fed an empty member list into the same prompt.
+    // `fetchRows`, ten lines below, 500s when a read it checks with
+    // `required()` fails — every household module kind and purchase_advisor
+    // since the H16 fix; before it, only purchase_advisor checked, so this
+    // comment's old "already 500s" was not true of the household kinds. This
+    // read dropped its error and fed an empty member list into the same prompt.
     expect(aiInsights).toContain('error: membersError');
     expect(bodyOf(aiInsights, 'if (membersError)', '{ status: 500 }')).toContain('console.error');
     expect(at(aiInsights, 'if (membersError)')).toBeLessThan(at(aiInsights, 'rows = await fetchRows('));

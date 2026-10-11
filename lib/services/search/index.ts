@@ -38,6 +38,8 @@
 // family_facts), not assumed.
 import 'server-only';
 import { isManager } from '@/lib/constants/roles';
+import { riskToDecision } from '@/lib/trust/engine';
+import { roleOf } from '@/lib/trust/server';
 import { rankHits, type SearchHit, type SearchKind } from '@/lib/search/rank';
 import { isSensitiveDocument } from '@/lib/documents/sensitivity';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -114,6 +116,24 @@ function snippetFrom(parts: Array<string | null | undefined>, max = 160): string
 export const MANAGER_ONLY_KINDS: readonly SearchKind[] = ['bill', 'warranty', 'renewal'];
 
 /**
+ * Trip sources. A role whose view of 'travel' the trust engine refuses (a
+ * guest, a child) does not search them, for the reason the assistant's
+ * `trips.getTrip` refuses them: `search.household` sits in the 'tasks' domain,
+ * so it used to hand a guest the title, destination and dates that tool
+ * withholds. Reported in `withheld`, like the money sources.
+ */
+export const TRAVEL_KINDS: readonly SearchKind[] = ['trip', 'vacation'];
+
+function canSearchTravel(scope: ServiceScope): boolean {
+  if (scope.role === 'system') return true;
+  return riskToDecision({
+    risk: 'low',
+    actor: { kind: 'member', id: scope.memberId ?? scope.userId ?? 'unknown', role: roleOf(scope.role) },
+    domain: 'travel', capability: 'view', explicitAllow: false,
+  }) === null;
+}
+
+/**
  * Parents and adults may search the money sources; a cron with no human behind
  * it may not, which is the same line `lib/services/documents` draws for
  * sensitive files.
@@ -173,12 +193,13 @@ export async function searchHousehold(
   const db = scope.db;
   const family = scope.familyId;
   const money = canSearchMoney(scope);
+  const travel = canSearchTravel(scope);
   const sensitiveDocs = canSeeSensitiveDocuments(scope);
   // Match recallFacts: system memory work may read sensitive facts, while its
   // existing money and document search restrictions remain separate.
   const sensitiveMemory = scope.role === 'system' || isManager(scope.role);
 
-  const sources: Array<{ table: string; run: () => Promise<SourceOutcome> }> = [
+  const allSources: Array<{ table: string; run: () => Promise<SourceOutcome> }> = [
     {
       table: 'documents',
       run: () => readSource('documents', () => db
@@ -351,6 +372,7 @@ export async function searchHousehold(
         }))),
     },
   ];
+  const sources = travel ? allSources : allSources.filter((source) => source.table !== 'trips' && source.table !== 'vacations');
 
   if (money) {
     sources.push(
@@ -434,6 +456,6 @@ export async function searchHousehold(
     hits,
     partial,
     searched: sources.filter((source) => !partial.some((f) => f.table === source.table)).map((source) => source.table),
-    withheld: money ? [] : [...MANAGER_ONLY_KINDS],
+    withheld: [...(money ? [] : MANAGER_ONLY_KINDS), ...(travel ? [] : TRAVEL_KINDS)],
   });
 }
