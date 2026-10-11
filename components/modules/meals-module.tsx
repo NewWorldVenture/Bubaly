@@ -476,7 +476,7 @@ export function MealsModule() {
                   <h2 className="text-base font-semibold">{tr('meals.recentlyCooked')}</h2>
                   <button onClick={() => setTab('recipes')} className="text-xs text-brand-text hover:underline">{tr('meals.viewAll')}</button>
                 </div>
-                {recipesLoading ? <SkeletonList count={2} /> : recipesError ? <ErrorState message={recipesError} onRetry={refreshRecipes} /> : <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
+                {recipesLoading ? <SkeletonList count={2} /> : recipesError ? <ErrorState message={recipesError} onRetry={refreshRecipes} /> : <div role="region" aria-label={tr('meals.recentlyCooked')} tabIndex={0} className="flex gap-3 overflow-x-auto pb-2 scrollbar-none focus-ring rounded-xl">
                   {recentlyCooked.map((r) => (
                     <div key={r.id} className="w-40 shrink-0 overflow-hidden rounded-xl border border-border bg-surface/40">
                       <MealImg src={r.photo_url} emoji="🍽️" className="h-24 w-full" />
@@ -559,7 +559,7 @@ export function MealsModule() {
             ) : (
               <div className="space-y-1.5">
                 {groceryItems.map((item) => (
-                  <button key={item.id} onClick={() => toggleGrocery(item)}
+                  <button key={item.id} type="button" role="checkbox" aria-checked={!!item.is_checked} onClick={() => toggleGrocery(item)}
                     className="flex w-full items-center gap-3 rounded-xl border border-border bg-surface/30 px-3 py-2.5 text-left transition hover:bg-elevated/40">
                     <span className={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded border', item.is_checked ? 'border-brand bg-brand' : 'border-border')}>
                       {item.is_checked && <Check className="h-3 w-3 text-white" />}
@@ -639,12 +639,15 @@ export function MealsModule() {
           {groceryLoading ? <SkeletonList count={1} /> : groceryError ? <p className="text-xs text-danger">{groceryError}</p> : groceryItems.length === 0 ? (
             <p className="text-xs text-muted">{tr('meals.yourGroceryListIsEmpty')}</p>
           ) : (
-            <div className="space-y-1.5">
+            <div className="space-y-0.5">
               {groceryItems.slice(0, 6).map(item => (
                 <div key={item.id} className="flex items-center gap-2">
-                  <button onClick={() => toggleGrocery(item)} aria-label={tr('meals.toggle')}
-                    className={cn('flex h-4 w-4 shrink-0 items-center justify-center rounded border', item.is_checked ? 'border-brand bg-brand' : 'border-border')}>
-                    {item.is_checked && <Check className="h-2.5 w-2.5 text-white" />}
+                  {/* A checkbox named by its item, with a 24px target around the 16px box. */}
+                  <button type="button" role="checkbox" aria-checked={!!item.is_checked} aria-label={item.name} onClick={() => toggleGrocery(item)}
+                    className="-mx-1 flex h-6 w-6 shrink-0 items-center justify-center">
+                    <span className={cn('flex h-4 w-4 items-center justify-center rounded border', item.is_checked ? 'border-brand bg-brand' : 'border-border')}>
+                      {item.is_checked && <Check className="h-2.5 w-2.5 text-white" />}
+                    </span>
                   </button>
                   <span className={cn('flex-1 text-xs', item.is_checked ? 'text-muted line-through' : 'text-fg')}>{item.name}</span>
                   {item.quantity && <span className="text-[10px] text-muted">{item.quantity}</span>}

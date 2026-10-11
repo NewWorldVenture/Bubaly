@@ -181,7 +181,7 @@ export function NotesModule() {
             className={cn('tab-item', activeCategory === cat.id ? 'tab-item-active' : 'tab-item-inactive')}>
             <cat.icon className="h-3.5 w-3.5" />
             {cat.label}
-            <span className="ml-1 text-xs opacity-70">
+            <span className="ml-1 text-xs font-normal">
               {cat.id === 'all' ? data.length : data.filter((n) => n.is_pinned).length}
             </span>
           </button>
