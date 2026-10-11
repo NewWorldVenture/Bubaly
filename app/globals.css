@@ -409,6 +409,14 @@ body {
   overscroll-behavior: none;
 }
 
+/* The kitchen display (/display) is a dark presentation in either theme, with
+   its own ink (#0b1020) under a fixed wash. Its page is that ink too, so the
+   light theme's page colour does not show through, and a checker that reads
+   the page behind the fixed wash (axe does) measures against what is there. */
+body:has(.kitchen-display) {
+  background-color: #0b1020;
+}
+
 /* Prevent iOS/iPadOS Safari from auto-zooming (and visually shifting the page off
    to the right) when a form control with a <16px font is focused. Any focusable
    input/textarea/select must render at ≥16px on touch devices.
