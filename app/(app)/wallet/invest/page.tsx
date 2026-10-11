@@ -75,9 +75,15 @@ export default async function WalletInvestPage() {
 
   const nameByMember = new Map((members ?? []).map((m) => [m.id, { name: m.display_name, color: m.color }]));
   const assetList: InvestAsset[] = (assets ?? []).map((a) => ({ id: a.id, symbol: a.symbol, name: a.name, kind: a.kind, emoji: a.emoji, description: a.description, priceCents: a.price_cents, riskLevel: a.risk_level }));
+  // Who may place an order on each card: a manager on any child's, a child on
+  // their own. placeInvestOrderAction refuses the rest; the card stops offering it.
+  const manager = isManager(ctx.active.role);
   const children: InvestChild[] = (childWallets ?? []).map((cw) => {
     const m = nameByMember.get(cw.member_id);
-    return { id: cw.id, name: m?.name ?? 'Child', color: m?.color ?? null, investCashCents: investCashByChild.get(cw.id) ?? 0 };
+    return {
+      id: cw.id, name: m?.name ?? 'Child', color: m?.color ?? null, investCashCents: investCashByChild.get(cw.id) ?? 0,
+      canTrade: manager || cw.member_id === ctx.active.member.id,
+    };
   });
   const holdingList: Holding[] = (holdings ?? []).filter((h) => h.shares > 0).map((h) => ({ childWalletId: h.child_wallet_id, assetId: h.asset_id, shares: h.shares, avgCostCents: h.avg_cost_cents }));
 
@@ -97,7 +103,7 @@ export default async function WalletInvestPage() {
           <p>{tr('walletInvest.someInvestmentDetailsAreTemporarilyUnavailable')} {dataWarnings.join(', ')}.</p>
         </div>
       )}
-      <InvestView assets={assetList} childWallets={children} holdings={holdingList} pendingOrders={pendingOrders} canManage={isManager(ctx.active.role)} />
+      <InvestView assets={assetList} childWallets={children} holdings={holdingList} pendingOrders={pendingOrders} canManage={manager} />
     </div>
   );
 }
