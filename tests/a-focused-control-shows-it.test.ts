@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+import { contrast, over, THEMES, tokensOf } from './helpers/faded-text';
 import { sourceFiles } from './helpers/hover-reveals';
 
 // A11Y-001, WCAG 2.4.7 (focus visible). Found by tabbing through all 246
@@ -21,11 +22,26 @@ import { sourceFiles } from './helpers/hover-reveals';
 // The selects and the area-code field take the app's focus-ring; each pill
 // rings when anything in it has focus (focus-within); a row in a clipped
 // card rings inside its own box (ring-inset); an avatar's focus is an outline
-// outside its selection ring.
+// outside its selection ring. These rings are full --brand: at 60% (the shared
+// focus-ring's alpha) they are 1.9–2.4:1 on their grounds, under the 3:1 a
+// focus indicator needs (WCAG 1.4.11); see the last test.
 
 const REMOVES = /^(focus:|focus-visible:)?outline-none$/;
-const REPLACES = /^(focus-ring|(focus|focus-visible):(ring|border|bg|shadow|underline|outline-(?!none))\S*)$/;
 const TEXT_ENTRY = /^(input|textarea)$/;
+
+// A focus style that paints something. A ring needs a width (a colour alone
+// draws nothing); a zero width, none, transparent or a zero alpha paints nothing.
+const paints = (c: string) =>
+  c === 'ring' || /^ring-([1-9]\d*|\[\d+px\])$/.test(c) || c === 'underline' ||
+  (/^(border|bg-|shadow|outline)/.test(c) && !/^outline-offset-|(^|-)(0|none|transparent|inherit|hidden)$|\/0$/.test(c));
+/** Whether `classes` paint something when `prefix` (focus:, focus-visible:, focus-within:) applies; `focus-ring` is the app's own. */
+const paintsOn = (classes: string[], prefixes: string[]) =>
+  classes.some((c) => (prefixes.includes('focus-visible:') && c === 'focus-ring') || prefixes.some((p) => c.startsWith(p) && paints(c.slice(p.length))));
+// A dialog takes focus programmatically, as a whole, and says so: role="dialog"
+// or "alertdialog", or aria-modal that is literally true. aria-modal={false}
+// or a bound value is not a dialog's word for it.
+const DIALOG_ROLE = /^["']?(dialog|alertdialog)["']?$|^\{["'](dialog|alertdialog)["']\}$/;
+const MODAL_TRUE = /^(["']true["']|\{true\}|\{["']true["']\})$/;
 
 type Bare = { at: string; file: string; tag: string; line: string; textEntry: boolean };
 
@@ -44,8 +60,12 @@ function bareFocus(file: string, src: string): Bare[] {
     if (attr?.initializer) collect(attr.initializer);
     return parts.join(' ').split(/\s+/).filter(Boolean);
   };
-  const attr = (open: ts.JsxOpeningLikeElement, name: string) =>
-    open.attributes.properties.filter(ts.isJsxAttribute).find((a) => a.name.getText(sf) === name)?.initializer?.getText(sf);
+  const has = (open: ts.JsxOpeningLikeElement, name: string) =>
+    open.attributes.properties.filter(ts.isJsxAttribute).find((a) => a.name.getText(sf) === name);
+  const attr = (open: ts.JsxOpeningLikeElement, name: string) => {
+    const a = has(open, name);
+    return a ? (a.initializer?.getText(sf) ?? '{true}') : undefined;
+  };
   const found: Bare[] = [];
   const visit = (node: ts.Node, ancestors: ts.JsxOpeningLikeElement[]) => {
     let open: ts.JsxOpeningLikeElement | undefined;
@@ -54,9 +74,10 @@ function bareFocus(file: string, src: string): Bare[] {
     if (open) {
       const classes = classesOf(open);
       const tag = open.tagName.getText(sf);
-      const programmatic = attr(open, 'tabIndex') === '{-1}' || attr(open, 'role') === '"dialog"' || attr(open, 'aria-modal') !== undefined;
-      if (classes.some((c) => REMOVES.test(c)) && !classes.some((c) => REPLACES.test(c)) && !programmatic) {
-        const wrapped = ancestors.some((a) => classesOf(a).some((c) => c.startsWith('focus-within:')));
+      const dialog = DIALOG_ROLE.test(attr(open, 'role') ?? '') || MODAL_TRUE.test(attr(open, 'aria-modal') ?? '');
+      const programmatic = attr(open, 'tabIndex') === '{-1}' || dialog;
+      if (classes.some((c) => REMOVES.test(c)) && !paintsOn(classes, ['focus:', 'focus-visible:']) && !programmatic) {
+        const wrapped = ancestors.some((a) => paintsOn(classesOf(a), ['focus-within:']));
         if (!wrapped) {
           const { line } = sf.getLineAndCharacterOfPosition(open.getStart(sf));
           found.push({ at: `${file}:${line + 1}`, file, tag, line: lines[line].trim(), textEntry: TEXT_ENTRY.test(tag) });
@@ -108,7 +129,7 @@ describe('a focused control shows it', () => {
 
   it('the sites the sweep found ring on focus', () => {
     const src = (f: string) => readFileSync(f, 'utf8');
-    const PILL = 'focus-within:ring-2 focus-within:ring-brand/60 focus-within:ring-offset-2 focus-within:ring-offset-bg';
+    const PILL = 'focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg';
     for (const f of ['shopping', 'recipes', 'notes', 'todos', 'contacts', 'inventory', 'photos']) {
       expect(src(`components/modules/${f}-module.tsx`), f).toContain(PILL);
     }
@@ -116,10 +137,16 @@ describe('a focused control shows it', () => {
     expect(src('components/modules/reminders-module.tsx').match(/text-muted focus-ring">/g)).toHaveLength(2);
     expect(src('components/modules/shopping-module.tsx')).toContain('text-muted focus-ring">');
     expect(src('components/modules/contact-center-module.tsx')).toContain('px-3 text-sm focus-ring"');
-    const INSET = 'outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/60';
+    const INSET = 'outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand';
     expect(src('app/(app)/dashboard/more/page.tsx')).toContain(`hover:bg-elevated ${INSET}"`);
-    expect(src('components/modules/profile-module.tsx')).toContain(`<Link href={href} className="block ${INSET}">`);
-    expect(src('components/modules/profile-module.tsx')).toContain(`className="w-full text-left ${INSET}">`);
+    // A profile row's hover paint is on the focused box, under its inset ring: on the
+    // full-size child it covered the ring while the row was hovered and focused.
+    const profile = src('components/modules/profile-module.tsx');
+    expect(profile).toContain(`<Link href={href} className="block transition hover:bg-elevated ${INSET}">{inner}</Link>`);
+    expect(profile).toContain(`className="w-full text-left transition hover:bg-elevated ${INSET}">{inner}</button>`);
+    const fill = profile.slice(profile.indexOf('const inner = ('), profile.indexOf(')}>', profile.indexOf('const inner = (')));
+    expect(fill).toContain(`'flex items-center gap-3 px-4 py-3.5',`);
+    expect(fill).not.toMatch(/\bbg-/); // the full-size child paints no background
     // The recipe card is overflow-hidden under a positioned photo: an offset ring was covered on every side.
     expect(src('components/modules/recipes-module.tsx')).toContain(`className="flex flex-1 flex-col p-4 text-left ${INSET}">`);
     // A preset avatar's selection is already a ring, so its focus is an outline outside it.
@@ -135,5 +162,48 @@ describe('a focused control shows it', () => {
     expect(scan(`<div className="border"><input className="outline-none" /></div>`)).toEqual(['input']);
     expect(scan(`<div tabIndex={-1} className="outline-none">x</div>`)).toEqual([]);
     expect(scan(`<div role="dialog" className="outline-none">x</div>`)).toEqual([]);
+    expect(scan(`<div role="alertdialog" aria-modal="true" className="outline-none">x</div>`)).toEqual([]);
+    expect(scan(`<div aria-modal className="outline-none">x</div>`)).toEqual([]);
+    expect(scan(`<a className="outline-none focus-visible:outline focus-visible:outline-2">x</a>`)).toEqual([]);
+    expect(scan(`<input className="outline-none focus:border-brand" />`)).toEqual([]);
   });
+
+  it('the scanner: a replacement that paints nothing, or a dialog that is not one, does not count', () => {
+    const scan = (jsx: string) => bareFocus('p.tsx', `export const P = ({ open }: any) => (${jsx});`).map((b) => b.tag);
+    expect(scan(`<a className="outline-none focus-visible:ring-0">x</a>`)).toEqual(['a']);
+    expect(scan(`<a className="outline-none focus-visible:ring-brand">x</a>`)).toEqual(['a']); // a colour, no width
+    expect(scan(`<button className="outline-none focus:shadow-none">x</button>`)).toEqual(['button']);
+    expect(scan(`<button className="outline-none focus:border-transparent">x</button>`)).toEqual(['button']);
+    expect(scan(`<button className="outline-none focus-visible:outline-0">x</button>`)).toEqual(['button']);
+    expect(scan(`<button className="outline-none focus-visible:bg-brand/0">x</button>`)).toEqual(['button']);
+    expect(scan(`<div className="focus-within:outline-none"><input className="outline-none" /></div>`)).toEqual(['input']);
+    expect(scan(`<div className="opacity-0 focus-within:opacity-100"><input className="outline-none" /></div>`)).toEqual(['input']);
+    expect(scan(`<div className="focus-within:ring-0"><input className="outline-none" /></div>`)).toEqual(['input']);
+    expect(scan(`<button aria-modal={false} className="outline-none">x</button>`)).toEqual(['button']);
+    expect(scan(`<button aria-modal={open} className="outline-none">x</button>`)).toEqual(['button']);
+    expect(scan(`<div role={open ? 'dialog' : undefined} className="outline-none">x</div>`)).toEqual(['div']);
+    expect(scan(`<div role="region" className="outline-none">x</div>`)).toEqual(['div']);
+  });
+
+  // The grounds each new ring is drawn against, composited as the browser
+  // paints them: the More and profile rows (bg-surface/40 on the page, and
+  // bg-elevated under hover), the recipe card (.glass-card, surface at 72%),
+  // the search pills (their ring-offset is --bg; outside is the page, a
+  // glass card, or the inventory's bg-brand/5 panel).
+  for (const [theme, selector] of THEMES) {
+    it(`${theme}: the new rings read at 3:1 on every ground they are drawn on; at 60% they did not`, () => {
+      const t = tokensOf(selector);
+      const grounds: Record<string, number[]> = {
+        bg: t.bg,
+        'row (surface/40)': over(t.surface, 0.4, t.bg),
+        'row hovered (elevated)': t.elevated,
+        'glass card (surface/72)': over(t.surface, 0.72, t.bg),
+        'inventory panel (brand/5)': over(t.brand, 0.05, t.bg),
+      };
+      for (const [name, g] of Object.entries(grounds)) {
+        expect(contrast(t.brand, g), `ring-brand on ${name}`).toBeGreaterThanOrEqual(3);
+        expect(contrast(over(t.brand, 0.6, g), g), `control: ring-brand/60 on ${name}`).toBeLessThan(3);
+      }
+    });
+  }
 });

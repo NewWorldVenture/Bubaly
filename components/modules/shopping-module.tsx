@@ -288,7 +288,7 @@ export function ShoppingModule() {
                     <Check className="h-3.5 w-3.5 text-success" /> {t('shopping.clear')} {checkedCount} done
                   </Button>
                 )}
-                <div className="flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-1.5 focus-within:ring-2 focus-within:ring-brand/60 focus-within:ring-offset-2 focus-within:ring-offset-bg">
+                <div className="flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-1.5 focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg">
                   <Search className="h-3.5 w-3.5 text-muted" />
                   <input value={search} inputMode="search" enterKeyHint="search" onChange={(e) => setSearch(e.target.value)} placeholder="Search…"
                     className="w-28 bg-transparent text-sm placeholder:text-muted outline-none" />
