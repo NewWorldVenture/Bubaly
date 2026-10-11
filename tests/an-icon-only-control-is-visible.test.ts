@@ -81,7 +81,7 @@ describe('an icon-only control is visible at 3:1', () => {
     };
     expect(probe(`<button aria-label="Delete" className="text-muted/40"><Trash2 className="h-4 w-4" /></button>`)).toBe(false);
     expect(probe(`<button className="text-muted/40">{paid ? <RotateCcw /> : <Check />}</button>`)).toBe(false);
-    expect(probe(`<button className="text-muted/40"><Trash2 /> {t('delete')}</button>`)).toBe(true);
+    expect(probe(`<button className="text-muted/40"><Trash2 /> {label}</button>`)).toBe(true);
   });
 
   it('the arithmetic: --muted at 40–60% is under 3:1 on some ground; full --muted clears it', () => {
