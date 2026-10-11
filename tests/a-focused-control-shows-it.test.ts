@@ -145,7 +145,7 @@ const CARET_ONLY: Record<string, number> = {
 const files = [...sourceFiles('components'), ...sourceFiles('app')];
 const all = files.flatMap((f) => {
   const src = readFileSync(f, 'utf8');
-  return /outline-none/.test(src) ? bareFocus(f, src) : [];
+  return /outline-none/.test(src) ? bareFocus(f.replaceAll('\\', '/'), src) : [];
 });
 
 describe('a focused control shows it', () => {
