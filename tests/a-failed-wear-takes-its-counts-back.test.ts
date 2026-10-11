@@ -2,10 +2,10 @@ import { createElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SOURCE_MESSAGES } from '@/lib/i18n/messages';
 import { translate } from '@/lib/i18n/translate';
-import { takeBackWear, type WearStore } from '@/lib/closet/wear';
+import { bumpWearCount, takeBackWear, type LandedWear, type WearStore } from '@/lib/closet/wear';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 import { HOUSEHOLD_DEFAULTS } from './helpers/household-fixtures';
-import { byName, click, render } from './helpers/module-harness';
+import { allByName, byName, click, render, settle, type Node } from './helpers/module-harness';
 import { resetHookSlots } from './helpers/hook-slots';
 
 // HC2 — the closet's "Wear" bumps every item's wear count and then writes the
@@ -23,12 +23,54 @@ import { resetHookSlots } from './helpers/hook-slots';
 // tap all-or-nothing, and says so. That needs one transaction (an RPC that
 // inserts the log and increments the counts together), recorded in
 // lib/closet/wear.ts — not SQL written here.
+//
+// HD2 — two failed taps on one item that overlap (two phones) are taken back
+// by count alone, and a take-back owns the last-worn date only while the
+// count says its wear is the latest. Taken back in the order they landed,
+// they left a never-worn item at 0 wears "worn today", and an item worn
+// before at its old count but today's date. The first is fixed (no wear left
+// is no date); the second is what one date column with no history cannot
+// tell, and is pinned below as the limit lib/closet/wear.ts states.
 
 const h = await vi.hoisted(async () => (await import('./helpers/module-state')).createModuleState());
 
+/** While `on`, each outfit_logs insert waits in `held` until the test lets it through. */
+const logGate = vi.hoisted(() => ({ on: false, held: [] as (() => void)[] }));
+
 vi.mock('react', async (original) => (await import('./helpers/hook-slots')).withHookSlots(await original<object>(), h.hooks));
 vi.mock('@/lib/hooks/use-realtime-query', async () => (await import('./helpers/module-harness')).realtimeQueryModule(h));
-vi.mock('@/lib/supabase/client', async () => (await import('./helpers/module-harness')).supabaseClientModule(h));
+vi.mock('@/lib/supabase/client', async () => {
+  const { clientFor } = await import('./helpers/module-harness');
+  /** The harness builder, its answer held while the gate is on and it is a log insert. */
+  function gated(builder: object, table: string): object {
+    let inserts = false;
+    const proxy: object = new Proxy(builder, {
+      get(target, property) {
+        if (property === 'then') {
+          return (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) => {
+            const answer = () => (target as PromiseLike<unknown>).then(resolve, reject);
+            if (!(logGate.on && table === 'outfit_logs' && inserts)) return answer();
+            return new Promise<void>((release) => { logGate.held.push(release); }).then(answer);
+          };
+        }
+        const value = Reflect.get(target, property);
+        if (typeof value !== 'function') return value;
+        return (...args: unknown[]) => {
+          if (property === 'insert') inserts = true;
+          const result = Reflect.apply(value, target, args);
+          return result === target ? proxy : result;
+        };
+      },
+    });
+    return proxy;
+  }
+  return {
+    createClient: () => {
+      const client = clientFor(h);
+      return { ...client, from: (table: string) => gated(client.from(table), table) };
+    },
+  };
+});
 vi.mock('@/components/app/app-context', async () => (await import('./helpers/module-harness')).appContextModule(h));
 vi.mock('@/components/ui/toast', async () => (await import('./helpers/module-harness')).toastModule(h));
 vi.mock('@/components/ui/confirm', async () => (await import('./helpers/module-harness')).confirmModule(h));
@@ -57,6 +99,7 @@ beforeEach(() => {
   h.db = db;
   h.rows = {}; h.readErrors = {}; h.refreshes = []; h.calls = []; h.fault = null;
   h.toasts = { success: [], error: [] }; h.confirmAnswer = true; h.timeZone = 'UTC';
+  logGate.on = false; logGate.held = [];
   vi.spyOn(console, 'error').mockImplementation(() => {});
   db.seed('wardrobe_items', [
     { id: 'hoodie', name: 'Grey hoodie', category: 'top', wear_count: 4, last_worn_on: '2026-09-01' },
@@ -79,6 +122,48 @@ const isBump = (table: string, calls: string[]) => table === 'wardrobe_items' &&
 const isLog = (table: string, calls: string[]) => table === 'outfit_logs' && calls[0] === 'insert';
 /** A reply supabase-js builds when none came back: no database code. */
 const LOST = { code: '', message: 'TypeError: fetch failed' };
+const OLD = '2026-09-01';
+
+/**
+ * Two phones on the closet, each its own ClosetModule against the one
+ * database. A tap is started, not awaited, so the other phone's can overlap it.
+ */
+const phones = (): ReactNode => render(h.hooks, createElement('div', null, [
+  createElement(ClosetModule, { key: 'phone-a' }), createElement(ClosetModule, { key: 'phone-b' }),
+]));
+const tap = (button: Node) => Promise.resolve((button.props.onClick as (event: unknown) => unknown)({ preventDefault() {}, stopPropagation() {} }));
+async function until(condition: () => boolean) {
+  for (let turn = 0; turn < 100 && !condition(); turn++) await settle();
+  expect(condition()).toBe(true);
+}
+
+/** The saved outfit is deleted on a third phone: both phones still show it, and its log fails the foreign key. */
+function deletedElsewhere() {
+  phones(); // the card is on both phones' screens
+  db.replace('outfits', []); // no DELETE event reaches either
+  h.fault = (table, calls) => (isLog(table, calls) && !db.table('outfits').some((o) => o.id === 'rainy')
+    ? { code: '23503', message: 'insert or update on table "outfit_logs" violates foreign key constraint "outfit_logs_outfit_id_fkey"' }
+    : null);
+}
+
+/**
+ * Phone A's tap lands its wears, then phone B's lands on top of them, with
+ * both logs held; then the logs answer, and each phone takes its wears back,
+ * in the order given.
+ */
+async function overlappingTaps(takenBack: 'as they landed' | 'latest first') {
+  const [wearA, wearB] = allByName(phones(), t('closet.wear'));
+  logGate.on = true;
+  const a = tap(wearA);
+  await until(() => logGate.held.length === 1);
+  expect(row('hoodie')).toMatchObject({ wear_count: 5, last_worn_on: TODAY });
+  const b = tap(wearB);
+  await until(() => logGate.held.length === 2);
+  expect(counts()).toEqual([6, 2, 2]);
+  const [answerA, answerB] = logGate.held;
+  if (takenBack === 'as they landed') { answerA(); await a; answerB(); await b; } else { answerB(); await b; answerA(); await a; }
+  await settle();
+}
 
 describe('a failed wear takes back the counts it raised', () => {
   it('every bump lands, then the log is refused: the counts go back, and the retry counts once', async () => {
@@ -169,6 +254,41 @@ describe('a failed wear takes back the counts it raised', () => {
   });
 });
 
+describe('two failed taps that overlap on one item (HD2)', () => {
+  it('taken back latest first: every count and every date is as it was', async () => {
+    deletedElsewhere();
+    await overlappingTaps('latest first');
+
+    expect(logs()).toEqual([]);
+    expect(counts()).toEqual([4, 0, 0]);
+    expect(ITEMS.map((id) => row(id).last_worn_on)).toEqual([OLD, null, null]);
+    expect(h.toasts.error).toHaveLength(2);
+    expect(h.toasts.error).not.toContain(MAY_BE_COUNTED());
+  });
+
+  it('taken back as they landed: every count is as it was, and an item never worn has no last-worn date', async () => {
+    deletedElsewhere();
+    await overlappingTaps('as they landed');
+
+    expect(logs()).toEqual([]);
+    expect(counts()).toEqual([4, 0, 0]);
+    // No wear left is no date: these said "worn today" at 0 wears.
+    expect([row('jeans').last_worn_on, row('boots').last_worn_on]).toEqual([null, null]);
+    expect(h.toasts.error).toHaveLength(2);
+  });
+
+  it('with one of them committing, the date is the committed wear\'s', async () => {
+    // Only phone A's log is refused; phone B's commits.
+    let refusals = 1;
+    h.fault = (table, calls) => (isLog(table, calls) && refusals-- > 0 ? { code: '57014', message: 'canceling statement due to statement timeout' } : null);
+    await overlappingTaps('as they landed');
+
+    expect(logs()).toHaveLength(1);
+    expect(counts()).toEqual([5, 1, 1]);
+    expect(ITEMS.map((id) => row(id).last_worn_on)).toEqual([TODAY, TODAY, TODAY]);
+  });
+});
+
 describe('the boundary: what a client cannot make all-or-nothing', () => {
   it('when the take-back itself cannot be written, the counts stay raised and the closet says so', async () => {
     let bumps = 0;
@@ -197,6 +317,20 @@ describe('the boundary: what a client cannot make all-or-nothing', () => {
     expect(counts()).toEqual([5, 1, 1]);
     expect(h.toasts.error).toEqual([MAY_BE_COUNTED()]);
     expect(h.toasts.success).toEqual([]);
+  });
+
+  it('two failed taps taken back as they landed leave an item worn before at today\'s date (HD2)', async () => {
+    deletedElsewhere();
+    await overlappingTaps('as they landed');
+
+    // The count is exact. The date is not: phone A had to keep today for
+    // phone B's wear, which might have committed, and phone B then put back
+    // the "today" it read from phone A's. One date column with no history
+    // cannot say otherwise; lib/closet/wear.ts states this limit rather than
+    // claiming the date is rolled back.
+    expect(logs()).toEqual([]);
+    expect(row('hoodie').wear_count).toBe(4);
+    expect(row('hoodie').last_worn_on).toBe(TODAY);
   });
 
   it('when a bump\'s reply is lost, the landed ones go back but that one may have landed: the closet says so', async () => {
@@ -244,5 +378,40 @@ describe('takeBackWear', () => {
     const s = store(row, { interleave: () => { row.wear_count += 1; } });
     expect(await takeBackWear(s, { id: 'item-1', count: 5, lastWornBefore: '2026-09-01' })).toBe(true);
     expect(row).toEqual({ wear_count: 5, last_worn_on: TODAY });
+  });
+
+  /** Two wears land, A then B, and are taken back in the order given (HD2). */
+  async function overlapping(row: { wear_count: number; last_worn_on: string | null }, order: 'AB' | 'BA') {
+    const s = store(row);
+    const landed: LandedWear[] = [];
+    expect(await bumpWearCount(s, 'item-1', TODAY, landed)).toEqual({ ok: true });
+    expect(await bumpWearCount(s, 'item-1', TODAY, landed)).toEqual({ ok: true });
+    const [a, b] = landed;
+    for (const wear of order === 'AB' ? [a, b] : [b, a]) expect(await takeBackWear(s, wear)).toBe(true);
+  }
+
+  it('clears the date when it leaves no wear at all, though another wear set that date', async () => {
+    // A wear below ours was taken back while ours was on top; ours is the last.
+    const row = { wear_count: 1, last_worn_on: TODAY as string | null };
+    expect(await takeBackWear(store(row), { id: 'item-1', count: 2, lastWornBefore: TODAY })).toBe(true);
+    expect(row).toEqual({ wear_count: 0, last_worn_on: null });
+  });
+
+  it('two overlapping wears on an item never worn: no count and no date, in either order', async () => {
+    for (const order of ['AB', 'BA'] as const) {
+      const row = { wear_count: 0, last_worn_on: null as string | null };
+      await overlapping(row, order);
+      expect(row, order).toEqual({ wear_count: 0, last_worn_on: null });
+    }
+  });
+
+  it('two overlapping wears on an item worn before: the count either way, the old date only latest first (the stated limit)', async () => {
+    const latestFirst = { wear_count: 4, last_worn_on: OLD as string | null };
+    await overlapping(latestFirst, 'BA');
+    expect(latestFirst).toEqual({ wear_count: 4, last_worn_on: OLD });
+
+    const asLanded = { wear_count: 4, last_worn_on: OLD as string | null };
+    await overlapping(asLanded, 'AB');
+    expect(asLanded).toEqual({ wear_count: 4, last_worn_on: TODAY });
   });
 });

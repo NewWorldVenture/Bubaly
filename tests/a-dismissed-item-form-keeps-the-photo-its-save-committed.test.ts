@@ -25,6 +25,13 @@ import { resetHookSlots } from './helpers/hook-slots';
 // held in flight while the form is dismissed, then answered — committed,
 // refused, or with the reply lost after it committed. Each route is shown to
 // close the dialog, so none of them is assumed.
+//
+// HD1 — a confirmed save then removes the photos it superseded, and only
+// after that removal called back to its parent. The form is still open during
+// that storage round trip, and the save had decided BEFORE it whether the form
+// had been dismissed: dismissed and another form opened meanwhile, the old
+// save's onSaved closed the NEW form, discarding its draft and orphaning the
+// photo that form had uploaded. Here the removal is held too.
 
 const h = await vi.hoisted(async () => (await import('./helpers/module-state')).createModuleState());
 
@@ -32,6 +39,8 @@ const h = await vi.hoisted(async () => (await import('./helpers/module-state')).
 const io = vi.hoisted(() => ({
   write: null as null | { table: string; until: Promise<void>; reply: 'database' | 'lost' },
   upload: null as null | Promise<void>,
+  /** Storage removals wait on this while it is set. */
+  remove: null as null | Promise<void>,
 }));
 
 vi.mock('react', async (original) => (await import('./helpers/hook-slots')).withHookSlots(await original<object>(), h.hooks));
@@ -53,7 +62,7 @@ vi.mock('@/components/app/page-header', async () => (await import('./helpers/mod
 vi.mock('@/components/ai/ai-insight', async () => (await import('./helpers/module-harness')).ui);
 vi.mock('@/components/media/family-media-img', async () => (await import('./helpers/module-harness')).ui);
 
-type Client = { from(table: string): object; storage: { from(name: string): { upload(path: string): Promise<unknown> } } };
+type Client = { from(table: string): object; storage: { from(name: string): { upload(path: string): Promise<unknown>; remove(paths: string[]): Promise<unknown> } } };
 type Reply = { data: unknown; error: unknown };
 
 /**
@@ -98,7 +107,11 @@ function inFlight(client: Client): Client {
     storage: {
       from(name: string) {
         const bucket = client.storage.from(name);
-        return { ...bucket, upload: async (path: string) => { if (io.upload) await io.upload; return bucket.upload(path); } };
+        return {
+          ...bucket,
+          upload: async (path: string) => { if (io.upload) await io.upload; return bucket.upload(path); },
+          remove: async (paths: string[]) => { if (io.remove) await io.remove; return bucket.remove(paths); },
+        };
       },
     },
   };
@@ -137,7 +150,7 @@ beforeEach(() => {
   h.rows = {}; h.readErrors = {}; h.refreshes = []; h.calls = []; h.fault = null;
   h.storage = { objects: new Map(), refused: new Set() };
   h.toasts = { success: [], error: [] }; h.confirmAnswer = true; h.timeZone = 'UTC';
-  io.write = null; io.upload = null;
+  io.write = null; io.upload = null; io.remove = null;
   doc = fakeDocument();
   vi.stubGlobal('document', doc);
   vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -195,6 +208,17 @@ function holdSave(table: string, reply: 'database' | 'lost' = 'database') {
   io.write = { table, until: gate.until, reply };
   return gate.open;
 }
+
+/** Hold every storage removal until the test lets them through. */
+function holdRemoval() {
+  const gate = deferred();
+  io.remove = gate.until;
+  return gate.open;
+}
+
+/** The photo the open form shows: its draft's own state, not a row's. */
+const shownPhoto = (Component: ComponentType) =>
+  nodes(form(screen(Component))).find((node) => node.type === 'img')?.props.src;
 
 /** Choose a file in the open form's photo input, as the browser would. */
 async function choosePhoto(Component: ComponentType, name: string) {
@@ -380,6 +404,88 @@ describe.each(MODULES)('$name: dismissing the item form never deletes a photo it
         expect(h.toasts.success).toEqual(['Item added']);
         expect(bucket()).toEqual([uploaded]);
       });
+
+      it('an edit dismissed while its old photo is still being removed does not close the form opened since (HD1)', async () => {
+        db.seed(m.table, [{ id: 'item-1', name: 'Swim shorts', photo_path: old }, { id: 'item-2', name: 'Rain coat' }]);
+        store(old);
+        await click(byName(screen(C), t('itemAction.edit', { name: 'Swim shorts' })));
+        await choosePhoto(C, 'new.jpg');
+        const uploaded = bucket().find((path) => path !== old)!;
+        const release = holdRemoval();
+        const saving = submit(form(screen(C)));
+        await settle();
+        // Saved and confirmed; the old photo's removal is still on its way,
+        // and the form is still open meanwhile.
+        expect(db.table(m.table).find((row) => row.id === 'item-1')!.photo_path).toBe(uploaded);
+        expect(dialogOpen(C)).toBe(true);
+
+        await dismiss(C, route, m.cancel);
+        await click(byName(screen(C), t('itemAction.edit', { name: 'Rain coat' })));
+        await choosePhoto(C, 'draft.jpg');
+        const draft = bucket().find((path) => path !== old && path !== uploaded)!;
+        release();
+        await saving;
+        await settle();
+
+        expect(dialogOpen(C), 'the form opened since is still open').toBe(true);
+        expect(shownPhoto(C), 'with its draft').toBe(draft);
+        expect(h.toasts.success).toEqual(['Item updated']);
+        expect(bucket()).toEqual([uploaded, draft].sort());
+        // And the draft is still its own form's to clean up: nothing is orphaned.
+        await dismiss(C, 'Cancel', m.cancel);
+        await settle();
+        expect(bucket()).toEqual([uploaded]);
+      });
+
+      it('a new item that uploaded twice, dismissed while the first upload is still being removed, does not close the form opened since (HD1)', async () => {
+        await click(byName(screen(C), t(m.add)));
+        await choosePhoto(C, 'first.jpg');
+        const [first] = bucket();
+        await choosePhoto(C, 'second.jpg');
+        const second = bucket().find((path) => path !== first)!;
+        const release = holdRemoval();
+        const saving = submit(form(screen(C)), { name: 'Swim shorts' });
+        await settle();
+        expect(db.table(m.table)).toHaveLength(1);
+        expect(db.table(m.table)[0].photo_path).toBe(second);
+        expect(dialogOpen(C)).toBe(true);
+
+        await dismiss(C, route, m.cancel);
+        await click(byName(screen(C), t(m.add)));
+        await choosePhoto(C, 'draft.jpg');
+        const draft = bucket().find((path) => path !== first && path !== second)!;
+        release();
+        await saving;
+        await settle();
+
+        expect(dialogOpen(C), 'the form opened since is still open').toBe(true);
+        expect(shownPhoto(C), 'with its draft').toBe(draft);
+        expect(h.toasts.success).toEqual(['Item added']);
+        expect(bucket()).toEqual([second, draft].sort());
+        await dismiss(C, 'Cancel', m.cancel);
+        await settle();
+        expect(bucket()).toEqual([second]);
+      });
     });
   }
+
+  it('a save nobody dismissed still closes its own form, once its old photo is removed', async () => {
+    db.seed(m.table, [{ id: 'item-1', name: 'Swim shorts', photo_path: old }]);
+    store(old);
+    await click(byName(screen(C), t('itemAction.edit', { name: 'Swim shorts' })));
+    await choosePhoto(C, 'new.jpg');
+    const uploaded = bucket().find((path) => path !== old)!;
+    const release = holdRemoval();
+    const saving = submit(form(screen(C)));
+    await settle();
+    expect(dialogOpen(C)).toBe(true);
+
+    release();
+    await saving;
+    await settle();
+
+    expect(dialogOpen(C)).toBe(false);
+    expect(h.toasts.success).toEqual(['Item updated']);
+    expect(bucket()).toEqual([uploaded]);
+  });
 });

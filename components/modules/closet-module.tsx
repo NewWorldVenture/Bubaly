@@ -462,7 +462,10 @@ export function ClosetModule() {
         <ItemForm
           familyId={familyId} userId={userId} memberId={memberId} members={members} item={itemForm.item}
           onClose={() => setItemForm({ open: false, item: null })}
-          onSaved={(msg) => { setItemForm({ open: false, item: null }); success(msg); }}
+          // Closes THIS opening, read when the save calls back: by then the
+          // person may have dismissed it and opened another, whose draft a
+          // plain close would discard (HD1). Each opening is a new object.
+          onSaved={(msg) => { setItemForm((now) => (now === itemForm ? { open: false, item: null } : now)); success(msg); }}
         />
       )}
       {builderOpen && memberId && (
@@ -480,7 +483,7 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
   onClose: () => void; onSaved: (message: string) => void;
 }) {
   const t = useTranslations();
-  const { success, error: toastError } = useToast();
+  const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [photoPath, setPhotoPath] = useState<string | null>(item?.photo_path ?? null);
@@ -560,14 +563,12 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
     if (wroteNoRows(saved)) { void settle('refused'); return toastError(t('errors.thatChangeWasNotSaved')); }
     // Only now that the row is confirmed to point at `photoPath`: the photo it
     // used to have (replaced or removed) and any other upload from this form.
-    const dismissed = uploads.isClosed;
     await settle('saved');
-    const message = item ? 'Item updated' : 'Item added';
-    // Dismissed while the request was in flight: the item is saved all the
-    // same, and the toast says so. Not through onSaved, which would close
-    // whatever form is open by now.
-    if (dismissed) return success(message);
-    onSaved(message);
+    // Reported however the form was left meanwhile — dismissed while the
+    // request was in flight, or while the old photo was being removed — since
+    // the item is saved all the same. onSaved closes this form only if it is
+    // still the one on screen, so a form opened since keeps its draft (HD1).
+    onSaved(item ? 'Item updated' : 'Item added');
   }
 
   return (
