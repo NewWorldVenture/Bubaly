@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { Section, SectionHeading } from '@/components/marketing/sections';
 import { CTASection } from '@/components/marketing/cta';
-import { Button } from '@/components/ui/button';
+import { ButtonLink } from '@/components/ui/button-link';
 import { AiActionDemo } from '@/components/marketing/ai-showcase';
 import { MarketingAeoSection } from '@/components/marketing/marketing-aeo-section';
 
@@ -93,10 +93,8 @@ export default async function AIPage() {
           <p className="mx-auto mt-5 max-w-2xl text-lg text-muted sm:text-xl">{t('ai.askInPlainLanguageAnd')}</p>
 
           <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-            <Link href="/signup">
-              <Button size="lg">{t('ai.startFree5Days')}{' '}<ArrowRight className="h-5 w-5" />
-              </Button>
-            </Link>
+            <ButtonLink href="/signup" size="lg">{t('ai.startFree5Days')}{' '}<ArrowRight className="h-5 w-5" />
+            </ButtonLink>
             <Link
               href="#demo"
               className="inline-flex items-center gap-2 rounded-full border border-border bg-surface/50 px-5 py-2.5 text-sm font-semibold transition hover:border-brand/40 hover:bg-surface/80"
