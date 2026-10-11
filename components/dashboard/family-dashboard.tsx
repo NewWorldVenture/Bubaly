@@ -17,6 +17,7 @@ import { dayPhase, phaseGreeting } from '@/lib/home/time-of-day';
 import { dayKeyInTz, zonedDayBoundsMs, addDaysToDayKey, weekStartDayKey, scopeFromUserContext } from '@/lib/services/scope';
 import { readCompleteCalendarOccurrences, projectCalendarOccurrences } from '@/lib/services/calendar/search-occurrences';
 import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from '@/lib/calendar/source-capability';
+import { readOnOpenGroceryLists } from '@/lib/services/groceries';
 
 const ACCENT = ['bg-violet-500', 'bg-emerald-500', 'bg-orange-500', 'bg-rose-500', 'bg-blue-500', 'bg-teal-500'];
 const MEAL_EMOJIS: Record<string, string> = { breakfast: '🍳', lunch: '🥗', dinner: '🍽️', snack: '🍎' };
@@ -110,8 +111,9 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
       .lt('plan_date', weekEnd.toISOString().slice(0, 10))
       .order('plan_date'),
     supabase.from('family_members').select('*').eq('family_id', familyId).eq('is_active', true).order('created_at'),
-    supabase.from('grocery_items').select('id, name, is_checked').eq('family_id', familyId)
-      .eq('is_checked', false).order('created_at').limit(6),
+    // Only lists the family has not archived (readOnOpenGroceryLists).
+    readOnOpenGroceryLists(supabase, familyId, (lists) => supabase.from('grocery_items').select('id, name, is_checked').eq('family_id', familyId)
+      .in('list_id', lists).eq('is_checked', false).order('created_at').limit(6)),
     supabase.from('chore_assignments')
       .select('id, due_at, status, member_id, chore_id')
       .eq('family_id', familyId).in('status', ['todo', 'in_progress']).order('due_at').limit(4),

@@ -139,6 +139,22 @@ export async function openGroceryListIds(
 }
 
 /**
+ * Run a `grocery_items` read over the family's open lists only: `read` gets
+ * their ids and adds `.in('list_id', ids)` to its own query. A failed list
+ * read comes back in the shape of a failed PostgREST read, so the caller's
+ * existing error handling reports it.
+ */
+export async function readOnOpenGroceryLists<T>(
+  db: ServiceScope['db'],
+  familyId: string,
+  read: (listIds: string[]) => PromiseLike<T>,
+): Promise<T | { data: null; count: null; error: { message: string } }> {
+  const lists = await openGroceryListIds(db, familyId);
+  if (!lists.ok) return { data: null, count: null, error: lists.error };
+  return read(lists.ids);
+}
+
+/**
  * Get-or-create a family's default grocery list, as ONE operation (DATA-007).
  *
  * Every writer that files groceries without naming a list comes through here:
