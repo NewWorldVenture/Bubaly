@@ -42,7 +42,7 @@ export function MemoryTimeline({ memories, nameById }: {
           <input
             value={query} onChange={(e) => setQuery(e.target.value)}
             placeholder={t('memoryTimeline.searchMemoriesTitleWhoDate')}
-            className="w-full rounded-xl border border-border bg-surface/60 py-2 pl-9 pr-8 text-sm outline-none transition focus:border-brand/50"
+            className="w-full rounded-xl border border-border bg-surface/60 py-2 pl-9 pr-8 text-sm outline-none transition focus:border-brand"
           />
           {query && (
             <button onClick={() => setQuery('')} aria-label={t('memoryTimeline.clearSearch')}

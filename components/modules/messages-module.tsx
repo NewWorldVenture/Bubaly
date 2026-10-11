@@ -1492,7 +1492,7 @@ function MessagesWorkspace() {
             {activeConv.is_archived && <p role="status" className="border-t border-border px-4 py-2 text-xs text-muted">{tr('messagesChat.archivedReadOnly')}</p>}
             <form onSubmit={sendMessage} className="flex shrink-0 items-end gap-2 border-t border-border bg-surface/50 px-3 py-2 sm:px-4 sm:py-3">
               <fieldset disabled={Boolean(activeConv.is_archived && !editMessage)} className="contents">
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1 rounded-2xl border border-border bg-elevated px-3 py-1.5 focus-within:border-brand/50">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1 rounded-2xl border border-border bg-elevated px-3 py-1.5 focus-within:border-brand">
                 {/* Hidden file inputs */}
                 <input ref={fileRef} type="file" accept="application/pdf,.doc,.docx,.xls,.xlsx,.txt,image/*"
                   className="hidden" onChange={(e) => { if (e.target.files?.[0]) sendFile(e.target.files[0]); e.target.value = ''; }} />
