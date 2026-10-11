@@ -202,7 +202,25 @@ export async function guardianEscalationKeyedOnText(client: SupabaseClient, fami
   return { kind: 'text', input: mark.data.input };
 }
 
-export type OwedLandingCounts = { landed: number; unavailable: number };
+export type OwedLandingCounts = {
+  landed: number;
+  unavailable: number;
+  /**
+   * Items read and never tried: the phase ended first. Emergencies that
+   * reached nobody, with no record on file for the sweep to find, so they are
+   * reported as left. Untouched, they keep their count, and so their turn in
+   * the next run's order.
+   */
+  deferred: number;
+};
+
+/**
+ * How long one item's landing (its record's insert, then its close), or the
+ * count of a failed one, may take before it is cut off. Far longer than a
+ * one-row insert or update takes, so what is cut here is a statement that is
+ * not being answered, and the next item is taken.
+ */
+const LANDING_MS = 10_000;
 
 type OwedItem = { id: string; family_id: string; inputs: unknown; attempt: unknown; created_at: string };
 
@@ -210,8 +228,9 @@ const triesOf = (item: OwedItem) => (typeof item.attempt === 'number' && Number.
 
 /**
  * Count a landing that failed on its item, so the next run reaches the items
- * tried fewer times first. Logged, never raised: left uncounted, the item is
- * only taken as early as before.
+ * tried fewer times first. Logged, never raised. A count is advancement only
+ * once it is on file: one refused, matching no row, or cut off leaves the item
+ * at the count it had, so it is taken in the same turn next run as in this one.
  */
 async function countFailedLanding(client: SupabaseClient, item: OwedItem, signal: AbortSignal): Promise<void> {
   try {
@@ -238,18 +257,48 @@ async function countFailedLanding(client: SupabaseClient, item: OwedItem, signal
  * this cannot read, or one whose record the database refuses every time), and
  * a newer escalation behind them waited out its window. Each failed landing is
  * counted on its item, so the ones that keep failing take their turn behind the
- * ones not yet tried.
+ * ones not yet tried — once that count is on file. A count refused, matching
+ * no row, or cut off is not: the item keeps its count and its turn, and while
+ * its counts keep failing the items behind it are taken no sooner. Those the
+ * phase does not reach are counted deferred, so the run says so.
  *
- * Every read and write stops at `signal` — the retry sweep's own deadline — so
- * a stalled write is cut off inside the run rather than holding it past the
- * function's lifetime. A landing cut off is counted unavailable, never landed;
- * a close cut off leaves the item open, and the next run closes it.
+ * Bounded, so a stalled statement is cut off inside the run rather than
+ * holding it past the function's lifetime, or holding the part of it the work
+ * after this phase needs. The read and every landing stop at `deadline` (epoch
+ * ms, the end of this phase's share of the run), each landing after
+ * LANDING_MS of its own, and everything at `signal` — the run's deadline, or
+ * the caller gone. The count of a failed landing may run on past `deadline`
+ * (the landing cut off there is one to count), but for LANDING_MS at most, and
+ * never past `countBy` (epoch ms, no earlier than `deadline`): the latest this
+ * phase holds the run, landings and counts alike. A landing cut off is counted
+ * unavailable, never landed; a close cut off leaves the item open, and the
+ * next run closes it (its record is on file, for the sweep to retry). The
+ * items the phase ends before are counted deferred, and left as they are.
+ *
+ * A landing cut off short of `countBy` is given its count, too (advancement
+ * once on file, as above). It was not, when every landing shared the run's
+ * deadline: one whose insert never
+ * answered took the whole run on every run, was never counted, and so stayed
+ * first — the owed escalations behind it were never landed, and the records
+ * on file were never retried after it. Nor did its count have a bound of its
+ * own in the phase: bounded by the run's deadline and a fresh LANDING_MS, the
+ * count after a landing cut off at `deadline` held the run up to LANDING_MS
+ * longer, and a slow drain before it left the records on file under an
+ * attempt's time — none was retried, on every run the slowness lasted.
  */
 export async function landOwedGuardianEscalations(
   client: SupabaseClient,
-  options: { since: string; limit: number; signal: AbortSignal },
+  options: { since: string; limit: number; signal: AbortSignal; deadline: number; countBy: number },
 ): Promise<OwedLandingCounts> {
-  const counts: OwedLandingCounts = { landed: 0, unavailable: 0 };
+  const counts: OwedLandingCounts = { landed: 0, unavailable: 0, deferred: 0 };
+  // Whole milliseconds: AbortSignal.timeout throws on a fraction, and a share of the run can be one.
+  const until = (at: number) => AbortSignal.timeout(Math.max(0, Math.floor(at - Date.now())));
+  /** All of this phase, the counts of failed landings included. */
+  const counting = AbortSignal.any([options.signal, until(options.countBy)]);
+  /** The read, and the landings: this phase's share of the run. */
+  const phase = AbortSignal.any([counting, until(options.deadline)]);
+  /** A statement of one item: cut off after LANDING_MS, or sooner with `within`. */
+  const bounded = (within: AbortSignal) => AbortSignal.any([within, AbortSignal.timeout(LANDING_MS)]);
   let items: OwedItem[];
   try {
     const { data, error } = await client.from('ai_tool_calls')
@@ -261,7 +310,7 @@ export async function landOwedGuardianEscalations(
       .order('created_at', { ascending: true })
       .order('id', { ascending: true })
       .limit(options.limit)
-      .abortSignal(options.signal);
+      .abortSignal(phase);
     if (error || !Array.isArray(data)) {
       console.error('[guardian] owed escalations could not be read', { error });
       counts.unavailable += 1;
@@ -274,14 +323,26 @@ export async function landOwedGuardianEscalations(
     return counts;
   }
 
-  /** One that could not be landed: counted, and — unless the run's deadline cut it off — tried later than the rest. */
+  /**
+   * One that could not be landed — refused, unreadable, or cut off: counted,
+   * so it is tried later than the rest once the count is on file. Its count is
+   * cut off at `countBy`, as everything in this phase is; past it there is no
+   * time left to say so.
+   */
   const failed = async (item: OwedItem) => {
     counts.unavailable += 1;
-    if (!options.signal.aborted) await countFailedLanding(client, item, options.signal);
+    if (!counting.aborted) await countFailedLanding(client, item, bounded(counting));
   };
 
-  for (const item of items) {
-    if (options.signal.aborted) break;
+  for (const [index, item] of items.entries()) {
+    if (phase.aborted) {
+      // The phase has ended: inside a landing or a close, or between items.
+      // The rest were read and never tried, and are counted, as the records'
+      // own loop counts the ones it leaves. Left uncounted, a run that reached
+      // none of them answered as though nothing were owed.
+      counts.deferred += items.length - index;
+      break;
+    }
     const stored = storedSchema.safeParse(item.inputs);
     if (!stored.success || stored.data.input.familyId !== item.family_id) {
       console.error('[guardian] an owed escalation cannot be landed as written', { id: item.id });
@@ -289,6 +350,7 @@ export async function landOwedGuardianEscalations(
       continue;
     }
     const { input, pushSent } = stored.data;
+    const landing = bounded(phase);
     try {
       const { data: landed, error: landError } = await client.from('guardian_escalations').insert({
         id: guardianEscalationRecordId(input),
@@ -303,7 +365,7 @@ export async function landOwedGuardianEscalations(
         sms_sent: false,
         call_attempted: false,
         escalated_at: item.created_at,
-      }).select('id').abortSignal(options.signal);
+      }).select('id').abortSignal(landing);
       // A unique violation is the record a later attempt already wrote.
       if (landError && !isUniqueViolation(landError)) {
         console.error('[guardian] an owed escalation record could not be landed', { id: item.id, error: landError });
@@ -319,10 +381,10 @@ export async function landOwedGuardianEscalations(
         .update({ state: 'succeeded', attempt: triesOf(item) + 1, finished_at: new Date().toISOString(), outputs: { version: 1, landed: true } })
         .eq('id', item.id).eq('family_id', item.family_id).eq('tool_name', GUARDIAN_ESCALATION_OWED_TOOL).eq('state', 'reserved')
         .select('id')
-        .abortSignal(options.signal);
+        .abortSignal(landing);
       // Left open, the item lands nothing new next time (the record is there),
-      // so a failed close — refused, or cut off at the deadline — costs a
-      // read, not a duplicate. The record did land, and is counted so.
+      // so a failed close — refused, or cut off — costs a read, not a
+      // duplicate. The record did land, and is counted so.
       if (closeError || !Array.isArray(closed) || closed.length !== 1) {
         console.error('[guardian] an owed escalation was landed but could not be closed', { id: item.id, error: closeError ?? 'no row updated' });
       }
