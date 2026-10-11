@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { emailsSent, recordedActions, runSteps, type Step } from '@/lib/marketing/automation-steps';
+import { emailsSent, failedAttempt, recordedActions, runSteps, type Step } from '@/lib/marketing/automation-steps';
 import { EVENT_DEFAULT_COPY, type EventTrigger } from '@/lib/marketing/automation-triggers';
 import { wroteNoRows } from '@/lib/supabase/errors';
 
@@ -78,7 +78,9 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
       actions = await runSteps(steps, { email: params.email ?? null, name: params.name ?? null }, fallback, previous);
     } catch (error) {
       console.error('[marketing automation] event-driven steps failed', error);
-      actions = ['automation:failed'];
+      // Keep what the earlier attempt delivered: a bare failure here would
+      // erase it, and the retry would send it again.
+      actions = failedAttempt(steps, previous);
     }
 
     const failed = actions.some((action) => action.includes(':failed') || action.includes(':skipped') || action.includes(':unsupported'));

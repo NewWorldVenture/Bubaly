@@ -158,3 +158,65 @@ describe('the event-driven automation path', () => {
     expect(runs(db)[0].status).toBe('completed');
   });
 });
+
+/**
+ * A step that THROWS — a malformed workflow, such as a `send_email` whose body
+ * is not text — used to escape `runSteps`, and both callers then recorded the
+ * attempt as `['automation:failed']`. That overwrote the only record of which
+ * emails had already gone, both earlier in the same attempt and in attempts
+ * before it, so every retry sent them again.
+ */
+describe('a step that throws', () => {
+  const broken = [
+    { action: 'send_email', subject: 'First note', body: 'Synthetic body' },
+    // Not text: building this email throws.
+    { action: 'send_email', subject: 'Broken note', body: 42 as unknown as string },
+  ];
+
+  it('does not make the scheduled runner send the earlier email again', async () => {
+    const db = withWorkflow('customer_inactive', broken);
+
+    for (let day = 0; day < 3; day++) await runAutomations(db as unknown as DB);
+
+    expect(h.sends.map((s) => s.subject), 'emails sent across three daily runs').toEqual(['First note']);
+    expect(runs(db)[0].status).toBe('failed');
+    expect((runs(db)[0].metadata as { actions: string[] }).actions).toEqual(['send_email', 'send_email:failed']);
+  });
+
+  it('does not make the event path send the earlier email again', async () => {
+    const db = withWorkflow('onboarding_abandoned', broken);
+    const fire = () => fireAutomationEvent(db as unknown as DB, {
+      trigger: 'onboarding_abandoned', email: EMAIL, name: 'Synthetic', subjectKey: 'onboarding_abandoned:user-2',
+    });
+
+    await fire(); await fire(); await fire();
+
+    expect(h.sends.map((s) => s.subject), 'emails sent across three sweeps').toEqual(['First note']);
+    expect(runs(db)[0].status).toBe('failed');
+  });
+
+  it('still runs the steps after it', async () => {
+    const db = withWorkflow('customer_inactive', [
+      { action: 'send_email', subject: 'Broken note', body: 42 as unknown as string },
+      { action: 'send_email', subject: 'Last note', body: 'Synthetic body' },
+    ]);
+
+    await runAutomations(db as unknown as DB);
+    await runAutomations(db as unknown as DB);
+
+    expect(h.sends.map((s) => s.subject)).toEqual(['Last note']);
+    expect((runs(db)[0].metadata as { actions: string[] }).actions).toEqual(['send_email:failed', 'send_email']);
+  });
+});
+
+describe('the log a failed attempt leaves when runSteps itself throws', () => {
+  it('keeps every send the earlier attempt recorded, by position, and fails the rest', async () => {
+    const { failedAttempt } = await import('@/lib/marketing/automation-steps');
+    const steps = [{ action: 'send_email' }, { action: 'apply_tag' }, { action: 'send_email' }];
+    expect(failedAttempt(steps, ['send_email', 'apply_tag:unsupported', 'send_email:failed']))
+      .toEqual(['send_email', 'automation:failed', 'automation:failed']);
+    expect(failedAttempt(steps, [])).toEqual(['automation:failed', 'automation:failed', 'automation:failed']);
+    // Still a failure with no steps at all, so the run is not recorded complete.
+    expect(failedAttempt([], [])).toEqual(['automation:failed']);
+  });
+});
