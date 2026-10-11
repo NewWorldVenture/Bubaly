@@ -1004,3 +1004,13 @@ body::before {
    the rule above, so this never reintroduces iOS focus-zoom. */
 :root[data-density='cozy']    { font-size: 104%; }
 :root[data-density='playful'] { font-size: 110%; }
+
+/* A focused marketing control must retain its brand border over the light canvas remap. */
+.light .marketing-theme .focus\:border-brand:focus,
+.light .marketing-theme .focus-visible\:border-brand:focus-visible,
+.light .marketing-theme .focus-within\:border-brand:focus-within { border-color: rgb(var(--brand)); }
+
+/* Translucent marketing fills over the elevated dark ground need the brighter brand token. */
+.dark .marketing-theme .focus\:border-brand:focus,
+.dark .marketing-theme .focus-visible\:border-brand:focus-visible,
+.dark .marketing-theme .focus-within\:border-brand:focus-within { border-color: rgb(var(--brand-text)); }

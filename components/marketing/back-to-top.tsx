@@ -62,7 +62,7 @@ export function BackToTop({ threshold = 400 }: { threshold?: number }) {
         'border border-border bg-surface/85 text-fg shadow-lg backdrop-blur',
         'transition-all duration-300 ease-out',
         'hover:-translate-y-0.5 hover:border-brand/50 hover:bg-elevated hover:text-brand-text',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:ring-offset-2 focus-visible:ring-offset-bg',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg',
         'motion-reduce:transition-none motion-reduce:hover:translate-y-0',
         raised ? 'bottom-28 sm:bottom-24' : 'bottom-6',
         visible ? 'pointer-events-auto translate-y-0 opacity-100' : 'pointer-events-none translate-y-3 opacity-0',
