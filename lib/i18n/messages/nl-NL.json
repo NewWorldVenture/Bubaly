@@ -16885,5 +16885,8 @@
   "mobileAssistant.conflictFamilyOne": "{count} gezinsadvies",
   "mobileAssistant.conflictFamilyOther": "{count} gezinsadviezen",
   "mobileAssistant.conflictCounts": "{personal} · {family}",
-  "mobileAssistant.conflictMobileFamilyLine": "Advies over gezinsbezetting: {titles} overlappen {when}. Geïmporteerde bezetting geldt voor het gezin; deze geeft niet aan wie dubbel is ingepland."
+  "mobileAssistant.conflictMobileFamilyLine": "Advies over gezinsbezetting: {titles} overlappen {when}. Geïmporteerde bezetting geldt voor het gezin; deze geeft niet aan wie dubbel is ingepland.",
+  "careModule.onlyTheCareYouLogged": "Alleen de zorg die jij voor {name} hebt vastgelegd wordt getoond. Het volledige zorglogboek is voor een ouder, een volwassene of een verzorger.",
+  "behaviorModule.keptForParentsAndCaregivers": "Gedragsnotities worden bijgehouden door de ouders en verzorgers van je gezin",
+  "behaviorModule.keptForParentsAndCaregiversBody": "Een notitie over hoe het met iemand gaat wordt gelezen door een ouder, een volwassene of een verzorger van het huishouden, en door wie hem schreef."
 }

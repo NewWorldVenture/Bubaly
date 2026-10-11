@@ -475,6 +475,14 @@ begin
       expected := 'Members read their own symptom_logs';
       want_qual := '(is_family_member(family_id) AND (can_manage_family(family_id) OR is_self_member(member_id) OR (created_by = auth.uid())))';
     end if;
+    -- The held 0510 does the same for behavior_logs: "a manager, its author or
+    -- a caregiver", still inside is_family_member(family_id), which is what the
+    -- stranger fails. Credited under 0510's name, exactly.
+    if t = 'behavior_logs' and exists (select 1 from pg_policies p
+         where p.schemaname = 'public' and p.tablename = t and p.policyname = 'A note is read by a manager, its author or a caregiver') then
+      expected := 'A note is read by a manager, its author or a caregiver';
+      want_qual := '(is_family_member(family_id) AND (can_manage_family(family_id) OR (logged_by = auth.uid()) OR (family_role(family_id) = ''caregiver''::member_role)))';
+    end if;
     if not exists (select 1 from pg_class c where c.oid = ('public.' || t)::regclass
                      and c.relrowsecurity and not c.relforcerowsecurity) then
       failures := array_append(failures, format('%s: row security is off or FORCED — the header describes neither', t));
@@ -528,7 +536,7 @@ begin
   if array_length(failures, 1) is not null then
     raise exception 'K-01 attribution UNPINNED (the boundary held above, but not for the reason this file credits): %', array_to_string(failures, ' | ');
   end if;
-  raise notice 'OK member-scope (attribution pin): one permissive SELECT-covering policy per table (this branch''s symptom_logs_read, or the held 0506''s narrower read inside the same is_family_member(family_id), and 0377''s behavior_logs_select, both per-command), each USING exactly the predicate credited, no restrictive SELECT policy on either, and the predicate is 0003''s';
+  raise notice 'OK member-scope (attribution pin): one permissive SELECT-covering policy per table (this branch''s symptom_logs_read, or the held 0506''s narrower read inside the same is_family_member(family_id), and 0377''s behavior_logs_select, or the held 0510''s narrower read inside it, both per-command), each USING exactly the predicate credited, no restrictive SELECT policy on either, and the predicate is 0003''s';
 end $$;
 
 -- Leave the database exactly as it was found: every row above, and the grant,

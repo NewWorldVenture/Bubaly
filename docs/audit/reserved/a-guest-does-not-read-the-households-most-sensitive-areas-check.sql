@@ -19,8 +19,10 @@
 --   1. the guest reads no Guest House row that is not about them (counted);
 --   2. control: where a row is about the guest, the guest reads it (1), but
 --      in the eight tables the released schema already closes to a guest
---      (0481's sweep; listed in the probe), and 0509 never takes a guest's own
---      rows away (compared with the 59 policies dropped);
+--      (0481's sweep; listed in the probe), and in behavior_logs where the
+--      held 0510 is installed (a note is read by a manager, its author or a
+--      caregiver), and 0509 never takes a guest's own rows away (compared with
+--      the 59 policies dropped);
 --   3. control: the caregiver and the parent read exactly what they read with
 --      0509's 59 policies taken away (counted per table, so 0509 changes no
 --      one but a guest), and the parent reads every Guest House row;
@@ -36,9 +38,10 @@
 -- and, only where 0509 is installed, each in a rolled-back subtransaction:
 --
 --   N1. NEGATIVE CONTROL: with the 59 policies dropped, the guest reads the
---       ward's row in every table the released schema leaves open (51), and in
---       none of the eight it already closes: the fixture reaches the limit
---       0509 closes, and 0509's guard on those eight is defence in depth;
+--       ward's row in every table the released schema leaves open (51; 50
+--       with 0510), and in none of the eight it already closes (nine with
+--       0510): the fixture reaches the limit 0509 closes, and 0509's guard on
+--       those is defence in depth;
 --   M1. MUTATION CONTROL: with is_family_guest asking whether the caller is a
 --       guest ANYWHERE (not of the row's family), the guest no longer reads
 --       the row in the household they are a parent of, so 4. catches it.
@@ -186,9 +189,16 @@ declare
   rule_n    constant text := '(NOT is_family_guest(family_id))';
   -- Tables the released schema already closes to a guest (0481's sweep): 0509
   -- keeps its guard there too, so a permissive read added later cannot reopen
-  -- them, and the negative control expects them closed without 0509.
-  closed_before constant text[] := array['care_log', 'expense_split_shares', 'expense_splits', 'family_places',
-                                         'gift_payments', 'medication_doses', 'member_locations', 'subscriptions_tracked'];
+  -- them, and the negative control expects them closed without 0509. Where the
+  -- held 0510 is installed, behavior_logs is closed to a guest without 0509 as
+  -- well: a note is read by a manager, its author or a caregiver, and no seeded
+  -- note is the guest's.
+  closed_before text[] := array['care_log', 'expense_split_shares', 'expense_splits', 'family_places',
+                                'gift_payments', 'medication_doses', 'member_locations', 'subscriptions_tracked']
+                          || case when exists (select 1 from pg_policies p
+                                                where p.schemaname = 'public' and p.tablename = 'behavior_logs'
+                                                  and p.policyname = 'A note is read by a manager, its author or a caregiver')
+                                  then array['behavior_logs'] else '{}'::text[] end;
   installed boolean := to_regprocedure('public.is_family_guest(uuid)') is not null
                        and exists (select 1 from pg_policies p where p.schemaname = 'public'
                                      and p.policyname = 'A guest does not read member_locations');

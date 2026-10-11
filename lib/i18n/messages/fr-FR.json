@@ -16885,5 +16885,8 @@
   "mobileAssistant.conflictFamilyOne": "{count} avis familial",
   "mobileAssistant.conflictFamilyOther": "{count} avis familiaux",
   "mobileAssistant.conflictCounts": "{personal} · {family}",
-  "mobileAssistant.conflictMobileFamilyLine": "Avis d’occupation familiale : {titles} se chevauchent {when}. L’occupation importée s’applique à la famille ; elle n’indique pas qui a deux engagements simultanés."
+  "mobileAssistant.conflictMobileFamilyLine": "Avis d’occupation familiale : {titles} se chevauchent {when}. L’occupation importée s’applique à la famille ; elle n’indique pas qui a deux engagements simultanés.",
+  "careModule.onlyTheCareYouLogged": "Seuls les soins que tu as notés pour {name} sont affichés. Son journal de soins complet est réservé à un parent, un adulte ou un aidant.",
+  "behaviorModule.keptForParentsAndCaregivers": "Les notes de comportement sont tenues par les parents et les aidants de ta famille",
+  "behaviorModule.keptForParentsAndCaregiversBody": "Une note sur la façon dont va quelqu'un est lue par un parent, un adulte ou un aidant du foyer, et par la personne qui l'a écrite."
 }

@@ -16885,5 +16885,8 @@
   "mobileAssistant.conflictFamilyOne": "{count} avviso familiare",
   "mobileAssistant.conflictFamilyOther": "{count} avvisi familiari",
   "mobileAssistant.conflictCounts": "{personal} · {family}",
-  "mobileAssistant.conflictMobileFamilyLine": "Avviso di occupazione familiare: {titles} si sovrappongono {when}. L’occupazione importata riguarda la famiglia; non identifica chi ha due impegni contemporanei."
+  "mobileAssistant.conflictMobileFamilyLine": "Avviso di occupazione familiare: {titles} si sovrappongono {when}. L’occupazione importata riguarda la famiglia; non identifica chi ha due impegni contemporanei.",
+  "careModule.onlyTheCareYouLogged": "Sono mostrate solo le cure che hai registrato per {name}. Il registro completo delle cure è riservato a un genitore, un adulto o un assistente.",
+  "behaviorModule.keptForParentsAndCaregivers": "Le note sul comportamento sono tenute dai genitori e dagli assistenti della tua famiglia",
+  "behaviorModule.keptForParentsAndCaregiversBody": "Una nota su come sta qualcuno la leggono un genitore, un adulto o un assistente della famiglia, e chi l'ha scritta."
 }

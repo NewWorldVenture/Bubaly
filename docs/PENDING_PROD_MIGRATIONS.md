@@ -132,6 +132,7 @@ source allocations are not evidence that production applied any migration.
 | 0507 proposed, held | `0507_a_kid_login_does_not_start_a_household.sql` | 0482's `is_child_login_account()` also reads the kid-login mark the server writes (`app_metadata.bubaly_kid_login`), as 0495's `accept_invite` does, so a kid login whose address moved off the synthetic domain cannot start a household through `families_insert`. Found by Support (#771 comment 6100987720); requested on #771 (comment 6101311405), not yet confirmed. |
 | 0508 proposed, held | `0508_tax_documents_are_a_managers.sql` | `tax_documents` is read and written only by a parent or adult of the family (four `can_manage_family` policies replacing 0481's, whose teen/child self-read goes; 0391's step-up guards kept), and a restrictive `storage.objects` policy withholds the documents bucket's tax files (the family's `tax/` folder, or a file a `tax_documents` row of that family names) from anyone who does not manage the family or has not cleared the rows' step-up. Decided by the account holder on PROD-002; requested on #771 (comment 6101674181), not yet confirmed. |
 | 0509 proposed, held | `0509_a_guest_does_not_read_the_households_most_sensitive_areas.sql` | A guest of a family reads none of its rows, but the ones about themselves, in 59 tables: locations (6), money and cards (34), medical and insurance (10), Guardian and the household inbox (9). One RESTRICTIVE read policy per table over `is_family_guest(family_id)`; every other role, the service role and session-less readers unchanged. Decided by the account holder on ROLE-SCOPE-001; requested on #771 (comment 6101674181, scope 6101807525), not yet confirmed. |
+| 0510 proposed, held | `0510_a_note_about_a_member_is_read_by_managers_its_author_and_caregivers.sql` | A row of `behavior_logs` or `care_log` is read by a manager of its family, its author (`logged_by`, `created_by`) or a caregiver, all inside `is_family_member(family_id)`; a teen or a child no longer reads the notes others wrote, including the ones about them. Writes unchanged. Decided by the account holder; requested on #771 (comment 6103909775), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4764,6 +4765,97 @@ Dropping any one table's trigger turns the probe red on that table. 184 of
 families, try to vote in one family's poll under their member id from the
 other family and confirm 42501; then vote as their own member there and
 confirm it lands.
+
+## `0510` (proposed, held) — every member read every note about every other
+
+`supabase/reserved/0510_a_note_about_a_member_is_read_by_managers_its_author_and_caregivers.sql`
+— **held**: proposed as `0510`, the first number above `0509`. The account
+holder decided who reads a behaviour or care note as "managers, author,
+caregivers", recorded and requested on #771 in comment 6103909775. Not yet
+confirmed. It answers the question 0506's header left open and 0481's FIX 2
+deferred.
+
+**Severity: medium (a sibling read "Concern: focus, -1" about a brother, and a
+child the notes a parent wrote about them). Deploy order: any; the screen
+change ships first and shows the same notes before and after.**
+`behavior_logs_select` and `care_log_read` are `is_family_member(family_id)`,
+so a teen or a child reads every behaviour note and every care note in the
+household. `lib/ai/context/policy.ts` already lists both as sensitive.
+Measured on a replay of every runnable migration through 0485, in Note House
+(one note about the ward and one about each other member, by the parent, plus
+each member's own and the caregivers'): the teen and the child each read
+**8 notes they did not write in each table**, the parent's note about them
+among them.
+
+For each table, 0510 replaces every permissive read with one,
+"A note is read by a manager, its author or a caregiver":
+
+```sql
+is_family_member(family_id)
+and (can_manage_family(family_id) or <author> = auth.uid()
+     or family_role(family_id) = 'caregiver')
+```
+
+The author is `behavior_logs.logged_by` and `care_log.created_by`, the user ids
+each table's attribution guard pins to the writer. The outer
+`is_family_member` keeps it to active members (`family_role` does not read
+`is_active`). The restrictive reads already there (0481's
+`care_log_not_a_guests_read`, the held 0509's guest guard) are kept. Writes
+are unchanged: 0481's insert guard still keeps a non-manager logging only
+about themselves. A self-check requires exactly the one permissive read.
+
+**App change, shipping with the source:**
+- `lib/care/note-scope.ts`: `readsEveryNote(role)` (a parent, an adult, a
+  caregiver) and `notesInScope(...)`, the same rule.
+- **Care log.** Shows each reader the notes the rule gives them. A reader of
+  only their own notes sees a line saying so and no summary cards: a "last
+  contact" or average built from part of the log would read as the whole.
+- **Behaviour.** Logging is a manager's, so a teen or a child would find an
+  empty page. They are told the notes are kept by the parents and caregivers.
+- Copy in the seven base locales.
+- `tests/a-note-about-a-member-is-read-by-managers-its-author-and-caregivers.test.ts`
+  ties the screens and the migration to the rule.
+
+**Released probes made rule-aware:**
+- `member-scope-crossing-check.sql`'s attribution pin credits 0510's policy
+  on `behavior_logs` by name and exact predicate, as it does 0506's on
+  `symptom_logs`.
+- `a-care-entry-names-who-logged-it-check.sql` reads the stored attribution as
+  the table owner, and expects a child to read their own notes and, under
+  0510, not the parent's.
+
+Both pass with and without 0510. The held 0509 probe counts `behavior_logs`
+among the tables already closed to a guest where 0510 is installed, so it
+passes on 0509 alone and on the stack.
+
+**Proof:** `.github/workflows/member-notes-runtime.yml` requires the held probe
+`docs/audit/reserved/a-note-about-a-member-is-read-by-managers-its-author-and-caregivers-check.sql`
+to fail on the released schema (the teen's and the child's reads, the guest's
+behaviour notes, and the wiring), with no control failing. It applies 0510
+twice, requires the probe to pass, and re-runs the nine released probes over
+the two tables. The passing run shows, in both tables:
+- **The teen and the child.** Read no note they did not write, not even the
+  parent's note about them (counted), and each reads the note they wrote.
+- **The guest.** Reads no note.
+- **Everyone who reads every note.** The parent, the adult and the caregiver
+  read every note. The teen reads the note in the household they manage.
+- **Gone or outside.** The removed caregiver reads nothing, not even the note
+  they wrote; a stranger reads nothing.
+- **Server.** The service role, with and without a user id, reads every note.
+- **Writes.** The screens' inserts and edits come back to their writer: the
+  child's own care note, the caregiver's care note for the ward, the child's
+  edit of their own, and the parent's and the child's behaviour notes
+  (`OK 1` each).
+- **Wiring.** One permissive read per table with the exact predicate; no
+  restrictive read but a guest's.
+- **Negative control.** N1 (the family-wide read put back): the child reads
+  the ward's note in both.
+- **Mutation control.** M1 (the outer `is_family_member` taken off): the
+  removed caregiver reads the note they wrote in both.
+
+**After approved release:** sign a test teen in, open `/dashboard/care`, and
+confirm only the notes they logged are listed; open `/dashboard/behavior` and
+confirm the notice. Confirm a test caregiver still sees the whole care log.
 
 ## `0509` (proposed, held) — a guest read the household's most sensitive areas
 

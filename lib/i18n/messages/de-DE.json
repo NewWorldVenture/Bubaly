@@ -16885,5 +16885,8 @@
   "mobileAssistant.conflictFamilyOne": "{count} Familienhinweis",
   "mobileAssistant.conflictFamilyOther": "{count} Familienhinweise",
   "mobileAssistant.conflictCounts": "{personal} · {family}",
-  "mobileAssistant.conflictMobileFamilyLine": "Hinweis zur Familienbelegung: {titles} überschneiden sich {when}. Importierte Belegungen gelten für die Familie; sie zeigen nicht, wer doppelt verplant ist."
+  "mobileAssistant.conflictMobileFamilyLine": "Hinweis zur Familienbelegung: {titles} überschneiden sich {when}. Importierte Belegungen gelten für die Familie; sie zeigen nicht, wer doppelt verplant ist.",
+  "careModule.onlyTheCareYouLogged": "Es wird nur die Pflege angezeigt, die du für {name} eingetragen hast. Das vollständige Pflegeprotokoll ist für einen Elternteil, einen Erwachsenen oder eine Betreuungsperson.",
+  "behaviorModule.keptForParentsAndCaregivers": "Verhaltensnotizen führen die Eltern und Betreuungspersonen deiner Familie",
+  "behaviorModule.keptForParentsAndCaregiversBody": "Eine Notiz darüber, wie es jemandem geht, lesen ein Elternteil, ein Erwachsener oder eine Betreuungsperson des Haushalts und wer sie geschrieben hat."
 }

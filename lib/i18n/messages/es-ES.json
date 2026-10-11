@@ -16885,5 +16885,8 @@
   "mobileAssistant.conflictFamilyOne": "{count} aviso familiar",
   "mobileAssistant.conflictFamilyOther": "{count} avisos familiares",
   "mobileAssistant.conflictCounts": "{personal} · {family}",
-  "mobileAssistant.conflictMobileFamilyLine": "Aviso de ocupación familiar: {titles} se solapan {when}. La ocupación importada se aplica a la familia; no identifica quién tiene una doble reserva."
+  "mobileAssistant.conflictMobileFamilyLine": "Aviso de ocupación familiar: {titles} se solapan {when}. La ocupación importada se aplica a la familia; no identifica quién tiene una doble reserva.",
+  "careModule.onlyTheCareYouLogged": "Solo se muestran los cuidados que registraste para {name}. Su registro completo de cuidados es para un padre o madre, un adulto o un cuidador.",
+  "behaviorModule.keptForParentsAndCaregivers": "Las notas de comportamiento las llevan los padres y cuidadores de tu familia",
+  "behaviorModule.keptForParentsAndCaregiversBody": "Una nota sobre cómo está alguien la leen un padre o madre, un adulto o un cuidador del hogar, y quien la escribió."
 }

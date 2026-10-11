@@ -16885,5 +16885,8 @@
   "mobileAssistant.conflictFamilyOne": "{count} family advisory",
   "mobileAssistant.conflictFamilyOther": "{count} family advisories",
   "mobileAssistant.conflictCounts": "{personal} · {family}",
-  "mobileAssistant.conflictMobileFamilyLine": "Family occupancy advisory: {titles} overlap {when}. Imported occupancy applies to the family; it does not identify who is double-booked."
+  "mobileAssistant.conflictMobileFamilyLine": "Family occupancy advisory: {titles} overlap {when}. Imported occupancy applies to the family; it does not identify who is double-booked.",
+  "careModule.onlyTheCareYouLogged": "Showing only the care you logged for {name}. Their full care log is kept for a parent, an adult or a caregiver.",
+  "behaviorModule.keptForParentsAndCaregivers": "Behavior notes are kept by your family's parents and caregivers",
+  "behaviorModule.keptForParentsAndCaregiversBody": "A note about how someone is doing is read by a parent, an adult or a caregiver of the household, and by whoever wrote it."
 }
