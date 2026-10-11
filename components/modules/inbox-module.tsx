@@ -223,7 +223,7 @@ export function InboxModule() {
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted pointer-events-none" />
               <input value={search} inputMode="search" enterKeyHint="search" onChange={e => setSearch(e.target.value)}
                 placeholder={tr('inbox.searchMessagesContacts')}
-                className="w-full rounded-xl border border-border bg-surface/60 py-2.5 pl-9 pr-4 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/30" />
+                className="w-full rounded-xl border border-border bg-surface/60 py-2.5 pl-9 pr-4 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand" />
               {search && (
                 <button aria-label={tr('a11y.clearSearch')} onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-fg">
                   <X className="h-4 w-4" />
@@ -612,7 +612,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
             <textarea value={draft} onChange={e => setDraft(e.target.value)}
               placeholder={tr('inbox.tapDraftReplyForAnAi')}
               rows={draft ? 5 : 2}
-              className="w-full resize-none rounded-lg border border-border bg-bg/60 p-2.5 text-xs leading-relaxed placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/30" />
+              className="w-full resize-none rounded-lg border border-border bg-bg/60 p-2.5 text-xs leading-relaxed placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand" />
             {draft && (
               <div className="mt-2 flex items-center justify-end gap-2">
                 <button onClick={copyDraft} className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-[11px] font-medium hover:border-brand/40 hover:text-brand-text transition">
@@ -788,7 +788,7 @@ function AiImportModal({ familyId, userId, contacts, onClose, onSaved }: {
         {!result ? (
           <>
             <textarea value={text} onChange={e => setText(e.target.value)} placeholder={tr('inbox.pasteTextHere')} rows={6}
-              className="w-full rounded-xl border border-border bg-surface/60 p-3 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/30 resize-none" />
+              className="w-full rounded-xl border border-border bg-surface/60 p-3 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand resize-none" />
             <div className="space-y-1.5">
               <p className="text-[11px] font-semibold text-muted uppercase tracking-wide">{tr('inbox.examples')}</p>
               {EXAMPLE_KEYS.map((key) => tr(key)).map((ex, i) => (

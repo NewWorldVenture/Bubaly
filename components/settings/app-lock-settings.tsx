@@ -201,7 +201,7 @@ function SetPinModal({ onClose, onConfirm, saving, confirmLabel }: { onClose: ()
         <input
           autoFocus inputMode="numeric" pattern="\d*" maxLength={4} value={val}
           onChange={(e) => { const v = e.target.value.replace(/\D/g, '').slice(0, 4); setVal(v); setErr(null); if (v.length === 4) next(v); }}
-          className="w-40 rounded-xl border border-border bg-surface/60 py-3 text-center text-3xl tracking-[0.6em] outline-none focus:border-brand/50"
+          className="w-40 rounded-xl border border-border bg-surface/60 py-3 text-center text-3xl tracking-[0.6em] outline-none focus:border-brand"
           placeholder="••••"
         />
         {err && <p className={cn('text-xs font-medium', 'text-rose-400')}>{err}</p>}

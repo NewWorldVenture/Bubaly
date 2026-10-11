@@ -52,7 +52,7 @@ export function SetPlanControl({ familyId, familyName, currentPlan }: {
       value={value}
       onChange={(e) => change(e.target.value)}
       disabled={pending}
-      className="rounded-lg border border-border bg-surface/60 px-2 py-1 text-xs focus:border-brand/50 focus:outline-none disabled:opacity-50"
+      className="rounded-lg border border-border bg-surface/60 px-2 py-1 text-xs focus:border-brand focus:outline-none disabled:opacity-50"
     >
       {PLAN_OPTIONS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
     </select>
