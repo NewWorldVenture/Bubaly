@@ -1,5 +1,7 @@
 // lib/reminders/details.ts — pure helpers for the richer reminder details
 // (early reminder, tags, subtasks, URL). DOM-free + fully unit-testable.
+import { addWallDays, wallAt, wallDate, wallParts, wallToInstant, type WallParts } from '@/lib/time/wall-clock';
+import { isValidTimezone } from '@/lib/time/zoned';
 
 export type Subtask = { id: string; title: string; done: boolean };
 
@@ -82,10 +84,20 @@ export function subtaskProgress(subtasks: Subtask[]): { done: number; total: num
  * The next occurrence of a recurring reminder after `remindAtIso`, or null for a
  * one-off ('none'). Mirrors the recurrence options: daily, weekdays (next
  * Mon–Fri), weekly, biweekly, monthly, yearly.
+ *
+ * Pass the FAMILY's `timeZone` wherever there is one. The steps are civil —
+ * "the same time tomorrow", "the next weekday" — so they have to be taken on
+ * the family's calendar, and without a zone this falls back to the runtime's,
+ * which on a server is UTC. There a 'weekdays' reminder at 6pm in Los Angeles
+ * (01:00Z the next day) was stepped on UTC's weekdays: Thursday's completion
+ * skipped Friday and set Sunday. And a daily 9am kept its UTC instant, so it
+ * rang at 8am once the clocks went back. With a zone the wall-clock time is
+ * kept across a DST change and the weekday is the family's.
  */
-export function nextRemindAt(remindAtIso: string, recurrence: string): string | null {
+export function nextRemindAt(remindAtIso: string, recurrence: string, timeZone?: string | null): string | null {
   const d = new Date(remindAtIso);
   if (Number.isNaN(d.getTime())) return null;
+  if (timeZone && isValidTimezone(timeZone)) return nextOnWallClock(d, recurrence, timeZone);
   switch (recurrence) {
     case 'daily': d.setDate(d.getDate() + 1); break;
     case 'weekdays': {
@@ -99,6 +111,36 @@ export function nextRemindAt(remindAtIso: string, recurrence: string): string | 
     default: return null; // 'none' or unknown
   }
   return d.toISOString();
+}
+
+const isWeekend = (p: WallParts) => p.weekday === 0 || p.weekday === 6;
+
+/**
+ * `nextRemindAt` stepped on `timeZone`'s calendar: the wall reading is moved
+ * (a day, a weekday, a month — overflowing as `setMonth` does, so the two
+ * paths agree on a 31st) and the result resolved back to an instant in the
+ * same zone. Seconds within the minute are carried over unchanged.
+ */
+function nextOnWallClock(at: Date, recurrence: string, timeZone: string): string | null {
+  const wall = wallAt(at, timeZone);
+  const p = wallParts(wall);
+  let next: Date;
+  switch (recurrence) {
+    case 'daily': next = addWallDays(wall, 1); break;
+    case 'weekdays': {
+      next = addWallDays(wall, 1);
+      while (isWeekend(wallParts(next))) next = addWallDays(next, 1);
+      break;
+    }
+    case 'weekly': next = addWallDays(wall, 7); break;
+    case 'biweekly': next = addWallDays(wall, 14); break;
+    case 'monthly': next = wallDate(p.year, p.month + 1, p.day, p.hour, p.minute); break;
+    case 'yearly': next = wallDate(p.year + 1, p.month, p.day, p.hour, p.minute); break;
+    default: return null; // 'none' or unknown
+  }
+  const instant = wallToInstant(next, timeZone);
+  if (Number.isNaN(instant.getTime())) return null;
+  return new Date(instant.getTime() + at.getUTCSeconds() * 1000 + at.getUTCMilliseconds()).toISOString();
 }
 
 /** True for a usable http(s) URL. */

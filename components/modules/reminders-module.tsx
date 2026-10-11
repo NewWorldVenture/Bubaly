@@ -114,7 +114,7 @@ export function RemindersModule() {
   const tr = useTranslations();
   const askConfirm = useConfirm();
   const plural = usePlural();
-  const { familyId, userId, members } = useApp();
+  const { familyId, userId, members, family } = useApp();
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
 
@@ -204,7 +204,7 @@ export function RemindersModule() {
       // (the completed one stays as history, like iOS).
       let recurred = false;
       const next = reminder.remind_at && reminder.recurrence !== 'none'
-        ? nextRemindAt(reminder.remind_at, reminder.recurrence) : null;
+        ? nextRemindAt(reminder.remind_at, reminder.recurrence, family?.timezone) : null;
       if (next) {
         const nextRow = {
           family_id: familyId, created_by: userId, title: reminder.title, notes: reminder.notes,
