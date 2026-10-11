@@ -279,7 +279,7 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
               )}
             </Field>
             <Field label={t('settings.email')} hint={t('settingsModule.managedByYourSignIn')}>
-              {(id) => <Input id={id} value={userEmail ?? ''} readOnly className="opacity-60" />}
+              {(id) => <Input id={id} value={userEmail ?? ''} readOnly className="text-muted" />}
             </Field>
           </div>
           <div className="flex justify-end">
