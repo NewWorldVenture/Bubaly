@@ -15,6 +15,7 @@ import { Progress } from './shared';
 import { PACK_CATEGORIES, lookup } from '@/lib/vacations/meta';
 import { tripNights } from '@/lib/vacations/dates';
 import { suggestPacking } from '@/lib/vacations/packing';
+import { forecastDaysWithin } from '@/lib/vacations/weather';
 import type { Tables, VacPackCategory } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -103,9 +104,11 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
     const listId = await ensureMasterList();
     if (!listId) { setBusy(false); return; }
     const nights = tripNights(trip?.start_date, trip?.end_date) ?? 5;
-    const temps = weather.map((w) => w.temp_high_c).filter((t): t is number => t != null);
-    const lows = weather.map((w) => w.temp_low_c).filter((t): t is number => t != null);
-    const rainy = weather.some((w) => (w.precip_prob ?? 0) >= 50);
+    // Only the forecast days inside the trip drive the packing hints.
+    const inTrip = forecastDaysWithin(weather, trip?.start_date, trip?.end_date);
+    const temps = inTrip.map((w) => w.temp_high_c).filter((t): t is number => t != null);
+    const lows = inTrip.map((w) => w.temp_low_c).filter((t): t is number => t != null);
+    const rainy = inTrip.some((w) => (w.precip_prob ?? 0) >= 50);
     const suggestions = suggestPacking({
       kind: trip?.kind ?? 'domestic', nights, isInternational: trip?.is_international ?? false,
       hasChildren: members.some((m) => m.role === 'child'), hasBaby: false,

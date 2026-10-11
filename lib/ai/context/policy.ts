@@ -126,18 +126,23 @@ export function isSensitiveTable(table: string): boolean {
  * (parent | adult) or a system actor; there is no override — an intent that
  * "requires" money for a child still does not get it, because §4 puts that
  * rule above the request.
+ *
+ * `hiddenFromGuests` slices are the household's own: a guest ("View limited
+ * shared events only") is not pre-loaded with every child's school, class
+ * days and times, team and practice location for the week, nor with where
+ * the family will be and when. The children themselves still see them.
  */
-export const SLICE_ACCESS: Record<SliceName, { managerOnly: boolean; note: string }> = {
+export const SLICE_ACCESS: Record<SliceName, { managerOnly: boolean; hiddenFromGuests?: boolean; note: string }> = {
   people: { managerOnly: false, note: 'names, roles, ages — no contact details' },
   schedule: { managerOnly: false, note: 'events, routines, conflicts, timing constraints' },
-  activities: { managerOnly: false, note: 'school classes/events/homework, teams, practices' },
+  activities: { managerOnly: false, hiddenFromGuests: true, note: 'school classes/events/homework, teams, practices — household members only' },
   food: { managerOnly: false, note: 'allergies, diet, likes, recent and planned meals, recipes' },
   shopping: { managerOnly: false, note: 'open grocery items, low or expiring pantry, shopping habits' },
   tasks: { managerOnly: false, note: 'open to-dos and chores, per-member load, rebalance moves' },
   money: { managerOnly: true, note: 'budgets vs actual, savings goals, bills due — adults only (§4)' },
   home: { managerOnly: false, note: 'home, vehicles (no VIN/plate), pets, open maintenance' },
   vendors: { managerOnly: false, note: 'saved contractors; contact details for managers only' },
-  travel: { managerOnly: false, note: 'live trips and travel preferences' },
+  travel: { managerOnly: false, hiddenFromGuests: true, note: 'live trips and travel preferences — household members only' },
   documents: { managerOnly: true, note: 'titles, categories and expiry only — adults only (§4)' },
   memory: { managerOnly: false, note: 'confirmed facts; medical/account categories for managers only' },
   proactive: { managerOnly: false, note: 'reasoning report, signals, pending suggestions and recommendations' },
@@ -162,10 +167,16 @@ export function viewerFor(scope: Pick<ServiceScope, 'role' | 'memberId'>): Viewe
 
 export type SliceAccessDecision = { allowed: true } | { allowed: false; reason: string };
 
-export function canViewSlice(slice: SliceName, viewer: Pick<Viewer, 'canManage'>): SliceAccessDecision {
+/** What the slice rules read of a viewer: whether they manage, and (for the guest rule) who they are. */
+export type SliceViewer = Pick<Viewer, 'canManage'> & Partial<Pick<Viewer, 'role'>>;
+
+export function canViewSlice(slice: SliceName, viewer: SliceViewer): SliceAccessDecision {
   const rule = SLICE_ACCESS[slice];
   if (rule.managerOnly && !viewer.canManage) {
     return { allowed: false, reason: `${slice} is only shown to the adults who manage the family` };
+  }
+  if (rule.hiddenFromGuests && !viewer.canManage && viewer.role === 'guest') {
+    return { allowed: false, reason: `${slice} is only shown to members of the household` };
   }
   return { allowed: true };
 }
@@ -175,7 +186,7 @@ export function canViewSlice(slice: SliceName, viewer: Pick<Viewer, 'canManage'>
  * in the order given (the order IS the trim priority), and the names withheld,
  * which the builder persists on `ai_request_context.sensitive_omitted`.
  */
-export function applySlicePolicy(slices: SliceName[], viewer: Pick<Viewer, 'canManage'>): { allowed: SliceName[]; omitted: SliceName[] } {
+export function applySlicePolicy(slices: SliceName[], viewer: SliceViewer): { allowed: SliceName[]; omitted: SliceName[] } {
   const allowed: SliceName[] = [];
   const omitted: SliceName[] = [];
   const seen = new Set<SliceName>();

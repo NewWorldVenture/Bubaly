@@ -8,9 +8,9 @@ import { MAX_FLYER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bound
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 import {
-  annotateAllergens, buildPantryChefPrompt, normalizeAllergies, normalizePlanDate, parsePantryRecipes,
+  annotateAllergens, boundedNames, buildPantryChefPrompt, normalizeAllergies, normalizePlanDate, parsePantryRecipes,
 } from '@/lib/meals/pantry-chef';
-import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
+import { addItems } from '@/lib/services/groceries';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { accessDeniedResponse, assertAIAccess } from '@/lib/server/ai-access';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -62,6 +62,13 @@ export async function POST(req: NextRequest) {
       addToPlan?: { title?: string; steps?: string; have?: string[]; need?: string[]; planDate?: string };
     };
 
+    // Phases 2 and 3 change the household's list and week. A guest sees the
+    // household and changes nothing in it — the manual meal writes refuse one,
+    // and so does this route, before anything is written.
+    if ((body.addToPlan || Array.isArray(body.addToGrocery)) && ctx.active.role === 'guest') {
+      return NextResponse.json({ error: t('actionRefusal.notAllowed') }, { status: 403 });
+    }
+
     // ── Phase 3: plan a suggested recipe for dinner ──────────────────────────
     if (body.addToPlan && typeof body.addToPlan === 'object') {
       const plan = body.addToPlan;
@@ -76,10 +83,11 @@ export async function POST(req: NextRequest) {
         console.error('[ai/pantry-chef] family dinner date unavailable', error);
         return NextResponse.json({ error: t('pantryChef.fridgeChefIsUnavailableRight') }, { status: 503 });
       }
-      const ingredients = [...(Array.isArray(plan.have) ? plan.have : []), ...(Array.isArray(plan.need) ? plan.need : [])]
-        .filter((n): n is string => typeof n === 'string' && n.trim().length > 0)
-        .slice(0, 50)
-        .map((name) => ({ name: name.trim() }));
+      // Bounded like the meal service's own ingredients: an over-long name here
+      // was stored on the dish and then refused by addItems every time the
+      // week's plan was sent to the grocery list, for as long as it stayed.
+      const ingredients = boundedNames([...(Array.isArray(plan.have) ? plan.have : []), ...(Array.isArray(plan.need) ? plan.need : [])], 50)
+        .map((name) => ({ name }));
 
       const { data: meal, error: mealError } = await supabase.from('meals').insert({
         family_id: familyId, created_by: userId, name: title, meal_type: 'dinner',
@@ -103,30 +111,20 @@ export async function POST(req: NextRequest) {
 
     // ── Phase 2: add the chosen recipe's missing ingredients to grocery ──────
     if (Array.isArray(body.addToGrocery)) {
-      const names = body.addToGrocery
-        .map((n) => (typeof n === 'string' ? n.trim() : ''))
-        .filter((n) => n.length > 0)
-        .slice(0, 40);
+      const names = boundedNames(body.addToGrocery, 40);
       if (names.length === 0) return NextResponse.json({ added: 0 });
 
-      // The family's default grocery list, found or created as ONE operation
-      // (0443, DATA-007) — the same get-or-create every other writer uses, so a
-      // pantry-chef shop and a quick capture at the same moment cannot give a
-      // family two lists. Both archive columns are asked, inside the helper.
-      const list = await ensureDefaultGroceryListId(supabase, familyId, userId, 'Groceries');
-      if (!list.id) {
-        console.error('[ai/pantry-chef] grocery list get-or-create failed', list.error);
-        return NextResponse.json({ error: t('pantryChef.couldNotOpenYourGrocery') }, { status: 500 });
-      }
-      const listId = list.id;
-
-      const rows = names.map((name) => ({ family_id: familyId, list_id: listId, name, created_by: userId }));
-      const { data: inserted, error: insertError } = await supabase.from('grocery_items').insert(rows).select('id');
-      if (insertError) {
-        console.error('[ai/pantry-chef] grocery insert failed', insertError);
+      // Through the grocery service, like every other writer: the family's
+      // default list found or created as ONE operation (0443, DATA-007), items
+      // already open on it skipped instead of added twice, the aisle filled in,
+      // and the service's own name bounds applied. The raw insert this replaces
+      // did none of that, so a second tap doubled the list.
+      const result = await addItems(scopeFromUserContext(ctx, supabase), { items: names.map((name) => ({ name })) });
+      if (!result.ok) {
+        console.error('[ai/pantry-chef] grocery add failed', { code: result.code });
         return NextResponse.json({ error: t('pantryChef.couldNotAddThoseItems') }, { status: 500 });
       }
-      return NextResponse.json({ added: inserted?.length ?? 0 });
+      return NextResponse.json({ added: result.data.added.length, skipped: result.data.skipped.length });
     }
 
     // ── Phase 1: photo → allergy-aware recipe suggestions ────────────────────

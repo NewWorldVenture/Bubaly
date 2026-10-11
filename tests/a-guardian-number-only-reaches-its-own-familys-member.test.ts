@@ -26,7 +26,7 @@ const C = vi.hoisted(() => ({
   MEMBER_B: '44444444-4444-4444-8444-444444444444',
   CONTACT_B: '55555555-5555-4555-8555-555555555555',
 }));
-const seam = vi.hoisted(() => ({ service: vi.fn(), server: vi.fn(), pipeline: vi.fn() }));
+const seam = vi.hoisted(() => ({ service: vi.fn(), server: vi.fn(), pipeline: vi.fn(), turn: vi.fn(), notify: vi.fn() }));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: seam.service, createServer: seam.server }));
 vi.mock('@/lib/supabase/auth', () => ({
   // A manager of family A.
@@ -37,7 +37,9 @@ vi.mock('@/lib/supabase/auth', () => ({
 }));
 vi.mock('@/lib/guardian/pipeline', () => ({ runDecisionPipeline: seam.pipeline }));
 vi.mock('@/lib/guardian/twilio', async (original) => ({ ...await original<typeof import('@/lib/guardian/twilio')>(), lookupCallerName: async () => null }));
-vi.mock('@/lib/guardian/ai-screen', () => ({ buildInitialGreeting: () => 'hello', buildVoicemailPrompt: () => 'leave a message' }));
+vi.mock('@/lib/guardian/ai-screen', () => ({ buildInitialGreeting: () => 'hello', buildVoicemailPrompt: () => 'leave a message', screeningTurn: seam.turn, summarizeScreening: async () => 'summary' }));
+vi.mock('@/lib/guardian/scam-ai', () => ({ detectScamWithAI: async () => ({ isScam: false, scamType: null, confidence: 0 }) }));
+vi.mock('@/lib/services/notifications', () => ({ notify: seam.notify }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 
@@ -71,6 +73,22 @@ function signedVoice(): NextRequest {
   });
 }
 
+const WA_SID = `SM${'d'.repeat(32)}`;
+const SESSION = '77777777-7777-4777-8777-777777777777';
+const COMM = '88888888-8888-4888-8888-888888888888';
+
+function signedTwilio(path: string, form: Record<string, string>, query = ''): NextRequest {
+  const url = `${ORIGIN}${path}${query}`;
+  const sorted = Object.keys(form).sort().map((k) => `${k}${form[k]}`).join('');
+  const signature = createHmac('sha1', TOKEN).update(url + sorted).digest('base64');
+  return new NextRequest(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-twilio-signature': signature },
+    body: new URLSearchParams(form).toString(),
+  });
+}
+const signedWhatsApp = () => signedTwilio('/api/guardian/inbound/whatsapp', { SmsSid: WA_SID, From: `whatsapp:${CALLER}`, To: `whatsapp:${GUARDIAN}`, Body: 'hello, it is Grandma' });
+
 beforeEach(() => {
   vi.resetModules();
   vi.stubEnv('NODE_ENV', 'production');
@@ -96,6 +114,8 @@ beforeEach(() => {
     contactId: null, contactName: 'Grandma', trustLevel: 'immediate_family', routingMode: 'immediate_ring', spamScore: 0,
     scamDetected: false, scamType: null, ruleId: null, reason: 'Immediate family', shouldEscalate: false, emergencyKeywords: false, memberProfile: null,
   });
+  seam.pipeline.mockClear(); seam.turn.mockReset(); seam.notify.mockReset();
+  seam.notify.mockResolvedValue({ ok: true, data: { created: 1, duplicates: 0, ids: [], skippedMemberIds: [], deferred: 0 } });
   vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => { errors.push(args); });
   vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
@@ -174,5 +194,89 @@ describe('the Guardian settings actions refuse a member who is not the caller\'s
     const own = await createRuleAction({ name: 'Quiet', action_routing_mode: 'silent_handling', member_id: C.MEMBER_A });
     expect(own.ok).toBe(true);
     expect(db.table('guardian_routing_rules')).toEqual([expect.objectContaining({ family_id: C.FAMILY_A, member_id: C.MEMBER_A })]);
+  });
+});
+
+describe('the WhatsApp webhook records and announces only for a member of the profile\'s own family', () => {
+  it('refuses a Guardian number whose profile names another family\'s member, instead of recording and announcing under them', async () => {
+    db.seed('guardian_member_profiles', [profile(C.MEMBER_B)]);
+    const { POST } = await import('@/app/api/guardian/inbound/whatsapp/route');
+    const res = await POST(signedWhatsApp());
+    expect(res.status).toBe(200);
+    // The defect: the message was recorded under family B's child, with
+    // family A's number as its destination, and family A was notified.
+    expect(seam.pipeline, 'no routing decision is made for a profile that is not the family\'s').not.toHaveBeenCalled();
+    expect(db.table('guardian_communications')).toEqual([]);
+    expect(seam.notify).not.toHaveBeenCalled();
+    expect(errors.some((args) => /names a member outside its family/.test(String(args[0])))).toBe(true);
+    // Refused, not retried: a retry cannot make the member the family's.
+    expect(db.table('guardian_callback_events')[0]).toMatchObject({ event_id: WA_SID, status: 'processed' });
+  });
+
+  it('a removed member of the family is not one either', async () => {
+    db.replace('family_members', db.table('family_members').map((row) => (row.id === C.MEMBER_A ? { ...row, is_active: false } : row)));
+    db.seed('guardian_member_profiles', [profile(C.MEMBER_A)]);
+    const { POST } = await import('@/app/api/guardian/inbound/whatsapp/route');
+    expect((await POST(signedWhatsApp())).status).toBe(200);
+    expect(seam.pipeline).not.toHaveBeenCalled();
+    expect(db.table('guardian_communications')).toEqual([]);
+    expect(seam.notify).not.toHaveBeenCalled();
+    expect(db.table('guardian_callback_events')[0]).toMatchObject({ event_id: WA_SID, status: 'processed' });
+  });
+
+  it('asks Twilio to retry when the member cannot be looked up, giving the claim back', async () => {
+    db.seed('guardian_member_profiles', [profile(C.MEMBER_A)]);
+    const before = db.from.bind(db);
+    const reply = { data: null, error: { code: '57014', message: 'canceling statement due to statement timeout' }, count: null, status: 503, statusText: 'Service Unavailable' };
+    const chain: Record<string | symbol, unknown> = new Proxy({}, {
+      get(_target, prop) {
+        if (prop === 'then') return (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) => Promise.resolve(reply).then(resolve, reject);
+        return () => chain;
+      },
+    });
+    db.from = ((name: string) => (name === 'family_members' ? chain : before(name))) as InMemorySupabase['from'];
+    const { POST } = await import('@/app/api/guardian/inbound/whatsapp/route');
+    expect((await POST(signedWhatsApp())).status).toBe(503);
+    expect(seam.pipeline).not.toHaveBeenCalled();
+    expect(db.table('guardian_callback_events'), 'the claim was given back so the retry is processed').toEqual([]);
+  });
+
+  it('still records and announces a message to the family\'s own member (positive control)', async () => {
+    db.seed('guardian_member_profiles', [profile(C.MEMBER_A)]);
+    const { POST } = await import('@/app/api/guardian/inbound/whatsapp/route');
+    expect((await POST(signedWhatsApp())).status).toBe(200);
+    expect(seam.pipeline).toHaveBeenCalledOnce();
+    expect(db.table('guardian_communications')).toEqual([expect.objectContaining({ family_id: C.FAMILY_A, member_id: C.MEMBER_A, twilio_sms_sid: WA_SID })]);
+    expect(seam.notify).toHaveBeenCalledOnce();
+  });
+});
+
+describe('the screening callback dials only an active member of the family', () => {
+  const screenedTransfer = async () => {
+    db.seed('guardian_communications', [{ id: COMM, family_id: C.FAMILY_A, member_id: C.MEMBER_A, status: 'screening', from_number: CALLER }]);
+    db.seed('guardian_screening_sessions', [{ id: SESSION, family_id: C.FAMILY_A, communication_id: COMM, twilio_call_sid: CALL, caller_number: CALLER, turn: 0, status: 'active', messages: [] }]);
+    seam.turn.mockResolvedValue({ responseText: 'Connecting you now.', decision: { action: 'transfer', risk: 'safe', urgency: 'medium', intent: 'personal', summary: 'Grandma calling.', callerName: 'Grandma' } });
+    const { POST } = await import('@/app/api/guardian/screen/route');
+    const res = await POST(signedTwilio('/api/guardian/screen', { CallSid: CALL, SpeechResult: 'Hi, it is Grandma.' }, `?sessionId=${SESSION}&turn=1`));
+    expect(res.status).toBe(200);
+    return res.text();
+  };
+
+  it('does not dial a member who has been removed from the family, even with a phone still on file', async () => {
+    db.replace('family_members', db.table('family_members').map((row) => (row.id === C.MEMBER_A ? { ...row, is_active: false } : row)));
+    db.seed('guardian_member_profiles', [profile(C.MEMBER_A)]);
+    const xml = await screenedTransfer();
+    // The defect: `<Dial>+15550000001</Dial>` — a removed member's phone,
+    // dialled through the family's Guardian number.
+    expect(xml).not.toContain('<Dial');
+    expect(xml).not.toContain(PHONE_A);
+    expect(xml).toContain('<Record');
+  });
+
+  it('still dials the family\'s own active member (positive control)', async () => {
+    db.seed('guardian_member_profiles', [profile(C.MEMBER_A)]);
+    const xml = await screenedTransfer();
+    expect(xml).toContain('<Dial');
+    expect(xml).toContain(PHONE_A);
   });
 });

@@ -566,3 +566,54 @@ export class InMemorySupabase {
 export function createInMemorySupabase<T = unknown>(options: InMemoryOptions = {}): InMemorySupabase & T {
   return new InMemorySupabase(options) as InMemorySupabase & T;
 }
+
+/** One builder call, as `withFaults` records it. */
+export type FaultCall = { method: string; args: unknown[] };
+
+/**
+ * The same client, with chosen calls answering an error instead of the
+ * database — a refused read, a timeout, a column PostgREST does not know.
+ *
+ * `fault` sees the table and every builder call made on it, in order, when the
+ * query is awaited; returning an error answers `{ data: null, error }`, the
+ * way supabase-js resolves every failure (it never throws). Returning null lets
+ * the in-memory database answer as usual.
+ */
+export function withFaults<T extends object>(
+  db: T,
+  fault: (table: string, calls: FaultCall[]) => { code?: string; message: string } | null,
+): T {
+  return new Proxy(db, {
+    get(target, property, receiver) {
+      if (property !== 'from') return Reflect.get(target, property, receiver);
+      return (table: string) => {
+        const builder = (target as unknown as InMemorySupabase).from(table);
+        const calls: FaultCall[] = [];
+        const proxy: object = new Proxy(builder, {
+          get(object, key) {
+            if (key === 'then') {
+              return (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) => {
+                const failure = fault(table, calls);
+                if (failure) {
+                  return Promise.resolve({
+                    data: null, count: null, status: 400, statusText: 'Bad Request',
+                    error: pgError(failure.code ?? 'XX000', failure.message),
+                  }).then(resolve, reject);
+                }
+                return object.then(resolve as never, reject);
+              };
+            }
+            const value = Reflect.get(object, key);
+            if (typeof value !== 'function') return value;
+            return (...args: unknown[]) => {
+              calls.push({ method: String(key), args });
+              const result = Reflect.apply(value, object, args);
+              return result === object ? proxy : result;
+            };
+          },
+        });
+        return proxy;
+      };
+    },
+  });
+}

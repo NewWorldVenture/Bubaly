@@ -14,7 +14,8 @@
 // the same call for the same reason. The real boundary is not the dial anyway:
 // `lib/services/search` decides per role which sources are searched at all, so
 // a child's assistant cannot reach bills, warranties, renewals or a sensitive
-// document through this tool whatever the dial says.
+// document through this tool whatever the dial says, and a guest's or a
+// child's cannot reach the trips `trips.getTrip` refuses them.
 //
 // Every string that comes back is household text a person (or an inbound
 // email) wrote, so it goes through `sanitizeUntrusted` before it reaches a
@@ -48,7 +49,7 @@ export const searchTools: ToolDefinition[] = [
   defineTool({
     name: 'search.household',
     aliases: ['search_household', 'household_search', 'find_in_household'],
-    description: 'Search everything the household has recorded — documents, inventory items, trips, vacations, bills, warranties, renewals, decisions, calendar events, notes and remembered facts — and get back records with the table they came from, their date and a link. Read-only. Bills, warranties and renewals are searched only for parents and adults.',
+    description: 'Search everything the household has recorded — documents, inventory items, trips, vacations, bills, warranties, renewals, decisions, calendar events, notes and remembered facts — and get back records with the table they came from, their date and a link. Read-only. Bills, warranties and renewals are searched only for parents and adults; trips and vacations are not searched for a guest or a child.',
     domain: 'tasks',
     capability: 'view',
     risk: 'low',

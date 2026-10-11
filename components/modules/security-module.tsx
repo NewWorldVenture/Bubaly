@@ -170,7 +170,7 @@ export function SecurityModule() {
           {visible.map((ev) => {
             const meta = severityMeta(ev.severity);
             return (
-              <div key={ev.id} className={`flex items-start gap-3 rounded-xl border bg-surface/40 p-3 ${ev.resolved ? 'border-border opacity-60' : meta.tone === 'danger' ? 'border-danger/40' : meta.tone === 'warning' ? 'border-amber-500/40' : 'border-border'}`}>
+              <div key={ev.id} className={`flex items-start gap-3 rounded-xl border bg-surface/40 p-3 ${ev.resolved ? 'border-border' : meta.tone === 'danger' ? 'border-danger/40' : meta.tone === 'warning' ? 'border-amber-500/40' : 'border-border'}`}>
                 <span className={`mt-0.5 rounded px-1.5 py-0.5 text-[10px] ${meta.tone === 'danger' ? 'bg-danger/15 text-danger' : meta.tone === 'warning' ? 'bg-amber-500/15 text-amber-500' : 'bg-border/40 text-muted'}`}>{meta.label}</span>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">{ev.title} <span className="text-xs font-normal text-muted">· {ev.kind}</span></p>

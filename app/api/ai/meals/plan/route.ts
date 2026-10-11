@@ -19,6 +19,7 @@ import { expiringSoon } from '@/lib/pantry/logic';
 import { readPlannerMeals, readPlannerRecipes, readPlannerPantry } from '@/lib/meals/planner-inputs';
 import type { MealType } from '@/lib/database.types';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
@@ -62,8 +63,23 @@ export async function POST(req: Request) {
   const avoidRepeats = body.avoidRepeats !== false;
   const useExpiring = body.useExpiring !== false;
   const write = body.write === true;
+  // A guest sees the household and changes nothing in it. The two manual
+  // writes behind this page (planMealAction, removeMealPlanAction) refuse a
+  // guest; this one replaced the family's planned week for them, and spent the
+  // family's AI allowance doing it. Refused before the model is asked, so the
+  // refusal costs nothing. A preview (write: false) changes nothing and stays
+  // open to every role, like the page.
+  if (write && ctx.active.role === 'guest') {
+    return NextResponse.json({ error: t('actionRefusal.notAllowed') }, { status: 403 });
+  }
 
   const supabase = await createServer();
+  // The page in front of this is `requireFeature('/dashboard/meals')`; the
+  // endpoint was not gated at all, so a trial-expired or closed family (or one
+  // whose meals feature an admin switched off) still got paid model calls by
+  // POSTing here. Same resolver as the page, before anything is spent.
+  const refused = await refuseUnlessEntitled(supabase, familyId, ['/dashboard/meals']);
+  if (refused) return refused;
   const limited = await enforceAIRateLimit(supabase, `ai-meals-plan:${userId}`, { limit: 10 });
   if (!limited.ok) return NextResponse.json(
     { error: t('plan.tooManyMealPlanRequests') },

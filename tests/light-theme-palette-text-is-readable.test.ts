@@ -5,14 +5,15 @@ import { at, between } from './helpers/source-order';
 
 // A11Y-001: the light theme's raw palette text.
 //
-// The app writes Tailwind's light palette shades straight into class names
-// (`text-emerald-400`, `hover:text-rose-300`, …). They were picked against the
-// dark theme; on a light surface they read at 1.2 to 2.8:1. app/globals.css
-// gives each hue's 200/300/400 shade, and its hover and group-hover forms, a
-// darker colour in `.light`. This test reads that block and holds it to two
-// things: every such class the source uses has a rule, and every rule's
-// colour is readable as text (4.5:1) on the light theme's surfaces and on the
-// hue's own pale chip tint.
+// The app writes Tailwind's palette shades straight into class names
+// (`text-emerald-400`, `hover:text-rose-300`, `text-amber-600`, …). They were
+// picked against the dark theme; on a light surface they read at 1.2 to 4.2:1.
+// app/globals.css gives each hue's 200/300/400 shade, every 500 and 600 that
+// fails the same bar, and their hover and group-hover forms, a darker colour
+// in `.light`. This test reads that block and holds it to two things: every
+// such class the source uses has a rule, and every rule's colour is readable
+// as text (4.5:1) on the light theme's surfaces and on the hue's own pale chip
+// tint.
 
 const css = readFileSync('app/globals.css', 'utf8');
 const block = between(css, "/* The light theme's raw palette text (A11Y-001).", "/* End of the light theme's raw palette text. */");
@@ -23,6 +24,13 @@ const TAILWIND_500: Record<string, string> = {
   rose: 'f43f5e', red: 'ef4444', orange: 'f97316', lime: '84cc16', cyan: '06b6d4', violet: '8b5cf6', purple: 'a855f7',
   pink: 'ec4899', indigo: '6366f1', fuchsia: 'd946ef',
 };
+// And their 600s, which a light-first class string reaches for (`text-amber-600`).
+const TAILWIND_600: Record<string, string> = {
+  emerald: '059669', green: '16a34a', amber: 'd97706', yellow: 'ca8a04', sky: '0284c7', blue: '2563eb', teal: '0d9488',
+  rose: 'e11d48', red: 'dc2626', orange: 'ea580c', lime: '65a30d', cyan: '0891b2', violet: '7c3aed', purple: '9333ea',
+  pink: 'db2777', indigo: '4f46e5', fuchsia: 'c026d3',
+};
+const SHADES = ['200', '300', '400', '500', '600'] as const;
 
 type Rgb = [number, number, number];
 const fromHex = (h: string): Rgb => [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)) as Rgb;
@@ -38,6 +46,20 @@ function lightToken(name: string): Rgb {
   expect(m, `--${name} in .light`).not.toBeNull();
   return [Number(m![1]), Number(m![2]), Number(m![3])];
 }
+
+/**
+ * Whether a shade needs a rule: 200 to 400 always; a 500 or 600 only where it
+ * fails the same bar the rules are held to (white, --bg, its hue's 500/20
+ * tint). indigo-600 already clears it, so it is left as it is.
+ */
+function needsRule(hue: string, shade: string): boolean {
+  if (shade === '200' || shade === '300' || shade === '400') return true;
+  const own = fromHex(shade === '500' ? TAILWIND_500[hue] : TAILWIND_600[hue]);
+  const bg = lightToken('bg');
+  const tint = over(fromHex(TAILWIND_500[hue]), 0.2, bg);
+  return Math.min(contrast(own, [255, 255, 255]), contrast(own, bg), contrast(own, tint)) < 4.5;
+}
+const remapped = () => Object.keys(TAILWIND_500).flatMap((hue) => SHADES.filter((s) => needsRule(hue, s)).map((s) => `${hue}-${s}`));
 
 const OUT = ':not(:where(.keep-dark-palette, .marketing-theme, .dark, .keep-dark-palette *, .marketing-theme *, .dark *))';
 
@@ -82,11 +104,14 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-const USED = /(?:^|["'`\s:])((?:hover:|group-hover:)?text-([a-z]+)-(200|300|400)(?:\/(\d+))?)(?=["'`\s]|$)/gm;
+const USED = /(?:^|["'`\s:])((?:hover:|group-hover:)?text-([a-z]+)-(200|300|400|500|600)(?:\/(\d+))?)(?=["'`\s]|$)/gm;
 
 describe('the light theme’s palette text is readable', () => {
   it('has a rule for every hue it names (non-vacuity)', () => {
     expect(rules().size).toBe(Object.keys(TAILWIND_500).length);
+    // Every 500 fails on a light surface; of the 600s only indigo's passes.
+    expect(Object.keys(TAILWIND_500).filter((hue) => !needsRule(hue, '500'))).toEqual([]);
+    expect(Object.keys(TAILWIND_500).filter((hue) => !needsRule(hue, '600'))).toEqual(['indigo']);
   });
 
   it('every rule’s colour keeps 4.5:1 on white, on --bg, on --surface and on its hue’s 500/20 tint', () => {
@@ -105,8 +130,9 @@ describe('the light theme’s palette text is readable', () => {
     for (const file of [...sourceFiles('app'), ...sourceFiles('components'), ...sourceFiles('lib')]) {
       for (const m of readFileSync(file, 'utf8').matchAll(USED)) {
         const [, cls, hue, shade, alpha] = m;
-        if (!(hue in TAILWIND_500)) continue;
+        if (!(hue in TAILWIND_500) || !needsRule(hue, shade)) continue;
         if (!hues.has(hue)) { missing.add(`${cls} (${file})`); continue; }
+        if (!cls.includes(':') && !alpha && !block.includes(`:where(.light) .text-${hue}-${shade}${OUT}`)) missing.add(`${cls} (${file})`);
         if (cls.startsWith('hover:') && !block.includes(`.light .hover\\:text-${hue}-${shade}:hover${OUT}`)) missing.add(`${cls} (${file})`);
         if (cls.startsWith('group-hover:') && !block.includes(`.light .group:hover .group-hover\\:text-${hue}-${shade}${OUT}`)) missing.add(`${cls} (${file})`);
         if (alpha && !block.includes(`:where(.light) .text-${hue}-${shade}\\/${alpha}${OUT}`)) missing.add(`${cls} (${file})`);
@@ -134,9 +160,10 @@ describe('the light theme’s palette text is readable', () => {
         else { expect(specificity(sel), sel).toBe(1); seen.base += 1; }
       }
     }
-    expect(seen.base).toBe(3 * rules().size);
-    expect(seen.hover).toBe(3 * rules().size);
-    expect(seen.group).toBe(3 * rules().size);
+    // One base, hover and group-hover selector per remapped shade.
+    expect(seen.base).toBe(remapped().length);
+    expect(seen.hover).toBe(remapped().length);
+    expect(seen.group).toBe(remapped().length);
   });
 
   it('applies only in the signed-in app\u2019s light theme: never to an element in or under a marketing page, a dark subtree or a marked presentation', () => {
