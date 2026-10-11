@@ -62,7 +62,7 @@ function server(mode: Mode, role = 'parent') {
     '@/lib/supabase/server': { createServer: async () => client },
     '@/lib/services/finances': {},
   };
-  const allowed = new Set(['app/(app)/dashboard/billing/actions.ts', 'lib/services/scope.ts', 'lib/time/zoned.ts', 'lib/constants/roles.ts', 'lib/finance/bills.ts', 'lib/finance/bill-schedule.ts', 'lib/finance/recurring.ts', 'lib/calendar/occurrences.ts', 'lib/calendar/recurrence.ts', 'lib/calendar/day.ts', 'lib/calendar/source-capability.ts', 'lib/calendar/exact-instant.ts', 'lib/onboarding/ics-time.ts', 'lib/briefing/calendar-window.ts', 'lib/supabase/errors.ts']);
+  const allowed = new Set(['app/(app)/dashboard/billing/actions.ts', 'lib/services/scope.ts', 'lib/time/zoned.ts', 'lib/time/civil.ts', 'lib/constants/roles.ts', 'lib/finance/bills.ts', 'lib/finance/bill-schedule.ts', 'lib/finance/recurring.ts', 'lib/calendar/occurrences.ts', 'lib/calendar/recurrence.ts', 'lib/calendar/day.ts', 'lib/calendar/source-capability.ts', 'lib/calendar/exact-instant.ts', 'lib/onboarding/ics-time.ts', 'lib/briefing/calendar-window.ts', 'lib/supabase/errors.ts']);
   const modules: Record<string, { exports: Record<string, unknown> }> = {};
   function load(file: string): Record<string, unknown> {
     if (!allowed.has(file)) throw new Error(`Unexpected server schedule module ${file}`);

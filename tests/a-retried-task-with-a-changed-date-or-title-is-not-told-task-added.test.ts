@@ -291,7 +291,9 @@ describe('the same press on the Add Chore modal', () => {
     // One chore with its one assignment: the pair was neither moved nor doubled.
     expect(chores()).toHaveLength(1);
     expect(assignments()).toHaveLength(1);
-    expect(chores()[0]!.due_at).toBe(TODAY);
+    // The first press's day, as the instant it starts on the family's
+    // (Chicago, CDT) clock — not UTC midnight, which is the evening before there.
+    expect(chores()[0]!.due_at).toBe('2026-09-26T05:00:00.000Z');
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining('does not match the row its key already wrote'),
       expect.objectContaining({ fields: ['due_at'] }),

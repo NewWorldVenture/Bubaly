@@ -30,8 +30,9 @@ import { isManager } from '@/lib/constants/roles';
 import { DIGEST_NOTIFICATION_TYPES, type NotificationPriority } from '@/lib/notifications/priority';
 import { describeDbError } from '@/lib/supabase/errors';
 import { createServiceClient } from '@/lib/supabase/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { getAISettings } from '../ai-settings';
-import { dayKeyInTz, hourInTz, scopeNow, zonedTimeMs } from '../scope';
+import { dayKeyInTz, familyInstantIso, hourInTz, scopeNow, zonedTimeMs } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
 export type Notification = Tables<'notifications'>;
@@ -134,8 +135,14 @@ export async function deliveryTimeFor(
   opts: { sendAt?: string | null; urgent?: boolean } = {},
 ): Promise<{ sendAt: string; deferred: boolean }> {
   const now = scopeNow(scope);
-  const explicit = opts.sendAt && Number.isFinite(Date.parse(opts.sendAt));
-  const base = explicit ? new Date(Date.parse(opts.sendAt as string)) : now;
+  // A zone-less `sendAt` is a reading on the FAMILY's clock — the shape the
+  // planner and the assistant are both told to write. `Date.parse` read it on
+  // the host's (UTC) clock, so "10:30pm" for a Los Angeles family was stored as
+  // 22:30Z and every phone buzzed at 3:30pm; east of UTC it landed hours late.
+  // `notify()` refuses one this cannot read before it gets here.
+  const named = opts.sendAt ? familyInstantIso(opts.sendAt, scope.tz) : null;
+  const explicit = named !== null;
+  const base = named ? new Date(named) : now;
   // A caller who NAMED a time has already decided when this should land —
   // "remind me at 10:30pm to put the bins out" is not a courtesy notice to hold
   // until morning, it is the whole point. Quiet hours move the default, never a
@@ -178,6 +185,11 @@ function notificationWriter(scope: ServiceScope) {
 export async function notify(scope: ServiceScope, input: NotifyInput): Promise<ServiceResult<NotifyResult>> {
   const title = input.title?.trim() ?? '';
   if (!title) return fail('A notification needs a title.', { code: SERVICE_CODES.invalidInput });
+  // A time someone named and nobody can read is not "now": sending at once
+  // would deliver "tonight at 10:30" this afternoon and still say it was sent.
+  if (input.sendAt?.trim() && !familyInstantIso(input.sendAt, scope.tz)) {
+    return fail((await getTranslations())('notifications.sendAtUnreadable'), { code: SERVICE_CODES.invalidInput });
+  }
 
   const recipients = await resolveRecipients(scope, input.recipients);
   if (!recipients.ok) return recipients;
