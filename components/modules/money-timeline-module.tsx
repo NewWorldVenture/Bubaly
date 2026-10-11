@@ -234,7 +234,7 @@ export function MoneyTimelineModule({
             const Icon = KIND_ICON[i.kind] ?? Sparkles;
             const acknowledged = statusOf(i.key) === 'acknowledged';
             return (
-              <article key={i.key} className={cn('rounded-2xl border p-4 transition', sev.ring, acknowledged && 'opacity-70')}>
+              <article key={i.key} className={cn('rounded-2xl border p-4 transition', sev.ring)}>
                 <div className="flex items-start gap-3">
                   <span className={cn('mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/[0.04] ring-1 ring-white/10')}>
                     <Icon className={cn('h-5 w-5', sev.icon)} />

@@ -137,7 +137,7 @@ function GoalCard({ goal, pending, onEdit, onDelete, onProgress }: {
   const { fmtDate } = useFormat();
   const t = useTranslations();
   return (
-    <Card className={cn('flex flex-col gap-3', goal.is_complete && 'opacity-70')}>
+    <Card className="flex flex-col gap-3">
       <div className="flex items-start justify-between gap-2">
         <div className="focus-ring min-w-0 flex-1 cursor-pointer" onClick={onEdit}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onEdit(); } }}

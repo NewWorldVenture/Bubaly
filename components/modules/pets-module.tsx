@@ -136,7 +136,7 @@ export function PetsModule() {
                       <Icon className="h-4 w-4 shrink-0" />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-fg">{pet?.name}: {r.title}</p>
-                        <p className="text-xs opacity-90">{r.reason}</p>
+                        <p className="text-xs">{r.reason}</p>
                       </div>
                       {r.urgency === 'overdue' && <AlertTriangle className="h-4 w-4 shrink-0" />}
                     </li>
@@ -415,7 +415,7 @@ function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
                         {r.next_due && <span className={cn('ml-1', u === 'overdue' ? 'text-rose-300' : u === 'due_soon' ? 'text-amber-300' : '')}>{t('pets.next')} {fmtDate(r.next_due)}</span>}
                       </p>
                     </div>
-                    <button onClick={() => deleteRecord(r.id)} aria-label={t('pets.deleteRecord')} className="shrink-0 p-1 text-muted/50 opacity-100 sm:opacity-0 transition hover:text-rose-400 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100">
+                    <button onClick={() => deleteRecord(r.id)} aria-label={t('pets.deleteRecord')} className="shrink-0 p-1 text-muted opacity-100 sm:opacity-0 transition hover:text-rose-400 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100">
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </li>

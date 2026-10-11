@@ -156,7 +156,7 @@ export function InsuranceModule() {
                     <CalendarClock className="h-4 w-4 shrink-0" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-fg">{typeLabel(tr, r.policyType)} · {r.insurer}</p>
-                      <p className="text-xs opacity-90">
+                      <p className="text-xs">
                         {r.urgency === 'lapsed'
                         ? (Math.abs(r.daysUntil) === 1 ? tr('insurance.lapsedDaysAgoOne') : tr('insurance.lapsedDaysAgoMany', { n: Math.abs(r.daysUntil) }))
                         : (r.daysUntil === 1 ? tr('insurance.renewsInDaysOne', { date: fmtDate(r.renewalDate) }) : tr('insurance.renewsInDaysMany', { n: r.daysUntil, date: fmtDate(r.renewalDate) }))}

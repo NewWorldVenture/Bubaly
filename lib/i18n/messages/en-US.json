@@ -15037,7 +15037,7 @@
   "trust.everyParentAndAdult": "Every parent and adult",
   "trust.everyone": "Everyone",
   "trust.expires": "· expires",
-  "trust.fadedRoleDefaultSolidExplicitOverride": "· faded = role default, solid = explicit override",
+  "trust.plainRoleDefaultTintedExplicitOverride": "· plain = role default, tinted = explicit override",
   "trust.from": "From",
   "trust.maxAmount": "Max amount ($)",
   "trust.member": "Member",

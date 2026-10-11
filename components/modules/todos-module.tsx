@@ -363,7 +363,7 @@ export function TodosModule() {
                   tab === t.id ? 'bg-brand/15 text-brand-text' : 'text-muted hover:bg-elevated hover:text-fg')}>
                 {t.label}
                 <span className={cn('grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-[11px] font-bold',
-                  tab === t.id ? 'bg-brand/25 text-brand-text' : 'bg-elevated text-muted')}>{t.n}</span>
+                  tab === t.id ? 'bg-brand text-brand-fg' : 'bg-elevated text-muted')}>{t.n}</span>
               </button>
             ))}
           </div>

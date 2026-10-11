@@ -14829,7 +14829,7 @@
   "trust.everyParentAndAdult": "Todas las madres, padres y adultos",
   "trust.everyone": "Todos",
   "trust.expires": "· caduca",
-  "trust.fadedRoleDefaultSolidExplicitOverride": "· atenuado = valor por defecto del rol, sólido = anulación explícita",
+  "trust.plainRoleDefaultTintedExplicitOverride": "· liso = valor por defecto del rol, coloreado = anulación explícita",
   "trust.from": "De",
   "trust.maxAmount": "Importe máx. ($)",
   "trust.member": "Miembro",

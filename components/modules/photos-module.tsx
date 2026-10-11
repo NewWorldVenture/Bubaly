@@ -316,7 +316,7 @@ export function PhotosModule() {
           <button key={key} onClick={() => { setTab(key); setActiveAlbum(null); }}
             className={cn('tab-item', tab === key ? 'tab-item-active' : 'tab-item-inactive')}>
             {tr(labelKey)}
-            {key === 'favorites' && <span className="ml-1 rounded-full bg-fg/10 px-1.5 text-[10px]">
+            {key === 'favorites' && <span className="ml-1 text-[10px]">
               {allPhotos.filter((p) => p.is_favorite).length}
             </span>}
           </button>
@@ -682,7 +682,8 @@ function UploadModal({ onClose, onUpload, progress }: {
           className={cn(
             'flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed p-10 text-center transition',
             'focus:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40',
-            busy ? 'cursor-not-allowed border-border opacity-60' : 'cursor-pointer',
+            'aria-disabled:cursor-not-allowed aria-disabled:opacity-60',
+                busy ? 'border-border' : 'cursor-pointer',
             dragging ? 'border-brand bg-brand/10' : !busy && 'border-border hover:border-brand/50 hover:bg-brand/5',
           )}>
           <Upload className="h-10 w-10 text-muted" />
