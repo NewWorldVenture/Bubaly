@@ -453,8 +453,13 @@ export async function answerClarification(
     return fail(context.error, { code: INTAKE_CODES.context, retryable: context.retryable });
   }
 
+  // An inbox hand-off stays someone else's words after a clarification: the
+  // re-plan fences the message and holds every write, as the first plan did.
   const planned = settlePlanner(await withDeadline(
-    planRequest(requestScope, { requestId, requestText: request.request_text, intent, context: context.data, conversationId: request.conversation_id, answers: answersFrom(clarifications, null) }),
+    planRequest(requestScope, {
+      requestId, requestText: request.request_text, intent, context: context.data, conversationId: request.conversation_id, answers: answersFrom(clarifications, null),
+      ...(request.kind === 'handle_it' ? { outsideText: true } : {}),
+    }),
     opts.plannerBudgetMs ?? DEFAULT_PLANNER_BUDGET_MS,
   ));
   if (!planned.ok) {

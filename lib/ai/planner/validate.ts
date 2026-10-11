@@ -43,7 +43,8 @@
 // drives it with the real registry and hand-built trust inputs.
 import { conformNulls } from '@/lib/ai/schema-to-json';
 import { findDependencyCycle, type StepState } from '@/lib/ai/runs/states';
-import { NOTIFY_TOOL, notifyToolArgs, parseNotifyInput, type NotifyStepInput } from '@/lib/ai/runs/executor';
+import { NOTIFY_TOOL, notifyToolArgs, ownNoticeClears, parseNotifyInput, type NotifyStepInput } from '@/lib/ai/runs/executor';
+import { isManager } from '@/lib/constants/roles';
 import { parseVerificationSpec } from '@/lib/ai/runs/verify';
 import { getTool } from '@/lib/ai/tools/registry';
 import { bindingSources } from '@/lib/ai/runs/bindings';
@@ -98,6 +99,11 @@ export type ValidationInputs = {
   emergencyDomains: string[];
   /** The requester's role as the executor will evaluate it (`system` → adult, see `trustRoleFor`). */
   role: TrustRole;
+  /**
+   * The requester's member id, when a person asked. A notice addressed to them
+   * alone is their own (`ownNoticeClears` in lib/ai/runs/executor.ts).
+   */
+  memberId?: string | null;
   /**
    * The family's own settings (0257). The planner used to read autonomy from
    * `subject_kind='ai'` trust policies alone — rows that Settings → Bubaly AI
@@ -276,7 +282,13 @@ function notifyDecision(input: NotifyStepInput, inputs: ValidationInputs): { eff
   if (!tool) return { effect: 'deny', reason: NOTIFY_TOOL };
   const behavior = behaviorFor(inputs, tool.domain);
   const decision = dryRunGate(tool, notifyToolArgs(input), inputs, behavior);
-  if (decision.effect === 'deny') return { effect: 'deny', reason: decision.reason };
+  // The asker's own notice is not refused for their role alone — the run
+  // delivers it by the same rule (lib/ai/runs/executor.ts `ownNoticeClears`),
+  // judged as the run sends it: `urgent` is a parent's or adult's to ask for,
+  // and anyone else's notice goes out as an ordinary one (`runNotifyStep`).
+  const asSent: NotifyStepInput = { ...input, urgent: input.urgent === true && isManager(inputs.role) };
+  const ownNotice = ownNoticeClears(decision, asSent, inputs.memberId, inputs.settings?.enabled !== false);
+  if (decision.effect === 'deny' && !ownNotice) return { effect: 'deny', reason: decision.reason };
   if (decision.effect === 'require_approval') return { effect: 'require_approval', reason: decision.reason };
   if (behavior === 'prepare') return { effect: 'require_approval', reason: 'This household has asked Bubaly to prepare changes and wait for a yes.' };
   return { effect: 'allow', reason: decision.reason };

@@ -296,6 +296,7 @@ export async function planRequest(
     emergencyDomains: trust.emergencyDomains,
     settings,
     role: plannerTrustRole(scope.role),
+    memberId: scope.memberId,
     now,
     tz: input.context.header.tz,
     allowedTools: catalogueNames(tools),
@@ -650,7 +651,7 @@ export async function replanRun(
   const inputs: ValidationInputs = {
     policies: trust.policies, grants: trust.grants, delegations: trust.delegations, emergencyDomains: trust.emergencyDomains,
     settings: await getAISettings(scope),
-    role: plannerTrustRole(scope.role), now, tz: context.data.header.tz, allowedTools: catalogueNames(tools),
+    role: plannerTrustRole(scope.role), memberId: scope.memberId, now, tz: context.data.header.tz, allowedTools: catalogueNames(tools),
   };
 
   const settled = steps.filter((s) => s.id !== step.id && TERMINAL_STEP_STATES.includes(s.status));

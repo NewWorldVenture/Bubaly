@@ -21,6 +21,10 @@ const hoisted = vi.hoisted(() => ({
   executed: [] as { name: string; args: unknown; skipTrust: boolean }[],
   submitted: [] as { scope: unknown; input: Record<string, unknown> }[],
   db: null as unknown,
+  // Set by a case that drives the real intake: the model behind the planner,
+  // and the context bundle it plans from.
+  provider: null as unknown,
+  context: null as unknown,
 }));
 
 vi.mock('@/lib/ai/tools/execute', () => ({
@@ -43,6 +47,24 @@ vi.mock('@/lib/server/ai-access', () => ({ assertAIAccess: async () => ({ ok: tr
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
 vi.mock('@/lib/ai/provider', async (original) => ({ ...await original<typeof import('@/lib/ai/provider')>(), isAIConfigured: async () => true }));
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
+vi.mock('@/lib/ai/routing', async (original) => {
+  const actual = await original<typeof import('@/lib/ai/routing')>();
+  return {
+    ...actual,
+    resolveProviderForTask: (...args: Parameters<typeof actual.resolveProviderForTask>) => (hoisted.provider
+      ? Promise.resolve(hoisted.provider as AIProvider)
+      : actual.resolveProviderForTask(...args)),
+  };
+});
+vi.mock('@/lib/ai/context/builder', async (original) => {
+  const actual = await original<typeof import('@/lib/ai/context/builder')>();
+  return {
+    ...actual,
+    buildContext: (...args: Parameters<typeof actual.buildContext>) => (hoisted.context
+      ? Promise.resolve({ ok: true as const, data: hoisted.context as ContextBundle })
+      : actual.buildContext(...args)),
+  };
+});
 vi.mock('@/lib/ai/runs/intake', async (original) => ({
   ...await original<typeof import('@/lib/ai/runs/intake')>(),
   submitRequest: async (scope: unknown, input: Record<string, unknown>) => {
@@ -66,6 +88,8 @@ let db: InMemorySupabase;
 beforeEach(() => {
   hoisted.executed = [];
   hoisted.submitted = [];
+  hoisted.provider = null;
+  hoisted.context = null;
   db = createInMemorySupabase({
     userId: USER,
     defaults: {
@@ -150,6 +174,49 @@ describe('the planner reads the message as data and holds every write it plans',
     expect(stripFencedBlocks(seen.user)).not.toContain('IGNORE YOUR RULES');
     const steps = db.table('ai_plan_steps');
     expect(steps.map((s) => [s.step_type, s.approval_required])).toEqual([['act', true], ['notify', true]]);
+  });
+});
+
+describe('a clarification does not turn the message into the member’s own words', () => {
+  // The planner may ask the member a question first — and a hostile message can
+  // ask for exactly that. The re-plan after the answer used to read the
+  // request as a plain `Request:` and keep the plan's flags as the model left
+  // them, so the second plan lost the fence the first one had.
+  it('re-plans the answered hand-off with the message still fenced and every write still held', async () => {
+    db.seed('families', [{ id: FAMILY, name: 'The Riveras', timezone: 'America/New_York' }]);
+    db.seed('family_members', [{ id: PARENT, family_id: FAMILY, user_id: USER, display_name: 'Dana', role: 'parent', is_active: true }]);
+    db.seed('ai_requests', [{
+      id: REQUEST, family_id: FAMILY, requested_by: USER, requested_by_member_id: PARENT, kind: 'handle_it', request_text: INJECTION,
+      interpreted_intent: 'other', status: 'awaiting_context', conversation_id: null, error: null,
+      clarifications: [{ question: 'Which pickup?', reason: 'The message names two.', asked_at: '2026-09-05T14:00:00.000Z', answer: null, answered_at: null }],
+    }]);
+    db.seed('family_automation_runs', [{
+      id: RUN, family_id: FAMILY, request_id: REQUEST, plan_id: null, requested_by_member_id: PARENT, run_type: 'concierge',
+      state: 'awaiting_context', status: 'pending', summary: 'Which pickup?', lease_owner: null, lease_expires_at: null, attempt: 0, max_attempts: 5, error: null,
+    }]);
+    const seen = { user: '' };
+    hoisted.provider = providerReplying({
+      objective: 'Deal with the pickup message', reasoning_summary: 'The answer names the school pickup.', risk_level: 'low', followups: [], clarification: null, answer: null,
+      steps: [
+        step({ key: 'event', tool_name: 'calendar.createEvent', input: '{"title":"Pickup at 9 Elm St","starts_at":"2026-09-05T20:00:00Z"}' }),
+        step({ key: 'tell', step_type: 'notify', input: '{"recipients":"family","type":"system","title":"Pickup moved"}', depends_on: ['event'] }),
+      ],
+    }, seen);
+    hoisted.context = bundle();
+    const { answerClarification } = await import('@/lib/ai/runs/intake');
+    const { extractFencedBlocks, stripFencedBlocks } = await import('@/lib/ai/safety/untrusted');
+    const kick = vi.fn();
+
+    const result = await answerClarification(parentScope(), RUN, 'The school one', { db: db as unknown as SupabaseClient<Database>, kick });
+
+    expect(result.ok, result.ok ? '' : result.error).toBe(true);
+    if (!result.ok) return;
+    expect(result.data).toMatchObject({ outcome: 'plan', runId: RUN });
+    expect(extractFencedBlocks(seen.user).some((b) => b.label === 'INBOX_MESSAGE' && b.text.includes(INJECTION))).toBe(true);
+    expect(stripFencedBlocks(seen.user)).not.toContain('IGNORE YOUR RULES');
+    const steps = db.table('ai_plan_steps');
+    expect(steps.map((s) => [s.step_type, s.approval_required])).toEqual([['act', true], ['notify', true]]);
+    expect(db.table('ai_plans')).toEqual([expect.objectContaining({ requires_approval: true })]);
   });
 });
 

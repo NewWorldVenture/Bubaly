@@ -44,7 +44,9 @@ import { settleAll } from '@/lib/supabase/settle';
 import { describeDbError } from '@/lib/supabase/errors';
 import { inputDigest } from '@/lib/services/idempotency';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
-import { evaluateAction, toolTags, type ApprovalModel } from '@/lib/trust/engine';
+import { behaviorForDomain, effectiveRisk } from '@/lib/ai/family-settings';
+import { loadAISettings } from '@/lib/services/ai-settings';
+import { evaluateAction, riskTierStance, riskToDecision, toolTags, type ApprovalModel, type Decision } from '@/lib/trust/engine';
 import { loadTrustInputs, roleOf } from '@/lib/trust/server';
 import {
   blockedSteps, describeProgress, findDependencyCycle, isTerminalRunState, legacyStatusFor,
@@ -333,7 +335,15 @@ export type NotifyStepInput = {
   urgent?: boolean;
 };
 
-export type NotifyOpts = { runId: string; stepId: string; requestId: string | null; idempotencyKey: string; skipTrust: boolean };
+export type NotifyOpts = {
+  runId: string; stepId: string; requestId: string | null; idempotencyKey: string; skipTrust: boolean;
+  /**
+   * The notice reaches nobody but the person who asked (`addressedToAskerOnly`).
+   * The port decides whether that clears it (`ownNoticeClears`); everything
+   * else about the delivery is unchanged.
+   */
+  ownNotice?: boolean;
+};
 
 /** What a notify step came to: delivered, or held by the trust gate for a person. */
 export type NotifyDelivery =
@@ -342,6 +352,45 @@ export type NotifyDelivery =
 
 /** The registry tool every notify step is delivered through. */
 export const NOTIFY_TOOL = 'notifications.notify';
+
+/**
+ * A notice addressed to nobody but the person who asked: the "Your day" a
+ * daily brief, "what am I forgetting?" or the chief of staff ends with
+ * (`recipients: [viewerMemberId]`). Not urgent — skipping quiet hours is a
+ * manager's call, whoever it reaches.
+ */
+export function addressedToAskerOnly(input: NotifyStepInput, requesterMemberId: string | null | undefined): boolean {
+  if (!requesterMemberId || input.urgent === true || !Array.isArray(input.recipients)) return false;
+  return input.recipients.length > 0 && input.recipients.every((id) => id === requesterMemberId);
+}
+
+/**
+ * Whether the gate's answer for a notice to the asker alone is the one refusal
+ * that does not apply to it.
+ *
+ * No role but a parent or adult holds `automate`, so every message a teen's,
+ * child's, caregiver's or guest's assistant sends is refused by the role
+ * matrix's generic fallback — which is right for the family, the parents or
+ * another member, and wrong for the asker's own notice: it reaches no one the
+ * asker could not already write to (0388 lets a member write their own
+ * notifications), and it is how their own brief reaches them. So that fallback,
+ * and only that, is lifted here. Everything the family itself said still
+ * decides: Bubaly switched off, a "recommend" or "prepare" dial or a raised
+ * risk for messaging (the tier turns those into a refusal or a hold before
+ * this is asked), and any policy or grant of theirs.
+ *
+ * Shared by the planner's dry run (lib/ai/planner/validate.ts) and the port
+ * below, so a plan keeps exactly the own notices a run delivers.
+ */
+export function ownNoticeClears(
+  decision: Pick<Decision, 'effect' | 'basis'>,
+  input: NotifyStepInput,
+  requesterMemberId: string | null | undefined,
+  bubalyOn: boolean,
+): boolean {
+  if (!bubalyOn || !addressedToAskerOnly(input, requesterMemberId)) return false;
+  return decision.effect === 'deny' && decision.basis === 'fallback';
+}
 
 /**
  * A notify step's input as the arguments of `notifications.notify`, so the step
@@ -1223,6 +1272,7 @@ async function runNotifyStep(
     requestId: run.request_id,
     idempotencyKey: runActionKey(run.family_id, run.id, NOTIFY_TOOL, notifyToolArgs(input)),
     skipTrust: approved,
+    ...(!approved && scope.actorKind === 'ai' && addressedToAskerOnly(input, scope.memberId) ? { ownNotice: true } : {}),
   });
   if (!sent.ok) {
     if (sent.code === SERVICE_CODES.denied) return recordDenial(port, run, step, NOTIFY_TOOL, sent.error);
@@ -1375,6 +1425,47 @@ async function approvalRuleFor(db: SupabaseClient<Database>, scope: ServiceScope
     });
   }
   return ok({ domain, approvalModel: 'single', requiredApprovals: 1, policyId: null });
+}
+
+/**
+ * Whether a notice to the asker alone may go out without the gate's refusal of
+ * their role (`ownNoticeClears`). The gate's decision is worked out here
+ * without its side effects, from what it reads: the family's settings, read
+ * STRICTLY; their rules; the tier at the family's own risk for the tool. A
+ * family that switched Bubaly off, any setting or rule that cannot be read, or
+ * any answer but the role matrix's generic "no" sends the notice back through
+ * the ordinary gate, which then refuses or holds it in its own words. A parent
+ * or adult has nothing to lift: their notice is the gate's to decide.
+ */
+async function ownNoticeCleared(db: SupabaseClient<Database>, scope: ServiceScope, input: NotifyStepInput): Promise<boolean> {
+  if (scope.actorKind !== 'ai' || isManager(scope.role) || !addressedToAskerOnly(input, scope.memberId)) return false;
+  const tool = getTool(NOTIFY_TOOL);
+  if (!tool) return false;
+  const settings = await loadAISettings(scope);
+  if (!settings.ok || !settings.data.enabled) return false;
+  const trust = await loadTrustInputs(db, scope.familyId);
+  if (trust.degraded) return false;
+  const risk = effectiveRisk(settings.data, tool);
+  // The role the run-time gate evaluates (`trustRoleFor` in execute.ts).
+  const actor = { kind: 'ai_agent' as const, id: 'bubaly', role: scope.role === 'system' ? 'adult' as const : roleOf(scope.role) };
+  let decision: Decision = evaluateAction({
+    actor,
+    domain: tool.domain,
+    capability: 'automate',
+    context: { confidence: 0.85, tags: [...toolTags(tool.name), `op:${tool.capability}`, `risk:${risk}`, `domain:${tool.domain}`] },
+    policies: trust.policies,
+    grants: trust.grants,
+    delegations: trust.delegations,
+    emergencyDomains: trust.emergencyDomains,
+  });
+  const stance = riskTierStance(decision);
+  if (stance !== 'silent') {
+    const risked = riskToDecision({
+      risk, actor, domain: tool.domain, capability: 'automate', behavior: behaviorForDomain(settings.data, tool.domain), explicitAllow: false,
+    });
+    if (risked && (stance === 'speaks' || risked.effect !== 'allow')) decision = risked;
+  }
+  return ownNoticeClears(decision, input, scope.memberId, settings.data.enabled);
 }
 
 /** The trust domain an approval row is filed under, taken from the tool's dotted prefix when it names one. */
@@ -1553,7 +1644,9 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
         stepId: opts.stepId,
         requestId: opts.requestId,
         idempotencyKey: opts.idempotencyKey,
-        skipTrust: opts.skipTrust,
+        // An own notice the family's switch, dial and rules all let through
+        // is delivered without the role refusal; still ledgered and keyed.
+        skipTrust: opts.skipTrust || (opts.ownNotice === true && await ownNoticeCleared(db, scope, input)),
       });
       switch (outcome.status) {
         case 'ok': {

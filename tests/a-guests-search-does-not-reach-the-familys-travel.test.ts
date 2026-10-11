@@ -5,6 +5,12 @@
 // non-manager got document titles and expiry dates that `documents.*` and the
 // manager-only documents slice keep from them.
 //
+// One rule per role for the trips: the assistant's search refuses them to
+// whoever `trips.getTrip` refuses — a guest, and a child (travel is one of the
+// child's private domains in the trust engine). That is also the rule PR #1004
+// puts in the search service for every caller, so the two branches pin the
+// same answer for a child.
+//
 // This drives the tool exactly as POST /api/ai offers it — `toToolSpecs` over
 // the member's scope, then the spec's own `execute`, which is `executeTool` —
 // against an in-memory household, so the gate, the tool and the service all
@@ -70,12 +76,20 @@ describe("the assistant's household search keeps to the assistant's own read rul
     expect(db.log.filter((c) => ['trips', 'vacations', 'documents'].includes(c.table))).toEqual([]);
   });
 
-  it.each(['teen', 'child', 'caregiver'] as const)('a %s keeps the family trips but gets no document titles', async (role) => {
+  it.each(['teen', 'caregiver'] as const)('a %s keeps the family trips but gets no document titles', async (role) => {
     const data = await assistantSearch(role, 'Tokyo');
     expect(tables(data)).toEqual(['calendar_events', 'trips', 'vacations']);
     expect(data.withheld).toContain('document');
     expect(data.withheld).not.toContain('trip');
     expect(data.withheld).not.toContain('vacation');
+  });
+
+  it('a child gets neither the trips trips.getTrip refuses a child nor document titles — and is told so', async () => {
+    const data = await assistantSearch('child', 'Tokyo');
+    expect(tables(data)).toEqual(['calendar_events']);
+    expect(data.withheld).toEqual(expect.arrayContaining(['trip', 'vacation', 'document']));
+    expect(data.unavailable).toEqual([]);
+    expect(db.log.filter((c) => ['trips', 'vacations', 'documents'].includes(c.table))).toEqual([]);
   });
 
   it.each(['parent', 'adult'] as const)('a %s still searches every source', async (role) => {
@@ -84,12 +98,16 @@ describe("the assistant's household search keeps to the assistant's own read rul
     expect(data.withheld).toEqual([]);
   });
 
-  it("the household search page keeps the service's own rules", async () => {
-    // Only the assistant's answer narrows; the search page and ⌘K bar call the
-    // service without options and are unchanged by this fix.
+  it("the household search page is not narrowed by the assistant's document rule", async () => {
+    // The search page and ⌘K bar call the service without options, so the
+    // assistant's narrowing never reaches them: a guest's page search still
+    // lists the household's non-sensitive documents, as 0266 lets every member
+    // read them. Whether the page searches trips for a guest or a child is the
+    // service's own rule, not this one's.
     const res = await searchHousehold(scopeFor('guest'), 'Tokyo');
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    expect([...new Set(res.data.hits.map((h) => h.table))].sort()).toEqual(['calendar_events', 'documents', 'trips', 'vacations']);
+    expect(res.data.hits.map((h) => h.table)).toEqual(expect.arrayContaining(['calendar_events', 'documents']));
+    expect(res.data.withheld).not.toContain('document');
   });
 });
