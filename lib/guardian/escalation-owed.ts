@@ -202,7 +202,17 @@ export async function guardianEscalationKeyedOnText(client: SupabaseClient, fami
   return { kind: 'text', input: mark.data.input };
 }
 
-export type OwedLandingCounts = { landed: number; unavailable: number };
+export type OwedLandingCounts = {
+  landed: number;
+  unavailable: number;
+  /**
+   * Items read and never tried: the phase ended first. Emergencies that
+   * reached nobody, with no record on file for the sweep to find, so they are
+   * reported as left. Untouched, they keep their count, and so their turn in
+   * the next run's order.
+   */
+  deferred: number;
+};
 
 /**
  * How long one item's landing (its record's insert, then its close), or the
@@ -254,7 +264,8 @@ async function countFailedLanding(client: SupabaseClient, item: OwedItem, signal
  * of the run's), each landing after LANDING_MS of its own, and everything at
  * `signal` — the run's deadline, or the caller gone. A landing cut off is
  * counted unavailable, never landed; a close cut off leaves the item open, and
- * the next run closes it.
+ * the next run closes it (its record is on file, for the sweep to retry). The
+ * items the phase ends before are counted deferred, and left as they are.
  *
  * A landing cut off short of the run's end is counted as tried, too. It was
  * not, when every landing shared the run's deadline: one whose insert never
@@ -266,7 +277,7 @@ export async function landOwedGuardianEscalations(
   client: SupabaseClient,
   options: { since: string; limit: number; signal: AbortSignal; deadline: number },
 ): Promise<OwedLandingCounts> {
-  const counts: OwedLandingCounts = { landed: 0, unavailable: 0 };
+  const counts: OwedLandingCounts = { landed: 0, unavailable: 0, deferred: 0 };
   // Whole milliseconds: AbortSignal.timeout throws on a fraction, and a share of the run can be one.
   const phase = AbortSignal.any([options.signal, AbortSignal.timeout(Math.max(0, Math.floor(options.deadline - Date.now())))]);
   /** A statement of one item: cut off after LANDING_MS, or sooner with `within`. */
@@ -305,8 +316,15 @@ export async function landOwedGuardianEscalations(
     if (!options.signal.aborted) await countFailedLanding(client, item, bounded(options.signal));
   };
 
-  for (const item of items) {
-    if (phase.aborted) break;
+  for (const [index, item] of items.entries()) {
+    if (phase.aborted) {
+      // The phase has ended: inside a landing or a close, or between items.
+      // The rest were read and never tried, and are counted, as the records'
+      // own loop counts the ones it leaves. Left uncounted, a run that reached
+      // none of them answered as though nothing were owed.
+      counts.deferred += items.length - index;
+      break;
+    }
     const stored = storedSchema.safeParse(item.inputs);
     if (!stored.success || stored.data.input.familyId !== item.family_id) {
       console.error('[guardian] an owed escalation cannot be landed as written', { id: item.id });

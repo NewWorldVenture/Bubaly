@@ -104,7 +104,12 @@ export type GuardianEscalationRetryCounts = {
   unreachable: number;
   /** The ledger could not be read, a record was malformed, or the attempt itself could not complete. */
   unavailable: number;
-  /** Records the run's deadline left unattempted; they are first in line next run. */
+  /**
+   * Records the run's deadline left unattempted; they are first in line next
+   * run. And owed work items the landing phase read and never tried, its end
+   * having come first: left as they are, with their count, they are taken in
+   * their turn next run.
+   */
   deferred: number;
   /** Records landed from the work item an escalation left when its own record could not be written. */
   recovered: number;
@@ -210,6 +215,7 @@ export async function retryUndeliveredGuardianEscalations(
   const owed = await landOwedGuardianEscalations(client, { since, limit, signal: stop, deadline: Date.now() + Math.max(0, deadline - Date.now()) * OWED_SHARE });
   counts.recovered += owed.landed;
   counts.unavailable += owed.unavailable;
+  counts.deferred += owed.deferred;
 
   let rows: Record<string, unknown>[];
   let claims: Map<string, { status: unknown; error: unknown }>;

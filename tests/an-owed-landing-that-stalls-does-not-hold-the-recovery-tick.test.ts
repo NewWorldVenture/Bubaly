@@ -51,6 +51,13 @@ type World = {
   landings: string[];
 };
 let world: World;
+/** How long the database takes over the close of a work item, and over the count of one that failed. Zero unless a case asks. */
+const slow = { closeMs: 0, countMs: 0 };
+/** A statement that answers after `ms`, or is cut off by its signal first, as a real fetch is. */
+const answerAfter = (ms: number, signal?: AbortSignal | null) => new Promise<void>((resolve, reject) => {
+  const timer = setTimeout(resolve, ms);
+  signal?.addEventListener('abort', () => { clearTimeout(timer); reject(new DOMException('This operation was aborted', 'AbortError')); }, { once: true });
+});
 
 /** The work item an escalation leaves when its record cannot be written, as oweGuardianEscalation writes it. */
 function owedItem(n: number, createdAt: number, attempt = 0): Row {
@@ -130,6 +137,9 @@ function makeClient() {
           return Response.json(ordered(open, url.searchParams.get('order')).slice(0, Number(url.searchParams.get('limit'))).map((item) => structuredClone(item)));
         }
         if (method === 'PATCH') {
+          // The close of a landed item, or the count of one that failed.
+          const ms = body?.state === 'succeeded' ? slow.closeMs : slow.countMs;
+          if (ms) await answerAfter(ms, init.signal);
           const matched = world.owed.filter((item) => item.id === eq('id') && item.family_id === eq('family_id') && item.state === eq('state'));
           for (const item of matched) Object.assign(item, body);
           return Response.json(matched.map((item) => ({ id: item.id })));
@@ -172,6 +182,7 @@ beforeEach(() => {
   });
   vi.stubEnv('CRON_SECRET', 'synthetic-recovery-cron-secret');
   world = { owed: [], records: [], settings: new Map(), landings: [] };
+  slow.closeMs = 0; slow.countMs = 0;
   seam.client = makeClient();
   seam.drain.mockReset().mockResolvedValue({ examined: 0, completed: 0, busy: 0, unavailable: 0 });
   // A text and a call that go through, except to the family whose number
@@ -288,9 +299,12 @@ describe('an owed escalation whose landing stalls on every tick', () => {
     const first = await tick();
     expect(first.landed.every((family) => family === STALLED)).toBe(true);
     expect(first.landed.length).toBeGreaterThan(0);
-    // The records on file got their attempts, inside what the drain left.
+    // The records on file got their attempts, inside what the drain left; every
+    // record was attempted, and the owed items the phase ended before (the newer
+    // one, never tried this tick, with no record yet) are reported as left.
     expect([...first.escalated].sort()).toEqual([FAM(10), REFUSED].sort());
-    expect(first.escalations).toMatchObject({ examined: 2, delivered: 1, undelivered: 1, deferred: 0 });
+    expect(first.escalations).toMatchObject({ examined: 2, delivered: 1, undelivered: 1, deferred: world.owed.length - first.landed.length });
+    expect(first.escalations.deferred).toBeGreaterThan(0);
     // Every stalled landing tried was cut off short of the run's end, and so counted.
     expect(world.owed.filter((row) => row.family_id === STALLED && row.state === 'reserved' && row.attempt === 1)).toHaveLength(first.landed.length);
 
@@ -300,5 +314,75 @@ describe('an owed escalation whose landing stalls on every tick', () => {
     expect(item(2)).toMatchObject({ state: 'succeeded' });
     expect(second.escalated).toContain(FAM(2));
     expect(second.escalated).toContain(REFUSED);
+  });
+});
+
+// The owed phase ends with items it read and never tried. Those are emergencies
+// that reached nobody, with no record on file for the sweep below to find, and
+// the tick has to say so, as it does for the records it leaves: the route's
+// promise is a non-2xx whenever something was not reached by this run, and the
+// ticks between can be hours apart. The loop stopped at the phase's end
+// without counting them, so a phase that ended inside a close, or between
+// items, answered 200 with emergencies left unreached.
+describe('an owed phase that ends before every item it read is tried', () => {
+  it('inside a close that is slow but answers: the items left are counted deferred, the tick answers 503, and they lead the next tick', async () => {
+    // Ten owed items, each landing at once, each close taking nine seconds
+    // (cut off by its signal, as a real fetch is). The phase has half the run:
+    // five closes, and a sixth cut off.
+    slow.closeMs = 9_000;
+    world.owed = Array.from({ length: 10 }, (_, i) => owedItem(20 + i, T0 - (60 - i) * MIN));
+
+    const first = await tick();
+    expect(first.landed).toEqual([20, 21, 22, 23, 24, 25].map(FAM));
+    // Five landed and closed; the sixth landed, and its close was cut off.
+    for (const n of [20, 21, 22, 23, 24]) expect(item(n)).toMatchObject({ state: 'succeeded', attempt: 1 });
+    expect(item(25)).toMatchObject({ state: 'reserved', attempt: 0 });
+    expect(recordOf(25)).toMatchObject({ notified_member_ids: [MANAGER] });
+    // Four read and never tried: untouched, with nothing on file for them.
+    for (const n of [26, 27, 28, 29]) {
+      expect(item(n)).toMatchObject({ state: 'reserved', attempt: 0 });
+      expect(recordOf(n)).toBeUndefined();
+    }
+    // The defect: { deferred: 0 } and a 200, with four emergencies reached by nobody.
+    expect(first.status).toBe(503);
+    expect(first.escalations).toMatchObject({ recovered: 6, examined: 6, delivered: 6, undelivered: 0, unavailable: 0, deferred: 4 });
+
+    // Next tick, at the same pace: the item whose close was cut off first (its
+    // record is there, so it is only closed), then the four left, all inside the phase.
+    const second = await tick();
+    expect(second.landed).toEqual([25, 26, 27, 28, 29].map(FAM));
+    expect(world.owed.filter((row) => row.state !== 'succeeded')).toEqual([]);
+    expect([...second.escalated].sort()).toEqual([26, 27, 28, 29].map(FAM).sort());
+    expect(second.escalations).toMatchObject({ recovered: 5, examined: 4, delivered: 4, unavailable: 0, deferred: 0 });
+    expect(second.status).toBe(200);
+  });
+
+  it('between items, after a count that outlasts it: the items left are counted deferred, and lead the next tick', async () => {
+    // Six older items written in a shape this cannot read, whose count as tried
+    // takes nine seconds, ahead of four that would land at once. The sixth
+    // count runs past the phase's end; the four behind it are never tried.
+    slow.countMs = 9_000;
+    world.owed = [
+      ...Array.from({ length: 6 }, (_, i) => ({ ...owedItem(30 + i, T0 - (60 - i) * MIN), inputs: { version: 2 } })),
+      ...Array.from({ length: 4 }, (_, i) => owedItem(40 + i, T0 - (30 - i) * MIN)),
+    ];
+
+    const first = await tick();
+    expect(first.landed).toEqual([]);
+    for (const n of [30, 31, 32, 33, 34, 35]) expect(item(n)).toMatchObject({ state: 'reserved', attempt: 1 });
+    for (const n of [40, 41, 42, 43]) {
+      expect(item(n)).toMatchObject({ state: 'reserved', attempt: 0 });
+      expect(recordOf(n)).toBeUndefined();
+    }
+    // The defect: { deferred: 0 }, the four never tried reported nowhere.
+    expect(first.escalations).toMatchObject({ recovered: 0, examined: 0, unavailable: 6, deferred: 4 });
+    expect(first.status).toBe(503);
+
+    // Tried fewer times, the four go first next tick, and are landed and reached.
+    const second = await tick();
+    expect(second.landed).toEqual([40, 41, 42, 43].map(FAM));
+    for (const n of [40, 41, 42, 43]) expect(item(n)).toMatchObject({ state: 'succeeded' });
+    expect([...second.escalated].sort()).toEqual([40, 41, 42, 43].map(FAM).sort());
+    expect(second.escalations).toMatchObject({ recovered: 4, examined: 4, delivered: 4, unavailable: 6, deferred: 0 });
   });
 });
