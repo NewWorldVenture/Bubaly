@@ -9,12 +9,15 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
+import { settleAll } from '@/lib/supabase/settle';
+import { readFamilyOrders } from '@/lib/marketplace/schema-compat';
 
-type Result = { ok: true } | { ok: false; error: string };
+type Failure = { ok: false; error: string };
+type Result = { ok: true } | Failure;
 
 const MARKETPLACE = '/marketplace';
 
-function actionFailure(operation: string, message: string, error: unknown): Result {
+function actionFailure(operation: string, message: string, error: unknown): Failure {
   console.error(`[marketplace-action] ${operation} failed`, error);
   return { ok: false, error: describeActionError(error, message) };
 }
@@ -141,12 +144,14 @@ export async function setOrderStatusAction(orderId: string, status: string): Pro
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
-  const { data: order, error: orderError } = await supabase
+  // Either party's family (readFamilyOrders): an order between two households
+  // carries the seller's family_id and, after the proposed economy SQL, the
+  // buyer's as buyer_family_id.
+  const { data: order, error: orderError } = await readFamilyOrders(ctx.active.familyId, (scope) => scope(supabase
     .from('marketplace_orders')
-    .select('id, status')
-    .eq('id', orderId)
-    .eq('family_id', ctx.active.familyId)
-    .maybeSingle();
+    .select('id, status, family_id')
+    .eq('id', orderId))
+    .maybeSingle());
   if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
   if (!order) return { ok: false, error: t('actions.orderNotFound') };
   if (!(ORDER_FLOW[order.status] ?? []).includes(status)) {
@@ -167,11 +172,13 @@ export async function setOrderStatusAction(orderId: string, status: string): Pro
   //
   // The `family_id` filter is defence in depth: ownership is already proven by
   // the read above and by RLS, but a write that carries its own scope cannot be
-  // detached from its guard by a later edit. Audit C1-S9-56.
+  // detached from its guard by a later edit. Audit C1-S9-56. It is the order's
+  // own family_id, read above under the caller's either-party scope: for the
+  // buyer's household on a cross-family order that is the seller's family.
   const { data: advanced, error } = await supabase.from('marketplace_orders')
     .update({ status })
     .eq('id', orderId)
-    .eq('family_id', ctx.active.familyId)
+    .eq('family_id', order.family_id)
     .eq('status', order.status)
     .select('id');
   if (error) return actionFailure('update the order', t('marketplace.couldNotUpdateTheOrder'), error);
@@ -189,12 +196,11 @@ export async function leaveReviewAction(input: { orderId: string; rating: number
   const supabase = await createServer();
   const memberId = ctx.active.member.id;
 
-  const { data: order, error: orderError } = await supabase
+  const { data: order, error: orderError } = await readFamilyOrders(ctx.active.familyId, (scope) => scope(supabase
     .from('marketplace_orders')
     .select('id, listing_id, buyer_member, seller_member, status')
-    .eq('id', input.orderId)
-    .eq('family_id', ctx.active.familyId)
-    .maybeSingle();
+    .eq('id', input.orderId))
+    .maybeSingle());
   if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
   if (!order) return { ok: false, error: t('actions.orderNotFound') };
   if (order.status !== 'completed') return { ok: false, error: t('actions.reviewsOpenOnceTheExchange') };
@@ -275,4 +281,54 @@ export async function makeOfferAction(listingId: string): Promise<Result> {
   revalidatePath(`${MARKETPLACE}/item/${listingId}`);
   revalidatePath(`${MARKETPLACE}/browse`);
   return { ok: true };
+}
+
+// ── The rail's Trust Score card ──────────────────────────────────────────────
+
+export type TrustScoreInputsResult =
+  | { ok: true; memberId: string; ratingsReceived: number[]; ordersCompleted: number; listingsPosted: number }
+  | Failure;
+
+/**
+ * What the Trust Score card scores for the active member: the ratings they
+ * received, the exchanges they completed on either side, and the listings they
+ * posted (components/marketplace/sidebar-trust-score.tsx runs the pure engine
+ * on these).
+ *
+ * Read here and not in the browser. The order read asks for buyer_family_id,
+ * and a database without the proposed economy SQL answers that with a 400
+ * before readFamilyOrders falls back to the seller-family read. On the server
+ * that 400 is a response to a fetch, handled and warned about once. In the
+ * browser Chromium also prints "Failed to load resource: the server responded
+ * with a status of 400" to the console — and the rail is on every marketplace
+ * page, so that one probe put a console error on all of them.
+ */
+export async function readTrustScoreInputsAction(): Promise<TrustScoreInputsResult> {
+  const t = await getTranslations();
+  const ctx = await requireUserContext();
+  const supabase = await createServer();
+  const familyId = ctx.active.familyId;
+  const memberId = ctx.active.member.id;
+
+  const [reviews, orders, listings] = await settleAll([
+    supabase.from('marketplace_reviews').select('rating').eq('family_id', familyId).eq('reviewee_member', memberId),
+    // Either party's family, so an exchange this member won from another
+    // household counts too (lib/marketplace/schema-compat.ts).
+    readFamilyOrders(familyId, (scope) => scope(supabase.from('marketplace_orders').select('status, buyer_member, seller_member'))),
+    supabase.from('marketplace_listings').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('member_id', memberId),
+  ]);
+  // A failed read is said, not scored: a zero baseline is a real-looking number
+  // the family would take as their standing.
+  const failure = reviews.error ?? orders.error ?? listings.error;
+  if (failure) return actionFailure('read the trust score', t('sidebarTrustScore.couldNotLoad'), failure);
+
+  return {
+    ok: true,
+    memberId,
+    ratingsReceived: (reviews.data ?? []).map((r) => r.rating),
+    ordersCompleted: (orders.data ?? []).filter(
+      (o) => o.status === 'completed' && (o.buyer_member === memberId || o.seller_member === memberId),
+    ).length,
+    listingsPosted: listings.count ?? 0,
+  };
 }

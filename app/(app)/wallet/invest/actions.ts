@@ -81,12 +81,20 @@ export async function placeInvestOrderAction(input: { childWalletId: string; ass
 
   const supabase = await createServer();
   const [{ data: cw, error: walletError }, { data: asset, error: assetError }] = await settleAll([
-    supabase.from('child_wallets').select('id').eq('id', input.childWalletId).eq('family_id', familyId).maybeSingle(),
+    supabase.from('child_wallets').select('id, member_id').eq('id', input.childWalletId).eq('family_id', familyId).maybeSingle(),
     supabase.from('invest_assets').select('id, price_cents, is_active').eq('id', input.assetId).maybeSingle(),
   ]);
   if (walletError) return actionFailure('load the child wallet', tr('invest.couldNotLoadTheChildWallet'), walletError);
   if (assetError) return actionFailure('load the investment', t('invest.couldNotLoadTheInvestment'), assetError);
   if (!cw) return { ok: false, error: tr('actions.childWalletNotFound') };
+  // A child places orders against their OWN wallet only. Belonging to the
+  // family was the whole check, so a child could queue a sell of a sibling's
+  // shares (or a buy from their Invest cash) that a parent approving the queue
+  // would fill against the sibling. Not found, as it is to them. The same rule
+  // requestAllowanceAction applies.
+  if (!isManager(ctx.active.role) && cw.member_id !== ctx.active.member.id) {
+    return { ok: false, error: tr('actions.childWalletNotFound') };
+  }
   if (!asset || !asset.is_active) return { ok: false, error: tr('actions.thatInvestmentIsNotAvailable') };
 
   const amount = orderAmountCents(shares, asset.price_cents);

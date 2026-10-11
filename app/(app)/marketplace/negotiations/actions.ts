@@ -6,11 +6,20 @@
 // and row-lock the listing, verifying the caller is the buyer (in their family)
 // or the listing owner (in theirs) — so a race can't hand the same item to two
 // buyers. Reads stay under RLS.
+//
+// Every negotiation is between two households: 0187's
+// marketplace_negotiations_distinct_families is `check (family_id <>
+// buyer_family_id)`, and the offer RPC refuses own_listing. So opening an
+// offer, countering and accepting are each a deal with another family's adult
+// (an accepted thread becomes a confirmed order and a pickup), and a child or
+// teen is refused all three here. Declining and withdrawing only end a thread
+// and stay open to every party.
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { describeActionError } from '@/lib/supabase/errors';
+import { isManager } from '@/lib/constants/roles';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -57,6 +66,9 @@ export async function makeOfferAction(
 ): Promise<Result<{ negotiationId: string; countered: boolean }>> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
+  // An offer is made to another household (see the header), and the seller
+  // accepting it turns this child's or teen's offer into a confirmed order.
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan16') };
   const supabase = await createServer();
   const amount = Math.round(input.amountCents);
   if (!input.listingId || !Number.isFinite(amount) || amount <= 0) {
@@ -87,9 +99,17 @@ export async function respondToOfferAction(
 ): Promise<Result<{ status: string; orderId?: string }>> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
-  void ctx; // auth enforced by requireUserContext + the RPC's ownership checks
   const supabase = await createServer();
   if (!input.negotiationId) return { ok: false, error: t('actions.invalidNegotiation') };
+
+  // Accepting creates a confirmed order with the other household, and a
+  // counter is an offer the other household's adult can accept into one. The
+  // two sides are always different families (0187's distinct_families check),
+  // so there is no same-family case to let through: a child or teen is refused
+  // both without a read. Decline and withdraw only end the thread.
+  if ((input.action === 'accept' || input.action === 'counter') && !isManager(ctx.active.role)) {
+    return { ok: false, error: t('actions.onlyAParentGuardianCan16') };
+  }
 
   const amount = input.action === 'counter' ? Math.round(input.amountCents ?? 0) : null;
   if (input.action === 'counter' && (!amount || amount <= 0)) {

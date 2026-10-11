@@ -16,6 +16,9 @@
 --   a parent creates a link and dismisses a pledge    -> allowed  (control)
 --   a parent's approval credits the child it was for  -> allowed  (control)
 --   a child can still see the gift sent to them       -> allowed  (control)
+--   a child reads a sibling's PENDING gift             -> REFUSED  (0483 §9: the
+--     giver's text is the parents' to read first; a child sees only completed
+--     gifts on their own wallet)
 --   a child forges a goal "reached" with no ledger     -> REFUSED
 --   a child repoints a goal or a Pay-ID                -> REFUSED
 --   a parent creates and funds a goal, claims a Pay-ID -> allowed  (control)
@@ -131,9 +134,14 @@ begin
   if not public.is_family_member(fam) then
     raise exception 'CONTROL FAILED: not acting as a family member, so no refusal below means anything';
   end if;
+  -- 0483 §9: a pending gift's text is the parents' to read first, and a child
+  -- sees only a completed gift on their own wallet. Brother cannot see Sister's
+  -- pending pledge at all, so the zero-row writes below are refused twice over
+  -- (invisible, and by 0350 not theirs to write). The read control is the one
+  -- at the end: Sister sees the gift once it is credited to her.
   select count(*) into n from public.gift_payments where id = pledge;
-  if n <> 1 then
-    raise warning 'CONTROL FAILED: a child cannot see the family''s pending gifts at all';
+  if n <> 0 then
+    raise warning 'REGRESSION: a child can read a sibling''s pending gift (%) — 0483 §9 keeps it for the parents until it is approved', n;
     failures := failures + 1;
   end if;
 

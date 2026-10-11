@@ -131,7 +131,7 @@ export function ExpensesModule() {
       // Under RLS a refused row comes back with no error and zero rows. Audit C1-S9-82.
       const { data: toggled, error } = await createClient().from('expense_split_shares')
         .update({ settled: !s.settled, settled_at: !s.settled ? new Date().toISOString() : null })
-        .eq('id', s.id).select('id');
+        .eq('id', s.id).eq('family_id', familyId).select('id');
       if (error) throw error;
       if (wroteNoRows(toggled)) toastError(tr('errors.thatChangeWasNotSaved'));
     });

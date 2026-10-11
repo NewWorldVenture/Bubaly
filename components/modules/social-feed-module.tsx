@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
+import { safeSocialLink } from '@/lib/social/links';
 import {
   PLATFORMS, platformMeta, platformLabel, buildFeed, quickFilterCounts,
   type FeedTab, type QuickFilter,
@@ -217,7 +218,10 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
                 <FeedCard key={item.id} item={item} busy={busy}
                   onFavorite={() => run(`fav-${item.id}`, () => toggleFavoriteAction({ id: item.id, favorite: !item.isFavorite }))}
                   onOpen={() => {
-                    if (item.permalink) window.open(item.permalink, '_blank', 'noopener');
+                    // A stored permalink is anyone-in-the-family's text: open it only as a
+                    // web link (SEC-002), as every stored href already is.
+                    const href = safeSocialLink(item.permalink);
+                    if (href) window.open(href, '_blank', 'noopener');
                     // Degrade quietly (the link already opened) but never silently:
                     // the refresh shows the server's truth either way, so a refused
                     // mark-read is a smaller answer — logged, not dropped — and a
@@ -332,7 +336,7 @@ function FeedCard({ item, busy, onFavorite, onOpen }: { item: FeedItem; busy: st
             className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg">
             <Bookmark className={cn('h-4 w-4', item.isFavorite && 'fill-brand text-brand-text')} />
           </button>
-          {item.permalink && (
+          {safeSocialLink(item.permalink) && (
             <button type="button" onClick={onOpen} aria-label={tr('socialFeed.openPost')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg">
               <MoreHorizontal className="h-4 w-4" />
             </button>

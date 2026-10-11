@@ -122,8 +122,9 @@ begin
   -- writes only binder entries that are NOT sensitive.
   insert into public.household_info (family_id, category, label, value, is_sensitive, created_by)
     values (fam, 'instruction', 'Bin day', 'Tuesday', false, enrolled) returning id into info_open;
-  insert into public.tax_documents (family_id, tax_year, category, name, created_by)
-    values (fam, 2025, 'w2', 'W-2 2025', enrolled) returning id into taxdoc;
+  insert into public.tax_documents (family_id, tax_year, category, name, created_by, member_id)
+    values (fam, 2025, 'w2', 'W-2 2025', enrolled,
+            (select id from public.family_members where family_id = fam and user_id = child)) returning id into taxdoc;
   insert into public.paperwork_items (family_id, kind, title, status, created_by)
     values (fam, 'school_notice', 'Field trip slip', 'needs_action', enrolled) returning id into paper;
 

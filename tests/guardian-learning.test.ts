@@ -27,7 +27,7 @@ describe('analyzeCommunications — repeat scammer', () => {
   it('proposes a block when an unsaved number is flagged scam >= threshold', () => {
     const comms = Array.from({ length: REPEAT_SCAM_THRESHOLD }, () =>
       comm({ scam_detected: true, from_number: '+15559999999' }));
-    const drafts = analyzeCommunications({ communications: comms, contacts: [] });
+    const drafts = analyzeCommunications({ communications: comms, contacts: [], timezone: 'UTC' });
     const block = drafts.find((dr) => dr.dedupeKey === 'block:+15559999999');
     expect(block).toBeTruthy();
     expect(block!.suggestion_type).toBe('flag_scam'); // no saved contact
@@ -40,7 +40,7 @@ describe('analyzeCommunications — repeat scammer', () => {
     const contacts: ContactSummary[] = [
       { id: 'c1', phone: '+15558887777', name: 'Spammy', trust_level: 'unknown', trust_override: false },
     ];
-    const drafts = analyzeCommunications({ communications: comms, contacts });
+    const drafts = analyzeCommunications({ communications: comms, contacts, timezone: 'UTC' });
     const block = drafts.find((dr) => dr.suggestion_type === 'block_contact');
     expect(block).toBeTruthy();
     expect(block!.proposed_contact_id).toBe('c1');
@@ -52,7 +52,7 @@ describe('analyzeCommunications — repeat scammer', () => {
     const contacts: ContactSummary[] = [
       { id: 'c1', phone: '+15558887777', name: 'Spammy', trust_level: 'blocked', trust_override: true },
     ];
-    const drafts = analyzeCommunications({ communications: comms, contacts });
+    const drafts = analyzeCommunications({ communications: comms, contacts, timezone: 'UTC' });
     expect(drafts.find((dr) => dr.suggestion_type.includes('block'))).toBeFalsy();
   });
 });
@@ -61,7 +61,7 @@ describe('analyzeCommunications — frequent unknown', () => {
   it('proposes adding a frequent, scam-free unknown number to contacts', () => {
     const comms = Array.from({ length: FREQUENT_UNKNOWN_THRESHOLD }, () =>
       comm({ from_number: '+15551112222' }));
-    const drafts = analyzeCommunications({ communications: comms, contacts: [] });
+    const drafts = analyzeCommunications({ communications: comms, contacts: [], timezone: 'UTC' });
     const trust = drafts.find((dr) => dr.dedupeKey === 'trust:+15551112222:known_contact');
     expect(trust).toBeTruthy();
     expect(trust!.proposed_trust_level).toBe('known_contact');
@@ -70,7 +70,7 @@ describe('analyzeCommunications — frequent unknown', () => {
   it('does not propose for numbers below the frequency threshold', () => {
     const comms = Array.from({ length: FREQUENT_UNKNOWN_THRESHOLD - 1 }, () =>
       comm({ from_number: '+15551112222' }));
-    const drafts = analyzeCommunications({ communications: comms, contacts: [] });
+    const drafts = analyzeCommunications({ communications: comms, contacts: [], timezone: 'UTC' });
     expect(drafts.find((dr) => dr.dedupeKey.startsWith('trust:+15551112222'))).toBeFalsy();
   });
 });
@@ -82,7 +82,7 @@ describe('analyzeCommunications — proven-safe upgrade', () => {
     const contacts: ContactSummary[] = [
       { id: 'c2', phone: '+15553334444', name: 'Coach Dave', trust_level: 'known_contact', trust_override: false },
     ];
-    const drafts = analyzeCommunications({ communications: comms, contacts });
+    const drafts = analyzeCommunications({ communications: comms, contacts, timezone: 'UTC' });
     const up = drafts.find((dr) => dr.dedupeKey === 'trust:c2:trusted_friend');
     expect(up).toBeTruthy();
     expect(up!.proposed_trust_level).toBe('trusted_friend');
@@ -94,7 +94,7 @@ describe('analyzeCommunications — proven-safe upgrade', () => {
     const contacts: ContactSummary[] = [
       { id: 'c2', phone: '+15553334444', name: 'Coach Dave', trust_level: 'known_contact', trust_override: true },
     ];
-    const drafts = analyzeCommunications({ communications: comms, contacts });
+    const drafts = analyzeCommunications({ communications: comms, contacts, timezone: 'UTC' });
     expect(drafts.find((dr) => dr.dedupeKey === 'trust:c2:trusted_friend')).toBeFalsy();
   });
 });
@@ -103,7 +103,7 @@ describe('analyzeCommunications — quiet hours', () => {
   it('proposes a quiet-hours rule after enough night-time unknown calls', () => {
     const comms = Array.from({ length: NIGHT_CALL_THRESHOLD }, (_, i) =>
       comm({ from_number: `+1555000000${i}`, started_at: NIGHT, trust_level_at_time: 'unknown' }));
-    const drafts = analyzeCommunications({ communications: comms, contacts: [] });
+    const drafts = analyzeCommunications({ communications: comms, contacts: [], timezone: 'UTC' });
     const rule = drafts.find((dr) => dr.dedupeKey === 'rule:quiet_hours_unknown');
     expect(rule).toBeTruthy();
     expect(rule!.suggestion_type).toBe('new_rule');
@@ -113,13 +113,13 @@ describe('analyzeCommunications — quiet hours', () => {
   it('does not propose quiet hours for daytime calls', () => {
     const comms = Array.from({ length: NIGHT_CALL_THRESHOLD }, (_, i) =>
       comm({ from_number: `+1555000000${i}`, started_at: DAY_NOON }));
-    const drafts = analyzeCommunications({ communications: comms, contacts: [] });
+    const drafts = analyzeCommunications({ communications: comms, contacts: [], timezone: 'UTC' });
     expect(drafts.find((dr) => dr.dedupeKey === 'rule:quiet_hours_unknown')).toBeFalsy();
   });
 });
 
 describe('analyzeCommunications — empty input', () => {
   it('returns no drafts for no activity', () => {
-    expect(analyzeCommunications({ communications: [], contacts: [] })).toEqual([]);
+    expect(analyzeCommunications({ communications: [], contacts: [], timezone: 'UTC' })).toEqual([]);
   });
 });

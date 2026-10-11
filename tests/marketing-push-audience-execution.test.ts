@@ -19,7 +19,9 @@ function fixture(users = 1, maxRows = 1000) {
     marketing_push_campaigns: [{ id: 'campaign', title: 'Fixture', status: 'draft', deleted_at: null, recipients: 0, sent: 0, failed: 0, skipped: 0 }],
     push_devices: Array.from({ length: users }, (_, i) => device(i)),
     profiles: Array.from({ length: users }, (_, i) => ({ id: userId(i), email: `${userId(i)}@example.test` })),
-    marketing_suppressions: [], family_members: [], family_ai_settings: [], user_preferences: [], notifications: [],
+    marketing_suppressions: [], family_members: [], family_ai_settings: [], notifications: [],
+    // Marketing push is opt-in: every fixture account has said yes unless a test says otherwise.
+    user_preferences: Array.from({ length: users }, (_, i) => ({ user_id: userId(i), push_enabled: true, notification_prefs: { marketingPush: true } })),
   }, { maxRows });
   state.db = f.db;
   return f;
@@ -200,14 +202,46 @@ describe('actual marketing action completes audience reads before delivery', () 
     expect(campaign(f)).toMatchObject({ status: 'sent', recipients: 3, sent: 3 });
   });
 
-  it('retains consent opt-outs after complete audience loading', async () => {
-    const f = fixture(2);
-    f.tables.user_preferences = [{ user_id: userId(0), push_enabled: false }];
-    f.tables.family_members = [{ user_id: userId(1), family_id: 'family', role: 'child', is_active: true }];
-    f.tables.family_ai_settings = [{ family_id: 'family', child_channels: { push: false } }];
+  it('retains push opt-outs after complete audience loading', async () => {
+    const f = fixture(1);
+    f.tables.user_preferences[0].push_enabled = false;
     await sendPushCampaignAction('campaign');
     expect(state.send).not.toHaveBeenCalled();
-    expect(campaign(f)).toMatchObject({ recipients: 2, sent: 0, skipped: 2 });
-    expect(state.audit.mock.calls[0][1].metadata).toMatchObject({ withheld: 2, deviceSkipped: 0 });
+    expect(campaign(f)).toMatchObject({ recipients: 1, sent: 0, skipped: 1 });
+    expect(state.audit.mock.calls[0][1].metadata).toMatchObject({ withheld: 1, deviceSkipped: 0 });
+  });
+
+  // Owning a device is not marketing consent: the device exists so the FAMILY
+  // can reach its members. The audience used to be every enabled device owner,
+  // so a child or teen with the app installed got the campaign, and the only
+  // way out was to switch off all push, including the family's own notices.
+  it('sends only to accounts that explicitly opted in to marketing push', async () => {
+    const f = fixture(4);
+    f.tables.user_preferences[1].notification_prefs = {};
+    f.tables.user_preferences[2].notification_prefs = { marketingPush: 'yes' };
+    f.tables.user_preferences.splice(3, 1); // no preferences row at all
+    await sendPushCampaignAction('campaign');
+    expect(state.send.mock.calls.map(c => c[1])).toEqual([userId(0)]);
+    expect(campaign(f)).toMatchObject({ status: 'sent', recipients: 1, sent: 1 });
+  });
+
+  it('never sends marketing push to a child or teen account, even one that says yes', async () => {
+    const f = fixture(4);
+    f.tables.family_members = [
+      { id: 'member-0', user_id: userId(0), family_id: 'family', role: 'parent', is_active: true },
+      { id: 'member-1', user_id: userId(1), family_id: 'family', role: 'child', is_active: true },
+      { id: 'member-2', user_id: userId(2), family_id: 'family', role: 'teen', is_active: true },
+      // A removed membership still says who the account belongs to.
+      { id: 'member-3', user_id: userId(3), family_id: 'other', role: 'teen', is_active: false },
+    ];
+    await sendPushCampaignAction('campaign');
+    expect(state.send.mock.calls.map(c => c[1])).toEqual([userId(0)]);
+    expect(campaign(f)).toMatchObject({ status: 'sent', recipients: 1, sent: 1 });
+  });
+
+  it.each(['user_preferences', 'family_members'])('fails closed when the %s read for consent or roles fails', async table => {
+    const f = fixture(2);
+    f.faults.add(`${table}:select:1`);
+    await failsBeforeSending(f);
   });
 });

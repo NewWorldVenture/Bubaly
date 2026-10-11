@@ -8,6 +8,8 @@ const routes = {
   cancel: readFileSync('app/api/billing/cancel/route.ts', 'utf8'),
   portal: readFileSync('app/api/billing/portal/route.ts', 'utf8'),
   webhook: readFileSync('app/api/webhooks/stripe/route.ts', 'utf8'),
+  // Both routes start a subscription Checkout through this one helper.
+  subscriptionCheckout: readFileSync('lib/billing/subscription-checkout.ts', 'utf8'),
 };
 
 /**
@@ -49,8 +51,10 @@ describe('billing API read boundaries', () => {
     // were refactored onto one writer and the binding was renamed — while the
     // guard it cared about was still there, and stricter. A name is not the
     // property; returning before Stripe is mutated is.
-    expect(writeIsChecked(routes.checkout, 'rememberStripeCustomer(', 'checkout.sessions.create')).toBeNull();
-    expect(writeIsChecked(routes.changePlan, 'rememberStripeCustomer(', 'checkout.sessions.create')).toBeNull();
+    // Both routes create the session through createSubscriptionCheckout.
+    expect(writeIsChecked(routes.checkout, 'rememberStripeCustomer(', 'createSubscriptionCheckout(')).toBeNull();
+    expect(writeIsChecked(routes.changePlan, 'rememberStripeCustomer(', 'createSubscriptionCheckout(')).toBeNull();
+    expect(routes.subscriptionCheckout).toContain('stripe.checkout.sessions.create(');
     // These two are still matched by name. They guard deliberately best-effort
     // writes that do not return, so `writeIsChecked` does not describe them;
     // they are named here rather than silently dropped.
@@ -106,8 +110,10 @@ describe('billing API read boundaries', () => {
   });
 
   it('carries plan metadata and lets the completion webhook repair missing checkout tracking', () => {
-    expect(routes.checkout).toContain('metadata: { family_id: familyId, plan: plan ?? null }');
-    expect(routes.changePlan).toContain('metadata: { family_id: familyId, plan }');
+    // One session builder for both routes, so the metadata cannot drift apart.
+    expect(routes.subscriptionCheckout).toContain('metadata: { family_id: input.familyId, plan: input.plan }');
+    expect(routes.checkout).toContain('createSubscriptionCheckout(');
+    expect(routes.changePlan).toContain('createSubscriptionCheckout(');
     expect(routes.webhook).toContain(".from('checkout_sessions')");
     expect(routes.webhook).toContain(".upsert({");
     expect(routes.webhook).toContain("onConflict: 'session_id'");

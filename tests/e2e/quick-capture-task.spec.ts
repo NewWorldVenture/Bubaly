@@ -11,7 +11,7 @@ import { reactBrowserScripts } from './helpers/react-browser';
 const { react, reactDom } = reactBrowserScripts('development');
 const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')), 'dist/umd/supabase.js'), 'utf8');
 const sources = Object.fromEntries([
-  'components/app/quick-capture.tsx', 'components/capture/capture-shell.tsx', 'lib/capture/document-link.ts', 'components/app/app-context.tsx', 'components/ui/toast.tsx', 'lib/analytics/use-journey.ts',
+  'components/app/quick-capture.tsx', 'components/capture/capture-shell.tsx', 'lib/capture/document-link.ts', 'components/app/app-context.tsx', 'components/ui/toast.tsx', 'lib/hooks/use-media-query.ts', 'lib/analytics/use-journey.ts',
   'lib/offline/cache.ts', 'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts',
   'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts', 'lib/realtime/own-channel.ts', 'lib/constants/roles.ts', 'lib/capture/save.ts', 'lib/capture/parse.ts', 'lib/capture/shortcut.ts',
   'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',

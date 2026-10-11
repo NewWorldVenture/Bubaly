@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { FAVORITE_KIND_META } from '@/lib/meals/tracker';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 type Favorite = Tables<'family_favorites'>;
 const KINDS = ['recipe', 'restaurant', 'meal', 'snack', 'drink', 'other'] as const;
@@ -90,7 +91,7 @@ export function FavoritesView() {
                   </div>
                 )}
                 {f.notes && <p className="mt-2 text-sm text-muted">{f.notes}</p>}
-                {f.ref_url && <a href={f.ref_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-text"><ExternalLink className="h-3.5 w-3.5" />{' '}{t('favoritesView.open')}</a>}
+                {f.ref_url && <a href={safeWebLink(f.ref_url) ?? undefined} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-text"><ExternalLink className="h-3.5 w-3.5" />{' '}{t('favoritesView.open')}</a>}
               </div>
             );
           })}

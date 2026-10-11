@@ -9,6 +9,12 @@ import { smsStep } from './sms-deadline';
 
 type Client = SupabaseClient<Database>;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/**
+ * How many notifications one communication may carry before the readback
+ * refuses to reason about it: its own text/voicemail notice, a screened call's
+ * notice, an emergency escalation's push. Fails closed past this.
+ */
+const RELATED_NOTIFICATIONS = 10;
 function unavailable(): never { throw new Error('Guardian SMS notification unavailable'); }
 
 export async function guardianSmsScope(client: Client, familyId: string, signal?: AbortSignal): Promise<ServiceScope> {
@@ -28,14 +34,24 @@ export async function notifyGuardianSms(scope: ServiceScope, input: NotifyInput,
     || !input.relatedId || !UUID.test(input.relatedId) || !input.title.trim()) return unavailable();
   const expected = { family_id: scope.familyId, user_id: null, type: 'system' as const, title: input.title.trim(),
     body: input.body?.trim() || null, related_type: 'guardian_communications', related_id: input.relatedId };
+  const id = guardianSmsNotificationId(options.receiptId);
+  // The dedupe reads the relation (so a matching notification written before
+  // this receipt's deterministic id existed still counts as this one and is not
+  // announced twice), but only a row carrying THIS notification's title is a
+  // copy of it. Other notifications legitimately share the communication: a
+  // screened call writes its own "📞 Call from …" row against it, and a
+  // voicemail that then found that row read it as a mismatched copy of itself
+  // and failed forever, 503 on every retry.
   const read = async (): Promise<string | null> => {
     const result = await smsStep(signal, current => scope.db.from('notifications')
       .select('id,family_id,user_id,type,title,body,related_type,related_id,send_at', { count: 'exact' })
       .eq('family_id', scope.familyId).eq('related_type', expected.related_type).eq('related_id', expected.related_id)
-      .limit(2).retry(false).abortSignal(current));
-    if (result.error || !Array.isArray(result.data) || result.count !== result.data.length || result.data.length > 1) return unavailable();
-    if (!result.data.length) return null;
-    const row = result.data[0];
+      .limit(RELATED_NOTIFICATIONS).retry(false).abortSignal(current));
+    if (result.error || !Array.isArray(result.data) || result.count !== result.data.length) return unavailable();
+    const mine = result.data.filter(candidate => candidate.title === expected.title);
+    if (mine.length > 1) return unavailable();
+    if (!mine.length) return null;
+    const row = mine[0];
     if (!UUID.test(row.id) || !Object.entries(expected).every(([key, value]) => row[key as keyof typeof row] === value)
       || typeof row.send_at !== 'string' || !Number.isFinite(Date.parse(row.send_at))) return unavailable();
     return row.id;
@@ -54,7 +70,8 @@ export async function notifyGuardianSms(scope: ServiceScope, input: NotifyInput,
     value !== null && (!Number.isInteger(value) || value < 0 || value > 23)))) return unavailable();
   const now = scopeNow(scope), hour = hourInTz(now, scope.tz);
   const start = quiet?.quiet_hours_start, end = quiet?.quiet_hours_end;
-  const deferred = typeof start === 'number' && typeof end === 'number' && start !== end && hour !== null
+  // An emergency is the one message quiet hours must not hold until morning.
+  const deferred = input.urgent !== true && typeof start === 'number' && typeof end === 'number' && start !== end && hour !== null
     && (start < end ? hour >= start && hour < end : hour >= start || hour < end);
   let sendAt = now.toISOString();
   if (deferred && typeof end === 'number') {
@@ -65,7 +82,6 @@ export async function notifyGuardianSms(scope: ServiceScope, input: NotifyInput,
     sendAt = new Date(next).toISOString();
   }
   await smsStep(signal, () => options.beforeWrite());
-  const id = guardianSmsNotificationId(options.receiptId);
   try {
     await smsStep(signal, current => scope.db.from('notifications').insert({ ...expected, id, send_at: sendAt })
       .select('id').retry(false).abortSignal(current));

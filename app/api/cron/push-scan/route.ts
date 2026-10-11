@@ -31,9 +31,8 @@ export async function GET(req: NextRequest) {
 
   const supabase = createServiceClient();
   // Every household — see lib/supabase/read-all.ts for why an unbounded select
-  // silently stops at PostgREST's row ceiling.
-  // Open accounts only. Closing (families.closed_at) is a pause the family
-  // chose, and every link in what this sends lands on the closed-account gate.
+  // silently stops at PostgREST's row ceiling. Every OPEN household: a family
+  // that closed its account (families.closed_at) is not nudged on its devices.
   const { rows: families, error } = await readAll<{ id: string }>(
     (from, to) => supabase.from('families').select('id').is('closed_at', null).order('id').range(from, to),
   );

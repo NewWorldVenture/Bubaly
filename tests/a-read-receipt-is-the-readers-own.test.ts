@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 const migration = readFileSync('supabase/migrations/0463_a_read_receipt_is_the_readers_own.sql', 'utf8');
 const messages = readFileSync('components/modules/messages-module.tsx', 'utf8');
+const paths = readFileSync('lib/messages/workspace-paths.ts', 'utf8');
 
 describe("a read receipt and a reaction are the reader's own (DB-RPC-M02)", () => {
   it('guards INSERT and any UPDATE that names read_by or reactions', () => {
@@ -37,10 +38,26 @@ describe("a read receipt and a reaction are the reader's own (DB-RPC-M02)", () =
   it("the product's writers only ever change the caller's own entry", () => {
     // Both merges are database-atomic and derive the actor from auth.uid().
     // No client-side snapshot can erase another reader's concurrent entry.
-    expect(messages).toContain(".rpc('mark_conversation_read_through', { p_conversation_id: activeConvId, p_message_id: newest.id })");
+    // The calls moved from the module into lib/messages/workspace-paths.ts,
+    // which the module now uses for both; the pins follow them there.
+    expect(messages).toContain('await markConversationReadThrough(supabase, { conversationId: activeConvId, messageId: newest.id,');
+    expect(paths).toContain(".rpc('mark_conversation_read_through', { p_conversation_id: input.conversationId, p_message_id: input.messageId })");
     expect(messages).not.toMatch(/\.update\(\{\s*read_by:/);
+    expect(paths).not.toMatch(/\.update\(\{\s*read_by:/);
     const react = messages.slice(messages.indexOf('async function reactTo('), messages.indexOf('// ── Delete message'));
-    expect(react).toContain(".rpc('toggle_family_message_reaction', { p_message_id: msg.id, p_emoji: emoji })");
+    expect(react).toContain('await toggleMessageReaction(createClient(), { message: msg, emoji, userId, familyId })');
+    expect(paths).toContain(".rpc('toggle_family_message_reaction', { p_message_id: input.message.id, p_emoji: input.emoji })");
     expect(react).not.toContain('.update(');
+  });
+
+  it('writes a whole array only on the previous production path, after the exact missing-RPC answer', () => {
+    // Owner decision: until 0475 is applied, receipts and reactions do what the
+    // previous production build did (lib/messages/legacy-schema.ts). That path
+    // is reached only when fellBackForMissing names the 0475 RPC; on a database
+    // with 0463 the trigger above still refuses any entry that is not the caller's.
+    const read = paths.slice(paths.indexOf('export async function markConversationReadThrough('), paths.indexOf('/** Toggle the caller'));
+    expect(read).toMatch(/if \(!fellBackForMissing\(error, MESSAGING_SCHEMA\.markReadThrough,[\s\S]*?return \{ error, legacy: false \};\s*\}\s*return \{ \.\.\.\(await legacyMarkConversationRead\(/);
+    const react = paths.slice(paths.indexOf('export async function toggleMessageReaction('));
+    expect(react).toMatch(/if \(!fellBackForMissing\(error, MESSAGING_SCHEMA\.toggleReaction,[\s\S]*?return \{ data, error, legacy: false \};\s*\}\s*return \{ \.\.\.\(await legacyToggleReaction\(/);
   });
 });

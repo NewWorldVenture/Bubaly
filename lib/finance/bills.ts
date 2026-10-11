@@ -1,7 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Tables } from '@/lib/database.types';
-import { billPaidPatch, billSchedulePatch, type BillScheduleChoice } from './bill-schedule';
-import { whereBillIsAsSeen, writeBillPatch, isMissingDueDayColumn, isDueDayNotKept } from './recurring';
+import { billCadence, billPaidPatch, billSchedulePatch, type BillScheduleChoice } from './bill-schedule';
+import {
+  whereBillIsAsSeen, writeBillPatch, isMissingDueDayColumn, isDueDayNotKept, billPaidPatchBefore0488,
+  warnDueDayMissing, withoutRenamedCadence, type WriteBillPatchOptions,
+} from './recurring';
 import { readCountedRows } from '@/lib/calendar/occurrences';
 
 /** Cached rows are only a first-paint prefix, never a complete financial list. */
@@ -49,12 +52,20 @@ export async function saveBillPayment(
   choice?: BillScheduleChoice,
   reopen = false,
   isCurrent: () => boolean = () => true,
+  options: WriteBillPatchOptions = {},
 ) {
   if (!isCurrent()) return { data: null, error: new Error('This bill view is no longer current.') };
   if (!bill?.updated_at)
     return { data: null, error: new Error('This bill changed. Refresh before marking it paid.') };
-  const patch = reopen ? { status: 'upcoming' as const } : billPaidPatch(bill, today, choice);
-  return writeBillPatch(patch, (p) => {
+  const paid = reopen ? { status: 'upcoming' as const } : billPaidPatch(bill, today, choice);
+  // A row read without due_day (an older schema) keeps its stored cadence
+  // spelling when the patch only renames it, as Mark paid did before 0488.
+  const patch = bill.due_day === undefined && paid && !('due_day' in paid) ? withoutRenamedCadence(paid, bill.recurrence) : paid;
+  return writeBillPatch(patch, writeAsSeen(client, familyId, bill, isCurrent), { ...options, storedRecurrence: bill.recurrence });
+}
+
+function writeAsSeen(client: SupabaseClient<Database>, familyId: string, bill: Tables<'bills'>, isCurrent: () => boolean) {
+  return (p: Database['public']['Tables']['bills']['Update']) => {
     // Missing-column compatibility may retry after an awaited HTTP refusal.
     // Recheck the calling view before every dispatch, not only the first one.
     if (!isCurrent()) return Promise.resolve({ data: null, error: new Error('This bill view is no longer current.') });
@@ -62,6 +73,44 @@ export async function saveBillPayment(
       client.from('bills').update(p).eq('id', bill.id).eq('family_id', familyId),
       bill,
     ).select('id');
+  };
+}
+
+// The held column (0488) this read exists to probe, as timeline-load's
+// BILL_COLUMNS names it: absent on an older schema by design, not by mistake.
+const DUE_DAY_PROBE = 'due_day';
+
+/**
+ * Mark paid for a row read without `due_day` whose schedule the anchored
+ * rules cannot settle (a day 28–30). Null when the database answers for the
+ * column, or when the bill names no cadence: the caller asks for the
+ * schedule, as with 0488.
+ * On the exact missing-column answer it writes the pre-0488 roll through the
+ * same compare-and-swap; any other answer is returned as the error.
+ */
+export async function saveBillPaymentBefore0488(
+  client: SupabaseClient<Database>,
+  familyId: string,
+  bill: Tables<'bills'>,
+  today: string,
+  isCurrent: () => boolean = () => true,
+  options: WriteBillPatchOptions = {},
+) {
+  if (bill.due_day !== undefined) return null;
+  // No named cadence: the person confirms the schedule, with or without the
+  // column. Nothing is probed or written, so no request can land late.
+  if (bill.is_recurring && !billCadence(bill)) return null;
+  if (!isCurrent()) return { data: null, error: new Error('This bill view is no longer current.') };
+  if (!bill.updated_at)
+    return { data: null, error: new Error('This bill changed. Refresh before marking it paid.') };
+  const probe = await client.from('bills').select(DUE_DAY_PROBE).eq('id', bill.id).eq('family_id', familyId).limit(1);
+  if (!probe.error) return null;
+  if (!isMissingDueDayColumn(probe.error)) return { data: null, error: probe.error };
+  warnDueDayMissing();
+  // The probe has answered: write without due_day at once, keeping the clamp question.
+  return writeBillPatch(billPaidPatchBefore0488(bill, today), writeAsSeen(client, familyId, bill, isCurrent), {
+    ...options,
+    dueDayMissing: true,
   });
 }
 

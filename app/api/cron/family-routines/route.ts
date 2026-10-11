@@ -130,7 +130,11 @@ export async function GET(req: NextRequest) {
 
   const { data: due, error } = await db
     .from('family_automation_rules')
-    .select('id, family_id, name, action_config, schedule_kind, schedule_expr, anchor_key, offset_days, at_hour, next_run_at, said')
+    // Routines of OPEN families only (families.closed_at). Filtered in the
+    // query, not after it: this read is oldest-due-first and bounded, so a
+    // closed family's routines would otherwise fill every tick's batch.
+    .select('id, family_id, name, action_config, schedule_kind, schedule_expr, anchor_key, offset_days, at_hour, next_run_at, said, family:families!inner(closed_at)')
+    .is('family.closed_at', null)
     .not('schedule_kind', 'is', null)
     .eq('is_enabled', true)
     .lte('next_run_at', now.toISOString())
@@ -351,7 +355,9 @@ async function armPendingRoutines(
 ): Promise<number> {
   const { data: pending, error } = await db
     .from('family_automation_rules')
-    .select('id, family_id, schedule_kind, schedule_expr, anchor_key, offset_days, at_hour, said, next_run_at')
+    // OPEN families only, for the same reason as the due read.
+    .select('id, family_id, schedule_kind, schedule_expr, anchor_key, offset_days, at_hour, said, next_run_at, family:families!inner(closed_at)')
+    .is('family.closed_at', null)
     .not('schedule_kind', 'is', null)
     .eq('is_enabled', true)
     .is('next_run_at', null)

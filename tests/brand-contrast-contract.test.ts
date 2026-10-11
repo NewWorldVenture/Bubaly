@@ -185,3 +185,51 @@ describe('text on a solid success fill meets WCAG AA', () => {
     expect(offenders, 'use text-success-fg on bg-success').toEqual([]);
   });
 });
+
+// A status role's text on its own tint: `bg-success/15 text-success` is a chip.
+// The token clearing 4.5:1 on --bg says nothing about the chip, whose ground is
+// the token itself at that opacity (success read 4.20 on its 15% tint in axe,
+// social accounts and sync). The strongest tint the source pairs with the
+// role's text is the ground to beat; it is read from the source, so a new,
+// stronger pairing is held to the same bar.
+describe('a status role’s text is readable on its own tint', () => {
+  const css = readFileSync(resolve('app/globals.css'), 'utf8');
+  const source = [collectSource(resolve('app')), collectSource(resolve('components'))].join('\n');
+  const STATUS = ['success', 'warning', 'danger', 'info'];
+
+  /** The strongest `bg-<role>/NN`, in any state (`hover:bg-<role>/25` too), in a class string that also has `text-<role>`. */
+  function strongestTint(role: string): number {
+    let max = 0;
+    for (const m of source.matchAll(/(["'`])([^"'`\n]*)\1/g)) {
+      const classes = m[2];
+      if (!new RegExp(`(^|\\s)text-${role}(\\s|$)`).test(classes)) continue;
+      for (const t of classes.matchAll(new RegExp(`(?:^|\\s)(?:[a-z-]+:)*bg-${role}/(\\d+)(?=\\s|$)`, 'g'))) max = Math.max(max, Number(t[1]));
+    }
+    return max;
+  }
+
+  it('finds the chips (non-vacuity)', () => {
+    for (const role of ['success', 'warning', 'danger']) expect(strongestTint(role), role).toBeGreaterThan(0);
+    // hover:bg-success/25 behind text-success: economy, wallet, concierge, approvals.
+    expect(strongestTint('success')).toBe(25);
+  });
+
+  for (const [theme, selector] of [['light', '.light {'], ['dark', '.dark {']] as const) {
+    it(`${theme}: each status role clears 4.5:1 on its strongest tint, over every ground`, () => {
+      const tokens = tokensOf(css, selector);
+      const failures: string[] = [];
+      for (const role of STATUS) {
+        const alpha = strongestTint(role) / 100;
+        if (!alpha) continue;
+        for (const ground of GROUNDS) {
+          const behind = tokens[ground];
+          if (!behind) continue;
+          const tint = tokens[role].map((v, i) => v * alpha + behind[i] * (1 - alpha));
+          const ratio = contrast(tokens[role], tint);
+          if (ratio < 4.5) failures.push(`--${role} on its ${Math.round(alpha * 100)}% tint over --${ground}: ${ratio.toFixed(2)}`);
+        }
+      }
+      expect(failures).toEqual([]);
+    });
+  }
+});

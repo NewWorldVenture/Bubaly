@@ -270,6 +270,20 @@ export function inboundProviderRef(input: { familyId: string; channel: InboundCh
   return (input.providerRef ?? '').trim() || derivedProviderRef(input);
 }
 
+/**
+ * The ref an inbound EMAIL is stored under. `uq_inbox_channel_provider_ref` is
+ * unique per channel across every family, and a Message-Id is written by the
+ * sender and is the same for every recipient: one email to two families (a
+ * school distribution list) arrived once per family with one Message-Id, the
+ * second copy collided with the first family's row, and it was answered 503 on
+ * every redelivery and never filed. A sender who knew a Message-Id could also
+ * use it first and suppress the real message. Scoping the ref to the family
+ * makes each family's copy its own row; the derived ref already includes it.
+ */
+export function familyScopedEmailRef(familyId: string, messageId: string): string {
+  return `email:${createHash('sha256').update([familyId, messageId.trim()].join('\u0000')).digest('hex').slice(0, 48)}`;
+}
+
 /** The index is global: a duplicate must still belong to this inbound family. */
 export async function findInboundMessage(admin: Admin, input: { familyId: string; channel: InboundChannel; providerRef: string }, signal?: AbortSignal): Promise<string | null> {
   const found = await admin.from('family_inbox_messages')

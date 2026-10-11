@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (byMember.size === 0) {
-    return NextResponse.json({ sent: 0, message: 'No pending assignments' });
+    return NextResponse.json({ sent: 0, message: t('choreReminders.noPendingAssignments') });
   }
 
   // Fetch family names
@@ -118,25 +118,25 @@ export async function GET(req: NextRequest) {
   const familyIds = [...new Set([...byMember.values()].map((bucket) => bucket.familyId))];
   // `timezone` too: the email prints each chore's due DAY, which is the
   // family's, not the UTC host's.
-  // `closed_at` too: a family that closed its account (a pause it chose) is
-  // not reminded, and every link in the email lands on the closed-account gate.
-  const { data: families, error: familiesError } = await readInChunks<{ id: string; name: string; timezone: string | null; closed_at: string | null }, { message: string }>(
+  const { data: families, error: familiesError } = await readInChunks<{ id: string; name: string; timezone: string | null }, { message: string }>(
     familyIds,
-    (chunk) => supabase.from('families').select('id, name, timezone, closed_at').in('id', chunk),
+    // OPEN families only: a family that closed its account (families.closed_at)
+    // is not emailed, so its members' buckets are dropped below.
+    (chunk) => supabase.from('families').select('id, name, timezone').is('closed_at', null).in('id', chunk),
   );
   if (familiesError) {
     console.error('Cron chore family read error:', familiesError);
     return NextResponse.json({ error: t('choreReminders.choreReminderProcessingFailed') }, { status: 500 });
   }
-  const familyNameById = new Map(families.map((f) => [f.id, f.name]));
-  const familyZoneById = new Map(families.map((f) => [f.id, f.timezone || 'UTC']));
-  const closedFamilies = new Set(families.filter((f) => f.closed_at).map((f) => f.id));
+  const openFamilyIds = new Set(families.map((f) => f.id));
   for (const [memberId, bucket] of byMember) {
-    if (closedFamilies.has(bucket.familyId)) byMember.delete(memberId);
+    if (!openFamilyIds.has(bucket.familyId)) byMember.delete(memberId);
   }
   if (byMember.size === 0) {
-    return NextResponse.json({ sent: 0, message: 'No pending assignments' });
+    return NextResponse.json({ sent: 0, message: t('choreReminders.noPendingAssignments') });
   }
+  const familyNameById = new Map(families.map((f) => [f.id, f.name]));
+  const familyZoneById = new Map(families.map((f) => [f.id, f.timezone || 'UTC']));
 
   // Patch family names back in
   for (const bucket of byMember.values()) {
