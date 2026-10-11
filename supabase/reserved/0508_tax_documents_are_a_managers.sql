@@ -2,30 +2,41 @@
 -- Decided by the account holder (PROD-002, tax_documents: "managers only"),
 -- recorded on #771 in comment 6101674181.
 --
--- tax_documents carries 0077's `FOR ALL to authenticated using
--- (is_family_member(family_id))`, and 0391's step-up guards are written
--- `session_cleared_step_up() or not can_manage_family(family_id)`: they bind
--- only a manager. So a parent must present a second factor to open the Tax
--- Vault, and a child signed in by PIN, a teen, a caregiver or a guest reads,
--- renames and deletes the household's tax documents with none (finalaudit
--- 59319; ROLE-SCOPE-001 measured a guest reading the row). The files follow the
--- rows: the documents bucket reads `is_family_member(<first folder>) and not
+-- tax_documents carried 0077's `FOR ALL is_family_member(family_id)`; 0481
+-- (released, the RLS sweep) replaced it with a manager's read and write plus a
+-- teen's or child's read of a document whose member_id is their own. 0391's
+-- step-up guards still bind a manager. The files were left as they were: the
+-- documents bucket reads `is_family_member(<first folder>) and not
 -- document_object_is_restricted(name)`, and that helper looks only at
--- `documents`, so every member lists and downloads {family}/tax/<year>/….
+-- `documents`. Measured on a replay of every runnable migration through 0485:
+--
+--   a teen, child, caregiver or guest lists and downloads {family}/tax/<year>/…
+--   (all three tax files), moves the W-2's file and uploads under tax/ (OK 1);
+--   a child reads a tax document about themselves (OK 1);
+--   a parent with a verified second factor, signed in at aal1, is refused the
+--   rows by 0391 and still reads, moves and deletes the files (OK 3).
+--
+-- The account holder decided "managers only": only a parent or adult reads and
+-- writes tax documents, behind the step-up they already face.
 --
 -- This makes both the rows and the files a manager's:
 --
---   1. tax_documents: every permissive policy goes, and four per-command
---      policies take their place, each `can_manage_family(family_id)` (a parent
---      or an adult of the row's family). 0391's RESTRICTIVE step-up guards stay
---      as they are, so a manager still needs the second factor, and now every
---      caller who reaches a row is one.
+--   1. tax_documents: every permissive policy goes (0481's four included, so
+--      a teen's or child's read of their own document goes with them), and
+--      four per-command policies take their place, each
+--      `can_manage_family(family_id)` (a parent or an adult of the row's
+--      family). 0391's RESTRICTIVE step-up guards stay as they are, so a
+--      manager still needs the second factor, and now every caller who reaches
+--      a row is one.
 --   2. storage.objects: one RESTRICTIVE policy, "Tax files are a manager's",
 --      for every command, to authenticated. An object of the documents bucket
 --      whose path is under its family's tax/ folder (where the Tax Vault
 --      uploads), or that a tax_documents row of the object's own family names,
---      is withheld from a caller who does not manage that family: no list, no
---      download, no signed link, no replace, move, delete or upload there.
+--      is withheld from a caller who does not manage that family, and from a
+--      manager whose session has not cleared the step-up 0391 asks of the rows
+--      (session_cleared_step_up(): no verified factor, or aal2): no list, no
+--      row for a download or signed link, no replace, move, delete or upload
+--      there. The files then answer to the same rule as their rows.
 --      The object's family is its first folder, cast exactly as the bucket's
 --      policies cast it (0499's rule), so a spelling of the family id that the
 --      cast accepts cannot step around it; a first folder that is not a uuid is
@@ -37,6 +48,9 @@
 -- through the caller's session, so RLS narrows it.
 --
 -- The service role and session-less writers are untouched (they bypass RLS).
+-- What storage-api does with a signed URL once issued, and the bytes it serves,
+-- are not exercised by the probe, which runs the policies as SQL; the probe's
+-- server-side control is the table owner standing in, not a download.
 --
 -- HELD: 0508, the first number above 0507, requested on #771 in comment
 -- 6101674181 and not yet confirmed. It stays in supabase/reserved/ until every
@@ -49,8 +63,9 @@ do $$
 begin
   if to_regclass('public.tax_documents') is null or to_regclass('storage.objects') is null
      or to_regprocedure('storage.foldername(text)') is null
-     or to_regprocedure('public.can_manage_family(uuid)') is null then
-    raise exception '0508 needs public.tax_documents, storage.objects, storage.foldername and can_manage_family';
+     or to_regprocedure('public.can_manage_family(uuid)') is null
+     or to_regprocedure('public.session_cleared_step_up()') is null then
+    raise exception '0508 needs public.tax_documents, storage.objects, storage.foldername, can_manage_family and session_cleared_step_up';
   end if;
 end
 $$;
@@ -86,7 +101,7 @@ security definer
 set search_path = public, pg_temp
 as $$
   select coalesce((
-    select not public.can_manage_family(s.fam)
+    select not (public.can_manage_family(s.fam) and public.session_cleared_step_up())
            and (lower(coalesce(s.second, '')) = 'tax'
                 or exists (select 1 from public.tax_documents t
                             where t.family_id = s.fam and t.storage_path = p_object_name))
@@ -101,7 +116,7 @@ as $$
 $$;
 
 comment on function public.tax_file_is_withheld(text) is
-  'True when a documents-bucket object is a tax file (under its family''s tax/ folder, or named by a tax_documents row of that family) and the CALLER does not manage that family. The family is the object''s first folder, cast as the bucket''s policies cast it. SECURITY DEFINER so it sees the rows it asks about (0508).';
+  'True when a documents-bucket object is a tax file (under its family''s tax/ folder, or named by a tax_documents row of that family) and the CALLER does not manage that family, or manages it without having cleared the step-up 0391 asks of the rows. The family is the object''s first folder, cast as the bucket''s policies cast it. SECURITY DEFINER so it sees the rows it asks about (0508).';
 
 revoke all on function public.tax_file_is_withheld(text) from public;
 revoke all on function public.tax_file_is_withheld(text) from anon;

@@ -1,11 +1,11 @@
 name: Kid household SQL runtime
 
-# The held 0507 (supabase/reserved/) adds a BEFORE INSERT guard on families: a
-# signed-in kid login (read from auth.users as 0495 reads it, the synthetic kid
-# domain or app_metadata's bubaly_kid_login mark) cannot start a family, which
-# on_family_created would make it the parent of. Before it, a kid login started
-# a household of its own, invited a stranger into it, and was reached there
-# where its own parents could not see. Neither the Database job's replay nor
+# The held 0507 (supabase/reserved/) makes 0482's is_child_login_account() also
+# read the kid-login mark the server writes (app_metadata.bubaly_kid_login), as
+# 0495's accept_invite does. 0482's families_insert asks that function, so a kid
+# login whose address moved off the synthetic domain (and has no mapping) can no
+# longer start a household it would be the parent of, invite a stranger into
+# it, and be reached there where its own parents cannot see. Neither the Database job's replay nor
 # `supabase db push` reads supabase/reserved/, and the Database job's probe glob
 # does not read docs/audit/reserved/, so nothing else in CI exercises it. This
 # job replays every runnable migration with the Database job's bootstrap, then:
@@ -121,10 +121,9 @@ jobs:
             exit 1
           fi
           for expected in \
-            'a kid login (on the domain, marked) started a household of its own (OK 1)' \
             'a kid login known by its app_metadata mark started a household of its own (OK 1)' \
-            'a kid login known by its address started a household of its own (OK 1)' \
-            "the kid login's own household exists, so a stranger can be invited into it"; do
+            'a kid login known by its app_metadata mark belongs to 1 household(s) besides its own family' \
+            'is_child_login_account() does not read the kid-login mark the server writes'; do
             if ! grep -qF "$expected" <<<"$out"; then
               echo "::error::the held probe failed on the released schema, but not on: $expected"
               exit 1

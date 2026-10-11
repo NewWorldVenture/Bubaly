@@ -4,9 +4,10 @@ name: Health records SQL runtime
 # health tables (symptom_logs, health_metrics, health_goals, health_visits,
 # immunizations, sleep_logs, sleep_checkins, nutrition_logs) from every member
 # of the family to a manager, the member the record is about, or its author,
-# all still inside is_family_member(family_id). Before it, a teen, a child, a
-# caregiver and a guest read every other member's symptoms, measurements,
-# goals, visits, vaccinations, sleep and meals. Neither the Database job's
+# all still inside is_family_member(family_id). Before it, a teen and a child
+# read every other member's symptoms, measurements, goals, visits,
+# vaccinations, sleep and meals, and a caregiver and a guest all but the visits
+# and vaccinations (0481 narrowed those two for them). Neither the Database job's
 # replay nor `supabase db push` reads supabase/reserved/, and the Database
 # job's probe glob does not read docs/audit/reserved/, so nothing else in CI
 # exercises it. This job replays every runnable migration with the Database
@@ -120,8 +121,8 @@ jobs:
           for expected in \
             'the teen reads records about other members in 8 of 8 health tables' \
             'the child reads records about other members in 8 of 8 health tables' \
-            'the caregiver reads records about other members in 8 of 8 health tables' \
-            'the guest reads records about other members in 8 of 8 health tables'; do
+            'the caregiver reads records about other members in 6 of 8 health tables' \
+            'the guest reads records about other members in 6 of 8 health tables'; do
             if ! grep -qF "$expected" <<<"$out"; then
               echo "::error::the held probe failed on the released schema, but not on: $expected"
               exit 1

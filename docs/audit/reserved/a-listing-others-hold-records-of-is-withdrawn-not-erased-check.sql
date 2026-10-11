@@ -17,11 +17,14 @@
 --   2. control: the seller withdraws the listing with the order and the report
 --      (marketplace_set_listing_status → withdrawn), and both records remain;
 --   3. control: the seller still deletes a listing nobody has dealt with (OK 1);
---   4. control: the service role (carrying the seller's user id) and, separately,
---      a session-less writer (null uid) each delete a listing with records
---      (1 row each, its records gone with it);
---   5. control: a family's own deletion still takes its listings, records
---      included (the family-gone branch);
+--   4. RECORDED LIMIT, pinned so a change is seen (not a preservation
+--      guarantee, and not an owner decision): the service role (carrying the
+--      seller's user id) and, separately, a session-less writer (null uid) each
+--      delete a listing with records (1 row each, its records gone with it);
+--   5. RECORDED LIMIT, likewise: a family's own deletion still takes its
+--      listings, and the offer and report other families hold of them (the
+--      family-gone branch). Whether those records should outlive the seller's
+--      family is the retention policy's owner's decision, not this probe's;
 --   6. wiring: an enabled BEFORE DELETE row trigger, SECURITY DEFINER with a
 --      pinned search_path;
 --
@@ -266,12 +269,13 @@ begin
     end;
   end if;
 
-  -- 5. A family's own deletion still takes its listings, records included (the
-  --    family-gone branch): Closing House's listing has an offer and a report.
+  -- 5. RECORDED LIMIT: a family's own deletion still takes its listings,
+  --    records included (the family-gone branch): Closing House's listing has
+  --    an offer and a report. Pinned so a change to it is seen, not endorsed.
   got := pg_temp.m0505_as('00000000-0000-4000-8505-0000000000c1', format('delete from public.families where id = %L', '00000000-0000-4000-8505-0000000000f3'));
   select count(*) into n from public.marketplace_listings where id = '00000000-0000-4000-8505-0000000000db';
   if got is distinct from 'OK 1' or n <> 0 or pg_temp.m0505_records('00000000-0000-4000-8505-0000000000db') <> 0 then
-    failures := array_append(failures, format('CONTROL: Closing House''s own deletion did not take its listing with an offer and a report (%s; %s listing(s), %s records left)',
+    failures := array_append(failures, format('RECORDED LIMIT changed: Closing House''s own deletion did not take its listing with an offer and a report as recorded (%s; %s listing(s), %s records left); re-read the retention limit',
       got, n, pg_temp.m0505_records('00000000-0000-4000-8505-0000000000db')));
   end if;
 

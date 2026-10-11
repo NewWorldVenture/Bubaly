@@ -52,6 +52,8 @@ describe('tax documents are a manager\'s', () => {
     const sql = squash(read(MIGRATION));
     expect(sql).toContain("create policy \"Tax files are a manager's\" on storage.objects as restrictive for all to authenticated");
     expect(sql).toContain("lower(coalesce(s.second, '')) = 'tax'");
+    // The files answer to the same step-up 0391 asks of the rows (#999 review 6101849884).
+    expect(sql).toContain('select not (public.can_manage_family(s.fam) and public.session_cleared_step_up())');
     // The module uploads to {family}/tax/<year>/…, the folder the policy names.
     expect(read('components/modules/tax-vault-module.tsx')).toContain('folder: `tax/${form.tax_year}`');
   });

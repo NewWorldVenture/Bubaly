@@ -4,15 +4,16 @@
 -- of. Decided by the account holder on the lead in #771 comment 6092825901:
 -- every non-manager reads only their own record, caregivers included.
 --
--- symptom_logs, health_metrics, health_goals, health_visits, immunizations,
--- sleep_logs, sleep_checkins and nutrition_logs each read with
--- is_family_member(family_id): every member (a teen, a child, a caregiver, a
--- guest) read every other member's symptoms, measurements, goals, visits,
--- immunisations, sleep and meals. Measured on a replay of every runnable
--- migration, as each of those roles: one row about another member, in each
--- table, read (1). lib/ai/context/policy.ts already lists all eight as
--- sensitive, and 0438's header named symptom_logs as "the same per-member
--- shape … a separate change".
+-- symptom_logs, health_metrics, health_goals, sleep_logs, sleep_checkins and
+-- nutrition_logs read with is_family_member(family_id), and since 0481
+-- health_visits and immunizations read family-wide for every role but a guest
+-- or caregiver (0481 left "the child/teen half of this finding" to this owner
+-- decision, M23). Measured on a replay of every runnable migration through
+-- 0485, as each role, the records about another member each reads: a teen and
+-- a child in all eight tables, a caregiver and a guest in six (5 to 7 rows a
+-- table). lib/ai/context/policy.ts already lists all eight as sensitive, and
+-- 0438's header named symptom_logs as "the same per-member shape … a separate
+-- change".
 --
 -- For each table this replaces every permissive SELECT policy with one:
 --
@@ -21,21 +22,28 @@
 --        or is_self_member(member_id)      -- your own record
 --        or created_by = auth.uid())       -- what you wrote yourself
 --
--- The third term is beyond 0438's and deliberate: these tables' own UPDATE and
--- DELETE policies already treat the author as entitled to their row
--- (created_by = auth.uid()), and a member who logs a symptom or a meal for a
--- child keeps seeing what they wrote, not the child's record as a whole. The
--- outer is_family_member(family_id) stays, as in 0438, because is_self_member
--- is not bound to the row's family. A row with no member (member_id is null on
--- health_visits, immunizations and nutrition_logs) is a manager's or its
--- author's. Writes are unchanged.
+-- The third term is a POLICY EXCEPTION beyond the owner's decision as worded
+-- ("own record"), and it needs the owner's confirmation: whoever wrote an entry
+-- about someone else keeps reading that whole row, later edits by others
+-- included, for as long as they are a member. It is here because these tables'
+-- own UPDATE and DELETE policies already treat the author as entitled to their
+-- row, because an insert that returns its row (PostgREST's) needs it, and
+-- because 0481 adopted the same term for health_visits and immunizations;
+-- without it a caregiver who logs a ward's meal cannot see what they logged.
+-- The outer is_family_member(family_id) stays, as in 0438, because
+-- is_self_member is not bound to the row's family. A row with no member
+-- (member_id is null on health_visits, immunizations and nutrition_logs) is a
+-- manager's or its author's. Writes are unchanged.
 --
--- Screens shipped with the source (no-ops before release, since RLS returns the
--- same rows to a manager): the sleep, nutrition, health-visits and immunisations
--- views offer a non-manager only their own member, as the health module
--- already did. The AI insights route reads through the caller's session, so
--- RLS narrows it; the health coach already grounds a non-manager on their own
--- record.
+-- Screens shipped with the source, the same before and after release
+-- (lib/health/record-scope.ts): anyone may still log a night, a check-in or a
+-- meal for any member; a manager, or the member themselves, sees the whole
+-- history and its summaries; anyone else sees only the entries they logged for
+-- that member, labelled as such, with no summary built from part of a record.
+-- The health-visits and immunisations filters offer a non-manager their own
+-- member. For a manager nothing changes. The AI insights route reads through
+-- the caller's session, so RLS narrows it; the health coach already grounds a
+-- non-manager on their own record.
 --
 -- Not changed, recorded: behavior_logs and care_log (notes ABOUT a member,
 -- written by others; whether the member reads them is a separate decision) and

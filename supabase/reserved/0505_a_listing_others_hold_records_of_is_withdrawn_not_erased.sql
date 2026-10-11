@@ -25,14 +25,25 @@
 -- has any order, offer, question, bid, negotiation (or round), handoff or
 -- report is refused (42501, its own sentence). Such a listing is withdrawn
 -- instead (marketplace_set_listing_status), which keeps every record; the
--- module's Remove does exactly that when this refuses. A listing with none of
+-- module's Remove does exactly that when this refuses, and keeps the listing's
+-- photo (lib/marketplace/remove-listing.ts deletes a photo only once its row is
+-- gone, and asks 0317's locked status change, not the screen's copy, whether
+-- the listing still needs withdrawing). A listing with none of
 -- those still deletes as before. Reviews already survive a delete (ON DELETE
 -- SET NULL); saves, collection items, matches, shares and price history are
 -- the listing's own or a bookmark, and still go with it.
 --
--- The service role and session-less writers are exempt, as in every guard of
--- this family, and a family being deleted still takes its listings: by the
--- time that cascade reaches a listing the family row is gone (0502's branch).
+-- This is not a preservation guarantee. Recorded limits, pinned by the probe so
+-- a change is seen, and the retention policy's owner's to decide (#999 review
+-- 6101040142):
+--   * the service role and session-less writers are exempt, as in every guard
+--     of this family, so a server job can still erase a listing and the
+--     records others hold of it;
+--   * a family being deleted still takes its listings, and by cascade the
+--     orders, offers, questions, bids, negotiations, handoffs and reports other
+--     families hold of them: by the time that cascade reaches a listing the
+--     family row is gone (0502's branch). Whether those records should outlive
+--     the seller's family is not decided here.
 --
 -- No race with a record inserted alongside: a DELETE locks the listing row FOR
 -- UPDATE before this trigger runs, which waits for the KEY SHARE an in-flight

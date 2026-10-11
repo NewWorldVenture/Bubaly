@@ -1,13 +1,14 @@
 name: Tax documents SQL runtime
 
 # The held 0508 (supabase/reserved/) makes the household's tax documents a
-# manager's: tax_documents' member policy (0077) becomes four manager-only
-# policies beside 0391's step-up guards, and a restrictive storage.objects
-# policy withholds the documents bucket's tax files (the family's tax/ folder,
-# or a file a tax_documents row of that family names) from anyone who does not
-# manage the family. Before it, a child, teen, caregiver or guest read, renamed
-# and deleted the tax documents and their files with no second factor, while a
-# parent needed one. Neither the Database job's replay nor `supabase db push`
+# manager's: tax_documents' four policies (0481's, which also let a teen or child
+# read their own document) become four manager-only policies beside 0391's
+# step-up guards, and a restrictive storage.objects policy withholds the
+# documents bucket's tax files (the family's tax/ folder, or a file a
+# tax_documents row of that family names) from anyone who does not manage the
+# family, or manages it without the step-up 0391 asks of the rows. Before it,
+# every member, and an enrolled manager at aal1, listed, moved and uploaded the
+# tax files. Neither the Database job's replay nor `supabase db push`
 # reads supabase/reserved/, and the Database job's probe glob does not read
 # docs/audit/reserved/, so nothing else in CI exercises it. This job replays
 # every runnable migration with the Database job's bootstrap, then:
@@ -35,6 +36,7 @@ on:
       - 'docs/audit/document-bytes-boundary-check.sql'
       - 'docs/audit/document-vault-boundary-check.sql'
       - 'docs/audit/gated-write-tables-check.sql'
+      - 'docs/audit/rls-sweep-check.sql'
       - 'docs/audit/pg-bootstrap.sh'
       - 'supabase/migrations/**'
   push:
@@ -47,6 +49,7 @@ on:
       - 'docs/audit/document-bytes-boundary-check.sql'
       - 'docs/audit/document-vault-boundary-check.sql'
       - 'docs/audit/gated-write-tables-check.sql'
+      - 'docs/audit/rls-sweep-check.sql'
       - 'docs/audit/pg-bootstrap.sh'
       - 'supabase/migrations/**'
 
@@ -118,10 +121,11 @@ jobs:
             exit 1
           fi
           for expected in \
-            "the teen reads the household's tax documents (OK 2)" \
-            "the child reads the household's tax files (OK 3)" \
-            "the caregiver renamed the W-2 (OK 1)" \
-            "the guest uploaded a file under tax/ (OK 1)"; do
+            "the teen reads the household's tax files (OK 3)" \
+            "the child reads the household's tax documents (OK 1)" \
+            "the caregiver moved the W-2's file (OK 1)" \
+            "the guest uploaded a file under tax/ (OK 1)" \
+            "the enrolled parent at aal1 reads the tax files (OK 3)"; do
             if ! grep -qF "$expected" <<<"$out"; then
               echo "::error::the held probe failed on the released schema, but not on: $expected"
               exit 1
@@ -153,7 +157,8 @@ jobs:
             docs/audit/a-password-alone-does-not-open-the-familys-vault-check.sql \
             docs/audit/document-bytes-boundary-check.sql \
             docs/audit/document-vault-boundary-check.sql \
-            docs/audit/gated-write-tables-check.sql; do
+            docs/audit/gated-write-tables-check.sql \
+            docs/audit/rls-sweep-check.sql; do
             echo "== $probe"
             psql -X -v ON_ERROR_STOP=1 -q -f "$probe"
           done

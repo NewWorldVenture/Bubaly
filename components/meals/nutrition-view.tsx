@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Apple, Plus, Trash2, Flame, Droplet } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
-import { isManager } from '@/lib/constants/roles';
+import { recordScope, rowsInScope } from '@/lib/health/record-scope';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
@@ -30,15 +30,9 @@ export function NutritionView() {
   const { familyId, userId, members, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
-  // Whose meals this screen offers. A manager sees everyone's; anyone else
-  // sees and logs their own, which is all the held 0506 lets them read.
-  const shown = useMemo(
-    () => members.filter((m) => m.is_active && (isManager(role) || m.user_id === userId)),
-    [role, members, userId],
-  );
 
   const today = todayKey();
-  const [member, setMember] = useState<string>(selfMember?.id ?? shown[0]?.id ?? '');
+  const [member, setMember] = useState<string>(selfMember?.id ?? members[0]?.id ?? '');
   const [form, setForm] = useState(false);
 
   const { data: rows, loading, error, refresh } = useRealtimeQuery<Log>({
@@ -46,8 +40,12 @@ export function NutritionView() {
     fetcher: (sb) => sb.from('nutrition_logs').select('*').eq('family_id', familyId).order('created_at', { ascending: false }).limit(400),
   });
 
-  const logs = useMemo(() => rows ?? [], [rows]);
-  const todayLogs = useMemo(() => logs.filter((l) => l.logged_on === today && (!member || l.member_id === member)), [logs, today, member]);
+  // Anyone may log a meal for anyone; whose intake this screen shows is the
+  // held 0506's rule: a manager or the member themselves sees it all, anyone
+  // else only the entries they logged (lib/health/record-scope).
+  const scope = recordScope(role, userId, memberById.get(member));
+  const logs = useMemo(() => (member ? rowsInScope(rows ?? [], member, scope, userId) : rows ?? []), [rows, member, scope, userId]);
+  const todayLogs = useMemo(() => logs.filter((l) => l.logged_on === today), [logs, today]);
   const totals = useMemo(() => dailyTotals(logs, today, member || undefined), [logs, today, member]);
   const byMeal = useMemo(() => groupByMeal(todayLogs), [todayLogs]);
 
@@ -73,13 +71,19 @@ export function NutritionView() {
 
       {/* Member tabs */}
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {shown.map((m) => (
+        {members.filter((m) => m.is_active).map((m) => (
           <button key={m.id} onClick={() => setMember(m.id)}
             className={cn('flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-sm whitespace-nowrap transition', member === m.id ? 'bg-brand text-brand-fg' : 'bg-surface/60 hover:bg-surface')}>
             <Avatar name={m.display_name} color={m.color} size={20} /> {m.display_name}
           </button>
         ))}
       </div>
+
+      {scope === 'authored' && member && (
+        <p role="note" className="rounded-xl border border-border bg-surface/40 px-4 py-3 text-sm text-muted">
+          {t('nutritionView.onlyTheMealsYouLogged', { name: memberById.get(member)?.display_name ?? '' })}
+        </p>
+      )}
 
       {/* Today's totals */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -113,7 +117,7 @@ export function NutritionView() {
         </div>
       )}
 
-      {form && <LogModal members={shown} defaultMember={member} familyId={familyId} userId={userId} onClose={() => setForm(false)} />}
+      {form && <LogModal members={members} defaultMember={member} familyId={familyId} userId={userId} onClose={() => setForm(false)} />}
     </div>
   );
 }

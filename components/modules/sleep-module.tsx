@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { MoonStar, Plus, Sparkles, Sunrise, BedDouble, Activity, ListChecks, Pencil, Trash2, Check, TrendingUp, TrendingDown, Minus, ClipboardCheck } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
-import { isManager } from '@/lib/constants/roles';
+import { recordScope, rowsInScope } from '@/lib/health/record-scope';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
@@ -63,24 +63,22 @@ export function SleepModule() {
     deps: [familyId],
   });
 
-  // Whose nights this screen offers. A manager sees everyone's; anyone else
-  // sees their own, which is all the held 0506 lets them read.
-  const shown = useMemo(
-    () => (isManager(role) ? members : members.filter((m) => m.user_id === userId)),
-    [role, members, userId],
-  );
   const [memberId, setMemberId] = useState('');
-  useEffect(() => { if (!memberId && shown.length) setMemberId(selfMember?.id ?? shown[0].id); }, [shown, selfMember, memberId]);
+  useEffect(() => { if (!memberId && members.length) setMemberId(selfMember?.id ?? members[0].id); }, [members, selfMember, memberId]);
   const [logOpen, setLogOpen] = useState(false);
   const [routineOpen, setRoutineOpen] = useState(false);
   const [checkinOpen, setCheckinOpen] = useState(false);
 
   const today = useFamilyCalendarToday();
   const member = members.find((m) => m.id === memberId) ?? null;
+  // Anyone may log a night for anyone; whose history this screen shows is the
+  // held 0506's rule: a manager or the member themselves sees it all, anyone
+  // else only the nights and check-ins they logged (lib/health/record-scope).
+  const scope = recordScope(role, userId, member);
   const age = ageOn(member?.birthday, today);
   const routine = routines.data.find((r) => r.member_id === memberId) ?? null;
-  const memberLogs = useMemo(() => logs.data.filter((l) => l.member_id === memberId), [logs.data, memberId]);
-  const memberCheckins = useMemo(() => checkins.data.filter((c) => c.member_id === memberId), [checkins.data, memberId]);
+  const memberLogs = useMemo(() => rowsInScope(logs.data, memberId, scope, userId), [logs.data, memberId, scope, userId]);
+  const memberCheckins = useMemo(() => rowsInScope(checkins.data, memberId, scope, userId), [checkins.data, memberId, scope, userId]);
   const summary = useMemo(() => sleepSummary(memberLogs, routine, age, today, memberId, clock.timeZone), [memberLogs, routine, age, today, memberId, clock.timeZone]);
   const fortnight = useMemo(() => recentLogs(memberLogs, memberId, today, 14).slice().reverse(), [memberLogs, memberId, today]);
   const correlations = useMemo(() => habitCorrelations(recentLogs(memberLogs, memberId, today, 30), memberCheckins), [memberLogs, memberCheckins, memberId, today]);
@@ -131,7 +129,7 @@ export function SleepModule() {
       />
 
       <div className="flex flex-wrap gap-2" role="tablist" aria-label={t('sleep.familyMember')}>
-        {shown.map((m) => {
+        {members.map((m) => {
           const a = ageOn(m.birthday, today);
           return (
             <button key={m.id} role="tab" aria-selected={m.id === memberId} onClick={() => setMemberId(m.id)}
@@ -142,7 +140,14 @@ export function SleepModule() {
         })}
       </div>
 
+      {scope === 'authored' && (
+        <p role="note" className="rounded-xl border border-border bg-surface/40 px-4 py-3 text-sm text-muted">
+          {t('sleepModule.onlyTheNightsYouLogged', { name: member?.display_name ?? '' })}
+        </p>
+      )}
+
       {/* Summary */}
+      {scope === 'full' && (
       <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="flex items-center gap-2 text-sm font-semibold"><BedDouble className="h-4 w-4 text-brand-text" /> {t('sleep.lastNight')}</div>
@@ -169,6 +174,7 @@ export function SleepModule() {
           <p className="mt-1 text-xs text-muted">{summary.debtMinutes > 0 ? t('sleep.debtThisWeek', { time: fmtHours(summary.debtMinutes) }) : t('sleep.noDebtThisWeek')}</p>
         </div>
       </div>
+      )}
 
       {/* Chart */}
       <div className="rounded-2xl border border-border bg-surface/40 p-5">
@@ -198,6 +204,7 @@ export function SleepModule() {
         )}
       </div>
 
+      {scope === 'full' && (
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Routine */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
@@ -250,6 +257,7 @@ export function SleepModule() {
           )}
         </div>
       </div>
+      )}
 
       {logOpen && memberId && (
         <LogForm familyId={familyId} userId={userId} memberId={memberId} existing={memberLogs.find((l) => l.sleep_date === todayIso()) ?? null} onClose={() => setLogOpen(false)} onSaved={() => { setLogOpen(false); success(t('sleepModule.nightLogged')); }} />
