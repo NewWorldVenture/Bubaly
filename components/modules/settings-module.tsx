@@ -252,7 +252,7 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
               onChange={(url) => setProfileForm((f) => ({ ...f, avatarUrl: url }))}
             />
           )}
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label={t('settings.firstName')} required>
               {(id) => (
                 <Input id={id} value={profileForm.firstName}
