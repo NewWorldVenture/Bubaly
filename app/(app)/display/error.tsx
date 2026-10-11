@@ -83,12 +83,12 @@ export default function DisplayError({
       </div>
 
       <div className="relative">
-        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/40">{t('display.bubalyKitchen')}</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/70">{t('display.bubalyKitchen')}</p>
         <h1 className="mt-3 text-3xl font-black sm:text-4xl">{t('display.oneMoment')}</h1>
-        <p className="mx-auto mt-3 max-w-sm text-sm text-white/55">
+        <p className="mx-auto mt-3 max-w-sm text-sm text-white/70">
           {t('display.theDisplayHitABriefHiccup')}
         </p>
-        <p className="mt-6 text-sm text-white/45">
+        <p className="mt-6 text-sm text-white/70">
           {t('display.refreshingIn')} <span className="tabular-nums font-bold text-white/80">{countdown}s</span>
         </p>
         <button
@@ -98,7 +98,7 @@ export default function DisplayError({
           <RotateCw className="h-4 w-4" /> {t('display.refreshNow')}
         </button>
         {/* Diagnostic line — small, but turns a photo of this screen into a bug report. */}
-        <p className="mx-auto mt-8 max-w-md break-all font-mono text-[10px] leading-relaxed text-white/25">
+        <p className="mx-auto mt-8 max-w-md break-all font-mono text-[10px] leading-relaxed text-white/70">
           {(error?.digest ? `digest ${error.digest}` : (error?.message ?? 'unknown error').slice(0, 160))} {t('display.build')} {BUILD_ID}
         </p>
       </div>

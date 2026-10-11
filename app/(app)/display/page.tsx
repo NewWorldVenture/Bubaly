@@ -304,9 +304,9 @@ async function DisplayReconnect() {
           <div className="absolute -right-16 bottom-0 h-80 w-80 rounded-full bg-blue-600/40 blur-3xl" />
         </div>
         <div className="relative">
-          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/40">{t('display.bubalyKitchen')}</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/70">{t('display.bubalyKitchen')}</p>
           <h1 className="mt-3 text-3xl font-black sm:text-4xl">{t('display.oneMoment')}</h1>
-          <p className="mx-auto mt-3 max-w-sm text-sm text-white/55">{t('display.reconnectingToYourFamilySpace')}</p>
+          <p className="mx-auto mt-3 max-w-sm text-sm text-white/70">{t('display.reconnectingToYourFamilySpace')}</p>
         </div>
       </div>
     </>

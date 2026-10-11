@@ -20,7 +20,7 @@ export function DisplayClock() {
       <div className="text-5xl font-black tabular-nums leading-none lg:text-6xl">
         {fmtTime(now)}
       </div>
-      <div className="mt-2 text-base text-white/60 lg:text-lg">
+      <div className="mt-2 text-base text-white/70 lg:text-lg">
         {fmtDate(now, 'EEEE, MMMM d')}
       </div>
     </div>

@@ -24,7 +24,7 @@ function ShellLoading() {
   const t = useTranslations();
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-[#0b1020]">
-      <p className="animate-pulse text-sm font-semibold uppercase tracking-[0.25em] text-white/30">{t('displayShellClient.bubalyKitchen')}</p>
+      <p className="animate-pulse text-sm font-semibold uppercase tracking-[0.25em] text-white/70">{t('displayShellClient.bubalyKitchen')}</p>
     </div>
   );
 }
