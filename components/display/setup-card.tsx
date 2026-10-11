@@ -82,9 +82,11 @@ export function DisplaySetupCard({
           <p className="mt-3 text-xs font-medium text-white/70">{t(wakeLockLine(wakeLock))}</p>
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
+            {/* Hovered at white/20, not /25: white on white/25 in this white/7
+                card read 4.4:1 on the morning wash, white/20 reads 5.0:1. */}
             <Link
               href="/display/setup"
-              className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-white/15 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/25"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-white/15 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
             >
               {t('displaySetupCard.openTheGuide')} <ExternalLink className="h-3.5 w-3.5" aria-hidden />
             </Link>

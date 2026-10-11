@@ -237,11 +237,11 @@ function WidgetBody({ widget, size, data, memberById, now, settings }: {
             const isNext = next !== null && calendarConsumerKey(next) === calendarConsumerKey(e);
             return (
               <li key={calendarConsumerKey(e)} className={cn('flex items-center gap-3 rounded-xl px-2 py-1.5', isNow && 'bg-white/10')}>
-                <span className={cn('w-16 shrink-0 text-sm font-bold tabular-nums', isNow ? 'text-emerald-300' : 'text-violet-300')}>
+                <span className={cn('w-16 shrink-0 text-sm font-bold tabular-nums', isNow ? 'text-emerald-200' : 'text-violet-300')}>
                   {e.all_day ? 'All day' : displayTime(e.displayStartsAt??e.starts_at, timezone, locale, settings.clock24)}
                 </span>
                 <span className="min-w-0 flex-1 truncate font-medium text-white">{e.title}</span>
-                {isNow && <span className="shrink-0 rounded-full bg-emerald-400/20 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-300">Now</span>}
+                {isNow && <span className="shrink-0 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-100">Now</span>}
                 {isNext && !isNow && <span className="shrink-0 text-[11px] text-white/70">{countdownLabel(e.starts_at, now, timezone)}</span>}
                 {who && <Avatar name={who.display_name} color={who.color} size={24} />}
               </li>
