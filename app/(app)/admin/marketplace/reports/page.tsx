@@ -124,7 +124,7 @@ export default async function AdminMarketplaceReportsPage({ searchParams }: Para
               filter === f.key ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:bg-elevated',
             )}
           >
-            {f.label} <span className="opacity-60">{filterCount[f.key]}</span>
+            {f.label} <span className="font-normal">{filterCount[f.key]}</span>
           </a>
         ))}
       </div>

@@ -278,3 +278,35 @@ describe('muted text is readable on the brand selection tint', () => {
     });
   }
 });
+
+// Muted text inside a status banner. The reminders page's overdue alert is
+// bg-danger/10 with the overdue titles in text-muted beside its danger
+// heading, found by an axe sweep of a seeded household at 4.36:1. A status
+// role's 10% tint is the strongest flat tint a banner puts behind body text,
+// so --muted has to clear 4.5 on each role's, over each ground.
+describe('muted text is readable inside a status banner (a role at 10%)', () => {
+  const css = readFileSync(resolve('app/globals.css'), 'utf8');
+  const reminders = readFileSync(resolve('components/modules/reminders-module.tsx'), 'utf8');
+
+  it('finds the banner that pairs them (non-vacuity)', () => {
+    const banner = reminders.slice(reminders.indexOf('{/* Overdue alert */}'), reminders.indexOf('{/* AI Suggestions panel */}'));
+    expect(banner).toContain('bg-danger/10');
+    expect(banner).toContain('text-muted');
+  });
+
+  for (const [theme, selector] of [['light', '.light {'], ['dark', '.dark {']] as const) {
+    it(`${theme}: --muted clears 4.5:1 on every role at 10%, over every ground`, () => {
+      const tokens = tokensOf(css, selector);
+      const failures: string[] = [];
+      for (const role of ['danger', 'warning', 'success', 'info', 'brand', 'accent']) {
+        for (const ground of GROUNDS) {
+          // Composited in 8-bit steps, as the browser paints it.
+          const tint = tokens[role].map((v, i) => Math.round(v * 0.1 + tokens[ground][i] * 0.9));
+          const ratio = contrast(tokens.muted, tint);
+          if (ratio < 4.5) failures.push(`--muted on --${role}/10 over --${ground}: ${ratio.toFixed(2)}`);
+        }
+      }
+      expect(failures).toEqual([]);
+    });
+  }
+});

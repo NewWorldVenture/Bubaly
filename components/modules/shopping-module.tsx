@@ -384,8 +384,7 @@ export function ShoppingModule() {
                         <div className="divide-y divide-border/40">
                           {catItems.map((item) => (
                             <div key={item.id}
-                              className={cn('group flex items-center gap-3 px-4 py-2.5 hover:bg-elevated/20 transition',
-                                item.is_checked && 'opacity-60')}>
+                              className="group flex items-center gap-3 px-4 py-2.5 hover:bg-elevated/20 transition">
                               <button onClick={() => toggleItem(item)} disabled={isPending(`toggle:${item.id}`)} aria-label={item.is_checked ? t('uiText.uncheckItem') : t('uiText.checkItem')}
                                 className={cn('flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border-2 transition disabled:opacity-60',
                                   item.is_checked ? 'border-success bg-success' : 'border-border hover:border-success/50')}>

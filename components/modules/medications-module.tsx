@@ -549,7 +549,7 @@ export function MedicationsModule() {
           {visibleMeds.map((m) => {
             const medSchedules = schedulesByMed.get(m.id) ?? [];
             return (
-              <div key={m.id} className={cn('rounded-2xl border p-5', m.is_active ? 'bg-surface/50 border-border' : 'bg-surface/20 border-border/50 opacity-70')}>
+              <div key={m.id} className={cn('rounded-2xl border p-5', m.is_active ? 'bg-surface/50 border-border' : 'bg-surface/20 border-border/50')}>
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="flex items-start gap-3 min-w-0">
                     <div className="mt-0.5 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-brand/10 text-brand-text flex-shrink-0">

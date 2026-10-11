@@ -12225,6 +12225,7 @@
   "reminders.repeat": "Herhalen",
   "reminders.searchReminders": "Herinneringen zoeken…",
   "reminders.smartReminders": "Slimme herinneringen",
+  "reminders.snoozeReminder": "Herinnering uitstellen",
   "reminders.snoozed": "Uitgesteld",
   "reminders.snoozedForHours": "{count} uur uitgesteld",
   "reminders.snoozedForMinutes": "{count} min uitgesteld",

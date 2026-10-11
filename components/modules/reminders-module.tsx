@@ -492,7 +492,7 @@ export function RemindersModule() {
                     {snoozed && <Badge tone="warning">{tr('reminders.snoozed')}</Badge>}
                     {overdue && !completed && <Badge tone="danger">{tr('reminders.overdue')}</Badge>}
                     {reminder.ai_suggested && (
-                      <span className="flex items-center gap-0.5 text-[10px] text-brand-text/70">
+                      <span className="flex items-center gap-0.5 text-[10px] text-brand-text">
                         <Sparkles className="h-2.5 w-2.5" /> AI
                       </span>
                     )}
@@ -585,8 +585,8 @@ export function RemindersModule() {
                   {!completed && (
                     <div className="relative">
                       <details className="group/snooze">
-                        <summary className="list-none cursor-pointer rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-warning">
-                          <AlarmClock className="h-4 w-4" />
+                        <summary aria-label={tr('reminders.snoozeReminder')} className="list-none cursor-pointer rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-warning">
+                          <AlarmClock className="h-4 w-4" aria-hidden />
                         </summary>
                         <div className="absolute right-0 top-8 z-10 rounded-xl border border-border bg-elevated p-1.5 shadow-xl min-w-[140px]">
                           {[[15,'15 min'],[60,'1 hour'],[180,'3 hours'],[1440,'Tomorrow']].map(([m, l]) => (

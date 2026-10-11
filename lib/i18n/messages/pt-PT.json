@@ -12226,6 +12226,7 @@
   "reminders.repeat": "Repetir",
   "reminders.searchReminders": "Procurar lembretes…",
   "reminders.smartReminders": "Lembretes inteligentes",
+  "reminders.snoozeReminder": "Adiar lembrete",
   "reminders.snoozed": "Adiado",
   "reminders.snoozedForHours": "Adiado {count} h",
   "reminders.snoozedForMinutes": "Adiado {count} min",
