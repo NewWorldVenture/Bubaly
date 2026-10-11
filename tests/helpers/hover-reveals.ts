@@ -67,6 +67,10 @@ export function hoverReveals(files: string[]): Reveal[] {
 export function revealProblem(r: Reveal): string | null {
   const has = (c: string) => r.classes.includes(c);
   if (has('opacity-0')) return 'hidden on touch and narrow screens (bare opacity-0; use opacity-100 sm:opacity-0)';
+  // Shown by opacity but not displayed at all below 640px: a phone never gets it.
+  if (has('hidden') && r.classes.some((c) => /^sm:(flex|block|inline-flex|inline-block|grid|inline)$/.test(c))) {
+    return 'not displayed below 640px (hidden … sm:flex); display it at every width';
+  }
   if (has('group-hover:opacity-100')) return 'revealed by hover at every width (use sm:group-hover:opacity-100)';
   if (!has('coarse:opacity-100')) return 'hidden on a wide touch screen (add coarse:opacity-100)';
   if (r.focusable && !has('focus-visible:opacity-100') && !has('focus:opacity-100')) return 'hidden while focused (add focus-visible:opacity-100)';

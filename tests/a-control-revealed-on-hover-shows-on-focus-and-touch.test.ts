@@ -52,5 +52,7 @@ describe('a control revealed on hover also shows on focus and on touch', () => {
     expect(revealProblem({ ...base, classes: good.filter((c) => c !== 'coarse:opacity-100') })).toMatch(/touch screen/);
     expect(revealProblem({ ...base, tag: 'div', focusable: false, classes: good })).toMatch(/inside it is focused/);
     expect(revealProblem({ ...base, tag: 'div', focusable: false, classes: [...good, 'focus-within:opacity-100'] })).toBeNull();
+    // The todos row's actions: right opacity classes, but display:none on a phone.
+    expect(revealProblem({ ...base, tag: 'div', focusable: false, classes: ['hidden', 'sm:flex', ...good, 'focus-within:opacity-100'] })).toMatch(/not displayed below 640px/);
   });
 });
