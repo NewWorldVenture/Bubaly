@@ -12227,6 +12227,7 @@
   "reminders.repeat": "Ripeti",
   "reminders.searchReminders": "Cerca promemoria…",
   "reminders.smartReminders": "Promemoria intelligenti",
+  "reminders.snoozeReminder": "Posticipa promemoria",
   "reminders.snoozed": "Posticipato",
   "reminders.snoozedForHours": "Posticipato di {count} h",
   "reminders.snoozedForMinutes": "Posticipato di {count} min",

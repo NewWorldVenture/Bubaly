@@ -88,9 +88,11 @@
   /* See the dark block. 3.52:1 on --surface, 3.29:1 on --bg. */
   --border-input: 124 137 163;
   --fg: 23 28 42;
-  /* 94 105 131, not 96 108 134: muted text also sits on the brand selection
-     tint (an active conversation row, bg-brand/10), where it read 4.32:1. */
-  --muted: 94 105 131;
+  /* 91 102 127, not 96 108 134: muted text also sits on tints. It read 4.32:1
+     on the brand selection tint (an active conversation row, bg-brand/10) at
+     96 108 134, and 4.36:1 in the reminders' overdue banner (bg-danger/10) at
+     94 105 131. Now it clears 4.5 on every role's 10% tint, over every ground. */
+  --muted: 91 102 127;
   --brand: 99 91 230;
   --brand-text: 81 69 205;
   --brand-fg: 255 255 255;

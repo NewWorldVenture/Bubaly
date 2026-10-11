@@ -12397,6 +12397,7 @@
   "reminders.repeat": "Repeat",
   "reminders.searchReminders": "Search reminders…",
   "reminders.smartReminders": "Smart Reminders",
+  "reminders.snoozeReminder": "Snooze reminder",
   "reminders.snoozed": "Snoozed",
   "reminders.snoozedForHours": "Snoozed for {count} hr",
   "reminders.snoozedForMinutes": "Snoozed for {count} min",

@@ -65,8 +65,10 @@ export function unnamedIconButtons(file: string, text?: string): Site[] {
   const out: Site[] = [];
   const visit = (node: ts.Node) => {
     // Links as well as buttons: an icon-only back link on the send-money page
-    // had no name, and this looked only at buttons (P-35).
-    if (ts.isJsxElement(node) && ['button', 'Button', 'a', 'Link'].includes(node.openingElement.tagName.getText())) {
+    // had no name, and this looked only at buttons (P-35). And a <details>
+    // disclosure's <summary>: each reminder's snooze clock was announced as an
+    // unnamed disclosure, 193 times on a populated reminders page (A11Y-001).
+    if (ts.isJsxElement(node) && ['button', 'Button', 'a', 'Link', 'summary'].includes(node.openingElement.tagName.getText())) {
       const names = attrNames(node.openingElement.attributes);
       const named = names.some((n) => n === 'aria-label' || n === 'aria-labelledby' || n === 'title' || n === '...') || insideLabel(node);
       const kids = meaningfulChildren(node.children);

@@ -12227,6 +12227,7 @@
   "reminders.repeat": "Répéter",
   "reminders.searchReminders": "Rechercher des rappels…",
   "reminders.smartReminders": "Rappels intelligents",
+  "reminders.snoozeReminder": "Reporter le rappel",
   "reminders.snoozed": "Reporté",
   "reminders.snoozedForHours": "Reporté de {count} h",
   "reminders.snoozedForMinutes": "Reporté de {count} min",
