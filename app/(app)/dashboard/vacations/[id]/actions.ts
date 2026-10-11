@@ -132,6 +132,12 @@ export async function reportDisruptionAction(input: DisruptionActionInput): Prom
   // Two submits racing through here at the same instant can still both pass
   // notify's read-then-insert guard; that needs a unique index (SQL).
   let notified = false;
+  // Every recipient already held THIS disruption's notice: an earlier submit
+  // wrote it and never stamped the note (its stamp failed, or it died in
+  // between). The family WAS told — by that submit — so the receipt says so
+  // rather than "No notification was sent", whether or not this submit's own
+  // stamp lands. The note read before this submit cannot know it.
+  let toldEarlier = false;
   if (!plan.noop && applied.noteItemId && !familyNotified) {
     const sent = await notify(scope, {
       recipients: 'family',
@@ -146,6 +152,7 @@ export async function reportDisruptionAction(input: DisruptionActionInput): Prom
     if (!sent.ok) console.error('[vacations] disruption notify failed', sent.error);
     else {
       notified = sent.data.created > 0;
+      toldEarlier = sent.data.created === 0 && sent.data.duplicates > 0;
       const stamped = await markDisruptionNotified(scope, input.vacationId, applied.noteItemId);
       if (!stamped.ok) console.error('[vacations] disruption notified stamp failed', stamped.error);
     }
@@ -164,6 +171,6 @@ export async function reportDisruptionAction(input: DisruptionActionInput): Prom
     // Honest: the note row is what makes this a record rather than a claim.
     recorded: applied.noteItemId !== null,
     alreadyApplied,
-    previouslyNotified: alreadyApplied && familyNotified,
+    previouslyNotified: alreadyApplied && (familyNotified || toldEarlier),
   };
 }

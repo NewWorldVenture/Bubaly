@@ -12,9 +12,10 @@
 // and cost nothing.
 //
 // ROLLBACK. `buildPlan` writes to four tables. There is no transaction across
-// PostgREST calls, so it records every id it creates and deletes them in
+// PostgREST calls, so it records every row it creates and deletes them in
 // reverse order if a later insert fails — the family sees either a whole plan
-// or no plan, never half an itinerary with no budget.
+// or no plan, never half an itinerary with no budget. A row someone booked or
+// edited in between is theirs by then, and is kept (see `buildPlan`).
 //
 // UNITS. Vacation tables store cents (`budget_cents`, `cost_cents`), unlike
 // the finance tables. Public inputs take dollars because that is what a
@@ -329,6 +330,16 @@ export type BuildPlanInput = {
   provider?: AIProvider;
 };
 
+/** A row `buildPlan` inserted, as its insert returned it: what its rollback fences on. */
+type Written = { id: string; updated_at: string };
+
+/** `rows` by the `updated_at` they carry; one insert is one statement, so its rows share one. */
+function byStamp(rows: Written[]): Map<string, string[]> {
+  const grouped = new Map<string, string[]>();
+  for (const row of rows) grouped.set(row.updated_at, [...(grouped.get(row.updated_at) ?? []), row.id]);
+  return grouped;
+}
+
 export type BuildPlanResult = {
   built: boolean;
   reason: string | null;
@@ -378,21 +389,45 @@ export async function buildPlan(scope: ServiceScope, vacationId: string, input: 
   const plan = planned.data;
 
   // ── persist with rollback ──
-  const created = { activities: [] as string[], days: [] as string[], items: [] as string[], budgets: [] as string[] };
+  // Each row this call inserts, with the `updated_at` its insert returned.
+  const created = { activities: [] as Written[], days: [] as Written[], items: [] as Written[], budgets: [] as Written[] };
   const changedBudgets = new Map<VacBudgetCategory, { id: string; planned_cents: number; notes: string | null }>();
   const rollback = async () => {
-    const remove = async (table: 'vacation_itinerary_items' | 'vacation_itinerary_days' | 'vacation_activities' | 'vacation_budgets', ids: string[]) => {
-      if (!ids.length) return;
-      // Ids this call created, so an exact count is right; fewer removed leaves
-      // part of a failed plan in the trip. Logged, not raised. Audit C1-S9-65.
-      const { data: removed, error } = await scope.db.from(table).delete().eq('family_id', scope.familyId).eq('vacation_id', vacationId).in('id', ids).select('id');
-      if (error) console.error(`[service:trips] rollback of ${table} failed`, error);
-      else if ((removed?.length ?? 0) !== ids.length) {
-        console.error(`[service:trips] rollback of ${table} was partial`, { removed: removed?.length ?? 0, created: ids.length });
+    // Rows this call created — but each became the family's when its insert
+    // committed, and a parent may have booked a new suggestion or edited one
+    // before a later write failed. So a delete is fenced on the row as this
+    // call wrote it: `updated_at` unchanged (the 0070 trigger moves it on every
+    // edit), and a suggestion still unbooked and carrying exactly the builder's
+    // marker. Fewer removed than created leaves part of a failed plan in the
+    // trip — someone's row, kept on purpose, or one already gone. Logged, not
+    // raised. Audit C1-S9-65.
+    const remove = async (table: 'vacation_itinerary_items' | 'vacation_itinerary_days' | 'vacation_activities' | 'vacation_budgets', rows: Written[]) => {
+      for (const [stamp, ids] of byStamp(rows)) {
+        const { data: removed, error } = table === 'vacation_activities' || table === 'vacation_itinerary_items'
+          ? await scope.db.from(table).delete().eq('family_id', scope.familyId).eq('vacation_id', vacationId).eq('updated_at', stamp)
+            .eq('booked', false).eq('notes', CONCIERGE_PLAN_MARKER).in('id', ids).select('id')
+          : await scope.db.from(table).delete().eq('family_id', scope.familyId).eq('vacation_id', vacationId).eq('updated_at', stamp).in('id', ids).select('id');
+        if (error) console.error(`[service:trips] rollback of ${table} failed`, error);
+        else if ((removed?.length ?? 0) !== ids.length) {
+          console.error(`[service:trips] rollback of ${table} was partial: the rest changed since this call wrote them and were kept`, { removed: removed?.length ?? 0, created: ids.length });
+        }
       }
     };
     await remove('vacation_itinerary_items', created.items);
-    await remove('vacation_itinerary_days', created.days);
+    // A created day goes only while nothing sits on it: `day_id` is ON DELETE
+    // CASCADE (0070), so deleting it would take an item a parent put there by
+    // hand, or a suggestion kept above. Two calls, as in the disruption
+    // rollback: an item placed between them is not covered (SQL).
+    if (created.days.length) {
+      const { data: occupied, error: occupiedError } = await scope.db.from('vacation_itinerary_items').select('day_id')
+        .eq('family_id', scope.familyId).eq('vacation_id', vacationId).in('day_id', created.days.map((day) => day.id));
+      if (occupiedError) console.error('[service:trips] rollback kept its new itinerary days: could not check they were empty', occupiedError);
+      else {
+        const held = new Set((occupied ?? []).map((row) => row.day_id));
+        if (held.size) console.error('[service:trips] rollback kept new itinerary days that hold items', { kept: [...held] });
+        await remove('vacation_itinerary_days', created.days.filter((day) => !held.has(day.id)));
+      }
+    }
     await remove('vacation_activities', created.activities);
     await remove('vacation_budgets', created.budgets);
     for (const [, previous] of changedBudgets) {
@@ -422,8 +457,8 @@ export async function buildPlan(scope: ServiceScope, vacationId: string, input: 
       notes: CONCIERGE_PLAN_MARKER,
       created_by: scope.userId,
     }));
-    const { data, error } = await scope.db.from('vacation_activities').insert(rows).select('id');
-    if (data) created.activities.push(...data.map((r) => r.id));
+    const { data, error } = await scope.db.from('vacation_activities').insert(rows).select('id, updated_at');
+    if (data) created.activities.push(...data);
     if (error || !data || data.length !== rows.length) return failAndRollback('Could not save the activities in the plan.', error ?? new Error('activity insert incomplete'));
     added.activities = rows.length;
   }
@@ -433,8 +468,8 @@ export async function buildPlan(scope: ServiceScope, vacationId: string, input: 
     const dayIdByDate = new Map(days.map((d) => [d.day_date, d.id]));
     const missing = range.filter((d) => !dayIdByDate.has(d)).map((d) => ({ family_id: scope.familyId, vacation_id: vacationId, day_date: d, created_by: scope.userId }));
     if (missing.length) {
-      const { data, error } = await scope.db.from('vacation_itinerary_days').insert(missing).select('id, day_date');
-      if (data) created.days.push(...data.map((r) => r.id));
+      const { data, error } = await scope.db.from('vacation_itinerary_days').insert(missing).select('id, day_date, updated_at');
+      if (data) created.days.push(...data);
       if (error || !data || data.length !== missing.length) return failAndRollback('Could not save the itinerary days.', error ?? new Error('day insert incomplete'));
       for (const d of data) dayIdByDate.set(d.day_date, d.id);
     }
@@ -449,8 +484,8 @@ export async function buildPlan(scope: ServiceScope, vacationId: string, input: 
       created_by: scope.userId,
     })).filter((r) => r.day_id);
     if (rows.length) {
-      const { data, error } = await scope.db.from('vacation_itinerary_items').insert(rows).select('id');
-      if (data) created.items.push(...data.map((r) => r.id));
+      const { data, error } = await scope.db.from('vacation_itinerary_items').insert(rows).select('id, updated_at');
+      if (data) created.items.push(...data);
       if (error || !data || data.length !== rows.length) return failAndRollback('Could not save the itinerary.', error ?? new Error('item insert incomplete'));
       added.items = rows.length;
     }
@@ -463,11 +498,11 @@ export async function buildPlan(scope: ServiceScope, vacationId: string, input: 
       category: b.category as VacBudgetCategory, planned_cents: Math.max(0, Math.round(b.planned_usd * 100)),
       created_by: scope.userId,
     }])).values()];
-    const { data, error } = await scope.db.from('vacation_budgets').upsert(rows, { onConflict: 'vacation_id,category' }).select('id, category');
+    const { data, error } = await scope.db.from('vacation_budgets').upsert(rows, { onConflict: 'vacation_id,category' }).select('id, category, updated_at');
     for (const row of data ?? []) {
       const previous = existing.get(row.category);
       if (previous) changedBudgets.set(row.category, { id: previous.id, planned_cents: previous.planned_cents, notes: previous.notes });
-      else created.budgets.push(row.id);
+      else created.budgets.push(row);
     }
     if (error || !data || data.length !== rows.length) return failAndRollback('Could not save the budget.', error ?? new Error('budget upsert incomplete'));
     added.budget = rows.length;

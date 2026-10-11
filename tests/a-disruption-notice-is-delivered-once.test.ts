@@ -174,9 +174,31 @@ describe('a notice that did not go out is sent by the retry — once — and not
     expect(String(notes(db)[0].notes)).not.toContain(DISRUPTION_NOTIFIED_STAMP);
 
     // The retry asks notify() again; its per-disruption key finds both copies.
-    expect(await report()).toMatchObject({ ok: true, notified: false, alreadyApplied: true });
+    const retry = await report();
+    expect(retry).toMatchObject({ ok: true, notified: false, previouslyNotified: true, alreadyApplied: true });
     expect(notices(db)).toHaveLength(2);
     expect(String(notes(db)[0].notes)).toContain(DISRUPTION_NOTIFIED_STAMP);
+    // Nobody was paged this time because everyone already had it: the receipt
+    // says the family was told, not that no notification was sent.
+    if (!retry.ok) throw new Error('the retry should succeed');
+    const html = renderTranslated(createElement(DisruptionReceipt, { result: retry }));
+    expect(html).toContain(EN['vacationDisruption.familyAlreadyNotified']);
+    expect(html).not.toContain(EN['vacationDisruption.familyNotNotified']);
+  });
+
+  it('a notice that went out is still reported as told when the retry\'s own stamp fails too', async () => {
+    const db = seeded();
+    hooks.push((name, builder) => {
+      if (name !== 'vacation_itinerary_items') return;
+      const update = builder.update.bind(builder);
+      builder.update = ((patch: Row) => (String(patch.notes ?? '').includes(DISRUPTION_NOTIFIED_STAMP) ? failed() : update(patch))) as never;
+    });
+
+    expect(await report()).toMatchObject({ ok: true, notified: true });
+    const retry = await report();
+    expect(retry).toMatchObject({ ok: true, notified: false, previouslyNotified: true, alreadyApplied: true });
+    expect(notices(db)).toHaveLength(2);
+    expect(String(notes(db)[0].notes)).not.toContain(DISRUPTION_NOTIFIED_STAMP);
   });
 
   it('a different disruption of the same trip is its own notice, not a duplicate of the first', async () => {
