@@ -4,10 +4,10 @@
 // THE DEFECT. The Autopilot scan (lib/autopilot/scan.ts) turns every active
 // medication with a refill date into a suggestion — "Refill Sertraline in 1
 // day" — and, because a refill is always urgency 2 or more, sends it as a
-// notification with `recipients: 'family'`. In the notifications service that
-// is ONE row with a NULL user_id, which every member reads in their bell and
-// which the push/email crons deliver to every member: the children, a teen, the
-// babysitter (caregiver), a guest. The nightly run is the cron's, on the
+// notification with `recipients: 'family'`. The notifications service delivers
+// that to every active member (it was one NULL-user row everyone read; it is
+// now one row per member, which is the same audience): the children, a teen,
+// the babysitter (caregiver), a guest. The nightly run is the cron's, on the
 // SERVICE client, so not even 0465 (a child reads only their own prescriptions)
 // would stop it; the scan reads every member's medications whatever RLS says.
 //
@@ -17,8 +17,8 @@
 //
 // WHAT IS ASSERTED, against the real scan over an in-memory database: a
 // parent's refill reaches the parents and adults only; a child's reaches that
-// child and the managers, never a sibling, caregiver or guest; no refill alert
-// is a family-wide row. If the household cannot be read, the alert is not sent
+// child and the managers, never a sibling, caregiver or guest. If the
+// household cannot be read, the alert is not sent
 // at all rather than falling back to everyone. A renewal (not a prescription)
 // still goes to the family, as before.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -54,7 +54,7 @@ const prescription = (memberId: string | null, name: string) => db.seed('medicat
   refill_on: '2026-10-11', refill_reminder_days: 7,
 }]);
 
-/** Who can read a notification naming `word`: a NULL user_id is everyone. */
+/** Who can read a notification naming `word` (a NULL user_id would be everyone). */
 function readersOf(word: string): (string | null)[] {
   return db.table('notifications').filter((n) => String(n.title).includes(word)).map((n) => n.user_id as string | null).sort();
 }
@@ -79,12 +79,13 @@ describe('a refill alert', () => {
     expect(readersOf('Epinephrine')).toEqual(['u-dad', 'u-mom']);
   });
 
-  it('is never a family-wide row', async () => {
+  it('never reaches the sitter, a guest or a former member, and is never a row everyone reads', async () => {
     prescription('m-mom', 'Sertraline');
     prescription('m-teen', 'Isotretinoin');
     await scan();
+    expect(readersOf('Isotretinoin')).toEqual(['u-dad', 'u-mom', 'u-teen']);
     expect(db.table('notifications').filter((n) => n.user_id === null)).toEqual([]);
-    for (const user of ['u-sitter', 'u-guest', 'u-gone']) expect(readersOf(''), user).not.toContain(user);
+    for (const user of ['u-sitter', 'u-guest', 'u-gone', 'u-kid']) expect(readersOf(''), user).not.toContain(user);
   });
 
   it('is not sent at all when the household cannot be read, rather than sent to everyone', async () => {
@@ -106,9 +107,9 @@ describe('a refill alert', () => {
 });
 
 describe('an alert that is not a prescription', () => {
-  it('still goes to the whole family, as before', async () => {
+  it('still goes to every active member, as before', async () => {
     db.seed('renewals', [{ id: 'r1', family_id: FAMILY, title: 'Passport', status: 'active', expires_at: '2026-10-10' }]);
     await scan();
-    expect(readersOf('Passport')).toEqual([null]);
+    expect(readersOf('Passport')).toEqual(['u-dad', 'u-guest', 'u-kid', 'u-mom', 'u-sitter', 'u-teen']);
   });
 });

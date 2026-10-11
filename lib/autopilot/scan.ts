@@ -343,7 +343,7 @@ export async function runAutopilotScan(
   let autoExecuted = 0;
   let notified = 0;
   // Who hears about a prescription: the person it is written for and the
-  // family's managers (F-G09), never the household row every member reads. A
+  // family's managers (F-G09), never the whole household ('family'). A
   // refill is always urgent enough to notify, and the cron runs this on the
   // service client, so no RLS stands between a parent's Sertraline and a
   // child's, a babysitter's or a guest's bell. Read once, and only when a
