@@ -756,7 +756,7 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
         className={cn(
           // A dark presentation in either theme: the light theme's palette
           // remap (app/globals.css) must leave its shades as drawn.
-          'keep-dark-palette flex min-h-dvh flex-col p-4 text-white sm:p-6 lg:p-6',
+          'kitchen-display keep-dark-palette flex min-h-dvh flex-col p-4 text-white sm:p-6 lg:p-6',
           // Kiosk fit: on large screens the display is exactly one viewport tall
           // and the tile grid divides whatever height is left — no page scroll.
           // (Edit mode restores normal flow so the settings panel can scroll.)
