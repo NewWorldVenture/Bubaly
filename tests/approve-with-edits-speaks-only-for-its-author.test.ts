@@ -166,6 +166,30 @@ describe('Approve-with-edits on a held run step that speaks in the requester’s
     expect(hoisted.executed).toEqual([{ name: 'messages.sendFamilyMessage', skipTrust: true, memberId: DANA.member, args: { content: 'Dinner at 7' } }]);
   });
 
+  it('refuses another manager’s rewording of a held announcement, which the board posts under the requester’s name', async () => {
+    household();
+    heldStep('messages.createAnnouncement', { title: 'Dinner at 7' });
+    const card = await cardForHeldStep();
+
+    const res = await editAndApprove(as(ALEX), card, { title: 'Dinner is cancelled, Dana says' });
+
+    expect(res).toEqual({ ok: false, error: NOT_YOURS, code: 'denied' });
+    expect(db.table('approval_requests')[0]).toMatchObject({ status: 'pending', edited_payload: null, approvals: [] });
+    await resume();
+    expect(hoisted.executed).toEqual([]);
+  });
+
+  it('lets the requester reword their own held announcement and runs what they wrote', async () => {
+    household();
+    heldStep('messages.createAnnouncement', { title: 'Dinner at 7' });
+    const card = await cardForHeldStep();
+
+    expect(await editAndApprove(as(DANA), card, { title: 'Dinner at 7:30' })).toMatchObject({ ok: true, data: { status: 'modified' } });
+    await resume();
+
+    expect(hoisted.executed).toEqual([{ name: 'messages.createAnnouncement', skipTrust: true, memberId: DANA.member, args: { title: 'Dinner at 7:30' } }]);
+  });
+
   it('still lets another manager correct a held step that speaks for no one', async () => {
     household();
     heldStep('tasks.createTodo', { title: 'Buy candles' });
@@ -195,6 +219,15 @@ describe('Approve-with-edits on a chat card Bubaly filed for the asker', () => {
     chatCard('send_family_message', { content: 'Dinner at 7' });
 
     expect(await editAndApprove(as(ALEX), CARD, { content: 'Alex wrote this' })).toEqual({ ok: false, error: NOT_YOURS, code: 'denied' });
+    expect(hoisted.executed).toEqual([]);
+    expect(db.table('approval_requests')[0]).toMatchObject({ status: 'pending', edited_payload: null });
+  });
+
+  it('refuses another manager’s rewording of an announcement card, under its chat name too', async () => {
+    household();
+    chatCard('create_announcement', { title: 'Dinner at 7' });
+
+    expect(await editAndApprove(as(ALEX), CARD, { title: 'Dinner is cancelled, Dana says' })).toEqual({ ok: false, error: NOT_YOURS, code: 'denied' });
     expect(hoisted.executed).toEqual([]);
     expect(db.table('approval_requests')[0]).toMatchObject({ status: 'pending', edited_payload: null });
   });

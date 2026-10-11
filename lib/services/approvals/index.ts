@@ -711,9 +711,9 @@ async function dismissConciergeRun(scope: ServiceScope, row: ApprovalRow): Promi
  *     until now NO approved write appeared in the feed at all.
  *
  * Confined to `requested_by_kind === 'ai'` — the same condition that already
- * decides `skipTrust`. A member-filed row keeps the decider's scope, because its
- * gate is re-evaluated under the approver's authority and re-labelling the actor
- * would change that evaluation.
+ * decides `skipTrust`. A member's row is not Bubaly's work: it runs, if the
+ * server filed it, as that member (`memberRequestScope`), and otherwise not at
+ * all.
  */
 export async function scopeForApprovedWork(scope: ServiceScope, row: ApprovalRow): Promise<ServiceScope> {
   if (row.requested_by_kind !== 'ai') return scope;
@@ -796,9 +796,10 @@ async function filedByBubaly(scope: ServiceScope, row: ApprovalRow): Promise<boo
  *     (`evaluateTrust` / the risk tier, under their role) and wrote the
  *     `require_approval` audit line naming them, which 0260 lets no member
  *     write. The approval is then the gate, and exactly that payload replays.
- *   - otherwise the row is only what a member typed, and the tool is gated
- *     again under their own role: they get what they could have done
- *     themselves, and anything more becomes a server-filed card of its own.
+ *   - otherwise the row is only what a member typed, and nothing runs
+ *     (`performApproved`). Gating it again under their role was not enough:
+ *     a member's own `create` reached tools that write through the service
+ *     role (`notifications.notify`), on the approver's session client.
  *
  * Null when the requester cannot be confirmed: nothing runs.
  */
@@ -931,18 +932,33 @@ async function performApproved(
       // `requested_by_kind` is a column any manager can rewrite on a pending
       // row, so it cannot decide whether the trust gate is skipped. An 'ai' row
       // only counts as Bubaly's when the server's own ledger says so; anything
-      // else is executed as a member-filed request would be.
+      // else is a member's row.
       const bubalyFiled = await filedByBubaly(scope, row);
       const provenRow: ApprovalRow = bubalyFiled ? row : { ...row, requested_by_kind: 'member' };
+      // A member's row runs its `{name, args}` only when the server's own gate
+      // filed it for them (`memberRequestScope`). Anything else is a payload a
+      // member typed under a card they wrote, and nothing of it runs: re-gating
+      // it lent the approver's session client and a member's own `create` to a
+      // tool whose limits live in RLS or nowhere — `notifications.notify`
+      // writes through the service role, so a child's "Can I go to Sam's?"
+      // sent the whole family an urgent push. No server code files a member row
+      // with a payload it did not gate, so nothing legitimate is refused.
+      const asker = bubalyFiled ? null : await memberRequestScope(scope, row);
+      if (!bubalyFiled && !asker?.filedByServer) {
+        const refused = (await getTranslations())(asker ? 'approval.memberPayloadNotRun' : 'approval.requesterUnconfirmed');
+        await stampExecution(scope, row.id, `error: ${refused}`);
+        await auditDecision(scope, row, 'approved_execution', `Execution refused: ${refused}`, { tool: classified.name, ok: false });
+        return fail(refused, { code: SERVICE_CODES.denied, retryable: false });
+      }
       const privatePurchase = classified.name === 'finances.advisePurchase';
       const requester = privatePurchase ? await scopeForApprovedPurchase(scope, provenRow) : null;
       if (requester && !requester.ok) {
         await stampExecution(scope, row.id, (await getTranslations())('purchaseAdvice.privateUnavailable'));
         return requester;
       }
-      // The approval IS the gate — when the server filed it. A row Bubaly
-      // filed replays as Bubaly for its asker; anything else is a member's own
-      // request and runs, if at all, as that member (`memberRequestScope`).
+      // The approval IS the gate — the server filed it. A row Bubaly filed
+      // replays as Bubaly for its asker; a row the gate filed for a member
+      // replays as that member (`memberRequestScope`).
       let actingScope: ServiceScope;
       let skipTrust: boolean;
       if (requester?.ok) {
@@ -952,15 +968,8 @@ async function performApproved(
         actingScope = await scopeForApprovedWork(scope, provenRow);
         skipTrust = true;
       } else {
-        const asker = await memberRequestScope(scope, row);
-        if (!asker) {
-          const refused = (await getTranslations())('approval.requesterUnconfirmed');
-          await stampExecution(scope, row.id, `error: ${refused}`);
-          await auditDecision(scope, row, 'approved_execution', `Execution refused: ${refused}`, { tool: classified.name, ok: false });
-          return fail(refused, { code: SERVICE_CODES.denied, retryable: false });
-        }
-        actingScope = asker.scope;
-        skipTrust = asker.filedByServer;
+        actingScope = asker!.scope;
+        skipTrust = true;
       }
       const outcome = await executeTool(
         { ...actingScope, requestId: row.request_id ?? scope.requestId ?? null, runId: row.run_id ?? null },

@@ -25,6 +25,7 @@ import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
 import { ensureTodoListId } from '@/lib/services/tasks';
 import { createGoal } from '@/lib/services/goals';
 import { normalizeEventTimes } from '@/lib/services/calendar';
+import { allDayBoundsAsDates } from '@/lib/assistant/all-day-dates';
 import { reminderInstant } from '@/lib/services/reminders';
 import { SERVICE_CODES } from '@/lib/services/types';
 import { isManager, ROLE_ORDER, type MemberRole } from '@/lib/constants/roles';
@@ -152,12 +153,14 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         const category = EVENT_CATEGORIES.includes(str(a.category)) ? (str(a.category) as Database['public']['Tables']['calendar_events']['Insert']['category']) : 'general';
         // The times `calendar.createEvent` — and this request approved and
         // replayed through it — would write: a zone-less time on the family's
-        // clock, and an all-day event as whole-day DATE labels (a zone-less
-        // midnight is that day) or not at all. Raw, Postgres read the first as
-        // UTC and stored the second as a row that made every calendar read
-        // covering it fail.
+        // clock, and an all-day event as whole-day DATE labels or not at all.
+        // Raw, Postgres read the first as UTC and stored the second as a row
+        // that made every calendar read covering it fail. A zone-less midnight
+        // on an all-day event is the date it names in chat; the trust wrapper
+        // reads it the same way before it files a card (all-day-dates.ts).
         const all_day = Boolean(a.all_day);
-        const times = await normalizeEventTimes({ startsAt: starts_at, endsAt: optStr(a.ends_at), allDay: all_day }, familyTz, MODEL_READER.t);
+        const bounds = allDayBoundsAsDates({ all_day, starts_at, ends_at: optStr(a.ends_at) });
+        const times = await normalizeEventTimes({ startsAt: str(bounds.starts_at), endsAt: optStr(bounds.ends_at), allDay: all_day }, familyTz, MODEL_READER.t);
         if (!times.ok) return { ok: false, error: times.error };
         const { data, error } = await supabase.from('calendar_events').insert({
           family_id: ctx.familyId, title, starts_at: times.data.startsAt,

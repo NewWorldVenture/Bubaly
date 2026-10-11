@@ -1,6 +1,9 @@
 // Tools whose output speaks in the requester's own first person.
 //
-// A family message posted with their name on it, an RSVP answering for them.
+// A family message posted with their name on it, an RSVP answering for them,
+// an announcement on the board under their name (`createAnnouncement` writes
+// `author_id`/`author_member_id` from the scope, and 0481 lets no member post
+// as another directly).
 // Approved and planned work runs AS the person who asked — a run on the
 // service client under their member and user ids (lib/ai/runs/executor.ts
 // `scopeFor`), a Bubaly-filed approval replayed for its asker
@@ -17,9 +20,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { getTool } from '@/lib/ai/tools/registry';
 
-export const SPEAKS_FOR_THE_REQUESTER: ReadonlySet<string> = new Set(['messages.sendFamilyMessage', 'calendar.rsvp']);
+export const SPEAKS_FOR_THE_REQUESTER: ReadonlySet<string> = new Set(['messages.sendFamilyMessage', 'messages.createAnnouncement', 'calendar.rsvp']);
 
-/** Whether this tool (by canonical name or alias — chat files `rsvp_to_event`) speaks for the requester. */
+/** Whether this tool (by canonical name or alias — chat files `rsvp_to_event`, `create_announcement`) speaks for the requester. */
 export function speaksForTheRequester(name: string | null | undefined): boolean {
   if (!name) return false;
   return SPEAKS_FOR_THE_REQUESTER.has(getTool(name)?.name ?? name);

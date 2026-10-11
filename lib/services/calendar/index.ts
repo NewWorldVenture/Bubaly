@@ -81,20 +81,6 @@ function validEventRange(start: string, end: string | null, allDay: boolean, ori
   } catch { return false; }
 }
 
-/** A wall reading of exactly midnight with no zone: "2026-10-15T00:00", ":00" or ":00.000". */
-const ZONELESS_MIDNIGHT = /^(\d{4}-\d{2}-\d{2})T00:00(?::00(?:\.0{1,9})?)?$/;
-
-/**
- * An all-day bound as the DATE label it names. A zone-less midnight is how a
- * model told to "use the family time zone" says a day; read on the family's
- * clock, a Los Angeles "2026-10-15T00:00:00" was 07:00Z — not a whole day — and
- * a parent's all-day event was refused. With a zone it is an instant the
- * caller chose, and stays one.
- */
-function allDayLabelOf(value: string): string {
-  return ZONELESS_MIDNIGHT.exec(value.trim())?.[1] ?? value;
-}
-
 /** Whether an all-day bound landed on the UTC midnight of the date it names (`validEventRange`'s rule). */
 function namesItsDate(normalized: string, original: string): boolean {
   try {
@@ -106,9 +92,14 @@ function namesItsDate(normalized: string, original: string): boolean {
  * The `starts_at` / `ends_at` a create writes for these inputs, or the refusal
  * it gives: a zone-less time is read on the family's clock, and an all-day
  * event must be whole UTC-midnight DATE labels with its end after its start.
- * An all-day bound given as a zone-less midnight is that date; any other time
- * of day is refused in words that say so (`calendar.allDayNeedsDate`), not as
- * an event ending before it starts.
+ * An all-day bound that is not one is refused in words that say so
+ * (`calendar.allDayNeedsDate`), not as an event ending before it starts.
+ *
+ * As strict as `updateEvent` and `rescheduleEvent`: a zone-less midnight is a
+ * time on the family's clock here, not a date. The chat toolbox, whose model is
+ * told to speak that clock, reads one on an all-day event as the date it names
+ * BEFORE its gate files the arguments (lib/assistant/all-day-dates.ts), so the
+ * approval card holds the DATE label this accepts on replay.
  *
  * Exported for the one writer that inserts an event row itself — the chat
  * toolbox's `create_calendar_event` — so its row is the row `createEvent`, and
@@ -124,8 +115,8 @@ export async function normalizeEventTimes(
   t?: (key: string) => string,
 ): Promise<ServiceResult<{ startsAt: string; endsAt: string | null }>> {
   const allDay = input.allDay === true;
-  const rawStart = allDay ? allDayLabelOf(input.startsAt) : input.startsAt;
-  const rawEnd = allDay && input.endsAt ? allDayLabelOf(input.endsAt) : input.endsAt ?? null;
+  const rawStart = input.startsAt;
+  const rawEnd = input.endsAt ?? null;
   const startsAt = normalizeCalendarWriteInstant(rawStart, timezone);
   if (!startsAt) return fail('That start time could not be understood.', { code: SERVICE_CODES.invalidInput });
 

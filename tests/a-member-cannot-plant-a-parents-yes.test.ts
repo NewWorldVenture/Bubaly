@@ -5,9 +5,12 @@
 // arguments and the write landed as the parent — a routine the cron then fires
 // with household authority, a family message in the parent's name.
 //
-// Now only what the server gated and filed replays as filed; anything else is
-// the member's own request and runs, if at all, as that member, under their
-// own role. Driven through `decide()`, the path every Approve button takes.
+// Now only what the server gated and filed replays, as filed and as the member
+// it was filed for; anything else is a payload the member typed, and nothing of
+// it runs — gating it again under the member's own role still reached tools
+// that write through the service role (tests/a-planted-approval-runs-nothing
+// .test.ts drives that through the real gate). Driven through `decide()`, the
+// path every Approve button takes.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
@@ -71,20 +74,16 @@ beforeEach(() => {
 });
 
 describe('approving a member-filed row never lends the approver’s authority', () => {
-  it('re-gates a planted tool call under the CHILD who filed it, not the parent who tapped Approve', async () => {
+  it('runs nothing for a planted tool call — neither as the parent who tapped Approve nor as the child who filed it', async () => {
     seed();
 
     const res = await decide(parent(), APPROVAL, 'approved');
 
-    expect(res.ok).toBe(true);
-    expect(hoisted.calls).toHaveLength(1);
-    const [call] = hoisted.calls;
-    expect(call.name).toBe('routines.create');
-    expect(call.opts.skipTrust).toBe(false);
-    // The child's identity AND role reach the gate: a child cannot set up a
-    // routine, so the gate refuses what the card disguised.
-    expect(call.scope).toMatchObject({ memberId: CHILD.member, userId: CHILD.user, role: 'child', actorKind: 'member' });
-    expect(call.scope.role).not.toBe('parent');
+    expect(res).toMatchObject({ ok: false, code: 'denied', retryable: false });
+    expect(hoisted.calls).toEqual([]);
+    // The parent's yes is recorded; the card says nothing was run.
+    expect(db.table('approval_requests')[0]).toMatchObject({ status: 'approved' });
+    expect(String(db.table('approval_requests')[0].execution_result)).toMatch(/^error: .*nothing was run/);
   });
 
   it('replays exactly what the server gated and filed for that member, as that member', async () => {
@@ -113,11 +112,9 @@ describe('approving a member-filed row never lends the approver’s authority', 
       { id: 'audit-other', family_id: FAMILY, actor_kind: 'member', actor_id: PARENT.member, approval_id: APPROVAL, decision: 'require_approval' },
     ]);
 
-    await decide(parent(), APPROVAL, 'approved');
+    expect(await decide(parent(), APPROVAL, 'approved')).toMatchObject({ ok: false, code: 'denied' });
 
-    expect(hoisted.calls).toHaveLength(1);
-    expect(hoisted.calls[0].opts.skipTrust).toBe(false);
-    expect(hoisted.calls[0].scope.role).toBe('child');
+    expect(hoisted.calls).toEqual([]);
   });
 
   it('runs nothing when the person who filed it is not an active member of this family', async () => {

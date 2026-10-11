@@ -2323,6 +2323,7 @@
   "approval.followAlong": "Follow along",
   "approval.notYoursToReword": "This speaks in the name of the person who asked, so only they can change its words. You can still approve or decline it as written.",
   "approval.requesterUnconfirmed": "Bubaly could not confirm who in the family asked for this, so nothing was run.",
+  "approval.memberPayloadNotRun": "Your approval is recorded, but Bubaly did not file this request itself, so nothing was run.",
   "approval.waitingForAParentOrAdult": "Waiting for a parent or adult.",
   "approvalCard.expired": "Expired",
   "approvalCard.expiresInDays": "Expires in {n} days",

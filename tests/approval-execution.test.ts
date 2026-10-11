@@ -280,23 +280,40 @@ describe('decide — tool payloads', () => {
     expect(store.tables.trust_audit_logs.map((a) => a.decision)).toEqual(['require_approval', 'approved', 'approved_execution']);
   });
 
-  it('re-evaluates the trust gate for a tool payload on a row a member filed themselves', async () => {
+  it('runs nothing for a tool payload on a row a member filed themselves', async () => {
     // A member can file their own approval row (0252 keeps that open, pinned to
-    // them); it must not become a way to run any tool with the gate skipped.
+    // them); it must not become a way to run any tool — with the gate skipped,
+    // or re-gated on the approver's client (tests/a-planted-approval-runs-nothing.test.ts).
     const store = makeStore({
       approval_requests: [approvalRow({
         requested_by_kind: 'member', requested_by_member_id: 'member-9', agent: null,
         payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } }, payload_kind: 'tool',
       })],
-      // The member who filed it, active in this family: their request is gated
-      // again under their own role (tests/a-member-cannot-plant-a-parents-yes.test.ts).
       family_members: [{ id: 'member-9', family_id: 'fam-1', user_id: 'auth-user-9', role: 'teen', is_active: true }],
+    });
+    holder.service = store.db;
+    const res = await decide(scopeWith(store.db), 'appr-1', 'approved');
+    expect(res).toMatchObject({ ok: false, code: 'denied', retryable: false });
+    expect(executed.calls).toHaveLength(0);
+    expect(store.tables.approval_requests[0]).toMatchObject({ status: 'approved' });
+    expect(String(store.tables.approval_requests[0].execution_result)).toMatch(/^error: /);
+  });
+
+  it('replays, as filed, a row the server’s gate filed for that member', async () => {
+    const store = makeStore({
+      approval_requests: [approvalRow({
+        requested_by_kind: 'member', requested_by_member_id: 'member-9', agent: null,
+        payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } }, payload_kind: 'tool',
+      })],
+      family_members: [{ id: 'member-9', family_id: 'fam-1', user_id: 'auth-user-9', role: 'teen', is_active: true }],
+      // `evaluateTrust`'s own line for the row it filed for member-9 (service-only, 0260).
+      trust_audit_logs: [{ id: 'audit-filed', family_id: 'fam-1', actor_kind: 'member', actor_id: 'member-9', approval_id: 'appr-1', decision: 'require_approval' }],
     });
     holder.service = store.db;
     const res = await decide(scopeWith(store.db), 'appr-1', 'approved');
     expect(res).toMatchObject({ ok: true, data: { status: 'approved', executed: true } });
     expect(executed.calls).toHaveLength(1);
-    expect(executed.calls[0].opts.skipTrust).toBe(false);
+    expect(executed.calls[0]).toMatchObject({ args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' }, opts: { skipTrust: true } });
   });
 
   it('releases only the steps already pointing at a member-filed plan_steps row, never the ids it names', async () => {
@@ -470,6 +487,8 @@ describe('editAndApprove', () => {
     const store = makeStore({
       approval_requests: [approvalRow({ requested_by_member_id: 'member-9', payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } }, payload_kind: 'tool' })],
       family_members: [{ id: 'member-9', family_id: 'fam-1', user_id: 'auth-user-9', role: 'teen', is_active: true }],
+      // Bubaly filed it for member-9: only a server-filed row runs a payload.
+      trust_audit_logs: [bubalyFiledMarker()],
     });
     holder.service = store.db;
 
@@ -481,7 +500,7 @@ describe('editAndApprove', () => {
     expect(row.edited_payload).toEqual({ title: 'Soccer practice', starts_at: '2026-09-06T13:00:00Z' });
     expect(row.decided_by).toBe('member-1');
     expect(executed.calls[0].args).toEqual({ title: 'Soccer practice', starts_at: '2026-09-06T13:00:00Z' });
-    expect(store.tables.trust_audit_logs.map((a) => a.decision)).toEqual(['modified', 'approved_execution']);
+    expect(store.tables.trust_audit_logs.map((a) => a.decision)).toEqual(['require_approval', 'modified', 'approved_execution']);
   });
 
   it('keeps a two-parent rule: an edit is one vote, nothing executes until the second parent approves', async () => {
@@ -538,13 +557,13 @@ describe('editAndApprove', () => {
 });
 
 describe('a pending row a manager rewrote is not trusted for what it says about itself', () => {
-  it('runs the trust gate for a row that claims requested_by_kind = ai without the server having filed it', async () => {
+  it('runs nothing for a row that claims requested_by_kind = ai without the server having filed it', async () => {
     // An adult files a member row, PATCHes requested_by_kind to 'ai' (no
     // column pin stops it), then has it approved. `skipTrust` read that
     // column, so any registered tool ran with every family rule skipped.
     // (Approving it ALONE is now refused outright — see "whose request it is
     // comes from the server's ledger" below — so the approver here is another
-    // adult, and the gate must still run.)
+    // adult. It is a member's row the server never filed, so nothing runs.)
     const store = makeStore({
       approval_requests: [approvalRow({
         requested_by_kind: 'ai', requested_by_member_id: 'member-2', agent: null,
@@ -557,9 +576,8 @@ describe('a pending row a manager rewrote is not trusted for what it says about 
     });
     holder.service = store.db;
     const res = await decide(scopeWith(store.db), 'appr-1', 'approved');
-    expect(res).toMatchObject({ ok: true });
-    expect(executed.calls).toHaveLength(1);
-    expect(executed.calls[0].opts.skipTrust).toBe(false);
+    expect(res).toMatchObject({ ok: false, code: 'denied' });
+    expect(executed.calls).toHaveLength(0);
   });
 
   it('refuses a member approving the request they filed themselves', async () => {

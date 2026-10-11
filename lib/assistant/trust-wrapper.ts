@@ -12,6 +12,7 @@ import type { ToolSpec } from '@/lib/ai/provider';
 import { getTool } from '@/lib/ai/tools/registry';
 import { roleOf } from '@/lib/trust/server';
 import { gateAiAction } from '@/lib/trust/ai-gate';
+import { allDayBoundsAsDates } from '@/lib/assistant/all-day-dates';
 
 type DB = SupabaseClient<Database>;
 
@@ -67,6 +68,20 @@ export const TOOL_DOMAIN: Record<string, string> = {
  */
 export const APPROVAL_CANNOT_REPLAY: Record<string, string> = {};
 
+/**
+ * A chat tool's arguments as the registry tool its approval replays through
+ * reads them, applied BEFORE the gate files anything. The card stores
+ * `{name, args}`, and the replay runs them through `executeTool`; a value the
+ * chat tool reads one way and the registry tool another was approved as one
+ * thing and refused, or done differently, as the other. The tool itself then
+ * runs on the same arguments the card would have held.
+ */
+const FILED_ARGS: Record<string, (args: Record<string, unknown>) => Record<string, unknown>> = {
+  // An all-day zone-less midnight is a date in chat; `calendar.createEvent`
+  // refuses it as a time of day (lib/assistant/all-day-dates.ts).
+  create_calendar_event: allDayBoundsAsDates,
+};
+
 export function wrapToolsWithTrust(
   tools: ToolSpec[],
   supabase: DB,
@@ -92,7 +107,8 @@ export function wrapToolsWithTrust(
 
     return {
       ...tool,
-      execute: async (args: Record<string, unknown>) => {
+      execute: async (given: Record<string, unknown>) => {
+        const args = FILED_ARGS[tool.name]?.(given) ?? given;
         const title = fmtTitle(tool.name, args);
 
         // One gate for every AI surface (lib/trust/ai-gate.ts): the family's

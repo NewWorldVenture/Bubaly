@@ -2282,6 +2282,7 @@
   "approval.followAlong": "Acompanhar",
   "approval.notYoursToReword": "Isto fala em nome de quem o pediu, por isso só essa pessoa pode alterar as palavras. Ainda podes aprová-lo ou recusá-lo tal como está.",
   "approval.requesterUnconfirmed": "O Bubaly não conseguiu confirmar quem na família pediu isto, por isso nada foi executado.",
+  "approval.memberPayloadNotRun": "A tua aprovação ficou registada, mas o Bubaly não fez este pedido, por isso nada foi executado.",
   "approval.waitingForAParentOrAdult": "À espera de um progenitor ou adulto.",
   "approvalCard.expired": "Expirada",
   "approvalCard.expiresInDays": "Expira dentro de {n} dias",

@@ -224,6 +224,27 @@ describe('approval replay: a parent approves exactly the instant chat would have
     expect(db.table('calendar_events').map((e) => [e.starts_at, e.ends_at, e.all_day])).toEqual([['2026-10-15T00:00:00.000Z', null, true]]);
   });
 
+  it.each([LA, TOKYO] as const)('in %s the card holds the dates the parent approves — the labels strict calendar.createEvent replays', async (tz) => {
+    household(tz, 'prepare');
+    const filed = await chatTool('create_calendar_event', tz).execute({ title: 'Camp', starts_at: '2026-10-19T00:00', ends_at: '2026-10-21T00:00:00.000', all_day: true });
+    expect(filed).toMatchObject({ ok: true, pending_approval: true });
+    // Read as dates BEFORE the gate files them: `calendar.createEvent` (like
+    // `updateEvent` and `rescheduleEvent`) refuses a zone-less midnight as a
+    // time of day, so a card holding one could never be carried out.
+    const [card] = db.table('approval_requests');
+    expect(card.payload).toEqual({ name: 'create_calendar_event', args: { title: 'Camp', starts_at: '2026-10-19', ends_at: '2026-10-21', all_day: true } });
+
+    expect(await decide(parentScope(tz), String(card.id), 'approved')).toMatchObject({ ok: true, data: { executed: true } });
+    expect(db.table('calendar_events').map((e) => [e.title, e.starts_at, e.ends_at, e.all_day])).toEqual([['Camp', '2026-10-19T00:00:00.000Z', '2026-10-21T00:00:00.000Z', true]]);
+  });
+
+  it('leaves the registry tool as strict as update and reschedule: calendar.createEvent refuses a zone-less midnight on an all-day event', async () => {
+    household(LA);
+    const created = await executeTool(aiScope(LA, '2026-10-11T12:00:00Z'), 'calendar.createEvent', { title: 'Fair', starts_at: '2026-10-15T00:00:00', all_day: true });
+    expect(created).toMatchObject({ status: 'error', retryable: false });
+    expect(db.table('calendar_events')).toEqual([]);
+  });
+
   it.each([
     // Approved at 07:00 local, for 9am local today: still ahead, so it moves.
     [LA, '2026-10-12T14:00:00Z', '2026-10-12T16:00:00.000Z'],

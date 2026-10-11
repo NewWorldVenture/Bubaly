@@ -74,6 +74,27 @@ describe('an edit to a step that speaks in the requester’s name', () => {
     expect(plans()).toHaveLength(2);
   });
 
+  it('is refused for an announcement too: the board posts it under the requester’s name', async () => {
+    // `createAnnouncement` writes `author_id`/`author_member_id` from the run's
+    // scope, and 0481 lets no member post as another directly.
+    seed([{ id: 'step-ann', tool_name: 'messages.createAnnouncement', status: 'failed', input_json: { title: 'Dinner at 7' } }]);
+
+    const res = await editStepInput(as(BOB, 'adult'), RUN, 'step-ann', { title: 'Dinner is cancelled, Alice says' }, opts());
+
+    expect(res).toMatchObject({ ok: false, code: 'denied' });
+    expect(plans()).toHaveLength(1);
+    expect(db.table('ai_plan_steps').map((s) => s.input_json)).toEqual([{ title: 'Dinner at 7' }]);
+  });
+
+  it('accepts the requester’s own rewording of their announcement', async () => {
+    seed([{ id: 'step-ann', tool_name: 'messages.createAnnouncement', status: 'failed', input_json: { title: 'Dinner at 7' } }]);
+
+    const res = await editStepInput(as(ALICE, 'parent'), RUN, 'step-ann', { title: 'Dinner at 7:30' }, opts());
+
+    expect(res.ok, res.ok ? '' : res.error).toBe(true);
+    expect(plans()).toHaveLength(2);
+  });
+
   it('leaves another manager free to correct a step that speaks for no one', async () => {
     seed([{ id: 'step-todo', tool_name: 'tasks.createTodo', status: 'queued', input_json: { title: 'Buy candles' } }]);
 
