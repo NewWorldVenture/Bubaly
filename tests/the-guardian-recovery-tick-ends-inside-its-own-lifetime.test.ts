@@ -17,7 +17,10 @@
 // left owed, closing that work item, and saving where the sweep stopped took
 // no part of the shared deadline: one stalled statement held the tick past
 // maxDuration, and the dispatcher got a 504 with no counts instead of a 503
-// with them. Each is stalled here in turn.
+// with them. Each is stalled here in turn. A stalled landing or close is cut
+// off on its own, short of the deadline, and the records on file still get
+// their attempts after it: cut off only at the deadline, it took the whole
+// tick from them.
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -65,7 +68,7 @@ function matchesFilter(expression: string, candidate: Candidate): boolean {
 
 /** A write that stalls: no answer, ever, unless the request is cut off by its signal. */
 type StallPoint = 'landing' | 'closing' | 'cursor';
-const trace = { stalled: [] as string[], landed: [] as string[], closed: [] as string[], settings: new Map<string, Row>() };
+const trace = { stalled: [] as string[], landed: [] as string[], closed: [] as string[], counted: [] as Row[], settings: new Map<string, Row>() };
 
 /** Eight receipts waiting for the drain (by default), ten escalations that reached nobody, any work items owed, and the two cursors. */
 function makeClient({ receipts: receiptCount = 8, owed = [] as Row[], stall = null as StallPoint | null } = {}) {
@@ -122,8 +125,13 @@ function makeClient({ receipts: receiptCount = 8, owed = [] as Row[], stall = nu
       if (table === 'ai_tool_calls' && url.searchParams.get('tool_name') === 'eq.guardian.escalation_owed') {
         if (method === 'GET') return Response.json(owed);
         if (method === 'PATCH') {
-          if (stall === 'closing') return stalled('closing');
           const id = url.searchParams.get('id')!.slice(3);
+          // A landing that failed is counted as tried; one that landed is closed.
+          if (body?.state !== 'succeeded') {
+            trace.counted.push({ id, attempt: body?.attempt });
+            return Response.json([{ id }]);
+          }
+          if (stall === 'closing') return stalled('closing');
           trace.closed.push(id);
           return Response.json([{ id }]);
         }
@@ -148,7 +156,7 @@ const HOUR = 60 * 60_000;
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
-  trace.stalled.length = 0; trace.landed.length = 0; trace.closed.length = 0; trace.settings = new Map();
+  trace.stalled.length = 0; trace.landed.length = 0; trace.closed.length = 0; trace.counted.length = 0; trace.settings = new Map();
   // Node's AbortSignal.timeout runs on an internal timer the fake clock does
   // not drive; model it on setTimeout, which it does.
   vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms: number) => {
@@ -268,26 +276,43 @@ describe('a recovery tick whose own write stalls', () => {
     return { status: res.status, body: await res.json() as { ok: boolean; escalations: Record<string, number> } };
   }
 
-  it('landing an owed record: cut off at the deadline, counted unavailable, and nothing counted landed or closed', async () => {
+  /** The records on file got their attempts after the stalled write, each ended before the function's end, and what was left is reported. */
+  async function recordsStillAttempted(body: { escalations: Record<string, number> }) {
+    const { maxDuration } = await import('@/app/api/cron/guardian-sms-recovery/route');
+    // The defect: the stalled write took the whole tick, and the records'
+    // read ran on the expired deadline — not one was re-attempted.
+    expect(seam.attempts.length).toBeGreaterThanOrEqual(1);
+    for (const attempt of seam.attempts) {
+      expect(attempt.end).not.toBeNull();
+      expect(attempt.end!).toBeLessThan(maxDuration * 1000);
+    }
+    expect(body.escalations.examined).toBe(seam.attempts.length);
+    expect(body.escalations.examined + body.escalations.deferred).toBe(10);
+  }
+
+  it('landing an owed record: cut off short of the deadline, counted unavailable and as tried, nothing counted landed or closed, and the records on file still attempted', async () => {
     const { status, body } = await stalledTick('landing', [owedItem]);
     expect(status).toBe(503);
-    expect(body.escalations).toMatchObject({ recovered: 0, examined: 0, delivered: 0 });
+    expect(body.escalations).toMatchObject({ recovered: 0, delivered: 0 });
     expect(body.escalations.unavailable).toBeGreaterThan(0);
     expect(trace.landed).toEqual([]);
     expect(trace.closed).toEqual([]);
-    expect(seam.escalate).not.toHaveBeenCalled();
+    // Counted as tried, so the next tick takes the items not yet tried first.
+    expect(trace.counted).toEqual([{ id: OWED_ID, attempt: 1 }]);
+    await recordsStillAttempted(body);
   });
 
-  it('closing the work item: cut off at the deadline, the item left open for the next tick, and the answer a 503 with counts', async () => {
+  it('closing the work item: cut off short of the deadline, the item left open for the next tick, the records on file still attempted, and the answer a 503 with counts', async () => {
     const { status, body } = await stalledTick('closing', [owedItem]);
     expect(status).toBe(503);
     // The record did land (that insert was answered), and is counted so; the
-    // item it came from is not closed, and no attempt was started late.
+    // item it came from is not closed, nor counted as a failed try.
     expect(trace.landed).toHaveLength(1);
     expect(trace.closed).toEqual([]);
-    expect(body.escalations).toMatchObject({ recovered: 1, examined: 0, delivered: 0 });
+    expect(trace.counted).toEqual([]);
+    expect(body.escalations).toMatchObject({ recovered: 1, delivered: 0 });
     expect(body.escalations.unavailable + body.escalations.deferred).toBeGreaterThan(0);
-    expect(seam.escalate).not.toHaveBeenCalled();
+    await recordsStillAttempted(body);
   });
 
   it('saving the retry cursor: cut off at the deadline, the attempts it followed answered, and the cursor not advanced', async () => {
