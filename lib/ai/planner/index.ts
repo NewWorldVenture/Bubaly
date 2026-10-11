@@ -481,8 +481,8 @@ type RecommendationInput = {
  * §11 level 1. The household has said "recommend, don't act", so the plan
  * becomes a `family_ai_recommendations` row the Command Center shows under
  * Needs-you: the objective as the title, the reasoning summary plus the
- * actions Bubaly would have taken as the body, the step list in `metadata`
- * so accepting it later can become a run.
+ * actions Bubaly would have taken as the body, the step list (names and
+ * descriptions, never the arguments) and the request id in `metadata`.
  */
 async function recordRecommendation(
   scope: ServiceScope,
@@ -515,7 +515,14 @@ async function recordRecommendation(
         behavior: input.behavior,
         planner_model: input.provider.model,
         planner_prompt_version: PLANNER_PROMPT_VERSION,
-        steps: input.plan.steps.map((s) => ({ key: s.key, step_type: s.step_type, tool_name: s.tool_name, description: s.description, input: s.input })),
+        // The step list WITHOUT each step's `input`. That string is the
+        // verbatim tool arguments — a private message's text, an announcement,
+        // figures, document titles — which 0264 keeps to the requester and the
+        // managers when a run stores them in `ai_plan_steps.input_json`. This
+        // row is every member's (0022), and nothing reads the arguments back:
+        // accepting a recommendation only changes its status. `request_id`
+        // still names the request it came from.
+        steps: input.plan.steps.map((s) => ({ key: s.key, step_type: s.step_type, tool_name: s.tool_name, description: s.description })),
         adjustments: input.issues.map((i) => i.code),
       } as unknown as Json,
       created_by: scope.userId,
