@@ -49,7 +49,10 @@ function fixture({advances=false,inactive=false,receiptError=false,generation=''
     if(method==='GET'){
       rows=rows.slice(Number(url.searchParams.get('offset')??0));const limit=url.searchParams.get('limit');if(limit)rows=rows.slice(0,Number(limit));
       if(table==='notifications'&&rows.length&&barrier){pendingReads++;firstPending.resolve();if(pendingReads===2)bothPending.resolve();await releasePending.promise;}
-      const select=url.searchParams.get('select');if(select&&select!=='*')rows=rows.map((r:any)=>Object.fromEntries(select.split(',').map(k=>[k.trim(),r[k.trim()]])));
+      const select=url.searchParams.get('select');if(select&&select!=='*')rows=rows.map((r:any)=>table==='family_members'&&select.includes('family:families!inner(')
+        // These finite original cursor fixtures declare every family open above.
+        ? {user_id:r.user_id,family_id:r.family_id,is_active:r.is_active,family:{id:r.family_id,closed_at:null}}
+        : Object.fromEntries(select.split(',').map(k=>[k.trim(),r[k.trim()]])));
       return reply(object(rows));
     }
     if(table==='push_deliveries'&&method==='POST'){if(!tables.push_deliveries.some((r:any)=>r.notification_id===body.notification_id&&r.device_id===body.device_id))tables.push_deliveries.push(body);return reply(null,201);}

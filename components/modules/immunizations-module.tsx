@@ -134,11 +134,11 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="flex items-center gap-2 text-base font-semibold"><Syringe className="h-4 w-4 text-brand-text" /> {title}</h3>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           {filterMembers.length > 0 && (
-            <select value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} aria-label={t('immunizations.familyMember')} className="h-9 rounded-lg border border-border bg-surface px-2 text-sm">
+            <select value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} aria-label={t('immunizations.familyMember')} className="h-9 min-w-0 max-w-full rounded-lg border border-border bg-surface px-2 text-sm">
               <option value="all">{t('immunizations.everyone')}</option>
               {filterMembers.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </select>

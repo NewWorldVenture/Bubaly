@@ -41,7 +41,7 @@ function fakeSupabase(updates: Record<string, unknown>[], createdAt = NOTIFICATI
   const rows: Record<string, unknown[]> = {
     notifications: [{ ...NOTIFICATION, created_at: createdAt }],
     push_devices: [DEVICE],
-    family_members: [{ user_id: 'u1' }],
+    family_members: [{ user_id: 'u1', family_id: 'f1', is_active: true, family: { id: 'f1', closed_at: null } }],
     child_channels: [],
   };
   const from = (table: string) => {

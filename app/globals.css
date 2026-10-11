@@ -506,9 +506,11 @@ body::before {
      `@apply focus-ring` (.btn-cta, .btn-inline) as well. The 16 sites that write
      `focus-visible:focus-ring` compile to `:focus-visible:focus-visible`, which
      still matches. Guarded by tests/the-focus-ring-only-shows-on-focus.test.ts,
-     which compiles this file and asserts on the emitted CSS. */
+     which compiles this file and asserts on the emitted CSS.
+     The ring is full --brand: at 60% it was 1.9–2.4:1 against the grounds it is
+     drawn on, under the 3:1 a focus indicator needs (WCAG 1.4.11). */
   .focus-ring:focus-visible {
-    @apply outline-none ring-2 ring-brand/60 ring-offset-2 ring-offset-bg;
+    @apply outline-none ring-2 ring-brand ring-offset-2 ring-offset-bg;
   }
   .gradient-text {
     @apply bg-clip-text text-transparent;

@@ -64,7 +64,7 @@ export default async function AnalyticsPage() {
             const def = PROVIDERS[p];
             const impressions = byPlatform[p] ?? 0;
             return (
-              <div key={p} className="flex items-center gap-3 text-sm">
+              <div key={p} className="flex flex-wrap items-center gap-3 text-sm">
                 <PlatformDot platform={p} />
                 <span className="w-32 shrink-0">{def.label}</span>
                 {def.analytics.supported ? (

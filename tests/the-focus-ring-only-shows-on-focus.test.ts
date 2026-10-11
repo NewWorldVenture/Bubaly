@@ -26,6 +26,7 @@ import { readFileSync } from 'node:fs';
 import postcss from 'postcss';
 import tailwindcss from 'tailwindcss';
 import tailwindConfig from '../tailwind.config';
+import { contrast, over, THEMES, tokensOf } from './helpers/faded-text';
 
 // Enough markup to make Tailwind emit the component classes under test. Scanning
 // the whole repository would take seconds and add nothing: the question is what
@@ -123,4 +124,46 @@ describe('the focus ring is a focus indicator, not decoration', () => {
     expect(focused.length).toBeGreaterThan(0);
     expect(focused.some((r) => r.body.includes('--tw-ring-color'))).toBe(true);
   });
+});
+
+// WCAG 1.4.11: a focus indicator reads at 3:1 against what is next to it. The
+// ring is drawn outside a 2px --bg offset, over whatever the element sits on,
+// so it meets the offset on one side and the ground on the other. The colour
+// is read from the emitted rule, not the source: `ring-brand/60` compiles to
+// `--tw-ring-color: rgb(var(--brand) / 0.6)`, and at 60% the ring was 1.9-2.4:1.
+describe('the focus ring reads at 3:1 on the grounds it is drawn on', () => {
+  const rule = rules.find((r) => r.selector === '.focus-ring:focus-visible')!;
+  /** The ring's token and alpha, as the emitted rule paints them. */
+  const ring = (body: string) => {
+    const m = body.match(/--tw-ring-color:\s*rgb\(var\(--([\w-]+)\) \/ (var\(--tw-ring-opacity, 1\)|[\d.]+)\)/);
+    if (!m) throw new Error(`no ring colour in: ${body}`);
+    const opacity = body.match(/--tw-ring-opacity:\s*([\d.]+)/);
+    const alpha = /^var\(--tw-ring-opacity/.test(m[2]) ? Number(opacity?.[1] ?? 1) : Number(m[2]);
+    return { token: m[1], alpha };
+  };
+  const grounds = (t: Record<string, number[]>): Record<string, number[]> => ({
+    bg: t.bg,
+    surface: t.surface,
+    elevated: t.elevated,
+    'glass card (surface/72)': over(t.surface, 0.72, t.bg),
+  });
+
+  it('is emitted with its colour and a --bg offset', () => {
+    expect(rule, '.focus-ring:focus-visible should be emitted').toBeDefined();
+    expect(ring(rule.body)).toEqual({ token: 'brand', alpha: 1 });
+    expect(rule.body).toMatch(/--tw-ring-offset-color:\s*rgb\(var\(--bg\)/);
+  });
+
+  for (const [theme, selector] of THEMES) {
+    it(`${theme}: against the offset and every ground; at 60% it did not`, () => {
+      const t = tokensOf(selector);
+      const { token, alpha } = ring(rule.body);
+      for (const [name, g] of Object.entries(grounds(t))) {
+        const painted = over(t[token], alpha, g);
+        expect(contrast(painted, g), `ring on ${name}`).toBeGreaterThanOrEqual(3);
+        expect(contrast(painted, t.bg), `ring beside its --bg offset, on ${name}`).toBeGreaterThanOrEqual(3);
+        expect(contrast(over(t.brand, 0.6, g), g), `control: brand at 60% on ${name}`).toBeLessThan(3);
+      }
+    });
+  }
 });
