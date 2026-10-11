@@ -280,7 +280,7 @@ export function WatchlistModule() {
                 <span className="w-14 shrink-0 text-xs text-muted">{fmtDate(s.watched_on)}</span>
                 <span className="min-w-0 flex-1 truncate">{s.title_name}<span className="text-xs text-muted"> · {s.member_ids.map(memberName).join(', ') || 'family'}</span></span>
                 {s.rating ? <span className="shrink-0 text-xs text-amber-300">{'★'.repeat(s.rating)}</span> : null}
-                <button onClick={() => deleteSession(s)} aria-label={tr('watchlist.deleteSession')} className="shrink-0 p-1 text-muted/50 opacity-0 transition hover:text-rose-400 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
+                <button onClick={() => deleteSession(s)} aria-label={tr('watchlist.deleteSession')} className="shrink-0 p-1 text-muted/50 opacity-100 sm:opacity-0 transition hover:text-rose-400 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
               </li>
             ))}
           </ul>

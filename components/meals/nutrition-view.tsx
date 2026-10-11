@@ -97,7 +97,7 @@ export function NutritionView() {
                       <p className="truncate text-sm font-semibold">{l.item}</p>
                       <p className="truncate text-xs text-muted">{l.calories} cal · P {Number(l.protein_g)}g · C {Number(l.carbs_g)}g · F {Number(l.fat_g)}g{l.water_ml ? ` · 💧 ${l.water_ml}ml` : ''}</p>
                     </div>
-                    <button onClick={() => remove(l)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={t('nutritionView.delete')}><Trash2 className="h-4 w-4" /></button>
+                    <button onClick={() => remove(l)} className="rounded-lg p-1.5 text-muted/40 opacity-100 sm:opacity-0 transition hover:text-danger sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100" aria-label={t('nutritionView.delete')}><Trash2 className="h-4 w-4" /></button>
                   </div>
                 ))}
               </div>
