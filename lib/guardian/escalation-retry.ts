@@ -42,6 +42,8 @@
 // escalation's `originalAt`). Each run is bounded by the deadline the cron
 // gives it, and takes the records in turn from where the last run stopped, so
 // records that keep failing cannot hold every slot while a newer one waits.
+// Landing the owed records takes at most half of the run, so a landing that
+// stalls cannot take the records' turn.
 
 import 'server-only';
 import { z } from 'zod';
@@ -64,6 +66,13 @@ const SETTLE_MS = 5_000;
 const MIN_ATTEMPT_MS = 15_000;
 /** The run's deadline when the caller gives none. */
 const DEFAULT_RUN_MS = 100_000;
+/**
+ * The most of what is left of the run that landing the owed records may take.
+ * Each landing is cut off on its own as well (escalation-owed.ts), so landings
+ * that stall — on every run, on the same item — leave the rest of the run to
+ * the records already on file.
+ */
+const OWED_SHARE = 0.5;
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
 const CURSOR_KEY = 'guardian.escalation_retry:cursor:v1';
@@ -198,7 +207,7 @@ export async function retryUndeliveredGuardianEscalations(
     return counts;
   }
 
-  const owed = await landOwedGuardianEscalations(client, { since, limit, signal: stop });
+  const owed = await landOwedGuardianEscalations(client, { since, limit, signal: stop, deadline: Date.now() + Math.max(0, deadline - Date.now()) * OWED_SHARE });
   counts.recovered += owed.landed;
   counts.unavailable += owed.unavailable;
 

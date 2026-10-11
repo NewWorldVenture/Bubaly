@@ -204,6 +204,14 @@ export async function guardianEscalationKeyedOnText(client: SupabaseClient, fami
 
 export type OwedLandingCounts = { landed: number; unavailable: number };
 
+/**
+ * How long one item's landing (its record's insert, then its close), or the
+ * count of a failed one, may take before it is cut off. Far longer than a
+ * one-row insert or update takes, so what is cut here is a statement that is
+ * not being answered, and the next item is taken.
+ */
+const LANDING_MS = 10_000;
+
 type OwedItem = { id: string; family_id: string; inputs: unknown; attempt: unknown; created_at: string };
 
 const triesOf = (item: OwedItem) => (typeof item.attempt === 'number' && Number.isInteger(item.attempt) && item.attempt >= 0 ? item.attempt : 0);
@@ -240,16 +248,29 @@ async function countFailedLanding(client: SupabaseClient, item: OwedItem, signal
  * counted on its item, so the ones that keep failing take their turn behind the
  * ones not yet tried.
  *
- * Every read and write stops at `signal` — the retry sweep's own deadline — so
- * a stalled write is cut off inside the run rather than holding it past the
- * function's lifetime. A landing cut off is counted unavailable, never landed;
- * a close cut off leaves the item open, and the next run closes it.
+ * Bounded three ways, so a stalled statement is cut off inside the run rather
+ * than holding it past the function's lifetime, or holding the rest of it. The
+ * read and every landing stop at `deadline` (epoch ms, this phase's end, short
+ * of the run's), each landing after LANDING_MS of its own, and everything at
+ * `signal` — the run's deadline, or the caller gone. A landing cut off is
+ * counted unavailable, never landed; a close cut off leaves the item open, and
+ * the next run closes it.
+ *
+ * A landing cut off short of the run's end is counted as tried, too. It was
+ * not, when every landing shared the run's deadline: one whose insert never
+ * answered took the whole run on every run, was never counted, and so stayed
+ * first — the owed escalations behind it were never landed, and the records
+ * on file were never retried after it.
  */
 export async function landOwedGuardianEscalations(
   client: SupabaseClient,
-  options: { since: string; limit: number; signal: AbortSignal },
+  options: { since: string; limit: number; signal: AbortSignal; deadline: number },
 ): Promise<OwedLandingCounts> {
   const counts: OwedLandingCounts = { landed: 0, unavailable: 0 };
+  // Whole milliseconds: AbortSignal.timeout throws on a fraction, and a share of the run can be one.
+  const phase = AbortSignal.any([options.signal, AbortSignal.timeout(Math.max(0, Math.floor(options.deadline - Date.now())))]);
+  /** A statement of one item: cut off after LANDING_MS, or sooner with `within`. */
+  const bounded = (within: AbortSignal) => AbortSignal.any([within, AbortSignal.timeout(LANDING_MS)]);
   let items: OwedItem[];
   try {
     const { data, error } = await client.from('ai_tool_calls')
@@ -261,7 +282,7 @@ export async function landOwedGuardianEscalations(
       .order('created_at', { ascending: true })
       .order('id', { ascending: true })
       .limit(options.limit)
-      .abortSignal(options.signal);
+      .abortSignal(phase);
     if (error || !Array.isArray(data)) {
       console.error('[guardian] owed escalations could not be read', { error });
       counts.unavailable += 1;
@@ -274,14 +295,18 @@ export async function landOwedGuardianEscalations(
     return counts;
   }
 
-  /** One that could not be landed: counted, and — unless the run's deadline cut it off — tried later than the rest. */
+  /**
+   * One that could not be landed — refused, unreadable, or cut off short of
+   * the run's end: counted, and tried later than the rest. Only when the run
+   * itself has ended is there no time left to say so.
+   */
   const failed = async (item: OwedItem) => {
     counts.unavailable += 1;
-    if (!options.signal.aborted) await countFailedLanding(client, item, options.signal);
+    if (!options.signal.aborted) await countFailedLanding(client, item, bounded(options.signal));
   };
 
   for (const item of items) {
-    if (options.signal.aborted) break;
+    if (phase.aborted) break;
     const stored = storedSchema.safeParse(item.inputs);
     if (!stored.success || stored.data.input.familyId !== item.family_id) {
       console.error('[guardian] an owed escalation cannot be landed as written', { id: item.id });
@@ -289,6 +314,7 @@ export async function landOwedGuardianEscalations(
       continue;
     }
     const { input, pushSent } = stored.data;
+    const landing = bounded(phase);
     try {
       const { data: landed, error: landError } = await client.from('guardian_escalations').insert({
         id: guardianEscalationRecordId(input),
@@ -303,7 +329,7 @@ export async function landOwedGuardianEscalations(
         sms_sent: false,
         call_attempted: false,
         escalated_at: item.created_at,
-      }).select('id').abortSignal(options.signal);
+      }).select('id').abortSignal(landing);
       // A unique violation is the record a later attempt already wrote.
       if (landError && !isUniqueViolation(landError)) {
         console.error('[guardian] an owed escalation record could not be landed', { id: item.id, error: landError });
@@ -319,10 +345,10 @@ export async function landOwedGuardianEscalations(
         .update({ state: 'succeeded', attempt: triesOf(item) + 1, finished_at: new Date().toISOString(), outputs: { version: 1, landed: true } })
         .eq('id', item.id).eq('family_id', item.family_id).eq('tool_name', GUARDIAN_ESCALATION_OWED_TOOL).eq('state', 'reserved')
         .select('id')
-        .abortSignal(options.signal);
+        .abortSignal(landing);
       // Left open, the item lands nothing new next time (the record is there),
-      // so a failed close — refused, or cut off at the deadline — costs a
-      // read, not a duplicate. The record did land, and is counted so.
+      // so a failed close — refused, or cut off — costs a read, not a
+      // duplicate. The record did land, and is counted so.
       if (closeError || !Array.isArray(closed) || closed.length !== 1) {
         console.error('[guardian] an owed escalation was landed but could not be closed', { id: item.id, error: closeError ?? 'no row updated' });
       }
