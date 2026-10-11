@@ -1337,7 +1337,7 @@ function MessagesWorkspace() {
                                 'mb-1 rounded-lg border-l-2 border-brand/60 bg-elevated/60 px-3 py-1.5 text-xs text-muted',
                                 isMine ? 'border-r-2 border-l-0 text-right' : '',
                               )}>
-                                <span className="font-semibold text-brand-text/80">{replyMsg.sender_name}</span>
+                                <span className="font-semibold text-brand-text">{replyMsg.sender_name}</span>
                                 <p className="truncate">{replyMsg.deleted_at ? tr('messages.messageDeleted') : replyMsg.content || previewText(replyMsg, userId)}</p>
                               </div>
                             )}

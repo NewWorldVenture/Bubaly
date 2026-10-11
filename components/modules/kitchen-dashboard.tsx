@@ -88,7 +88,7 @@ export function KitchenDashboard({ data }: { data: KitchenData }) {
         <div className="lg:col-span-2 overflow-hidden rounded-3xl border border-brand/20 bg-gradient-to-br from-brand/10 via-brand/5 to-transparent p-6">
           <div className="flex items-start justify-between">
             <div>
-              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-brand-text/70">
+              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-brand-text">
                 <Flame className="h-3.5 w-3.5" /> {tr('kitchenDashboard.tonightAposSDinner')}
               </p>
               <p className="mt-2 text-3xl font-black tracking-tight">{data.tonight ?? 'Nothing planned yet'}</p>
