@@ -20,6 +20,7 @@ import { Input, Field, Textarea } from '@/components/ui/input';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { useFormat } from '@/components/i18n/use-format';
 import { cn } from '@/lib/utils/cn';
+import { isManager } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { activateOnKey } from '@/lib/a11y/activate-on-key';
@@ -28,7 +29,9 @@ type Goal = Tables<'goals'>;
 
 export function GoalsModule() {
   const t = useTranslations();
-  const { familyId, userId } = useApp();
+  const { familyId, userId, role } = useApp();
+  // deleteGoal refuses anyone but a parent or adult; do not offer what it refuses.
+  const canDelete = isManager(role);
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
   const [open, setOpen] = useState(false);
@@ -91,7 +94,7 @@ export function GoalsModule() {
           {active.length > 0 && (
             <div className="grid gap-4 sm:grid-cols-2">
               {active.map((g) => (
-                <GoalCard key={g.id} goal={g} pending={pendingFor(g.id)} onEdit={() => setEditing(g)} onDelete={remove} onProgress={updateProgress} />
+                <GoalCard key={g.id} goal={g} pending={pendingFor(g.id)} onEdit={() => setEditing(g)} onDelete={canDelete ? remove : undefined} onProgress={updateProgress} />
               ))}
             </div>
           )}
@@ -101,7 +104,7 @@ export function GoalsModule() {
               <h2 className="mb-3 text-sm font-semibold text-muted">{t('goals.completed')}</h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 {completed.map((g) => (
-                  <GoalCard key={g.id} goal={g} pending={pendingFor(g.id)} onEdit={() => setEditing(g)} onDelete={remove} onProgress={updateProgress} />
+                  <GoalCard key={g.id} goal={g} pending={pendingFor(g.id)} onEdit={() => setEditing(g)} onDelete={canDelete ? remove : undefined} onProgress={updateProgress} />
                 ))}
               </div>
             </div>
@@ -128,7 +131,7 @@ function GoalCard({ goal, pending, onEdit, onDelete, onProgress }: {
   goal: Goal;
   pending: boolean;
   onEdit: () => void;
-  onDelete: (id: string) => void;
+  onDelete?: (id: string) => void;
   onProgress: (g: Goal, progress: number) => void;
 }) {
   const { fmtDate } = useFormat();
@@ -150,9 +153,11 @@ function GoalCard({ goal, pending, onEdit, onDelete, onProgress }: {
             <p className="mt-1 text-xs text-muted">Target: {fmtDate(goal.target_date)}</p>
           )}
         </div>
-        <button onClick={() => onDelete(goal.id)} disabled={pending} className="rounded-lg p-1.5 text-muted transition hover:text-danger disabled:opacity-50" aria-label={t('goals.delete')}>
-          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-        </button>
+        {onDelete && (
+          <button onClick={() => onDelete(goal.id)} disabled={pending} className="rounded-lg p-1.5 text-muted transition hover:text-danger disabled:opacity-50" aria-label={t('goals.delete')}>
+            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+          </button>
+        )}
       </div>
 
       {/* Progress bar */}

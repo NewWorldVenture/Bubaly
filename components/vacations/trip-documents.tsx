@@ -6,6 +6,7 @@ import { TripCrudSection, type FieldDef } from './shared';
 import { DOC_KINDS, lookup } from '@/lib/vacations/meta';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 type Doc = Tables<'vacation_documents'>;
 
@@ -48,7 +49,7 @@ export function TripDocuments({ vacationId }: { vacationId: string }) {
             <p className="mt-0.5 text-xs text-muted">
               {[k.label, who?.display_name, d.number && `#${d.number}`, d.expires_on && `Expires ${fmtDate(d.expires_on)}`].filter(Boolean).join(' · ')}
             </p>
-            {d.file_url && <a href={d.file_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-xs text-brand-text hover:underline">{t('tripDocuments.openFile')}</a>}
+            {d.file_url && <a href={safeWebLink(d.file_url) ?? undefined} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-xs text-brand-text hover:underline">{t('tripDocuments.openFile')}</a>}
           </div>
         );
       }}

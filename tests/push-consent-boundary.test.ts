@@ -26,7 +26,7 @@ function fixture() {
   const f = pushDispatchDb({
     marketing_push_campaigns: [{ id: 'campaign', title: 'Fixture campaign', body: 'Body', url: '/dashboard', status: 'draft', deleted_at: null, recipients: 0, sent: 0, failed: 0, skipped: 0 }],
     push_devices: [device('child')], profiles: [{ id: 'child', email: 'child@example.test' }], marketing_suppressions: [],
-    family_members: [{ user_id: 'child', family_id: 'family', role: 'child', is_active: true }],
+    family_members: [{ id: 'member-child', user_id: 'child', family_id: 'family', role: 'child', is_active: true }],
     family_ai_settings: [{ family_id: 'family', child_channels: { push: true } }],
     user_preferences: [{ user_id: 'child', push_enabled: true }],
     notifications: [{ id: notificationId(1), family_id: 'family', user_id: 'child', title: 'Notice', body: '', pushed_at: null, created_at: NOW.toISOString(), send_at: NOW.toISOString() }],
@@ -134,10 +134,20 @@ describe('all public push senders enforce consent', () => {
 });
 
 describe('actual marketing action through the consent-aware sender', () => {
-  it.each(['recipient', 'parent', 'both'])('does not send on %s opt-out and records withheld accounting', async mode => {
+  // Marketing push is opt-in and never reaches a minor's account
+  // (lib/marketing/push-audience.ts), so the campaign tests use the fixture
+  // account as an ADULT who opted in; the child case is pinned separately.
+  const optedIn = { marketingPush: true };
+  function marketingFixture() {
     const f = fixture();
-    if (mode !== 'parent') f.tables.user_preferences[0].push_enabled = false;
-    if (mode !== 'recipient') f.tables.family_ai_settings[0].child_channels = { push: false };
+    f.tables.family_members[0].role = 'parent';
+    f.tables.user_preferences[0].notification_prefs = optedIn;
+    return f;
+  }
+
+  it('does not send on recipient opt-out and records withheld accounting', async () => {
+    const f = marketingFixture();
+    f.tables.user_preferences[0].push_enabled = false;
     await sendPushCampaignAction('campaign');
     expect(state.send).not.toHaveBeenCalled();
     expect(f.tables.marketing_push_campaigns[0]).toMatchObject({ status: 'sent', recipients: 1, sent: 0, failed: 0, skipped: 1 });
@@ -147,8 +157,17 @@ describe('actual marketing action through the consent-aware sender', () => {
     });
   });
 
-  it.each(['family_members', 'family_ai_settings', 'user_preferences'])('fails the campaign on a returned %s policy read error and sends only after recovery', async table => {
+  it.each([{ push: true }, {}])('never sends a marketing campaign to a child account (child_channels %o), even one marked opted in', async channels => {
     const f = fixture();
+    f.tables.user_preferences[0].notification_prefs = optedIn;
+    f.tables.family_ai_settings[0].child_channels = channels;
+    await sendPushCampaignAction('campaign');
+    expect(state.send).not.toHaveBeenCalled();
+    expect(f.tables.marketing_push_campaigns[0]).toMatchObject({ status: 'sent', recipients: 0, sent: 0 });
+  });
+
+  it.each(['family_members', 'user_preferences'])('fails the campaign on a returned %s policy read error and sends only after recovery', async table => {
+    const f = marketingFixture();
     f.faults.add(`${table}:select`);
     await expect(sendPushCampaignAction('campaign')).rejects.toThrow('Could not send the push campaign');
     expect(state.send).not.toHaveBeenCalled();
@@ -160,8 +179,8 @@ describe('actual marketing action through the consent-aware sender', () => {
     expect(f.tables.marketing_push_campaigns[0]).toMatchObject({ status: 'sent', sent: 1, failed: 0, skipped: 0 });
   });
 
-  it.each(['family_members', 'family_ai_settings', 'user_preferences'])('does not send or mark sent after a thrown %s policy read', async table => {
-    const f = fixture();
+  it.each(['family_members', 'user_preferences'])('does not send or mark sent after a thrown %s policy read', async table => {
+    const f = marketingFixture();
     f.thrownFaults.add(`${table}:select`);
     await expect(sendPushCampaignAction('campaign')).rejects.toThrow('Could not send the push campaign');
     expect(state.send).not.toHaveBeenCalled();
@@ -170,15 +189,18 @@ describe('actual marketing action through the consent-aware sender', () => {
 
   it('preserves recipient suppression, device deduplication and independent adult delivery', async () => {
     const f = fixture();
-    f.tables.family_ai_settings[0].child_channels = { push: false };
+    f.tables.user_preferences[0].notification_prefs = optedIn;
     f.tables.push_devices.push(device('parent'), device('parent', 'second-device'), device('suppressed'));
-    f.tables.family_members.push({ user_id: 'parent', family_id: 'family', role: 'parent', is_active: true });
+    f.tables.family_members.push({ id: 'member-parent', user_id: 'parent', family_id: 'family', role: 'parent', is_active: true });
+    f.tables.user_preferences.push({ user_id: 'parent', push_enabled: true, notification_prefs: optedIn },
+      { user_id: 'suppressed', push_enabled: true, notification_prefs: optedIn });
     f.tables.profiles.push({ id: 'parent', email: 'parent@example.test' }, { id: 'suppressed', email: 'suppressed@example.test' });
     f.tables.marketing_suppressions.push({ email: 'suppressed@example.test' });
     await sendPushCampaignAction('campaign');
+    // The child is not in the audience at all; the parent's two devices are.
     expect(state.send.mock.calls.map(call => call[1])).toEqual(['parent-fixture-token', 'parent-fixture-token']);
-    expect(f.tables.marketing_push_campaigns[0]).toMatchObject({ recipients: 2, sent: 2, skipped: 1 });
-    expect(state.audit.mock.calls[0][1].metadata).toMatchObject({ withheld: 1, deviceSkipped: 0 });
+    expect(f.tables.marketing_push_campaigns[0]).toMatchObject({ recipients: 1, sent: 2, skipped: 0 });
+    expect(state.audit.mock.calls[0][1].metadata).toMatchObject({ withheld: 0, deviceSkipped: 0 });
   });
 
   it('preserves zero-recipient campaign completion without inventing skipped deliveries', async () => {

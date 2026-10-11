@@ -110,7 +110,7 @@ export function TripMemoriesModule() {
       if (storageError) return toastError(storageError);
     }
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
-    const { data: removed, error } = await supabase.from('trip_memories').delete().eq('id', m.id).select('id');
+    const { data: removed, error } = await supabase.from('trip_memories').delete().eq('id', m.id).eq('family_id', familyId).select('id');
     if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('tripMemoriesModule.deleted'));
   }
 

@@ -136,6 +136,8 @@ export type SmsReceiptResult =
   | { kind: 'retryable'; code: 'rate_limited' }
   | { kind: 'rejected'; code: 'provider_rejected' | 'invalid_message' }
   | { kind: 'unconfigured' }
+  /** Our credentials or account were refused (401/403/404): nothing was sent, and the message is not at fault. */
+  | { kind: 'misconfigured' }
   | { kind: 'unknown' };
 
 /** A single attempt for durable callers; never retries an ambiguous external send. */
@@ -151,6 +153,12 @@ export async function sendSmsWithReceipt(to: string, body: string, signal?: Abor
     }, 15_000);
     if (response.status === 429) return { kind: 'retryable', code: 'rate_limited' };
     if (response.status === 408) return { kind: 'unknown' };
+    // A wrong or rotated auth token (401), a suspended or unauthorized account
+    // (403) or a wrong account SID in the URL (404) refuses the REQUEST, not the
+    // message. Calling those 'rejected' made every urgent text sent during a
+    // credential misconfiguration permanently dropped; they are configuration
+    // failures that recover once the configuration is fixed.
+    if (response.status === 401 || response.status === 403 || response.status === 404) return { kind: 'misconfigured' };
     if (response.status >= 400 && response.status < 500) return { kind: 'rejected', code: 'provider_rejected' };
     if (response.status !== 201) return { kind: 'unknown' };
     const data = await readBoundedResponseJson<{ sid?: unknown; status?: unknown }>(response, 64 * 1024);

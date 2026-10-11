@@ -25,6 +25,7 @@
 import 'server-only';
 import type { Tables } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
+import { isManager } from '@/lib/constants/roles';
 import { recordActivitySafely } from '../activity';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
@@ -50,6 +51,30 @@ function isRealCalendarDate(value: string): boolean {
   return asUtc.getUTCFullYear() === y && asUtc.getUTCMonth() === mo - 1 && asUtc.getUTCDate() === d;
 }
 
+/**
+ * Who may change the family's goals. Neither the page gate (plan entitlement
+ * only) nor RLS (`goals_*` is plain `is_family_member`) looks at the role, so
+ * this is where it is decided. A guest ("view limited shared events only") and
+ * a caregiver ("view only the areas assigned to them") do not shape the
+ * household's goals; teens and children can work on them.
+ */
+function assertGoalWriter(scope: ServiceScope): ServiceResult<null> {
+  if (scope.role === 'guest' || scope.role === 'caregiver') {
+    return fail('Only a member of the household can change its goals.', { code: SERVICE_CODES.denied });
+  }
+  return ok(null);
+}
+
+/**
+ * Removing a goal the whole household shares is the adults' call, the same
+ * line `deleteSavingsGoal` / `deleteBudget` draw. `system` is allowed for the
+ * reason it is there: a cron has no person to ask.
+ */
+function assertGoalRemover(scope: ServiceScope): ServiceResult<null> {
+  if (scope.role === 'system' || isManager(scope.role)) return ok(null);
+  return fail('Only a parent or another adult can remove a family goal.', { code: SERVICE_CODES.denied });
+}
+
 export type CreateGoalInput = {
   title: string;
   description?: string | null;
@@ -59,6 +84,8 @@ export type CreateGoalInput = {
 };
 
 export async function createGoal(scope: ServiceScope, input: CreateGoalInput): Promise<ServiceResult<FamilyGoal>> {
+  const allowed = assertGoalWriter(scope);
+  if (!allowed.ok) return allowed;
   const title = input.title?.trim() ?? '';
   if (!title) return fail('A goal needs a title.', { code: SERVICE_CODES.invalidInput });
   if (title.length > MAX_TITLE) {
@@ -138,6 +165,8 @@ export async function updateGoal(
   goalId: string,
   input: UpdateGoalInput,
 ): Promise<ServiceResult<FamilyGoal>> {
+  const allowed = assertGoalWriter(scope);
+  if (!allowed.ok) return allowed;
   const patch: Partial<{ title: string; description: string | null; target_date: string | null }> = {};
 
   if (input.title !== undefined) {
@@ -217,6 +246,8 @@ export async function setGoalProgress(
   goalId: string,
   progress: number,
 ): Promise<ServiceResult<FamilyGoal>> {
+  const allowed = assertGoalWriter(scope);
+  if (!allowed.ok) return allowed;
   // Refused rather than clamped, matching `createGoal`: a caller asking for
   // 250% has misunderstood the field.
   if (!Number.isFinite(progress) || progress < 0 || progress > 100) {
@@ -251,6 +282,8 @@ export async function setGoalProgress(
 
 /** Remove a goal. Family-scoped, where the module deleted on `id` alone. */
 export async function deleteGoal(scope: ServiceScope, goalId: string): Promise<ServiceResult<{ id: string }>> {
+  const allowed = assertGoalRemover(scope);
+  if (!allowed.ok) return allowed;
   const { data, error } = await scope.db
     .from('goals')
     .delete()

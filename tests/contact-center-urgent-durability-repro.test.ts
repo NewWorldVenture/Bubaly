@@ -105,13 +105,29 @@ describe.each(paths)('INT-002 $channel urgent recovery', ({ path, status }) => {
   });
 });
 
+describe.each(paths)('INT-002 $channel urgent text under refused provider credentials', ({ path, status }) => {
+  it('keeps a 401 queued and reported, then sends it once the credentials are fixed', async () => {
+    network.mockResolvedValueOnce(Response.json({ code: 20003, message: 'Authenticate' }, { status: 401 }))
+      .mockImplementation(async () => Response.json({ sid: `SM${'1'.repeat(32)}`, status: 'queued' }, { status: 201 }));
+    expect((await deliver(path)).status).toBe(status);
+    expect(db.table('ai_tool_calls')[0]).toMatchObject({ state: 'failed', attempt: 0, outputs: { phase: 'queued', drain: true } });
+    const worker = await import('@/lib/contact-center/urgent-delivery');
+    expect(await worker.drainUrgentDeliveries(db as never, { now: new Date(Date.now() + 600_000) })).toMatchObject({ accepted: 1, rejected: 0 });
+    expect(network).toHaveBeenCalledTimes(2);
+    expect(db.table('ai_tool_calls')[0]).toMatchObject({ state: 'succeeded', outputs: { phase: 'accepted', drain: false } });
+  });
+});
+
 describe('Twilio durable-send outcome adapter', () => {
   it.each([
     [201, { sid: `SM${'a'.repeat(32)}`, status: 'queued' }, 'accepted'],
     [201, { sid: `MM${'b'.repeat(32)}`, status: 'accepted' }, 'accepted'],
     [429, { message: 'private rejection' }, 'retryable'],
     [400, { message: 'private rejection' }, 'rejected'],
-    [403, { message: 'private rejection' }, 'rejected'],
+    [422, { message: 'private rejection' }, 'rejected'],
+    [401, { message: 'private rejection' }, 'misconfigured'],
+    [403, { message: 'private rejection' }, 'misconfigured'],
+    [404, { message: 'private rejection' }, 'misconfigured'],
     [408, {}, 'unknown'], [500, {}, 'unknown'], [302, {}, 'unknown'],
     [200, { sid: `SM${'a'.repeat(32)}`, status: 'queued' }, 'unknown'],
     [201, { sid: 'SM_invalid', status: 'queued' }, 'unknown'],

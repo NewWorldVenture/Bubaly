@@ -72,6 +72,12 @@ class FakeSession extends EventEmitter {
     this.streams.push(stream);
     return stream;
   });
+  // Graceful close: no new streams, open ones run to completion (Node's
+  // ClientHttp2Session.close()). 'close' fires once the last stream is done.
+  close = vi.fn(() => {
+    this.closed = true;
+    if (this.streams.every(stream => stream.listenerCount('end') === 0)) this.emit('close');
+  });
   destroy = vi.fn(() => {
     if (this.destroyed) return;
     this.destroyed = true;
@@ -303,7 +309,38 @@ describe('APNs HTTP/2', () => {
     expect(sessions[0].destroy).toHaveBeenCalled();
   });
 
-  it.each(['error', 'close', 'goaway'])('settles in-flight work and cleans up on connection %s', async (event) => {
+  it('lets a stream the provider may already have accepted finish after GOAWAY, and opens a new session for new work', async () => {
+    // GOAWAY is ordinary APNs operation; streams up to last-stream-id may
+    // already have been delivered. Failing them left pushed_at null and the
+    // next dispatch sent the notification to the device again.
+    configureApns();
+    const sessions = apnsTransport(() => {});
+    const pending = api.sendNativePush('apns', deviceToken, payload);
+    await vi.advanceTimersByTimeAsync(0);
+    sessions[0].emit('goaway');
+    expect(sessions[0].destroy).not.toHaveBeenCalled();
+    expect(sessions[0].close).toHaveBeenCalled();
+    apnsResponse(sessions[0].streams[0]);
+    expect(await pending).toBe('sent');
+
+    const next = api.sendNativePush('apns', deviceToken, payload);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sessions).toHaveLength(2);
+    apnsResponse(sessions[1].streams[0]);
+    expect(await next).toBe('sent');
+  });
+
+  it('still settles a stream that never answers after GOAWAY', async () => {
+    configureApns();
+    const sessions = apnsTransport(() => {});
+    const pending = api.sendNativePush('apns', deviceToken, payload);
+    await vi.advanceTimersByTimeAsync(0);
+    sessions[0].emit('goaway');
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(await pending).toBe('failed');
+  });
+
+  it.each(['error', 'close'])('settles in-flight work and cleans up on connection %s', async (event) => {
     configureApns();
     const sessions = apnsTransport(() => {});
     const pending = api.sendNativePush('apns', deviceToken, payload);

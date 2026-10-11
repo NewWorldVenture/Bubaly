@@ -79,6 +79,13 @@ async function connected() {
   expect((await GET(callback(flow))).status).toBe(307);
   return flow;
 }
+/** A failed flow's own receipt is retired: not connected, not listed, and holding no grant. */
+function expectReceiptRetired(accountId = String(state.db.table('social_accounts')[0].id)) {
+  const account = state.db.table('social_accounts').find((row) => row.id === accountId)!;
+  expect(account.status).toBe('disconnected'); expect(account.deleted_at).toBeTruthy();
+  const token = state.db.table('social_account_tokens').find((row) => row.id === accountId);
+  expect(token?.access_token_enc ?? null).toBeNull(); expect(token?.refresh_token_enc ?? null).toBeNull();
+}
 function input(accountId: string): ConnectorPublishInput { return { platform: 'x', providerAccountId: '123456789', accountId, familyId: originalFamily, userId: originalUser, kind: 'text', body: 'Hello', mediaUrls: [] }; }
 
 describe('X action → OAuth callback → encrypted credentials → live registry', () => {
@@ -197,8 +204,8 @@ describe('X action → OAuth callback → encrypted credentials → live registr
     else provider.mockResolvedValueOnce(tokenReply()).mockResolvedValueOnce(Response.json({ data: { id: 'not-an-id', username: 'example', name: 'Example' } }));
     const response = await GET(callback(flow));
     expect(response.status).toBe(400); expect(await response.text()).not.toContain('private-provider-secret');
-    expect(state.db.table('social_accounts')[0].status).toBe('pending');
-    expect(state.db.table('social_account_tokens')[0].access_token_enc).toBeUndefined();
+    expectReceiptRetired();
+    expect(state.db.table('social_account_tokens')[0].access_token_enc ?? null).toBeNull();
   });
 
   it.each(['disconnect', 'permission', 'member'])('fences %s during provider exchange before connection finalization', async (reason) => {
@@ -218,7 +225,7 @@ describe('X action → OAuth callback → encrypted credentials → live registr
     state.fault = { table: 'social_account_tokens', op: 'update', occurrence: 2, mode };
     provider.mockResolvedValueOnce(tokenReply()).mockResolvedValueOnce(identityReply());
     const response = await GET(callback(flow)); expect(response.status).toBe(400); expect(await response.text()).not.toContain('private-provider-secret');
-    expect(state.db.table('social_accounts')[0].status).toBe('pending');
+    expectReceiptRetired();
   });
   it.each(['claim', 'final-account', 'callback-permission-read'])('fences %s persistence/read failure', async (stage) => {
     const flow = await begin();
@@ -226,7 +233,7 @@ describe('X action → OAuth callback → encrypted credentials → live registr
       ? { table: 'social_accounts', op: 'update', occurrence: 2, mode: 'throw' } : { table: 'social_access_permissions', op: 'select', occurrence: 1, mode: 'error' };
     provider.mockResolvedValueOnce(tokenReply()).mockResolvedValueOnce(identityReply());
     expect((await GET(callback(flow))).status).toBe(400);
-    expect(state.db.table('social_accounts')[0].status).toBe('pending');
+    expectReceiptRetired();
     expect(provider).toHaveBeenCalledTimes(stage === 'final-account' ? 2 : 0);
   });
 
@@ -265,8 +272,8 @@ describe('X action → OAuth callback → encrypted credentials → live registr
     const flow = await begin();
     provider.mockImplementationOnce(async () => { vi.setSystemTime(new Date('2026-09-12T15:10:01Z')); return tokenReply(); }).mockResolvedValueOnce(identityReply());
     expect((await GET(callback(flow))).status).toBe(400);
-    expect(state.db.table('social_accounts')[0].status).toBe('pending');
-    expect(state.db.table('social_account_tokens')[0].access_token_enc).toBeUndefined();
+    expectReceiptRetired();
+    expect(state.db.table('social_account_tokens')[0].access_token_enc ?? null).toBeNull();
   });
   it('rejects duplicate provider identity rows even when API cap hides the second row', async () => {
     const first = await connected(); const again = await begin();
@@ -448,5 +455,102 @@ describe('X credentials outlive the two-hour access token', () => {
     expect((await getConnector('x').publish(input(flow.accountId))).status).toBe('failed');
     expect(tokenState(flow.accountId)).toBe('blocked');
     expect(provider).toHaveBeenCalledOnce();
+  });
+});
+
+describe('X connect flows never strand an account or leave orphan receipts', () => {
+  const tokenOf = (accountId: string) => state.db.table('social_account_tokens').find((row) => row.id === accountId)!;
+  const xState = (accountId: string) => (tokenOf(accountId).metadata as Row).x_state;
+  async function publishes(accountId: string) {
+    provider.mockClear(); provider.mockResolvedValueOnce(Response.json({ data: { id: '987654321' } }, { status: 201 }));
+    return (await getConnector('x').publish(input(accountId))).status;
+  }
+  /** Runs `event` once, just after the reconnect has claimed the existing credential (its first write). */
+  function afterReconnectClaim(event: () => void) {
+    const from = state.db.from.bind(state.db);
+    const mark = state.operations.length; let fired = false;
+    state.db.from = ((table: string) => {
+      const tokenWrites = state.operations.slice(mark).filter((op) => op.table === 'social_account_tokens' && op.op === 'update').length;
+      if (!fired && tokenWrites >= 2) { fired = true; event(); }
+      return from(table);
+    }) as typeof state.db.from;
+  }
+
+  it('hands the live credential back when a reconnect loses its account write, and later reconnects still work', async () => {
+    const first = await connected();
+    const again = await begin();
+    state.fault = { table: 'social_accounts', op: 'update', occurrence: 1, mode: 'error' };
+    provider.mockResolvedValueOnce(tokenReply()).mockResolvedValueOnce(identityReply());
+    expect((await GET(callback(again))).status).toBe(400);
+    expect(xState(first.accountId)).toBe('ready');
+    expect(state.db.table('social_accounts').find((row) => row.id === first.accountId)?.status).toBe('connected');
+    expect(await publishes(first.accountId)).toBe('published');
+    const third = await begin(); provider.mockResolvedValueOnce(tokenReply()).mockResolvedValueOnce(identityReply());
+    expect((await GET(callback(third))).status).toBe(307);
+  });
+
+  it("lets a fresh reconnect take over a credential a dead reconnect left in 'connecting'", async () => {
+    const first = await connected();
+    tokenOf(first.accountId).metadata = { x_state: 'connecting', x_revision: randomUUID() };
+    const again = await begin(); provider.mockResolvedValueOnce(tokenReply()).mockResolvedValueOnce(identityReply());
+    expect((await GET(callback(again))).status).toBe(307);
+    expect(xState(first.accountId)).toBe('ready');
+    expect(await publishes(first.accountId)).toBe('published');
+  });
+
+  it.each(['expiry', 'permission'])('re-checks %s before the first reconnect write, so a late change cannot leave the account pending', async (reason) => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-09-12T15:00:00Z'));
+    const first = await connected();
+    const again = await begin(); provider.mockResolvedValueOnce(tokenReply()).mockResolvedValueOnce(identityReply());
+    afterReconnectClaim(() => {
+      if (reason === 'expiry') vi.setSystemTime(new Date('2026-09-12T15:10:01Z'));
+      else state.db.seed('social_access_permissions', [{ family_id: originalFamily, user_id: originalUser, social_role: 'read_only', status: 'active' }]);
+    });
+    await GET(callback(again));
+    expect(state.db.table('social_accounts').find((row) => row.id === first.accountId)?.status).toBe('connected');
+    expect(xState(first.accountId)).toBe('ready');
+  });
+
+  it('restores a previously connected account when the final status write fails', async () => {
+    const first = await connected();
+    const again = await begin();
+    // Reconnect account writes: claim target (1), retire receipt (2), final 'connected' (3).
+    state.fault = { table: 'social_accounts', op: 'update', occurrence: 3, mode: 'error' };
+    provider.mockResolvedValueOnce(tokenReply()).mockResolvedValueOnce(identityReply());
+    expect((await GET(callback(again))).status).toBe(400);
+    expect(state.db.table('social_accounts').find((row) => row.id === first.accountId)?.status).toBe('connected');
+    expect(await publishes(first.accountId)).toBe('published');
+  });
+
+  it('retires the receipt when the member denies consent at X', async () => {
+    const flow = await begin();
+    expect((await GET(callback(flow, '&error=access_denied'))).status).toBe(400);
+    expect(provider).not.toHaveBeenCalled();
+    expectReceiptRetired(flow.accountId); expect(xState(flow.accountId)).toBe('consumed');
+  });
+
+  it('does not let a duplicate callback retire the flow a concurrent callback is exchanging', async () => {
+    const flow = await begin(); provider.mockResolvedValueOnce(tokenReply()).mockResolvedValueOnce(identityReply());
+    const responses = await Promise.all([GET(callback(flow)), GET(callback(flow))]);
+    expect(responses.map((r) => r.status).sort()).toEqual([307, 400]);
+    expect(state.db.table('social_accounts')[0]).toMatchObject({ id: flow.accountId, status: 'connected', deleted_at: null });
+  });
+
+  it('sweeps receipts whose flow expired unfinished, without touching connected accounts', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-09-12T15:00:00Z'));
+    const live = await connected();
+    const abandoned = await begin();
+    vi.setSystemTime(new Date('2026-09-12T15:16:00Z'));
+    const fresh = await begin();
+    expectReceiptRetired(abandoned.accountId);
+    expect(state.db.table('social_accounts').find((row) => row.id === fresh.accountId)).toMatchObject({ status: 'pending', deleted_at: null });
+    expect(state.db.table('social_accounts').find((row) => row.id === live.accountId)).toMatchObject({ status: 'connected', deleted_at: null });
+  });
+
+  it('does not leave a listed pending account when the receipt token insert fails', async () => {
+    state.fault = { table: 'social_account_tokens', op: 'insert', occurrence: 1, mode: 'error' };
+    const fd = new FormData(); fd.set('platform', 'x');
+    expect(await connectAccountAction(fd)).toMatchObject({ ok: false, error: 'socialX.storageUnavailable' });
+    expect(state.db.table('social_accounts').filter((row) => !row.deleted_at)).toHaveLength(0);
   });
 });

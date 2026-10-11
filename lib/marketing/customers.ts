@@ -21,6 +21,8 @@ export type MarketingCustomer = {
   estLtvCents: number;
   createdAt: string;
   lastActivityAt: string;
+  /** families.closed_at — set when the family closed its account. */
+  closedAt?: string | null;
 };
 
 const DAY = 86_400_000;
@@ -38,7 +40,7 @@ function monthsBetween(from: string, to: number): number {
  */
 export async function getMarketingCustomersWithError(supabase: DB): Promise<{ customers: MarketingCustomer[]; error: unknown | null }> {
   const [familiesResult, subsResult, membersResult, profilesResult] = await settleAll([
-    readAllAsQuery((from, to) => supabase.from('families').select('id, name, created_at, updated_at').order('created_at', { ascending: false }).order('id').range(from, to), { max: 2000 }),
+    readAllAsQuery((from, to) => supabase.from('families').select('id, name, created_at, updated_at, closed_at').order('created_at', { ascending: false }).order('id').range(from, to), { max: 2000 }),
     // The three sibling reads below page for the same reason the families read
     // does: each is joined BACK onto the families list, so a read capped at
     // db-max-rows does not shorten the table — it silently mislabels customers
@@ -109,6 +111,7 @@ export async function getMarketingCustomersWithError(supabase: DB): Promise<{ cu
       estLtvCents,
       createdAt: f.created_at,
       lastActivityAt: f.updated_at,
+      closedAt: f.closed_at ?? null,
     };
   });
   return { customers, error: null };

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
 import { redirect } from 'next/navigation';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { getUser, requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { readAssurance } from '@/lib/auth/require-aal2';
 import { isSafeReturnPath, sessionStrength } from '@/lib/auth/mfa';
@@ -26,15 +26,18 @@ export const dynamic = 'force-dynamic';
  * is sent straight back: the page never asks for something it cannot use.
  */
 export default async function StepUpPage({ searchParams }: { searchParams: Promise<{ next?: string | string[] }> }) {
-  const ctx = await requireUserContext();
   const params = await searchParams;
   const rawNext = Array.isArray(params.next) ? params.next[0] : params.next;
   const next = isSafeReturnPath(rawNext) ? rawNext : '/dashboard';
+  // The admin console must never require a family (app/(app)/admin/layout.tsx).
+  // requireUserContext auto-provisions one for a signed-in user without one,
+  // so a step-up on the way INTO /admin asks only for the signed-in user.
+  const userId = isAdminConsolePath(next) ? await signedInUserId(next) : (await requireUserContext()).user.id;
 
   const supabase = await createServer();
   const read = await readAssurance(supabase);
   if (read.ok && sessionStrength(read.assurance) !== 'needs_step_up') redirect(next);
-  if (!read.ok) console.error('[auth/step-up] assurance level read failed', { userId: ctx.user.id, error: read.error });
+  if (!read.ok) console.error('[auth/step-up] assurance level read failed', { userId, error: read.error });
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -48,4 +51,14 @@ export default async function StepUpPage({ searchParams }: { searchParams: Promi
       </main>
     </div>
   );
+}
+
+function isAdminConsolePath(path: string): boolean {
+  return path === '/admin' || path.startsWith('/admin/') || path.startsWith('/admin?') || path.startsWith('/admin#');
+}
+
+async function signedInUserId(next: string): Promise<string> {
+  const user = await getUser();
+  if (!user) redirect(`/login?redirect=${encodeURIComponent(next)}`);
+  return user.id;
 }

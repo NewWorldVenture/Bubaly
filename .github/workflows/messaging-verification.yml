@@ -33,7 +33,7 @@ jobs:
       - name: Participant boundaries and independent-session races
         run: node scripts/verify-messaging-database.mjs --bin /usr/lib/postgresql/16/bin
       - name: Messaging service and thread state contracts
-        run: npx vitest run tests/messages-overview.test.ts tests/messages-thread-state.test.ts tests/messaging-schema-compat.test.ts tests/service-messages.test.ts
+        run: npx vitest run tests/messages-overview.test.ts tests/messages-thread-state.test.ts tests/messaging-schema-compat.test.ts tests/messaging-without-0475.test.ts tests/service-messages.test.ts
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       # Real React components with deterministic transport boundaries. Database

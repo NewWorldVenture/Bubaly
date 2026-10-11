@@ -12,6 +12,7 @@ import { formatDuration, progressPercent } from '@/lib/library/feed-parse';
 import {
   addBookAction, refreshFeedAction, saveProgressAction, subscribeFeedAction, unsubscribeFeedAction,
 } from './actions';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm focus-ring';
 
@@ -243,7 +244,7 @@ export function ItemRow({ item }: { item: PlayableItem }) {
             </Button>
           )}
           {item.pageUrl && (
-            <a href={item.pageUrl} target="_blank" rel="noreferrer noopener"
+            <a href={safeWebLink(item.pageUrl) ?? undefined} target="_blank" rel="noreferrer noopener"
               className="rounded-lg p-2 text-muted hover:text-fg" aria-label="Open page">
               <ExternalLink className="h-4 w-4" />
             </a>

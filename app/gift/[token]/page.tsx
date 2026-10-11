@@ -62,10 +62,14 @@ export default async function PublicGiftPage({ params }: { params: Promise<{ tok
   let familyName = t('gift.aFamily');
   // An inactive capability must not disclose the household or child it used
   // to target. Keep all identifying lookups behind the active-link check.
+  // Both reads stay inside the link's own family. gift_links' write policy
+  // checks only the row's family_id, so a household could save a link naming
+  // ANOTHER family's child wallet, and this page (service role) then showed
+  // that child's name under the first household's name.
   if (active && link?.child_wallet_id) {
-    const { data: cw } = await supabase.from('child_wallets').select('member_id').eq('id', link.child_wallet_id).maybeSingle();
+    const { data: cw } = await supabase.from('child_wallets').select('member_id').eq('id', link.child_wallet_id).eq('family_id', link.family_id).maybeSingle();
     if (cw?.member_id) {
-      const { data: m } = await supabase.from('family_members').select('display_name').eq('id', cw.member_id).maybeSingle();
+      const { data: m } = await supabase.from('family_members').select('display_name').eq('id', cw.member_id).eq('family_id', link.family_id).maybeSingle();
       if (m?.display_name) childName = m.display_name;
     }
   }

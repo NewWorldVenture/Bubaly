@@ -35,7 +35,8 @@ export function syncExecutionPolicy(row: { sync_direction: unknown; metadata: un
 }
 
 /** Re-read persisted policy instead of trusting the caller's possibly stale
- * account object. The account, family, requester and provider must all match. */
+ * account object. The account, family, requester and provider must all match,
+ * and the requester must still be an active member of that family. */
 export async function loadSyncExecutionPolicy(
   db: ServiceScope['db'], account: SyncAccountIdentity, provider: SyncProviderEnum,
 ): Promise<ServiceResult<SyncExecutionPolicy>> {
@@ -45,6 +46,15 @@ export async function loadSyncExecutionPolicy(
     const result = await db.from('sync_accounts').select('sync_direction,metadata')
       .eq('id', account.id).eq('family_id', account.family_id).eq('user_id', account.user_id).eq('provider', provider).maybeSingle();
     if (result.error || !result.data) throw result.error ?? new Error('Connected account was unavailable');
+    // The owner must still be an ACTIVE member of this family. Removal is a
+    // soft `is_active = false` that leaves sync_accounts in place, and every
+    // caller runs on the service role, so without this a removed member's
+    // calendar went on importing into the household and the household's
+    // events went on exporting to them.
+    const owner = await db.from('family_members').select('id')
+      .eq('family_id', account.family_id).eq('user_id', account.user_id).eq('is_active', true).limit(1);
+    if (owner.error) throw owner.error;
+    if (!owner.data?.length) return fail(t('syncPolicy.ownerUnavailable'), { code: 'ownerUnavailable' });
     const policy = syncExecutionPolicy(result.data);
     return policy.ok ? ok(policy.data) : fail(t(`syncPolicy.${policy.code}`), { code: policy.code, retryable: policy.retryable });
   } catch (error) {

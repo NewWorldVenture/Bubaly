@@ -46,6 +46,8 @@ type Escalation = {
   caller_number: string | null;
   acknowledged_at: string | null;
   escalated_at: string;
+  /** Who was actually reached by SMS or call. Empty: nobody's phone rang. */
+  notified_member_ids?: string[] | null;
 };
 
 type MemberProfile = {
@@ -205,6 +207,12 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
                 <p className="text-xs text-muted mt-1">
                   From {formatPhone(esc.caller_number)} · {fmtDate(esc.escalated_at, 'pp')}
                 </p>
+                {/* An escalation the server could not deliver by phone (no manager
+                    number on file, telephony down) is still recorded; say so, so
+                    the in-app banner is not mistaken for a text that arrived. */}
+                {(esc.notified_member_ids ?? []).length === 0 && (
+                  <p className="text-xs font-medium text-red-400 mt-1">{t('guardianDashboard.noManagerReachedByPhone')}</p>
+                )}
               </div>
               <button
                 onClick={() => handleAcknowledge(esc.id)}

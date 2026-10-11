@@ -87,14 +87,13 @@ export async function placeInvestOrderAction(input: { childWalletId: string; ass
   if (walletError) return actionFailure('load the child wallet', tr('invest.couldNotLoadTheChildWallet'), walletError);
   if (assetError) return actionFailure('load the investment', t('invest.couldNotLoadTheInvestment'), assetError);
   if (!cw) return { ok: false, error: tr('actions.childWalletNotFound') };
-  // A child orders on their OWN wallet; a manager may order on any child's.
-  // The read above is family-scoped, which stops a stranger, not a sibling, and
-  // `invest_orders` takes an insert from any member (0220). The approval queue
-  // names the wallet's owner, so a sister's "sell" on her brother's shares read
-  // to the parent as him asking. Same rule as requestAllowanceAction and both
-  // redemption actions; a caregiver or guest owns no wallet and orders on none.
-  if (cw.member_id !== ctx.active.member.id && !isManager(ctx.active.role)) {
-    return { ok: false, error: tr('actions.notAuthorized') };
+  // A child places orders against their OWN wallet only. Belonging to the
+  // family was the whole check, so a child could queue a sell of a sibling's
+  // shares (or a buy from their Invest cash) that a parent approving the queue
+  // would fill against the sibling. Not found, as it is to them. The same rule
+  // requestAllowanceAction applies.
+  if (!isManager(ctx.active.role) && cw.member_id !== ctx.active.member.id) {
+    return { ok: false, error: tr('actions.childWalletNotFound') };
   }
   if (!asset || !asset.is_active) return { ok: false, error: tr('actions.thatInvestmentIsNotAvailable') };
 
