@@ -367,7 +367,7 @@ export function TodosModule() {
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-1.5">
+          <div className="flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-1.5 focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg">
             <Search className="h-3.5 w-3.5 text-muted" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={tr('todos.searchTasks')}
               className="w-32 bg-transparent text-sm placeholder:text-muted outline-none sm:w-40" />
