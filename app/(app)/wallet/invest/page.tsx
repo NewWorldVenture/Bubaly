@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { AlertTriangle } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { refuseGuest } from '@/lib/auth/guest-scope';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
@@ -20,7 +21,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function WalletInvestPage() {
   const tr = await getTranslations();
-  const ctx = await requireUserContext();
+  const ctx = await requireUserContext(); refuseGuest(ctx, '/wallet/invest');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   const dataWarnings: string[] = [];

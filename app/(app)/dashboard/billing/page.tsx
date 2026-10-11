@@ -6,6 +6,7 @@ import { CloseAccountCard } from '@/components/app/close-account-card';
 import { createServiceClient } from '@/lib/supabase/server';
 import { serviceFeeEnabled, resolveServiceFeeCents, formatServiceFee } from '@/lib/stripe/service-fee';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { refuseGuest } from '@/lib/auth/guest-scope';
 import { requireAal2 } from '@/lib/auth/require-aal2';
 import { returnPathWith } from '@/lib/auth/mfa';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
@@ -32,7 +33,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   // It returns the session to the query the page was reached with, not the bare
   // path: the plan gate sends families here as ?upgrade=1&need=… and the
   // "Manage" links as ?view=manage, and entering a code must not lose either.
-  const ctx = await requireUserContext();
+  const ctx = await requireUserContext(); refuseGuest(ctx, '/dashboard/billing');
   const params = await searchParams;
   await requireAal2(ctx, 'money', returnPathWith('/dashboard/billing', params));
 

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { refuseGuest } from '@/lib/auth/guest-scope';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { CallHistory } from '@/components/guardian/call-history';
@@ -24,7 +25,7 @@ export default async function HistoryPage({
   const pageSize = 50;
   const offset = (pageNum - 1) * pageSize;
 
-  const ctx = await requireUserContext();
+  const ctx = await requireUserContext(); refuseGuest(ctx, '/guardian/history');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 

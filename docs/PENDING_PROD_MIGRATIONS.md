@@ -131,6 +131,7 @@ source allocations are not evidence that production applied any migration.
 | 0506 proposed, held | `0506_a_health_record_is_read_by_a_manager_or_its_own_member.sql` | A row of `symptom_logs`, `health_metrics`, `health_goals`, `health_visits`, `immunizations`, `sleep_logs`, `sleep_checkins` or `nutrition_logs` is read by a manager of its family, the member it is about, or its author, all inside `is_family_member(family_id)`; every other member no longer reads it. Writes unchanged. Decided by the account holder on the lead in #771 comment 6092825901; requested on #771 (comment 6100826185), not yet confirmed. |
 | 0507 proposed, held | `0507_a_kid_login_does_not_start_a_household.sql` | 0482's `is_child_login_account()` also reads the kid-login mark the server writes (`app_metadata.bubaly_kid_login`), as 0495's `accept_invite` does, so a kid login whose address moved off the synthetic domain cannot start a household through `families_insert`. Found by Support (#771 comment 6100987720); requested on #771 (comment 6101311405), not yet confirmed. |
 | 0508 proposed, held | `0508_tax_documents_are_a_managers.sql` | `tax_documents` is read and written only by a parent or adult of the family (four `can_manage_family` policies replacing 0481's, whose teen/child self-read goes; 0391's step-up guards kept), and a restrictive `storage.objects` policy withholds the documents bucket's tax files (the family's `tax/` folder, or a file a `tax_documents` row of that family names) from anyone who does not manage the family or has not cleared the rows' step-up. Decided by the account holder on PROD-002; requested on #771 (comment 6101674181), not yet confirmed. |
+| 0509 proposed, held | `0509_a_guest_does_not_read_the_households_most_sensitive_areas.sql` | A guest of a family reads none of its rows, but the ones about themselves, in 59 tables: locations (6), money and cards (34), medical and insurance (10), Guardian and the household inbox (9). One RESTRICTIVE read policy per table over `is_family_guest(family_id)`; every other role, the service role and session-less readers unchanged. Decided by the account holder on ROLE-SCOPE-001; requested on #771 (comment 6101674181, scope 6101807525), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4763,6 +4764,140 @@ Dropping any one table's trigger turns the probe red on that table. 184 of
 families, try to vote in one family's poll under their member id from the
 other family and confirm 42501; then vote as their own member there and
 confirm it lands.
+
+## `0509` (proposed, held) — a guest read the household's most sensitive areas
+
+`supabase/reserved/0509_a_guest_does_not_read_the_households_most_sensitive_areas.sql`
+— **held**: proposed as `0509`, the first number above `0508`. The account
+holder decided ROLE-SCOPE-001 as "narrow guests; fix the copy", recorded and
+requested on #771 in comment 6101674181. The exact scope was posted before any
+SQL in 6101807525; that post said 57 tables, and the sections it lists add up
+to 59. Not yet confirmed.
+
+**Severity: medium (a neighbour or grandparent invited as Guest read the
+children's whereabouts and the family's finances). Deploy order: any; the route
+gate and copy ship first.** `/family/permissions` and the FAQ described a guest
+as seeing "limited shared events only", and B15 measured a real guest reading
+the whole household. Measured on a replay of every runnable migration through
+0485, as a guest of Guest House, with one row about the ward in each table:
+the guest reads it in **51 of 59** tables. 0481's sweep already closes
+`care_log`, `expense_split_shares`, `expense_splits`, `family_places`,
+`gift_payments`, `medication_doses`, `member_locations` and
+`subscriptions_tracked` to a guest.
+
+0509 adds `is_family_guest(family_id)` (SECURITY DEFINER, pinned search_path,
+not executable by PUBLIC or anon): the caller's active membership in that
+family is `guest`, exactly, one row per family and user. Each of the 59 tables
+gets one RESTRICTIVE SELECT policy, "A guest does not read <table>", for
+authenticated: `not is_family_guest(family_id)`, plus
+`or is_self_member(member_id)` where the table has a `member_id`. Restrictive,
+so it narrows the permissive reads already there and widens nothing. 0509's
+guard also stands on the eight tables 0481 closes, so a permissive read added
+later cannot reopen them. A self-check requires all 59.
+
+The tables:
+- **Locations:** `member_locations`, `location_events`, `safety_check_ins`,
+  `driving_trips`, `family_places`, `home_locations`.
+- **Money and cards:**
+  - allowances and payments: `allowance_rules`, `babysitter_payments`,
+    `billing_customers`, `bills`, `budgets`;
+  - wallets and accounts: `child_wallets`, `family_wallets`,
+    `financial_accounts`;
+  - splits, gifts and investments: `expense_splits`, `expense_split_shares`,
+    `gift_payments`, `pay_handles`, `invest_holdings`, `invest_orders`;
+  - loyalty: `loyalty_accounts`, `loyalty_transactions`;
+  - ledgers: `money_timeline_insights`, `savings_goals`,
+    `subscriptions_tracked`, `transactions`, `utility_bills`;
+  - Stripe: `stripe_authorizations`, `stripe_cardholders`,
+    `stripe_connected_accounts`, `stripe_financial_accounts`,
+    `stripe_issuing_cards`;
+  - wallet internals: `wallet_audit_logs`, `wallet_buckets`, `wallet_cards`,
+    `wallet_goals`, `wallet_passes`, `wallet_rewards`, `wallet_rules`,
+    `wallet_transactions`.
+- **Medical and insurance:** `medications`, `medication_schedules`,
+  `medication_doses`, `health_providers`, `insurance_policies`,
+  `family_insurance_policies`, `auto_insurance_policies`, `care_log`,
+  `behavior_logs`, `vacation_medical_information`.
+- **Guardian and the household inbox:** `guardian_communications`,
+  `guardian_audit_log`, `guardian_contacts`, `guardian_escalations`,
+  `guardian_member_profiles`, `guardian_routing_rules`,
+  `guardian_screening_sessions`, `guardian_suggestions`,
+  `family_inbox_messages`.
+
+**Kept for a guest, deliberately:**
+- the family chat and their own conversations (`family_messages` reads through
+  `family_conversations`, which admits only participants);
+- calendar, lists, meals, chores and the other shared areas (0464 keeps them
+  view-only);
+- rides, and the emergency contacts and plans;
+- gift links, and the kid economy's points;
+- trip budgets;
+- `subscriptions`, the plan row feature gating reads.
+
+A caregiver is untouched.
+
+**App change, shipping with the source:**
+- **Route gate.** `lib/auth/guest-scope.ts` lists the pages over those areas.
+  `requireFeature` and every page in the list that resolves its context
+  another way send a guest to `/dashboard/grandparent-portal`:
+  - locator, check-in and driving safety;
+  - autopay, billing, bills, budgets, expenses, family CFO, money timeline,
+    payments, savings and subscriptions, and all of `/wallet`;
+  - medical, medications, health, family health, care, behaviour, insurance
+    and auto insurance;
+  - all of `/guardian`, and the inbox.
+
+  The Tax Vault answers every non-manager under 0508.
+- **Copy.** The caregiver and guest descriptions, the two FAQ answers and the
+  permission matrix's caption now say what each role sees, in the seven base
+  locales. The caption no longer claims "enforced by database row-level
+  security" for the whole matrix; the guest row is enforced (0464, this), and
+  for other roles each area applies its own rules.
+- **Test.** `tests/a-guest-does-not-read-the-households-most-sensitive-areas.test.ts`:
+  - walks every page under the listed prefixes and holds each to the gate;
+  - drives `refuseGuest` for every role;
+  - ties the migration's 59 tables to the probe's;
+  - checks the copy.
+
+**Released probes made rule-aware:**
+- `member-scope-crossing-check.sql`'s attribution pin admits 0509's guard on
+  `behavior_logs` by name and exact predicate. 0481's FIX 2b deferred that
+  guard for exactly this pin.
+- The money-warnings probe expects a guest to read no warning where 0509 is
+  installed.
+
+Both pass with and without 0509.
+
+**Proof:** `.github/workflows/guest-scope-runtime.yml` requires the held probe
+`docs/audit/reserved/a-guest-does-not-read-the-households-most-sensitive-areas-check.sql`
+to fail on the released schema (51 of 59, and no guard), with no control
+failing. It applies 0509 twice, requires the probe to pass, and re-runs five
+released probes over guests and these tables. The fixture is one generic row
+per table, written by the table owner (required columns filled by type,
+foreign keys deferred for the seed only), about the ward and, where there is a
+`member_id`, about the guest. The passing run shows, in every table:
+- **The guest.** Reads no row that is not about them, reads the rows about
+  themselves, and 0509 takes none of those away.
+- **Everyone else.** With 0509's 59 policies taken away, the caregiver and
+  the parent read exactly what they read with them, so 0509 changes no one but
+  a guest. The parent reads every row.
+- **Per-family.** The guest reads the location row in the household they are
+  a parent of.
+- **Server.** The service role, with and without a user id, reads every row.
+- **Wiring.** 59 guards with the exact predicate, and the helper is checked.
+- **Negative control.** N1 (the 59 policies dropped): the guest reads the
+  ward's row in every table the released schema leaves open, and in none of
+  the eight it closes.
+- **Mutation control.** M1 (`is_family_guest` unbound from the row's family):
+  the guest loses their own household's row.
+
+188 of 188 released probes pass with 0509, and with every held migration
+through 0509 applied twice.
+
+**After approved release:** sign a test guest in, open `/dashboard/locator`
+and `/wallet`, and confirm they land on the guest page; through the API,
+confirm `transactions` and `member_locations` return nothing about others.
+Confirm a test caregiver still sees the locator.
 
 ## `0508` (proposed, held) — the household's tax files were every member's
 

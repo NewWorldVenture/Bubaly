@@ -17,8 +17,8 @@ export const ROLE_DESCRIPTIONS: Record<MemberRole, string> = {
   adult: 'Manage shared household data and approve chores.',
   teen: 'Manage their own tasks, activities, and calendar.',
   child: 'Complete assigned chores and view their items.',
-  caregiver: 'View only the areas assigned to them.',
-  guest: 'View limited shared events only.',
+  caregiver: "Sees and helps with the whole household, including where the children are and their health. Can't manage members or billing.",
+  guest: "View the shared calendar, lists and plans. Never sees locations, money, health records or other members' private messages.",
 };
 
 /**

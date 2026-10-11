@@ -501,9 +501,15 @@ begin
       failures := array_append(failures, format('%s: %L now reads USING (%s), not %s — the zeroes above are attributed to a predicate that is no longer the one in force', t, expected, got_qual, want_qual));
     end if;
 
+    -- The held 0509's guest guard (the owner's decision on ROLE-SCOPE-001) is
+    -- the one restrictive read this pin admits, by its name and exact
+    -- predicate: it refuses only a guest of the row's family, and the stranger
+    -- above is no member of it, so the zero stays is_family_member's.
     select count(*) into n_restr from pg_policies p
      where p.schemaname = 'public' and p.tablename = t
-       and p.permissive = 'RESTRICTIVE' and p.cmd in ('SELECT', 'ALL');
+       and p.permissive = 'RESTRICTIVE' and p.cmd in ('SELECT', 'ALL')
+       and not (p.policyname = 'A guest does not read ' || t and p.cmd = 'SELECT'
+                and p.qual = '((NOT is_family_guest(family_id)) OR is_self_member(member_id))');
     if n_restr <> 0 then
       failures := array_append(failures, format('%s: %s restrictive policy(ies) now cover SELECT — a second refusal is in the read path, and the control above cannot tell a family-scoped one from the policy it credits', t, n_restr));
     end if;

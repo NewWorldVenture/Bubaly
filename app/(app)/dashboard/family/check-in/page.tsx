@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { refuseGuest } from '@/lib/auth/guest-scope';
 import { CheckInView } from '@/components/family/check-in-view';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -9,6 +10,6 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function CheckInPage() {
-  await requireUserContext();
+  refuseGuest(await requireUserContext(), '/dashboard/family/check-in');
   return <CheckInView />;
 }
