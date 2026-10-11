@@ -260,6 +260,10 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
           {budget.over && <p className="mt-1 text-xs text-rose-300">{tr('tripOverview.overBudgetIn')} {budget.categories.filter((c) => c.over).length} categor{budget.categories.filter((c) => c.over).length === 1 ? 'y' : 'ies'}</p>}
         </Link>
         <Link href={`/dashboard/vacations/${vacationId}/weather`} className="rounded-2xl border border-border bg-surface/40 p-5 transition hover:border-brand/40">
+          {/* The heading stays inside the link, as on the budget card beside it: it is the
+              link's accessible name, and a link whose only child is a component reads as
+              unnamed to tests/a-control-has-a-name. */}
+          <h3 className="flex items-center gap-2 font-semibold"><CloudSun className="h-4 w-4 text-brand-text" /> {tr('tripOverview.weather')}</h3>
           <TripWeatherGlance weather={weather} startDate={trip?.start_date} endDate={trip?.end_date} />
         </Link>
       </div>
@@ -287,7 +291,6 @@ export function TripWeatherGlance({ weather, startDate, endDate }: {
   const advice = useMemo(() => tripWeatherAdvice(inTrip), [inTrip]);
   return (
     <>
-      <h3 className="flex items-center gap-2 font-semibold"><CloudSun className="h-4 w-4 text-brand-text" /> {tr('tripOverview.weather')}</h3>
       {inTrip.length === 0 ? <p className="mt-2 text-sm text-muted">{tr('tripOverview.noForecastYetFetchOneOn')}</p> : (
         <ul className="mt-2 space-y-1 text-sm">
           {advice.slice(0, 3).map((a, i) => <li key={i} className="text-muted">• {a.text}</li>)}
