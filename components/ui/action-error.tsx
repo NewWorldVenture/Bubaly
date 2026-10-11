@@ -23,6 +23,7 @@ import { useCallback, useState } from 'react';
 
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { refusalForThrown } from '@/lib/actions/refusal';
+import { localizeDbErrorText } from '@/lib/supabase/errors';
 
 export function useActionError() {
   const t = useTranslations();
@@ -51,10 +52,11 @@ export function useActionError() {
 }
 
 export function ActionError({ message }: { message: string | null }) {
+  const t = useTranslations();
   if (!message) return null;
   return (
     <p role="alert" className="mt-3 rounded-xl border border-danger/30 bg-danger/[0.06] px-3 py-2 text-xs text-danger">
-      {message}
+      {localizeDbErrorText(message, t)}
     </p>
   );
 }

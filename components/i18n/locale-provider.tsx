@@ -7,7 +7,7 @@
 // the browser downloads one language rather than eleven, and the first paint is
 // already correct — no English flash before a preference is read from storage.
 
-import { createContext, useContext, useMemo } from 'react';
+import { createContext, useContext, useEffect, useMemo } from 'react';
 
 import { DEFAULT_LOCALE, localeOrDefault, type Locale } from '@/lib/i18n/locales';
 import { isValidTimezone } from '@/lib/time/zoned';
@@ -16,6 +16,7 @@ import { isValidTimezone } from '@/lib/time/zoned';
 // translate from there put en-US in the client graph on every page.
 import { pluralize, translate, type Messages } from '@/lib/i18n/translate';
 import type { LocaleSource } from '@/lib/i18n/resolve';
+import { rememberDbErrorText } from '@/lib/supabase/errors';
 
 type LocaleContextValue = {
   locale: Locale;
@@ -72,6 +73,11 @@ export function LocaleProvider({
     }),
     [locale, source, messages, zone],
   );
+  // describeDbError's five sentences, for the browser's later refusals. After
+  // commit, so the hydrating render says what the server said; and taken out
+  // again on unmount, so a nested provider that goes away leaves the one
+  // around it current (I18N-011).
+  useEffect(() => rememberDbErrorText(messages), [messages]);
 
   return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>;
 }
