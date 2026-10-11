@@ -16,6 +16,9 @@
 // this ("a child asks for themselves; a manager may ask on anyone's behalf");
 // this was the money request that did not.
 //
+// Main's #989 (money-writes) landed the same action check, answering "not
+// found" as it is to the child; this file keeps pinning it and the page.
+//
 // WHAT IS ASSERTED: a non-manager's order on a wallet that is not theirs is
 // refused before anything is read about that wallet's money or the Trust
 // Engine is asked, and no order row is written. A child's order on their own
@@ -107,7 +110,7 @@ describe("a child's order on a sibling's wallet", () => {
     signInAs('child', MIA.member);
     const before = ledgers();
 
-    expect(await order(LEO.wallet, side)).toEqual({ ok: false, error: 'actions.notAuthorized' });
+    expect(await order(LEO.wallet, side)).toEqual({ ok: false, error: 'actions.childWalletNotFound' });
 
     expect(ledgers()).toEqual(before);
     expect(db.table('invest_orders')).toEqual([]);
@@ -116,7 +119,7 @@ describe("a child's order on a sibling's wallet", () => {
 
   it("is refused before Leo's cash or shares are read and before the Trust Engine is asked", async () => {
     signInAs('child', MIA.member);
-    expect(await order(LEO.wallet, 'sell')).toEqual({ ok: false, error: 'actions.notAuthorized' });
+    expect(await order(LEO.wallet, 'sell')).toEqual({ ok: false, error: 'actions.childWalletNotFound' });
     const read = vi.mocked(db.from).mock.calls.map(([table]) => table);
     expect(read).not.toContain('wallet_transactions');
     expect(read).not.toContain('invest_holdings');
@@ -125,14 +128,14 @@ describe("a child's order on a sibling's wallet", () => {
 
   it('is refused for a teen too', async () => {
     signInAs('teen', MIA.member);
-    expect(await order(LEO.wallet, 'buy')).toEqual({ ok: false, error: 'actions.notAuthorized' });
+    expect(await order(LEO.wallet, 'buy')).toEqual({ ok: false, error: 'actions.childWalletNotFound' });
     expect(db.table('invest_orders')).toEqual([]);
   });
 
   it.each(['caregiver', 'guest'])('is refused for a %s, who owns no child wallet at all', async (role) => {
     signInAs(role, `member-${role}`);
     for (const wallet of [MIA.wallet, LEO.wallet]) {
-      expect(await order(wallet, 'sell')).toEqual({ ok: false, error: 'actions.notAuthorized' });
+      expect(await order(wallet, 'sell')).toEqual({ ok: false, error: 'actions.childWalletNotFound' });
     }
     expect(db.table('invest_orders')).toEqual([]);
   });
