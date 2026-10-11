@@ -13,9 +13,14 @@ import { gateAiAction } from '@/lib/trust/ai-gate';
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { buildProposal, classify } from '@/lib/front-desk/school-sports';
+import { getTool } from '@/lib/ai/tools/registry';
 
-// Map a Magic-Import action to a Trust Engine domain so the governance layer can
-// allow / block / require-approval before the AI writes anything.
+// The actions Magic Import proposes (phase 1) and may carry out (phase 2), each
+// with the Trust Engine domain it is governed under. Phase 2 accepts NOTHING
+// outside this set: `confirm` items come straight from the client, and an
+// unlisted name used to be gated under a 'tasks' fallback — so a registry tool
+// like `finances.createTransaction` was evaluated as a task, allowed for an
+// automation-trusted role, and then run with the registry's own gate skipped.
 const ACTION_DOMAIN: Record<string, string> = {
   create_calendar_event: 'calendar',
   create_chore: 'chores',
@@ -23,6 +28,11 @@ const ACTION_DOMAIN: Record<string, string> = {
   add_grocery_item: 'shopping',
   create_meal_plan_entry: 'meal_planning',
 };
+
+/** True for a name Magic Import proposed and the registry can resolve. */
+function isMagicImportAction(name: unknown): name is string {
+  return typeof name === 'string' && Object.hasOwn(ACTION_DOMAIN, name) && getTool(name) !== null;
+}
 
 export const runtime = 'nodejs';
 
@@ -159,9 +169,18 @@ export async function POST(req: NextRequest) {
     // allow → execute · require_approval → queue (don't execute) · deny → block.
     if (Array.isArray(body.confirm)) {
       const actorRole = roleOf(ctx.active.role);
+      const confirmed = body.confirm.slice(0, 50);
+      // Refused whole, before any item is gated or run: a confirm list naming
+      // an action this surface never proposed is not a Magic Import.
+      if (confirmed.some((item) => !item || typeof item !== 'object' || !isMagicImportAction(item.name))) {
+        return NextResponse.json({ error: t('import.magicImportCanOnlyCarryOut') }, { status: 400 });
+      }
       const results = await Promise.all(
-        body.confirm.slice(0, 50).map(async (item) => {
-          const domain = ACTION_DOMAIN[item.name] ?? 'tasks';
+        confirmed.map(async (item) => {
+          // The tool's OWN domain, as the registry declares it (the five names
+          // are registry aliases), never a fallback: that is the domain the
+          // family's policies and the autonomy dial are written against.
+          const domain = getTool(item.name)?.domain ?? ACTION_DOMAIN[item.name];
           // The shared AI gate (lib/trust/ai-gate.ts), same as chat and the
           // tool registry. Magic Import used to call the bare engine, so a
           // family who had switched Bubaly off — or set a category to

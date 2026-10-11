@@ -13,9 +13,10 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { LoadingBlock, EmptyState, ErrorState } from '@/components/ui/states';
-import { useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
+import { useFormat, useFamilyCalendarToday, useFamilyClock } from '@/components/i18n/use-format';
 import { VACATION_KINDS, VACATION_STATUSES, lookup } from '@/lib/vacations/meta';
 import { countdownLabel, daysUntil, isActive } from '@/lib/vacations/dates';
+import { isValidTimezone } from '@/lib/time/zoned';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -23,7 +24,7 @@ type Vacation = Tables<'vacations'>;
 type Member = Tables<'vacation_members'>;
 type Score = Tables<'vacation_travel_scores'>;
 
-const blank = () => ({ title: '', kind: 'domestic', destination: '', start_date: '', end_date: '', budget: '', description: '', is_international: false });
+const blank = () => ({ title: '', kind: 'domestic', destination: '', start_date: '', end_date: '', budget: '', description: '', is_international: false, timezone: '' });
 
 export function VacationsList({ openCreate = false }: { openCreate?: boolean }) {
   // Date-only helpers read local calendar fields: give them the FAMILY's day (TIME-003).
@@ -33,6 +34,10 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
   const { familyId, userId } = useApp();
   const router = useRouter();
   const { success, error: toastError } = useToast();
+  // The trip's clock is the DESTINATION's (itinerary times and imported
+  // bookings are read in it); the family zone is the default for a trip close
+  // to home. A trip created with none left the confirmation import refusing.
+  const clock = useFamilyClock();
 
   // The vacations list is the primary source-of-truth read: a genuine failure
   // must surface + be retryable, not render as the "No trips yet" empty state
@@ -97,6 +102,8 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
     setSaving(true);
     try {
       if (!form?.title.trim()) return toastError(tr('vacationsList.giveYourTripAName'));
+      const timezone = form.timezone.trim() || clock.timeZone;
+      if (!isValidTimezone(timezone)) return toastError(tr('vacationsList.unknownTimeZone'));
       const { data, error } = await createClient().from('vacations').insert({
         family_id: familyId, created_by: userId,
         title: form.title.trim(),
@@ -107,6 +114,7 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
         budget_cents: form.budget ? Math.round(parseFloat(form.budget) * 100) : null,
         description: form.description.trim() || null,
         is_international: form.is_international,
+        timezone,
       }).select('id').single();
       if (error) return toastError(describeDbError(error));
       success(tr('vacationsList.tripCreated'));
@@ -201,6 +209,7 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
                 <input type="checkbox" checked={form.is_international} onChange={(e) => setForm({ ...form, is_international: e.target.checked })} className="h-4 w-4 rounded border-border" /> {tr('vacationsList.international')}
               </label>
             </div>
+            <Field label={tr('vacationsList.destinationTimeZone')}>{(id) => <Input id={id} value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })} placeholder={clock.timeZone} />}</Field>
             <Field label={tr('vacationsList.notes')}>{(id) => <Textarea id={id} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} />}</Field>
             <div className="rounded-xl border border-border bg-elevated/40 p-3 text-xs text-muted">
               <Sparkles className="mr-1 inline h-3.5 w-3.5 text-brand-text" /> {tr('vacationsList.tipAfterCreatingOpenTheAi')}

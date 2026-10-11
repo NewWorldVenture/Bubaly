@@ -93,6 +93,8 @@ export const schoolTools: ToolDefinition[] = [
     capability: 'view',
     risk: 'low',
     readOnly: true,
+    // Names a child's teacher, room and school day — private to the adults.
+    sensitiveRead: true,
     input: z.object({
       day_of_week: z.number().int().nullish().describe('0 = Sunday … 6 = Saturday'),
       for_date: z.string().nullish().describe('ISO 8601 date inside the week to resolve A/B classes for; defaults to now'),

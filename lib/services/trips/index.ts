@@ -19,7 +19,17 @@
 // UNITS. Vacation tables store cents (`budget_cents`, `cost_cents`), unlike
 // the finance tables. Public inputs take dollars because that is what a
 // person says; the conversion happens once, here.
+//
+// CLOCKS. `vacations.timezone` is the DESTINATION's zone, not the family's
+// home zone: `vacation_itinerary_items.start_time`/`end_time` are civil clock
+// times in that zone (a 09:00 breakfast on a Tokyo trip is 09:00 JST), the
+// confirmation-import RPC projects a booking's instant into it, and the
+// disruption re-flow resolves a flight's arrival into that day and clock. It
+// defaults to the family zone on create (right for a domestic trip) and is
+// editable on the trip. `commitmentConflicts` alone keeps the FAMILY zone for
+// its bounds, because it compares the trip against the family calendar.
 import 'server-only';
+import { isManager } from '@/lib/constants/roles';
 import { z } from 'zod';
 import { structured } from '@/lib/ai/structured';
 import type { AIProvider } from '@/lib/ai/provider';
@@ -33,6 +43,7 @@ import {
 import { dateRange, tripNights } from '@/lib/vacations/dates';
 import { suggestPacking } from '@/lib/vacations/packing';
 import { computeReadiness as scoreReadiness, type ReadinessResult } from '@/lib/vacations/readiness';
+import { forecastDaysWithin } from '@/lib/vacations/weather';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { settle } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
@@ -185,6 +196,8 @@ export type FindOrCreateVacationInput = {
   /** Whole-trip budget in dollars. */
   budget?: number | null;
   description?: string | null;
+  /** IANA zone of the DESTINATION (itinerary clock times are read in it). Defaults to the family zone. */
+  timezone?: string | null;
 };
 
 function datesOverlap(a: { start_date: string | null; end_date: string | null }, start: string | null, end: string | null): boolean {
@@ -211,6 +224,10 @@ export async function findOrCreateVacation(scope: ServiceScope, input: FindOrCre
     return fail('A trip cannot end before it starts.', { code: SERVICE_CODES.invalidInput });
   }
   if (input.kind && !KINDS.includes(input.kind)) return fail('That trip type is not one Bubaly knows.', { code: SERVICE_CODES.invalidInput });
+  // The trip's clock is the destination's; a zone Intl does not know would
+  // make every itinerary time on the trip unreadable, so it is refused here.
+  const timezone = input.timezone?.trim() || scope.tz;
+  if (!isValidTimezone(timezone)) return fail('That time zone is not one Bubaly knows. Use a name like Asia/Tokyo.', { code: SERVICE_CODES.invalidInput });
 
   const needles = [destination, input.title?.trim() || null].filter((s): s is string => Boolean(s));
   const live = await listTrips(scope);
@@ -252,7 +269,7 @@ export async function findOrCreateVacation(scope: ServiceScope, input: FindOrCre
           is_international: isInternational,
           budget_cents: input.budget != null && Number.isFinite(input.budget) ? Math.max(0, Math.round(input.budget * 100)) : null,
           description: input.description?.trim() || null,
-          timezone: scope.tz,
+          timezone,
           created_by: scope.userId,
         })
         .select('*')
@@ -479,13 +496,20 @@ export type PackingListResult = {
   items: { name: string; category: string; quantity: number }[];
 };
 
-function weatherHints(weather: TripSnapshot['weather']): { maxTempC: number | null; minTempC: number | null; rainy: boolean } {
-  const highs = weather.map((w) => w.temp_high_c).filter((v): v is number => v != null);
-  const lows = weather.map((w) => w.temp_low_c).filter((v): v is number => v != null);
+/**
+ * Packing hints from the trip's weather snapshots — only the days INSIDE the
+ * trip. The weather route used to cache this week's forecast under a trip a
+ * month away (Open-Meteo answers the default horizon when the dates are out of
+ * range), and a snapshot outside the trip dates is not the trip's weather.
+ */
+function weatherHints(weather: TripSnapshot['weather'], trip: Pick<VacationRow, 'start_date' | 'end_date'>): { maxTempC: number | null; minTempC: number | null; rainy: boolean } {
+  const days = forecastDaysWithin(weather, trip.start_date, trip.end_date);
+  const highs = days.map((w) => w.temp_high_c).filter((v): v is number => v != null);
+  const lows = days.map((w) => w.temp_low_c).filter((v): v is number => v != null);
   return {
     maxTempC: highs.length ? Math.max(...highs) : null,
     minTempC: lows.length ? Math.min(...lows) : null,
-    rainy: weather.some((w) => (w.precip_prob ?? 0) >= 50),
+    rainy: days.some((w) => (w.precip_prob ?? 0) >= 50),
   };
 }
 
@@ -502,7 +526,7 @@ export async function generatePackingList(scope: ServiceScope, vacationId: strin
   const members = await getMembers(scope);
   if (!members.ok) return members;
   const memberById = new Map(members.data.map((m) => [m.id, m]));
-  const hints = weatherHints(weather);
+  const hints = weatherHints(weather, trip);
   const anyChildren = travelers.some((t) => t.role === 'child' || (t.member_id && (memberById.get(t.member_id)?.age ?? 99) < 13));
   const anyBaby = travelers.some((t) => t.member_id && (memberById.get(t.member_id)?.age ?? 99) < 3);
 
@@ -1146,7 +1170,25 @@ export async function planTripDisruption(
 
 export type ReportedDisruption = TripDisruption & {
   applied: { shifted: number; noteItemId: string | null };
+  /**
+   * True when this exact disruption (booking, outcome, delay) was already on
+   * the itinerary, so nothing was moved again and nothing new was written —
+   * `applied.noteItemId` is the earlier report's note.
+   */
+  alreadyApplied: boolean;
 };
+
+/**
+ * The machine-readable tail of a disruption note. The booking rows have no
+ * status column (see the TODO above), so the note itself is the record that a
+ * disruption was applied: a second submit of the same report — a retry after a
+ * lost response, a second parent, the day-of follow-up running twice — finds
+ * it and does not move the already-moved items another two hours.
+ */
+export function disruptionMarker(request: DisruptionRequest): string {
+  const outcome = request.cancelled ? 'cancelled' : `delayed:${Math.max(0, Math.round(request.delayMinutes ?? 0))}`;
+  return `[disruption ${request.kind}:${request.bookingId} ${outcome}]`;
+}
 
 /** The day row for a date, creating it when a shift rolled onto a day the trip had none for. */
 async function dayIdFor(
@@ -1154,7 +1196,8 @@ async function dayIdFor(
   vacationId: string,
   day: string,
   known: Map<string, string>,
-): Promise<ServiceResult<string | null>> {
+  created: string[],
+): Promise<ServiceResult<string>> {
   const existing = known.get(day);
   if (existing) return ok(existing);
   const { data, error } = await scope.db
@@ -1162,12 +1205,16 @@ async function dayIdFor(
     .insert({ family_id: scope.familyId, vacation_id: vacationId, day_date: day, created_by: scope.userId })
     .select('id')
     .maybeSingle();
-  if (error) {
-    console.error('[service:trips] itinerary day create failed', error);
+  if (error || !data?.id) {
+    // An insert that yields no row is a day that does not exist: the item it
+    // was for would be re-timed and silently kept on its old day. A failure,
+    // not a null.
+    console.error('[service:trips] itinerary day create failed', error ?? { day, error: 'no row returned' });
     return fail(describeDbError(error, 'Could not make room on the itinerary for the new day.'), { code: SERVICE_CODES.db });
   }
-  if (data?.id) known.set(day, data.id);
-  return ok(data?.id ?? null);
+  known.set(day, data.id);
+  created.push(data.id);
+  return ok(data.id);
 }
 
 /**
@@ -1175,30 +1222,77 @@ async function dayIdFor(
  * happened as a `note` item. Nothing here contacts an airline, a hotel or a
  * restaurant, so nothing here may be described as rebooked — `plan.toRebook`
  * is the list a PERSON still has to work through.
+ *
+ * A manager's act: it rewrites the shared itinerary and the caller then tells
+ * the whole family, so a guest, child, teen or caregiver is refused before any
+ * read — the same rule the confirmation import and the school desk apply.
+ *
+ * ROLLBACK. There is no transaction across PostgREST calls, so every target
+ * day is resolved before the first update, every moved row's previous clock
+ * is remembered, and a failure part-way restores what already moved and
+ * removes the day rows this call created — the family sees the whole re-flow
+ * or none of it, never half an itinerary two hours out of step.
  */
 export async function reportTripDisruption(
   scope: ServiceScope,
   vacationId: string,
   request: DisruptionRequest,
 ): Promise<ServiceResult<ReportedDisruption>> {
+  if (!isManager(scope.role)) {
+    return fail('Only a parent or adult can re-flow the trip itinerary.', { code: SERVICE_CODES.denied });
+  }
   const planned = await planTripDisruption(scope, vacationId, request);
   if (!planned.ok) return planned;
   const { plan, booking } = planned.data;
-  if (plan.noop) return ok({ ...planned.data, applied: { shifted: 0, noteItemId: null } });
+  if (plan.noop) return ok({ ...planned.data, applied: { shifted: 0, noteItemId: null }, alreadyApplied: false });
 
   const snapshot = await getTrip(scope, vacationId);
   if (!snapshot.ok) return snapshot;
+  const marker = disruptionMarker(request);
+  const earlier = snapshot.data.items.find((item) => item.kind === 'note' && (item.notes ?? '').includes(marker));
+  if (earlier) return ok({ ...planned.data, applied: { shifted: 0, noteItemId: earlier.id }, alreadyApplied: true });
+
   const dayIds = new Map(snapshot.data.days.map((d) => [d.day_date, d.id]));
+  const itemById = new Map(snapshot.data.items.map((item) => [item.id, item]));
+  const createdDays: string[] = [];
+  const moved: { id: string; previous: Updatable<'vacation_itinerary_items'> }[] = [];
+
+  const rollback = async () => {
+    for (const { id, previous } of moved) {
+      const { data: restored, error } = await scope.db.from('vacation_itinerary_items').update(previous)
+        .eq('id', id).eq('family_id', scope.familyId).eq('vacation_id', vacationId).select('id');
+      if (error || wroteNoRows(restored)) console.error('[service:trips] disruption rollback of an itinerary item failed', error ?? { id, error: 'no rows updated' });
+    }
+    if (createdDays.length) {
+      const { data: removed, error } = await scope.db.from('vacation_itinerary_days').delete()
+        .eq('family_id', scope.familyId).eq('vacation_id', vacationId).in('id', createdDays).select('id');
+      if (error || (removed?.length ?? 0) !== createdDays.length) console.error('[service:trips] disruption rollback of itinerary days was partial', error ?? { removed: removed?.length ?? 0, created: createdDays.length });
+    }
+  };
+  const failAndRollback = async <T>(result: ServiceResult<T>): Promise<ServiceResult<never>> => {
+    await rollback();
+    return result.ok ? fail('Could not move the itinerary.', { code: SERVICE_CODES.db }) : result;
+  };
+
+  // Every day the re-flow lands on, and the day the note files under, before a
+  // single item moves — so a day that cannot be made leaves nothing half-moved.
+  const targetDay = new Map<string, string>();
+  for (const move of plan.shiftedItems) {
+    const target = await dayIdFor(scope, vacationId, move.toDay, dayIds, createdDays);
+    if (!target.ok) return failAndRollback(target);
+    targetDay.set(move.id, target.data);
+  }
+  const anchorDayId = await dayIdFor(scope, vacationId, booking.day, dayIds, createdDays);
+  if (!anchorDayId.ok) return failAndRollback(anchorDayId);
 
   let shifted = 0;
   for (const move of plan.shiftedItems) {
-    const target = await dayIdFor(scope, vacationId, move.toDay, dayIds);
-    if (!target.ok) return target;
     const patch: Updatable<'vacation_itinerary_items'> = {
       start_time: move.toStart,
       end_time: move.toEnd,
+      day_id: targetDay.get(move.id)!,
     };
-    if (target.data) patch.day_id = target.data;
+    const before = itemById.get(move.id);
     // `shifted` is reported back as how much of the itinerary moved, and it was
     // incremented for items that matched nothing (deleted since the plan was
     // read). Counted only when a row moved; the rest of the disruption goes on.
@@ -1212,15 +1306,16 @@ export async function reportTripDisruption(
       .select('id');
     if (error) {
       console.error('[service:trips] itinerary shift failed', error);
-      return fail(describeDbError(error, 'Could not move the itinerary.'), { code: SERVICE_CODES.db });
+      return failAndRollback(fail(describeDbError(error, 'Could not move the itinerary.'), { code: SERVICE_CODES.db }));
     }
     if (!wroteNoRows(shiftedRow)) shifted += 1;
+    // Only a row that really moved is restored on failure, to what it was.
+    if (!wroteNoRows(shiftedRow) && before) moved.push({ id: move.id, previous: { start_time: before.start_time, end_time: before.end_time, day_id: before.day_id } });
   }
 
   // The record of the disruption itself. `vacation_itinerary_items` already
-  // has a `note` kind and a `notes` column, so this needs no new schema.
-  const anchorDayId = await dayIdFor(scope, vacationId, booking.day, dayIds);
-  if (!anchorDayId.ok) return anchorDayId;
+  // has a `note` kind and a `notes` column, so this needs no new schema. The
+  // marker on its last line is what makes a repeated report a no-op.
   const { data: note, error: noteError } = await scope.db
     .from('vacation_itinerary_items')
     .insert({
@@ -1230,15 +1325,15 @@ export async function reportTripDisruption(
       kind: 'note',
       day_part: 'all_day',
       title: `Disruption: ${booking.label}`,
-      notes: plan.summary,
+      notes: `${plan.summary}\n${marker}`,
       sort_order: 999,
       created_by: scope.userId,
     })
     .select('id')
     .maybeSingle();
-  if (noteError) {
-    console.error('[service:trips] disruption note create failed', noteError);
-    return fail(describeDbError(noteError, 'Could not record the disruption on the itinerary.'), { code: SERVICE_CODES.db });
+  if (noteError || !note?.id) {
+    console.error('[service:trips] disruption note create failed', noteError ?? { error: 'no row returned' });
+    return failAndRollback(fail(describeDbError(noteError, 'Could not record the disruption on the itinerary.'), { code: SERVICE_CODES.db }));
   }
 
   await recordActivitySafely(scope, {
@@ -1248,5 +1343,5 @@ export async function reportTripDisruption(
     href: `/dashboard/vacations/${vacationId}/itinerary`,
   });
 
-  return ok({ ...planned.data, applied: { shifted, noteItemId: note?.id ?? null } });
+  return ok({ ...planned.data, applied: { shifted, noteItemId: note.id }, alreadyApplied: false });
 }

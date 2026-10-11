@@ -112,7 +112,19 @@ export const ROLE_DEFAULTS: Record<TrustRole, RoleDefault> = {
   },
   guest: {
     capabilities: ['view'],
-    sensitiveDomains: [],
+    // "View limited shared events only" (ROLE_DESCRIPTIONS). An empty list
+    // here made the one outside-adult role a LESS restricted reader than the
+    // family's own children: `riskToDecision`'s view rule only bites on a
+    // sensitive domain, so a guest's assistant could read every child's
+    // teacher, timetable, coach, practice location and passport status. A
+    // guest sees the shared calendar, meals, tasks and chores; everything that
+    // names a child's school, health, money, papers or travel is private.
+    sensitiveDomains: [
+      'medical', 'dental', 'vision', 'mental_health',
+      'education', 'school_forms', 'homework',
+      'travel', 'passports', 'documents',
+      'finances', 'banking', 'insurance', 'emergency',
+    ],
     automationTrusted: false,
   },
 };
@@ -455,8 +467,13 @@ export type RiskDecisionInput = {
   sensitiveRead?: boolean;
 };
 
-/** Roles a household would not hand a private read to without saying so. */
-const RESTRICTED_READ_ROLES: TrustRole[] = ['teen', 'child', 'caregiver', 'guest'];
+/**
+ * Roles a household would not hand a private read to without saying so.
+ * Exported so the tool executor can tell which callers may skip the gate on a
+ * read: for these, every read is evaluated as `view`, because a read that
+ * should never have happened cannot be undone afterwards.
+ */
+export const RESTRICTED_READ_ROLES: readonly TrustRole[] = ['teen', 'child', 'caregiver', 'guest'];
 
 function isSensitiveDomainFor(role: TrustRole, domain: string): boolean {
   const def = ROLE_DEFAULTS[role];

@@ -24,7 +24,8 @@ import {
 } from '@/lib/homework/board';
 import type { Tables, HomeworkStatus } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
-import { useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { datetimeLocalToInstant, instantToDatetimeLocal } from '@/lib/time/datetime-local';
 import { useConfirm } from '@/components/ui/confirm';
 
 type Homework = Tables<'homework_assignments'>;
@@ -38,17 +39,13 @@ const NEXT_STATUS: Record<HomeworkStatus, HomeworkStatus> = {
   assigned: 'in_progress', in_progress: 'done', done: 'assigned', submitted: 'assigned',
 };
 
-function toLocalInput(iso: string | null): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 const blank = { id: '', member_id: '', subject: '', title: '', details: '', due_at: '', status: 'assigned' as HomeworkStatus };
 
 export function HomeworkModule() {
   const format = useFormat();
+  // The due-date input is a reading on the FAMILY's clock, both ways: a
+  // device-zone `new Date(value)` shifted it for a parent entering it away.
+  const clock = useFamilyClock();
   const t = useTranslations();
   const askConfirm = useConfirm();
   const { familyId, userId, members, role } = useApp();
@@ -82,7 +79,7 @@ export function HomeworkModule() {
 
   function openNew() { setForm({ ...blank, member_id: students[0]?.id ?? '' }); setModalOpen(true); }
   function openEdit(h: Homework) {
-    setForm({ id: h.id, member_id: h.member_id ?? '', subject: h.subject ?? '', title: h.title, details: h.details ?? '', due_at: toLocalInput(h.due_at), status: h.status });
+    setForm({ id: h.id, member_id: h.member_id ?? '', subject: h.subject ?? '', title: h.title, details: h.details ?? '', due_at: instantToDatetimeLocal(h.due_at, clock.timeZone), status: h.status });
     setModalOpen(true);
   }
 
@@ -97,7 +94,7 @@ export function HomeworkModule() {
       subject: form.subject.trim() || null,
       title: form.title.trim(),
       details: form.details.trim() || null,
-      due_at: form.due_at ? new Date(form.due_at).toISOString() : null,
+      due_at: form.due_at ? datetimeLocalToInstant(form.due_at, clock.timeZone) : null,
       status: form.status,
       completed_at: isDone ? new Date().toISOString() : null,
     };

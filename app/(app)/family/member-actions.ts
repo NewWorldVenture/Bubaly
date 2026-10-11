@@ -8,7 +8,10 @@ import { revokeRemovedChildLogin, type ChildLoginRevocation } from '@/lib/server
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { forgetMemberLocation } from '@/lib/location/retention';
 
-type RemoveResult = { ok: true; loginRevocation: ChildLoginRevocation } | { ok: false; error: string };
+type RemoveResult =
+  /** `locationForgotten` false: the removal stands, but the member's last position could not be cleared and may still show on the family map. */
+  | { ok: true; loginRevocation: ChildLoginRevocation; locationForgotten: boolean }
+  | { ok: false; error: string };
 
 /**
  * Remove (soft-delete) a member from one of the caller's families.
@@ -51,8 +54,11 @@ export async function removeFamilyMemberAction(input: { memberId: string }): Pro
   // member_locations row is blanked and the coordinates on their
   // location_events and safety_check_ins cleared. Service role, because
   // location_events is append-only for clients (0335). The removal stands if
-  // this fails; the failure is logged, as the admin console's removal logs it.
+  // this fails; the failure is logged AND returned, so the screen can say the
+  // position may still be on the family map (it used to be logged only, and
+  // the screen toasted "Member removed"). The daily retention sweep repairs
+  // the live row of any member no longer active, so the failure is not for good.
   const forgotten = await forgetMemberLocation(service, familyId, target.id);
   if (!forgotten.ok) console.error('[family] removed member location was not cleared', { familyId, memberId: target.id, failures: forgotten.failures });
-  return { ok: true, loginRevocation };
+  return { ok: true, loginRevocation, locationForgotten: forgotten.ok };
 }

@@ -196,6 +196,9 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
     // Said before the reload, and as an error: the member is gone from the
     // list, but their login is still live and someone has to know.
     if (res.loginRevocation === 'failed') { toastError(t('familyModule.removedButLoginStillActive')); return; }
+    // Likewise a last position that could not be cleared: it may still be on
+    // the family map until the daily sweep catches it.
+    if (!res.locationForgotten) { toastError(t('familyModule.removedButLocationStillVisible')); return; }
     success(t('settingsModule.memberRemoved'));
     window.location.reload();
   }

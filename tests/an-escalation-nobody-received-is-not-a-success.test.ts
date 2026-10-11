@@ -11,10 +11,13 @@
 // with nobody reached beyond an unaddressed in-app row.
 //
 // Now: a member is recorded as notified only after a send to them succeeded;
-// every failure is logged with the family and the callback; zero deliveries is
-// a non-2xx with the claim given back; and the dashboard says when nobody was
-// reached. (Twilio unconfigured is pinned beside the other escalation retry
-// cases in tests/a-screening-turn-or-escalation-that-asked-for-a-retry-can-be-retried.test.ts.)
+// every failure is logged with the family and the callback; zero deliveries
+// where there was somebody to reach is a non-2xx with the claim given back; and
+// the dashboard says when nobody was reached. Nobody to reach at all (no
+// manager with a phone on file) is `unreachable`: still not `ok`, still on the
+// dashboard, but complete rather than left for a retry that would find the
+// same. (Twilio unconfigured is pinned beside the other escalation retry cases
+// in tests/a-screening-turn-or-escalation-that-asked-for-a-retry-can-be-retried.test.ts.)
 import { readFileSync } from 'node:fs';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -109,14 +112,40 @@ describe('when every text and call fails', () => {
 });
 
 describe('when no manager has a phone on file', () => {
-  it('is undelivered, not handled', async () => {
+  it('is unreachable: recorded with nobody to tell, not ok, and not left for a retry that would find the same', async () => {
     db.replace('profiles', [{ id: 'u-parent', phone: null }, { id: 'u-adult', phone: null }, { id: 'u-child', phone: '+15550000003' }]);
     const [res, body] = await escalate();
-    expect(res.status).toBe(503);
-    expect(body).toMatchObject({ ok: false, delivered: false });
+    // Not the 200 { ok: true } of old, and not the 503 of the first fix either:
+    // that asked for a retry of something no retry can mend, and the lanes that
+    // honoured it re-ran every five minutes until a phone was added.
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({ ok: false, delivered: false, unreachable: true, notifiedCount: 0 });
     expect(seam.sms).not.toHaveBeenCalled();
-    expect(escalation()).toMatchObject({ notified_member_ids: [], sms_sent: false, call_attempted: false });
+    // NULL, not []: nobody COULD be told. The dashboard renders both as nobody
+    // reached; the retry sweep reads the difference.
+    expect(escalation()).toMatchObject({ notified_member_ids: null, sms_sent: false, call_attempted: false, push_sent: true });
+    expect(db.table('guardian_callback_events'), 'as handled as it can be').toEqual([expect.objectContaining({ status: 'processed' })]);
     expect(errors.filter((args) => /no phone on file/.test(String(args[0])))).toHaveLength(2);
+    expect(errors.some((args) => /nobody to text or call/.test(String(args[0])))).toBe(true);
+
+    // A retry is a duplicate, and alarms nobody.
+    const [retry, again] = await escalate();
+    expect(retry.status).toBe(200);
+    expect(again).toEqual({ ok: true, duplicate: true });
+    expect(db.table('notifications')).toHaveLength(1);
+    expect(db.table('guardian_escalations')).toHaveLength(1);
+  });
+
+  it('one manager without a phone beside one whose sends failed is undelivered, not unreachable: there was somebody to reach', async () => {
+    db.replace('profiles', [{ id: 'u-parent', phone: null }, { id: 'u-adult', phone: ADULT_PHONE }, { id: 'u-child', phone: '+15550000003' }]);
+    seam.sms.mockRejectedValue(new Error('Twilio 503'));
+    seam.call.mockRejectedValue(new Error('Twilio 503'));
+    const [res, body] = await escalate();
+    expect(res.status).toBe(503);
+    expect(body).toMatchObject({ ok: false, delivered: false, notifiedCount: 0 });
+    expect(body).not.toHaveProperty('unreachable');
+    expect(escalation()).toMatchObject({ notified_member_ids: [], sms_sent: false, call_attempted: false });
+    expect(db.table('guardian_callback_events'), 'given back for the retry').toEqual([]);
   });
 });
 
