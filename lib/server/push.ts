@@ -122,20 +122,42 @@ async function deliveredDevices(supabase: DB, notificationIds: string[]): Promis
   return { byNotification, store };
 }
 
-// Internal read failure flag keeps unknown family access pending even beyond
+// Internal read failure flag keeps unknown family access or user permission pending even beyond
 // the provider-failure retry window. It is never part of public outcome counts.
 type DeliveryResult = PushResult & { familyReadFailed?: true };
 
+/** Recheck queued family push permission after device/endpoint work. */
+async function currentPushPreference(supabase: DB, userId: string): Promise<boolean> {
+  const { data, error } = await supabase.from('user_preferences')
+    .select('user_id, push_enabled').eq('user_id', userId).limit(1);
+  if (error || !Array.isArray(data)) throw new Error('Push preference read failed.');
+  // A missing preference retains the existing default; an unreadable row does not.
+  if (data.length === 0) return true;
+  const preference = data[0];
+  if (data.length !== 1 || !preference || typeof preference !== 'object' || Array.isArray(preference)
+    || preference.user_id !== userId || typeof preference.push_enabled !== 'boolean') {
+    throw new Error('Push preference reply is invalid.');
+  }
+  return preference.push_enabled;
+}
+
 async function activeFamilyRecipient(supabase: DB, familyId: string, userId: string): Promise<boolean> {
   const { data, error } = await supabase.from('family_members')
-    .select('user_id, family_id, is_active')
-    .eq('family_id', familyId).eq('user_id', userId).eq('is_active', true).limit(1);
+    .select('user_id, family_id, is_active, family:families!inner(id, closed_at)')
+    .eq('family_id', familyId).eq('user_id', userId).eq('is_active', true)
+    .is('family.closed_at', null).limit(1);
   if (error || !Array.isArray(data)) throw new Error('Push family membership read failed.');
   if (data.length === 0) return false;
   const member = data[0];
   if (data.length !== 1 || !member || typeof member !== 'object' || Array.isArray(member)
     || member.user_id !== userId || member.family_id !== familyId || member.is_active !== true) {
     throw new Error('Push family membership reply is invalid.');
+  }
+  const family: unknown = member.family;
+  if (!family || typeof family !== 'object' || Array.isArray(family)
+    || (family as Record<string, unknown>).id !== familyId
+    || (family as Record<string, unknown>).closed_at !== null) {
+    throw new Error('Push family reply is invalid.');
   }
   return true;
 }
@@ -145,11 +167,14 @@ async function sendPushDevicesToUser(supabase: DB, userId: string, payload: Push
   async function stillPermitted(): Promise<boolean> {
     if (familyId === undefined) return true;
     try {
-      if (await activeFamilyRecipient(supabase, familyId, userId)) return true;
+      // Initial batch consent can expire while looking up a device or endpoint.
+      // Keep the existing final family read after this permission check.
+      if (await currentPushPreference(supabase, userId)
+        && await activeFamilyRecipient(supabase, familyId, userId)) return true;
       result.withheld = 1;
     } catch (error) {
       result.failed++; result.familyReadFailed = true;
-      console.error('[push] final family membership read failed', { familyId, userId, error });
+      console.error('[push] final family permission read failed', { familyId, userId, error });
     }
     return false;
   }
@@ -427,7 +452,7 @@ export async function dispatchPendingPushes(
   }
 
   // The roster prepares recipients; queued family sends also recheck each
-  // recipient immediately before contacting a device provider. A change after
+  // recipient and open family before contacting a device provider. A change after
   // that final read is still not atomically fenced against the external send.
   const familyMembers = new Map<string, Set<string>>();
   async function membersOf(familyId: string): Promise<Set<string>> {

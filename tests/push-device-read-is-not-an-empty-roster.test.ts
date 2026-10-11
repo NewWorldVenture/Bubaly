@@ -38,7 +38,7 @@ function fakeSupabase(updates: Record<string, unknown>[], unreadable: string | n
   const rows: Record<string, unknown[]> = {
     notifications: [NOTIFICATION],
     push_devices: [DEVICE],
-    family_members: [{ user_id: 'u1', family_id: 'f1', is_active: true }],
+    family_members: [{ user_id: 'u1', family_id: 'f1', is_active: true, family: { id: 'f1', closed_at: null } }],
   };
   const from = (table: string) => {
     let range: [number, number] | null = null;

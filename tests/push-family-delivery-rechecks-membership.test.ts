@@ -68,6 +68,7 @@ function fixture(
   } = {},
 ) {
   const tables: Record<string, Row[]> = {
+    families: [family, otherFamily].map(id => ({ id, closed_at: null })),
     family_members: options.members ?? [member()],
     notifications: options.notices ?? [notice()],
     push_devices: options.devices ?? [device()],
@@ -85,6 +86,10 @@ function fixture(
       headers: { 'content-type': 'application/json' },
     });
   const matches = (row: Row, key: string, expression: string) => {
+    if (key === 'family.closed_at') {
+      const current = tables.families.find(f => f.id === row.family_id);
+      return current !== undefined && expression === 'is.null' && current.closed_at === null;
+    }
     if (expression === 'is.null') return row[key] == null;
     if (expression.startsWith('eq.')) return String(row[key]) === expression.slice(3);
     if (expression.startsWith('lte.')) return String(row[key]) <= expression.slice(4);
@@ -122,7 +127,8 @@ function fixture(
           url.searchParams.get('family_id'),
         );
         expect(url.searchParams.get('is_active')).toBe('eq.true');
-        expect(url.searchParams.get('select')).toBe('user_id,family_id,is_active');
+        expect(url.searchParams.get('select')).toBe('user_id,family_id,is_active,family:families!inner(id,closed_at)');
+        expect(url.searchParams.get('family.closed_at')).toBe('is.null');
         expect(url.searchParams.get('limit')).toBe('1');
         if (options.lateThrow) throw new Error('Synthetic final membership transport failure');
         if ('lateReply' in options) return reply(options.lateReply, options.lateStatus ?? 200);
@@ -160,7 +166,10 @@ function fixture(
       const select = url.searchParams.get('select');
       if (select && select !== '*')
         rows = rows.map((row) =>
-          Object.fromEntries(select.split(',').map((key) => [key, row[key]])),
+          table === 'family_members' && select.includes('family:families!inner(')
+            ? { user_id: row.user_id, family_id: row.family_id, is_active: row.is_active,
+              family: tables.families.find(f => f.id === row.family_id) ?? null }
+            : Object.fromEntries(select.split(',').map((key) => [key, row[key]])),
         );
       return reply(rows);
     } catch (error) {
