@@ -28,6 +28,19 @@ function logDatabaseFailure(operation: string, error: unknown) {
   console.error(`[vacation-ai] ${operation} failed:`, error);
 }
 
+/** A row the build inserted, as its insert returned it: what the rollback fences on. */
+type Written = { id: string; updated_at: string };
+
+/**
+ * `rows` by the `updated_at` they carry. One insert is one statement, so its
+ * rows share one: a fenced delete is a call per insert, not one per row.
+ */
+function byStamp(rows: Written[]): Map<string, string[]> {
+  const grouped = new Map<string, string[]>();
+  for (const row of rows) grouped.set(row.updated_at, [...(grouped.get(row.updated_at) ?? []), row.id]);
+  return grouped;
+}
+
 export async function POST(req: NextRequest) {
   const t = await getTranslations();
   let ctx;
@@ -233,13 +246,13 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
     }
 
     let added = { activities: 0, items: 0, budget: 0, packing: 0 };
-    const createdActivityIds: string[] = [];
-    const createdDayIds: string[] = [];
-    const createdItemIds: string[] = [];
-    const createdBudgetIds: string[] = [];
+    const createdActivities: Written[] = [];
+    const createdDays: Written[] = [];
+    const createdItems: Written[] = [];
+    const createdBudgets: Written[] = [];
     const changedBudgetCategories: NonNullable<typeof budgets.data>[number]['category'][] = [];
-    const createdPackingItemIds: string[] = [];
-    let createdPackingListId: string | null = null;
+    const createdPackingItems: Written[] = [];
+    let createdPackingList: Written | null = null;
     // An explicit rebuild REPLACES the last build, as the confirm copy
     // (tripConcierge.rebuildExistingPlan) promises: the rows the builder wrote
     // are the ones carrying its marker in `notes`, and only those go. A row a
@@ -275,30 +288,84 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
     const asInsert = <T extends { created_at: string; updated_at: string }>(row: T): Omit<T, 'created_at' | 'updated_at'> =>
       Object.fromEntries(Object.entries(row).filter(([column]) => column !== 'created_at' && column !== 'updated_at')) as Omit<T, 'created_at' | 'updated_at'>;
 
+    // Every row here was minted by THIS request — but it became the family's
+    // the moment its insert committed, and the writes after it are round trips
+    // that take longer when one stalls before it errors. A parent who booked a
+    // new suggestion, or pencilled a time onto one, in that window made it
+    // theirs, and deleting it by id alone erased that. So the compensation is
+    // FENCED like the rebuild's replace below: `updated_at` still the one the
+    // insert returned (the 0070 trigger moves it on every edit), and a
+    // suggestion still unbooked and still carrying exactly the builder's
+    // marker. A short count is that fence keeping someone's row (or a row
+    // already gone): part of the failed build stays in the trip, so it is
+    // logged — not raised, as the caller is already answering with the build's
+    // failure. Audit C1-S9-63.
     const removeRows = async (
       table: 'vacation_activities' | 'vacation_itinerary_days' | 'vacation_itinerary_items' | 'vacation_budgets' | 'vacation_packing_items' | 'vacation_packing_lists',
-      ids: string[],
+      rows: Written[],
     ) => {
-      if (!ids.length) return;
-      // Every id here was minted by THIS request moments ago, so unlike an undo
-      // a person started, an exact count is right: removing fewer than were
-      // created leaves part of a failed build in the family's trip. Logged, not
-      // raised — the caller is already answering with the build's failure.
-      // Audit C1-S9-63.
-      const { data: removed, error } = await supabase.from(table).delete().eq('vacation_id', vacationId).in('id', ids).select('id');
-      if (error) logDatabaseFailure(`build rollback ${table}`, error);
-      else if ((removed?.length ?? 0) !== ids.length) {
-        logDatabaseFailure(`build rollback ${table}`, new Error(`removed ${removed?.length ?? 0} of ${ids.length}`));
+      for (const [stamp, ids] of byStamp(rows)) {
+        const { data: removed, error } = table === 'vacation_activities' || table === 'vacation_itinerary_items'
+          ? await supabase.from(table).delete().eq('family_id', familyId).eq('vacation_id', vacationId).eq('updated_at', stamp)
+            .eq('booked', false).eq('notes', CONCIERGE_PLAN_MARKER).in('id', ids).select('id')
+          : await supabase.from(table).delete().eq('family_id', familyId).eq('vacation_id', vacationId).eq('updated_at', stamp).in('id', ids).select('id');
+        if (error) logDatabaseFailure(`build rollback ${table}`, error);
+        else if ((removed?.length ?? 0) !== ids.length) {
+          logDatabaseFailure(`build rollback ${table}`, new Error(`removed ${removed?.length ?? 0} of ${ids.length}; the rest changed since this request wrote them and were kept`));
+        }
       }
     };
 
+    // A day this build created goes only while nothing sits on it:
+    // `vacation_itinerary_items.day_id` is ON DELETE CASCADE (0070), so the
+    // delete would take whatever is on the day with it — a dinner a parent
+    // added by hand, a confirmation import, a new suggestion the fence above
+    // kept because someone booked it. As in the disruption rollback, the read
+    // and the delete are two calls, so an item placed between them is not
+    // covered; that needs the NOT EXISTS delete as one statement (SQL).
+    const removeEmptyDays = async (days: Written[]) => {
+      if (!days.length) return;
+      const { data: occupied, error } = await supabase.from('vacation_itinerary_items').select('day_id')
+        .eq('family_id', familyId).eq('vacation_id', vacationId).in('day_id', days.map((day) => day.id));
+      if (error) {
+        logDatabaseFailure('build rollback vacation_itinerary_days (kept: could not check they were empty)', error);
+        return;
+      }
+      const held = new Set((occupied ?? []).map((row) => row.day_id));
+      if (held.size) console.warn(`[vacation-ai] build rollback kept ${held.size} new itinerary day(s) that hold items`);
+      await removeRows('vacation_itinerary_days', days.filter((day) => !held.has(day.id)));
+    };
+
+    // The master packing list this build created, by the same rule as its
+    // days: `vacation_packing_items.list_id` is ON DELETE CASCADE (0070), and
+    // adding an item to a list does not move the list's own `updated_at`, so
+    // the fence alone would let the delete take an item a parent added to it
+    // in the packing screen (which adds to the trip's master list, this one)
+    // or a suggestion the fence above kept because someone ticked it packed.
+    // The list goes only while nothing is on it. The read and the delete are
+    // two calls, so an item added between them is not covered; that needs the
+    // NOT EXISTS delete as one statement (SQL).
+    const removeEmptyList = async (list: Written) => {
+      const { data: onList, error } = await supabase.from('vacation_packing_items').select('id')
+        .eq('family_id', familyId).eq('vacation_id', vacationId).eq('list_id', list.id).limit(1);
+      if (error) {
+        logDatabaseFailure('build rollback vacation_packing_lists (kept: could not check it was empty)', error);
+        return;
+      }
+      if ((onList ?? []).length) {
+        console.warn('[vacation-ai] build rollback kept the new master packing list: it holds items');
+        return;
+      }
+      await removeRows('vacation_packing_lists', [list]);
+    };
+
     const rollbackBuild = async () => {
-      await removeRows('vacation_packing_items', createdPackingItemIds);
-      if (createdPackingListId) await removeRows('vacation_packing_lists', [createdPackingListId]);
-      await removeRows('vacation_itinerary_items', createdItemIds);
-      await removeRows('vacation_itinerary_days', createdDayIds);
-      await removeRows('vacation_activities', createdActivityIds);
-      await removeRows('vacation_budgets', createdBudgetIds);
+      await removeRows('vacation_packing_items', createdPackingItems);
+      if (createdPackingList) await removeEmptyList(createdPackingList);
+      await removeRows('vacation_itinerary_items', createdItems);
+      await removeEmptyDays(createdDays);
+      await removeRows('vacation_activities', createdActivities);
+      await removeRows('vacation_budgets', createdBudgets);
       // A rebuild removed the prior build's rows only after the new plan had
       // landed; failing after that puts back exactly the rows this request
       // removed, as the delete returned them — not the read from before the
@@ -344,8 +411,8 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
     // activities
     if (plan.activities.length) {
       const rows = plan.activities.map((x) => ({ family_id: familyId, vacation_id: vacationId, name: x.name, category: x.category ?? null, location: x.location ?? null, family_friendly: x.family_friendly ?? true, cost_cents: x.cost == null ? null : Math.round(x.cost * 100), notes: CONCIERGE_PLAN_MARKER, created_by: ctx!.user.id }));
-      const { data, error } = await supabase.from('vacation_activities').insert(rows).select('id');
-      if (data) createdActivityIds.push(...data.map((row) => row.id));
+      const { data, error } = await supabase.from('vacation_activities').insert(rows).select('id, updated_at');
+      if (data) createdActivities.push(...data);
       if (error || !data || data.length !== rows.length) return buildFailure(t('ai.couldNotSaveTheGenerated'), error ?? new Error('Activity insert returned an incomplete result.'));
       added.activities = rows.length;
     }
@@ -354,8 +421,8 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
       const existing = new Map((days.data ?? []).map((d) => [d.day_date, d.id]));
       const toCreate = range.filter((d) => !existing.has(d)).map((d) => ({ family_id: familyId, vacation_id: vacationId, day_date: d, created_by: ctx!.user.id }));
       if (toCreate.length) {
-        const { data: created, error } = await supabase.from('vacation_itinerary_days').insert(toCreate).select('id, day_date');
-        if (created) createdDayIds.push(...created.map((day) => day.id));
+        const { data: created, error } = await supabase.from('vacation_itinerary_days').insert(toCreate).select('id, day_date, updated_at');
+        if (created) createdDays.push(...created);
         if (error || !created || created.length !== toCreate.length) return buildFailure(t('ai.couldNotSaveTheGenerated'), error ?? new Error('Itinerary day insert returned an incomplete result.'));
         for (const d of created) {
           existing.set(d.day_date, d.id);
@@ -371,8 +438,8 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
         title: x.title, notes: CONCIERGE_PLAN_MARKER, created_by: ctx!.user.id,
       })).filter((x) => x.day_id);
       if (rows.length) {
-        const { data, error } = await supabase.from('vacation_itinerary_items').insert(rows).select('id');
-        if (data) createdItemIds.push(...data.map((row) => row.id));
+        const { data, error } = await supabase.from('vacation_itinerary_items').insert(rows).select('id, updated_at');
+        if (data) createdItems.push(...data);
         if (error || !data || data.length !== rows.length) return buildFailure(t('ai.couldNotSaveTheGenerated'), error ?? new Error('Itinerary item insert returned an incomplete result.'));
         added.items = rows.length;
       }
@@ -381,10 +448,10 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
     if (plan.budget.length) {
       const rows = [...new Map(plan.budget.map((x) => [x.category, { family_id: familyId, vacation_id: vacationId, category: x.category, planned_cents: Math.round(x.planned * 100), created_by: ctx!.user.id }])).values()];
       if (rows.length) {
-        const { data, error } = await supabase.from('vacation_budgets').upsert(rows, { onConflict: 'vacation_id,category' }).select('id, category');
+        const { data, error } = await supabase.from('vacation_budgets').upsert(rows, { onConflict: 'vacation_id,category' }).select('id, category, updated_at');
         for (const row of data ?? []) {
           if (originalBudgets.has(row.category)) changedBudgetCategories.push(row.category);
-          else createdBudgetIds.push(row.id);
+          else createdBudgets.push(row);
         }
         if (error || !data || data.length !== rows.length) return buildFailure(t('ai.couldNotSaveTheGenerated'), error ?? new Error('Budget upsert returned an incomplete result.'));
         added.budget = rows.length;
@@ -429,16 +496,16 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
       if (error) return buildFailure(t('ai.couldNotSaveTheGenerated'), error);
     }
     // packing (rule-based, always solid)
-    const master =(packing.data ?? []).length ? null : await supabase.from('vacation_packing_lists').insert({ family_id: familyId, vacation_id: vacationId, name: 'Master list', is_master: true, created_by: ctx!.user.id }).select('id').single();
+    const master =(packing.data ?? []).length ? null : await supabase.from('vacation_packing_lists').insert({ family_id: familyId, vacation_id: vacationId, name: 'Master list', is_master: true, created_by: ctx!.user.id }).select('id, updated_at').single();
     const listId = master?.data?.id;
-    if (listId) createdPackingListId = listId;
+    if (master?.data) createdPackingList = master.data;
     if (master?.error) return buildFailure(t('ai.couldNotSaveTheGenerated'), master.error);
     if (listId) {
       const sugg = suggestPacking({ kind: trip.kind, nights: nights || 5, isInternational: trip.is_international, hasChildren, hasBaby: false, activities: a.map((x) => x.name) });
       const rows = sugg.map((s) => ({ family_id: familyId, vacation_id: vacationId, list_id: listId, name: s.name, category: s.category as never, quantity: s.quantity, ai_suggested: true, created_by: ctx!.user.id }));
       if (rows.length) {
-        const { data, error } = await supabase.from('vacation_packing_items').insert(rows).select('id');
-        if (data) createdPackingItemIds.push(...data.map((row) => row.id));
+        const { data, error } = await supabase.from('vacation_packing_items').insert(rows).select('id, updated_at');
+        if (data) createdPackingItems.push(...data);
         if (error || !data || data.length !== rows.length) return buildFailure(t('ai.couldNotSaveTheGenerated'), error ?? new Error('Packing insert returned an incomplete result.'));
         added.packing = rows.length;
       }

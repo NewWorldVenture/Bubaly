@@ -84,7 +84,7 @@ function instrument(db: InMemorySupabase) {
   }) as typeof db.from);
 }
 
-function seeded(opts: { plan?: 'stamped' | 'unstamped' | 'none' } = {}) {
+function seeded(opts: { plan?: 'stamped' | 'unstamped' | 'none'; days?: boolean } = {}) {
   // The column defaults 0070 gives these tables, which a builder insert relies on.
   const db = createInMemorySupabase({ defaults: {
     vacation_activities: { booked: false, notes: null },
@@ -95,9 +95,11 @@ function seeded(opts: { plan?: 'stamped' | 'unstamped' | 'none' } = {}) {
     start_date: '2026-10-01', end_date: '2026-10-03', timezone: 'America/New_York', is_international: false,
     budget_cents: null, currency: 'USD', updated_at: READ_AT,
   }]);
-  db.seed('vacation_itinerary_days', ['2026-10-01', '2026-10-02', '2026-10-03'].map((day, i) => ({
-    id: `day-${i + 1}`, family_id: FAMILY, vacation_id: TRIP, day_date: day,
-  })));
+  if (opts.days !== false) {
+    db.seed('vacation_itinerary_days', ['2026-10-01', '2026-10-02', '2026-10-03'].map((day, i) => ({
+      id: `day-${i + 1}`, family_id: FAMILY, vacation_id: TRIP, day_date: day,
+    })));
+  }
   const plan = opts.plan ?? 'stamped';
   if (plan !== 'none') {
     const notes = plan === 'stamped' ? CONCIERGE_PLAN_MARKER : null;
@@ -222,6 +224,205 @@ describe('a rebuild keeps what another tab changed while the model was writing',
   });
 });
 
+/**
+ * A plan write that hangs and then fails — a lock wait that ends in a
+ * statement timeout. Until the test releases it, other tabs act on what this
+ * request has already written: its rows are the family's from the moment
+ * their insert commits. `only` picks the build's own write out of the writes
+ * to the same table, so another tab's insert there is not held with it.
+ */
+function stalledThenFails(table: string, op: 'insert' | 'upsert', only: (value: Row | Row[]) => boolean = () => true) {
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => { release = resolve; });
+  let reached!: () => void;
+  const reachedWrite = new Promise<void>((resolve) => { reached = resolve; });
+  const timedOut = { data: null, error: { code: '57014', message: 'canceling statement due to statement timeout' } };
+  hooks.push((name, builder) => {
+    if (name !== table) return;
+    const write = (builder[op] as (...args: unknown[]) => unknown).bind(builder);
+    Object.assign(builder, { [op]: (value: Row | Row[], ...rest: unknown[]) => {
+      if (!only(value)) return write(value, ...rest);
+      reached();
+      const query: Record<string, unknown> = {};
+      Object.assign(query, {
+        select: () => query, single: () => query,
+        then: (ok: never, ko: never) => released.then(() => timedOut).then(ok, ko),
+      });
+      return query;
+    } });
+  });
+  return { reachedWrite, release };
+}
+
+/** 0070: `vacation_itinerary_items.day_id` is ON DELETE CASCADE. The store does not model it; this does. */
+const dayCascade = (db: InMemorySupabase): Hook => (name, builder) => {
+  if (name !== 'vacation_itinerary_days') return;
+  const remove = builder.delete.bind(builder);
+  builder.delete = (() => {
+    const query = remove();
+    const run = query.then.bind(query);
+    Object.assign(query, { then: (ok: never, ko: never) => run((reply: unknown) => {
+      const days = new Set(rows(db, 'vacation_itinerary_days').map((d) => d.id));
+      db.replace('vacation_itinerary_items', rows(db, 'vacation_itinerary_items').filter((item) => item.day_id == null || days.has(item.day_id)));
+      return reply;
+    }).then(ok, ko) });
+    return query;
+  }) as never;
+};
+
+/** 0070: `vacation_packing_items.list_id` is ON DELETE CASCADE. Modelled as `dayCascade` is. */
+const listCascade = (db: InMemorySupabase): Hook => (name, builder) => {
+  if (name !== 'vacation_packing_lists') return;
+  const remove = builder.delete.bind(builder);
+  builder.delete = (() => {
+    const query = remove();
+    const run = query.then.bind(query);
+    Object.assign(query, { then: (ok: never, ko: never) => run((reply: unknown) => {
+      const lists = new Set(rows(db, 'vacation_packing_lists').map((l) => l.id));
+      db.replace('vacation_packing_items', rows(db, 'vacation_packing_items').filter((item) => item.list_id == null || lists.has(item.list_id)));
+      return reply;
+    }).then(ok, ko) });
+    return query;
+  }) as never;
+};
+
+describe('a build that fails takes back only what is still as it wrote it', () => {
+  it('first build: the new suggestion a parent booked, and the one they edited, while a later write hung, survive its rollback', async () => {
+    const db = seeded({ plan: 'none' });
+    holder.complete.mockResolvedValue({ text: planNamed('Park') });
+    const stalled = stalledThenFails('vacation_budgets', 'upsert');
+    const build = post({ action: 'build' });
+    await stalled.reachedWrite;
+
+    // The activities and itinerary are in; the budget write hangs. A parent
+    // books the park and pencils a time onto the first morning, through the
+    // same update the trip screens make.
+    const park = named(db, 'Park')[0];
+    const morning = rows(db, 'vacation_itinerary_items').find((r) => r.title === 'Park morning')!;
+    await otherTab(db, 'vacation_activities', String(park.id), { booked: true });
+    await otherTab(db, 'vacation_itinerary_items', String(morning.id), { start_time: '09:30' });
+    stalled.release();
+
+    expect((await build).status).toBe(503);
+    expect(named(db, 'Park')).toEqual([expect.objectContaining({ id: park.id, booked: true })]);
+    // The edited item is theirs now; the untouched one was the failed build's, and went.
+    expect(rows(db, 'vacation_itinerary_items')).toEqual([expect.objectContaining({ id: morning.id, start_time: '09:30' })]);
+  });
+
+  it('rebuild: a new suggestion booked while the packing write hung survives, and the replaced plan is still put back', async () => {
+    const db = seeded();
+    holder.complete.mockResolvedValue({ text: planNamed('Park') });
+    // The master packing list is the write after the replace.
+    const stalled = stalledThenFails('vacation_packing_lists', 'insert');
+    const rebuild = post({ action: 'build', rebuild: true });
+    await stalled.reachedWrite;
+    const park = named(db, 'Park')[0];
+    await otherTab(db, 'vacation_activities', String(park.id), { booked: true });
+    stalled.release();
+
+    expect((await rebuild).status).toBe(503);
+    expect(named(db, 'Park')).toEqual([expect.objectContaining({ id: park.id, booked: true })]);
+    // The rows the replace deleted are back exactly as it removed them.
+    expect(ids(db, 'vacation_activities')).toEqual(['act-ai-1', 'act-ai-2', 'act-hand', String(park.id)].sort());
+    expect(ids(db, 'vacation_itinerary_items')).toEqual(['item-ai-1', 'item-ai-2', 'item-ai-3', 'item-hand']);
+  });
+
+  it('a day the failed build created is kept while an item sits on it, so the item is not cascaded away', async () => {
+    const db = seeded({ plan: 'none', days: false });
+    hooks.push(dayCascade(db));
+    holder.complete.mockResolvedValue({ text: planNamed('Park') });
+    const stalled = stalledThenFails('vacation_budgets', 'upsert');
+    const build = post({ action: 'build' });
+    await stalled.reachedWrite;
+    // A parent adds dinner by hand to the first day, which this build created.
+    const firstDay = rows(db, 'vacation_itinerary_days').find((d) => d.day_date === '2026-10-01')!;
+    await db.from('vacation_itinerary_items').insert({
+      family_id: FAMILY, vacation_id: TRIP, day_id: firstDay.id, kind: 'meal', day_part: 'evening', title: 'Dinner with cousins', booked: true, confirmation_code: 'TBL-6',
+    }).select('id');
+    stalled.release();
+
+    expect((await build).status).toBe(503);
+    expect(rows(db, 'vacation_itinerary_items')).toEqual([expect.objectContaining({ title: 'Dinner with cousins', day_id: firstDay.id, confirmation_code: 'TBL-6' })]);
+    // The days nothing sits on were the failed build's, and went.
+    expect(ids(db, 'vacation_itinerary_days')).toEqual([firstDay.id]);
+    expect(named(db, 'Park')).toHaveLength(0);
+  });
+
+  it('the master packing list the failed build created is kept while an item sits on it, so the item is not cascaded away', async () => {
+    const db = seeded({ plan: 'none', days: false });
+    hooks.push(dayCascade(db), listCascade(db));
+    holder.complete.mockResolvedValue({ text: planNamed('Park') });
+    // The build's own suggestions (the mocked suggestPacking gives Socks) hang
+    // and then time out; the packing screen's insert goes straight through.
+    const stalled = stalledThenFails('vacation_packing_items', 'insert', (value) => [value].flat().some((row) => row.name === 'Socks'));
+    const build = post({ action: 'build' });
+    await stalled.reachedWrite;
+    // The packing screen (trip-packing.tsx ensureMasterList) finds the master
+    // list this build created, and a parent adds to it by hand.
+    const master = rows(db, 'vacation_packing_lists').find((l) => l.is_master)!;
+    expect(master).toBeDefined();
+    await db.from('vacation_packing_items').insert({
+      family_id: FAMILY, vacation_id: TRIP, list_id: master.id, name: 'Passports', category: 'documents', quantity: 4, created_by: 'user-2',
+    }).select('id');
+    stalled.release();
+
+    expect((await build).status).toBe(503);
+    expect(rows(db, 'vacation_packing_items')).toEqual([expect.objectContaining({ name: 'Passports', list_id: master.id })]);
+    expect(ids(db, 'vacation_packing_lists')).toEqual([master.id]);
+    // Everything else the failed build wrote was its own, and went.
+    expect(named(db, 'Park')).toHaveLength(0);
+    expect(rows(db, 'vacation_itinerary_items')).toHaveLength(0);
+    expect(rows(db, 'vacation_itinerary_days')).toHaveLength(0);
+    expect(rows(db, 'vacation_budgets')).toHaveLength(0);
+  });
+
+  it('a master packing list the failed build created, with nothing on it, still goes', async () => {
+    const db = seeded({ plan: 'none', days: false });
+    hooks.push(dayCascade(db), listCascade(db));
+    holder.complete.mockResolvedValue({ text: planNamed('Park') });
+    const stalled = stalledThenFails('vacation_packing_items', 'insert');
+    const build = post({ action: 'build' });
+    await stalled.reachedWrite;
+    expect(rows(db, 'vacation_packing_lists')).toHaveLength(1);
+    stalled.release();
+
+    expect((await build).status).toBe(503);
+    for (const table of ['vacation_activities', 'vacation_itinerary_items', 'vacation_itinerary_days', 'vacation_budgets', 'vacation_packing_lists', 'vacation_packing_items']) {
+      expect([table, rows(db, table)]).toEqual([table, []]);
+    }
+  });
+
+  it('trips.buildPlan: what a parent booked or put on a new day while the budget write hung survives its rollback', async () => {
+    const db = seeded({ plan: 'none', days: false });
+    hooks.push(dayCascade(db));
+    const stalled = stalledThenFails('vacation_budgets', 'upsert');
+    const drafting = buildPlan(scope(db), TRIP, { provider: structured({
+      activities: [
+        { name: 'Fenway tour', category: 'tour', location: null, family_friendly: true, cost_usd: 30 },
+        { name: 'Swan boats', category: 'outdoors', location: null, family_friendly: true, cost_usd: 10 },
+      ],
+      itinerary: [
+        { day: 1, day_part: 'morning', title: 'Fenway tour', kind: 'activity' },
+        { day: 2, day_part: 'afternoon', title: 'Swan boats', kind: 'activity' },
+      ],
+      budget: [{ category: 'food', planned_usd: 25 }],
+    }) });
+    await stalled.reachedWrite;
+    const fenway = rows(db, 'vacation_activities').find((r) => r.name === 'Fenway tour')!;
+    await otherTab(db, 'vacation_activities', String(fenway.id), { booked: true });
+    const firstDay = rows(db, 'vacation_itinerary_days').find((d) => d.day_date === '2026-10-01')!;
+    await db.from('vacation_itinerary_items').insert({
+      family_id: FAMILY, vacation_id: TRIP, day_id: firstDay.id, kind: 'meal', day_part: 'evening', title: 'Dinner with cousins', booked: true,
+    }).select('id');
+    stalled.release();
+
+    expect(await drafting).toMatchObject({ ok: false });
+    expect(rows(db, 'vacation_activities')).toEqual([expect.objectContaining({ id: fenway.id, booked: true })]);
+    expect(rows(db, 'vacation_itinerary_items').map((r) => r.title)).toEqual(['Dinner with cousins']);
+    expect(ids(db, 'vacation_itinerary_days')).toEqual([firstDay.id]);
+  });
+});
+
 describe('two tabs building at once: one plan, not two', () => {
   it('two rebuilds started from the same read — the second is refused and writes nothing', async () => {
     const db = seeded();
@@ -313,15 +514,16 @@ describe('two tabs building at once: one plan, not two', () => {
   });
 });
 
-describe('whether a rebuild would replace anything is said, not promised', () => {
-  const structured = (reply: unknown): AIProvider => ({
-    id: 'fake', model: 'fake',
-    structuredCompletion: async () => ({ text: JSON.stringify(reply), refusal: null, usage: null }),
-  } as unknown as AIProvider);
-  const scope = (db: InMemorySupabase): ServiceScope => ({
-    db: db as unknown as SupabaseClient<Database>, familyId: FAMILY, userId: 'user-1', memberId: 'member-1', role: 'parent', actorKind: 'member', tz: 'America/Chicago',
-  });
+/** The assistant's `trips.buildPlan`, with a model that answers `reply`. */
+const structured = (reply: unknown): AIProvider => ({
+  id: 'fake', model: 'fake',
+  structuredCompletion: async () => ({ text: JSON.stringify(reply), refusal: null, usage: null }),
+} as unknown as AIProvider);
+const scope = (db: InMemorySupabase): ServiceScope => ({
+  db: db as unknown as SupabaseClient<Database>, familyId: FAMILY, userId: 'user-1', memberId: 'member-1', role: 'parent', actorKind: 'member', tz: 'America/Chicago',
+});
 
+describe('whether a rebuild would replace anything is said, not promised', () => {
   it('a plan the assistant drafted (trips.buildPlan) is stamped, so "Replace it?" is offered and a confirmed rebuild replaces it', async () => {
     const db = seeded({ plan: 'none' });
     const drafted = await buildPlan(scope(db), TRIP, { provider: structured({
