@@ -17,9 +17,12 @@ const RULE = '44444444-4444-4444-8444-444444444444';
 
 /** Minimal Supabase stand-in: from(table) → a chain resolving to that table's canned result. */
 function mockSupabase(tables: Canned) {
+  // The family's own zone is the fourth required policy read (rules used to run
+  // on America/New_York for everyone); every case here has one unless it says otherwise.
+  const withFamily: Canned = { families: { data: { id: FAMILY, timezone: 'UTC' }, error: null }, ...tables };
   return {
     from(table: string) {
-      const canned = tables[table] ?? { data: null, error: null };
+      const canned = withFamily[table] ?? { data: null, error: null };
       const data = canned.data === null ? [] : Array.isArray(canned.data) ? canned.data : [canned.data];
       const result = { data, error: canned.error, count: data.length };
       const chain: Record<string, unknown> = {

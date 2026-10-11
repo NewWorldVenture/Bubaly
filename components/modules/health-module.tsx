@@ -742,7 +742,7 @@ export function HealthModule() {
               {sortedSymptoms.slice(0, 12).map((s) => {
                 const member = memberById.get(s.member_id);
                 return (
-                  <div key={s.id} className={cn('flex items-center gap-3 rounded-xl border border-border p-3', s.status === 'resolved' && 'opacity-60')}>
+                  <div key={s.id} className="flex items-center gap-3 rounded-xl border border-border p-3">
                     {member && <Avatar name={member.display_name} color={member.color} size={32} />}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">

@@ -9,6 +9,7 @@ import { coerceNutrition, parseModelJSON, type Nutrition } from '@/lib/meals/nut
 import { weekDates } from '@/lib/meals/planner';
 import type { NutritionSubject } from '@/lib/database.types';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import { describeReadError } from '@/lib/supabase/settle';
 
@@ -57,6 +58,10 @@ export async function POST(req: Request) {
   }
 
   const supabase = await createServer();
+  // Served to the meals page, which is `requireFeature('/dashboard/meals')`.
+  // Ungated, a locked or switched-off family still got model calls here.
+  const refused = await refuseUnlessEntitled(supabase, familyId, ['/dashboard/meals']);
+  if (refused) return refused;
   const limited = await enforceAIRateLimit(supabase, `ai-meals-nutrition:${ctx.user.id}`, { limit: 15 });
   if (!limited.ok) return NextResponse.json(
     { error: t('nutrition.tooManyNutritionRequestsPlease') },

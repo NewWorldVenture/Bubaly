@@ -6,7 +6,7 @@
 // actions that revalidate the public /feedback board instantly.
 
 import Link from 'next/link';
-import { feedbackAttachmentPathFromUrl } from '@/lib/storage/feedback-attachment-url';
+import { feedbackAttachmentPathFromSignedUrl } from '@/lib/storage/feedback-attachment-url';
 import { useId, useMemo, useState, useTransition } from 'react';
 import {
   Loader2, Pin, PinOff, Trash2, Send, ChevronDown, ChevronRight,
@@ -26,6 +26,7 @@ import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 export type AdminComment = { id: string; idea_id: string; author_name: string; is_team: boolean; body: string; created_at: string };
 export type AdminNotification = { id: string; kind: string; title: string; body: string | null; url: string | null; is_read: boolean; created_at: string };
@@ -268,7 +269,7 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
             </span>
             <span className="text-[11px] text-muted">{cat.emoji} {cat.label}</span>
             {idea.github_issue_url && (
-              <a href={idea.github_issue_url} target="_blank" rel="noreferrer"
+              <a href={safeWebLink(idea.github_issue_url) ?? undefined} target="_blank" rel="noreferrer"
                 className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-text hover:underline">
                 <Github className="h-3 w-3" /> #{idea.github_issue_number}
               </a>
@@ -281,8 +282,10 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
           {idea.body && <p className="mt-1 line-clamp-3 text-xs text-muted">{idea.body}</p>}
           {/* Only this project's own feedback attachment is fetched: a row can be
               inserted with any image_url, and rendering an arbitrary one makes the
-              admin's browser report to whoever chose it. */}
-          {idea.image_url && feedbackAttachmentPathFromUrl(idea.image_url, process.env.NEXT_PUBLIC_SUPABASE_URL) && (
+              admin's browser report to whoever chose it. The page hands this a
+              signed URL for the private bucket (feedback-attachment-signing), or
+              null, so the signed form is the one checked here. */}
+          {idea.image_url && feedbackAttachmentPathFromSignedUrl(idea.image_url, process.env.NEXT_PUBLIC_SUPABASE_URL) && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={idea.image_url} alt="" className="mt-2 max-h-40 rounded-lg border border-border object-cover" referrerPolicy="no-referrer" />
           )}

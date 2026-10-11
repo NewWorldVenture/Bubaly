@@ -34,7 +34,7 @@ declare
   up  uuid := 'f0326000-0000-4000-8000-00000000c001';  -- parent
   uk  uuid := 'f0326000-0000-4000-8000-00000000c002';  -- child (the attacker)
   us  uuid := 'f0326000-0000-4000-8000-00000000c003';  -- sibling (the subject)
-  mp uuid; mk uuid; ms uuid; vis uuid; imm uuid; med uuid;
+  mp uuid; mk uuid; ms uuid; vis uuid; imm uuid; med uuid; medk uuid;
   n int; txt text; dt date; holes text[] := '{}';
 begin
   insert into public.families (id, name) values (fam, '0414 health records') on conflict do nothing;
@@ -62,6 +62,8 @@ begin
     returning id into imm;
   insert into public.medications (family_id, member_id, name, dosage, is_active, created_by)
     values (fam, ms, 'Amoxicillin', '250 mg', true, up) returning id into med;
+  insert into public.medications (family_id, member_id, name, dosage, is_active, created_by)
+    values (fam, mk, 'Cetirizine', '5 mg', true, up) returning id into medk;
   -- A second pair nothing below attacks, so the "can a child still READ the
   -- hub?" control measures RLS rather than the probe's own deletions.
   insert into public.health_visits (family_id, member_id, kind, title, visit_date, created_by)
@@ -135,7 +137,7 @@ begin
   -- tick name its logger (logged_by = auth.uid()), and this control predated
   -- that rule (merge with main, Audit C1-S9-89).
   insert into public.medication_doses (family_id, medication_id, member_id, scheduled_for, status, logged_by)
-    values (fam, med, mk, now(), 'taken', uk);
+    values (fam, medk, mk, now(), 'taken', uk);
   -- And 0309's own boundary must still hold, so a regression there is not
   -- mistaken for this migration working.
   begin

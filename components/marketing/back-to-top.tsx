@@ -67,7 +67,10 @@ export function BackToTop({ threshold = 400 }: { threshold?: number }) {
         raised ? 'bottom-28 sm:bottom-24' : 'bottom-6',
         visible ? 'pointer-events-auto translate-y-0 opacity-100' : 'pointer-events-none translate-y-3 opacity-0',
       )}
-      style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
+      // Raised, it sits just above the banner's measured top (ConsentManager
+      // sets the space); bottom-28 / sm:bottom-24 were shorter than the banner,
+      // which then covered this button for a keyboard user.
+      style={{ marginBottom: 'env(safe-area-inset-bottom)', ...(raised ? { bottom: 'var(--consent-banner-space, 7rem)' } : {}) }}
     >
       <ArrowUp className="h-5 w-5 transition-transform duration-300 group-hover:-translate-y-0.5" aria-hidden />
     </button>

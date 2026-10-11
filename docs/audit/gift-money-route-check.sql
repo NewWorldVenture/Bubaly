@@ -7,8 +7,12 @@
 --
 -- As SIBLING A: repointing B's pending gift or Pay-ID at A's own wallet, raising
 -- the amount, and inserting a fake pledge must all be refused (UPDATE/DELETE
--- match zero rows; INSERT raises). A can still read them (control). As the
--- PARENT: approving the untouched gift credits B, the intended child (control).
+-- match zero rows; INSERT raises). Since 0483 §9 A cannot even READ B's pending
+-- gift: a pending gift's giver_name and message are an outsider's free text,
+-- read by the parents first, and a child sees only a COMPLETED gift on their
+-- own wallet. As the PARENT: approving the untouched gift credits B, the
+-- intended child (control). Then B reads their own approved gift and A still
+-- does not (control for the read rule).
 \set ON_ERROR_STOP on
 set client_min_messages = warning;
 
@@ -49,8 +53,9 @@ begin
   perform set_config('request.jwt.claims', json_build_object('sub', uA, 'role', 'authenticated')::text, true);
   set local role authenticated;
 
+  -- 0483 §9: a sibling's PENDING gift is not a child's to read at all.
   select count(*) into n from public.gift_payments where id = gift;
-  if n <> 1 then raise warning 'CONTROL FAILED: a child cannot see the family''s gifts (%)', n; failures := failures + 1; end if;
+  if n <> 0 then raise warning 'REGRESSION: a child can read a sibling''s pending gift (%) — 0483 §9 keeps it for the parents until it is approved', n; failures := failures + 1; end if;
 
   update public.gift_payments set child_wallet_id = wA where id = gift;
   get diagnostics n = row_count;
@@ -89,6 +94,21 @@ begin
     raise warning 'CONTROL FAILED: approving the gift did not credit the intended child (%, credited %)', approved, creditedTo;
     failures := failures + 1;
   end if;
+
+  -- ── as SIBLING B: the approved gift on their own wallet is theirs to see ──
+  perform set_config('request.jwt.claim.sub', uB::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', uB, 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  select count(*) into n from public.gift_payments where id = gift and status = 'completed';
+  if n <> 1 then raise warning 'CONTROL FAILED: the child cannot see the approved gift credited to their own wallet (%)', n; failures := failures + 1; end if;
+  reset role;
+  -- ── and SIBLING A still cannot ───────────────────────────────────────────
+  perform set_config('request.jwt.claim.sub', uA::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', uA, 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  select count(*) into n from public.gift_payments where id = gift;
+  if n <> 0 then raise warning 'REGRESSION: a child reads a sibling''s gift (%) — 0483 §9 shows a child only completed gifts on their own wallet', n; failures := failures + 1; end if;
+  reset role;
 
   delete from public.wallet_transactions where family_id = fam;
   delete from public.wallet_audit_logs where family_id = fam;

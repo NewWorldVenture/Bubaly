@@ -33,13 +33,13 @@ export async function refuseUnlessEntitled(
   familyId: string,
   hrefs: readonly string[],
 ): Promise<NextResponse | null> {
-  const outcomes: { reason: 'off' | 'plan'; needLevel: number }[] = [];
+  const outcomes: { reason: 'off' | 'plan' | 'locked'; needLevel: number; code?: 'trial_expired' | 'account_closed' }[] = [];
 
   for (const href of hrefs) {
     try {
       const entitlement = await resolveFeatureEntitlement(db, familyId, href);
       if (entitlement.allowed) return null;
-      outcomes.push({ reason: entitlement.reason, needLevel: entitlement.needLevel });
+      outcomes.push({ reason: entitlement.reason, needLevel: entitlement.needLevel, ...(entitlement.reason === 'locked' ? { code: entitlement.code } : {}) });
     } catch (error) {
       console.error('[route-feature-gate] plan read failed', { href, error });
       return NextResponse.json(
@@ -68,6 +68,22 @@ export async function refuseUnlessEntitled(
 
   if (outcomes.every((o) => o.reason === 'off')) {
     return NextResponse.json({ error: 'Not found.', code: 'feature_off' }, { status: 404 });
+  }
+
+  // A trial that ended unpaid (or a closed account) refuses every feature,
+  // free ones included: the paywall the layout shows has a server half.
+  const locked = outcomes.find((o) => o.reason === 'locked');
+  if (locked) {
+    return NextResponse.json(
+      {
+        error: locked.code === 'account_closed'
+          ? 'This Bubaly account is closed. Reopen it to continue.'
+          : 'Your free trial has ended. Choose Family Basic or Family+ to keep using Bubaly.',
+        code: locked.code ?? 'trial_expired',
+        needLevel: 1,
+      },
+      { status: 403 },
+    );
   }
 
   const needLevel = Math.min(...outcomes.filter((o) => o.reason === 'plan').map((o) => o.needLevel));

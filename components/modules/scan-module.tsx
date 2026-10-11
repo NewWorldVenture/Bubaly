@@ -160,9 +160,10 @@ export function ScanModule() {
               <li key={i}>
                 <button
                   onClick={() => toggle(i)}
+                  aria-pressed={selected.has(i)}
                   className={cn(
                     'flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left text-sm transition',
-                    selected.has(i) ? 'border-brand/50 bg-brand/10' : 'border-border bg-surface/30 opacity-60',
+                    selected.has(i) ? 'border-brand/50 bg-brand/10' : 'border-border bg-surface/30',
                   )}
                 >
                   <span className={cn(

@@ -62,8 +62,10 @@ describe('the social sub-menu and the marketplace trust score', () => {
     const { TRUST_BAND_LABEL_KEYS } = await import('@/lib/marketplace/trust');
     const widget = readFileSync('components/marketplace/sidebar-trust-score.tsx', 'utf8');
     expect(widget).not.toMatch(/item\$\{|List an item to start/);
-    // A failed read shows a message, never a zero-baseline score.
-    expect(widget).toMatch(/if \(reviews\.error \|\| orders\.error \|\| listings\.error\)/);
+    // A failed read shows a message, never a zero-baseline score. The inputs come
+    // from readTrustScoreInputsAction, which answers ok: false for any read it
+    // could not make (tests/marketplace-reads-before-and-after-the-economy-sql.test.ts).
+    expect(widget).toMatch(/if \(!result\.ok\)/);
     expect(widget).toMatch(/if \(failed\)/);
     const keys = [...Object.values(TRUST_BAND_LABEL_KEYS), 'sidebarTrustScore.oneItemListed', 'sidebarTrustScore.itemsListed', 'sidebarTrustScore.listAnItem', 'sidebarTrustScore.couldNotLoad'];
     for (const code of CODES) for (const key of keys) expect(catalogues[code][key], `${code} ${key}`).toBeTruthy();

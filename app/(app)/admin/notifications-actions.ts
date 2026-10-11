@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { isSuperAdmin } from '@/lib/supabase/auth';
+import { superAdminAssurance } from '@/lib/auth/super-admin-assurance';
 import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -14,6 +15,7 @@ type Result = { ok: true } | { ok: false; error: string };
 export async function markAdminNotesReadAction(ids?: string[]): Promise<Result> {
   const t = await getTranslations();
   if (!(await isSuperAdmin())) return { ok: false, error: t('notificationsActions.notAuthorized') };
+  if (!(await superAdminAssurance()).ok) return { ok: false, error: t('actions.adminConsoleNeedsYourCode') };
   const supabase = createServiceClient();
   // Deliberately NOT confirmed. Without ids this is `.eq('is_read', false)`,
   // where zero rows is the ordinary "nothing unread"; with ids, zero rows means

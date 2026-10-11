@@ -134,7 +134,9 @@ describe('a signed URL is the URL that was signed', () => {
  * which is correct for OAuth and is not what this helper does.
  */
 const SIGNATURE_PATH = [
-  'app/api/guardian/escalate/route.ts',
+  // The escalation's outbound-call TwiML URL is built where the escalation
+  // runs, lib/guardian/escalate.ts; its HTTP face only parses and delegates.
+  'lib/guardian/escalate.ts',
   'app/api/guardian/escalate/twiml/route.ts',
   'app/api/guardian/inbound/voice/route.ts',
   'app/api/guardian/inbound/sms/route.ts',
@@ -155,7 +157,8 @@ describe('the signature path has one spelling of the base URL', () => {
     // lib/contact-center/server.ts, this list would be asserting over verifiers
     // only and would no longer be checking that the two sides agree.
     expect(SIGNATURE_PATH).toContain('lib/contact-center/server.ts');
-    expect(SIGNATURE_PATH.filter((f) => f.includes('/api/'))).toHaveLength(10);
+    expect(SIGNATURE_PATH.filter((f) => f.includes('/api/'))).toHaveLength(9);
+    expect(SIGNATURE_PATH).toContain('lib/guardian/escalate.ts');
   });
 
   it('no file on it derives the base URL for itself', () => {

@@ -17,7 +17,7 @@ export function AccountClosedGate() {
   useDialogBehavior(dialogRef, true, { lockScroll: false });
   const t = useTranslations();
   const [busy, setBusy] = useState(false);
-  const { error: toastError, success } = useToast();
+  const { error: toastError, success, toast } = useToast();
 
   // Blocking full-screen gate: lock the page behind it (mobile scroll-bleed).
   useLockBodyScroll(true);
@@ -27,8 +27,12 @@ export function AccountClosedGate() {
     setBusy(true);
     const res = await reopenAccountAction();
     setBusy(false);
-    if (res.ok) { success(t('accountClosedGate.welcomeBackYourAccountIs')); window.location.reload(); }
-    else toastError(res.error);
+    if (!res.ok) { toastError(res.error); return; }
+    success(t('accountClosedGate.welcomeBackYourAccountIs'));
+    // Reopened, but a subscription is still set to end at its period end: say
+    // so, and land on billing, where it is resumed.
+    if (res.notice) { toast(res.notice, 'info'); window.location.assign('/dashboard/billing'); }
+    else window.location.reload();
   }
 
   return (

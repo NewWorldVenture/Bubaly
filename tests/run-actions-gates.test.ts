@@ -24,7 +24,9 @@ vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 vi.mock('@/lib/server/rate-limit', () => ({ rateLimit: (...a: unknown[]) => rateLimit(...a) }));
 vi.mock('@/lib/server/rate-limit-db', () => ({ rateLimitDb: (...a: unknown[]) => rateLimitDb(...a) }));
 vi.mock('@/lib/server/feature-tiers', () => ({ getResolvedFeatureTiers: (...a: unknown[]) => getResolvedFeatureTiers(...a) }));
-vi.mock('@/lib/server/plan', () => ({ resolveFamilyPlanLevel: (...a: unknown[]) => resolveFamilyPlanLevel(...a) }));
+vi.mock('@/lib/server/plan', () => ({ resolveFamilyPlanLevel: (...a: unknown[]) => resolveFamilyPlanLevel(...a),
+  resolveFamilyEntitlement: async (...a: unknown[]) => ({ effectiveLevel: await (resolveFamilyPlanLevel(...a)), locked: false, closed: false, inTrial: false, trialEndsAt: null }),
+}));
 vi.mock('@/lib/ai/provider', () => ({ isAIConfigured: () => isAIConfigured() }));
 vi.mock('@/lib/ai/runs/intake', () => ({
   submitRequest: (...a: unknown[]) => submitRequest(...a),

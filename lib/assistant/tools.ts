@@ -23,6 +23,9 @@ import { escapeLike } from '@/lib/supabase/escape-like';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
 import { ensureTodoListId } from '@/lib/services/tasks';
+import { createGoal } from '@/lib/services/goals';
+import { SERVICE_CODES } from '@/lib/services/types';
+import { ROLE_ORDER, type MemberRole } from '@/lib/constants/roles';
 
 type DB = SupabaseClient<Database>;
 
@@ -58,9 +61,22 @@ export type AssistantCtx = {
    */
   memberId: string | null;
   members: { id: string; display_name: string }[];
+  /**
+   * The caller's `family_members.role` (or null when it is not known).
+   *
+   * Required, not optional, so a new call site cannot forget it: the goals
+   * service decides who may write `goals` from this (a guest or a caregiver
+   * may not), and RLS on `goals` admits every member. An unknown role is
+   * refused for those writes rather than waved through.
+   */
+  role: string | null;
   /** Family time zone (IANA), used to format times for availability answers. */
   tz?: string;
 };
+
+function knownRole(role: string | null | undefined): MemberRole | null {
+  return role && (ROLE_ORDER as string[]).includes(role) ? (role as MemberRole) : null;
+}
 
 const EVENT_CATEGORIES = ['general', 'school', 'sports', 'appointment', 'medication', 'maintenance', 'birthday', 'holiday', 'other'];
 
@@ -365,11 +381,20 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
       execute: async (a) => {
         const title = str(a.title);
         if (!title) return { ok: false, error: 'title is required' };
-        const { error } = await supabase.from('goals').insert({
-          family_id: ctx.familyId, title, description: optStr(a.description), target_date: optStr(a.target_date), created_by: ctx.userId,
-        });
-        if (error) return toolFailure('create the family goal', error);
-        return { ok: true, summary: `Created the goal “${title}”.` };
+        // Through the goals service, not a direct insert: that is where the
+        // role rule (no guest or caregiver), the date check and the
+        // `is_complete` invariant live — RLS on `goals` admits every member.
+        const role = knownRole(ctx.role);
+        if (!role) return { ok: false, error: 'Only a member of the household can change its goals.' };
+        const res = await createGoal(
+          { db: supabase, familyId: ctx.familyId, userId: ctx.userId, memberId: ctx.memberId, role, actorKind: 'ai', tz: ctx.tz || 'UTC' },
+          { title, description: optStr(a.description), targetDate: optStr(a.target_date) },
+        );
+        if (!res.ok) {
+          if (res.code === SERVICE_CODES.db) return toolFailure('create the family goal', res.error);
+          return { ok: false, error: res.error };
+        }
+        return { ok: true, summary: `Created the goal “${res.data.title}”.` };
       },
     },
 

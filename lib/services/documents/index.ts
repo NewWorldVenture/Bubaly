@@ -48,6 +48,14 @@ export { SENSITIVE_CATEGORIES, isSensitiveCategory, isSensitiveDocument } from '
 import { isSensitiveDocument } from '@/lib/documents/sensitivity';
 import { escapeLike } from '@/lib/supabase/escape-like';
 
+/**
+ * The activity line for one document. Sensitive titles stay off the shared
+ * agent feed and household trail, which every family member can read.
+ */
+function activityDocumentTitle(row: Pick<DocumentRow, 'title' | 'category' | 'is_secure'>, verb: 'Opened' | 'Attached'): string {
+  return isSensitiveDocument(row) ? `${verb} a private document` : `${verb} "${row.title}"`;
+}
+
 /** Parents and adults may hold sensitive files; a cron with no human behind it may not. */
 function canReadSensitive(scope: ServiceScope): boolean {
   return scope.role !== 'system' && isManager(scope.role);
@@ -172,7 +180,11 @@ export async function readDocument(scope: ServiceScope, documentId: string, inpu
     console.error('[service:documents] signed url failed', signed.error);
     return fail(describeDbError(signed.error, 'Could not open that document right now.'), { code: SERVICE_CODES.db });
   }
-  await recordActivitySafely(scope, { action: null, agent: 'documents', title: `Opened "${data.title}"`, href: '/dashboard/documents' });
+  // agent_activity is readable by every family member (0127), so a sensitive
+  // document's title must not reach it: the feed would tell a child that
+  // "Divorce decree.pdf" exists. The generic line still records that Bubaly
+  // opened something.
+  await recordActivitySafely(scope, { action: null, agent: 'documents', title: activityDocumentTitle(data, 'Opened'), href: '/dashboard/documents' });
   return ok({
     document: toMeta(data),
     url: signed.data.signedUrl,
@@ -213,7 +225,25 @@ export async function linkToVacation(scope: ServiceScope, input: LinkToVacationI
     return fail('That document is private to the adults in this family.', { code: SERVICE_CODES.denied });
   }
 
-  const { data: existing, error: existingError } = await scope.db
+  // The owner written onto the link must be someone in THIS family: the FK
+  // alone accepts any household's member id, and a model-supplied id is
+  // untrusted input. A foreign or removed member reads as "not found".
+  if (input.memberId) {
+    const member = await scope.db
+      .from('family_members')
+      .select('id')
+      .eq('id', input.memberId)
+      .eq('family_id', scope.familyId)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (member.error) {
+      console.error('[service:documents] link member lookup failed', member.error);
+      return fail(describeDbError(member.error, 'Could not check whose document that is.'), { code: SERVICE_CODES.db });
+    }
+    if (!member.data) return fail('That person is not in this family.', { code: SERVICE_CODES.notFound });
+  }
+
+  const readExisting = () => scope.db
     .from('vacation_documents')
     .select('*')
     .eq('family_id', scope.familyId)
@@ -221,6 +251,7 @@ export async function linkToVacation(scope: ServiceScope, input: LinkToVacationI
     .eq('document_id', input.documentId)
     .limit(1)
     .maybeSingle();
+  const { data: existing, error: existingError } = await readExisting();
   if (existingError) {
     console.error('[service:documents] link probe failed', existingError);
     return fail(describeDbError(existingError, 'Could not check whether that document is already on the trip.'), { code: SERVICE_CODES.db });
@@ -242,11 +273,22 @@ export async function linkToVacation(scope: ServiceScope, input: LinkToVacationI
     })
     .select('*')
     .single();
+  // A concurrent call won the race (once a unique index on
+  // (family_id, vacation_id, document_id) backs the probe): the link exists,
+  // which is what this caller asked for.
+  if (error?.code === '23505') {
+    const raced = await readExisting();
+    if (!raced.error && raced.data) return ok({ link: raced.data, created: false });
+  }
   if (error || !data) {
     console.error('[service:documents] link insert failed', error);
     return fail(describeDbError(error, 'Could not attach that document to the trip.'), { code: SERVICE_CODES.db });
   }
-  await recordActivitySafely(scope, { action: 'update', agent: 'documents', title: `Attached "${data.title}" to ${trip.data.title}`, href: `/dashboard/vacations/${trip.data.id}` });
+  await recordActivitySafely(scope, {
+    action: 'update', agent: 'documents',
+    title: isSensitiveDocument(doc.data) ? `${activityDocumentTitle(doc.data, 'Attached')} to ${trip.data.title}` : `Attached "${data.title}" to ${trip.data.title}`,
+    href: `/dashboard/vacations/${trip.data.id}`,
+  });
   return ok({ link: data, created: true });
 }
 

@@ -79,7 +79,7 @@ export function WeatherChip() {
       <span className="text-2xl leading-none">{info.icon}</span>
       <div className="leading-tight">
         <p className="text-lg font-bold tabular-nums">{tempFromFahrenheit(state.forecast.current.temp, unit)}</p>
-        <p className="max-w-[10ch] truncate text-[10px] text-white/60">{state.place}</p>
+        <p className="max-w-[10ch] truncate text-[10px] text-white/70">{state.place}</p>
       </div>
     </div>
   );
@@ -100,7 +100,7 @@ export function WeatherTile({ size = 'sm' }: { size?: TileSize }) {
   if (state.status === 'loading') return <div className="h-full animate-pulse rounded-xl bg-white/5" />;
   if (state.status === 'denied' || !state.forecast) {
     return (
-      <div className="flex h-full flex-col items-center justify-center text-center text-white/50">
+      <div className="flex h-full flex-col items-center justify-center text-center text-white/70">
         <CloudSun className="h-9 w-9" />
         <p className="mt-2 text-sm">{t('displayWeather.enableLocationForWeather')}</p>
       </div>
@@ -113,12 +113,12 @@ export function WeatherTile({ size = 'sm' }: { size?: TileSize }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <p className="flex items-center gap-1 text-xs text-white/50"><MapPin className="h-3 w-3 shrink-0" /><span className="truncate">{state.place}</span></p>
+      <p className="flex items-center gap-1 text-xs text-white/70"><MapPin className="h-3 w-3 shrink-0" /><span className="truncate">{state.place}</span></p>
       <div className={cn('mt-1 flex items-center gap-3', compact && 'flex-1')}>
         <span className={cn('leading-none', compact ? 'text-4xl' : 'text-5xl')}>{info.icon}</span>
         <div className="min-w-0">
           <p className={cn('font-black leading-none', compact ? 'text-4xl' : 'text-5xl')}>{tempFromFahrenheit(f.current.temp, unit)}</p>
-          <p className="mt-0.5 truncate text-sm text-white/60">{info.label} {t('displayWeather.feels')} {tempFromFahrenheit(f.current.feelsLike, unit)}</p>
+          <p className="mt-0.5 truncate text-sm text-white/70">{info.label} {t('displayWeather.feels')} {tempFromFahrenheit(f.current.feelsLike, unit)}</p>
         </div>
       </div>
       {/* Forecast strip only when there's vertical room — this is the piece that
@@ -127,10 +127,10 @@ export function WeatherTile({ size = 'sm' }: { size?: TileSize }) {
         <div className="mt-auto flex justify-between gap-1 pt-3">
           {f.daily.slice(1, 1 + days).map((d) => (
             <div key={d.date} className="flex-1 rounded-xl bg-white/5 py-2 text-center">
-              <p className="text-[11px] text-white/50">{format.fmtDate(d.date, 'EEE')}</p>
+              <p className="text-[11px] text-white/70">{format.fmtDate(d.date, 'EEE')}</p>
               <p className="text-xl leading-tight">{weatherInfo(d.code).icon}</p>
               <p className="text-sm font-bold">{tempFromFahrenheit(d.tempMax, unit)}</p>
-              <p className="text-[11px] text-white/40">{tempFromFahrenheit(d.tempMin, unit)}</p>
+              <p className="text-[11px] text-white/70">{tempFromFahrenheit(d.tempMin, unit)}</p>
             </div>
           ))}
         </div>

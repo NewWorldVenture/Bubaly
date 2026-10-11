@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { selectPushRecipients } from '@/lib/marketing/push';
+import { hasMarketingPushConsent, MARKETING_PUSH_EXCLUDED_ROLES, selectPushRecipients } from '@/lib/marketing/push';
 
 type DB = SupabaseClient<Database>;
 const PAGE_SIZE = 200;
@@ -95,5 +95,42 @@ export async function loadPushCampaignAudience(supabase: DB): Promise<string[]> 
     return query;
   }, row => row.email, budget, 'suppressions');
 
-  return selectPushRecipients(uniqueIds, emailByUser, suppressions.map(row => row.email));
+  const selected = selectPushRecipients(uniqueIds, emailByUser, suppressions.map(row => row.email));
+  return consentingAdults(supabase, selected, budget);
+}
+
+/**
+ * Keep only accounts that explicitly opted in to marketing push and hold no
+ * child or teen membership in any family.
+ *
+ * The device table says who CAN be reached, not who agreed to marketing: a
+ * child with the app installed was in the audience because their family left
+ * push on, and the only way out was to turn off all push, including the
+ * family's own notices. Read completely before dispatch, on the same budget;
+ * an incomplete read throws, so a refused read sends nothing.
+ */
+async function consentingAdults(supabase: DB, userIds: string[], budget: ReadBudget): Promise<string[]> {
+  const consented = new Set<string>();
+  const minors = new Set<string>();
+  for (let offset = 0; offset < userIds.length; offset += ID_CHUNK) {
+    const chunk = userIds.slice(offset, offset + ID_CHUNK);
+    const preferences = await readPages(cursor => {
+      let query = supabase.from('user_preferences').select('user_id, notification_prefs')
+        .in('user_id', chunk).order('user_id', { ascending: true }).limit(PAGE_SIZE);
+      if (cursor !== null) query = query.gt('user_id', cursor);
+      return query;
+    }, row => row.user_id, budget, 'consent');
+    for (const row of preferences) if (hasMarketingPushConsent(row.notification_prefs)) consented.add(row.user_id);
+    // Every membership, active or not: a removed child is still a child.
+    const memberships = await readPages(cursor => {
+      let query = supabase.from('family_members').select('id, user_id, role')
+        .in('user_id', chunk).order('id', { ascending: true }).limit(PAGE_SIZE);
+      if (cursor !== null) query = query.gt('id', cursor);
+      return query;
+    }, row => row.id, budget, 'member roles');
+    for (const row of memberships) {
+      if (typeof row.user_id === 'string' && MARKETING_PUSH_EXCLUDED_ROLES.includes(String(row.role))) minors.add(row.user_id);
+    }
+  }
+  return userIds.filter(id => consented.has(id) && !minors.has(id));
 }

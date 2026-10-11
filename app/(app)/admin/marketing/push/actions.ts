@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import type { Json } from '@/lib/database.types';
 import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import { sendPushToUsers, PushPreparationError, type PushResult } from '@/lib/server/push';
-import { canSendPush, canDeletePush } from '@/lib/marketing/push';
+import { canSendPush, canDeletePush, staleSendingResolution } from '@/lib/marketing/push';
 import { loadPushCampaignAudience } from '@/lib/marketing/push-audience';
 
 function s(fd: FormData, k: string): string | null {
@@ -124,5 +124,45 @@ export async function deletePushCampaignAction(id: string): Promise<void> {
   if (error) marketingActionFailure('delete the push campaign', error);
   if (!data) return;
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'delete', resource: 'marketing_push_campaign', resourceId: id });
+  revalidatePath('/admin/marketing/push');
+}
+
+/**
+ * Record the outcome of an attempt that can no longer finish on its own.
+ *
+ * A send killed by the platform (function timeout, worker crash) never reaches
+ * its catch block, and an attempt whose results could not be saved is left in
+ * 'unknown' on purpose; either way the row stayed 'sending' for good, with no
+ * action able to retry, delete or acknowledge it. staleSendingResolution says
+ * what may be recorded: a 'preparing' attempt that never reached a provider
+ * becomes retryable, anything that may have reached devices is recorded as
+ * reviewed (deletable, never re-sent).
+ */
+export async function resolveStalePushCampaignAction(id: string): Promise<void> {
+  const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
+  const { data: campaign, error: readError } = await supabase.from('marketing_push_campaigns')
+    .select('status,metadata,updated_at').eq('id', id).is('deleted_at', null).maybeSingle();
+  if (readError) marketingActionFailure('load the push campaign', readError);
+  if (!campaign) return;
+  const resolution = staleSendingResolution(campaign.status, campaign.metadata, campaign.updated_at);
+  if (!resolution) return;
+  const metadata = campaign.metadata && typeof campaign.metadata === 'object' && !Array.isArray(campaign.metadata)
+    ? campaign.metadata : {};
+  const previous = metadata.push_delivery && typeof metadata.push_delivery === 'object' && !Array.isArray(metadata.push_delivery)
+    ? metadata.push_delivery : {};
+  const previousPhase = typeof previous.phase === 'string' ? previous.phase : null;
+  const { data, error } = await supabase.from('marketing_push_campaigns').update({
+    status: resolution.status,
+    metadata: { ...metadata, push_delivery: {
+      ...previous, version: 1,
+      attemptId: typeof previous.attemptId === 'string' ? previous.attemptId : 'legacy',
+      phase: resolution.phase, previousPhase, resolvedAt: new Date().toISOString(), resolvedBy: actorId,
+    } },
+  }).eq('id', id).eq('status', 'sending').eq('updated_at', campaign.updated_at)
+    .is('deleted_at', null).select('id').maybeSingle();
+  if (error) marketingActionFailure('resolve the push campaign', error);
+  if (!data) return;
+  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'resolve', resource: 'marketing_push_campaign', resourceId: id,
+    metadata: { previousPhase, phase: resolution.phase } });
   revalidatePath('/admin/marketing/push');
 }

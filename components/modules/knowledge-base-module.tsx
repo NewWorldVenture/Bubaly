@@ -164,7 +164,7 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
         <div className="space-y-6">
           {grouped.map(([cat, items]) => (
             <section key={cat}>
-              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{FACT_CATEGORY_LABELS[cat]} <span className="opacity-60">· {items.length}</span></h2>
+              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{FACT_CATEGORY_LABELS[cat]} <span className="font-normal">· {items.length}</span></h2>
               <ul className="space-y-2">
                 {items.map((f) => (
                   <li key={f.id} className={cn('flex items-start gap-3 rounded-xl border bg-surface/50 p-3', f.is_pinned ? 'border-brand/30' : 'border-border')}>

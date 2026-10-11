@@ -52,7 +52,7 @@ import type { ToolDefinition } from '@/lib/ai/tools/types';
 import type { AiStepType } from '@/lib/database.types';
 import { zonedTimeMs } from '@/lib/services/scope';
 import {
-  evaluateAction, HIGH_STAKES_AI_DOMAINS, riskToDecision, riskTierStance,
+  evaluateAction, readSkipsTrustGate, riskToDecision, riskTierStance,
   type AutonomyBehavior, type Capability, type Decision, type Delegation, type Grant, type Policy, type TrustRole,
 } from '@/lib/trust/engine';
 import {
@@ -218,11 +218,15 @@ export type DryRunDecision = Decision & { capability: Capability; skipped: boole
  * and tags below are copied from the executor verbatim.
  */
 export function dryRunGate(tool: ToolDefinition, input: unknown, inputs: ValidationInputs, behavior: AutonomyBehavior | null): DryRunDecision {
-  const readSkipsGate = tool.readOnly && !HIGH_STAKES_AI_DOMAINS.includes(tool.domain);
-  if (readSkipsGate) {
+  const actor = { kind: 'ai_agent' as const, id: 'bubaly', role: inputs.role };
+  // The executor's own skip rule, from the one shared helper. This used to be
+  // a copy of the OLD rule (every read outside the high-stakes domains), so a
+  // teen's, child's, caregiver's or guest's plan kept a private read the run
+  // then denied — and its dependants failed mid-run instead of being left out
+  // here with a reason.
+  if (readSkipsTrustGate(tool, actor)) {
     return { effect: 'allow', reason: 'A read that needs no permission.', basis: 'role_default', capability: tool.capability, skipped: true };
   }
-  const actor = { kind: 'ai_agent' as const, id: 'bubaly', role: inputs.role };
   const capability: Capability = tool.readOnly ? tool.capability : 'automate';
   const confidence = inputs.confidence ?? 0.85;
   const amountCents = readAmountCents(input);
@@ -255,6 +259,7 @@ export function dryRunGate(tool: ToolDefinition, input: unknown, inputs: Validat
       domain: tool.domain,
       capability,
       explicitAllow: false,
+      sensitiveRead: tool.sensitiveRead === true,
       ...(behavior ? { behavior } : {}),
     });
     if (risked && (stance === 'speaks' || risked.effect !== 'allow')) decision = risked;

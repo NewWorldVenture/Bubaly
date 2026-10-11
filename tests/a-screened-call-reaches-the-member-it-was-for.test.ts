@@ -27,13 +27,15 @@ const COMM = '00000000-0000-4000-8000-00000000c0c1';
 beforeEach(() => {
   const db = createInMemorySupabase({ uniques: { guardian_callback_events: [['event_id']] } });
   db.seed('families', [{ id: FAMILY, name: 'Fixture' }]);
+  // `is_active` as the tables default it (true): the screen dials and screens
+  // for active members only, as the voice route already routed.
   db.seed('family_members', [
-    { id: 'm-grandpa', family_id: FAMILY, display_name: 'Grandpa', phone: '+15550000001' },
-    { id: 'm-teen', family_id: FAMILY, display_name: 'Teen', phone: '+15550000002' },
+    { id: 'm-grandpa', family_id: FAMILY, display_name: 'Grandpa', phone: '+15550000001', is_active: true },
+    { id: 'm-teen', family_id: FAMILY, display_name: 'Teen', phone: '+15550000002', is_active: true },
   ]);
   db.seed('guardian_member_profiles', [
-    { id: 'p-grandpa', family_id: FAMILY, member_id: 'm-grandpa' },
-    { id: 'p-teen', family_id: FAMILY, member_id: 'm-teen' },
+    { id: 'p-grandpa', family_id: FAMILY, member_id: 'm-grandpa', is_active: true },
+    { id: 'p-teen', family_id: FAMILY, member_id: 'm-teen', is_active: true },
   ]);
   db.seed('guardian_communications', [{ id: COMM, family_id: FAMILY, member_id: 'm-teen', status: 'screening' }]);
   db.seed('guardian_screening_sessions', [{ id: SESSION, family_id: FAMILY, communication_id: COMM, twilio_call_sid: 'CA0001', caller_number: '+15559999999', turn: 0, status: 'active', messages: [] }]);

@@ -4,14 +4,15 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { superAdminGate } from '@/lib/auth/super-admin-gate';
 import { createServiceClient } from '@/lib/supabase/server';
-import { setFeatureTier, resetFeatureTiers } from '@/lib/server/feature-tiers';
+import { setFeatureTier, resetFeatureTiers, FeatureTierConflictError } from '@/lib/server/feature-tiers';
 import { isFeatureTier } from '@/lib/features/tiers';
 import { FEATURE_CATALOG_BY_KEY } from '@/lib/constants/feature-catalog';
 import { describeActionError } from '@/lib/supabase/errors';
+import { logAudit } from '@/lib/server/audit';
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 type AdminClient = ReturnType<typeof createServiceClient>;
-type GuardResult = { supabase: AdminClient } | { ok: false; error: string };
+type GuardResult = { supabase: AdminClient; actorId: string } | { ok: false; error: string };
 
 function actionFailure(operation: string, message: string, error: unknown): ActionResult {
   console.error(`[tier-features] ${operation} failed`, error);
@@ -22,9 +23,11 @@ async function guard(): Promise<GuardResult> {
   const t = await getTranslations();
   const gate = await superAdminGate();
   if (gate.status !== 'allowed') {
-    return { ok: false, error: gate.status === 'unavailable' ? t('ai.accountContextIsTemporarilyUnavailable') : t('actions.notAuthorized') };
+    const error = gate.status === 'unavailable' ? t('ai.accountContextIsTemporarilyUnavailable')
+      : gate.status === 'step_up' ? t('actions.adminConsoleNeedsYourCode') : t('actions.notAuthorized');
+    return { ok: false, error };
   }
-  return { supabase: createServiceClient() };
+  return { supabase: createServiceClient(), actorId: gate.user.id };
 }
 
 function revalidate() {
@@ -39,11 +42,21 @@ export async function setFeatureTierAction(key: string, tier: string): Promise<A
   if (!('supabase' in guarded)) return guarded;
   if (!FEATURE_CATALOG_BY_KEY[key]) return { ok: false, error: t('actions.chooseAValidFeature') };
   if (!isFeatureTier(tier)) return { ok: false, error: t('actions.chooseAValidTier') };
+  let previous: string | null;
   try {
-    await setFeatureTier(guarded.supabase, key, tier);
+    ({ previous } = await setFeatureTier(guarded.supabase, key, tier, guarded.actorId));
   } catch (error) {
+    if (error instanceof FeatureTierConflictError) {
+      console.error('[tier-features] save that feature tier failed', error);
+      return { ok: false, error: t('tierFeatures.theFeatureTiersChangedWhileSaving') };
+    }
     return actionFailure('save that feature tier', t('tierFeatures.couldNotSaveThatFeatureTier'), error);
   }
+  // Platform-wide entitlement gating: who moved which feature, from what.
+  await logAudit(guarded.supabase, {
+    familyId: null, actorId: guarded.actorId, action: 'update', resource: 'feature_tiers', resourceId: null,
+    metadata: { key, previous_tier: previous ?? FEATURE_CATALOG_BY_KEY[key].defaultTier, tier, via: 'site_admin' },
+  });
   revalidate();
   return { ok: true };
 }
@@ -52,11 +65,16 @@ export async function resetFeatureTiersAction(): Promise<ActionResult> {
   const t = await getTranslations();
   const guarded = await guard();
   if (!('supabase' in guarded)) return guarded;
+  let previous: Record<string, string>;
   try {
-    await resetFeatureTiers(guarded.supabase);
+    ({ previous } = await resetFeatureTiers(guarded.supabase, guarded.actorId));
   } catch (error) {
     return actionFailure('reset feature tiers', t('tierFeatures.couldNotResetFeatureTiers'), error);
   }
+  await logAudit(guarded.supabase, {
+    familyId: null, actorId: guarded.actorId, action: 'reset', resource: 'feature_tiers', resourceId: null,
+    metadata: { setting_key: 'feature_tiers', previous_overrides: previous, via: 'site_admin' },
+  });
   revalidate();
   return { ok: true };
 }

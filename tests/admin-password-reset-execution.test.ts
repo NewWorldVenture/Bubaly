@@ -5,6 +5,13 @@ import type { Database } from '@/lib/database.types';
 const state = vi.hoisted(() => ({
   client: undefined as unknown as SupabaseClient<Database>, allowed: vi.fn(), user: vi.fn(), factory: vi.fn(),
 }));
+// The admin gates also ask lib/auth/super-admin-assurance whether the session
+// proved its authenticator; this file is not about step-up, so it says yes.
+vi.mock('@/lib/auth/super-admin-assurance', () => ({
+  superAdminAssurance: async () => ({ ok: true }),
+  decideSuperAdminAssurance: () => ({ ok: true }),
+  SUPER_ADMIN_STEP_UP_PATH: '/auth/step-up?next=%2Fadmin',
+}));
 vi.mock('@/lib/supabase/auth', () => ({ isSuperAdmin: state.allowed, getUser: state.user }));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: state.factory }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));

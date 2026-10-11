@@ -199,6 +199,103 @@ export type OpenedApproval = {
   alreadyPending: boolean;
 };
 
+/** What a pending row must say about itself before a resend may reuse it. */
+export type PendingAsk = {
+  requestedByKind: 'ai' | 'member';
+  requestedByMemberId: string | null;
+  domain: string;
+  capability: string;
+  payload: unknown;
+};
+
+type PendingCandidate = {
+  id: string;
+  requested_by_kind: string | null;
+  requested_by_member_id: string | null;
+  domain: string | null;
+  capability: string | null;
+  payload: unknown;
+};
+
+function canonicalJson(value: unknown): string {
+  // Through JSON first, so the comparison sees what jsonb stored (undefined
+  // dropped, dates as strings) rather than the caller's in-memory shape.
+  return stable(JSON.parse(JSON.stringify(value ?? {})));
+}
+
+/**
+ * Whether a pending row found under a dedupe key really IS this ask.
+ *
+ * `dedupe_key` is a column a member writes when they file their own row (the
+ * 0255 insert policy does not pin it), and the key is a hash of values the
+ * asker knows. So a key match alone proves nothing: an adult could plant a row
+ * with Bubaly's key and a different payload, let Bubaly "reuse" it — writing
+ * Bubaly's `ai_agent` audit line against it — and then approve their own
+ * payload as if Bubaly had filed it. Only a row whose filer and payload (which
+ * 0389 freezes) match the ask is the same request.
+ */
+export function pendingRowIsThisAsk(row: PendingCandidate | null | undefined, ask: PendingAsk): boolean {
+  if (!row?.id) return false;
+  return row.requested_by_kind === ask.requestedByKind
+    && (row.requested_by_member_id ?? null) === (ask.requestedByMemberId ?? null)
+    && row.domain === ask.domain
+    && row.capability === ask.capability
+    && canonicalJson(row.payload) === canonicalJson(ask.payload);
+}
+
+type InsertResult = { data: { id: string } | null; error: { code?: string } | null };
+
+/**
+ * Reuse the pending row for this exact ask, or file a new one.
+ *
+ * A row holding the key that is NOT this ask (see `pendingRowIsThisAsk`) is
+ * never returned. The new row is then filed without a dedupe key: 0273's
+ * partial unique index would refuse the key while the planted row is pending,
+ * and failing the ask would let a planted row block Bubaly from asking at all.
+ */
+export async function fileOrReusePendingApproval(
+  writer: DB,
+  familyId: string,
+  dedupeKey: string,
+  ask: PendingAsk,
+  insert: (dedupeKey: string | null) => PromiseLike<InsertResult>,
+): Promise<{ id: string; alreadyPending: boolean } | { id: null; error: unknown }> {
+  const lookup = () => writer.from('approval_requests')
+    .select('id, requested_by_kind, requested_by_member_id, domain, capability, payload')
+    .eq('family_id', familyId).eq('dedupe_key', dedupeKey).eq('status', 'pending')
+    .limit(1).maybeSingle();
+
+  // A pending row for this exact ask already covers it. 0273's partial unique
+  // index makes this a fast lookup and, more importantly, makes the check
+  // correct under a race: two simultaneous resends both miss here, one insert
+  // wins, and the loser is caught below rather than filing a second card.
+  const existing = await lookup();
+  const existingRow = existing.data as PendingCandidate | null;
+  if (pendingRowIsThisAsk(existingRow, ask)) return { id: existingRow!.id, alreadyPending: true };
+  if (existingRow?.id) {
+    console.warn('[trust] a pending row holds this dedupe key but is not this request; filing a separate one', { familyId, approvalId: existingRow.id });
+    const separate = await insert(null);
+    return separate.data?.id ? { id: separate.data.id, alreadyPending: false } : { id: null, error: separate.error };
+  }
+
+  const first = await insert(dedupeKey);
+  if (first.data?.id) return { id: first.data.id, alreadyPending: false };
+
+  // 23505: the index caught a concurrent resend between our lookup and this
+  // insert. The row that won is the answer — if it is this ask. One that is
+  // not was planted under the key, and this ask is filed on its own.
+  if (first.error?.code === '23505') {
+    const raced = await lookup();
+    const racedRow = raced.data as PendingCandidate | null;
+    if (pendingRowIsThisAsk(racedRow, ask)) return { id: racedRow!.id, alreadyPending: true };
+    if (racedRow?.id) {
+      const separate = await insert(null);
+      return separate.data?.id ? { id: separate.data.id, alreadyPending: false } : { id: null, error: separate.error };
+    }
+  }
+  return { id: null, error: first.error };
+}
+
 export async function openApprovalRequest(
   supabase: DB,
   familyId: string,
@@ -207,31 +304,27 @@ export async function openApprovalRequest(
 ): Promise<OpenedApproval | null> {
   const writer = await ledgerWriter(supabase);
   const dedupeKey = approvalDedupeKey(familyId, req);
+  const requestedByKind = req.actor.kind === 'ai_agent' ? 'ai' as const : 'member' as const;
+  // For a member the actor IS the asker. For an agent the actor is Bubaly, so
+  // the asker has to be carried alongside — without it the row records that
+  // "Bubaly asked" and loses the person it asked for, which is the whole
+  // reason an approved action could only ever be replayed as the approver.
+  const requestedByMemberId = req.actor.kind === 'member' ? req.actor.id : (req.onBehalfOfMemberId ?? null);
+  const payload = (req.payload ?? {}) as Json;
 
-  // A pending row for this exact ask already covers it. 0273's partial unique
-  // index makes this a fast lookup and, more importantly, makes the check
-  // correct under a race: two simultaneous resends both miss here, one insert
-  // wins, and the loser is caught below rather than filing a second card.
-  const existing = await writer.from('approval_requests')
-    .select('id').eq('family_id', familyId).eq('dedupe_key', dedupeKey).eq('status', 'pending')
-    .limit(1).maybeSingle();
-  if (existing.data?.id) return { id: existing.data.id, alreadyPending: true };
-
-  const { data: appr, error } = await writer.from('approval_requests').insert({
-    dedupe_key: dedupeKey,
+  const opened = await fileOrReusePendingApproval(writer, familyId, dedupeKey, {
+    requestedByKind, requestedByMemberId, domain: req.domain, capability: req.capability, payload,
+  }, (key) => writer.from('approval_requests').insert({
+    dedupe_key: key,
     family_id: familyId,
     domain: req.domain,
     capability: req.capability,
-    requested_by_kind: req.actor.kind === 'ai_agent' ? 'ai' : 'member',
-    // For a member the actor IS the asker. For an agent the actor is Bubaly, so
-    // the asker has to be carried alongside — without it the row records that
-    // "Bubaly asked" and loses the person it asked for, which is the whole
-    // reason an approved action could only ever be replayed as the approver.
-    requested_by_member_id: req.actor.kind === 'member' ? req.actor.id : (req.onBehalfOfMemberId ?? null),
+    requested_by_kind: requestedByKind,
+    requested_by_member_id: requestedByMemberId,
     agent: req.actor.kind === 'ai_agent' ? (req.agent ?? req.actor.id) : null,
     title: req.title ?? `${req.capability} · ${req.domain}`,
     summary: req.summary ?? null,
-    payload: (req.payload ?? {}) as Json,
+    payload,
     amount_cents: req.context?.amountCents ?? null,
     confidence: req.context?.confidence ?? null,
     policy_id: decision.policyId ?? null,
@@ -240,20 +333,10 @@ export async function openApprovalRequest(
     required_approvals: decision.requiredApprovals ?? 1,
     status: 'pending',
     priority: req.context?.amountCents && req.context.amountCents > 20000 ? 'high' : 'normal',
-  }).select('id').single();
+  }).select('id').single());
 
-  if (appr?.id) return { id: appr.id, alreadyPending: false };
-
-  // 23505: the index caught a concurrent resend between our lookup and this
-  // insert. The row that won is the answer — returning null here would tell the
-  // family "could not send for approval" about a card sitting in their inbox.
-  if (error?.code === '23505') {
-    const raced = await writer.from('approval_requests')
-      .select('id').eq('family_id', familyId).eq('dedupe_key', dedupeKey).eq('status', 'pending')
-      .limit(1).maybeSingle();
-    if (raced.data?.id) return { id: raced.data.id, alreadyPending: true };
-  }
-  if (error) console.error('[trust] approval request insert failed', error);
+  if (opened.id) return { id: opened.id, alreadyPending: opened.alreadyPending };
+  if ('error' in opened && opened.error) console.error('[trust] approval request insert failed', opened.error);
   return null;
 }
 
