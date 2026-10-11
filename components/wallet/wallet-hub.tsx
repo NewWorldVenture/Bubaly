@@ -379,7 +379,7 @@ function Row({ children, onDelete }: { children: React.ReactNode; onDelete?: () 
     <div className="group flex items-center gap-3 rounded-xl px-1 py-2.5 hover:bg-elevated/40">
       {children}
       {onDelete && (
-        <button onClick={onDelete} className="rounded-lg p-1 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={tr('wallet.remove')}>
+        <button onClick={onDelete} className="rounded-lg p-1 text-muted/40 opacity-100 sm:opacity-0 transition hover:text-danger sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100" aria-label={tr('wallet.remove')}>
           <Trash2 className="h-4 w-4" />
         </button>
       )}
@@ -399,7 +399,7 @@ function CardRow({ card, onDelete }: { card: Card; onDelete: () => void }) {
         <p className="text-[11px] text-muted">···· {card.last_four ?? '••••'} · {card.kind}</p>
       </div>
       <div className="text-right"><p className="text-sm font-bold tabular-nums">{fmtUsd(card.available_cents)}</p><p className="text-[10px] text-muted">{tr('wallet.available')}</p></div>
-      <button onClick={onDelete} className="absolute right-1 top-1 rounded-lg p-1 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={tr('wallet.remove')}><Trash2 className="h-3.5 w-3.5" /></button>
+      <button onClick={onDelete} className="absolute right-1 top-1 rounded-lg p-1 text-muted/40 opacity-100 sm:opacity-0 transition hover:text-danger sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100" aria-label={tr('wallet.remove')}><Trash2 className="h-3.5 w-3.5" /></button>
     </div>
   );
 }

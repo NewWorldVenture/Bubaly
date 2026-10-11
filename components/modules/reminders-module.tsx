@@ -581,7 +581,7 @@ export function RemindersModule() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                <div className="flex items-center gap-1 opacity-100 sm:opacity-0 transition-opacity sm:group-hover:opacity-100 focus-within:opacity-100 coarse:opacity-100">
                   {!completed && (
                     <div className="relative">
                       <details className="group/snooze">
