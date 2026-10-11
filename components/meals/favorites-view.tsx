@@ -83,7 +83,7 @@ export function FavoritesView() {
                       <p className="text-xs text-muted">{meta.label}</p>
                     </div>
                   </div>
-                  <button onClick={() => remove(f.id)} className="rounded-lg p-1 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={t('favoritesView.remove')}><Trash2 className="h-4 w-4" /></button>
+                  <button onClick={() => remove(f.id)} className="rounded-lg p-1 text-muted/40 opacity-100 sm:opacity-0 transition hover:text-danger sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100" aria-label={t('favoritesView.remove')}><Trash2 className="h-4 w-4" /></button>
                 </div>
                 {f.rating != null && (
                   <div className="mt-2 flex gap-0.5">

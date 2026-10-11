@@ -413,7 +413,7 @@ function HabitCard({ habit, today, logDates, progress, memberName, onToggle, onC
         {WEEKDAYS.map((d, i) => <span key={i}>{d}</span>)}
       </div>
 
-      <div className="mt-3 flex justify-end gap-1 opacity-0 transition group-hover:opacity-100">
+      <div className="mt-3 flex justify-end gap-1 opacity-100 sm:opacity-0 transition sm:group-hover:opacity-100 focus-within:opacity-100 coarse:opacity-100">
         <button disabled={disabled} onClick={onEdit} aria-label={t('habits.editHabit')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
         <button disabled={disabled} onClick={() => { if (!disabled && confirm(t('habitsModule.archiveThisHabit'))) onArchive(); }} aria-label={t('habits.archiveHabit')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Archive className="h-3.5 w-3.5" /></button>
       </div>

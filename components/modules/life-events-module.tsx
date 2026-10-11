@@ -187,7 +187,7 @@ export function LifeEventsModule({
                     <p className="mt-0.5 text-sm text-muted">{f.value}</p>
                     {f.notes && <p className="mt-1 text-xs text-muted">{f.notes}</p>}
                   </div>
-                  <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+                  <div className="flex shrink-0 items-center gap-0.5 opacity-100 sm:opacity-0 transition sm:group-hover:opacity-100 coarse:opacity-100 focus-within:opacity-100">
                     <button onClick={() => togglePin(f)} aria-label={f.is_pinned ? tr('dialogTitle.unpin') : tr('dialogTitle.pin')} className="rounded-lg p-1.5 text-muted hover:text-brand-text">{f.is_pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}</button>
                     <button onClick={() => setFactModal({ open: true, editing: f })} aria-label={tr('lifeEvents.edit')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
                     <button onClick={() => removeFact(f)} aria-label={tr('lifeEvents.remove')} className="rounded-lg p-1.5 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>

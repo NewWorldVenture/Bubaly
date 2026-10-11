@@ -244,9 +244,9 @@ export function InventoryModule() {
                     <button onClick={() => setLocationFilter(location.id)} className={cn('flex min-h-9 flex-1 items-center gap-2 rounded-lg px-2 text-left text-sm', locationFilter === location.id ? 'bg-brand/15 text-brand-text' : 'hover:bg-elevated')}>
                       <span>{locationKindMeta(location.kind).emoji}</span><span className="truncate">{location.name}</span><span className="ml-auto text-xs text-muted">{itemsIn(location.id)}</span>
                     </button>
-                    <button onClick={() => setLocationForm({ open: true, parent: location, location: null })} aria-label={tr('inventory.addContainerIn', { name: location.name })} className="rounded p-1 text-muted opacity-0 hover:text-fg group-hover:opacity-100"><Plus className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => setLocationForm({ open: true, parent: null, location })} aria-label={tr('itemAction.edit', { name: location.name })} className="rounded p-1 text-muted opacity-0 hover:text-fg group-hover:opacity-100"><Pencil className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => deleteLocation(location)} aria-label={tr('itemAction.delete', { name: location.name })} className="rounded p-1 text-muted opacity-0 hover:text-rose-400 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => setLocationForm({ open: true, parent: location, location: null })} aria-label={tr('inventory.addContainerIn', { name: location.name })} className="rounded p-1 text-muted opacity-100 sm:opacity-0 hover:text-fg sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100"><Plus className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => setLocationForm({ open: true, parent: null, location })} aria-label={tr('itemAction.edit', { name: location.name })} className="rounded p-1 text-muted opacity-100 sm:opacity-0 hover:text-fg sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100"><Pencil className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => deleteLocation(location)} aria-label={tr('itemAction.delete', { name: location.name })} className="rounded p-1 text-muted opacity-100 sm:opacity-0 hover:text-rose-400 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
                   {children.length > 0 && (
                     <ul className="ml-4 border-l border-border pl-2">
@@ -255,7 +255,7 @@ export function InventoryModule() {
                           <button onClick={() => setLocationFilter(c.id)} className={cn('flex min-h-8 flex-1 items-center gap-2 rounded-lg px-2 text-left text-xs', locationFilter === c.id ? 'bg-brand/15 text-brand-text' : 'text-muted hover:bg-elevated hover:text-fg')}>
                             <ChevronRight className="h-3 w-3" /><span className="truncate">{c.name}</span><span className="ml-auto">{itemsIn(c.id)}</span>
                           </button>
-                          <button onClick={() => deleteLocation(c)} aria-label={tr('itemAction.delete', { name: c.name })} className="rounded p-1 text-muted opacity-0 hover:text-rose-400 group-hover:opacity-100"><Trash2 className="h-3 w-3" /></button>
+                          <button onClick={() => deleteLocation(c)} aria-label={tr('itemAction.delete', { name: c.name })} className="rounded p-1 text-muted opacity-100 sm:opacity-0 hover:text-rose-400 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100"><Trash2 className="h-3 w-3" /></button>
                         </li>
                       ))}
                     </ul>

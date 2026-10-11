@@ -86,7 +86,7 @@ export function SavingsView() {
                       {g.target_date && <p className="text-xs text-muted">by {fmtDueDate(g.target_date)}</p>}
                     </div>
                   </div>
-                  <button onClick={() => remove(g.id)} className="rounded-lg p-1 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={t('savingsView.delete')}><Trash2 className="h-4 w-4" /></button>
+                  <button onClick={() => remove(g.id)} className="rounded-lg p-1 text-muted/40 opacity-100 sm:opacity-0 transition hover:text-danger sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100" aria-label={t('savingsView.delete')}><Trash2 className="h-4 w-4" /></button>
                 </div>
                 <div className="mb-1 flex items-baseline justify-between text-sm">
                   <span className="font-bold tabular-nums">{usd(Number(g.current_amount))}</span>
