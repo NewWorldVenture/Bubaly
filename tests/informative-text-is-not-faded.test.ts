@@ -15,8 +15,9 @@ import { sourceFiles } from './helpers/hover-reveals';
 // already says ("Resolved", "Suspended", "Noted", "Claimed by", a strike-
 // through, a switch, the section it is in) or by a dashed border where the
 // fade was the only cue. A done fridge-chef button is disabled now instead
-// of faded and unclickable only by mouse: Enter still pressed it, and
-// "Added to grocery" added the items again.
+// of faded and unclickable only by mouse: Enter still pressed it, and on
+// "Added to grocery" it would add the items again (addToGrocery has no
+// guard for an item already added).
 
 /** `line`: the source line the element opens on, then its whole opening tag. */
 type Fade = { at: string; file: string; line: string; tag: string; fade: string };
@@ -94,15 +95,9 @@ function carriesText(node: ts.JsxElement | ts.JsxSelfClosingElement): boolean {
   return node.children.some(child);
 }
 
-// What is still faded on purpose, and why. `pending` names a PR that removes it.
-const ALLOWED: { file: string; has: string; why: string; pending?: string }[] = [
+// What is still faded on purpose, and why.
+const ALLOWED: { file: string; has: string; why: string }[] = [
   { file: 'components/modules/scan-module.tsx', has: "scanning && 'pointer-events-none opacity-70'", why: 'the form while a scan runs: inactive, and announced as busy' },
-  { file: 'components/modules/shopping-module.tsx', has: "item.is_checked && 'opacity-60'", why: 'a checked grocery item', pending: '#1007' },
-  { file: 'components/modules/medications-module.tsx', has: "'bg-surface/20 border-border/50 opacity-70'", why: 'an inactive medication', pending: '#1007' },
-  { file: 'components/modules/knowledge-base-module.tsx', has: '<span className="opacity-60">· {items.length}</span>', why: 'a heading count', pending: '#1007' },
-  { file: 'components/modules/next-actions-module.tsx', has: '<span className="opacity-60">· {items.length}</span>', why: 'a heading count', pending: '#1007' },
-  { file: 'components/modules/notes-module.tsx', has: '<span className="ml-1 text-xs opacity-70">', why: 'a tab count', pending: '#1007' },
-  { file: 'app/(app)/admin/marketplace/reports/page.tsx', has: '<span className="opacity-60">{filterCount[f.key]}</span>', why: 'a filter count', pending: '#1007' },
 ];
 
 const files = [...sourceFiles('components'), ...sourceFiles('app')];
@@ -112,8 +107,8 @@ describe('informative text is not faded with opacity', () => {
     const found = fadedText(files);
     const allowed = (f: Fade) => ALLOWED.some((a) => f.file === a.file && f.line.includes(a.has));
     expect(found.filter((f) => !allowed(f)).map((f) => `${f.at} <${f.tag}> ${f.fade}: ${f.line}`)).toEqual([]);
-    // Each allowance still names a real site, unless a pending PR has removed it.
-    for (const a of ALLOWED.filter((x) => !x.pending)) {
+    // Each allowance still names a real site.
+    for (const a of ALLOWED) {
       expect(found.some((f) => f.file === a.file && f.line.includes(a.has)), a.file).toBe(true);
     }
     expect(found.length).toBeGreaterThanOrEqual(1);
