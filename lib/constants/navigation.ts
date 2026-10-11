@@ -9,6 +9,7 @@ import {
   Truck, Hammer, Briefcase, Languages, Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, LayoutGrid, HelpCircle, Smartphone, Apple, Utensils, PiggyBank, Receipt, Target, FileText, History, Cloud, Lock, Store, Mic, Wand2, Leaf, Scale, Radar, Milestone, Compass, Headset, Shirt, Clapperboard, PackageSearch, MoonStar, Sparkle, Headphones, Speaker, type LucideIcon,
 } from 'lucide-react';
 import { AllServicesIcon } from '@/components/app/icons/all-services-icon';
+import { isWithheldFromGuest } from '@/lib/auth/guest-scope';
 
 /** A single nav destination. `minLevel` is the lowest plan that can use it:
  *  0 = Free (everyone), 1 = Family Basic+, 2 = Family+. Omitted = 0 (free).
@@ -24,9 +25,12 @@ export type NavItem = { href: string; label: string; icon: LucideIcon; minLevel?
  *  (see `resolveItems`). Pure + deterministic so it's unit-testable. */
 export function isNavItemVisibleToRole(
   item: NavItem,
-  opts: { isManager: boolean; isSuperAdmin?: boolean },
+  opts: { isManager: boolean; isSuperAdmin?: boolean; isGuest?: boolean },
 ): boolean {
   if (item.manage && !opts.isManager && !opts.isSuperAdmin) return false;
+  // A guest is sent away from the household's most sensitive pages (held 0509,
+  // lib/auth/guest-scope.ts), so they are not offered as links either.
+  if (opts.isGuest && !opts.isSuperAdmin && isWithheldFromGuest(item.href)) return false;
   return true;
 }
 

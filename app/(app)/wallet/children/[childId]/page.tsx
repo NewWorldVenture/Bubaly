@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { AlertTriangle } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { refuseGuest } from '@/lib/auth/guest-scope';
 import { settleAll } from '@/lib/supabase/settle';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { createServer } from '@/lib/supabase/server';
@@ -19,7 +20,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function ChildWalletPage({ params }: { params: Promise<{ childId: string }> }) {
   const tr = await getTranslations();
   const { childId } = await params;
-  const ctx = await requireUserContext();
+  const ctx = await requireUserContext(); refuseGuest(ctx, '/wallet/children');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 

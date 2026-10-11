@@ -280,8 +280,14 @@ begin
   if n <> 1 then failures := array_append(failures, format('an ENROLLED CHILD on aal1 was refused an ordinary binder entry (%s rows) — needsStepUp never sends a child to the code page, so the database refused them for a code the app never asks for', n)); end if;
   select count(*) into n from public.household_info where id = info;
   if n <> 0 then failures := array_append(failures, format('an ENROLLED CHILD read the alarm code (%s rows) — 0408 keeps a sensitive binder entry to managers whatever the assurance level', n)); end if;
+  -- The held 0508 makes tax documents a manager's (the owner's decision on
+  -- PROD-002): where it is installed the child reads none, at any level, and
+  -- the Tax Vault says so instead of rendering empty.
   select count(*) into n from public.tax_documents where id = taxdoc;
-  if n <> 1 then failures := array_append(failures, format('an ENROLLED CHILD on aal1 was refused the tax document (%s rows) — the tax vault renders empty for them with no way to enter a code', n)); end if;
+  if exists (select 1 from pg_policies p where p.schemaname = 'public' and p.tablename = 'tax_documents'
+               and p.policyname = 'Managers read tax_documents') then
+    if n <> 0 then failures := array_append(failures, format('an ENROLLED CHILD read the tax document (%s rows) — 0508 makes tax documents a manager''s', n)); end if;
+  elsif n <> 1 then failures := array_append(failures, format('an ENROLLED CHILD on aal1 was refused the tax document (%s rows) — the tax vault renders empty for them with no way to enter a code', n)); end if;
   select count(*) into n from public.family_credentials where id = cred;
   if n <> 0 then failures := array_append(failures, format('an ENROLLED CHILD read a stored password (%s rows) — 0296 makes family_credentials manager-only whatever the assurance level', n)); end if;
   update public.household_info set note = 'child' where id = info_open;

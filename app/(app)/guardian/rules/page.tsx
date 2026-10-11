@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { refuseGuest } from '@/lib/auth/guest-scope';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { RulesEditor } from '@/components/guardian/rules-editor';
@@ -15,7 +16,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function RulesPage() {
   const t = await getTranslations();
-  const ctx = await requireUserContext();
+  const ctx = await requireUserContext(); refuseGuest(ctx, '/guardian/rules');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 

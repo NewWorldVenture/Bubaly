@@ -3,6 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { ErrorState } from '@/components/ui/states';
 import { headers } from 'next/headers';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { refuseGuest } from '@/lib/auth/guest-scope';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
@@ -16,7 +17,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function WalletGiftPage() {
   const t = await getTranslations();
-  const ctx = await requireUserContext();
+  const ctx = await requireUserContext(); refuseGuest(ctx, '/wallet/gift');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   // A pending gift's giver name and message are an outsider's free text that

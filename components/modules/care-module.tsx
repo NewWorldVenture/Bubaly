@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { isManager } from '@/lib/constants/roles';
+import { notesInScope, readsEveryNote } from '@/lib/care/note-scope';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
@@ -96,9 +97,13 @@ export function CareModule() {
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
   const now = useMemo(() => new Date(), []); // instant: overdue and last-7-days compare instants (lib/care/log.ts)
 
+  // The held 0510: a parent, an adult or a caregiver reads every note; anyone
+  // else the ones they wrote, so the summaries below are a reader of every
+  // note's alone (built from part of a log they would read as the whole).
+  const seesEveryNote = readsEveryNote(role);
   const recipientEntries = useMemo(
-    () => (entries ?? []).filter((e) => e.member_id === recipientId),
-    [entries, recipientId],
+    () => notesInScope(entries ?? [], role, userId, (e) => e.created_by).filter((e) => e.member_id === recipientId),
+    [entries, recipientId, role, userId],
   );
   const entryLikes = useMemo<CareEntryLike[]>(
     () => recipientEntries.map((e) => ({ id: e.id, occurred_at: e.occurred_at, wellbeing: e.wellbeing, log_type: e.log_type })),
@@ -212,8 +217,11 @@ export function CareModule() {
         <EmptyState icon={HeartHandshake} title={tr('care.addAFamilyMember')} description={tr('careModule.addFamilyMembersToStart')} />
       ) : (
         <>
+          {!seesEveryNote && (
+            <p className="text-sm text-muted mb-6">{tr('careModule.onlyTheCareYouLogged', { name: memberName(recipientId) ?? '' })}</p>
+          )}
           {/* Status cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+          {seesEveryNote && <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
             <div className={cn('rounded-2xl border p-5', overdue ? 'bg-amber-500/5 border-amber-500/30' : 'bg-surface/50 border-border')}>
               <div className="flex items-center gap-2 text-xs text-muted uppercase tracking-wider mb-1.5">
                 <Clock className="h-4 w-4" /> {tr('care.lastContact')}
@@ -235,7 +243,7 @@ export function CareModule() {
               <div className="text-2xl font-bold text-fg">{weekCount}</div>
               <div className="text-xs text-muted mt-1">{tr('care.careTouchpoints')}</div>
             </div>
-          </div>
+          </div>}
 
           {/* Quick log */}
           <div className="flex flex-wrap gap-1.5 mb-6">

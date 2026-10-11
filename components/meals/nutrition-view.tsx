@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Apple, Plus, Trash2, Flame, Droplet } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { recordScope, rowsInScope } from '@/lib/health/record-scope';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
@@ -26,7 +27,7 @@ export function NutritionView() {
   const t = useTranslations();
   const askConfirm = useConfirm();
   const { fmtNumber } = useFormat();
-  const { familyId, userId, members, selfMember } = useApp();
+  const { familyId, userId, members, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
@@ -39,8 +40,12 @@ export function NutritionView() {
     fetcher: (sb) => sb.from('nutrition_logs').select('*').eq('family_id', familyId).order('created_at', { ascending: false }).limit(400),
   });
 
-  const logs = useMemo(() => rows ?? [], [rows]);
-  const todayLogs = useMemo(() => logs.filter((l) => l.logged_on === today && (!member || l.member_id === member)), [logs, today, member]);
+  // Anyone may log a meal for anyone; whose intake this screen shows is the
+  // held 0506's rule: a manager or the member themselves sees it all, anyone
+  // else only the entries they logged (lib/health/record-scope).
+  const scope = recordScope(role, userId, memberById.get(member));
+  const logs = useMemo(() => (member ? rowsInScope(rows ?? [], member, scope, userId) : rows ?? []), [rows, member, scope, userId]);
+  const todayLogs = useMemo(() => logs.filter((l) => l.logged_on === today), [logs, today]);
   const totals = useMemo(() => dailyTotals(logs, today, member || undefined), [logs, today, member]);
   const byMeal = useMemo(() => groupByMeal(todayLogs), [todayLogs]);
 
@@ -73,6 +78,12 @@ export function NutritionView() {
           </button>
         ))}
       </div>
+
+      {scope === 'authored' && member && (
+        <p role="note" className="rounded-xl border border-border bg-surface/40 px-4 py-3 text-sm text-muted">
+          {t('nutritionView.onlyTheMealsYouLogged', { name: memberById.get(member)?.display_name ?? '' })}
+        </p>
+      )}
 
       {/* Today's totals */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

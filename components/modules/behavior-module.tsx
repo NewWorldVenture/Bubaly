@@ -5,6 +5,7 @@ import { Smile, Frown, Minus, Plus, Trash2, Sparkles, TrendingUp, Flame, Award }
 import Link from 'next/link';
 import { useApp } from '@/components/app/app-context';
 import { isManager } from '@/lib/constants/roles';
+import { readsEveryNote } from '@/lib/care/note-scope';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
@@ -33,7 +34,19 @@ const blank = (timeZone: string) => ({ id: '', member_id: '', kind: 'positive', 
 
 const KIND_ICON = { positive: Smile, concern: Frown, neutral: Minus } as const;
 
+// The held 0510: behaviour notes are read by a parent, an adult or a caregiver,
+// and by whoever wrote one. Logging here is a manager's, so anyone else would
+// find an empty log; they are told whose it is instead.
 export function BehaviorModule() {
+  const { role } = useApp();
+  const tr = useTranslations();
+  if (!readsEveryNote(role)) {
+    return <EmptyState icon={Smile} title={tr('behaviorModule.keptForParentsAndCaregivers')} description={tr('behaviorModule.keptForParentsAndCaregiversBody')} />;
+  }
+  return <BehaviorLog />;
+}
+
+function BehaviorLog() {
   const clock = useFamilyClock();
   const { fmtDate } = useFormat();
   const tr = useTranslations();

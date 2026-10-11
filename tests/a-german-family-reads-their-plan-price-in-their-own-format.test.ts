@@ -59,7 +59,8 @@ vi.mock('next/headers', () => ({
   cookies: async () => ({ get: (name: string) => (name === LOCALE_COOKIE ? { value: state.cookieLocale } : undefined) }),
   headers: async () => new Headers(),
 }));
-vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: async () => ({ user: { id: 'user-a' } }) }));
+// The billing page asks the guest gate (held 0509) which role the active membership has.
+vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: async () => ({ user: { id: 'user-a' }, active: { role: 'parent' } }) }));
 vi.mock('@/lib/auth/require-aal2', () => ({ requireAal2: async () => undefined }));
 vi.mock('@/lib/supabase/server', () => ({
   createServiceClient: () => ({
