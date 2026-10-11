@@ -36,6 +36,22 @@
 //     reclaimable after ten minutes like any other `error`, so a late
 //     redelivery texted and called every manager again. It is final now.
 //
+// And three after those:
+//
+//  8. A late WhatsApp delivery chose its identity from reads that FAILED: a
+//     communication it could not read back left it keyed on its text, and a
+//     mark it could not read was taken for "no mark" and switched a message
+//     escalated under its text to its communication. Either way a new claim
+//     was taken and every manager texted and called again. Neither read is
+//     guessed now: the callback is given back for a retry.
+//  9. A screened emergency whose escalation could not run at all — its claim
+//     not taken, or the managers or their phones not read — wrote no record
+//     and no work item, and the after() task only logged it. Nothing retried
+//     it. The route leaves the work item now.
+// 10. The work items were landed oldest first, ten at a time, with nothing to
+//     move past ones that could not be landed: ten of those took every slot
+//     on every tick, and a newer one behind them was never landed.
+//
 // Everything here goes through the real callers: the WhatsApp and screening
 // webhooks, and the recovery cron route the dispatcher calls.
 import { createHmac } from 'node:crypto';
@@ -43,7 +59,7 @@ import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, type InMemorySupabase, type Row } from './helpers/in-memory-supabase';
 import { at } from './helpers/source-order';
-import { guardianEscalationEventId, guardianEscalationRecordId } from '@/lib/guardian/escalation';
+import { guardianEscalationEventId, guardianEscalationRecordId, guardianEscalationStableId } from '@/lib/guardian/escalation';
 
 const seam = vi.hoisted(() => ({
   service: vi.fn(), scam: vi.fn(), notify: vi.fn(), turn: vi.fn(), after: vi.fn(),
@@ -106,7 +122,10 @@ function fail(table: string, op: Op, times = Number.POSITIVE_INFINITY) { faults.
 const lostAnswers: Array<{ table: string; times: number }> = [];
 /** The next `times` inserts on this table commit, and answer refused anyway. */
 function loseAnswer(table: string, times = 1) { lostAnswers.push({ table, times }); }
-function heal() { faults.length = 0; lostAnswers.length = 0; }
+const refusedRows: Array<{ table: string; when: (row: Row) => boolean }> = [];
+/** Every insert of a row like this into this table is refused, however often it is tried: a row the database will never take. */
+function refuseInsertsWhere(table: string, when: (row: Row) => boolean) { refusedRows.push({ table, when }); }
+function heal() { faults.length = 0; lostAnswers.length = 0; refusedRows.length = 0; }
 function refusedChain(): unknown {
   const chain: Record<string | symbol, unknown> = new Proxy({}, {
     get(_target, prop) {
@@ -181,6 +200,7 @@ beforeEach(() => {
         if (op !== 'select') wrote = true;
         const fault = (op !== 'select' || !wrote) ? faults.find((f) => f.table === table && f.op === op && f.times > 0) : undefined;
         if (fault) { fault.times -= 1; return refusedChain(); }
+        if (op === 'insert' && refusedRows.some((refused) => refused.table === table && (Array.isArray(args[0]) ? args[0] : [args[0]]).some((row) => refused.when(row as Row)))) return refusedChain();
         // A write that commits and whose answer is lost on the way back.
         const lost = op === 'insert' ? lostAnswers.find((f) => f.table === table && f.times > 0) : undefined;
         if (lost) {
@@ -626,5 +646,184 @@ describe('a retry that lands hours after the emergency', () => {
     expect(seam.texts).toHaveLength(1);
     expect(seam.texts[0]).not.toContain('DELAYED');
     expect(new URL(seam.calls[0]).searchParams.get('msg')).not.toContain('DELAYED');
+  });
+});
+
+describe('a late WhatsApp redelivery whose own reads fail', () => {
+  const markOf = (smsSid: string) => db.table('ai_tool_calls').find((row) => row.tool_name === 'guardian.whatsapp_escalation_key' && row.idempotency_key === `guardian.whatsapp_escalation_key:v1:${smsSid}`);
+
+  it('cannot read back the communication its sid names: given back for a retry, and nobody is texted, called or told twice', async () => {
+    // The first delivery records the message and is keyed on it; nobody could
+    // be reached at first, and the sweep then reaches the parent.
+    seam.telephony.down = true;
+    expect((await whatsapp()).status).toBe(503);
+    const comm = communications()[0].id;
+    seam.telephony.down = false;
+    expect((await tick()).body.escalations).toMatchObject({ examined: 1, delivered: 1 });
+    expect(seam.sent).toEqual([PARENT_PHONE]);
+
+    // Redelivered after the ten minutes: the unique sid refuses the insert,
+    // and the read of the row it names fails.
+    age(WA_SID, 11 * MIN);
+    fail('guardian_communications', 'select', 1);
+    const late = await whatsapp();
+    // The defect: with no communication it was keyed on its text, wrote a
+    // mark saying so under its sid, took a new claim, and texted and called
+    // the parent a second time.
+    expect(late.status).toBe(503);
+    expect(callback(WA_SID), 'given back for the retry').toBeUndefined();
+    expect(seam.sent, 'texted once').toEqual([PARENT_PHONE]);
+    expect(seam.called, 'called once').toEqual([PARENT_PHONE]);
+    expect(escalations()).toHaveLength(1);
+    expect(markOf(WA_SID)).toBeUndefined();
+    expect(seam.notify).toHaveBeenCalledOnce();
+
+    // The retry, with the read answering, joins the first escalation.
+    expect((await whatsapp()).status).toBe(200);
+    expect(seam.sent).toEqual([PARENT_PHONE]);
+    expect(seam.called).toEqual([PARENT_PHONE]);
+    expect(escalations()).toEqual([expect.objectContaining({ communication_id: comm, notified_member_ids: [PARENT] })]);
+    expect(callback(WA_SID)).toMatchObject({ status: 'processed' });
+    // Each notice names the communication and is said once per communication.
+    for (const [, input] of seam.notify.mock.calls) expect(input).toMatchObject({ relatedId: comm, once: true });
+  });
+
+  it('cannot read its sid\'s mark after the first delivery escalated under its text: not switched to its communication and alarmed again', async () => {
+    // The first delivery's insert commits and its answer is lost, so it is
+    // escalated under its text, written down under its sid. Nobody could be
+    // reached at first; the sweep then reaches the parent.
+    loseAnswer('guardian_communications');
+    seam.telephony.down = true;
+    expect((await whatsapp()).status).toBe(503);
+    expect(markOf(WA_SID)).toBeDefined();
+    seam.telephony.down = false;
+    expect((await tick()).body.escalations).toMatchObject({ examined: 1, delivered: 1 });
+    expect(seam.sent).toEqual([PARENT_PHONE]);
+
+    age(WA_SID, 11 * MIN);
+    fail('ai_tool_calls', 'select', 1);
+    const late = await whatsapp();
+    // The defect: the failed read was taken for "no mark", and the delivery —
+    // which did learn its communication — was keyed on it, took a new claim,
+    // and texted and called the parent again.
+    expect(late.status).toBe(503);
+    expect(callback(WA_SID), 'given back for the retry').toBeUndefined();
+    expect(seam.sent, 'texted once').toEqual([PARENT_PHONE]);
+    expect(seam.called, 'called once').toEqual([PARENT_PHONE]);
+    expect(escalations()).toEqual([expect.objectContaining({ id: guardianEscalationRecordId(byContent), communication_id: null })]);
+
+    expect((await whatsapp()).status).toBe(200);
+    expect(seam.sent).toEqual([PARENT_PHONE]);
+    expect(seam.called).toEqual([PARENT_PHONE]);
+    expect(escalations()).toHaveLength(1);
+    expect(seam.notify).toHaveBeenCalledOnce();
+    expect(callback(WA_SID)).toMatchObject({ status: 'processed' });
+  });
+
+  it('cannot read the mark after a first delivery that reached the parent itself and was never marked handled', async () => {
+    // The first delivery's insert is refused outright, so it is escalated
+    // under its text, and the parent is reached at once.
+    fail('guardian_communications', 'insert', 1);
+    expect((await whatsapp()).status).toBe(200);
+    expect(seam.sent).toEqual([PARENT_PHONE]);
+    // Its callback was never marked handled (the update refused, or the
+    // function ended after the alerts went out): reclaimable after ten minutes.
+    callback(WA_SID)!.status = 'processing';
+    age(WA_SID, 11 * MIN);
+
+    // The redelivery records the message now, and cannot read the mark.
+    fail('ai_tool_calls', 'select', 1);
+    expect((await whatsapp()).status).toBe(503);
+    expect(callback(WA_SID), 'given back for the retry').toBeUndefined();
+    expect(seam.sent, 'texted once').toEqual([PARENT_PHONE]);
+    expect(seam.called, 'called once').toEqual([PARENT_PHONE]);
+    expect(communications()).toHaveLength(1);
+
+    // The retry finds the message it recorded and joins the first escalation.
+    expect((await whatsapp()).status).toBe(200);
+    expect(communications()).toHaveLength(1);
+    expect(seam.sent).toEqual([PARENT_PHONE]);
+    expect(seam.called).toEqual([PARENT_PHONE]);
+    expect(escalations()).toHaveLength(1);
+    expect(seam.notify).toHaveBeenCalledOnce();
+  });
+});
+
+describe('a screened emergency whose escalation could not run at all', () => {
+  it.each([
+    ['its claim could not be taken', () => fail('guardian_callback_events', 'insert', 1)],
+    ['the managers could not be read', () => fail('family_members', 'select', 1)],
+    ['their phone numbers could not be read', () => fail('profiles', 'select', 1)],
+  ])('%s: the after() task leaves the work item, and the next tick reaches the manager once', async (_case, refuse) => {
+    db.seed('guardian_communications', [{ id: COMM, family_id: FAMILY, member_id: CHILD, status: 'screening', from_number: CALLER }]);
+    db.seed('guardian_screening_sessions', [{ id: SESSION, family_id: FAMILY, communication_id: COMM, twilio_call_sid: CALL, caller_number: CALLER, turn: 0, status: 'active', messages: [] }]);
+    seam.turn.mockResolvedValue({
+      responseText: 'Stay on the line.',
+      decision: { action: 'voicemail', risk: 'safe', urgency: 'emergency', intent: 'personal', summary: 'Caller says grandpa collapsed.', callerName: 'Neighbour' },
+    });
+    const held: Array<() => Promise<void>> = [];
+    seam.after.mockImplementation((task: () => Promise<void>) => { held.push(task); });
+    const { POST } = await import('@/app/api/guardian/screen/route');
+    expect((await POST(signed('/api/guardian/screen', { CallSid: CALL, SpeechResult: 'Grandpa collapsed, please hurry.' }, `?sessionId=${SESSION}&turn=1`))).status).toBe(200);
+    // The TwiML has gone out; the escalation then fails before sending anything.
+    refuse();
+    await held[0]();
+    expect(seam.sent).toEqual([]);
+    expect(escalations()).toEqual([]);
+    // The defect: no record and no work item — the after() task only logged,
+    // and no sweep could ever find it.
+    expect(owedItems()).toEqual([expect.objectContaining({ family_id: FAMILY, state: 'reserved', resource_table: 'guardian_escalations' })]);
+
+    heal();
+    const { status, body } = await tick();
+    expect(body.escalations).toMatchObject({ recovered: 1, examined: 1, delivered: 1, unavailable: 0 });
+    expect(status).toBe(200);
+    expect(escalations()).toEqual([expect.objectContaining({ communication_id: COMM, escalation_type: 'emergency_call', notified_member_ids: [PARENT], push_sent: true })]);
+    expect(seam.sent).toEqual([PARENT_PHONE]);
+    expect(seam.called).toEqual([PARENT_PHONE]);
+    expect(owedItems()).toEqual([expect.objectContaining({ state: 'succeeded' })]);
+    expect((await tick()).body.escalations).toMatchObject({ recovered: 0, examined: 0 });
+    expect(seam.sent).toEqual([PARENT_PHONE]);
+  });
+});
+
+describe('owed escalations that cannot be landed', () => {
+  const OTHER = '99999999-9999-4999-8999-999999999999';
+  type Owed = Row & { inputs: { version: 1; input: Row; pushSent: boolean } };
+  /** The work item an escalation leaves when its record cannot be written, as oweGuardianEscalation writes it. */
+  const owed = (familyId: string, description: string, agoMs: number): Owed => {
+    const input = { familyId, escalationType: 'urgent_personal' as const, severity: 'critical' as const, description, callerNumber: CALLER };
+    const eventId = guardianEscalationEventId(input);
+    return {
+      id: guardianEscalationStableId(eventId, 'owed'), family_id: familyId, tool_name: 'guardian.escalation_owed', actor_kind: 'system',
+      inputs: { version: 1, input, pushSent: true }, outputs: null, state: 'reserved', attempt: 0,
+      idempotency_key: `guardian.escalation_owed:v1:${eventId}`, resource_table: 'guardian_escalations', resource_id: guardianEscalationRecordId(input),
+      created_at: new Date(Date.now() - agoMs).toISOString(),
+    };
+  };
+
+  it.each([
+    // A contact name long enough puts the description past what the sweep reads back.
+    ['written in a shape the sweep cannot read', (item: Owed): Owed => ({ ...item, inputs: { ...item.inputs, input: { ...item.inputs.input, description: 'x'.repeat(5000) } } }), () => {}],
+    ['whose record the database refuses every time', (item: Owed): Owed => item, () => refuseInsertsWhere('guardian_escalations', (row) => row.family_id === OTHER)],
+  ])('ten %s do not hold every slot while a newer one waits', async (_case, shape, refuse) => {
+    db.seed('families', [{ id: OTHER, name: 'Other', timezone: 'UTC' }]);
+    refuse();
+    db.seed('ai_tool_calls', [
+      ...Array.from({ length: 10 }, (_, i) => shape(owed(OTHER, `persistent emergency ${i}`, (10 * HOUR) - i * 30 * MIN))),
+      owed(FAMILY, 'a newer emergency whose record could not be written', 5 * MIN),
+    ]);
+    const first = await tick();
+    expect(first.body.escalations).toMatchObject({ recovered: 0, unavailable: 10 });
+    // The defect: every tick took the same ten oldest for as long as they
+    // could not be landed (up to a day), and the newer one was never landed,
+    // let alone retried. This is the work-item queue, not the record cursor.
+    const second = await tick();
+    expect(second.body.escalations).toMatchObject({ recovered: 1, examined: 1, delivered: 1 });
+    expect(seam.sent).toEqual([PARENT_PHONE]);
+    expect(escalations()).toEqual([expect.objectContaining({ family_id: FAMILY, notified_member_ids: [PARENT], sms_sent: true })]);
+    // And the ones that cannot be landed are still tried in their turn.
+    expect(second.body.escalations.unavailable).toBe(9);
+    expect(owedItems().filter((item) => item.state === 'reserved')).toHaveLength(10);
   });
 });

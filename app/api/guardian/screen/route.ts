@@ -20,6 +20,8 @@ import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import { appBaseUrl } from '@/lib/server/app-url';
 import { escalateGuardianEmergency } from '@/lib/guardian/escalate';
+import type { GuardianEscalationInput } from '@/lib/guardian/escalation';
+import { oweGuardianEscalation } from '@/lib/guardian/escalation-owed';
 
 export const runtime = 'nodejs';
 
@@ -387,23 +389,35 @@ async function notifyFamily(
   // answered by the escalation's own claim instead of alarming twice. Logged,
   // never raised — the caller is still on the line.
   if (opts.urgency === 'emergency') {
+    const input: GuardianEscalationInput = {
+      familyId,
+      commId: opts.commId,
+      escalationType: 'emergency_call',
+      severity: 'critical',
+      description: `Emergency call from ${opts.callerName}: ${opts.summary}`.slice(0, 4096),
+      ...(opts.callerNumber ? { callerNumber: opts.callerNumber.slice(0, 64) } : {}),
+    };
     const escalate = async () => {
       try {
-        const escalation = await escalateGuardianEmergency(supabase, {
-          familyId,
-          commId: opts.commId,
-          escalationType: 'emergency_call',
-          severity: 'critical',
-          description: `Emergency call from ${opts.callerName}: ${opts.summary}`.slice(0, 4096),
-          ...(opts.callerNumber ? { callerNumber: opts.callerNumber.slice(0, 64) } : {}),
-        });
-        // The TwiML has gone out, so nothing here can ask Twilio for a retry.
-        // An escalation that reached nobody is retried by the sweep on the
-        // Guardian recovery cron from its record — or, when the record could
-        // not be written, from the work item the escalation leaves in its place
-        // (lib/guardian/escalation-owed.ts). Only with neither is it lost, and
-        // that is said here.
-        if ((escalation.kind === 'undelivered' || escalation.kind === 'interrupted') && !escalation.recorded && !escalation.owed) {
+        const escalation = await escalateGuardianEmergency(supabase, input);
+        // The TwiML has gone out, so nothing here can ask Twilio for a retry,
+        // and the sweep on the Guardian recovery cron reads only escalation
+        // records and the work items they are landed from
+        // (lib/guardian/escalation-owed.ts). An escalation that was attempted
+        // and reached nobody leaves one or the other itself.
+        if (escalation.kind === 'claim_unavailable' || escalation.kind === 'read_failed') {
+          // Refused before anything was sent: its claim could not be taken,
+          // or a read the alert needs failed. It wrote neither, and this used
+          // only to be logged, so nothing ever tried again. Leave the work
+          // item now: the sweep lands the record from it (nobody reached, no
+          // in-app alert yet) and re-attempts it from there, under this
+          // escalation's own claim, so a manager is still texted only once.
+          const owed = await oweGuardianEscalation(supabase, input, { pushSent: false });
+          console.error(owed
+            ? '[guardian/screen] emergency escalation could not run; left for the retry sweep'
+            : '[guardian/screen] emergency escalation could not run and could not be left for the retry sweep; nothing will retry it', { familyId, commId: opts.commId, outcome: escalation.kind });
+        } else if ((escalation.kind === 'undelivered' || escalation.kind === 'interrupted') && !escalation.recorded && !escalation.owed) {
+          // Only with neither the record nor its work item is it lost.
           console.error('[guardian/screen] emergency escalation reached no manager and could not be recorded; nothing will retry it', { familyId, commId: opts.commId, outcome: escalation.kind });
         } else if (escalation.kind !== 'delivered' && escalation.kind !== 'duplicate') {
           console.error('[guardian/screen] emergency escalation did not reach a manager', { familyId, commId: opts.commId, outcome: escalation.kind });
@@ -417,9 +431,10 @@ async function notifyFamily(
     // here, it could outlive the response and drop the live call. `after()`
     // runs it once the TwiML has gone out, inside the same invocation (the
     // precedent is lib/reasoning/auto-refresh.ts). It throws outside a request
-    // scope — a direct call, or a test — and then the escalation runs inline:
-    // the recovery cron's sweep retries an escalation that reached nobody, but
-    // only once it has been attempted and recorded, so it is never skipped.
+    // scope — a direct call, or a test — and then the escalation runs inline.
+    // Either way the recovery cron's sweep can retry it only from what it
+    // left: its record, or the work item written in the record's place (by
+    // the escalation, or above when it could not run).
     try { after(escalate); } catch { await escalate(); }
   }
 }
