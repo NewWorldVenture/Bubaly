@@ -16888,5 +16888,12 @@
   "mobileAssistant.conflictMobileFamilyLine": "Hinweis zur Familienbelegung: {titles} überschneiden sich {when}. Importierte Belegungen gelten für die Familie; sie zeigen nicht, wer doppelt verplant ist.",
   "careModule.onlyTheCareYouLogged": "Es wird nur die Pflege angezeigt, die du für {name} eingetragen hast. Das vollständige Pflegeprotokoll ist für einen Elternteil, einen Erwachsenen oder eine Betreuungsperson.",
   "behaviorModule.keptForParentsAndCaregivers": "Verhaltensnotizen führen die Eltern und Betreuungspersonen deiner Familie",
-  "behaviorModule.keptForParentsAndCaregiversBody": "Eine Notiz darüber, wie es jemandem geht, lesen ein Elternteil, ein Erwachsener oder eine Betreuungsperson des Haushalts und wer sie geschrieben hat."
+  "behaviorModule.keptForParentsAndCaregiversBody": "Eine Notiz darüber, wie es jemandem geht, lesen ein Elternteil, ein Erwachsener oder eine Betreuungsperson des Haushalts und wer sie geschrieben hat.",
+  "medicationsModule.noMedicinesForTheHousehold": "Für den Haushalt wurden noch keine Medikamente hinzugefügt.",
+  "childLoginActions.couldNotRemoveTheLogin": "Der Kinder-Login konnte nicht entfernt werden. Aktualisiere und versuche es erneut.",
+  "childAccessManager.removeLogin": "Login entfernen",
+  "childAccessManager.removeLoginFor": "Kinder-Login von {name} entfernen",
+  "childAccessManager.removeTheKidLoginConfirm": "Den Kinder-Login von {name} entfernen? Die Anmeldung mit Benutzername und PIN ist dann nicht mehr möglich. Der Platz in der Familie bleibt.",
+  "childAccessManager.loginRemovedFor": "Der Kinder-Login von {name} wurde entfernt.",
+  "familyModule.aKidLoginCannotBeAManager": "{name} meldet sich mit einer Kinder-PIN an und kann daher kein Elternteil oder Erwachsener sein. Entferne zuerst den Kinder-Login unter Kinder-Logins; Eltern und Erwachsene melden sich mit ihrer eigenen E-Mail an."
 }

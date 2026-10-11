@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
-import { settleAll } from '@/lib/supabase/settle';
+import { settle, settleAll } from '@/lib/supabase/settle';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -20,7 +20,7 @@ import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
-import { MANAGER_ROLES, assignableMemberRoles, canRemoveMember, type MemberRole } from '@/lib/constants/roles';
+import { MANAGER_ROLES, assignableMemberRoles, canRemoveMember, rolesForAKidLogin, type MemberRole } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
 import { usePlural, useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock, useFormat, type FamilyClock, useFamilyCalendarToday } from '@/components/i18n/use-format';
@@ -530,8 +530,21 @@ function MemberModal({ familyId, createdBy, member, onClose, onSaved }: {
 }) {
   const t = useTranslations();
   const { role: actorRole } = useApp();
+  // A member who signs in with a kid PIN is never offered parent or adult (the
+  // held 0512 refuses it): the PIN login is removed in Kid Logins first.
+  const [hasKidLogin, setHasKidLogin] = useState(false);
+  useEffect(() => {
+    if (!member) return;
+    let live = true;
+    // Unread, the editor offers what it would without a kid login; the
+    // database still refuses the promotion (0512) and says why.
+    void settle(createClient().from('child_logins').select('id').eq('member_id', member.id).eq('family_id', familyId).limit(1))
+      .then(({ data }) => { if (live) setHasKidLogin((data ?? []).length > 0); });
+    return () => { live = false; };
+  }, [member, familyId]);
   // An adult may not grant `parent` or change a parent's role (F: adult -> parent self-promotion).
-  const roleOptions = assignableMemberRoles(actorRole, member?.role ?? null);
+  const assignable = assignableMemberRoles(actorRole, member?.role ?? null);
+  const roleOptions = hasKidLogin ? rolesForAKidLogin(assignable, member?.role ?? null) : assignable;
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState(member?.display_name ?? '');
@@ -570,7 +583,7 @@ function MemberModal({ familyId, createdBy, member, onClose, onSaved }: {
     <Modal open title={member ? t('dialogTitle.editMember') : t('dialogTitle.addMember')} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
         <Field label={t('family.name')} required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('family.eGEllaParker')} required />}</Field>
-        <Field label={t('family.role')}>{(id) => (
+        <Field label={t('family.role')} hint={hasKidLogin ? t('familyModule.aKidLoginCannotBeAManager', { name: member?.display_name ?? '' }) : undefined}>{(id) => (
           <Select id={id} value={mrole} onChange={(e) => setMrole(e.target.value as MemberRole)}>
             {roleOptions.map((r) => <option key={r} value={r}>{t(ROLE_LABEL_KEY[r])}</option>)}
           </Select>

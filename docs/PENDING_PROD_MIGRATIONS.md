@@ -133,6 +133,9 @@ source allocations are not evidence that production applied any migration.
 | 0508 proposed, held | `0508_tax_documents_are_a_managers.sql` | `tax_documents` is read and written only by a parent or adult of the family (four `can_manage_family` policies replacing 0481's, whose teen/child self-read goes; 0391's step-up guards kept), and a restrictive `storage.objects` policy withholds the documents bucket's tax files (the family's `tax/` folder, or a file a `tax_documents` row of that family names) from anyone who does not manage the family or has not cleared the rows' step-up. Decided by the account holder on PROD-002; requested on #771 (comment 6101674181), not yet confirmed. |
 | 0509 proposed, held | `0509_a_guest_does_not_read_the_households_most_sensitive_areas.sql` | A guest of a family reads none of its rows, but the ones about themselves, in 59 tables: locations (6), money and cards (34), medical and insurance (10), Guardian and the household inbox (9). One RESTRICTIVE read policy per table over `is_family_guest(family_id)`; every other role, the service role and session-less readers unchanged. Decided by the account holder on ROLE-SCOPE-001; requested on #771 (comment 6101674181, scope 6101807525), not yet confirmed. |
 | 0510 proposed, held | `0510_a_note_about_a_member_is_read_by_managers_its_author_and_caregivers.sql` | A row of `behavior_logs` or `care_log` is read by a manager of its family, its author (`logged_by`, `created_by`) or a caregiver, all inside `is_family_member(family_id)`; a teen or a child no longer reads the notes others wrote, including the ones about them. Writes unchanged. Decided by the account holder; requested on #771 (comment 6103909775), not yet confirmed. |
+| 0511 proposed, held | `0511_a_medication_is_read_by_managers_its_member_and_caregivers.sql` | A row of `medications` is read by a manager of its family, the member it is for, or a caregiver, inside `is_family_member(family_id)` (one saved with no member, the form's default, by a manager or a caregiver); a `medication_schedules` row exactly when its medication is. Writes and `medication_doses` unchanged. The autopilot refill names the drug only to those readers. Decided by the account holder (0434's filed read; takes over the closed #674's candidate); requested on #771 (comment 6104294318), not yet confirmed. |
+| 0512 proposed, held | `0512_a_kid_login_is_never_a_parent_or_adult.sql` | A member whose account is a kid login (the synthetic kid address or the server's `bubaly_kid_login` mark; not a mapping alone, for 0495's reason) is refused a parent or adult role when the role or the login changes, and a kid-login mapping is refused for a parent or adult member or an account that is one in any family (42501, every caller). Nothing stored is changed. Decided by the account holder ("refuse until the PIN login is gone"); requested on #771 (comment 6104294318), not yet confirmed. |
+| 0513 proposed, held | `0513_a_removed_member_keeps_no_social_raise.sql` | When a member is removed (`is_active` to false) or their row deleted, their `social_access_permissions` grant in that family is deleted if its social role carries any permission their role's default lacks; a restriction stays. Adds `social_role_permissions(social_role)`, the matrix as a set. Decided by the account holder ("drop raises, keep limits"); requested on #771 (comment 6104294318), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4765,6 +4768,248 @@ Dropping any one table's trigger turns the probe red on that table. 184 of
 families, try to vote in one family's poll under their member id from the
 other family and confirm 42501; then vote as their own member there and
 confirm it lands.
+
+## `0513` (proposed, held) — a member invited back got their old social raise
+
+`supabase/reserved/0513_a_removed_member_keeps_no_social_raise.sql` —
+**held**: proposed as `0513`, the first number above `0512`. The account holder
+decided "drop raises, keep limits", recorded and requested on #771 in comment
+6104294318. Not yet confirmed.
+
+**Severity: low (nothing is granted while the member is away; the old role
+comes back with them). Deploy order: any.** `social_access_permissions` rows
+are keyed by `(family_id, user_id)` and `social_role_for` prefers them over
+the role's default. Removal left them in place. Measured on a replay through
+0485: a teen made `admin` of the family's social accounts, removed by the
+parent and reactivated as a teen, resolved to **admin** again.
+
+**Database.**
+- `social_role_permissions(social_role)`: the permission matrix as a set per
+  role. It mirrors `social_has_permission` (0348) and `lib/social/roles.ts`.
+- `a_removed_member_keeps_no_social_raise`: an AFTER UPDATE OF `is_active` OR
+  DELETE trigger on `family_members` (SECURITY DEFINER, pinned search_path,
+  executable by no client role). On a row going from active to inactive, or
+  deleted, it deletes that user's grant in that family when the grant's
+  permissions are not a subset of the role default's. The defaults are parent
+  `admin`, adult `marketing_manager`, teen `content_creator`, and everyone
+  else `read_only`.
+- A grant within the default (a restriction, which 0344 keeps a member from
+  lifting) stays. One that adds and removes (an `analyst` teen) counts as a
+  raise.
+
+A self-check requires every role's set to be non-empty and
+`social_role_for` to still fall back to those defaults.
+
+**No app change.** The member editor's removal already writes
+`REMOVED_MEMBER_PATCH`; the trigger does the rest.
+`tests/social-permission-matrix-matches-the-database.test.ts` now also holds
+`social_role_permissions` to the app's matrix, role by role.
+
+**Proof:** `.github/workflows/social-raise-runtime.yml` requires the held
+probe `docs/audit/reserved/a-removed-member-keeps-no-social-raise-check.sql`
+to fail on the released schema on the defect (every raise survives removal;
+the returning teen is `admin`), with no control failing. It applies 0513 twice,
+requires the probe to pass, and re-runs eight released probes over social
+access and member removal. The passing run shows:
+- **Cleared.** The parent's removal clears the `admin` teen's, the `approver`
+  child's and the `analyst` teen's grants. The server's delete of a row
+  clears that member's `social_manager` grant.
+- **Kept.** The `read_only` restriction and an adult's grant at their
+  default.
+- **Invited back.** The `admin` teen resolves to `content_creator`; the
+  restricted teen is still `read_only`.
+- **Untouched.** An active member's grant survives a rename and a role
+  change. The removed teen's grant in their other household stays.
+- **Wiring.** The trigger is enabled, pinned and closed to clients.
+  `social_role_permissions` agrees with `social_has_permission` for every
+  role and permission, checked as a member holding each role in turn.
+- **Negative control.** N1 (the trigger dropped): the grant survives removal.
+- **Mutation control.** M1 (a rule clearing only `owner` and `admin`): the
+  `approver` child's grant survives, so the probe catches a rule narrower than
+  "any permission the default lacks".
+
+**After approved release:** in a test household, give a test teen an explicit
+`admin` social role, remove and re-invite them, and confirm they come back as
+a content creator.
+
+## `0512` (proposed, held) — a kid PIN could end up guarding a manager
+
+`supabase/reserved/0512_a_kid_login_is_never_a_parent_or_adult.sql` —
+**held**: proposed as `0512`, the first number above `0511`. The account holder
+decided "refuse until the PIN login is gone", recorded and requested on #771 in
+comment 6104294318. Not yet confirmed.
+
+**Severity: medium (a 4-digit PIN in front of an account that reaches the
+household's money, vault and members). Deploy order: any; the editor and the
+removal action ship first.** #981 stops the app creating a PIN login for a
+parent or adult. The other order was open. Measured on a replay through 0485,
+as the household's parent through PostgREST's role: promoting a child who has a
+PIN login to adult returned **UPDATE 1**, and the child's session then passed
+`can_manage_family`.
+
+**Database.** Two guards, one per table, both SECURITY DEFINER with a pinned
+search_path and executable by no client role:
+- `a_kid_login_is_never_a_manager` (BEFORE INSERT OR UPDATE OF `role`,
+  `user_id` on `family_members`) refuses `parent` or `adult` for a member
+  whose account is a kid login, as the account itself says: the synthetic kid
+  domain (the only address the PIN sign-in reaches), or the
+  `bubaly_kid_login` app_metadata mark only the server writes, as 0495 reads
+  it. Not a `child_logins` row, for 0495's reason: a household's parent can
+  write one onto any account (0297), and trusting it would let one household
+  keep another's adult from ever being an adult. It fires only on insert or
+  when the role or the login changes, so a row already stored that way can
+  still be renamed.
+- `a_manager_is_never_a_kid_login` (BEFORE INSERT OR UPDATE OF `member_id`,
+  `user_id` on `child_logins`) refuses a mapping for a parent or adult member,
+  or for an account that is a parent or adult in any family.
+
+Both refuse with 42501 and a sentence saying what to do, for every caller,
+the service role included. A kid login is an account, so the rule holds in
+every family.
+
+**App change, shipping with the source:**
+- **Member editor.** For a member with a kid login, adult and parent are not
+  offered (`rolesForAKidLogin`), and a hint says to remove the kid login in
+  Kid Logins first.
+- **Kid Logins.** "Remove login" (`removeChildLoginAction`) deletes the
+  mapping, the member's link and the PIN account, through the create action's
+  confirmed rollback. Before touching anything it checks what a PIN reset
+  checks: the mapping and the member row agree, and the account is this kid
+  login's synthetic address.
+- Copy in the seven base locales.
+- `tests/a-kid-login-is-never-a-parent-or-adult.test.ts` drives the removal
+  through its refusals and its success.
+
+**Released probe adjusted:** `sensitive-role-boundary-check.sql`'s negative
+control files its kid login as a parent of a second household, which 0512
+refuses. Where 0512 is installed, that one row is written with triggers held
+off, as an older release could have left it. The probe passes with and
+without 0512.
+
+**Proof:** `.github/workflows/kid-login-manager-runtime.yml` requires the held
+probe `docs/audit/reserved/a-kid-login-is-never-a-parent-or-adult-check.sql`
+to fail on the released schema on the defect (every promotion and mapping
+lands, no guards), with no control failing. It applies 0512 twice, requires
+the probe to pass, and re-runs eight released probes over member roles and
+kid logins. The passing run shows:
+- **Refused (42501).** The parent's promotion of the PIN kid to adult and to
+  parent. The promotion of a kid known only by the mark, and of one known only
+  by the address. The service role's promotion. A mapping onto the parent, and
+  one for an account that is a parent of another household.
+- **Allowed (OK 1).** Promoting a teen with their own email (with a kid-login
+  mapping written onto that ordinary account) and a ward with no login. Making the PIN kid a teen and renaming them. Renaming an adult
+  already stored with a kid login. Mapping a kid login onto a child. After the
+  server removes the login, the parent's promotion.
+- **Wiring.** Both guards enabled, pinned, and not executable by anon or
+  authenticated.
+- **Negative control.** N1 (the `family_members` trigger dropped): the
+  promotion lands.
+- **Mutation control.** M1 (the mark test removed): the kid known only by the
+  mark is promoted.
+
+**After approved release:** in a test household, open a child with a PIN login
+in the member editor and confirm adult and parent are not offered; remove the
+login in Kid Logins and confirm the promotion then saves.
+
+## `0511` (proposed, held) — every member read every prescription
+
+`supabase/reserved/0511_a_medication_is_read_by_managers_its_member_and_caregivers.sql`
+— **held**: proposed as `0511`, the first number above `0510`. The account
+holder decided the read 0434 filed ("READS ARE UNCHANGED … Filed for an owner
+decision"), recorded and requested on #771 in comment 6104294318. It takes
+over the closed #674's candidate (`a_child_reads_only_their_own_prescriptions`,
+F-G09), whose finding on rows with no member the owner then confirmed. Not yet
+confirmed.
+
+**Severity: medium (a child read a parent's antidepressant, its dosage and
+refill date; a refill reminder named it to the whole family). Deploy order:
+any; the page and autopilot changes ship first and are correct either side.**
+`medications_select` and `medication_schedules_select` are
+`is_family_member(family_id)`. Measured on a replay of every runnable
+migration through 0485, in Pill House (five medications, each with a
+schedule: the parent's saved with no member, the parent's own, the ward's,
+the teen's and the child's): the teen and the child each read **4
+medications and 4 schedules that are not theirs**, the parent's with no member
+among them, and the guest 5 and 5.
+
+**The decision:**
+- a parent or adult, a caregiver (who may give it) and the member a
+  medication is for read it;
+- one saved with no member is read by a parent, an adult or a caregiver. The
+  form defaults "For" to "Whole family", so a parent's own prescription is
+  often stored that way (#674 found a parent's sertraline filed so);
+- a schedule is read exactly when its medication is.
+
+0511 replaces each table's permissive read with one:
+
+```sql
+-- medications
+is_family_member(family_id)
+and (can_manage_family(family_id) or is_self_member(member_id)
+     or family_role(family_id) = 'caregiver')
+-- medication_schedules
+is_family_member(family_id)
+and exists (select 1 from medications m
+             where m.id = medication_id and m.family_id = family_id)
+```
+
+The schedule's subquery runs under the caller's RLS on `medications`, so one
+rule decides both. Writes (0434: managers only) and `medication_doses` (0481:
+a manager or the member) are unchanged; the held 0509's guest guard is kept.
+A self-check requires exactly the one permissive read per table.
+
+**App change, shipping with the source:**
+- `lib/medications/readers.ts`: `readsEveryMedication(role)` and
+  `medicationReaderIds(...)`, the same rule.
+- **Autopilot refill.** The card and the reminder it creates are read by the
+  whole household, so they say "a prescription". The notification goes to the
+  medication's readers by member id and names the drug. If the members cannot
+  be read, it goes to the managers, never the family.
+- **Medicines page.** A caregiver reads the household's medicines and
+  schedules, with the member filter, as a manager does. Doses, their buttons
+  and the adherence ring stay built from the viewer's own (0481). Anyone else
+  sees the medicines prescribed to them, as before.
+- Copy in the seven base locales.
+- `tests/a-medication-is-read-by-managers-its-member-and-caregivers.test.ts`
+  runs the scan against an in-memory database and holds the page to the rule.
+
+**Released probe made rule-aware:** `prescription-write-boundary-check.sql`
+gives the child a medication of their own. It expects the child to read both
+medications before 0511 and only their own after; the child's dose is ticked
+on their own. It passes with and without 0511. The held 0509 probe counts
+`medications` and `medication_schedules` as already closed to a guest under
+0511.
+
+**Proof:** `.github/workflows/medication-reads-runtime.yml` requires the held
+probe
+`docs/audit/reserved/a-medication-is-read-by-managers-its-member-and-caregivers-check.sql`
+to fail on the released schema (the teen's, the child's and the guest's reads
+and the wiring), with no control failing. It applies 0511 twice, requires the
+probe to pass, and re-runs the eight released probes over the two tables. The
+passing run shows, on both tables:
+- **The teen and the child.** Each reads only their own medication and its
+  schedule (counted).
+- **The guest.** Reads none.
+- **Everyone who reads every one.** The parent, the adult and the caregiver
+  read all five and their schedules. The teen reads the household they
+  manage.
+- **Gone or outside.** The removed caregiver and a stranger read nothing.
+- **Server.** The service role, with and without a user id, reads every row.
+- **Writes.** The parent's new medication and schedule come back from
+  `insert … returning`, and the child ticks their own dose (`OK 1` each).
+- **Wiring.** One permissive read per table with the exact predicates; no
+  restrictive read but a guest's.
+- **Negative controls.** N1 (the medication read put back): the child reads
+  the parent's prescription with no member and its schedule. N2 (the schedule
+  read put back): the schedule alone.
+- **Mutation control.** M1 (the outer `is_family_member` taken off): the
+  removed caregiver reads the ward's medication.
+
+**After approved release:** sign a test child in and confirm `/dashboard/medications`
+and a direct `medications` read return only their own; sign a test caregiver
+in and confirm the household's medicines show. Let a test refill fall due and
+confirm the family's Autopilot card says "a prescription" and only the readers
+are notified by name.
 
 ## `0510` (proposed, held) — every member read every note about every other
 

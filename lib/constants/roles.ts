@@ -80,6 +80,16 @@ export function assignableMemberRoles(actorRole?: string | null, currentRole?: s
 }
 
 /**
+ * The roles a member who signs in with a kid PIN may be given from the editor
+ * (the held 0512, the owner's decision): never parent or adult, because a PIN
+ * must not guard a manager's account. A row that already has one keeps it on
+ * offer, so editing its name sends the role it has, which the database allows.
+ */
+export function rolesForAKidLogin(options: readonly MemberRole[], currentRole?: string | null): MemberRole[] {
+  return options.filter((r) => !isManager(r) || r === currentRole);
+}
+
+/**
  * The patch every "remove member" path writes. Removal is a soft delete, and
  * `accept_invite` (0136) reactivates an existing (family_id, user_id) row with
  * `on conflict ... set is_active = true` WITHOUT writing the invite's role. So

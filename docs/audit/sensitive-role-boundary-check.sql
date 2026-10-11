@@ -136,6 +136,14 @@ begin
   delete from public.social_accounts       where family_id = fam;
   delete from public.child_logins          where family_id = fam;
   delete from public.family_members        where family_id = fam;
+  -- The control household's rows too, BEFORE anything is written: a previous
+  -- run left `kid` a parent there, and the held 0512 refuses a kid login for an
+  -- account that manages any family, so clearing it later would fail the
+  -- re-run's first mapping.
+  delete from public.social_account_tokens where family_id = ctl_fam;
+  delete from public.social_accounts       where family_id = ctl_fam;
+  delete from public.child_logins          where family_id = ctl_fam;
+  delete from public.family_members        where family_id = ctl_fam;
 
   insert into public.family_members (family_id,user_id,display_name,role,is_active)
     values (fam,par,'Parent','parent',true)  returning id into par_m;
@@ -168,11 +176,6 @@ begin
   -- was then tested against.
   insert into public.families (id, name) values (ctl_fam, '0297 control house') on conflict do nothing;
   insert into auth.users (id, email) values (ctl_ward, 'w0297@example.test') on conflict do nothing;
-
-  delete from public.social_account_tokens where family_id = ctl_fam;
-  delete from public.social_accounts       where family_id = ctl_fam;
-  delete from public.child_logins          where family_id = ctl_fam;
-  delete from public.family_members        where family_id = ctl_fam;
 
   insert into public.family_members (family_id,user_id,display_name,role,is_active)
     values (ctl_fam,kid,'Kid (a manager HERE)','parent',true);

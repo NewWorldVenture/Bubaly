@@ -189,8 +189,15 @@ begin
   end if;
 
   if installed then
+    -- The held 0512 also refuses the parent membership on_family_created files
+    -- for a kid login: a second wall over the same hole. These controls
+    -- measure 0507's families_insert alone, so where 0512 is installed its
+    -- guard is dropped inside each rolled-back subtransaction.
     -- N1. 0482's body put back: the mark is no longer read.
     begin
+      if to_regprocedure('public.a_kid_login_is_never_a_manager()') is not null then
+        drop trigger if exists a_kid_login_is_never_a_manager on public.family_members;
+      end if;
       create or replace function public.is_child_login_account()
       returns boolean language sql stable security definer set search_path = pg_catalog, public, pg_temp as $n$
         select auth.uid() is not null and (
@@ -214,6 +221,9 @@ begin
 
     -- M1. families_insert stops asking.
     begin
+      if to_regprocedure('public.a_kid_login_is_never_a_manager()') is not null then
+        drop trigger if exists a_kid_login_is_never_a_manager on public.family_members;
+      end if;
       drop policy families_insert on public.families;
       create policy families_insert on public.families for insert with check (created_by = auth.uid());
       got := pg_temp.k0507_as('authenticated', kid, pg_temp.k0507_new_family('00000000-0000-4000-8507-0000000000f9', 'Kid''s Own House', kid));

@@ -16888,5 +16888,12 @@
   "mobileAssistant.conflictMobileFamilyLine": "Aviso de ocupação familiar: {titles} sobrepõem-se {when}. A ocupação importada aplica-se à família; não identifica quem tem dois compromissos simultâneos.",
   "careModule.onlyTheCareYouLogged": "Só são mostrados os cuidados que registaste para {name}. O registo completo de cuidados é para um pai ou mãe, um adulto ou um cuidador.",
   "behaviorModule.keptForParentsAndCaregivers": "As notas de comportamento são mantidas pelos pais e cuidadores da tua família",
-  "behaviorModule.keptForParentsAndCaregiversBody": "Uma nota sobre como alguém está é lida por um pai ou mãe, um adulto ou um cuidador da casa, e por quem a escreveu."
+  "behaviorModule.keptForParentsAndCaregiversBody": "Uma nota sobre como alguém está é lida por um pai ou mãe, um adulto ou um cuidador da casa, e por quem a escreveu.",
+  "medicationsModule.noMedicinesForTheHousehold": "Ainda não foram adicionados medicamentos para a casa.",
+  "childLoginActions.couldNotRemoveTheLogin": "Não foi possível remover o acesso infantil. Atualiza e tenta de novo.",
+  "childAccessManager.removeLogin": "Remover acesso",
+  "childAccessManager.removeLoginFor": "Remover o acesso infantil de {name}",
+  "childAccessManager.removeTheKidLoginConfirm": "Remover o acesso infantil de {name}? Deixa de poder entrar com o nome de utilizador e o PIN. O lugar na família mantém-se.",
+  "childAccessManager.loginRemovedFor": "O acesso infantil de {name} foi removido.",
+  "familyModule.aKidLoginCannotBeAManager": "{name} entra com um PIN infantil, por isso não pode ser pai, mãe ou adulto. Remove primeiro o acesso infantil em Acessos de crianças; um pai, mãe ou adulto entra com o seu próprio email."
 }

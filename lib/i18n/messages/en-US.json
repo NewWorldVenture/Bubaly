@@ -16888,5 +16888,12 @@
   "mobileAssistant.conflictMobileFamilyLine": "Family occupancy advisory: {titles} overlap {when}. Imported occupancy applies to the family; it does not identify who is double-booked.",
   "careModule.onlyTheCareYouLogged": "Showing only the care you logged for {name}. Their full care log is kept for a parent, an adult or a caregiver.",
   "behaviorModule.keptForParentsAndCaregivers": "Behavior notes are kept by your family's parents and caregivers",
-  "behaviorModule.keptForParentsAndCaregiversBody": "A note about how someone is doing is read by a parent, an adult or a caregiver of the household, and by whoever wrote it."
+  "behaviorModule.keptForParentsAndCaregiversBody": "A note about how someone is doing is read by a parent, an adult or a caregiver of the household, and by whoever wrote it.",
+  "medicationsModule.noMedicinesForTheHousehold": "No medicines have been added for the household yet.",
+  "childLoginActions.couldNotRemoveTheLogin": "Couldn't remove the kid login. Refresh and try again.",
+  "childAccessManager.removeLogin": "Remove login",
+  "childAccessManager.removeLoginFor": "Remove {name}'s kid login",
+  "childAccessManager.removeTheKidLoginConfirm": "Remove {name}'s kid login? They won't be able to sign in with their username and PIN. Their place in the family stays.",
+  "childAccessManager.loginRemovedFor": "{name}'s kid login was removed.",
+  "familyModule.aKidLoginCannotBeAManager": "{name} signs in with a kid PIN, so they can't be a parent or adult. Remove their kid login in Kid Logins first; a parent or adult signs in with their own email."
 }

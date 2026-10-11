@@ -9,6 +9,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
+import { readsEveryMedication } from '@/lib/medications/readers';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -84,12 +85,18 @@ export function MedicationsModule() {
   const familyZone = family.timezone || 'UTC';
   const { success, error: toastError } = useToast();
   const canEdit = isManager(role);
-  // A non-manager's page asks for their OWN prescriptions and doses (F-G09).
-  // 0465 makes the database refuse the rest, but this page must not depend on
-  // it: until 0465 is applied a child's read still returns the family's rows,
-  // and "you see the medicines prescribed to you" would be untrue. No member
-  // row matches nothing (the nil UUID), never everything.
-  const ownMemberOnly = canEdit ? null : (selfMember?.id ?? NIL_UUID);
+  // Who reads which medicines is the held 0511's rule (the owner's decision):
+  // a parent, an adult or a caregiver reads the household's; anyone else reads
+  // the ones prescribed to them (F-G09). The page asks for exactly that, so it
+  // does not depend on 0511: until it is applied a child's read still returns
+  // the family's rows, and "you see the medicines prescribed to you" would be
+  // untrue. No member row matches nothing (the nil UUID), never everything.
+  const readsEveryMedicine = readsEveryMedication(role);
+  const ownMemberOnly = readsEveryMedicine ? null : (selfMember?.id ?? NIL_UUID);
+  // Doses stay a manager's or the member's own (0481), a caregiver's included:
+  // the dose list, its buttons and the adherence ring are built only from
+  // medicines whose doses this viewer reads and logs.
+  const ownDosesOnly = canEdit ? null : (selfMember?.id ?? NIL_UUID);
 
   const [memberFilter, setMemberFilter] = useState<string>('all');
   const [medOpening, setMedOpening] = useState<object | null>(null);
@@ -165,10 +172,10 @@ export function MedicationsModule() {
     fetcher: (sb) => sb.from('medication_schedules').select('*').eq('family_id', familyId).order('time_of_day'),
   });
   const { data: doses, loading: dosesLoading, error: dosesError, refreshAndConfirm: confirmDoses, stale: dosesStale } = useRealtimeQuery<Dose>({
-    table: 'medication_doses', familyId, deps: [familyId, dayKey, ownMemberOnly],
+    table: 'medication_doses', familyId, deps: [familyId, dayKey, ownDosesOnly],
     fetcher: (sb) => {
       const q = sb.from('medication_doses').select('*').eq('family_id', familyId).gte('scheduled_for', windowStart);
-      return ownMemberOnly ? q.eq('member_id', ownMemberOnly) : q;
+      return ownDosesOnly ? q.eq('member_id', ownDosesOnly) : q;
     },
   });
   const loading = medsLoading || schedulesLoading || dosesLoading;
@@ -247,13 +254,14 @@ export function MedicationsModule() {
   const scheduleLikes = useMemo<(ScheduleLike & { medMemberId: string | null })[]>(() =>
     (schedules ?? [])
       .filter((s) => s.family_id === familyId && medIdSet.has(s.medication_id)
-        && meds.some((m) => m.id === s.medication_id && m.family_id === familyId && m.is_active))
+        && meds.some((m) => m.id === s.medication_id && m.family_id === familyId && m.is_active
+          && (ownDosesOnly === null || m.member_id === ownDosesOnly)))
       .map((s) => ({
         id: s.id, medication_id: s.medication_id, time_of_day: s.time_of_day,
         days_of_week: s.days_of_week, starts_on: s.starts_on, ends_on: s.ends_on,
         medMemberId: (meds ?? []).find((m) => m.id === s.medication_id)?.member_id ?? null,
       })),
-    [schedules, medIdSet, meds, familyId]);
+    [schedules, medIdSet, meds, familyId, ownDosesOnly]);
 
   const today = useMemo(() => new Date(`${dayKey}T12:00:00`), [dayKey]);
   const todayDoses = useMemo(
@@ -264,9 +272,9 @@ export function MedicationsModule() {
   );
 
   const windowDoseLogs = useMemo(() => {
-    const visibleMedIds = new Set(visibleMeds.map((m) => m.id));
+    const visibleMedIds = new Set(visibleMeds.filter((m) => ownDosesOnly === null || m.member_id === ownDosesOnly).map((m) => m.id));
     return (doses ?? []).filter((d) => visibleMedIds.has(d.medication_id)).map((d) => ({ status: d.status }));
-  }, [doses, visibleMeds]);
+  }, [doses, visibleMeds, ownDosesOnly]);
   const adherence = adherenceRate(windowDoseLogs);
   const counts = doseStatusCounts(windowDoseLogs);
 
@@ -520,12 +528,13 @@ export function MedicationsModule() {
         </div>
       </div>
 
-      {/* Member filter. A manager reads the whole family's prescriptions and
-          filters them; anyone else reads only the ones naming their own member
-          row (0465), so a filter by sibling or "Whole family" could only ever
-          come up empty. They are told what they are looking at instead, so the
-          shorter list reads as the rule and not as a failed load. */}
-      {canEdit ? (
+      {/* Member filter. A manager or a caregiver reads the whole family's
+          prescriptions and filters them; anyone else reads only the ones naming
+          their own member row (0511), so a filter by sibling or "Whole family"
+          could only ever come up empty. They are told what they are looking at
+          instead, so the shorter list reads as the rule and not as a failed
+          load. */}
+      {readsEveryMedicine ? (
         <div className="flex flex-wrap gap-1.5 mb-4 max-h-28 overflow-y-auto">
           {[{ id: 'all', label: 'All' }, { id: WHOLE_FAMILY, label: 'Whole family' }, ...members.map((m) => ({ id: m.id, label: m.display_name }))].map((opt) => (
             <button key={opt.id} onClick={() => setMemberFilter(opt.id)}
@@ -542,7 +551,8 @@ export function MedicationsModule() {
       {/* Medications list */}
       {visibleMeds.length === 0 ? (
         <EmptyState icon={Pill} title={t('medications.noMedicationsYet')}
-          description={canEdit ? t('uiText.addAMedicationAndSetItsDosing') : t('medicationsModule.noMedicinesPrescribedToYou')}
+          description={canEdit ? t('uiText.addAMedicationAndSetItsDosing')
+            : readsEveryMedicine ? t('medicationsModule.noMedicinesForTheHousehold') : t('medicationsModule.noMedicinesPrescribedToYou')}
           action={canEdit && <Button onClick={openNewMed} disabled={!!busy} className="gap-1.5"><Plus className="h-4 w-4" /> {t('medications.addMedication')}</Button>} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

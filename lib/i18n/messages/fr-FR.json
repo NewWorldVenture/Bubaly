@@ -16888,5 +16888,12 @@
   "mobileAssistant.conflictMobileFamilyLine": "Avis d’occupation familiale : {titles} se chevauchent {when}. L’occupation importée s’applique à la famille ; elle n’indique pas qui a deux engagements simultanés.",
   "careModule.onlyTheCareYouLogged": "Seuls les soins que tu as notés pour {name} sont affichés. Son journal de soins complet est réservé à un parent, un adulte ou un aidant.",
   "behaviorModule.keptForParentsAndCaregivers": "Les notes de comportement sont tenues par les parents et les aidants de ta famille",
-  "behaviorModule.keptForParentsAndCaregiversBody": "Une note sur la façon dont va quelqu'un est lue par un parent, un adulte ou un aidant du foyer, et par la personne qui l'a écrite."
+  "behaviorModule.keptForParentsAndCaregiversBody": "Une note sur la façon dont va quelqu'un est lue par un parent, un adulte ou un aidant du foyer, et par la personne qui l'a écrite.",
+  "medicationsModule.noMedicinesForTheHousehold": "Aucun médicament n'a encore été ajouté pour le foyer.",
+  "childLoginActions.couldNotRemoveTheLogin": "Impossible de supprimer la connexion enfant. Actualise et réessaie.",
+  "childAccessManager.removeLogin": "Supprimer la connexion",
+  "childAccessManager.removeLoginFor": "Supprimer la connexion enfant de {name}",
+  "childAccessManager.removeTheKidLoginConfirm": "Supprimer la connexion enfant de {name} ? Il ne pourra plus se connecter avec son identifiant et son code PIN. Sa place dans la famille reste.",
+  "childAccessManager.loginRemovedFor": "La connexion enfant de {name} a été supprimée.",
+  "familyModule.aKidLoginCannotBeAManager": "{name} se connecte avec un code PIN enfant et ne peut donc pas être parent ou adulte. Supprime d'abord sa connexion enfant dans Connexions enfants ; un parent ou un adulte se connecte avec sa propre adresse e-mail."
 }

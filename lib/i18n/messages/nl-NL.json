@@ -16888,5 +16888,12 @@
   "mobileAssistant.conflictMobileFamilyLine": "Advies over gezinsbezetting: {titles} overlappen {when}. Geïmporteerde bezetting geldt voor het gezin; deze geeft niet aan wie dubbel is ingepland.",
   "careModule.onlyTheCareYouLogged": "Alleen de zorg die jij voor {name} hebt vastgelegd wordt getoond. Het volledige zorglogboek is voor een ouder, een volwassene of een verzorger.",
   "behaviorModule.keptForParentsAndCaregivers": "Gedragsnotities worden bijgehouden door de ouders en verzorgers van je gezin",
-  "behaviorModule.keptForParentsAndCaregiversBody": "Een notitie over hoe het met iemand gaat wordt gelezen door een ouder, een volwassene of een verzorger van het huishouden, en door wie hem schreef."
+  "behaviorModule.keptForParentsAndCaregiversBody": "Een notitie over hoe het met iemand gaat wordt gelezen door een ouder, een volwassene of een verzorger van het huishouden, en door wie hem schreef.",
+  "medicationsModule.noMedicinesForTheHousehold": "Er zijn nog geen medicijnen voor het huishouden toegevoegd.",
+  "childLoginActions.couldNotRemoveTheLogin": "De kinderlogin kon niet worden verwijderd. Vernieuw en probeer het opnieuw.",
+  "childAccessManager.removeLogin": "Login verwijderen",
+  "childAccessManager.removeLoginFor": "Kinderlogin van {name} verwijderen",
+  "childAccessManager.removeTheKidLoginConfirm": "De kinderlogin van {name} verwijderen? Inloggen met gebruikersnaam en pincode kan dan niet meer. De plek in het gezin blijft.",
+  "childAccessManager.loginRemovedFor": "De kinderlogin van {name} is verwijderd.",
+  "familyModule.aKidLoginCannotBeAManager": "{name} logt in met een kinderpincode en kan dus geen ouder of volwassene zijn. Verwijder eerst de kinderlogin bij Kinderlogins; een ouder of volwassene logt in met een eigen e-mailadres."
 }

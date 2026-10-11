@@ -16888,5 +16888,12 @@
   "mobileAssistant.conflictMobileFamilyLine": "Avviso di occupazione familiare: {titles} si sovrappongono {when}. L’occupazione importata riguarda la famiglia; non identifica chi ha due impegni contemporanei.",
   "careModule.onlyTheCareYouLogged": "Sono mostrate solo le cure che hai registrato per {name}. Il registro completo delle cure è riservato a un genitore, un adulto o un assistente.",
   "behaviorModule.keptForParentsAndCaregivers": "Le note sul comportamento sono tenute dai genitori e dagli assistenti della tua famiglia",
-  "behaviorModule.keptForParentsAndCaregiversBody": "Una nota su come sta qualcuno la leggono un genitore, un adulto o un assistente della famiglia, e chi l'ha scritta."
+  "behaviorModule.keptForParentsAndCaregiversBody": "Una nota su come sta qualcuno la leggono un genitore, un adulto o un assistente della famiglia, e chi l'ha scritta.",
+  "medicationsModule.noMedicinesForTheHousehold": "Non sono ancora stati aggiunti farmaci per la famiglia.",
+  "childLoginActions.couldNotRemoveTheLogin": "Impossibile rimuovere l'accesso bambino. Aggiorna e riprova.",
+  "childAccessManager.removeLogin": "Rimuovi accesso",
+  "childAccessManager.removeLoginFor": "Rimuovi l'accesso bambino di {name}",
+  "childAccessManager.removeTheKidLoginConfirm": "Rimuovere l'accesso bambino di {name}? Non potrà più entrare con nome utente e PIN. Il suo posto in famiglia resta.",
+  "childAccessManager.loginRemovedFor": "L'accesso bambino di {name} è stato rimosso.",
+  "familyModule.aKidLoginCannotBeAManager": "{name} entra con un PIN da bambino, quindi non può essere genitore o adulto. Rimuovi prima il suo accesso bambino in Accessi bambini; un genitore o un adulto entra con la propria email."
 }
