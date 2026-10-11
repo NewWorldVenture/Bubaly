@@ -22,7 +22,7 @@ export function SuperAdminToggle({ email, isAdmin, locked }: { email: string; is
 
   if (locked) {
     return (
-      <span title={t('superAdminToggle.setViaCodeSuperAdminEmails')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-text/80">
+      <span title={t('superAdminToggle.setViaCodeSuperAdminEmails')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-text">
         <ShieldCheck className="h-3.5 w-3.5" /> {t('superAdminToggle.adminCode')}
       </span>
     );

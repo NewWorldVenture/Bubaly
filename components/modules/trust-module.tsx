@@ -578,10 +578,10 @@ function PermissionsTab({ members, grants, canManage }: { members: Member[]; gra
                           className={cn('inline-flex h-7 w-7 items-center justify-center rounded-lg border text-[10px] font-bold transition',
                             state === 'allow' && 'border-green-500/40 bg-green-500/15 text-green-400',
                             state === 'deny' && 'border-red-500/40 bg-red-500/15 text-red-400',
-                            state === 'default-allow' && 'border-border bg-surface text-green-400/50',
-                            state === 'default-approval' && 'border-border bg-surface text-amber-400/60',
-                            state === 'default-deny' && 'border-border bg-surface text-muted/40',
-                            canManage && 'hover:brightness-125 cursor-pointer')}>
+                            state === 'default-allow' && 'border-border bg-surface text-green-400',
+                            state === 'default-approval' && 'border-border bg-surface text-amber-400',
+                            state === 'default-deny' && 'border-border bg-surface text-muted',
+                            canManage && 'hover:shadow-md cursor-pointer')}>
                           {busy === `${domain}__${cap}` ? <Loader2 className="h-3 w-3 animate-spin" />
                             : state === 'allow' || state === 'default-allow' ? <Check className="h-3.5 w-3.5" />
                             : state === 'deny' || state === 'default-deny' ? <X className="h-3.5 w-3.5" />
@@ -599,8 +599,8 @@ function PermissionsTab({ members, grants, canManage }: { members: Member[]; gra
       <div className="flex flex-wrap items-center gap-3 text-[10px] text-muted">
         <span className="flex items-center gap-1"><span className="inline-flex h-4 w-4 items-center justify-center rounded border border-green-500/40 bg-green-500/15 text-green-400"><Check className="h-3 w-3" /></span> allowed</span>
         <span className="flex items-center gap-1"><span className="inline-flex h-4 w-4 items-center justify-center rounded border border-red-500/40 bg-red-500/15 text-red-400"><X className="h-3 w-3" /></span> blocked</span>
-        <span className="flex items-center gap-1"><span className="text-amber-400/60">~</span> {tr('trust.needsApprovalRoleDefault')}</span>
-        <span>{tr('trust.fadedRoleDefaultSolidExplicitOverride')}{canManage ? ' (tap to change)' : ''}</span>
+        <span className="flex items-center gap-1"><span className="font-bold text-amber-400">~</span> {tr('trust.needsApprovalRoleDefault')}</span>
+        <span>{tr('trust.plainRoleDefaultTintedExplicitOverride')}{canManage ? ' (tap to change)' : ''}</span>
       </div>
     </div>
   );

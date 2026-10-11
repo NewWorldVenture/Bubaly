@@ -14828,7 +14828,7 @@
   "trust.everyParentAndAdult": "Todos os progenitores e adultos",
   "trust.everyone": "Todos",
   "trust.expires": "· expira",
-  "trust.fadedRoleDefaultSolidExplicitOverride": "· esbatido = predefinição da função, sólido = substituição explícita",
+  "trust.plainRoleDefaultTintedExplicitOverride": "· simples = predefinição da função, colorido = substituição explícita",
   "trust.from": "De",
   "trust.maxAmount": "Valor máx. ($)",
   "trust.member": "Membro",
