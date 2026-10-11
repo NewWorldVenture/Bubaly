@@ -2,7 +2,8 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createServiceClient } from '@/lib/supabase/server';
-import { getStripe } from '@/lib/stripe';
+import { stripeFromKey } from '@/lib/stripe';
+import { effectiveSecretKey, getStripeSettings } from '@/lib/stripe/settings';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import {
   DEFAULT_REFERRAL_CONFIG, resolveReferralConfig, generateReferralCode, normalizeCode,
@@ -212,7 +213,7 @@ export async function markReferralConverted(service: DB, referredFamilyId: strin
 
 /**
  * The slice of the Stripe client the reward needs. Narrow so a test can hand
- * in a recorder; the real client (`getStripe()`) satisfies it structurally.
+ * in a recorder; the real client (`stripeFromKey(...)`) satisfies it structurally.
  */
 export type StripeCustomerCredits = {
   customers: {
@@ -222,6 +223,10 @@ export type StripeCustomerCredits = {
       params: { amount: number; currency: string; description?: string; metadata?: Record<string, string> },
       options?: { idempotencyKey?: string },
     ): Promise<{ id: string }>;
+    listBalanceTransactions(
+      id: string,
+      params?: { limit?: number; starting_after?: string; created?: { gte?: number } },
+    ): Promise<{ data: { id: string; metadata?: Record<string, string> | null }[]; has_more: boolean }>;
   };
 };
 
@@ -242,6 +247,43 @@ export type RewardDeps = {
   now?: Date;
 };
 
+/** Pages of a customer's balance history read before giving up (100 each). */
+const REWARD_LOOKUP_PAGES = 10;
+/** How far before the conversion the lookup starts, for clock skew between us and Stripe. */
+const REWARD_LOOKUP_MARGIN_SECONDS = 24 * 60 * 60;
+
+/**
+ * The credit this referral already made to this side's customer, if Stripe
+ * holds one. The idempotency key does not cover a retry on its own: Stripe keeps
+ * keys for about 24 hours, and a side left owed (Stripe made the credit but the
+ * answer was lost, or its id never reached the row) is retried by the referred
+ * family's next subscription event, usually the renewal a month or a year later.
+ * Each credit carries `referral_id` and `side` metadata (below), which is what
+ * this matches. Only transactions from a day before the referral converted are
+ * read (`since`): no credit for it can be older, and a long history from before
+ * cannot block it. Throws when Stripe cannot be asked, or when the history is
+ * longer than it reads, so the caller credits nobody rather than guessing.
+ */
+async function existingRewardCredit(
+  stripe: StripeCustomerCredits, customerRef: string, referralId: string, side: ReferralRewardSide, since: number | null,
+): Promise<string | null> {
+  let startingAfter: string | undefined;
+  for (let page = 0; page < REWARD_LOOKUP_PAGES; page++) {
+    const listed = await stripe.customers.listBalanceTransactions(customerRef, {
+      limit: 100,
+      ...(since !== null ? { created: { gte: since } } : {}),
+      ...(startingAfter ? { starting_after: startingAfter } : {}),
+    });
+    const found = listed.data.find((txn) => txn.metadata?.referral_id === referralId && txn.metadata?.side === side);
+    if (found) return found.id;
+    if (!listed.has_more) return null;
+    // "More" with nothing on this page gives no cursor to go on from.
+    if (listed.data.length === 0) throw new Error('Stripe reported more balance transactions but returned none');
+    startingAfter = listed.data[listed.data.length - 1].id;
+  }
+  throw new Error(`more than ${REWARD_LOOKUP_PAGES * 100} balance transactions; cannot tell whether this referral was already credited`);
+}
+
 async function customerRefForFamily(service: DB, familyId: string): Promise<{ ref: string | null; error: unknown }> {
   const { data, error } = await service.from('billing_customers').select('customer_ref').eq('family_id', familyId).maybeSingle();
   return { ref: data?.customer_ref ?? null, error };
@@ -253,7 +295,10 @@ async function customerRefForFamily(service: DB, familyId: string): Promise<{ re
  *
  * Idempotent for webhook retries: a 'rewarded' row is a no-op; a side already
  * credited (its balance-transaction id is on the row's metadata) is skipped;
- * each Stripe call carries a per-side idempotency key. A family with no
+ * a side whose credit Stripe already holds but the row never recorded takes
+ * that credit's id instead of a second one (existingRewardCredit); and each
+ * Stripe call carries a per-side idempotency key for deliveries that overlap
+ * within Stripe's 24 hours. A family with no
  * Stripe customer yet leaves the row 'converted' for the next event to retry.
  * A negative customer balance is a credit that Stripe applies to the next
  * invoice automatically.
@@ -262,7 +307,7 @@ export async function rewardReferral(service: DB, referralId: string, deps: Rewa
   const now = deps.now ?? new Date();
   const { data: row, error: readError } = await service
     .from('referrals')
-    .select('id, code, status, referrer_family_id, referred_family_id, referrer_reward_cents, referred_reward_cents, metadata')
+    .select('id, code, status, referrer_family_id, referred_family_id, referrer_reward_cents, referred_reward_cents, metadata, converted_at')
     .eq('id', referralId)
     .maybeSingle();
   if (readError) {
@@ -273,12 +318,18 @@ export async function rewardReferral(service: DB, referralId: string, deps: Rewa
   if (row.status === 'rewarded') return { outcome: 'already_rewarded', referralId };
   if (row.status !== 'converted') return { outcome: 'not_converted', referralId, status: row.status };
 
+  const convertedAt = row.converted_at ? Date.parse(row.converted_at) : Number.NaN;
+  const since = Number.isFinite(convertedAt) ? Math.floor(convertedAt / 1000) - REWARD_LOOKUP_MARGIN_SECONDS : null;
+
   let metadata: unknown = row.metadata;
   const persistMetadata = async (next: Record<string, unknown>): Promise<string | null> => {
     const { data, error } = await service
       .from('referrals')
       .update({ metadata: next as ReferralMetadata })
       .eq('id', referralId)
+      // A run that started before another one flipped the row to rewarded must
+      // not write its stale copy of the record over the finished one.
+      .eq('status', 'converted')
       .select('id')
       .maybeSingle();
     if (error || !data) return error?.message ?? 'referral row vanished';
@@ -311,35 +362,73 @@ export async function rewardReferral(service: DB, referralId: string, deps: Rewa
       return { outcome: 'missing_customer', referralId, side };
     }
 
-    let txnId: string;
+    const record = rewardRecordFrom(metadata);
+    const attempted = (side === 'referrer' ? record.referrer_customer : record.referred_customer) ?? null;
+    const creditFailed = (err: unknown): RewardOutcome => {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('[referrals/reward] Stripe credit failed', { referralId, side, familyId, error: message });
+      return { outcome: 'credit_failed', referralId, side, error: message };
+    };
+
+    let stripe: StripeCustomerCredits;
+    let currency: string;
+    let txnId: string | null = null;
     try {
-      const stripe = deps.stripe ?? getStripe();
+      // The key the billing routes use: Super Admin → Stripe Setup first, then
+      // the environment. getStripe() read only the environment, so a deployment
+      // configured in Stripe Setup alone failed every reward.
+      stripe = deps.stripe ?? stripeFromKey(effectiveSecretKey(await getStripeSettings()));
       const customer = await stripe.customers.retrieve(customerRef);
       if (customer.deleted) {
         console.warn('[referrals/reward] Stripe customer is deleted; leaving converted', { referralId, side, familyId });
         return { outcome: 'missing_customer', referralId, side };
       }
-      const txn = await stripe.customers.createBalanceTransaction(
-        customerRef,
-        {
-          amount: -Math.round(amount),
-          currency: customer.currency ?? 'usd',
-          description: `Bubaly referral credit (${row.code})`,
-          metadata: { referral_id: referralId, family_id: familyId, side },
-        },
-        { idempotencyKey: rewardIdempotencyKey(referralId, side) },
-      );
-      txnId = txn.id;
+      currency = customer.currency ?? 'usd';
+      // Where this side's credit may already be: the customer an earlier attempt
+      // was made on, and the one the family has now. A customer Stripe no longer
+      // has holds no credit to find.
+      for (const ref of [...new Set([attempted, customerRef].filter((c): c is string => Boolean(c)))]) {
+        try {
+          txnId = await existingRewardCredit(stripe, ref, referralId, side, since);
+        } catch (lookupError) {
+          if (ref !== customerRef && (lookupError as { code?: string })?.code === 'resource_missing') continue;
+          throw lookupError;
+        }
+        if (txnId) break;
+      }
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error('[referrals/reward] Stripe credit failed', { referralId, side, familyId, error: message });
-      return { outcome: 'credit_failed', referralId, side, error: message };
+      return creditFailed(err);
+    }
+
+    if (!txnId) {
+      if (attempted !== customerRef) {
+        // Recorded before the credit, so that if its answer is lost the retry
+        // looks on this customer even if the family's customer changes first.
+        const recordError = await persistMetadata(withRewardRecord(metadata, { [`${side}_customer`]: customerRef }));
+        if (recordError) return { outcome: 'persist_failed', referralId, error: recordError };
+      }
+      try {
+        const txn = await stripe.customers.createBalanceTransaction(
+          customerRef,
+          {
+            amount: -Math.round(amount),
+            currency,
+            description: `Bubaly referral credit (${row.code})`,
+            metadata: { referral_id: referralId, family_id: familyId, side },
+          },
+          { idempotencyKey: rewardIdempotencyKey(referralId, side) },
+        );
+        txnId = txn.id;
+      } catch (err) {
+        return creditFailed(err);
+      }
     }
 
     const err = await persistMetadata(withRewardRecord(metadata, { [`${side}_txn`]: txnId }));
     if (err) {
-      // The credit exists in Stripe; the idempotency key makes the retry return
-      // the same transaction rather than a second credit.
+      // The credit exists in Stripe. A retry within Stripe's 24 hours gets the
+      // same transaction back for the idempotency key; a later one finds it with
+      // existingRewardCredit and records it instead of making a second.
       console.error('[referrals/reward] credit persisted in Stripe but not on the referral row', { referralId, side, txnId, error: err });
       return { outcome: 'persist_failed', referralId, error: err };
     }
