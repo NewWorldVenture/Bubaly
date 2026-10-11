@@ -229,6 +229,22 @@ describe('the screens say whose the household\'s money is', () => {
     expect(read('lib/wallet/family-wallet-status.ts')).toContain(".from('family_wallets').select('is_active').eq('family_id', familyId).maybeSingle()");
   });
 
+  it('the cards page asks the server for the Stripe account\'s status flags, not the row', () => {
+    const src = read('app/(app)/wallet/cards/page.tsx');
+    expect(src).toContain('readConnectedAccountStatus(familyId),');
+    expect(src).not.toMatch(/supabase\.from\('stripe_connected_accounts'\)/);
+    expect(read('lib/wallet/family-wallet-status.ts')).toContain(".select('status, charges_enabled, details_submitted, card_issuing_enabled').eq('family_id', familyId).maybeSingle()");
+  });
+
+  it('the budget simulator, the intelligence preview and needs-you do not stand a member\'s own spending in for the household\'s', () => {
+    const twin = read('app/(app)/dashboard/family-digital-twin/actions.ts');
+    expect(at(twin, 'if (!readsHouseholdMoney(ctx.active.role)) {')).toBeLessThan(at(twin, ".from('budgets').select('category, amount, period')"));
+    const intel = read('app/(app)/dashboard/intelligence/page.tsx');
+    expect(intel).toContain('typicalWeeklySpend: seesSpending ? typicalWeeklySpend(');
+    expect(intel).toContain(': Promise.resolve({ data: [] as { amount: number }[], error: null }),');
+    expect(read('app/(app)/dashboard/needs-you/page.tsx')).toContain(".eq('family_id', familyId).eq('created_by', ctx.user.id))");
+  });
+
   it('says so in the seven base locales', () => {
     for (const locale of LOCALES) {
       const m = JSON.parse(read(`lib/i18n/messages/${locale}.json`)) as Record<string, string>;

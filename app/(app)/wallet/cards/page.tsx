@@ -8,7 +8,7 @@ import { isManager } from '@/lib/constants/roles';
 import { getMoneyCapabilities } from '@/lib/stripe/capabilities';
 import { syncConnectedAccount } from '@/lib/stripe/connect';
 import { WalletActivation } from '@/components/wallet/wallet-activation';
-import { readFamilyWalletIsActive } from '@/lib/wallet/family-wallet-status';
+import { readConnectedAccountStatus, readFamilyWalletIsActive } from '@/lib/wallet/family-wallet-status';
 import { MoneyCardsView, type CardChild, type IssuedCard } from '@/components/wallet/money-cards-view';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
@@ -57,8 +57,9 @@ export default async function WalletCardsPage({
   }
 
   const [{ data: account, error: accountError }, { data: childWallets, error: childWalletsError }, { data: members, error: membersError }, { data: cards, error: cardsError }] = await settleAll([
-    supabase.from('stripe_connected_accounts')
-      .select('status, charges_enabled, details_submitted, card_issuing_enabled').eq('family_id', familyId).maybeSingle(),
+    // The account's status flags, read by the server: the row is a parent's
+    // or adult's (the held 0514), and every member's cards page turns on them.
+    readConnectedAccountStatus(familyId),
     supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true),
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId),
     supabase.from('stripe_issuing_cards')
