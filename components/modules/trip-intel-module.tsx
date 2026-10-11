@@ -589,7 +589,7 @@ function DepartureCard({ plan }: { plan: SavedDeparturePlan }) {
   const copy = departureStatusCopy(live.status);
   const toneCls = copy.tone === 'urgent' ? 'border-danger/40 bg-danger/5' :
     copy.tone === 'warn' ? 'border-amber-500/40 bg-amber-500/5' :
-    copy.tone === 'muted' ? 'border-border bg-surface/30 opacity-70' : 'border-emerald-500/30 bg-emerald-500/5';
+    copy.tone === 'muted' ? 'border-border bg-surface/30' : 'border-emerald-500/30 bg-emerald-500/5';
   const chipCls = copy.tone === 'urgent' ? 'bg-danger/15 text-danger' :
     copy.tone === 'warn' ? 'bg-amber-500/15 text-amber-600' :
     copy.tone === 'muted' ? 'bg-border/60 text-muted' : 'bg-emerald-500/15 text-emerald-500';

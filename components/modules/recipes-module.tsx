@@ -375,7 +375,7 @@ export function RecipesModule() {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={safeWebLink(recipe.photo_url) ?? undefined} alt={recipe.name} className="h-full w-full object-cover transition group-hover:scale-105" />
                   ) : (
-                    <div className="flex h-full items-center justify-center text-5xl opacity-30">{cat.emoji}</div>
+                    <div aria-hidden className="flex h-full items-center justify-center text-5xl opacity-30">{cat.emoji}</div>
                   )}
                   {/* Badges */}
                   <div className="absolute left-2 top-2 flex gap-1.5">

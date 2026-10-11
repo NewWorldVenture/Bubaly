@@ -14829,7 +14829,7 @@
   "trust.everyParentAndAdult": "Tous les parents et adultes",
   "trust.everyone": "Tout le monde",
   "trust.expires": "· expire",
-  "trust.fadedRoleDefaultSolidExplicitOverride": "· estompé = valeur par défaut du rôle, plein = dérogation explicite",
+  "trust.plainRoleDefaultTintedExplicitOverride": "· neutre = valeur par défaut du rôle, teinté = dérogation explicite",
   "trust.from": "De",
   "trust.maxAmount": "Montant max ($)",
   "trust.member": "Membre",

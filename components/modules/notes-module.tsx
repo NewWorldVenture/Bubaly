@@ -74,7 +74,7 @@ function renderChecklist(body: string) {
     if (checked || unchecked) {
       const text = line.trim().replace(/^\[[ x]\]\s*/i, '');
       return (
-        <div key={i} className={cn('flex items-start gap-2 py-0.5 text-sm', checked && 'opacity-50')}>
+        <div key={i} className="flex items-start gap-2 py-0.5 text-sm">
           {checked
             ? <CheckSquare className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-success" />
             : <Square className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-muted" />}
@@ -348,7 +348,7 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
                   const unchecked = /^\[ \]/.test(line.trim());
                   if (!checked && !unchecked) return null;
                   return (
-                    <div key={i} className={cn('flex items-center gap-1.5 text-xs', checked && 'opacity-50')}>
+                    <div key={i} className="flex items-center gap-1.5 text-xs">
                       {checked
                         ? <CheckSquare className="h-3 w-3 text-success flex-shrink-0" />
                         : <Square className="h-3 w-3 text-muted flex-shrink-0" />}

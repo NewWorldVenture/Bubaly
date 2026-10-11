@@ -464,7 +464,6 @@ export function RemindersModule() {
               <div key={reminder.id}
                 className={cn(
                   'group relative flex items-start gap-4 rounded-2xl border p-4 transition',
-                  completed && 'opacity-50',
                   overdue && !completed ? 'border-danger/30 bg-danger/5' : 'border-border bg-surface/30 hover:bg-surface/50',
                   snoozed && 'border-warning/30 bg-warning/5',
                 )}>

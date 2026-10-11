@@ -257,7 +257,7 @@ export function DeclutterModule() {
                 const meta = zoneKindMeta(z.kind);
                 const openHere = open.filter((m) => m.zone_id === z.id).length;
                 return (
-                  <li key={z.id} className={cn('rounded-2xl border border-border bg-surface/40 p-4', !z.is_active && 'opacity-60')}>
+                  <li key={z.id} className={cn('rounded-2xl border border-border bg-surface/40 p-4', !z.is_active && 'border-dashed')}>
                     <div className="flex items-start gap-3">
                       <span className="text-2xl" aria-hidden>{meta.emoji}</span>
                       <div className="min-w-0 flex-1">
@@ -322,7 +322,7 @@ export function DeclutterModule() {
               }) : tr('declutter.addZoneFirst')}</p>
               {plan.length > 0 && (
                 <ul className="mt-3 grid gap-1 text-xs text-muted sm:grid-cols-2">
-                  {plan.slice(0, 6).map((p) => <li key={`${p.day}-${p.zone.id}`}>{p.dayLabel}: {zoneKindMeta(p.zone.kind).emoji} {templateTitle(tr, p.zone.kind, p.template.title)} <span className="opacity-70">({p.zone.name}{p.assigneeId ? `, ${nameOf(p.assigneeId)}` : ''})</span></li>)}
+                  {plan.slice(0, 6).map((p) => <li key={`${p.day}-${p.zone.id}`}>{p.dayLabel}: {zoneKindMeta(p.zone.kind).emoji} {templateTitle(tr, p.zone.kind, p.template.title)} <span>({p.zone.name}{p.assigneeId ? `, ${nameOf(p.assigneeId)}` : ''})</span></li>)}
                 </ul>
               )}
             </div>

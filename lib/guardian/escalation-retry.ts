@@ -42,6 +42,11 @@
 // escalation's `originalAt`). Each run is bounded by the deadline the cron
 // gives it, and takes the records in turn from where the last run stopped, so
 // records that keep failing cannot hold every slot while a newer one waits.
+// Landing the owed records takes at most half of what is left of the run, and
+// counting the landings that failed runs on past that only into what the
+// records do not need (RECORDS_RESERVE_MS, when the share leaves them that
+// much), so neither a landing that stalls nor a count that does can take the
+// records' turn.
 
 import 'server-only';
 import { z } from 'zod';
@@ -64,6 +69,23 @@ const SETTLE_MS = 5_000;
 const MIN_ATTEMPT_MS = 15_000;
 /** The run's deadline when the caller gives none. */
 const DEFAULT_RUN_MS = 100_000;
+/**
+ * The most of what is left of the run that landing the owed records may take.
+ * Each landing is cut off on its own as well (escalation-owed.ts), so landings
+ * that stall — on every run, on the same item — leave the rest of the run to
+ * the records already on file.
+ */
+const OWED_SHARE = 0.5;
+/**
+ * What the records on file keep of the run, whatever the owed phase before
+ * them does, when its share leaves them that much: what an attempt needs left
+ * to be started, and a moment for their reads ahead of it. The count of an
+ * owed landing that failed may run on past the phase's share, and is cut off
+ * here. It used to run on for its own 10 s: with a receipt drain that took its
+ * whole part, a landing cut off at the share's end and a slow count after it
+ * left the records under an attempt's time, and none was started.
+ */
+const RECORDS_RESERVE_MS = MIN_ATTEMPT_MS + SETTLE_MS + 2_000;
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
 const CURSOR_KEY = 'guardian.escalation_retry:cursor:v1';
@@ -95,7 +117,12 @@ export type GuardianEscalationRetryCounts = {
   unreachable: number;
   /** The ledger could not be read, a record was malformed, or the attempt itself could not complete. */
   unavailable: number;
-  /** Records the run's deadline left unattempted; they are first in line next run. */
+  /**
+   * Records the run's deadline left unattempted; they are first in line next
+   * run. And owed work items the landing phase read and never tried, its end
+   * having come first: left as they are, with their count, they are taken in
+   * their turn next run.
+   */
   deferred: number;
   /** Records landed from the work item an escalation left when its own record could not be written. */
   recovered: number;
@@ -198,9 +225,14 @@ export async function retryUndeliveredGuardianEscalations(
     return counts;
   }
 
-  const owed = await landOwedGuardianEscalations(client, { since, limit, signal: stop });
+  // The landings stop at the owed phase's share; the counts of failed ones,
+  // and so the whole phase, by the records' reserve (or the share's end, when
+  // the share leaves the records less than that).
+  const share = Date.now() + Math.max(0, deadline - Date.now()) * OWED_SHARE;
+  const owed = await landOwedGuardianEscalations(client, { since, limit, signal: stop, deadline: share, countBy: Math.max(share, deadline - RECORDS_RESERVE_MS) });
   counts.recovered += owed.landed;
   counts.unavailable += owed.unavailable;
+  counts.deferred += owed.deferred;
 
   let rows: Record<string, unknown>[];
   let claims: Map<string, { status: unknown; error: unknown }>;

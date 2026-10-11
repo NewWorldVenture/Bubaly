@@ -14829,7 +14829,7 @@
   "trust.everyParentAndAdult": "Tutti i genitori e gli adulti",
   "trust.everyone": "Tutti",
   "trust.expires": "· scade",
-  "trust.fadedRoleDefaultSolidExplicitOverride": "· sbiadito = valore predefinito del ruolo, pieno = override esplicito",
+  "trust.plainRoleDefaultTintedExplicitOverride": "· semplice = valore predefinito del ruolo, colorato = override esplicito",
   "trust.from": "Da",
   "trust.maxAmount": "Importo max ($)",
   "trust.member": "Membro",
