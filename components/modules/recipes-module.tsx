@@ -298,7 +298,7 @@ export function RecipesModule() {
         description={tr('recipesModule.yourFamilySCookbookOrganized')}
         action={
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2">
+            <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2 focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg">
               <Search className="h-4 w-4 text-muted" />
               <input value={search} inputMode="search" enterKeyHint="search" onChange={(e) => setSearch(e.target.value)}
                 placeholder={tr('recipes.searchRecipes')}
@@ -343,7 +343,7 @@ export function RecipesModule() {
           ))}
         </div>
         <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} aria-label={tr('recipes.category')}
-          className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-xs text-muted focus:outline-none">
+          className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-xs text-muted focus-ring">
           <option value="all">{tr('recipes.allCategories')}</option>
           {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.emoji} {tr(c.labelKey)}</option>)}
         </select>
@@ -401,7 +401,7 @@ export function RecipesModule() {
                     children, so assistive technology may drop that toggle. Its
                     accessible name is the recipe name and description. */}
                 <button type="button" onClick={(e) => { e.stopPropagation(); setViewing(recipe); }}
-                  className="focus-ring flex flex-1 flex-col p-4 text-left">
+                  className="flex flex-1 flex-col p-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand">
                   <h3 className="mb-1 line-clamp-2 font-semibold leading-tight">{recipe.name}</h3>
                   {recipe.description && <p className="mb-2 line-clamp-2 text-xs text-muted">{recipe.description}</p>}
 

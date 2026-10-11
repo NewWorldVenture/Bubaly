@@ -133,7 +133,7 @@ export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, 
               <input
                 value={areaCode} onChange={(e) => setAreaCode(e.target.value.replace(/\D/g, '').slice(0, 3))}
                 placeholder={t('contactCenter.areaCode')} inputMode="numeric" aria-label={t('contactCenter.preferredAreaCode')}
-                className="h-9 w-28 rounded-lg border border-border bg-bg px-3 text-sm outline-none" />
+                className="h-9 w-28 rounded-lg border border-border bg-bg px-3 text-sm focus-ring" />
               <button
                 type="button" disabled={pending}
                 onClick={() => run(() => provisionNumberAction(areaCode))}
