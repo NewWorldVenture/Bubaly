@@ -228,8 +228,9 @@ const triesOf = (item: OwedItem) => (typeof item.attempt === 'number' && Number.
 
 /**
  * Count a landing that failed on its item, so the next run reaches the items
- * tried fewer times first. Logged, never raised: left uncounted, the item is
- * only taken as early as before.
+ * tried fewer times first. Logged, never raised. A count is advancement only
+ * once it is on file: one refused, matching no row, or cut off leaves the item
+ * at the count it had, so it is taken in the same turn next run as in this one.
  */
 async function countFailedLanding(client: SupabaseClient, item: OwedItem, signal: AbortSignal): Promise<void> {
   try {
@@ -256,30 +257,46 @@ async function countFailedLanding(client: SupabaseClient, item: OwedItem, signal
  * this cannot read, or one whose record the database refuses every time), and
  * a newer escalation behind them waited out its window. Each failed landing is
  * counted on its item, so the ones that keep failing take their turn behind the
- * ones not yet tried.
+ * ones not yet tried — once that count is on file. A count refused, matching
+ * no row, or cut off is not: the item keeps its count and its turn, and while
+ * its counts keep failing the items behind it are taken no sooner. Those the
+ * phase does not reach are counted deferred, so the run says so.
  *
- * Bounded three ways, so a stalled statement is cut off inside the run rather
- * than holding it past the function's lifetime, or holding the rest of it. The
- * read and every landing stop at `deadline` (epoch ms, this phase's end, short
- * of the run's), each landing after LANDING_MS of its own, and everything at
- * `signal` — the run's deadline, or the caller gone. A landing cut off is
- * counted unavailable, never landed; a close cut off leaves the item open, and
- * the next run closes it (its record is on file, for the sweep to retry). The
+ * Bounded, so a stalled statement is cut off inside the run rather than
+ * holding it past the function's lifetime, or holding the part of it the work
+ * after this phase needs. The read and every landing stop at `deadline` (epoch
+ * ms, the end of this phase's share of the run), each landing after
+ * LANDING_MS of its own, and everything at `signal` — the run's deadline, or
+ * the caller gone. The count of a failed landing may run on past `deadline`
+ * (the landing cut off there is one to count), but for LANDING_MS at most, and
+ * never past `countBy` (epoch ms, no earlier than `deadline`): the latest this
+ * phase holds the run, landings and counts alike. A landing cut off is counted
+ * unavailable, never landed; a close cut off leaves the item open, and the
+ * next run closes it (its record is on file, for the sweep to retry). The
  * items the phase ends before are counted deferred, and left as they are.
  *
- * A landing cut off short of the run's end is counted as tried, too. It was
- * not, when every landing shared the run's deadline: one whose insert never
+ * A landing cut off short of `countBy` is given its count, too (advancement
+ * once on file, as above). It was not, when every landing shared the run's
+ * deadline: one whose insert never
  * answered took the whole run on every run, was never counted, and so stayed
  * first — the owed escalations behind it were never landed, and the records
- * on file were never retried after it.
+ * on file were never retried after it. Nor did its count have a bound of its
+ * own in the phase: bounded by the run's deadline and a fresh LANDING_MS, the
+ * count after a landing cut off at `deadline` held the run up to LANDING_MS
+ * longer, and a slow drain before it left the records on file under an
+ * attempt's time — none was retried, on every run the slowness lasted.
  */
 export async function landOwedGuardianEscalations(
   client: SupabaseClient,
-  options: { since: string; limit: number; signal: AbortSignal; deadline: number },
+  options: { since: string; limit: number; signal: AbortSignal; deadline: number; countBy: number },
 ): Promise<OwedLandingCounts> {
   const counts: OwedLandingCounts = { landed: 0, unavailable: 0, deferred: 0 };
   // Whole milliseconds: AbortSignal.timeout throws on a fraction, and a share of the run can be one.
-  const phase = AbortSignal.any([options.signal, AbortSignal.timeout(Math.max(0, Math.floor(options.deadline - Date.now())))]);
+  const until = (at: number) => AbortSignal.timeout(Math.max(0, Math.floor(at - Date.now())));
+  /** All of this phase, the counts of failed landings included. */
+  const counting = AbortSignal.any([options.signal, until(options.countBy)]);
+  /** The read, and the landings: this phase's share of the run. */
+  const phase = AbortSignal.any([counting, until(options.deadline)]);
   /** A statement of one item: cut off after LANDING_MS, or sooner with `within`. */
   const bounded = (within: AbortSignal) => AbortSignal.any([within, AbortSignal.timeout(LANDING_MS)]);
   let items: OwedItem[];
@@ -307,13 +324,14 @@ export async function landOwedGuardianEscalations(
   }
 
   /**
-   * One that could not be landed — refused, unreadable, or cut off short of
-   * the run's end: counted, and tried later than the rest. Only when the run
-   * itself has ended is there no time left to say so.
+   * One that could not be landed — refused, unreadable, or cut off: counted,
+   * so it is tried later than the rest once the count is on file. Its count is
+   * cut off at `countBy`, as everything in this phase is; past it there is no
+   * time left to say so.
    */
   const failed = async (item: OwedItem) => {
     counts.unavailable += 1;
-    if (!options.signal.aborted) await countFailedLanding(client, item, bounded(options.signal));
+    if (!counting.aborted) await countFailedLanding(client, item, bounded(counting));
   };
 
   for (const [index, item] of items.entries()) {
