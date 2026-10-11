@@ -336,9 +336,32 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
       await removeRows('vacation_itinerary_days', days.filter((day) => !held.has(day.id)));
     };
 
+    // The master packing list this build created, by the same rule as its
+    // days: `vacation_packing_items.list_id` is ON DELETE CASCADE (0070), and
+    // adding an item to a list does not move the list's own `updated_at`, so
+    // the fence alone would let the delete take an item a parent added to it
+    // in the packing screen (which adds to the trip's master list, this one)
+    // or a suggestion the fence above kept because someone ticked it packed.
+    // The list goes only while nothing is on it. The read and the delete are
+    // two calls, so an item added between them is not covered; that needs the
+    // NOT EXISTS delete as one statement (SQL).
+    const removeEmptyList = async (list: Written) => {
+      const { data: onList, error } = await supabase.from('vacation_packing_items').select('id')
+        .eq('family_id', familyId).eq('vacation_id', vacationId).eq('list_id', list.id).limit(1);
+      if (error) {
+        logDatabaseFailure('build rollback vacation_packing_lists (kept: could not check it was empty)', error);
+        return;
+      }
+      if ((onList ?? []).length) {
+        console.warn('[vacation-ai] build rollback kept the new master packing list: it holds items');
+        return;
+      }
+      await removeRows('vacation_packing_lists', [list]);
+    };
+
     const rollbackBuild = async () => {
       await removeRows('vacation_packing_items', createdPackingItems);
-      if (createdPackingList) await removeRows('vacation_packing_lists', [createdPackingList]);
+      if (createdPackingList) await removeEmptyList(createdPackingList);
       await removeRows('vacation_itinerary_items', createdItems);
       await removeEmptyDays(createdDays);
       await removeRows('vacation_activities', createdActivities);

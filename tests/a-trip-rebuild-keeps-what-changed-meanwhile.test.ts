@@ -228,9 +228,10 @@ describe('a rebuild keeps what another tab changed while the model was writing',
  * A plan write that hangs and then fails — a lock wait that ends in a
  * statement timeout. Until the test releases it, other tabs act on what this
  * request has already written: its rows are the family's from the moment
- * their insert commits.
+ * their insert commits. `only` picks the build's own write out of the writes
+ * to the same table, so another tab's insert there is not held with it.
  */
-function stalledThenFails(table: string, op: 'insert' | 'upsert') {
+function stalledThenFails(table: string, op: 'insert' | 'upsert', only: (value: Row | Row[]) => boolean = () => true) {
   let release!: () => void;
   const released = new Promise<void>((resolve) => { release = resolve; });
   let reached!: () => void;
@@ -238,7 +239,9 @@ function stalledThenFails(table: string, op: 'insert' | 'upsert') {
   const timedOut = { data: null, error: { code: '57014', message: 'canceling statement due to statement timeout' } };
   hooks.push((name, builder) => {
     if (name !== table) return;
-    Object.assign(builder, { [op]: () => {
+    const write = (builder[op] as (...args: unknown[]) => unknown).bind(builder);
+    Object.assign(builder, { [op]: (value: Row | Row[], ...rest: unknown[]) => {
+      if (!only(value)) return write(value, ...rest);
       reached();
       const query: Record<string, unknown> = {};
       Object.assign(query, {
@@ -261,6 +264,22 @@ const dayCascade = (db: InMemorySupabase): Hook => (name, builder) => {
     Object.assign(query, { then: (ok: never, ko: never) => run((reply: unknown) => {
       const days = new Set(rows(db, 'vacation_itinerary_days').map((d) => d.id));
       db.replace('vacation_itinerary_items', rows(db, 'vacation_itinerary_items').filter((item) => item.day_id == null || days.has(item.day_id)));
+      return reply;
+    }).then(ok, ko) });
+    return query;
+  }) as never;
+};
+
+/** 0070: `vacation_packing_items.list_id` is ON DELETE CASCADE. Modelled as `dayCascade` is. */
+const listCascade = (db: InMemorySupabase): Hook => (name, builder) => {
+  if (name !== 'vacation_packing_lists') return;
+  const remove = builder.delete.bind(builder);
+  builder.delete = (() => {
+    const query = remove();
+    const run = query.then.bind(query);
+    Object.assign(query, { then: (ok: never, ko: never) => run((reply: unknown) => {
+      const lists = new Set(rows(db, 'vacation_packing_lists').map((l) => l.id));
+      db.replace('vacation_packing_items', rows(db, 'vacation_packing_items').filter((item) => item.list_id == null || lists.has(item.list_id)));
       return reply;
     }).then(ok, ko) });
     return query;
@@ -327,6 +346,50 @@ describe('a build that fails takes back only what is still as it wrote it', () =
     // The days nothing sits on were the failed build's, and went.
     expect(ids(db, 'vacation_itinerary_days')).toEqual([firstDay.id]);
     expect(named(db, 'Park')).toHaveLength(0);
+  });
+
+  it('the master packing list the failed build created is kept while an item sits on it, so the item is not cascaded away', async () => {
+    const db = seeded({ plan: 'none', days: false });
+    hooks.push(dayCascade(db), listCascade(db));
+    holder.complete.mockResolvedValue({ text: planNamed('Park') });
+    // The build's own suggestions (the mocked suggestPacking gives Socks) hang
+    // and then time out; the packing screen's insert goes straight through.
+    const stalled = stalledThenFails('vacation_packing_items', 'insert', (value) => [value].flat().some((row) => row.name === 'Socks'));
+    const build = post({ action: 'build' });
+    await stalled.reachedWrite;
+    // The packing screen (trip-packing.tsx ensureMasterList) finds the master
+    // list this build created, and a parent adds to it by hand.
+    const master = rows(db, 'vacation_packing_lists').find((l) => l.is_master)!;
+    expect(master).toBeDefined();
+    await db.from('vacation_packing_items').insert({
+      family_id: FAMILY, vacation_id: TRIP, list_id: master.id, name: 'Passports', category: 'documents', quantity: 4, created_by: 'user-2',
+    }).select('id');
+    stalled.release();
+
+    expect((await build).status).toBe(503);
+    expect(rows(db, 'vacation_packing_items')).toEqual([expect.objectContaining({ name: 'Passports', list_id: master.id })]);
+    expect(ids(db, 'vacation_packing_lists')).toEqual([master.id]);
+    // Everything else the failed build wrote was its own, and went.
+    expect(named(db, 'Park')).toHaveLength(0);
+    expect(rows(db, 'vacation_itinerary_items')).toHaveLength(0);
+    expect(rows(db, 'vacation_itinerary_days')).toHaveLength(0);
+    expect(rows(db, 'vacation_budgets')).toHaveLength(0);
+  });
+
+  it('a master packing list the failed build created, with nothing on it, still goes', async () => {
+    const db = seeded({ plan: 'none', days: false });
+    hooks.push(dayCascade(db), listCascade(db));
+    holder.complete.mockResolvedValue({ text: planNamed('Park') });
+    const stalled = stalledThenFails('vacation_packing_items', 'insert');
+    const build = post({ action: 'build' });
+    await stalled.reachedWrite;
+    expect(rows(db, 'vacation_packing_lists')).toHaveLength(1);
+    stalled.release();
+
+    expect((await build).status).toBe(503);
+    for (const table of ['vacation_activities', 'vacation_itinerary_items', 'vacation_itinerary_days', 'vacation_budgets', 'vacation_packing_lists', 'vacation_packing_items']) {
+      expect([table, rows(db, table)]).toEqual([table, []]);
+    }
   });
 
   it('trips.buildPlan: what a parent booked or put on a new day while the budget write hung survives its rollback', async () => {
