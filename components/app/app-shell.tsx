@@ -305,7 +305,7 @@ function SidebarNav({ onLocked }: { onLocked: (item: NavItem) => void }) {
       {/* AI Assistant — pinned at the very top */}
       <AiAssistantNavButton />
       {APP_NAV_GROUPS.map((group) => {
-        const resolved = resolveItems(group.items, featureTiers, planLevel, isSuperAdmin, manager);
+        const resolved = resolveItems(group.items, featureTiers, planLevel, isSuperAdmin, manager, role === 'guest');
         const isSuggested = group.title === 'Suggested';
         // Drop a group whose every feature is Off (the Suggested group always
         // keeps the two dashboard links, so it never disappears).
@@ -354,7 +354,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // AI-first marketplace), replacing the global nav BODY — the Bubaly logo + top
   // header stay, so there's ONE rail, not two.
   const onMarketplace = pathname === '/marketplace' || pathname.startsWith('/marketplace/');
-  const mobileTabs = resolveItems(MOBILE_TABS, featureTiers, planLevel, isSuperAdmin, isManager(role));
+  const mobileTabs = resolveItems(MOBILE_TABS, featureTiers, planLevel, isSuperAdmin, isManager(role), role === 'guest');
   const upgradeLevel: 1 | 2 = upgradeFor
     ? (featureTiers[upgradeFor.href] === 'plus' ? 2 : 1)
     : 1;

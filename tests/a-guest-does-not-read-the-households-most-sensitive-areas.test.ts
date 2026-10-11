@@ -105,3 +105,32 @@ describe('the copy says what each role sees', () => {
     expect(en['permissions.theAccessModelBehindYour']).toContain('The guest row is enforced by the database');
   });
 });
+
+describe('a guest is not offered the links it would be sent away from', () => {
+  it('hides every withheld page from a guest, and from nobody else', async () => {
+    const { isNavItemVisibleToRole } = await import('@/lib/constants/navigation');
+    const item = (href: string) => ({ href, label: href, icon: (() => null) as never });
+    for (const href of ['/dashboard/locator', '/wallet', '/wallet/cards', '/guardian', '/dashboard/medical', '/dashboard/bills']) {
+      expect(isNavItemVisibleToRole(item(href), { isManager: false, isGuest: true }), href).toBe(false);
+      expect(isNavItemVisibleToRole(item(href), { isManager: false, isGuest: false }), `${href} caregiver`).toBe(true);
+      expect(isNavItemVisibleToRole(item(href), { isManager: true }), `${href} parent`).toBe(true);
+      expect(isNavItemVisibleToRole(item(href), { isManager: false, isGuest: true, isSuperAdmin: true }), `${href} super admin`).toBe(true);
+    }
+    expect(isNavItemVisibleToRole(item('/dashboard/calendar'), { isManager: false, isGuest: true })).toBe(true);
+  });
+
+  it('every sidebar that asks the role rule tells it about a guest', () => {
+    for (const file of ['components/app/free-tier-sidebar.tsx', 'components/settings/navigation-choices.tsx']) {
+      const src = read(file);
+      const calls = src.match(/isNavItemVisibleToRole\([^)]*\)/g) ?? [];
+      expect(calls.length, file).toBeGreaterThan(0);
+      for (const call of calls) expect(call, file).toContain("isGuest: role === 'guest'");
+    }
+    for (const file of ['components/app/free-tier-sidebar.tsx', 'components/app/app-shell.tsx']) {
+      const calls = read(file).match(/resolveItems\([^;]*\);/g) ?? [];
+      expect(calls.length, file).toBeGreaterThan(0);
+      for (const call of calls) expect(call, file).toContain("role === 'guest'");
+    }
+  });
+});
+

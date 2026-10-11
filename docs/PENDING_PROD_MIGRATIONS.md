@@ -4848,6 +4848,9 @@ A caregiver is untouched.
   - all of `/guardian`, and the inbox.
 
   The Tax Vault answers every non-manager under 0508.
+- **Navigation.** The sidebars, the mobile tabs and the navigation settings
+  stop offering those links to a guest (`isNavItemVisibleToRole`, from the
+  same list).
 - **Copy.** The caregiver and guest descriptions, the two FAQ answers and the
   permission matrix's caption now say what each role sees, in the seven base
   locales. The caption no longer claims "enforced by database row-level

@@ -45,7 +45,8 @@
 -- Shipped with the source: the pages over these areas send a guest to their
 -- landing page (one list, lib/auth/guest-scope.ts, asked by requireFeature and
 -- by every page in it that resolves its context another way; a test walks
--- app/ and holds each page to it), and the role descriptions, the FAQ and the
+-- app/ and holds each page to it; the sidebars and mobile tabs stop offering
+-- those links to a guest), and the role descriptions, the FAQ and the
 -- permission matrix's caption say what each role sees, in the seven base
 -- locales, instead of promising what nothing enforced.
 --

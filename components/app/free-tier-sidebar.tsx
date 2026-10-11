@@ -238,12 +238,12 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin, onPinA
   const inTierHrefs = useMemo(() => {
     const set = new Set<string>();
     for (const group of APP_NAV_GROUPS) {
-      for (const { item, locked } of resolveItems(group.items, featureTiers, planLevel, isSuperAdmin, manager)) {
+      for (const { item, locked } of resolveItems(group.items, featureTiers, planLevel, isSuperAdmin, manager, role === 'guest')) {
         if (!locked && ALL_SERVICES_BY_HREF.has(item.href)) set.add(item.href);
       }
     }
     return [...set];
-  }, [featureTiers, planLevel, isSuperAdmin, manager]);
+  }, [featureTiers, planLevel, isSuperAdmin, manager, role]);
 
   const allPinned = inTierHrefs.length > 0 && inTierHrefs.every((h) => pinned.has(h));
 
@@ -282,7 +282,7 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin, onPinA
 
       <div className="max-h-[68vh] space-y-6 overflow-y-auto pr-0.5">
         {APP_NAV_GROUPS.map((group) => {
-          const resolved = resolveItems(group.items, featureTiers, planLevel, isSuperAdmin, manager);
+          const resolved = resolveItems(group.items, featureTiers, planLevel, isSuperAdmin, manager, role === 'guest');
           if (resolved.length === 0) return null;
           return (
             <section key={group.title} className="space-y-2">
@@ -377,14 +377,14 @@ export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => voi
   // modules are dropped entirely.
   const primaryNav = useMemo(
     () => sidebarNav
-      .filter((item) => isNavItemVisibleToRole(item, { isManager: manager, isSuperAdmin }))
+      .filter((item) => isNavItemVisibleToRole(item, { isManager: manager, isSuperAdmin, isGuest: role === 'guest' }))
       .map((item) => {
         const access = featureAccessByTier(featureTiers[item.href], planLevel, isSuperAdmin);
-        const children = item.children?.filter((c) => isNavItemVisibleToRole(c, { isManager: manager, isSuperAdmin }));
+        const children = item.children?.filter((c) => isNavItemVisibleToRole(c, { isManager: manager, isSuperAdmin, isGuest: role === 'guest' }));
         return { item: children ? { ...item, children } : item, locked: access === 'locked', hidden: access === 'hidden' };
       })
       .filter((x) => !x.hidden),
-    [sidebarNav, manager, isSuperAdmin, planLevel, featureTiers],
+    [sidebarNav, manager, role, isSuperAdmin, planLevel, featureTiers],
   );
 
   const pinnedSet = useMemo(() => new Set(keys), [keys]);
