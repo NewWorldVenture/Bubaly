@@ -208,8 +208,9 @@ export function SleepModule() {
         )}
       </div>
 
-      {scope === 'full' && (
       <div className="grid gap-4 lg:grid-cols-3">
+        {/* The shared bedtime plan keeps its existing family-member access;
+            a partial sleep record does not remove routine controls. */}
         {/* Routine */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-2 flex items-center justify-between">
@@ -236,7 +237,8 @@ export function SleepModule() {
           )}
         </div>
 
-        {/* Program */}
+        {/* Program and correlations need the member's whole sleep record. */}
+        {scope === 'full' && (
         <div className="rounded-2xl border border-brand/20 bg-brand/5 p-5 lg:col-span-2">
           <div className="flex items-center gap-2 text-sm font-semibold text-brand-text"><Sparkles className="h-4 w-4" /> {t('sleep.thisWeeksProgramFor')} {member?.display_name ?? 'you'}</div>
           <ol className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -260,8 +262,8 @@ export function SleepModule() {
             </div>
           )}
         </div>
+        )}
       </div>
-      )}
 
       {logOpen && memberId && (
         <LogForm familyId={familyId} userId={userId} memberId={memberId} existing={memberLogs.find((l) => l.sleep_date === todayIso()) ?? null} onClose={() => setLogOpen(false)} onSaved={() => { setLogOpen(false); success(t('sleepModule.nightLogged')); }} />

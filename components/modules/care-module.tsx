@@ -84,14 +84,17 @@ export function CareModule() {
   const [form, setForm] = useState(blank);
   const [saving, setSaving] = useState(false);
 
+  const seesEveryNote = readsEveryNote(role);
   const { data: entries, loading, error } = useRealtimeQuery<CareEntry>({
-    table: 'care_log', familyId, deps: [familyId],
-    // Bound the read: care_log grows unbounded over time, but the views are
-    // recent-focused ("This week" count + a day-grouped timeline). Load a rolling
-    // 365-day window (hard-capped at 1000 rows) so the client payload stays bounded.
-    fetcher: (sb) => sb.from('care_log').select('*').eq('family_id', familyId)
-      .gte('occurred_at', new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString())
-      .order('occurred_at', { ascending: false }).limit(1000),
+    table: 'care_log', familyId, deps: [familyId, role, userId],
+    // Keep the rolling window and row cap, but narrow an author's read before
+    // the cap: newer notes by others must not crowd their own history out.
+    fetcher: (sb) => {
+      const query = sb.from('care_log').select('*').eq('family_id', familyId);
+      const scoped = seesEveryNote ? query : query.eq('created_by', userId);
+      return scoped.gte('occurred_at', new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString())
+        .order('occurred_at', { ascending: false }).limit(1000);
+    },
   });
 
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
@@ -100,7 +103,6 @@ export function CareModule() {
   // The held 0510: a parent, an adult or a caregiver reads every note; anyone
   // else the ones they wrote, so the summaries below are a reader of every
   // note's alone (built from part of a log they would read as the whole).
-  const seesEveryNote = readsEveryNote(role);
   const recipientEntries = useMemo(
     () => notesInScope(entries ?? [], role, userId, (e) => e.created_by).filter((e) => e.member_id === recipientId),
     [entries, recipientId, role, userId],

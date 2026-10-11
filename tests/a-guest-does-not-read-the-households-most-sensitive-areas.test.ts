@@ -1,6 +1,7 @@
 import { globSync, readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { at, between } from './helpers/source-order';
+import { ROLE_DESCRIPTIONS } from '@/lib/constants/roles';
 
 // ROLE-SCOPE-001, decided by the account holder: a guest stops reading the
 // household's most sensitive areas (locations, money and cards, medical and
@@ -20,7 +21,7 @@ const read = (p: string) => readFileSync(p, 'utf8');
 
 /** The route a page file serves, without its dynamic segments. */
 function routeOf(file: string): string {
-  const segs = file.replace(/^app\/\(app\)\//, '').split('/').slice(0, -1).filter((s) => !s.startsWith('['));
+  const segs = file.replaceAll('\\', '/').replace(/^app\/\(app\)\//, '').split('/').slice(0, -1).filter((s) => !s.startsWith('['));
   return `/${segs.join('/')}`;
 }
 
@@ -90,7 +91,7 @@ describe('the database half is the same 59 tables in the migration and its probe
 });
 
 describe('the copy says what each role sees', () => {
-  it('describes a guest as viewing the shared areas and a caregiver as seeing the household', () => {
+  it('describes shared access without promising unrestricted private data', () => {
     for (const locale of LOCALES) {
       const m = JSON.parse(read(`lib/i18n/messages/${locale}.json`)) as Record<string, string>;
       for (const key of ['roleDescription.caregiver', 'roleDescription.guest', 'faq.absolutelyInviteThemAsA', 'faq.thereAreSixRolesParent', 'permissions.theAccessModelBehindYour']) {
@@ -98,7 +99,10 @@ describe('the copy says what each role sees', () => {
       }
     }
     const en = JSON.parse(read('lib/i18n/messages/en-US.json')) as Record<string, string>;
-    expect(en['roleDescription.guest']).toMatch(/^View the shared calendar, lists and plans\. Never sees locations, money, health records/);
+    expect(en['roleDescription.guest']).toMatch(/^View the shared calendar, lists and plans\. Access to other information depends on/);
+    expect(en['roleDescription.caregiver']).toMatch(/^Help with shared household and care information where access is granted\./);
+    expect(ROLE_DESCRIPTIONS.guest).toBe(en['roleDescription.guest']);
+    expect(ROLE_DESCRIPTIONS.caregiver).toBe(en['roleDescription.caregiver']);
     expect(en['faq.absolutelyInviteThemAsA']).not.toMatch(/assigned areas|limited shared events|You control exactly what they can see/);
     expect(en['faq.thereAreSixRolesParent']).not.toMatch(/assigned areas|limited shared events/);
     expect(en['permissions.theAccessModelBehindYour']).not.toMatch(/enforced by database row-level security\.$/);
@@ -114,7 +118,7 @@ describe('a guest is not offered the links it would be sent away from', () => {
       expect(isNavItemVisibleToRole(item(href), { isManager: false, isGuest: true }), href).toBe(false);
       expect(isNavItemVisibleToRole(item(href), { isManager: false, isGuest: false }), `${href} caregiver`).toBe(true);
       expect(isNavItemVisibleToRole(item(href), { isManager: true }), `${href} parent`).toBe(true);
-      expect(isNavItemVisibleToRole(item(href), { isManager: false, isGuest: true, isSuperAdmin: true }), `${href} super admin`).toBe(true);
+      expect(isNavItemVisibleToRole(item(href), { isManager: false, isGuest: true, isSuperAdmin: true }), `${href} active-family guest, including super admin`).toBe(false);
     }
     expect(isNavItemVisibleToRole(item('/dashboard/calendar'), { isManager: false, isGuest: true })).toBe(true);
   });

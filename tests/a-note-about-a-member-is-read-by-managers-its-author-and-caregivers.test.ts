@@ -48,14 +48,21 @@ describe('the screens show each reader what the rule gives them', () => {
     expect(src.match(/created_by: userId/g)?.length).toBe(2);
   });
 
-  it('the behaviour page tells anyone but a reader of every note whose the notes are, before loading any', () => {
+  it('the behaviour page keeps guests out and gives an existing author only their own notes', () => {
     const src = read('components/modules/behavior-module.tsx');
     const gate = between(src, 'export function BehaviorModule() {', 'function BehaviorLog() {');
-    expect(gate).toContain('if (!readsEveryNote(role)) {');
+    expect(gate).toContain("if (!familyId || !userId || role === 'guest' || (!readsEveryNote(role) && role !== 'teen' && role !== 'child')) {");
     expect(gate).toContain("tr('behaviorModule.keptForParentsAndCaregivers')");
     expect(gate).toContain('return <BehaviorLog />;');
     expect(gate).not.toContain('useRealtimeQuery');
-    // Whoever writes a behaviour note is its author (logged_by), so they read it back.
+    expect(src).toContain("if (!seesEveryNote) query = query.eq('logged_by', userId);");
+    expect(at(src, "query.eq('logged_by', userId)")).toBeLessThan(at(src, "return query.gte('occurred_at'"));
+    expect(src).toContain('deps: [familyId, role, userId]');
+    expect(src).toContain('notesInScope(logs ?? [], role, userId, (log) => log.logged_by)');
+    expect(src).toContain('{seesEveryNote && <AiInsight kind="behavior" iconOnly />}');
+    expect(src).toContain('{seesEveryNote && memberIds.length > 0 && (');
+    expect(src).toContain("tr('behaviorModule.onlyTheNotesYouLogged')");
+    // The observation subject does not confer authorship or a new write right.
     expect(src).toContain('insert({ ...row, family_id: familyId, logged_by: userId })');
   });
 

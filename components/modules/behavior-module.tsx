@@ -5,7 +5,7 @@ import { Smile, Frown, Minus, Plus, Trash2, Sparkles, TrendingUp, Flame, Award }
 import Link from 'next/link';
 import { useApp } from '@/components/app/app-context';
 import { isManager } from '@/lib/constants/roles';
-import { readsEveryNote } from '@/lib/care/note-scope';
+import { notesInScope, readsEveryNote } from '@/lib/care/note-scope';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
@@ -34,13 +34,13 @@ const blank = (timeZone: string) => ({ id: '', member_id: '', kind: 'positive', 
 
 const KIND_ICON = { positive: Smile, concern: Frown, neutral: Minus } as const;
 
-// The held 0510: behaviour notes are read by a parent, an adult or a caregiver,
-// and by whoever wrote one. Logging here is a manager's, so anyone else would
-// find an empty log; they are told whose it is instead.
+// The held 0510 also lets an existing author read their own behaviour notes.
+// Keep the guest page boundary and manager-only controls, while narrowing an
+// author-only reader's query before the rolling window and row cap.
 export function BehaviorModule() {
-  const { role } = useApp();
+  const { familyId, userId, role } = useApp();
   const tr = useTranslations();
-  if (!readsEveryNote(role)) {
+  if (!familyId || !userId || role === 'guest' || (!readsEveryNote(role) && role !== 'teen' && role !== 'child')) {
     return <EmptyState icon={Smile} title={tr('behaviorModule.keptForParentsAndCaregivers')} description={tr('behaviorModule.keptForParentsAndCaregiversBody')} />;
   }
   return <BehaviorLog />;
@@ -61,18 +61,22 @@ function BehaviorLog() {
   // stands in the database; finalaudit.md records it for the owner.
   const canEdit = isManager(role);
   const canRemove = isManager(role);
+  const seesEveryNote = readsEveryNote(role);
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
   const { data: logs, loading, error, refresh } = useRealtimeQuery<Log>({
-    table: 'behavior_logs', familyId, deps: [familyId],
+    table: 'behavior_logs', familyId, deps: [familyId, role, userId],
     // Bound the read: behavior_logs grows unbounded over a family's lifetime, but
     // every view here is recent-focused (6-week trend, streaks, recent list). Load
     // a rolling 365-day window (hard-capped at 1000 rows) instead of the full
     // history, so the client payload stays bounded as data accumulates.
-    fetcher: (sb) => sb.from('behavior_logs').select('*').eq('family_id', familyId)
-      .gte('occurred_at', new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString())
-      .order('occurred_at', { ascending: false }).limit(1000),
+    fetcher: (sb) => {
+      let query = sb.from('behavior_logs').select('*').eq('family_id', familyId);
+      if (!seesEveryNote) query = query.eq('logged_by', userId);
+      return query.gte('occurred_at', new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString())
+        .order('occurred_at', { ascending: false }).limit(1000);
+    },
   });
 
   const [saving, setSaving] = useState(false);
@@ -81,7 +85,10 @@ function BehaviorLog() {
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
   const [ai, setAi] = useState<{ loading: boolean; insight: string; tips: string[] } | null>(null);
 
-  const all = useMemo(() => logs ?? [], [logs]);
+  const all = useMemo(
+    () => notesInScope(logs ?? [], role, userId, (log) => log.logged_by).filter((log) => log.family_id === familyId),
+    [logs, role, userId, familyId],
+  );
   const scoped = useMemo(
     () => (memberFilter === 'all' ? all : all.filter((l) => l.member_id === memberFilter)),
     [all, memberFilter],
@@ -147,6 +154,7 @@ function BehaviorLog() {
   }
 
   async function getInsight() {
+    if (!seesEveryNote) return;
     setAi({ loading: true, insight: '', tips: [] });
     try {
       const res = await fetch('/api/behavior/insight', {
@@ -174,7 +182,7 @@ function BehaviorLog() {
               {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </Select>
           )}
-          <AiInsight kind="behavior" iconOnly />
+          {seesEveryNote && <AiInsight kind="behavior" iconOnly />}
           <Link href="/dashboard/independence"
             className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-border bg-surface px-3 text-sm font-semibold text-muted transition hover:text-fg hover:bg-elevated">
             <Award className="h-4 w-4" /> {tr('behavior.independence')}
@@ -183,8 +191,10 @@ function BehaviorLog() {
         </div>
       </div>
 
+      {!seesEveryNote && <p className="text-sm text-muted">{tr('behaviorModule.onlyTheNotesYouLogged')}</p>}
+
       {/* AI parenting insight */}
-      <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4">
+      {seesEveryNote && <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4">
         <div className="flex items-center justify-between gap-3">
           <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> {tr('behavior.aiParentingInsight')}</p>
           <Button variant="secondary" onClick={getInsight} loading={ai?.loading}>{tr('behavior.generate')}</Button>
@@ -199,10 +209,10 @@ function BehaviorLog() {
             )}
           </div>
         )}
-      </div>
+      </div>}
 
       {/* Per-child insight cards */}
-      {memberIds.length > 0 && (
+      {seesEveryNote && memberIds.length > 0 && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {memberIds.map((mid) => {
             const mlogs = all.filter((l) => l.member_id === mid) as BehaviorLogLike[];
@@ -249,7 +259,7 @@ function BehaviorLog() {
       {/* Recent log */}
       <div className="space-y-2">
         {scoped.length === 0 ? (
-          <EmptyState icon={Smile} title={tr('behavior.noBehaviorLoggedYet')} description={tr('behaviorModule.logPositiveMomentsAndConcerns')} />
+          <EmptyState icon={Smile} title={tr('behavior.noBehaviorLoggedYet')} description={tr(seesEveryNote ? 'behaviorModule.logPositiveMomentsAndConcerns' : 'behaviorModule.onlyTheNotesYouLogged')} />
         ) : scoped.map((l) => {
           const Icon = KIND_ICON[l.kind as keyof typeof KIND_ICON] ?? Minus;
           const meta = kindMeta(l.kind);

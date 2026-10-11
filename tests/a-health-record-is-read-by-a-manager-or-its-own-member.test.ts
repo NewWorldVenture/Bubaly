@@ -39,7 +39,14 @@ describe('a health record is read by a manager or its own member', () => {
     expect(src).toContain('rowsInScope(checkins.data, memberId, scope, userId)');
     // The summaries and the coach are built only from a whole record, and a partial one says so.
     expect(src).toContain("{scope === 'full' && (\n      <div className=\"grid gap-4 md:grid-cols-4\">");
-    expect(src).toContain("{scope === 'full' && (\n      <div className=\"grid gap-4 lg:grid-cols-3\">");
+    expect(src).toContain("{scope === 'full' && (\n        <div className=\"rounded-2xl border border-brand/20 bg-brand/5 p-5 lg:col-span-2\">");
+    // The bedtime plan has the existing family-member permission, separate
+    // from a whole sleep record. Only its history-derived program is gated.
+    const routine = src.slice(src.indexOf('{/* Routine */}'), src.indexOf('{/* Program and correlations'));
+    expect(routine).toContain("t('sleep.bedtimeRoutine')");
+    expect(routine).toContain('setRoutineOpen(true)');
+    expect(routine).toContain('archiveRoutine(routine)');
+    expect(routine).not.toContain("scope === 'full'");
     expect(src).toContain("t('sleepModule.onlyTheNightsYouLogged', { name: member?.display_name ?? '' })");
   });
 

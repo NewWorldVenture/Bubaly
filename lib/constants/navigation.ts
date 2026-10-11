@@ -21,7 +21,8 @@ export type NavItem = { href: string; label: string; icon: LucideIcon; minLevel?
 /** Role visibility for a nav destination (Friction #8, role-tailored surfaces):
  *  `manage`-only items are hidden from non-managers (kids/teens/guests) since the
  *  page's `isManager` guard redirects them away anyway — so showing the link is a
- *  dead-end. Super-admins always see everything. Plan/tier gating is separate
+ *  dead-end. Super-admins bypass manager-only navigation; the active household's
+ *  guest page boundary still applies. Plan/tier gating is separate
  *  (see `resolveItems`). Pure + deterministic so it's unit-testable. */
 export function isNavItemVisibleToRole(
   item: NavItem,
@@ -30,7 +31,7 @@ export function isNavItemVisibleToRole(
   if (item.manage && !opts.isManager && !opts.isSuperAdmin) return false;
   // A guest is sent away from the household's most sensitive pages (held 0509,
   // lib/auth/guest-scope.ts), so they are not offered as links either.
-  if (opts.isGuest && !opts.isSuperAdmin && isWithheldFromGuest(item.href)) return false;
+  if (opts.isGuest && isWithheldFromGuest(item.href)) return false;
   return true;
 }
 
