@@ -261,6 +261,29 @@ describe('an emergency SMS whose every text and call failed', () => {
     expect(seam.sent).toEqual([PARENT_PHONE]);
     expect(emergencyNotices(), 'the in-app row from the first attempt is reused').toHaveLength(1);
   });
+
+  it('from a contact whose name is longer than an escalation can carry: the sweep can still read the record back, and reaches the manager once', async () => {
+    // guardian_contacts.name is uncapped, and the description carries it.
+    db.seed('guardian_contacts', [{ id: '88888888-8888-4888-8888-888888888888', family_id: FAMILY, phone: CALLER, name: 'N'.repeat(4200), trust_level: 'known_contact', spam_score: 0 }]);
+    seam.telephony.down = true;
+    expect(await sms(SMS_SID, EMERGENCY)).toBe('completed');
+    expect(escalations()).toEqual([expect.objectContaining({ notified_member_ids: [], sms_sent: false })]);
+    expect(String(escalations()[0].description).startsWith(`Emergency text from ${'N'.repeat(100)}`)).toBe(true);
+
+    seam.telephony.down = false;
+    // The defect: the lane completes and leaves the retry to the sweep, and
+    // the sweep could not read back a description past 4096 characters, so it
+    // counted the record unavailable on every pass: nobody was ever texted or
+    // called.
+    expect(await sweep()).toMatchObject({ examined: 1, delivered: 1, unavailable: 0 });
+    expect(seam.sent).toEqual([PARENT_PHONE]);
+    expect(seam.called).toEqual([PARENT_PHONE]);
+    expect(escalations()).toEqual([expect.objectContaining({ notified_member_ids: [PARENT], sms_sent: true })]);
+    expect(await sweep()).toMatchObject({ examined: 0 });
+    expect(seam.sent).toEqual([PARENT_PHONE]);
+    // Within what the sweep reads back.
+    expect(String(escalations()[0].description).length).toBeLessThanOrEqual(4096);
+  });
 });
 
 describe('an emergency with nobody to text or call', () => {

@@ -22,9 +22,10 @@
 // claim marked (ESCALATION_SENT_UNRECORDED), and this leaves such a record
 // alone rather than reading "nobody reached" and texting everyone again.
 //
-// When the record itself could not be written, the escalation left a work item
-// instead (lib/guardian/escalation-owed.ts); each run first lands those
-// records, so they are retried like any other.
+// When the record itself could not be written — or, on the screening route, the
+// escalation could not run at all — a work item was left instead
+// (lib/guardian/escalation-owed.ts); each run first lands those records, so
+// they are retried like any other.
 //
 // It is the ONLY retrier of a recorded escalation that reached nobody, and it
 // is finite: a record older than the window, an acknowledged one, and one the
@@ -46,7 +47,7 @@ import 'server-only';
 import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ESCALATION_SENT_UNRECORDED, escalateGuardianEmergency, type GuardianEscalationOutcome } from './escalate';
-import { guardianEscalationEventId, type GuardianEscalationInput } from './escalation';
+import { GUARDIAN_ESCALATION_DESCRIPTION_MAX, guardianEscalationEventId, type GuardianEscalationInput } from './escalation';
 import { landOwedGuardianEscalations } from './escalation-owed';
 
 /** How far back a record that reached nobody is still re-attempted. */
@@ -112,7 +113,7 @@ function inputFrom(row: Record<string, unknown>): GuardianEscalationInput | null
   if (typeof family_id !== 'string' || !UUID.test(family_id)) return null;
   if (communication_id !== null && communication_id !== undefined && (typeof communication_id !== 'string' || !UUID.test(communication_id))) return null;
   if (!TYPES.includes(escalation_type as typeof TYPES[number]) || !SEVERITIES.includes(severity as typeof SEVERITIES[number])) return null;
-  if (typeof description !== 'string' || !description.trim() || description.length > 4096) return null;
+  if (typeof description !== 'string' || !description.trim() || description.length > GUARDIAN_ESCALATION_DESCRIPTION_MAX) return null;
   if (caller_number !== null && caller_number !== undefined && (typeof caller_number !== 'string' || caller_number.length > 64)) return null;
   return {
     familyId: family_id,
@@ -145,13 +146,15 @@ async function readCursor(client: SupabaseClient, signal: AbortSignal): Promise<
   }
 }
 
-async function saveCursor(client: SupabaseClient, after: Position): Promise<void> {
+async function saveCursor(client: SupabaseClient, after: Position, signal: AbortSignal): Promise<void> {
   try {
     const { data, error } = await client.from('app_settings')
       .upsert({ key: CURSOR_KEY, value: { version: 1, after } }, { onConflict: 'key' })
-      .select('key');
-    // Not saved, the next run starts where this one did: the same records
-    // first, which is the unfairness this cursor exists to end — for one run.
+      .select('key')
+      .abortSignal(signal);
+    // Not saved — refused, or cut off at the run's deadline — the next run
+    // starts where this one did: the same records first, which is the
+    // unfairness this cursor exists to end — for one run.
     if (error || !Array.isArray(data) || data.length !== 1) console.error('[guardian] the escalation retry cursor could not be saved', { error: error ?? 'no row written' });
   } catch (error) {
     console.error('[guardian] the escalation retry cursor could not be saved', { error });
@@ -300,6 +303,11 @@ export async function retryUndeliveredGuardianEscalations(
       counts.unavailable += 1;
     }
   }
-  if (last) await saveCursor(client, last);
+  // Bounded like every other statement of the run: a stalled save is cut off
+  // at the deadline and the counts above are answered, rather than holding the
+  // invocation until the platform kills it with none. Every attempt stops
+  // sending SETTLE_MS before the deadline, so in the ordinary case the save
+  // has most of that.
+  if (last) await saveCursor(client, last, stop);
   return counts;
 }

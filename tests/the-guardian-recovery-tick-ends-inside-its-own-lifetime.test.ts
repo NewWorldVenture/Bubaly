@@ -12,6 +12,12 @@
 // Driven here through the real route, the real drain and the real sweep, over
 // a PostgREST fixture, with every receipt resume and every escalation attempt
 // hanging until it is cut off — the slow outage — on a fake clock.
+//
+// And the same for the sweep's own writes. Landing the record an escalation
+// left owed, closing that work item, and saving where the sweep stopped took
+// no part of the shared deadline: one stalled statement held the tick past
+// maxDuration, and the dispatcher got a 504 with no counts instead of a 503
+// with them. Each is stalled here in turn.
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -29,6 +35,7 @@ vi.mock('@/lib/guardian/escalate', async (original) => ({
 }));
 
 const DRAIN_KEY = 'guardian.sms_intake:recovery_cursor:v1';
+const RETRY_KEY = 'guardian.escalation_retry:cursor:v1';
 const T0 = Date.parse('2026-10-11T12:00:00.000Z');
 const ID = (n: number) => `00000000-0000-4000-8000-${n.toString().padStart(12, '0')}`;
 const FAM = (n: number) => `10000000-0000-4000-8000-${n.toString().padStart(12, '0')}`;
@@ -56,10 +63,14 @@ function matchesFilter(expression: string, candidate: Candidate): boolean {
   return match[2] === 'eq' ? actual === expected : match[2] === 'gt' ? actual > expected : match[2] === 'lt' ? actual < expected : actual <= expected;
 }
 
-/** Eight receipts waiting for the drain, ten escalations that reached nobody, and the two cursors. */
-function makeClient() {
-  const settings = new Map<string, Row>();
-  const receipts: Candidate[] = Array.from({ length: 8 }, (_, i) => ({ id: ID(i + 1), created_at: new Date(T0 - HOUR + i * 1000).toISOString() }));
+/** A write that stalls: no answer, ever, unless the request is cut off by its signal. */
+type StallPoint = 'landing' | 'closing' | 'cursor';
+const trace = { stalled: [] as string[], landed: [] as string[], closed: [] as string[], settings: new Map<string, Row>() };
+
+/** Eight receipts waiting for the drain (by default), ten escalations that reached nobody, any work items owed, and the two cursors. */
+function makeClient({ receipts: receiptCount = 8, owed = [] as Row[], stall = null as StallPoint | null } = {}) {
+  const settings = trace.settings;
+  const receipts: Candidate[] = Array.from({ length: receiptCount }, (_, i) => ({ id: ID(i + 1), created_at: new Date(T0 - HOUR + i * 1000).toISOString() }));
   const escalations = Array.from({ length: 10 }, (_, i) => ({
     id: ID(100 + i), family_id: FAM(i), communication_id: null, escalation_type: 'medical', severity: 'critical',
     description: `synthetic emergency ${i}`, caller_number: '+15555550199', notified_member_ids: [],
@@ -70,6 +81,14 @@ function makeClient() {
     global: { fetch: async (raw, init = {}) => {
       const url = new URL(String(raw)), table = url.pathname.split('/').at(-1)!, method = init.method ?? 'GET';
       const body = typeof init.body === 'string' ? JSON.parse(init.body) as Row : null;
+      const stalled = (point: StallPoint) => {
+        trace.stalled.push(point);
+        return new Promise<Response>((_resolve, reject) => {
+          const cutOff = () => reject(new DOMException('This operation was aborted', 'AbortError'));
+          if (init.signal?.aborted) cutOff();
+          else init.signal?.addEventListener('abort', cutOff, { once: true });
+        });
+      };
       if (table === 'app_settings') {
         if (method === 'GET') {
           const key = url.searchParams.get('key')!.slice(3);
@@ -77,6 +96,7 @@ function makeClient() {
           return Response.json(found, { headers: { 'content-range': `0-${Math.max(0, found.length - 1)}/${found.length}` } });
         }
         if (method === 'POST') {
+          if (stall === 'cursor' && body?.key === RETRY_KEY) return stalled('cursor');
           const upsert = (init.headers as Record<string, string> | undefined)?.Prefer?.includes('merge-duplicates')
             ?? new Headers(init.headers).get('prefer')?.includes('merge-duplicates');
           if (settings.has(String(body?.key)) && !upsert) return Response.json({ code: '23505' }, { status: 409 });
@@ -98,8 +118,21 @@ function makeClient() {
         if (url.searchParams.get('order')?.startsWith('created_at.desc')) list.reverse();
         return Response.json(list.slice(0, 1));
       }
-      // No escalation was left owed, and none of these has a claim yet.
-      if (table === 'ai_tool_calls' && url.searchParams.get('tool_name') === 'eq.guardian.escalation_owed') return Response.json([]);
+      // The work items owed (none unless a case asks), and none of these has a claim yet.
+      if (table === 'ai_tool_calls' && url.searchParams.get('tool_name') === 'eq.guardian.escalation_owed') {
+        if (method === 'GET') return Response.json(owed);
+        if (method === 'PATCH') {
+          if (stall === 'closing') return stalled('closing');
+          const id = url.searchParams.get('id')!.slice(3);
+          trace.closed.push(id);
+          return Response.json([{ id }]);
+        }
+      }
+      if (table === 'guardian_escalations' && method === 'POST') {
+        if (stall === 'landing') return stalled('landing');
+        trace.landed.push(String(body?.id));
+        return Response.json([{ id: body?.id }], { status: 201 });
+      }
       if (table === 'guardian_callback_events' && method === 'GET') return Response.json([]);
       if (table === 'guardian_escalations' && method === 'GET') {
         const filter = url.searchParams.get('or');
@@ -115,6 +148,7 @@ const HOUR = 60 * 60_000;
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
+  trace.stalled.length = 0; trace.landed.length = 0; trace.closed.length = 0; trace.settings = new Map();
   // Node's AbortSignal.timeout runs on an internal timer the fake clock does
   // not drive; model it on setTimeout, which it does.
   vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms: number) => {
@@ -207,5 +241,60 @@ describe('the Guardian recovery tick', () => {
     // Not the same oldest records again: the ones the first tick left.
     expect(next[0]).toBe(FAM(reached.length));
     expect(next.some((family) => reached.includes(family))).toBe(false);
+  });
+});
+
+describe('a recovery tick whose own write stalls', () => {
+  const OWED_ID = '20000000-0000-4000-8000-000000000001';
+  /** The work item an escalation leaves when its record cannot be written. */
+  const owedItem = {
+    id: OWED_ID, family_id: FAM(42), attempt: 0, created_at: new Date(T0 - 30 * 60_000).toISOString(),
+    inputs: { version: 1, pushSent: true, input: { familyId: FAM(42), escalationType: 'medical', severity: 'critical', description: 'synthetic owed emergency', callerNumber: '+15555550199' } },
+  };
+
+  /** One tick, as the dispatcher calls it, with the clock run on well past maxDuration. */
+  async function stalledTick(point: StallPoint, owed: Row[]) {
+    seam.client = makeClient({ receipts: 0, owed, stall: point });
+    const { GET, maxDuration } = await import('@/app/api/cron/guardian-sms-recovery/route');
+    let settledAt: number | null = null;
+    const pending = GET(request()).then((res) => { settledAt = Date.now() - T0; return res; });
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(trace.stalled, 'the write was reached, and stalled').toEqual([point]);
+    // The defect: the stalled statement had no signal, so nothing ever cut it
+    // off — the tick outlived maxDuration (the platform's 504, no counts).
+    expect(settledAt, 'the tick answered').not.toBeNull();
+    expect(settledAt!).toBeLessThan(maxDuration * 1000);
+    const res = await pending;
+    return { status: res.status, body: await res.json() as { ok: boolean; escalations: Record<string, number> } };
+  }
+
+  it('landing an owed record: cut off at the deadline, counted unavailable, and nothing counted landed or closed', async () => {
+    const { status, body } = await stalledTick('landing', [owedItem]);
+    expect(status).toBe(503);
+    expect(body.escalations).toMatchObject({ recovered: 0, examined: 0, delivered: 0 });
+    expect(body.escalations.unavailable).toBeGreaterThan(0);
+    expect(trace.landed).toEqual([]);
+    expect(trace.closed).toEqual([]);
+    expect(seam.escalate).not.toHaveBeenCalled();
+  });
+
+  it('closing the work item: cut off at the deadline, the item left open for the next tick, and the answer a 503 with counts', async () => {
+    const { status, body } = await stalledTick('closing', [owedItem]);
+    expect(status).toBe(503);
+    // The record did land (that insert was answered), and is counted so; the
+    // item it came from is not closed, and no attempt was started late.
+    expect(trace.landed).toHaveLength(1);
+    expect(trace.closed).toEqual([]);
+    expect(body.escalations).toMatchObject({ recovered: 1, examined: 0, delivered: 0 });
+    expect(body.escalations.unavailable + body.escalations.deferred).toBeGreaterThan(0);
+    expect(seam.escalate).not.toHaveBeenCalled();
+  });
+
+  it('saving the retry cursor: cut off at the deadline, the attempts it followed answered, and the cursor not advanced', async () => {
+    seam.escalate.mockReset().mockResolvedValue({ kind: 'delivered', pushSent: true, smsSent: true, callAttempted: true, notifiedCount: 1 });
+    const { status, body } = await stalledTick('cursor', []);
+    expect(body.escalations).toMatchObject({ examined: 10, delivered: 10, deferred: 0, unavailable: 0 });
+    expect(status).toBe(200);
+    expect(trace.settings.has(RETRY_KEY)).toBe(false);
   });
 });

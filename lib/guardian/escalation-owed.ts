@@ -15,6 +15,9 @@
 // same row, under the same id, that the escalation would have written — and
 // closes the item; from then on the record is what the sweep retries, exactly
 // as for a record that landed the first time. Nothing here sends anything.
+// The screening route leaves the same item when the escalation could not run
+// at all (its claim not taken, or a read it needs failed, so it wrote nothing):
+// its TwiML has gone out, and nothing else would come back for it.
 //
 // It is a second write to a second table, so it does not survive a database
 // that refuses everything: an escalation whose record AND work item both fail
@@ -28,7 +31,7 @@
 import 'server-only';
 import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { guardianEscalationEventId, guardianEscalationRecordId, guardianEscalationStableId, type GuardianEscalationInput } from './escalation';
+import { GUARDIAN_ESCALATION_DESCRIPTION_MAX, guardianEscalationEventId, guardianEscalationRecordId, guardianEscalationStableId, type GuardianEscalationInput } from './escalation';
 
 export const GUARDIAN_ESCALATION_OWED_TOOL = 'guardian.escalation_owed';
 
@@ -43,7 +46,7 @@ const storedSchema = z.object({
     commId: uuid.optional(),
     escalationType: z.enum(['emergency_call', 'medical', 'police', 'fire', 'child_safety', 'urgent_personal']),
     severity: z.enum(['high', 'critical']),
-    description: z.string().min(1).max(4096),
+    description: z.string().min(1).max(GUARDIAN_ESCALATION_DESCRIPTION_MAX),
     callerNumber: z.string().max(64).optional(),
   }).strict(),
   pushSent: z.boolean(),
@@ -159,7 +162,19 @@ export type GuardianTextKeyedEscalation =
   | { kind: 'text'; input: GuardianEscalationInput }
   /** No delivery of this message has escalated it under its text. */
   | { kind: 'none' }
-  /** That could not be read. */
+  /**
+   * An earlier delivery did escalate it under its text — the mark is on file —
+   * and the mark cannot be parsed as this code writes one (another version's
+   * shape, or a description past the bound, as the route used to write it).
+   * Not "unreadable": a retry reads the same mark, so giving a claim back for
+   * one only answers 503 for ever. The caller keys the escalation on the text,
+   * as that delivery did.
+   */
+  | { kind: 'unparseable' }
+  /**
+   * The mark could not be read: the query failed. Not "none": the caller
+   * chooses no identity from it, and gives its claim back for a retry.
+   */
   | { kind: 'unreadable' };
 
 /**
@@ -167,21 +182,49 @@ export type GuardianTextKeyedEscalation =
  * nothing else — escalated it under its text, and as what.
  */
 export async function guardianEscalationKeyedOnText(client: SupabaseClient, familyId: string, smsSid: string): Promise<GuardianTextKeyedEscalation> {
+  let data: unknown;
   try {
-    const { data, error } = await client.from('ai_tool_calls')
+    const read = await client.from('ai_tool_calls')
       .select('inputs').eq('family_id', familyId).eq('idempotency_key', textKeyIdempotency(smsSid))
       .eq('tool_name', GUARDIAN_WHATSAPP_TEXT_KEY_TOOL).limit(1);
-    if (error || !Array.isArray(data)) return { kind: 'unreadable' };
-    if (!data.length) return { kind: 'none' };
-    const mark = textKeySchema.safeParse((data[0] as { inputs?: unknown }).inputs);
-    if (!mark.success || mark.data.smsSid !== smsSid || mark.data.input.familyId !== familyId || mark.data.input.commId) return { kind: 'unreadable' };
-    return { kind: 'text', input: mark.data.input };
+    if (read.error || !Array.isArray(read.data)) return { kind: 'unreadable' };
+    data = read.data;
   } catch {
     return { kind: 'unreadable' };
   }
+  const rows = data as Array<{ inputs?: unknown }>;
+  if (!rows.length) return { kind: 'none' };
+  // Read, and on file. From here nothing is a failed read: a mark that cannot
+  // be parsed, or that names another message, family or a communication,
+  // stays so however often it is read.
+  const mark = textKeySchema.safeParse(rows[0]?.inputs);
+  if (!mark.success || mark.data.smsSid !== smsSid || mark.data.input.familyId !== familyId || mark.data.input.commId) return { kind: 'unparseable' };
+  return { kind: 'text', input: mark.data.input };
 }
 
 export type OwedLandingCounts = { landed: number; unavailable: number };
+
+type OwedItem = { id: string; family_id: string; inputs: unknown; attempt: unknown; created_at: string };
+
+const triesOf = (item: OwedItem) => (typeof item.attempt === 'number' && Number.isInteger(item.attempt) && item.attempt >= 0 ? item.attempt : 0);
+
+/**
+ * Count a landing that failed on its item, so the next run reaches the items
+ * tried fewer times first. Logged, never raised: left uncounted, the item is
+ * only taken as early as before.
+ */
+async function countFailedLanding(client: SupabaseClient, item: OwedItem, signal: AbortSignal): Promise<void> {
+  try {
+    const { data, error } = await client.from('ai_tool_calls')
+      .update({ attempt: triesOf(item) + 1 })
+      .eq('id', item.id).eq('family_id', item.family_id).eq('tool_name', GUARDIAN_ESCALATION_OWED_TOOL).eq('state', 'reserved')
+      .select('id')
+      .abortSignal(signal);
+    if (error || !Array.isArray(data) || data.length !== 1) console.error('[guardian] an owed escalation that could not be landed could not be counted as tried', { id: item.id, error: error ?? 'no row updated' });
+  } catch (error) {
+    console.error('[guardian] an owed escalation that could not be landed could not be counted as tried', { id: item.id, error });
+  }
+}
 
 /**
  * Land the record every open work item stands for, then close the item. The
@@ -189,20 +232,34 @@ export type OwedLandingCounts = { landed: number; unavailable: number };
  * written), is dated when the escalation was first raised, and is inserted —
  * never upserted — so a record a later attempt DID land, with the managers it
  * reached, is left exactly as it is.
+ *
+ * Least-tried first, then oldest. Oldest first alone gave every slot, every
+ * run, to the same items when they could not be landed (one written in a shape
+ * this cannot read, or one whose record the database refuses every time), and
+ * a newer escalation behind them waited out its window. Each failed landing is
+ * counted on its item, so the ones that keep failing take their turn behind the
+ * ones not yet tried.
+ *
+ * Every read and write stops at `signal` — the retry sweep's own deadline — so
+ * a stalled write is cut off inside the run rather than holding it past the
+ * function's lifetime. A landing cut off is counted unavailable, never landed;
+ * a close cut off leaves the item open, and the next run closes it.
  */
 export async function landOwedGuardianEscalations(
   client: SupabaseClient,
   options: { since: string; limit: number; signal: AbortSignal },
 ): Promise<OwedLandingCounts> {
   const counts: OwedLandingCounts = { landed: 0, unavailable: 0 };
-  let items: Array<{ id: string; family_id: string; inputs: unknown; created_at: string }>;
+  let items: OwedItem[];
   try {
     const { data, error } = await client.from('ai_tool_calls')
-      .select('id, family_id, inputs, created_at')
+      .select('id, family_id, inputs, attempt, created_at')
       .eq('tool_name', GUARDIAN_ESCALATION_OWED_TOOL)
       .eq('state', 'reserved')
       .gte('created_at', options.since)
+      .order('attempt', { ascending: true })
       .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
       .limit(options.limit)
       .abortSignal(options.signal);
     if (error || !Array.isArray(data)) {
@@ -217,12 +274,18 @@ export async function landOwedGuardianEscalations(
     return counts;
   }
 
+  /** One that could not be landed: counted, and — unless the run's deadline cut it off — tried later than the rest. */
+  const failed = async (item: OwedItem) => {
+    counts.unavailable += 1;
+    if (!options.signal.aborted) await countFailedLanding(client, item, options.signal);
+  };
+
   for (const item of items) {
     if (options.signal.aborted) break;
     const stored = storedSchema.safeParse(item.inputs);
     if (!stored.success || stored.data.input.familyId !== item.family_id) {
       console.error('[guardian] an owed escalation cannot be landed as written', { id: item.id });
-      counts.unavailable += 1;
+      await failed(item);
       continue;
     }
     const { input, pushSent } = stored.data;
@@ -240,31 +303,33 @@ export async function landOwedGuardianEscalations(
         sms_sent: false,
         call_attempted: false,
         escalated_at: item.created_at,
-      }).select('id');
+      }).select('id').abortSignal(options.signal);
       // A unique violation is the record a later attempt already wrote.
       if (landError && !isUniqueViolation(landError)) {
         console.error('[guardian] an owed escalation record could not be landed', { id: item.id, error: landError });
-        counts.unavailable += 1;
+        await failed(item);
         continue;
       }
       if (!landError && (!Array.isArray(landed) || landed.length !== 1)) {
         console.error('[guardian] an owed escalation record could not be confirmed', { id: item.id });
-        counts.unavailable += 1;
+        await failed(item);
         continue;
       }
       const { data: closed, error: closeError } = await client.from('ai_tool_calls')
-        .update({ state: 'succeeded', attempt: 1, finished_at: new Date().toISOString(), outputs: { version: 1, landed: true } })
+        .update({ state: 'succeeded', attempt: triesOf(item) + 1, finished_at: new Date().toISOString(), outputs: { version: 1, landed: true } })
         .eq('id', item.id).eq('family_id', item.family_id).eq('tool_name', GUARDIAN_ESCALATION_OWED_TOOL).eq('state', 'reserved')
-        .select('id');
+        .select('id')
+        .abortSignal(options.signal);
       // Left open, the item lands nothing new next time (the record is there),
-      // so a failed close costs a read, not a duplicate.
+      // so a failed close — refused, or cut off at the deadline — costs a
+      // read, not a duplicate. The record did land, and is counted so.
       if (closeError || !Array.isArray(closed) || closed.length !== 1) {
         console.error('[guardian] an owed escalation was landed but could not be closed', { id: item.id, error: closeError ?? 'no row updated' });
       }
       counts.landed += 1;
     } catch (error) {
       console.error('[guardian] an owed escalation record could not be landed', { id: item.id, error });
-      counts.unavailable += 1;
+      await failed(item);
     }
   }
   return counts;

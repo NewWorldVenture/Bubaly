@@ -22,8 +22,12 @@ const RECOVERY_DRAIN_MS = 55_000;
 // Two sweeps on one tick. The receipt drain resumes inbound SMS left mid-way;
 // the escalation retry re-attempts recent emergency escalations whose record
 // says no manager was reached — the SMS lane's, the WhatsApp route's and the
-// screening route's alike, none of which has another way back once Twilio has
-// been answered. It rides here rather than on a route of its own because a new
+// screening route's alike. It finds only what an escalation left behind: its
+// record, or the work item written in the record's place (by the escalation
+// when the record failed, or by the screening route when the escalation could
+// not run at all, which has no other way back once Twilio has been answered).
+// With neither, only the caller's own retry can come back for it. It rides
+// here rather than on a route of its own because a new
 // route would need a schedule in vercel.json and the dispatcher table. That
 // table asks for this job every five minutes; what vercel.json guarantees is
 // one run a day (10 2 * * *), and the GitHub ticks between have been measured

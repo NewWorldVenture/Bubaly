@@ -15,7 +15,7 @@ import { shouldRingImmediately } from '@/lib/guardian/trust';
 import { claimGuardianCallback, isValidGuardianEventId, markGuardianCallbackError, markGuardianCallbackProcessed, releaseGuardianCallback } from '@/lib/guardian/callbacks';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { escalateGuardianEmergency, type GuardianEscalationOutcome } from '@/lib/guardian/escalate';
-import type { GuardianEscalationInput } from '@/lib/guardian/escalation';
+import { guardianEscalationDescription, type GuardianEscalationInput } from '@/lib/guardian/escalation';
 import { guardianEscalationKeyedOnText, markGuardianEscalationKeyedOnText } from '@/lib/guardian/escalation-owed';
 import { GUARDIAN_INBOUND_CAP_REASON, GUARDIAN_INBOUND_FAMILY_CAP, GUARDIAN_INBOUND_SENDER_CAP, GUARDIAN_INBOUND_WINDOW_MS } from '@/lib/guardian/inbound-caps';
 import { wroteNoRows } from '@/lib/supabase/errors';
@@ -221,8 +221,17 @@ export async function POST(req: NextRequest) {
   if (commError && (commError as { code?: string }).code === '23505') {
     const { data: existing, error: existingError } = await supabase.from('guardian_communications')
       .select('id').eq('twilio_sms_sid', smsSid).eq('family_id', familyId).maybeSingle();
-    if (existingError) console.error('[guardian/inbound/whatsapp] a redelivered message\'s communication could not be read', { familyId, smsSid, error: existingError.message });
-    else commId = ((existing as { id?: string } | null)?.id) ?? null;
+    if (existingError) {
+      // The message is on record and which row it is could not be read. Going
+      // on without it guessed: the escalation was keyed on the text instead, a
+      // new claim was taken, and every manager the first delivery (or the
+      // sweep) had reached was texted and called again. Nothing has been
+      // written by this delivery, so the claim goes back for a retry instead.
+      console.error('[guardian/inbound/whatsapp] a redelivered message\'s communication could not be read; releasing the callback for a retry', { familyId, smsSid, error: existingError.message });
+      await releaseGuardianCallback(supabase, 'inbound_whatsapp', smsSid);
+      return new NextResponse('Guardian routing unavailable', { status: 503 });
+    }
+    commId = ((existing as { id?: string } | null)?.id) ?? null;
   } else if (commError) {
     console.error('[guardian/inbound/whatsapp] could not record the communication; message continues unlogged', {
       familyId, smsSid, error: commError.message,
@@ -302,6 +311,10 @@ export async function POST(req: NextRequest) {
   // again. Only the sid decides "the same message": a different message with
   // the same words from the same caller is its own emergency, and used to be
   // joined to the earlier one by its text — found settled, and silenced.
+  // An identity is never chosen from a read that failed: a communication that
+  // could not be read back (above) or a mark that could not be read (here)
+  // gives the claim back for a retry instead. A mark that WAS read and cannot
+  // be parsed is not that: a retry reads the same mark.
   let escalationInput: GuardianEscalationInput | null = null;
   let escalatedBefore = false;
   if (emergency) {
@@ -309,13 +322,42 @@ export async function POST(req: NextRequest) {
       familyId,
       escalationType: 'urgent_personal',
       severity: 'critical',
-      description: `Emergency WhatsApp from ${callerDisplay}: "${body.slice(0, 300)}"`,
+      // Cut to what the mark's reader and the retry sweep take back: the
+      // caller's name is the contact's, which nothing bounds, and a longer
+      // description left a mark no redelivery could parse and a record the
+      // sweep could not rebuild — an emergency nobody reached was never sent.
+      description: guardianEscalationDescription(`Emergency WhatsApp from ${callerDisplay}: "${body.slice(0, 300)}"`),
       ...(from ? { callerNumber: from.slice(0, 64) } : {}),
     };
     const earlier = await guardianEscalationKeyedOnText(supabase, familyId, smsSid);
-    if (earlier.kind === 'unreadable') console.error('[guardian/inbound/whatsapp] could not check whether an earlier delivery of this message was escalated under its text', { familyId, smsSid, keyedOn: commId ? 'communication' : 'text' });
+    if (earlier.kind === 'unreadable') {
+      // Read as "no mark", a message an earlier delivery had escalated under
+      // its text switched to its communication here, took a new claim, and
+      // texted and called every manager again. Nobody has been told anything
+      // by this delivery yet (the notice and the escalation both follow), and
+      // what it did write — the message, under its unique sid — a retry finds
+      // again, so the claim goes back for one.
+      console.error('[guardian/inbound/whatsapp] could not check whether an earlier delivery of this message was escalated under its text; releasing the callback for a retry', { familyId, smsSid });
+      await releaseGuardianCallback(supabase, 'inbound_whatsapp', smsSid);
+      return new NextResponse('Escalation unavailable', { status: 503 });
+    }
     if (earlier.kind === 'text') {
       escalationInput = earlier.input;
+      escalatedBefore = true;
+    } else if (earlier.kind === 'unparseable') {
+      // An earlier delivery escalated this message under its text, and what
+      // it wrote down cannot be parsed (another version's shape, or a
+      // description past the bound, as this route used to write). Every retry
+      // reads the same mark, so giving the claim back for one answered 503 on
+      // every delivery, and the managers were never texted or called. So this
+      // delivery keys the escalation on its text, as the first one did, and
+      // never on its communication: the same message gives the same text, so
+      // it joins that escalation. (Only a description past the bound comes out
+      // differently now — and that escalation's record could not be rebuilt
+      // either, so nothing else would ever have sent it.) The family was told
+      // by the first delivery, which wrote the mark just before its notice.
+      console.error('[guardian/inbound/whatsapp] an earlier delivery of this message was escalated under its text and its mark cannot be parsed; escalating under the text again', { familyId, smsSid });
+      escalationInput = byContent;
       escalatedBefore = true;
     } else if (commId) {
       escalationInput = { ...byContent, commId };
