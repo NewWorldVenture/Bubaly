@@ -397,7 +397,7 @@ export function RemindersModule() {
           </button>
           {/* Kind filter */}
           <select value={filterKind} onChange={(e) => setFilterKind(e.target.value)} aria-label={tr('reminders.type')}
-            className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-xs text-muted focus:outline-none">
+            className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-xs text-muted focus-ring">
             <option value="all">{tr('reminders.allTypes')}</option>
             {KINDS.map((k) => <option key={k.id} value={k.id}>{tr(k.labelKey)}</option>)}
           </select>
@@ -405,7 +405,7 @@ export function RemindersModule() {
           {(lists ?? []).length > 0 && (
             <div className="flex items-center gap-1">
               <select value={filterList} onChange={(e) => setFilterList(e.target.value)} aria-label={tr('reminders.list')}
-                className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-xs text-muted focus:outline-none">
+                className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-xs text-muted focus-ring">
                 <option value="all">{tr('reminders.allLists')}</option>
                 {(lists ?? []).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                 <option value="none">{tr('reminders.noList')}</option>

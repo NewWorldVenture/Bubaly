@@ -157,7 +157,7 @@ export function NotesModule() {
         description={t('notesModule.sharedFamilyNotesChecklistsIdeas')}
         action={
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2">
+            <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2 focus-within:ring-2 focus-within:ring-brand/60 focus-within:ring-offset-2 focus-within:ring-offset-bg">
               <Search className="h-3.5 w-3.5 text-muted" />
               <input value={search} onChange={(e) => setSearch(e.target.value)}
                 placeholder={t('notes.searchNotes')}

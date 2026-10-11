@@ -53,8 +53,8 @@ function Row({
       <ChevronRight className="h-4 w-4 text-muted/60" />
     </div>
   );
-  if (href) return <Link href={href}>{inner}</Link>;
-  return <button type="button" onClick={onClick} className="w-full text-left">{inner}</button>;
+  if (href) return <Link href={href} className="block outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/60">{inner}</Link>;
+  return <button type="button" onClick={onClick} className="w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/60">{inner}</button>;
 }
 
 function Section({ children, className }: { children: React.ReactNode; className?: string }) {
