@@ -607,7 +607,7 @@ export function SchoolModule() {
                             </td>
                             <td className="px-4 py-3.5 capitalize text-fg">{(e.event_type ?? 'general').replace('_', ' ')}</td>
                             <td className="px-4 py-3.5"><p className="font-medium">{due.label}</p><p className={cn('text-xs', due.urgent ? 'text-orange-400' : 'text-muted')}>{due.sub}</p></td>
-                            <td className="px-4 py-3.5"><button type="button" onClick={() => void removeEvent(e.id, e.title)} aria-label={tr('schoolModule.deleteEventTitle', { title: e.title })} className="text-muted/60 hover:text-danger focus-ring rounded"><Trash2 className="h-4 w-4" /></button></td>
+                            <td className="px-4 py-3.5"><button type="button" onClick={() => void removeEvent(e.id, e.title)} aria-label={tr('schoolModule.deleteEventTitle', { title: e.title })} className="text-muted hover:text-danger focus-ring rounded"><Trash2 className="h-4 w-4" /></button></td>
                           </tr>
                         );
                       })}

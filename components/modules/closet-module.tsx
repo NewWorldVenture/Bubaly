@@ -373,7 +373,7 @@ export function ClosetModule() {
                     </p>
                   </div>
                   <Button size="sm" variant="secondary" loading={busy} onClick={() => logWear(o.item_ids, o.id)}>{t('closet.wear')}</Button>
-                  <button onClick={() => deleteOutfit(o)} aria-label={t('closet.deleteOutfit')} className="shrink-0 p-1 text-muted/60 hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
+                  <button onClick={() => deleteOutfit(o)} aria-label={t('closet.deleteOutfit')} className="shrink-0 p-1 text-muted hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
                 </li>
               ))}
             </ul>
