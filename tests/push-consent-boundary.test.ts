@@ -74,14 +74,16 @@ describe('all public push senders enforce consent', () => {
     expect(f.calls).toEqual([]); expect(state.send).not.toHaveBeenCalled();
   });
 
-  it('bounds consent reads to 200 distinct recipients per chunk', async () => {
+  it('bounds consent reads to 100 distinct recipients per chunk', async () => {
     const f = fixture();
     const ids = Array.from({ length: 401 }, (_, index) => `recipient-${index}`);
     f.tables.user_preferences = ids.map(user_id => ({ user_id, push_enabled: false }));
     expect(await sendPushToUsers(f.db, [...ids, ...ids.slice(0, 5)], payload)).toEqual(counts({ withheld: 401 }));
-    expect(f.calls.filter(call => call.table === 'user_preferences').map(call => call.count)).toEqual([200, 200, 1]);
-    // Each 200-recipient public batch now uses 100-ID child-policy chunks:
-    // two, two, and one. Each empty chunk terminates on its first response.
+    // 100 ids per request, the bound lib/supabase/chunked-in.ts holds a URL
+    // filter to: 200 UUIDs is the ~8 KB request line itself.
+    expect(f.calls.filter(call => call.table === 'user_preferences').map(call => call.count)).toEqual([100, 100, 100, 100, 1]);
+    // One 100-ID child-policy chunk per batch. Each empty chunk terminates on
+    // its first response.
     expect(f.calls.filter(call => call.table === 'family_members').map(call => call.count)).toEqual([0, 0, 0, 0, 0]);
     expect(state.send).not.toHaveBeenCalled();
   });

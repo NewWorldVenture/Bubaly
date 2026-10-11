@@ -16,6 +16,7 @@ import { nativePushConfigured, sendNativePush } from '@/lib/server/native-push';
 import { childrenBlockedOn } from '@/lib/notifications/child-channels';
 import { isMissingRelationError } from '@/lib/supabase/errors';
 import { readAll } from '@/lib/supabase/read-all';
+import { readAllInChunks } from '@/lib/supabase/chunked-in';
 
 type DB = SupabaseClient<Database>;
 
@@ -105,8 +106,16 @@ async function deliveredDevices(supabase: DB, notificationIds: string[]): Promis
   const byNotification = new Map<string, Set<string>>();
   const store = { enabled: true };
   if (notificationIds.length === 0) return { byNotification, store };
-  const { data, error } = await supabase.from('push_deliveries')
-    .select('notification_id, device_id').in('notification_id', notificationIds);
+  // Chunked AND paged. The rows still pending are the partly failed ones, each
+  // with a receipt per device it reached, so a batch of 200 passes the server's
+  // row cap during an outage. One unpaged read came back short with no error,
+  // and every device whose receipt fell past the cap was buzzed again.
+  const { data, error } = await readAllInChunks<{ notification_id: string; device_id: string }>(
+    notificationIds,
+    (chunk, from, to) => supabase.from('push_deliveries')
+      .select('notification_id, device_id').in('notification_id', chunk)
+      .order('notification_id').order('device_id').range(from, to),
+  );
   if (error) {
     if (isMissingRelationError(error)) { store.enabled = false; return { byNotification, store }; }
     // Not knowing who was reached is not "nobody was": sending now would buzz
@@ -212,14 +221,19 @@ async function sendPushDevicesToUser(supabase: DB, userId: string, payload: Push
   return result;
 }
 
+/** Recipients per consent read; one preference row each, so a chunk cannot reach the row cap. */
+const PREFERENCE_CHUNK = 100;
+
 /** Batch consent is mandatory for every public sender, including marketing/test pushes. */
 async function blockedPushRecipients(supabase: DB, userIds: string[]): Promise<Set<string>> {
   const candidates = [...new Set(userIds.filter(Boolean))];
   const blocked = new Set<string>();
-  // Bound generated IN URLs. Resolve every chunk before any provider send, so
-  // a failed later permission read cannot partially deliver an unchecked batch.
-  for (let offset = 0; offset < candidates.length; offset += 200) {
-    const batch = candidates.slice(offset, offset + 200);
+  // Bound generated IN URLs to the repo's 100 ids (lib/supabase/chunked-in.ts):
+  // 200 UUIDs is the ~8 KB request line itself. Resolve every chunk before any
+  // provider send, so a failed later permission read cannot partially deliver
+  // an unchecked batch.
+  for (let offset = 0; offset < candidates.length; offset += PREFERENCE_CHUNK) {
+    const batch = candidates.slice(offset, offset + PREFERENCE_CHUNK);
     for (const id of await childrenBlockedOn(supabase, 'push', batch)) blocked.add(id);
     const { data: preferences, error } = await supabase.from('user_preferences')
       .select('user_id, push_enabled').in('user_id', batch);
