@@ -273,10 +273,10 @@ export async function retryUndeliveredGuardianEscalations(
     }
     const claim = claims.get(guardianEscalationEventId(input));
     if (claim?.status === 'error' && claim.error === ESCALATION_SENT_UNRECORDED) {
-      // An attempt reached a manager and could not say so on the record. The
-      // claim is reclaimable after ten minutes, the record still reads
-      // "nobody reached", and re-running it would text and call every manager
-      // a second time.
+      // An attempt reached a manager and could not say so on the record, which
+      // still reads "nobody reached". Its claim is final (claimGuardianCallback
+      // never reclaims it), so an attempt would only find it settled: it is
+      // not made, and nobody is texted or called a second time.
       console.error('[guardian] an escalation whose alerts went out is not sent again', { id: row.id });
       counts.duplicate += 1;
       continue;

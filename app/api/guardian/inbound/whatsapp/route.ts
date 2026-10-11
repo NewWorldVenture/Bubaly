@@ -16,7 +16,7 @@ import { claimGuardianCallback, isValidGuardianEventId, markGuardianCallbackErro
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { escalateGuardianEmergency, type GuardianEscalationOutcome } from '@/lib/guardian/escalate';
 import type { GuardianEscalationInput } from '@/lib/guardian/escalation';
-import { guardianEscalationOnFile } from '@/lib/guardian/escalation-owed';
+import { guardianEscalationKeyedOnText, markGuardianEscalationKeyedOnText } from '@/lib/guardian/escalation-owed';
 import { GUARDIAN_INBOUND_CAP_REASON, GUARDIAN_INBOUND_FAMILY_CAP, GUARDIAN_INBOUND_SENDER_CAP, GUARDIAN_INBOUND_WINDOW_MS } from '@/lib/guardian/inbound-caps';
 import { wroteNoRows } from '@/lib/supabase/errors';
 
@@ -296,10 +296,12 @@ export async function POST(req: NextRequest) {
   // communication recovered above — claims the same ledger id and lands in the
   // same record, and the retry sweep, which rebuilds the key from that record,
   // claims it too. A message whose first delivery could not be recorded (or
-  // could not learn that it had been) was escalated under its text instead; a
-  // later delivery that knows its communication looks for that earlier
-  // escalation first, and joins it rather than switching keys and alarming
-  // every manager again.
+  // could not learn that it had been) is escalated under its text instead, and
+  // that is written down under the message's sid; a later delivery of THAT
+  // message joins it rather than switching keys and alarming every manager
+  // again. Only the sid decides "the same message": a different message with
+  // the same words from the same caller is its own emergency, and used to be
+  // joined to the earlier one by its text — found settled, and silenced.
   let escalationInput: GuardianEscalationInput | null = null;
   let escalatedBefore = false;
   if (emergency) {
@@ -310,16 +312,21 @@ export async function POST(req: NextRequest) {
       description: `Emergency WhatsApp from ${callerDisplay}: "${body.slice(0, 300)}"`,
       ...(from ? { callerNumber: from.slice(0, 64) } : {}),
     };
-    escalationInput = commId ? { ...byContent, commId } : byContent;
-    if (commId) {
-      const earlier = await guardianEscalationOnFile(supabase, byContent);
-      if (earlier === null) console.error('[guardian/inbound/whatsapp] could not check for an earlier escalation of this message; keyed on its communication', { familyId, smsSid });
-      if (earlier === true) { escalationInput = byContent; escalatedBefore = true; }
+    const earlier = await guardianEscalationKeyedOnText(supabase, familyId, smsSid);
+    if (earlier.kind === 'unreadable') console.error('[guardian/inbound/whatsapp] could not check whether an earlier delivery of this message was escalated under its text', { familyId, smsSid, keyedOn: commId ? 'communication' : 'text' });
+    if (earlier.kind === 'text') {
+      escalationInput = earlier.input;
+      escalatedBefore = true;
+    } else if (commId) {
+      escalationInput = { ...byContent, commId };
+    } else {
+      escalationInput = byContent;
+      await markGuardianEscalationKeyedOnText(supabase, smsSid, byContent);
     }
   }
 
-  // An earlier delivery of this message already told the family (under a
-  // communication that was not recorded then), and its escalation's own
+  // An earlier delivery of this message (this sid) already told the family,
+  // under a communication that was not recorded then, and its escalation's own
   // in-app alert stands; a second notice would be the same news twice.
   if (!escalatedBefore) {
     try {

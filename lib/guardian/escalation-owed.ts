@@ -20,6 +20,10 @@
 // that refuses everything: an escalation whose record AND work item both fail
 // is logged, and only the caller's own retry (the SMS lane's receipt, a
 // provider redelivery) can come back for it.
+//
+// The same ledger also holds, further down, the mark a WhatsApp message leaves
+// when it is escalated under its text, so that only a later delivery of that
+// same message joins that escalation.
 
 import 'server-only';
 import { z } from 'zod';
@@ -82,24 +86,98 @@ export async function oweGuardianEscalation(
   }
 }
 
+// ── Which escalation a WhatsApp message was given, written down under its sid ──
+//
+// A WhatsApp emergency is keyed on its communication when the message could be
+// recorded, and on its text when it could not (the insert was refused, or its
+// answer was lost). A later delivery of the SAME message — Twilio's redelivery
+// after the ten-minute reclaim, or a replay of the signed request — usually
+// does learn its communication, and switching keys took a new claim and alarmed
+// every manager again. That later delivery used to decide "same message" by
+// looking for an earlier escalation under the same TEXT, which a different
+// message with the same words from the same caller matches too: it was joined
+// to the earlier escalation, found settled, and silenced — no text, no call, no
+// family notice.
+//
+// So the delivery that escalates under the text writes that down, keyed on the
+// message's sid (the one identity every delivery of a message shares and no
+// other message has), with the escalation input verbatim; a later delivery
+// joins a text-keyed escalation only when its own sid's mark names one.
+// Another message is never joined by this: its sid has no mark.
+
+export const GUARDIAN_WHATSAPP_TEXT_KEY_TOOL = 'guardian.whatsapp_escalation_key';
+
+const textKeyIdempotency = (smsSid: string) => `${GUARDIAN_WHATSAPP_TEXT_KEY_TOOL}:v1:${smsSid}`;
+
+const textKeySchema = z.object({
+  version: z.literal(1),
+  smsSid: z.string().min(1).max(160),
+  input: storedSchema.shape.input,
+}).strict();
+
 /**
- * Whether this escalation has been attempted under this identity before: its
- * record is there, or the work item standing in for a record that did not
- * land. Null when that cannot be read.
+ * Write down that this WhatsApp message (by its sid) is escalated under its
+ * text. True when the mark is on file — written now, or already there. Never
+ * throws: a failure is logged and answered false, and the escalation goes out
+ * regardless. (Then a later delivery that does learn the communication keys on
+ * it, and can alarm a second time: the limit this cannot close while the
+ * escalation record does not name the message it came from.)
  */
-export async function guardianEscalationOnFile(client: SupabaseClient, input: GuardianEscalationInput): Promise<boolean | null> {
+export async function markGuardianEscalationKeyedOnText(
+  client: SupabaseClient,
+  smsSid: string,
+  input: GuardianEscalationInput,
+): Promise<boolean> {
   try {
-    const { data: record, error: recordError } = await client.from('guardian_escalations')
-      .select('id').eq('id', guardianEscalationRecordId(input)).eq('family_id', input.familyId).limit(1);
-    if (recordError || !Array.isArray(record)) return null;
-    if (record.length) return true;
-    const { data: owed, error: owedError } = await client.from('ai_tool_calls')
-      .select('id').eq('id', guardianEscalationStableId(guardianEscalationEventId(input), 'owed')).eq('family_id', input.familyId)
-      .eq('tool_name', GUARDIAN_ESCALATION_OWED_TOOL).limit(1);
-    if (owedError || !Array.isArray(owed)) return null;
-    return owed.length > 0;
+    const { data, error } = await client.from('ai_tool_calls').insert({
+      id: guardianEscalationStableId(`whatsapp:${input.familyId}:${smsSid}`, 'text-key'),
+      family_id: input.familyId,
+      tool_name: GUARDIAN_WHATSAPP_TEXT_KEY_TOOL,
+      actor_kind: 'system',
+      inputs: { version: 1, smsSid, input },
+      outputs: null,
+      // A fact about the message, not work owed: nothing picks it up.
+      state: 'succeeded',
+      attempt: 1,
+      idempotency_key: textKeyIdempotency(smsSid),
+      resource_table: 'guardian_escalations',
+      resource_id: guardianEscalationRecordId(input),
+      finished_at: new Date().toISOString(),
+    }).select('id');
+    if (!error && Array.isArray(data) && data.length === 1) return true;
+    if (isUniqueViolation(error)) return true;
+    console.error('[guardian] a WhatsApp escalation keyed on its text could not be written down under its message', { familyId: input.familyId, smsSid, error: error ?? 'no row written' });
+    return false;
+  } catch (error) {
+    console.error('[guardian] a WhatsApp escalation keyed on its text could not be written down under its message', { familyId: input.familyId, smsSid, error });
+    return false;
+  }
+}
+
+export type GuardianTextKeyedEscalation =
+  /** An earlier delivery of this message escalated it under its text: this input, verbatim. */
+  | { kind: 'text'; input: GuardianEscalationInput }
+  /** No delivery of this message has escalated it under its text. */
+  | { kind: 'none' }
+  /** That could not be read. */
+  | { kind: 'unreadable' };
+
+/**
+ * Whether an earlier delivery of this WhatsApp message — this family, this sid,
+ * nothing else — escalated it under its text, and as what.
+ */
+export async function guardianEscalationKeyedOnText(client: SupabaseClient, familyId: string, smsSid: string): Promise<GuardianTextKeyedEscalation> {
+  try {
+    const { data, error } = await client.from('ai_tool_calls')
+      .select('inputs').eq('family_id', familyId).eq('idempotency_key', textKeyIdempotency(smsSid))
+      .eq('tool_name', GUARDIAN_WHATSAPP_TEXT_KEY_TOOL).limit(1);
+    if (error || !Array.isArray(data)) return { kind: 'unreadable' };
+    if (!data.length) return { kind: 'none' };
+    const mark = textKeySchema.safeParse((data[0] as { inputs?: unknown }).inputs);
+    if (!mark.success || mark.data.smsSid !== smsSid || mark.data.input.familyId !== familyId || mark.data.input.commId) return { kind: 'unreadable' };
+    return { kind: 'text', input: mark.data.input };
   } catch {
-    return null;
+    return { kind: 'unreadable' };
   }
 }
 

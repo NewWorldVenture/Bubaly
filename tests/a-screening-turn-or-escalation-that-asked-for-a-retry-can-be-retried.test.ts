@@ -11,8 +11,8 @@
 // is reclaimable only after ten minutes, so the caller's retry inside that
 // window was answered `{ ok: true, duplicate: true }`: an emergency escalation
 // reported as handled when nobody had been told. Its third failure, after the
-// alerts have gone out, keeps `error` on purpose, and that asymmetry is pinned
-// here too.
+// alerts have gone out, keeps `error` on purpose — final, never reclaimed, when
+// a manager's phone was reached — and that asymmetry is pinned here too.
 import { createHmac } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -354,5 +354,47 @@ describe('the emergency escalation', () => {
     expect(again).toEqual({ ok: true, duplicate: true });
     expect(db.table('notifications')).toHaveLength(1);
     expect(seam.sms, 'the parent is not texted a second time').toHaveBeenCalledTimes(1);
+  });
+
+  it('and that error is final: a retry long after the ten minutes still does not text or call twice', async () => {
+    // The ten minutes were not the whole answer. Past them the claim was
+    // reclaimed like any other `error`, and the retry — this caller's, a
+    // provider redelivery's, the SMS lane's — texted every manager again.
+    const heal = refuse(db, 'guardian_escalations', REFUSED);
+    const [first] = await escalate();
+    expect(first.status).toBe(500);
+    expect(seam.sms).toHaveBeenCalledTimes(1);
+    heal();
+    for (const row of events()) row.received_at = new Date(Date.now() - 11 * MINUTE).toISOString();
+
+    const [retry, again] = await escalate();
+    expect(retry.status).toBe(200);
+    expect(again).toEqual({ ok: true, duplicate: true });
+    expect(seam.sms, 'the parent is not texted a second time').toHaveBeenCalledTimes(1);
+    expect(db.table('notifications')).toHaveLength(1);
+    expect(events()).toEqual([expect.objectContaining({ event_id: ESCALATION_EVENT, status: 'error', error: 'Unable to record escalation.' })]);
+  });
+
+  it('with nobody to text or call, a record that did not land holds its claim only the ten minutes: the retry after lands it and alarms nobody', async () => {
+    // Final is for an escalation that reached a phone. With nobody to reach
+    // there is nothing a retry could send twice (the in-app row has a stable
+    // id), so the claim stays reclaimable and a later retry writes the record.
+    seam.twilio.ready = false;
+    const heal = refuse(db, 'guardian_escalations', REFUSED);
+    const [first] = await escalate();
+    expect(first.status).toBe(500);
+    expect(events()).toEqual([expect.objectContaining({ event_id: ESCALATION_EVENT, status: 'error' })]);
+    heal();
+    const [, held] = await escalate();
+    expect(held, 'inside the ten minutes it is held').toEqual({ ok: true, duplicate: true });
+
+    for (const row of events()) row.received_at = new Date(Date.now() - 11 * MINUTE).toISOString();
+    const [late, body] = await escalate();
+    expect(late.status).toBe(200);
+    expect(body).toMatchObject({ unreachable: true });
+    expect(db.table('guardian_escalations')).toEqual([expect.objectContaining({ notified_member_ids: null })]);
+    expect(db.table('notifications')).toHaveLength(1);
+    expect(seam.sms).not.toHaveBeenCalled();
+    expect(events()).toEqual([expect.objectContaining({ event_id: ESCALATION_EVENT, status: 'processed' })]);
   });
 });

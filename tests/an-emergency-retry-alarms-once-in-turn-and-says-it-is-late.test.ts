@@ -24,6 +24,18 @@
 //  5. A retry can land hours after the emergency — the job's only guaranteed
 //     run is daily — and read exactly like an emergency happening now.
 //
+// And two the first fixes left:
+//
+//  6. The fix for 1 joined a later delivery to an earlier escalation keyed on
+//     the same TEXT, so a different message in the same words from the same
+//     caller was joined to it, found settled, and silenced: no text, no call,
+//     no family notice. Only the message's own sid decides "the same message"
+//     now, by a mark written under it when it is escalated under its text.
+//  7. The mark an attempt leaves when its alerts went out and its record did
+//     not (3) was honoured by the sweep only. The claim it marks was
+//     reclaimable after ten minutes like any other `error`, so a late
+//     redelivery texted and called every manager again. It is final now.
+//
 // Everything here goes through the real callers: the WhatsApp and screening
 // webhooks, and the recovery cron route the dispatcher calls.
 import { createHmac } from 'node:crypto';
@@ -303,6 +315,143 @@ describe('a WhatsApp emergency delivered again after the ten-minute reclaim wind
     expect(seam.called, 'called once').toEqual([PARENT_PHONE]);
     expect(escalations()).toHaveLength(1);
     expect(seam.notify).toHaveBeenCalledOnce();
+  });
+});
+
+describe('a different WhatsApp message with the same words as one escalated under its text', () => {
+  const FIRST = `SM${'a'.repeat(32)}`;
+  const SECOND = `SM${'b'.repeat(32)}`;
+  const markOf = (smsSid: string) => db.table('ai_tool_calls').find((row) => row.tool_name === 'guardian.whatsapp_escalation_key' && row.idempotency_key === `guardian.whatsapp_escalation_key:v1:${smsSid}`);
+
+  it('is its own emergency: texted, called and told, while the first message\'s redelivery still joins its own escalation', async () => {
+    // The first message could not be recorded, so it is escalated under its
+    // text — and that is written down under ITS sid. Nobody could be reached;
+    // the sweep reaches the parent.
+    fail('guardian_communications', 'insert', 1);
+    seam.telephony.down = true;
+    expect((await whatsapp(FIRST)).status).toBe(503);
+    expect(communications()).toEqual([]);
+    expect(escalations()).toEqual([expect.objectContaining({ id: guardianEscalationRecordId(byContent), communication_id: null })]);
+    seam.telephony.down = false;
+    expect((await tick()).body.escalations).toMatchObject({ examined: 1, delivered: 1 });
+    expect(seam.sent).toEqual([PARENT_PHONE]);
+    expect(seam.notify).toHaveBeenCalledOnce();
+
+    // Later, a DIFFERENT message — its own sid — from the same caller, in the
+    // same words, and this one is recorded. The defect: it was taken for the
+    // first message because the text matched, joined to that settled
+    // escalation, and nobody was texted, called or told.
+    expect((await whatsapp(SECOND)).status).toBe(200);
+    const comm = communications().find((row) => row.twilio_sms_sid === SECOND)?.id;
+    expect(comm).toEqual(expect.any(String));
+    expect(seam.sent, 'the second emergency texts the parent').toEqual([PARENT_PHONE, PARENT_PHONE]);
+    expect(seam.called, 'and calls them').toEqual([PARENT_PHONE, PARENT_PHONE]);
+    expect(seam.notify, 'and tells the family').toHaveBeenCalledTimes(2);
+    expect(seam.notify.mock.calls[1][1]).toMatchObject({ relatedId: comm, once: true, urgent: true });
+    expect(escalations()).toHaveLength(2);
+    expect(escalations().find((row) => row.communication_id === comm)).toMatchObject({ notified_member_ids: [PARENT], sms_sent: true, call_attempted: true });
+    expect(callback(SECOND)).toMatchObject({ status: 'processed' });
+    // What told them apart: the first message's sid carries the mark of its
+    // text-keyed escalation; the second, keyed on its communication, has none.
+    expect(markOf(FIRST)).toMatchObject({ family_id: FAMILY, resource_id: guardianEscalationRecordId(byContent) });
+    expect(markOf(SECOND)).toBeUndefined();
+
+    // The first message, redelivered after the ten minutes and recorded now,
+    // is still the first emergency: its sid's mark joins it to its own
+    // escalation, and nobody is alarmed or told again.
+    age(FIRST, 11 * MIN);
+    expect((await whatsapp(FIRST)).status).toBe(200);
+    expect(communications()).toHaveLength(2);
+    expect(seam.sent).toEqual([PARENT_PHONE, PARENT_PHONE]);
+    expect(seam.called).toEqual([PARENT_PHONE, PARENT_PHONE]);
+    expect(seam.notify).toHaveBeenCalledTimes(2);
+    expect(escalations()).toHaveLength(2);
+  });
+
+  it('LIMIT, pinned: when NEITHER message could be recorded, the second shares the first one\'s text-keyed escalation — told in-app, not texted or called', async () => {
+    // Both are keyed on the same text, and the record a text-keyed escalation
+    // writes cannot say which message it came from (the retry sweep rebuilds
+    // the key from that record), so the second finds the first one's claim
+    // settled. Closing this needs the record to name its source message
+    // (guardian_escalations.source_event_id, a migration). Until then the
+    // family still gets the second message's urgent in-app notice.
+    fail('guardian_communications', 'insert', 2);
+    expect((await whatsapp(FIRST)).status).toBe(200);
+    expect((await whatsapp(SECOND)).status).toBe(200);
+    expect(communications()).toEqual([]);
+    expect(escalations()).toHaveLength(1);
+    expect(seam.sent).toEqual([PARENT_PHONE]);
+    expect(seam.called).toEqual([PARENT_PHONE]);
+    expect(seam.notify).toHaveBeenCalledTimes(2);
+    expect(seam.notify.mock.calls[1][1]).toMatchObject({ relatedId: null, urgent: true });
+    // Each under its own sid, so a redelivery of either still joins only its own.
+    expect(markOf(FIRST)).toBeDefined();
+    expect(markOf(SECOND)).toBeDefined();
+  });
+
+  it('LIMIT, pinned: a message escalated under its text whose mark was refused too is, redelivered late and recorded, keyed on its communication', async () => {
+    // Three failures in a row: the message not recorded, its mark not written,
+    // and nobody reached at first. The late redelivery then cannot know the
+    // text-keyed escalation was this message's, and alarms a second time —
+    // rather than, as before, joining whatever escalation had the same words.
+    fail('guardian_communications', 'insert', 1);
+    fail('ai_tool_calls', 'insert', 1);
+    seam.telephony.down = true;
+    expect((await whatsapp(FIRST)).status).toBe(503);
+    expect(markOf(FIRST)).toBeUndefined();
+    seam.telephony.down = false;
+    expect((await tick()).body.escalations).toMatchObject({ delivered: 1 });
+    age(FIRST, 11 * MIN);
+    expect((await whatsapp(FIRST)).status).toBe(200);
+    expect(seam.sent).toEqual([PARENT_PHONE, PARENT_PHONE]);
+    expect(escalations()).toHaveLength(2);
+  });
+});
+
+describe('a late WhatsApp redelivery after the sweep reached the manager but could not write its record', () => {
+  /** Nobody reached at first; then the sweep reaches the parent and its record write is refused (and, if asked, the narrow "who was told" update too). */
+  async function sweptButUnrecorded({ narrowUpdateRefused = false } = {}) {
+    seam.telephony.down = true;
+    expect((await whatsapp()).status).toBe(503);
+    seam.telephony.down = false;
+    fail('guardian_escalations', 'upsert', 1);
+    if (narrowUpdateRefused) fail('guardian_escalations', 'update', 1);
+    expect((await tick()).body.escalations).toMatchObject({ examined: 1, unavailable: 1 });
+    expect(seam.sent).toEqual([PARENT_PHONE]);
+    expect(seam.called).toEqual([PARENT_PHONE]);
+    expect(callback(commKey())).toMatchObject({ status: 'error', error: 'Unable to record escalation.' });
+  }
+
+  it('texts and calls nobody again, however late: the claim the attempt marked is final', async () => {
+    await sweptButUnrecorded();
+    expect(escalations()[0]).toMatchObject({ notified_member_ids: [PARENT] });
+    // Twilio redelivers (or the signed request is replayed) once both claims
+    // are past the ten minutes. The defect: the escalation's claim was
+    // reclaimed like any other `error`, and the parent was texted and called
+    // a second time.
+    age(WA_SID, 11 * MIN);
+    age(commKey(), 11 * MIN);
+    expect((await whatsapp()).status).toBe(200);
+    expect(seam.sent, 'texted once').toEqual([PARENT_PHONE]);
+    expect(seam.called, 'called once').toEqual([PARENT_PHONE]);
+    expect(callback(commKey()), 'still final').toMatchObject({ status: 'error', error: 'Unable to record escalation.' });
+    expect(callback(WA_SID)).toMatchObject({ status: 'processed' });
+    expect(escalations()).toHaveLength(1);
+    expect((await tick()).body.escalations).toMatchObject({ examined: 0 });
+    expect(seam.sent).toEqual([PARENT_PHONE]);
+  });
+
+  it('and when the narrow update failed as well, the final claim alone keeps the redelivery and the cron from sending again', async () => {
+    await sweptButUnrecorded({ narrowUpdateRefused: true });
+    expect(escalations()[0]).toMatchObject({ notified_member_ids: [], sms_sent: false });
+    age(WA_SID, 11 * MIN);
+    age(commKey(), 11 * MIN);
+    expect((await whatsapp()).status).toBe(200);
+    expect(seam.sent, 'texted once').toEqual([PARENT_PHONE]);
+    expect(seam.called, 'called once').toEqual([PARENT_PHONE]);
+    expect(callback(commKey())).toMatchObject({ status: 'error', error: 'Unable to record escalation.' });
+    expect((await tick()).body.escalations).toMatchObject({ examined: 0, duplicate: 1 });
+    expect(seam.sent).toEqual([PARENT_PHONE]);
   });
 });
 

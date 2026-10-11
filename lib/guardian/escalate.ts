@@ -27,9 +27,10 @@ export type GuardianEscalationOutcome =
   | { kind: 'read_failed' }
   /**
    * Alerts went out (or there was nobody to alert) but the escalation row could
-   * not be written; the claim is parked as `error`, and when somebody WAS told
-   * a narrow second write records who, so the retry sweep does not read the
-   * row as "nobody reached" and text them all again.
+   * not be written; the claim is parked as `error` — final when somebody WAS
+   * told (ESCALATION_SENT_UNRECORDED), so no retry sends again — and a narrow
+   * second write records who, so the retry sweep does not read the row as
+   * "nobody reached" either.
    */
   | { kind: 'record_failed' }
   /**
@@ -85,10 +86,23 @@ export type GuardianEscalationOptions = {
 };
 
 /**
- * The escalation claim's `error` text when the alerts went out and the record
- * did not land. The retry sweep reads it: such an escalation is never re-sent.
+ * The escalation claim's `error` text when a manager was texted or called and
+ * the record did not land. Such an escalation is never re-sent, whichever way
+ * the retry comes: the claim it marks is final (claimGuardianCallback never
+ * reclaims it, so a redelivery, a replay or the SMS lane's retry finds it
+ * settled), and the retry sweep leaves its record alone. It used to be honoured
+ * by the sweep only, and the claim was reclaimable after ten minutes like any
+ * other `error`: a late redelivery texted and called every manager again.
  */
 export const ESCALATION_SENT_UNRECORDED = 'Unable to record escalation.';
+
+/**
+ * The claim's `error` text when there was nobody to text or call and the record
+ * did not land. Not final: nothing reached a phone, the in-app notice has a
+ * stable id, so a retry after ten minutes repeats nothing and may land the
+ * record.
+ */
+const ESCALATION_UNREACHABLE_UNRECORDED = 'Unable to record escalation; nobody to text or call.';
 
 /** How late a retry has to be before the alert says it is delayed. */
 const DELAYED_ALERT_AFTER_MS = 5 * 60_000;
@@ -134,7 +148,7 @@ export async function escalateGuardianEmergency(
   const { familyId, commId, escalationType, severity, description, callerNumber } = body;
   const { signal, originalAt } = options;
   const callbackId = guardianEscalationEventId(body);
-  const claim = await claimGuardianCallback(supabase, 'emergency_escalation', callbackId);
+  const claim = await claimGuardianCallback(supabase, 'emergency_escalation', callbackId, { finalError: ESCALATION_SENT_UNRECORDED });
   if (claim === 'unavailable') return { kind: 'claim_unavailable' };
   if (claim !== 'claimed') return { kind: 'duplicate' };
 
@@ -348,19 +362,20 @@ export async function escalateGuardianEmergency(
 
   if (escalationError) {
     // Deliberately `error`, not a release: the alerts above have gone out (or,
-    // with nobody to text or call, the in-app notice has), and the ten minutes
-    // before an `error` row can be reclaimed is what keeps an immediate retry
-    // from texting and calling every manager a second time.
+    // with nobody to text or call, the in-app notice has). When a manager was
+    // texted or called the mark makes the claim final — no retry, however
+    // late, texts and calls them again; with nobody reached by phone the
+    // ten minutes before an `error` row can be reclaimed are enough.
     console.error('[guardian] escalation could not be recorded after alerts went out', { familyId, callbackId, notifiedCount: notifiedIds.length, error: escalationError });
-    await markGuardianCallbackError(supabase, callbackId, ESCALATION_SENT_UNRECORDED);
+    await markGuardianCallbackError(supabase, callbackId, notifiedIds.length > 0 ? ESCALATION_SENT_UNRECORDED : ESCALATION_UNREACHABLE_UNRECORDED);
     if (notifiedIds.length > 0) {
-      // Ten minutes is not enough when this was the retry sweep's attempt: the
-      // record it read still says nobody was reached, and once this claim can
-      // be reclaimed the next sweep would text and call every manager again.
-      // So record who WAS told, narrowly, on the row that is already there (a
-      // first attempt has none, and this updates nothing). The sweep also
-      // leaves alone a record whose claim carries the mark above, for when
-      // this write fails as well (lib/guardian/escalation-retry.ts).
+      // The final claim keeps every retry from re-sending; the record should
+      // say so too. When this was the retry sweep's attempt the record it read
+      // still says nobody was reached, so record who WAS told, narrowly, on the
+      // row that is already there (a first attempt has none, and this updates
+      // nothing). The sweep also leaves alone a record whose claim carries the
+      // mark above, for when this write fails as well
+      // (lib/guardian/escalation-retry.ts).
       const { error: toldError } = await supabase.from('guardian_escalations')
         .update({ notified_member_ids: notifiedIds, sms_sent: smsSent, call_attempted: callAttempted, push_sent: pushSent })
         .eq('id', stableId(callbackId, 'escalation')).eq('family_id', familyId)
