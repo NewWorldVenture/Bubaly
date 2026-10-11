@@ -9,6 +9,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type { ToolSpec } from '@/lib/ai/provider';
+import { getTool } from '@/lib/ai/tools/registry';
 import { roleOf } from '@/lib/trust/server';
 import { gateAiAction } from '@/lib/trust/ai-gate';
 
@@ -16,6 +17,14 @@ type DB = SupabaseClient<Database>;
 
 // Write tools that touch family data — all need a trust check.
 // Read tools are intentionally absent; they pass through unchanged.
+//
+// Membership here is what puts a tool behind the gate. The DOMAIN it is gated
+// under is the registry's, whenever the name is a registry alias (all of these
+// are): the family's per-category dial and its trust policies are written
+// against those domains, and a value here that drifted from the registry was a
+// domain no setting could reach. `create_announcement` was gated as
+// 'announcements' — not a trust domain at all — so a household that set
+// Messaging to "suggest only" still had announcements posted for it.
 export const TOOL_DOMAIN: Record<string, string> = {
   create_calendar_event: 'calendar',
   add_chore: 'chores',
@@ -30,7 +39,7 @@ export const TOOL_DOMAIN: Record<string, string> = {
   snooze_reminder: 'scheduling',
   add_note: 'tasks',
   add_goal: 'tasks',
-  create_announcement: 'announcements',
+  create_announcement: 'messaging',
   rsvp_to_event: 'calendar',
 };
 
@@ -76,8 +85,10 @@ export function wrapToolsWithTrust(
   const actorRole = roleOf(memberRole);
 
   return tools.map((tool) => {
-    const domain = TOOL_DOMAIN[tool.name];
-    if (!domain) return tool; // read tools and unrecognised names skip trust
+    const declared = TOOL_DOMAIN[tool.name];
+    if (!declared) return tool; // read tools and unrecognised names skip trust
+    // The registry tool this name aliases owns the domain (see TOOL_DOMAIN).
+    const domain = getTool(tool.name)?.domain ?? declared;
 
     return {
       ...tool,

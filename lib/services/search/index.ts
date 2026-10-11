@@ -152,6 +152,18 @@ async function readSource(
   }
 }
 
+/** What a caller can narrow beyond the service's own per-role rules. */
+export type SearchOptions = {
+  /**
+   * Kinds this caller must not be handed even though the service's own rules
+   * would search them. Their sources are not queried at all, and they are
+   * reported in `withheld` like the money kinds. The assistant passes the
+   * kinds its own context policy keeps from this member (lib/ai/tools/search.ts);
+   * the search page and the command bar pass nothing.
+   */
+  withhold?: readonly SearchKind[];
+};
+
 /**
  * Search everything the caller is allowed to see, ranked, with evidence.
  *
@@ -163,6 +175,7 @@ export async function searchHousehold(
   scope: ServiceScope,
   query: string,
   limit: number = DEFAULT_LIMIT,
+  opts: SearchOptions = {},
 ): Promise<ServiceResult<HouseholdSearch>> {
   const q = sanitizeQuery(query ?? '');
   if (q.length < MIN_QUERY_CHARS) {
@@ -178,9 +191,10 @@ export async function searchHousehold(
   // existing money and document search restrictions remain separate.
   const sensitiveMemory = scope.role === 'system' || isManager(scope.role);
 
-  const sources: Array<{ table: string; run: () => Promise<SourceOutcome> }> = [
+  const sources: Array<{ table: string; kind: SearchKind; run: () => Promise<SourceOutcome> }> = [
     {
       table: 'documents',
+      kind: 'document',
       run: () => readSource('documents', () => db
         .from('documents')
         .select('id, title, category, is_secure, expires_at, created_at, updated_at')
@@ -208,6 +222,7 @@ export async function searchHousehold(
     },
     {
       table: 'inventory_items',
+      kind: 'item',
       run: () => readSource('inventory_items', () => db
         .from('inventory_items')
         .select('id, name, brand, model, serial_number, notes, purchased_on, created_at, updated_at')
@@ -227,6 +242,7 @@ export async function searchHousehold(
     },
     {
       table: 'trips',
+      kind: 'trip',
       run: () => readSource('trips', () => db
         .from('trips')
         .select('id, name, destination, notes, start_date, created_at, updated_at')
@@ -246,6 +262,7 @@ export async function searchHousehold(
     },
     {
       table: 'vacations',
+      kind: 'vacation',
       run: () => readSource('vacations', () => db
         .from('vacations')
         .select('id, title, destination, description, notes, start_date, created_at, updated_at')
@@ -267,6 +284,7 @@ export async function searchHousehold(
     },
     {
       table: 'family_decisions',
+      kind: 'decision',
       run: () => readSource('family_decisions', () => db
         .from('family_decisions')
         .select('id, question, detail, status, created_at, updated_at')
@@ -286,6 +304,7 @@ export async function searchHousehold(
     },
     {
       table: 'calendar_events',
+      kind: 'event',
       run: () => readSource('calendar_events', () => db
         .from('calendar_events')
         .select('id, title, description, location, starts_at, created_at, updated_at')
@@ -305,6 +324,7 @@ export async function searchHousehold(
     },
     {
       table: 'notes',
+      kind: 'note',
       run: () => readSource('notes', () => db
         .from('notes')
         .select('id, title, body, created_at, updated_at')
@@ -324,6 +344,7 @@ export async function searchHousehold(
     },
     {
       table: 'family_facts',
+      kind: 'fact',
       run: () => readSource('family_facts', () => db
         .from('family_facts')
         .select('id, label, value, notes, category, created_at, updated_at')
@@ -356,6 +377,7 @@ export async function searchHousehold(
     sources.push(
       {
         table: 'bills',
+        kind: 'bill',
         run: () => readSource('bills', () => db
           .from('bills')
           .select('id, name, category, due_date, status, created_at, updated_at')
@@ -375,6 +397,7 @@ export async function searchHousehold(
       },
       {
         table: 'home_warranties',
+        kind: 'warranty',
         run: () => readSource('home_warranties', () => db
           .from('home_warranties')
           .select('id, name, provider, coverage, warranty_type, notes, expires_on, created_at, updated_at')
@@ -398,6 +421,7 @@ export async function searchHousehold(
       },
       {
         table: 'renewals',
+        kind: 'renewal',
         run: () => readSource('renewals', () => db
           .from('renewals')
           .select('id, title, category, notes, expires_at, status, created_at, updated_at')
@@ -418,12 +442,17 @@ export async function searchHousehold(
     );
   }
 
-  const outcomes = await Promise.all(sources.map((source) => source.run()));
+  // A kind the caller withholds is not searched at all: a read whose rows are
+  // then thrown away has still been made, and a filter after ranking would
+  // also cost the caller the hits it may see.
+  const withhold = new Set(opts.withhold ?? []);
+  const searchable = sources.filter((source) => !withhold.has(source.kind));
+  const outcomes = await Promise.all(searchable.map((source) => source.run()));
   const partial = outcomes.map((outcome) => outcome.failure).filter((f): f is SearchSourceFailure => f !== null);
 
   // Every source failing is not an empty household — it is an outage, and the
   // caller must be able to render a retryable error rather than "no results".
-  if (partial.length === sources.length) {
+  if (searchable.length > 0 && partial.length === searchable.length) {
     return fail('Could not search your household right now.', { code: SERVICE_CODES.db, retryable: true });
   }
 
@@ -433,7 +462,7 @@ export async function searchHousehold(
     query: q,
     hits,
     partial,
-    searched: sources.filter((source) => !partial.some((f) => f.table === source.table)).map((source) => source.table),
-    withheld: money ? [] : [...MANAGER_ONLY_KINDS],
+    searched: searchable.filter((source) => !partial.some((f) => f.table === source.table)).map((source) => source.table),
+    withheld: [...new Set<SearchKind>([...(money ? [] : MANAGER_ONLY_KINDS), ...withhold])],
   });
 }

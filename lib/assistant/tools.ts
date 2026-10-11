@@ -25,7 +25,7 @@ import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
 import { ensureTodoListId } from '@/lib/services/tasks';
 import { createGoal } from '@/lib/services/goals';
 import { SERVICE_CODES } from '@/lib/services/types';
-import { ROLE_ORDER, type MemberRole } from '@/lib/constants/roles';
+import { isManager, ROLE_ORDER, type MemberRole } from '@/lib/constants/roles';
 
 type DB = SupabaseClient<Database>;
 
@@ -482,8 +482,16 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         const in14 = new Date(now.getTime() + 14 * 86400000).toISOString();
         const in30 = new Date(now.getTime() + 30 * 86400000).toISOString();
         const in45 = new Date(now.getTime() + 45 * 86400000).toISOString();
+        // Money decisions and chore sign-offs wait on a parent, and only a
+        // parent or adult is shown them — Home, Needs-you and the dashboard all
+        // read them for a manager and pass nothing otherwise. An unknown role
+        // is not a manager.
+        const role = knownRole(ctx.role);
+        const manager = role !== null && isManager(role);
         const [appr, ren, docs, dueRem, convEvents, signoff, grocery, todos] = await settleAll([
-          supabase.from('parent_approvals').select('id, kind, amount_cents, created_at').eq('family_id', ctx.familyId).eq('status', 'pending').limit(50),
+          manager
+            ? supabase.from('parent_approvals').select('id, kind, amount_cents, created_at').eq('family_id', ctx.familyId).eq('status', 'pending').limit(50)
+            : Promise.resolve({ data: [] as ParentApprovalRow[], error: null }),
           supabase.from('renewals').select('id, title, expires_at, reminder_days, status, created_at').eq('family_id', ctx.familyId).in('status', ['active', 'expired']).lte('expires_at', in45).limit(50),
           supabase.from('documents').select('id, title, expires_at').eq('family_id', ctx.familyId).not('expires_at', 'is', null).lte('expires_at', in30).limit(50),
           supabase.from('family_reminders').select('id, remind_at, status').eq('family_id', ctx.familyId).eq('status', 'active').not('remind_at', 'is', null).lte('remind_at', todayEnd.toISOString()).limit(100),
@@ -494,7 +502,9 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
             refine: (query) => query.not('assignee_id', 'is', null),
             limit: 200,
           }),
-          supabase.from('chore_assignments').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('status', 'submitted'),
+          manager
+            ? supabase.from('chore_assignments').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('status', 'submitted')
+            : Promise.resolve({ count: 0, error: null }),
           supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('is_checked', false),
           supabase.from('todo_items').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('is_done', false),
         ]);
