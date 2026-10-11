@@ -10,6 +10,31 @@ type AuditEntry = {
   metadata?: Record<string, unknown> | null;
 };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * audit_logs.resource_id is a `uuid` column. A key, an email or a name passed
+ * as resourceId is refused by Postgres with an invalid-uuid error, and the row
+ * is lost (logAudit only reports it to the console). So a non-uuid resourceId
+ * is moved into metadata.resource_key and the column gets null: the row lands
+ * and still says what it was about, whatever a future caller passes.
+ */
+function auditRow(entry: AuditEntry) {
+  const raw = entry.resourceId ?? null;
+  const isUuid = raw !== null && UUID_RE.test(raw);
+  const metadata = raw !== null && !isUuid
+    ? { ...(entry.metadata ?? {}), resource_key: raw }
+    : (entry.metadata ?? null);
+  return {
+    family_id: entry.familyId,
+    actor_id: entry.actorId ?? null,
+    action: entry.action,
+    resource: entry.resource,
+    resource_id: isUuid ? raw : null,
+    metadata: metadata as Database['public']['Tables']['audit_logs']['Insert']['metadata'],
+  };
+}
+
 /** Whether an audit row landed; `error` is what the database answered. */
 export type AuditOutcome = { ok: true } | { ok: false; error: unknown };
 
@@ -30,14 +55,7 @@ export async function recordAudit(
   entry: AuditEntry,
 ): Promise<AuditOutcome> {
   try {
-    const { error } = await supabase.from('audit_logs').insert({
-      family_id: entry.familyId,
-      actor_id: entry.actorId ?? null,
-      action: entry.action,
-      resource: entry.resource,
-      resource_id: entry.resourceId ?? null,
-      metadata: (entry.metadata ?? null) as Database['public']['Tables']['audit_logs']['Insert']['metadata'],
-    });
+    const { error } = await supabase.from('audit_logs').insert(auditRow(entry));
     // The error has to be READ, not caught. A PostgREST call resolves with
     // { data, error } and rejects only under .throwOnError() — without it, even
     // a fetch-level failure is converted into a resolved error. So the catch

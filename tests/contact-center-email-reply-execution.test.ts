@@ -2,6 +2,7 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
+import { familyScopedEmailRef } from '@/lib/contact-center/server';
 
 const mocks = vi.hoisted(() => ({
   admin: vi.fn(), sendEmail: vi.fn(), concierge: vi.fn(), translate: vi.fn(),
@@ -75,7 +76,7 @@ describe('Contact Center email auto-reply acceptance', () => {
     expect((await deliver()).status).toBe(200);
     expect(mocks.sendEmail).toHaveBeenCalledOnce();
     expect(inbound()).toHaveLength(1);
-    expect(inbound()[0]).toMatchObject({ family_id: FAMILY, body: 'A simple note.', provider_ref: 'reply-fixture' });
+    expect(inbound()[0]).toMatchObject({ family_id: FAMILY, body: 'A simple note.', provider_ref: familyScopedEmailRef(FAMILY, 'reply-fixture') });
     expect(outbound()).toEqual([]);
   });
 
@@ -127,8 +128,9 @@ describe('Contact Center email auto-reply acceptance', () => {
     });
     expect(outbound()).toHaveLength(1);
     expect(outbound()[0].body).toBe(LOCALIZED);
-    expect(db.table('ai_tool_calls')).toHaveLength(1);
-    expect(db.table('ai_tool_calls')[0]).toMatchObject({ state: 'succeeded', outputs: { phase: 'in_app_only' } });
+    const urgent = db.table('ai_tool_calls').filter(row => row.tool_name === 'contact_center.urgent_delivery');
+    expect(urgent).toHaveLength(1);
+    expect(urgent[0]).toMatchObject({ state: 'succeeded', outputs: { phase: 'in_app_only' } });
     expect(db.table('notifications')).toHaveLength(1);
   });
 });

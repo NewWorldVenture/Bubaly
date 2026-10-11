@@ -34,6 +34,28 @@ export function documentType(input: DocumentInput): string | null {
   }
 }
 
+/** A failure that the same document will hit again on every retry. */
+class PermanentExtractionError extends Error {
+  override name = 'PermanentExtractionError';
+}
+
+/**
+ * Whether retrying the same bytes can succeed. Only a failure about THIS
+ * document is permanent: a refusal, an unusable transcription, or an HTTP
+ * 400/413/422 rejection of the request. A missing or rejected key, an unknown
+ * model (401/403/404), network, timeout, rate-limit and 5xx failures are
+ * retryable, so the webhook answers 503 and the attachment is redelivered once
+ * the configuration is fixed instead of being skipped. A numeric `status`
+ * decides on its own; message wording never overrides it.
+ */
+const PERMANENT_STATUSES = new Set([400, 413, 422]);
+function isRetryableExtractionError(error: unknown): boolean {
+  if (error instanceof PermanentExtractionError || error instanceof SyntaxError) return false;
+  const status = (error as { status?: unknown } | null)?.status;
+  if (typeof status === 'number') return !PERMANENT_STATUSES.has(status);
+  return true;
+}
+
 /** Transcription only: no tools, actions, links, or document instructions run. */
 export async function extractDocumentText(
   input: DocumentInput,
@@ -69,16 +91,16 @@ export async function extractDocumentText(
       jsonSchema: { type: 'object', properties: { text: { type: 'string' }, truncated: { type: 'boolean' } }, required: ['text', 'truncated'], additionalProperties: false },
       maxTokens: 8192, signal: deadline,
     });
-    if (result.refusal) throw new Error('Document transcription was refused');
+    if (result.refusal) throw new PermanentExtractionError('Document transcription was refused');
     const parsed: unknown = JSON.parse(result.text);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)
       || typeof (parsed as { text?: unknown }).text !== 'string'
-      || typeof (parsed as { truncated?: unknown }).truncated !== 'boolean') throw new Error('Document transcription response is incomplete');
+      || typeof (parsed as { truncated?: unknown }).truncated !== 'boolean') throw new PermanentExtractionError('Document transcription response is incomplete');
     const { text, truncated } = parsed as { text: string; truncated: boolean };
     return { ok: true, text: text.slice(0, MAX_DOCUMENT_TEXT_CHARS), truncated: truncated || text.length > MAX_DOCUMENT_TEXT_CHARS, method: 'multimodal' };
   } catch (error) {
     // Provider errors may contain document data; keep the raw response out of logs.
     console.error('[document-text] extraction failed', error instanceof Error ? error.name : 'provider_error');
-    return { ok: false, reason: 'provider_unavailable', retryable: true };
+    return { ok: false, reason: 'provider_unavailable', retryable: isRetryableExtractionError(error) };
   }
 }

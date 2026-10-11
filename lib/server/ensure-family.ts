@@ -2,6 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServiceClient } from '@/lib/supabase/server';
 import { autoFamilyName, autoOwnerName, DEFAULT_OWNER_DISPLAY_NAME } from '@/lib/onboarding/family';
+import { isChildLoginAccount } from '@/lib/server/child-account';
 
 // Guarantees an authenticated user always has a family space, so onboarding can
 // never trap them in a redirect loop (sign up → land on the dashboard with an
@@ -69,6 +70,15 @@ export async function ensureActiveFamily(
     return false;
   }
   if (existing && existing.length > 0) return true;
+
+  // A parent-issued child login with no active membership was REMOVED from
+  // the family that made it. Provisioning it a household of its own would make
+  // the child that household's parent (billing, invites, AI, child logins),
+  // outside every parental control. It gets no family instead.
+  if (await isChildLoginAccount(admin, user)) {
+    console.error('[ensure-family] refusing to provision a family for a child login', { userId: user.id });
+    return false;
+  }
 
   const { data: profile, error: profileErr } = await admin
     .from('profiles')

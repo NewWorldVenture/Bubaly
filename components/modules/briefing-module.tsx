@@ -676,7 +676,10 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
   const dayStr   = format.fmtDate(now, 'EEEE, MMMM d');
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#07070d] flex flex-col overflow-hidden pt-[var(--safe-top)] pb-[var(--safe-bottom)]">
+    // `dark`: Kitchen Mode stays dark in the light theme, so its text takes the
+    // dark theme's tokens (text-fg, text-muted, border-border); with the light
+    // ones its clock read 1.18:1 on this background (A11Y-001).
+    <div className="dark keep-dark-palette fixed inset-0 z-50 bg-[#07070d] flex flex-col overflow-hidden pt-[var(--safe-top)] pb-[var(--safe-bottom)]">
       {/* Header bar */}
       <div className="flex items-center justify-between px-8 py-4 border-b border-border">
         <div className="flex items-center gap-3">

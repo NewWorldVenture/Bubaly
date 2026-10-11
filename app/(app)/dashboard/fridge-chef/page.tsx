@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { PageHeader } from '@/components/app/page-header';
 import { FridgeChef } from '@/components/meals/fridge-chef';
 import { getTranslations } from '@/lib/i18n/server';
@@ -12,8 +12,9 @@ export const dynamic = 'force-dynamic';
 
 export default async function FridgeChefPage() {
   const t = await getTranslations();
-  // Gate to authenticated family members (the API re-checks auth + rate limits).
-  await requireUserContext();
+  // Fridge Chef is part of Smart Kitchen (its only link is the kitchen
+  // dashboard), so it carries that feature's plan gate; the API re-checks it.
+  await requireFeature('/dashboard/kitchen');
   return (
     <div className="space-y-5">
       <PageHeader

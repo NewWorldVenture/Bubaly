@@ -75,8 +75,14 @@ export function NotificationsModule() {
     // was marked read. Logged rather than toasted, deliberately: an unrecorded
     // read receipt is not worth interrupting someone over. The readback is what
     // makes the log true.
+    //
+    // Bounded to the rows this list shows (own or family-wide): notif_update
+    // also lets a manager write OTHER members' rows, and their read state is
+    // theirs. Family notices from notify() are one row per member, so reading
+    // yours no longer clears anyone else's.
     const { data: rows, error } = await settle(supabase.from('notifications')
-      .update({ is_read: true }).eq('id', id).eq('family_id', familyId).select('id'));
+      .update({ is_read: true }).eq('id', id).eq('family_id', familyId)
+      .or(`user_id.eq.${userId},user_id.is.null`).select('id'));
     if (error) console.error('[notifications] mark-read failed', { message: error.message });
     else if (wroteNoRows(rows)) console.error('[notifications] mark-read changed no row', { id });
     void refresh();
@@ -88,8 +94,13 @@ export function NotificationsModule() {
     // Zero rows here is NORMAL — nothing was unread — so this checks the error
     // only, and is left unconfirmed on purpose. `notifications` is "own row OR
     // manager", not manager-only. Audit C1-S9-82.
+    //
+    // Only the rows this list shows: without the recipient bound, a parent's
+    // "mark all read" cleared every member's personal notices too, because
+    // RLS lets a manager update any row in the family.
     const { error } = await settle(supabase.from('notifications').update({ is_read: true })
-      .eq('family_id', familyId).eq('is_read', false));
+      .eq('family_id', familyId).eq('is_read', false)
+      .or(`user_id.eq.${userId},user_id.is.null`));
     if (error) console.error('[notifications] mark-all-read failed', { message: error.message });
     setMarkingAll(false);
     void refresh();

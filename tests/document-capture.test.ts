@@ -9,11 +9,11 @@ import { uploadCapturedDocument, CAPTURE_DOCUMENT_BYTES } from '@/lib/capture/do
 import { MAX_DOCUMENT_BYTES } from '@/lib/ai/document-text';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 
-const state = vi.hoisted(() => ({ db: null as unknown, provider: null as unknown, signedIn: true, familyId: 'family-1', userId: 'parent-1', stepUp: false }));
+const state = vi.hoisted(() => ({ db: null as unknown, provider: null as unknown, signedIn: true, familyId: 'family-1', userId: 'parent-1', stepUp: false, role: 'parent' }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => state.db }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: async () => {
   if (!state.signedIn) throw new Error('Signed out');
-  return { user: { id: state.userId }, active: { familyId: state.familyId, member: { id: 'member-1' }, family: { timezone: 'UTC' }, role: 'parent' } };
+  return { user: { id: state.userId }, active: { familyId: state.familyId, member: { id: 'member-1' }, family: { timezone: 'UTC' }, role: state.role } };
 } }));
 vi.mock('@/lib/auth/require-aal2', () => ({ aal2Verdict: async () => state.stepUp ? { action: 'step_up', to: '/auth/step-up?next=%2Fdashboard%2Fpaperwork' } : { action: 'allow' } }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
@@ -29,7 +29,7 @@ beforeEach(() => {
   vi.restoreAllMocks();
   vi.spyOn(console, 'error').mockImplementation(() => {});
   state.signedIn = true;
-  state.familyId = 'family-1'; state.userId = 'parent-1'; state.stepUp = false;
+  state.familyId = 'family-1'; state.userId = 'parent-1'; state.stepUp = false; state.role = 'parent';
   db = createInMemorySupabase<DB>({ uniques: { paperwork_items: [['id']] } });
   state.db = db;
   transcribe = vi.fn(async () => ({ text: JSON.stringify({ text, truncated: false }) }));
@@ -109,11 +109,16 @@ describe('document capture receipts', () => {
     expect(transcribe).toHaveBeenCalledTimes(1);
   });
 
-  it.each(['failure', 'missing', 'malformed'] as const)('makes %s provider output retryable instead of saved success', async (kind) => {
+  it.each(['failure', 'missing'] as const)('makes %s provider output retryable instead of saved success', async (kind) => {
     if (kind === 'failure') transcribe.mockRejectedValue(new Error('Provider timeout'));
-    else if (kind === 'missing') state.provider = null;
-    else transcribe.mockResolvedValue({ text: '{}' });
+    else state.provider = null;
     expect(await captureDocument(scope, { captureId, file: file() })).toEqual({ ok: false, reason: 'provider_unavailable', retryable: true });
+    expect(db.table('paperwork_items')).toHaveLength(0);
+  });
+
+  it('reports malformed provider output as a failure the same file will hit again, never as saved success', async () => {
+    transcribe.mockResolvedValue({ text: '{}' });
+    expect(await captureDocument(scope, { captureId, file: file() })).toEqual({ ok: false, reason: 'provider_unavailable', retryable: false });
     expect(db.table('paperwork_items')).toHaveLength(0);
   });
 
@@ -125,6 +130,20 @@ describe('document capture receipts', () => {
     }
     expect(await captureDocument(scope, { captureId, file: new File([new Uint8Array(MAX_DOCUMENT_BYTES + 1)], 'big.txt', { type: 'text/plain' }) })).toMatchObject({ ok: false, reason: 'too_large' });
     expect(transcribe).toHaveBeenCalledTimes(1);
+    expect(db.table('paperwork_items')).toHaveLength(0);
+  });
+
+  it('refuses a view-only guest in the route and the service, before any receipt read, OCR or insert', async () => {
+    state.role = 'guest';
+    for (const body of [{ captureId }, form()]) {
+      const response = await request(body);
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({ ok: false, reason: 'access_denied', retryable: false });
+    }
+    expect(await captureDocument({ ...scope, role: 'guest' }, { captureId, file: file(), sender: 'Lincoln Elementary' }))
+      .toEqual({ ok: false, reason: 'access_denied', retryable: false });
+    expect(db.log).toHaveLength(0);
+    expect(transcribe).not.toHaveBeenCalled();
     expect(db.table('paperwork_items')).toHaveLength(0);
   });
 

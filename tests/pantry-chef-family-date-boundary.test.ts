@@ -21,6 +21,10 @@ vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => {
 } }));
 vi.mock('@/lib/ai/settings', () => ({ getAIConfig: h.forbidden }));
 vi.mock('@/lib/services/groceries', () => ({ ensureDefaultGroceryListId: h.forbidden }));
+// The route's Smart Kitchen gate and AI allowance are covered by
+// tests/fridge-chef-is-a-kitchen-feature.test.ts; this file is about the date.
+vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: async () => null }));
+vi.mock('@/lib/server/ai-access', () => ({ assertAIAccess: h.forbidden, accessDeniedResponse: h.forbidden }));
 import { POST } from '@/app/api/ai/pantry-chef/route';
 
 beforeEach(() => {

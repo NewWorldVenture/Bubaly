@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
+import { superAdminAssurance } from '@/lib/auth/super-admin-assurance';
 import { createServiceClient } from '@/lib/supabase/server';
 import { describeActionError } from '@/lib/supabase/errors';
 import { isFeedbackStatus } from '@/lib/feedback/board';
@@ -21,6 +22,7 @@ const NOTE_MAX = 2000;
 async function guard(): Promise<Guarded> {
   const t = await getTranslations();
   if (!(await isSuperAdmin())) return { ok: false, error: t('actions.notAuthorized') };
+  if (!(await superAdminAssurance()).ok) return { ok: false, error: t('actions.adminConsoleNeedsYourCode') };
   const user = await getUser();
   return { supabase: createServiceClient(), userId: user?.id ?? null };
 }

@@ -504,10 +504,24 @@ describe('Supabase migration filename safety', () => {
     // /family/permissions shows them as read-only on (ROLE-M03).
     // 0471 adds the per-recipient admin digest delivery store, and 0474
     // (reserved for #710) withdraws an admin removed after a digest was
-    // Messaging occupies 0475-0476. Preserve main's owner allocation map:
-    // bill anchor 0488 and feed claim 0490 remain held in supabase/reserved.
-    // Approval, AI privacy and atomic sync candidates are held at 0492-0494.
-    expect(audit.nextVersion).toBe('0477');
+    // Messaging occupies 0475-0476.
+    //
+    // 0477-0485 are the 2026-10-10 audit migrations, numbered consecutively
+    // from 0477 by owner decision of 2026-10-10 (the preserved map's holders
+    // of 0477-0487 take the next free number when they land): 0477 makes an
+    // assistant key the server's to mint and revoke; 0478 lets a guest or
+    // caregiver read but not write a family goal, and only a manager delete
+    // one; 0479 makes a reminder or to-do a manager's or its author's to
+    // delete; 0480 pins who filed an approval request and what it is linked
+    // to; 0481 is the RLS sweep over the household tables; 0482 decides who
+    // may make, unmake and invite a parent; 0483 counts live card holds
+    // against the spend bucket and records both families on an order; 0484
+    // links a document to a trip once and keeps a guest out of paperwork;
+    // 0485 indexes push_devices by device_key. 0486 and 0487 are free.
+    // Preserve main's owner allocation map above that: bill anchor 0488 and
+    // feed claim 0490 remain held in supabase/reserved. Approval, AI privacy
+    // and atomic sync candidates are held at 0492-0494.
+    expect(audit.nextVersion).toBe('0486');
   });
 
   // A hole below the high-water mark is not a free number: `supabase db push`

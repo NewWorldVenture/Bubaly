@@ -10,15 +10,16 @@ import type { Database } from '@/lib/database.types';
 
 const holder = vi.hoisted(() => ({ service: null as SupabaseClient<Database> | null }));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: () => holder.service }));
-vi.mock('@/lib/ai/runs/continue', () => ({ kickRun: () => undefined, continueRun: async () => ({ claimed: false }) }));
+const kicked = vi.hoisted(() => ({ runs: [] as string[] }));
+vi.mock('@/lib/ai/runs/continue', () => ({ kickRun: (id: string) => { kicked.runs.push(id); }, continueRun: async () => ({ claimed: false }) }));
 vi.mock('@/lib/ai/tools/execute', () => ({ executeTool: async () => ({ status: 'denied', reason: 'not in this test', toolCallId: null }) }));
 
-const { expireStale } = await import('@/lib/services/approvals');
+const { expireStale, resumeSettledRuns } = await import('@/lib/services/approvals');
 
 type Call = { table: string; kind: 'select' | 'insert' | 'update'; filters: Record<string, unknown>; payload?: unknown };
 type Row = Record<string, unknown> & { id: string };
 
-function makeStore(seed: Record<string, Row[]>, opts: { failRead?: boolean } = {}) {
+function makeStore(seed: Record<string, Row[]>, opts: { failRead?: boolean; failRunUpdate?: boolean; failStepRead?: boolean } = {}) {
   const tables: Record<string, Row[]> = Object.fromEntries(Object.entries(seed).map(([k, v]) => [k, v.map((r) => ({ ...r }))]));
   const calls: Call[] = [];
   let counter = 0;
@@ -37,6 +38,12 @@ function makeStore(seed: Record<string, Row[]>, opts: { failRead?: boolean } = {
     const filter = (column: string, value: unknown) => { call.filters[column] = value; return b; };
     const resolve = () => {
       if (opts.failRead && call.kind === 'select' && table === 'approval_requests') {
+        return { data: null, error: { code: '57014', message: 'canceling statement due to statement timeout' } };
+      }
+      if (opts.failRunUpdate && call.kind === 'update' && table === 'family_automation_runs') {
+        return { data: null, error: { code: '57014', message: 'canceling statement due to statement timeout' } };
+      }
+      if (opts.failStepRead && call.kind === 'select' && table === 'ai_plan_steps') {
         return { data: null, error: { code: '57014', message: 'canceling statement due to statement timeout' } };
       }
       const rows = tables[table] ?? (tables[table] = []);
@@ -80,7 +87,7 @@ function approval(over: Partial<Row>): Row {
   };
 }
 
-beforeEach(() => { holder.service = null; });
+beforeEach(() => { holder.service = null; kicked.runs = []; });
 
 describe('expireStale', () => {
   it('expires pending rows past their deadline, per family, and blocks the runs parked on them', async () => {
@@ -99,7 +106,7 @@ describe('expireStale', () => {
     holder.service = store.db;
 
     const result = await expireStale(store.db, NOW);
-    expect(result).toEqual({ expired: 2, blockedRuns: 1 });
+    expect(result).toEqual({ expired: 2, blockedRuns: 1, failures: 0 });
 
     const byId = Object.fromEntries(store.tables.approval_requests.map((r) => [r.id, r.status]));
     expect(byId).toEqual({ a1: 'expired', a2: 'expired', a3: 'pending', a4: 'approved' });
@@ -127,7 +134,7 @@ describe('expireStale', () => {
     });
     holder.service = store.db;
     const result = await expireStale(store.db, NOW);
-    expect(result).toEqual({ expired: 1, blockedRuns: 0 });
+    expect(result).toEqual({ expired: 1, blockedRuns: 0, failures: 0 });
     expect(store.tables.family_automation_runs[0].state).toBe('executing');
     expect(store.tables.ai_run_events ?? []).toHaveLength(0);
   });
@@ -140,16 +147,17 @@ describe('expireStale', () => {
     });
     holder.service = store.db;
     const result = await expireStale(store.db, NOW);
-    expect(result).toEqual({ expired: 1, blockedRuns: 1 });
+    expect(result).toEqual({ expired: 1, blockedRuns: 1, failures: 0 });
     expect(store.tables.family_automation_runs[0].state).toBe('blocked');
   });
 
-  it('returns zeros and writes nothing when the sweep read fails', async () => {
+  it('writes nothing and REPORTS the failure when the sweep read fails', async () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const store = makeStore({ approval_requests: [approval({ id: 'a1' })] }, { failRead: true });
     holder.service = store.db;
     const result = await expireStale(store.db, NOW);
-    expect(result).toEqual({ expired: 0, blockedRuns: 0 });
+    // A swallowed read error made the cron answer 200 while nothing expired.
+    expect(result).toEqual({ expired: 0, blockedRuns: 0, failures: 1 });
     expect(store.calls.filter((c) => c.kind === 'update')).toHaveLength(0);
     expect(errors).toHaveBeenCalled();
     errors.mockRestore();
@@ -158,7 +166,95 @@ describe('expireStale', () => {
   it('does nothing when there is nothing due', async () => {
     const store = makeStore({ approval_requests: [approval({ id: 'a1', expires_at: '2026-12-01T00:00:00Z' })] });
     holder.service = store.db;
-    expect(await expireStale(store.db, NOW)).toEqual({ expired: 0, blockedRuns: 0 });
+    expect(await expireStale(store.db, NOW)).toEqual({ expired: 0, blockedRuns: 0, failures: 0 });
     expect(store.calls).toHaveLength(1);
+  });
+
+  it('a run that cannot be blocked keeps its approval pending, so the next tick tries again', async () => {
+    // Expiring first and blocking after stranded the run: the approval was
+    // `expired` (never selected again) and the run stayed `awaiting_approval`
+    // (never leased). Now the approval only expires once its run is blocked.
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const seed = {
+      approval_requests: [approval({ id: 'a1', run_id: 'run-1' })],
+      family_automation_runs: [{ id: 'run-1', family_id: 'fam-1', plan_id: 'plan-1', request_id: null, state: 'awaiting_approval', status: 'pending' }],
+      ai_plan_steps: [{ id: 'step-1', family_id: 'fam-1', plan_id: 'plan-1', status: 'awaiting_approval', approval_id: 'a1', dependency_ids: [] }],
+    };
+    const store = makeStore(seed, { failRunUpdate: true });
+    holder.service = store.db;
+    expect(await expireStale(store.db, NOW)).toEqual({ expired: 0, blockedRuns: 0, failures: 1 });
+    expect(store.tables.approval_requests[0].status).toBe('pending');
+    errors.mockRestore();
+  });
+
+  it('a step read that fails leaves the approval pending and is counted', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const store = makeStore({
+      approval_requests: [approval({ id: 'a1', run_id: 'run-1' })],
+      family_automation_runs: [{ id: 'run-1', family_id: 'fam-1', plan_id: 'plan-1', request_id: null, state: 'awaiting_approval', status: 'pending' }],
+      ai_plan_steps: [{ id: 'step-1', family_id: 'fam-1', plan_id: 'plan-1', status: 'awaiting_approval', approval_id: 'a1', dependency_ids: [] }],
+    }, { failStepRead: true });
+    holder.service = store.db;
+    expect(await expireStale(store.db, NOW)).toMatchObject({ expired: 0, failures: 1 });
+    expect(store.tables.approval_requests[0].status).toBe('pending');
+    errors.mockRestore();
+  });
+});
+
+describe('resumeSettledRuns', () => {
+  const run = (id: string, over: Partial<Row> = {}): Row => ({
+    id, family_id: 'fam-1', plan_id: `plan-${id}`, request_id: null, state: 'awaiting_approval', status: 'pending', ...over,
+  });
+  const step = (id: string, planId: string, over: Partial<Row>): Row => ({
+    id, family_id: 'fam-1', plan_id: planId, status: 'awaiting_approval', approval_id: null, dependency_ids: [], ...over,
+  });
+
+  it('returns to the queue a run still parked on an approval that was already decided or expired', async () => {
+    // decide() commits the status before folding the run; a fold that failed
+    // (or a rejection whose fold was only logged, or an expiry that could not
+    // block) left the run at `awaiting_approval`, which nothing leases.
+    const store = makeStore({
+      approval_requests: [
+        approval({ id: 'approved', status: 'approved' }), approval({ id: 'rejected', status: 'rejected' }),
+        approval({ id: 'expired', status: 'expired' }), approval({ id: 'pending', status: 'pending' }),
+      ],
+      family_automation_runs: [
+        run('r-approved', { request_id: 'req-1' }), run('r-rejected'), run('r-expired'), run('r-pending'), run('r-partial'),
+        run('r-executing', { state: 'executing' }),
+      ],
+      ai_plan_steps: [
+        step('s1', 'plan-r-approved', { approval_id: 'approved' }),
+        step('s2', 'plan-r-rejected', { approval_id: 'rejected' }),
+        step('s3', 'plan-r-expired', { approval_id: 'expired' }),
+        step('s4', 'plan-r-pending', { approval_id: 'pending' }),
+        // A partial fold: the step was released but the run update failed.
+        step('s5', 'plan-r-partial', { status: 'ready', approval_id: 'approved' }),
+      ],
+      ai_requests: [{ id: 'req-1', family_id: 'fam-1', status: 'awaiting_approval' }],
+    });
+    holder.service = store.db;
+    const result = await resumeSettledRuns(store.db, NOW);
+    expect(result).toEqual({ resumed: 4, failures: 0 });
+    const states = Object.fromEntries(store.tables.family_automation_runs.map((r) => [r.id, r.state]));
+    expect(states).toEqual({
+      'r-approved': 'ready', 'r-rejected': 'ready', 'r-expired': 'ready', 'r-partial': 'ready',
+      'r-pending': 'awaiting_approval', 'r-executing': 'executing',
+    });
+    expect(kicked.runs.sort()).toEqual(['r-approved', 'r-expired', 'r-partial', 'r-rejected']);
+    expect(store.tables.ai_requests[0].status).toBe('ready');
+    // Only from `awaiting_approval`, so a run someone else moved is not touched.
+    const runUpdates = store.calls.filter((c) => c.kind === 'update' && c.table === 'family_automation_runs');
+    expect(runUpdates.every((u) => u.filters.state === 'awaiting_approval' && u.filters.family_id === 'fam-1')).toBe(true);
+  });
+
+  it('counts a read it could not make instead of reporting a clean sweep', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const store = makeStore({
+      family_automation_runs: [run('r1')],
+      ai_plan_steps: [step('s1', 'plan-r1', { approval_id: 'a1' })],
+    }, { failStepRead: true });
+    holder.service = store.db;
+    expect(await resumeSettledRuns(store.db, NOW)).toEqual({ resumed: 0, failures: 1 });
+    errors.mockRestore();
   });
 });

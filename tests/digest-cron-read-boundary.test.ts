@@ -67,7 +67,7 @@ vi.mock('@/lib/supabase/server', () => ({
         return { data: state.families, error: null };
       };
       Object.assign(b, {
-        select: () => b, order: () => b, in: () => b, not: () => b, lte: () => b, eq: () => b,
+        select: () => b, order: () => b, in: () => b, not: () => b, lte: () => b, eq: () => b, is: () => b,
         range: (from: number, to: number) => { range = [from, to]; return b; },
         then: (resolve: (v: unknown) => void) => resolve(settle()),
       });

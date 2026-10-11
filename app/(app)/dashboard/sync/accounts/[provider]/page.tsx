@@ -77,7 +77,10 @@ const SETUP: Record<SyncProvider, { steps: string[]; connectHref?: string; docsH
   internal: { authKind: 'native', docsHref: '#', steps: [] },
 };
 
-const STATUS_MSG: Record<string, { tone: 'success' | 'danger'; text: string }> = {
+// `text` is this page's untranslated debt, counted by
+// tests/i18n-ungated-surface-ratchet; new copy is worded from the catalogue
+// through `key` instead of adding to it.
+const STATUS_MSG: Record<string, { tone: 'success' | 'danger' } & ({ text: string } | { key: string })> = {
   'connected=1': { tone: 'success', text: 'Account connected. Run “Sync now” to pull and push your data.' },
   'disconnected=1': { tone: 'success', text: 'Account disconnected and access revoked.' },
   // Disconnected, but the grant at the provider was NOT withdrawn — no adapter,
@@ -90,6 +93,7 @@ const STATUS_MSG: Record<string, { tone: 'success' | 'danger'; text: string }> =
   'error=state_mismatch': { tone: 'danger', text: 'Security check failed (state mismatch). Please try connecting again.' },
   'error=denied': { tone: 'danger', text: 'Authorization was cancelled or denied.' },
   'error=connect_failed': { tone: 'danger', text: 'Could not complete the connection. Please try again.' },
+  'error=connected_elsewhere': { tone: 'danger', key: 'sync.accountConnectedInAnotherFamily' },
   // The disconnect route reports this when the account row could not be
   // deleted. It must not fall through to 'disconnected=1' above: that line
   // tells the member their access was revoked, and here it was not.
@@ -166,7 +170,7 @@ export default async function SyncProviderPage({
 
       {banner && (
         <div className={`rounded-xl border p-3 text-sm ${banner.tone === 'success' ? 'border-success/25 bg-success/10 text-success' : 'border-danger/25 bg-danger/10 text-danger'}`}>
-          {banner.text}
+          {'key' in banner ? t(banner.key) : banner.text}
         </div>
       )}
 

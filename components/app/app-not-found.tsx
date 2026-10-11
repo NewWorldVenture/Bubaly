@@ -1,7 +1,6 @@
-import Link from 'next/link';
 import { getTranslations } from '@/lib/i18n/server';
 import { Compass } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { ButtonLink } from '@/components/ui/button-link';
 
 // Shared 404 body for in-shell "not found" boundaries. Section-level
 // not-found.tsx files render this INSIDE the app frame, so the sidebar/nav
@@ -37,8 +36,8 @@ export async function AppNotFound({
       <h1 className="mt-5 text-2xl font-semibold">{title}</h1>
       <p className="mt-2 max-w-md text-sm text-muted">{description}</p>
       <div className="mt-6 flex flex-col gap-2 sm:flex-row">
-        <Link href={backHref}><Button>{backLabel}</Button></Link>
-        <Link href="/home"><Button variant="outline">{t('appNotFound.home')}</Button></Link>
+        <ButtonLink href={backHref}>{backLabel}</ButtonLink>
+        <ButtonLink href="/home" variant="outline">{t('appNotFound.home')}</ButtonLink>
       </div>
     </div>
   );

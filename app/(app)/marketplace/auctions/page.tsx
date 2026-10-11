@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils/cn';
 import { getTranslations } from '@/lib/i18n/server';
 import { getFormat } from '@/lib/utils/format-server';
 import { MARKETPLACE_CURRENCY } from '@/lib/marketplace/listings';
-import { RESERVE_VIEW_COLUMNS, readWithReserveView } from '@/lib/marketplace/reserve-view';
+import { readLiveAuctions, type LiveAuctionRow } from '@/lib/marketplace/circle-reads';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -29,12 +29,7 @@ async function ReadFailure() {
   );
 }
 
-type Row = {
-  id: string; title: string; photo_url: string | null; category: string;
-  sale_format: string; status: string; starting_bid_cents: number; current_bid_cents: number;
-  bid_count: number; has_reserve: boolean; reserve_met: boolean; buy_now_cents: number | null;
-  auction_starts_at: string | null; auction_ends_at: string | null;
-};
+type Row = LiveAuctionRow;
 
 /** Live auctions board — the eBay-beating surface: ending-soon first, with live
  *  countdowns, bid counts, reserve state, and Buy-It-Now flags. */
@@ -48,19 +43,12 @@ export default async function AuctionsPage() {
   const sb = await createServer();
   const now = new Date();
 
-  // Family + reachable (RLS/circles) auctions that are still open, soonest-ending first.
-  // Through readWithReserveView: this has to render on a database 0452 has not
-  // reached yet as well as one it has (lib/marketplace/reserve-view.ts).
-  const { data, error } = await readWithReserveView<Row[]>(
-    `id, title, photo_url, category, sale_format, status, starting_bid_cents, current_bid_cents, bid_count, ${RESERVE_VIEW_COLUMNS}, buy_now_cents, auction_starts_at, auction_ends_at`,
-    (columns) => sb
-      .from('marketplace_listings')
-      .select(columns)
-      .eq('sale_format', 'auction').eq('status', 'available')
-      .gt('auction_ends_at', now.toISOString())
-      .order('auction_ends_at', { ascending: true })
-      .limit(60),
-  );
+  // Family + reachable (circle) auctions that are still open, soonest-ending
+  // first: the family's own from the table, other families' through the
+  // circle view when the database has it (lib/marketplace/circle-reads.ts).
+  // Each read goes through readWithReserveView, so this renders on a database
+  // 0452 has not reached yet as well as one it has.
+  const { data, error } = await readLiveAuctions(sb, ctx.active.familyId, now.toISOString());
   if (error) {
     console.error('[marketplace-auctions] listing read failed', error);
     return <ReadFailure />;

@@ -41,7 +41,7 @@ export type PolicyHistory = {
   approvals: ApprovalHistoryRow[];
   toolCalls: ToolCallHistoryRow[];
   existingPolicies: ExistingAiPolicy[];
-  existingSuggestions: { id: string; dedupe_key: string; status: string; detail: string | null; confidence: number }[];
+  existingSuggestions: { id: string; dedupe_key: string; status: string; detail: string | null; confidence: number; updated_at: string | null }[];
 };
 
 /** A legacy alias in `payload.name` resolves to the canonical registry name; an unknown name is kept as written. */
@@ -73,7 +73,7 @@ export async function loadPolicyHistory(supabase: DB, familyId: string, now: Dat
       .select('id, domain, capability, effect, enabled, conditions')
       .eq('family_id', familyId).in('subject_kind', ['ai', 'everyone']).eq('enabled', true).limit(200),
     supabase.from('autopilot_suggestions')
-      .select('id, dedupe_key, status, detail, confidence')
+      .select('id, dedupe_key, status, detail, confidence, updated_at')
       .eq('family_id', familyId).eq('kind', POLICY_SUGGESTION_KIND).not('dedupe_key', 'like', 'archived:%').limit(200),
   ]);
 
@@ -105,6 +105,7 @@ export async function loadPolicyHistory(supabase: DB, familyId: string, now: Dat
     })),
     existingSuggestions: (suggestionsResult.data ?? []).map((s) => ({
       id: s.id, dedupe_key: s.dedupe_key, status: s.status, detail: s.detail, confidence: s.confidence,
+      updated_at: s.updated_at ?? null,
     })),
   };
 }
@@ -150,9 +151,17 @@ export async function runPolicyScan(
         // matched nothing (resolved by a parent since the read). Counted only
         // when one changed; zero rows is ordinary, so it is not an error.
         // Audit C1-S9-69.
-        const { data: refreshedRow, error } = await supabase.from('autopilot_suggestions')
+        //
+        // Fenced on the status (and the version) this scan READ: a row a
+        // manager accepted or a member dismissed since then matches nothing,
+        // instead of having its recorded evidence rewritten under the cron's
+        // service role — or, in a member's own session, tripping the 0327
+        // resolver guard on someone else's resolution and failing the scan.
+        let refresh = supabase.from('autopilot_suggestions')
           .update({ detail: d.detail, confidence: d.confidence, payload: d.payload as never, expires_at: d.expiresAt })
-          .eq('id', prior.id).eq('family_id', familyId).select('id');
+          .eq('id', prior.id).eq('family_id', familyId).eq('status', 'open');
+        if (prior.updated_at) refresh = refresh.eq('updated_at', prior.updated_at);
+        const { data: refreshedRow, error } = await refresh.select('id');
         if (error) throw new Error('Autopilot could not refresh the policy suggestion');
         if (!wroteNoRows(refreshedRow)) refreshed++;
       }

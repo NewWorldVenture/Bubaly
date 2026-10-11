@@ -216,17 +216,28 @@ for (const engine of ['google', 'generic'] as const) {
       });
 
       // An orphan adopted and recovered by several pulls. The nth item refresh
-      // (an item write carrying remote content) first runs stages[n]; every
-      // generation token a takeover writes to the mapping is recorded.
-      const staged = (stages: (() => Promise<void>)[]) => {
+      // (an item write carrying remote content) first runs stages[n]; the nth
+      // TOUCH (the takeover's fence-minting item write) first runs
+      // touchStages[n]; every generation token a takeover writes to the
+      // mapping is recorded. The fixture awaits `gate` before it applies a
+      // request, so a pull held at its touch has committed its mapping
+      // compare-and-set and written nothing to the item yet.
+      // The touch is the only item PATCH whose body is exactly
+      // { metadata: { origin: 'remote' } }: a refresh carries title, a
+      // cancellation carries deleted_at.
+      const isTouch = (body: Record<string, unknown> | null) =>
+        !!body && Object.keys(body).length === 1 && JSON.stringify(body.metadata) === '{"origin":"remote"}';
+      const staged = (stages: (() => Promise<void>)[], touchStages: (() => Promise<void>)[] = []) => {
         const remote: Record<string, unknown> = kind === 'event' ? { ...event } : { ...task };
         let refreshes = 0;
+        let touches = 0;
         const tokens: string[] = [];
         const state = syncSdkFixture(kind === 'event' ? [remote as typeof event] : [], {
           rpcFailure: 'missing', tasks: kind === 'reminder' ? [remote as typeof task] : [],
           gate: async ({ table: target, method, body }) => {
             const adoption = (body?.metadata as { adoption?: { token?: unknown } } | undefined)?.adoption;
             if (target === 'sync_external_mappings' && method === 'PATCH' && typeof adoption?.token === 'string') tokens.push(adoption.token);
+            if (target === table && method === 'PATCH' && isTouch(body)) await touchStages[touches++]?.();
             if (target === table && method === 'PATCH' && body?.title !== undefined) await stages[refreshes++]?.();
           },
         });
@@ -234,7 +245,7 @@ for (const engine of ['google', 'generic'] as const) {
         state.rows[table] = [{ id: 'orphan', ...container, family_id: ACCOUNT.family_id, user_id: ACCOUNT.user_id,
           provider: 'google', external_id: external, title: 'Stale partial write', content_hash: 'stale', deleted_at: '2026-05-01T00:00:00Z',
           updated_at: '2026-05-01T00:00:00.000Z' }];
-        return { ...state, remote, tokens, refreshes: () => refreshes };
+        return { ...state, remote, tokens, refreshes: () => refreshes, touches: () => touches };
       };
       const hang = () => new Promise<void>(() => {});
       const pause = () => {
@@ -246,6 +257,27 @@ for (const engine of ['google', 'generic'] as const) {
       const cancelRemote = (remote: Record<string, unknown>) =>
         Object.assign(remote, kind === 'event' ? { status: 'cancelled' } : { deleted: true });
       const SEEDED_DELETION = '2026-05-01T00:00:00Z';
+      // Undo cancelRemote: googleEventToRow reads a missing status as live and
+      // googleTaskToReminderRow a missing `deleted` as false.
+      const restoreRemote = (remote: Record<string, unknown>) => { delete remote.status; delete remote.deleted; };
+      const retitle = (remote: Record<string, unknown>, title: string) => { remote[kind === 'event' ? 'summary' : 'title'] = title; };
+
+      // A publishes a pending claim and stops for good before its refresh. G0
+      // takes A's claim over and is held between its compare-and-set and its
+      // touch: the claim is G0's ('syncing', one token taken) and the item is
+      // still exactly as A left it.
+      const claimThenHoldAtTouch = async (g0: ReturnType<typeof pause>, laterTouches: (() => Promise<void>)[] = []) => {
+        const state = staged([hang], [g0.stage, ...laterTouches]);
+        void run(state.db);
+        await vi.waitFor(() => expect(state.refreshes()).toBe(1));
+        expect(maps(state.rows)).toEqual([expect.objectContaining({ local_id: 'orphan', sync_status: 'pending' })]);
+        const stale = run(state.db);
+        await g0.at;
+        expect(maps(state.rows)).toEqual([expect.objectContaining({ local_id: 'orphan', sync_status: 'syncing' })]);
+        expect(state.tokens).toHaveLength(1);
+        expect(state.touches()).toBe(1);
+        return { ...state, stale };
+      };
 
       it(`${kind} a cancellation after the claim keeps its receipt and association; the paused claimant fails`, async () => {
         const a = pause();
@@ -314,6 +346,143 @@ for (const engine of ['google', 'generic'] as const) {
         expect((await first).error).toBeDefined();
         expect(rows[table]).toEqual([completedByR2]);
         expect(maps(rows)).toEqual([mappingR2]);
+      });
+
+      // A takeover's touch mints the fence every later item write of its
+      // generation carries. Held between its compare-and-set and that touch,
+      // a generation is superseded without having written anything; when it
+      // resumes it must not manufacture a fresh fence for a claim it no longer
+      // holds. Exact row equality (updated_at included) proves no write landed.
+      it(`${kind} a takeover held between its compare-and-set and its touch never overwrites the newer snapshot a later pull completed`, async () => {
+        const g0 = pause();
+        const { db, rows, remote, stale, tokens, touches } = await claimThenHoldAtTouch(g0);
+
+        retitle(remote, 'Newer remote snapshot');
+        expect((await run(db)).error).toBeUndefined(); // G1 takes G0's claim over, refreshes, completes
+        const completedByG1 = { ...rows[table].find(row => row.id === 'orphan') };
+        expect(completedByG1).toMatchObject({ title: 'Newer remote snapshot', deleted_at: null, user_id: ACCOUNT.user_id });
+        const mappingG1 = { ...maps(rows)[0] };
+        expect(mappingG1).toMatchObject({ local_id: 'orphan', sync_status: 'synced', metadata: { lastHash: completedByG1.content_hash } });
+        expect(new Set(tokens).size).toBe(2);
+        if (kind === 'event') expect(rows.sync_calendars[0].sync_token).toBe(NEXT);
+
+        g0.resume();
+        expect((await stale).error).toContain(`${kind} adoption takeover`);
+        expect(touches()).toBe(2); // G0's held touch missed; it stopped at the token re-check without a re-touch
+        expect(rows[table]).toEqual([completedByG1]);
+        expect(maps(rows)).toEqual([mappingG1]);
+        if (kind === 'event') expect(rows.sync_calendars[0].sync_token).toBe(NEXT);
+      });
+
+      it(`${kind} a takeover held between its compare-and-set and its touch never revives the item a later pull cancelled`, async () => {
+        const g0 = pause();
+        const { db, rows, remote, stale, touches } = await claimThenHoldAtTouch(g0);
+
+        cancelRemote(remote);
+        expect((await run(db)).error).toBeUndefined(); // G1 cancels under a generation of its own
+        const cancelledByG1 = { ...rows[table].find(row => row.id === 'orphan') };
+        expect(cancelledByG1.deleted_at).toEqual(expect.any(String));
+        expect(cancelledByG1.deleted_at).not.toBe(SEEDED_DELETION);
+        const mappingG1 = { ...maps(rows)[0] };
+        expect(mappingG1).toMatchObject({ local_id: 'orphan', sync_status: 'synced', metadata: {} });
+        if (kind === 'event') expect(rows.sync_calendars[0].sync_token).toBe(NEXT);
+
+        g0.resume();
+        expect((await stale).error).toContain(`${kind} adoption takeover`);
+        expect(touches()).toBe(2); // G0's held touch missed; it stopped at the token re-check without a re-touch
+        expect(rows[table]).toEqual([cancelledByG1]);
+        expect(maps(rows)).toEqual([mappingG1]);
+        if (kind === 'event') expect(rows.sync_calendars[0].sync_token).toBe(NEXT);
+      });
+
+      it(`${kind} a cancellation held between its compare-and-set and its touch never deletes the item a later pull refreshed live`, async () => {
+        const g0 = pause();
+        const { db, rows, remote, refreshes, touches } = staged([hang], [g0.stage]);
+        void run(db); // A claims pending, then stops for good before its refresh
+        await vi.waitFor(() => expect(refreshes()).toBe(1));
+        cancelRemote(remote);
+        const stale = run(db); // G0 is a cancellation: it takes the claim over and is held at its touch
+        await g0.at;
+        expect(maps(rows)).toEqual([expect.objectContaining({ local_id: 'orphan', sync_status: 'syncing' })]);
+        expect(touches()).toBe(1);
+
+        restoreRemote(remote);
+        retitle(remote, 'Back on the calendar');
+        expect((await run(db)).error).toBeUndefined(); // G1 refreshes the item live
+        const liveByG1 = { ...rows[table].find(row => row.id === 'orphan') };
+        expect(liveByG1).toMatchObject({ title: 'Back on the calendar', deleted_at: null });
+        const mappingG1 = { ...maps(rows)[0] };
+        expect(mappingG1).toMatchObject({ local_id: 'orphan', sync_status: 'synced', metadata: { lastHash: liveByG1.content_hash } });
+        if (kind === 'event') expect(rows.sync_calendars[0].sync_token).toBe(NEXT);
+
+        g0.resume();
+        expect((await stale).error).toContain(`${kind} adoption takeover`);
+        expect(touches()).toBe(2); // G0's held touch missed; it stopped at the token re-check without a re-touch
+        expect(rows[table]).toEqual([liveByG1]);
+        expect(maps(rows)).toEqual([mappingG1]);
+        if (kind === 'event') expect(rows.sync_calendars[0].sync_token).toBe(NEXT);
+      });
+
+      // The mirror ordering: G0's touch and refresh land between G1's
+      // compare-and-set and G1's touch. G1's touch misses its fence and G1
+      // heals itself once: it re-reads the fence, proves the claim is still
+      // its own, re-touches and refreshes over G0's writes. G0's completion
+      // misses on the token. The touch count pins that the re-touch happened.
+      it(`${kind} the newer generation heals over a stale write that landed before its touch`, async () => {
+        const g0 = pause(), g1 = pause();
+        const { db, rows, remote, stale, tokens, touches } = await claimThenHoldAtTouch(g0, [g1.stage]);
+
+        retitle(remote, 'Newer remote snapshot');
+        const newer = run(db);
+        await g1.at; // G1 took G0's claim over and is held before its touch
+        expect(new Set(tokens).size).toBe(2);
+        expect(touches()).toBe(2);
+
+        g0.resume();
+        expect((await stale).error).toContain(`${kind} adoption completion`); // G0 touched and refreshed, then lost on the token
+        expect(rows[table][0]).toMatchObject({ title: kind === 'event' ? event.summary : task.title });
+
+        g1.resume();
+        expect((await newer).error).toBeUndefined();
+        expect(touches()).toBe(3);
+        const healed = { ...rows[table].find(row => row.id === 'orphan') };
+        expect(healed).toMatchObject({ title: 'Newer remote snapshot', deleted_at: null, user_id: ACCOUNT.user_id });
+        expect(maps(rows)).toEqual([expect.objectContaining({ local_id: 'orphan', sync_status: 'synced', metadata: { lastHash: healed.content_hash } })]);
+        if (kind === 'event') expect(rows.sync_calendars[0].sync_token).toBe(NEXT);
+      });
+
+      // Reconciliation: when the healing re-touch is itself refused (a third
+      // generation took the claim over in between), nothing completes under
+      // the refused generation, no cursor moves for it, and the next pull takes
+      // the 'syncing' claim over and repairs.
+      it(`${kind} a recovery refused twice commits nothing and the next pull repairs`, async () => {
+        const g0 = pause(), g1 = pause(), g1again = pause();
+        // Touch stages: G0's touch, G1's first touch, G1's healing re-touch; G2's touch (the fourth) is not held.
+        const { db, rows, remote, stale, tokens, touches } = await claimThenHoldAtTouch(g0, [g1.stage, g1again.stage]);
+        retitle(remote, 'Newer remote snapshot');
+        const newer = run(db);
+        await g1.at; // G1 held before its first touch
+        g0.resume();
+        expect((await stale).error).toContain(`${kind} adoption completion`);
+        g1.resume(); // G1's first touch misses; it re-reads, proves its token, and is held before its re-touch
+        await g1again.at;
+        expect(touches()).toBe(3);
+        if (kind === 'event') expect(rows.sync_calendars[0].sync_token).toBe(STALE);
+
+        retitle(remote, 'Third snapshot');
+        expect((await run(db)).error).toBeUndefined(); // G2 takes G1's claim over and completes
+        const byG2 = { ...rows[table].find(row => row.id === 'orphan') };
+        expect(byG2).toMatchObject({ title: 'Third snapshot', deleted_at: null });
+        const mappingG2 = { ...maps(rows)[0] };
+        expect(mappingG2).toMatchObject({ local_id: 'orphan', sync_status: 'synced', metadata: { lastHash: byG2.content_hash } });
+
+        g1again.resume();
+        expect((await newer).error).toContain(`${kind} adoption takeover`);
+        expect(touches()).toBe(4);
+        expect(rows[table]).toEqual([byG2]);
+        expect(maps(rows)).toEqual([mappingG2]);
+        expect(new Set(tokens).size).toBe(3);
+        if (kind === 'event') expect(rows.sync_calendars[0].sync_token).toBe(NEXT);
       });
 
       it(`${kind} an orphan that changes owner after the lookup is never adopted`, async () => {

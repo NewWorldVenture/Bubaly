@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
+import { superAdminAssurance } from '@/lib/auth/super-admin-assurance';
 import { describeActionError } from '@/lib/supabase/errors';
 import { emailSchema } from '@/lib/validation';
 import type { Database } from '@/lib/database.types';
@@ -26,6 +27,7 @@ function actionFailure(operation: string, message: string, error: unknown): Acti
 async function guard(): Promise<GuardResult> {
   const t = await getTranslations();
   if (!(await isSuperAdmin())) return { ok: false, error: t('actions.notAuthorized') };
+  if (!(await superAdminAssurance()).ok) return { ok: false, error: t('actions.adminConsoleNeedsYourCode') };
   return { supabase: createServiceClient() };
 }
 
