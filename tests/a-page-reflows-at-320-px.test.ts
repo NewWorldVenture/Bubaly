@@ -72,6 +72,15 @@ describe('a page reflows at 320 px', () => {
     expect(src('components/guardian/call-history.tsx')).toContain('<div className="flex flex-wrap gap-1.5">');
     expect(src('components/referrals/referral-panel.tsx')).toContain('className="h-11 min-w-0 flex-1 rounded-xl');
     expect(src('components/modules/immunizations-module.tsx')).toContain('<div className="flex flex-wrap items-center justify-between gap-3">');
+    // Their member filter and Add: the row wraps and the filter, as wide as its
+    // longest name, is capped at the row (rendered: tests/e2e/a-health-header-reflows-at-320-px.spec.ts).
+    for (const f of ['components/modules/health-visits-module.tsx', 'components/modules/immunizations-module.tsx']) {
+      expect(src(f), f).toContain('<div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">');
+      expect(src(f), f).toContain('className="h-9 min-w-0 max-w-full rounded-lg border border-border bg-surface px-2 text-sm">');
+    }
+    // Two more member filters a long name widened past the screen, capped at their row.
+    expect(src('app/(app)/dashboard/activity/activity-feed.tsx')).toContain('className="ml-auto min-w-0 max-w-full rounded-lg border');
+    expect(src('components/modules/timetable-module.tsx')).toContain('className="h-9 w-auto min-w-0 max-w-full">');
     // A full URL is one word: it breaks anywhere rather than push the card past the screen.
     expect(src('app/(app)/dashboard/assistants/page.tsx').match(/<code className="break-all text-xs">https:\/\//g)).toHaveLength(2);
   });
