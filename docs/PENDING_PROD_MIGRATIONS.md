@@ -136,6 +136,8 @@ source allocations are not evidence that production applied any migration.
 | 0511 proposed, held | `0511_a_medication_is_read_by_managers_its_member_and_caregivers.sql` | A row of `medications` is read by a manager of its family, the member it is for, or a caregiver, inside `is_family_member(family_id)` (one saved with no member, the form's default, by a manager or a caregiver); a `medication_schedules` row exactly when its medication is. Writes and `medication_doses` unchanged. The autopilot refill names the drug only to those readers. Decided by the account holder (0434's filed read; takes over the closed #674's candidate); requested on #771 (comment 6104294318), not yet confirmed. |
 | 0512 proposed, held | `0512_a_kid_login_is_never_a_parent_or_adult.sql` | A member whose account is a kid login (the synthetic kid address or the server's `bubaly_kid_login` mark; not a mapping alone, for 0495's reason) is refused a parent or adult role when the role or the login changes, and a kid-login mapping is refused for a parent or adult member or an account that is one in any family (42501, every caller). Nothing stored is changed. Decided by the account holder ("refuse until the PIN login is gone"); requested on #771 (comment 6104294318), not yet confirmed. |
 | 0513 proposed, held | `0513_a_removed_member_keeps_no_social_raise.sql` | When a member is removed (`is_active` to false) or their row deleted, their `social_access_permissions` grant in that family is deleted if its social role carries any permission their role's default lacks; a restriction stays. Adds `social_role_permissions(social_role)`, the matrix as a set. Decided by the account holder ("drop raises, keep limits"); requested on #771 (comment 6104294318), not yet confirmed. |
+| 0516 proposed, held | `0516_location_history_is_read_by_managers_the_member_and_caregivers.sql` | A row of `location_events`, `safety_check_ins` or `driving_trips` is read by a manager of its family, the member it is about, or a caregiver, inside `is_family_member(family_id)`. Live location keeps its own rule; writes unchanged. Decided by the account holder (the audit's open sensitive-table finding, location group); requested on #771 (comment 6109587749), not yet confirmed. |
+| 0517 proposed, held | `0517_a_personal_record_is_read_by_managers_and_its_member.sql` | A row of `insurance_policies`, `family_insurance_policies`, `vacation_documents` or `voice_commands` is read by a manager of its family or the member it is about, inside `is_family_member(family_id)`; `vacation_medical_information` and `health_providers` also by a caregiver. The two travel tables' FOR ALL policies are split so their member-wide writes stay exactly as they were. Decided by the account holder (the audit's open sensitive-table finding, personal-records group); requested on #771 (comment 6109587749), not yet confirmed. |
 
 Held files remain in `supabase/reserved/`; normal migration replay and
 `supabase db push` do not load them. Reserved gaps must be fulfilled by their
@@ -4768,6 +4770,135 @@ Dropping any one table's trigger turns the probe red on that table. 184 of
 families, try to vote in one family's poll under their member id from the
 other family and confirm 42501; then vote as their own member there and
 confirm it lands.
+
+## `0517` (proposed, held) — every member read every member's personal records
+
+`supabase/reserved/0517_a_personal_record_is_read_by_managers_and_its_member.sql`
+— **held**: requested on #771 in comment 6109587749. Not yet confirmed.
+
+**Severity: medium (a child read a parent's policy numbers and passport
+details, and the household's verbatim voice commands). Deploy order: any; the
+screens ship first.** Six tables of records about one member read with
+`is_family_member(family_id)`. Measured on a replay through 0485, in Paper
+House (one row per table about each member, and one about nobody): the teen,
+the child and the guest each read **6 rows that are not theirs in each
+table**; the caregiver read 6 in each of the four personal tables.
+
+**Database.** One permissive read per table, "A personal record is read by a
+manager or its member":
+- `insurance_policies`, `family_insurance_policies`, `vacation_documents`,
+  `voice_commands`: `is_family_member(family_id) and (can_manage_family(family_id) or is_self_member(member_id))`;
+- `vacation_medical_information`, `health_providers`: the same `or
+  family_role(family_id) = 'caregiver'`, as the owner decided for medical
+  detail.
+
+A row about nobody is a manager's (and, for the medical two, a caregiver's).
+`vacation_documents` and `vacation_medical_information` each had one FOR ALL
+policy; its write half is re-created per command with that policy's own
+expressions before the read is narrowed, so writes are exactly as they were.
+The held 0509's guest guards are kept.
+
+**App, shipping with the source** (`lib/records/personal-scope.ts`, the same
+rule):
+- the insurance hub, the medical and dental records pages, the trip documents
+  and travel medical sections, the trip emergency summary and the voice
+  history show each viewer the rows the rule gives them, and the insurance
+  summaries are of what is shown;
+- a viewer who reads only their own is told so, and the trip forms offer them
+  only themselves as the record's member, so what they file stays readable to
+  them;
+- copy in seven locales.
+
+**Released probes made rule-aware:**
+- `journal-and-policy-boundary-check.sql` expects a household policy that
+  names nobody to be a manager's under 0517;
+- `health-write-gate-check.sql` and
+  `a-child-cannot-lift-the-publish-lock-or-link-a-document-they-cannot-read-check.sql`
+  make their fixture rows the teen's and the child's own, so their controls
+  stay about the write rule.
+
+All three pass with and without 0517. The held 0509 probe counts the four
+guest-guarded tables as already closed to a guest under 0517.
+
+**Proof:** `.github/workflows/personal-records-runtime.yml` requires the held
+probe
+`docs/audit/reserved/a-personal-record-is-read-by-managers-and-its-member-check.sql`
+to fail on the released schema on the defect, with no control failing, then
+applies 0517 twice and requires it to pass. The passing run shows:
+- the teen, the child and the guest read their own row and no other, in all
+  six;
+- the caregiver reads their own only in the four personal tables, and every
+  row in the two medical ones;
+- the parent and the adult read every row; the teen reads the household they
+  manage;
+- the removed caregiver and a stranger read nothing;
+- the service role, with and without a user id, reads every row;
+- the child's own travel document, travel medical detail and voice command come
+  back from `insert … returning`, and the child updates and deletes their own
+  travel document (`OK 1` each);
+- **wiring:** the exact predicates, and the travel tables' member-wide writes;
+- **N1** (the family-wide read put back): the child reads the ward's row in
+  all six;
+- **M1** (a caregiver clause on `voice_commands`): the caregiver reads the
+  ward's command.
+
+**After approved release:** sign a test teen in and confirm the insurance hub,
+the medical records page and a trip's documents show only what names them.
+
+## `0516` (proposed, held) — every member read every member's location history
+
+`supabase/reserved/0516_location_history_is_read_by_managers_the_member_and_caregivers.sql`
+— **held**: requested on #771 in comment 6109587749 (numbers `0514`–`0517`
+for the four groups of the audit's open sensitive-table finding). Not yet
+confirmed.
+
+**Severity: medium (a child read a sibling's or parent's arrivals,
+coordinates and driving record). Deploy order: any; the screens ship first.**
+`location_events`, `safety_check_ins` and `driving_trips` read with
+`is_family_member(family_id)`. Measured on a replay of every runnable
+migration through 0485, in Trail House (one row per table about each member):
+the teen, the child and the guest each read **5 or 6 rows about other members
+in each table**.
+
+**Database.** One permissive read per table, "History is read by a manager, the
+member or a caregiver":
+`is_family_member(family_id) and (can_manage_family(family_id) or is_self_member(member_id) or family_role(family_id) = 'caregiver')`.
+A row about nobody is a manager's or a caregiver's. The restrictive guards
+(0509's guest guard, the no-client update and delete guards) are kept; writes
+are unchanged. Live location (`member_locations`) keeps its own sharing rule.
+
+**App, shipping with the source** (`lib/location/history-scope.ts`, the same
+rule): the locator's history and arrival alerts, the check-in feed and the
+driving log show each viewer the rows the rule gives them. A viewer who reads
+only their own is told so, in seven locales.
+
+**Released probes made rule-aware:**
+- `a-location-says-who-was-actually-there-check.sql` expects a child to read
+  every member's history before 0516, and only their own after.
+- `locator-write-boundary-check.sql` checks the refused delete against the
+  stored row, read as the owner.
+
+Both pass with and without 0516. The held 0509 probe counts the three tables as
+already closed to a guest under 0516.
+
+**Proof:** `.github/workflows/location-history-runtime.yml` requires the held
+probe
+`docs/audit/reserved/location-history-is-read-by-managers-the-member-and-caregivers-check.sql`
+to fail on the released schema (the teen's, the child's and the guest's reads
+and the wiring), with no control failing, then applies 0516 twice and requires
+it to pass. The passing run shows, in each table:
+- the teen, the child and the guest read their own row and no other;
+- the parent, the adult and the caregiver read every row, and the teen reads
+  the household they manage;
+- the removed caregiver and a stranger read nothing;
+- the service role, with and without a user id, reads every row;
+- the child's own arrival and check-in and the teen's own trip come back from
+  `insert … returning` (`OK 1`);
+- **N1** (the family-wide read put back): the child reads the ward's row;
+- **M1** (the outer `is_family_member` taken off): the removed caregiver does.
+
+**After approved release:** sign a test child in and confirm the locator's
+history, the check-ins and the driving log show only their own.
 
 ## `0513` (proposed, held) — a member invited back got their old social raise
 

@@ -16928,5 +16928,13 @@
   "childAccessManager.removeLoginFor": "Supprimer la connexion enfant de {name}",
   "childAccessManager.removeTheKidLoginConfirm": "Supprimer la connexion enfant de {name} ? Il ne pourra plus se connecter avec son identifiant et son code PIN. Sa place dans la famille reste.",
   "childAccessManager.loginRemovedFor": "La connexion enfant de {name} a été supprimée.",
-  "familyModule.aKidLoginCannotBeAManager": "{name} se connecte avec un code PIN enfant et ne peut donc pas être parent ou adulte. Supprime d'abord sa connexion enfant dans Connexions enfants ; un parent ou un adulte se connecte avec sa propre adresse e-mail."
+  "familyModule.aKidLoginCannotBeAManager": "{name} se connecte avec un code PIN enfant et ne peut donc pas être parent ou adulte. Supprime d'abord sa connexion enfant dans Connexions enfants ; un parent ou un adulte se connecte avec sa propre adresse e-mail.",
+  "locator.onlyYourOwnHistory": "Tu vois ton propre historique de positions. Un parent, un adulte ou un aidant voit celui de tout le monde.",
+  "checkInView.onlyYourOwnCheckIns": "Tu vois tes propres signalements. Un parent, un adulte ou un aidant voit ceux de tout le monde.",
+  "drivingSafetyView.onlyYourOwnTrips": "Tu vois tes propres trajets. Un parent, un adulte ou un aidant voit ceux de tout le monde.",
+  "medicalRecordsModule.onlyYourOwnInsurance": "Tu vois les assurances à ton nom. Un parent ou un adulte voit celles de tout le foyer.",
+  "medicalRecordsModule.onlyYourOwnProviders": "Tu vois tes propres praticiens. Un parent, un adulte ou un aidant voit ceux de tout le foyer.",
+  "insuranceModule.onlyPoliciesThatNameYou": "Tu vois les contrats à ton nom. Un parent ou un adulte voit ceux de tout le foyer.",
+  "shared.onlyYourOwnRecords": "Tu vois ici tes propres fiches. Un parent ou un adulte voit celles de tout le monde.",
+  "shared.onlyYourOwnMedicalRecords": "Tu vois ici tes propres informations médicales. Un parent, un adulte ou un aidant voit celles de tout le monde."
 }

@@ -209,7 +209,20 @@ declare
                           || case when exists (select 1 from pg_policies p
                                                 where p.schemaname = 'public' and p.tablename = 'medications'
                                                   and p.policyname = 'A medication is read by a manager, its member or a caregiver')
-                                  then array['medications', 'medication_schedules'] else '{}'::text[] end;
+                                  then array['medications', 'medication_schedules'] else '{}'::text[] end
+                          -- The held 0516: location history is read by a manager,
+                          -- the member or a caregiver.
+                          || case when exists (select 1 from pg_policies p
+                                                where p.schemaname = 'public' and p.tablename = 'location_events'
+                                                  and p.policyname = 'History is read by a manager, the member or a caregiver')
+                                  then array['location_events', 'safety_check_ins', 'driving_trips'] else '{}'::text[] end
+                          -- The held 0517: a personal record is read by a manager
+                          -- or its member (a caregiver too for the medical two).
+                          || case when exists (select 1 from pg_policies p
+                                                where p.schemaname = 'public' and p.tablename = 'insurance_policies'
+                                                  and p.policyname = 'A personal record is read by a manager or its member')
+                                  then array['insurance_policies', 'family_insurance_policies', 'health_providers', 'vacation_medical_information']
+                                  else '{}'::text[] end;
   installed boolean := to_regprocedure('public.is_family_guest(uuid)') is not null
                        and exists (select 1 from pg_policies p where p.schemaname = 'public'
                                      and p.policyname = 'A guest does not read member_locations');

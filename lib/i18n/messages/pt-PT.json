@@ -16928,5 +16928,13 @@
   "childAccessManager.removeLoginFor": "Remover o acesso infantil de {name}",
   "childAccessManager.removeTheKidLoginConfirm": "Remover o acesso infantil de {name}? Deixa de poder entrar com o nome de utilizador e o PIN. O lugar na família mantém-se.",
   "childAccessManager.loginRemovedFor": "O acesso infantil de {name} foi removido.",
-  "familyModule.aKidLoginCannotBeAManager": "{name} entra com um PIN infantil, por isso não pode ser pai, mãe ou adulto. Remove primeiro o acesso infantil em Acessos de crianças; um pai, mãe ou adulto entra com o seu próprio email."
+  "familyModule.aKidLoginCannotBeAManager": "{name} entra com um PIN infantil, por isso não pode ser pai, mãe ou adulto. Remove primeiro o acesso infantil em Acessos de crianças; um pai, mãe ou adulto entra com o seu próprio email.",
+  "locator.onlyYourOwnHistory": "Vês o teu próprio histórico de localizações. Um pai ou mãe, um adulto ou um cuidador vê o de todos.",
+  "checkInView.onlyYourOwnCheckIns": "Vês os teus próprios check-ins. Um pai ou mãe, um adulto ou um cuidador vê os de todos.",
+  "drivingSafetyView.onlyYourOwnTrips": "Vês as tuas próprias viagens. Um pai ou mãe, um adulto ou um cuidador vê as de todos.",
+  "medicalRecordsModule.onlyYourOwnInsurance": "Vês os seguros em teu nome. Um pai ou mãe ou um adulto vê os de toda a casa.",
+  "medicalRecordsModule.onlyYourOwnProviders": "Vês os teus próprios profissionais. Um pai ou mãe, um adulto ou um cuidador vê os de toda a casa.",
+  "insuranceModule.onlyPoliciesThatNameYou": "Vês as apólices em teu nome. Um pai ou mãe ou um adulto vê as de toda a casa.",
+  "shared.onlyYourOwnRecords": "Aqui vês os teus próprios registos. Um pai ou mãe ou um adulto vê os de todos.",
+  "shared.onlyYourOwnMedicalRecords": "Aqui vês os teus próprios dados médicos. Um pai ou mãe, um adulto ou um cuidador vê os de todos."
 }

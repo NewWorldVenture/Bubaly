@@ -16928,5 +16928,13 @@
   "childAccessManager.removeLoginFor": "Quitar el acceso infantil de {name}",
   "childAccessManager.removeTheKidLoginConfirm": "¿Quitar el acceso infantil de {name}? No podrá entrar con su usuario y PIN. Su lugar en la familia se mantiene.",
   "childAccessManager.loginRemovedFor": "Se quitó el acceso infantil de {name}.",
-  "familyModule.aKidLoginCannotBeAManager": "{name} entra con un PIN infantil, así que no puede ser padre, madre ni adulto. Quita primero su acceso infantil en Accesos de niños; un padre, madre o adulto entra con su propio correo."
+  "familyModule.aKidLoginCannotBeAManager": "{name} entra con un PIN infantil, así que no puede ser padre, madre ni adulto. Quita primero su acceso infantil en Accesos de niños; un padre, madre o adulto entra con su propio correo.",
+  "locator.onlyYourOwnHistory": "Ves tu propio historial de ubicaciones. Un padre o madre, un adulto o un cuidador ve el de todos.",
+  "checkInView.onlyYourOwnCheckIns": "Ves tus propios avisos de llegada. Un padre o madre, un adulto o un cuidador ve los de todos.",
+  "drivingSafetyView.onlyYourOwnTrips": "Ves tus propios trayectos. Un padre o madre, un adulto o un cuidador ve los de todos.",
+  "medicalRecordsModule.onlyYourOwnInsurance": "Ves los seguros que te nombran. Un padre o madre o un adulto ve los de todo el hogar.",
+  "medicalRecordsModule.onlyYourOwnProviders": "Ves tus propios profesionales. Un padre o madre, un adulto o un cuidador ve los de todo el hogar.",
+  "insuranceModule.onlyPoliciesThatNameYou": "Ves las pólizas que te nombran. Un padre o madre o un adulto ve las de todo el hogar.",
+  "shared.onlyYourOwnRecords": "Aquí ves tus propios registros. Un padre o madre o un adulto ve los de todos.",
+  "shared.onlyYourOwnMedicalRecords": "Aquí ves tus propios datos médicos. Un padre o madre, un adulto o un cuidador ve los de todos."
 }

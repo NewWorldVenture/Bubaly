@@ -16928,5 +16928,13 @@
   "childAccessManager.removeLoginFor": "Kinder-Login von {name} entfernen",
   "childAccessManager.removeTheKidLoginConfirm": "Den Kinder-Login von {name} entfernen? Die Anmeldung mit Benutzername und PIN ist dann nicht mehr möglich. Der Platz in der Familie bleibt.",
   "childAccessManager.loginRemovedFor": "Der Kinder-Login von {name} wurde entfernt.",
-  "familyModule.aKidLoginCannotBeAManager": "{name} meldet sich mit einer Kinder-PIN an und kann daher kein Elternteil oder Erwachsener sein. Entferne zuerst den Kinder-Login unter Kinder-Logins; Eltern und Erwachsene melden sich mit ihrer eigenen E-Mail an."
+  "familyModule.aKidLoginCannotBeAManager": "{name} meldet sich mit einer Kinder-PIN an und kann daher kein Elternteil oder Erwachsener sein. Entferne zuerst den Kinder-Login unter Kinder-Logins; Eltern und Erwachsene melden sich mit ihrer eigenen E-Mail an.",
+  "locator.onlyYourOwnHistory": "Du siehst deinen eigenen Standortverlauf. Eltern, Erwachsene und Betreuungspersonen sehen den aller.",
+  "checkInView.onlyYourOwnCheckIns": "Du siehst deine eigenen Check-ins. Eltern, Erwachsene und Betreuungspersonen sehen die aller.",
+  "drivingSafetyView.onlyYourOwnTrips": "Du siehst deine eigenen Fahrten. Eltern, Erwachsene und Betreuungspersonen sehen die aller.",
+  "medicalRecordsModule.onlyYourOwnInsurance": "Du siehst die Versicherungen, in denen du genannt bist. Eltern und Erwachsene sehen die des ganzen Haushalts.",
+  "medicalRecordsModule.onlyYourOwnProviders": "Du siehst deine eigenen Behandelnden. Eltern, Erwachsene und Betreuungspersonen sehen die des ganzen Haushalts.",
+  "insuranceModule.onlyPoliciesThatNameYou": "Du siehst die Policen, in denen du genannt bist. Eltern und Erwachsene sehen die des ganzen Haushalts.",
+  "shared.onlyYourOwnRecords": "Du siehst hier deine eigenen Einträge. Eltern und Erwachsene sehen die aller.",
+  "shared.onlyYourOwnMedicalRecords": "Du siehst hier deine eigenen medizinischen Angaben. Eltern, Erwachsene und Betreuungspersonen sehen die aller."
 }

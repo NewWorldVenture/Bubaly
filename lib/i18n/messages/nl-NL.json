@@ -16928,5 +16928,13 @@
   "childAccessManager.removeLoginFor": "Kinderlogin van {name} verwijderen",
   "childAccessManager.removeTheKidLoginConfirm": "De kinderlogin van {name} verwijderen? Inloggen met gebruikersnaam en pincode kan dan niet meer. De plek in het gezin blijft.",
   "childAccessManager.loginRemovedFor": "De kinderlogin van {name} is verwijderd.",
-  "familyModule.aKidLoginCannotBeAManager": "{name} logt in met een kinderpincode en kan dus geen ouder of volwassene zijn. Verwijder eerst de kinderlogin bij Kinderlogins; een ouder of volwassene logt in met een eigen e-mailadres."
+  "familyModule.aKidLoginCannotBeAManager": "{name} logt in met een kinderpincode en kan dus geen ouder of volwassene zijn. Verwijder eerst de kinderlogin bij Kinderlogins; een ouder of volwassene logt in met een eigen e-mailadres.",
+  "locator.onlyYourOwnHistory": "Je ziet je eigen locatiegeschiedenis. Een ouder, volwassene of verzorger ziet die van iedereen.",
+  "checkInView.onlyYourOwnCheckIns": "Je ziet je eigen check-ins. Een ouder, volwassene of verzorger ziet die van iedereen.",
+  "drivingSafetyView.onlyYourOwnTrips": "Je ziet je eigen ritten. Een ouder, volwassene of verzorger ziet die van iedereen.",
+  "medicalRecordsModule.onlyYourOwnInsurance": "Je ziet de verzekeringen op jouw naam. Een ouder of volwassene ziet die van het hele huishouden.",
+  "medicalRecordsModule.onlyYourOwnProviders": "Je ziet je eigen zorgverleners. Een ouder, volwassene of verzorger ziet die van het hele huishouden.",
+  "insuranceModule.onlyPoliciesThatNameYou": "Je ziet de polissen op jouw naam. Een ouder of volwassene ziet die van het hele huishouden.",
+  "shared.onlyYourOwnRecords": "Je ziet hier je eigen gegevens. Een ouder of volwassene ziet die van iedereen.",
+  "shared.onlyYourOwnMedicalRecords": "Je ziet hier je eigen medische gegevens. Een ouder, volwassene of verzorger ziet die van iedereen."
 }

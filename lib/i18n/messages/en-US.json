@@ -16928,5 +16928,13 @@
   "childAccessManager.removeLoginFor": "Remove {name}'s kid login",
   "childAccessManager.removeTheKidLoginConfirm": "Remove {name}'s kid login? They won't be able to sign in with their username and PIN. Their place in the family stays.",
   "childAccessManager.loginRemovedFor": "{name}'s kid login was removed.",
-  "familyModule.aKidLoginCannotBeAManager": "{name} signs in with a kid PIN, so they can't be a parent or adult. Remove their kid login in Kid Logins first; a parent or adult signs in with their own email."
+  "familyModule.aKidLoginCannotBeAManager": "{name} signs in with a kid PIN, so they can't be a parent or adult. Remove their kid login in Kid Logins first; a parent or adult signs in with their own email.",
+  "locator.onlyYourOwnHistory": "You see your own location history. A parent, adult or caregiver sees everyone's.",
+  "checkInView.onlyYourOwnCheckIns": "You see your own check-ins. A parent, adult or caregiver sees everyone's.",
+  "drivingSafetyView.onlyYourOwnTrips": "You see your own trips. A parent, adult or caregiver sees everyone's.",
+  "medicalRecordsModule.onlyYourOwnInsurance": "You see the insurance that names you. A parent or adult sees the household's.",
+  "medicalRecordsModule.onlyYourOwnProviders": "You see your own providers. A parent, adult or caregiver sees the household's.",
+  "insuranceModule.onlyPoliciesThatNameYou": "You see the policies that name you. A parent or adult sees the household's.",
+  "shared.onlyYourOwnRecords": "You see your own records here. A parent or adult sees everyone's.",
+  "shared.onlyYourOwnMedicalRecords": "You see your own medical details here. A parent, adult or caregiver sees everyone's."
 }

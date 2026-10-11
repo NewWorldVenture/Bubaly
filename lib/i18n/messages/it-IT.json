@@ -16928,5 +16928,13 @@
   "childAccessManager.removeLoginFor": "Rimuovi l'accesso bambino di {name}",
   "childAccessManager.removeTheKidLoginConfirm": "Rimuovere l'accesso bambino di {name}? Non potrà più entrare con nome utente e PIN. Il suo posto in famiglia resta.",
   "childAccessManager.loginRemovedFor": "L'accesso bambino di {name} è stato rimosso.",
-  "familyModule.aKidLoginCannotBeAManager": "{name} entra con un PIN da bambino, quindi non può essere genitore o adulto. Rimuovi prima il suo accesso bambino in Accessi bambini; un genitore o un adulto entra con la propria email."
+  "familyModule.aKidLoginCannotBeAManager": "{name} entra con un PIN da bambino, quindi non può essere genitore o adulto. Rimuovi prima il suo accesso bambino in Accessi bambini; un genitore o un adulto entra con la propria email.",
+  "locator.onlyYourOwnHistory": "Vedi la tua cronologia delle posizioni. Un genitore, un adulto o un assistente vede quella di tutti.",
+  "checkInView.onlyYourOwnCheckIns": "Vedi i tuoi check-in. Un genitore, un adulto o un assistente vede quelli di tutti.",
+  "drivingSafetyView.onlyYourOwnTrips": "Vedi i tuoi viaggi. Un genitore, un adulto o un assistente vede quelli di tutti.",
+  "medicalRecordsModule.onlyYourOwnInsurance": "Vedi le assicurazioni che ti riguardano. Un genitore o un adulto vede quelle di tutta la famiglia.",
+  "medicalRecordsModule.onlyYourOwnProviders": "Vedi i tuoi medici. Un genitore, un adulto o un assistente vede quelli di tutta la famiglia.",
+  "insuranceModule.onlyPoliciesThatNameYou": "Vedi le polizze che ti riguardano. Un genitore o un adulto vede quelle di tutta la famiglia.",
+  "shared.onlyYourOwnRecords": "Qui vedi le tue voci. Un genitore o un adulto vede quelle di tutti.",
+  "shared.onlyYourOwnMedicalRecords": "Qui vedi i tuoi dati medici. Un genitore, un adulto o un assistente vede quelli di tutti."
 }
