@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createClient } from '@supabase/supabase-js';
 import { dispatchPendingPushes, sendPushToUser } from '@/lib/server/push';
 import type { Database } from '@/lib/database.types';
+import { at } from './helpers/source-order';
 
 // Real installed SDK and dispatcher. Finite synthetic REST relationships and
 // inert device providers do not establish SQL/RLS or atomic provider admission.
@@ -84,7 +85,9 @@ describe('queued family push observes current user preference after endpoint wor
     const f = fixture({ broadcast });
     transport.endpoint.mockImplementationOnce(async () => { f.events.push('endpoint:begin'); await Promise.resolve(); f.tables.user_preferences[0].push_enabled = false; f.events.push('preference:off'); return true; });
     expect((await dispatchPendingPushes(f.db, { now: NOW })).result).toEqual(counts({ withheld: 1 })); noLeak(f); expect(f.errors).toEqual([]); expect(f.tables.notifications[0].pushed_at).not.toBeNull();
-    const preferenceRead=f.events.lastIndexOf('sdk:user_preferences:GET'); expect(f.events.indexOf('preference:off')).toBeLessThan(preferenceRead); expect(f.finalReads()).toEqual([]);
+    const preferenceRead=f.events.lastIndexOf('sdk:user_preferences:GET');
+    expect(preferenceRead).toBeGreaterThanOrEqual(0);
+    expect(at(f.events, 'preference:off')).toBeLessThan(preferenceRead); expect(f.finalReads()).toEqual([]);
   });
   it('withholds a native payload after opt-out during device lookup', async () => {
     let f: ReturnType<typeof fixture>; f=fixture({ onDevices: () => { f.tables.user_preferences[0].push_enabled=false; } });
@@ -111,7 +114,8 @@ describe('queued family push observes current user preference after endpoint wor
   });
   it('current true permission retains delivery with exact user and one-row preference qualifiers',async()=>{
     const f=fixture(); expect((await dispatchPendingPushes(f.db,{now:NOW})).result).toEqual(counts({sent:1}));
-    const reads=f.calls.filter(c=>c.table==='user_preferences'&&c.query.user_id?.startsWith('eq.')); expect(reads).toHaveLength(1); expect(reads[0].query).toEqual({select:'user_id,push_enabled',user_id:'eq.'+USER,limit:'1'}); expect(f.events.lastIndexOf('sdk:user_preferences:GET')).toBeLessThan(f.events.lastIndexOf('sdk:family_members:GET')); expect(f.errors).toEqual([]);
+    const reads=f.calls.filter(c=>c.table==='user_preferences'&&c.query.user_id?.startsWith('eq.')); expect(reads).toHaveLength(1); expect(reads[0].query).toEqual({select:'user_id,push_enabled',user_id:'eq.'+USER,limit:'1'}); const preferenceRead=f.events.lastIndexOf('sdk:user_preferences:GET'), memberRead=f.events.lastIndexOf('sdk:family_members:GET');
+    expect(preferenceRead).toBeGreaterThanOrEqual(0); expect(memberRead).toBeGreaterThanOrEqual(0); expect(preferenceRead).toBeLessThan(memberRead); expect(f.errors).toEqual([]);
   });
   it('an initial opt-out still accesses no devices or final preference query',async()=>{
     const f=fixture(); f.tables.user_preferences[0].push_enabled=false; expect((await dispatchPendingPushes(f.db,{now:NOW})).result).toEqual(counts({withheld:1})); noLeak(f); expect(f.calls.some(c=>c.table==='push_devices')).toBe(false); expect(f.calls.filter(c=>c.table==='user_preferences')).toHaveLength(1); expect(f.errors).toEqual([]);

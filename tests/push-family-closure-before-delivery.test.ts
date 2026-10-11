@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createClient } from '@supabase/supabase-js';
 import { dispatchPendingPushes, sendPushToUser } from '@/lib/server/push';
 import type { Database } from '@/lib/database.types';
+import { at } from './helpers/source-order';
 
 // Real installed SDK and dispatcher. Finite synthetic REST relationships and
 // inert device providers do not establish SQL/RLS or atomic provider admission.
@@ -79,7 +80,8 @@ describe('queued family push observes closure after endpoint work', () => {
     transport.endpoint.mockImplementationOnce(async () => { f.events.push('endpoint:begin'); await Promise.resolve(); f.close(); f.events.push('endpoint:finish'); return true; });
     const result = await dispatchPendingPushes(f.db, { now: NOW });
     expect(result.result).toEqual(counts({ withheld: 1 })); noLeak(f); expect(f.tables.notifications[0].pushed_at).not.toBeNull();
-    expect(f.finalReads()).toHaveLength(1); expect(f.events.indexOf('family:closed')).toBeLessThan(f.events.lastIndexOf('sdk:family_members:GET'));
+    expect(f.finalReads()).toHaveLength(1); const memberRead=f.events.lastIndexOf('sdk:family_members:GET');
+    expect(memberRead).toBeGreaterThanOrEqual(0); expect(at(f.events, 'family:closed')).toBeLessThan(memberRead);
   });
   it('retains the first accepted-device receipt and withholds a later device after family closure', async () => {
     const f = fixture({ devices: 2 });
