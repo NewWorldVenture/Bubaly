@@ -20,6 +20,11 @@ const TOKEN = 'contact-center-test-token';
 const SMS = '/api/contact-center/sms';
 const SMS_SID = `SM${'2'.repeat(32)}`;
 const VOICEMAIL = `/api/contact-center/voice/transcription?familyId=${FAMILY}`;
+// The texts below come from a parent's own phone: the number their login
+// confirmed with a one-time code, which is what lets an inbound text be planned
+// at all (lib/contact-center/server.ts `verifiedInboundSender`). A voicemail's
+// caller ID proves nothing, so a voicemail is filed and never planned.
+const PARENT = { member: '33333333-3333-4333-8333-333333333333', user: '44444444-4444-4444-8444-444444444444', phone: '+15555550200' };
 let db: ReturnType<typeof createInMemorySupabase>;
 
 function twilioRequest(path: string, fields: Record<string, string> = {}, valid = true) {
@@ -61,6 +66,10 @@ beforeEach(() => {
     defaults: { family_inbox_messages: { ai_handled: false, direction: 'inbound', status: 'new', occurred_at: '2026-09-12T00:00:00.000Z' } } });
   db.seed('families', [{ id: FAMILY, name: 'Ours', timezone: 'UTC' }]);
   db.seed('family_contact_channels', [{ id: 'channel-ours', family_id: FAMILY, phone_number: '+15555550100', email_local: 'ours', ai_concierge_enabled: false }]);
+  db.seed('family_members', [{ id: PARENT.member, family_id: FAMILY, user_id: PARENT.user, role: 'parent', is_active: true }]);
+  Object.assign(db.auth, { admin: { getUserById: async (id: string) => (id === PARENT.user
+    ? { data: { user: { id, phone: PARENT.phone.slice(1), phone_confirmed_at: '2026-01-01T00:00:00Z' } }, error: null }
+    : { data: { user: null }, error: { message: 'User not found', status: 404 } }) } });
   mocks.admin.mockReturnValue(db);
   mocks.concierge.mockResolvedValue({ intent: 'appointment', summary: 'A visit request', reply: 'Thank you', aiUsed: false });
   mocks.submit.mockImplementation(async (scope, input) => {
@@ -99,7 +108,13 @@ describe('Contact Center provider callbacks through middleware', () => {
   });
 });
 
-describe.each([{ path: SMS, status: 200, channel: 'sms' }, { path: VOICEMAIL, status: 204, channel: 'voice' }])('$channel callback durable intake recovery', ({ path, status, channel }) => {
+// The planner handoff exists only for a text from a member's own confirmed
+// phone, so its recovery is driven through the SMS callback.
+describe('sms callback durable planner handoff', () => {
+  const path = SMS;
+  const status = 200;
+  const channel = 'sms';
+
   it.each(['returned failure', 'thrown failure'])('returns 503 after %s, retries saved work, then deduplicates', async failure => {
     if (failure === 'returned failure') mocks.submit.mockResolvedValueOnce({ ok: false, error: 'Planner unavailable', retryable: true });
     else mocks.submit.mockRejectedValueOnce(new Error('Planner unavailable'));
@@ -109,7 +124,6 @@ describe.each([{ path: SMS, status: 200, channel: 'sms' }, { path: VOICEMAIL, st
     expect(db.table('ai_requests')).toHaveLength(0);
     const recovered = await deliver(path);
     expect(recovered.status).toBe(status);
-    if (status === 204) expect(await recovered.text()).toBe('');
     expect(db.table('family_inbox_messages')).toHaveLength(1);
     expect(db.table('family_inbox_messages')[0].ai_handled).toBe(true);
     expect(db.table('ai_requests')).toHaveLength(1);
@@ -122,7 +136,7 @@ describe.each([{ path: SMS, status: 200, channel: 'sms' }, { path: VOICEMAIL, st
     expect(db.table('ai_requests')).toHaveLength(1);
   });
 
-  it('retries after system family scope could not be read', async () => {
+  it('retries after the family scope could not be read', async () => {
     // A missing family row is a no-scope outcome, before intake can run.
     db.table('families').splice(0);
     expect((await deliver(path)).status).toBe(503);
@@ -191,6 +205,38 @@ describe.each([{ path: SMS, status: 200, channel: 'sms' }, { path: VOICEMAIL, st
     expect(mocks.submit.mock.calls[0][1].clientRequestId).toBe(mocks.submit.mock.calls[1][1].clientRequestId);
   });
 
+});
+
+describe('voice callback: filed for a person, never planned', () => {
+  it('files a voicemail once, plans nothing from it, and acknowledges every replay', async () => {
+    expect((await deliver(VOICEMAIL)).status).toBe(204);
+    const replay = await deliver(VOICEMAIL);
+    expect(replay.status).toBe(204);
+    expect(await replay.text()).toBe('');
+    expect(db.table('family_inbox_messages')).toHaveLength(1);
+    expect(db.table('family_inbox_messages')[0]).toMatchObject({ channel: 'voice', ai_handled: false });
+    expect(mocks.submit).not.toHaveBeenCalled();
+    expect(db.table('ai_requests')).toHaveLength(0);
+  });
+
+  it('still refuses to acknowledge a duplicate when its required handled-state read fails', async () => {
+    expect((await deliver(VOICEMAIL)).status).toBe(204);
+    const from = db.from.bind(db);
+    vi.spyOn(db, 'from').mockImplementation(((table: string) => {
+      const query = from(table);
+      const select = query.select.bind(query);
+      query.select = ((...args: Parameters<typeof query.select>) => {
+        if (table === 'family_inbox_messages' && args[0] === 'ai_handled') throw new Error('Read unavailable');
+        return select(...args);
+      }) as typeof query.select;
+      return query;
+    }) as typeof db.from);
+    expect((await deliver(VOICEMAIL)).status).toBe(503);
+    expect(mocks.submit).not.toHaveBeenCalled();
+  });
+});
+
+describe.each([{ path: SMS, status: 200, channel: 'sms' }, { path: VOICEMAIL, status: 204, channel: 'voice' }])('$channel callback durable intake recovery', ({ path, status, channel }) => {
   it('fails closed when the deduplicated message belongs to another family', async () => {
     db.seed('family_inbox_messages', [{ id: 'foreign-message', family_id: 'family-other', channel, provider_ref: channel === 'sms' ? SMS_SID : 'RE_test_delivery', ai_handled: false }]);
     expect((await deliver(path)).status).toBe(503);

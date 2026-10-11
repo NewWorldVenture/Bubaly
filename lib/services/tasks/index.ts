@@ -899,7 +899,7 @@ export async function respawnMissingChoreAssignments(
 export async function completeChoreAssignment(scope: ServiceScope, assignmentId: string): Promise<ServiceResult<ChoreAssignment>> {
   const { data: assignment, error: readError } = await scope.db
     .from('chore_assignments')
-    .select('id, chore_id')
+    .select('id, chore_id, member_id, status')
     .eq('id', assignmentId)
     .eq('family_id', scope.familyId)
     .maybeSingle();
@@ -908,6 +908,22 @@ export async function completeChoreAssignment(scope: ServiceScope, assignmentId:
     return fail(describeDbError(readError, 'Could not load that chore.'), { code: SERVICE_CODES.db });
   }
   if (!assignment) return fail('That chore could not be found.', { code: SERVICE_CODES.notFound });
+
+  // 0374's rule, in code: your own assignment, or a manager's decision. The
+  // run executor writes with the service client, which RLS and 0374's
+  // settled-row guard both let through (`auth.uid() is null`), so a teen's
+  // assistant could mark a sibling's chore done — or pull an approved one, and
+  // its points, back to "submitted". `can_manage_family` is parent or adult
+  // (MANAGER_ROLES); a system actor (a cron) is the household itself.
+  const decidesForAnyone = scope.role === 'parent' || scope.role === 'adult' || scope.role === 'system';
+  if (!decidesForAnyone) {
+    if (assignment.member_id !== scope.memberId) {
+      return fail((await getTranslations())('chores.notYourAssignment'), { code: SERVICE_CODES.denied });
+    }
+    if (assignment.status === 'approved') {
+      return fail((await getTranslations())('chores.approvedIsSettled'), { code: SERVICE_CODES.denied });
+    }
+  }
 
   const { data: chore, error: choreError } = await scope.db
     .from('chores')

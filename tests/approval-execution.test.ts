@@ -288,6 +288,9 @@ describe('decide — tool payloads', () => {
         requested_by_kind: 'member', requested_by_member_id: 'member-9', agent: null,
         payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } }, payload_kind: 'tool',
       })],
+      // The member who filed it, active in this family: their request is gated
+      // again under their own role (tests/a-member-cannot-plant-a-parents-yes.test.ts).
+      family_members: [{ id: 'member-9', family_id: 'fam-1', user_id: 'auth-user-9', role: 'teen', is_active: true }],
     });
     holder.service = store.db;
     const res = await decide(scopeWith(store.db), 'appr-1', 'approved');
@@ -336,7 +339,10 @@ describe('decide — tool payloads', () => {
 
   it('reports an execution failure honestly and stamps it, while the decision itself stands', async () => {
     executed.outcome = { status: 'error', error: 'Calendar is read-only right now.', retryable: true, toolCallId: null };
-    const store = makeStore({ approval_requests: [approvalRow({ payload: { name: 'create_calendar_event', args: { title: 'Soccer' } } })] });
+    const store = makeStore({
+      approval_requests: [approvalRow({ payload: { name: 'create_calendar_event', args: { title: 'Soccer' } } })],
+      trust_audit_logs: [bubalyFiledMarker()],
+    });
     holder.service = store.db;
 
     const res = await decide(scopeWith(store.db), 'appr-1', 'approved');
@@ -441,7 +447,10 @@ describe('decide — guards', () => {
   });
 
   it('collects votes on a two-parent approval and executes only on the deciding one', async () => {
-    const store = makeStore({ approval_requests: [approvalRow({ required_approvals: 2, payload: { name: 'add_todo', args: { task: 'Pack' } } })] });
+    const store = makeStore({
+      approval_requests: [approvalRow({ required_approvals: 2, payload: { name: 'add_todo', args: { task: 'Pack' } } })],
+      trust_audit_logs: [bubalyFiledMarker()],
+    });
     holder.service = store.db;
 
     const first = await decide(scopeWith(store.db), 'appr-1', 'approved');
@@ -459,7 +468,8 @@ describe('decide — guards', () => {
 describe('editAndApprove', () => {
   it('merges edits over the stored args, validates against the tool schema, stores edited_payload, executes the edited version', async () => {
     const store = makeStore({
-      approval_requests: [approvalRow({ payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } }, payload_kind: 'tool' })],
+      approval_requests: [approvalRow({ requested_by_member_id: 'member-9', payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } }, payload_kind: 'tool' })],
+      family_members: [{ id: 'member-9', family_id: 'fam-1', user_id: 'auth-user-9', role: 'teen', is_active: true }],
     });
     holder.service = store.db;
 
@@ -477,6 +487,7 @@ describe('editAndApprove', () => {
   it('keeps a two-parent rule: an edit is one vote, nothing executes until the second parent approves', async () => {
     const store = makeStore({
       approval_requests: [approvalRow({ required_approvals: 2, payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } }, payload_kind: 'tool' })],
+      trust_audit_logs: [bubalyFiledMarker()],
     });
     holder.service = store.db;
 
@@ -540,8 +551,8 @@ describe('a pending row a manager rewrote is not trusted for what it says about 
         payload: { name: 'create_calendar_event', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z' } }, payload_kind: 'tool',
       })],
       family_members: [
-        { id: 'member-1', family_id: 'fam-1', user_id: 'auth-user-1' },
-        { id: 'member-2', family_id: 'fam-1', user_id: 'auth-user-2' },
+        { id: 'member-1', family_id: 'fam-1', user_id: 'auth-user-1', role: 'parent', is_active: true },
+        { id: 'member-2', family_id: 'fam-1', user_id: 'auth-user-2', role: 'adult', is_active: true },
       ],
     });
     holder.service = store.db;

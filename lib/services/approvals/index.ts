@@ -778,6 +778,63 @@ async function filedByBubaly(scope: ServiceScope, row: ApprovalRow): Promise<boo
 }
 
 /**
+ * A row Bubaly did not file is a MEMBER's request, and it is done — if at all
+ * — as that member, never as the parent who tapped Approve.
+ *
+ * The 0255/0480 insert policy lets any member file their own approval row with
+ * a `payload` of their choosing, and the card a parent sees is built from the
+ * title and consequences the member wrote. Replayed under the approver's scope
+ * (what this used to do), a child picked any registry tool and its arguments
+ * and the write landed as the parent: a routine the cron later fires with
+ * household authority, a family message in the parent's name, an erased fact.
+ *
+ * So the requester is resolved, active, in this family, and the work runs
+ * under THEIR identity and role on the approver's session client:
+ *
+ *   - `filedByServer`: the server's own gate filed this row for that member
+ *     (`evaluateTrust` / the risk tier, under their role) and wrote the
+ *     `require_approval` audit line naming them, which 0260 lets no member
+ *     write. The approval is then the gate, and exactly that payload replays.
+ *   - otherwise the row is only what a member typed, and the tool is gated
+ *     again under their own role: they get what they could have done
+ *     themselves, and anything more becomes a server-filed card of its own.
+ *
+ * Null when the requester cannot be confirmed: nothing runs.
+ */
+async function memberRequestScope(
+  scope: ServiceScope,
+  row: ApprovalRow,
+): Promise<{ scope: ServiceScope; filedByServer: boolean } | null> {
+  if (!row.requested_by_member_id) return null;
+  const reader = await ledgerWriter(scope.db);
+  const [{ data: asker, error: askerError }, { data: filed, error: filedError }] = await settleAll([
+    reader.from('family_members')
+      .select('id, user_id, role, is_active, family_id')
+      .eq('id', row.requested_by_member_id)
+      .eq('family_id', scope.familyId)
+      .eq('is_active', true)
+      .maybeSingle(),
+    reader.from('trust_audit_logs')
+      .select('id')
+      .eq('family_id', scope.familyId)
+      .eq('approval_id', row.id)
+      .eq('actor_kind', 'member')
+      .eq('actor_id', row.requested_by_member_id)
+      .eq('decision', 'require_approval')
+      .limit(1),
+  ]);
+  if (askerError || filedError) {
+    console.error('[service:approvals] could not confirm who filed a member approval; nothing will run', { approvalId: row.id, error: askerError ?? filedError });
+    return null;
+  }
+  if (!asker || asker.id !== row.requested_by_member_id || asker.family_id !== scope.familyId || asker.is_active !== true) return null;
+  return {
+    scope: { ...scope, memberId: asker.id, userId: asker.user_id ?? null, role: asker.role, actorKind: 'member' },
+    filedByServer: Array.isArray(filed) && filed.length > 0,
+  };
+}
+
+/**
  * The decision is recorded but the run could not be put back in the queue.
  * Not `retryable`: a retry of the decision is refused as "already decided".
  * `resumeSettledRuns` (the notifications cron) finds a run still parked on a
@@ -876,17 +933,34 @@ async function performApproved(
         await stampExecution(scope, row.id, (await getTranslations())('purchaseAdvice.privateUnavailable'));
         return requester;
       }
-      const actingScope = requester?.ok ? requester.data : await scopeForApprovedWork(scope, provenRow);
+      // The approval IS the gate — when the server filed it. A row Bubaly
+      // filed replays as Bubaly for its asker; anything else is a member's own
+      // request and runs, if at all, as that member (`memberRequestScope`).
+      let actingScope: ServiceScope;
+      let skipTrust: boolean;
+      if (requester?.ok) {
+        actingScope = requester.data;
+        skipTrust = bubalyFiled;
+      } else if (bubalyFiled) {
+        actingScope = await scopeForApprovedWork(scope, provenRow);
+        skipTrust = true;
+      } else {
+        const asker = await memberRequestScope(scope, row);
+        if (!asker) {
+          const refused = (await getTranslations())('approval.requesterUnconfirmed');
+          await stampExecution(scope, row.id, `error: ${refused}`);
+          await auditDecision(scope, row, 'approved_execution', `Execution refused: ${refused}`, { tool: classified.name, ok: false });
+          return fail(refused, { code: SERVICE_CODES.denied, retryable: false });
+        }
+        actingScope = asker.scope;
+        skipTrust = asker.filedByServer;
+      }
       const outcome = await executeTool(
         { ...actingScope, requestId: row.request_id ?? scope.requestId ?? null, runId: row.run_id ?? null },
         classified.name,
         args,
         {
-          // The approval IS the gate — when Bubaly filed it. A row a member
-          // filed themselves (requested_by_kind = 'member') is not a decision
-          // Bubaly made, so the tool is evaluated again under the approver's
-          // role rather than executed on the strength of the row's contents.
-          skipTrust: bubalyFiled,
+          skipTrust,
           requestId: row.request_id ?? null,
           runId: row.run_id ?? null,
           // A retried decision (network blip after the flip) must not write twice.

@@ -172,6 +172,10 @@ export async function POST(req: NextRequest) {
             domain,
             actorId: 'magic_import',
             actorRole,
+            // Who Bubaly is importing FOR, as chat and the school desk say. A
+            // row without it names no asker, merges with anyone else's identical
+            // import, and replays as the parent who approved it.
+            onBehalfOfMemberId: ctx.active.member.id,
             agent: 'Magic Import',
             title: item.summary,
             payload: { name: item.name, args: item.args },
