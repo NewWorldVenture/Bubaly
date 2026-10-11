@@ -78,11 +78,18 @@ const CONNECTION_LOST = { data: null, error: { code: '08006', message: 'connecti
 /** What RLS answers for a delete it filters: no error, no rows. */
 const FILTERED = { data: [], error: null };
 
-type Household = { db: InMemorySupabase; store: Bucket; failDocumentReads: boolean; refuseDocumentDeletes: boolean };
+type Household = {
+  db: InMemorySupabase; store: Bucket; failDocumentReads: boolean; refuseDocumentDeletes: boolean;
+  /** Runs once, just after the asset's attachments were enumerated. */
+  afterEnumeration?: () => void;
+  /** Every documents read or write from this call on (1 = the enumeration) gets `documentsReply`. */
+  failDocumentsFromCall?: number;
+  documentsReply?: { data: unknown; error: unknown };
+};
 
 /** One family with a fridge (manual + vaulted warranty) and a boiler. */
-function household(): Household {
-  const db = createInMemorySupabase();
+function household(options: { maxRows?: number } = {}): Household {
+  const db = createInMemorySupabase(options);
   // The schema's cascade, modelled: `documents.asset_id … ON DELETE CASCADE`.
   const replace = db.replace.bind(db);
   db.replace = (name: string, rows: Row[]) => {
@@ -111,9 +118,18 @@ function household(): Household {
 }
 
 function client(home: Household) {
+  let documentCalls = 0;
   return {
     from: (table: string) => {
       if (table !== 'documents') return home.db.from(table);
+      // The enumeration is the first documents read; anything after it is the delete pass.
+      documentCalls += 1;
+      if (documentCalls === 2 && home.afterEnumeration) {
+        const once = home.afterEnumeration;
+        home.afterEnumeration = undefined;
+        once();
+      }
+      if (home.failDocumentsFromCall && documentCalls >= home.failDocumentsFromCall) return answering(home.documentsReply ?? CONNECTION_LOST);
       if (home.failDocumentReads) return answering(CONNECTION_LOST);
       if (home.refuseDocumentDeletes) return { select: (list: string) => home.db.from(table).select(list), delete: () => answering(FILTERED) };
       return home.db.from(table);
@@ -200,6 +216,70 @@ describe('deleting a home asset deletes the files it carried', () => {
     const result = await removeHomeAsset(client(home), FAMILY, 'asset-somewhere-else');
 
     expect(result).toEqual({ ok: false, notSaved: true });
+  });
+});
+
+describe('the final asset delete is fenced (AUD-1022-L1)', () => {
+  // The cascade takes every attachment row still naming the asset when it
+  // goes, and with the row goes the only record of the object. So the asset
+  // is deleted only when nothing is left on it that this pass did not handle.
+  const LATE = `${FAMILY}/manuals/asset-fridge/1790000000009-late.pdf`;
+
+  it('refuses the final delete when an attachment arrived after the enumeration, and keeps it', async () => {
+    const home = household();
+    home.afterEnumeration = () => {
+      home.db.seed('documents', [{ id: 'doc-late', family_id: FAMILY, asset_id: 'asset-fridge', title: 'Late', category: 'manual', is_secure: true, storage_path: LATE }]);
+      home.store.objects.add(LATE);
+    };
+
+    const result = await removeHomeAsset(client(home), FAMILY, 'asset-fridge');
+
+    expect(result).toEqual({ ok: false, notSaved: true });
+    expect(home.db.table('home_assets').some((asset) => asset.id === 'asset-fridge')).toBe(true);
+    expect(home.db.table('documents').some((doc) => doc.id === 'doc-late')).toBe(true);
+    expect(home.store.objects.has(LATE)).toBe(true);
+    // A second press handles it and then deletes the asset.
+    expect(await removeHomeAsset(client(home), FAMILY, 'asset-fridge')).toEqual({ ok: true });
+    expect(home.store.objects.has(LATE)).toBe(false);
+  });
+
+  it('refuses the final delete when the enumeration was truncated, and keeps what it did not return', async () => {
+    // PostgREST caps a response at db-max-rows and says nothing; here, one row.
+    const home = household({ maxRows: 1 });
+
+    const result = await removeHomeAsset(client(home), FAMILY, 'asset-fridge');
+
+    expect(result).toEqual({ ok: false, notSaved: true });
+    expect(home.db.table('home_assets').some((asset) => asset.id === 'asset-fridge')).toBe(true);
+    const left = home.db.table('documents').filter((doc) => doc.asset_id === 'asset-fridge' && doc.family_id === FAMILY);
+    expect(left).toHaveLength(1);
+    expect(home.store.objects.has(String(left[0].storage_path))).toBe(true);
+    // Each press handles what it was given; the asset goes when nothing is left.
+    expect(await removeHomeAsset(client(home), FAMILY, 'asset-fridge')).toEqual({ ok: true });
+    expect(home.store.objects.has(MANUAL) || home.store.objects.has(WARRANTY)).toBe(false);
+  });
+
+  it('refuses the final delete when what is left cannot be counted', async () => {
+    const home = household();
+    // The enumeration, then one delete per file (two), then the count.
+    home.failDocumentsFromCall = 4;
+
+    const result = await removeHomeAsset(client(home), FAMILY, 'asset-fridge');
+
+    expect(result.ok).toBe(false);
+    expect(result).toHaveProperty('error');
+    expect(home.db.table('home_assets').some((asset) => asset.id === 'asset-fridge')).toBe(true);
+  });
+
+  it('refuses the final delete when the count comes back without a number', async () => {
+    const home = household();
+    home.failDocumentsFromCall = 4;
+    home.documentsReply = { data: null, error: null };
+
+    const result = await removeHomeAsset(client(home), FAMILY, 'asset-fridge');
+
+    expect(result).toEqual({ ok: false, notSaved: true });
+    expect(home.db.table('home_assets').some((asset) => asset.id === 'asset-fridge')).toBe(true);
   });
 });
 

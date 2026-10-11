@@ -14,6 +14,16 @@
 // asset row goes last. Any step that fails stops here with the asset still in
 // place, so the remaining files stay listed under it and pressing delete again
 // finishes the job (an object already gone confirms as gone).
+//
+// The asset itself goes only when an exact count says nothing is left on it
+// (AUD-1022-L1). The enumeration can miss attachments in two ways: one added
+// after it was read, and one it never returned, because PostgREST caps a
+// response at db-max-rows without an error. Either would be taken by the
+// cascade with its object left behind, so the asset stays, with those rows,
+// until a later press has handled them. What this cannot close in code is the
+// moment between that count and the delete: an upload landing exactly there is
+// still cascaded. Closing it needs the schema (`documents.asset_id` ON DELETE
+// RESTRICT, or a delete function that locks the asset), not this helper.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { removeConfirmed, type RemovableBucket } from '@/lib/storage/confirm-removal';
@@ -47,6 +57,12 @@ export async function removeHomeAsset(db: AssetRemovalDb, familyId: string, asse
     if (rowError) return { ok: false, error: describeDbError(rowError) };
     if (wroteNoRows(gone)) return { ok: false, notSaved: true };
   }
+
+  const { count: remaining, error: remainingError } = await db.from('documents')
+    .select('id', { count: 'exact', head: true })
+    .eq('family_id', familyId).eq('asset_id', assetId);
+  if (remainingError) return { ok: false, error: describeDbError(remainingError) };
+  if (remaining !== 0) return { ok: false, notSaved: true };
 
   const { data: removed, error } = await db.from('home_assets').delete()
     .eq('id', assetId).eq('family_id', familyId).select('id');
