@@ -26,6 +26,9 @@ export function FavoritesView() {
   const { familyId, userId, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
+  // family_favorites is not in the realtime publication (REALTIME_TABLES), so
+  // no channel ever tells this screen about a write — its own included. Every
+  // confirmed write below reads the list back itself (H8).
   const { data: rows, loading, error, refresh } = useRealtimeQuery<Favorite>({
     table: 'family_favorites', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('family_favorites').select('*').eq('family_id', familyId).order('created_at', { ascending: false }),
@@ -46,7 +49,9 @@ export function FavoritesView() {
     if (!confirm(t('favoritesView.removeThisFavorite'))) return;
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-84.
     const { data: removed2, error } = await createClient().from('family_favorites').delete().eq('id', id).select('id');
-    if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed2)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('favoritesView.removed'));
+    if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(removed2)) toastError(t('errors.thatChangeWasNotSaved'));
+    else { await refresh(); success(t('favoritesView.removed')); }
   }
 
   // A genuine read failure must surface + be retryable, not silently render as an
@@ -98,7 +103,8 @@ export function FavoritesView() {
         </div>
       )}
 
-      {form && <FavoriteModal familyId={familyId} userId={userId} memberId={selfMember?.id ?? null} onClose={() => setForm(false)} />}
+      {form && <FavoriteModal familyId={familyId} userId={userId} memberId={selfMember?.id ?? null}
+        onAdded={refresh} onClose={() => setForm(false)} />}
     </div>
   );
 }
@@ -109,7 +115,12 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
   );
 }
 
-function FavoriteModal({ familyId, userId, memberId, onClose }: { familyId: string; userId: string; memberId: string | null; onClose: () => void }) {
+function FavoriteModal({ familyId, userId, memberId, onAdded, onClose }: {
+  familyId: string; userId: string; memberId: string | null;
+  /** Read the grid back, so the new favorite shows without a reload. */
+  onAdded: () => Promise<void>;
+  onClose: () => void;
+}) {
   const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
@@ -119,13 +130,15 @@ function FavoriteModal({ familyId, userId, memberId, onClose }: { familyId: stri
     e.preventDefault();
     if (!v.name.trim()) return toastError(t('favoritesView.addAName'));
     setSaving(true);
-    const { error } = await createClient().from('family_favorites').insert({
+    const { data: added, error } = await createClient().from('family_favorites').insert({
       family_id: familyId, member_id: memberId, kind: v.kind, name: v.name.trim(),
       rating: v.rating ? Number(v.rating) : null, notes: v.notes.trim() || null,
       ref_url: v.ref_url.trim() || null, created_by: userId,
-    });
+    }).select('id').single();
+    if (error) { setSaving(false); return toastError(describeDbError(error)); }
+    if (!added) { setSaving(false); return toastError(t('errors.thatChangeWasNotSaved')); }
+    await onAdded();
     setSaving(false);
-    if (error) return toastError(describeDbError(error));
     success(t('favoritesView.favoriteAdded'));
     onClose();
   }

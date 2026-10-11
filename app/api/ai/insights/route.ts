@@ -108,8 +108,10 @@ export async function POST(req: Request) {
   const familyId = ctx.active.familyId;
   const tz = ctx.active.family.timezone || 'America/New_York';
 
-  // The roster read directly beside this one — `fetchRows` — already fails the
-  // request with a 500 when it cannot load. This one dropped its error and fed
+  // The roster read directly beside this one — `fetchRows` — fails the request
+  // with a 500 when a read it checks with `required()` fails (every household
+  // module kind and purchase_advisor; see the note above `required`). This one
+  // dropped its error and fed
   // an empty member list into the same prompt, so the insight was generated for
   // a family the model was told has no members: every name, every per-child
   // observation, silently absent from an answer that still reads as complete.
@@ -187,8 +189,17 @@ const eq = (sb: SupabaseClient, table: string, familyId: string) => sb.from(tabl
  * Fail closed on a read the prompt would otherwise describe as an empty, healthy
  * state. The route catches this and answers "could not load data" — a refused
  * query must never reach a model as "nothing found".
+ *
+ * supabase-js resolves EVERY failure — a PostgREST error and a transport one
+ * alike — as `{ data: null, error }` rather than throwing, so the route's
+ * try/catch never sees a read that `x.data ?? []` swallowed. For thirteen
+ * household kinds that is exactly what happened: a failed inventory read
+ * became "Nothing catalogued yet.", a failed `moves` read became "No move
+ * planned yet.", and the answer came back at HTTP 200. Each of those kinds now
+ * passes every read through here, parent reads before the ids derived from
+ * them. (RLS filtering is not an error and still reads as fewer rows.)
  */
-function required(reads: [string, { message?: string } | null][]): void {
+function required(reads: [string, { message?: string } | null | undefined][]): void {
   const failed = reads.find(([, error]) => Boolean(error));
   if (failed) throw new Error(`${failed[0]} read failed: ${failed[1]?.message ?? 'unknown error'}`);
 }
@@ -219,6 +230,7 @@ async function fetchRows(
         eq(sb, 'wardrobe_items', familyId).in('status', ['active', 'laundry', 'outgrown']).order('member_id').limit(160),
         eq(sb, 'outfit_logs', familyId).gte('worn_on', since(30).slice(0, 10)).order('worn_on', { ascending: false }).limit(60),
       ]);
+      required([['wardrobe_items', items.error], ['outfit_logs', logs.error]]);
       return { wardrobe_items: items.data ?? [], outfit_logs: logs.data ?? [] };
     }
     case 'watchlist': {
@@ -227,6 +239,7 @@ async function fetchRows(
         eq(sb, 'watchlist_votes', familyId).limit(300),
         eq(sb, 'watch_sessions', familyId).order('watched_on', { ascending: false }).limit(30),
       ]);
+      required([['watchlist_titles', titles.error], ['watchlist_votes', votes.error], ['watch_sessions', sessions.error]]);
       return { watchlist_titles: titles.data ?? [], watchlist_votes: votes.data ?? [], watch_sessions: sessions.data ?? [] };
     }
     case 'inventory': {
@@ -235,6 +248,7 @@ async function fetchRows(
         eq(sb, 'inventory_items', familyId).neq('status', 'disposed').order('updated_at', { ascending: false }).limit(200),
         eq(sb, 'inventory_moves', familyId).order('moved_at', { ascending: false }).limit(20),
       ]);
+      required([['home_locations', locations.error], ['inventory_items', items.error], ['inventory_moves', moves.error]]);
       return { home_locations: locations.data ?? [], inventory_items: items.data ?? [], inventory_moves: moves.data ?? [] };
     }
     case 'sleep': {
@@ -243,6 +257,7 @@ async function fetchRows(
         eq(sb, 'bedtime_routines', familyId).eq('is_active', true).limit(30),
         eq(sb, 'sleep_checkins', familyId).gte('checkin_date', since(21).slice(0, 10)).order('checkin_date', { ascending: false }).limit(80),
       ]);
+      required([['sleep_logs', logs.error], ['bedtime_routines', routines.error], ['sleep_checkins', checkins.error]]);
       return { sleep_logs: logs.data ?? [], bedtime_routines: routines.data ?? [], sleep_checkins: checkins.data ?? [] };
     }
     case 'declutter': {
@@ -251,46 +266,56 @@ async function fetchRows(
         eq(sb, 'declutter_missions', familyId).order('scheduled_for', { ascending: false, nullsFirst: false }).limit(60),
         eq(sb, 'declutter_sessions', familyId).order('started_at', { ascending: false }).limit(20),
       ]);
+      required([['declutter_zones', zones.error], ['declutter_missions', missions.error], ['declutter_sessions', sessions.error]]);
       return { declutter_zones: zones.data ?? [], declutter_missions: missions.data ?? [], declutter_sessions: sessions.data ?? [] };
     }
     case 'moving': {
       const live = await eq(sb, 'moves', familyId).neq('status', 'cancelled').order('move_date', { ascending: false }).limit(1);
+      // Checked before `mv` is derived: a failed read is not "No move planned yet."
+      required([['moves', live.error]]);
       const mv = live.data?.[0];
       if (!mv) return { moves: [], move_tasks: [], move_boxes: [] };
       const [tasks, boxes] = await Promise.all([
         eq(sb, 'move_tasks', familyId).eq('move_id', mv.id).order('due_date', { ascending: true, nullsFirst: false }).limit(80),
         eq(sb, 'move_boxes', familyId).eq('move_id', mv.id).order('box_number').limit(80),
       ]);
+      required([['move_tasks', tasks.error], ['move_boxes', boxes.error]]);
       return { moves: [mv], move_tasks: tasks.data ?? [], move_boxes: boxes.data ?? [] };
     }
     case 'projects': {
       const live = await eq(sb, 'home_projects', familyId).not('status', 'in', '("done","cancelled")').order('priority').order('updated_at', { ascending: false }).limit(12);
+      required([['home_projects', live.error]]);
       const ids = (live.data ?? []).map((p) => p.id);
       if (!ids.length) return { home_projects: [], project_materials: [], project_quotes: [] };
       const [materials, quotes] = await Promise.all([
         eq(sb, 'project_materials', familyId).in('project_id', ids).limit(120),
         eq(sb, 'project_quotes', familyId).in('project_id', ids).limit(60),
       ]);
+      required([['project_materials', materials.error], ['project_quotes', quotes.error]]);
       return { home_projects: live.data ?? [], project_materials: materials.data ?? [], project_quotes: quotes.data ?? [] };
     }
     case 'career': {
       const live = await eq(sb, 'career_profiles', familyId).eq('is_active', true).order('updated_at', { ascending: false }).limit(4);
+      required([['career_profiles', live.error]]);
       const ids = (live.data ?? []).map((p) => p.id);
       if (!ids.length) return { career_profiles: [], job_applications: [], resume_versions: [] };
       const [apps, resumes] = await Promise.all([
         eq(sb, 'job_applications', familyId).in('profile_id', ids).order('updated_at', { ascending: false }).limit(60),
         eq(sb, 'resume_versions', familyId).in('profile_id', ids).order('is_primary', { ascending: false }).limit(8),
       ]);
+      required([['job_applications', apps.error], ['resume_versions', resumes.error]]);
       return { career_profiles: live.data ?? [], job_applications: apps.data ?? [], resume_versions: resumes.data ?? [] };
     }
     case 'language': {
       const live = await eq(sb, 'language_goals', familyId).eq('is_active', true).order('updated_at', { ascending: false }).limit(4);
+      required([['language_goals', live.error]]);
       const ids = (live.data ?? []).map((g) => g.id);
       if (!ids.length) return { language_goals: [], language_sessions: [], vocab_cards: [] };
       const [sessions, cards] = await Promise.all([
         eq(sb, 'language_sessions', familyId).in('goal_id', ids).order('practiced_on', { ascending: false }).limit(60),
         eq(sb, 'vocab_cards', familyId).in('goal_id', ids).order('due_on').limit(300),
       ]);
+      required([['language_sessions', sessions.error], ['vocab_cards', cards.error]]);
       return { language_goals: live.data ?? [], language_sessions: sessions.data ?? [], vocab_cards: cards.data ?? [] };
     }
     case 'calendar': {
@@ -310,6 +335,7 @@ async function fetchRows(
     case 'grocery':
     case 'shopping': {
       const items = await eq(sb, 'grocery_items', familyId).eq('is_checked', false).limit(120);
+      required([['grocery_items', items.error]]);
       return { grocery_items: items.data ?? [] };
     }
     case 'homework': {
@@ -448,6 +474,7 @@ async function fetchRows(
         settle(sb.from('meal_plans').select('*').eq('family_id', familyId).gte('plan_date', since(7)).order('plan_date').limit(30)),
         settle(sb.from('meals').select('id, name, meal_type, notes').eq('family_id', familyId).order('created_at', { ascending: false }).limit(20)),
       ]);
+      required([['meal_plans', plans.error], ['meals', mealRows.error]]);
       return { meal_plans: plans.data ?? [], meals: mealRows.data ?? [] };
     }
     case 'reminders': {
@@ -461,8 +488,13 @@ async function fetchRows(
     case 'recipes': {
       const [recipes, pantry] = await Promise.all([
         eq(sb, 'family_recipes', familyId).order('created_at', { ascending: false }).limit(15),
-        eq(sb, 'pantry_items', familyId).eq('is_out_of_stock', false).limit(20),
+        // In stock = a quantity left. The filter used to name `is_out_of_stock`,
+        // a column no migration ever created, so PostgREST refused this read on
+        // every call and the recipes prompt always said "Pantry items: none
+        // tracked." — now that the read is checked, it has to be a real one.
+        eq(sb, 'pantry_items', familyId).gt('quantity', 0).limit(20),
       ]);
+      required([['family_recipes', recipes.error], ['pantry_items', pantry.error]]);
       return { family_recipes: recipes.data ?? [], pantry_items: pantry.data ?? [] };
     }
     case 'documents': {
@@ -512,6 +544,7 @@ async function fetchRows(
     }
     case 'pantry': {
       const items = await eq(sb, 'pantry_items', familyId).limit(40);
+      required([['pantry_items', items.error]]);
       return { pantry_items: items.data ?? [] };
     }
     case 'announcements': {

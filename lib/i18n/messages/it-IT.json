@@ -16897,5 +16897,12 @@
   "mobileAssistant.conflictFamilyOne": "{count} avviso familiare",
   "mobileAssistant.conflictFamilyOther": "{count} avvisi familiari",
   "mobileAssistant.conflictCounts": "{personal} · {family}",
-  "mobileAssistant.conflictMobileFamilyLine": "Avviso di occupazione familiare: {titles} si sovrappongono {when}. L’occupazione importata riguarda la famiglia; non identifica chi ha due impegni contemporanei."
+  "mobileAssistant.conflictMobileFamilyLine": "Avviso di occupazione familiare: {titles} si sovrappongono {when}. L’occupazione importata riguarda la famiglia; non identifica chi ha due impegni contemporanei.",
+  "chef.kitchenDataIsTemporarilyUnavailable": "Lo chef non è riuscito a leggere la tua cucina in questo momento. Riprova tra poco.",
+  "kitchenDashboard.aiChefUnavailableShowingAPlan": "Lo chef IA non è riuscito a rispondere in questo momento: viene mostrato un piano dalle tue ricette e dagli avanzi. Riprova tra poco.",
+  "closetModule.itemRemovedButPhotoKept": "Articolo rimosso, ma non è stato possibile eliminare la sua foto dall’archivio.",
+  "inventoryModule.itemRemovedButPhotoKept": "Oggetto rimosso, ma non è stato possibile eliminare la sua foto dall’archivio.",
+  "displayGrid.mealsUnavailable": "I pasti di oggi non sono disponibili.",
+  "displayGrid.groceryUnavailable": "La lista della spesa non è disponibile.",
+  "displayGrid.choresUnavailable": "Le faccende non sono disponibili."
 }

@@ -16897,5 +16897,12 @@
   "mobileAssistant.conflictFamilyOne": "{count} aviso familiar",
   "mobileAssistant.conflictFamilyOther": "{count} avisos familiares",
   "mobileAssistant.conflictCounts": "{personal} · {family}",
-  "mobileAssistant.conflictMobileFamilyLine": "Aviso de ocupación familiar: {titles} se solapan {when}. La ocupación importada se aplica a la familia; no identifica quién tiene una doble reserva."
+  "mobileAssistant.conflictMobileFamilyLine": "Aviso de ocupación familiar: {titles} se solapan {when}. La ocupación importada se aplica a la familia; no identifica quién tiene una doble reserva.",
+  "chef.kitchenDataIsTemporarilyUnavailable": "El chef no ha podido leer tu cocina ahora mismo. Inténtalo de nuevo en un momento.",
+  "kitchenDashboard.aiChefUnavailableShowingAPlan": "El chef de IA no ha podido responder ahora mismo: se muestra un plan a partir de tus propias recetas y sobras. Inténtalo de nuevo en un momento.",
+  "closetModule.itemRemovedButPhotoKept": "Artículo eliminado, pero no se pudo borrar su foto del almacenamiento.",
+  "inventoryModule.itemRemovedButPhotoKept": "Objeto eliminado, pero no se pudo borrar su foto del almacenamiento.",
+  "displayGrid.mealsUnavailable": "Las comidas de hoy no están disponibles.",
+  "displayGrid.groceryUnavailable": "La lista de la compra no está disponible.",
+  "displayGrid.choresUnavailable": "Las tareas no están disponibles."
 }

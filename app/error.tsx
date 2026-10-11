@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect } from 'react';
-import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { ButtonLink } from '@/components/ui/button-link';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { reloadOnceForChunkFailure } from '@/lib/utils/stale-bundle-reload';
 
@@ -27,7 +27,7 @@ export default function GlobalError({
       <p className="mt-2 max-w-md text-sm text-muted">{t('error.weHitAnUnexpectedError')}</p>
       <div className="mt-6 flex flex-col gap-2 sm:flex-row">
         <Button onClick={reset}>{t('root.tryAgain')}</Button>
-        <Link href="/dashboard"><Button variant="outline">{t('root.goToDashboard')}</Button></Link>
+        <ButtonLink href="/dashboard" variant="outline">{t('root.goToDashboard')}</ButtonLink>
       </div>
       {error.digest && (
         <p className="mt-4 text-xs text-muted">

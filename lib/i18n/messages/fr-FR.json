@@ -16897,5 +16897,12 @@
   "mobileAssistant.conflictFamilyOne": "{count} avis familial",
   "mobileAssistant.conflictFamilyOther": "{count} avis familiaux",
   "mobileAssistant.conflictCounts": "{personal} · {family}",
-  "mobileAssistant.conflictMobileFamilyLine": "Avis d’occupation familiale : {titles} se chevauchent {when}. L’occupation importée s’applique à la famille ; elle n’indique pas qui a deux engagements simultanés."
+  "mobileAssistant.conflictMobileFamilyLine": "Avis d’occupation familiale : {titles} se chevauchent {when}. L’occupation importée s’applique à la famille ; elle n’indique pas qui a deux engagements simultanés.",
+  "chef.kitchenDataIsTemporarilyUnavailable": "Le chef n’a pas pu lire votre cuisine pour le moment. Veuillez réessayer dans un instant.",
+  "kitchenDashboard.aiChefUnavailableShowingAPlan": "Le chef IA n’a pas pu répondre pour le moment — voici un plan basé sur vos propres recettes et restes. Réessayez dans un instant.",
+  "closetModule.itemRemovedButPhotoKept": "Article supprimé, mais sa photo n’a pas pu être supprimée du stockage.",
+  "inventoryModule.itemRemovedButPhotoKept": "Objet supprimé, mais sa photo n’a pas pu être supprimée du stockage.",
+  "displayGrid.mealsUnavailable": "Les repas du jour sont indisponibles.",
+  "displayGrid.groceryUnavailable": "La liste de courses est indisponible.",
+  "displayGrid.choresUnavailable": "Les tâches sont indisponibles."
 }

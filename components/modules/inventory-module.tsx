@@ -1,11 +1,11 @@
 'use client';
 
-import { useId, useMemo, useState } from 'react';
+import { useId, useMemo, useRef, useState } from 'react';
 import {
   PackageSearch, Plus, Search, MapPin, Trash2, Pencil, Handshake, ArrowRightLeft, ShieldCheck, Boxes, AlertTriangle, Camera, Check, CheckCircle2, ChevronRight, DoorOpen,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
-import { familyMediaPath } from '@/lib/storage/family-media';
+import { familyMediaPath, releaseFamilyMedia } from '@/lib/storage/family-media';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { readInventoryItems } from '@/lib/inventory/read-items';
@@ -114,9 +114,28 @@ export function InventoryModule() {
   async function deleteItem(item: Item) {
     if (!(await askConfirm({ title: tr('confirm.removeNamed', { name: item.name }), body: tr('confirm.cannotBeUndone') }))) return;
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-80.
-    const { data: removed, error } = await createClient().from('inventory_items').delete().eq('id', item.id).select('id');
+    const supabase = createClient();
+    const { data: removed, error } = await supabase.from('inventory_items').delete().eq('id', item.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // Published without REPLICA IDENTITY FULL, so the family_id-filtered
+    // channel never hears this DELETE: the confirmed delete drops the row from
+    // the screen here, or it stays until a reload (H3).
+    items.setData((rows) => rows.filter((row) => row.id !== item.id));
+    // inventory_moves.item_id is ON DELETE CASCADE (0242), so the database took
+    // this item's moves with it, and that table is DELETE-blind too: drop them
+    // here, or 'Recent moves' keeps them as "Item: …" until a reload (H3).
+    moves.setData((rows) => rows.filter((row) => row.item_id !== item.id));
+    // The photo goes with the row, after the row (SEC-015): the family-media
+    // bucket serves an object to anyone holding its URL, and nothing points at
+    // this one any more (H2).
+    if (item.photo_path) {
+      const removal = await releaseFamilyMedia(supabase, item.photo_path, { familyId, folder: 'inventory' });
+      if (removal.error) {
+        console.error('[inventory] photo survived its deleted item', { itemId: item.id }, removal.error);
+        return toastError(tr('inventoryModule.itemRemovedButPhotoKept'));
+      }
+    }
     success(tr('inventoryModule.itemRemoved'));
   }
 
@@ -147,6 +166,13 @@ export function InventoryModule() {
     const { data: removed2, error } = await createClient().from('home_locations').delete().eq('id', location.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed2)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // Published without REPLICA IDENTITY FULL, so the family_id-filtered
+    // channel never hears this DELETE: the confirmed delete drops the row from
+    // the screen here, or it stays until a reload (H3).
+    // A leaf location left in the pickers (LocationOptions) was offered to the
+    // next save and refused by the foreign key. Items that pointed at it had
+    // location_id set null by the database; those are UPDATEs and arrive.
+    locations.setData((rows) => rows.filter((row) => row.id !== location.id));
     success(tr('inventoryModule.locationDeleted'));
   }
 
@@ -384,6 +410,28 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [photoPath, setPhotoPath] = useState<string | null>(item?.photo_path ?? null);
+  // Every object this form put in the bucket. Whatever the saved row does not
+  // end up pointing at — a photo replaced before saving, or everything when
+  // the form is closed unsaved — is removed rather than left behind (H2).
+  const uploads = useRef<string[]>([]);
+
+  /** Remove objects nothing points at. Logged, not shown: the save stands either way. */
+  async function releaseUnreferenced(paths: (string | null | undefined)[]) {
+    const supabase = createClient();
+    for (const path of new Set(paths)) {
+      if (!path) continue;
+      const removal = await releaseFamilyMedia(supabase, path, { familyId, folder: 'inventory' });
+      if (removal.error) console.error('[inventory] could not remove an unreferenced photo', removal.error);
+    }
+  }
+
+  /** Close without saving: this form's uploads were never referenced by any row. */
+  function abandon() {
+    const unsaved = uploads.current.filter((path) => path !== item?.photo_path);
+    uploads.current = [];
+    void releaseUnreferenced(unsaved);
+    onClose();
+  }
 
   async function uploadPhoto(file: File) {
     if (file.size > 25 * 1024 * 1024) { toastError(tr('validation.photoTooLarge', { max: 25 })); return; }
@@ -392,6 +440,7 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
       const path = familyMediaPath(familyId, 'inventory', file.name);
       const { data: stored, error: upErr } = await createClient().storage.from('family-media').upload(path, file, { upsert: false });
       if (upErr || !stored) { toastError(describeDbError(upErr)); return; }
+      uploads.current.push(stored.path);
       setPhotoPath(stored.path);
     } finally {
       setUploading(false);
@@ -427,11 +476,16 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
     setLoading(false);
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(saved)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // Only now that the row is confirmed to point at `photoPath`: the photo it
+    // used to have (replaced or removed) and any other upload from this form.
+    const superseded = [item?.photo_path, ...uploads.current].filter((path) => path && path !== photoPath);
+    uploads.current = [];
+    await releaseUnreferenced(superseded);
     onSaved(item ? 'Item updated' : 'Item added');
   }
 
   return (
-    <Modal open title={item ? `Edit · ${item.name}` : 'Add an item'} onClose={onClose}>
+    <Modal open title={item ? `Edit · ${item.name}` : 'Add an item'} onClose={abandon}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('inventory.name')} required>{(id) => <Input id={id} name="name" autoFocus defaultValue={item?.name ?? ''} placeholder={tr('inventory.skiHelmet')} />}</Field>
@@ -466,7 +520,7 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
         </div>
         <Field label={tr('inventory.notes')}>{(id) => <Textarea id={id} name="notes" defaultValue={item?.notes ?? ''} placeholder={tr('inventory.receiptInTheWarrantyFolderCharger')} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>{tr('inventory.cancel')}</Button>
+          <Button type="button" variant="ghost" onClick={abandon}>{tr('inventory.cancel')}</Button>
           <Button type="submit" loading={loading || uploading}>{item ? 'Save changes' : 'Add item'}</Button>
         </div>
       </form>

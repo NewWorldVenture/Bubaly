@@ -250,7 +250,9 @@ export function ProjectsModule() {
       )}
       {openProject && (
         <ProjectDetail project={openProject} familyId={familyId} userId={userId} members={members} contractors={contractors.data} materials={materials.data.filter((m) => m.project_id === openProject.id)} quotes={quotes.data.filter((q) => q.project_id === openProject.id)} today={today}
-          onClose={() => setOpenId(null)} onEdit={() => openProjectForm(openProject)} onStatus={(s) => setStatus(openProject, s)} onDelete={() => deleteProject(openProject)} />
+          onClose={() => setOpenId(null)} onEdit={() => openProjectForm(openProject)} onStatus={(s) => setStatus(openProject, s)} onDelete={() => deleteProject(openProject)}
+          onMaterialRemoved={(id) => materials.setData((rows) => rows.filter((row) => row.id !== id))}
+          onQuoteRemoved={(id) => quotes.setData((rows) => rows.filter((row) => row.id !== id))} />
       )}
     </div>
   );
@@ -360,9 +362,11 @@ function ProjectForm({ familyId, userId, members, contractors, project, defaultO
   );
 }
 
-function ProjectDetail({ project, familyId, userId, members, contractors, materials, quotes, today, onClose, onEdit, onStatus, onDelete }: {
+function ProjectDetail({ project, familyId, userId, members, contractors, materials, quotes, today, onClose, onEdit, onStatus, onDelete, onMaterialRemoved, onQuoteRemoved }: {
   project: Project; familyId: string; userId: string; members: { id: string; display_name: string }[]; contractors: Contractor[]; materials: Material[]; quotes: Quote[]; today: Date;
   onClose: () => void; onEdit: () => void; onStatus: (s: HomeProjectStatus) => void; onDelete: () => void;
+  /** A confirmed delete leaves the parent's list here: realtime never delivers it (H3). */
+  onMaterialRemoved: (id: string) => void; onQuoteRemoved: (id: string) => void;
 }) {
   const locale = useLocale();
   const { fmtDate: fmt } = useFormat();
@@ -398,6 +402,10 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
     const { data: removed, error } = await createClient().from('project_materials').delete().eq('id', m.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // Published without REPLICA IDENTITY FULL, so the family_id-filtered
+    // channel never hears this DELETE: the confirmed delete drops the row from
+    // the screen here, or it stays until a reload (H3).
+    onMaterialRemoved(m.id);
     success(tr('projectsModule.materialRemoved'));
   }
 
@@ -444,6 +452,10 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
     const { data: removed, error } = await createClient().from('project_quotes').delete().eq('id', q.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // Published without REPLICA IDENTITY FULL, so the family_id-filtered
+    // channel never hears this DELETE: the confirmed delete drops the row from
+    // the screen here, or it stays until a reload (H3).
+    onQuoteRemoved(q.id);
     success(tr('projectsModule.quoteRemoved'));
   }
 

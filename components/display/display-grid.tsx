@@ -51,7 +51,12 @@ export type DisplayData = {
   timezone?: string;
   dayKey?: string;
   timezoneFallback?: boolean;
-  loadStatus?: { events: 'ok' | 'error'; upcoming: 'ok' | 'error'; monthEvents: 'ok' | 'error'; reminders: 'ok' | 'error' };
+  loadStatus?: {
+    events: 'ok' | 'error'; upcoming: 'ok' | 'error'; monthEvents: 'ok' | 'error'; reminders: 'ok' | 'error';
+    // Optional so a payload from before these were reported still renders;
+    // the page always sets them now.
+    meals?: 'ok' | 'error'; grocery?: 'ok' | 'error'; chores?: 'ok' | 'error';
+  };
   members: { id: string; display_name: string; color: string | null; role: string }[];
   events: Ev[];
   upcoming: Ev[];
@@ -270,6 +275,7 @@ function WidgetBody({ widget, size, data, memberById, now, settings }: {
     </>;
 
     case 'chores':
+      if (data.loadStatus?.chores === 'error') return <Unavailable text={tr('displayGrid.choresUnavailable')} />;
       return data.chores.length ? (
         <ul className="space-y-2.5">
           {data.chores.slice(0, tileListLimit(size, 4)).map((c) => {
@@ -286,6 +292,7 @@ function WidgetBody({ widget, size, data, memberById, now, settings }: {
       ) : <Empty icon={CheckCircle2} text={tr('displayGrid.allDone')} />;
 
     case 'meals':
+      if (data.loadStatus?.meals === 'error') return <Unavailable text={tr('displayGrid.mealsUnavailable')} />;
       return data.meals.length ? (
         <ul className="space-y-2">
           {data.meals.map((m) => (
@@ -303,6 +310,7 @@ function WidgetBody({ widget, size, data, memberById, now, settings }: {
       ) : <Empty icon={UtensilsCrossed} text={tr('displayGrid.noMealsPlanned')} />;
 
     case 'grocery':
+      if (data.loadStatus?.grocery === 'error') return <Unavailable text={tr('displayGrid.groceryUnavailable')} />;
       return (
         <div className="flex h-full flex-col">
           <p className="text-4xl font-black text-white">{data.grocery.count}<span className="ml-1.5 text-base font-normal text-white/50">items</span></p>
@@ -613,16 +621,21 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
   // Echo-style bottom hints, recomputed as the clock ticks.
   const eventsAvailable = data.loadStatus?.events !== 'error';
   const remindersAvailable = data.loadStatus?.reminders !== 'error';
+  const mealsAvailable = data.loadStatus?.meals !== 'error';
+  const groceryAvailable = data.loadStatus?.grocery !== 'error';
+  const choresAvailable = data.loadStatus?.chores !== 'error';
   const { next: nextEv } = nowAndNext(eventsAvailable ? data.events : [], now);
   const hints = useMemo(() => buildHints({
     nextEvent: nextEv ? { title: nextEv.title??'', startsAt: nextEv.starts_at } : null,
-    dinner: data.meals.find((m) => m.type === 'dinner')?.name ?? null,
-    groceryCount: data.grocery.count,
-    choresDue: data.chores.length,
+    dinner: mealsAvailable ? data.meals.find((m) => m.type === 'dinner')?.name ?? null : null,
+    groceryCount: groceryAvailable ? data.grocery.count : undefined,
+    choresDue: choresAvailable ? data.chores.length : undefined,
     birthdays: data.birthdays,
     remindersDue: remindersAvailable ? data.reminders.length : undefined,
-    availabilityKnown: eventsAvailable && remindersAvailable,
-  }, now, timezone), [nextEv, data.meals, data.grocery.count, data.chores.length, data.birthdays, data.reminders.length, eventsAvailable, remindersAvailable, now, timezone]);
+    // "All clear" is a claim about every fact above; it may only be made when
+    // each of them was actually read.
+    availabilityKnown: eventsAvailable && remindersAvailable && mealsAvailable && groceryAvailable && choresAvailable,
+  }, now, timezone), [nextEv, data.meals, data.grocery.count, data.chores.length, data.birthdays, data.reminders.length, eventsAvailable, remindersAvailable, mealsAvailable, groceryAvailable, choresAvailable, now, timezone]);
 
   const frameNextLine = nextEv ? `Next: ${nextEv.title} · ${countdownLabel(nextEv.starts_at, now, timezone)}` : null;
 
