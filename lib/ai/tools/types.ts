@@ -93,6 +93,15 @@ export type ToolDefinition<I = unknown, O = unknown> = {
    */
   activityFrom?: 'service' | 'executor';
   /**
+   * The executor's activity line, when it must say less than `summarize`.
+   * The summary goes back to the person who asked; the activity line lands in
+   * `agent_activity`, which every member of the family reads (0127). A tool
+   * whose output is addressed to fewer people than that — a notification to
+   * the parents or to one member — names who was told here, not what.
+   * Defaults to the summary.
+   */
+  activityTitle?: (input: I, output: O) => string;
+  /**
    * The verb the household trail records for this call, when `capability`
    * cannot say it. `create`/`edit`/`delete` map straight onto a trail verb;
    * `automate` does not — `routines.create` and `routines.pause` share it and
