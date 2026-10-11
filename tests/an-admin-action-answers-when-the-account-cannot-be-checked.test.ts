@@ -21,6 +21,13 @@ const h = vi.hoisted(() => ({
   serviceClient: vi.fn(),
 }));
 
+// The admin gates also ask lib/auth/super-admin-assurance whether the session
+// proved its authenticator; this file is not about step-up, so it says yes.
+vi.mock('@/lib/auth/super-admin-assurance', () => ({
+  superAdminAssurance: async () => ({ ok: true }),
+  decideSuperAdminAssurance: () => ({ ok: true }),
+  SUPER_ADMIN_STEP_UP_PATH: '/auth/step-up?next=%2Fadmin',
+}));
 vi.mock('@/lib/supabase/auth', () => ({
   getUser: async () => {
     if (h.mode === 'throws') throw new Error('Account context is temporarily unavailable.');

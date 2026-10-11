@@ -49,6 +49,8 @@ function setup(value:unknown=snapshot(),options:{cap?:number;missingCount?:boole
   if(url.pathname==='/rest/v1/rpc/calendar_read_occurrence_inputs'){
    expect(init?.method).toBe('POST');expect(JSON.parse(String(init?.body))).toEqual({p_family_id:FAMILY});return Response.json(value);
   }
+  // resolveAssigneeId checks a supplied assignee id belongs to this family.
+  if(url.pathname==='/rest/v1/family_members'){expect(url.searchParams.get('family_id')).toBe('eq.'+FAMILY);const found=url.searchParams.get('id')==='eq.'+MEMBER?[{id:MEMBER}]:[];return String(new Headers(init?.headers).get('accept')).includes('vnd.pgrst.object')?(found.length?Response.json(found[0]):Response.json({code:'PGRST116',message:'none'},{status:406})):Response.json(found);}
   expect(init?.method??'GET').toBe('GET');expect(url.pathname).toBe('/rest/v1/calendar_events');expect(url.searchParams.get('family_id')).toBe('eq.'+FAMILY);
   const offset=Number(url.searchParams.get('offset')??0);if(offset&&options.laterError)return Response.json({message:'Synthetic denied'},{status:403});
   const selected=rows.filter(row=>url.searchParams.get('recurrence')==='neq.none'?row.recurrence!=='none':row.recurrence==='none');const page=selected.slice(offset,offset+(options.cap??1000));

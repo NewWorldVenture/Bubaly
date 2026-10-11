@@ -236,7 +236,7 @@ describe('the reminder sweep, which has no reader to name', () => {
     holder.service = db;
 
     const result = await remindPendingApprovals(db as unknown as DB, NOW);
-    expect(result).toEqual({ reminded: 1, families: 1 });
+    expect(result).toEqual({ reminded: 1, families: 1, failures: 0 });
     const rows = db.table('notifications');
     expect(rows.map((r) => r.user_id)).toEqual(['u1']);
     expect(rows[0].title).toBe(`Needs your OK: Add soccer Saturday · ${usd(CENTS, 'en-US')}`);

@@ -38,6 +38,8 @@ type Options = { fetch?: typeof fetchPublicDocument; extract?: typeof extractDoc
 export async function captureDocumentLink(scope: ServiceScope, input: DocumentLinkInput, options: Options = {}): Promise<DocumentLinkResult> {
   const originalUrl = canonicalDocumentUrl(input.url);
   if (!scope.familyId || !scope.userId || scope.actorKind !== 'member' || !UUID.test(input.captureId) || !originalUrl) return { ok: false, reason: 'invalid_url', retryable: false };
+  // Guests are view-only: no paperwork rows, and no server fetch of a URL they chose.
+  if (scope.role === 'guest') return { ok: false, reason: 'access_denied', retryable: false };
   let saved = false;
   try {
     const source = input.messageId !== undefined ? await linkedDocumentSource(scope, input.messageId) : null;

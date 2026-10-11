@@ -105,6 +105,10 @@ export function CareerModule() {
     const { data: removed, error } = await createClient().from('job_applications').delete().eq('id', a.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // Published without REPLICA IDENTITY FULL, so the family_id-filtered
+    // channel never hears this DELETE: the confirmed delete drops the row from
+    // the screen here, or it stays until a reload (H3).
+    apps.setData((rows) => rows.filter((row) => row.id !== a.id));
     success(tr('careerModule.applicationRemoved'));
   }
 
@@ -130,6 +134,10 @@ export function CareerModule() {
     const { data: removed2, error } = await createClient().from('resume_versions').delete().eq('id', r.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed2)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // Published without REPLICA IDENTITY FULL, so the family_id-filtered
+    // channel never hears this DELETE: the confirmed delete drops the row from
+    // the screen here, or it stays until a reload (H3).
+    resumes.setData((rows) => rows.filter((row) => row.id !== r.id));
     success(tr('careerModule.resumeDeleted'));
   }
 
@@ -145,6 +153,14 @@ export function CareerModule() {
     const { data: removed3, error } = await createClient().from('career_profiles').delete().eq('id', p.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed3)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // Published without REPLICA IDENTITY FULL, so the family_id-filtered
+    // channel never hears this DELETE: the confirmed delete drops the row from
+    // the screen here, or it stays until a reload (H3).
+    // Its applications and resumes went with it (ON DELETE CASCADE, 0247), and
+    // their deletes are just as silent.
+    profiles.setData((rows) => rows.filter((row) => row.id !== p.id));
+    apps.setData((rows) => rows.filter((row) => row.profile_id !== p.id));
+    resumes.setData((rows) => rows.filter((row) => row.profile_id !== p.id));
     setProfileId('');
     success(tr('careerModule.profileDeleted'));
   }
@@ -205,8 +221,8 @@ export function CareerModule() {
           {(profiles.data.length > 1) && (
             <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label={tr('career.jobSearch')}>
               {visibleProfiles.map((p) => (
-                <button key={p.id} role="tab" aria-selected={p.id === profileId} onClick={() => setProfileId(p.id)} className={cn('rounded-full border px-3 py-1.5 text-sm transition coarse:min-h-11', p.id === profileId ? 'border-brand bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg', !p.is_active && 'opacity-60')}>
-                  {nameOf(p.member_id)} <span className="text-xs opacity-70">· {p.title}</span>
+                <button key={p.id} role="tab" aria-selected={p.id === profileId} onClick={() => setProfileId(p.id)} className={cn('rounded-full border px-3 py-1.5 text-sm transition coarse:min-h-11', p.id === profileId ? 'border-brand bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg', !p.is_active && 'border-dashed')}>
+                  {nameOf(p.member_id)} <span className="text-xs">· {p.title}</span>
                 </button>
               ))}
               {profiles.data.some((p) => !p.is_active) && <button onClick={() => setShowArchived((v) => !v)} className="text-xs text-muted hover:text-fg">{showArchived ? 'Hide' : 'Show'} {tr('career.pastSearches')}</button>}

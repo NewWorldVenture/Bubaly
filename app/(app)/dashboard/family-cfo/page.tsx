@@ -17,6 +17,7 @@ import { getFormat } from '@/lib/utils/format-server';
 import { loadMoneyTimelineInput } from '@/lib/finance/timeline-load';
 import { isCfoMissingTable, loadCfoSummaryRows } from '@/lib/finance/cfo-load';
 import { buildCashflowTimeline, DEFAULT_BUFFER, money as moneyIn, pretty as prettyIn, type BuildTimelineInput, type PlanSource } from '@/lib/finance/timeline';
+import { BillScheduleConfirmationRequired } from '@/lib/finance/bill-schedule';
 import { EXPLAIN_MONTH_REQUEST } from '@/lib/finance/cfo-prompts';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 
@@ -82,7 +83,20 @@ export default async function FamilyCfoPage() {
     console.error('[dashboard/family-cfo] forecast read failed', err);
     return <ErrorState message={tr('familyCfo.couldNotLoadYourFamily')} />;
   }
-  const forecast = buildCashflowTimeline(forecastInput);
+  // A recurring bill without a named cadence or day is not stepped on a
+  // guessed schedule: the page says which confirmation it needs instead.
+  let forecast: ReturnType<typeof buildCashflowTimeline>;
+  try {
+    forecast = buildCashflowTimeline(forecastInput);
+  } catch (err) {
+    if (!(err instanceof BillScheduleConfirmationRequired)) throw err;
+    return (
+      <div className="space-y-4">
+        <ErrorState message={tr('bills.scheduleForecastNeedsConfirmation')} />
+        <Link href="/dashboard/bills" className="inline-block rounded-xl border border-border px-4 py-3 font-semibold">{tr('bills.reviewSchedules')}</Link>
+      </div>
+    );
+  }
   const buffer = forecastInput.buffer ?? DEFAULT_BUFFER;
 
   const accounts = accountsRes.data;

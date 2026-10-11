@@ -65,8 +65,8 @@ describe('a gated chat tool can be replayed from its approval', () => {
     });
     holder.db = db;
     db.seed('family_members', [
-      { id: 'parent', user_id: 'parent-user', family_id: 'family', role: 'parent' },
-      { id: 'asker', user_id: 'asker-user', family_id: asker === 'foreign' ? 'other-family' : 'family', role: 'teen' },
+      { id: 'parent', user_id: 'parent-user', family_id: 'family', role: 'parent', is_active: true },
+      { id: 'asker', user_id: 'asker-user', family_id: asker === 'foreign' ? 'other-family' : 'family', role: 'teen', is_active: true },
     ]);
     db.seed('calendar_events', [{ id: 'event', title: 'Soccer', family_id: 'family', starts_at: '2026-09-16T16:00:00Z' }]);
     db.seed('event_rsvps', [{ id: 'parent-reply', event_id: 'event', family_id: 'family', member_id: 'parent', status: 'declined' }]);
@@ -79,6 +79,10 @@ describe('a gated chat tool can be replayed from its approval', () => {
     }, { effect: 'require_approval', reason: 'Review the reply', basis: 'fallback' });
     expect(approval?.id).toBeTruthy();
     expect(db.table('approval_requests')[0].requested_by_member_id).toBe(requestedBy);
+    // Every caller of openApprovalRequest (evaluateTrust, gateAiAction) also
+    // writes the service-only audit line naming the approval; that line, not
+    // the member-writable `requested_by_kind`, is what proves Bubaly filed it.
+    db.seed('trust_audit_logs', [{ family_id: 'family', actor_kind: 'ai_agent', actor_id: 'assistant', approval_id: approval!.id, decision: 'require_approval' }]);
 
     const scope: ServiceScope = { db, familyId: 'family', userId: 'parent-user', memberId: 'parent', role: 'parent', actorKind: 'member', tz: 'UTC' };
     const result = await decide(scope, approval!.id, 'approved');

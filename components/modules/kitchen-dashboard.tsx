@@ -88,7 +88,7 @@ export function KitchenDashboard({ data }: { data: KitchenData }) {
         <div className="lg:col-span-2 overflow-hidden rounded-3xl border border-brand/20 bg-gradient-to-br from-brand/10 via-brand/5 to-transparent p-6">
           <div className="flex items-start justify-between">
             <div>
-              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-brand-text/70">
+              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-brand-text">
                 <Flame className="h-3.5 w-3.5" /> {tr('kitchenDashboard.tonightAposSDinner')}
               </p>
               <p className="mt-2 text-3xl font-black tracking-tight">{data.tonight ?? 'Nothing planned yet'}</p>
@@ -398,7 +398,7 @@ function ChefModal({ onClose }: { onClose: () => void }) {
   const [request, setRequest] = useState('');
   const [loading, setLoading] = useState(false);
   const [reply, setReply] = useState<ChefReply | null>(null);
-  const [source, setSource] = useState<'ai' | 'fallback' | null>(null);
+  const [source, setSource] = useState<'ai' | 'fallback' | 'unavailable' | null>(null);
 
   async function ask(prompt?: string) {
     const q = (prompt ?? request).trim();
@@ -447,9 +447,16 @@ function ChefModal({ onClose }: { onClose: () => void }) {
 
         {reply && (
           <div className="space-y-4 border-t border-border pt-4">
+            {/* "Not configured" only when the server says so; a provider that
+                failed is a different fact with a different remedy. */}
             {source === 'fallback' && (
               <p className="rounded-lg border border-border bg-surface/40 px-3 py-2 text-[11px] text-muted">
                 {i18nT('kitchenDashboard.aiIsntConfiguredShowingAPlan')}
+              </p>
+            )}
+            {source === 'unavailable' && (
+              <p className="rounded-lg border border-border bg-surface/40 px-3 py-2 text-[11px] text-muted">
+                {i18nT('kitchenDashboard.aiChefUnavailableShowingAPlan')}
               </p>
             )}
             {reply.message && <p className="text-sm font-medium">{reply.message}</p>}

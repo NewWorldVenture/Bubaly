@@ -1,5 +1,12 @@
 -- A-20: a family can never be left with nobody able to manage it.
 --
+-- 0482 extends 0299's function (same deferred constraint trigger): a family
+-- that HAS an active parent must keep one, so an adult alone no longer lets
+-- the last parent go (23514, service role included). The control household
+-- and case 3 therefore keep a second PARENT, not merely a second manager;
+-- the last-parent rule itself is proved by
+-- a-parent-is-made-unmade-and-invited-only-by-a-parent-check.sql (L01-L06).
+--
 -- can_manage_family() is the whole predicate of fm_insert (WITH CHECK),
 -- fm_update (USING and WITH CHECK) and fm_delete (USING), and it is true only
 -- for an active member whose role is parent or adult. If a family's last
@@ -155,7 +162,9 @@ insert into public.family_members (id, family_id, display_name, role, is_active)
   ('00000000-0000-4000-8000-00000000fb28', '00000000-0000-4000-8000-00000000fa9a', 'Control Guest Target',      'parent', true),
   ('00000000-0000-4000-8000-00000000fb22', '00000000-0000-4000-8000-00000000fa9a', 'Control Deactivate Target', 'parent', true),
   ('00000000-0000-4000-8000-00000000fb23', '00000000-0000-4000-8000-00000000fa9a', 'Control Delete Target',     'parent', true),
-  ('00000000-0000-4000-8000-00000000fb24', '00000000-0000-4000-8000-00000000fa9a', 'Control Second Manager',    'adult',  true),
+  -- a PARENT since 0482: the control's last leg deletes the last of the six
+  -- parent targets, and a family that had a parent must keep one.
+  ('00000000-0000-4000-8000-00000000fb24', '00000000-0000-4000-8000-00000000fa9a', 'Control Second Manager',    'parent', true),
   ('00000000-0000-4000-8000-00000000fb25', '00000000-0000-4000-8000-00000000fa9a', 'Control Child',             'child',  true);
 
 do $$
@@ -382,9 +391,11 @@ begin
   insert into public.family_members (id, family_id, display_name, role, is_active)
   values ('00000000-0000-4000-8000-00000000fb01', '00000000-0000-4000-8000-00000000fa99', 'Sole Parent', 'parent', true);
 
-  -- 3. With a second manager present, the first is free to leave.
+  -- 3. With a second manager present, the first is free to leave. A second
+  --    PARENT, since 0482: a family that has a parent keeps one, so an adult
+  --    alone would not free the sole parent to go.
   insert into public.family_members (id, family_id, display_name, role, is_active)
-  values ('00000000-0000-4000-8000-00000000fb03', '00000000-0000-4000-8000-00000000fa99', 'Other Parent', 'adult', true);
+  values ('00000000-0000-4000-8000-00000000fb03', '00000000-0000-4000-8000-00000000fa99', 'Other Parent', 'parent', true);
   delete from public.family_members where id = '00000000-0000-4000-8000-00000000fb01';
   raise notice 'A-20 OK: with a second manager the first can leave';
 

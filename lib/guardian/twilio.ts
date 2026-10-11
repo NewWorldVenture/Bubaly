@@ -13,7 +13,17 @@ function authHeader(): string {
   return `Basic ${creds}`;
 }
 
-async function twilioFetch(path: string, body?: Record<string, string>): Promise<unknown> {
+/**
+ * One Twilio REST request. `signal` is the CALLER's deadline — a webhook's
+ * request signal, or the step budget an inbound lane runs the escalation
+ * under — and it is combined with this helper's own 15 s ceiling rather than
+ * replacing it: fetchWithDeadline adds its timeout only when no signal is
+ * given, so handing it the caller's signal alone would have removed the
+ * per-request ceiling. Without a caller signal the ceiling stands on its own,
+ * as before. (The escalation used to reach this with no signal at all, so a
+ * caller that had timed out and moved on left every remaining send running.)
+ */
+async function twilioFetch(path: string, body?: Record<string, string>, signal?: AbortSignal): Promise<unknown> {
   const url = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}${path}`;
   const res = await fetchWithDeadline(url, {
     method: body ? 'POST' : 'GET',
@@ -22,6 +32,7 @@ async function twilioFetch(path: string, body?: Record<string, string>): Promise
       ...(body ? { 'content-type': 'application/x-www-form-urlencoded' } : {}),
     },
     body: body ? new URLSearchParams(body).toString() : undefined,
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(15_000)]) : undefined,
   }, 15_000);
   if (!res.ok) {
     const bounded = await readBoundedResponseText(res, 64 * 1024);
@@ -125,9 +136,9 @@ export function wrapTwiml(...elements: string[]): string {
 
 // ─── Twilio REST Calls ──────────────────────────────────────────────────────
 
-/** Send an SMS. */
-export async function sendSms(to: string, body: string, from = TWILIO_PHONE_NUMBER): Promise<void> {
-  await twilioFetch('/Messages.json', { To: to, From: from, Body: body });
+/** Send an SMS. `signal` is the caller's deadline; the request's own 15 s ceiling applies as well. */
+export async function sendSms(to: string, body: string, options: { from?: string; signal?: AbortSignal } = {}): Promise<void> {
+  await twilioFetch('/Messages.json', { To: to, From: options.from ?? TWILIO_PHONE_NUMBER, Body: body }, options.signal);
 }
 
 /** Acceptance is a provider receipt, not proof that a handset received the SMS. */
@@ -136,6 +147,8 @@ export type SmsReceiptResult =
   | { kind: 'retryable'; code: 'rate_limited' }
   | { kind: 'rejected'; code: 'provider_rejected' | 'invalid_message' }
   | { kind: 'unconfigured' }
+  /** Our credentials or account were refused (401/403/404): nothing was sent, and the message is not at fault. */
+  | { kind: 'misconfigured' }
   | { kind: 'unknown' };
 
 /** A single attempt for durable callers; never retries an ambiguous external send. */
@@ -151,6 +164,12 @@ export async function sendSmsWithReceipt(to: string, body: string, signal?: Abor
     }, 15_000);
     if (response.status === 429) return { kind: 'retryable', code: 'rate_limited' };
     if (response.status === 408) return { kind: 'unknown' };
+    // A wrong or rotated auth token (401), a suspended or unauthorized account
+    // (403) or a wrong account SID in the URL (404) refuses the REQUEST, not the
+    // message. Calling those 'rejected' made every urgent text sent during a
+    // credential misconfiguration permanently dropped; they are configuration
+    // failures that recover once the configuration is fixed.
+    if (response.status === 401 || response.status === 403 || response.status === 404) return { kind: 'misconfigured' };
     if (response.status >= 400 && response.status < 500) return { kind: 'rejected', code: 'provider_rejected' };
     if (response.status !== 201) return { kind: 'unknown' };
     const data = await readBoundedResponseJson<{ sid?: unknown; status?: unknown }>(response, 64 * 1024);
@@ -163,12 +182,13 @@ export async function sendSmsWithReceipt(to: string, body: string, signal?: Abor
   }
 }
 
-/** Initiate an outbound call (e.g., emergency escalation). */
+/** Initiate an outbound call (e.g., emergency escalation). `signal` is the caller's deadline. */
 export async function initiateCall(params: {
   to: string;
   from?: string;
   twimlUrl: string;
   statusCallbackUrl?: string;
+  signal?: AbortSignal;
 }): Promise<{ callSid: string }> {
   const body: Record<string, string> = {
     To: params.to,
@@ -176,7 +196,7 @@ export async function initiateCall(params: {
     Url: params.twimlUrl,
   };
   if (params.statusCallbackUrl) body.StatusCallback = params.statusCallbackUrl;
-  const data = await twilioFetch('/Calls.json', body) as { sid: string };
+  const data = await twilioFetch('/Calls.json', body, params.signal) as { sid: string };
   return { callSid: data.sid };
 }
 

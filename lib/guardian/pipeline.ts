@@ -8,6 +8,7 @@ import { evaluateRules, buildRuleContext, type GuardianRule } from './rules';
 import { detectScamFromText, type ScamType } from './scam';
 import { applySeasonalBoost } from './seasonal';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { isValidTimezone } from '@/lib/time/zoned';
 
 // Same reason as TrustLevel: `guardian_routing_mode` is a Postgres enum, and a
 // second hand-written copy of it is a copy that can disagree.
@@ -51,7 +52,14 @@ export type PipelineResult = {
   scamType: string | null;
   ruleId: string | null;
   reason: string;              // explainable AI string
-  shouldEscalate: boolean;     // true if emergency detected
+  /**
+   * True when an emergency was detected from a sender the family has NOT
+   * blocked. Callers escalate to the managers (SMS + call) and bypass quiet
+   * hours on it. A blocked sender never sets it: the family's block wins.
+   */
+  shouldEscalate: boolean;
+  /** Emergency keywords matched, whoever sent them — recorded for parent review only. */
+  emergencyKeywords: boolean;
   memberProfile: MemberProfile | null;
 };
 
@@ -71,10 +79,12 @@ export type MemberProfile = {
   default_mode_blocked: RoutingMode;
   context_overrides: Record<string, RoutingMode>;
   voicemail_greeting: string | null;
+  /** 01370: "always ring through regardless of mode" on an emergency. NOT NULL DEFAULT true. */
+  emergency_always_ring?: boolean;
 };
 
 export class GuardianPolicyUnavailableError extends Error {
-  constructor(public readonly stage: 'contact' | 'profile' | 'rules') {
+  constructor(public readonly stage: 'contact' | 'profile' | 'rules' | 'timezone') {
     super('Guardian routing policy unavailable');
     this.name = 'GuardianPolicyUnavailableError';
   }
@@ -166,6 +176,7 @@ async function loadMemberProfile(
   if (!validId(row.id) || row.family_id !== familyId || row.member_id !== memberId || row.is_active !== true
     || typeof row.ai_persona_name !== 'string' || !nullableString(row.ai_greeting_template)
     || !nullableString(row.guardian_phone) || !nullableString(row.voicemail_greeting)
+    || (row.emergency_always_ring !== undefined && typeof row.emergency_always_ring !== 'boolean')
     || (row.current_context !== null && !CONTEXTS.includes(row.current_context as string))
     || !record(row.context_overrides) || !Object.values(row.context_overrides).every(routing)
     || !['default_mode_immediate', 'default_mode_close', 'default_mode_trusted', 'default_mode_known', 'default_mode_unknown', 'default_mode_suspected_spam', 'default_mode_blocked'].every(key => routing(row[key]))) {
@@ -206,6 +217,28 @@ async function loadRules(
     ids.add(row.id);
   }
   return data as unknown as GuardianRule[];
+}
+
+/**
+ * The family's IANA zone, which every time and day condition is evaluated in.
+ * Required policy like the other three reads: a missing, unreadable or
+ * unusable zone stops routing rather than falling back to someone else's clock.
+ */
+async function loadTimezone(
+  supabase: SupabaseClient,
+  familyId: string,
+  signal: AbortSignal,
+): Promise<string> {
+  const data = await policyRows('timezone', signal, 1, () => supabase
+    .from('families')
+    .select('id, timezone', { count: 'exact' })
+    .eq('id', familyId)
+    .limit(2).abortSignal(signal).retry(false));
+  const row = data[0];
+  if (!row || row.id !== familyId || typeof row.timezone !== 'string' || !row.timezone || !isValidTimezone(row.timezone)) {
+    throw new GuardianPolicyUnavailableError('timezone');
+  }
+  return row.timezone;
 }
 
 /** Resolve routing mode from profile based on trust level + current context. */
@@ -251,12 +284,13 @@ export async function runDecisionPipeline(
   // Independent reads share one deadline; a late response cannot resume routing.
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), POLICY_READ_MS);
-  let contact: Contact | null, profile: MemberProfile | null, rules: GuardianRule[];
+  let contact: Contact | null, profile: MemberProfile | null, rules: GuardianRule[], timezone: string;
   try {
-    [contact, profile, rules] = await Promise.all([
+    [contact, profile, rules, timezone] = await Promise.all([
       lookupContact(supabase, familyId, callerPhone, controller.signal),
       loadMemberProfile(supabase, familyId, memberId, controller.signal),
       loadRules(supabase, familyId, memberId, controller.signal),
+      loadTimezone(supabase, familyId, controller.signal),
     ]);
   } catch (error) {
     controller.abort();
@@ -294,6 +328,8 @@ export async function runDecisionPipeline(
     callerPhone,
     callerName,
     memberContext: profile?.current_context ?? 'normal',
+    // The family's own clock. loadTimezone has already refused an unusable one.
+    timezone,
   });
   const ruleResult = evaluateRules(rules, ruleCtx);
 
@@ -310,12 +346,23 @@ export async function runDecisionPipeline(
     routingMode = defaultRouting(trust);
   }
 
-  // Step 7: Emergency override — if initial transcript mentions emergency keywords, always escalate
-  const shouldEscalate = Boolean(
+  // Step 7: Emergency override.
+  //
+  // The keyword list is broad on purpose ("hurt", "fire", "police"), which is
+  // exactly why it must never outrank the family's own block: "you'll get
+  // hurt" from a number a parent blocked would otherwise ring straight through
+  // and notify the house. A blocked contact, or a route that resolved to
+  // `blocked`, keeps its block; the match is only recorded for parent review.
+  // Ringing through is further governed by the member's own
+  // `emergency_always_ring` setting (01370, default true).
+  const emergencyKeywords = Boolean(
     initialTranscript &&
     /\b(911|emergency|help me|heart attack|stroke|fire|crash|accident|hospital|police|hurt|dying)\b/i.test(initialTranscript)
   );
-  if (shouldEscalate) routingMode = 'immediate_ring';
+  const blockedSender = contact?.trust_level === 'blocked' || routingMode === 'blocked';
+  const shouldEscalate = emergencyKeywords && !blockedSender;
+  const emergencyRingsThrough = profile ? profile.emergency_always_ring !== false : true;
+  if (shouldEscalate && emergencyRingsThrough) routingMode = 'immediate_ring';
 
   let reason = ruleResult.matched
     ? ruleResult.reason
@@ -333,6 +380,7 @@ export async function runDecisionPipeline(
     ruleId,
     reason,
     shouldEscalate,
+    emergencyKeywords,
     memberProfile: profile,
   };
 }

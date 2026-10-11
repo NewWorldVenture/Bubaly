@@ -7,6 +7,7 @@ import {
   webPushSupported, subscribeWebPush, unsubscribeWebPush, VAPID_PUBLIC_KEY,
 } from '@/lib/push/web-client';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { forgetPushDevice, rememberPushDevice } from '@/lib/push/device-registration';
 
 type State = 'idle' | 'busy' | 'on' | 'unsupported' | 'denied' | 'unconfigured';
 
@@ -58,15 +59,17 @@ export function EnablePushButton() {
     if (perm !== 'granted') { setState(perm === 'denied' ? 'denied' : 'idle'); return; }
     const payload = await subscribeWebPush();
     if (!payload) { setState('unsupported'); return; }
-    await fetch('/api/push/subscribe', {
+    const res = await fetch('/api/push/subscribe', {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload),
     });
+    if (res.ok) rememberPushDevice(payload);
     setState('on');
   }
 
   async function disable() {
     setState('busy');
     const endpoint = await unsubscribeWebPush();
+    forgetPushDevice();
     if (endpoint) {
       await fetch('/api/push/unsubscribe', {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint }),

@@ -20,6 +20,7 @@ import type { Tables } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
 import { keyedProbe, sameId, sameInstant, withIdempotency, type KeyedCreateOptions } from '../idempotency';
+import { familyInstant } from '@/lib/time/civil';
 import { scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
@@ -69,6 +70,23 @@ function reminderDrift(stored: FamilyReminder, wanted: ReminderContent): string[
   return drift;
 }
 
+/**
+ * A `remindAt` as an instant. A zone-less value — the school desk's
+ * `${date}T09:00:00` for a permission slip or a fee, a template's
+ * `localTime(dayKey, 7, 0)`, the assistant's `2026-10-12T09:00:00.000` — is a
+ * reading on the FAMILY's clock, by the one rule `lib/time/civil.ts` states
+ * for every such string, the calendar's included: a fraction is still a
+ * reading (it used to miss the pattern and fall through to `Date.parse`, the
+ * HOST's clock — 09:00Z for a Los Angeles 9am), a date that does not exist is
+ * refused rather than rolled into the next month, and the DST gap and fold
+ * resolve as RFC 5545 does. A bare date is the start of the family's day; an
+ * offset or `Z` is kept as written. Nothing else is accepted.
+ */
+function resolveRemindAt(value: string, tz: string): string | null {
+  const at = familyInstant(value, tz);
+  return at ? at.toISOString() : null;
+}
+
 export async function createReminder(
   scope: ServiceScope,
   input: CreateReminderInput,
@@ -79,9 +97,8 @@ export async function createReminder(
 
   let remindAt: string | null = null;
   if (input.remindAt) {
-    const ms = Date.parse(input.remindAt);
-    if (!Number.isFinite(ms)) return fail('That reminder time could not be understood.', { code: SERVICE_CODES.invalidInput });
-    remindAt = new Date(ms).toISOString();
+    remindAt = resolveRemindAt(input.remindAt, scope.tz);
+    if (!remindAt) return fail('That reminder time could not be understood.', { code: SERVICE_CODES.invalidInput });
   }
 
   const kind = input.kind && KINDS.includes(input.kind) ? input.kind : 'time';

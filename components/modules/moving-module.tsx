@@ -111,12 +111,18 @@ export function MovingWorkspace() {
     if (!move) return;
     if (!plan.length) return toastError(tr('movingModule.theFullChecklistForThis'));
     setPlanning(true);
-    const { error } = await createClient().from('move_tasks').insert(plan.map((p) => ({
+    // The inserted rows join the timeline BEFORE the button is live again.
+    // `plan` is computed from the tasks on screen and move_tasks has no unique
+    // (move_id, template_key), so a click in the gap before the realtime
+    // refetch landed re-inserted every template step.
+    const { data: added, error } = await createClient().from('move_tasks').insert(plan.map((p) => ({
       family_id: familyId, move_id: move.id, title: p.title, category: p.category, offset_days: p.offsetDays, due_date: p.dueDate, date_mode: 'relative' as const, template_key: p.key, status: 'todo' as const, created_by: userId,
-    })));
+    }))).select('*');
+    if (error) { setPlanning(false); return toastError(describeDbError(error)); }
+    if (!added || wroteNoRows(added)) { setPlanning(false); return toastError(tr('errors.thatChangeWasNotSaved')); }
+    tasks.setData((rows) => [...rows.filter((row) => !added.some((task) => task.id === row.id)), ...added]);
     setPlanning(false);
-    if (error) return toastError(describeDbError(error));
-    success(plan.length === 1 ? tr('moving.taskAddedToTimelineOne', { count: plan.length }) : tr('moving.tasksAddedToTimelineMany', { count: plan.length }));
+    success(added.length === 1 ? tr('moving.taskAddedToTimelineOne', { count: added.length }) : tr('moving.tasksAddedToTimelineMany', { count: added.length }));
   }
 
   async function setTaskStatus(t: Task, status: Task['status']) {
@@ -132,6 +138,10 @@ export function MovingWorkspace() {
     const { data: removed, error } = await createClient().from('move_tasks').delete().eq('id', t.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // Published without REPLICA IDENTITY FULL, so the family_id-filtered
+    // channel never hears this DELETE: the confirmed delete drops the row from
+    // the screen here, or it stays until a reload (H3).
+    tasks.setData((rows) => rows.filter((row) => row.id !== t.id));
     success(tr('movingModule.taskDeleted'));
   }
 
@@ -149,6 +159,10 @@ export function MovingWorkspace() {
     const { data: removed2, error } = await createClient().from('move_boxes').delete().eq('id', b.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed2)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // Published without REPLICA IDENTITY FULL, so the family_id-filtered
+    // channel never hears this DELETE: the confirmed delete drops the row from
+    // the screen here, or it stays until a reload (H3).
+    boxes.setData((rows) => rows.filter((row) => row.id !== b.id));
     success(tr('movingModule.boxDeleted'));
   }
 
@@ -165,6 +179,14 @@ export function MovingWorkspace() {
     const { data: removed3, error } = await createClient().from('moves').delete().eq('id', m.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed3)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // Published without REPLICA IDENTITY FULL, so the family_id-filtered
+    // channel never hears this DELETE: the confirmed delete drops the row from
+    // the screen here, or it stays until a reload (H3).
+    // Left in `moves.data`, the effect above re-selected the move just deleted,
+    // with its cascade-deleted tasks and boxes (0245) still listed under it.
+    moves.setData((rows) => rows.filter((row) => row.id !== m.id));
+    tasks.setData((rows) => rows.filter((row) => row.move_id !== m.id));
+    boxes.setData((rows) => rows.filter((row) => row.move_id !== m.id));
     setMoveId('');
     success(tr('movingModule.moveDeleted'));
   }
@@ -246,7 +268,7 @@ export function MovingWorkspace() {
               {moves.data.map((m) => (
                 <button key={m.id} role="tab" aria-selected={m.id === moveId} onClick={() => setMoveId(m.id)}
                   className={cn('rounded-full border px-3 py-1.5 text-sm transition coarse:min-h-11', m.id === moveId ? 'border-brand bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
-                  {m.title} <span className="text-xs opacity-70">· {fmtDate(m.move_date)}</span>
+                  {m.title} <span className="text-xs">· {fmtDate(m.move_date)}</span>
                 </button>
               ))}
             </div>

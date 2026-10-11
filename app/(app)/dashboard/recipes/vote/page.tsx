@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
@@ -15,7 +15,8 @@ export const dynamic = 'force-dynamic';
 
 export default async function MealVotePage() {
   const t = await getTranslations();
-  const ctx = await requireUserContext();
+  // Part of Recipes: it answers to that feature's tier, not just a session.
+  const ctx = await requireFeature('/dashboard/recipes');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 

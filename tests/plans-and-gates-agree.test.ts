@@ -130,8 +130,15 @@ describe('the quota is enforced where the money is spent', () => {
     expect(rpcCall, 'the protected household usage RPC is gone').toBeTruthy();
     expect(rpcCall![1]).toContain('p_family_id: familyId');
     expect(rpcCall![1]).toContain('p_month_start: monthStartIso');
-    expect(access, 'a raw request-row count would omit private sibling and system requests')
-      .not.toMatch(/\.from\(\s*['"]ai_requests['"]\s*\)/);
+    // Until held 0493 is applied the previous release's direct count stands in,
+    // and only behind the exact missing-RPC check. Anywhere else a raw
+    // request-row count would omit private sibling and system requests.
+    const rawCounts = [...access.matchAll(/\.from\(\s*['"]ai_requests['"]\s*\)/g)];
+    expect(rawCounts.length, 'a raw request-row count would omit private sibling and system requests').toBeLessThanOrEqual(1);
+    if (rawCounts.length === 1) {
+      const guarded = /if \(isMissingMonthlyCountRpc\(countError\)\) \{([\s\S]*?)\n {4}\}/.exec(access);
+      expect(guarded?.[1], 'the direct ai_requests count escaped the missing-0493 branch').toMatch(/\.from\(\s*['"]ai_requests['"]\s*\)/);
+    }
 
     const migration = read('supabase/reserved/0493_ai_copy_private_read_and_quota.sql');
     const rpcBody = /create or replace function public\.count_family_ai_requests_month\([\s\S]*?security definer[\s\S]*?as \$\$([\s\S]*?)\$\$;/i.exec(migration);

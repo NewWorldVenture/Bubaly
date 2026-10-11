@@ -76,7 +76,7 @@ export function PlayDatesView() {
         <div className="mt-3 flex items-center gap-2">
           {next && <Button size="sm" variant="outline" onClick={() => setStatus(pd, next)}>{t('playDates.mark')} {PLAY_DATE_STATUS[next].label.toLowerCase()}</Button>}
           {pd.status !== 'cancelled' && pd.status !== 'completed' && <Button size="sm" variant="ghost" onClick={() => setStatus(pd, 'cancelled')}>{t('playDates.cancel')}</Button>}
-          <button onClick={() => remove(pd.id)} className="ml-auto rounded-lg p-1.5 text-muted/50 transition hover:text-danger" aria-label={t('playDates.delete')}><Trash2 className="h-4 w-4" /></button>
+          <button onClick={() => remove(pd.id)} className="ml-auto rounded-lg p-1.5 text-muted transition hover:text-danger" aria-label={t('playDates.delete')}><Trash2 className="h-4 w-4" /></button>
         </div>
       </div>
     );

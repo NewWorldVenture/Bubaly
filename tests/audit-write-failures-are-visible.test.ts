@@ -165,8 +165,11 @@ describe('an emergency notification that was not written says so', () => {
   // lives in lib/contact-center/urgent-delivery.ts. The invariant follows the
   // write rather than being dropped with the line that used to carry it — and it
   // is checked harder there, because that implementation does more than log.
+  // The escalation's write lives in lib/guardian/escalate.ts since the inbound
+  // SMS, WhatsApp and screening flows started calling it directly; the route
+  // only parses and delegates.
   const ROUTES = [
-    'app/api/guardian/escalate/route.ts',
+    'lib/guardian/escalate.ts',
     'app/api/guardian/screen/route.ts',
   ];
 
@@ -219,10 +222,11 @@ describe('an emergency notification that was not written says so', () => {
 
   it('the escalation claims a push only when the row landed', async () => {
     const { readFileSync } = await import('node:fs');
-    const source = readFileSync('app/api/guardian/escalate/route.ts', 'utf8');
+    const source = readFileSync('lib/guardian/escalate.ts', 'utf8');
     // `pushSent = true` must sit on the no-error branch, never as the next
     // statement after an insert whose outcome nobody checked.
-    expect(source).toMatch(/if \(notifyError\)[\s\S]{0,200}else pushSent = true;/);
+    // A 23505 on the stable id means the row already landed on an earlier attempt.
+    expect(source).toMatch(/if \(notifyError && [^\n]*\) \{[\s\S]{0,240}\} else pushSent = true;/);
     expect(source, 'push_sent is persisted, so it has to mean the write landed')
       .toContain('push_sent: pushSent');
   });

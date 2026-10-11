@@ -519,8 +519,8 @@ export interface Database {
         Partial<{ collection_id: string; listing_id: string }>
       >;
       marketplace_orders: T<
-        { id: string; family_id: string; listing_id: string; buyer_member: string | null; seller_member: string | null; kind: string; status: string; amount_cents: number; starts_on: string | null; ends_on: string | null; notes: string | null; due_reminder_sent_at: string | null; overdue_notified_at: string | null; returned_at: string | null; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; listing_id: string; buyer_member?: string | null; seller_member?: string | null; kind?: string; status?: string; amount_cents?: number; starts_on?: string | null; ends_on?: string | null; notes?: string | null; due_reminder_sent_at?: string | null; overdue_notified_at?: string | null; returned_at?: string | null; created_by?: string | null },
+        { id: string; family_id: string; buyer_family_id: string | null; listing_id: string; buyer_member: string | null; seller_member: string | null; kind: string; status: string; amount_cents: number; starts_on: string | null; ends_on: string | null; notes: string | null; due_reminder_sent_at: string | null; overdue_notified_at: string | null; returned_at: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; buyer_family_id?: string | null; listing_id: string; buyer_member?: string | null; seller_member?: string | null; kind?: string; status?: string; amount_cents?: number; starts_on?: string | null; ends_on?: string | null; notes?: string | null; due_reminder_sent_at?: string | null; overdue_notified_at?: string | null; returned_at?: string | null; created_by?: string | null },
         Partial<{ buyer_member: string | null; seller_member: string | null; kind: string; status: string; amount_cents: number; starts_on: string | null; ends_on: string | null; notes: string | null; due_reminder_sent_at: string | null; overdue_notified_at: string | null; returned_at: string | null }>
       >;
       marketplace_handoffs: T<
@@ -2422,6 +2422,14 @@ export interface Database {
         { id?: string; circle_id: string; family_id: string; family_name: string; role?: string },
         Partial<{ family_name: string; role: string }>
       >;
+      // 0483: families a circle's owner removed and barred from rejoining. Written only by
+      // marketplace_remove_circle_member / marketplace_unblock_circle_family; the owner
+      // family's managers read it. No updated_at.
+      marketplace_circle_blocks: T<
+        { circle_id: string; family_id: string; blocked_by: string | null; created_at: string },
+        { circle_id: string; family_id: string; blocked_by?: string | null; created_at?: string },
+        Partial<{ blocked_by: string | null }>
+      >;
       marketplace_listing_shares: T<
         { id: string; listing_id: string; circle_id: string; family_id: string; created_by: string | null } & Stamps,
         { id?: string; listing_id: string; circle_id: string; family_id: string; created_by?: string | null },
@@ -2753,6 +2761,15 @@ export interface Database {
         Partial<{ term: string; translation: string; example: string | null; part_of_speech: string | null; tags: string[]; ease: number; interval_days: number; repetitions: number; lapses: number; due_on: string; last_reviewed_on: string | null; is_suspended: boolean; notes: string | null }>
       >;
     };
+    // Views stay unregistered on purpose. supabase-js types `from()` as two
+    // overloads, tables then views, and TypeScript resolves `ReturnType<Client['from']>`
+    // and a `vi.spyOn(db, 'from').mockImplementation(...)` against the LAST overload.
+    // With no views that is a row type of `never`, which is what lets
+    // `as ReturnType<typeof supabase.from>` erase a row type (lib/guardian/sms-processing.ts,
+    // app/(app)/guardian/contacts/page.tsx, tests/*). Registering a view here turns every
+    // one of those casts into a cast to that view's row. The circle feed view (0483) is
+    // typed as MarketplaceCircleListingRow below instead: query the view by name
+    // and cast its rows through that type.
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
     Functions: {
@@ -2848,6 +2865,20 @@ export interface Database {
       marketplace_close_auction: { Args: { p_listing_id: string; p_now?: string }; Returns: Json };
       marketplace_negotiation_offer: { Args: { p_listing: string; p_buyer_member: string; p_buyer_family: string; p_amount: number; p_message?: string | null }; Returns: Json };
       marketplace_negotiation_respond: { Args: { p_negotiation: string; p_action: string; p_amount?: number | null; p_message?: string | null }; Returns: Json };
+      // 0483: circles — the owner family's manager removes (and by default blocks) a member
+      // family, lifts a block, or rotates the join code; the party and own-wallet tests behind
+      // the order/handoff policies and invest_orders; the spendable sum (service role only).
+      marketplace_remove_circle_member: { Args: { p_family: string; p_circle: string; p_member_family: string; p_block?: boolean }; Returns: Json };
+      marketplace_unblock_circle_family: { Args: { p_family: string; p_circle: string; p_blocked_family: string }; Returns: Json };
+      marketplace_rotate_circle_code: { Args: { p_family: string; p_circle: string }; Returns: string };
+      marketplace_circle_owner_manager: { Args: { p_circle: string; p_family: string }; Returns: boolean };
+      is_marketplace_order_party: { Args: { p_order_id: string }; Returns: boolean };
+      is_own_child_wallet: { Args: { p_child_wallet_id: string }; Returns: boolean };
+      wallet_spendable_cents: { Args: { p_family_id: string; p_bucket_id: string }; Returns: number };
+      // 0482: the role rank behind invites_insert/update and accept_invite, and the
+      // child-login test behind families_insert (answers only about the caller).
+      member_role_rank: { Args: { p_role: MemberRole }; Returns: number };
+      is_child_login_account: { Args: Record<string, never>; Returns: boolean };
       economy_decide_redemption: { Args: { p_redemption_id: string; p_approve: boolean; p_note?: string | null }; Returns: Json };
       // 0441: mark + increment in one transaction, for the claim holder only.
       ensure_default_grocery_list: { Args: { p_family_id: string; p_name: string; p_created_by: string | null }; Returns: string };
@@ -2939,6 +2970,16 @@ export interface Database {
     };
   };
 }
+
+/**
+ * public.marketplace_circle_listings (0483): what a circle sees of a listing shared into
+ * it — the shopper-facing columns of marketplace_listings plus the listing family's name;
+ * never location, member_id, created_by, claimed_by, highest_bidder_member_id,
+ * reserve_cents or highest_max_cents. Read-only (a security_barrier view owned by
+ * postgres) and granted to authenticated; it replaces the whole-row
+ * marketplace_listings_circle_read policy. Not under `Views` — see the note there.
+ */
+export type MarketplaceCircleListingRow = { id: string; family_id: string; family_name: string; title: string; description: string | null; kind: string; category: string; condition: string | null; price_cents: number; rent_period: string | null; photo_url: string | null; status: string; sale_format: string; starting_bid_cents: number; buy_now_cents: number | null; current_bid_cents: number; bid_count: number; has_reserve: boolean; reserve_met: boolean; highest_bidder_family_id: string | null; auction_starts_at: string | null; auction_ends_at: string | null; anti_snipe_minutes: number; auction_closed_at: string | null; created_at: string; updated_at: string };
 
 /** Convenience row-type aliases used throughout the app. */
 export type Tables<K extends keyof Database['public']['Tables']> =

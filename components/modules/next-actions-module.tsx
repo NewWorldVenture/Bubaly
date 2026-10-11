@@ -166,7 +166,7 @@ export function NextActionsModule() {
                   <h2 className={cn('mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide',
                     urgent ? 'text-rose-300' : 'text-muted')}>
                     {urgent && <AlertCircle className="h-3.5 w-3.5" />}
-                    {BUCKET_LABELS[bucket]} <span className="opacity-60">· {items.length}</span>
+                    {BUCKET_LABELS[bucket]} <span className="font-normal">· {items.length}</span>
                   </h2>
                   <ul className="space-y-2">
                     {items.map((a) => {

@@ -19,6 +19,9 @@ const mocks = vi.hoisted(() => ({
   syncFailure: 'none' as 'none' | 'returned' | 'thrown' | 'matchedNone',
   secretKey: 'sk_test_fixture' as string | null,
 }));
+// The billing routes now ask for the AAL2 step-up (/dashboard/billing's own
+// guard); these cases are about what they do once the session has it.
+vi.mock('@/lib/auth/require-aal2', () => ({ aal2Verdict: async () => ({ action: 'allow' }) }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('@/lib/supabase/auth', () => {
   const context = () => ({ user: { id: 'user-a', email: 'fixture@example.test' },
@@ -223,7 +226,7 @@ it('Checkout uses the verified current annual price before creating a customer',
   mocks.rows.subscriptions = { plan: 'free', status: 'active', provider_ref: null };
   expect((await checkout(request('basic_annual'))).status).toBe(200);
   expect(mocks.trace).toEqual(['price', 'customer', 'checkout']);
-  expect(mocks.createCheckout).toHaveBeenCalledWith(expect.objectContaining({ line_items: [{ price: PRICES.stripePrices.basic_annual.id, quantity: 1 }] }));
+  expect(mocks.createCheckout).toHaveBeenCalledWith(expect.objectContaining({ line_items: [{ price: PRICES.stripePrices.basic_annual.id, quantity: 1 }] }), expect.objectContaining({ idempotencyKey: expect.any(String) }));
 });
 it('a subscription change uses the verified Plus annual price', async () => {
   expect((await changePlan(request('plus_annual'))).status).toBe(200);
@@ -235,7 +238,7 @@ it('a Free family uses the same verified price when plan change falls back to Ch
   mocks.rows.subscriptions = { plan: 'free', status: 'active', provider_ref: null };
   expect((await changePlan(request('plus_annual'))).status).toBe(200);
   expect(mocks.trace).toEqual(['price', 'customer', 'checkout']);
-  expect(mocks.createCheckout).toHaveBeenCalledWith(expect.objectContaining({ line_items: [{ price: PRICES.stripePrices.plus_annual.id, quantity: 1 }] }));
+  expect(mocks.createCheckout).toHaveBeenCalledWith(expect.objectContaining({ line_items: [{ price: PRICES.stripePrices.plus_annual.id, quantity: 1 }] }), expect.objectContaining({ idempotencyKey: expect.any(String) }));
 });
 it('legacy Family annual Checkout selects Basic annual and is also accepted by change-plan', async () => {
   mocks.rows.subscriptions = { plan: 'free', status: 'active', provider_ref: null };
@@ -420,7 +423,9 @@ describe('subscription webhook price history', () => {
   });
   it('rejects an unknown price without writing a free or incorrect subscription', async () => {
     expect((await webhook(event('price_unknown'))).status).toBe(500);
-    expect(mocks.writes).toEqual([]); expect(mocks.markProcessed).not.toHaveBeenCalled();
+    // The only write is the admin alert about the unmapped price.
+    expect(mocks.writes.filter(w => w.table !== 'admin_notifications')).toEqual([]); expect(mocks.markProcessed).not.toHaveBeenCalled();
+    expect(mocks.writes).toContainEqual(expect.objectContaining({ table: 'admin_notifications', operation: 'insert' }));
     expect(mocks.markError).toHaveBeenCalledTimes(1);
   });
 });
@@ -448,7 +453,8 @@ describe('subscription webhook item periods', () => {
     const response = await webhook(delivery());
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({ error: 'stripe.handlerFailed' });
-    expect(mocks.writes).toEqual([]);
+    // An unmapped price also files an admin alert; nothing touches billing rows.
+    expect(mocks.writes.filter(w => w.table !== 'admin_notifications')).toEqual([]);
     expect(mocks.markProcessed).not.toHaveBeenCalled();
     expect(mocks.markError).toHaveBeenCalledWith(expect.anything(), 'evt-period', expect.any(String), 'claim-fixture');
   }

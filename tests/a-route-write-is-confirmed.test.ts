@@ -178,7 +178,12 @@ describe('a failed trip build is rolled back and counted (C1-S9-63)', () => {
   it('the recommendation clear stays ungated on rows, with its reason', () => {
     const w = vacations.slice(at(vacations, "const { error: deleteError } = await supabase.from('vacation_ai_recommendations').delete()"));
     expect(w.split('\n')[0]).not.toContain('.select(');
-    expect(vacations).toContain('on a first run there is\n    // no prior set');
+    expect(vacations).toContain('Zero prior rows is the ordinary first run');
+    // The clear deletes exactly the rows it read, and only AFTER the new set
+    // landed — deleting first wiped the family's recommendations on a failed insert.
+    expect(w.split('\n')[0]).toContain(".in('id', priorIds)");
+    expect(at(vacations, "const { error: insertError } = await supabase.from('vacation_ai_recommendations').insert("))
+      .toBeLessThan(at(vacations, "const { error: deleteError } = await supabase.from('vacation_ai_recommendations').delete()"));
   });
 });
 
@@ -207,8 +212,11 @@ describe('the routine cron only counts what landed (C1-S9-63)', () => {
 
 describe('ai-runs counts a run as returned only when it was (C1-S9-63)', () => {
   it('neither an error nor the state guard declining is counted', () => {
-    expect(aiRuns).toContain(".eq('state', 'executing')\n            .select('id');");
-    expect(aiRuns).toContain('else if (!wroteNoRows(requeued)) returned += 1;');
+    // One requeue, shared by the out-of-tick return and the closed-family
+    // deferral: it answers true only for a write that landed and matched.
+    expect(aiRuns).toContain(".eq('state', 'executing')\n      .select('id');");
+    expect(aiRuns).toContain('return !error && !wroteNoRows(requeued);');
+    expect(aiRuns).toContain('if (await requeue(run, new Date())) returned += 1;');
     expect(code(aiRuns)).not.toMatch(/^\s*returned \+= 1;/m);
   });
 });

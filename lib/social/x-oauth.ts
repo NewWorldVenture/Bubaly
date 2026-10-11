@@ -3,7 +3,7 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 import { encryptSecret, decryptSecret } from '@/lib/sync/crypto';
 import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
-import { claimXReceipt, createXReceipt, isXId, saveXConnection, X_SCOPES, xFailure, type XActor, type XFlow, type XGrant } from './account-tokens';
+import { abandonXReceipt, claimXReceipt, createXReceipt, isXId, saveXConnection, X_SCOPES, xFailure, type XActor, type XFlow, type XGrant } from './account-tokens';
 
 export const X_COOKIE = 'social-x-authorization';
 export const X_CALLBACK_PATH = '/api/social/x/callback';
@@ -141,14 +141,25 @@ export async function finishXAuthorization(flow: XFlow, code: string): Promise<v
   if (!code || code.length > 4096 || /[\x00-\x20\x7f]/.test(code)) xFailure('callbackInvalid');
   requireXConfiguration();
   await claimXReceipt(flow, sha256(flow.state));
-  const basic = Buffer.from(`${encodeURIComponent(process.env.X_CLIENT_ID!)}:${encodeURIComponent(process.env.X_CLIENT_SECRET!)}`).toString('base64');
-  const exchanged = await xJsonRequest(TOKEN_URL, { method: 'POST', headers: { Authorization: `Basic ${basic}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: flow.redirectUri, code_verifier: flow.verifier }).toString() });
-  const grant = readXGrant(exchanged);
-  if (!grant) xFailure('connectionFailed');
-  const identityResponse = await xJsonRequest(IDENTITY_URL, { headers: { Authorization: `Bearer ${grant.accessToken}` } });
-  const identity = record(record(identityResponse.body).data);
-  if (identityResponse.status !== 200 || !isXId(identity.id) || typeof identity.username !== 'string' || !/^[A-Za-z0-9_]{1,15}$/.test(identity.username) ||
-      typeof identity.name !== 'string' || !identity.name.trim() || identity.name.length > 200) xFailure('connectionFailed');
-  await saveXConnection(flow, grant, { id: identity.id as string, username: identity.username as string, name: identity.name as string });
+  try {
+    const basic = Buffer.from(`${encodeURIComponent(process.env.X_CLIENT_ID!)}:${encodeURIComponent(process.env.X_CLIENT_SECRET!)}`).toString('base64');
+    const exchanged = await xJsonRequest(TOKEN_URL, { method: 'POST', headers: { Authorization: `Basic ${basic}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: flow.redirectUri, code_verifier: flow.verifier }).toString() });
+    const grant = readXGrant(exchanged);
+    if (!grant) xFailure('connectionFailed');
+    const identityResponse = await xJsonRequest(IDENTITY_URL, { headers: { Authorization: `Bearer ${grant.accessToken}` } });
+    const identity = record(record(identityResponse.body).data);
+    if (identityResponse.status !== 200 || !isXId(identity.id) || typeof identity.username !== 'string' || !/^[A-Za-z0-9_]{1,15}$/.test(identity.username) ||
+        typeof identity.name !== 'string' || !identity.name.trim() || identity.name.length > 200) xFailure('connectionFailed');
+    await saveXConnection(flow, grant, { id: identity.id as string, username: identity.username as string, name: identity.name as string });
+  } catch (error) {
+    // This callback owns the claimed receipt: retire it rather than leave a pending 'X' row.
+    await abandonXReceipt(flow, true).catch(() => undefined);
+    throw error;
+  }
+}
+
+/** A denied, invalid or expired callback whose flow cookie is still valid retires its unclaimed receipt. */
+export async function abandonXAuthorization(flow: XFlow): Promise<void> {
+  await abandonXReceipt(flow, false).catch(() => undefined);
 }

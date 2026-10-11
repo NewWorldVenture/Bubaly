@@ -21,7 +21,7 @@ vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string)
 vi.mock('@/lib/supabase/auth', () => ({
   requireUserContext: async () => ({
     user: { id: 'u1' },
-    active: { familyId: 'f1', member: { display_name: 'Pat' }, family: { name: 'Fixture' } },
+    active: { familyId: 'f1', role: 'parent', member: { display_name: 'Pat' }, family: { name: 'Fixture' } },
   }),
 }));
 vi.mock('@/lib/supabase/server', () => ({
@@ -30,7 +30,7 @@ vi.mock('@/lib/supabase/server', () => ({
       const b: Record<string, unknown> = {};
       Object.assign(b, {
         select: () => b, eq: () => b,
-        maybeSingle: async () => ({ data: { id: 'inv-1', email: 'partner@example.test', token: 'tok', role: 'parent' }, error: null }),
+        maybeSingle: async () => ({ data: { id: 'inv-1', email: 'partner@example.test', token: 'tok', role: 'parent', status: 'pending', expires_at: '2999-01-01T00:00:00Z' }, error: null }),
       });
       return b;
     },

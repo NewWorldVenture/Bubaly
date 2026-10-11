@@ -1,0 +1,134 @@
+name: Invite rejoin role SQL runtime
+
+# The held 0495 (supabase/reserved/) makes a member who is invited back get the
+# role the invite grants, and refuses a kid login's acceptance of another
+# family's invite, reading kid identity from the account itself (its synthetic
+# address, or the server's app_metadata mark), never from a child_logins row or
+# a membership a household can write. Neither the Database job's replay nor `supabase db
+# push` reads supabase/reserved/, and the Database job's probe glob does not
+# read docs/audit/reserved/, so nothing else in CI exercises it. This job
+# replays every runnable migration with the Database job's bootstrap, then:
+#
+#   1. runs the held probe on that released schema and requires it to FAIL on
+#      the defect (a removed parent invited back as a guest comes back a
+#      parent), so a green step 3 is the migration's and not a probe that can
+#      no longer see anything;
+#   2. applies the held migration twice (it is re-runnable);
+#   3. runs the probe again and requires it to pass, which includes taking
+#      each clause of the kid-login guard back out inside its transaction and
+#      requiring the case that clause decides to flip.
+#
+# When 0495 is released into supabase/migrations/, its probe moves back to
+# docs/audit/ (the Database job then runs it) and this workflow is retired with
+# it. Throwaway database only; agents must not apply migrations to production.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - '.github/workflows/invite-rejoin-role-runtime.yml'
+      - 'supabase/reserved/0495_a_member_invited_back_gets_what_the_invite_grants.sql'
+      - 'docs/audit/reserved/a-member-invited-back-gets-the-invited-role-check.sql'
+      - 'docs/audit/pg-bootstrap.sh'
+      - 'supabase/migrations/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/invite-rejoin-role-runtime.yml'
+      - 'supabase/reserved/0495_a_member_invited_back_gets_what_the_invite_grants.sql'
+      - 'docs/audit/reserved/a-member-invited-back-gets-the-invited-role-check.sql'
+      - 'docs/audit/pg-bootstrap.sh'
+      - 'supabase/migrations/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: invite-rejoin-role-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  invite-rejoin-role:
+    if: >-
+      github.repository == 'NewWorldVenture/Bubaly' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # No service container: Docker Hub's unauthenticated pull limit refused
+    # pgvector/pgvector:pg16 on this job's first two runs before any SQL ran.
+    # PostgreSQL 16 and pgvector come from the runner's own apt sources instead,
+    # the same major version and extension the Database job replays into.
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: ci-only-not-a-production-secret
+      PGDATABASE: bubaly
+    steps:
+      - name: Check out exact same-repository PR or main head without stored credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Start a job-owned PostgreSQL 16 with pgvector
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-16 postgresql-16-pgvector
+          sudo pg_ctlcluster 16 main start || true
+          port="$(pg_lsclusters --no-header | awk '$1 == 16 && $2 == "main" { print $3 }')"
+          [[ "$port" =~ ^[0-9]+$ ]]
+          [[ "$(pg_lsclusters --no-header | awk '$1 == 16 && $2 == "main" { print $4 }')" == online ]]
+          echo "PGPORT=$port" >> "$GITHUB_ENV"
+          sudo -u postgres psql -X -p "$port" -v ON_ERROR_STOP=1 -q \
+            -c "alter user postgres password 'ci-only-not-a-production-secret'"
+
+      - name: Create the database
+        run: |
+          [[ "$(PGDATABASE=postgres psql -X -Atc 'show server_version_num')" == 16* ]]
+          PGDATABASE=postgres psql -X -c 'create database bubaly'
+
+      - name: Replay every runnable migration
+        run: bash docs/audit/pg-bootstrap.sh
+
+      - name: The released schema still gives a returning member their old role
+        shell: bash
+        run: |
+          set -euo pipefail
+          # GitHub runs bash steps with -e, so the expected failure is caught
+          # here rather than ending the step before it is examined.
+          status=0
+          out="$(psql -X -v ON_ERROR_STOP=1 -q -f docs/audit/reserved/a-member-invited-back-gets-the-invited-role-check.sql 2>&1)" || status=$?
+          printf '%s\n' "$out"
+          if [ "$status" -eq 0 ]; then
+            echo '::error::the held probe passed on the released schema, so it can no longer see the defect 0495 repairs'
+            exit 1
+          fi
+          for expected in \
+            'a removed parent invited back as a guest came back as parent' \
+            'a removed child invited back as an adult came back as child' \
+            'the former parent, invited back as a guest, can manage the family' \
+            'a kid login on its synthetic address and holding a child_logins row joined another family through an invite' \
+            'a kid login on its synthetic address with no child_logins row joined another family through an invite' \
+            "a kid login under an ordinary address carrying the server's app_metadata mark joined another family through an invite"; do
+            if ! grep -qF "$expected" <<<"$out"; then
+              echo "::error::the held probe failed on the released schema, but not on: $expected"
+              exit 1
+            fi
+          done
+
+      - name: Apply the held migration, twice
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -q -f supabase/reserved/0495_a_member_invited_back_gets_what_the_invite_grants.sql
+          psql -X -v ON_ERROR_STOP=1 -q -f supabase/reserved/0495_a_member_invited_back_gets_what_the_invite_grants.sql
+
+      - name: A returning member gets the invited role
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$(psql -X -v ON_ERROR_STOP=1 -q -f docs/audit/reserved/a-member-invited-back-gets-the-invited-role-check.sql 2>&1)"
+          printf '%s\n' "$out"
+          grep -qF 'a-member-invited-back-gets-the-invited-role: OK' <<<"$out"
