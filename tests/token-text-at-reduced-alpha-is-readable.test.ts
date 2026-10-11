@@ -43,12 +43,14 @@ describe('token text at reduced alpha reads at 4.5:1', () => {
     alphaText(scanSource('fixture.tsx', `${prelude}\nexport function P({ pending, hidden, k }: any) { return (${body}); }`)).length === 1;
 
   it('exempts only an element that is certainly inactive or hidden; scans false and dynamic states', () => {
-    expect(flagged(`<p disabled className="text-brand-text/70">Total</p>`)).toBe(false);
-    expect(flagged(`<p disabled={true} className="text-brand-text/70">Total</p>`)).toBe(false);
+    expect(flagged(`<button disabled className="text-brand-text/70">Total</button>`)).toBe(false);
+    expect(flagged(`<Button disabled={true} className="text-brand-text/70">Total</Button>`)).toBe(false);
+    // On an element that cannot be disabled, `disabled` hides nothing: still scanned.
+    expect(flagged(`<p disabled className="text-brand-text/70">Total</p>`)).toBe(true);
     expect(flagged(`<p aria-hidden className="text-brand-text/70">Total</p>`)).toBe(false);
     expect(flagged(`<p aria-hidden="true" className="text-brand-text/70">Total</p>`)).toBe(false);
-    expect(flagged(`<p disabled={false} className="text-brand-text/70">Total</p>`)).toBe(true);
-    expect(flagged(`<p disabled={pending} className="text-brand-text/70">Total</p>`)).toBe(true);
+    expect(flagged(`<button disabled={false} className="text-brand-text/70">Total</button>`)).toBe(true);
+    expect(flagged(`<button disabled={pending} className="text-brand-text/70">Total</button>`)).toBe(true);
     expect(flagged(`<p aria-hidden={false} className="text-brand-text/70">Total</p>`)).toBe(true);
     expect(flagged(`<p aria-hidden={hidden} className="text-brand-text/70">Total</p>`)).toBe(true);
     expect(flagged(`<p className="cursor-not-allowed text-brand-text/70">Total</p>`)).toBe(true);
@@ -56,6 +58,9 @@ describe('token text at reduced alpha reads at 4.5:1', () => {
     expect(flagged(`<p className={HERO}>Total</p>`, `const HERO = 'text-xs text-brand-text/70';`)).toBe(true);
     expect(flagged(`<p className={TONE[k]}>Total</p>`, `const TONE = { hero: 'text-brand-text/70' };`)).toBe(true);
     expect(flagged(`<p className={HERO}>Total</p>`, `import { HERO } from './hero';`)).toBe(false);
+    // By scope: another component's same-named const does not answer for this one.
+    expect(alphaText(scanSource('fixture.tsx', `function A() { const HERO = 'text-brand-text/70'; return <p className={HERO}>a</p>; }
+      function B() { const HERO = 'text-brand-text'; return <p className={HERO}>b</p>; }`)).map((f) => f.line.includes('>a<'))).toEqual([true]);
   });
 
   it('a fade --fg can afford (70% or more) passes; the ones fixed here did not', () => {
@@ -121,6 +126,33 @@ describe('a trust-matrix default reads as clearly as an override', () => {
     expect(on('text-green-400')).toBeGreaterThanOrEqual(4.5);
     expect(on('text-amber-400')).toBeGreaterThanOrEqual(4.5);
     expect(contrast(t.muted, t.surface)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('the legend: its "~" is full amber on every ground, and its words name the cues the cells now use', () => {
+    // The legend sits on no tint of its own: the page or card under the module.
+    expect(trust).toContain('<span className="font-bold text-amber-400">~</span>');
+    expect(trust).not.toContain('text-amber-400/60');
+    for (const [theme, selector] of THEMES) {
+      const t = tokensOf(selector);
+      for (const g of GROUNDS) {
+        if (theme === 'light') {
+          const on = (cls: string) => { const [ink, a] = lightText(cls); return contrast(over(ink, a, t[g]), t[g]); };
+          expect(on('text-amber-400/60'), `control over --${g}`).toBeLessThan(4.5);
+          expect(on('text-amber-400'), `light over --${g}`).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    }
+    // A default is a plain cell; an override is tinted and outlined in its colour.
+    expect(trust).toMatch(/state === 'allow' && 'border-green-500\/40 bg-green-500\/15 text-green-400'/);
+    expect(trust).toMatch(/state === 'deny' && 'border-red-500\/40 bg-red-500\/15 text-red-400'/);
+    // The words follow: "faded" no longer describes anything on screen.
+    expect(trust).toContain("tr('trust.plainRoleDefaultTintedExplicitOverride')");
+    for (const locale of ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT']) {
+      const messages = JSON.parse(readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8')) as Record<string, string>;
+      expect(messages['trust.fadedRoleDefaultSolidExplicitOverride'], locale).toBeUndefined();
+      expect(messages['trust.plainRoleDefaultTintedExplicitOverride'], locale).toBeTruthy();
+      if (locale !== 'en-US') expect(messages['trust.plainRoleDefaultTintedExplicitOverride'], locale).not.toBe('· plain = role default, tinted = explicit override');
+    }
   });
 
   it('the allowed write-back fade is applied only to a button that is then disabled', () => {

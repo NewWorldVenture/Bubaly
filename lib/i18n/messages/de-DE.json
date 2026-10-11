@@ -14815,7 +14815,7 @@
   "trust.everyParentAndAdult": "Alle Eltern und Erwachsenen",
   "trust.everyone": "Alle",
   "trust.expires": "· läuft ab",
-  "trust.fadedRoleDefaultSolidExplicitOverride": "· blass = Rollenstandard, kräftig = ausdrückliche Übersteuerung",
+  "trust.plainRoleDefaultTintedExplicitOverride": "· schlicht = Rollenstandard, eingefärbt = ausdrückliche Übersteuerung",
   "trust.from": "Von",
   "trust.maxAmount": "Höchstbetrag ($)",
   "trust.member": "Mitglied",

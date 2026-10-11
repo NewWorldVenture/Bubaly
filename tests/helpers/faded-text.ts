@@ -10,15 +10,25 @@ import ts from 'typescript';
 // What it reads, and what it does not:
 //   - the string literals anywhere in a `className` expression: plain strings,
 //     template text, `cn(…)` arguments, both arms of `?:` and `&&`;
-//   - a name in it that the same file binds with `const` to a string, or to
-//     an object of strings (`CATEGORY_COLORS[e.category]` counts every value);
-//   - NOT a class built at run time, imported from another file, or returned
-//     by a function: those are outside this guard.
-// An element is exempt only when it is certainly hidden from assistive tech
-// or certainly inactive: `aria-hidden` or `disabled` written bare, as "true",
-// or as {true}. A dynamic value (`disabled={pending}`) or false is scanned,
-// since the element can render enabled and visible; so is cursor-not-allowed,
-// which is only a look.
+//   - a name in it, resolved by lexical scope to the `const` that binds it in
+//     this file, when that const is a string, a `?:` of strings, or an object
+//     of them (`CATEGORY_COLORS[e.category]` counts every value). A name a
+//     nearer scope rebinds (a parameter, a `let`, a destructured or loop
+//     variable, an import, a function) is that binding, not an outer const;
+//   - NOT a class built at run time, imported from another file, returned by
+//     a function, or bound by `let`: those are outside this guard.
+// An element is exempt only when it is certainly inactive or certainly hidden:
+//   - `disabled` written bare, as "true" or as {true}, on an element that can
+//     be disabled (a native form control, or the design system's <Button>,
+//     which passes it to one). On a <p> it disables nothing;
+//   - `aria-hidden` written the same way: marked as decoration, the incidental
+//     text WCAG 1.4.3 exempts (a placeholder emoji, a decorative layer).
+// A dynamic value (`disabled={pending}`) or false is scanned, since the
+// element can render enabled and visible; so is cursor-not-allowed, which is
+// only a look.
+
+/** Elements `disabled` actually disables: native form controls, and <Button>, which renders a <button>. */
+const DISABLEABLE = /^(button|input|select|textarea|fieldset|optgroup|option|Button)$/;
 
 export type Site = { at: string; file: string; line: string; tag: string; classes: string[]; text: boolean; exempt: boolean };
 
@@ -26,7 +36,6 @@ export type Site = { at: string; file: string; line: string; tag: string; classe
 export function scanSource(file: string, src: string): Site[] {
   const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const lines = src.split('\n');
-  const aliases = constStrings(sf);
   const found: Site[] = [];
   const visit = (node: ts.Node) => {
     if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
@@ -39,9 +48,10 @@ export function scanSource(file: string, src: string): Site[] {
           file,
           line: `${lines[line]} ${open.getText(sf)}`.replace(/\s+/g, ' ').trim(),
           tag: open.tagName.getText(sf),
-          classes: classStrings(className.initializer, aliases).join(' ').split(/\s+/).filter(Boolean),
+          classes: classStrings(className.initializer).join(' ').split(/\s+/).filter(Boolean),
           text: carriesText(node),
-          exempt: literallyTrue(attribute(open, 'aria-hidden', sf)) || literallyTrue(attribute(open, 'disabled', sf)),
+          exempt: literallyTrue(attribute(open, 'aria-hidden', sf))
+            || (DISABLEABLE.test(open.tagName.getText(sf)) && literallyTrue(attribute(open, 'disabled', sf))),
         });
       }
     }
@@ -71,41 +81,76 @@ function literallyTrue(attr: ts.JsxAttribute | undefined): boolean {
   return ts.isJsxExpression(init) && init.expression?.kind === ts.SyntaxKind.TrueKeyword;
 }
 
-/** The same file's `const NAME = 'classes'` and `const NAME = { key: 'classes', … }`. */
-function constStrings(sf: ts.SourceFile): Map<string, string[]> {
-  const map = new Map<string, string[]>();
-  const strings = (x: ts.Expression): string[] | null => {
-    if (ts.isStringLiteral(x) || ts.isNoSubstitutionTemplateLiteral(x)) return [x.text];
-    if (ts.isAsExpression(x) || ts.isSatisfiesExpression(x) || ts.isParenthesizedExpression(x)) return strings(x.expression);
-    if (ts.isObjectLiteralExpression(x)) {
-      const out: string[] = [];
-      for (const p of x.properties) {
-        if (!ts.isPropertyAssignment(p)) continue;
-        if (ts.isStringLiteral(p.initializer) || ts.isNoSubstitutionTemplateLiteral(p.initializer)) out.push(p.initializer.text);
-        else if (ts.isObjectLiteralExpression(p.initializer)) out.push(...(strings(p.initializer) ?? []));
-      }
-      return out.length ? out : null;
+/** The strings a const initializer can hold: a string, a `?:` of strings, or an object of them. */
+function literalStrings(x: ts.Expression): string[] | null {
+  if (ts.isStringLiteral(x) || ts.isNoSubstitutionTemplateLiteral(x)) return [x.text];
+  if (ts.isAsExpression(x) || ts.isSatisfiesExpression(x) || ts.isParenthesizedExpression(x)) return literalStrings(x.expression);
+  if (ts.isConditionalExpression(x)) {
+    const a = literalStrings(x.whenTrue);
+    const b = literalStrings(x.whenFalse);
+    return a && b ? [...a, ...b] : null;
+  }
+  if (ts.isObjectLiteralExpression(x)) {
+    const out: string[] = [];
+    for (const p of x.properties) {
+      if (!ts.isPropertyAssignment(p)) continue;
+      out.push(...(literalStrings(p.initializer) ?? []));
     }
-    return null;
-  };
-  const visit = (n: ts.Node) => {
-    if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer && ts.isVariableDeclarationList(n.parent) && n.parent.flags & ts.NodeFlags.Const) {
-      const s = strings(n.initializer);
-      if (s) map.set(n.name.text, s);
-    }
-    ts.forEachChild(n, visit);
-  };
-  visit(sf);
-  return map;
+    return out.length ? out : null;
+  }
+  return null;
 }
 
-/** Every class string a className expression can produce, following same-file const aliases. */
-function classStrings(expr: ts.Node, aliases: Map<string, string[]>): string[] {
+/** Whether a binding (a name, or a destructuring pattern) binds `name`. */
+function binds(b: ts.BindingName, name: string): boolean {
+  if (ts.isIdentifier(b)) return b.text === name;
+  return b.elements.some((e) => !ts.isOmittedExpression(e) && binds(e.name, name));
+}
+
+/**
+ * The strings `id` holds, found by walking out through its scopes to the
+ * nearest binding of its name. null when that binding is not a const of
+ * literal strings: a parameter, a `let`, a destructured or loop variable, a
+ * function, a class or an import.
+ */
+function resolve(id: ts.Identifier): string[] | null {
+  const name = id.text;
+  for (let node: ts.Node | undefined = id.parent; node; node = node.parent) {
+    if (ts.isFunctionLike(node) && node.parameters.some((p) => binds(p.name, name))) return null;
+    if (ts.isCatchClause(node) && node.variableDeclaration && binds(node.variableDeclaration.name, name)) return null;
+    if ((ts.isForOfStatement(node) || ts.isForInStatement(node) || ts.isForStatement(node))
+      && node.initializer && ts.isVariableDeclarationList(node.initializer)
+      && node.initializer.declarations.some((d) => binds(d.name, name))) return null;
+    if (ts.isBlock(node) || ts.isSourceFile(node) || ts.isModuleBlock(node) || ts.isCaseClause(node) || ts.isDefaultClause(node)) {
+      for (const st of node.statements) {
+        if (ts.isVariableStatement(st)) {
+          for (const d of st.declarationList.declarations) {
+            if (!binds(d.name, name)) continue;
+            const constant = (st.declarationList.flags & ts.NodeFlags.Const) !== 0;
+            return constant && ts.isIdentifier(d.name) && d.initializer ? literalStrings(d.initializer) : null;
+          }
+        }
+        if ((ts.isFunctionDeclaration(st) || ts.isClassDeclaration(st) || ts.isEnumDeclaration(st)) && st.name?.text === name) return null;
+        if (ts.isImportDeclaration(st) && st.importClause) {
+          const c = st.importClause;
+          if (c.name?.text === name) return null;
+          const nb = c.namedBindings;
+          if (nb && (ts.isNamespaceImport(nb) ? nb.name.text === name : nb.elements.some((e) => e.name.text === name))) return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/** Every class string a className expression can produce, following const aliases by scope. */
+function classStrings(expr: ts.Node): string[] {
   const out: string[] = [];
   const collect = (x: ts.Node) => {
     if (ts.isStringLiteral(x) || ts.isNoSubstitutionTemplateLiteral(x)) { out.push(x.text); return; }
     if (ts.isTemplateExpression(x)) out.push(x.head.text, ...x.templateSpans.map((s) => s.literal.text));
-    if (ts.isIdentifier(x) && aliases.has(x.text)) out.push(...aliases.get(x.text)!);
+    if (ts.isPropertyAccessExpression(x)) { collect(x.expression); return; } // `TONE.done`: the object, not the key's name
+    if (ts.isIdentifier(x)) { out.push(...(resolve(x) ?? [])); return; }
     ts.forEachChild(x, collect);
   };
   collect(expr);

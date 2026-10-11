@@ -14815,7 +14815,7 @@
   "trust.everyParentAndAdult": "Alle ouders en volwassenen",
   "trust.everyone": "Iedereen",
   "trust.expires": "· verloopt",
-  "trust.fadedRoleDefaultSolidExplicitOverride": "· vervaagd = rolstandaard, vol = expliciete overschrijving",
+  "trust.plainRoleDefaultTintedExplicitOverride": "· neutraal = rolstandaard, gekleurd = expliciete overschrijving",
   "trust.from": "Van",
   "trust.maxAmount": "Max. bedrag ($)",
   "trust.member": "Lid",

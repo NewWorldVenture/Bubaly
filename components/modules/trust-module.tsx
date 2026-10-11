@@ -599,8 +599,8 @@ function PermissionsTab({ members, grants, canManage }: { members: Member[]; gra
       <div className="flex flex-wrap items-center gap-3 text-[10px] text-muted">
         <span className="flex items-center gap-1"><span className="inline-flex h-4 w-4 items-center justify-center rounded border border-green-500/40 bg-green-500/15 text-green-400"><Check className="h-3 w-3" /></span> allowed</span>
         <span className="flex items-center gap-1"><span className="inline-flex h-4 w-4 items-center justify-center rounded border border-red-500/40 bg-red-500/15 text-red-400"><X className="h-3 w-3" /></span> blocked</span>
-        <span className="flex items-center gap-1"><span className="text-amber-400/60">~</span> {tr('trust.needsApprovalRoleDefault')}</span>
-        <span>{tr('trust.fadedRoleDefaultSolidExplicitOverride')}{canManage ? ' (tap to change)' : ''}</span>
+        <span className="flex items-center gap-1"><span className="font-bold text-amber-400">~</span> {tr('trust.needsApprovalRoleDefault')}</span>
+        <span>{tr('trust.plainRoleDefaultTintedExplicitOverride')}{canManage ? ' (tap to change)' : ''}</span>
       </div>
     </div>
   );
