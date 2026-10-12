@@ -415,6 +415,47 @@ describe('files attached while the asset is being deleted', () => {
     });
   });
 
+  // #1022 review 6127894527: the cleanup deleted a row by id alone. A row whose
+  // storage_path a manager changed while its old object was being removed now
+  // protects a different, newly published object, and deleting it left that
+  // object with no protecting row. A row is now deleted only while it still
+  // names the object just removed; a changed row is kept, and the delete says
+  // it did not finish.
+  it('keeps a guard row repointed to another file while its old file was being removed', async () => {
+    const home = household();
+    const REPOINTED = `${FAMILY}/cloud/1790000000013-new-sensitive.pdf`;
+    let guardId: unknown = null;
+    const deleting = watchingRemoval(committingBeforeAssetDelete(home, () => attachLate(home)), LATE, () => {
+      const guard = guarding(home, LATE)[0];
+      guardId = guard?.id;
+      home.store.objects.add(REPOINTED);
+      if (guard) guard.storage_path = REPOINTED;
+    });
+
+    expect(await removeHomeAsset(deleting, FAMILY, 'asset-fridge')).toEqual({ ok: false, notSaved: true });
+    expect(guardId, 'the sweep had written its guard before the removal').not.toBeNull();
+    expect(home.store.objects.has(LATE)).toBe(false);
+    expect(home.store.objects.has(REPOINTED)).toBe(true);
+    expect(guarding(home, REPOINTED).map((doc) => doc.id), 'the new file keeps a protecting row').toEqual([guardId]);
+  });
+
+  it('keeps a linked row repointed to another file while its old file was being removed, and the asset', async () => {
+    const home = household();
+    const REPOINTED = `${FAMILY}/cloud/1790000000014-new-warranty.pdf`;
+    const linked = home.db.table('documents').find((doc) => doc.id === 'doc-warranty')!;
+    const oldPath = String(linked.storage_path);
+    const deleting = watchingRemoval(client(home), oldPath, () => {
+      home.store.objects.add(REPOINTED);
+      linked.storage_path = REPOINTED;
+    });
+
+    expect(await removeHomeAsset(deleting, FAMILY, 'asset-fridge')).toEqual({ ok: false, notSaved: true });
+    expect(home.store.objects.has(oldPath)).toBe(false);
+    expect(home.store.objects.has(REPOINTED)).toBe(true);
+    expect(home.db.table('documents').some((doc) => doc.id === 'doc-warranty' && doc.storage_path === REPOINTED)).toBe(true);
+    expect(home.db.table('home_assets').some((asset) => asset.id === 'asset-fridge')).toBe(true);
+  });
+
   it('a later sweep leaves the kept row and its file alone; every other row stays where it was', async () => {
     const home = household();
     home.store.refuse.add(LATE);

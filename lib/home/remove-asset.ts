@@ -236,9 +236,13 @@ async function sweepAssetFolders(db: AssetRemovalDb, familyId: string, assetId: 
       const guardId = guarded.get(path);
       if (!guardId) continue;
       // The object is confirmed gone, so the row this sweep wrote to guard it
-      // goes too: that row by its id, and no other.
+      // goes too: that row by its id, and no other, and only while it still
+      // names the object that was removed. A row whose path was changed while
+      // the removal ran now protects some other file: it is kept, and the
+      // sweep reports it did not finish (#1022 review 6127894527).
       const { data: cleared, error: clearError } = await db.from('documents').delete()
-        .eq('id', guardId).eq('family_id', familyId).select('id');
+        .eq('id', guardId).eq('family_id', familyId).eq('storage_path', path).is('asset_id', null)
+        .select('id');
       if (clearError) return { ok: false, error: describeDbError(clearError) };
       if (wroteNoRows(cleared)) return { ok: false, notSaved: true };
     }
@@ -260,8 +264,12 @@ async function removeLinkedDocuments(db: AssetRemovalDb, familyId: string, asset
         const { error: storageError } = await removeConfirmed(bucket, file.storage_path);
         if (storageError) return { ok: false, error: storageError };
       }
+      // The row goes only while it still names the object just removed and
+      // this asset: one whose path or asset changed meanwhile protects some
+      // other file now, and is kept (#1022 review 6127894527).
       const { data: gone, error: rowError } = await db.from('documents').delete()
-        .eq('id', file.id).eq('family_id', familyId).select('id');
+        .eq('id', file.id).eq('family_id', familyId).eq('asset_id', assetId)
+        .eq('storage_path', file.storage_path).select('id');
       if (rowError) return { ok: false, error: describeDbError(rowError) };
       if (wroteNoRows(gone)) return { ok: false, notSaved: true };
     }
