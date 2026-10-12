@@ -151,9 +151,13 @@ insert into public.documents (id, family_id, title, category, storage_path, is_s
      '00000000-0000-4000-8000-000000387b00/itinerary.pdf', false, :'UX')
   on conflict do nothing;
 
--- The row a PARENT linked to the vault document, through linkToVacation.
-insert into public.vacation_documents (id, family_id, vacation_id, document_id, kind, title, notes, created_by)
+-- The row a PARENT linked to the vault document, through linkToVacation. It is
+-- about the child (their travel document): under the held 0517 a travel
+-- document is read by a manager or the member it is about, so the child's
+-- notes edit below is the child's own row either way.
+insert into public.vacation_documents (id, family_id, vacation_id, member_id, document_id, kind, title, notes, created_by)
   values ('00000000-0000-4000-8000-000000387a20',:'FA','00000000-0000-4000-8000-000000387a10',
+          '00000000-0000-4000-8000-000000387a32',
           '00000000-0000-4000-8000-000000387a12','other','Vault deed','', :'UP');
 
 -- ════════════════════════════════════════════════════════════════════════════
@@ -463,8 +467,10 @@ begin
   --     as the refusals below
   if control_ok then
     begin
-      insert into public.vacation_documents (id, family_id, vacation_id, document_id, kind, title, created_by)
-        values (r_mine, fam, trip, d_plain, 'itinerary', 'Hotel itinerary', uk);
+      -- The child's own row, as the trip form files it for them (0517: a
+      -- travel document is read by a manager or the member it is about).
+      insert into public.vacation_documents (id, family_id, vacation_id, member_id, document_id, kind, title, created_by)
+        values (r_mine, fam, trip, '00000000-0000-4000-8000-000000387a32', d_plain, 'itinerary', 'Hotel itinerary', uk);
     exception when others then
       control_ok := false;
       failures := array_append(failures, format('vacation_documents UNPROVEN: the child was refused linking an ORDINARY document of their own family (%s: %s) — a refusal below would prove nothing', sqlstate, sqlerrm));
@@ -613,9 +619,12 @@ begin
     (d_free,   fam, 'Unlinked itinerary', 'Itinerary', fam::text || '/free.pdf',   false, up),
     (d_move,   fam, 'Linked itinerary',   'Itinerary', fam::text || '/move.pdf',   false, up),
     (d_server, fam, 'Server itinerary',   'Itinerary', fam::text || '/server.pdf', false, up);
-  insert into public.vacation_documents (id, family_id, vacation_id, document_id, kind, title, created_by) values
-    (r_move,   fam, trip, d_move,   'itinerary', 'Linked itinerary', up),
-    (r_server, fam, trip, d_server, 'itinerary', 'Server itinerary', up);
+  -- r_move is the child's own itinerary (member_id), which they unlink below:
+  -- under the held 0517 a travel document is read by a manager or the member
+  -- it is about.
+  insert into public.vacation_documents (id, family_id, vacation_id, member_id, document_id, kind, title, created_by) values
+    (r_move,   fam, trip, '00000000-0000-4000-8000-000000387a32', d_move, 'itinerary', 'Linked itinerary', up),
+    (r_server, fam, trip, null, d_server, 'itinerary', 'Server itinerary', up);
 
   perform set_config('role','authenticated', true);
   perform set_config('request.jwt.claim.role','authenticated', true);

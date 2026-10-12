@@ -52,6 +52,7 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { isInMonth, parseCalendarDate, startOfLocalDay } from '@/lib/utils/calendar-date';
 import { isAdmin, isManager } from '@/lib/constants/roles';
+import { readsHouseholdMoney } from '@/lib/finance/household-money';
 import { BASIC_MONTHLY_CENTS, BASIC_ANNUAL_CENTS, PLUS_MONTHLY_CENTS, PLUS_ANNUAL_CENTS, planLevel } from '@/lib/constants/plans';
 import { PLAN_CURRENCY } from '@/lib/marketing/value';
 import { formatCents } from '@/lib/wallet/ledger';
@@ -694,20 +695,26 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   const [showAddGoal, setShowAddGoal] = useState(false);
 
   // ── Data queries ────────────────────────────────────────────────────────
+  // The household's accounts and spending are a parent's or adult's (the held
+  // 0514). Anyone else reaches this module only from the plan gate, sees the
+  // plan, and does not ask for the household's money.
+  const seesHouseholdMoney = readsHouseholdMoney(role);
   const { data: accounts, loading: accLoading, error: accError, refresh: refreshAccounts } = useRealtimeQuery<FinancialAccount>({
     table: 'financial_accounts',
     familyId,
-    deps: [familyId],
-    fetcher: (supabase) =>
-      supabase.from('financial_accounts').select('*').eq('family_id', familyId).order('name'),
+    deps: [familyId, seesHouseholdMoney],
+    fetcher: (supabase) => seesHouseholdMoney
+      ? supabase.from('financial_accounts').select('*').eq('family_id', familyId).order('name')
+      : Promise.resolve({ data: [] as FinancialAccount[], error: null }),
   });
 
   const { data: transactions, loading: txLoading, error: txError, refresh: refreshTransactions } = useRealtimeQuery<Transaction>({
     table: 'transactions',
     familyId,
-    deps: [familyId],
-    fetcher: (supabase) =>
-      supabase.from('transactions').select('*').eq('family_id', familyId).order('date', { ascending: false }),
+    deps: [familyId, seesHouseholdMoney],
+    fetcher: (supabase) => seesHouseholdMoney
+      ? supabase.from('transactions').select('*').eq('family_id', familyId).order('date', { ascending: false })
+      : Promise.resolve({ data: [] as Transaction[], error: null }),
   });
 
   const { data: budgets, loading: budLoading, error: budError, refresh: refreshBudgets } = useRealtimeQuery<Budget>({
@@ -1698,6 +1705,15 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       )}
     </div>
   );
+
+  if (!seesHouseholdMoney) {
+    return (
+      <div className="module-page">
+        <PageHeader title={tr('billing.finances')} description={tr('householdMoney.keptByParentsBody')} />
+        {planCard}
+      </div>
+    );
+  }
 
   return (
     <div className="module-with-sidebar">

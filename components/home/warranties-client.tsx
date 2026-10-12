@@ -27,7 +27,8 @@ const TYPE_LABELS: Record<string, string> = {
   manufacturer: 'Manufacturer', extended: 'Extended', home_warranty: 'Home Warranty', service_plan: 'Service Plan',
 };
 
-export function WarrantiesClient({ warranties, assets }: { warranties: Warranty[]; assets: Asset[] }) {
+/** `ownOnly`: the viewer reads only the warranties they added (the held 0514). */
+export function WarrantiesClient({ warranties, assets, ownOnly = false }: { warranties: Warranty[]; assets: Asset[]; ownOnly?: boolean }) {
   const tr = useTranslations();
   const t = useTranslations();
   const { fmtMoney } = useFormat();
@@ -58,6 +59,7 @@ export function WarrantiesClient({ warranties, assets }: { warranties: Warranty[
         <div>
           <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{t('warrantiesClient.warranties')}</h1>
           <p className="text-sm text-muted">{t('warrantiesClient.everyWarrantyInOnePlaceCoverage')}</p>
+          {ownOnly && <p className="text-xs text-muted">{t('householdMoney.onlyWhatYouAdded')}</p>}
         </div>
         <Button onClick={openNew}><Plus className="h-4 w-4" /> {t('warrantiesClient.addWarranty')}</Button>
       </div>

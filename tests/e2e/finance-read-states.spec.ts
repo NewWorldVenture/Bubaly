@@ -12,6 +12,8 @@ const sources = Object.fromEntries([
   'components/finance/bill-payment-modal.tsx',
   'components/finance/bill-schedule-modal.tsx', 'lib/constants/roles.ts',
   'components/finance/payments-view.tsx', 'components/finance/savings-view.tsx',
+  // The held 0514's rule: who reads the household's transactions.
+  'lib/finance/household-money.ts',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
   'components/ui/input.tsx', 'components/app/page-header.tsx', 'lib/finance/hub.ts',
   // bills-view's Mark paid and add form write what lib/finance/recurring.ts decides.
