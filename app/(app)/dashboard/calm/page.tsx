@@ -10,6 +10,7 @@ import { loadFamilyContext } from '@/lib/reasoning/context';
 import { reasoningInsights } from '@/lib/reasoning/insights';
 import { autopilotTitleFor } from '@/lib/autopilot/engine';
 import { suggestionVisibleTo } from '@/lib/autopilot/audience';
+import { readVisiblePrefix } from '@/lib/autopilot/visible-prefix';
 import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -64,8 +65,15 @@ export default async function CalmPage() {
   const [agentResult, autopilotResult, foiResult, approvalResult, reminderResult] = await Promise.all([
     safe(supabase.from('agent_activity').select('id, agent, title, detail, href, severity')
       .eq('family_id', familyId).eq('status', 'active').in('severity', ['action', 'attention']).order('created_at', { ascending: false }).limit(100)),
-    safe(supabase.from('autopilot_suggestions').select('id, title, detail, urgency, payload, kind, source_kind, member_id')
-      .eq('family_id', familyId).eq('status', 'open').limit(100)),
+    // The first hundred open cards THIS reader may see, the rule applied
+    // before the hundred are taken (lib/autopilot/visible-prefix.ts): taken
+    // first, a hundred cards a child is not shown emptied their inbox of the
+    // card of theirs behind them.
+    safe(readVisiblePrefix((from, to) => supabase.from('autopilot_suggestions')
+      .select('id, title, detail, urgency, payload, kind, source_kind, member_id')
+      .eq('family_id', familyId).eq('status', 'open')
+      .order('urgency', { ascending: false }).order('id').range(from, to),
+    { limit: 100, visible: (s) => suggestionVisibleTo(s, viewer) })),
     safe(supabase.from('family_operating_index').select('suggestions')
       .eq('family_id', familyId).order('as_of_date', { ascending: false }).limit(1)),
     safe(supabase.from('approval_requests').select('id, title')

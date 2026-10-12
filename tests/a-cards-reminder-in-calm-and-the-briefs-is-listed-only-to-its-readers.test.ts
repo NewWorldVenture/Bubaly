@@ -239,3 +239,47 @@ describe("the briefing module's Kitchen Mode reads a card's reminder only for it
     for (const reader of ['mum', 'ava']) expect(await kitchenReminders(reader, db), reader).toEqual([POLICY, PASSPORT].sort());
   });
 });
+
+describe('the Calm inbox takes its cards after the reader\'s rule, not before', () => {
+  // Review on #1031 (RV-R4R2-1): the page took a hundred open cards in no
+  // order and only then dropped the ones the reader may not see, so a hundred
+  // cards hidden from Kit emptied his inbox of the card behind them.
+  const SNACKS = 'Pack snacks for Saturday match';
+  async function calmCards(memberId: string): Promise<string[]> {
+    as(memberId);
+    h.inbox = undefined;
+    renderToStaticMarkup(await CalmPage());
+    const inbox = h.inbox as { needsYou: { source: string; title: string }[]; today: { source: string; title: string }[]; later?: { source: string; title: string }[] };
+    return [...inbox.needsYou, ...inbox.today, ...(inbox.later ?? [])].filter((i) => i.source === 'autopilot').map((i) => i.title);
+  }
+  function household(hidden: number): void {
+    const db = createInMemorySupabase<DB>();
+    db.seed('families', [{ id: FAMILY, timezone: 'UTC', name: 'Family' }]);
+    db.seed('family_members', ROSTER.map((m) => ({ ...m, family_id: FAMILY, user_id: `u-${m.id}`, display_name: m.id, is_active: true, birthday: null })));
+    db.seed('autopilot_suggestions', [
+      ...Array.from({ length: hidden }, (_, i) => ({
+        id: `ins-${String(i).padStart(3, '0')}`, family_id: FAMILY, status: 'open', kind: 'insurance', source_kind: 'family_insurance_policies',
+        member_id: 'ava', urgency: 3, title: `Renew policy ${i}`, detail: null, payload: {},
+      })),
+      { id: 'zz-snacks', family_id: FAMILY, status: 'open', kind: 'moment', source_kind: null, member_id: null, urgency: 2, title: SNACKS, detail: null, payload: {} },
+    ]);
+    h.db = db;
+  }
+
+  it('a hundred cards hidden from Kit ahead of his own still leave his card in his inbox', async () => {
+    household(100);
+    expect(await calmCards('kit')).toContain(SNACKS);
+    expect(await calmCards('kit')).not.toContain('Renew policy 0');
+  });
+
+  it('control: with nothing hidden ahead, Kit sees his card', async () => {
+    household(0);
+    expect(await calmCards('kit')).toContain(SNACKS);
+  });
+
+  it('control: a manager still sees the policy cards first', async () => {
+    household(100);
+    const cards = await calmCards('mum');
+    expect(cards).toContain('Renew policy 0');
+  });
+});
