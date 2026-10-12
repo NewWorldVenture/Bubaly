@@ -28,12 +28,21 @@
 // object. No read or write from here can close that gap: the database has to
 // refuse the delete while a row is attached, and that is a change to 0007's
 // foreign key (ON DELETE NO ACTION), which is the owner's to make — the exact
-// statement is in the AUD-1022-L1 notes on #1022. Until it lands, what this
-// can do is find those objects afterwards: an asset's files are only ever
-// uploaded under `{family}/manuals/{asset}` and `{family}/warranties/{asset}`
-// (the Home page's handleFile, through `assetDocumentFolder` below), and once
-// the asset is gone no new row can name it. So after a confirmed asset delete
-// both folders are listed, and every object no surviving row names is
+// statement is in the AUD-1022-L1 notes on #1022.
+//
+// Once it lands, that delete answers 23503 and deletes nothing: the asset, the
+// late row and its file all stay, so the file keeps the row that protects it,
+// and the sweep below does not run. The caller is told a file is still
+// attached (`stillAttached`), because describeDbError reads 23503 as "could not
+// be found — it may have already been removed" and the asset is right there.
+// Deleting again reads that row and finishes the job.
+//
+// Until it lands, what this can do is find those objects afterwards: an
+// asset's files are only ever uploaded under `{family}/manuals/{asset}` and
+// `{family}/warranties/{asset}` (the Home page's handleFile, through
+// `assetDocumentFolder` below), and once the asset is gone no new row can name
+// it. So after a confirmed asset delete both folders are listed, and every
+// object no surviving row names is
 //
 //   1. GUARDED first: one vaulted row (`is_secure`, no asset, filed under
 //      PENDING_REMOVAL_CATEGORY) per object, inserted and read back before any
@@ -71,6 +80,8 @@ const MAX_ROW_PAGES = 200;
 /** Objects listed per storage page, and pages listed per folder before giving up. */
 const LIST_PAGE = 100;
 const MAX_LIST_PAGES = 50;
+/** foreign_key_violation: a row still names the asset, so the database refused to delete it. */
+const FOREIGN_KEY_VIOLATION = '23503';
 /** Paths per "does a row still name this object" read. */
 const PATH_CHUNK = 50;
 /** List-and-remove rounds, so an object a concurrent removal shifted past a page is still found. */
@@ -111,6 +122,9 @@ export type AssetRemoval =
   // keptInVault: the asset is gone, and a file of it that could not be removed
   // is kept under a guarding row in the Secure Vault (see the header).
   | { ok: false; error: string; keptInVault?: true }
+  // stillAttached: the database refused the asset delete because a row still
+  // names the asset (23503, see the header). Nothing was deleted by it.
+  | { ok: false; error: string; stillAttached: true }
   | { ok: false; notSaved: true };
 
 type Step = AssetRemoval | null;
@@ -262,7 +276,13 @@ export async function removeHomeAsset(db: AssetRemovalDb, familyId: string, asse
 
   const { data: removed, error } = await db.from('home_assets').delete()
     .eq('id', assetId).eq('family_id', familyId).select('id');
-  if (error) return { ok: false, error: describeDbError(error) };
+  if (error) {
+    // Refused while a row still names the asset (ON DELETE NO ACTION): one
+    // committed after the last read, or one this family cannot read. The
+    // asset, that row and its file are all kept, and no sweep runs.
+    if (error.code === FOREIGN_KEY_VIOLATION) return { ok: false, error: describeDbError(error), stillAttached: true };
+    return { ok: false, error: describeDbError(error) };
+  }
   if (wroteNoRows(removed)) {
     // Nothing deleted. If the asset is still there (RLS filtered the delete),
     // its folders hold live uploads and are left alone. If it is already gone —

@@ -20,7 +20,8 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { ASSET_DOCUMENT_KINDS, PENDING_REMOVAL_CATEGORY, removeHomeAsset } from '@/lib/home/remove-asset';
 import { isSensitiveDocument } from '@/lib/documents/sensitivity';
-import { createInMemorySupabase, type InMemorySupabase, type Row } from './helpers/in-memory-supabase';
+import { describeDbError } from '@/lib/supabase/errors';
+import { createInMemorySupabase, withFaults, type InMemorySupabase, type Row } from './helpers/in-memory-supabase';
 import { at, between, bodyOf } from './helpers/source-order';
 
 const FAMILY = 'fam-1';
@@ -227,6 +228,16 @@ describe('the Home page deletes an asset through it', () => {
     const failed = between(removeAsset, 'if (!removed.ok)', "success(tr('homeModule.assetRemoved'))");
     expect(at(failed, 'refreshWarranty();')).toBeLessThan(at(failed, 'return toastError('));
     expect(at(failed, 'removed.keptInVault')).toBeLessThan(at(failed, "tr('homeModule.assetRemovedFileKept')"));
+  });
+
+  // AUD-1022-L1, re-fix round 2: once the database refuses the delete (23503),
+  // the asset is still there, so "it may have already been removed" (what
+  // describeDbError makes of 23503) is the wrong thing to tell the person.
+  it('says a file is still attached when the database kept the asset, before the generic error', () => {
+    const failed = between(removeAsset, 'if (!removed.ok)', "success(tr('homeModule.assetRemoved'))");
+    expect(at(failed, 'refreshWarranty();')).toBeLessThan(at(failed, 'removed.stillAttached'));
+    expect(at(failed, 'removed.stillAttached')).toBeLessThan(at(failed, "tr('homeModule.assetKeptFileAttached')"));
+    expect(at(failed, "tr('homeModule.assetKeptFileAttached')")).toBeLessThan(at(failed, "'error' in removed ? removed.error"));
   });
 });
 
@@ -444,6 +455,107 @@ describe('files attached while the asset is being deleted', () => {
     expect(result.ok).toBe(false);
     expect(result).toHaveProperty('error');
     expect(result).not.toHaveProperty('keptInVault');
+  });
+
+  // AUD-1022-L1, re-fix round 2. Only the database can close the gap between
+  // the last read and the asset DELETE: the owner's SQL turns 0007's
+  // `ON DELETE CASCADE` into `ON DELETE NO ACTION`, so that DELETE answers
+  // 23503 and deletes nothing while any row still names the asset. Modelled
+  // here, so what removeHomeAsset does with that refusal is pinned before the
+  // SQL lands. (The cascade model above is inert under it: a delete that
+  // runs at all leaves no row behind for the cascade to take.)
+  describe('once the database refuses to delete an asset a row still names (ON DELETE NO ACTION)', () => {
+    /** What Postgres answers for the asset DELETE once the foreign key is NO ACTION. */
+    const REFUSAL = {
+      code: '23503',
+      message: 'update or delete on table "home_assets" violates foreign key constraint "documents_asset_id_fkey" on table "documents"',
+    };
+
+    /**
+     * The same client, with the DELETE refused while a row of ANY family names
+     * an asset it would delete, and `commit` run as that DELETE executes:
+     * after every read of the asset's files.
+     */
+    function refusingWhileNamed(home: Household, commit: () => void = () => {}) {
+      let committed = false;
+      return withFaults(client(home) as object, (table, calls) => {
+        if (table !== 'home_assets' || !calls.some((call) => call.method === 'delete')) return null;
+        if (!committed) { committed = true; commit(); }
+        const filters = calls.filter((call) => call.method === 'eq').map((call) => call.args as [string, unknown]);
+        const deleting = new Set(home.db.table('home_assets')
+          .filter((asset) => filters.every(([column, value]) => asset[column] === value)).map((asset) => asset.id));
+        return home.db.table('documents').some((doc) => deleting.has(doc.asset_id)) ? REFUSAL : null;
+      }) as Parameters<typeof removeHomeAsset>[0];
+    }
+
+    /** The household without the other family's row that names this asset id. */
+    function ownRowsOnly(): Household {
+      const home = household();
+      home.db.replace('documents', home.db.table('documents').filter((doc) => doc.id !== 'doc-theirs'));
+      return home;
+    }
+
+    const pendingRemovalRows = (home: Household) => home.db.table('documents')
+      .filter((doc) => doc.category === PENDING_REMOVAL_CATEGORY);
+
+    it('control: with no row left naming it, the asset is deleted with its files', async () => {
+      const home = ownRowsOnly();
+
+      expect(await removeHomeAsset(refusingWhileNamed(home), FAMILY, 'asset-fridge')).toEqual({ ok: true });
+      expect(home.store.objects.has(MANUAL)).toBe(false);
+      expect(home.store.objects.has(WARRANTY)).toBe(false);
+      expect(ids(home.db.table('home_assets'))).toEqual(['asset-boiler']);
+    });
+
+    it('a row committed after the last read keeps the asset, the row and its file, and says a file is still attached', async () => {
+      const home = ownRowsOnly();
+      const lateRemovals: number[] = [];
+      const deleting = watchingRemoval(refusingWhileNamed(home, () => attachLate(home)), LATE,
+        () => lateRemovals.push(guarding(home, LATE).length));
+
+      const result = await removeHomeAsset(deleting, FAMILY, 'asset-fridge');
+
+      // describeDbError reads 23503 as "not found, may already be removed";
+      // the flag is what lets the Home page say what actually happened.
+      expect(result).toEqual({ ok: false, error: describeDbError(REFUSAL), stillAttached: true });
+      expect(home.db.table('home_assets').some((asset) => asset.id === 'asset-fridge')).toBe(true);
+      // The file is still stored, and the vaulted row that hides it from a child is still there.
+      expect(home.store.objects.has(LATE)).toBe(true);
+      expect(guarding(home, LATE)).toEqual([expect.objectContaining({ id: 'doc-late', asset_id: 'asset-fridge' })]);
+      // Nothing was swept: no removal of it was asked for and no guarding row was needed.
+      expect(lateRemovals).toEqual([]);
+      expect(pendingRemovalRows(home)).toEqual([]);
+    });
+
+    it('a second press reads that row and finishes: its file, then its row, then the asset', async () => {
+      const home = ownRowsOnly();
+      await removeHomeAsset(refusingWhileNamed(home, () => attachLate(home)), FAMILY, 'asset-fridge');
+      const guardedAtRemoval: number[] = [];
+
+      const retry = await removeHomeAsset(watchingRemoval(refusingWhileNamed(home), LATE,
+        () => guardedAtRemoval.push(guarding(home, LATE).length)), FAMILY, 'asset-fridge');
+
+      expect(retry).toEqual({ ok: true });
+      // Asked while the object was still stored, its own row still named it.
+      expect(guardedAtRemoval).toEqual([1]);
+      expect(home.store.objects.has(LATE)).toBe(false);
+      expect(home.db.table('documents').some((doc) => doc.storage_path === LATE)).toBe(false);
+      expect(home.db.table('home_assets').some((asset) => asset.id === 'asset-fridge')).toBe(false);
+    });
+
+    it('a refusal no read of this family can clear keeps the asset and returns describeDbError, touching nothing of theirs', async () => {
+      // The other household's row names this asset id, and every read here is family-scoped.
+      const home = household();
+
+      for (let press = 0; press < 2; press++) {
+        const result = await removeHomeAsset(refusingWhileNamed(home), FAMILY, 'asset-fridge');
+        expect(result).toMatchObject({ ok: false, error: describeDbError(REFUSAL) });
+        expect(home.db.table('home_assets').some((asset) => asset.id === 'asset-fridge')).toBe(true);
+      }
+      expect(home.db.table('documents').some((doc) => doc.id === 'doc-theirs')).toBe(true);
+      expect(home.store.objects.has(OTHER_FAMILY_FILE)).toBe(true);
+      expect(pendingRemovalRows(home)).toEqual([]);
+    });
   });
 });
 

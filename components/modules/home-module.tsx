@@ -197,6 +197,9 @@ export function HomeModule() {
       // remove is kept in the Secure Vault, where a parent deletes it in Files.
       refreshWarranty();
       if ('keptInVault' in removed && removed.keptInVault) return toastError(tr('homeModule.assetRemovedFileKept'));
+      // The database kept the asset because a file is still attached (often
+      // one added meanwhile); deleting again removes it with its files.
+      if ('stillAttached' in removed && removed.stillAttached) return toastError(tr('homeModule.assetKeptFileAttached'));
       return toastError('error' in removed ? removed.error : tr('errors.thatChangeWasNotSaved'));
     }
     success(tr('homeModule.assetRemoved'));
