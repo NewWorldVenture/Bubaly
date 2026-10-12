@@ -7,7 +7,7 @@ import { effectiveSecretKey, getStripeSettings } from '@/lib/stripe/settings';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import {
   DEFAULT_REFERRAL_CONFIG, resolveReferralConfig, generateReferralCode, normalizeCode,
-  REFERRAL_EMAIL_SOURCE, evaluateReferralEmailThrottle, referralEmailSendTimes, withReferralEmailSent,
+  REFERRAL_EMAIL_SOURCE, evaluateReferralEmailThrottle, decideReferralEmailAdmission, referralEmailSendTimes, withReferralEmailSent,
   rewardRecordFrom, rewardSidesOwed, withRewardRecord, rewardIdempotencyKey,
   type ReferralConfig, type ReferralRewardSide,
 } from '@/lib/referrals/core';
@@ -544,6 +544,12 @@ export type EmailInviteRecord =
  * row (`metadata.email_sent_at`), which is also what the limit is counted
  * from — so the state lives in a column that already exists. A repeat send
  * to the same address reuses that row rather than adding a second family.
+ *
+ * The first read only turns away a family that is already at the limit. The
+ * compare-and-set below guards one row, and two invitations to different
+ * addresses write different rows. So a written send is admitted only by
+ * `admitWrittenReferralEmail`, from a read taken after the write. `ok: true`
+ * means admitted, and only then may the caller send the email.
  */
 export async function recordReferralEmailInvite(service: DB, input: {
   referrerFamilyId: string;
@@ -578,7 +584,7 @@ export async function recordReferralEmailInvite(service: DB, input: {
       console.error('[referrals/email] referral send record failed', { id: existing.id, error: updateError });
       return { ok: false, reason: 'write_failed' };
     }
-    return { ok: true, rowId: existing.id, created: false, remaining: decision.remaining - 1 };
+    return admitWrittenReferralEmail(service, { referrerFamilyId: input.referrerFamilyId, rowId: existing.id, created: false, sentAt: now });
   }
 
   const { data, error: insertError } = await service
@@ -600,7 +606,51 @@ export async function recordReferralEmailInvite(service: DB, input: {
     console.error('[referrals/email] referral invite insert failed', { familyId: input.referrerFamilyId, error: insertError });
     return { ok: false, reason: 'write_failed' };
   }
-  return { ok: true, rowId: data.id, created: true, remaining: decision.remaining - 1 };
+  return admitWrittenReferralEmail(service, { referrerFamilyId: input.referrerFamilyId, rowId: data.id, created: true, sentAt: now });
+}
+
+/**
+ * Pauses before reading again while a send ranked past the limit withdraws.
+ * Bounded: a send that never withdraws leaves this one throttled instead of
+ * sent. That happens when an admitted send ranks after this one because this
+ * request's clock is behind, or when another request's rollback failed.
+ */
+const ADMISSION_RECHECK_MS = [25, 50, 100, 200] as const;
+
+/**
+ * Admit a send that is already written, or withdraw it. Each racer reads
+ * after its own write, so it sees its own send, and every racer ranks sends
+ * the same way (see `decideReferralEmailAdmission`). Only this request's own
+ * send is ever rolled back: its row by id, or its stamp on a reused row.
+ */
+async function admitWrittenReferralEmail(service: DB, input: {
+  referrerFamilyId: string; rowId: string; created: boolean; sentAt: Date;
+}): Promise<EmailInviteRecord> {
+  const own = { rowId: input.rowId, created: input.created, sentAt: input.sentAt };
+  for (let attempt = 0; ; attempt++) {
+    const { data: rows, error } = await service
+      .from('referrals')
+      .select('id, metadata')
+      .eq('referrer_family_id', input.referrerFamilyId);
+    if (error) {
+      console.error('[referrals/email] referral admission read failed', { familyId: input.referrerFamilyId, error });
+      await rollbackReferralEmailInvite(service, own);
+      return { ok: false, reason: 'read_failed' };
+    }
+    const admission = decideReferralEmailAdmission(rows ?? [], { rowId: input.rowId, sentAt: input.sentAt });
+    if (admission.verdict === 'admit') return { ok: true, rowId: input.rowId, created: input.created, remaining: admission.remaining };
+    if (admission.verdict === 'missing') {
+      console.error('[referrals/email] referral send missing after write', { id: input.rowId });
+      return { ok: false, reason: 'write_failed' };
+    }
+    if (admission.verdict === 'wait' && attempt < ADMISSION_RECHECK_MS.length) {
+      await new Promise((resolve) => setTimeout(resolve, ADMISSION_RECHECK_MS[attempt]));
+      continue;
+    }
+    // A failed rollback is logged inside and leaves the send counted; either way no email goes.
+    await rollbackReferralEmailInvite(service, own);
+    return { ok: false, reason: 'throttled', retryAfterSec: admission.retryAfterSec };
+  }
 }
 
 /** Undo a recorded send whose email never left: drop a fresh row, or the timestamp on a reused one. */
