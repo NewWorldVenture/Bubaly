@@ -608,6 +608,7 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
 
   const scoped = await port.scopeFor(run);
   if (!scoped.ok) {
+    if (unconfirmedRefusal(scoped)) return { status: 'error', ...empty };
     await blockForRequester(port, run, scoped.error);
     return { status: 'blocked', ...empty };
   }
@@ -719,9 +720,7 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
       // they held when the run was claimed.
       const rescoped = await port.scopeFor(run);
       if (!rescoped.ok) {
-        // A read that failed has not shown the requester gone: nothing more
-        // runs, and the run keeps its state for the next claim to read again.
-        if (rescoped.code === SERVICE_CODES.db || rescoped.retryable) return summarize('error', steps);
+        if (unconfirmedRefusal(rescoped)) return summarize('error', steps);
         await blockForRequester(port, run, rescoped.error);
         return summarize('blocked', steps);
       }
@@ -786,6 +785,16 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
   // Reaching the pass cap means the graph stopped converging; finishing
   // honestly beats spinning until the function is killed.
   return finalizeRun(port, run, steps);
+}
+
+/**
+ * A requester read that failed (a database error, or anything marked
+ * retryable) has not shown the requester gone. Nothing runs on it, and nothing
+ * is written: the run keeps its state for the next claim to read again, where
+ * a blocked run would wait for a person.
+ */
+function unconfirmedRefusal(result: { code?: string; retryable?: boolean }): boolean {
+  return result.code === SERVICE_CODES.db || result.retryable === true;
 }
 
 /**

@@ -1100,3 +1100,42 @@ describe('a requester read that failed between batches is not a removal', () => 
     expect(fake.run.state).toBe('blocked');
   });
 });
+
+describe('a requester read that failed at claim is not a removal', () => {
+  // Review on #1028 (AUD-1028-ACTOR-INITIAL): the same distinction at claim
+  // time. A transient failure reading the requester blocked the run, which the
+  // claim excludes until a person looks; it now runs and writes nothing, so the
+  // next claim reads again. A confirmed refusal still blocks.
+  const chain = () => [{ id: 's1' }, { id: 's2', dependency_ids: ['s1'] }];
+
+  for (const [label, failure] of [
+    ['a database error', { code: 'db', retryable: true }],
+    ['a retryable failure with no code', { retryable: true }],
+  ] as const) {
+    it(`${label} dispatches nothing and leaves the run as it was`, async () => {
+      const fake = makeFake({ steps: chain(), run: { state: 'ready' } });
+      fake.port.scopeFor = async () => fail('Bubaly could not confirm who this run is for.', failure);
+
+      const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+      expect(result.status).toBe('error');
+      expect(fake.calls).toEqual([]);
+      expect(fake.run.state).toBe('ready');
+      expect(fake.run.error).toBeUndefined();
+      expect(fake.events).toEqual([]);
+      expect(fake.requestStates).toEqual([]);
+      expect(fake.steps.map((s) => s.status)).toEqual(['queued', 'queued']);
+    });
+  }
+
+  it('a confirmed refusal at claim still blocks (control)', async () => {
+    const fake = makeFake({ steps: chain(), run: { state: 'ready' }, scopeError: 'The person who asked for this is no longer an active member of the family.' });
+
+    const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(result.status).toBe('blocked');
+    expect(fake.calls).toEqual([]);
+    expect(fake.run.state).toBe('blocked');
+    expect(fake.requestStates).toEqual(['blocked']);
+  });
+});
