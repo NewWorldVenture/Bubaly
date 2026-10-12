@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 export const runtime = 'nodejs';
 
@@ -18,18 +19,41 @@ export const runtime = 'nodejs';
 // matched and the reactivation the owner had just refused went through. Each
 // click now re-stamps the opt-out with a time later than the one on the row,
 // which no reactivation read before it can match.
+//
+// AND A CLICK ONLY EVER MOVES THE OPT-OUT FORWARD (AUD-1028-M1-ABA). The
+// re-stamp was computed from an unlocked read and written over whatever the
+// row said by then. Two clicks overlapping a reactivation could put back a
+// stamp the reactivation had read: with the clock at T, click A reads T and
+// pauses; click B writes T+1; a reactivation reads T+1 and waits on its
+// notice; click C writes T+2; A lands and writes T+1 over it — and the
+// reactivation's guard matched again and put the address back on the list
+// despite C. So the write is a compare-and-set on the status and opt-out time
+// this click read, like the reactivation's own: a click another write has
+// overtaken writes nothing, re-reads the row, and stamps again later than
+// everything it has seen. A click that is overtaken on every attempt says so
+// (`error`) rather than claiming an opt-out it could not write.
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
- * The opt-out time this click writes: now, and in any case later than the one
- * already on the row, so it differs from anything a reactivation in flight
- * read — even within the same millisecond, or behind a clock that stepped back.
+ * How many times one click writes: the first try, and a re-read and retry for
+ * each time a newer write overtook it. Losing once takes another click (or a
+ * reactivation) landing in the few milliseconds between a read and a write;
+ * losing every time is contention, answered honestly rather than spun on.
  */
-function optOutStamp(previous: string | null | undefined): string {
+const WRITE_ATTEMPTS = 3;
+
+type Observed = { id: string; status: string; unsubscribed_at: string | null };
+
+/**
+ * The opt-out time this click writes: now, and in any case later than every
+ * opt-out time this click has seen on the row (`latestSeen`, epoch ms), so it
+ * differs from anything a reactivation in flight read — even within the same
+ * millisecond, or behind a clock that stepped back.
+ */
+function optOutStamp(latestSeen: number): string {
   const now = Date.now();
-  const before = previous ? Date.parse(previous) : Number.NaN;
-  return new Date(Number.isFinite(before) && before >= now ? before + 1 : now).toISOString();
+  return new Date(latestSeen >= now ? latestSeen + 1 : now).toISOString();
 }
 
 export async function GET(req: NextRequest) {
@@ -69,26 +93,60 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(home);
   }
 
-  if (data) {
-    // Written whatever status was read, so a reactivation waiting on its notice
-    // cannot outlast this click (see the top of this file). Unguarded: a row a
-    // reactivation moved to `active` since the read is opted out again.
-    // Deliberately NOT confirmed. This runs on the service role, so RLS cannot be
-    // what makes it match nothing: zero rows means the row was deleted since the
-    // read, and a person with no row is not on the list — which is what they
-    // asked for. Confirming it would show "error" on an unsubscribe that took.
-    // Audit C1-S9-62.
-    const { error: updateError } = await supabase
+  if (!data) {
+    home.searchParams.set('unsubscribed', 'invalid');
+    return NextResponse.redirect(home);
+  }
+
+  // Written whatever status was read, so a reactivation waiting on its notice
+  // cannot outlast this click (see the top of this file), and written only
+  // over the row as this click read it, so a stale click cannot put back an
+  // opt-out time a newer one replaced. Service role, so RLS is never why the
+  // write matches nothing: either the row moved since the read — another
+  // click, or a reactivation — and is read again, or it was deleted since,
+  // and a person with no row is not on the list — which is what they asked for.
+  let observed: Observed = data;
+  let latestSeen = Number.NEGATIVE_INFINITY;
+  for (let attempt = 1; ; attempt += 1) {
+    const seenStamp = observed.unsubscribed_at ?? null;
+    const seenAt = seenStamp === null ? Number.NaN : Date.parse(seenStamp);
+    if (Number.isFinite(seenAt)) latestSeen = Math.max(latestSeen, seenAt);
+    const advance = supabase
       .from('blog_subscribers')
-      .update({ status: 'unsubscribed', unsubscribed_at: optOutStamp(data.unsubscribed_at) })
-      .eq('id', data.id);
+      .update({ status: 'unsubscribed', unsubscribed_at: optOutStamp(latestSeen) })
+      .eq('id', observed.id)
+      .eq('status', observed.status);
+    const { data: advanced, error: updateError } = await (seenStamp === null
+      ? advance.is('unsubscribed_at', null)
+      : advance.eq('unsubscribed_at', seenStamp)
+    ).select('id');
     if (updateError) {
-      console.error('[blog-unsubscribe] unsubscribe write failed', { subscriberId: data.id, error: updateError });
+      console.error('[blog-unsubscribe] unsubscribe write failed', { subscriberId: observed.id, error: updateError });
       home.searchParams.set('unsubscribed', 'error');
       return NextResponse.redirect(home);
     }
+    if (!wroteNoRows(advanced)) break;
+
+    if (attempt >= WRITE_ATTEMPTS) {
+      console.error('[blog-unsubscribe] unsubscribe write was overtaken on every attempt', { subscriberId: observed.id, attempts: attempt });
+      home.searchParams.set('unsubscribed', 'error');
+      return NextResponse.redirect(home);
+    }
+    // A refused re-read is not "the row is gone": the click is unrecorded.
+    const { data: fresh, error: rereadError } = await supabase
+      .from('blog_subscribers')
+      .select('id, status, unsubscribed_at')
+      .eq('id', observed.id)
+      .maybeSingle();
+    if (rereadError) {
+      console.error('[blog-unsubscribe] subscriber re-read failed', { subscriberId: observed.id, error: rereadError });
+      home.searchParams.set('unsubscribed', 'error');
+      return NextResponse.redirect(home);
+    }
+    if (!fresh) break;
+    observed = fresh;
   }
 
-  home.searchParams.set('unsubscribed', data ? '1' : 'invalid');
+  home.searchParams.set('unsubscribed', '1');
   return NextResponse.redirect(home);
 }

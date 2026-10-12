@@ -35,6 +35,28 @@
 // than the card carries, means this card cannot release it. Nothing is written,
 // and the family declines it and asks Bubaly again. A card filed under the
 // current rules is untouched by this: its own rule is the answer.
+//
+// AT THE CONFIDENCE IT WAS FILED AT, OR AT EVERY ONE IT MIGHT HAVE BEEN
+// (AUD-1028-AI-CONFIDENCE). A rule may hang on `minConfidence`, and the engine
+// applies that to a deny or a "both of us" as readily as to an allow — so no
+// single stand-in for an unknown confidence is the cautious one: 0 hides a
+// "when Bubaly is sure, both of us" rule, and 1 lets a "when Bubaly is sure,
+// one of us" rule stand over the stricter one beneath it. When the confidence
+// a card was filed at cannot be known, its release must hold at every
+// confidence that changes which rules apply.
+//
+// WHOSE CONSENSUS (AUD-1028-AI-QUORUM). A consensus card needs everyone who
+// can vote, which is a count of people, and the household changes. Which
+// count governs is decided by WHEN the release is weighed (`quorum`):
+//  - a pending card is released by a yes in `decide()`, which counts the votes
+//    against the family's managers NOW (`thresholdOf`), so that is the count
+//    the card carries against today's rule;
+//  - a card already decided carries the decision `decide()` took — the yeses
+//    it recorded, against the threshold it computed then. A member who joined
+//    since is not asked again, one who left still voted, and the run executor
+//    resuming the card weighs it at those recorded yeses (`recordedQuorum`):
+//    what today's rule asks is compared with the votes the card has, never
+//    with a membership the decision did not see.
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
@@ -44,7 +66,7 @@ import type { ToolDefinition } from '@/lib/ai/tools/types';
 import { thresholdFor } from '@/lib/approvals/threshold';
 import { loadAISettingsFor } from '@/lib/services/ai-settings';
 import { carriesAmount, readAmountCents, UNKNOWN_AMOUNT_CENTS } from '@/lib/trust/amount';
-import { evaluateAction, riskTierStance, toolTags, type Actor, type Capability, type Decision, type TrustRole } from '@/lib/trust/engine';
+import { evaluateAction, riskTierStance, toolTags, type Actor, type Capability, type Decision, type Policy, type TrustRole } from '@/lib/trust/engine';
 import { loadTrustInputs, roleOf } from '@/lib/trust/server';
 
 type DB = SupabaseClient<Database>;
@@ -95,7 +117,30 @@ export type ReleasedRequest = {
    * step, or a row with no step parked on it — where only an edit is weighed.
    */
   runsWork?: boolean;
+  /**
+   * How many people a consensus counts at this release (see the top of this
+   * file): the family's active managers now for a yes in `decide()`, the
+   * card's recorded yeses (`recordedQuorum`) for a decided card the run
+   * executor resumes. Omitted, 1 — the strictest reading of a consensus card.
+   */
+  quorum?: number;
 };
+
+/**
+ * The quorum a decided card's decision was taken on: the distinct members it
+ * records a yes from. 0389 freezes a decided row's votes, and 0381 let it
+ * into approved/modified only with the yeses its model asked for then.
+ */
+export function recordedQuorum(approvals: unknown): number {
+  if (!Array.isArray(approvals)) return 0;
+  const yeses = new Set<string>();
+  for (const vote of approvals) {
+    if (!vote || typeof vote !== 'object') continue;
+    const { member_id: member, decision } = vote as { member_id?: unknown; decision?: unknown };
+    if (decision === 'approved' && typeof member === 'string' && member) yeses.add(member);
+  }
+  return yeses.size;
+}
 
 /**
  * - `outside_rule`: the approver's edit moved the request to another rule.
@@ -169,13 +214,18 @@ export function refusesOutright(decision: Decision): boolean {
   return decision.effect === 'deny' && riskTierStance(decision) === 'silent';
 }
 
-/** Whether `decision` asks for more approvals, or narrower approvers, than the row was filed with. */
+/**
+ * Whether `decision` asks for more approvals, or narrower approvers, than the
+ * row was filed with — a consensus on either side counted at `quorum` (see
+ * `ReleasedRequest.quorum`).
+ */
 function asksMoreThanFiled(
   decision: Decision,
   row: Pick<FiledRequest, 'approval_model' | 'required_approvals'>,
+  quorum: number,
 ): boolean {
-  const now = thresholdFor(decision.approvalModel ?? 'single', decision.requiredApprovals ?? 1, 1);
-  const filed = thresholdFor(row.approval_model ?? 'single', row.required_approvals ?? 1, 1);
+  const now = thresholdFor(decision.approvalModel ?? 'single', decision.requiredApprovals ?? 1, quorum);
+  const filed = thresholdFor(row.approval_model ?? 'single', row.required_approvals ?? 1, quorum);
   if (now.parentsOnly && !filed.parentsOnly) return true;
   if (decision.approvalModel === 'consensus' && row.approval_model !== 'consensus') return true;
   return now.required > filed.required;
@@ -191,11 +241,12 @@ function asksMoreThanFiled(
 export function withinFiledRule(
   decision: Decision,
   row: Pick<FiledRequest, 'approval_model' | 'required_approvals' | 'policy_id'>,
+  quorum = 1,
 ): boolean {
   if (decision.effect === 'allow') return true;
   if (decision.effect === 'deny') return false;
   if (decision.basis === 'policy' && (decision.policyId ?? null) !== (row.policy_id ?? null)) return false;
-  return !asksMoreThanFiled(decision, row);
+  return !asksMoreThanFiled(decision, row, quorum);
 }
 
 /**
@@ -213,9 +264,10 @@ export function withinFiledRule(
 export function filedRuleStillHolds(
   decision: Decision,
   row: Pick<FiledRequest, 'approval_model' | 'required_approvals'>,
+  quorum = 1,
 ): boolean {
   if (refusesOutright(decision)) return false;
-  if (decision.effect === 'require_approval') return !asksMoreThanFiled(decision, row);
+  if (decision.effect === 'require_approval') return !asksMoreThanFiled(decision, row, quorum);
   return true;
 }
 
@@ -232,12 +284,15 @@ export function filedRuleStillHolds(
  *    line in `trust_audit_logs` (`evaluateTrust` writes it with the
  *    approval's id), a table only the service role writes (0260).
  *
- * No filing line, or none that recorded a confidence, is read as 0: a rule
- * that needs Bubaly to be sure never relaxes a release it cannot prove. Null
+ * No filing line, or none that recorded a confidence, is UNKNOWN (`null`),
+ * not 0 (AUD-1028-AI-CONFIDENCE): 0 is cautious only for a rule that relaxes
+ * when Bubaly is sure, and the engine applies `minConfidence` to a deny or a
+ * "both of us" too, which 0 would hide. The caller weighs an unknown
+ * confidence at every value that matters (`confidencesThatMatter`). Not ok
  * when the ledger cannot be read, so the caller answers "unreadable".
  */
-async function filingConfidence(db: DB, request: ReleasedRequest): Promise<number | null> {
-  if (request.filedBy.kind === 'step') return HELD_STEP_CONFIDENCE;
+async function filingConfidence(db: DB, request: ReleasedRequest): Promise<{ ok: true; confidence: number | null } | { ok: false }> {
+  if (request.filedBy.kind === 'step') return { ok: true, confidence: HELD_STEP_CONFIDENCE };
   const { data, error } = await db.from('trust_audit_logs')
     .select('confidence, created_at')
     .eq('family_id', request.row.family_id)
@@ -246,17 +301,38 @@ async function filingConfidence(db: DB, request: ReleasedRequest): Promise<numbe
     .limit(1);
   if (error) {
     console.error('[trust/edit-rule] could not read the confidence a request was filed at', { approvalId: request.row.id, code: error.code });
-    return null;
+    return { ok: false };
   }
   const filed = (data ?? [])[0]?.confidence;
-  return typeof filed === 'number' ? filed : 0;
+  return { ok: true, confidence: typeof filed === 'number' && Number.isFinite(filed) ? filed : null };
 }
 
 /**
- * The family's answer for this request at a given amount, evaluated as the
- * gate that filed it evaluated the ask. Null when what that needs cannot be read.
+ * Every confidence at which the family's rules can answer differently: 0, 1,
+ * and each enabled policy's `minConfidence` between them. The engine reads a
+ * confidence only as `confidence >= minConfidence` (`conditionsSatisfied`),
+ * so which policies apply is constant from one threshold up to the next, and
+ * these points between them reach every answer a confidence in [0, 1] can.
  */
-async function ruleFor(db: DB, request: ReleasedRequest): Promise<((amountCents: number | null) => Decision) | null> {
+function confidencesThatMatter(policies: readonly Policy[]): number[] {
+  const points = new Set<number>([0, 1]);
+  for (const policy of policies) {
+    const raw = policy.enabled ? policy.conditions?.minConfidence : null;
+    if (raw === null || raw === undefined) continue;
+    // A jsonb value the engine compares as a number, whatever it was saved as.
+    const threshold = Number(raw);
+    if (Number.isFinite(threshold)) points.add(Math.min(1, Math.max(0, threshold)));
+  }
+  return [...points].sort((a, b) => a - b);
+}
+
+/**
+ * The family's answers for this request at a given amount, evaluated as the
+ * gate that filed it evaluated the ask: one, at the confidence it was filed
+ * at, or one per confidence that matters when that is unknown — and the
+ * release must hold under every one. Null when what that needs cannot be read.
+ */
+async function ruleFor(db: DB, request: ReleasedRequest): Promise<((amountCents: number | null) => Decision[]) | null> {
   const { row } = request;
   const role = await askerRole(db, row);
   if (!role.ok) return null;
@@ -274,9 +350,10 @@ async function ruleFor(db: DB, request: ReleasedRequest): Promise<((amountCents:
   const capability: Capability = request.filedBy.kind === 'step'
     ? (!request.tool || !request.tool.readOnly ? 'automate' : request.tool.capability)
     : row.capability as Capability;
-  const confidence = await filingConfidence(db, request);
-  if (confidence === null) return null;
-  return (amountCents) => evaluateAction({
+  const filed = await filingConfidence(db, request);
+  if (!filed.ok) return null;
+  const confidences = filed.confidence !== null ? [filed.confidence] : confidencesThatMatter(trust.policies);
+  return (amountCents) => confidences.map((confidence) => evaluateAction({
     actor,
     domain: row.domain,
     capability,
@@ -285,7 +362,7 @@ async function ruleFor(db: DB, request: ReleasedRequest): Promise<((amountCents:
     grants: trust.grants,
     delegations: trust.delegations,
     emergencyDomains: trust.emergencyDomains,
-  });
+  }));
 }
 
 /**
@@ -293,6 +370,8 @@ async function ruleFor(db: DB, request: ReleasedRequest): Promise<((amountCents:
  * an approver's edit that moved the amount is weighed as `withinFiledRule`
  * weighs it, and whatever runs — the edit or the ask — must still be
  * releasable by this card under the family's rules now (`filedRuleStillHolds`).
+ * Both hold under every answer `ruleFor` gives, each consensus counted at the
+ * request's `quorum`.
  */
 export async function releaseStaysWithinFiledRule(db: DB, request: ReleasedRequest): Promise<ReleaseVerdict> {
   const after = amountOf(request.tool, request.released);
@@ -302,8 +381,13 @@ export async function releaseStaysWithinFiledRule(db: DB, request: ReleasedReque
 
   const rule = await ruleFor(db, request);
   if (!rule) return { ok: false, reason: 'unreadable' };
-  const decision = rule(after);
-  if (weighsEdit && !withinFiledRule(decision, request.row)) return { ok: false, reason: 'outside_rule' };
-  if (weighsRule && !filedRuleStillHolds(decision, request.row)) return { ok: false, reason: 'rule_changed' };
+  const decisions = rule(after);
+  const quorum = request.quorum ?? 1;
+  if (weighsEdit && !decisions.every((decision) => withinFiledRule(decision, request.row, quorum))) {
+    return { ok: false, reason: 'outside_rule' };
+  }
+  if (weighsRule && !decisions.every((decision) => filedRuleStillHolds(decision, request.row, quorum))) {
+    return { ok: false, reason: 'rule_changed' };
+  }
   return { ok: true };
 }
