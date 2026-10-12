@@ -113,15 +113,20 @@ describe('all public push senders enforce consent', () => {
     expect((await dispatchPendingPushes(f.db, { now: NOW })).result).toEqual(counts());
   });
 
-  it('does not repeat consent reads for each queued notification', async () => {
+  it('shares initial policy reads and rechecks current user preference for each queued delivery', async () => {
     const f = fixture();
     f.tables.notifications = Array.from({ length: 20 }, (_, index) => ({ ...f.tables.notifications[0], id: notificationId(index + 1) }));
     expect((await dispatchPendingPushes(f.db, { now: NOW })).result.sent).toBe(20);
-    // One active-roster read and one child-role policy read, each with its
-    // empty terminal page, independent of the twenty queued notifications.
-    expect(f.calls.filter(call => call.table === 'family_members').map(call => call.count)).toEqual([1, 0, 1, 0]);
+    // The roster and child-role policy still each finish their empty terminal page.
+    // Every delivery also checks current active membership after those shared reads.
+    const memberReads = f.calls.filter(call => call.table === 'family_members').map(call => call.count);
+    expect(memberReads.slice(0, 4)).toEqual([1, 0, 1, 0]);
+    expect(memberReads.slice(4)).toEqual(Array(20).fill(1));
     expect(f.calls.filter(call => call.table === 'family_ai_settings').map(call => call.count)).toEqual([1, 0]);
-    expect(f.calls.filter(call => call.table === 'user_preferences')).toHaveLength(1);
+    const preferences = f.calls.filter(call => call.table === 'user_preferences');
+    expect(preferences[0]).toMatchObject({ count: 1, limit: Infinity });
+    expect(preferences.slice(1).map(call => ({ count: call.count, limit: call.limit })))
+      .toEqual(Array.from({ length: 20 }, () => ({ count: 1, limit: 1 })));
   });
 
   it.each(['recipient', 'parent'])('returns a non-success own-device test result for %s opt-out', async mode => {

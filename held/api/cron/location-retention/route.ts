@@ -14,11 +14,16 @@ import { enforceLocationRetention } from '@/lib/location/retention';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-// Location history retention — daily. location_events kept every member's
-// exact coordinates forever: "Stop Sharing" did not touch them and 0335 makes
-// the table append-only for clients, so no member could remove them either.
-// Events older than the window are deleted, and coordinates nothing reads are
-// cleared. Idempotent: a second run the same day finds nothing to do.
+// Location history retention — meant to run daily ONCE RESTORED; held, it runs
+// never. location_events kept every member's exact coordinates forever: "Stop
+// Sharing" did not touch them and 0335 makes the table append-only for
+// clients, so no member could remove them either. Restored, it would delete
+// events older than the window and clear coordinates nothing reads, and would
+// blank the live position of any member no longer active — the repair for a
+// removal whose own forget failed. That repair is part of this held sweep and
+// is not run, scheduled or routed anywhere else until the owner's retention
+// decision (tests/a-removed-member-takes-their-location-with-them.test.ts).
+// Idempotent: a second run the same day would find nothing to do.
 export async function GET(req: NextRequest) {
   const tr = await getTranslations();
   if (!hasCronAuthorization(req)) {
@@ -27,9 +32,9 @@ export async function GET(req: NextRequest) {
   try {
     const result = await enforceLocationRetention(createServiceClient());
     if (!result.ok) console.error('[location-retention] sweep incomplete', result.failures);
-    const { ok, purgedEvents, clearedEvents, clearedCheckIns } = result;
+    const { ok, purgedEvents, clearedEvents, clearedCheckIns, clearedRemovedMembers } = result;
     return NextResponse.json(
-      { ok, purgedEvents, clearedEvents, clearedCheckIns, failed: result.failures.length },
+      { ok, purgedEvents, clearedEvents, clearedCheckIns, clearedRemovedMembers, failed: result.failures.length },
       { status: ok ? 200 : 502 },
     );
   } catch (err) {

@@ -148,7 +148,7 @@ export function InboxQueue({ items, unavailable, needsYou }: {
               const ChannelIcon = CHANNEL_ICON[item.channel] ?? source.icon;
               const runPath = runPaths[item.id];
               return (
-                <div key={item.id} className={cn('flex items-start gap-3 px-4 py-3.5', item.handled && 'opacity-70')}>
+                <div key={item.id} className="flex items-start gap-3 px-4 py-3.5">
                   <div className="mt-0.5 grid h-9 w-9 flex-shrink-0 place-items-center rounded-xl bg-surface text-muted">
                     <ChannelIcon className="h-4 w-4" />
                   </div>

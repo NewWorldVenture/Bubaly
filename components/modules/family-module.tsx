@@ -272,7 +272,7 @@ export function FamilyModule() {
                   <div key={m.id} className="group relative flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface/20 p-4 text-center">
                     {canManage && !isLastManager(m) && (
                       <div className="absolute right-1.5 top-1.5">
-                        <button onClick={() => setMenuId(menuId === m.id ? null : m.id)} aria-label={t('itemAction.manage', { name: m.display_name })} className="grid h-6 w-6 place-items-center rounded-lg text-muted/60 opacity-0 transition hover:bg-elevated group-hover:opacity-100">
+                        <button onClick={() => setMenuId(menuId === m.id ? null : m.id)} aria-label={t('itemAction.manage', { name: m.display_name })} className="grid h-6 w-6 place-items-center rounded-lg text-muted opacity-100 sm:opacity-0 transition hover:bg-elevated sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100">
                           <MoreHorizontal className="h-4 w-4" />
                         </button>
                         {menuId === m.id && (
@@ -312,7 +312,7 @@ export function FamilyModule() {
         </div>
 
         {/* Family Calendar + Highlights */}
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-semibold">{t('family.familyCalendar')}</h2>
@@ -485,6 +485,11 @@ export function FamilyModule() {
               if (!res) { toastError(t('errors.thatChangeWasNotSaved')); return; }
               if (!res.ok) { toastError(res.error); return; }
               if (res.loginRevocation === 'failed') toastError(t('familyModule.removedButLoginStillActive'));
+              // The removal stands, but their last position could not be
+              // cleared and may still be on the family map — nothing
+              // scheduled clears it (the retention sweep that would is held):
+              // said, like the login that stayed live.
+              else if (!res.locationForgotten) toastError(t('familyModule.removedButLocationStillVisible'));
               else success(t('familyModule.memberRemoved'));
               void refreshMembers();
             }}>{t('family.remove')}</Button>

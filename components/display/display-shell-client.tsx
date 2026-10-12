@@ -24,7 +24,9 @@ function ShellLoading() {
   const t = useTranslations();
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-[#0b1020]">
-      <p className="animate-pulse text-sm font-semibold uppercase tracking-[0.25em] text-white/30">{t('displayShellClient.bubalyKitchen')}</p>
+      {/* Full white: animate-pulse halves it at its faintest frame (5.3:1 on
+          the ink); white/70 halved read 3.2:1 there. */}
+      <p className="animate-pulse text-sm font-semibold uppercase tracking-[0.25em] text-white">{t('displayShellClient.bubalyKitchen')}</p>
     </div>
   );
 }

@@ -100,7 +100,7 @@ export default async function FamilyCooPage() {
         <StatTile href="/dashboard/home" label={tr('dashboardFamilyCoo.maintenance')} value={maint?.length ?? 0} icon={Wrench} accent="bg-orange-500" sublabel="Home" />
       </div>
 
-      <div className="grid gap-5 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         <SectionCard title={tr('dashboardFamilyCoo.taskAssignments')} viewAllHref="/dashboard/chores">
           {openChores && openChores.length > 0 ? (
             <ul className="divide-y divide-border">
@@ -141,7 +141,7 @@ export default async function FamilyCooPage() {
         </SectionCard>
       </div>
 
-      <div className="grid gap-5 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         <SectionCard title={tr('dashboardFamilyCoo.thisWeek')} viewAllHref="/dashboard/calendar">
           {events && events.length > 0 ? (
             <ul className="space-y-2.5">

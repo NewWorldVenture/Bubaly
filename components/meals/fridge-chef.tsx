@@ -4,7 +4,6 @@ import { useRef, useState } from 'react';
 import { Camera, CalendarPlus, Clock, Check, AlertTriangle, ShoppingCart, Sparkles, Utensils } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Recipe = {
@@ -181,9 +180,9 @@ export function FridgeChef() {
 
               <div className="mt-auto space-y-2 pt-4">
                 <Button
-                  className={cn('w-full', planned.has(i) && 'pointer-events-none opacity-70')}
+                  className="w-full"
                   onClick={() => planForDinner(recipe, i)}
-                  disabled={planningIndex !== null}
+                  disabled={planningIndex !== null || planned.has(i)}
                 >
                   {planned.has(i)
                     ? <><Check className="h-4 w-4" /> On tonight&apos;s plan</>
@@ -192,9 +191,9 @@ export function FridgeChef() {
                 {recipe.need.length > 0 ? (
                   <Button
                     variant="secondary"
-                    className={cn('w-full', added.has(i) && 'pointer-events-none opacity-70')}
+                    className="w-full"
                     onClick={() => addToGrocery(recipe, i)}
-                    disabled={addingIndex !== null}
+                    disabled={addingIndex !== null || added.has(i)}
                   >
                     {added.has(i)
                       ? <><Check className="h-4 w-4" />{' '}{t('fridgeChef.addedToGrocery')}</>

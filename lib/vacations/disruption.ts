@@ -197,7 +197,16 @@ export function replanDisruption(
     const dayOffset = Math.floor(newStart / MINUTES_PER_DAY);
     const toDay = addDays(input.anchorDay, dayOffset);
     const toStart = fromMin(newStart);
-    const toEnd = end === null ? null : fromMin(end + delay);
+    // The end is wrapped modulo 24h on its own, so an item whose END alone
+    // crosses midnight (23:00–23:45 delayed 30 minutes) used to be stored as
+    // 23:30–00:15 on the SAME day row — an inverted interval `conflicts.ts`
+    // then skipped rather than flagged. An end that rolls past the start's day
+    // is clamped to the last minute of that day instead.
+    let toEnd: string | null = null;
+    if (end !== null) {
+      const newEnd = end + delay;
+      toEnd = Math.floor(newEnd / MINUTES_PER_DAY) > dayOffset ? '23:59' : fromMin(newEnd);
+    }
     shiftedItems.push({
       id: item.id,
       title: item.title,

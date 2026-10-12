@@ -95,7 +95,7 @@ const row = (id: string) => db.table('family_members').find((m) => m.id === id)!
 describe('removeFamilyMemberAction', () => {
   it("removes a child and bans their PIN login's account", async () => {
     const result = await removeFamilyMemberAction({ memberId: 'kid' });
-    expect(result).toEqual({ ok: true, loginRevocation: 'revoked' });
+    expect(result).toEqual({ ok: true, loginRevocation: 'revoked', locationForgotten: true });
     expect(row('kid')).toMatchObject({ is_active: false, role: 'guest' });
     expect(state.bans).toHaveLength(1);
     expect(state.bans[0].id).toBe(KID_USER);
@@ -105,7 +105,7 @@ describe('removeFamilyMemberAction', () => {
   it('still removes the child when the ban fails, and logs and reports it', async () => {
     state.banError = { message: 'auth admin unavailable' };
     const result = await removeFamilyMemberAction({ memberId: 'kid' });
-    expect(result).toEqual({ ok: true, loginRevocation: 'failed' });
+    expect(result).toEqual({ ok: true, loginRevocation: 'failed', locationForgotten: true });
     expect(row('kid')).toMatchObject({ is_active: false, role: 'guest' });
     expect(console.error).toHaveBeenCalled();
   });
@@ -113,13 +113,13 @@ describe('removeFamilyMemberAction', () => {
   it('bans an account whose metadata marks it a child login even without a child_logins row', async () => {
     db.replace('child_logins', []);
     state.metadata = { child: true };
-    expect(await removeFamilyMemberAction({ memberId: 'kid' })).toEqual({ ok: true, loginRevocation: 'revoked' });
+    expect(await removeFamilyMemberAction({ memberId: 'kid' })).toEqual({ ok: true, loginRevocation: 'revoked', locationForgotten: true });
     expect(state.bans.map((b) => b.id)).toEqual([KID_USER]);
   });
 
   it('never bans an ordinary account, which may belong to other households (control)', async () => {
-    expect(await removeFamilyMemberAction({ memberId: 'aunt' })).toEqual({ ok: true, loginRevocation: 'none' });
-    expect(await removeFamilyMemberAction({ memberId: 'local' })).toEqual({ ok: true, loginRevocation: 'none' });
+    expect(await removeFamilyMemberAction({ memberId: 'aunt' })).toEqual({ ok: true, loginRevocation: 'none', locationForgotten: true });
+    expect(await removeFamilyMemberAction({ memberId: 'local' })).toEqual({ ok: true, loginRevocation: 'none', locationForgotten: true });
     expect(state.bans).toEqual([]);
     expect(row('aunt').is_active).toBe(false);
   });
@@ -193,7 +193,7 @@ describe('re-adding a removed child lifts only the removal ban', () => {
 
   it('never lifts an admin ban that was already in place before the removal', async () => {
     state.users.set(KID_USER, { banned_until: '2126-01-01T00:00:00Z', app_metadata: {} });
-    expect(await removeFamilyMemberAction({ memberId: 'kid' })).toEqual({ ok: true, loginRevocation: 'revoked' });
+    expect(await removeFamilyMemberAction({ memberId: 'kid' })).toEqual({ ok: true, loginRevocation: 'revoked', locationForgotten: true });
     expect(state.bans).toEqual([]);
     expect((await readd()).ok).toBe(true);
     expect(banned()).toBe(true);

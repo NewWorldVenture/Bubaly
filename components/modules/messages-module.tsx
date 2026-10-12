@@ -76,8 +76,8 @@ type ConvInsert = {
 
 /**
  * Validate membership and deduplicate direct chats in one database transaction.
- * Before 0475 there is no such RPC: reuse the 1:1 chat with the same roster or
- * insert directly, as before the build-out.
+ * Required privacy schema must be available; a missing RPC returns an error
+ * rather than reusing old audiences or inserting directly.
  */
 async function createConversation(payload: ConvInsert) {
   return createFamilyConversation(createClient(), payload);
@@ -197,11 +197,10 @@ function MessagesWorkspace() {
   const [onlineIds, setOnlineIds] = useState<Set<string>>(new Set());
   const [mutedIds, setMutedIds] = useState(new Set<string>());
   const [muteLoading, setMuteLoading] = useState(false);
-  // Set when this database turns out not to have 0475 / 0476 yet: the paths
-  // that need them fall back to main's behaviour or hide (schema-compat.ts).
+  // Set when required messaging schema is unavailable; protected paths
+  // return an error and clear any stale conversation data.
   const [legacy0475, setLegacy0475] = useState(false);
-  // Presence is not keyed on legacy0475: one missing RPC sets that flag, but
-  // only the inbox read lacking is_family_chat may select the public topic.
+  // Presence requires a verified current inbox and always uses a private topic.
   const [presenceSchema, setPresenceSchema] = useState<PresenceSchema>('unknown');
   // Realtime waits for the first Family Chat ensure, which settles the schema:
   // a private topic is joined only once 0475 is known to authorize it.
@@ -254,14 +253,25 @@ function MessagesWorkspace() {
     if (error || !rows) {
       // Fail visibly instead of showing an empty inbox on a failed load — an empty
       // list here would make the user think they have no conversations.
+      if (error?.code === 'messaging_schema_unavailable') {
+        // Privacy schema is unavailable: retain no selected history or public
+        // presence while it cannot validate the recorded audience.
+        setPresenceSchema('unknown');
+        setLegacy0475(true);
+        owner.current.select(null);
+        setActiveConv(null);
+        setConversations([]);
+        setMessages([]);
+        setText(''); setReplyTo(null); setEditMessage(null);
+      }
       setInboxError(describeDbError(error));
       toastError(describeDbError(error));
       setLoadingConvs(false);
       return;
     }
     setInboxError(null);
-    // Without 0475 the rows carry no is_family_chat: list them all, as before.
-    if (legacy) setLegacy0475(true);
+    // Only a verified canonical marker admits the recorded audience.
+    setLegacy0475(legacy);
     setPresenceSchema(presenceSchemaOf({ legacy }));
     setConversations(rows);
     setLoadingConvs(false);
@@ -292,9 +302,7 @@ function MessagesWorkspace() {
       if (!alive.current || !active) return;
       if (legacy) setLegacy0475(true);
       setSchemaSettled(true);
-      // Before 0475 a failed lookup or insert was silent and retried next visit.
-      if (error && legacy) console.error('[messages] family chat fallback failed', { message: error.message });
-      else if (error) toastError(describeDbError(error, tr('messagesModule.couldNotCreateConversation')));
+      if (error) toastError(describeDbError(error, tr('messagesModule.couldNotCreateConversation')));
       else void loadConversations();
     })();
     return () => { active = false; };
@@ -403,13 +411,15 @@ function MessagesWorkspace() {
 
   // ── Realtime for conversations ──────────────────────────────
   useEffect(() => {
+    // Do not open or retain a subscription without a verified current inbox.
+    if (presenceSchema !== 'current') return;
     const supabase = createClient();
     const ch = ownChannel(supabase, `convs:${familyId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'family_conversations', filter: `family_id=eq.${familyId}` },
         () => { void loadConversations(); })
       .subscribe();
     return () => { void supabase.removeChannel(ch); };
-  }, [familyId, loadConversations]);
+  }, [familyId, loadConversations, presenceSchema]);
 
   // ── Per-conversation previews + unread counts ───────────────
   // The membership-scoped overview returns exact unread counts across history.
@@ -531,8 +541,8 @@ function MessagesWorkspace() {
   // ── Presence: who in the family is online right now ─────────
   useEffect(() => {
     if (!schemaSettled) return;
-    // 0475 authorizes the private family topic; only an inbox read without
-    // is_family_chat (0475 wholly absent) selects the old public one.
+    // A verified current inbox authorizes the private family topic.
+    // An unavailable canonical marker never authorizes a public topic.
     const config = presenceChannelConfig(presenceSchema, userId);
     if (!config) return;
     const supabase = createClient();
@@ -1337,7 +1347,7 @@ function MessagesWorkspace() {
                                 'mb-1 rounded-lg border-l-2 border-brand/60 bg-elevated/60 px-3 py-1.5 text-xs text-muted',
                                 isMine ? 'border-r-2 border-l-0 text-right' : '',
                               )}>
-                                <span className="font-semibold text-brand-text/80">{replyMsg.sender_name}</span>
+                                <span className="font-semibold text-brand-text">{replyMsg.sender_name}</span>
                                 <p className="truncate">{replyMsg.deleted_at ? tr('messages.messageDeleted') : replyMsg.content || previewText(replyMsg, userId)}</p>
                               </div>
                             )}
@@ -1370,14 +1380,14 @@ function MessagesWorkspace() {
                                     aria-disabled={media(msg.attachment_url) ? undefined : true}
                                     className={cn(
                                       'flex min-w-[13rem] items-center gap-3 rounded-xl border p-2.5',
-                                      isMine ? 'border-brand-fg/25 bg-brand-fg/10' : 'border-border bg-surface/50',
+                                      isMine ? 'border-brand-fg/40' : 'border-border bg-surface/50',
                                     )}>
                                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-rose-500/15 text-rose-300">
                                       <FileText className="h-5 w-5" />
                                     </span>
                                     <span className="min-w-0 flex-1">
                                       <span className="block truncate text-sm font-medium">{msg.attachment_name ?? 'File'}</span>
-                                      <span className="block text-[11px] opacity-70">
+                                      <span className="block text-[11px]">
                                         {(msg.attachment_mime?.split('/')[1] ?? 'file').toUpperCase()}
                                       </span>
                                     </span>
@@ -1395,7 +1405,7 @@ function MessagesWorkspace() {
                                 {msg.content && <span className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{msg.content}</span>}
 
                                 {/* Timestamp inside bubble */}
-                                <span className={cn('ml-2 text-[10px] opacity-60', isMine ? 'text-brand-fg' : 'text-muted')}>
+                                <span className={cn('ml-2 text-[10px]', isMine ? 'text-brand-fg' : 'text-muted')}>
                                   {fmtDate(msg.created_at, 'h:mm a')}
                                   {msg.edited_at && <span> · {tr('messagesChat.edited')}</span>}
                                   {isMine && (messageReadByOthers(msg.read_by, msg.sender_id) ? <span title={tr('messagesChat.read')} aria-label={tr('messagesChat.read')}><CheckCheck className="ml-0.5 inline h-3 w-3" /></span> : <span title={tr('messagesChat.sent')} aria-label={tr('messagesChat.sent')}><Check className="ml-0.5 inline h-3 w-3" /></span>)}

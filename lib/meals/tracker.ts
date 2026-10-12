@@ -1,6 +1,8 @@
 // lib/meals/tracker.ts — pure, tested helpers for the Nutrition Tracker and
 // Family Favorites pages. No Supabase/React.
 
+import { dayKeyIn } from '@/lib/time/zoned';
+
 export interface NutritionLike {
   member_id: string | null;
   logged_on: string; // YYYY-MM-DD
@@ -21,8 +23,17 @@ export interface DailyTotals {
   count: number;
 }
 
-export function todayKey(now: Date = new Date()): string {
-  return now.toISOString().slice(0, 10);
+/**
+ * The family's `YYYY-MM-DD` at `now`.
+ *
+ * The zone is required. This used to be `toISOString().slice(0, 10)` —
+ * Greenwich's date — so from 17:00 in a Pacific evening the tracker's "today"
+ * was tomorrow: breakfast and lunch fell out of today's totals, and dinner was
+ * stored under the next day and summed with its breakfast. In a UTC+ zone the
+ * morning landed on the day before. The screen asks `useFamilyClock()`.
+ */
+export function todayKey(timeZone: string, now: Date = new Date()): string {
+  return dayKeyIn(now, timeZone);
 }
 
 /** Sum a day's nutrition for the whole family (or one member). */

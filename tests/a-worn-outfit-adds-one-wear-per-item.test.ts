@@ -18,7 +18,7 @@ function store(initial: number, opts: { interleave?: (s: { count: number }) => v
       state.reads++;
       if (opts.readError) return { data: null, error: opts.readError };
       if (opts.missing) return { data: null, error: null };
-      return { data: { wear_count: state.count }, error: null };
+      return { data: { wear_count: state.count, last_worn_on: null }, error: null };
     },
     async writeWearCount(_id, expected, next) {
       // The other writer lands after our read, once.
@@ -65,7 +65,7 @@ describe('a worn outfit adds exactly one wear per item', () => {
   it('gives up, and says so, if the count never holds still', async () => {
     const state = { count: 0 };
     const s: WearStore = {
-      async readWearCount() { return { data: { wear_count: state.count }, error: null }; },
+      async readWearCount() { return { data: { wear_count: state.count, last_worn_on: null }, error: null }; },
       async writeWearCount() { state.count += 1; return { data: [], error: null }; },
     };
     expect(await bumpWearCount(s, 'item-1', '2026-09-27')).toEqual({ ok: false, reason: 'contended' });

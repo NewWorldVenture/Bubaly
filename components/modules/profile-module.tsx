@@ -44,7 +44,7 @@ function Row({
 }) {
   const inner = (
     <div className={cn(
-      'flex items-center gap-3 px-4 py-3.5 transition hover:bg-elevated',
+      'flex items-center gap-3 px-4 py-3.5',
       danger ? 'text-danger' : 'text-fg',
     )}>
       <Icon className="h-5 w-5 shrink-0 text-muted" />
@@ -53,8 +53,10 @@ function Row({
       <ChevronRight className="h-4 w-4 text-muted/60" />
     </div>
   );
-  if (href) return <Link href={href}>{inner}</Link>;
-  return <button type="button" onClick={onClick} className="w-full text-left">{inner}</button>;
+  // The hover paint is on the focused box, under its inset ring: on the
+  // full-size child it covered the ring when a row was hovered and focused.
+  if (href) return <Link href={href} className="block transition hover:bg-elevated outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand">{inner}</Link>;
+  return <button type="button" onClick={onClick} className="w-full text-left transition hover:bg-elevated outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand">{inner}</button>;
 }
 
 function Section({ children, className }: { children: React.ReactNode; className?: string }) {

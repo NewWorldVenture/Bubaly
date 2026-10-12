@@ -12,37 +12,53 @@ import { detectScamWithAI } from '@/lib/guardian/scam-ai';
 import { twilioRefusal, verifyTwilioRequest } from '@/lib/server/twilio-ingress';
 import { formatPhone } from '@/lib/guardian/phone';
 import { shouldRingImmediately } from '@/lib/guardian/trust';
-import { claimGuardianCallback, isValidGuardianEventId, markGuardianCallbackProcessed, releaseGuardianCallback } from '@/lib/guardian/callbacks';
+import { claimGuardianCallback, isValidGuardianEventId, markGuardianCallbackError, markGuardianCallbackProcessed, releaseGuardianCallback } from '@/lib/guardian/callbacks';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
-import { escalateGuardianEmergency } from '@/lib/guardian/escalate';
+import { escalateGuardianEmergency, type GuardianEscalationOutcome } from '@/lib/guardian/escalate';
+import { guardianEscalationDescription, type GuardianEscalationInput } from '@/lib/guardian/escalation';
+import { guardianEscalationKeyedOnText, markGuardianEscalationKeyedOnText } from '@/lib/guardian/escalation-owed';
 import { GUARDIAN_INBOUND_CAP_REASON, GUARDIAN_INBOUND_FAMILY_CAP, GUARDIAN_INBOUND_SENDER_CAP, GUARDIAN_INBOUND_WINDOW_MS } from '@/lib/guardian/inbound-caps';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 export const runtime = 'nodejs';
 
 const MAX_TWILIO_BODY_BYTES = 64 * 1024;
+/**
+ * The emergency escalation texts AND calls every manager (fanned out together,
+ * two Twilio requests of up to 15 s each) around a few database round-trips.
+ * Awaited here with no bound, a slow provider held the webhook open for as
+ * long as it liked; now the fan-out stops at this deadline (or the request's
+ * own), and a cut-off is `interrupted`, never a success.
+ */
+const ESCALATION_MS = 30_000;
 
-type InboundCap = { sender: boolean; family: boolean };
-const UNDER_CAP: InboundCap = { sender: false, family: false };
+type InboundCap = { sender: boolean; family: boolean; unreadable: boolean };
+const UNDER_CAP: InboundCap = { sender: false, family: false, unreadable: false };
+/** A count that could not be read: the model call is withheld, the delivery is not. */
+const UNREADABLE_CAP: InboundCap = { sender: false, family: false, unreadable: true };
 
 /**
  * Whether this sender, and whether this family, is past the rolling inbound
- * cap (the same caps as the SMS lane). A count that cannot be read reads as
- * under it.
+ * cap (the same caps as the SMS lane). The message was RECORDED before it is
+ * counted, so the count includes it and the comparison is `>`, as in the SMS
+ * lane. A count that cannot be read used to read as zero, which bought the
+ * model call exactly when the database was slow or refusing; it now reads as
+ * unreadable, and an unreadable cap withholds the model call and nothing else.
  */
 async function overInboundCap(supabase: ReturnType<typeof createServiceClient>, familyId: string, from: string | null): Promise<InboundCap> {
   const since = new Date(Date.now() - GUARDIAN_INBOUND_WINDOW_MS).toISOString();
-  const count = async (sender: boolean): Promise<number> => {
+  const count = async (sender: boolean): Promise<number | null> => {
     try {
       let query = supabase.from('guardian_communications').select('id', { count: 'exact', head: true })
         .eq('family_id', familyId).eq('comm_type', 'whatsapp_inbound').gte('started_at', since);
       if (sender) query = from === null ? query.is('from_number', null) : query.eq('from_number', from);
       const { count: n, error } = await query;
-      return !error && typeof n === 'number' ? n : 0;
-    } catch { return 0; }
+      return !error && typeof n === 'number' ? n : null;
+    } catch { return null; }
   };
   const [fromSender, forFamily] = await Promise.all([count(true), count(false)]);
-  // The current message is not recorded yet, so it is the one past `>=`.
-  return { sender: fromSender >= GUARDIAN_INBOUND_SENDER_CAP, family: forFamily >= GUARDIAN_INBOUND_FAMILY_CAP };
+  if (fromSender === null || forFamily === null) return UNREADABLE_CAP;
+  return { sender: fromSender > GUARDIAN_INBOUND_SENDER_CAP, family: forFamily > GUARDIAN_INBOUND_FAMILY_CAP, unreadable: false };
 }
 
 /** Strip Twilio's `whatsapp:` channel prefix, leaving a bare E.164 number. */
@@ -111,6 +127,26 @@ export async function POST(req: NextRequest) {
   const familyId = (memberProfile as { family_id: string }).family_id;
   const memberId = (memberProfile as { member_id: string }).member_id;
 
+  // The profile names a member, but nothing in the database ties that member to
+  // the profile's family (a plain FK to family_members.id), and every write
+  // below runs with the service role. So check the member really is this
+  // family's, and still in it, before the message is recorded under them or
+  // the family told — the voice route refuses the same case before it routes,
+  // and the SMS lane in ownsDestination. A removed member's profile is not
+  // deactivated by the removal, so without this their messages kept arriving.
+  const { data: owner, error: ownerError } = await supabase.from('family_members')
+    .select('id, family_id').eq('id', memberId).eq('family_id', familyId).eq('is_active', true).maybeSingle();
+  if (ownerError) {
+    console.error('[guardian-whatsapp] Guardian member lookup failed', { familyId, memberId, error: ownerError });
+    await releaseGuardianCallback(supabase, 'inbound_whatsapp', smsSid);
+    return new NextResponse('Guardian routing unavailable', { status: 503 });
+  }
+  if (!owner || (owner as { family_id?: string }).family_id !== familyId) {
+    console.error('[guardian-whatsapp] Guardian number names a member outside its family; refusing the message', { familyId, memberId, to });
+    await markGuardianCallbackProcessed(supabase, smsSid);
+    return new NextResponse('', { status: 200 });
+  }
+
   // Run decision pipeline.
   let decision: Awaited<ReturnType<typeof runDecisionPipeline>>;
   try {
@@ -128,31 +164,26 @@ export async function POST(req: NextRequest) {
     return new NextResponse('Guardian routing unavailable', { status: 503 });
   }
 
-  // Deep scam analysis on the message body — but no model call where the
-  // answer cannot change anything (the sender is already blocked, or the
-  // pattern detector is already sure), and none past the rolling per-sender /
-  // per-family cap, so a spamming sender cannot buy one LLM request per text.
-  // Past the per-sender cap only a sender the family has not vouched for is
-  // HELD: a contact at a ring-through trust level (immediate family, close
-  // family, trusted friend) is still delivered, as in the SMS lane. The
-  // family-wide flood cap holds for everyone.
+  // No model call where the answer cannot change anything: the sender is
+  // already blocked, or the pattern detector is already sure.
   const settled = decision.routingMode === 'blocked' || (decision.scamDetected && decision.spamScore >= 80);
-  const cap = settled ? UNDER_CAP : await overInboundCap(supabase, familyId, from);
-  const modelCapped = cap.sender || cap.family;
-  const throttled = cap.family || (cap.sender && !shouldRingImmediately(decision.trustLevel));
-  const scamResult = settled || modelCapped
-    ? { isScam: decision.scamDetected, scamType: decision.scamType, confidence: decision.scamDetected ? Math.min(100, Math.max(0, decision.spamScore)) : 0 }
-    : await detectScamWithAI(body, from, `Family ID: ${familyId}`);
-  const emergency = decision.shouldEscalate;
+  const patternVerdict = { isScam: decision.scamDetected, scamType: decision.scamType, confidence: decision.scamDetected ? Math.min(100, Math.max(0, decision.spamScore)) : 0 };
 
-  // Create communication record.
+  // Create communication record — BEFORE the cap is counted and the model is
+  // asked, with the pipeline's decision and the pattern detector's verdict;
+  // the scam verdict and the status are filled in below once decided.
+  //
+  // Recording first is what makes the cap a cap. Counted first, two deliveries
+  // arriving together at one under the cap both read "under" and both bought a
+  // model call; recorded first, each delivery's own row is in the count it
+  // reads (the SMS lane's order). It also means a message that could not be
+  // recorded cannot be counted, and an uncounted message buys no model call.
   //
   // The voice twin of this (`inbound/voice/route.ts`) has the same defect and
   // the same reasoning: a dropped error means the message is delivered but
-  // never recorded, so the family's guardian history — including the scam
-  // verdict just computed above — silently loses the entry. Here it also
-  // reaches the notification below as `relatedId: comm?.id ?? null`, so the
-  // family gets an alert that links back to nothing.
+  // never recorded, so the family's guardian history silently loses the
+  // entry. Here it also reaches the notification below as `relatedId:
+  // comm?.id ?? null`, so the family gets an alert that links back to nothing.
   //
   // Not fatal to the message, which must still be delivered, so it degrades
   // loudly rather than failing. Audit C1-S9-39.
@@ -169,20 +200,77 @@ export async function POST(req: NextRequest) {
     trust_level_at_time: decision.trustLevel,
     routing_mode_used: decision.routingMode,
     routing_rule_id: decision.ruleId,
-    // A routine message past the cap is recorded as `blocked`, and the reason
-    // says why: kept in the inbox, no family alert.
-    ai_decision_reason: throttled ? `${decision.reason} ${GUARDIAN_INBOUND_CAP_REASON}` : decision.reason,
-    scam_detected: scamResult.isScam,
-    scam_type: scamResult.scamType,
-    scam_confidence: scamResult.confidence,
+    ai_decision_reason: decision.reason,
+    scam_detected: patternVerdict.isScam,
+    scam_type: patternVerdict.scamType,
+    scam_confidence: patternVerdict.confidence,
     twilio_sms_sid: smsSid,
-    status: emergency ? 'escalated' : (scamResult.isScam && scamResult.confidence >= 80) || throttled ? 'blocked' : 'received',
+    status: 'screening',
   }).select('id').maybeSingle();
 
-  if (commError) {
+  // The communication this message is, for the family notice and the
+  // escalation key. A redelivery of a message already recorded — the first
+  // delivery's callback reclaimed after ten minutes, or a replay — is refused
+  // by the unique sid, and the row it names is this message's: it used to
+  // leave `comm` null, so the escalation was keyed on its text instead of on
+  // the communication, a new claim was taken, and every manager was texted and
+  // called a second time. Recovered here, the redelivery joins the first
+  // delivery's escalation. The cap, the model call and the decision below
+  // still go only with a row recorded NOW: a redelivery buys no model call.
+  let commId: string | null = (comm?.id as string | undefined) ?? null;
+  if (commError && (commError as { code?: string }).code === '23505') {
+    const { data: existing, error: existingError } = await supabase.from('guardian_communications')
+      .select('id').eq('twilio_sms_sid', smsSid).eq('family_id', familyId).maybeSingle();
+    if (existingError) {
+      // The message is on record and which row it is could not be read. Going
+      // on without it guessed: the escalation was keyed on the text instead, a
+      // new claim was taken, and every manager the first delivery (or the
+      // sweep) had reached was texted and called again. Nothing has been
+      // written by this delivery, so the claim goes back for a retry instead.
+      console.error('[guardian/inbound/whatsapp] a redelivered message\'s communication could not be read; releasing the callback for a retry', { familyId, smsSid, error: existingError.message });
+      await releaseGuardianCallback(supabase, 'inbound_whatsapp', smsSid);
+      return new NextResponse('Guardian routing unavailable', { status: 503 });
+    }
+    commId = ((existing as { id?: string } | null)?.id) ?? null;
+  } else if (commError) {
     console.error('[guardian/inbound/whatsapp] could not record the communication; message continues unlogged', {
       familyId, smsSid, error: commError.message,
     });
+  }
+
+  // Deep scam analysis on the message body — none past the rolling per-sender
+  // / per-family cap, so a spamming sender cannot buy one LLM request per text,
+  // and none when the cap cannot be read or this message is not in it. Past
+  // the per-sender cap only a sender the family has not vouched for is HELD: a
+  // contact at a ring-through trust level (immediate family, close family,
+  // trusted friend) is still delivered, as in the SMS lane. The family-wide
+  // flood cap holds for everyone.
+  const cap = settled ? UNDER_CAP : comm?.id ? await overInboundCap(supabase, familyId, from) : UNREADABLE_CAP;
+  const modelCapped = cap.sender || cap.family || cap.unreadable;
+  const throttled = cap.family || (cap.sender && !shouldRingImmediately(decision.trustLevel));
+  const scamResult = settled || modelCapped
+    ? patternVerdict
+    : await detectScamWithAI(body, from, `Family ID: ${familyId}`);
+  const emergency = decision.shouldEscalate;
+  const status = emergency ? 'escalated' : (scamResult.isScam && scamResult.confidence >= 80) || throttled ? 'blocked' : 'received';
+
+  if (comm?.id) {
+    // The decision, onto the row recorded above. A routine message past the
+    // cap is recorded as `blocked`, and the reason says why: kept in the inbox,
+    // no family alert. Confirmed and logged, never raised: the message is
+    // delivered either way.
+    const { data: decided, error: decideError } = await supabase.from('guardian_communications').update({
+      ai_decision_reason: throttled ? `${decision.reason} ${GUARDIAN_INBOUND_CAP_REASON}` : decision.reason,
+      scam_detected: scamResult.isScam,
+      scam_type: scamResult.scamType,
+      scam_confidence: scamResult.confidence,
+      status,
+    }).eq('id', comm.id as string).eq('family_id', familyId).select('id');
+    if (decideError || wroteNoRows(decided)) {
+      console.error('[guardian/inbound/whatsapp] could not save the decision on the recorded message', {
+        familyId, smsSid, error: decideError?.message ?? 'no rows updated',
+      });
+    }
   }
 
   // Update contact last-contact timestamp.
@@ -212,40 +300,154 @@ export async function POST(req: NextRequest) {
   const callerDisplay = decision.contactName ?? formatPhone(from);
   const preview = body.length > 100 ? `${body.slice(0, 100)}…` : body;
 
-  try {
-    // Same shape and same reason as the SMS route: a routine screened message
-    // obeys quiet hours. An emergency does not wait for morning.
-    const scope = await systemScopeForFamily(supabase, familyId);
-    if (scope) {
-      await notify(scope, {
-        recipients: 'family',
-        type: 'system',
-        title: emergency ? `🚨 Emergency WhatsApp from ${callerDisplay}` : `💚 WhatsApp from ${callerDisplay}`,
-        body: preview,
-        relatedType: 'guardian_communications',
-        relatedId: comm?.id ?? null,
-        ...(emergency ? { urgent: true } : {}),
-      });
-    }
-  } catch { /* non-fatal */ }
-
+  // Which escalation this message is. Keyed on its communication, so every
+  // delivery of the message — a late redelivery included, with the
+  // communication recovered above — claims the same ledger id and lands in the
+  // same record, and the retry sweep, which rebuilds the key from that record,
+  // claims it too. A message whose first delivery could not be recorded (or
+  // could not learn that it had been) is escalated under its text instead, and
+  // that is written down under the message's sid; a later delivery of THAT
+  // message joins it rather than switching keys and alarming every manager
+  // again. Only the sid decides "the same message": a different message with
+  // the same words from the same caller is its own emergency, and used to be
+  // joined to the earlier one by its text — found settled, and silenced.
+  // An identity is never chosen from a read that failed: a communication that
+  // could not be read back (above) or a mark that could not be read (here)
+  // gives the claim back for a retry instead. A mark that WAS read and cannot
+  // be parsed is not that: a retry reads the same mark.
+  let escalationInput: GuardianEscalationInput | null = null;
+  let escalatedBefore = false;
   if (emergency) {
-    // Text and call the managers, keyed on the communication (or, if it was not
-    // recorded, on the message itself) so a redelivery cannot alarm twice.
+    const byContent: GuardianEscalationInput = {
+      familyId,
+      escalationType: 'urgent_personal',
+      severity: 'critical',
+      // Cut to what the mark's reader and the retry sweep take back: the
+      // caller's name is the contact's, which nothing bounds, and a longer
+      // description left a mark no redelivery could parse and a record the
+      // sweep could not rebuild — an emergency nobody reached was never sent.
+      description: guardianEscalationDescription(`Emergency WhatsApp from ${callerDisplay}: "${body.slice(0, 300)}"`),
+      ...(from ? { callerNumber: from.slice(0, 64) } : {}),
+    };
+    const earlier = await guardianEscalationKeyedOnText(supabase, familyId, smsSid);
+    if (earlier.kind === 'unreadable') {
+      // Read as "no mark", a message an earlier delivery had escalated under
+      // its text switched to its communication here, took a new claim, and
+      // texted and called every manager again. Nobody has been told anything
+      // by this delivery yet (the notice and the escalation both follow), and
+      // what it did write — the message, under its unique sid — a retry finds
+      // again, so the claim goes back for one.
+      console.error('[guardian/inbound/whatsapp] could not check whether an earlier delivery of this message was escalated under its text; releasing the callback for a retry', { familyId, smsSid });
+      await releaseGuardianCallback(supabase, 'inbound_whatsapp', smsSid);
+      return new NextResponse('Escalation unavailable', { status: 503 });
+    }
+    if (earlier.kind === 'text') {
+      escalationInput = earlier.input;
+      escalatedBefore = true;
+    } else if (earlier.kind === 'unparseable') {
+      // An earlier delivery escalated this message under its text, and what
+      // it wrote down cannot be parsed (another version's shape, or a
+      // description past the bound, as this route used to write). Every retry
+      // reads the same mark, so giving the claim back for one answered 503 on
+      // every delivery, and the managers were never texted or called. So this
+      // delivery keys the escalation on its text, as the first one did, and
+      // never on its communication: the same message gives the same text, so
+      // it joins that escalation. (Only a description past the bound comes out
+      // differently now — and that escalation's record could not be rebuilt
+      // either, so nothing else would ever have sent it.) The family was told
+      // by the first delivery, which wrote the mark just before its notice.
+      console.error('[guardian/inbound/whatsapp] an earlier delivery of this message was escalated under its text and its mark cannot be parsed; escalating under the text again', { familyId, smsSid });
+      escalationInput = byContent;
+      escalatedBefore = true;
+    } else if (commId) {
+      escalationInput = { ...byContent, commId };
+    } else {
+      escalationInput = byContent;
+      await markGuardianEscalationKeyedOnText(supabase, smsSid, byContent);
+    }
+  }
+
+  // An earlier delivery of this message (this sid) already told the family,
+  // under a communication that was not recorded then, and its escalation's own
+  // in-app alert stands; a second notice would be the same news twice.
+  if (!escalatedBefore) {
     try {
-      const escalation = await escalateGuardianEmergency(supabase, {
-        familyId,
-        ...(comm?.id ? { commId: comm.id as string } : {}),
-        escalationType: 'urgent_personal',
-        severity: 'critical',
-        description: `Emergency WhatsApp from ${callerDisplay}: "${body.slice(0, 300)}"`,
-        ...(from ? { callerNumber: from.slice(0, 64) } : {}),
-      });
-      if (escalation.kind !== 'delivered' && escalation.kind !== 'duplicate') {
-        console.error('[guardian/inbound/whatsapp] emergency escalation did not reach a manager', { familyId, smsSid, outcome: escalation.kind });
+      // Same shape and same reason as the SMS route: a routine screened message
+      // obeys quiet hours. An emergency does not wait for morning. Said once
+      // per communication, read or not, so a redelivery of a message that was
+      // already announced is not announced again.
+      const scope = await systemScopeForFamily(supabase, familyId);
+      if (scope) {
+        await notify(scope, {
+          recipients: 'family',
+          type: 'system',
+          title: emergency ? `🚨 Emergency WhatsApp from ${callerDisplay}` : `💚 WhatsApp from ${callerDisplay}`,
+          body: preview,
+          relatedType: 'guardian_communications',
+          relatedId: commId,
+          ...(commId ? { once: true } : {}),
+          ...(emergency ? { urgent: true } : {}),
+        });
       }
+    } catch { /* non-fatal */ }
+  }
+
+  if (emergency && escalationInput) {
+    // Text and call the managers, under the identity settled above, so a
+    // redelivery cannot alarm twice.
+    let escalation: GuardianEscalationOutcome | { kind: 'threw' };
+    try {
+      escalation = await escalateGuardianEmergency(supabase, escalationInput, { signal: AbortSignal.any([req.signal, AbortSignal.timeout(ESCALATION_MS)]) });
     } catch (error) {
       console.error('[guardian/inbound/whatsapp] emergency escalation threw', { familyId, smsSid, error });
+      escalation = { kind: 'threw' };
+    }
+    const outcome = escalation.kind;
+    if (escalation.kind === 'undelivered' || escalation.kind === 'interrupted') {
+      if (escalation.recorded || escalation.owed) {
+        // Nobody's phone was reached, and the escalation is on record saying
+        // so (or the work item the sweep lands that record from is). This used
+        // to be logged and the callback marked processed with a 200 — after
+        // which nothing anywhere would try again. Now the callback is parked as
+        // `error`, not processed: a redelivery inside ten minutes is
+        // acknowledged without a second record or ping, the 503 says the
+        // message was not handled, and the sweep on the Guardian recovery cron
+        // re-attempts the escalation from its record until a manager is
+        // reached. A redelivery after the ten minutes is processed again, and
+        // joins the same escalation.
+        console.error('[guardian/inbound/whatsapp] emergency escalation did not reach a manager; left for the retry sweep', { familyId, smsSid, outcome, recorded: escalation.recorded });
+        await markGuardianCallbackError(supabase, smsSid, 'Emergency escalation reached no manager.');
+        return new NextResponse('Escalation undelivered', { status: 503 });
+      }
+      // Nobody reached, and neither the record nor its work item could be
+      // written: no sweep can find this one. Only a redelivery can retry it,
+      // so the callback is given back for one rather than parked.
+      console.error('[guardian/inbound/whatsapp] emergency escalation reached no manager and could not be recorded; releasing the callback for a retry', { familyId, smsSid, outcome });
+      await releaseGuardianCallback(supabase, 'inbound_whatsapp', smsSid);
+      return new NextResponse('Escalation unavailable', { status: 503 });
+    }
+    if (outcome === 'claim_unavailable' || outcome === 'read_failed' || outcome === 'threw') {
+      // Nothing was recorded by the escalation, so no sweep can find it: only
+      // a redelivery can retry it. Give the claim back so the redelivery is
+      // processed rather than acknowledged; the unique message sid keeps it
+      // from recording the message twice, the communication recovered above
+      // keeps it under the same escalation, whose own claim keeps it from
+      // alarming twice, and the family notice is said once per communication.
+      console.error('[guardian/inbound/whatsapp] emergency escalation could not run; releasing the callback for a retry', { familyId, smsSid, outcome });
+      await releaseGuardianCallback(supabase, 'inbound_whatsapp', smsSid);
+      return new NextResponse('Escalation unavailable', { status: 503 });
+    }
+    if (outcome === 'record_failed') {
+      // The alerts went out; only the record failed. Logged, and the message
+      // is complete.
+      console.error('[guardian/inbound/whatsapp] emergency escalation went out but could not be recorded', { familyId, smsSid });
+    }
+    if (outcome === 'unreachable') {
+      // Nobody to text or call (no manager with a phone on file, or Twilio not
+      // configured): recorded with nobody reached, and nothing to retry — a
+      // redelivery or the sweep would find the same. Logged, and the message is
+      // complete; it is not parked for the sweep as `undelivered` is.
+      console.error('[guardian/inbound/whatsapp] emergency escalation had nobody to text or call; recorded with nobody reached', { familyId, smsSid });
     }
   }
 
