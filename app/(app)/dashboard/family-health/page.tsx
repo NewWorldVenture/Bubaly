@@ -5,6 +5,7 @@ import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
+import { readsEveryMedication } from '@/lib/medications/readers';
 import { PageHeader } from '@/components/app/page-header';
 import { StatTile, SectionCard, MiniEmpty } from '@/components/family/shell';
 import { ErrorState } from '@/components/ui/states';
@@ -16,6 +17,8 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t('pageTitle.familyHealth') };
 }
 export const dynamic = 'force-dynamic';
+
+const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 
 export default async function FamilyHealthPage() {
   const t = await getTranslations();
@@ -33,11 +36,20 @@ export default async function FamilyHealthPage() {
 
   // Health data is sensitive — surfaced only to managers in summary form here.
   const manager = isManager(ctx.active.role);
+  // Who reads which medicines is the held 0511's rule (the owner's decision),
+  // the one the Medications page asks by: a parent, an adult or a caregiver
+  // reads the household's; anyone else reads the ones prescribed to them
+  // (F-G09). Until 0511 is applied a child's read of `medications` returns
+  // every member's rows, and this list showed a teen or a guest each
+  // sibling's and parent's medicine and dose. No member row asks for the nil
+  // UUID, which matches nothing, never everything.
+  const ownMedsOnly = readsEveryMedication(ctx.active.role) ? null : (ctx.active.member?.id ?? NIL_UUID);
+  const activeMeds = supabase.from('medications').select('*').eq('family_id', familyId).eq('is_active', true);
 
   const [membersRes, apptsRes, medsRes, profilesRes, providersRes] = await Promise.all([
     settle(supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true)),
     settle(supabase.from('appointments').select('*').eq('family_id', familyId).gte('starts_at', now).lte('starts_at', in30).order('starts_at').limit(8)),
-    settle(supabase.from('medications').select('*').eq('family_id', familyId).eq('is_active', true).limit(12)),
+    settle((ownMedsOnly ? activeMeds.eq('member_id', ownMedsOnly) : activeMeds).limit(12)),
     manager ? settle(supabase.from('medical_profiles').select('member_id, allergies, blood_type, conditions').eq('family_id', familyId)) : Promise.resolve({ data: [], error: null }),
     settle(supabase.from('health_providers').select('id, name, specialty, phone').eq('family_id', familyId).limit(8)),
   ]);
