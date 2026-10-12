@@ -50,7 +50,11 @@ export async function startMilestoneAction(memberId: string, title: string): Pro
     status: 'in_progress',
     points: m.points,
     created_by: ctx.user.id,
-  }, { onConflict: 'family_id,member_id,domain,title' });
+  // Insert-only. A merge rewrote whatever row was there: a second parent's page
+  // rendered before the rung was achieved offered "Start", and the tap set the
+  // child's achievement back to in progress (achieved_at and evidence left
+  // set). A rung already on the ladder stays as it is.
+  }, { onConflict: 'family_id,member_id,domain,title', ignoreDuplicates: true });
   if (error) return { ok: false, error: describeActionError(error) };
 
   await logAudit(supabase, {

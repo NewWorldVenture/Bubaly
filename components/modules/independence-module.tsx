@@ -38,8 +38,11 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
   const kidRows = useMemo(() => rows.filter(r => r.member_id === selectedKid), [rows, selectedKid]);
   const achievedTitles = useMemo(
     () => new Set(kidRows.filter(r => r.status === 'achieved').map(r => r.title)), [kidRows]);
+  // Every rung already on this child's ladder, skipped ones included: Skip
+  // promises "it won't be suggested again", and leaving skipped titles out of
+  // this set put the rung straight back among the suggestions.
   const trackedTitles = useMemo(
-    () => new Set(kidRows.filter(r => r.status !== 'skipped').map(r => r.title)), [kidRows]);
+    () => new Set(kidRows.map(r => r.title)), [kidRows]);
 
   const level = useMemo(() => independenceLevel(age, achievedTitles), [age, achievedTitles]);
   const suggestions = useMemo(() => suggestMilestones(age, trackedTitles), [age, trackedTitles]);

@@ -9,6 +9,7 @@ import { buildCalmInbox, type CalmItem, type ItemSeverity } from '@/lib/calm/inb
 import { loadFamilyContext } from '@/lib/reasoning/context';
 import { reasoningInsights } from '@/lib/reasoning/insights';
 import { autopilotTitleFor } from '@/lib/autopilot/engine';
+import { suggestionVisibleTo } from '@/lib/autopilot/audience';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -51,7 +52,7 @@ export default async function CalmPage() {
   const [agentResult, autopilotResult, foiResult, approvalResult, reminderResult] = await Promise.all([
     safe(supabase.from('agent_activity').select('id, agent, title, detail, href, severity')
       .eq('family_id', familyId).eq('status', 'active').in('severity', ['action', 'attention']).order('created_at', { ascending: false }).limit(100)),
-    safe(supabase.from('autopilot_suggestions').select('id, title, detail, urgency, payload')
+    safe(supabase.from('autopilot_suggestions').select('id, title, detail, urgency, payload, kind, source_kind, member_id')
       .eq('family_id', familyId).eq('status', 'open').limit(100)),
     safe(supabase.from('family_operating_index').select('suggestions')
       .eq('family_id', familyId).order('as_of_date', { ascending: false }).limit(1)),
@@ -99,7 +100,10 @@ export default async function CalmPage() {
   for (const a of agentRows as { id: string; agent: string; title: string; detail: string | null; href: string | null; severity: string }[]) {
     items.push({ id: `agent:${a.id}`, source: 'agent', title: a.title, detail: a.detail, href: a.href, severity: (a.severity as ItemSeverity) });
   }
-  for (const s of autopilotRows as { id: string; title: string; detail: string | null; urgency: number; payload: unknown }[]) {
+  // Only the cards this reader may see (lib/autopilot/audience.ts).
+  const visibleAutopilot = (autopilotRows as { id: string; title: string; detail: string | null; urgency: number; payload: unknown; kind: string | null; source_kind: string | null; member_id: string | null }[])
+    .filter((s) => suggestionVisibleTo(s, { role: ctx.active.role, memberId: ctx.active.member?.id ?? null }));
+  for (const s of visibleAutopilot) {
     const severity: ItemSeverity = s.urgency >= 3 ? 'action' : s.urgency >= 2 ? 'attention' : 'info';
     // A subscription title carries money, worded by whichever scan inserted it
     // (usually the cron, in en-US); worded again here for this reader.

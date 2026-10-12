@@ -18,7 +18,7 @@ beforeEach(()=>{rows=[];requests=[];mode='healthy';state.role='parent';state.aud
   const reply=(data:any,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json'}});
   if(method==='POST'&&table==='independence_milestones'){
    expect(body).toEqual({family_id:family,member_id:body.member_id,domain:'school',title,description:'Puts folder, snack, and water bottle in the bag.',age_band:'4-6',status:'in_progress',points:5,created_by:'bbbbbbbb-bbbb-4bbb-8bbb-000000000001'});
-   expect(u.searchParams.get('on_conflict')).toBe('family_id,member_id,domain,title');expect(new Headers(init.headers).get('prefer')).toContain('resolution=merge-duplicates');
+   expect(u.searchParams.get('on_conflict')).toBe('family_id,member_id,domain,title');expect(new Headers(init.headers).get('prefer')).toContain('resolution=ignore-duplicates');
    if(mode==='write-refusal')return reply({code:'42501',message:'Synthetic policy refused this write'},403);
    if(!roster.some(r=>r.id===body.member_id))return reply({code:'23503',message:'Synthetic single-column member FK refuses a nonexistent member'},409);
    const previous=rows.findIndex(r=>r.family_id===body.family_id&&r.member_id===body.member_id&&r.domain===body.domain&&r.title===body.title);if(previous>=0)rows[previous]=body;else rows.push(body);

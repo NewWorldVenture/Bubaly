@@ -9,7 +9,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { toggleDateOnCalendarAction } from '@/app/(app)/dashboard/relationship/actions';
+import { toggleDateOnCalendarAction, syncDateOnCalendarAction, removeRelationshipDateAction } from '@/app/(app)/dashboard/relationship/actions';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -126,8 +126,17 @@ export function RelationshipModule() {
   }, [digestScope]);
   const [giftFilter, setGiftFilter] = useState<'all' | RelationshipGiftStatus>('all');
 
-  const giftSummary = useMemo(() => summarizeGifts((gifts ?? []).map((g) => ({ status: g.status, price_cents: g.price_cents }))), [gifts]);
-  const visibleGifts = useMemo(() => (gifts ?? []).filter((g) => giftFilter === 'all' || g.status === giftFilter), [gifts, giftFilter]);
+  // The partner the gifts are FOR does not read the gifts being planned for
+  // them: only the ones they recorded themselves. Everyone else in the family
+  // reads the list as before (00980's policy is family-wide, so this is the
+  // screen's half; the database half is recorded with the audit).
+  const viewerIsRecipient = !!profile?.partner_member_id && profile.partner_member_id === selfMember?.id;
+  const readableGifts = useMemo(
+    () => (gifts ?? []).filter((g) => !viewerIsRecipient || g.created_by === userId),
+    [gifts, viewerIsRecipient, userId],
+  );
+  const giftSummary = useMemo(() => summarizeGifts(readableGifts.map((g) => ({ status: g.status, price_cents: g.price_cents }))), [readableGifts]);
+  const visibleGifts = useMemo(() => readableGifts.filter((g) => giftFilter === 'all' || g.status === giftFilter), [readableGifts, giftFilter]);
 
   // The FAMILY's day, not this device's — the same answer the server-rendered
   // home dashboard gives for the same anniversary, and the right one for a
@@ -148,9 +157,12 @@ export function RelationshipModule() {
   const partnerName = profile?.partner_name?.trim()
     || (profile?.partner_member_id ? members.find((m) => m.id === profile.partner_member_id)?.display_name : null)
     || 'your partner';
+  // Never built from the viewer's OWN wishes: the candidates leave out what is
+  // already claimed or bought, so the partner reading them could see which of
+  // their wishes someone is getting them.
   const partnerWishes = useMemo(
-    () => (wishes ?? []).filter((w) => profile?.partner_member_id && w.member_id === profile.partner_member_id),
-    [wishes, profile?.partner_member_id],
+    () => (wishes ?? []).filter((w) => profile?.partner_member_id && w.member_id === profile.partner_member_id && w.member_id !== selfMember?.id),
+    [wishes, profile?.partner_member_id, selfMember?.id],
   );
   const wishSuggestions = useMemo(
     () => suggestGiftsFromWishlist(partnerWishes as unknown as WishItemLite[], { maxBudgetCents: profile?.gift_budget_cents ?? null, limit: 12 }),
@@ -176,9 +188,15 @@ export function RelationshipModule() {
     if (!dateForm.eventDate) { toastError(t('relationshipModule.pickADate')); return; }
     setSaving(true);
     const sb = createClient();
+    // 0 is "remind me on the day", which the form offers and the column allows;
+    // `Number(x) || 14` turned it into two weeks. Only an empty or unreadable
+    // field falls back to the default.
+    const reminderDays = Number(dateForm.reminderDaysBefore);
     const fields = {
       kind: dateForm.kind, title: dateForm.title.trim(), event_date: dateForm.eventDate,
-      recurs_annually: dateForm.recursAnnually, reminder_days_before: Number(dateForm.reminderDaysBefore) || 14,
+      recurs_annually: dateForm.recursAnnually,
+      reminder_days_before: dateForm.reminderDaysBefore.trim() === '' || !Number.isFinite(reminderDays)
+        ? 14 : Math.min(365, Math.max(0, Math.trunc(reminderDays))),
       member_id: dateForm.memberId || null, location: dateForm.location.trim() || null,
       notes: dateForm.notes.trim() || null, status: dateForm.status as RelationshipDateStatus,
     };
@@ -186,18 +204,26 @@ export function RelationshipModule() {
     const { data: saved2, error: err } = dateForm.id
       ? await sb.from('relationship_dates').update(fields).eq('id', dateForm.id).select('id')
       : await sb.from('relationship_dates').insert({ ...fields, family_id: familyId, created_by: userId }).select('id');
+    if (err) { setSaving(false); toastError(describeDbError(err)); return; }
+    if (wroteNoRows(saved2)) { setSaving(false); toastError(t('errors.thatChangeWasNotSaved')); return; }
+    // An edited date that is on the calendar takes its event with it: the
+    // update above changed only the date row, and the calendar kept the old day.
+    const linked = dateForm.id ? (dates ?? []).find((d) => d.id === dateForm.id)?.calendar_event_id : null;
+    if (linked) {
+      const synced = await syncDateOnCalendarAction(dateForm.id);
+      if (!synced.ok) { setSaving(false); toastError(synced.error); return; }
+    }
     setSaving(false);
-    if (err) { toastError(describeDbError(err)); return; }
-    if (wroteNoRows(saved2)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(dateForm.id ? 'Date updated' : 'Date added');
     setDateModal(false);
   }
   async function removeDate(d: RDate) {
     if (!(await askConfirm({ title: t('confirm.removeNamed', { name: d.title }), body: t('confirm.cannotBeUndone') }))) return;
-    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
-    const { data: removed, error: err } = await createClient().from('relationship_dates').delete().eq('id', d.id).select('id');
-    if (err) { toastError(describeDbError(err)); return; }
-    if (wroteNoRows(removed)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
+    // Through the server, which takes the date's calendar event with it: a
+    // direct delete left a yearly event on the family calendar that nothing
+    // pointed at any more.
+    const result = await removeRelationshipDateAction(d.id);
+    if (!result.ok) { toastError(result.error); return; }
     success(t('relationshipModule.removed'));
   }
   async function toggleCalendar(d: RDate) {
@@ -466,7 +492,7 @@ export function RelationshipModule() {
             <Button size="sm" onClick={openNewGift} className="gap-1"><Plus className="h-3.5 w-3.5" /> {t('relationship.addIdea')}</Button>
           </div>
         </div>
-        {(gifts ?? []).length === 0 ? (
+        {readableGifts.length === 0 ? (
           <EmptyState icon={Gift} title={t('relationship.noGiftIdeasYet')}
             description={profile?.partner_member_id ? t('relationship.ideasHintWithPartner', { name: partnerName }) : t('relationship.ideasHint')}
             action={<Button onClick={openNewGift} className="gap-1.5"><Plus className="h-4 w-4" /> {t('relationship.addAGiftIdea')}</Button>} />
@@ -660,7 +686,7 @@ export function RelationshipModule() {
             ? <p className="text-sm text-muted">{t('relationship.noAvailableWishlistItemsToAdd')}</p>
             : wishSuggestions.map((c) => {
                 const w = partnerWishes.find((x) => x.id === c.wishlistItemId)!;
-                const already = (gifts ?? []).some((g) => g.wishlist_item_id === c.wishlistItemId);
+                const already = readableGifts.some((g) => g.wishlist_item_id === c.wishlistItemId);
                 return (
                   <div key={c.wishlistItemId} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface/50 p-3">
                     <div className="min-w-0">

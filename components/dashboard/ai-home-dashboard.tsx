@@ -7,6 +7,7 @@ import { settle, settleAll } from '@/lib/supabase/settle';
 import type { UserContext } from '@/lib/supabase/auth';
 import { isSuperAdmin } from '@/lib/supabase/auth';
 import { isManager } from '@/lib/constants/roles';
+import { suggestionVisibleTo } from '@/lib/autopilot/audience';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { fmtTime } from '@/lib/utils/format';
@@ -139,7 +140,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       .eq('family_id', familyId).eq('is_active', true).order('created_at').limit(6),
     readDisplayCalendarOccurrences(supabase, familyId, upcomingWindow, tz, { overlap: true }),
     supabase.from('autopilot_suggestions')
-      .select('id, title, detail, kind, urgency, confidence, payload')
+      .select('id, title, detail, kind, urgency, confidence, payload, source_kind, member_id')
       .eq('family_id', familyId).eq('status', 'open')
       .order('urgency', { ascending: false }).order('confidence', { ascending: false }).limit(20),
     supabase.from('autopilot_suggestions').select('id', { count: 'exact', head: true })
@@ -292,7 +293,12 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   // A subscription suggestion's title carries money and was worded by whichever
   // scan inserted it — usually the cron, in en-US — so it is worded again here for
   // THIS reader from the facts in its payload (lib/autopilot/engine.ts).
-  const openSuggestions = ((autopilotOpen ?? []) as { id: string; title: string; detail: string | null; kind: string; urgency: number; confidence: number; payload: unknown }[])
+  // Only the cards this reader may see: a subscription charge is not a
+  // guest's, an insurance renewal is the managers' and its member's
+  // (lib/autopilot/audience.ts). autopilot_suggestions is family-wide under
+  // 0085, so the rule is applied where the cards are listed.
+  const openSuggestions = ((autopilotOpen ?? []) as { id: string; title: string; detail: string | null; kind: string; urgency: number; confidence: number; payload: unknown; source_kind: string | null; member_id: string | null }[])
+    .filter((s) => suggestionVisibleTo(s, { role: ctx.active.role, memberId: myMemberId }))
     .map((s) => ({ ...s, title: autopilotTitleFor(s, locale.code, t) }));
   const concierge = (activeConcierge ?? []) as { id: string; title: string; kind: string; status: string }[];
   const autopilotProbability = successProbability(openSuggestions.map((s) => ({ urgency: s.urgency as 1 | 2 | 3, confidence: s.confidence } as never)));

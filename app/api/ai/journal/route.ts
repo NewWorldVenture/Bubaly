@@ -7,6 +7,7 @@ import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider } from '@/lib/ai/provider';
 import { buildJournalPrompt, parseJournalPrompt, promptOfTheDay } from '@/lib/journal/prompts';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { describeReadError } from '@/lib/supabase/settle';
 
 // POST /api/ai/journal — returns one personalized reflection prompt for the
@@ -18,6 +19,10 @@ export async function POST() {
     const ctx = await requireUserContext();
     const memberId = ctx.active.member?.id ?? null;
     const supabase = await createServer();
+    // The page in front of this is feature-gated; this endpoint was not, and it
+    // calls a model. Same resolver, so the two cannot disagree.
+    const refused = await refuseUnlessEntitled(supabase, ctx.active.familyId, ['/dashboard/journal']);
+    if (refused) return refused;
     const limited = await enforceAIRateLimit(supabase, `ai-journal:${ctx.user.id}`, { limit: 20 });
     if (!limited.ok) return NextResponse.json(
       { error: t('journal.tooManyJournalRequestsPlease') },

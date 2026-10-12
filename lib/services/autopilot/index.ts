@@ -6,6 +6,7 @@ import { scopeNow } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
 import { AUTOPILOT_SOURCE_TAG } from '@/lib/reminders/provenance';
 import { reminderIsoFor } from '@/lib/autopilot/reminder-time';
+import { suggestionVisibleTo } from '@/lib/autopilot/audience';
 
 type Suggestion = Tables<'autopilot_suggestions'>;
 export type ResolutionResult =
@@ -46,6 +47,9 @@ export async function resolveSuggestion(scope: ServiceScope, input: ResolveSugge
     if (read.error) return { ok: false, code: 'unavailable' };
     const source = read.data;
     if (!source || source.id !== input.suggestionId || source.family_id !== scope.familyId) return { ok: false, code: 'notFound' };
+    // A card the reader is not shown (lib/autopilot/audience.ts) is not theirs
+    // to accept or dismiss either; answered as absent, like another family's.
+    if (!suggestionVisibleTo(source, { role: scope.role, memberId: scope.memberId })) return { ok: false, code: 'notFound' };
 
     if (input.action === 'reminder') {
       if (source.kind === 'policy' || source.action_type !== 'create_reminder') return { ok: false, code: 'unsupported' };

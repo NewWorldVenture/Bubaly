@@ -20,6 +20,7 @@ const CLASSIFIED: Record<string, { count: number; how: string }> = {
   'app/api/ai/chat/route.ts': { count: 1, how: 'readback: re-reads the conversation with ownership' },
   'app/(app)/dashboard/moments/page.tsx': { count: 1, how: 'best-effort log; reports nothing; error now logged' },
   'app/(app)/dashboard/playbook/playbook-actions.ts': { count: 1, how: '.select(): counts only inserted rows (fixed C1-S9-70)' },
+  'app/(app)/dashboard/independence/actions.ts': { count: 1, how: 'insert-only start: a duplicate is a rung already on the ladder, left as it is; the module refreshes and shows its real state' },
   'app/onboarding/actions.ts': { count: 1, how: '.select() + readback of the existing token on a duplicate' },
   'lib/chores/server.ts': { count: 1, how: '.select(): returns only newly earned badges' },
   'lib/planning/prep-server.ts': { count: 1, how: 'idempotent regeneration; reports plans, not steps' },

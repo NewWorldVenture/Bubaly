@@ -320,9 +320,12 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   // reminder fired a day early for the last seven hours of every Californian
   // day. And because the dedup is PERMANENT and keyed by occurrence year, the
   // early one is the only one — the real day arrives with nothing sent.
-  const { data: relDates } = await supabase.from('relationship_dates')
+  const { data: relDates, error: relDatesError } = await supabase.from('relationship_dates')
     .select('id, kind, title, event_date, recurs_annually, reminder_days_before, status')
     .eq('family_id', familyId).neq('status', 'cancelled').limit(100);
+  // Degrade-but-log, the rule SOURCE_TABLES above follows: a silently broken
+  // read would stop every anniversary and birthday reminder with no signal.
+  if (relDatesError) console.error('[notifications] generation source read failed', { familyId, table: 'relationship_dates', error: relDatesError });
   for (const d of upcomingRelationship((relDates ?? []).map((r): RelDate => ({
     id: r.id, kind: r.kind, title: r.title, eventDate: r.event_date,
     recursAnnually: r.recurs_annually, reminderDaysBefore: r.reminder_days_before, status: r.status,

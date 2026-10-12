@@ -8,6 +8,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { isManager } from '@/lib/constants/roles';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
+import { dayKeyIn } from '@/lib/time/zoned';
 import { resolveProvider } from '@/lib/ai/provider';
 import { summarizeSubscriptions, wastedMonthlyCents, isStale, monthlyCostCents, type SubLike } from '@/lib/finance/subscriptions';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -96,8 +97,10 @@ export async function POST() {
 
   const subList = (subs ?? []) as SubLike[];
   const subStats = summarizeSubscriptions(subList);
-  const wasted = wastedMonthlyCents(subList);
-  const staleNames = (subs ?? []).filter((s) => isStale(s as SubLike)).map((s) => `${s.name} (${usd(monthlyCostCents(s.cost_cents, s.cadence))}/mo)`);
+  // Recorded use is a DATE on the family's wall, counted from the family's day.
+  const usageDay = dayKeyIn(new Date(), ctx.active.family?.timezone || 'UTC');
+  const wasted = wastedMonthlyCents(subList, 60, usageDay);
+  const staleNames = (subs ?? []).filter((s) => isStale(s as SubLike, 60, usageDay)).map((s) => `${s.name} (${usd(monthlyCostCents(s.cost_cents, s.cadence))}/mo)`);
 
   const context = [
     `Subscriptions: ${subStats.active} active, ${usd(subStats.monthlyCents)}/mo. Unused (60d+): ${staleNames.join(', ') || 'none'} → up to ${usd(wasted)}/mo recoverable.`,
