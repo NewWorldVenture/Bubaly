@@ -48,8 +48,10 @@ import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '
 import { behaviorForDomain, effectiveRisk } from '@/lib/ai/family-settings';
 import { loadAISettings } from '@/lib/services/ai-settings';
 import { evaluateAction, riskTierStance, riskToDecision, toolTags, type ApprovalModel, type Decision } from '@/lib/trust/engine';
-import { readAmountCents } from '@/lib/trust/amount';
+import { carriesAmount, readAmountCents, UNKNOWN_AMOUNT_CENTS } from '@/lib/trust/amount';
+import { editStaysWithinFiledRule, FILED_REQUEST_COLUMNS, type FiledRequest } from '@/lib/trust/edit-rule';
 import { loadTrustInputs, roleOf } from '@/lib/trust/server';
+import { conformNulls } from '@/lib/ai/schema-to-json';
 import {
   blockedSteps, describeProgress, findDependencyCycle, isTerminalRunState, legacyStatusFor,
   selectRunnableSteps, summarizeSteps, terminalRunStateFor, type RunState, type StepState,
@@ -60,10 +62,10 @@ import {
   type RunEventInput, type RunRow, type StepRow,
 } from './store';
 import { parseVerificationSpec, runVerification, type VerificationOutcome } from './verify';
-import { resolveBindings } from './bindings';
+import { resolveBindings, type Resolution } from './bindings';
 // Pure, and shared with the approval card and `decide()`: what an approved step
 // runs must be derived by the one rule that decided what the approvers saw.
-import { classifyPayload, effectiveArgsOf } from '@/lib/approvals/card-data';
+import { classifyPayload, editableArgsOf, effectiveArgsOf } from '@/lib/approvals/card-data';
 
 type RunPatch = Database['public']['Tables']['family_automation_runs']['Update'];
 type StepPatch = Database['public']['Tables']['ai_plan_steps']['Update'];
@@ -192,8 +194,21 @@ export type ExecutorPort = {
     args: unknown,
     opts: { runId: string; stepId: string; requestId: string | null; idempotencyKey: string; skipTrust: boolean },
   ): Promise<ToolOutcome>;
-  requestApproval(scope: ServiceScope, run: RunSnapshot, step: StepSnapshot): Promise<ServiceResult<{ id: string }>>;
+  /**
+   * File the approval a held step waits on. `bound` is the step's input with
+   * its bindings resolved against the steps it depends on — what the tool will
+   * actually run with — so the rule it is filed under reads that amount, not a
+   * `{ "$fromStep": … }` placeholder (`approvalRuleFor`).
+   */
+  requestApproval(scope: ServiceScope, run: RunSnapshot, step: StepSnapshot, bound: Resolution): Promise<ServiceResult<{ id: string }>>;
   loadApproval(scope: ServiceScope, approvalId: string): Promise<ServiceResult<ApprovalSnapshot | null>>;
+  /**
+   * Whether an approver's edit (`approvedArgsFor`) keeps this step under the
+   * rule its approval was filed under (lib/trust/edit-rule.ts). False: the
+   * step does not run it. An error: the rules could not be read, and nothing
+   * runs on a guess.
+   */
+  editWithinFiledRule(scope: ServiceScope, step: StepSnapshot, approvalId: string, args: Record<string, unknown>): Promise<ServiceResult<boolean>>;
   /**
    * Deliver a notify step THROUGH the trust gate (`notifications.notify` in the
    * registry), under the requester's role: the family's switch, its messaging
@@ -1000,7 +1015,12 @@ async function runStep(
   const heldForOutsideText = scope.untrustedRequest === true && writesHousehold(step);
   if (step.approval_required || step.step_type === 'approval' || heldForOutsideText) {
     if (!step.approval_id) {
-      const created = await port.requestApproval(scope, run, step);
+      // The rule the ask is filed under reads the amount the step will run
+      // with. Its dependencies are done by now, so a value bound from one of
+      // them is already known; filed before resolving, a bound $900 read as no
+      // amount at all, and a rule capped at $50 matched it. A binding that
+      // does not resolve still fails the step below, after the decision.
+      const created = await port.requestApproval(scope, run, step, resolveBindings(step.input_json as Json, depByIdResults));
       if (!created.ok) return failStep(port, run, step, created.error, created.retryable === true);
       await port.updateStep(run, step.id, {
         status: 'awaiting_approval', approval_id: created.data.id, ...(step.approval_required ? {} : { approval_required: true }),
@@ -1046,6 +1066,17 @@ async function runStep(
         status: 'completed', completed_at: new Date(port.now()).toISOString(), result_json: { summary: 'Approved.' } as Json,
       });
       return { kind: 'progressed' };
+    }
+    // An edit runs under the decision only while it stays under the rule the
+    // approval was filed under. `editAndApprove` and `decide()` refuse one that
+    // does not, but the column is any manager's to write on a pending row, and
+    // a row decided before they did is still waiting here. Such an edit is not
+    // run, and neither is the original nobody approved last: the step fails
+    // and says to ask again.
+    if (approvedPayload !== null) {
+      const within = await port.editWithinFiledRule(scope, step, step.approval_id, approvedPayload as Record<string, unknown>);
+      if (!within.ok) return failStep(port, run, step, within.error, within.retryable === true);
+      if (!within.data) return failStep(port, run, step, (await getTranslations())('aiRuns.editOutsideFiledRule'), false);
     }
   }
 
@@ -1407,6 +1438,27 @@ function toolForStep(step: StepSnapshot): ToolDefinition | null {
 type ApprovalRule = { domain: string; approvalModel: ApprovalModel; requiredApprovals: number; policyId: string | null };
 
 /**
+ * The amount a held step's rule reads: from the input the tool will run with —
+ * its bindings resolved — parsed by the tool's own schema, as `executeTool`
+ * parses it, so a key the schema drops (a stray `amount_cents` beside the
+ * `amount` that runs) cannot speak for it. Null when the step moves no money.
+ *
+ * An amount that cannot be read — money fields beside a binding that did not
+ * resolve, or money fields the schema refuses — is `UNKNOWN_AMOUNT_CENTS`:
+ * unbounded, so a rule capped by `maxAmountCents` does not match it. Read as
+ * "none", it was 0, and "Bubaly may spend up to $50" covered whatever the step
+ * finally moved.
+ */
+function ruleAmountCents(tool: ToolDefinition | null, input: unknown, bound: Resolution): number | null {
+  if (!bound.ok) return carriesAmount(input) ? UNKNOWN_AMOUNT_CENTS : null;
+  if (tool) {
+    const parsed = tool.input.safeParse(conformNulls(tool.input, bound.value));
+    if (parsed.success) return readAmountCents(parsed.data);
+  }
+  return carriesAmount(bound.value) ? UNKNOWN_AMOUNT_CENTS : null;
+}
+
+/**
  * The rule a held step's approval is filed under: the family's own.
  *
  * The planner's dry run sees a "two parents" policy and holds the step, but the
@@ -1419,13 +1471,15 @@ type ApprovalRule = { domain: string; approvalModel: ApprovalModel; requiredAppr
  * domain is the tool's registry domain, not a guess from its name.
  *
  * The context carries what the dry run's does — the step's amount included
- * (`readAmountCents`) — so a policy whose conditions the plan found unmet is
+ * (`ruleAmountCents`) — so a policy whose conditions the plan found unmet is
  * not found met here.
  *
  * A household whose rules cannot be read is not asked on a guess either: the
  * step fails retryably and asks again once the rules can be read.
  */
-async function approvalRuleFor(db: SupabaseClient<Database>, scope: ServiceScope, step: StepSnapshot): Promise<ServiceResult<ApprovalRule>> {
+async function approvalRuleFor(
+  db: SupabaseClient<Database>, scope: ServiceScope, step: StepSnapshot, bound: Resolution,
+): Promise<ServiceResult<ApprovalRule>> {
   const tool = toolForStep(step);
   const domain = tool?.domain ?? approvalDomainFor(step);
   const trust = await loadTrustInputs(db, scope.familyId);
@@ -1433,7 +1487,7 @@ async function approvalRuleFor(db: SupabaseClient<Database>, scope: ServiceScope
     return fail((await getTranslations())('aiRuns.approvalRulesUnreadable'), { code: SERVICE_CODES.db, retryable: true });
   }
   const capability = !tool || !tool.readOnly ? 'automate' : tool.capability;
-  const amountCents = readAmountCents(step.input_json);
+  const amountCents = ruleAmountCents(tool, step.input_json, bound);
   const decision = evaluateAction({
     // The role the run-time gate evaluates (`trustRoleFor` in execute.ts).
     actor: { kind: 'ai_agent', id: 'bubaly', role: scope.role === 'system' ? 'adult' : roleOf(scope.role) },
@@ -1611,10 +1665,10 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
         skipTrust: opts.skipTrust,
       });
     },
-    async requestApproval(scope, run, step) {
+    async requestApproval(scope, run, step, bound) {
       const input = (step.input_json ?? {}) as Record<string, unknown>;
       const consequences = Array.isArray(input.consequences) ? input.consequences : [];
-      const rule = await approvalRuleFor(db, scope, step);
+      const rule = await approvalRuleFor(db, scope, step, bound);
       if (!rule.ok) return rule;
       const { data, error } = await db
         .from('approval_requests')
@@ -1677,6 +1731,34 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
         editedPayload: data.edited_payload ?? null,
         recordedEdits,
       });
+    },
+    async editWithinFiledRule(scope, step, approvalId, args) {
+      // The row as filed: who asked, under which rule, and the ask the edit
+      // was merged over (`approvedArgsFor`). 0480 keeps the first two as filed.
+      const { data, error } = await db
+        .from('approval_requests')
+        .select(`${FILED_REQUEST_COLUMNS}, payload, payload_kind, plan_step_ids`)
+        .eq('id', approvalId)
+        .eq('family_id', scope.familyId)
+        .maybeSingle();
+      if (error || !data) {
+        if (error) console.error('[ai/runs] failed to read the rule an edited approval was filed under', error);
+        return fail((await getTranslations())('aiRuns.approvalRulesUnreadable'), { code: SERVICE_CODES.db, retryable: true });
+      }
+      const row = data as unknown as FiledRequest & { payload: unknown; payload_kind: string | null; plan_step_ids: string[] | null };
+      const classified = classifyPayload({
+        payload: row.payload, payload_kind: row.payload_kind, run_id: null, plan_step_id: null, plan_step_ids: row.plan_step_ids,
+      });
+      const verdict = await editStaysWithinFiledRule(db, {
+        row,
+        filedBy: classified?.kind === 'tool' ? { kind: 'tool', filedName: classified.name } : { kind: 'step' },
+        tool: toolForStep(step),
+        original: editableArgsOf(classified) ?? {},
+        edited: args,
+      });
+      if (verdict.ok) return ok(true);
+      if (verdict.reason === 'outside_rule') return ok(false);
+      return fail((await getTranslations())('aiRuns.approvalRulesUnreadable'), { code: SERVICE_CODES.db, retryable: true });
     },
     async notifyFamily(scope, input, opts) {
       const outcome = await executeTool(scope, NOTIFY_TOOL, notifyToolArgs(input), {

@@ -350,6 +350,8 @@ function harnessFor(steps: StepSnapshot[], planId: string): Harness {
       const found = h.approvals[approvalId];
       return ok(found ? { id: approvalId, status: found.status, payload: null, payloadKind: null, planStepIds: null, editedPayload: null } : null);
     },
+    // This double models no household rules, so no edit can leave one.
+    async editWithinFiledRule() { return ok(true); },
     async notifyFamily() { return ok({ created: 1 }); },
     async verify() { return ok({ verified: true, detail: 'All checks passed.', checks: [] }); },
     replan: null,

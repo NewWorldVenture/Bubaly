@@ -149,6 +149,8 @@ function makeFake(options: FakeOptions): Fake {
         editedPayload: found.editedPayload ?? null,
       } : null);
     },
+    // This double models no household rules, so no edit can leave one.
+    async editWithinFiledRule() { return ok(true); },
     notifyFamily: options.notify ?? (async () => ok({ created: 2 })),
     verify: options.verify ?? (async () => ok({ verified: true, detail: 'All 1 checks passed.', checks: [] })),
     replan: options.replan ?? null,

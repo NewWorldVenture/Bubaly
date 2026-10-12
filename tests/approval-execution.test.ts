@@ -375,7 +375,14 @@ describe('decide — tool payloads', () => {
 describe('decide — concierge_plan', () => {
   it('materialises the write-backs once and closes the legacy pending automation row', async () => {
     const store = makeStore({
-      approval_requests: [approvalRow({ payload: { plan_id: 'plan-9', kinds: ['calendar', 'reminder', 'task'] }, domain: 'scheduling', title: 'Execute plan: Zoo trip' })],
+      // What planAcceptedAction files: the plan as it was asked about rides along.
+      approval_requests: [approvalRow({
+        payload: {
+          plan_id: 'plan-9', kinds: ['calendar', 'reminder', 'task'],
+          plan: { title: 'Zoo trip', description: 'Take the kids', location: 'City Zoo', planned_for: '2026-09-12' },
+        },
+        domain: 'scheduling', title: 'Execute plan: Zoo trip',
+      })],
       concierge_plans: [{ id: 'plan-9', family_id: 'fam-1', title: 'Zoo trip', description: 'Take the kids', location: 'City Zoo', planned_for: '2026-09-12', budget_cents: 5000 }],
       concierge_plan_actions: [{ id: 'cpa-1', family_id: 'fam-1', plan_id: 'plan-9', action_kind: 'reminder' }],
       family_automation_runs: [{ id: 'legacy-run', family_id: 'fam-1', status: 'pending', metadata: { plan_id: 'plan-9', approval_id: 'appr-1' } }],
@@ -661,7 +668,11 @@ describe('whose request it is comes from the server\'s ledger, not the row\'s ow
   // none: an adult could materialise a plan by themselves.
   const planRow = () => approvalRow({
     requested_by_kind: 'ai', requested_by_member_id: 'member-1', agent: null,
-    payload: { plan_id: 'plan-9', kinds: ['calendar'] }, payload_kind: 'concierge_plan', domain: 'scheduling',
+    payload: {
+      plan_id: 'plan-9', kinds: ['calendar'],
+      plan: { title: 'Zoo trip', description: null, location: null, planned_for: '2026-09-12' },
+    },
+    payload_kind: 'concierge_plan', domain: 'scheduling',
   });
   const planSeed = () => ({
     concierge_plans: [{ id: 'plan-9', family_id: 'fam-1', title: 'Zoo trip', description: null, location: null, planned_for: '2026-09-12', budget_cents: null }],
