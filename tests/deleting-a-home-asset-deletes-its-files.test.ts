@@ -18,9 +18,10 @@
 // so its files stay findable and a second press finishes the job.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { ASSET_DOCUMENT_KINDS, removeHomeAsset } from '@/lib/home/remove-asset';
+import { ASSET_DOCUMENT_KINDS, PENDING_REMOVAL_CATEGORY, removeHomeAsset } from '@/lib/home/remove-asset';
+import { isSensitiveDocument } from '@/lib/documents/sensitivity';
 import { createInMemorySupabase, type InMemorySupabase, type Row } from './helpers/in-memory-supabase';
-import { at, bodyOf } from './helpers/source-order';
+import { at, between, bodyOf } from './helpers/source-order';
 
 const FAMILY = 'fam-1';
 
@@ -218,6 +219,15 @@ describe('the Home page deletes an asset through it', () => {
   it('says so when the delete did not happen', () => {
     expect(at(removeAsset, 'if (!removed.ok)')).toBeLessThan(at(removeAsset, "success(tr('homeModule.assetRemoved'))"));
   });
+
+  // AUD-1022-L1, re-fix round 1: a sweep that failed ran after the asset was
+  // deleted, so the list it leaves on screen is stale, and a kept file has to
+  // be findable after the asset has gone from it.
+  it('shows what is there now when the delete did not finish, and says where a kept file is', () => {
+    const failed = between(removeAsset, 'if (!removed.ok)', "success(tr('homeModule.assetRemoved'))");
+    expect(at(failed, 'refreshWarranty();')).toBeLessThan(at(failed, 'return toastError('));
+    expect(at(failed, 'removed.keptInVault')).toBeLessThan(at(failed, "tr('homeModule.assetRemovedFileKept')"));
+  });
 });
 
 // AUD-1022-L1. The asset delete is its own statement, so the cascade takes
@@ -329,6 +339,111 @@ describe('files attached while the asset is being deleted', () => {
     expect(await removeHomeAsset(filtered, FAMILY, 'asset-fridge')).toEqual({ ok: false, notSaved: true });
     expect(home.store.objects.has(inFlight)).toBe(true);
     expect(home.db.table('home_assets').some((asset) => asset.id === 'asset-fridge')).toBe(true);
+  });
+
+  // AUD-1022-L1, re-fix round 1. The cascade has already taken the late row
+  // when the sweep starts. Before this round the sweep then tried the removal
+  // with nothing naming the object, and a removal storage refused left a file
+  // every member could read with no record anywhere that it was still there.
+  /** Every sensitive row of this family that names `path`: what 0303 restricts a child by. */
+  const guarding = (home: Household, path: string) => home.db.table('documents')
+    .filter((doc) => doc.family_id === FAMILY && doc.storage_path === path
+      && isSensitiveDocument({ is_secure: doc.is_secure as boolean | null, category: doc.category as string | null }));
+
+  /** The same client, with `seen` called each time storage is asked to remove `path`. */
+  function watchingRemoval(base: Parameters<typeof removeHomeAsset>[0], path: string, seen: () => void) {
+    const raw = base as unknown as { from: unknown; storage: { from: (name: string) => ReturnType<typeof storageFor> } };
+    return {
+      ...raw,
+      storage: {
+        from: (name: string) => {
+          const store = raw.storage.from(name);
+          return { ...store, remove: async (paths: string[]) => { if (paths.includes(path)) seen(); return store.remove(paths); } };
+        },
+      },
+    } as unknown as Parameters<typeof removeHomeAsset>[0];
+  }
+
+  it('guards a file the cascade orphaned with a vaulted row before it tries the removal', async () => {
+    const home = household();
+    const guardedAtRemoval: number[] = [];
+    const deleting = watchingRemoval(committingBeforeAssetDelete(home, () => attachLate(home)), LATE,
+      () => guardedAtRemoval.push(guarding(home, LATE).length));
+
+    expect(await removeHomeAsset(deleting, FAMILY, 'asset-fridge')).toEqual({ ok: true });
+    // Asked while the object was still stored: a sensitive row already named it.
+    expect(guardedAtRemoval).toEqual([1]);
+    expect(home.store.objects.has(LATE)).toBe(false);
+    // And once it is gone, the row that guarded it goes too.
+    expect(home.db.table('documents').some((doc) => doc.storage_path === LATE)).toBe(false);
+  });
+
+  it('keeps that vaulted row when storage refuses the removal, so the file stays guarded and on record', async () => {
+    const home = household();
+    home.store.refuse.add(LATE);
+
+    const result = await removeHomeAsset(committingBeforeAssetDelete(home, () => attachLate(home)), FAMILY, 'asset-fridge');
+
+    expect(result).toMatchObject({ ok: false, keptInVault: true });
+    expect(result).toHaveProperty('error');
+    expect(home.db.table('home_assets').some((asset) => asset.id === 'asset-fridge')).toBe(false);
+    expect(home.store.objects.has(LATE)).toBe(true);
+    // The coordinator's assertion: a stored sensitive object keeps a row that protects it.
+    expect(guarding(home, LATE)).toHaveLength(1);
+    // A row of its own, in the vault: a parent finds it in Files after any
+    // reload and deletes it there; nothing ties it to the deleted asset.
+    expect(guarding(home, LATE)[0]).toMatchObject({
+      family_id: FAMILY, asset_id: null, is_secure: true, category: PENDING_REMOVAL_CATEGORY, title: 'late-policy.pdf',
+    });
+  });
+
+  it('clears the kept row once a later sweep removes the file', async () => {
+    const home = household();
+    home.store.refuse.add(LATE);
+    await removeHomeAsset(committingBeforeAssetDelete(home, () => attachLate(home)), FAMILY, 'asset-fridge');
+    home.store.refuse.clear();
+
+    expect(await removeHomeAsset(client(home), FAMILY, 'asset-fridge')).toEqual({ ok: false, notSaved: true });
+    expect(home.store.objects.has(LATE)).toBe(false);
+    expect(home.db.table('documents').some((doc) => doc.storage_path === LATE)).toBe(false);
+    // Only the guard went: every other row of the family is where it was.
+    expect(ids(home.db.table('documents').filter((doc) => doc.family_id === FAMILY))).toEqual(['doc-boiler', 'doc-loose']);
+  });
+
+  it('still removes the file when the guarding row cannot be written', async () => {
+    const home = household();
+    const base = committingBeforeAssetDelete(home, () => attachLate(home)) as unknown as { from: (table: string) => unknown; storage: unknown };
+    const noInsert = {
+      ...base,
+      from: (table: string) => {
+        const query = base.from(table) as { insert: (rows: unknown) => unknown };
+        if (table === 'documents') query.insert = () => answering(CONNECTION_LOST);
+        return query;
+      },
+    } as unknown as Parameters<typeof removeHomeAsset>[0];
+
+    expect(await removeHomeAsset(noInsert, FAMILY, 'asset-fridge')).toEqual({ ok: true });
+    expect(home.store.objects.has(LATE)).toBe(false);
+  });
+
+  it('does not claim the vault for a file it could neither guard nor remove', async () => {
+    const home = household();
+    home.store.refuse.add(LATE);
+    const base = committingBeforeAssetDelete(home, () => attachLate(home)) as unknown as { from: (table: string) => unknown; storage: unknown };
+    const noInsert = {
+      ...base,
+      from: (table: string) => {
+        const query = base.from(table) as { insert: (rows: unknown) => unknown };
+        if (table === 'documents') query.insert = () => answering(CONNECTION_LOST);
+        return query;
+      },
+    } as unknown as Parameters<typeof removeHomeAsset>[0];
+
+    const result = await removeHomeAsset(noInsert, FAMILY, 'asset-fridge');
+
+    expect(result.ok).toBe(false);
+    expect(result).toHaveProperty('error');
+    expect(result).not.toHaveProperty('keptInVault');
   });
 });
 

@@ -25,15 +25,38 @@
 // AND the rows that land after the last read. The asset delete is a separate
 // statement, so a document committed between the last empty read and that
 // delete still goes with the cascade, and with it the row that protected its
-// object. No read from here can close that gap (the database would have to
-// refuse the delete; see the AUD-1022-L1 note on #1022). What this can do is
-// find those objects afterwards: an asset's files are only ever uploaded under
-// `{family}/manuals/{asset}` and `{family}/warranties/{asset}` (the Home
-// page's handleFile, through `assetDocumentFolder` below), and once the asset
-// is gone no new row can name it. So after a confirmed asset delete both
-// folders are listed and every object no surviving row names is removed,
-// each confirmed gone. A sweep that fails is reported, and a second press —
-// which finds the asset already gone — sweeps again.
+// object. No read or write from here can close that gap: the database has to
+// refuse the delete while a row is attached, and that is a change to 0007's
+// foreign key (ON DELETE NO ACTION), which is the owner's to make — the exact
+// statement is in the AUD-1022-L1 notes on #1022. Until it lands, what this
+// can do is find those objects afterwards: an asset's files are only ever
+// uploaded under `{family}/manuals/{asset}` and `{family}/warranties/{asset}`
+// (the Home page's handleFile, through `assetDocumentFolder` below), and once
+// the asset is gone no new row can name it. So after a confirmed asset delete
+// both folders are listed, and every object no surviving row names is
+//
+//   1. GUARDED first: one vaulted row (`is_secure`, no asset, filed under
+//      PENDING_REMOVAL_CATEGORY) per object, inserted and read back before any
+//      removal is tried. While it exists 0303 restricts the object to the
+//      family's managers again, so the unguarded stretch runs from the cascade
+//      to this insert — the folder listings and one read — not the whole
+//      sweep, and not past a removal storage refuses;
+//   2. removed, confirmed gone;
+//   3. and only then is its guarding row deleted, read back.
+//
+// A removal storage refuses leaves the object AND its guarding row: a vault
+// file a parent sees in Files after any reload and deletes there (object
+// first, confirmed), and a record the next sweep of these folders picks up and
+// finishes. The caller is told the file was kept in the vault. If the guarding
+// row cannot be written the removal is still tried, because removing the file
+// is the point and the guard only covers its failing.
+//
+// An upload whose row insert fails because the asset is already gone (its FK
+// no longer resolves) never had a row, and the Home page never inserts one
+// into the vault (a file is vaulted later, from Files, by changing a row that
+// exists), so no protection is lost with it: its object is as readable as its
+// row would have made it. The uploader's compensating removal is what clears
+// it, and a failed compensation is logged there (Audit C4-S4-09).
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { removeConfirmed, type RemovableBucket } from '@/lib/storage/confirm-removal';
@@ -52,6 +75,14 @@ const MAX_LIST_PAGES = 50;
 const PATH_CHUNK = 50;
 /** List-and-remove rounds, so an object a concurrent removal shifted past a page is still found. */
 const MAX_SWEEP_ROUNDS = 5;
+
+/**
+ * The folder a guarding row is filed under. Stored data, like the Home page's
+ * 'manual' and 'warranty': it is the folder name a parent sees in Files, and
+ * what tells a later sweep that the row is a guard it may clear rather than a
+ * document of the family's to leave alone.
+ */
+export const PENDING_REMOVAL_CATEGORY = 'pending removal';
 
 /** The two folders an asset's files are uploaded to, under the family's own folder. */
 export const ASSET_DOCUMENT_KINDS = ['manuals', 'warranties'] as const;
@@ -77,7 +108,9 @@ type AssetRemovalDb = Pick<SupabaseClient<Database>, 'from'> & {
 
 export type AssetRemoval =
   | { ok: true }
-  | { ok: false; error: string }
+  // keptInVault: the asset is gone, and a file of it that could not be removed
+  // is kept under a guarding row in the Secure Vault (see the header).
+  | { ok: false; error: string; keptInVault?: true }
   | { ok: false; notSaved: true };
 
 type Step = AssetRemoval | null;
@@ -105,23 +138,60 @@ async function listFolder(bucket: AssetBucket, folder: string): Promise<{ paths:
   return { failed: { ok: false, notSaved: true } };
 }
 
-/** The paths no row of this family still names: those objects lost their row with the asset. */
-async function unreferenced(db: AssetRemovalDb, familyId: string, paths: string[]): Promise<{ paths: string[] } | { failed: AssetRemoval }> {
-  const named = new Set<string>();
+/**
+ * Which of these objects rows of this family name: `guarded` by a guarding row
+ * an earlier sweep left (pending removal), `kept` by any other row (a document
+ * of the family's, left alone).
+ */
+async function rowsNaming(
+  db: AssetRemovalDb, familyId: string, paths: string[],
+): Promise<{ kept: Set<string>; guarded: Set<string> } | { failed: AssetRemoval }> {
+  const kept = new Set<string>();
+  const guarded = new Set<string>();
   for (let i = 0; i < paths.length; i += PATH_CHUNK) {
-    const { data, error } = await db.from('documents').select('storage_path')
+    const { data, error } = await db.from('documents').select('storage_path, asset_id, category')
       .eq('family_id', familyId).in('storage_path', paths.slice(i, i + PATH_CHUNK));
     if (error) return { failed: { ok: false, error: describeDbError(error) } };
-    for (const row of data ?? []) if (row.storage_path) named.add(row.storage_path);
+    for (const row of data ?? []) {
+      if (!row.storage_path) continue;
+      if (!row.asset_id && row.category === PENDING_REMOVAL_CATEGORY) guarded.add(row.storage_path);
+      else kept.add(row.storage_path);
+    }
   }
-  return { paths: paths.filter((path) => !named.has(path)) };
+  return { kept, guarded };
+}
+
+/** A guarding row's title: the stored file name, without the upload's timestamp prefix. */
+function fileTitle(path: string): string {
+  const name = path.slice(path.lastIndexOf('/') + 1);
+  return name.replace(/^\d+-/, '') || name;
+}
+
+/**
+ * Guard objects nothing names with one vaulted row each, read back. Answers
+ * the paths now guarded; an empty answer means the guard could not be written,
+ * and the sweep goes on to remove them unguarded rather than not at all.
+ */
+async function guardObjects(db: AssetRemovalDb, familyId: string, assetId: string, paths: string[]): Promise<string[]> {
+  if (paths.length === 0) return [];
+  const { data: guards, error } = await db.from('documents').insert(paths.map((path) => ({
+    family_id: familyId, asset_id: null, storage_path: path, title: fileTitle(path),
+    category: PENDING_REMOVAL_CATEGORY, is_secure: true,
+  }))).select('storage_path');
+  // One statement, so all of them or none: a short read-back is treated as none.
+  if (error || !guards || guards.length !== paths.length) {
+    console.error('[home/remove-asset] could not guard the files of a deleted asset', { familyId, assetId, code: error?.code ?? 'short read-back' });
+    return [];
+  }
+  return paths;
 }
 
 /**
  * After the asset is gone: remove every object left in its folders that no
- * row names any more. Those are the files of rows the cascade took — attached
- * after the last read — and a file nothing names is readable by the whole
- * family (0303), whatever vault it was in.
+ * row of the family's names any more, guarding each one first (see the
+ * header). Those are the files of rows the cascade took — attached after the
+ * last read — and a file nothing names is readable by the whole family
+ * (0303), whatever vault it was in.
  */
 async function sweepAssetFolders(db: AssetRemovalDb, familyId: string, assetId: string): Promise<Step> {
   const bucket = db.storage.from(BUCKET);
@@ -133,15 +203,28 @@ async function sweepAssetFolders(db: AssetRemovalDb, familyId: string, assetId: 
       found.push(...listed.paths);
     }
     if (found.length === 0) return null;
-    const orphaned = await unreferenced(db, familyId, found);
-    if ('failed' in orphaned) return orphaned.failed;
-    if (orphaned.paths.length === 0) return null;
-    for (const path of orphaned.paths) {
+    const named = await rowsNaming(db, familyId, found);
+    if ('failed' in named) return named.failed;
+    const pending = found.filter((path) => !named.kept.has(path));
+    if (pending.length === 0) return null;
+
+    const guarded = new Set([...named.guarded].filter((path) => !named.kept.has(path)));
+    const newlyGuarded = await guardObjects(db, familyId, assetId, pending.filter((path) => !guarded.has(path)));
+    for (const path of newlyGuarded) guarded.add(path);
+
+    for (const path of pending) {
       const { error: storageError } = await removeConfirmed(bucket, path);
       if (storageError) {
-        console.error('[home/remove-asset] an object of a deleted asset is still stored', { familyId, assetId, path });
-        return { ok: false, error: storageError };
+        console.error('[home/remove-asset] an object of a deleted asset is still stored', { familyId, assetId, path, guarded: guarded.has(path) });
+        return guarded.has(path) ? { ok: false, error: storageError, keptInVault: true } : { ok: false, error: storageError };
       }
+      if (!guarded.has(path)) continue;
+      // The object is confirmed gone, so the row guarding it goes too.
+      const { data: cleared, error: clearError } = await db.from('documents').delete()
+        .eq('family_id', familyId).eq('storage_path', path).is('asset_id', null)
+        .eq('category', PENDING_REMOVAL_CATEGORY).select('id');
+      if (clearError) return { ok: false, error: describeDbError(clearError) };
+      if (wroteNoRows(cleared)) return { ok: false, notSaved: true };
     }
   }
   return { ok: false, notSaved: true };

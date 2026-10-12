@@ -191,7 +191,14 @@ export function HomeModule() {
     // `error: null` and the toast said the asset was gone while it stayed.
     // The asset's manuals and warranty files go first: see lib/home/remove-asset.
     const removed = await removeHomeAsset(createClient(), familyId, id);
-    if (!removed.ok) return toastError('error' in removed ? removed.error : tr('errors.thatChangeWasNotSaved'));
+    if (!removed.ok) {
+      // A file sweep that failed ran after the asset was deleted, so the list
+      // on screen may be stale: show what is there now. A file it could not
+      // remove is kept in the Secure Vault, where a parent deletes it in Files.
+      refreshWarranty();
+      if ('keptInVault' in removed && removed.keptInVault) return toastError(tr('homeModule.assetRemovedFileKept'));
+      return toastError('error' in removed ? removed.error : tr('errors.thatChangeWasNotSaved'));
+    }
     success(tr('homeModule.assetRemoved'));
     void refreshAssets();
   }

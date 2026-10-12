@@ -7711,6 +7711,7 @@
   "homeModule.addMaintenanceTasksToStay": "Aggiungi attività di manutenzione per tenere sotto controllo la casa.",
   "homeModule.assetAdded": "Bene aggiunto",
   "homeModule.assetRemoved": "Bene rimosso",
+  "homeModule.assetRemovedFileKept": "Bene rimosso, ma uno dei suoi file non è stato eliminato. Resta nell’archivio protetto, che solo i genitori e gli altri adulti possono aprire; eliminalo da lì in File.",
   "homeModule.fileRemoved": "File rimosso",
   "homeModule.keepTheExpirationDateAnd": "Tieni insieme la data di scadenza e il certificato di garanzia o lo scontrino, direttamente sull’oggetto.",
   "homeModule.keepTheManualTheWarrantyCard": "Tieni insieme il manuale, il certificato di garanzia e la data di scadenza, direttamente sull’oggetto.",

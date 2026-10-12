@@ -7712,6 +7712,7 @@
   "homeModule.addMaintenanceTasksToStay": "Adicione tarefas de manutenção para manter a casa sob controlo.",
   "homeModule.assetAdded": "Bem adicionado",
   "homeModule.assetRemoved": "Bem removido",
+  "homeModule.assetRemovedFileKept": "Bem removido, mas um dos seus ficheiros não pôde ser eliminado. Fica guardado no cofre seguro, que só os progenitores e outros adultos podem abrir; elimine-o a partir de Ficheiros.",
   "homeModule.fileRemoved": "Ficheiro removido",
   "homeModule.keepTheExpirationDateAnd": "Guarde juntos a data de validade e o cartão de garantia ou o recibo, no próprio objeto.",
   "homeModule.keepTheManualTheWarrantyCard": "Guarde juntos o manual, o cartão de garantia e a data de validade, no próprio objeto.",

@@ -7891,6 +7891,7 @@
   "homeModule.addMaintenanceTasksToStay": "Add maintenance tasks to stay on top of your home.",
   "homeModule.assetAdded": "Asset added",
   "homeModule.assetRemoved": "Asset removed",
+  "homeModule.assetRemovedFileKept": "Asset removed, but one of its files could not be deleted. It is kept in the Secure Vault, where only parents and other adults can open it; delete it from there in Files.",
   "homeModule.fileRemoved": "File removed",
   "homeModule.keepTheExpirationDateAnd": "Keep the expiration date and the warranty card or receipt together, right on the asset.",
   "homeModule.keepTheManualTheWarrantyCard": "Keep the manual, the warranty card and the expiry date together, right on the asset.",

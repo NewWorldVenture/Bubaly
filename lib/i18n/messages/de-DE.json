@@ -7711,6 +7711,7 @@
   "homeModule.addMaintenanceTasksToStay": "Wartungsaufgaben hinzufügen, um Ihr Zuhause im Griff zu behalten.",
   "homeModule.assetAdded": "Gegenstand hinzugefügt",
   "homeModule.assetRemoved": "Gegenstand entfernt",
+  "homeModule.assetRemovedFileKept": "Gegenstand entfernt, aber eine seiner Dateien konnte nicht gelöscht werden. Sie bleibt im geschützten Tresor, den nur Eltern und andere Erwachsene öffnen können; löschen Sie sie dort unter Dateien.",
   "homeModule.fileRemoved": "Datei entfernt",
   "homeModule.keepTheExpirationDateAnd": "Ablaufdatum und Garantiekarte oder Beleg zusammen beim Gegenstand aufbewahren.",
   "homeModule.keepTheManualTheWarrantyCard": "Handbuch, Garantiekarte und Ablaufdatum zusammen beim Gegenstand aufbewahren.",

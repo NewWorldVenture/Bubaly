@@ -7711,6 +7711,7 @@
   "homeModule.addMaintenanceTasksToStay": "Voeg onderhoudstaken toe om je huis onder controle te houden.",
   "homeModule.assetAdded": "Bezit toegevoegd",
   "homeModule.assetRemoved": "Bezit verwijderd",
+  "homeModule.assetRemovedFileKept": "Bezit verwijderd, maar een van de bestanden kon niet worden gewist. Het blijft in de beveiligde kluis, die alleen ouders en andere volwassenen kunnen openen; verwijder het daar via Bestanden.",
   "homeModule.fileRemoved": "Bestand verwijderd",
   "homeModule.keepTheExpirationDateAnd": "Bewaar de vervaldatum en het garantiebewijs of de bon samen, bij het item zelf.",
   "homeModule.keepTheManualTheWarrantyCard": "Bewaar de handleiding, het garantiebewijs en de vervaldatum samen, bij het item zelf.",
