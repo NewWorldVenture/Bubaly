@@ -75,6 +75,7 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options
   const calls: { table: string; operation: string; count: number; limit: number; filter?: string }[] = [];
   const from = (table: string) => {
     let operation = 'select', patch: PushFixtureRow = {}, limit = Infinity, expression: string | undefined;
+    let selection = '*';
     // readAll() pages with .order().range(); without range support the whole
     // paged read threw, and a cron route that should answer 502 answered 500.
     let rangeFrom: number | undefined, rangeTo: number | undefined;
@@ -124,10 +125,25 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options
       if (operation === 'update') {
         for (const row of rows) { Object.assign(row, patch); if (table === 'notifications') stamps.push(String(row.id)); }
       } else if (operation === 'delete') tables[table] = tables[table].filter(row => !rows.includes(row));
-      return { data: rows, error: null };
+      // The existing fixtures without a families table explicitly model open
+      // families (same assumption as the embedded filter below). Expose that
+      // joined row when selected; explicit family tables control closure.
+      const data = operation === 'select' && selection.includes('family:families!inner(')
+        ? rows.map(row => ({ ...row, family: tables.families
+          ? (() => {
+            const family = tables.families.find(family => family.id === row.family_id);
+            // Only this fixture's known family row with an omitted SQL-null
+            // default is declared open. Explicit malformed values stay raw.
+            return family && typeof family.id === 'string'
+              && !Object.prototype.hasOwnProperty.call(family, 'closed_at')
+              ? { ...family, closed_at: null } : family ?? null;
+          })()
+          : { id: row.family_id, closed_at: null } }))
+        : rows;
+      return { data, error: null };
     };
     const query = {
-      select: () => query,
+      select: (columns?: string) => { selection = columns ?? '*'; return query; },
       // postgrest-js writes `eq.${value}` into the URL, so the server sees TEXT:
       // an object arrives as "[object Object]". Against a jsonb column the text
       // is parsed as JSON (and compared as jsonb, key order aside), and text that

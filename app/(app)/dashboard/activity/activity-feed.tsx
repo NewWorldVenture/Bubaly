@@ -140,7 +140,7 @@ export function ActivityFeed({
           <select aria-label={t('fieldName.filterByMember')}
             value={filterMember}
             onChange={(e) => setFilterMember(e.target.value)}
-            className="ml-auto rounded-lg border border-border bg-surface px-2 py-1 text-xs text-fg"
+            className="ml-auto min-w-0 max-w-full rounded-lg border border-border bg-surface px-2 py-1 text-xs text-fg"
           >
             <option value="all">{t('dashboardActivityActivityFeed.allMembers')}</option>
             {members.map((m) => (

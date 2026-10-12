@@ -1,8 +1,7 @@
 // The Free-tier AI helpers refuse a closed or trial-ended family.
 //
-// Eleven routes call a model or a voice provider with no feature gate:
-//   - habits, journal, notes, meal plan, nutrition, relationship;
-//   - recipe suggest and transform;
+// Seven routes call a model or a voice provider with no feature gate:
+//   - habits, journal, notes, relationship;
 //   - voice transcribe and speak (the phone app's microphone);
 //   - the public gift page's idea helper.
 // Free families may use them; that is the plan. But none asked whether the
@@ -11,8 +10,8 @@
 // `app/(app)/layout.tsx` draws over the web screens. Calling the route, or
 // opening the phone app, which has no overlay, still spent the deployment's
 // model and voice keys on an account that is meant to be locked. (The pantry
-// chef is a Smart Kitchen feature now, behind `refuseUnlessEntitled`, which
-// refuses a locked family itself.)
+// chef, the meal planner, nutrition and the two recipe helpers are behind
+// `refuseUnlessEntitled` on main now, which refuses a locked family itself.)
 //
 // Refusal only: none of this meters the routes.
 //
@@ -89,22 +88,13 @@ vi.mock('@/lib/ai/settings', async (importOriginal) => ({
 }));
 
 type Handler = (req?: NextRequest) => Promise<Response>;
-// Bodies only where a route validates its input before the rate limiter.
-const BODIES: Record<string, unknown> = {
-  '/api/ai/meals/plan': { weekStart: '2026-09-14' },
-  '/api/ai/meals/nutrition': { subjectType: 'recipe', subjectId: 'recipe-1' },
-};
 const MEMBER_ROUTES: Array<[string, () => Promise<Handler>]> = [
   ['/api/ai/habits', async () => (await import('@/app/api/ai/habits/route')).POST as Handler],
   ['/api/ai/journal', async () => (await import('@/app/api/ai/journal/route')).POST as Handler],
   ['/api/ai/notes', async () => (await import('@/app/api/ai/notes/route')).POST as Handler],
-  ['/api/ai/meals/plan', async () => (await import('@/app/api/ai/meals/plan/route')).POST as Handler],
-  ['/api/ai/meals/nutrition', async () => (await import('@/app/api/ai/meals/nutrition/route')).POST as Handler],
   ['/api/ai/relationship', async () => (await import('@/app/api/ai/relationship/route')).POST as Handler],
   ['/api/ai/voice/transcribe', async () => (await import('@/app/api/ai/voice/transcribe/route')).POST as Handler],
   ['/api/ai/voice/speak', async () => (await import('@/app/api/ai/voice/speak/route')).POST as Handler],
-  ['/api/recipes/suggest', async () => (await import('@/app/api/recipes/suggest/route')).POST as Handler],
-  ['/api/recipes/transform', async () => (await import('@/app/api/recipes/transform/route')).POST as Handler],
 ];
 
 const request = (path: string, body: unknown = {}) => new NextRequest(`http://localhost${path}`, {
@@ -137,7 +127,7 @@ afterEach(() => { vi.clearAllMocks(); vi.restoreAllMocks(); });
 describe.each(MEMBER_ROUTES)('%s', (path, load) => {
   it('refuses a closed family before any work', async () => {
     state.family = { trial_ends_at: null, closed_at: PAST };
-    const res = await (await load())(request(path, BODIES[path]));
+    const res = await (await load())(request(path));
     expect(res.status).toBe(403);
     expect((await res.json()).code).toBe('account_closed');
     expect(reached(), 'the route went on to its work').toBe(false);
@@ -145,14 +135,14 @@ describe.each(MEMBER_ROUTES)('%s', (path, load) => {
 
   it('refuses a trial-ended family before any work, asking for a plan', async () => {
     state.family = { trial_ends_at: PAST, closed_at: null };
-    const res = await (await load())(request(path, BODIES[path]));
+    const res = await (await load())(request(path));
     expect(res.status).toBe(403);
     expect(await res.json()).toMatchObject({ code: 'trial_expired', needLevel: 1 });
     expect(reached(), 'the route went on to its work').toBe(false);
   });
 
   it('lets an open Free family through to its work', async () => {
-    const res = await (await load())(request(path, BODIES[path]));
+    const res = await (await load())(request(path));
     expect(res.status).not.toBe(403);
     expect(reached(), 'the open family never reached the route\'s work').toBe(true);
   });

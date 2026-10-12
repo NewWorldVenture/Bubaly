@@ -27,7 +27,7 @@ export async function familyLockedCode(db: DB, familyId: string): Promise<Locked
  * Refuses a closed or trial-ended family before a route spends anything on it.
  *
  * For the routes with no feature gate of their own: the Free-tier AI helpers
- * (habits, journal, notes, meals, recipes, the relationship helper) and voice.
+ * (habits, journal, notes, the relationship helper) and voice.
  * Each calls a model or a voice provider on the deployment's keys, and none
  * asked whether the account was open, so the paywall `app/(app)/layout.tsx`
  * draws over the web screens was the only thing in a locked family's way, and

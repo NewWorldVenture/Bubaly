@@ -86,6 +86,18 @@ export function AuthenticatedCacheBoundary({ access, children }: { access: Cache
 
   return (
     <Context.Provider value={scope}>
+      {scope.status === 'unavailable' && (
+        <div role="status" className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-elevated p-4">
+          <p>{unavailableError}</p>
+          <button
+            type="button"
+            className="focus-ring min-h-11 rounded-xl border border-border px-4 text-sm font-medium"
+            onClick={() => window.location.reload()}
+          >
+            {t('globalError.reloadBubaly')}
+          </button>
+        </div>
+      )}
       {blocked
         ? <div role="status">{changedError}</div>
         : <CacheLifetime key={`${accessKey}:${next.epoch}`}>{children}</CacheLifetime>}

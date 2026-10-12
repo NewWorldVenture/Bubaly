@@ -248,7 +248,7 @@ export function ShoppingModule() {
                 {isActive && (
                   <button type="button" onClick={() => setEditingList(list)}
                     aria-label={t('shopping.editList')}
-                    className="mr-3 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 rounded p-1 hover:bg-black/10">
+                    className="mr-3 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 rounded p-1.5 hover:bg-black/10">
                     <Pencil className="h-3 w-3" />
                   </button>
                 )}
@@ -276,7 +276,7 @@ export function ShoppingModule() {
                 <span className="text-2xl">{(activeList as Record<string, unknown>).list_icon as string ?? '🛒'}</span>
                 <h2 className="text-xl font-bold">{activeList.name}</h2>
               </div>
-              <div className="ml-auto flex items-center gap-2">
+              <div className="ml-auto flex flex-wrap items-center gap-2">
                 <AiInsight kind="shopping" />
                 {checkedCount > 0 && (
                   <Button variant="outline" size="sm" onClick={() => setBoughtOpen(true)}>
@@ -288,7 +288,7 @@ export function ShoppingModule() {
                     <Check className="h-3.5 w-3.5 text-success" /> {t('shopping.clear')} {checkedCount} done
                   </Button>
                 )}
-                <div className="flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-1.5">
+                <div className="flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-1.5 focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg">
                   <Search className="h-3.5 w-3.5 text-muted" />
                   <input value={search} inputMode="search" enterKeyHint="search" onChange={(e) => setSearch(e.target.value)} placeholder="Search…"
                     className="w-28 bg-transparent text-sm placeholder:text-muted outline-none" />
@@ -338,7 +338,7 @@ export function ShoppingModule() {
                       </button>
                     ))}
                   </div>
-                  <div className="ml-auto flex items-center gap-2">
+                  <div className="ml-auto flex flex-wrap items-center gap-2">
                     <Button variant="ghost" size="sm" onClick={copyList} disabled={isPending('copy-list')}>
                       <Copy className="h-3.5 w-3.5" /> {t('shoppingModule.copyList')}
                     </Button>
@@ -384,8 +384,7 @@ export function ShoppingModule() {
                         <div className="divide-y divide-border/40">
                           {catItems.map((item) => (
                             <div key={item.id}
-                              className={cn('group flex items-center gap-3 px-4 py-2.5 hover:bg-elevated/20 transition',
-                                item.is_checked && 'opacity-60')}>
+                              className="group flex items-center gap-3 px-4 py-2.5 hover:bg-elevated/20 transition">
                               <button onClick={() => toggleItem(item)} disabled={isPending(`toggle:${item.id}`)} aria-label={item.is_checked ? t('uiText.uncheckItem') : t('uiText.checkItem')}
                                 className={cn('flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border-2 transition disabled:opacity-60',
                                   item.is_checked ? 'border-success bg-success' : 'border-border hover:border-success/50')}>
@@ -410,7 +409,7 @@ export function ShoppingModule() {
                                 </a>
                               )}
                               <button onClick={() => deleteItem(item.id)} disabled={isPending(`delete:${item.id}`)} aria-label={t('shopping.deleteItem')}
-                                className="rounded p-1 text-muted opacity-0 transition group-hover:opacity-100 hover:text-danger disabled:opacity-50">
+                                className="rounded p-1 text-muted opacity-100 sm:opacity-0 transition sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 hover:text-danger disabled:opacity-50">
                                 {isPending(`delete:${item.id}`) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                               </button>
                             </div>
@@ -426,12 +425,12 @@ export function ShoppingModule() {
             {/* Quick add */}
             <form onSubmit={addItem} className="flex items-center gap-2">
               <select aria-label={t('fieldName.category')} value={addingCategory} onChange={(e) => setAddingCategory(e.target.value)}
-                className="rounded-xl border border-border bg-surface/60 px-2 py-2 text-xs text-muted focus:outline-none">
+                className="rounded-xl border border-border bg-surface/60 px-2 py-2 text-xs text-muted focus-ring">
                 {CATEGORIES.map((c) => <option key={c} value={c}>{groceryCategoryLabel(t, c)}</option>)}
               </select>
               <input value={addingText} onChange={(e) => setAddingText(e.target.value)}
                 placeholder={t('shopping.addItem')}
-                className="flex-1 rounded-xl border border-dashed border-border bg-transparent px-4 py-2 text-sm placeholder:text-muted focus:border-brand/50 focus:outline-none transition" />
+                className="min-w-0 flex-1 rounded-xl border border-dashed border-border bg-transparent px-4 py-2 text-sm placeholder:text-muted focus:border-brand/50 focus:outline-none transition" />
               {addingText && <Button type="submit" size="sm" disabled={isPending('add-item')}>Add</Button>}
             </form>
           </>

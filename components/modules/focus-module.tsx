@@ -188,7 +188,7 @@ function FocusQueue() {
       ) : (
         <div className="flex w-full flex-col items-center gap-8">
           {/* progress dots */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center justify-center gap-1.5">
             {items.map((_, i) => (
               <span key={i} className={`h-1.5 rounded-full transition-all ${i < index ? 'w-1.5 bg-brand' : i === index ? 'w-6 bg-brand' : 'w-1.5 bg-border'}`} />
             ))}

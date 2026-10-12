@@ -456,11 +456,11 @@ export function DocumentsModule() {
                         <td className="py-3 pr-4 text-xs text-muted tabular-nums">{fmtSize(doc.size_bytes)}</td>
                         <td className="py-3">
                           <div className="flex items-center justify-end gap-1">
-                            <button onClick={() => toggleFavorite(doc)} aria-label={isFav(doc) ? tr('uiText.unstar') : tr('uiText.star')} className="grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-elevated">
+                            <button onClick={() => toggleFavorite(doc)} aria-label={isFav(doc) ? tr('uiText.unstar') : tr('uiText.star')} className="grid h-7 w-7 place-items-center rounded-lg text-muted hover:bg-elevated">
                               <Star className={cn('h-4 w-4', isFav(doc) && 'fill-amber-400 text-amber-400')} />
                             </button>
                             <div className="relative">
-                              <button onClick={() => setMenuId(menuId === doc.id ? null : doc.id)} aria-label={tr('documents.moreActions')} className="grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-elevated">
+                              <button onClick={() => setMenuId(menuId === doc.id ? null : doc.id)} aria-label={tr('documents.moreActions')} className="grid h-7 w-7 place-items-center rounded-lg text-muted hover:bg-elevated">
                                 <MoreHorizontal className="h-4 w-4" />
                               </button>
                               {menuId === doc.id && (
@@ -488,7 +488,7 @@ export function DocumentsModule() {
                 const meta = fileMeta(doc.title, doc.mime_type);
                 return (
                   <div key={doc.id} className="group relative rounded-2xl border border-border bg-surface/20 p-4">
-                    <button onClick={() => toggleFavorite(doc)} aria-label={isFav(doc) ? tr('uiText.unstar') : tr('uiText.star')} className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-elevated">
+                    <button onClick={() => toggleFavorite(doc)} aria-label={isFav(doc) ? tr('uiText.unstar') : tr('uiText.star')} className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-lg text-muted hover:bg-elevated">
                       <Star className={cn('h-4 w-4', isFav(doc) && 'fill-amber-400 text-amber-400')} />
                     </button>
                     <span className={cn('grid h-12 w-12 place-items-center rounded-xl', meta.tint)}><meta.Icon className={cn('h-6 w-6', meta.color)} /></span>

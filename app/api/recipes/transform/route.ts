@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { refuseClosedOrTrialEnded } from '@/lib/server/account-standing';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
@@ -11,6 +11,7 @@ import { buildTransformPrompt, parseTransformResult, getRecipeAiAction, type Rec
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import type { Database } from '@/lib/database.types';
 import { describeReadError } from '@/lib/supabase/settle';
+import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 
 export const runtime = 'nodejs';
 type Json = Database['public']['Tables']['family_recipes']['Insert']['ingredients'];
@@ -24,12 +25,13 @@ export async function POST(req: NextRequest) {
   try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: t('transform.unauthorized') }, { status: 401 }); }
 
   const supabase = await createServer();
-  // A closed or trial-ended family is refused before any work: see lib/server/account-standing.ts.
-  const refused = await refuseClosedOrTrialEnded(supabase, ctx.active.familyId);
-  if (refused) return refused;
   // No key: say so before any work, rather than let the provider's throw
   // reach the catch below as a generic failure.
   if (!(await isAIConfigured())) return NextResponse.json({ error: t('ai.theAiEngineIsnT'), code: 'not_configured' }, { status: 503 });
+  // Same feature as the recipes page in front of it; refused before the rate
+  // limiter and the model, like every other gated AI endpoint.
+  const refused = await refuseUnlessEntitled(supabase, ctx.active.familyId, ['/dashboard/recipes']);
+  if (refused) return refused;
   const limited = await enforceAIRateLimit(supabase, `ai-recipe-transform:${ctx.user.id}`, { limit: 12 });
   if (!limited.ok) return NextResponse.json(
     { error: t('transform.tooManyRecipeTransformationsPlease') },
@@ -65,7 +67,7 @@ export async function POST(req: NextRequest) {
     ingredients: (recipe.ingredients as unknown as { name: string; quantity?: string; unit?: string }[]) ?? [],
     instructions: (recipe.instructions as unknown as { step: number; text: string }[]) ?? [],
     allergyFlags: recipe.allergy_flags ?? [],
-  }, actionId as RecipeAiActionId);
+  }, actionId as RecipeAiActionId, { block: fenceUntrustedBlock, rule: UNTRUSTED_CONTENT_RULE });
   if (!prompt) return NextResponse.json({ error: t('transform.unknownAction') }, { status: 422 });
 
   let result;

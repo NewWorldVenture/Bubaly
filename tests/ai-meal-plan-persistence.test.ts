@@ -4,10 +4,6 @@ import type { Database } from '@/lib/database.types';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 
 const mocks = vi.hoisted(() => ({ context: vi.fn(), server: vi.fn(), configured: vi.fn(), complete: vi.fn(), limit: vi.fn() }));
-// The account-standing gate (a closed or trial-ended family is refused) has its
-// own test, tests/the-free-ai-helpers-refuse-a-closed-or-trial-ended-family.test.ts.
-// The family here is open, so the gate is answered rather than seeded.
-vi.mock('@/lib/server/account-standing', () => ({ refuseClosedOrTrialEnded: async () => null }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.context }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.server }));
 vi.mock('@/lib/ai/provider', () => ({
@@ -16,6 +12,10 @@ vi.mock('@/lib/ai/provider', () => ({
   describeAIError: () => ({ message: 'Generation unavailable' }),
 }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: mocks.limit }));
+// The route's plan gate (refuseUnlessEntitled, H18) is covered by
+// tests/the-meal-and-recipe-model-endpoints-refuse-like-their-pages.test.ts;
+// this file is about something else, so the gate admits its fixture family.
+vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: async () => null }));
 vi.mock('@/lib/ai/observability', () => ({
   withAiRequest: (_scope: unknown, _feature: unknown, run: (observer: { used: () => void }) => Promise<string>) => run({ used: vi.fn() }),
 }));
