@@ -218,7 +218,7 @@ describe('the shared lookup (lib/autopilot/reminder-cards.ts)', () => {
     const reminder = await acceptedInsuranceReminder(db);
     const withoutKeys = reminderCardsReader(db, FAMILY, { onError: () => { throw new Error('the cards were readable'); } });
     const withKeys = reminderCardsReader(db, FAMILY, { keyOf: (id) => suggestionReminderKey(FAMILY, id), sourceTagOf: suggestionSourceTag, onError: () => { throw new Error('the cards were readable'); } });
-    const rows = [reminder as { idempotency_key: string | null; tags: string[] | null }];
+    const rows = [reminder as { id: string; idempotency_key: string | null; tags: string[] | null }];
     expect(await visibleReminders(rows, { role: 'parent', memberId: 'mum' }, withoutKeys)).toHaveLength(1);
     expect(await visibleReminders(rows, { role: 'child', memberId: 'ava' }, withoutKeys)).toHaveLength(0);
     expect(await visibleReminders(rows, { role: 'child', memberId: 'ava' }, withKeys)).toHaveLength(1);

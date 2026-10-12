@@ -6,7 +6,7 @@ import { scopeNow } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
 import { AUTOPILOT_SOURCE_TAG } from '@/lib/reminders/provenance';
 import { reminderIsoFor } from '@/lib/autopilot/reminder-time';
-import type { SuggestionStampSource } from '@/lib/autopilot/reminder-key';
+import { stampedPayload, type SuggestionStampSource } from '@/lib/autopilot/reminder-key';
 import { reminderMemberFor, suggestionVisibleTo } from '@/lib/autopilot/audience';
 
 type Suggestion = Tables<'autopilot_suggestions'>;
@@ -35,8 +35,10 @@ export function suggestionSourceTag(source: SuggestionStampSource): string {
   // Existing tags preserve which proposal was accepted, independently of later
   // edits to the reminder. Exclude status/timestamps: our own resolution updates
   // those. A revised proposal must never inherit an older reminder's success.
+  // Exclude, too, the scan's record of the reminder it wrote with the card
+  // (stampedPayload): bookkeeping, not the proposal.
   return `${AUTOPILOT_SOURCE_TAG}${makeKey([source.family_id, source.id, source.kind, source.action_type,
-    source.title, source.detail, source.member_id, source.urgency, JSON.stringify(source.payload)])}`;
+    source.title, source.detail, source.member_id, source.urgency, JSON.stringify(stampedPayload(source.payload))])}`;
 }
 
 async function readSuggestion(scope: ServiceScope, id: string) {

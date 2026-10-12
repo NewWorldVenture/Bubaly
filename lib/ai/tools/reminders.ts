@@ -56,14 +56,15 @@ async function findReminder(scope: ServiceScope, title: string): Promise<Service
   const term = title.trim();
   if (!term) return fail('Which reminder did you mean?', { code: SERVICE_CODES.invalidInput });
 
-  const { data, error } = await readVisibleReminders((n) => scope.db
+  const { data, error } = await readVisibleReminders((from, to) => scope.db
     .from('family_reminders')
     .select('id, title, idempotency_key, tags')
     .eq('family_id', scope.familyId)
     .in('status', ['active', 'snoozed'])
     .ilike('title', `%${escapeLike(term)}%`)
     .order('remind_at', { ascending: true, nullsFirst: false })
-    .limit(n), {
+    .order('id')
+    .range(from, to), {
     limit: 1,
     viewer: { role: scope.role, memberId: scope.memberId },
     cards: reminderCardsReader(scope.db, scope.familyId, {

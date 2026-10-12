@@ -166,7 +166,7 @@ export function HealthModule() {
   const reminderViewer = { role, memberId: selfMember?.id ?? null };
   const { data: reminders, loading: remLoading, error: remError, refresh: refreshReminders } = useRealtimeQuery<Reminder>({
     table: 'reminders', familyId, deps: [familyId, role, reminderViewer.memberId],
-    fetcher: (sb) => readVisibleReminders((n) => sb.from('reminders').select('*').eq('family_id', familyId).eq('is_done', false).limit(n), {
+    fetcher: (sb) => readVisibleReminders((from, to) => sb.from('reminders').select('*').eq('family_id', familyId).eq('is_done', false).order('id').range(from, to), {
       limit: 4, viewer: reminderViewer,
       cards: reminderCardsReader(sb, familyId, {
         onError: (error) => console.error('[health] autopilot reminder cards read failed', error),

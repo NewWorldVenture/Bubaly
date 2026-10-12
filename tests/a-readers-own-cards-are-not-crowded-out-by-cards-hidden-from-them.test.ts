@@ -7,7 +7,7 @@ import type { UserContext } from '@/lib/supabase/auth';
 import type { ServiceScope } from '@/lib/services/types';
 import type { SliceEnv } from '@/lib/ai/context/policy';
 import { getMessages, translate } from '@/lib/i18n/messages';
-import { createInMemorySupabase } from './helpers/in-memory-supabase';
+import { createInMemorySupabase, withFaults } from './helpers/in-memory-supabase';
 
 // AUD-1031-VISIBLE-PREFIX. Two readers of the family's open Autopilot cards
 // took a fixed prefix — Home's panel the twenty most urgent, the assistant's
@@ -52,8 +52,9 @@ const ROSTER = [
 const role = (id: string) => ROSTER.find((m) => m.id === id)!.role;
 const KITS_CARD = 'Pack snacks for Saturday’s match';
 
-function household(): Memory {
-  const db = createInMemorySupabase<DB>();
+/** `maxRows`: the server's cap on one response (PostgREST's db-max-rows); none by default. */
+function household(maxRows?: number): Memory {
+  const db = createInMemorySupabase<DB>(maxRows === undefined ? {} : { maxRows });
   db.seed('families', [{ id: FAMILY, timezone: 'UTC' }]);
   db.seed('family_members', ROSTER.map((m, i) => ({
     ...m, family_id: FAMILY, user_id: `u-${m.id}`, display_name: m.id, is_active: true, birthday: null, created_at: `2026-01-0${i + 1}T00:00:00Z`,
@@ -160,5 +161,101 @@ describe("the assistant's proactive context holds the reader's own cards past ei
     expect(await proactiveCardsFor(db, 'kit')).toEqual([KITS_CARD]);
     const html = await homePanelFor(db, 'kit');
     expect(html).toContain(KITS_CARD);
+  });
+});
+
+// AUD-1031-VISIBLE-PREFIX, R5. A page the server capped ended the read: asked
+// for rows 8–23 after eight hidden ones, a server capping every response at
+// eight (db-max-rows) answered 8–15, and eight rows where sixteen were asked
+// read as the end, so the card at row 16 was never read. A page now starts
+// where the rows actually returned end, and only an empty page ends the read
+// (lib/autopilot/visible-prefix.ts). Home and Calm (tests/a-cards-reminder-in-
+// calm-and-the-briefs-is-listed-only-to-its-readers.test.ts) share the helper.
+describe('a page the server capped is not the end of the read', () => {
+  /** The same database, recording the range of each page of open cards read. */
+  function recordingPages(db: Memory) {
+    const pages: unknown[] = [];
+    const client = withFaults(db, (table, calls) => {
+      const range = calls.find((c) => c.method === 'range');
+      if (table === 'autopilot_suggestions' && range) pages.push(range.args);
+      return null;
+    });
+    return { client, pages };
+  }
+
+  it("the assistant's context: past sixteen hidden cards from a server capping at eight, Kit is handed his own; a manager's eight are one round trip, in order", async () => {
+    const db = household(8);
+    seedCards(db, 16);
+    const kit = recordingPages(db);
+    expect(await proactiveCardsFor(kit.client, 'kit')).toEqual([KITS_CARD]);
+    // Each page from where the last one's rows ended, twice as many asked;
+    // the end is the empty page after the card at row 16.
+    expect(kit.pages).toEqual([[0, 7], [8, 23], [16, 47], [17, 80]]);
+    const mum = recordingPages(db);
+    expect(await proactiveCardsFor(mum.client, 'mum')).toEqual(Array.from({ length: 8 }, (_, i) => `Policy ${i} renews in 3 days`));
+    expect(mum.pages).toEqual([[0, 7]]);
+  });
+
+  it("Home's panel: past forty hidden cards from a server capping at twenty, Kit and the guest are listed their own", async () => {
+    const db = household(20);
+    seedCards(db, 40);
+    for (const reader of ['kit', 'neighbour']) {
+      const html = await homePanelFor(db, reader);
+      expect(html, reader).toContain(KITS_CARD);
+      expect(html, reader).not.toContain('Policy 0 renews');
+    }
+    expect(await homePanelFor(db, 'mum')).toContain('Policy 0 renews in 3 days');
+  });
+
+  it('a page that fails after a capped one fails the read, as the one query would', async () => {
+    const db = household(8);
+    seedCards(db, 16);
+    const failing = withFaults(db, (table, calls) => (table === 'autopilot_suggestions'
+      && calls.some((c) => c.method === 'range' && c.args[0] === 16) ? { message: 'Fixture page refused' } : null));
+    const built = await proactiveSlice.load(
+      { db: failing, familyId: FAMILY } as unknown as ServiceScope,
+      { tz: 'UTC', now: new Date(NOW), viewer: { role: 'child', memberId: 'kit', canManage: false }, members: [], pageContext: null } as unknown as SliceEnv,
+    );
+    expect(built.ok).toBe(false);
+    expect(JSON.stringify(built)).not.toContain('Fixture page refused');
+  });
+});
+
+describe('a read that never comes back empty still ends', () => {
+  // The read now ends on an empty page, not a short one, so a page that
+  // ignores its range — and never comes back empty — is a runaway: it is
+  // read through VISIBLE_PREFIX_SCAN_LIMIT rows, from where each page's rows
+  // end, and answered with what was kept (lib/autopilot/visible-prefix.ts).
+  it('the card prefix and the reminder prefix read no further than VISIBLE_PREFIX_SCAN_LIMIT rows', async () => {
+    const { readVisiblePrefix, VISIBLE_PREFIX_SCAN_LIMIT } = await import('@/lib/autopilot/visible-prefix');
+    const { readVisibleReminders } = await import('@/lib/autopilot/reminder-cards');
+    const pageStarts = Array.from({ length: VISIBLE_PREFIX_SCAN_LIMIT / 1000 }, (_, i) => i * 1000);
+
+    const cards = Array.from({ length: 1000 }, (_, i) => ({ id: `hidden-${i}` }));
+    const cardPages: number[] = [];
+    expect(await readVisiblePrefix(async (from: number) => { cardPages.push(from); return { data: cards, error: null }; }, { limit: 8, visible: () => false }))
+      .toEqual({ data: [], error: null });
+    expect(cardPages).toEqual(pageStarts);
+
+    // A scan reminder no card answers is the managers' alone: hidden from Kit.
+    const reminders = Array.from({ length: 1000 }, (_, i) => ({ id: `r-${i}`, related_type: 'renewal', related_id: `ren-${i}` }));
+    const reminderPages: number[] = [];
+    expect(await readVisibleReminders(async (from: number) => { reminderPages.push(from); return { data: reminders, error: null }; }, {
+      limit: 8, viewer: { role: 'child', memberId: 'kit' }, cards: async () => null,
+    })).toEqual({ data: [], error: null });
+    expect(reminderPages).toEqual(pageStarts);
+  });
+
+  it('a server answering one row at a time is read through VISIBLE_PREFIX_SCAN_LIMIT rows, each page asking for no more than that', async () => {
+    const { readVisiblePrefix, VISIBLE_PREFIX_SCAN_LIMIT } = await import('@/lib/autopilot/visible-prefix');
+    const asked: [number, number][] = [];
+    const read = await readVisiblePrefix(async (from: number, to: number) => {
+      asked.push([from, to]);
+      return { data: [{ id: `hidden-${from}` }], error: null };
+    }, { limit: 8, visible: () => false });
+    expect(read).toEqual({ data: [], error: null });
+    expect(asked.map(([from]) => from)).toEqual(Array.from({ length: VISIBLE_PREFIX_SCAN_LIMIT }, (_, i) => i));
+    expect(asked.slice(0, 4)).toEqual([[0, 7], [1, 16], [2, 33], [3, 66]]);
+    expect(Math.max(...asked.map(([from, to]) => to - from + 1))).toBe(VISIBLE_PREFIX_SCAN_LIMIT);
   });
 });

@@ -151,8 +151,8 @@ export async function POST(req: NextRequest) {
       // A reminder an Autopilot card made goes into this reader's brief only if
       // the card would (lib/autopilot/reminder-cards.ts): "Renew Passport" is
       // not a guest's, a policy's renewal is the managers' and its member's.
-      readVisibleReminders((n) => supabase.from('reminders').select('title, notes, remind_at, related_type, related_id')
-        .eq('family_id', familyId).eq('is_done', false).lte('remind_at', weekEnd).order('remind_at').limit(n),
+      readVisibleReminders((from, to) => supabase.from('reminders').select('id, title, notes, remind_at, related_type, related_id')
+        .eq('family_id', familyId).eq('is_done', false).lte('remind_at', weekEnd).order('remind_at').order('id').range(from, to),
       { limit: 8, viewer: { role: ctx.active.role, memberId: ctx.active.member?.id ?? null }, cards: reminderCardsReader(supabase, familyId, {
         onError: (error) => console.error('[briefing] autopilot reminder cards read failed', error),
       }) }),
