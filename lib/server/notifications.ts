@@ -291,22 +291,24 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   //
   // Read once, and only when a reminder could be one (lib/autopilot/
   // reminder-cards.ts, the lookup every reader of these reminders shares). A
-  // failed read never widens the audience: such a reminder goes to the
-  // managers, who read every card, and the rest of its readers are told on a
-  // later tick.
+  // linked reminder is addressed past the managers only when its card is
+  // found: a failed read, and a link no card answers — the scan's reminder in
+  // the moment before its card is saved, or one whose card never was — go to
+  // the managers, who read every card, and never to the family. The rest of
+  // its readers are told on a later tick, once the card is there.
   const reminderCards = reminderCardsReader(supabase, familyId, {
     keyOf: (cardId) => suggestionReminderKey(familyId, cardId),
     onError: (error) => console.error('[notifications] generation source read failed', { familyId, table: 'autopilot_suggestions', error }),
   });
   const audienceRoster = (members ?? []).map((m) => ({ id: m.id, role: m.role }));
   const managerAccounts = documentManagers.map((m) => m.user_id as string);
-  /** The accounts told about a card's reminder; undefined when it is no narrower card's. */
+  /** The accounts told about a card's reminder; undefined when it has no link, or its card is found and is everyone's. */
   const cardReaders = async (row: ReminderLink): Promise<string[] | undefined> => {
     if (!mayBeCardReminder(row)) return undefined;
     const cards = await reminderCards();
     const found = cards ? reminderCardOf(cards, row) : null;
-    if (found === null) return managerAccounts;
-    const ids = found ? reminderNoticeMemberIds(found, audienceRoster) : null;
+    if (!found) return managerAccounts;
+    const ids = reminderNoticeMemberIds(found, audienceRoster);
     if (!ids) return undefined;
     return [...new Set(ids.map((id) => userByMember.get(id)).filter((u): u is string => typeof u === 'string' && u.trim().length > 0))];
   };

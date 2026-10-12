@@ -9,6 +9,7 @@ import { isSuperAdmin } from '@/lib/supabase/auth';
 import { isManager } from '@/lib/constants/roles';
 import { suggestionVisibleTo } from '@/lib/autopilot/audience';
 import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
+import { readVisiblePrefix } from '@/lib/autopilot/visible-prefix';
 import { suggestionReminderKey } from '@/lib/services/autopilot';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
@@ -154,10 +155,15 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     supabase.from('family_members').select('id, display_name, color, role')
       .eq('family_id', familyId).eq('is_active', true).order('created_at').limit(6),
     readDisplayCalendarOccurrences(supabase, familyId, upcomingWindow, tz, { overlap: true }),
-    supabase.from('autopilot_suggestions')
+    // The first twenty open cards THIS reader may see (lib/autopilot/audience.ts),
+    // the rule applied before the twenty are taken (lib/autopilot/
+    // visible-prefix.ts): taken first, twenty insurance cards a child is not
+    // shown emptied the panel with a card of theirs behind them.
+    readVisiblePrefix((from, to) => supabase.from('autopilot_suggestions')
       .select('id, title, detail, kind, urgency, confidence, payload, source_kind, member_id')
       .eq('family_id', familyId).eq('status', 'open')
-      .order('urgency', { ascending: false }).order('confidence', { ascending: false }).limit(20),
+      .order('urgency', { ascending: false }).order('confidence', { ascending: false }).order('id').range(from, to),
+    { limit: 20, visible: (s) => suggestionVisibleTo(s, { role: ctx.active.role, memberId: myMemberId }) }),
     supabase.from('autopilot_suggestions').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).in('status', ['auto_executed', 'executed', 'approved']),
     supabase.from('family_communications').select('id', { count: 'exact', head: true })
@@ -313,9 +319,8 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   // Only the cards this reader may see: a subscription charge is not a
   // guest's, an insurance renewal is the managers' and its member's
   // (lib/autopilot/audience.ts). autopilot_suggestions is family-wide under
-  // 0085, so the rule is applied where the cards are listed.
+  // 0085, so the rule is applied where the cards are read, above.
   const openSuggestions = ((autopilotOpen ?? []) as { id: string; title: string; detail: string | null; kind: string; urgency: number; confidence: number; payload: unknown; source_kind: string | null; member_id: string | null }[])
-    .filter((s) => suggestionVisibleTo(s, { role: ctx.active.role, memberId: myMemberId }))
     .map((s) => ({ ...s, title: autopilotTitleFor(s, locale.code, t) }));
   const concierge = (activeConcierge ?? []) as { id: string; title: string; kind: string; status: string }[];
   const autopilotProbability = successProbability(openSuggestions.map((s) => ({ urgency: s.urgency as 1 | 2 | 3, confidence: s.confidence } as never)));

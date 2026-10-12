@@ -277,7 +277,7 @@ describe("/home's Today lists an accepted card's reminder only to the card's rea
 
   it('a failed read of the cards lists them to the managers alone', async () => {
     const db = await household();
-    h.db = withFaults(db, (table, calls) => (table === 'autopilot_suggestions' && calls.some((c) => c.method === 'or') ? { message: 'Fixture read refused' } : null));
+    h.db = withFaults(db, (table, calls) => (table === 'autopilot_suggestions' && calls.some((c) => c.method === 'eq' && c.args[0] === 'action_type') ? { message: 'Fixture read refused' } : null));
     expect((await homeToday('mum')).titles).toEqual(sorted(EXPECTED.mum));
     expect((await homeToday('ava')).titles).toEqual([BINS]);
     expect(console.error).toHaveBeenCalledWith('[home] autopilot reminder cards read failed', expect.anything());
@@ -308,7 +308,7 @@ describe("/dashboard/reminders lists an accepted card's reminder only to the car
 
   it('a failed read of the cards lists them to the managers alone', async () => {
     const db = await household();
-    const faulty = withFaults(db, (table, calls) => (table === 'autopilot_suggestions' && calls.some((c) => c.method === 'or') ? { message: 'Fixture read refused' } : null));
+    const faulty = withFaults(db, (table, calls) => (table === 'autopilot_suggestions' && calls.some((c) => c.method === 'eq' && c.args[0] === 'action_type') ? { message: 'Fixture read refused' } : null));
     expect((await remindersModule('gran', faulty)).titles).toEqual(sorted(EXPECTED.gran));
     expect((await remindersModule('ava', faulty)).titles).toEqual([BINS]);
     expect(console.error).toHaveBeenCalledWith('[reminders] autopilot reminder cards read failed', expect.anything());

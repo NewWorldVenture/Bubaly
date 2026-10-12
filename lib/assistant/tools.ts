@@ -27,6 +27,8 @@ import { createGoal } from '@/lib/services/goals';
 import { normalizeEventTimes } from '@/lib/services/calendar';
 import { allDayBoundsAsDates } from '@/lib/assistant/all-day-dates';
 import { reminderInstant } from '@/lib/services/reminders';
+import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
+import { mintSuggestionReminderKey } from '@/lib/autopilot/reminder-key';
 import { SERVICE_CODES } from '@/lib/services/types';
 import { isManager, ROLE_ORDER, type MemberRole } from '@/lib/constants/roles';
 import { isSensitiveDocument } from '@/lib/documents/sensitivity';
@@ -128,6 +130,20 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
   // zone — and a raw write of that into a `timestamptz` was read in the
   // database's zone (UTC), storing a Los Angeles 9am reminder as 09:00Z.
   const familyTz = ctx.tz || 'UTC';
+  // A reminder found by part of its title is the soonest match this reader may
+  // be SHOWN: one an Autopilot card made is its card's readers'
+  // (lib/autopilot/reminder-cards.ts), as `reminders.listDue` lists it. Matched
+  // on the title alone, Kit's "renew" completed the managers' "Renew dental
+  // insurance (Smile Co)" in place of his own "Renew library books" and read
+  // its title back to him. A hidden reminder is no match.
+  const visibleReminderLookup = () => ({
+    limit: 1,
+    viewer: { role: ctx.role, memberId: ctx.memberId },
+    cards: reminderCardsReader(supabase, ctx.familyId, {
+      keyOf: (cardId) => mintSuggestionReminderKey(ctx.familyId, cardId),
+      onError: (cause) => console.error('[assistant] autopilot reminder cards read failed', cause),
+    }),
+  });
 
   return [
     {
@@ -313,10 +329,11 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
       execute: async (a) => {
         const q = str(a.title);
         if (!q) return { ok: false, error: 'title is required' };
-        const { data: rows, error: lookupError } = await supabase.from('family_reminders')
-          .select('id, title, notes, kind, priority, recurrence, remind_at, member_id, location_name')
+        // The soonest match this reader may be shown (visibleReminderLookup).
+        const { data: rows, error: lookupError } = await readVisibleReminders((n) => supabase.from('family_reminders')
+          .select('id, title, notes, kind, priority, recurrence, remind_at, member_id, location_name, idempotency_key, tags')
           .eq('family_id', ctx.familyId).eq('status', 'active').ilike('title', `%${escapeLike(q)}%`)
-          .order('remind_at', { ascending: true, nullsFirst: false }).limit(1);
+          .order('remind_at', { ascending: true, nullsFirst: false }).limit(n), visibleReminderLookup());
         if (lookupError) return toolFailure('find the reminder', lookupError);
         const r = rows?.[0];
         if (!r) return { ok: false, error: `No active reminder matching “${q}”.` };
@@ -369,9 +386,10 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         // when this move is approved and replayed.
         const remind_at = reminderInstant(requested, familyTz);
         if (!remind_at) return { ok: false, error: MODEL_READER.t('reminders.timeUnreadable') };
-        const { data: rows, error: lookupError } = await supabase.from('family_reminders')
-          .select('id, title').eq('family_id', ctx.familyId).eq('status', 'active').ilike('title', `%${escapeLike(q)}%`)
-          .order('remind_at', { ascending: true, nullsFirst: false }).limit(1);
+        // The soonest match this reader may be shown (visibleReminderLookup).
+        const { data: rows, error: lookupError } = await readVisibleReminders((n) => supabase.from('family_reminders')
+          .select('id, title, idempotency_key, tags').eq('family_id', ctx.familyId).eq('status', 'active').ilike('title', `%${escapeLike(q)}%`)
+          .order('remind_at', { ascending: true, nullsFirst: false }).limit(n), visibleReminderLookup());
         if (lookupError) return toolFailure('find the reminder', lookupError);
         const r = rows?.[0];
         if (!r) return { ok: false, error: `No active reminder matching “${q}”.` };
