@@ -166,7 +166,7 @@ describe("the Health page's reminders card lists the scan's insurance reminder o
 
   it('a failed read of the cards lists it to the managers alone', async () => {
     const db = await scannedHousehold();
-    const faulty = withFaults(db, (table, calls) => (table === 'autopilot_suggestions' && calls.some((c) => c.method === 'or') ? { message: 'Fixture read refused' } : null));
+    const faulty = withFaults(db, (table, calls) => (table === 'autopilot_suggestions' && calls.some((c) => c.method === 'eq' && c.args[0] === 'action_type') ? { message: 'Fixture read refused' } : null));
     expect((await healthReminders('mum', faulty)).titles).toEqual([POLICY]);
     for (const reader of ['ava', 'kit']) expect((await healthReminders(reader, faulty)).titles, reader).toEqual([]);
     expect(console.error).toHaveBeenCalledWith('[health] autopilot reminder cards read failed', expect.anything());

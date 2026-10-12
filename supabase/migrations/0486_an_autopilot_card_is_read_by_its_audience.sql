@@ -68,12 +68,17 @@
 --     reminder" a `family_reminders` row (the card's idempotency key); both
 --     carry the card's words, and both tables still read family-wide in RLS.
 --     The app hides them per card in lib/autopilot/reminder-cards.ts by
---     READING the card, and answers a card it cannot find as "not a card's
---     reminder". Under this policy a reader the card is not for no longer
---     finds it, so that lookup must answer an unfound card the managers' way
---     before this is applied (recorded with the release dependency in
---     docs/PENDING_PROD_MIGRATIONS.md). The reminder rows need a read rule of
---     their own.
+--     READING the card. Under this policy a reader the card is not for no
+--     longer finds it, so that lookup reads every create_reminder card its
+--     reader may read (an everyone card's too: a refill's reminder is also
+--     related_type 'renewal') and answers a reminder that looks like a card's
+--     whose card it does not find as the managers' alone, the answer it gives
+--     a failed read; changed with this migration, before it is applied, and
+--     the same answer without it (tests/a-cards-reminder-stays-with-its-
+--     readers-when-the-card-is-not-theirs-to-read.test.ts, both schemas).
+--     A screen that lists these rows without that lookup, or a direct read of
+--     either table, still shows them to the family: the reminder rows need a
+--     read rule of their own.
 --   * The insurance source. family_insurance_policies (0416) still reads
 --     family-wide: the held 0517 narrows it to managers and its member. Until
 --     it lands any member reads the policy row this card copies; this closes

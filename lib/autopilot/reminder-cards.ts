@@ -22,6 +22,17 @@
 // card is not for. A failed read of the cards never widens: a reminder that
 // could be a card's is then the managers', who read every card.
 //
+// Nor does a card the reader cannot find. Under 0486 a reader reads only the
+// cards that are theirs (the RLS twin of lib/autopilot/audience.ts), so a
+// guest's read of the cards has no renewal card in it and an unnamed teen's no
+// insurance card; answered as "no card", their reminders reached exactly the
+// readers the card refuses. So every create_reminder card the reader may read
+// is read, an everyone card's (a refill's, also related_type 'renewal')
+// included, and a reminder that looks like a card's whose card is not among
+// them is the managers' — who read every card, so it is never theirs to miss.
+// The same answer holds before 0486, when every member reads every card and an
+// unfound card is one that was never written.
+//
 // Client-safe: the briefing module's kitchen list, the Health page and the
 // reminders module read their reminders in the browser. The key an accepted
 // card stamps is a sha-256 (suggestionReminderKey), so a reader of
@@ -32,16 +43,17 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
 import { readAll } from '@/lib/supabase/read-all';
-import { AUTOPILOT_SOURCE_TAG } from '@/lib/reminders/provenance';
-import { NARROWER_THAN_EVERYONE_FILTER, suggestionVisibleTo, type AudienceRow, type AudienceViewer } from '@/lib/autopilot/audience';
+import { isReminderProvenanceTag } from '@/lib/reminders/provenance';
+import { suggestionVisibleTo, type AudienceRow, type AudienceViewer } from '@/lib/autopilot/audience';
 
 type DB = SupabaseClient<Database>;
 
 export type ReminderCard = AudienceRow & { id: string; source_id: string | null };
 
 /**
- * The family's narrower cards, by the two links a reminder carries back to
- * one. `byReminderKey` is null when the reader did not say how a key is minted.
+ * The family's reminder cards this reader may read, by the two links a
+ * reminder carries back to one. `byReminderKey` is null when the reader did
+ * not say how a key is minted.
  */
 export type ReminderCards = { bySource: Map<string, ReminderCard>; byReminderKey: Map<string, ReminderCard> | null };
 
@@ -69,9 +81,13 @@ function scanSource(row: ReminderLink): string | null {
   return row.related_type === 'renewal' && row.related_id ? row.related_id : null;
 }
 
-/** The key an accepted card's reminder carries, or null. */
+/**
+ * The key an accepted card's reminder carries, or null. Only the card's own
+ * stamp counts: a tag somebody typed that starts with the prefix does not make
+ * their reminder look like a card's, which an unfound card would hide.
+ */
 function acceptedKey(row: ReminderLink): string | null {
-  return row.idempotency_key && (row.tags ?? []).some((tag) => tag.startsWith(AUTOPILOT_SOURCE_TAG)) ? row.idempotency_key : null;
+  return row.idempotency_key && (row.tags ?? []).some(isReminderProvenanceTag) ? row.idempotency_key : null;
 }
 
 /** Whether this reminder could have been made from a card at all. */
@@ -80,15 +96,16 @@ export function mayBeCardReminder(row: ReminderLink): boolean {
 }
 
 /**
- * The family's Autopilot reminder cards whose audience is narrower than
- * everyone. Newest card first for a source, so a policy renewed every year
- * answers with this year's. Every page, so a card is never missed for being
- * old; null when the read failed.
+ * Every Autopilot reminder card of the family this reader may read, whatever
+ * its audience: an everyone card has to be found too, or its reminder would
+ * read as a card the reader may not see. Newest card first for a source, so a
+ * policy renewed every year answers with this year's. Every page, so a card is
+ * never missed for being old; null when the read failed.
  */
 export async function readReminderCards(db: DB, familyId: string, opts: ReminderCardsOptions): Promise<ReminderCards | null> {
   const read = await readAll<ReminderCard>((from, to) => db.from('autopilot_suggestions')
     .select('id, kind, source_kind, source_id, member_id')
-    .eq('family_id', familyId).eq('action_type', 'create_reminder').or(NARROWER_THAN_EVERYONE_FILTER)
+    .eq('family_id', familyId).eq('action_type', 'create_reminder')
     .order('created_at', { ascending: false }).order('id').range(from, to));
   if (read.error) {
     opts.onError(read.error);
@@ -120,9 +137,10 @@ export function reminderCardsReader(db: DB, familyId: string, opts: ReminderCard
 }
 
 /**
- * The narrower card this reminder was made from: found, none (undefined —
- * a reminder somebody wrote, or an everyone card's), or unknown (null — an
- * accepted card's row read without `keyOf`).
+ * The card this reminder was made from: found, not found (undefined — a
+ * reminder somebody wrote, or one whose card this reader may not read or that
+ * was never written), or unknown (null — an accepted card's row read without
+ * `keyOf`).
  */
 export function reminderCardOf(cards: ReminderCards, row: ReminderLink): ReminderCard | undefined | null {
   const source = scanSource(row);
@@ -133,15 +151,17 @@ export function reminderCardOf(cards: ReminderCards, row: ReminderLink): Reminde
 }
 
 /**
- * Whether `viewer` may be shown this reminder. `cards` null is a failed read:
- * a reminder that could be a card's is then the managers' alone.
+ * Whether `viewer` may be shown this reminder. A reminder that could be a
+ * card's is the managers' alone when the cards could not be read (`cards`
+ * null), when an accepted card's row was read without `keyOf`, and when its
+ * card is not among the cards this reader may read — under 0486, a card that
+ * is not theirs.
  */
 export function reminderVisibleTo(row: ReminderLink, cards: ReminderCards | null, viewer: AudienceViewer): boolean {
   if (!mayBeCardReminder(row)) return true;
-  if (!cards) return isManager(viewer.role);
-  const card = reminderCardOf(cards, row);
-  if (card === null) return isManager(viewer.role);
-  return !card || suggestionVisibleTo(card, viewer);
+  const card = cards ? reminderCardOf(cards, row) : null;
+  if (!card) return isManager(viewer.role);
+  return suggestionVisibleTo(card, viewer);
 }
 
 /** The rows `viewer` may be shown; the cards are read only when a row could be a card's. */

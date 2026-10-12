@@ -293,7 +293,9 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   // reminder-cards.ts, the lookup every reader of these reminders shares). A
   // failed read never widens the audience: such a reminder goes to the
   // managers, who read every card, and the rest of its readers are told on a
-  // later tick.
+  // later tick. Nor does a card that is not there (this runs on the service
+  // role, so one that was never written): the lists show such a reminder to
+  // the managers alone, and it is told to them alone.
   const reminderCards = reminderCardsReader(supabase, familyId, {
     keyOf: (cardId) => suggestionReminderKey(familyId, cardId),
     onError: (error) => console.error('[notifications] generation source read failed', { familyId, table: 'autopilot_suggestions', error }),
@@ -305,8 +307,8 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     if (!mayBeCardReminder(row)) return undefined;
     const cards = await reminderCards();
     const found = cards ? reminderCardOf(cards, row) : null;
-    if (found === null) return managerAccounts;
-    const ids = found ? reminderNoticeMemberIds(found, audienceRoster) : null;
+    if (!found) return managerAccounts;
+    const ids = reminderNoticeMemberIds(found, audienceRoster);
     if (!ids) return undefined;
     return [...new Set(ids.map((id) => userByMember.get(id)).filter((u): u is string => typeof u === 'string' && u.trim().length > 0))];
   };

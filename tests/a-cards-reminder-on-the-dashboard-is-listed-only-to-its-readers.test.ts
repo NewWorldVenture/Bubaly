@@ -181,7 +181,7 @@ describe("the dashboard lists an accepted card's reminder only to the card's rea
     const db = household();
     const reminder = await acceptedInsuranceReminder(db);
     const dayBefore = new Date(Date.parse(String(reminder.remind_at)) - 86_400_000).toISOString();
-    const faulty = withFaults(db, (table, calls) => (table === 'autopilot_suggestions' && calls.some((c) => c.method === 'or') ? { message: 'Fixture read refused' } : null));
+    const faulty = withFaults(db, (table, calls) => (table === 'autopilot_suggestions' && calls.some((c) => c.method === 'eq' && c.args[0] === 'action_type') ? { message: 'Fixture read refused' } : null));
     expect((await dashboardFor(faulty as unknown as DB, 'mum', dayBefore)).comingUp).toEqual([RENEW]);
     expect((await dashboardFor(faulty as unknown as DB, 'ava', dayBefore)).comingUp).toEqual([]);
     expect((await dashboardFor(faulty as unknown as DB, 'neighbour', dayBefore)).comingUp).toEqual([]);
