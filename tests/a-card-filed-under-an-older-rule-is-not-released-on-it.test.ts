@@ -30,7 +30,7 @@ vi.mock('@/lib/ai/runs/continue', () => ({
   continueRun: async () => ({ status: 'unavailable', completed: 0, failed: 0, pending: 0, awaitingApproval: 0, claimed: false }),
 }));
 
-const { decide } = await import('@/lib/services/approvals');
+const { decide, editAndApprove } = await import('@/lib/services/approvals');
 const { executeTool } = await import('@/lib/ai/tools/execute');
 const { createExecutorPort, runGraphWith } = await import('@/lib/ai/runs/executor');
 const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
@@ -38,7 +38,9 @@ const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
 const FAMILY = '00000000-0000-4000-8000-00000000d201';
 const DANA = { member: '00000000-0000-4000-8000-00000000d211', user: '00000000-0000-4000-8000-00000000d221' };
 const ALEX = { member: '00000000-0000-4000-8000-00000000d212', user: '00000000-0000-4000-8000-00000000d222' };
-type Who = typeof DANA | typeof ALEX;
+/** A third manager (an adult), for the household a consensus counts. */
+const SAM = { member: '00000000-0000-4000-8000-00000000d213', user: '00000000-0000-4000-8000-00000000d223' };
+type Who = typeof DANA | typeof ALEX | typeof SAM;
 const REQUEST = '00000000-0000-4000-8000-00000000d231';
 const PLAN = '00000000-0000-4000-8000-00000000d232';
 const RUN = '00000000-0000-4000-8000-00000000d233';
@@ -85,12 +87,28 @@ const SURE = policy({
   id: '00000000-0000-4000-8000-00000000d246', name: 'Bubaly may set budgets when 95% sure', effect: 'allow',
   conditions: { minConfidence: 0.95 }, priority: 250,
 });
+/** "Money needs three of us" — a count of approvals, not everyone. */
+const THREE_OF_US = policy({
+  id: '00000000-0000-4000-8000-00000000d247', name: 'Money needs three of us', effect: 'require_approval',
+  conditions: {}, approval_model: 'single', required_approvals: 3, priority: 200,
+});
+/** "When Bubaly is at least 80% sure, money needs both of us" — stricter the surer it is. */
+const SURE_BOTH = policy({
+  id: '00000000-0000-4000-8000-00000000d248', name: 'When Bubaly is sure, money needs both of us', effect: 'require_approval',
+  conditions: { minConfidence: 0.8 }, approval_model: 'two_parent', required_approvals: 2, priority: 400,
+});
+/** "When Bubaly is at least 80% sure, it moves no money" — a refusal a confidence switches on. */
+const SURE_NO = policy({
+  id: '00000000-0000-4000-8000-00000000d249', name: 'When Bubaly is sure, it moves no money', effect: 'deny',
+  conditions: { minConfidence: 0.8 }, priority: 400,
+});
 
 let db: InMemorySupabase;
 const client = () => db as unknown as SupabaseClient<Database>;
 const asParent = (who: Who): ServiceScope => ({
   db: client(), familyId: FAMILY, userId: who.user, memberId: who.member, role: 'parent', actorKind: 'member', tz: 'America/New_York',
 });
+const asAdult = (who: Who): ServiceScope => ({ ...asParent(who), role: 'adult' });
 const assistantFor = (who: Who): ServiceScope => ({
   db: client(), familyId: FAMILY, userId: who.user, memberId: who.member, role: 'parent', actorKind: 'ai', tz: 'America/New_York', now: NOW,
 });
@@ -150,9 +168,9 @@ function seedRun(count: number, budget: Record<string, unknown> = {}): void {
 /**
  * A run whose held step is already parked on a card filed under `rule`,
  * exactly as the executor's `requestApproval` writes one — pending, or decided
- * by Alex's yes and waiting for the run to resume.
+ * by Alex's yes (or `voters`' yeses) and waiting for the run to resume.
  */
-function seedParkedCard(count: number, rule: Rule, decided = false): void {
+function seedParkedCard(count: number, rule: Rule, decided = false, voters: { who: Who; role: string }[] = [{ who: ALEX, role: 'parent' }]): void {
   seedRun(count, { status: 'awaiting_approval', approval_id: CARD });
   db.seed('approval_requests', [{
     id: CARD, family_id: FAMILY, domain: 'finances', capability: 'automate', ...rule,
@@ -161,8 +179,8 @@ function seedParkedCard(count: number, rule: Rule, decided = false): void {
     run_id: RUN, request_id: REQUEST, plan_step_id: BUDGET, plan_step_ids: [BUDGET], confidence: null, priority: 'high',
     consequences: [], status: decided ? 'approved' : 'pending',
     ...(decided ? {
-      approvals: [{ member_id: ALEX.member, decision: 'approved', note: null, at: NOW.toISOString(), role: 'parent' }],
-      decided_by: ALEX.member, decided_at: NOW.toISOString(),
+      approvals: voters.map(({ who, role }) => ({ member_id: who.member, decision: 'approved', note: null, at: NOW.toISOString(), role })),
+      decided_by: voters[voters.length - 1].who.member, decided_at: NOW.toISOString(),
     } : {}),
   }]);
 }
@@ -170,9 +188,10 @@ function seedParkedCard(count: number, rule: Rule, decided = false): void {
 /**
  * A standalone card Bubaly's tool gate filed for Dana's assistant, with the
  * filing line the gate writes (`filedByBubaly`), before the gate read amounts:
- * "Under $50, one of us" matched a $900 it read as nothing.
+ * "Under $50, one of us" matched a $900 it read as nothing. A line written
+ * before the gate recorded a confidence carries none; `filing` adds one.
  */
-function seedToolCard(amount: number, rule: Rule): void {
+function seedToolCard(amount: number, rule: Rule, filing: { confidence?: number | null } = {}): void {
   db.seed('approval_requests', [{
     id: CARD, family_id: FAMILY, domain: 'finances', capability: 'automate', ...rule,
     requested_by_kind: 'ai', requested_by_member_id: DANA.member, agent: 'Bubaly', title: 'Set the Groceries budget', summary: null,
@@ -182,7 +201,13 @@ function seedToolCard(amount: number, rule: Rule): void {
   }]);
   db.seed('trust_audit_logs', [{
     id: `audit-${CARD}`, family_id: FAMILY, actor_kind: 'ai_agent', actor_id: 'bubaly', approval_id: CARD, decision: 'require_approval',
+    ...filing,
   }]);
+}
+
+/** Sam, an adult, joins the household as its third manager. */
+function samJoins(): void {
+  db.seed('family_members', [{ id: SAM.member, family_id: FAMILY, user_id: SAM.user, role: 'adult', is_active: true, display_name: 'Sam' }]);
 }
 
 const runOnce = () => runGraphWith(createExecutorPort(client()), RUN, { budgetMs: 60_000 });
@@ -292,6 +317,183 @@ describe('a raised confidence does not release a stale card', () => {
 
     expect(await decide(asParent(ALEX), CARD, 'approved')).toMatchObject({ ok: true });
     expect(groceries()).toMatchObject({ amount: 40 });
+  });
+});
+
+// #1028 review (AUD-1028-AI-CONFIDENCE): a filing line with no confidence was
+// read as 0. The engine applies `minConfidence` to a deny or a "both of us" as
+// readily as to an allow, so 0 hid a rule that tightens when Bubaly is sure —
+// and the gate files at 0.85 unless told otherwise. A card whose filing
+// confidence is unknown must now hold at every confidence that matters.
+describe('a card filed at a confidence nobody recorded is weighed at every one that matters', () => {
+  for (const [label, filing] of [
+    ['whose filing line carries no confidence', {}],
+    ['whose filing line recorded a null confidence', { confidence: null }],
+  ] as const) {
+    for (const [rule, sure] of [
+      ['“when Bubaly is sure, money needs both of us”', SURE_BOTH],
+      ['“when Bubaly is sure, it moves no money”', SURE_NO],
+    ] as const) {
+      it(`a $40 card ${label}, under ${rule}: a plain yes is refused and nothing runs`, async () => {
+        db.seed('trust_policies', [UNDER_FIFTY, sure]);
+        seedToolCard(40, { approval_model: 'single', required_approvals: 1, policy_id: UNDER_FIFTY.id }, filing);
+
+        const res = await decide(asParent(ALEX), CARD, 'approved');
+
+        expect(res, 'released on one yes a card today’s rule may send to both parents, or refuse').toMatchObject({ ok: false, code: 'denied', error: NO_LONGER });
+        expect(approvalRow(CARD)).toMatchObject({ status: 'pending', approvals: [] });
+        expect(groceries()).toMatchObject({ amount: 400 });
+        expect(db.table('ai_tool_calls')).toEqual([]);
+      });
+    }
+  }
+
+  it('an edit of such a card is weighed at every one too, and refused', async () => {
+    db.seed('trust_policies', [UNDER_FIFTY, SURE_BOTH]);
+    seedToolCard(40, { approval_model: 'single', required_approvals: 1, policy_id: UNDER_FIFTY.id });
+
+    const res = await editAndApprove(asParent(ALEX), CARD, { amount: 45 });
+
+    expect(res).toMatchObject({ ok: false, code: 'denied', error: translate(SOURCE_MESSAGES, 'approval.editOutsideFiledRule') });
+    expect(approvalRow(CARD)).toMatchObject({ status: 'pending', approvals: [], edited_payload: null });
+    expect(groceries()).toMatchObject({ amount: 400 });
+  });
+
+  it('a filing line that recorded 0.85 is weighed at 0.85: refused under the same rule (control)', async () => {
+    db.seed('trust_policies', [UNDER_FIFTY, SURE_BOTH]);
+    seedToolCard(40, { approval_model: 'single', required_approvals: 1, policy_id: UNDER_FIFTY.id }, { confidence: 0.85 });
+
+    expect(await decide(asParent(ALEX), CARD, 'approved')).toMatchObject({ ok: false, code: 'denied', error: NO_LONGER });
+    expect(groceries()).toMatchObject({ amount: 400 });
+  });
+
+  it('a filing line that recorded 0.5 is weighed at 0.5, as filed: one yes still releases it (positive control)', async () => {
+    db.seed('trust_policies', [UNDER_FIFTY, SURE_BOTH, SURE_NO]);
+    seedToolCard(40, { approval_model: 'single', required_approvals: 1, policy_id: UNDER_FIFTY.id }, { confidence: 0.5 });
+    // The row's own column is any manager's to rewrite; the filing line is not.
+    approvalRow(CARD).confidence = 0.99;
+
+    expect(await decide(asParent(ALEX), CARD, 'approved')).toMatchObject({ ok: true, data: { status: 'approved', executed: true } });
+    expect(groceries()).toMatchObject({ amount: 40 });
+  });
+
+  it('a card the tool gate files today under the same rule asks both parents and runs on the second yes (positive control)', async () => {
+    db.seed('trust_policies', [UNDER_FIFTY, SURE_BOTH]);
+    const outcome = await executeTool(assistantFor(DANA), 'finances.updateBudget', { category: 'Groceries', amount: 40 });
+    const card = String((outcome as { approvalId: string }).approvalId);
+    expect(approvalRow(card)).toMatchObject({ approval_model: 'two_parent', policy_id: SURE_BOTH.id });
+
+    expect(await decide(asParent(DANA), card, 'approved')).toMatchObject({ ok: true, data: { status: 'pending' } });
+    expect(await decide(asParent(ALEX), card, 'approved')).toMatchObject({ ok: true, data: { status: 'approved', executed: true } });
+    expect(groceries()).toMatchObject({ amount: 40 });
+  });
+});
+
+// #1028 review (AUD-1028-AI-QUORUM): a consensus needs everyone who can vote,
+// and the household changes. The release check compared a consensus as if the
+// family had one manager, and the run executor resuming a decided card looked
+// at neither the household nor the votes. Which membership governs is now
+// decided by when the release is weighed (lib/trust/edit-rule.ts):
+//  - a PENDING card is released by a yes in decide(), which counts the votes
+//    against the managers the family has now — so that is what the card is
+//    weighed at against today's rule;
+//  - a DECIDED card carries the decision decide() took: the yeses it recorded.
+//    A member who joined since is not asked again, one who left still voted,
+//    and today's rule is compared with the votes the card has.
+describe('a consensus card after the household changes', () => {
+  const ALL_OF_US_RULE: Rule = { approval_model: 'consensus', required_approvals: 1, policy_id: ALL_OF_US.id };
+
+  describe('pending: the managers the family has when it votes govern', () => {
+    it('grew to three under “all of us”: the card waits for all three, then runs (control)', async () => {
+      db.seed('trust_policies', [UP_TO_FIFTY, ALL_OF_US]);
+      seedParkedCard(900, ALL_OF_US_RULE);
+      samJoins();
+
+      expect(await decide(asParent(DANA), CARD, 'approved')).toMatchObject({ ok: true, data: { status: 'pending' } });
+      expect(await decide(asParent(ALEX), CARD, 'approved')).toMatchObject({ ok: true, data: { status: 'pending' } });
+      await runOnce();
+      expect(groceries()).toMatchObject({ amount: 400 });
+      expect(await decide(asAdult(SAM), CARD, 'approved')).toMatchObject({ ok: true, data: { status: 'approved' } });
+      await runOnce();
+      expect(budgetStep()).toMatchObject({ status: 'completed' });
+      expect(groceries()).toMatchObject({ amount: 900 });
+    });
+
+    it('grew to three, and the family now asks “three of us”: the card needs all three yeses, and releases on them', async () => {
+      db.seed('trust_policies', [UP_TO_FIFTY, THREE_OF_US]);
+      seedParkedCard(900, ALL_OF_US_RULE);
+      samJoins();
+
+      expect(await decide(asParent(DANA), CARD, 'approved'), 'a consensus of three was weighed as one').toMatchObject({ ok: true, data: { status: 'pending' } });
+      expect(await decide(asParent(ALEX), CARD, 'approved')).toMatchObject({ ok: true, data: { status: 'pending' } });
+      await runOnce();
+      expect(groceries()).toMatchObject({ amount: 400 });
+      expect(await decide(asAdult(SAM), CARD, 'approved')).toMatchObject({ ok: true, data: { status: 'approved' } });
+      await runOnce();
+      expect(budgetStep()).toMatchObject({ status: 'completed' });
+      expect(groceries()).toMatchObject({ amount: 900 });
+    });
+
+    it('shrank to two under “three of us”: a consensus of two asks less, and a yes is refused (control)', async () => {
+      db.seed('trust_policies', [UP_TO_FIFTY, THREE_OF_US]);
+      samJoins();
+      seedParkedCard(900, ALL_OF_US_RULE);
+      db.table('family_members').find((m) => m.id === SAM.member)!.is_active = false;
+
+      expect(await decide(asParent(DANA), CARD, 'approved')).toMatchObject({ ok: false, code: 'denied', error: NO_LONGER });
+      expect(approvalRow(CARD)).toMatchObject({ status: 'pending', approvals: [] });
+      await runOnce();
+      expect(groceries()).toMatchObject({ amount: 400 });
+    });
+
+    it('shrank to two under “all of us”: the two who remain release it (control)', async () => {
+      db.seed('trust_policies', [UP_TO_FIFTY, ALL_OF_US]);
+      samJoins();
+      seedParkedCard(900, ALL_OF_US_RULE);
+      db.table('family_members').find((m) => m.id === SAM.member)!.is_active = false;
+
+      expect(await decide(asParent(DANA), CARD, 'approved')).toMatchObject({ ok: true, data: { status: 'pending' } });
+      expect(await decide(asParent(ALEX), CARD, 'approved')).toMatchObject({ ok: true, data: { status: 'approved' } });
+      await runOnce();
+      expect(groceries()).toMatchObject({ amount: 900 });
+    });
+  });
+
+  describe('decided: the yeses the decision was taken on govern, not who the household has when the run resumes', () => {
+    const DANA_AND_ALEX = [{ who: DANA, role: 'parent' }, { who: ALEX, role: 'parent' }];
+    const ALL_THREE = [...DANA_AND_ALEX, { who: SAM, role: 'adult' }];
+
+    it('both managers said yes, then a third joined: under “all of us” the run still runs it (control)', async () => {
+      db.seed('trust_policies', [UP_TO_FIFTY, ALL_OF_US]);
+      seedParkedCard(900, ALL_OF_US_RULE, true, DANA_AND_ALEX);
+      samJoins();
+
+      await runOnce();
+      expect(budgetStep()).toMatchObject({ status: 'completed' });
+      expect(groceries()).toMatchObject({ amount: 900 });
+    });
+
+    it('both managers said yes, then a third joined: under “three of us” two yeses are not three, and it does not run (control)', async () => {
+      db.seed('trust_policies', [UP_TO_FIFTY, THREE_OF_US]);
+      seedParkedCard(900, ALL_OF_US_RULE, true, DANA_AND_ALEX);
+      samJoins();
+
+      await runOnce();
+      expect(budgetStep(), 'today’s household lent the card a yes it never had').toMatchObject({ status: 'failed', error: STEP_NO_LONGER });
+      expect(groceries()).toMatchObject({ amount: 400 });
+      expect(db.table('ai_tool_calls')).toEqual([]);
+    });
+
+    it('all three said yes, then one left: under “three of us” the three recorded yeses release it', async () => {
+      db.seed('trust_policies', [UP_TO_FIFTY, THREE_OF_US]);
+      samJoins();
+      seedParkedCard(900, ALL_OF_US_RULE, true, ALL_THREE);
+      db.table('family_members').find((m) => m.id === SAM.member)!.is_active = false;
+
+      await runOnce();
+      expect(budgetStep(), 'a decided consensus was weighed as one yes').toMatchObject({ status: 'completed' });
+      expect(groceries()).toMatchObject({ amount: 900 });
+    });
   });
 });
 

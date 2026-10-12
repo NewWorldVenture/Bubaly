@@ -49,7 +49,7 @@ import { behaviorForDomain, effectiveRisk } from '@/lib/ai/family-settings';
 import { loadAISettings } from '@/lib/services/ai-settings';
 import { evaluateAction, riskTierStance, riskToDecision, toolTags, type ApprovalModel, type Decision } from '@/lib/trust/engine';
 import { carriesAmount, readAmountCents, UNKNOWN_AMOUNT_CENTS } from '@/lib/trust/amount';
-import { FILED_REQUEST_COLUMNS, HELD_STEP_CONFIDENCE, refusesOutright, releaseStaysWithinFiledRule, type FiledRequest } from '@/lib/trust/edit-rule';
+import { FILED_REQUEST_COLUMNS, HELD_STEP_CONFIDENCE, recordedQuorum, refusesOutright, releaseStaysWithinFiledRule, type FiledRequest } from '@/lib/trust/edit-rule';
 import { localizedTrustReason } from '@/lib/trust/messages';
 import { loadTrustInputs, roleOf } from '@/lib/trust/server';
 import { conformNulls } from '@/lib/ai/schema-to-json';
@@ -1784,10 +1784,13 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
     },
     async releaseWithinFiledRule(scope, step, approvalId, release) {
       // The row as filed: who asked and under which rule. 0480 keeps both as
-      // filed.
+      // filed. And the yeses it was decided on, which 0389 freezes: a
+      // consensus is weighed at the quorum the decision was taken on, not at
+      // whoever the household counts by the time the run resumes
+      // (AUD-1028-AI-QUORUM, lib/trust/edit-rule.ts).
       const { data, error } = await db
         .from('approval_requests')
-        .select(`${FILED_REQUEST_COLUMNS}, payload, payload_kind, plan_step_ids`)
+        .select(`${FILED_REQUEST_COLUMNS}, payload, payload_kind, plan_step_ids, approvals`)
         .eq('id', approvalId)
         .eq('family_id', scope.familyId)
         .maybeSingle();
@@ -1795,7 +1798,7 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
         if (error) console.error('[ai/runs] failed to read the rule an approval was filed under', error);
         return fail((await getTranslations())('aiRuns.approvalRulesUnreadable'), { code: SERVICE_CODES.db, retryable: true });
       }
-      const row = data as unknown as FiledRequest & { payload: unknown; payload_kind: string | null; plan_step_ids: string[] | null };
+      const row = data as unknown as FiledRequest & { payload: unknown; payload_kind: string | null; plan_step_ids: string[] | null; approvals: unknown };
       const classified = classifyPayload({
         payload: row.payload, payload_kind: row.payload_kind, run_id: null, plan_step_id: null, plan_step_ids: row.plan_step_ids,
       });
@@ -1806,6 +1809,7 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
         asked: release.asked,
         released: release.released,
         edited: release.edited,
+        quorum: recordedQuorum(row.approvals),
       });
       if (verdict.ok) return ok('within');
       if (verdict.reason !== 'unreadable') return ok(verdict.reason);

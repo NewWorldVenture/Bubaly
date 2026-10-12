@@ -26,7 +26,11 @@ vi.mock('@/lib/supabase/server', () => ({
   createServer: async () => createServiceClient(),
 }));
 
-/** A blog_subscribers table that answers the lookup and the update as told. */
+/**
+ * A blog_subscribers table that answers the lookup and the update as told.
+ * The update is guarded on the row as the lookup read it and asks for what it
+ * wrote (AUD-1028-M1-ABA), so one that lands answers the row it wrote.
+ */
 function subscriberClient(
   lookup: { data: { id: string; status: string } | null; error: unknown },
   updateError: unknown = null,
@@ -34,15 +38,17 @@ function subscriberClient(
   const updates: string[] = [];
   const from = () => {
     let mode: 'select' | 'update' = 'select';
-    let id = '';
+    const filters: Record<string, unknown> = {};
     const chain: Record<string, unknown> = {
-      select: () => { mode = 'select'; return chain; },
+      // After an update, `.select()` asks for the written rows; it is still the update.
+      select: () => chain,
       update: () => { mode = 'update'; return chain; },
-      eq: (_c: string, v: unknown) => { id = String(v); return chain; },
+      eq: (c: string, v: unknown) => { filters[c] = v; return chain; },
+      is: (c: string, v: unknown) => { filters[c] = v; return chain; },
       maybeSingle: () => Promise.resolve(lookup),
       then: (onF: (v: unknown) => unknown) => {
-        if (mode === 'update') updates.push(id);
-        return Promise.resolve({ data: null, error: updateError }).then(onF);
+        if (mode === 'update') updates.push(String(filters.id));
+        return Promise.resolve(updateError ? { data: null, error: updateError } : { data: [{ id: filters.id }], error: null }).then(onF);
       },
     };
     return chain;
