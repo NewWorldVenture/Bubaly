@@ -103,9 +103,9 @@ export function PetsModule() {
 
   const petById = (id: string) => pets.data.find((p) => p.id === id);
 
-  const loading = pets.loading || records.loading;
-  const error = pets.error || records.error;
-  const refresh = () => { void pets.refresh(); void records.refresh(); };
+  const loading = pets.loading || allRecords.loading;
+  const error = pets.error || allRecords.error;
+  const refresh = () => { void pets.refresh(); void allRecords.refresh(); };
 
   if (loading) return <SkeletonList />;
   if (error) return <ErrorState message={t('petsModule.couldNotLoadPetCare')} onRetry={refresh} />;

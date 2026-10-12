@@ -676,9 +676,15 @@ async function fetchRows(
     case 'rides': {
       // From the family's today: oldest-first with no date bound, a family with
       // thirty past rides was handed only past ones and told it had none ahead.
-      const rides = await eq(sb, 'rides', familyId).gte('ride_date', viewer.todayKey).order('ride_date').order('pickup_time', { nullsFirst: false }).limit(30);
+      // And only rides still to happen ('planned' or 'confirmed', 0027's
+      // ride_status), every one of them (readAll): a cap taken before the
+      // cancelled and completed rows were dropped let thirty of those hide a
+      // planned ride, and the prompt's counts are only true if nothing is cut.
+      const rides = await readAll<Record<string, unknown>>((from, to) => sb.from('rides').select('*').eq('family_id', familyId)
+        .gte('ride_date', viewer.todayKey).in('status', ['planned', 'confirmed'])
+        .order('ride_date').order('pickup_time', { nullsFirst: false }).order('id').range(from, to));
       required([['rides', rides.error]]);
-      return { rides: rides.data ?? [] };
+      return { rides: rides.rows };
     }
     case 'votes': {
       // The options and votes OF the polls listed. Read as the family's first
@@ -689,8 +695,8 @@ async function fetchRows(
       // Every row of those polls (readAll), so no cap can cut one short.
       const pollIds = (polls.data ?? []).map((p) => p.id as string);
       const [options, votes] = await Promise.all([
-        readAll<Record<string, unknown>>((from, to) => eq(sb, 'family_poll_options', familyId).in('poll_id', pollIds).order('id').range(from, to)),
-        readAll<Record<string, unknown>>((from, to) => eq(sb, 'family_poll_votes', familyId).in('poll_id', pollIds).order('id').range(from, to)),
+        readAll<Record<string, unknown>>((from, to) => sb.from('family_poll_options').select('*').eq('family_id', familyId).in('poll_id', pollIds).order('id').range(from, to)),
+        readAll<Record<string, unknown>>((from, to) => sb.from('family_poll_votes').select('*').eq('family_id', familyId).in('poll_id', pollIds).order('id').range(from, to)),
       ]);
       required([['family_poll_options', options.error], ['family_poll_votes', votes.error]]);
       return { family_polls: polls.data ?? [], family_poll_options: options.rows, family_poll_votes: votes.rows };

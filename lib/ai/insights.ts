@@ -1071,7 +1071,9 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
         ...dates.map((dt) => ({ name: String(dt.title ?? ''), type: String(dt.kind ?? 'other'), date: String(dt.event_date ?? '') })),
         ...r(d, 'family_members').map((m) => ({ name: `${String(m.display_name ?? '')}'s birthday`, type: 'birthday', date: String(m.birthday ?? '') })),
       ];
-      const today = d.todayKey ?? new Date().toISOString().slice(0, 10);
+      // The route always supplies the family's day. Without one there is no day
+      // to count from: the host's UTC date is a different family's day.
+      const today = d.todayKey ?? '';
       const upcoming = all
         .map((c) => ({ ...c, inDays: daysUntilNextOn(c.date, today) }))
         .filter((c): c is typeof c & { inDays: number } => c.inDays !== null && c.inDays <= 60)
@@ -1219,10 +1221,11 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     system:
       'You are a helpful family logistics coordinator. Help families plan rides, identify carpool opportunities, and reduce transportation stress. Be specific and actionable. ' + SHARED_RULES,
     buildUser: (d) => {
-      // The route reads from the family's today, so every row is today or
-      // later. `planned` is the unconfirmed status (0027's ride_status enum has
-      // no 'requested' or 'pending', so that count was always 0).
-      const rides = r(d, 'rides').slice(0, 30);
+      // The route reads every ride still to happen from the family's today, so
+      // these counts are complete; the filter below stays as a guard. `planned`
+      // is the unconfirmed status (0027's ride_status enum has no 'requested'
+      // or 'pending', so that count was always 0).
+      const rides = r(d, 'rides');
       const today = d.todayKey ?? '';
       const upcoming = rides.filter((ride) => typeof ride.ride_date === 'string' && ride.ride_date >= today
         && ride.status !== 'cancelled' && ride.status !== 'completed');

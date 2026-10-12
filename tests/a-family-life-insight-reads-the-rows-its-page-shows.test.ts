@@ -177,6 +177,31 @@ describe('rides counts what is ahead and what is unconfirmed (F31)', () => {
     expect(prompt()).toContain('Upcoming rides: 2.');
     expect(prompt()).toContain('Pending/unconfirmed: 1.');
   });
+
+  it('does not let thirty cancelled or completed rides ahead hide a planned one', async () => {
+    // Review on #1031 (AUD-1031-F31-SAMPLE): the 30-row cap was taken before
+    // the terminal rides were dropped.
+    base.seed('rides', Array.from({ length: 30 }, (_, i) => ({
+      id: `done-${i}`, family_id: FAMILY, title: `Called off ${i}`, ride_date: `2026-10-${String(13 + (i % 5)).padStart(2, '0')}`,
+      status: i % 2 ? 'cancelled' : 'completed',
+    })));
+    base.seed('rides', [{ id: 'live', family_id: FAMILY, title: 'Swim pickup', ride_date: '2026-10-25', status: 'planned' }]);
+    const response = await ask('rides');
+    expect(response.status).toBe(200);
+    expect(prompt()).toContain('Upcoming rides: 1.');
+    expect(prompt()).toContain('Pending/unconfirmed: 1.');
+  });
+
+  it('counts every ride ahead, not the first thirty', async () => {
+    base.seed('rides', Array.from({ length: 45 }, (_, i) => ({
+      id: `ahead-${i}`, family_id: FAMILY, title: `Ride ${i}`, ride_date: `2026-11-${String(1 + (i % 28)).padStart(2, '0')}`,
+      status: i < 40 ? 'confirmed' : 'planned',
+    })));
+    const response = await ask('rides');
+    expect(response.status).toBe(200);
+    expect(prompt()).toContain('Upcoming rides: 45.');
+    expect(prompt()).toContain('Pending/unconfirmed: 5.');
+  });
 });
 
 describe('votes reads question and status (F24/F30)', () => {
