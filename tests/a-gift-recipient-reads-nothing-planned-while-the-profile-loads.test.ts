@@ -2,6 +2,8 @@ import { createElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SOURCE_MESSAGES } from '@/lib/i18n/messages';
 import { translate } from '@/lib/i18n/translate';
+import { cacheIdentity, readPartitionedCache, writePartitionedCache, type CachePartition } from '@/lib/offline/cache';
+import type { AuthenticatedCacheScope } from '@/lib/offline/cache-scope';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
 import { byName, render, settle, text } from './helpers/module-harness';
 import { resetHookSlots } from './helpers/hook-slots';
@@ -19,11 +21,20 @@ import { resetHookSlots } from './helpers/hook-slots';
 // is held at a gate the test opens: the component, the hook and its loading
 // states are production's; only the network is a database in memory with a
 // door on it.
+//
+// In production every module renders inside the authenticated cache boundary,
+// where the hook first paints this device's cached rows as loaded (and stale)
+// before it asks the database. A profile cached before the viewer was named
+// the partner says "not the recipient" just as wrongly as a missing one, so
+// the last cases run the same race with a ready cache scope and that cache.
 
 const h = await vi.hoisted(async () => (await import('./helpers/module-state')).createModuleState());
 const reads = vi.hoisted(() => ({
   gates: new Map<string, { opened: Promise<{ message: string } | null>; open: (fault: { message: string } | null) => void }>(),
 }));
+// The authenticated cache scope the module renders under: none (network-only)
+// unless a case puts the module inside a ready boundary.
+const cacheScope = vi.hoisted(() => ({ current: null as AuthenticatedCacheScope | null }));
 const actions = vi.hoisted(() => ({
   toggle: vi.fn(async () => ({ ok: true, onCalendar: true, eventId: 'e1' })),
   sync: vi.fn(async () => ({ ok: true })),
@@ -31,11 +42,11 @@ const actions = vi.hoisted(() => ({
 }));
 
 vi.mock('react', async (original) => (await import('./helpers/hook-slots')).withHookSlots(await original<object>(), h.hooks));
-// No authenticated cache provider: the hook runs network-only, as it does
-// for a module rendered outside the cache boundary.
+// By default no authenticated cache provider: the hook runs network-only, as
+// it does for a module rendered outside the cache boundary.
 vi.mock('@/lib/offline/cache-scope', () => ({
-  useAuthenticatedCacheScope: () => null,
-  isAuthenticatedCacheScopeCurrent: () => true,
+  useAuthenticatedCacheScope: () => cacheScope.current,
+  isAuthenticatedCacheScopeCurrent: (scope: AuthenticatedCacheScope) => scope === cacheScope.current,
 }));
 vi.mock('@/lib/supabase/client', () => {
   const gate = (table: string) => {
@@ -125,8 +136,17 @@ const shows = (tree: ReactNode) => text(tree);
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-10-12T15:00:00Z'));
-  // The hook listens for `online` on the window; a bare target stands in.
-  vi.stubGlobal('window', new EventTarget());
+  // The hook listens for `online` on the window; a bare target stands in, with
+  // a localStorage the offline cache reads and writes when a scope is ready.
+  const stored = new Map<string, string>();
+  vi.stubGlobal('window', Object.assign(new EventTarget(), {
+    localStorage: {
+      getItem: (key: string) => stored.get(key) ?? null,
+      setItem: (key: string, value: string) => { stored.set(key, value); },
+      removeItem: (key: string) => { stored.delete(key); },
+    },
+  }));
+  cacheScope.current = null;
   resetHookSlots(h.hooks);
   reads.gates.clear();
   db = createInMemorySupabase();
@@ -210,6 +230,88 @@ describe('the partner who plans the gifts', () => {
     expect(() => byName(waiting, t('relationship.fromWishlist'))).toThrow();
 
     await open('wishlist_items');
+    const settled = screen();
+    for (const title of ['Surprise spa day', 'Weekend in Lisbon', MY_OWN]) expect(shows(settled)).toContain(title);
+    expect(shows(settled)).toContain('2 to buy');
+    expect(shows(settled)).toContain('$190 to go');
+    expect(shows(settled)).toContain('· 1 done');
+    expect(byName(settled, t('relationship.fromWishlist')).props.disabled).toBeFalsy();
+    expect(byName(settled, t('relationship.aiSuggestions')).props.disabled).toBe(false);
+  });
+});
+
+describe('inside the cache boundary, with a profile this device cached before the partner was named', () => {
+  // The viewer's earlier visit, before Bo named Ada as the partner the gifts
+  // are for: the device kept that visit's rows, under this session's partition.
+  const PARTITION: CachePartition = { userId: h.app.userId, sessionId: 'session-1', accessIdentity: 'access-1' };
+  const READY: AuthenticatedCacheScope = {
+    status: 'ready', key: 'ready-scope', partition: PARTITION, familyId: FAMILY,
+    sessionRevision: 1, error: null, familyMismatchError: 'family mismatch',
+  };
+  // The module's reads are keyed by table with deps [familyId].
+  const cached = (table: string) => cacheIdentity(PARTITION, table, FAMILY, [FAMILY])!;
+  const seedEarlierVisit = (profile: object[]) => {
+    writePartitionedCache(cached('relationship_dates'), [{ id: 'date-1', family_id: FAMILY, kind: 'anniversary', title: 'Our anniversary', event_date: '2026-11-14', recurs_annually: true, reminder_days_before: 14, status: 'upcoming', calendar_event_id: null, location: null, member_id: null, notes: null }]);
+    writePartitionedCache(cached('relationship_profile'), profile);
+    writePartitionedCache(cached('relationship_gift_ideas'), []);
+    writePartitionedCache(cached('wishlist_items'), []);
+  };
+
+  it.each([
+    ['no profile yet', []],
+    ['preferences saved with no partner named', [{ id: 'p1', family_id: FAMILY, partner_name: null, partner_member_id: null, interests: [], love_languages: [], gift_budget_cents: null, notes: null }]],
+  ])('the recipient reads none of the plan when fresh gifts land before the fresh profile (cached: %s)', async (_label, earlierProfile) => {
+    cacheScope.current = READY;
+    seedEarlierVisit(earlierProfile);
+    // The database now: Ada is the partner the gifts are for.
+    db.seed('relationship_profile', [{ id: 'p1', family_id: FAMILY, partner_name: 'Ada', partner_member_id: ME, interests: [], love_languages: [], gift_budget_cents: null, notes: null }]);
+    await mount();
+    expect([...reads.gates.keys()].sort()).toEqual(['relationship_dates', 'relationship_gift_ideas', 'relationship_profile', 'wishlist_items']);
+
+    // First paint is the earlier visit, from this device: the cached dates
+    // show, so the module is reading this partition.
+    const hydrated = screen();
+    expect(shows(hydrated)).toContain('Our anniversary');
+    for (const secret of PLANNED_FOR_ME) expect(shows(hydrated)).not.toContain(secret);
+
+    // Dates, gifts and wishes answer from the database; the profile does not
+    // yet, so the only profile on hand is the cached one.
+    await open('relationship_dates');
+    await open('relationship_gift_ideas');
+    await open('wishlist_items');
+    const waiting = screen();
+    expect(shows(waiting)).toContain('Our anniversary');
+    for (const secret of PLANNED_FOR_ME) expect(shows(waiting)).not.toContain(secret);
+    expect(shows(waiting)).not.toContain(t('relationship.noGiftIdeasYet'));
+    expect(() => byName(waiting, t('relationship.fromWishlist'))).toThrow();
+    expect(byName(waiting, t('relationship.aiSuggestions')).props.disabled).toBe(true);
+
+    // The fresh profile answers: Ada is the recipient, and reads her own gift.
+    await open('relationship_profile');
+    const settled = screen();
+    for (const secret of PLANNED_FOR_ME) expect(shows(settled)).not.toContain(secret);
+    expect(shows(settled)).toContain(MY_OWN);
+    expect(shows(settled)).toContain('1 to buy');
+    expect(shows(settled)).toContain('$40 to go');
+    expect(() => byName(settled, t('relationship.fromWishlist'))).toThrow();
+    expect(byName(settled, t('relationship.aiSuggestions')).props.disabled).toBe(false);
+    // The answer replaced the cached profile under the same identity.
+    expect(readPartitionedCache<{ partner_member_id: string | null }>(cached('relationship_profile'))?.rows
+      .map((row) => row.partner_member_id)).toEqual([ME]);
+  });
+
+  it('the partner who plans the gifts reads the whole plan once the fresh profile has answered', async () => {
+    cacheScope.current = READY;
+    seedEarlierVisit([{ id: 'p1', family_id: FAMILY, partner_name: null, partner_member_id: null, interests: [], love_languages: [], gift_budget_cents: null, notes: null }]);
+    db.seed('relationship_profile', [{ id: 'p1', family_id: FAMILY, partner_name: 'Bo', partner_member_id: BO, interests: [], love_languages: [], gift_budget_cents: null, notes: null }]);
+    await mount();
+    await open('relationship_dates');
+    await open('relationship_gift_ideas');
+    await open('wishlist_items');
+    const waiting = screen();
+    for (const title of ['Surprise spa day', 'Weekend in Lisbon', MY_OWN]) expect(shows(waiting)).not.toContain(title);
+
+    await open('relationship_profile');
     const settled = screen();
     for (const title of ['Surprise spa day', 'Weekend in Lisbon', MY_OWN]) expect(shows(settled)).toContain(title);
     expect(shows(settled)).toContain('2 to buy');

@@ -85,7 +85,7 @@ export function RelationshipModule() {
     table: 'relationship_gift_ideas', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('relationship_gift_ideas').select('*').eq('family_id', familyId),
   });
-  const { data: profileRows, loading: profileLoading, error: profileError } = useRealtimeQuery<Profile>({
+  const { data: profileRows, loading: profileLoading, error: profileError, stale: profileStale } = useRealtimeQuery<Profile>({
     table: 'relationship_profile', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('relationship_profile').select('*').eq('family_id', familyId),
   });
@@ -139,7 +139,15 @@ export function RelationshipModule() {
   // renders until the profile has answered without an error, together with
   // the gifts and wishes it filters. A viewer whose own member row is not known
   // yet is held to their own gifts until it is.
-  const recipientKnown = !profileLoading && !profileError && !giftsLoading && !giftsError && !wishesLoading && !wishesError;
+  //
+  // "Answered" means answered by the database in this visit. Inside the cache
+  // boundary the hook first paints this device's cached rows as loaded (and
+  // stale): a profile cached before this viewer was named the partner reads
+  // "not the recipient", and fresh gifts landing before the fresh profile
+  // would show them the plan again. A stale profile waits like a loading one;
+  // offline costs nothing, since a failed refresh is already an error.
+  const recipientKnown = !profileLoading && !profileStale && !profileError
+    && !giftsLoading && !giftsError && !wishesLoading && !wishesError;
   const viewerIsRecipient = !!profile?.partner_member_id && (!selfMember || profile.partner_member_id === selfMember.id);
   const readableGifts = useMemo(
     () => (recipientKnown ? (gifts ?? []).filter((g) => !viewerIsRecipient || g.created_by === userId) : []),
