@@ -608,14 +608,10 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
 
   const scoped = await port.scopeFor(run);
   if (!scoped.ok) {
-    // An inactive or demoted requester must never have their run finished with
-    // their old authority - it is blocked for a person to look at, not failed.
-    await port.updateRun(run, { state: 'blocked', status: legacyStatusFor('blocked'), error: scoped.error });
-    await port.appendEvent(run, { eventType: 'blocked', message: scoped.error });
-    await port.setRequestState(run, 'blocked', scoped.error);
+    await blockForRequester(port, run, scoped.error);
     return { status: 'blocked', ...empty };
   }
-  const scope = scoped.data;
+  let scope = scoped.data;
 
   const firstSteps = await port.loadSteps(run);
   if (!firstSteps.ok) return { status: 'error', ...empty };
@@ -669,15 +665,17 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
   for (let pass = 0; pass < MAX_PASSES; pass += 1) {
     // Pause and cancel arrive as writes from another request, so both are
     // re-read every pass - that is what makes "Cancel" stop a run in flight
-    // rather than after it finishes.
+    // rather than after it finishes. A pass that cannot see the run starts
+    // nothing: the last snapshot predates whatever the steps just run, or a
+    // person, did to it. The run keeps its state and the next claim reads it.
     const refreshed = await port.loadRun(runId);
-    if (refreshed.ok && refreshed.data) {
-      run = refreshed.data;
-      if (run.cancel_requested_at) return finalizeCancelled(port, run, steps);
-      if (run.paused_at || run.state === 'paused') {
-        await port.appendEvent(run, { eventType: 'paused', message: 'Paused - Bubaly stopped after the steps already in flight.' });
-        return summarize('paused', steps);
-      }
+    if (!refreshed.ok) return summarize('error', steps);
+    if (!refreshed.data) return summarize('not_found', steps);
+    run = refreshed.data;
+    if (run.cancel_requested_at) return finalizeCancelled(port, run, steps);
+    if (run.paused_at || run.state === 'paused') {
+      await port.appendEvent(run, { eventType: 'paused', message: 'Paused - Bubaly stopped after the steps already in flight.' });
+      return summarize('paused', steps);
     }
 
     // Everything downstream of a failure can never run; say so once, then finish.
@@ -713,6 +711,18 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
       // re-plan must see that decision, so the run parks (finalizeRun reports
       // `awaiting_approval` when anything is) and resumes when it lands.
       return finalizeRun(port, run, steps);
+    }
+    if (pass > 0) {
+      // Who the requester is now, read again before every later batch: a
+      // member removed while the first steps ran stops the rest, and one whose
+      // role changed has the rest run with the role they hold now, not the one
+      // they held when the run was claimed.
+      const rescoped = await port.scopeFor(run);
+      if (!rescoped.ok) {
+        await blockForRequester(port, run, rescoped.error);
+        return summarize('blocked', steps);
+      }
+      scope = rescoped.data;
     }
     const settled = await Promise.allSettled(batch.map((step) => runStep(port, scope, run, step, steps, deadline)));
 
@@ -773,6 +783,17 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
   // Reaching the pass cap means the graph stopped converging; finishing
   // honestly beats spinning until the function is killed.
   return finalizeRun(port, run, steps);
+}
+
+/**
+ * A requester who is no longer an active member, or whose run no longer
+ * matches their request, must never have it finished with their old
+ * authority: the run is blocked for a person to look at, not failed.
+ */
+async function blockForRequester(port: ExecutorPort, run: RunSnapshot, error: string): Promise<void> {
+  await port.updateRun(run, { state: 'blocked', status: legacyStatusFor('blocked'), error });
+  await port.appendEvent(run, { eventType: 'blocked', message: error });
+  await port.setRequestState(run, 'blocked', error);
 }
 
 /**
@@ -1631,8 +1652,6 @@ export type ExecutorPortOptions = {
  * boundary here is the code, not the database.
  */
 export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorPortOptions = {}): ExecutorPort {
-  const scopeCache = new Map<string, ServiceScope>();
-
   // A minimal system scope for the bookkeeping writes, which only ever need the
   // family id and the service client. The EXECUTING scope (with the requester's
   // re-read role and the family's real timezone) is built by `scopeFor`.
@@ -1673,8 +1692,8 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
       if (run.lease_owner) await heartbeatRun(db, run.id, run.lease_owner);
     },
     async scopeFor(run) {
-      const cached = scopeCache.get(run.id);
-      if (cached) return ok(cached);
+      // Read every time it is asked: the graph asks again before each later
+      // batch, and a cached answer would be the requester as they were.
       const actor = await loadRunActor(db, run.family_id, run.requested_by_member_id);
       if (!actor.ok) return actor;
       // Defense in depth behind the 0252 INSERT policy: a run that names a
@@ -1703,7 +1722,6 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
         requestId: run.request_id,
         ...(untrusted ? { untrustedRequest: true } : {}),
       };
-      scopeCache.set(run.id, scope);
       return ok(scope);
     },
     runTool(scope, name, args, opts) {
