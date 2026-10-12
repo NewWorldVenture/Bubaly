@@ -27,6 +27,12 @@
 // grammar does not contain it. Main found both of its search sanitizers missing
 // it for exactly that reason (a search for `*` became `%%%%`); the rule lives
 // here so the next caller cannot miss it a third time.
+//
+// Escaping a star stops it WIDENING a pattern; it does not make a literal star
+// matchable. PostgREST replaces every `*` in the value with `%`, escaped or not,
+// so `\*` reaches PostgreSQL as `\%` and matches a literal percent sign. A lookup
+// that must not MISS a starred value (an opt-out) sends `_` for the star and
+// compares exactly afterwards, as lib/marketing/automation-steps.ts does.
 export function escapeLike(value: string): string {
   return value.replace(/[\\%_*]/g, (m) => `\\${m}`);
 }

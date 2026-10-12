@@ -4,7 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { parseFormFields, validateSubmission, submissionEmail, submissionName } from '@/lib/marketing/forms';
-import { fireAutomationEvent } from '@/lib/marketing/automation-events';
+import { firePublicFormSubmitted } from '@/lib/marketing/public-form-automation';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { describeReadError } from '@/lib/supabase/settle';
@@ -16,7 +16,8 @@ const MAX_FORM_REQUEST_BYTES = 65_536;
  * Public marketing-form submission endpoint. Marketing tables have no client RLS
  * policies, so the form is read and the submission written with the service role.
  * Only active, non-deleted forms accept submissions. On success it fires any
- * active `form_submitted` automation workflow (best-effort, deduped per submission).
+ * active `form_submitted` automation workflow (best-effort, deduped per submission,
+ * and at most one mail per inbox a day — see lib/marketing/public-form-automation.ts).
  */
 export async function POST(req: NextRequest) {
   const t = await getTranslations();
@@ -80,10 +81,11 @@ export async function POST(req: NextRequest) {
   }
 
   // Fire any event-driven "form_submitted" automation workflows in real time.
-  // Best-effort: never block the visitor on marketing automation.
+  // Best-effort: never block the visitor on marketing automation. The address
+  // is unverified, so the mail is bounded per inbox and carries no text of the
+  // caller's (lib/marketing/public-form-automation.ts).
   try {
-    await fireAutomationEvent(supabase, {
-      trigger: 'form_submitted',
+    await firePublicFormSubmitted({
       email,
       name: submissionName(fields, cleaned),
       subjectKey: eventSubjectKey('form_submitted', [form.id, inserted.id]),
