@@ -5,6 +5,7 @@ import { getResend, FROM_EMAIL, emailEnabled, APP_URL } from '@/lib/email';
 import type { Copy } from '@/lib/marketing/automation-triggers';
 import { unsubUrl } from '@/lib/marketing/unsubscribe';
 import { canonicalMailbox } from '@/lib/server/canonical-mailbox';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 type DB = SupabaseClient<Database>;
 
@@ -53,13 +54,18 @@ async function suppressionFor(supabase: DB, email: string): Promise<'mailable' |
     if (error || !Array.isArray(data)) return 'unknown';
     if (data.length > 0) return 'suppressed';
 
-    const pattern = spellingsOf(inbox);
-    if (!pattern) return 'mailable';
-    const { data: near, error: nearError } = await supabase
-      .from('marketing_suppressions')
-      .select('email')
-      .like('email', pattern)
-      .limit(SPELLING_SCAN_LIMIT);
+    const parts = inboxParts(inbox);
+    if (!parts) return 'mailable';
+    // Every stored spelling whose canonical inbox is `inbox` matches (and some
+    // that are not; the comparison below is exact). Outside Gmail a spelling
+    // differs from its inbox only by a `+tag`; Gmail also ignores dots anywhere
+    // in the local part and answers to googlemail.com. The address's own LIKE
+    // metacharacters go through the shared escapeLike (lib/supabase/escape-like.ts).
+    const spellings = supabase.from('marketing_suppressions').select('email');
+    const { data: near, error: nearError } = await (parts.gmail
+      ? spellings.like('email', `${[...parts.local].map((char) => escapeLike(char)).join('%')}%@g%mail.com%`)
+      : spellings.like('email', `${escapeLike(parts.local)}+%@${escapeLike(parts.domain)}%`)
+    ).limit(SPELLING_SCAN_LIMIT);
     if (nearError || !Array.isArray(near)) return 'unknown';
     if (near.some((row) => typeof row.email === 'string' && canonicalMailbox(row.email) === inbox)) return 'suppressed';
     return near.length < SPELLING_SCAN_LIMIT ? 'mailable' : 'unknown';
@@ -71,21 +77,12 @@ async function suppressionFor(supabase: DB, email: string): Promise<'mailable' |
 /** Rows the spelling read takes before it stops trusting that it saw them all. */
 const SPELLING_SCAN_LIMIT = 500;
 
-/**
- * A LIKE pattern matched by every stored spelling whose canonical inbox is
- * `inbox` (and by some that are not; suppressionFor compares exactly). Outside
- * Gmail a spelling differs from its inbox only by a `+tag`; Gmail also ignores
- * dots anywhere in the local part and answers to googlemail.com. The local
- * part's own LIKE metacharacters are escaped.
- */
-function spellingsOf(inbox: string): string | null {
+/** An inbox's local part and domain, and whether Gmail's spelling rules apply. */
+function inboxParts(inbox: string): { local: string; domain: string; gmail: boolean } | null {
   const at = inbox.lastIndexOf('@');
   if (at <= 0) return null;
-  const escape = (value: string) => value.replace(/[\\%_]/g, (char) => `\\${char}`);
-  const local = inbox.slice(0, at);
   const domain = inbox.slice(at + 1);
-  if (domain === 'gmail.com') return `${[...local].map(escape).join('%')}%@g%mail.com%`;
-  return `${escape(local)}+%@${escape(domain)}%`;
+  return { local: inbox.slice(0, at), domain, gmail: domain === 'gmail.com' };
 }
 
 /** The signed one-click way out every automation mail carries, as campaign mail does. */
