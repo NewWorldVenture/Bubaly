@@ -22,11 +22,12 @@
 // card is not for. A failed read of the cards never widens: a reminder that
 // could be a card's is then the managers', who read every card.
 //
-// Client-safe: the briefing module's kitchen list reads its reminders in the
-// browser. The key an accepted card stamps is minted on the server
-// (suggestionReminderKey, a sha-256), so a reader of `family_reminders` passes
-// it in as `keyOf`; without it such a row is treated as unreadable, never as
-// nobody's card.
+// Client-safe: the briefing module's kitchen list, the Health page and the
+// reminders module read their reminders in the browser. The key an accepted
+// card stamps is a sha-256 (suggestionReminderKey), so a reader of
+// `family_reminders` passes it in as `keyOf` — the server's mint, or the
+// browser's (lib/autopilot/reminder-key.ts mintSuggestionReminderKey); without
+// it such a row is treated as unreadable, never as nobody's card.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
@@ -53,8 +54,12 @@ export type ReminderLink = {
 };
 
 export type ReminderCardsOptions = {
-  /** How an accepted card's reminder key is minted (lib/services/autopilot suggestionReminderKey). */
-  keyOf?: (cardId: string) => string;
+  /**
+   * How an accepted card's reminder key is minted: lib/services/autopilot
+   * suggestionReminderKey on the server, lib/autopilot/reminder-key.ts
+   * mintSuggestionReminderKey in the browser. A mint that fails is a failed read.
+   */
+  keyOf?: (cardId: string) => string | PromiseLike<string>;
   /** Told when the cards could not be read; the reader then answers null. */
   onError: (error: unknown) => void;
 };
@@ -90,12 +95,21 @@ export async function readReminderCards(db: DB, familyId: string, opts: Reminder
     return null;
   }
   const { keyOf } = opts;
-  const bySource = new Map<string, ReminderCard>();
-  const byReminderKey = keyOf ? new Map<string, ReminderCard>() : null;
-  for (const card of read.rows) {
-    if (card.source_id && !bySource.has(card.source_id)) bySource.set(card.source_id, card);
-    if (keyOf) byReminderKey?.set(keyOf(card.id), card);
+  let keys: string[] | null = null;
+  if (keyOf) {
+    try {
+      keys = await Promise.all(read.rows.map((card) => keyOf(card.id)));
+    } catch (error) {
+      opts.onError(error);
+      return null;
+    }
   }
+  const bySource = new Map<string, ReminderCard>();
+  const byReminderKey = keys ? new Map<string, ReminderCard>() : null;
+  read.rows.forEach((card, i) => {
+    if (card.source_id && !bySource.has(card.source_id)) bySource.set(card.source_id, card);
+    if (keys) byReminderKey?.set(keys[i], card);
+  });
   return { bySource, byReminderKey };
 }
 
