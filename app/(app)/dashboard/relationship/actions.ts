@@ -169,7 +169,21 @@ export async function toggleDateOnCalendarAction(dateId: string): Promise<Toggle
       if (!rereadError && current?.calendar_event_id && !sameId(current.calendar_event_id, created.data.id)) {
         const duplicate = await deleteEvent(scope, created.data.id);
         if (duplicate.ok || duplicate.code === SERVICE_CODES.notFound) {
+          // The winner is read again AFTER the cleanup: while it was awaited the
+          // date (and its event) could have been removed or re-linked, and the
+          // answer must not announce an event that is no longer there.
+          const { data: after, error: afterError } = await supabase
+            .from('relationship_dates')
+            .select('calendar_event_id')
+            .eq('id', row.id)
+            .eq('family_id', ctx.active.familyId)
+            .maybeSingle();
           revalidatePath(PATH);
+          if (afterError) return { ok: false, error: t('actions.couldNotUpdateYourCalendar') };
+          if (!after) return { ok: false, error: t('actions.thatDateCouldNotBe') };
+          if (!after.calendar_event_id || !sameId(after.calendar_event_id, current.calendar_event_id)) {
+            return { ok: false, error: t('actions.theDateWasPutBackOnTheCalendarWhileSaving') };
+          }
           return { ok: true, onCalendar: true, eventId: current.calendar_event_id };
         }
         console.error('[relationship-action] duplicate event cleanup failed', { dateId: row.id, eventId: created.data.id, error: duplicate.error });

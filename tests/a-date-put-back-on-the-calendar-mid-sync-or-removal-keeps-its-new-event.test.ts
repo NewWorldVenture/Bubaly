@@ -519,3 +519,34 @@ describe('a toggle keeps a link another toggle wrote in between', () => {
     expect(events().map((e) => e.id)).toEqual([winner]);
   });
 });
+
+describe('a losing toggle-on reports the winner only if it is still there after its cleanup', () => {
+  // Review on #1031 (AUD-1031-TOGGLE-WINNER): the loser read the winner B,
+  // awaited the deletion of its own duplicate, and answered "on the calendar
+  // as B" from the read before it, though a removal in that wait had deleted
+  // the date and B.
+  it('a removal during the loser\'s cleanup: the loser does not claim the deleted event', async () => {
+    const linkHold = holdWrites(db, 'relationship_dates', 'update');
+    const cleanupHold = holdWrites(linkHold.client, 'calendar_events', 'delete');
+    h.db = cleanupHold.client;
+    const loser = relationship.toggleDateOnCalendarAction('date-1');
+    await vi.waitFor(() => expect(linkHold.held).toHaveLength(1));
+
+    h.db = db;
+    expect(await relationship.toggleDateOnCalendarAction('date-1')).toMatchObject({ ok: true, onCalendar: true });
+    const b = link()!;
+    expect(event(b)).toBeTruthy();
+
+    linkHold.held[0].release();
+    await vi.waitFor(() => expect(cleanupHold.held).toHaveLength(1));
+
+    h.db = withSetNullOnEventDelete(db).client;
+    expect(await relationship.removeRelationshipDateAction('date-1')).toEqual({ ok: true });
+    expect(date()).toBeUndefined();
+    expect(event(b)).toBeUndefined();
+
+    cleanupHold.held[0].release();
+    expect(await loser).toEqual({ ok: false, error: 'actions.thatDateCouldNotBe' });
+    expect(events()).toEqual([]);
+  });
+});
