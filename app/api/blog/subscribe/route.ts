@@ -42,15 +42,18 @@ export const runtime = 'nodejs';
 // to the address instead (lib/blog/subscribe-notice.ts), where only its owner
 // can read it. The 400 above it is a property of the submitted string itself,
 // which the caller can compute without us, and the 500 below it is the same
-// sentence whichever write failed.
+// sentence whichever write failed. A write that lost a race is not a failure:
+// two simultaneous submissions of one address get the same pair of answers
+// whether it is on the list, opted out or new.
 //
 // Timing is kept boring rather than left to chance: every accepted address
 // takes the same two rate-limit round trips, one lookup, exactly ONE write, and
 // one mail dispatch, whatever state it was in (a reactivation dispatches before
-// its write, because the write depends on it). The honeypot is the one branch
-// that answers without doing that work, and equalising it would mean writing
-// bot rows or sleeping — the body it returns is identical, which is what the
-// caller can actually read.
+// its write, because the write depends on it; a write that a concurrent change
+// left matching no row adds one read by id and mails nothing after it). The
+// honeypot is the one branch that answers without doing that work, and
+// equalising it would mean writing bot rows or sleeping — the body it returns
+// is identical, which is what the caller can actually read.
 //
 // WHICH VISITOR THE ADDRESS IS ATTRIBUTED TO COMES FROM THE COOKIE (SEC-008).
 //
@@ -190,8 +193,8 @@ export async function POST(req: NextRequest) {
     // this write (from any notice — the token never changes) was overwritten
     // with `active`, by the re-assert as much as by a reactivation. The write
     // lands only while the row still has the status and opt-out time this
-    // request saw; anything else matches no row and is refused below, so the
-    // newer choice stands.
+    // request saw; anything else matches no row, writes nothing, and the newer
+    // state stands (below).
     const guarded = supabase
       .from('blog_subscribers')
       .update(patch)
@@ -205,13 +208,42 @@ export async function POST(req: NextRequest) {
       console.error('[blog-subscribe] re-activation write failed', { subscriberId: existing.id, error });
       return NextResponse.json({ error: t('subscribe.couldNotSubscribeRightNow') }, { status: 500 });
     }
-    // Service role, so zero rows means the row was deleted, or its status or
-    // opt-out moved, between the lookup and this write — and a notice sent now
-    // would describe a row that is not there any more. Refused like any failed
-    // write, so a retry starts again from what the row now says.
+    // Service role, so zero rows means the row moved between the lookup and
+    // this write: its status or opt-out changed, or it was deleted.
+    //
+    // A ROW THAT MOVED IS STILL AN ACCEPTED SUBMISSION, AND GETS accepted().
+    // This used to answer 500 for it, and that was the middle answer again,
+    // readable by anyone: two simultaneous submissions of an address that had
+    // opted out both read the opt-out, both wait out a notice, the first
+    // reactivates and the second's guard then matches nothing — 500. An active
+    // row's re-assert changes neither guarded column, so its twin still
+    // matches, and a never-seen address's twin takes the 23505 branch; so the
+    // pair answered [200, 200], [200, 200] and [200, 500], and the 500 named
+    // the opt-out. Nothing is written here and no further notice is sent —
+    // "already on the list" would be untrue of a row the owner just left — so
+    // whatever the row now says (the owner's newer opt-out, or the twin's
+    // reactivation) stands, and the caller gets the one answer.
+    //
+    // A row that is GONE keeps the 500, so the retry finds no row and takes
+    // the insert path (Audit C1-S9-62). Telling the two apart costs one read
+    // by primary key, on this race-only path. It says nothing a caller can
+    // steer: no public route deletes a subscriber (unsubscribing is a status),
+    // so only an operator's erasure can land between the two. A refused
+    // re-read is not "the row is there": it is a failed read, answered with
+    // the same sentence as the failed lookup above.
     if (wroteNoRows(patched)) {
-      console.error('[blog-subscribe] subscriber write matched no row; it changed mid-request', { subscriberId: existing.id });
-      return NextResponse.json({ error: t('subscribe.couldNotSubscribeRightNow') }, { status: 500 });
+      const { data: still, error: recheckError } = await supabase
+        .from('blog_subscribers')
+        .select('id')
+        .eq('id', existing.id)
+        .maybeSingle();
+      if (recheckError || !still) {
+        console.error('[blog-subscribe] subscriber write matched no row and the row could not be found', {
+          subscriberId: existing.id, error: recheckError,
+        });
+        return NextResponse.json({ error: t('subscribe.couldNotSubscribeRightNow') }, { status: 500 });
+      }
+      return accepted();
     }
   } else {
     const { data: inserted, error } = await supabase
