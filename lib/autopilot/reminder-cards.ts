@@ -59,6 +59,17 @@
 // appointment or an event, whose cards are everyone's — is read and addressed
 // as before.
 //
+// Nor does a card the reader cannot find. Under 0486 a reader reads only the
+// cards that are theirs (the RLS twin of lib/autopilot/audience.ts), so a
+// guest's read of the cards has no renewal card in it and an unnamed teen's no
+// insurance card; answered as "no card", their reminders reached exactly the
+// readers the card refuses. So every create_reminder card the reader may read
+// is read, an everyone card's (a refill's, also related_type 'renewal')
+// included, and a reminder that looks like a card's whose card is not among
+// them is the managers' — who read every card, so it is never theirs to miss.
+// The same answer holds before 0486, when every member reads every card and an
+// unfound card is one that was never written.
+//
 // Client-safe: the briefing module's kitchen list, the Health page and the
 // reminders module read their reminders in the browser. The stamps an
 // accepted card writes are sha-256s (suggestionReminderKey,

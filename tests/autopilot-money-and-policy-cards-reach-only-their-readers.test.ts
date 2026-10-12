@@ -87,6 +87,67 @@ describe('the scan tells each card\'s readers, and no one else', () => {
   });
 });
 
+// 0486 reads a card by its audience, and the scan's insert reads its row back
+// (`.select('id')`), so on a member's own client (Rescan, app/api/autopilot/
+// scan) a card that member may not read is refused 42501 and the whole scan
+// failed. That scan now writes only the cards its member may read; the nightly
+// scan (service role, no viewer) writes the rest. The in-memory database has no
+// RLS, so what is asserted is what the scan tries to write.
+describe("a member's own scan writes only the cards they may read back (0486)", () => {
+  const AT = new Date('2026-09-28T06:30:00Z');
+  function insured() {
+    const db = household();
+    db.seed('family_insurance_policies', [
+      // Within 7 days: auto-tier, so the card would also create a reminder.
+      { id: 'pol-ava', family_id: FAMILY, policy_type: 'dental', insurer: 'Smile Co', renewal_date: '2026-10-01', member_id: 'ava', is_active: true },
+      { id: 'pol-home', family_id: FAMILY, policy_type: 'home', insurer: 'Acme', renewal_date: '2026-10-02', member_id: null, is_active: true },
+    ]);
+    db.seed('subscriptions_tracked', [{ id: 'sub-1', family_id: FAMILY, name: 'Netflix', cost_cents: 1599, cadence: 'monthly', next_charge: '2026-09-29', last_used: null, status: 'active' }]);
+    return db;
+  }
+  const insuranceCards = (db: ReturnType<typeof household>) => db.table('autopilot_suggestions')
+    .filter((s) => s.source_kind === 'family_insurance_policies').map((s) => s.source_id).sort();
+
+  it('a teen no policy names writes neither insurance card, nor its reminder, and the scan does not fail', async () => {
+    const db = insured();
+    await runAutopilotScan(db, FAMILY, 'u-sam', 'UTC', 'en-US', echo, AT, { role: 'teen', memberId: 'sam' });
+
+    expect(insuranceCards(db)).toEqual([]);
+    expect(db.table('reminders').filter((r) => r.related_id === 'pol-ava' || r.related_id === 'pol-home')).toEqual([]);
+    expect(sent.notices.filter((n) => n.title.includes('Smile Co') || n.title.includes('Acme'))).toEqual([]);
+    // What the teen may read is still written: the subscription charge.
+    expect(db.table('autopilot_suggestions').some((s) => s.source_id === 'sub-1')).toBe(true);
+  });
+
+  it('the member a policy names writes that card alone; a manager and the nightly scan write both', async () => {
+    const asAva = insured();
+    await runAutopilotScan(asAva, FAMILY, 'u-ava', 'UTC', 'en-US', echo, AT, { role: 'child', memberId: 'ava' });
+    expect(insuranceCards(asAva)).toEqual(['pol-ava']);
+
+    const asMum = insured();
+    await runAutopilotScan(asMum, FAMILY, 'u-mum', 'UTC', 'en-US', echo, AT, { role: 'parent', memberId: 'mum' });
+    expect(insuranceCards(asMum)).toEqual(['pol-ava', 'pol-home']);
+
+    const nightly = insured();
+    await runAutopilotScan(nightly, FAMILY, null, 'UTC', 'en-US', echo, AT);
+    expect(insuranceCards(nightly)).toEqual(['pol-ava', 'pol-home']);
+  });
+
+  it('a card the member skips is not archived as stale', async () => {
+    const db = insured();
+    db.seed('autopilot_suggestions', [{
+      id: 'sug-home', family_id: FAMILY, kind: 'insurance', title: 'home insurance (Acme) renews in 4 days', status: 'open',
+      source_kind: 'family_insurance_policies', source_id: 'pol-home', member_id: null, dedupe_key: 'insurance:pol-home:2026-10-02',
+      urgency: 2, confidence: 95, action_type: 'create_reminder', payload: {},
+    }]);
+    await runAutopilotScan(db, FAMILY, 'u-sam', 'UTC', 'en-US', echo, AT, { role: 'teen', memberId: 'sam' });
+
+    const card = db.table('autopilot_suggestions').find((s) => s.id === 'sug-home');
+    expect(card?.status).toBe('open');
+    expect(card?.dedupe_key).toBe('insurance:pol-home:2026-10-02');
+  });
+});
+
 describe('a card a reader is not shown is not theirs to resolve', () => {
   const scopeAs = (db: DB, role: ServiceScope['role'], memberId: string): ServiceScope => ({
     db, familyId: FAMILY, userId: `u-${memberId}`, memberId, role, actorKind: 'member', tz: 'UTC',
