@@ -149,6 +149,8 @@ function makeFake(options: FakeOptions): Fake {
         editedPayload: found.editedPayload ?? null,
       } : null);
     },
+    // This double models no household rules, so no release can leave one.
+    async releaseWithinFiledRule() { return ok('within' as const); },
     notifyFamily: options.notify ?? (async () => ok({ created: 2 })),
     verify: options.verify ?? (async () => ok({ verified: true, detail: 'All 1 checks passed.', checks: [] })),
     replan: options.replan ?? null,
@@ -932,5 +934,208 @@ describe('re-planning through a wired port', () => {
     expect(fake.step('p2').error).toMatch(/nothing more to plan/);
     expect(fake.run.plan_id).toBe('plan-1');
     expect(result).toMatchObject({ status: 'partially_completed', completed: 1, failed: 1 });
+  });
+});
+
+describe('a later batch starts only on what is true now', () => {
+  // Review on #1028: the graph read the run once per pass but dispatched the
+  // next batch anyway when that read failed or found nothing, so a pause or
+  // cancel written while the first step ran was not seen. And it read the
+  // requester's authority once, so a member removed or demoted after the first
+  // step still had the next one run as they were.
+  const chain = () => [{ id: 's1' }, { id: 's2', dependency_ids: ['s1'] }];
+
+  it('starts nothing more when the run cannot be re-read after a step paused it', async () => {
+    const fake = makeFake({
+      steps: chain(),
+      tool: (call, _attempt, f) => {
+        if (call.opts.stepId === 's1') f.run.paused_at = new Date(f.now).toISOString();
+        return okOutcome();
+      },
+    });
+    const load = fake.port.loadRun;
+    let reads = 0;
+    // Read 1 claims the run, read 2 opens the first pass; the read before the
+    // second batch fails.
+    fake.port.loadRun = async (id) => { reads += 1; return reads >= 3 ? fail('statement timeout', { code: 'db', retryable: true }) : load(id); };
+
+    const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(fake.calls.map((c) => c.opts.stepId)).toEqual(['s1']);
+    expect(result.status).toBe('error');
+    expect(fake.step('s2').status).toBe('queued');
+  });
+
+  it('starts nothing more when the run is gone after a step cancelled it', async () => {
+    const fake = makeFake({
+      steps: chain(),
+      tool: (call, _attempt, f) => {
+        if (call.opts.stepId === 's1') f.run.cancel_requested_at = new Date(f.now).toISOString();
+        return okOutcome();
+      },
+    });
+    const load = fake.port.loadRun;
+    let reads = 0;
+    fake.port.loadRun = async (id) => { reads += 1; return reads >= 3 ? ok(null) : load(id); };
+
+    const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(fake.calls.map((c) => c.opts.stepId)).toEqual(['s1']);
+    expect(result.status).toBe('not_found');
+    expect(fake.step('s2').status).toBe('queued');
+  });
+
+  it('a pause the next read does see stops the run as before (control)', async () => {
+    const fake = makeFake({
+      steps: chain(),
+      tool: (call, _attempt, f) => {
+        if (call.opts.stepId === 's1') f.run.paused_at = new Date(f.now).toISOString();
+        return okOutcome();
+      },
+    });
+
+    const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(fake.calls.map((c) => c.opts.stepId)).toEqual(['s1']);
+    expect(result.status).toBe('paused');
+  });
+
+  it('blocks the rest when the requester is removed after the first step', async () => {
+    const fake = makeFake({ steps: chain() });
+    const scopeFor = fake.port.scopeFor;
+    let asked = 0;
+    fake.port.scopeFor = async (run) => {
+      asked += 1;
+      return asked === 1 ? scopeFor(run) : fail('The person who asked for this is no longer an active member of the family.', { code: 'denied' });
+    };
+
+    const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(fake.calls.map((c) => c.opts.stepId)).toEqual(['s1']);
+    expect(result.status).toBe('blocked');
+    expect(fake.run.state).toBe('blocked');
+    expect(fake.run.error).toMatch(/no longer an active member/);
+    expect(fake.requestStates.at(-1)).toBe('blocked');
+    expect(fake.step('s2').status).toBe('queued');
+  });
+
+  it('runs the next batch with the role the requester holds now, not the one they started with', async () => {
+    const fake = makeFake({ steps: chain() });
+    const scopeFor = fake.port.scopeFor;
+    let asked = 0;
+    fake.port.scopeFor = async (run) => {
+      asked += 1;
+      const scoped = await scopeFor(run);
+      return scoped.ok && asked > 1 ? ok({ ...scoped.data, role: 'teen' }) : scoped;
+    };
+    const runTool = fake.port.runTool;
+    const roles: Array<string | null> = [];
+    fake.port.runTool = (scope, name, args, opts) => { roles.push(scope.role); return runTool(scope, name, args, opts); };
+
+    await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(roles).toEqual(['parent', 'teen']);
+  });
+
+  it('reads the requester again for each later batch, once per batch rather than per step', async () => {
+    const fake = makeFake({ steps: [{ id: 'a' }, { id: 'b' }, { id: 'c', dependency_ids: ['a', 'b'] }] });
+    const scopeFor = fake.port.scopeFor;
+    let asked = 0;
+    fake.port.scopeFor = async (run) => { asked += 1; return scopeFor(run); };
+
+    const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(result.status).toBe('completed');
+    expect(fake.calls.map((c) => c.opts.stepId)).toEqual(['a', 'b', 'c']);
+    expect(asked).toBe(2);
+  });
+});
+
+describe('a requester read that failed between batches is not a removal', () => {
+  // Review on #1028: a transient failure reading the requester before a later
+  // batch reached the same permanent block as a removed member, although
+  // nothing had shown they were gone. It now runs nothing more and leaves the
+  // run as it was for the next claim; a confirmed refusal still blocks.
+  const chain = () => [{ id: 's1' }, { id: 's2', dependency_ids: ['s1'] }];
+
+  for (const [label, failure] of [
+    ['a database error', { code: 'db', retryable: true }],
+    ['a retryable failure with no code', { retryable: true }],
+  ] as const) {
+    it(`${label} stops the next batch without blocking the run`, async () => {
+      const fake = makeFake({ steps: chain() });
+      const scopeFor = fake.port.scopeFor;
+      let asked = 0;
+      fake.port.scopeFor = async (run) => {
+        asked += 1;
+        return asked === 1 ? scopeFor(run) : fail('Bubaly could not confirm who this run is for.', failure);
+      };
+
+      const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+      expect(asked).toBe(2);
+      expect(fake.calls.map((c) => c.opts.stepId)).toEqual(['s1']);
+      expect(result.status).toBe('error');
+      expect(fake.run.state).toBe('executing');
+      expect(fake.requestStates).not.toContain('blocked');
+      expect(fake.eventTypes()).not.toContain('blocked');
+      expect(fake.step('s1').status).toBe('completed');
+      expect(fake.step('s2').status).toBe('queued');
+    });
+  }
+
+  it('a refusal that is not retryable still blocks (control)', async () => {
+    const fake = makeFake({ steps: chain() });
+    const scopeFor = fake.port.scopeFor;
+    let asked = 0;
+    fake.port.scopeFor = async (run) => {
+      asked += 1;
+      return asked === 1 ? scopeFor(run) : fail('This run would act for someone other than the person who asked, so Bubaly will not act on it.', { code: 'denied' });
+    };
+
+    const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(fake.calls.map((c) => c.opts.stepId)).toEqual(['s1']);
+    expect(result.status).toBe('blocked');
+    expect(fake.run.state).toBe('blocked');
+  });
+});
+
+describe('a requester read that failed at claim is not a removal', () => {
+  // Review on #1028 (AUD-1028-ACTOR-INITIAL): the same distinction at claim
+  // time. A transient failure reading the requester blocked the run, which the
+  // claim excludes until a person looks; it now runs and writes nothing, so the
+  // next claim reads again. A confirmed refusal still blocks.
+  const chain = () => [{ id: 's1' }, { id: 's2', dependency_ids: ['s1'] }];
+
+  for (const [label, failure] of [
+    ['a database error', { code: 'db', retryable: true }],
+    ['a retryable failure with no code', { retryable: true }],
+  ] as const) {
+    it(`${label} dispatches nothing and leaves the run as it was`, async () => {
+      const fake = makeFake({ steps: chain(), run: { state: 'ready' } });
+      fake.port.scopeFor = async () => fail('Bubaly could not confirm who this run is for.', failure);
+
+      const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+      expect(result.status).toBe('error');
+      expect(fake.calls).toEqual([]);
+      expect(fake.run.state).toBe('ready');
+      expect(fake.run.error).toBeUndefined();
+      expect(fake.events).toEqual([]);
+      expect(fake.requestStates).toEqual([]);
+      expect(fake.steps.map((s) => s.status)).toEqual(['queued', 'queued']);
+    });
+  }
+
+  it('a confirmed refusal at claim still blocks (control)', async () => {
+    const fake = makeFake({ steps: chain(), run: { state: 'ready' }, scopeError: 'The person who asked for this is no longer an active member of the family.' });
+
+    const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(result.status).toBe('blocked');
+    expect(fake.calls).toEqual([]);
+    expect(fake.run.state).toBe('blocked');
+    expect(fake.requestStates).toEqual(['blocked']);
   });
 });

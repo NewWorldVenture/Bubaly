@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join as nativeJoin } from 'node:path';
+const join = (...parts: string[]): string => nativeJoin(...parts).replace(/\\/g, '/');
 import { describe, expect, it } from 'vitest';
 
 // Page audit B7. Opening /dashboard/sync/accounts/google as a teen never
@@ -14,6 +15,7 @@ import { describe, expect, it } from 'vitest';
 
 function files(dir: string, test: RegExp): string[] {
   return (readdirSync(dir, { recursive: true }) as string[])
+    .map((f) => f.replace(/\\/g, '/'))
     .filter((f) => test.test(f) && !f.includes('node_modules'))
     .map((f) => join(dir, f));
 }

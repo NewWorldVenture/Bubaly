@@ -43,7 +43,8 @@
 // drives it with the real registry and hand-built trust inputs.
 import { conformNulls } from '@/lib/ai/schema-to-json';
 import { findDependencyCycle, type StepState } from '@/lib/ai/runs/states';
-import { NOTIFY_TOOL, notifyToolArgs, ownNoticeClears, parseNotifyInput, readAmountCents, type NotifyStepInput } from '@/lib/ai/runs/executor';
+import { NOTIFY_TOOL, notifyToolArgs, ownNoticeClears, parseNotifyInput, type NotifyStepInput } from '@/lib/ai/runs/executor';
+import { readAmountCents } from '@/lib/trust/amount';
 import { isManager } from '@/lib/constants/roles';
 import { parseVerificationSpec } from '@/lib/ai/runs/verify';
 import { getTool } from '@/lib/ai/tools/registry';

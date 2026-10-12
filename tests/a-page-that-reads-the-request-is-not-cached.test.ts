@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 
 // MAIN-F-005. /blog/[slug] declared `revalidate` and read the locale cookie.
@@ -9,8 +9,8 @@ import { describe, expect, it } from 'vitest';
 // 500. `force-dynamic` fixed the three pages; nothing stopped the combination
 // from coming back on those or any other page.
 
-const routeFiles = execSync("git ls-files 'app/**/page.tsx' 'app/**/layout.tsx' 'app/**/page.ts'", { encoding: 'utf8' })
-  .trim().split('\n').filter(Boolean);
+const routeFiles = execFileSync('git', ["ls-files","-z","app/**/page.tsx","app/**/layout.tsx","app/**/page.ts"], { encoding: 'utf8' })
+    .split('\0').filter(Boolean).filter(Boolean);
 const code = (f: string) => readFileSync(f, 'utf8').split('\n').filter((l) => !l.trimStart().startsWith('//')).join('\n');
 const READS_REQUEST = /\b(getTranslations|getLocaleContext)\(|\bcookies\(\)|\bheaders\(\)/;
 

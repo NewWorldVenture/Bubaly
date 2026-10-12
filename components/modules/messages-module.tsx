@@ -84,8 +84,9 @@ async function createConversation(payload: ConvInsert) {
 }
 
 export function MessagesModule() {
-  const { familyId, userId } = useApp();
-  return <MessagesWorkspace key={`${familyId}:${userId}`} />;
+  const { familyId, userId, selfMember } = useApp();
+  if (!selfMember?.id || selfMember.family_id !== familyId || selfMember.user_id !== userId || selfMember.is_active !== true) return <SkeletonList />;
+  return <MessagesWorkspace key={`${familyId}:${userId}:${selfMember.id}`} />;
 }
 
 function MessagesWorkspace() {

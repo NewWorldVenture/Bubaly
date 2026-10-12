@@ -903,6 +903,31 @@ export async function respawnMissingChoreAssignments(
 }
 
 /**
+ * Why a member's own completion matched no row, read back after the write: the
+ * assignment was handed to someone else, or a parent approved it, after the
+ * checks were made. Both are refusals in the words the up-front checks use; a
+ * row that is gone altogether is "not found", as it would have been before.
+ */
+async function refusedCompletion(scope: ServiceScope, assignmentId: string, ownMemberId: string): Promise<ServiceResult<never>> {
+  const t = await getTranslations();
+  const { data: current, error } = await scope.db
+    .from('chore_assignments')
+    .select('member_id, status')
+    .eq('id', assignmentId)
+    .eq('family_id', scope.familyId)
+    .maybeSingle();
+  if (error) console.error('[service:tasks] could not re-read a chore whose completion matched no row', { assignmentId, error });
+  if (!error && !current) return fail('That chore could not be found.', { code: SERVICE_CODES.notFound });
+  if (current && current.member_id === ownMemberId && current.status === 'approved') {
+    return fail(t('chores.approvedIsSettled'), { code: SERVICE_CODES.denied });
+  }
+  if (current && current.member_id !== ownMemberId) return fail(t('chores.notYourAssignment'), { code: SERVICE_CODES.denied });
+  // Unreadable, or changed in a way neither check names: still not settled by
+  // this write, and nothing was written.
+  return fail(t('chores.changedBeforeCompleting'), { code: SERVICE_CODES.denied });
+}
+
+/**
  * Mark an assignment done.
  *
  * A chore whose `requires_approval` is true goes to 'submitted', not 'done':
@@ -936,8 +961,9 @@ export async function completeChoreAssignment(scope: ServiceScope, assignmentId:
   // its points, back to "submitted". `can_manage_family` is parent or adult
   // (MANAGER_ROLES); a system actor (a cron) is the household itself.
   const decidesForAnyone = scope.role === 'parent' || scope.role === 'adult' || scope.role === 'system';
+  const ownMemberId = decidesForAnyone ? null : scope.memberId ?? null;
   if (!decidesForAnyone) {
-    if (assignment.member_id !== scope.memberId) {
+    if (!ownMemberId || assignment.member_id !== ownMemberId) {
       return fail((await getTranslations())('chores.notYourAssignment'), { code: SERVICE_CODES.denied });
     }
     if (assignment.status === 'approved') {
@@ -957,18 +983,27 @@ export async function completeChoreAssignment(scope: ServiceScope, assignmentId:
   }
 
   const status: TaskStatus = chore?.requires_approval === false ? 'done' : 'submitted';
-  const { data, error } = await scope.db
+  let completion = scope.db
     .from('chore_assignments')
     .update({ status, submitted_at: new Date().toISOString() })
     .eq('id', assignmentId)
-    .eq('family_id', scope.familyId)
-    .select('*')
-    .maybeSingle();
+    .eq('family_id', scope.familyId);
+  // The two checks above were made on the FIRST read. A parent approving the
+  // chore, or handing it to a sibling, between that read and this write would
+  // otherwise be overwritten: the approved chore — and its points — pulled
+  // back to "submitted", or a sibling's chore marked done by someone else.
+  // The run executor writes on the service client, where 0374's settled-row
+  // trigger steps aside, so the write itself has to carry the rule.
+  if (ownMemberId) completion = completion.eq('member_id', ownMemberId).neq('status', 'approved');
+  const { data, error } = await completion.select('*').maybeSingle();
   if (error) {
     console.error('[service:tasks] assignment complete failed', error);
     return fail(describeDbError(error, 'Could not update that chore.'), { code: SERVICE_CODES.db });
   }
-  if (!data) return fail('That chore could not be found.', { code: SERVICE_CODES.notFound });
+  if (!data) {
+    if (!ownMemberId) return fail('That chore could not be found.', { code: SERVICE_CODES.notFound });
+    return refusedCompletion(scope, assignmentId, ownMemberId);
+  }
 
   // The SETTLED status, not the requested one: a chore that needs no approval
   // is done, and the trail must not say it is waiting for a parent.

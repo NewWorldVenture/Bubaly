@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { posix } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { hoverReveals, revealProblem, sourceFiles } from './helpers/hover-reveals';
+
+const join = posix.join;
 
 // A11Y-001: row actions (delete, edit, pin, the "…" menu) hidden until the
 // row is hovered were invisible to the two kinds of user who cannot hover.

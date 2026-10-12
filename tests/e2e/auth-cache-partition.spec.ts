@@ -57,12 +57,14 @@ type Row = { id: string };
 type ProviderState = {
   user: string; session: string; rotation: number; rows: Row[]; unavailable: boolean;
   tokenVariant?: 'missing-session' | 'invalid-session' | 'wrong-sub' | 'missing-sub' | 'non-jwt';
+  rosterUnavailable?: boolean; holdRosterOnce?: boolean; rosterHeld?: boolean; releaseRoster?: () => void; rosterRequests?: number;
   calls: string[]; holdRefresh?: boolean; refreshHeld?: boolean; releaseRefresh?: () => void;
 };
 type Snapshot = { user: string; role: string; data: Row[]; copied: Row[]; loading: boolean; error: string | null; stale: boolean; instance: number };
 type Probe = {
   signIn: () => Promise<void>; signOut: () => Promise<void>; rotate: () => Promise<void>;
-  mount: (access: CacheAccessIdentity, provider?: boolean) => void; unmount: () => void;
+  mount: (access: CacheAccessIdentity, provider?: boolean, initialMembers?: Row[], strict?: boolean) => void;
+  rosterRefresh: () => Promise<void>; startRosterRefresh: () => void; waitRosterRefresh: () => Promise<void>; unmount: () => void;
   snapshot: () => Snapshot | null; refresh: () => Promise<void>; settle: () => Promise<void>;
   disk: () => Record<string, string>; failRemoval: () => void; removals: number;
   holdBootstrap: () => void; releaseBootstrap: () => Promise<void>; bootstrapHeld: boolean;
@@ -91,6 +93,17 @@ async function install(context: BrowserContext, override: Partial<ProviderState>
     const headers = { 'access-control-allow-origin': origin, 'access-control-allow-headers': '*', 'access-control-allow-methods': 'GET,POST,OPTIONS' };
     if (request.method() === 'OPTIONS' || url.pathname === '/auth/v1/logout') { await route.fulfill({ status: 204, headers }); return; }
     if (url.pathname === '/rest/v1/family_members') {
+      if (url.searchParams.get('is_active') === 'eq.true') {
+        state.rosterRequests = (state.rosterRequests ?? 0) + 1;
+        const captured = JSON.stringify(state.rosterUnavailable
+          ? { code: '42501', message: 'Fixture roster permission unavailable', details: null, hint: null } : state.rows);
+        const status = state.rosterUnavailable ? 403 : 200;
+        if (state.holdRosterOnce) {
+          state.holdRosterOnce = false; state.rosterHeld = true;
+          await new Promise<void>(resolve => { state.releaseRoster = resolve; });
+        }
+        await route.fulfill({ status, headers, contentType: 'application/json', body: captured }); return;
+      }
       await route.fulfill({ status: state.unavailable ? 403 : 200, headers, contentType: 'application/json', body: JSON.stringify(state.unavailable
         ? { code: '42501', message: 'Fixture permission unavailable', details: null, hint: null } : state.rows) }); return;
     }
@@ -222,20 +235,28 @@ async function load(page: Page) {
         React.createElement('input', { 'aria-label': 'Private draft', value: draft, onChange: event => setDraft(event.target.value) }),
         React.createElement('button', { onClick: () => setCopied(state.data) }, 'Copy rows locally'));
     }
-    function AppQuery() { return React.createElement(Query, { access: useApp() }); }
+    let rosterPending;
+    p.startRosterRefresh = () => { rosterPending = p.rosterRefresh(); };
+    p.waitRosterRefresh = () => rosterPending;
+    function AppQuery() {
+      const app = useApp(); p.rosterRefresh = app.refreshMembers;
+      return React.createElement(React.Fragment, null,
+        React.createElement('output', { 'aria-label': 'Current membership' }, app.selfMember?.id ?? 'none'),
+        React.createElement(Query, { access: app }));
+    }
     let root;
-    p.mount = (access, provider = true) => {
+    p.mount = (access, provider = true, initialMembers = [], strict = false) => {
       if (!root) root = ReactDOM.createRoot(document.getElementById('root'));
       const value = { userId: access.userId, userEmail: 'fixture@example.invalid', familyId: access.familyId,
         family: { id: access.familyId, name: 'Fixture family' }, role: access.role, families: [],
         isSuperAdmin: access.isSuperAdmin, defaultDashboard: 'family', planLevel: access.planLevel, featureTiers: access.featureTiers };
       const child = provider
-        ? React.createElement(AppProvider, { value, membershipId: access.memberId, membershipUpdatedAt: access.membershipUpdatedAt, initialMembers: [] }, React.createElement(AppQuery))
+        ? React.createElement(AppProvider, { value, membershipId: access.memberId, membershipUpdatedAt: access.membershipUpdatedAt, initialMembers }, React.createElement(AppQuery))
         : React.createElement(Query, { access });
       const locale = localeOrDefault(p.locale);
       ReactDOM.flushSync(() => root.render(React.createElement(LocaleProvider, {
         locale, source: 'default', messages: getMessages(locale.code),
-      }, child)));
+      }, strict ? React.createElement(React.StrictMode, null, child) : child)));
     };
     p.unmount = () => { ReactDOM.flushSync(() => root.unmount()); root = null; };
     p.snapshot = () => { const pre = document.querySelector('pre'); return pre ? JSON.parse(pre.textContent) : null; };
@@ -523,4 +544,103 @@ test('valid authentication never adopts unowned v1 rows, and queries outside the
   await page.evaluate(() => window.__authPartition.refresh());
   await expect.poll(() => snapshot(page)).toMatchObject({ data: [{ id: 'network-only' }], error: null });
   expect(await page.evaluate(() => window.__authPartition.disk())).toEqual(disk);
+});
+
+
+test.describe('roster refresh admission first RED', () => {
+  const activeMember = { id: accessA.memberId, family_id: accessA.familyId, user_id: userA, is_active: true, role: 'parent', display_name: 'Synthetic owner', updated_at: accessA.membershipUpdatedAt };
+  async function active(page: Page) {
+    await load(page);
+    await page.evaluate(() => window.__authPartition.signIn());
+    await page.evaluate(({ access, member }) => window.__authPartition.mount(access, true, [member]), { access: accessA, member: activeMember });
+    await expect(page.getByLabel('Current membership')).toHaveText(accessA.memberId);
+    await expect.poll(() => page.evaluate(() => window.__authPartition.identity())).toEqual({ userId: userA, sessionId: sessionA });
+    expect(await page.evaluate(() => window.__authPartition.cookieAbsent())).toBe(false);
+    return page.context().cookies();
+  }
+  test('healthy roster refresh preserves the actual auth session and current member', async ({ page, context }) => {
+    const state = await install(context, { rows: [activeMember] });
+    const cookies = await active(page);
+    await page.evaluate(() => window.__authPartition.rosterRefresh());
+    await expect(page.getByLabel('Current membership')).toHaveText(accessA.memberId);
+    expect(state.rosterRequests).toBe(1);
+    expect(await context.cookies()).toEqual(cookies);
+    expect(await page.evaluate(() => window.__authPartition.identity())).toEqual({ userId: userA, sessionId: sessionA });
+    expect(state.calls.some(call => call.includes('/auth/v1/logout'))).toBe(false);
+  });
+  test('an older active roster response cannot resurrect a newer observed retirement', async ({ page, context }) => {
+    const state = await install(context, { rows: [activeMember] });
+    const cookies = await active(page);
+    state.holdRosterOnce = true;
+    await page.evaluate(() => window.__authPartition.startRosterRefresh());
+    try {
+      await expect.poll(() => state.rosterHeld).toBe(true);
+      state.rows = [];
+      await page.evaluate(() => window.__authPartition.rosterRefresh());
+      await expect(page.getByLabel('Current membership')).toHaveText('none');
+      expect(state.rosterRequests).toBe(2);
+      expect(await context.cookies()).toEqual(cookies);
+      expect(await page.evaluate(() => window.__authPartition.identity())).toEqual({ userId: userA, sessionId: sessionA });
+      state.releaseRoster!();
+      await page.evaluate(() => window.__authPartition.waitRosterRefresh());
+      await page.evaluate(() => window.__authPartition.settle());
+      expect(await context.cookies()).toEqual(cookies);
+      expect(state.calls.some(call => call.includes('/auth/v1/logout'))).toBe(false);
+      await expect(page.getByLabel('Current membership')).toHaveText('none');
+    } finally { state.releaseRoster?.(); }
+  });
+});
+
+
+test.describe('roster generation error and StrictMode controls', () => {
+  const member = { id: accessA.memberId, family_id: accessA.familyId, user_id: userA, is_active: true, role: 'parent', display_name: 'Synthetic owner', updated_at: accessA.membershipUpdatedAt };
+  async function ready(page: Page, strict = false) {
+    await load(page);
+    await page.evaluate(() => window.__authPartition.signIn());
+    await page.evaluate(({ access, member, strict }) => window.__authPartition.mount(access, true, [member], strict), { access: accessA, member, strict });
+    await expect(page.getByLabel('Current membership')).toHaveText(accessA.memberId);
+    await expect.poll(() => page.evaluate(() => window.__authPartition.identity())).toEqual({ userId: userA, sessionId: sessionA });
+    expect(await page.evaluate(() => window.__authPartition.cookieAbsent())).toBe(false);
+    return page.context().cookies();
+  }
+  test('a latest failed roster refresh cannot admit an older active response', async ({ page, context }) => {
+    const state = await install(context, { rows: [member] });
+    const cookies = await ready(page);
+    state.rows = [];
+    await page.evaluate(() => window.__authPartition.rosterRefresh());
+    await expect(page.getByLabel('Current membership')).toHaveText('none');
+    state.rows = [member]; state.holdRosterOnce = true;
+    const errors: string[] = [];
+    page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+    await page.evaluate(() => window.__authPartition.startRosterRefresh());
+    try {
+      await expect.poll(() => state.rosterHeld).toBe(true);
+      state.rosterUnavailable = true;
+      await page.evaluate(() => window.__authPartition.rosterRefresh());
+      expect(errors.some(error => error.includes('[app-context] member roster refresh failed; keeping the current roster'))).toBe(true);
+      await expect(page.getByLabel('Current membership')).toHaveText('none');
+      expect(state.rosterRequests).toBe(3);
+      state.releaseRoster!();
+      await page.evaluate(() => window.__authPartition.waitRosterRefresh());
+      await page.evaluate(() => window.__authPartition.settle());
+      await expect(page.getByLabel('Current membership')).toHaveText('none');
+      expect(await context.cookies()).toEqual(cookies);
+      expect(await page.evaluate(() => window.__authPartition.identity())).toEqual({ userId: userA, sessionId: sessionA });
+      expect(state.calls.some(call => call.includes('/auth/v1/logout'))).toBe(false);
+    } finally { state.releaseRoster?.(); }
+  });
+  test('a live StrictMode provider continues admitting current roster updates', async ({ page, context }) => {
+    const state = await install(context, { rows: [member] });
+    const cookies = await ready(page, true);
+    state.rows = [];
+    await page.evaluate(() => window.__authPartition.rosterRefresh());
+    await expect(page.getByLabel('Current membership')).toHaveText('none');
+    state.rows = [member];
+    await page.evaluate(() => window.__authPartition.rosterRefresh());
+    await expect(page.getByLabel('Current membership')).toHaveText(accessA.memberId);
+    expect(state.rosterRequests).toBe(2);
+    expect(await context.cookies()).toEqual(cookies);
+    expect(await page.evaluate(() => window.__authPartition.identity())).toEqual({ userId: userA, sessionId: sessionA });
+    expect(state.calls.some(call => call.includes('/auth/v1/logout'))).toBe(false);
+  });
 });
