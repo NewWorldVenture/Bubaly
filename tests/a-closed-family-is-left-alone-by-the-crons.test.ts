@@ -113,7 +113,9 @@ vi.mock('@/lib/ai/runs/executor', () => ({
 }));
 vi.mock('@/lib/ai/planner/replan-port', () => ({ replanPortFor: () => null }));
 vi.mock('@/lib/ai/runs/continue', () => ({ kickRun: () => undefined, continueRun: async () => ({ claimed: false }) }));
-vi.mock('@/lib/marketing/automation-steps', () => ({
+vi.mock('@/lib/marketing/automation-steps', async (importOriginal) => ({
+  // The runners also count sends and read a retried run's log through this module.
+  ...(await importOriginal<typeof import('@/lib/marketing/automation-steps')>()),
   runSteps: async (_steps: unknown, recipient: { email: string | null }) => { harness.emailedTo.push(recipient.email ?? ''); return ['send_email']; },
 }));
 
