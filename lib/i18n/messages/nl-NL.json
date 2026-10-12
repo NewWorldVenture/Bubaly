@@ -336,6 +336,7 @@
   "actions.couldNotUpdateThatLeftover": "Dit restje kon niet worden bijgewerkt. Vernieuw en probeer het opnieuw.",
   "actions.couldNotUpdateThatMember": "Kan dat lid niet bijwerken.",
   "actions.couldNotUpdateThatMilestone": "Deze mijlpaal kon niet worden bijgewerkt. Vernieuw en probeer het opnieuw — hij is niet gewijzigd.",
+  "actions.milestoneAlreadyOnTheLadder": "Deze mijlpaal staat al op de zelfstandigheidsladder van dit kind, dus er is niets toegevoegd. De ladder laat nu zien hoe hij ervoor staat.",
   "actions.couldNotUpdateThatPaperwork": "Kan dat papierwerk niet bijwerken.",
   "actions.couldNotUpdateThatPolicy": "Kan die polis niet bijwerken.",
   "actions.couldNotUpdateThatReport": "Kan die melding niet bijwerken.",

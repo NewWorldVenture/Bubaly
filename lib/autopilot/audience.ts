@@ -8,8 +8,9 @@
 // refuses — a guest was pushed "$15.99 charge: Netflix tomorrow" although the
 // applied 0481 `subscriptions_tracked_not_a_guests_read` refuses them the row.
 //
-// One rule, used by the scan to address the push and by every screen that
-// lists suggestions:
+// One rule, used by the scan to address the push, by the notifications
+// generator to address a card's reminder, and by every screen that lists
+// suggestions (Home's "Completed by Bubaly" included):
 //
 //   not-guests      subscription charges and unused-subscription flags, and
 //                   renewals — the two tables 0481 refuses a guest
@@ -64,3 +65,37 @@ export function audienceMemberIds(
     ))
     .map((m) => m.id);
 }
+
+/**
+ * The member a reminder made from this card is assigned to — the scan's
+ * auto-created one and a manager's "Add reminder" alike.
+ *
+ * An insurance card's `member_id` says whose policy it is, which is who may
+ * READ it; it does not make the renewal that member's errand. Assigned to
+ * them, a policy naming a child was reminded to the child alone and the
+ * parents who renew it heard nothing. So the reminder carries no member, and
+ * its notice goes to the card's readers (`reminderNoticeMemberIds`).
+ */
+export function reminderMemberFor(row: AudienceRow): string | null {
+  return suggestionAudience(row) === 'policy-readers' ? null : row.member_id ?? null;
+}
+
+/**
+ * The members told when a reminder made from this card comes due, or null
+ * when the card is everyone's — then it is addressed like any reminder (its
+ * member, or the family). Never the family for a narrower card: a renewal's
+ * reminder is not a guest's, an insurance renewal's is the managers' and the
+ * member the policy names.
+ */
+export function reminderNoticeMemberIds(row: AudienceRow, roster: { id: string; role: string }[]): string[] | null {
+  const audience = suggestionAudience(row);
+  return audience === 'everyone' ? null : audienceMemberIds(audience, roster, row.member_id ?? null);
+}
+
+/**
+ * A PostgREST `or` filter for the cards whose audience is narrower than
+ * everyone. A pre-filter for a read, built from the same names as
+ * `suggestionAudience`, which stays the rule.
+ */
+export const NARROWER_THAN_EVERYONE_FILTER =
+  `kind.in.(insurance,finance),source_kind.in.(family_insurance_policies,${[...NOT_GUESTS].join(',')})`;

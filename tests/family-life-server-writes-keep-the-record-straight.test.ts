@@ -133,7 +133,8 @@ describe('"Start" never rewrites a rung already on the ladder (F18)', () => {
     ladder.seed('independence_milestones', [{ id: 'm1', family_id: FAMILY, member_id: 'kid', domain: rung.domain, title: rung.title, status: 'achieved', achieved_at: '2026-10-01T00:00:00Z', evidence: 'Did it all week' }]);
     h.db = ladder;
 
-    expect(await startMilestoneAction('kid', rung.title)).toEqual({ ok: true });
+    // Told it was already there (insert-only, confirmed), not "Added".
+    expect(await startMilestoneAction('kid', rung.title)).toEqual({ ok: false, code: 'alreadyOnLadder', error: 'actions.milestoneAlreadyOnTheLadder' });
     expect(ladder.table('independence_milestones')).toEqual([expect.objectContaining({ id: 'm1', status: 'achieved', evidence: 'Did it all week' })]);
   });
 });

@@ -340,7 +340,7 @@ export default async function HomePage() {
       console.warn('[home] pending AI approvals read threw', cause);
       return { ok: false as const, error: String(cause) };
     }),
-    loadCompletedByBubaly(supabase, familyId, { now, limit: 6 }).catch((cause) => {
+    loadCompletedByBubaly(supabase, familyId, { now, limit: 6, viewer: { role: ctx.active.role, memberId: ctx.active.member.id } }).catch((cause) => {
       console.error('[home] completed-by-Bubaly read threw', cause);
       return { ok: false as const, error: String(cause) };
     }),

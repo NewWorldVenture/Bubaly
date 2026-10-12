@@ -336,6 +336,7 @@
   "actions.couldNotUpdateThatLeftover": "Non è stato possibile aggiornare questo avanzo. Aggiorna e riprova.",
   "actions.couldNotUpdateThatMember": "Impossibile aggiornare quel membro.",
   "actions.couldNotUpdateThatMilestone": "Non è stato possibile aggiornare questa tappa. Aggiorna e riprova: non è cambiata.",
+  "actions.milestoneAlreadyOnTheLadder": "Questa tappa è già nella scala dell'autonomia di questo figlio, quindi non è stato aggiunto nulla. La scala ora mostra a che punto è.",
   "actions.couldNotUpdateThatPaperwork": "Impossibile aggiornare quel documento.",
   "actions.couldNotUpdateThatPolicy": "Impossibile aggiornare quella polizza.",
   "actions.couldNotUpdateThatReport": "Impossibile aggiornare quella segnalazione.",

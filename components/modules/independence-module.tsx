@@ -49,12 +49,18 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
   const inProgress = kidRows.filter(r => r.status === 'in_progress' || r.status === 'suggested');
   const achieved = kidRows.filter(r => r.status === 'achieved');
 
-  function run(fn: () => Promise<{ ok: boolean } & { error?: string }>, key: string, okMsg: string) {
+  function run(fn: () => Promise<{ ok: boolean } & { error?: string; code?: string }>, key: string, okMsg: string) {
     setBusy(key);
     startTransition(async () => {
       const res = await fn();
       setBusy(null);
-      if (!res.ok) { toastError(res.error ?? 'Something went wrong'); return; }
+      if (!res.ok) {
+        toastError(res.error ?? 'Something went wrong');
+        // Start on a rung already on the ladder added nothing: this page is
+        // behind, so it is brought up to date rather than left offering Start.
+        if (res.code === 'alreadyOnLadder') router.refresh();
+        return;
+      }
       success(okMsg);
       router.refresh();
     });

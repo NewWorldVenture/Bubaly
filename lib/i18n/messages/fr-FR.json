@@ -336,6 +336,7 @@
   "actions.couldNotUpdateThatLeftover": "Impossible de mettre à jour ce reste. Actualisez et réessayez.",
   "actions.couldNotUpdateThatMember": "Impossible de mettre à jour ce membre.",
   "actions.couldNotUpdateThatMilestone": "Impossible de mettre à jour cette étape. Actualisez et réessayez — elle n’a pas changé.",
+  "actions.milestoneAlreadyOnTheLadder": "Cette étape figure déjà sur l’échelle d’autonomie de cet enfant, rien n’a donc été ajouté. L’échelle montre maintenant où elle en est.",
   "actions.couldNotUpdateThatPaperwork": "Impossible de mettre à jour ce document.",
   "actions.couldNotUpdateThatPolicy": "Impossible de mettre à jour ce contrat.",
   "actions.couldNotUpdateThatReport": "Impossible de mettre à jour ce signalement.",

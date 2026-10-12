@@ -327,6 +327,7 @@
   "actions.couldNotUpdateThatLeftover": "Could not update that leftover. Refresh and try again.",
   "actions.couldNotUpdateThatMember": "Could not update that member.",
   "actions.couldNotUpdateThatMilestone": "Could not update that milestone. Refresh and try again — it has not changed.",
+  "actions.milestoneAlreadyOnTheLadder": "That milestone is already on this child's independence ladder, so nothing was added. The ladder now shows where it stands.",
   "actions.couldNotUpdateThatPaperwork": "Could not update that paperwork.",
   "actions.couldNotUpdateThatPolicy": "Could not update that policy.",
   "actions.couldNotUpdateThatReport": "Could not update that report.",

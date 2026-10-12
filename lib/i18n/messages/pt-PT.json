@@ -337,6 +337,7 @@
   "actions.couldNotUpdateThatLeftover": "Não foi possível atualizar essa sobra. Atualize e tente novamente.",
   "actions.couldNotUpdateThatMember": "Não foi possível atualizar esse membro.",
   "actions.couldNotUpdateThatMilestone": "Não foi possível atualizar esse marco. Atualize e tente novamente — não foi alterado.",
+  "actions.milestoneAlreadyOnTheLadder": "Esse marco já está na escada de autonomia desta criança, por isso nada foi adicionado. A escada mostra agora em que ponto está.",
   "actions.couldNotUpdateThatPaperwork": "Não foi possível atualizar essa papelada.",
   "actions.couldNotUpdateThatPolicy": "Não foi possível atualizar essa apólice.",
   "actions.couldNotUpdateThatReport": "Não foi possível atualizar essa denúncia.",

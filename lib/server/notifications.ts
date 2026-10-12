@@ -24,6 +24,9 @@ import { asWallClockIn, isValidTimezone } from '@/lib/time/zoned';
 import { addDaysToDayKey, dayKeyInTz, systemScopeForFamily, zonedDayBoundsMs } from '@/lib/services/scope';
 import { readInChunks } from '@/lib/supabase/chunked-in';
 import { readAll } from '@/lib/supabase/read-all';
+import { NARROWER_THAN_EVERYONE_FILTER, reminderNoticeMemberIds, type AudienceRow } from '@/lib/autopilot/audience';
+import { AUTOPILOT_SOURCE_TAG } from '@/lib/reminders/provenance';
+import { suggestionReminderKey } from '@/lib/services/autopilot';
 
 type DB = SupabaseClient<Database>;
 type NotificationMember = Pick<Tables<'family_members'>, 'id' | 'user_id' | 'display_name' | 'role' | 'birthday'>;
@@ -169,7 +172,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
       supabase.from('chore_assignments').select('id, due_at, member_id, chore_id, status').eq('family_id', familyId).in('status', ['todo', 'in_progress']).not('due_at', 'is', null).lte('due_at', in24).gte('due_at', nowIso),
       supabase.from('school_events').select('id, title, starts_at, member_id, event_type').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
       supabase.from('sports_events').select('id, title, starts_at, member_id, sport, location').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
-      supabase.from('reminders').select('id, title, remind_at, member_id, is_done').eq('family_id', familyId).eq('is_done', false).gte('remind_at', nowIso).lte('remind_at', in24),
+      supabase.from('reminders').select('id, title, remind_at, member_id, is_done, related_type, related_id').eq('family_id', familyId).eq('is_done', false).gte('remind_at', nowIso).lte('remind_at', in24),
       supabase.from('documents').select('id, title, expires_at').eq('family_id', familyId).not('expires_at', 'is', null).gte('expires_at', todayKey).lte('expires_at', documentMaxKey),
       // Renewals within ~90d (per-item reminder window applied in code) and open signups within 7d.
       supabase.from('renewals').select('id, title, expires_at, reminder_days, status').eq('family_id', familyId).eq('status', 'active').gte('expires_at', todayKey).lte('expires_at', renewalMaxKey),
@@ -276,13 +279,46 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     });
   }
 
+  // An Autopilot card's reminder is told to the card's readers
+  // (lib/autopilot/audience.ts), not by the rule for a reminder somebody wrote:
+  // with no member that rule is the whole family, so a renewal's "Renew
+  // Passport" reached a guest, and with the policy's member it was that child
+  // alone, so the parents who renew the policy heard nothing. Linked through
+  // what each path writes: the scan's `reminders` row names its source
+  // (related_type 'renewal', related_id the renewal or policy), and an
+  // accepted card's `family_reminders` row carries the card's idempotency key
+  // (lib/services/autopilot suggestionReminderKey).
+  //
+  // Read once, and only when a reminder could be one. A failed read never
+  // widens the audience: such a reminder goes to the managers, who read every
+  // card, and the rest of its readers are told on a later tick.
+  let cardRead: Promise<ReminderCards | null> | null = null;
+  const reminderCards = () => (cardRead ??= readReminderCards(supabase, familyId));
+  const audienceRoster = (members ?? []).map((m) => ({ id: m.id, role: m.role }));
+  const managerAccounts = documentManagers.map((m) => m.user_id as string);
+  /** The accounts told about a card's reminder; undefined when it is no narrower card's. */
+  const cardReaders = (cards: ReminderCards | null, card: (cards: ReminderCards) => AudienceRow | undefined): string[] | undefined => {
+    if (!cards) return managerAccounts;
+    const found = card(cards);
+    const ids = found ? reminderNoticeMemberIds(found, audienceRoster) : null;
+    if (!ids) return undefined;
+    return [...new Set(ids.map((id) => userByMember.get(id)).filter((u): u is string => typeof u === 'string' && u.trim().length > 0))];
+  };
+
   for (const r of reminders ?? []) {
-    candidates.push({
-      type: 'system', related_type: 'reminders', related_id: r.id,
-      user_id: r.member_id ? userByMember.get(r.member_id) ?? null : null,
+    const base = {
+      type: 'system' as const, related_type: 'reminders', related_id: r.id,
       title: `Reminder: ${r.title}`,
       body: `Due ${timeLabel(r.remind_at, tz)}`,
-    });
+    };
+    // The scan's day-tied reminders (lib/autopilot/scan.ts relatedType).
+    const source = r.related_type === 'renewal' ? r.related_id : null;
+    const readers = source ? cardReaders(await reminderCards(), (cards) => cards.bySource.get(source)) : undefined;
+    if (readers) {
+      for (const account of readers) candidates.push({ ...base, user_id: account });
+      continue;
+    }
+    candidates.push({ ...base, user_id: r.member_id ? userByMember.get(r.member_id) ?? null : null });
   }
 
   // Expiring documents → notify managers (one per manager so each is alerted).
@@ -349,17 +385,24 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   // their due time.
   const reminderHorizon = reminderFetchHorizonIso(now);
   const { data: famReminders } = await supabase.from('family_reminders')
-    .select('id, title, remind_at, status, early_reminder_minutes, member_id, recurrence, snoozed_until')
+    .select('id, title, remind_at, status, early_reminder_minutes, member_id, recurrence, snoozed_until, idempotency_key, tags')
     .eq('family_id', familyId).in('status', ['active', 'snoozed']).not('remind_at', 'is', null)
     .or(`and(status.eq.active,remind_at.gte.${nowIso},remind_at.lte.${reminderHorizon}),and(status.eq.snoozed,snoozed_until.gte.${nowIso},snoozed_until.lte.${reminderHorizon})`);
   for (const n of dueFamilyReminderNotices((famReminders ?? []) as FamilyReminderRow[], now)) {
     const r = (famReminders ?? []).find((x) => x.id === n.id)!;
-    candidates.push({
-      type: 'system', related_type: 'family_reminders', related_id: n.key,
-      user_id: r.member_id ? userByMember.get(r.member_id) ?? null : null,
+    const base = {
+      type: 'system' as const, related_type: 'family_reminders', related_id: n.key,
       title: `Reminder: ${n.title}`,
       body: `Due ${timeLabel(n.remindAtIso, tz)}`,
-    });
+    };
+    // An accepted Autopilot card's reminder (see the scan's reminders above).
+    const key = r.idempotency_key && (r.tags ?? []).some((tag) => tag.startsWith(AUTOPILOT_SOURCE_TAG)) ? r.idempotency_key : null;
+    const readers = key ? cardReaders(await reminderCards(), (cards) => cards.byReminderKey.get(key)) : undefined;
+    if (readers) {
+      for (const account of readers) candidates.push({ ...base, user_id: account });
+      continue;
+    }
+    candidates.push({ ...base, user_id: r.member_id ? userByMember.get(r.member_id) ?? null : null });
   }
 
   // "On this day" memories → one warm family-wide ping on days that resurface
@@ -541,4 +584,33 @@ function toRow(familyId: string, c: Candidate): NotificationRow {
     related_type: c.related_type,
     related_id: c.related_id,
   };
+}
+
+type ReminderCard = AudienceRow & { id: string; source_id: string | null };
+type ReminderCards = { bySource: Map<string, ReminderCard>; byReminderKey: Map<string, ReminderCard> };
+
+/**
+ * The family's Autopilot reminder cards whose audience is narrower than
+ * everyone, indexed by the two links a reminder carries back to its card: the
+ * source the scan's reminder names, and the key a manager's accepted card
+ * stamps on its `family_reminders` row. Newest card first for a source, so a
+ * policy renewed every year answers with this year's. Every page, so a card is
+ * never missed for being old; null when the read failed.
+ */
+async function readReminderCards(supabase: DB, familyId: string): Promise<ReminderCards | null> {
+  const read = await readAll<ReminderCard>((from, to) => supabase.from('autopilot_suggestions')
+    .select('id, kind, source_kind, source_id, member_id')
+    .eq('family_id', familyId).eq('action_type', 'create_reminder').or(NARROWER_THAN_EVERYONE_FILTER)
+    .order('created_at', { ascending: false }).order('id').range(from, to));
+  if (read.error) {
+    console.error('[notifications] generation source read failed', { familyId, table: 'autopilot_suggestions', error: read.error });
+    return null;
+  }
+  const bySource = new Map<string, ReminderCard>();
+  const byReminderKey = new Map<string, ReminderCard>();
+  for (const card of read.rows) {
+    if (card.source_id && !bySource.has(card.source_id)) bySource.set(card.source_id, card);
+    byReminderKey.set(suggestionReminderKey(familyId, card.id), card);
+  }
+  return { bySource, byReminderKey };
 }

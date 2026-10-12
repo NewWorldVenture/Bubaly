@@ -9,6 +9,7 @@ import { adviseOnPurchase, describeAdvice, type FactRow, type HomeAssetRow, type
 import type { LocationLike } from '@/lib/inventory/finder';
 import { daysUntilNextOn } from '@/lib/celebrations/dates';
 import { isPollClosed } from '@/lib/voting/polls';
+import { isManager } from '@/lib/constants/roles';
 
 export type InsightKind =
   | 'chores'
@@ -142,6 +143,16 @@ export const MANAGER_ONLY_INSIGHTS: ReadonlySet<InsightKind> = new Set<InsightKi
   // shows a child or teen only the policies that name them.
   'insurance',
 ]);
+
+/**
+ * Whether `role` may ask for `kind` — the route's own refusal
+ * (`MANAGER_ONLY_INSIGHTS.has(kind) && !isManager(ctx.active.role)` answers
+ * 403), for the screens that offer the button. A page every role reaches
+ * offered a child the Insurance Hub's summary, and every tap was a refusal.
+ */
+export function mayAskInsight(kind: InsightKind, role: string | null | undefined): boolean {
+  return !(MANAGER_ONLY_INSIGHTS.has(kind) && !isManager(role));
+}
 
 // The §44 data-not-instruction rule is appended by the route, not here: this
 // module is imported by a CLIENT component (components/ai/ai-insight.tsx), and

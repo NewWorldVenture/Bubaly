@@ -238,7 +238,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   // the tool that acted and the plan's reason. A ServiceResult, not a Postgrest
   // response, so it is awaited BESIDE the batch — settleAll substitutes the
   // { data, error } shape for a rejection, which has no `ok` to branch on.
-  const completedRes = await loadCompletedByBubaly(supabase, familyId, { now, limit: 6 }).catch((cause) => {
+  const completedRes = await loadCompletedByBubaly(supabase, familyId, { now, limit: 6, viewer: { role: ctx.active.role, memberId: ctx.active.member.id } }).catch((cause) => {
     console.error('[dashboard-home] completed-by-Bubaly read threw', cause);
     return { ok: false as const, error: String(cause) };
   });

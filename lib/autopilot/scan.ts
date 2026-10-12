@@ -47,7 +47,7 @@ import { archiveStaleSuggestions } from '@/lib/autopilot/history';
 import { draftHasLapsed, reminderIsoFor } from '@/lib/autopilot/reminder-time';
 import { notify, type NotifyRecipients } from '@/lib/services/notifications';
 import { activeRoster, medicationReaderIds, type RosterMember } from '@/lib/autopilot/medication-readers';
-import { audienceMemberIds, suggestionAudience } from '@/lib/autopilot/audience';
+import { audienceMemberIds, reminderMemberFor, suggestionAudience } from '@/lib/autopilot/audience';
 import { sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
 import { addDaysToDayKey, dayKeyInTz, systemScopeForFamily, zonedTimeMs } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
@@ -370,11 +370,15 @@ export async function runAutopilotScan(
       if (!at) continue;
       const relatedType = d.sourceKind === 'appointments' ? 'appointment'
         : d.sourceKind === 'calendar_events' ? 'event' : 'renewal';
+      // The member the reminder is FOR, which is not always the card's member:
+      // an insurance card names whose policy it is, not who renews it, and its
+      // reminder is told to the card's readers by the notifications generator
+      // (lib/autopilot/audience.ts reminderMemberFor).
       const { data: reminder, error: remErr } = await supabase.from('reminders').insert({
         family_id: familyId,
         title: (d.payload.title as string) ?? d.title,
         remind_at: at,
-        member_id: d.memberId,
+        member_id: reminderMemberFor({ kind: d.kind, source_kind: d.sourceKind, member_id: d.memberId }),
         related_type: relatedType,
         related_id: d.sourceId,
         created_by: userId,

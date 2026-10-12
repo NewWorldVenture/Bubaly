@@ -21,6 +21,7 @@ import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { INSIGHT_FEATURE_HREFS } from '@/lib/ai/insight-features';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
+import { readAll } from '@/lib/supabase/read-all';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -680,13 +681,19 @@ async function fetchRows(
       return { rides: rides.data ?? [] };
     }
     case 'votes': {
-      const [polls, options, votes] = await Promise.all([
-        eq(sb, 'family_polls', familyId).order('created_at', { ascending: false }).limit(15),
-        eq(sb, 'family_poll_options', familyId).limit(60),
-        eq(sb, 'family_poll_votes', familyId).limit(60),
+      // The options and votes OF the polls listed. Read as the family's first
+      // sixty of each, in no order and for any poll, a family whose older polls
+      // held sixty votes was told its newest poll had none.
+      const polls = await eq(sb, 'family_polls', familyId).order('created_at', { ascending: false }).limit(15);
+      required([['family_polls', polls.error]]);
+      // Every row of those polls (readAll), so no cap can cut one short.
+      const pollIds = (polls.data ?? []).map((p) => p.id as string);
+      const [options, votes] = await Promise.all([
+        readAll<Record<string, unknown>>((from, to) => eq(sb, 'family_poll_options', familyId).in('poll_id', pollIds).order('id').range(from, to)),
+        readAll<Record<string, unknown>>((from, to) => eq(sb, 'family_poll_votes', familyId).in('poll_id', pollIds).order('id').range(from, to)),
       ]);
-      required([['family_polls', polls.error], ['family_poll_options', options.error], ['family_poll_votes', votes.error]]);
-      return { family_polls: polls.data ?? [], family_poll_options: options.data ?? [], family_poll_votes: votes.data ?? [] };
+      required([['family_poll_options', options.error], ['family_poll_votes', votes.error]]);
+      return { family_polls: polls.data ?? [], family_poll_options: options.rows, family_poll_votes: votes.rows };
     }
     default:
       return {};

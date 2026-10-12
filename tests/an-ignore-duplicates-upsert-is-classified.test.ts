@@ -20,7 +20,7 @@ const CLASSIFIED: Record<string, { count: number; how: string }> = {
   'app/api/ai/chat/route.ts': { count: 1, how: 'readback: re-reads the conversation with ownership' },
   'app/(app)/dashboard/moments/page.tsx': { count: 1, how: 'best-effort log; reports nothing; error now logged' },
   'app/(app)/dashboard/playbook/playbook-actions.ts': { count: 1, how: '.select(): counts only inserted rows (fixed C1-S9-70)' },
-  'app/(app)/dashboard/independence/actions.ts': { count: 1, how: 'insert-only start: a duplicate is a rung already on the ladder, left as it is; the module refreshes and shows its real state' },
+  'app/(app)/dashboard/independence/actions.ts': { count: 1, how: '.select(): insert-only start; an empty result is a rung already on the ladder, left as it is and answered alreadyOnLadder (never "Added", never audited); the module refreshes to its real state' },
   'app/onboarding/actions.ts': { count: 1, how: '.select() + readback of the existing token on a duplicate' },
   'lib/chores/server.ts': { count: 1, how: '.select(): returns only newly earned badges' },
   'lib/planning/prep-server.ts': { count: 1, how: 'idempotent regeneration; reports plans, not steps' },
@@ -55,6 +55,12 @@ describe('every ignoreDuplicates upsert knows what it actually wrote (C1-S9-70)'
       if ((sites.get(f) ?? 0) !== count) off.push(`${f}: ${sites.get(f) ?? 0} != ${count}`);
     }
     expect(off, 'update CLASSIFIED to match the code').toEqual([]);
+  });
+
+  it('the independence start reports what it inserted, not what it was asked to', () => {
+    const src = readFileSync('app/(app)/dashboard/independence/actions.ts', 'utf8');
+    expect(src).toContain("ignoreDuplicates: true }).select('id');");
+    expect(src).toContain("if (wroteNoRows(started)) return { ok: false, code: 'alreadyOnLadder'");
   });
 
   it('the playbook reports what it inserted, not what it offered', () => {
