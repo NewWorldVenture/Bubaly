@@ -119,14 +119,15 @@ export async function runSteps(
   admit?: SendAdmission,
 ): Promise<string[]> {
   const done: string[] = [];
-  let consent: 'mailable' | 'suppressed' | 'unknown' | null = null;
   for (const step of steps) {
     if (step.action === 'send_email' && !recipient.email) {
       done.push('send_email:skipped(no-recipient)');
       continue;
     }
     if (step.action === 'send_email' && recipient.email) {
-      consent ??= await suppressionFor(supabase, recipient.email);
+      // Read the opt-out for EVERY send, never once per run: an unsubscribe that
+      // lands while an earlier step's mail is in flight must stop the next one.
+      const consent = await suppressionFor(supabase, recipient.email);
       if (consent === 'unknown') {
         done.push('send_email:failed');
         continue;
@@ -146,6 +147,16 @@ export async function runSteps(
         if (!admitted) {
           done.push('send_email:throttled');
           continue;
+        }
+        // The admission is awaited, and an opt-out can land while it is. Read
+        // the opt-out again right before the provider is called. (The first
+        // read stays, so an inbox already opted out never spends its allowance.)
+        if (admit) {
+          const now = await suppressionFor(supabase, recipient.email);
+          if (now !== 'mailable') {
+            done.push(now === 'suppressed' ? 'send_email:suppressed' : 'send_email:failed');
+            continue;
+          }
         }
         try {
           const unsubscribe = unsubUrl(APP_URL, recipient.email);
