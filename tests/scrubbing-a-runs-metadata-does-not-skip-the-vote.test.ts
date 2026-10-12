@@ -72,12 +72,15 @@ function seedFamilyAndPlan(): void {
   }]);
 }
 
+/** The plan as planAcceptedAction files it with the ask: what the approval and the queued run are about. */
+const FILED_PLAN = { title: 'Soccer Saturday', description: 'At the park', location: 'Riverside Park', planned_for: '2026-09-06' };
+
 /** The approval planAcceptedAction files through the trust engine: payload names the plan, no payload_kind. */
 function seedApproval(over: Record<string, unknown> = {}): void {
   store.seed('approval_requests', [{
     id: APPROVAL, family_id: FAMILY, domain: 'scheduling', capability: 'automate', requested_by_kind: 'ai',
     requested_by_member_id: null, agent: 'Concierge', title: 'Materialize: Soccer Saturday', summary: null,
-    payload: { plan_id: PLAN, kinds: ['calendar', 'reminder', 'task'] }, payload_kind: null,
+    payload: { plan_id: PLAN, kinds: ['calendar', 'reminder', 'task'], plan: FILED_PLAN }, payload_kind: null,
     amount_cents: null, confidence: null, policy_id: null, reasoning: 'two parents',
     approval_model: 'two_parent', required_approvals: 1, approvals: [], status: 'pending', priority: 'normal',
     decided_by: null, decided_at: null, expires_at: '2099-01-01T00:00:00Z', executed_at: null, execution_result: null,
@@ -96,7 +99,7 @@ function seedScrubbedRun(over: Record<string, unknown> = {}): void {
   store.seed('family_automation_runs', [{
     id: RUN, family_id: FAMILY, trigger_type: 'plan_accepted', status: 'pending', state: 'awaiting_approval',
     requested_by_member_id: MUM, summary: 'Waiting for approval: Materialize: Soccer Saturday', result: {},
-    metadata: { plan_id: PLAN, kinds: ['calendar', 'reminder', 'task'] },
+    metadata: { plan_id: PLAN, kinds: ['calendar', 'reminder', 'task'], plan: FILED_PLAN },
     created_by: 'auth-mum',
     ...over,
   }]);
@@ -216,7 +219,7 @@ describe('a run a manager filed themselves, with no approval_id at all', () => {
 describe('what is NOT gated stays ungated', () => {
   it('a plan with no approval row at all is materialised directly — the never-gated path', async () => {
     seedFamilyAndPlan();
-    seedScrubbedRun({ metadata: { plan_id: PLAN, kinds: ['calendar', 'reminder', 'task'], approval_id: null } });
+    seedScrubbedRun({ metadata: { plan_id: PLAN, kinds: ['calendar', 'reminder', 'task'], approval_id: null, plan: FILED_PLAN } });
     actAs(AS_NAN);
 
     const res = await executeQueuedRunAction(RUN);

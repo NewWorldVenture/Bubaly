@@ -162,7 +162,11 @@ function seedQueuedConciergePlan(over: Record<string, unknown> = {}): void {
   }]);
   store.seed('approval_requests', [approvalRow({
     domain: 'scheduling',
-    payload: { plan_id: PLAN, kinds: ['calendar', 'reminder', 'task'] },
+    // What planAcceptedAction files: the plan as it was asked about rides along.
+    payload: {
+      plan_id: PLAN, kinds: ['calendar', 'reminder', 'task'],
+      plan: { title: 'Soccer Saturday', description: 'At the park', location: 'Riverside Park', planned_for: '2026-09-06' },
+    },
     payload_kind: 'concierge_plan',
     title: 'Materialize: Soccer Saturday',
     ...over,

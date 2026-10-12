@@ -59,13 +59,14 @@ import {
   appendEvent, ledgerClient, loadPlanSteps, loadRun, updateRequest, updateRun, updateRunWhereState, updateStep, type StepRow,
 } from '@/lib/ai/runs/store';
 import {
-  availableWriteBackKinds, reminderLeadAt, writeBackTitle, type WriteBackKind,
+  availableWriteBackKinds, matchesPlanSnapshot, readPlanSnapshot, reminderLeadAt, writeBackTitle, type WriteBackKind,
 } from '@/lib/concierge/apply';
 import { runSummary } from '@/lib/autonomy/loop';
 import {
   asRecord, classifyPayload, editableArgsOf, editableFieldsFor, effectiveArgsOf, toApprovalCardData, WRITE_BACK_KINDS,
   type ApprovalCardData, type ClassifiedPayload,
 } from '@/lib/approvals/card-data';
+import { editStaysWithinFiledRule, type EditedRequest } from '@/lib/trust/edit-rule';
 import { aiApprovalReminders, type AiApprovalInput } from '@/lib/notifications/approval-reminders';
 import type { NeedsReader } from '@/lib/home/needs-sources';
 import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
@@ -617,6 +618,19 @@ async function runConciergePlan(
   }
   if (!plan) return fail('That plan no longer exists.', { code: SERVICE_CODES.notFound });
 
+  // The yes is to the plan the card was filed about. planAcceptedAction files
+  // the fields that become records with the ask, and 0389 freezes `payload`;
+  // the plan row itself any member may rewrite meanwhile (0091 reads no role),
+  // and materializing it as it is NOW put a guest's retitled plan on the
+  // calendar and in reminders in the approver's name. So nothing is written
+  // unless the plan still says what was filed. A row filed before the snapshot
+  // existed cannot show that and is refused the same way; the plan's own Make
+  // it happen, or accepting it again, files a fresh ask.
+  const filed = readPlanSnapshot(asRecord(row.payload)?.plan);
+  if (!filed || !matchesPlanSnapshot(plan, filed)) {
+    return fail((await getTranslations())('approval.planChangedSinceAsked'), { code: SERVICE_CODES.denied, retryable: false });
+  }
+
   const { applied, failed } = await materializeConciergePlan(scope.db, scope.familyId, scope.userId, plan, kinds);
   if (failed.length) {
     // Not "everything was already in place". The legacy run below is left
@@ -909,7 +923,9 @@ async function performApproved(
       const done = await runConciergePlan(scope, row, classified.planId, kinds);
       if (!done.ok) {
         await stampExecution(scope, row.id, `error: ${done.error}`);
-        await auditDecision(scope, row, 'approved_execution', `Execution failed: ${done.error}`, { ok: false });
+        // `denied` is a plan that no longer says what was filed: refused, not failed.
+        const outcome = done.code === SERVICE_CODES.denied ? 'Execution refused' : 'Execution failed';
+        await auditDecision(scope, row, 'approved_execution', `${outcome}: ${done.error}`, { plan_id: classified.planId, ok: false });
         return done;
       }
       await stampExecution(scope, row.id, done.data.summary);
@@ -1097,6 +1113,16 @@ export async function decide(
     return fail('You already responded to this request.', { code: SERVICE_CODES.invalidInput });
   }
   if (decision === 'approved' && await isOwnMemberRequest(scope, row, memberId)) return OWN_REQUEST;
+  // A yes releases the edit an earlier approver recorded — or one written to
+  // the column directly, which any manager may do on a pending row. One that
+  // moved the request out from under the rule it was filed under is not this
+  // card's to release, so the vote is refused before anything is written.
+  const filedAs = classifyPayload(row);
+  const recordedEdit = decision === 'approved' && filedAs ? storedEdit(row, filedAs) : null;
+  if (recordedEdit && filedAs) {
+    const kept = await editKeepsFiledRule(scope, row, filedAs, recordedEdit);
+    if (!kept.ok) return kept;
+  }
   const nowIso = scopeNow(scope).toISOString();
   const cleanNote = note?.trim() || null;
   const threshold = await thresholdOf(scope, row);
@@ -1187,8 +1213,9 @@ export async function decide(
   // approver edited the request, `editAndApprove` recorded their change on
   // `edited_payload` and left the row pending — passing `null` here executed
   // the ORIGINAL instead, silently discarding the correction that was the whole
-  // reason they engaged with it.
-  return performApproved(scope, row, classified, storedEdit(row, classified), 'approved');
+  // reason they engaged with it. (`recordedEdit` is `storedEdit` of this row,
+  // weighed against its rule above.)
+  return performApproved(scope, row, classified, recordedEdit, 'approved');
 }
 
 /**
@@ -1232,6 +1259,53 @@ function storedEdit(row: ApprovalRow, classified: ClassifiedPayload): Record<str
   }
   if (classified.kind === 'concierge_plan' && !WRITE_BACK_KINDS.some((k) => merged[k] === true)) return null;
   return merged;
+}
+
+/** The registry tool a parked step runs: its own, or `notifications.notify` for a notify step. */
+function toolOfStep(step: StepRow) {
+  if (step.step_type === 'notify') return getTool('notifications.notify');
+  return step.tool_name ? getTool(step.tool_name) : null;
+}
+
+/**
+ * Whether an edit keeps this row under the rule it was filed under
+ * (lib/trust/edit-rule.ts): an approver may correct a held card, but not move
+ * it to an amount the family's rules send to another require_approval policy,
+ * or to a stricter model or count, than this card's — one parent turning a $40
+ * card filed "one of us" into $900 that "needs both of us". Refused with
+ * nothing changed, and the family asks Bubaly again.
+ *
+ * A `tool` row is weighed as its filing gate weighed it; a `plan_steps` row as
+ * the executor filed it, for each step the server parked on it (found by the
+ * steps' own `approval_id`, as `foldIntoRun` finds what a decision releases).
+ * A concierge plan's edit only picks write-backs, which no rule reads.
+ */
+async function editKeepsFiledRule(
+  scope: ServiceScope,
+  row: ApprovalRow,
+  classified: ClassifiedPayload,
+  edited: Record<string, unknown>,
+): Promise<ServiceResult<null>> {
+  if (classified.kind === 'concierge_plan') return ok(null);
+  const original = editableArgsOf(classified) ?? {};
+  let requests: EditedRequest[];
+  if (classified.kind === 'tool') {
+    requests = [{ row, filedBy: { kind: 'tool', filedName: classified.name }, tool: getTool(classified.name), original, edited }];
+  } else {
+    const waiting = await stepsWaitingOn(ledgerClient(scope), scope.familyId, row.id);
+    if (!waiting.ok) return waiting;
+    const tools = waiting.data.length ? waiting.data.map(toolOfStep) : [null];
+    requests = tools.map((tool) => ({ row, filedBy: { kind: 'step' as const }, tool, original, edited }));
+  }
+  for (const request of requests) {
+    const verdict = await editStaysWithinFiledRule(scope.db, request);
+    if (verdict.ok) continue;
+    const t = await getTranslations();
+    return verdict.reason === 'unreadable'
+      ? fail(t('approval.editRuleUnreadable'), { code: SERVICE_CODES.db, retryable: true })
+      : fail(t('approval.editOutsideFiledRule'), { code: SERVICE_CODES.denied, retryable: false });
+  }
+  return ok(null);
 }
 
 /**
@@ -1359,6 +1433,11 @@ export async function editAndApprove(
   if (threshold.parentsOnly && scope.role !== 'parent') {
     return fail('This one needs two parents to agree. Ask a parent to approve it.', { code: SERVICE_CODES.denied });
   }
+  // This row's rule covers what it was filed for. An edit that moves it under
+  // another rule — a bigger amount the family sends to both parents — is
+  // refused before anything is written (`editKeepsFiledRule`).
+  const kept = await editKeepsFiledRule(scope, row, classified, merged);
+  if (!kept.ok) return kept;
   const votes: Vote[] = [...prior, { member_id: memberId, decision: 'approved', note: cleanNote, at: nowIso, role: scope.role ?? null }];
 
   // An edit is still one vote. A two-parent rule stays a two-parent rule:
