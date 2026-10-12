@@ -63,11 +63,16 @@ async function suppressionFor(supabase: DB, email: string): Promise<'mailable' |
     // either as typed), so the scan takes the local part as a prefix, not only
     // `local+…`. Gmail also ignores dots anywhere in the local part and answers
     // to googlemail.com. The address's own LIKE metacharacters go through the
-    // shared escapeLike (lib/supabase/escape-like.ts).
+    // shared escapeLike (lib/supabase/escape-like.ts), except a star: PostgREST
+    // turns every `*` in a like value into `%` before PostgreSQL sees it,
+    // backslash or not, so escapeLike's `\*` arrives as `\%` and matches a
+    // literal percent sign, never the star. A star is therefore sent as `_` (any
+    // one character), which keeps the scan a superset; the exact comparison
+    // below drops the neighbours it lets in.
     const spellings = supabase.from('marketing_suppressions').select('email');
     const { data: near, error: nearError } = await (parts.gmail
-      ? spellings.like('email', `${[...parts.local].map((char) => escapeLike(char)).join('%')}%@g%mail.com%`)
-      : spellings.like('email', `${escapeLike(parts.local)}%@${escapeLike(parts.domain)}%`)
+      ? spellings.like('email', `${[...parts.local].map((char) => escapeLike(char).replace('\\*', '_')).join('%')}%@g%mail.com%`)
+      : spellings.like('email', `${escapeLike(parts.local).replaceAll('\\*', '_')}%@${escapeLike(parts.domain).replaceAll('\\*', '_')}%`)
     ).limit(SPELLING_SCAN_LIMIT);
     if (nearError || !Array.isArray(near)) return 'unknown';
     if (near.some((row) => typeof row.email === 'string' && canonicalMailbox(row.email) === inbox)) return 'suppressed';
