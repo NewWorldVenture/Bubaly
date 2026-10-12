@@ -76,18 +76,37 @@ describe('the CRM identity key is the verified address', () => {
   });
 });
 
-describe('the identity lookups use anchored literal imatch patterns', () => {
+describe('the identity lookups match the email as literal text', () => {
+  // These lookups used `.ilike('email', escapeLike(...))`. PostgREST rewrites
+  // every `*` in a like value to `%`, escaped or not, so an address with a
+  // literal star still matched as a pattern (#1030). They now match an
+  // anchored, escaped case-insensitive regex and check the email they got back.
   const sites: [string, string][] = [
     ['lib/marketing/onboarding-contact.ts', contact],
     ['lib/marketing/identity.ts', identity],
     ['app/(app)/dashboard/settings/profile-actions.ts', profileActions],
   ];
 
-  it('each passes literalCaseInsensitivePattern() into imatch on crm_contacts email', () => {
+  it('each matches crm_contacts email through literalCaseInsensitivePattern()', () => {
+    for (const [name, src] of sites) {
+      const call = /\.filter\('email',\s*'imatch',\s*([^)]+\))/.exec(src)?.[1] ?? '';
+      expect(call, `${name} matches crm_contacts email with "${call}"`).toMatch(/^literalCaseInsensitivePattern\(/);
+      expect(src, `${name} still pattern-matches crm_contacts email`).not.toMatch(/\.i?like\('email'/);
+    }
+  
+    {
     for (const [name, src] of sites) {
       const call = /\.filter\('email',\s*'imatch',\s*(literalCaseInsensitivePattern\([^)]*\))\)/.exec(src)?.[1] ?? '';
       expect(call, `${name} matches crm_contacts email with "${call}"`).toMatch(/^literalCaseInsensitivePattern\((email|e)\)$/);
       expect(src, `${name} must not fall back to email LIKE aliases`).not.toMatch(/\.(?:i?like)\('email'/);
+    }
+    }
+  });
+
+  it('each reads the email back and refuses a row whose email is not the one asked for', () => {
+    for (const [name, src] of sites) {
+      expect(src, `${name} does not select the email it matched`).toMatch(/\.select\('id, email[^']*'\)\.filter\('email',\s*'imatch'/);
+      expect(src, `${name} does not compare the returned email`).toMatch(/\.email\.trim\(\)\.toLowerCase\(\) !== /);
     }
   });
 
@@ -95,8 +114,18 @@ describe('the identity lookups use anchored literal imatch patterns', () => {
     expect(literalCaseInsensitivePattern('p%_*q@example.test')).toBe('^p%_\\*q@example\\.test$');
   });
 
+
   it('a wildcard stops being a wildcard', () => {
-    // What the service-role lookup would receive after the fix.
+    // What the service-role lookup would receive after the fix: anchored at
+    // both ends, regex metacharacters escaped, and LIKE's `%` `_` and
+    // PostgREST's `*` all plain text.
+    expect(literalCaseInsensitivePattern('%')).toBe('^%$');
+    expect(literalCaseInsensitivePattern('_')).toBe('^_$');
+    expect(literalCaseInsensitivePattern('p*q@example.com')).toBe('^p\\*q@example\\.com$');
+    expect(literalCaseInsensitivePattern('victim@bigcorp.test')).toBe('^victim@bigcorp\\.test$');
+    expect(new RegExp(literalCaseInsensitivePattern('a.b+c@x.test'), 'i').test('aXb+c@x.test')).toBe(false);
+    expect(new RegExp(literalCaseInsensitivePattern('A.b+c@X.test'), 'i').test('a.b+c@x.test')).toBe(true);
+    // The shared LIKE helper is unchanged for its other callers.
     expect(escapeLike('%')).toBe('\\%');
     expect(escapeLike('victim@bigcorp.test')).toBe('victim@bigcorp.test');
   });

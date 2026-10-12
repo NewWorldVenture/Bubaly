@@ -10,14 +10,18 @@ const { stitchVisitorIdentity } = await import('@/lib/marketing/identity');
  * The read saw `owner_id` null and the write set it, filtered on `id` alone —
  * so a lead claimed in between (an import, another sign-in) was overwritten.
  * C1-S9-61 closed the same race in `resolveContactId`. The write now repeats
- * the raw identity and read's condition. A lost claim is unknown: no later
- * contact fallback, visitor link or consent carry may use that stale answer.
+ * the read's condition: the email the lookup verified and the owner it saw
+ * (null for a claim). A write that matches nothing means the contact changed
+ * since the read, so the sign-in's identity is `unknown`: no lifecycle-only
+ * fallback, no visitor stitched to it and no consent carried to it (#1030).
  */
 type Update = { table: string; patch: Record<string, unknown>; filters: Record<string, unknown> };
 let updates: Update[];
 let inserts: string[];
-let lookups: { table: string; column: string; operator: string; value: unknown }[];
 let claimMatches: boolean;
+let contactWriteMatches: boolean;
+let visitorPresent: boolean;
+let lookups: { table: string; column: string; operator: string; value: unknown }[];
 
 function fakeAdmin(ownerOnRead: string | null) {
   const from = (table: string) => {
@@ -28,18 +32,21 @@ function fakeAdmin(ownerOnRead: string | null) {
       if (patch) {
         updates.push({ table, patch, filters: { ...filters } });
         const isClaim = table === 'crm_contacts' && 'owner_id' in patch;
-        // A claim matches only if nobody took the lead in between.
-        const rows = isClaim && !claimMatches ? [] : [{ id: 'row' }];
-        return { data: rows, error: null };
+        // A claim matches only if nobody took the lead in between; any contact
+        // write matches only if the row still says what the read saw.
+        const lost = table === 'crm_contacts' && (!contactWriteMatches || (isClaim && !claimMatches));
+        return { data: lost ? [] : [{ id: 'row' }], error: null };
       }
       if (table === 'crm_contacts') return { data: [{ id: 'contact-1', email: 'a@example.test', owner_id: ownerOnRead }], error: null };
-      return { data: [], error: null };
+      if (table === 'mkt_visitors') return { data: visitorPresent ? [{ id: 'visitor-1', contact_id: null }] : [], error: null };
+      return { data: null, error: null };
     };
     Object.assign(b, {
-      select: () => b, ilike: () => b, limit: () => b,
-      filter: (c: string, op: string, value: unknown) => {
+      select: () => b, limit: () => b,
+      filter: (c: string, op: string, v: unknown) => {
         if (op !== 'imatch') throw new Error('Unexpected contact identity operator');
-        lookups.push({ table, column: c, operator: op, value }); return b;
+        lookups.push({ table, column: c, operator: op, value: v });
+        filters[`${op}:${c}`] = v; return b;
       },
       eq: (c: string, v: unknown) => { filters[c] = v; return b; },
       is: (c: string, v: unknown) => { filters[`is:${c}`] = v; return b; },
@@ -53,10 +60,22 @@ function fakeAdmin(ownerOnRead: string | null) {
   return { from } as never;
 }
 
-beforeEach(() => { updates = []; inserts = []; lookups = []; claimMatches = true; vi.spyOn(console, 'error').mockImplementation(() => {}); });
+beforeEach(() => {
+  updates = [];
+  inserts = [];
+  claimMatches = true;
+  contactWriteMatches = true;
+  visitorPresent = true;
+  lookups = [];
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+});
+
+const signIn = (owner: string | null) =>
+  stitchVisitorIdentity(fakeAdmin(owner), { anonymousId: 'anon-1', email: 'a@example.test', userId: 'user-1' });
 
 describe('claiming an unowned CRM contact (C1-S9-67)', () => {
-  it('the claim repeats the read condition on the write', async () => {
+  it('a healthy claim without a visitor stays noop and carries its consent', async () => {
+    visitorPresent = false;
     const result = await stitchVisitorIdentity(fakeAdmin(null), { anonymousId: 'anon-1', email: 'a@example.test', userId: 'user-1' });
     const claim = updates.find((u) => u.table === 'crm_contacts' && 'owner_id' in u.patch);
     expect(claim?.patch).toMatchObject({ owner_id: 'user-1', lifecycle_stage: 'customer' });
@@ -66,24 +85,49 @@ describe('claiming an unowned CRM contact (C1-S9-67)', () => {
     expect(updates.filter(u => u.table === 'mkt_consent_events')).toHaveLength(1);
   });
 
-  it('a claim that lost the race stops as unknown without another contact, visitor or consent write', async () => {
+
+  it('the claim repeats the read condition on the write', async () => {
+    const result = await signIn(null);
+    const claim = updates.find((u) => u.table === 'crm_contacts' && 'owner_id' in u.patch);
+    expect(claim?.patch).toMatchObject({ owner_id: 'user-1', lifecycle_stage: 'customer' });
+    expect(claim?.filters).toMatchObject({ id: 'contact-1', email: 'a@example.test', 'is:owner_id': null });
+    // Positive control: a claim that lands goes on to stitch the visitor.
+    expect(result).toEqual({ decision: 'link', contactId: 'contact-1' });
+    expect(updates.some((u) => u.table === 'mkt_visitors')).toBe(true);
+    expect(lookups).toEqual([{ table: 'crm_contacts', column: 'email', operator: 'imatch', value: '^a@example\\.test$' }]);
+  });
+
+  it('a claim that lost the race writes nothing further and links nothing', async () => {
     claimMatches = false;
-    const result = await stitchVisitorIdentity(fakeAdmin(null), { anonymousId: 'anon-1', email: 'a@example.test', userId: 'user-1' });
+    const result = await signIn(null);
+    expect(result).toEqual({ decision: 'unknown', contactId: null });
+    // The failed claim is the only write: no lifecycle-only fallback, no
+    // visitor stitched, no consent carried, no replacement contact.
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toMatchObject({ table: 'crm_contacts', patch: { owner_id: 'user-1' } });
     const contactWrites = updates.filter((u) => u.table === 'crm_contacts');
-    // One attempted CAS returns zero rows; there must be no fallback write.
     expect(contactWrites.filter((u) => 'owner_id' in u.patch)).toHaveLength(1);
     expect(contactWrites).toHaveLength(1);
     expect(contactWrites[0].filters).toMatchObject({ id: 'contact-1', email: 'a@example.test', 'is:owner_id': null });
     expect(updates.filter(u => u.table !== 'crm_contacts')).toEqual([]);
     expect(inserts).toEqual([]);
-    expect(result).toEqual({ decision: 'unknown', contactId: null });
   });
 
   it('a contact that already has an owner is never claimed', async () => {
-    await stitchVisitorIdentity(fakeAdmin('someone-else'), { anonymousId: 'anon-1', email: 'a@example.test', userId: 'user-1' });
+    const result = await signIn('someone-else');
     const contactWrites = updates.filter((u) => u.table === 'crm_contacts');
     expect(contactWrites).toHaveLength(1);
+    expect(contactWrites[0].patch).toEqual({ lifecycle_stage: 'customer' });
     expect(contactWrites.every((u) => !('owner_id' in u.patch))).toBe(true);
     expect(contactWrites[0].filters).toMatchObject({ id: 'contact-1', email: 'a@example.test', owner_id: 'someone-else' });
+    expect(result.contactId).toBe('contact-1');
+  });
+
+  it('an owned contact that changed before the stage write is unknown and links nothing', async () => {
+    contactWriteMatches = false;
+    const result = await signIn('someone-else');
+    expect(result).toEqual({ decision: 'unknown', contactId: null });
+    expect(updates.map((u) => u.table)).toEqual(['crm_contacts']);
+    expect(inserts).toEqual([]);
   });
 });

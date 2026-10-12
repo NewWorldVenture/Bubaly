@@ -152,10 +152,9 @@ describe('the unconfirmed-write class outside server actions only shrinks (C1-S9
     // prune's two branches are one chunked delete.
     // 50 since AUD-1028-M1-ABA: the blog unsubscribe writes only over the row
     // it read, so it confirms what it wrote.
+    // 49 since #1030: a sign-in whose CRM contact changed under it no longer
+    // falls back to an unconfirmed lifecycle-only write; it is unknown.
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    // The unsafe lifecycle-only contact fallback was removed; the consent
-    // carry remains deliberately idempotent. The visitor claim is confirmed.
-    // Together with main's confirmed blog unsubscribe, the total is 49.
     expect(total).toBe(49);
   });
 });
