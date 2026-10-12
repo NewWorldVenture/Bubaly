@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import ts from 'typescript';
 
 // The elements hidden until their group is hovered, read from the source with
@@ -14,7 +14,7 @@ export function sourceFiles(dir: string, out: string[] = []): string[] {
     if (entry.name === 'node_modules' || entry.name === '.next') continue;
     const full = join(dir, entry.name);
     if (entry.isDirectory()) sourceFiles(full, out);
-    else if (full.endsWith('.tsx')) out.push(full);
+    else if (full.endsWith('.tsx')) out.push(full.split(sep).join('/'));
   }
   return out;
 }

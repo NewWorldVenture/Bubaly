@@ -143,6 +143,30 @@ function operatorPredicate(column: string, op: string, wanted: unknown): Predica
         : String(wanted).replace(/^\(/, '').replace(/\)$/, '').split(',').map((v) => parseFilterValue(v.trim().replace(/^"|"$/g, '')));
       return (row) => values.some((v) => looseEq(row[column], v));
     }
+    case 'imatch': {
+      // Only the anchored, escaped literal subset used by CRM email lookups.
+      // Unsupported ARE syntax must fail rather than silently model a regex.
+      if (typeof wanted !== 'string' || !wanted.startsWith('^') || !wanted.endsWith('$')) {
+        throw new Error('[in-memory-supabase] unsupported imatch pattern');
+      }
+      const body = wanted.slice(1, -1);
+      const specials = '.*+?^$' + '{}()|[]' + String.fromCharCode(92);
+      let literal = '';
+      for (let index = 0; index < body.length; index++) {
+        const char = body[index];
+        if (char === String.fromCharCode(92)) {
+          const escaped = body[++index];
+          if (escaped === undefined || !specials.includes(escaped)) {
+            throw new Error('[in-memory-supabase] unsupported imatch pattern');
+          }
+          literal += escaped;
+        } else {
+          if (specials.includes(char)) throw new Error('[in-memory-supabase] unsupported imatch pattern');
+          literal += char;
+        }
+      }
+      return (row) => typeof row[column] === 'string' && (row[column] as string).toLowerCase() === literal.toLowerCase();
+    }
     case 'like':
     case 'ilike': {
       const source = String(wanted).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*').replace(/_/g, '.');

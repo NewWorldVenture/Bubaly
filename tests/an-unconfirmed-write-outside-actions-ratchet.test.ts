@@ -58,7 +58,7 @@ const BASELINE = new Map<string, number>([
   ['lib/guardian/callbacks.ts', 2],
   ['lib/marketing/automation-events.ts', 1],
   ['lib/marketing/automation-runner.ts', 1],
-  ['lib/marketing/identity.ts', 2],
+  ['lib/marketing/identity.ts', 1],
   // 3 since the merge with main's #581 (Audit C1-S9-92): the AEO retirement
   // in retireAeoQuestionsForPath, where zero rows is the ordinary case.
   ['lib/marketing/platform.ts', 3],
@@ -152,7 +152,9 @@ describe('the unconfirmed-write class outside server actions only shrinks (C1-S9
     // prune's two branches are one chunked delete.
     // 50 since AUD-1028-M1-ABA: the blog unsubscribe writes only over the row
     // it read, so it confirms what it wrote.
+    // 49 since #1030: a sign-in whose CRM contact changed under it no longer
+    // falls back to an unconfirmed lifecycle-only write; it is unknown.
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(50);
+    expect(total).toBe(49);
   });
 });

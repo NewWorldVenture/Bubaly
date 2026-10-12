@@ -1,4 +1,11 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const file = dir + '/' + entry.name;
+    return entry.isDirectory() ? sourceFiles(file) : entry.isFile() ? [file] : [];
+  });
+}
+
 import { describe, expect, it } from 'vitest';
 import { at, bodyOf } from './helpers/source-order';
 
@@ -623,8 +630,7 @@ describe('every auth.getUser() in the API denies on a null user (C1-S9-42)', () 
 });
 
 function globSyncRoutes(): string[] {
-  const { execSync } = require('node:child_process') as typeof import('node:child_process');
-  return execSync('find app/api -name route.ts', { encoding: 'utf8' }).trim().split('\n');
+  return sourceFiles('app/api').filter(file => file.endsWith('/route.ts'));
 }
 
 /**
