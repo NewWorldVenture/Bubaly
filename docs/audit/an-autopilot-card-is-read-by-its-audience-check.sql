@@ -44,7 +44,8 @@
 -- or PostgREST's unfiltered PATCH with return=minimal, skipped the read rule:
 -- the teen named themselves on Ava's insurance card and read it. Asserted, each
 -- as one write and then a read in the same session, with the card's
--- member_id, kind, source_kind and status compared before and after:
+-- member_id, kind, source_kind, status and family_id compared before and
+-- after:
 --
 --   DENIED   the unnamed teen, the guest and the caregiver, column-free (no
 --            WHERE, `where true`, `returning 1`, a SET from auth.uid(), the
@@ -57,6 +58,16 @@
 --            card, the guest moving her travel card out of insurance, the teen
 --            narrowing an ordinary card to finance, and a manager rewriting a
 --            card's kind (the pin is not a role rule);
+--   DENIED   (RV486-2-FAMILY) a move into another family the writer also
+--            belongs to. Ava is a child here and in her co-parent's household,
+--            Sam a teen in both, the guest runs her own household and the
+--            parent is an adult in the co-parent's: Ava's move of her
+--            insurance card (by id, returning id), Sam's of the subscription
+--            charge (PostgREST's filtered PATCH, and with no WHERE), the
+--            guest's of an ordinary card into her household and the parent's
+--            of Ava's card are refused, the card stays in this family (this
+--            family's reader still reads it) and the other family's reader
+--            reads nothing;
 --   ALLOWED  a manager reassigning a policy's card (the scan's refresh on a
 --            manager's client, by id and family, returning id): the new member
 --            reads it and the old one does not; the named member's and a
@@ -74,16 +85,22 @@
 -- do not, the other three are as they were, and applying it once more rewrites
 -- no row (compared by ctid).
 --
--- NEGATIVE CONTROLS, in this transaction, after the re-apply: with 0486's
--- update guard dropped the teen's column-free write names him on Ava's card and
--- he reads it, and the named child's moves it to her brother, who reads it;
--- with the pin dropped the teen turns the subscription charge into an 'other'
--- card and the guest reads it; with the read policy dropped the guest reads the
+-- NEGATIVE CONTROLS, in this transaction, after the re-apply, each drop adding
+-- to the last: with 0486's pin ALONE dropped (both policies in place) Ava's,
+-- Sam's and the guest's moves into their other family land, that family's
+-- reader reads the card and this family's no longer does, and the teen turns
+-- the subscription charge into an 'other' card the guest reads; with the
+-- update guard dropped as well the teen's column-free write names him on Ava's
+-- card and he reads it, and the named child's moves it to her brother, who
+-- reads it; with the read policy dropped as well the guest reads the
 -- subscription charge and the teen reads the child's insurance card again. So
--- this probe is shown to see each defect. Replayed without the update guard,
--- the pin and the backfill (0486 as bd57dd0c3 had it) it fails on exactly the
--- RV486-2 and legacy lines and passes the rest (the per-group summary below
--- says which).
+-- this probe is shown to see each defect, and the family moves to be the
+-- pin's to hold, not the policies'. Replayed with 0486 as bd57dd0c3 had it
+-- (no update guard, no pin, no backfill) it fails on exactly the RV486-2 lines
+-- (the family moves included) and the legacy lines; replayed with the pin on
+-- kind and source_kind only (0486 as 0bb434c22 had it) it fails on exactly the
+-- family-move lines; it passes the rest (the per-group summary below says
+-- which).
 --
 -- Rolled back: nothing here outlives the run.
 --
@@ -146,7 +163,7 @@ end $f$;
 -- What a card says about who reads it, and whether it is resolved.
 create function pg_temp.ap_card_state(card uuid) returns text
 language sql as $f$
-  select format('%s|%s|%s|%s', s.member_id, s.kind, s.source_kind, s.status)
+  select format('%s|%s|%s|%s|%s', s.member_id, s.kind, s.source_kind, s.status, s.family_id)
     from public.autopilot_suggestions s where s.id = card
 $f$;
 
@@ -154,8 +171,9 @@ $f$;
 -- payload) as `reader`, in ONE subtransaction that is always rolled back: the
 -- read sees what the write left. Returns '<write>; <card>; reads <n>' where
 -- <write> is '<n> written', 'refused' (42501) or 'error:<sqlstate> <message>',
--- and <card> is 'kept' when the card's member_id, kind, source_kind and status
--- are what they were, 'deleted', or 'changed:' and the columns that changed.
+-- and <card> is 'kept' when the card's member_id, kind, source_kind, status and
+-- family_id are what they were, 'deleted', or 'changed:' and the columns that
+-- changed.
 create function pg_temp.ap_write_read(who uuid, as_role text, write_q text, card uuid, reader uuid) returns text
 language plpgsql as $f$
 declare
@@ -164,7 +182,7 @@ declare
   was text[];
   now_is text[];
   changed text[] := '{}';
-  cols constant text[] := array['member_id', 'kind', 'source_kind', 'status'];
+  cols constant text[] := array['member_id', 'kind', 'source_kind', 'status', 'family_id'];
   res text;
 begin
   was := string_to_array(pg_temp.ap_card_state(card), '|');
@@ -182,7 +200,7 @@ begin
     execute 'reset role';
     now_is := string_to_array(pg_temp.ap_card_state(card), '|');
     if now_is is not null then
-      for i in 1 .. 4 loop
+      for i in 1 .. 5 loop
         if now_is[i] is distinct from was[i] then changed := changed || cols[i]; end if;
       end loop;
     end if;
@@ -236,6 +254,11 @@ declare
   uI    constant uuid := '00000000-0000-4000-8000-000000486007';  -- a removed (inactive) parent
   uX    constant uuid := '00000000-0000-4000-8000-000000486008';  -- another family's parent
   uL    constant uuid := '00000000-0000-4000-8000-000000486009';  -- Leo, Ava's brother, a child no policy names
+  -- RV486-2-FAMILY: households some of this family's members also belong to.
+  famB  constant uuid := '00000000-0000-4000-8000-0000004860f3';  -- the co-parent's household: Ava and Sam live here too
+  famX  constant uuid := '00000000-0000-4000-8000-0000004860f4';  -- the guest's own household, which she runs
+  uB    constant uuid := '00000000-0000-4000-8000-00000048600a';  -- the co-parent, a parent of famB only
+  uY    constant uuid := '00000000-0000-4000-8000-00000048600b';  -- Grandpa, an adult of famX only
   -- RV486-2's cards, by id.
   c_fin  constant uuid := '00000000-0000-4000-8000-0000004860c1';
   c_ava  constant uuid := '00000000-0000-4000-8000-0000004860c4';
@@ -267,6 +290,13 @@ declare
     || 'from (select %L::json as json_data) pgrst_payload, '
     || 'lateral (select member_id from json_populate_record(null::public.autopilot_suggestions, pgrst_payload.json_data)) pgrst_body '
     || 'returning 1) select count(*) from pgrst_source';
+  -- PostgREST's PATCH /autopilot_suggestions?id=eq.<card>&family_id=eq.<family>
+  -- with {"family_id": "<other>"} and return=representation.
+  PATCH_FAM constant text := 'with pgrst_source as (update public.autopilot_suggestions set family_id = pgrst_body.family_id '
+    || 'from (select %L::json as json_data) pgrst_payload, '
+    || 'lateral (select family_id from json_populate_record(null::public.autopilot_suggestions, pgrst_payload.json_data)) pgrst_body '
+    || 'where public.autopilot_suggestions.id = %L::uuid and public.autopilot_suggestions.family_id = %L::uuid '
+    || 'returning public.autopilot_suggestions.*) select count(*) from pgrst_source';
 begin
   -- ── fixture, written as the table owner with no session (auth.uid() null) ──
   perform set_config('request.jwt.claim.sub', '', true);
@@ -274,9 +304,11 @@ begin
   insert into auth.users (id, email) values
     (uP, 'ap486-parent@example.test'), (uA, 'ap486-adult@example.test'), (uN, 'ap486-ava@example.test'),
     (uU, 'ap486-sam@example.test'), (uC, 'ap486-sitter@example.test'), (uG, 'ap486-gran@example.test'),
-    (uI, 'ap486-former@example.test'), (uX, 'ap486-away@example.test'), (uL, 'ap486-leo@example.test')
+    (uI, 'ap486-former@example.test'), (uX, 'ap486-away@example.test'), (uL, 'ap486-leo@example.test'),
+    (uB, 'ap486-coparent@example.test'), (uY, 'ap486-grandpa@example.test')
   on conflict (id) do nothing;
-  insert into public.families (id, name) values (fam, 'Autopilot audience probe'), (away, 'Autopilot audience probe, next door')
+  insert into public.families (id, name) values (fam, 'Autopilot audience probe'), (away, 'Autopilot audience probe, next door'),
+    (famB, 'Autopilot audience probe, the co-parent''s household'), (famX, 'Autopilot audience probe, Grandma''s own household')
   on conflict (id) do nothing;
   insert into public.family_members (family_id, user_id, display_name, role, is_active) values
     (fam, uP, 'Mum', 'parent', true), (fam, uA, 'Gran', 'adult', true);
@@ -290,10 +322,19 @@ begin
     (fam, uI, 'Former parent', 'parent', false);
   insert into public.family_members (family_id, user_id, display_name, role, is_active) values
     (away, uX, 'Neighbour', 'parent', true) returning id into mX;
+  -- Two households beside this one (RV486-2-FAMILY): Ava and Sam also live
+  -- with the co-parent, Mum is an adult there too, and Grandma, a guest here,
+  -- runs her own.
+  insert into public.family_members (family_id, user_id, display_name, role, is_active) values
+    (famB, uB, 'Dad', 'parent', true), (famB, uN, 'Ava', 'child', true), (famB, uU, 'Sam', 'teen', true),
+    (famB, uP, 'Mum', 'adult', true),
+    (famX, uG, 'Grandma', 'parent', true), (famX, uY, 'Grandpa', 'adult', true);
   insert into ap_fx values
-    ('fam', fam), ('uP', uP), ('uN', uN), ('uU', uU), ('uG', uG), ('uL', uL),
+    ('fam', fam), ('uP', uP), ('uA', uA), ('uN', uN), ('uU', uU), ('uG', uG), ('uL', uL),
     ('mN', mN), ('mU', mU), ('mL', mL), ('mX', mX),
-    ('c_fin', c_fin), ('c_ava', c_ava), ('c_leg', c_leg), ('c_none', c_none), ('c_away', c_away), ('c_moved', c_moved);
+    ('famB', famB), ('famX', famX), ('uB', uB), ('uY', uY),
+    ('c_fin', c_fin), ('c_ava', c_ava), ('c_ord', c_ord),
+    ('c_leg', c_leg), ('c_none', c_none), ('c_away', c_away), ('c_moved', c_moved);
 
   -- The cards, as the scan writes them (lib/autopilot/engine.ts): kind,
   -- source_kind, member_id, and the words.
@@ -447,8 +488,10 @@ begin
   perform pg_temp.ap_expect_re(v_grp, 'the unnamed teen names himself on every card (no WHERE): Ava''s insurance card is not touched and he still reads nothing',
     pg_temp.ap_write_read(uU, 'authenticated', format('update public.autopilot_suggestions set member_id = %L', mU), c_ava, uU), HELD);
   perform pg_temp.ap_expect_re(v_grp, 'the unnamed teen, `where true` and a SET from auth.uid(): the household''s policy card is not touched',
-    pg_temp.ap_write_read(uU, 'authenticated',
-      'update public.autopilot_suggestions set member_id = (select id from public.family_members where user_id = auth.uid()) where true', c_home, uU), HELD);
+    pg_temp.ap_write_read(uU, 'authenticated', format(
+      -- Sam belongs to two households, so the subquery names this one; it
+      -- names no column of autopilot_suggestions.
+      'update public.autopilot_suggestions set member_id = (select fm.id from public.family_members fm where fm.user_id = auth.uid() and fm.family_id = %L) where true', fam), c_home, uU), HELD);
   perform pg_temp.ap_expect_re(v_grp, 'the unnamed teen, PostgREST''s unfiltered PATCH with return=minimal: Ava''s insurance card is not touched',
     pg_temp.ap_write_read(uU, 'authenticated', format(PATCH, json_build_object('member_id', mU)::text), c_ava, uU), HELD);
   perform pg_temp.ap_expect_re(v_grp, 'the unnamed teen turns every card into an ''other'' card (no WHERE): Ava''s insurance card is not touched',
@@ -480,6 +523,32 @@ begin
     pg_temp.ap_write_read(uU, 'authenticated', format('update public.autopilot_suggestions set kind = ''finance'' where id = %L', c_ord), c_ord, uG), KEPT_OWN);
   perform pg_temp.ap_expect_re(v_grp, 'a manager turns the subscription charge into an ''other'' card by id: the guest still reads nothing (the pin is not a role rule)',
     pg_temp.ap_write_read(uP, 'authenticated', format('update public.autopilot_suggestions set kind = ''other'', source_kind = null where id = %L', c_fin), c_fin, uG), HELD);
+
+  -- ── 4b. a move into another family the writer also belongs to ───────────
+  -- (RV486-2-FAMILY.) Every helper in the read rule, and 0085's membership,
+  -- takes the card's family_id; a writer who belongs to two families passes
+  -- 0085's WITH CHECK in the other one, the update guard's USING on the old
+  -- row and its WITH CHECK on the new one. Each move is read back as the other
+  -- family's reader (it must read nothing) and as this family's (the card is
+  -- still here: a move out of the family is also the delete 0327 refuses).
+  v_grp := 'DENIED: no client moves a card into another family it also belongs to (RV486-2-FAMILY)';
+  F := 'update public.autopilot_suggestions set family_id = %L where id = %L returning id';
+  perform pg_temp.ap_expect_re(v_grp, 'Ava (named, a child in both households) moves her insurance card to her co-parent''s by id, returning id: refused, and the co-parent reads nothing',
+    pg_temp.ap_write_read(uN, 'authenticated', format(F, famB, c_ava), c_ava, uB), '^refused; kept; reads 0$');
+  perform pg_temp.ap_expect_re(v_grp, 'Ava''s move: her insurance card is still this family''s and Gran (the adult, of this family only) still reads it',
+    pg_temp.ap_write_read(uN, 'authenticated', format(F, famB, c_ava), c_ava, uA), '^refused; kept; reads 1$');
+  perform pg_temp.ap_expect_re(v_grp, 'Sam (a teen in both) moves the subscription charge by PostgREST''s filtered PATCH: refused, and the co-parent reads nothing',
+    pg_temp.ap_write_read(uU, 'authenticated', format(PATCH_FAM, json_build_object('family_id', famB)::text, c_fin, fam), c_fin, uB), '^refused; kept; reads 0$');
+  perform pg_temp.ap_expect_re(v_grp, 'Sam''s PATCH: the subscription charge is still this family''s and Leo (of this family only) still reads it',
+    pg_temp.ap_write_read(uU, 'authenticated', format(PATCH_FAM, json_build_object('family_id', famB)::text, c_fin, fam), c_fin, uL), '^refused; kept; reads 1$');
+  perform pg_temp.ap_expect_re(v_grp, 'Sam moves every card he may update (no WHERE): the subscription charge stays, and the co-parent reads nothing',
+    pg_temp.ap_write_read(uU, 'authenticated', format('update public.autopilot_suggestions set family_id = %L', famB), c_fin, uB), '^refused; kept; reads 0$');
+  perform pg_temp.ap_expect_re(v_grp, 'the guest (who runs her own household) moves an ordinary card into it by id: refused, and Grandpa there reads nothing',
+    pg_temp.ap_write_read(uG, 'authenticated', format(F, famX, c_ord), c_ord, uY), '^refused; kept; reads 0$');
+  perform pg_temp.ap_expect_re(v_grp, 'the guest''s move: the ordinary card is still this family''s and the teen still reads it',
+    pg_temp.ap_write_read(uG, 'authenticated', format(F, famX, c_ord), c_ord, uU), '^refused; kept; reads 1$');
+  perform pg_temp.ap_expect_re(v_grp, 'Mum (a manager here, an adult in the co-parent''s) moves Ava''s card there: refused too (the pin is not a role rule)',
+    pg_temp.ap_write_read(uP, 'authenticated', format(F, famB, c_ava), c_ava, uB), '^refused; kept; reads 0$');
 
   v_grp := 'a manager says whose policy a card is';
   F := 'update public.autopilot_suggestions set member_id = %L where id = %L and family_id = %L returning id';
@@ -604,21 +673,48 @@ begin
 
   -- ── 8. NEGATIVE CONTROLS: without each guard its defect is back ─────────
   v_grp := 'negative control: the probe sees the defect';
-  drop policy if exists autopilot_suggestions_audience_update_guard on public.autopilot_suggestions;
-  perform pg_temp.ap_expect_re(v_grp, 'with the update guard dropped the unnamed teen''s column-free write names him on Ava''s insurance card, and he reads it',
-    pg_temp.ap_write_read((fx->>'uU')::uuid, 'authenticated',
-      format('update public.autopilot_suggestions set member_id = %L', fx->>'mU'), (fx->>'c_ava')::uuid, (fx->>'uU')::uuid),
-    '^[0-9]+ written; changed:member_id; reads 1$');
-  perform pg_temp.ap_expect_re(v_grp, 'with the update guard dropped Ava''s column-free write moves her card to her brother, and he reads it',
-    pg_temp.ap_write_read((fx->>'uN')::uuid, 'authenticated',
-      format('update public.autopilot_suggestions set member_id = %L', fx->>'mL'), (fx->>'c_ava')::uuid, (fx->>'uL')::uuid),
-    '^[0-9]+ written; changed:member_id; reads 1$');
+  -- The pin ALONE (both policies still in place): the family moves and the
+  -- reader's widening are the pin's to hold, not the policies'.
   drop trigger if exists autopilot_suggestions_keep_their_audience on public.autopilot_suggestions;
-  perform pg_temp.ap_expect_re(v_grp, 'with the pin dropped as well the teen turns the subscription charge into an ''other'' card, and the guest reads it',
+  perform pg_temp.ap_expect_re(v_grp, 'with only the pin dropped Ava moves her insurance card to her co-parent''s household, and the co-parent reads it',
+    pg_temp.ap_write_read((fx->>'uN')::uuid, 'authenticated',
+      format('update public.autopilot_suggestions set family_id = %L where id = %L returning id', fx->>'famB', fx->>'c_ava'),
+      (fx->>'c_ava')::uuid, (fx->>'uB')::uuid),
+    '^1 written; changed:family_id; reads 1$');
+  perform pg_temp.ap_expect_re(v_grp, 'with only the pin dropped Ava''s move takes the card out of this family: Gran (the adult, of this family only) no longer reads it',
+    pg_temp.ap_write_read((fx->>'uN')::uuid, 'authenticated',
+      format('update public.autopilot_suggestions set family_id = %L where id = %L returning id', fx->>'famB', fx->>'c_ava'),
+      (fx->>'c_ava')::uuid, (fx->>'uA')::uuid),
+    '^1 written; changed:family_id; reads 0$');
+  perform pg_temp.ap_expect_re(v_grp, 'with only the pin dropped Sam''s filtered PATCH moves the subscription charge, and the co-parent reads it',
+    pg_temp.ap_write_read((fx->>'uU')::uuid, 'authenticated',
+      format('with pgrst_source as (update public.autopilot_suggestions set family_id = pgrst_body.family_id '
+        || 'from (select %L::json as json_data) pgrst_payload, '
+        || 'lateral (select family_id from json_populate_record(null::public.autopilot_suggestions, pgrst_payload.json_data)) pgrst_body '
+        || 'where public.autopilot_suggestions.id = %L::uuid and public.autopilot_suggestions.family_id = %L::uuid '
+        || 'returning public.autopilot_suggestions.*) select count(*) from pgrst_source',
+        json_build_object('family_id', fx->>'famB')::text, fx->>'c_fin', fx->>'fam'),
+      (fx->>'c_fin')::uuid, (fx->>'uB')::uuid),
+    '^1 written; changed:family_id; reads 1$');
+  perform pg_temp.ap_expect_re(v_grp, 'with only the pin dropped the guest moves an ordinary card into her own household, and Grandpa reads it',
+    pg_temp.ap_write_read((fx->>'uG')::uuid, 'authenticated',
+      format('update public.autopilot_suggestions set family_id = %L where id = %L returning id', fx->>'famX', fx->>'c_ord'),
+      (fx->>'c_ord')::uuid, (fx->>'uY')::uuid),
+    '^1 written; changed:family_id; reads 1$');
+  perform pg_temp.ap_expect_re(v_grp, 'with only the pin dropped the teen turns the subscription charge into an ''other'' card, and the guest reads it',
     pg_temp.ap_write_read((fx->>'uU')::uuid, 'authenticated',
       format('update public.autopilot_suggestions set kind = ''other'', source_kind = null where id = %L', fx->>'c_fin'),
       (fx->>'c_fin')::uuid, (fx->>'uG')::uuid),
     '^1 written; changed:kind,source_kind; reads 1$');
+  drop policy if exists autopilot_suggestions_audience_update_guard on public.autopilot_suggestions;
+  perform pg_temp.ap_expect_re(v_grp, 'with the update guard dropped as well the unnamed teen''s column-free write names him on Ava''s insurance card, and he reads it',
+    pg_temp.ap_write_read((fx->>'uU')::uuid, 'authenticated',
+      format('update public.autopilot_suggestions set member_id = %L', fx->>'mU'), (fx->>'c_ava')::uuid, (fx->>'uU')::uuid),
+    '^[0-9]+ written; changed:member_id; reads 1$');
+  perform pg_temp.ap_expect_re(v_grp, 'with the update guard dropped as well Ava''s column-free write moves her card to her brother, and he reads it',
+    pg_temp.ap_write_read((fx->>'uN')::uuid, 'authenticated',
+      format('update public.autopilot_suggestions set member_id = %L', fx->>'mL'), (fx->>'c_ava')::uuid, (fx->>'uL')::uuid),
+    '^[0-9]+ written; changed:member_id; reads 1$');
   drop policy if exists autopilot_suggestions_audience_read_guard on public.autopilot_suggestions;
   perform pg_temp.ap_expect(v_grp, 'with the read policy dropped the guest reads the subscription charge again',
     pg_temp.ap_as((fx->>'uG')::uuid, 'authenticated', format('select title, detail, payload from public.autopilot_suggestions where id = %L', fx->>'c_fin'), true), '1');
@@ -636,7 +732,7 @@ begin
     raise exception E'an Autopilot card is not read by its audience (0486), % of % checks failed:\n  - %',
       cardinality(failures), (select count(*) from ap_result), array_to_string(failures, E'\n  - ');
   end if;
-  raise notice 'an-autopilot-card-is-read-by-its-audience: OK (% checks: a guest reads no subscription or renewal copy, a non-manager no policy card that does not name them; managers read every card, a policy''s member its card, non-guests the finance cards, everyone the ordinary ones; another family, an inactive member and anon read nothing; resolve and the scan''s read-back follow the same rule; a column-free UPDATE reaches no card its writer may not read and no reader relabels a card out of its audience, while a manager reassigns one and readers resolve; 0327 still holds; a legacy insurance card names its policy''s member after 0486 re-applied here, and re-applying again writes nothing; negative controls reproduced each defect)%',
+  raise notice 'an-autopilot-card-is-read-by-its-audience: OK (% checks: a guest reads no subscription or renewal copy, a non-manager no policy card that does not name them; managers read every card, a policy''s member its card, non-guests the finance cards, everyone the ordinary ones; another family, an inactive member and anon read nothing; resolve and the scan''s read-back follow the same rule; a column-free UPDATE reaches no card its writer may not read and no reader relabels a card out of its audience or moves it into another family they belong to, while a manager reassigns one and readers resolve; 0327 still holds; a legacy insurance card names its policy''s member after 0486 re-applied here, and re-applying again writes nothing; negative controls reproduced each defect)%',
     (select count(*) from ap_result), summary;
 end
 $controls$;

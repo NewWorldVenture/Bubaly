@@ -520,9 +520,9 @@ describe('Supabase migration filename safety', () => {
     // 0485 indexes push_devices by device_key. 0486 (2026-10-12, PR #1031's
     // follow-up, the next free number) reads an Autopilot card by its
     // audience: lib/autopilot/audience.ts's rule as RESTRICTIVE SELECT and
-    // UPDATE policies on autopilot_suggestions, a pin on the two columns that
-    // rule reads, and a backfill of legacy insurance cards' member. 0487 is
-    // free.
+    // UPDATE policies on autopilot_suggestions, a pin on the columns that
+    // decide who reads a card (kind, source_kind, family_id), and a backfill
+    // of legacy insurance cards' member. 0487 is free.
     // Preserve main's owner allocation map above that: bill anchor 0488 and
     // feed claim 0490 remain held in supabase/reserved. Approval, AI privacy
     // and atomic sync candidates are held at 0492-0494.

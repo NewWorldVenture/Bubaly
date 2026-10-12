@@ -96,29 +96,48 @@
 --      same CASE. An UPDATE policy applies to every UPDATE, whatever it names:
 --      USING means a caller updates only rows they may read, so a non-reader
 --      cannot touch a card at all; WITH CHECK means the row it leaves must
---      still be one the CALLER may read. That stops every relabel that lands
---      outside the caller's audience: a named child moving her card to a
---      sibling (or to nobody, the managers'), a teen or a guest naming
---      themselves on a card they could not read (they could not reach it).
+--      still be one the CALLER may read. That stops every relabel of the
+--      card's member that lands outside the caller's audience: a named child
+--      moving her card to a sibling (or to nobody, the managers'), a teen or a
+--      guest naming themselves on a card they could not read (they could not
+--      reach it). It cannot stop a reader whose new row is still theirs to
+--      read, which is (2)'s.
 --      A manager reads every card, so a manager may still say whose policy a
 --      card is; that is the Insurance Hub's decision and it is how the scan
 --      keeps a card in step with a reassigned policy (below).
---   2. A BEFORE UPDATE trigger that pins `kind` and `source_kind` for every
---      caller subject to RLS. The policy sees only the NEW row, and a READER
---      who widens a card ends inside their own audience: the teen who may
---      read the subscription charge turns it into kind 'other' and passes any
---      check on the new row, and the guest reads it. Only the old row can
---      tell that from an honest resolve, which is a trigger's (0480's
---      pattern, and its bypass test: a role that bypasses RLS bypasses this).
---      These are the two columns audience.ts classifies a card by, so with
---      them pinned no client changes which audience a card has, either way;
---      `member_id` is the only audience-bearing column left, and only on an
---      insurance card, where (1) holds it. Nothing in app/ or lib/ updates
---      either column (resolve, archive, the policy refresh and the trust
---      actions write status, resolved_*, dedupe_key, expires_at, detail,
---      confidence, payload; the scan's refresh writes member_id), so the pin
---      costs no flow. A manager is pinned too: no client rewrites what a card
---      is a copy of.
+--   2. A BEFORE UPDATE trigger that pins the columns that decide who reads a
+--      card, `kind`, `source_kind` and `family_id`, for every caller subject
+--      to RLS. The policy sees only the NEW row, and a READER who widens a
+--      card ends inside their own audience: the teen who may read the
+--      subscription charge turns it into kind 'other' and passes any check on
+--      the new row, and the guest reads it. Only the old row can tell that
+--      from an honest resolve, which is a trigger's (0480's pattern, and its
+--      bypass test: a role that bypasses RLS bypasses this). `kind` and
+--      `source_kind` are what audience.ts classifies a card by. `family_id`
+--      is an argument of every helper in the CASE (can_manage_family,
+--      family_role) and of 0085's membership test, so it decides the audience
+--      as much as the other two (RV486-2-FAMILY): replayed on PG16 with only
+--      those two pinned, Ava, a child in this family and in her co-parent's,
+--      moved her insurance card into the other family by id (`set family_id
+--      = '<B>' … returning id`), the other family's parent read it and this
+--      family's adult no longer did; Sam, a teen in both, did the same to
+--      the subscription charge by PostgREST's filtered PATCH; a guest here
+--      who runs her own household moved an ordinary card into it. Every check
+--      passed: 0085's WITH CHECK is membership of the NEW family, which they
+--      have; this policy's USING read the old row, its WITH CHECK the new one
+--      (`is_self_member(member_id)` does not ask which family, and the teen's
+--      role in the other family is not guest); 0327's update guard asks only
+--      membership of the old family and who resolved.
+--      Moving a card out of its family is also the delete 0327 refuses every
+--      client. With the three pinned no client changes which audience a card
+--      has, either way: `member_id` is the only column a client can still
+--      write that decides who reads a card, and only on an insurance card,
+--      where (1) holds it. Nothing in app/ or lib/ updates any of the three
+--      (resolve, archive, the policy refresh and the trust actions write
+--      status, resolved_*, dedupe_key, expires_at, detail, confidence,
+--      payload; the scan's refresh writes member_id, by id AND family_id), so
+--      the pin costs no flow. A manager is pinned too: no client rewrites
+--      what a card is a copy of or whose family it is.
 --
 -- ── Insurance cards written before the scan stored their member ─────────────
 --
@@ -177,9 +196,10 @@
 --     the copy, not the source.
 --
 -- Probe: docs/audit/an-autopilot-card-is-read-by-its-audience-check.sql (the
--- read rule, the column-free UPDATE, the pin, and this file's backfill
--- re-applied in its transaction). docs/audit/autopilot-suggestion-write-check.sql
--- (0327) still holds: its cards are everyone's.
+-- read rule, the column-free UPDATE, the pin, a move into another family the
+-- writer also belongs to, and this file's backfill re-applied in its
+-- transaction). docs/audit/autopilot-suggestion-write-check.sql (0327) still
+-- holds: its cards are everyone's.
 --
 -- Agents must NOT apply this to production (docs/PENDING_PROD_MIGRATIONS.md);
 -- the owner applies it in the normal manual release.
@@ -268,9 +288,10 @@ create policy autopilot_suggestions_audience_update_guard on public.autopilot_su
   );
 
 comment on policy autopilot_suggestions_audience_update_guard on public.autopilot_suggestions is
-  'A card is updated only by its audience, and only into a card its writer may still read (0486, RV486-2): the read rule of autopilot_suggestions_audience_read_guard on the old row (USING) and the new row (WITH CHECK), for every UPDATE, including one that names no column and so skips the SELECT policy. With autopilot_suggestion_keeps_its_audience, a non-reader cannot touch a card and a reader cannot relabel one for someone outside its audience.';
+  'A card is updated only by its audience, and only into a card its writer may still read (0486, RV486-2): the read rule of autopilot_suggestions_audience_read_guard on the old row (USING) and the new row (WITH CHECK), for every UPDATE, including one that names no column and so skips the SELECT policy. With autopilot_suggestion_keeps_its_audience, which pins kind, source_kind and family_id (a reader''s widening, or a move into another family the writer also belongs to, passes a check on either row alone), a non-reader cannot touch a card and a reader cannot relabel one for someone outside its audience.';
 
--- ── what a card is a copy of is the scan's (RV486-2) ───────────────────────
+-- ── what a card is a copy of, and whose family it is, is the scan's ─────────
+-- (RV486-2, RV486-2-FAMILY)
 create or replace function public.autopilot_suggestion_keeps_its_audience()
 returns trigger
 language plpgsql
@@ -289,8 +310,9 @@ begin
   end if;
 
   if new.kind is distinct from old.kind
-     or new.source_kind is distinct from old.source_kind then
-    raise exception 'what an Autopilot card is a copy of (kind, source_kind) decides who reads it and cannot be rewritten (0486)'
+     or new.source_kind is distinct from old.source_kind
+     or new.family_id is distinct from old.family_id then
+    raise exception 'what an Autopilot card is a copy of and whose family it is (kind, source_kind, family_id) decide who reads it and cannot be rewritten (0486)'
       using errcode = '42501';
   end if;
 
@@ -299,7 +321,7 @@ end;
 $$;
 
 comment on function public.autopilot_suggestion_keeps_its_audience() is
-  'BEFORE UPDATE on autopilot_suggestions, for callers subject to RLS: kind and source_kind, the two columns lib/autopilot/audience.ts classifies a card by, never change after insert, so a reader cannot widen a card (a finance card turned into an everyone card) or narrow one past the update guard, which sees only the new row (0486).';
+  'BEFORE UPDATE on autopilot_suggestions, for callers subject to RLS: kind, source_kind and family_id, the columns that decide who reads a card (lib/autopilot/audience.ts classifies it by the first two; every helper in the read rule, and 0085''s membership, takes the third), never change after insert. So a reader cannot widen a card (a finance card turned into an everyone card), narrow one past the update guard, which sees only the new row, or move one into another family they also belong to, where that family''s readers read it and its own family loses it (0486).';
 
 revoke all on function public.autopilot_suggestion_keeps_its_audience() from public, anon, authenticated;
 
@@ -340,7 +362,7 @@ begin
        and t.tgenabled = 'O'
        and t.tgfoid = 'public.autopilot_suggestion_keeps_its_audience()'::regprocedure
   ) then
-    raise exception '0486: the trigger pinning a card''s kind and source_kind is missing or disabled';
+    raise exception '0486: the trigger pinning a card''s kind, source_kind and family_id is missing or disabled';
   end if;
   if has_function_privilege('anon', 'public.autopilot_suggestion_keeps_its_audience()', 'execute')
      or has_function_privilege('authenticated', 'public.autopilot_suggestion_keeps_its_audience()', 'execute') then
@@ -369,6 +391,6 @@ begin
   if v_legacy <> 0 then
     raise exception '0486: % insurance card(s) still name no member although their policy names one', v_legacy;
   end if;
-  raise notice '0486 OK: an Autopilot card is read and updated by its audience (insurance: managers and its member; subscriptions and renewals: not guests; the rest: the family), its kind and source_kind are the server''s, and every insurance card names the member its policy names';
+  raise notice '0486 OK: an Autopilot card is read and updated by its audience (insurance: managers and its member; subscriptions and renewals: not guests; the rest: the family), its kind, source_kind and family are the server''s, and every insurance card names the member its policy names';
 end
 $$;
