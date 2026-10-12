@@ -4,6 +4,7 @@ import type { Database } from '@/lib/database.types';
 import { getResend, FROM_EMAIL, emailEnabled, APP_URL } from '@/lib/email';
 import type { Copy } from '@/lib/marketing/automation-triggers';
 import { unsubUrl } from '@/lib/marketing/unsubscribe';
+import { canonicalMailbox } from '@/lib/server/canonical-mailbox';
 
 type DB = SupabaseClient<Database>;
 
@@ -23,13 +24,20 @@ function escapeHtml(value: string): string {
  * mail — and the form_submitted trigger is reachable anonymously, so a stranger
  * could aim it at an address that had asked us to stop. A read that fails is
  * `unknown`, never `mailable`: an opt-out we could not read is still an opt-out.
+ *
+ * The opt-out is looked up under the address as typed AND its canonical inbox
+ * (lib/server/canonical-mailbox.ts). A public form takes any spelling, so
+ * `victim+day1@gmail.com` would otherwise reach the inbox that unsubscribed as
+ * `victim@gmail.com`, once a day, a new `+tag` each time.
  */
 async function suppressionFor(supabase: DB, email: string): Promise<'mailable' | 'suppressed' | 'unknown'> {
   try {
+    const typed = email.trim().toLowerCase();
+    const spellings = [...new Set([typed, canonicalMailbox(typed)])];
     const { data, error } = await supabase
       .from('marketing_suppressions')
       .select('email')
-      .eq('email', email.trim().toLowerCase())
+      .in('email', spellings)
       .limit(1);
     if (error || !Array.isArray(data)) return 'unknown';
     return data.length > 0 ? 'suppressed' : 'mailable';

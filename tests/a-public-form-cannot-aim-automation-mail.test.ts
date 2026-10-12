@@ -161,6 +161,15 @@ describe('the greeting carries no text of the caller’s', () => {
     expect(String(mail.html)).not.toContain('closed today');
   });
 
+  it('contact: a short sentence with no punctuation is not taken for a name', async () => {
+    const res = await contact({ name: 'there your Bubaly account will be closed', email: 'quiet@example.com' }, '192.0.2.21');
+    expect(res.status).toBe(200);
+    const [mail] = mailTo(/^quiet@/);
+    expect(mail).toBeTruthy();
+    expect(String(mail.html)).toContain('<p>Hi there,</p>');
+    expect(String(mail.html)).not.toContain('account will be closed');
+  });
+
   it('forms: a 30 KB name field is not mailed', async () => {
     const essay = `Jordan ${'click https://evil.example/x '.repeat(1_000)}`;
     const res = await formSubmit({ full_name: essay, email: 'long@example.com' }, '192.0.2.30');
@@ -182,6 +191,17 @@ describe('an address that opted out is not mailed through a public form', () => 
     const [run] = db.table('marketing_automation_runs');
     expect(run.status).toBe('completed');
     expect((run.metadata as { actions: string[] }).actions).toEqual(['send_email:suppressed']);
+  });
+
+  it('contact: a +tag or Gmail-dot spelling does not reach an inbox that opted out', async () => {
+    seed({ suppressions: [{ email: 'victim@gmail.com', reason: 'unsubscribe' }] });
+    for (const [i, email] of ['victim+day1@gmail.com', 'v.ictim@gmail.com', 'Victim+x@googlemail.com'].entries()) {
+      // A fresh limiter per spelling, so only the opt-out can stop the mail.
+      vi.setSystemTime(new Date(Date.UTC(2026, 9, 12 + i, 10, 5)));
+      const res = await contact({ name: 'Jordan', email }, `192.0.2.${50 + i}`);
+      expect(res.status, email).toBe(200);
+    }
+    expect(h.sent).toEqual([]);
   });
 
   it('forms: a suppressed address gets nothing', async () => {

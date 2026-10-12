@@ -60,9 +60,9 @@ function seed(trigger: string) {
   h.db = db;
 }
 
-function clicked(recipient: string, id: string) {
+function clicked(recipient: string, id: string, link?: string) {
   const timestamp = String(Math.floor(Date.now() / 1000));
-  const body = JSON.stringify({ type: 'email.clicked', data: { to: [recipient] } });
+  const body = JSON.stringify({ type: 'email.clicked', data: link ? { to: [recipient], click: { link } } : { to: [recipient] } });
   const signature = createHmac('sha256', signingKey).update(`${id}.${timestamp}.${body}`).digest('base64');
   return new Request('https://bubaly.test/api/webhooks/resend', {
     method: 'POST', body,
@@ -70,10 +70,10 @@ function clicked(recipient: string, id: string) {
   });
 }
 
-async function webhook(recipient: string, id: string) {
+async function webhook(recipient: string, id: string, link?: string) {
   const { POST } = await import('@/app/api/webhooks/resend/route');
   const { NextRequest } = await import('next/server');
-  return POST(new NextRequest(clicked(recipient, id)));
+  return POST(new NextRequest(clicked(recipient, id, link)));
 }
 
 async function cron() {
@@ -111,6 +111,24 @@ describe('the Resend webhook does not mail someone who unsubscribed', () => {
     const [run] = db.table('marketing_automation_runs');
     expect(run.status, 'an opt-out honoured is a completed run, not a failure').toBe('completed');
     expect((run.metadata as { actions: string[] }).actions).toEqual(['send_email:suppressed']);
+  });
+
+  // The browser's GET of the Unsubscribe link writes the opt-out row; Resend's
+  // email.clicked for that same click can arrive first. Then no suppression
+  // exists yet, and only the link itself says this click was a way out.
+  it('a click on the Unsubscribe link starts no mail, even before the opt-out row lands', async () => {
+    seed('email_clicked');
+    const res = await webhook('stays@example.com', 'msg_unsub_link',
+      'https://bubaly.test/api/marketing/unsubscribe?e=stays%40example.com&t=abc');
+    expect(res.status).toBe(200);
+    expect(h.sent).toEqual([]);
+    expect(db.table('marketing_automation_runs')).toEqual([]);
+  });
+
+  it('a click on any other link is still engagement (positive control)', async () => {
+    seed('email_clicked');
+    await webhook('stays@example.com', 'msg_other_link', 'https://bubaly.test/pricing?utm_source=mail');
+    expect(h.sent).toHaveLength(1);
   });
 
   it('a reader who did not opt out is mailed, with the way out on the mail (positive control)', async () => {

@@ -25,15 +25,17 @@ export const PUBLIC_AUTOMATION_WINDOW_MS = 86_400_000;
 
 /**
  * A visitor-typed name, only if it reads as a name: letters (any script),
- * spaces, apostrophes and hyphens, at most 40 characters. Anything else — a
- * URL, digits, punctuation, a paragraph — is null, and the greeting falls back
- * to its fixed "there".
+ * spaces, apostrophes and hyphens, at most 40 characters and three words.
+ * Anything else — a URL, digits, punctuation, a paragraph, or a short sentence
+ * with no punctuation at all ("there your Bubaly account will be closed") — is
+ * null, and the greeting falls back to its fixed "there".
  */
 export function greetingName(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
   const name = raw.normalize('NFKC').replace(/\s+/g, ' ').trim();
   if (name.length < 1 || name.length > 40) return null;
   if (!/^\p{L}[\p{L}\p{M}'’ -]*$/u.test(name)) return null;
+  if (name.split(' ').length > 3) return null;
   return name;
 }
 
