@@ -259,3 +259,42 @@ describe('a read that never comes back empty still ends', () => {
     expect(Math.max(...asked.map(([from, to]) => to - from + 1))).toBe(VISIBLE_PREFIX_SCAN_LIMIT);
   });
 });
+
+describe('a row written between two pages is listed once', () => {
+  // Pages are separate reads. A row written ahead of the boundary after the
+  // first page pushes that page's last row into the second; stitched as
+  // returned, the list held it twice (RV-REMID-1).
+  function shiftingPages<T extends { id: string }>(rows: T[], ahead: T, maxRows: number) {
+    let calls = 0;
+    return async (from: number, to: number) => {
+      if (calls++ === 1) rows.unshift(ahead);
+      return { data: rows.slice(from, Math.min(to + 1, from + maxRows)), error: null };
+    };
+  }
+
+  it('the card prefix', async () => {
+    const { readVisiblePrefix } = await import('@/lib/autopilot/visible-prefix');
+    const rows = [{ id: 'c-1', hidden: true }, { id: 'c-2', hidden: false }, { id: 'c-3', hidden: false }, { id: 'c-4', hidden: false }];
+    const read = await readVisiblePrefix(shiftingPages(rows, { id: 'c-0', hidden: true }, 2), { limit: 3, visible: (row) => !row.hidden });
+    expect(read.error).toBeNull();
+    expect(read.data!.map((row) => row.id)).toEqual(['c-2', 'c-3', 'c-4']);
+  });
+
+  it('the reminder prefix', async () => {
+    const { readVisibleReminders } = await import('@/lib/autopilot/reminder-cards');
+    // r-1 links to a card nobody can find: the managers' alone, hidden from Kit.
+    const rows = [
+      { id: 'r-1', related_type: 'renewal', related_id: 'ren-gone' },
+      { id: 'r-2', related_type: null, related_id: null },
+      { id: 'r-3', related_type: null, related_id: null },
+      { id: 'r-4', related_type: null, related_id: null },
+    ];
+    const read = await readVisibleReminders(shiftingPages(rows, { id: 'r-0', related_type: null, related_id: null }, 2), {
+      limit: 3, viewer: { role: 'child', memberId: 'kit' }, cards: async () => null,
+    });
+    expect(read.error).toBeNull();
+    const ids = read.data!.map((row) => row.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toEqual(['r-2', 'r-3', 'r-4']);
+  });
+});

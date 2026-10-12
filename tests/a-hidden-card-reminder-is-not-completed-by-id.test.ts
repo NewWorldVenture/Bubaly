@@ -46,10 +46,10 @@ async function cardReminder(named: boolean): Promise<void> {
   db.seed('family_reminders', [{ ...personal('insurance-reminder'), title: card.title, member_id: null, idempotency_key, tags: [stamp] }]);
 }
 async function eligible(): Promise<string[]> {
-  const result = await readVisibleReminders<Record<string, unknown> & { related_type: string | null; related_id: string | null; tags: string[]; idempotency_key: string | null }>(
-    async n => {
-      const reply = await db.from('family_reminders').select('*').eq('family_id', FAMILY).order('remind_at').order('id').limit(n);
-      return { data: reply.data as (Record<string, unknown> & { related_type: string | null; related_id: string | null; tags: string[]; idempotency_key: string | null })[] | null, error: reply.error };
+  const result = await readVisibleReminders<Record<string, unknown> & { id: string; related_type: string | null; related_id: string | null; tags: string[]; idempotency_key: string | null }>(
+    async (from, to) => {
+      const reply = await db.from('family_reminders').select('*').eq('family_id', FAMILY).order('remind_at').order('id').range(from, to);
+      return { data: reply.data as (Record<string, unknown> & { id: string; related_type: string | null; related_id: string | null; tags: string[]; idempotency_key: string | null })[] | null, error: reply.error };
     },
     { limit: 20, viewer: { role: 'teen', memberId: TEEN }, cards: reminderCardsReader(db, FAMILY, { onError: error => { throw error; }, keyOf: id => mintSuggestionReminderKey(FAMILY, id), sourceTagOf: mintSuggestionSourceTag }) },
   );

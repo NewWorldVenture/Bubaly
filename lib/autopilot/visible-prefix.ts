@@ -50,21 +50,37 @@ export const VISIBLE_PREFIX_SCAN_LIMIT = 10_000;
  * `keep(rows, wanted)` answers the page's rows this reader keeps, in order;
  * it need not answer more than `wanted`, and what it answers past that is not
  * used.
+ *
+ * A row is looked at once. Pages are separate reads, so a row written ahead
+ * of the boundary between two of them pushes the last row of one page into
+ * the next: stitched as returned, the list showed that row twice (a doubled
+ * line and a duplicate React key). A row already seen, by `id` (or `keyOf`),
+ * is passed over. A row removed ahead of the boundary pulls one back instead,
+ * and that row is not read this time; the list is as stale as any one read.
  */
 export async function readKeptPrefix<T, E = unknown>(
   page: PrefixPage<T, E>,
   limit: number,
   keep: (rows: T[], wanted: number) => T[] | PromiseLike<T[]>,
+  keyOf: (row: T) => unknown = (row) => (row as { id?: unknown } | null)?.id,
 ): Promise<{ data: T[] | null; error: E | null }> {
   const kept: T[] = [];
   if (limit <= 0) return { data: kept, error: null };
+  const seen = new Set<unknown>();
   for (let from = 0, size = limit; from < VISIBLE_PREFIX_SCAN_LIMIT; size = Math.min(size * 2, VISIBLE_PREFIX_SCAN_LIMIT)) {
     const { data, error } = await page(from, from + size - 1);
     if (error) return { data: null, error };
     const rows = data ?? [];
     if (rows.length === 0) break;
+    const fresh = rows.filter((row) => {
+      const key = keyOf(row);
+      if (key === undefined || key === null) return true;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
     const wanted = limit - kept.length;
-    kept.push(...(await keep(rows, wanted)).slice(0, wanted));
+    if (fresh.length > 0) kept.push(...(await keep(fresh, wanted)).slice(0, wanted));
     if (kept.length >= limit) break;
     from += rows.length;
   }
