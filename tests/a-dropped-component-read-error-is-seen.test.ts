@@ -98,7 +98,7 @@ describe('the four smaller answers are logged, not escalated', () => {
       bind: 'const { data, error } = await supabase',
       log: "if (error) console.error('[app-context] member roster refresh failed",
       // A refused refresh keeps the roster on screen; it must never empty it.
-      keeps: 'if (data) setMembers(data);',
+      keeps: 'if (data && rosterLive.current && generation === rosterGeneration.current) setMembers(data);',
     },
     {
       file: 'components/concierge/plan-write-backs.tsx',
