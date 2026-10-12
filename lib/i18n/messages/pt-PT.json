@@ -16966,5 +16966,7 @@
   "householdMoney.keptByParents": "O dinheiro da casa é gerido pelos pais da tua família",
   "householdMoney.keptByParentsBody": "As contas, os saldos e as despesas da casa são para um pai, uma mãe ou um adulto da casa. Pede a um deles se precisares de alguma coisa.",
   "householdMoney.onlyYourOwnSpending": "Aqui vês as despesas atribuídas a ti. Um pai ou mãe ou um adulto vê as contas da casa e todas as suas despesas.",
-  "householdMoney.onlyWhatYouAdded": "Aqui vês os registos que adicionaste. Um pai ou mãe ou um adulto vê os de todos."
+  "householdMoney.onlyWhatYouAdded": "Aqui vês os registos que adicionaste. Um pai ou mãe ou um adulto vê os de todos.",
+  "handoff.pickupChangedRefresh": "Esta recolha acabou de mudar. Atualize a página para ver em que ponto está.",
+  "marketplace.onlyTheSellerFinishesAnOrder": "Só quem o vendeu ou emprestou pode marcá-lo como devolvido ou concluído."
 }

@@ -16966,5 +16966,7 @@
   "householdMoney.keptByParents": "Das Haushaltsgeld wird von den Eltern deiner Familie geführt",
   "householdMoney.keptByParentsBody": "Konten, Kontostände und Ausgaben des Haushalts sind für einen Elternteil oder Erwachsenen des Haushalts. Frag einen von ihnen, wenn du etwas daraus brauchst.",
   "householdMoney.onlyYourOwnSpending": "Du siehst hier die Ausgaben, die dir zugeordnet sind. Eltern und Erwachsene sehen die Konten des Haushalts und alle seine Ausgaben.",
-  "householdMoney.onlyWhatYouAdded": "Du siehst hier die Einträge, die du hinzugefügt hast. Eltern und Erwachsene sehen die aller."
+  "householdMoney.onlyWhatYouAdded": "Du siehst hier die Einträge, die du hinzugefügt hast. Eltern und Erwachsene sehen die aller.",
+  "handoff.pickupChangedRefresh": "Diese Abholung wurde gerade geändert. Aktualisiere die Seite, um den aktuellen Stand zu sehen.",
+  "marketplace.onlyTheSellerFinishesAnOrder": "Nur die Person, die das verkauft oder verliehen hat, kann es als zurückgegeben oder abgeschlossen markieren."
 }

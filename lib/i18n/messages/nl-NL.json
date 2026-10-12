@@ -16966,5 +16966,7 @@
   "householdMoney.keptByParents": "Het huishoudgeld wordt bijgehouden door de ouders in je gezin",
   "householdMoney.keptByParentsBody": "De rekeningen, saldi en uitgaven van het huishouden zijn voor een ouder of volwassene in het huishouden. Vraag het een van hen als je er iets uit nodig hebt.",
   "householdMoney.onlyYourOwnSpending": "Je ziet hier de uitgaven die aan jou zijn toegewezen. Een ouder of volwassene ziet de rekeningen van het huishouden en al zijn uitgaven.",
-  "householdMoney.onlyWhatYouAdded": "Je ziet hier de gegevens die jij hebt toegevoegd. Een ouder of volwassene ziet die van iedereen."
+  "householdMoney.onlyWhatYouAdded": "Je ziet hier de gegevens die jij hebt toegevoegd. Een ouder of volwassene ziet die van iedereen.",
+  "handoff.pickupChangedRefresh": "Deze ophaling is net gewijzigd. Vernieuw de pagina om te zien hoe het ervoor staat.",
+  "marketplace.onlyTheSellerFinishesAnOrder": "Alleen degene die dit heeft verkocht of uitgeleend, kan het als teruggebracht of afgerond markeren."
 }

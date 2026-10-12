@@ -16966,5 +16966,7 @@
   "householdMoney.keptByParents": "Household money is kept by your family's parents",
   "householdMoney.keptByParentsBody": "The household's accounts, balances and spending are for a parent or adult of the household. Ask one of them if you need something from them.",
   "householdMoney.onlyYourOwnSpending": "You see the spending tagged to you here. A parent or adult sees the household's accounts and all of its spending.",
-  "householdMoney.onlyWhatYouAdded": "You see the records you added here. A parent or adult sees everyone's."
+  "householdMoney.onlyWhatYouAdded": "You see the records you added here. A parent or adult sees everyone's.",
+  "handoff.pickupChangedRefresh": "This pickup changed a moment ago. Refresh to see where it stands.",
+  "marketplace.onlyTheSellerFinishesAnOrder": "Only the person who sold or lent this can mark it returned or complete."
 }

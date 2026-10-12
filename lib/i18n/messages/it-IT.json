@@ -16966,5 +16966,7 @@
   "householdMoney.keptByParents": "Il denaro di casa è gestito dai genitori della tua famiglia",
   "householdMoney.keptByParentsBody": "I conti, i saldi e le spese della famiglia sono per un genitore o un adulto della famiglia. Chiedi a uno di loro se ti serve qualcosa.",
   "householdMoney.onlyYourOwnSpending": "Qui vedi le spese attribuite a te. Un genitore o un adulto vede i conti della famiglia e tutte le sue spese.",
-  "householdMoney.onlyWhatYouAdded": "Qui vedi le voci che hai aggiunto. Un genitore o un adulto vede quelle di tutti."
+  "householdMoney.onlyWhatYouAdded": "Qui vedi le voci che hai aggiunto. Un genitore o un adulto vede quelle di tutti.",
+  "handoff.pickupChangedRefresh": "Questo ritiro è appena cambiato. Aggiorna la pagina per vedere a che punto è.",
+  "marketplace.onlyTheSellerFinishesAnOrder": "Solo chi l’ha venduto o prestato può segnarlo come restituito o completato."
 }

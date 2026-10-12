@@ -16966,5 +16966,7 @@
   "householdMoney.keptByParents": "L'argent du foyer est tenu par les parents de votre famille",
   "householdMoney.keptByParentsBody": "Les comptes, les soldes et les dépenses du foyer sont réservés à un parent ou à un adulte du foyer. Demandez-leur si vous avez besoin de quelque chose.",
   "householdMoney.onlyYourOwnSpending": "Tu vois ici les dépenses qui te sont attribuées. Un parent ou un adulte voit les comptes du foyer et toutes ses dépenses.",
-  "householdMoney.onlyWhatYouAdded": "Tu vois ici les fiches que tu as ajoutées. Un parent ou un adulte voit celles de tout le monde."
+  "householdMoney.onlyWhatYouAdded": "Tu vois ici les fiches que tu as ajoutées. Un parent ou un adulte voit celles de tout le monde.",
+  "handoff.pickupChangedRefresh": "Ce retrait vient d’être modifié. Actualisez la page pour voir où il en est.",
+  "marketplace.onlyTheSellerFinishesAnOrder": "Seule la personne qui l’a vendu ou prêté peut le marquer comme rendu ou terminé."
 }
