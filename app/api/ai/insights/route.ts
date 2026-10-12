@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { settle, describeReadError } from '@/lib/supabase/settle';
+import { settle, settleAll, describeReadError } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
@@ -694,12 +694,18 @@ async function fetchRows(
       required([['family_polls', polls.error]]);
       // Every row of those polls (readAll), so no cap can cut one short.
       const pollIds = (polls.data ?? []).map((p) => p.id as string);
-      const [options, votes] = await Promise.all([
+      // settleAll: a read that never completes comes back as an error, which
+      // required() refuses, instead of taking the other read down with it.
+      const [options, votes] = await settleAll([
         readAll<Record<string, unknown>>((from, to) => sb.from('family_poll_options').select('*').eq('family_id', familyId).in('poll_id', pollIds).order('id').range(from, to)),
         readAll<Record<string, unknown>>((from, to) => sb.from('family_poll_votes').select('*').eq('family_id', familyId).in('poll_id', pollIds).order('id').range(from, to)),
       ]);
       required([['family_poll_options', options.error], ['family_poll_votes', votes.error]]);
-      return { family_polls: polls.data ?? [], family_poll_options: options.rows, family_poll_votes: votes.rows };
+      return {
+        family_polls: polls.data ?? [],
+        family_poll_options: 'rows' in options ? options.rows : [],
+        family_poll_votes: 'rows' in votes ? votes.rows : [],
+      };
     }
     default:
       return {};
