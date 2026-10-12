@@ -25,6 +25,7 @@ import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/remin
 import { mintSuggestionReminderKey, mintSuggestionSourceTag } from '@/lib/autopilot/reminder-key';
 import { scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
+import { requireShownReminder } from './shown';
 
 export type FamilyReminder = Tables<'family_reminders'>;
 
@@ -212,6 +213,10 @@ export async function createReminder(
  * someone ticked it off.
  */
 export async function completeReminder(scope: ServiceScope, reminderId: string): Promise<ServiceResult<FamilyReminder>> {
+  // Only one its actor may be shown; any other id is unknown (./shown.ts).
+  const shown = await requireShownReminder(scope, reminderId);
+  if (!shown.ok) return shown;
+
   const { data: existing, error: readError } = await scope.db
     .from('family_reminders')
     .select('id, recurrence, remind_at')
@@ -258,6 +263,10 @@ export async function completeReminder(scope: ServiceScope, reminderId: string):
  * the service does not already have.
  */
 export async function deleteReminder(scope: ServiceScope, reminderId: string): Promise<ServiceResult<{ id: string; title: string }>> {
+  // Only one its actor may be shown; any other id is unknown (./shown.ts).
+  const shown = await requireShownReminder(scope, reminderId);
+  if (!shown.ok) return shown;
+
   const { data, error } = await scope.db
     .from('family_reminders')
     .delete()
@@ -279,6 +288,10 @@ export async function deleteReminder(scope: ServiceScope, reminderId: string): P
 export async function snoozeReminder(scope: ServiceScope, reminderId: string, minutes: number): Promise<ServiceResult<FamilyReminder>> {
   const mins = Math.round(minutes);
   if (!Number.isFinite(mins) || mins <= 0) return fail('Snooze needs a length in minutes.', { code: SERVICE_CODES.invalidInput });
+
+  // Only one its actor may be shown; any other id is unknown (./shown.ts).
+  const shown = await requireShownReminder(scope, reminderId);
+  if (!shown.ok) return shown;
 
   const until = new Date(scopeNow(scope).getTime() + mins * 60_000).toISOString();
   const { data, error } = await scope.db

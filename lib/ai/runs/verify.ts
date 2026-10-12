@@ -17,6 +17,7 @@ import 'server-only';
 import { z } from 'zod';
 import { describeDbError } from '@/lib/supabase/errors';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
+import { requireShownReminder } from '@/lib/services/reminders/shown';
 import { BINDING_KEY } from './bindings';
 
 /**
@@ -167,6 +168,18 @@ async function runCheck(scope: ServiceScope, check: VerificationCheck): Promise<
   if (check.kind === 'fields_match') {
     if (typeof check.id !== 'string') {
       return { kind: check.kind, label, verified: false, detail: 'Bubaly could not work out which record this was meant to check.' };
+    }
+    // A reminder the run's actor may not be shown is no record of theirs to
+    // compare against a guess (lib/services/reminders/shown.ts): matched, a
+    // plan's "title is …" check read back whether a hidden policy reminder's
+    // title was the one guessed. It answers as an id the family does not hold.
+    if (check.table === 'family_reminders') {
+      const shown = await requireShownReminder(scope, check.id);
+      if (!shown.ok) {
+        return shown.code === SERVICE_CODES.notFound
+          ? { kind: check.kind, label, verified: false, detail: 'That record no longer exists.' }
+          : { kind: check.kind, label, verified: false, detail: 'Bubaly could not re-read what it wrote.' };
+      }
     }
     const { data, error } = await reader
       .from(check.table)
