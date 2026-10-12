@@ -47,7 +47,7 @@ import { archiveStaleSuggestions } from '@/lib/autopilot/history';
 import { draftHasLapsed, reminderIsoFor } from '@/lib/autopilot/reminder-time';
 import { notify, type NotifyRecipients } from '@/lib/services/notifications';
 import { activeRoster, medicationReaderIds, type RosterMember } from '@/lib/autopilot/medication-readers';
-import { audienceMemberIds, reminderMemberFor, suggestionAudience } from '@/lib/autopilot/audience';
+import { audienceMemberIds, reminderMemberFor, suggestionAudience, suggestionVisibleTo, type AudienceViewer } from '@/lib/autopilot/audience';
 import { sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
 import { addDaysToDayKey, dayKeyInTz, systemScopeForFamily, zonedTimeMs } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
@@ -155,6 +155,11 @@ export async function runAutopilotScan(
   locale: LocaleCode,
   t: Translate,
   now: Date = new Date(),
+  // The member whose own client runs this scan (app/api/autopilot/scan/route.ts),
+  // or null for the cron's service role, which writes every card. 0486 lets a
+  // member read only the cards lib/autopilot/audience.ts gives them, and the
+  // insert below reads its row back, so a member's scan writes only those.
+  viewer: AudienceViewer | null = null,
 ): Promise<AutopilotScanResult> {
   // Built once, lazily: the scope read costs a query, and most scans produce no
   // notification at all. Null means the family could not be read, and the
@@ -351,6 +356,13 @@ export async function runAutopilotScan(
   for (const d of drafts) {
     const prior = existingByKey.get(d.dedupeKey);
     if (prior) continue; // respect prior state (resolved or already-open); avoid churn
+    // A card this member may not read is not theirs to write. Under 0486 the
+    // insert's read-back (`.select('id')`) would refuse it with 42501 and
+    // throw, failing the whole scan: a child opening Autopilot while a
+    // parent's policy renews. The nightly scan (service role) or a reader's
+    // own scan writes it. Skipped before any side effect; its key stays in
+    // `draftKeys`, so an open card for it is not archived as stale.
+    if (viewer && !suggestionVisibleTo({ kind: d.kind, source_kind: d.sourceKind, member_id: d.memberId }, viewer)) continue;
 
     const isAuto = confidenceTier(d.confidence) === 'auto';
     let status: 'open' | 'auto_executed' = 'open';
