@@ -179,13 +179,17 @@ describe('every unchecked grocery read is scoped to a list', () => {
   // A read of `grocery_items` filtered on `is_checked = false` is "what is
   // still needed", and an archived list's items are not. Scoped means the
   // chain names `list_id`: one list the caller chose, or the open lists.
+  // The chain starts at the table name, not at `from(`, so a read through a
+  // helper that takes the table as an argument (/api/ai/insights's
+  // `eq(sb, 'grocery_items', familyId)`) is held too
+  // (tests/an-insight-does-not-shop-from-an-archived-list.test.ts).
   it('in app/, lib/ and components/', () => {
     const files = execFileSync('git', ['ls-files', 'app', 'lib', 'components'], { encoding: 'utf8' })
       .split('\n').filter((file) => /\.(ts|tsx)$/.test(file));
     const unscoped: string[] = [];
     for (const file of files) {
       const source = readFileSync(file, 'utf8');
-      for (const match of source.matchAll(/from\('grocery_items'\)/g)) {
+      for (const match of source.matchAll(/'grocery_items'/g)) {
         const rest = source.slice(match.index, match.index + 700);
         // The statement ends at `;` or at the `)` that closes an array element.
         const ends = [rest.indexOf(';'), rest.indexOf('),\n') + 1].filter((at) => at > 0);

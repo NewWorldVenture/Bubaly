@@ -12,6 +12,7 @@ import { roleOf } from '@/lib/trust/server';
 import { isManager } from '@/lib/constants/roles';
 import { isExpiredFact, isSensitiveMemory } from '@/lib/services/memory';
 import { loadAISettingsFor } from '@/lib/services/ai-settings';
+import { readOnOpenGroceryLists } from '@/lib/services/groceries';
 import type { ServiceScope } from '@/lib/services/types';
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -334,7 +335,8 @@ async function fetchRows(
     }
     case 'grocery':
     case 'shopping': {
-      const items = await eq(sb, 'grocery_items', familyId).eq('is_checked', false).limit(120);
+      // Only lists the family has not archived (readOnOpenGroceryLists).
+      const items = await readOnOpenGroceryLists(sb as ServiceScope['db'], familyId, (lists) => eq(sb, 'grocery_items', familyId).in('list_id', lists).eq('is_checked', false).limit(120));
       required([['grocery_items', items.error]]);
       return { grocery_items: items.data ?? [] };
     }
