@@ -24,8 +24,8 @@ import { asWallClockIn, isValidTimezone } from '@/lib/time/zoned';
 import { addDaysToDayKey, dayKeyInTz, systemScopeForFamily, zonedDayBoundsMs } from '@/lib/services/scope';
 import { readInChunks } from '@/lib/supabase/chunked-in';
 import { readAll } from '@/lib/supabase/read-all';
-import { NARROWER_THAN_EVERYONE_FILTER, reminderNoticeMemberIds, type AudienceRow } from '@/lib/autopilot/audience';
-import { AUTOPILOT_SOURCE_TAG } from '@/lib/reminders/provenance';
+import { reminderNoticeMemberIds } from '@/lib/autopilot/audience';
+import { mayBeCardReminder, reminderCardOf, reminderCardsReader, type ReminderLink } from '@/lib/autopilot/reminder-cards';
 import { suggestionReminderKey } from '@/lib/services/autopilot';
 
 type DB = SupabaseClient<Database>;
@@ -289,17 +289,23 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   // accepted card's `family_reminders` row carries the card's idempotency key
   // (lib/services/autopilot suggestionReminderKey).
   //
-  // Read once, and only when a reminder could be one. A failed read never
-  // widens the audience: such a reminder goes to the managers, who read every
-  // card, and the rest of its readers are told on a later tick.
-  let cardRead: Promise<ReminderCards | null> | null = null;
-  const reminderCards = () => (cardRead ??= readReminderCards(supabase, familyId));
+  // Read once, and only when a reminder could be one (lib/autopilot/
+  // reminder-cards.ts, the lookup every reader of these reminders shares). A
+  // failed read never widens the audience: such a reminder goes to the
+  // managers, who read every card, and the rest of its readers are told on a
+  // later tick.
+  const reminderCards = reminderCardsReader(supabase, familyId, {
+    keyOf: (cardId) => suggestionReminderKey(familyId, cardId),
+    onError: (error) => console.error('[notifications] generation source read failed', { familyId, table: 'autopilot_suggestions', error }),
+  });
   const audienceRoster = (members ?? []).map((m) => ({ id: m.id, role: m.role }));
   const managerAccounts = documentManagers.map((m) => m.user_id as string);
   /** The accounts told about a card's reminder; undefined when it is no narrower card's. */
-  const cardReaders = (cards: ReminderCards | null, card: (cards: ReminderCards) => AudienceRow | undefined): string[] | undefined => {
-    if (!cards) return managerAccounts;
-    const found = card(cards);
+  const cardReaders = async (row: ReminderLink): Promise<string[] | undefined> => {
+    if (!mayBeCardReminder(row)) return undefined;
+    const cards = await reminderCards();
+    const found = cards ? reminderCardOf(cards, row) : null;
+    if (found === null) return managerAccounts;
     const ids = found ? reminderNoticeMemberIds(found, audienceRoster) : null;
     if (!ids) return undefined;
     return [...new Set(ids.map((id) => userByMember.get(id)).filter((u): u is string => typeof u === 'string' && u.trim().length > 0))];
@@ -312,8 +318,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
       body: `Due ${timeLabel(r.remind_at, tz)}`,
     };
     // The scan's day-tied reminders (lib/autopilot/scan.ts relatedType).
-    const source = r.related_type === 'renewal' ? r.related_id : null;
-    const readers = source ? cardReaders(await reminderCards(), (cards) => cards.bySource.get(source)) : undefined;
+    const readers = await cardReaders(r);
     if (readers) {
       for (const account of readers) candidates.push({ ...base, user_id: account });
       continue;
@@ -396,8 +401,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
       body: `Due ${timeLabel(n.remindAtIso, tz)}`,
     };
     // An accepted Autopilot card's reminder (see the scan's reminders above).
-    const key = r.idempotency_key && (r.tags ?? []).some((tag) => tag.startsWith(AUTOPILOT_SOURCE_TAG)) ? r.idempotency_key : null;
-    const readers = key ? cardReaders(await reminderCards(), (cards) => cards.byReminderKey.get(key)) : undefined;
+    const readers = await cardReaders(r);
     if (readers) {
       for (const account of readers) candidates.push({ ...base, user_id: account });
       continue;
@@ -584,33 +588,4 @@ function toRow(familyId: string, c: Candidate): NotificationRow {
     related_type: c.related_type,
     related_id: c.related_id,
   };
-}
-
-type ReminderCard = AudienceRow & { id: string; source_id: string | null };
-type ReminderCards = { bySource: Map<string, ReminderCard>; byReminderKey: Map<string, ReminderCard> };
-
-/**
- * The family's Autopilot reminder cards whose audience is narrower than
- * everyone, indexed by the two links a reminder carries back to its card: the
- * source the scan's reminder names, and the key a manager's accepted card
- * stamps on its `family_reminders` row. Newest card first for a source, so a
- * policy renewed every year answers with this year's. Every page, so a card is
- * never missed for being old; null when the read failed.
- */
-async function readReminderCards(supabase: DB, familyId: string): Promise<ReminderCards | null> {
-  const read = await readAll<ReminderCard>((from, to) => supabase.from('autopilot_suggestions')
-    .select('id, kind, source_kind, source_id, member_id')
-    .eq('family_id', familyId).eq('action_type', 'create_reminder').or(NARROWER_THAN_EVERYONE_FILTER)
-    .order('created_at', { ascending: false }).order('id').range(from, to));
-  if (read.error) {
-    console.error('[notifications] generation source read failed', { familyId, table: 'autopilot_suggestions', error: read.error });
-    return null;
-  }
-  const bySource = new Map<string, ReminderCard>();
-  const byReminderKey = new Map<string, ReminderCard>();
-  for (const card of read.rows) {
-    if (card.source_id && !bySource.has(card.source_id)) bySource.set(card.source_id, card);
-    byReminderKey.set(suggestionReminderKey(familyId, card.id), card);
-  }
-  return { bySource, byReminderKey };
 }

@@ -8,6 +8,8 @@ import type { UserContext } from '@/lib/supabase/auth';
 import { isSuperAdmin } from '@/lib/supabase/auth';
 import { isManager } from '@/lib/constants/roles';
 import { suggestionVisibleTo } from '@/lib/autopilot/audience';
+import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
+import { suggestionReminderKey } from '@/lib/services/autopilot';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { fmtTime } from '@/lib/utils/format';
@@ -98,6 +100,19 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     return 0 as Awaited<ReturnType<typeof resolveFamilyPlanLevel>>;
   });
 
+  // A reminder an Autopilot card made is listed only to the card's readers
+  // (lib/autopilot/reminder-cards.ts). "Mine or nobody's" is not that rule: a
+  // manager's accepted insurance card writes an unassigned reminder so the
+  // managers are reminded, and read by it a guest and the child the policy does
+  // not name were listed "Renew dental insurance (Smile Co)". The cards are
+  // read once, only when a listed reminder could be one; if that read fails,
+  // such a reminder is listed to the managers alone.
+  const reminderViewer = { role: ctx.active.role, memberId: myMemberId };
+  const reminderCards = reminderCardsReader(supabase, familyId, {
+    keyOf: (cardId) => suggestionReminderKey(familyId, cardId),
+    onError: (error) => console.error('[dashboard-home] autopilot reminder cards read failed', error),
+  });
+
   const [
     { count: pendingChores },
     todayCalendarRes,
@@ -156,16 +171,18 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       .eq('family_id', familyId).is('deleted_at', null).in('scope', ['user', 'family']),
     supabase.from('relationship_dates').select('id, kind, title, event_date, recurs_annually, reminder_days_before, status')
       .eq('family_id', familyId).neq('status', 'cancelled').limit(100),
-    supabase.from('family_reminders').select('id, title, remind_at, status, member_id, priority')
+    readVisibleReminders((n) => supabase.from('family_reminders').select('id, title, remind_at, status, member_id, priority, idempotency_key, tags')
       .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null)
       .or(`member_id.eq.${myMemberId},member_id.is.null`)
-      .lte('remind_at', todayEnd.toISOString()).order('remind_at', { ascending: true }).limit(100),
-    supabase.from('family_reminders').select('id, title, remind_at')
+      .lte('remind_at', todayEnd.toISOString()).order('remind_at', { ascending: true }).limit(n),
+    { limit: 100, viewer: reminderViewer, cards: reminderCards }),
+    readVisibleReminders((n) => supabase.from('family_reminders').select('id, title, remind_at, idempotency_key, tags')
       .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null)
       .or(`member_id.eq.${myMemberId},member_id.is.null`)
       .gt('remind_at', todayEnd.toISOString())
       .lte('remind_at', new Date(Date.now() + 7 * 86400000).toISOString())
-      .order('remind_at').limit(10),
+      .order('remind_at').limit(n),
+    { limit: 10, viewer: reminderViewer, cards: reminderCards }),
     // Money decisions waiting on a parent (wallet/cards/allowance) — managers only.
     manager
       ? supabase.from('parent_approvals').select('id, kind, amount_cents, created_at')

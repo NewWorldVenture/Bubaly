@@ -10,6 +10,7 @@ import { loadFamilyContext } from '@/lib/reasoning/context';
 import { reasoningInsights } from '@/lib/reasoning/insights';
 import { autopilotTitleFor } from '@/lib/autopilot/engine';
 import { suggestionVisibleTo } from '@/lib/autopilot/audience';
+import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -48,6 +49,17 @@ export default async function CalmPage() {
   // with a day key, and a day key only means something in a zone.
   const tz = ctx.active.family.timezone || 'UTC';
   const in24 = new Date(now.getTime() + 24 * 3_600_000).toISOString();
+  const viewer = { role: ctx.active.role, memberId: ctx.active.member?.id ?? null };
+
+  // The scan's auto-executed card leaves a `reminders` row behind — "Renew
+  // dental insurance (Smile Co)", "Renew Passport" — that names its source but
+  // not the card's readers. The cards below are filtered by
+  // lib/autopilot/audience.ts; the reminder made from one is filtered by the
+  // same card (lib/autopilot/reminder-cards.ts), or listed to the managers
+  // alone when the cards cannot be read.
+  const reminderCards = reminderCardsReader(supabase, familyId, {
+    onError: (error) => console.error('[dashboard-calm] autopilot reminder cards read failed', error),
+  });
 
   const [agentResult, autopilotResult, foiResult, approvalResult, reminderResult] = await Promise.all([
     safe(supabase.from('agent_activity').select('id, agent, title, detail, href, severity')
@@ -58,8 +70,9 @@ export default async function CalmPage() {
       .eq('family_id', familyId).order('as_of_date', { ascending: false }).limit(1)),
     safe(supabase.from('approval_requests').select('id, title')
       .eq('family_id', familyId).eq('status', 'pending').limit(50)),
-    safe(supabase.from('reminders').select('id, title, remind_at')
-      .eq('family_id', familyId).eq('is_done', false).gte('remind_at', now.toISOString()).lte('remind_at', in24).limit(50)),
+    safe(readVisibleReminders((n) => supabase.from('reminders').select('id, title, remind_at, related_type, related_id')
+      .eq('family_id', familyId).eq('is_done', false).gte('remind_at', now.toISOString()).lte('remind_at', in24).limit(n),
+    { limit: 50, viewer, cards: reminderCards })),
   ]);
 
   // The NAME is the family's half of the line and comes from the catalogue; the
@@ -102,7 +115,7 @@ export default async function CalmPage() {
   }
   // Only the cards this reader may see (lib/autopilot/audience.ts).
   const visibleAutopilot = (autopilotRows as { id: string; title: string; detail: string | null; urgency: number; payload: unknown; kind: string | null; source_kind: string | null; member_id: string | null }[])
-    .filter((s) => suggestionVisibleTo(s, { role: ctx.active.role, memberId: ctx.active.member?.id ?? null }));
+    .filter((s) => suggestionVisibleTo(s, viewer));
   for (const s of visibleAutopilot) {
     const severity: ItemSeverity = s.urgency >= 3 ? 'action' : s.urgency >= 2 ? 'attention' : 'info';
     // A subscription title carries money, worded by whichever scan inserted it
