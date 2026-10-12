@@ -241,7 +241,8 @@ describe('the loop acts on the persisted status, not the caller\'s word (C1-S9-7
 });
 
 describe('approving a queued run', () => {
-  const RUN = { id: 'run-1', status: 'pending', metadata: { plan_id: 'plan-1', kinds: ['calendar'] } };
+  // What planAcceptedAction queues, the plan as it was queued included.
+  const RUN = { id: 'run-1', status: 'pending', metadata: { plan_id: 'plan-1', kinds: ['calendar'], plan: { title: 'Beach day', description: null, location: null, planned_for: '2026-10-10' } } };
 
   it('a plan that did not land leaves the run pending — the retry stays offered', async () => {
     const updates: Record<string, unknown>[] = [];

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, relative, resolve } from 'node:path';
 import {
   ROOT_CHROME_SCOPE, MARKETING_SCOPE, AUTH_SCOPE, PUBLIC_LINK_SCOPE, SURVEY_SCOPE, scopeMessages,
 } from '@/lib/i18n/scopes';
@@ -106,7 +106,7 @@ const CALLS_TRANSLATOR_WITH_EXPRESSION = new RegExp(
 function translationKeys(modules: Set<string>): Map<string, string> {
   const keys = new Map<string, string>(); // key → the file that asked for it
   const add = (key: string, file: string) => {
-    if (!keys.has(key)) keys.set(key, file.replace(`${ROOT}/`, ''));
+    if (!keys.has(key)) keys.set(key, relative(ROOT, file).replaceAll('\\', '/'));
   };
   for (const file of modules) {
     const source = readFileSync(file, 'utf8');
@@ -419,7 +419,7 @@ describe('the scoped surfaces still ask for keys no static reading can name', ()
         if (!/useTranslations/.test(source)) continue;
         for (const m of source.matchAll(CALLS_TRANSLATOR_WITH_EXPRESSION)) {
           if (m[1] === "'" || m[1] === '"') continue; // a literal; the cases above cover it
-          found.add(file.replace(`${ROOT}/`, ''));
+          found.add(relative(ROOT, file).replaceAll('\\', '/'));
         }
       }
     }

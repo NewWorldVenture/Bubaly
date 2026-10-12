@@ -137,7 +137,7 @@ export function ContactsModule() {
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="contacts" iconOnly />
-            <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2">
+            <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2 focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg">
               <Search className="h-4 w-4 text-muted" />
               <input value={search} onChange={(e) => setSearch(e.target.value)}
                 placeholder={t('contacts.searchContacts')}
@@ -528,7 +528,7 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
           <Field label={t('contacts.birthdayMonth')}>
             {(id) => (
               <select id={id} name="birthday_month" defaultValue={contact?.birthday_month ?? ''}
-                className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
+                className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand focus:outline-none">
                 <option value="">{t('contacts.month')}</option>
                 {months.map((month, i) => (
                   <option key={i} value={i + 1}>{month}</option>

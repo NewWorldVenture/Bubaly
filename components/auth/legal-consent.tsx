@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { Fragment } from 'react';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -42,7 +41,7 @@ export function LegalConsent({ className }: { className?: string }) {
         const link = LINKS[part.slice(1, -1)];
         if (!link) return <Fragment key={i}>{part}</Fragment>;
         return (
-          <Link key={i} href={link.href} className={LINK_CLASS}>{t(link.key)}</Link>
+          <a key={i} href={link.href} className={LINK_CLASS}>{t(link.key)}</a>
         );
       })}
     </p>

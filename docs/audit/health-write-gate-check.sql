@@ -42,10 +42,13 @@ begin
   insert into public.family_members (family_id, user_id, display_name, role, is_active)
     values (fam, uTeen, 'Teen', 'teen', true) returning id into mTeen;
 
-  insert into public.health_providers (family_id, kind, name, created_by)
-    values (fam, 'medical', 'Dr Ada', uPar) returning id into provider;
-  insert into public.insurance_policies (family_id, kind, insurer, created_by)
-    values (fam, 'medical', 'BlueCross', uPar) returning id into policy;
+  -- About the teen, so the teen reads them under the held 0517 as well (a
+  -- personal record is read by a manager or its member) and the refusals below
+  -- are the write gate's, not invisibility.
+  insert into public.health_providers (family_id, member_id, kind, name, created_by)
+    values (fam, mTeen, 'medical', 'Dr Ada', uPar) returning id into provider;
+  insert into public.insurance_policies (family_id, member_id, kind, insurer, created_by)
+    values (fam, mTeen, 'medical', 'BlueCross', uPar) returning id into policy;
   insert into public.medications (family_id, member_id, name, created_by)
     values (fam, mPar, 'Amoxicillin', uPar) returning id into med;
 

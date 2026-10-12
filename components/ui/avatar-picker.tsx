@@ -127,7 +127,7 @@ export function AvatarPicker({ name = 'avatarUrl', defaultValue = '', displayNam
               aria-label={t('avatarPicker.presetAvatar', { color })}
               aria-pressed={active}
               className={cn(
-                'relative h-9 w-9 rounded-full transition-transform hover:scale-110 focus:outline-none',
+                'relative h-9 w-9 rounded-full transition-transform hover:scale-110 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand',
                 active
                   ? 'ring-2 ring-brand ring-offset-2 ring-offset-surface'
                   : 'ring-1 ring-border ring-offset-1 ring-offset-surface',

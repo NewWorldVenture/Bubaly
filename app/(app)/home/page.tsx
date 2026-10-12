@@ -11,6 +11,7 @@ import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { settle, settleAll } from '@/lib/supabase/settle';
 import { getOnboardingProgress, resolveCompleteness } from '@/lib/server/onboarding-progress';
 import { isManager } from '@/lib/constants/roles';
+import { readsHouseholdMoney } from '@/lib/finance/household-money';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { firstName } from '@/lib/utils/format';
@@ -227,11 +228,15 @@ export default async function HomePage() {
       .order('created_at', { ascending: false }).limit(6),
     supabase.from('meal_plans').select('plan_date, meal_id, meal_type')
       .eq('family_id', familyId).eq('meal_type', 'dinner').gte('plan_date', weekStartIso).lte('plan_date', weekEndIso),
-    supabase.from('transactions').select('type, amount, date')
-      // `date` is a DATE column: the family's first of the month as a day key.
-      // `isoDate(monthStart)` re-read the family's midnight instant in the host's
-      // calendar, which east of Greenwich is the last day of the previous month.
-      .eq('family_id', familyId).gte('date', `${todayKey.slice(0, 7)}-01`).limit(1000),
+    // The household's spending is a parent's or adult's (the held 0514): the
+    // Family Finances card is theirs, and nobody else's session asks for it.
+    readsHouseholdMoney(ctx.active.role)
+      ? supabase.from('transactions').select('type, amount, date')
+        // `date` is a DATE column: the family's first of the month as a day key.
+        // `isoDate(monthStart)` re-read the family's midnight instant in the host's
+        // calendar, which east of Greenwich is the last day of the previous month.
+        .eq('family_id', familyId).gte('date', `${todayKey.slice(0, 7)}-01`).limit(1000)
+      : Promise.resolve({ data: [] as HomeTxn[], error: null }),
     supabase.from('family_photos').select('id, url, thumbnail_url, caption, taken_at, created_at')
       .eq('family_id', familyId).order('created_at', { ascending: false }).limit(4),
     supabase.from('family_messages').select('id, sender_id, sender_name, sender_avatar, content, created_at, read_by')
@@ -800,8 +805,8 @@ export default async function HomePage() {
           </Link>
         </Card>
 
-        {/* Family Finances */}
-        <Card>
+        {/* Family Finances: a parent's or adult's (the held 0514) */}
+        {manager && <Card>
           <CardHead icon={DollarSign} title={tr('home.familyFinances')} href="/dashboard/billing" action="View finances" />
           <p className="text-xs text-muted">{tr('home.thisMonth')} {monthStart.toLocaleDateString(locale.code, { month: 'long', timeZone: tz })}</p>
           <div className="mt-3 flex items-center gap-4">
@@ -812,7 +817,7 @@ export default async function HomePage() {
               <Row label={tr('home.remaining')} value={usd(finances.remaining)} valueClass="text-brand-text font-bold" />
             </div>
           </div>
-        </Card>
+        </Card>}
 
         {/* Recent Memories */}
         <Card className="lg:col-span-2">

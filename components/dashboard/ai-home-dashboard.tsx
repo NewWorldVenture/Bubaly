@@ -533,7 +533,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
             <ArrowRight className="h-4 w-4 text-brand-text" />
           </div>
 
-          <div className="mt-4 flex items-center gap-5">
+          <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2">
             <div className="flex items-center gap-2">
               <Gauge className={cn('h-4 w-4', autopilotProbability >= 85 ? 'text-emerald-400' : autopilotProbability >= 60 ? 'text-amber-400' : 'text-rose-400')} />
               <span className="text-lg font-black">{autopilotProbability}%</span>

@@ -8,6 +8,7 @@ import { ErrorState } from '@/components/ui/states';
 import { PaperworkModule } from '@/components/modules/paperwork-module';
 import type { Tables } from '@/lib/database.types';
 import { isMissingRelationError } from '@/lib/supabase/errors';
+import { addedInScope, readsHouseholdMoney } from '@/lib/finance/household-money';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -47,9 +48,13 @@ export default async function PaperworkPage() {
   //
   // A genuinely missing relation still degrades, because that is what the
   // original comment was for. Anything else fails closed. Audit C1-S9-30.
-  const inbox = await supabase
-    .from('paperwork_items').select('*')
-    .eq('family_id', ctx.active.familyId)
+  //
+  // The paperwork is a parent's or adult's, and whoever added an item keeps
+  // reading it (the held 0514): anyone else's read is narrowed to what they
+  // added before the limit, and the module says so.
+  const seesAll = readsHouseholdMoney(ctx.active.role);
+  const scoped = supabase.from('paperwork_items').select('*').eq('family_id', ctx.active.familyId);
+  const inbox = await (seesAll ? scoped : scoped.eq('created_by', ctx.user.id))
     .order('created_at', { ascending: false })
     .limit(500);
   if (inbox.error && !isMissingRelationError(inbox.error)) {
@@ -60,7 +65,7 @@ export default async function PaperworkPage() {
       </div>
     );
   }
-  const items = (inbox.data ?? []) as Tables<'paperwork_items'>[];
+  const items = addedInScope((inbox.data ?? []) as Tables<'paperwork_items'>[], ctx.active.role, ctx.user.id);
 
-  return <PaperworkModule items={items} />;
+  return <PaperworkModule items={items} ownOnly={!seesAll} />;
 }

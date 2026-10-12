@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
       { data: choresDue },
       { data: schoolEvents },
       { data: sportsEvents },
-      { data: groceryItems },
+      groceryResult,
       { data: reminders },
       { data: mealPlans },
       { data: appointments },
@@ -179,6 +179,14 @@ export async function POST(req: NextRequest) {
       console.error('[api/ai/briefing] calendar read failed', { today: todayEventsResult.error, upcoming: tomorrowEventsResult.error });
       return NextResponse.json({ error: tr('briefing.failedToGenerateBriefing') }, { status: 503 });
     }
+    // The same for groceries: a list the brief could not read is unavailable,
+    // not "None" still needed. A returned error and a rejected read (settled
+    // above) both arrive here, before any model is asked.
+    if (groceryResult.error) {
+      console.error('[api/ai/briefing] grocery read failed', groceryResult.error);
+      return NextResponse.json({ error: tr('briefing.failedToGenerateBriefing') }, { status: 503 });
+    }
+    const groceryItems = groceryResult.data;
     const todayEvents = projectCalendarDay(todayEventsResult.data??[],today,tz);
     const tomorrowBounds=briefingCalendarBounds(today,tz,1,7);
     const tomorrowEvents = projectCalendarWindow(tomorrowEventsResult.data??[],tomorrowBounds.allDayFromDay,tomorrowBounds.allDayToDay,tz).slice(0,8);

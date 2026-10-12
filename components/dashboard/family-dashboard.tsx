@@ -103,8 +103,12 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
     calendarRead,
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).in('status', ['todo', 'in_progress']),
+    // Due today is the family's day, as a range (the home page's): `due_at` is
+    // a timestamptz and a date-only board chore is due at the family's
+    // midnight (`choreDueAt`), so an equality on the bare date — UTC midnight
+    // to Postgres — counted none of them outside UTC.
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
-      .eq('family_id', familyId).eq('due_at', start.toISOString().slice(0, 10)).in('status', ['todo', 'in_progress']),
+      .eq('family_id', familyId).gte('due_at', start.toISOString()).lt('due_at', end.toISOString()).in('status', ['todo', 'in_progress']),
     supabase.from('meal_plans').select('plan_date, meal_type, meal_id')
       .eq('family_id', familyId)
       .gte('plan_date', weekStart.toISOString().slice(0, 10))

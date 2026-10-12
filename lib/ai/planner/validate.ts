@@ -43,7 +43,9 @@
 // drives it with the real registry and hand-built trust inputs.
 import { conformNulls } from '@/lib/ai/schema-to-json';
 import { findDependencyCycle, type StepState } from '@/lib/ai/runs/states';
-import { parseNotifyInput } from '@/lib/ai/runs/executor';
+import { NOTIFY_TOOL, notifyToolArgs, ownNoticeClears, parseNotifyInput, type NotifyStepInput } from '@/lib/ai/runs/executor';
+import { readAmountCents } from '@/lib/trust/amount';
+import { isManager } from '@/lib/constants/roles';
 import { parseVerificationSpec } from '@/lib/ai/runs/verify';
 import { getTool } from '@/lib/ai/tools/registry';
 import { bindingSources } from '@/lib/ai/runs/bindings';
@@ -98,6 +100,11 @@ export type ValidationInputs = {
   emergencyDomains: string[];
   /** The requester's role as the executor will evaluate it (`system` → adult, see `trustRoleFor`). */
   role: TrustRole;
+  /**
+   * The requester's member id, when a person asked. A notice addressed to them
+   * alone is their own (`ownNoticeClears` in lib/ai/runs/executor.ts).
+   */
+  memberId?: string | null;
   /**
    * The family's own settings (0257). The planner used to read autonomy from
    * `subject_kind='ai'` trust policies alone — rows that Settings → Bubaly AI
@@ -267,17 +274,30 @@ export function dryRunGate(tool: ToolDefinition, input: unknown, inputs: Validat
   return { ...decision, capability, skipped: false };
 }
 
-/** A money amount in the arguments, for `maxAmountCents` policy conditions; null when the tool carries none. */
-function readAmountCents(input: unknown): number | null {
-  if (!input || typeof input !== 'object') return null;
-  const record = input as Record<string, unknown>;
-  for (const key of ['amount_cents', 'amountCents']) {
-    if (typeof record[key] === 'number' && Number.isFinite(record[key])) return Math.round(record[key] as number);
-  }
-  for (const key of ['amount', 'budget', 'target_amount', 'cost']) {
-    if (typeof record[key] === 'number' && Number.isFinite(record[key])) return Math.round((record[key] as number) * 100);
-  }
-  return null;
+/**
+ * A notify step is delivered as `notifications.notify` (lib/ai/runs/executor.ts
+ * runNotifyStep), through the gate, under the requester's role. The dry run
+ * asks it the same question, so a notification the requester's assistant may
+ * not send is left out here rather than failing at run time, and one the
+ * family wants to see first is held for a yes.
+ */
+function notifyDecision(input: NotifyStepInput, inputs: ValidationInputs): { effect: 'allow' | 'deny' | 'require_approval'; reason: string } {
+  const tool = getTool(NOTIFY_TOOL);
+  // Registered in lib/ai/tools/notifications.ts. Without it no notify step
+  // could be delivered, so none is planned.
+  if (!tool) return { effect: 'deny', reason: NOTIFY_TOOL };
+  const behavior = behaviorFor(inputs, tool.domain);
+  const decision = dryRunGate(tool, notifyToolArgs(input), inputs, behavior);
+  // The asker's own notice is not refused for their role alone — the run
+  // delivers it by the same rule (lib/ai/runs/executor.ts `ownNoticeClears`),
+  // judged as the run sends it: `urgent` is a parent's or adult's to ask for,
+  // and anyone else's notice goes out as an ordinary one (`runNotifyStep`).
+  const asSent: NotifyStepInput = { ...input, urgent: input.urgent === true && isManager(inputs.role) };
+  const ownNotice = ownNoticeClears(decision, asSent, inputs.memberId, inputs.settings?.enabled !== false);
+  if (decision.effect === 'deny' && !ownNotice) return { effect: 'deny', reason: decision.reason };
+  if (decision.effect === 'require_approval') return { effect: 'require_approval', reason: decision.reason };
+  if (behavior === 'prepare') return { effect: 'require_approval', reason: 'This household has asked Bubaly to prepare changes and wait for a yes.' };
+  return { effect: 'allow', reason: decision.reason };
 }
 
 // ── Follow-ups ──────────────────────────────────────────────────────────────
@@ -604,7 +624,17 @@ function buildDraft(raw: PlanStep, key: string, inputs: ValidationInputs, issues
         issues.push({ code: 'invalid_notify', step: key, message: `Step "${key}": ${parsed.error} Give it {recipients, type, title, body}.` });
         return null;
       }
-      return { ...base, stepType: 'notify', toolName: null, input: parsedInput.value, approvalRequired: raw.approval_required === true, riskLevel: 'low', decisionReason: null, behavior: null, tool: null, verifySpec: null };
+      const gated = notifyDecision(parsed.data, inputs);
+      if (gated.effect === 'deny') {
+        issues.push({ code: 'denied', step: key, message: `"${description}" was left out: ${gated.reason}`, reason: gated.reason });
+        return null;
+      }
+      const held = gated.effect === 'require_approval' || raw.approval_required === true;
+      return {
+        ...base, stepType: 'notify', toolName: null, input: parsedInput.value, approvalRequired: held, riskLevel: 'low',
+        decisionReason: gated.effect === 'require_approval' ? gated.reason : held ? 'Bubaly chose to ask first.' : null,
+        behavior: null, tool: null, verifySpec: null,
+      };
     }
     case 'verify': {
       const parsed = parseVerificationSpec(parsedInput.value);
@@ -704,10 +734,19 @@ function appendFollowups(steps: ValidatedStep[], followups: Plan['followups'], i
       input: { runAfter: f.at }, dependsOn: previous, condition: null, approvalRequired: false, riskLevel: 'low', decisionReason: null, behavior: null, tool: null,
     });
     const notifyKey = `${key}__notify`;
+    const notice: NotifyStepInput = { recipients: 'managers', type: 'system', title: 'Bubaly follow-up', body: f.prompt };
+    // Gated like every other notify step: a requester whose assistant may not
+    // message the parents gets the follow-up without the reminder.
+    const gated = notifyDecision(notice, inputs);
+    if (gated.effect === 'deny') {
+      previous = [key];
+      return;
+    }
     steps.push({
       key: notifyKey, stepType: 'notify', toolName: null, description: `Remind the parents: ${f.prompt}`,
-      input: { recipients: 'managers', type: 'system', title: 'Bubaly follow-up', body: f.prompt },
-      dependsOn: [key], condition: null, approvalRequired: false, riskLevel: 'low', decisionReason: null, behavior: null, tool: null,
+      input: { ...notice },
+      dependsOn: [key], condition: null, approvalRequired: gated.effect === 'require_approval', riskLevel: 'low',
+      decisionReason: gated.effect === 'require_approval' ? gated.reason : null, behavior: null, tool: null,
     });
     previous = [notifyKey];
   });

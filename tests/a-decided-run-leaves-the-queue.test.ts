@@ -91,7 +91,8 @@ const needsYou = () => db.runs.filter((r) => r.state === 'awaiting_approval' || 
 beforeEach(() => {
   db.failFinal = false;
   db.beforeDismissWrite = null;
-  db.runs = [{ id: 'run-1', family_id: 'family-1', status: 'pending', state: 'awaiting_approval', metadata: { plan_id: 'plan-1', kinds: [] }, approved_at: null, approved_by: null }];
+  // What planAcceptedAction queues, the plan as it was queued included.
+  db.runs = [{ id: 'run-1', family_id: 'family-1', status: 'pending', state: 'awaiting_approval', metadata: { plan_id: 'plan-1', kinds: [], plan: { title: 'Dinner', description: null, location: null, planned_for: null } }, approved_at: null, approved_by: null }];
   materialize.fn = vi.fn(async () => ({ applied: ['calendar'], failed: [] }));
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });

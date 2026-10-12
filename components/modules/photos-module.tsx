@@ -291,7 +291,7 @@ export function PhotosModule() {
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="photos" iconOnly />
-            <div className="flex items-center gap-1 rounded-xl border border-border bg-surface/60 px-3 py-1.5">
+            <div className="flex items-center gap-1 rounded-xl border border-border bg-surface/60 px-3 py-1.5 focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg">
               <Search className="h-3.5 w-3.5 text-muted" />
               <input value={search} inputMode="search" enterKeyHint="search" onChange={(e) => setSearch(e.target.value)}
                 placeholder={tr('photos.searchPhotos')}

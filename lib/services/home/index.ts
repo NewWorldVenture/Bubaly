@@ -21,7 +21,7 @@ import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
 import { withIdempotency } from '../idempotency';
-import { dayKeyInTz, scopeNow } from '../scope';
+import { dayKeyInTz, familyInstantIso, scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { escapeLike } from '@/lib/supabase/escape-like';
 
@@ -421,9 +421,10 @@ export async function createMaintenanceTask(scope: ServiceScope, input: CreateMa
   if (!title) return fail('A maintenance task needs a title.', { code: SERVICE_CODES.invalidInput });
   let dueAt: string | null = null;
   if (input.dueAt) {
-    const ms = Date.parse(input.dueAt);
-    if (!Number.isFinite(ms)) return fail('That due date could not be understood.', { code: SERVICE_CODES.invalidInput });
-    dueAt = new Date(ms).toISOString();
+    // On the FAMILY's clock: `Date.parse` read "Friday 17:00" as 17:00Z (10am in
+    // Los Angeles) and a bare date as UTC midnight, the evening before.
+    dueAt = familyInstantIso(input.dueAt, scope.tz);
+    if (!dueAt) return fail('That due date could not be understood.', { code: SERVICE_CODES.invalidInput });
   }
   if (input.priority && !PRIORITIES.includes(input.priority)) return fail('Priority is low, medium or high.', { code: SERVICE_CODES.invalidInput });
   if (input.intervalDays != null && (!Number.isInteger(input.intervalDays) || input.intervalDays <= 0)) {
@@ -499,9 +500,10 @@ export async function listOpenMaintenance(
     .order('due_at', { ascending: true, nullsFirst: false })
     .limit(Math.min(Math.max(input.limit ?? 100, 1), 500));
   if (input.dueBefore) {
-    const ms = Date.parse(input.dueBefore);
-    if (!Number.isFinite(ms)) return fail('That date could not be understood.', { code: SERVICE_CODES.invalidInput });
-    query = query.lte('due_at', new Date(ms).toISOString());
+    // The family's day boundary, not UTC midnight (see createMaintenanceTask).
+    const dueBefore = familyInstantIso(input.dueBefore, scope.tz);
+    if (!dueBefore) return fail('That date could not be understood.', { code: SERVICE_CODES.invalidInput });
+    query = query.lte('due_at', dueBefore);
   }
   if (input.assetId) query = query.eq('asset_id', input.assetId);
   const { data, error } = await query;

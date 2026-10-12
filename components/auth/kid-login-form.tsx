@@ -1,7 +1,6 @@
 'use client';
 
 import { useLayoutEffect, useRef, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -122,7 +121,7 @@ export function KidLoginForm() {
 
       <p className="mt-5 text-center text-sm text-muted">
         {t('kidLogin.grownUp')}{' '}
-        <Link href="/login" onClick={retire} className="font-medium text-brand-text hover:underline">{t('kidLogin.signInHere')}</Link>
+        <a href="/login" onClick={retire} className="font-medium text-brand-text hover:underline">{t('kidLogin.signInHere')}</a>
       </p>
     </div>
   );

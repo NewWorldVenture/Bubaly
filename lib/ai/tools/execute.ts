@@ -48,6 +48,7 @@ import {
   readSkipsTrustGate, riskToDecision, riskTierStance, toolTags,
   type Capability, type Decision, type TrustRole,
 } from '@/lib/trust/engine';
+import { readAmountCents } from '@/lib/trust/amount';
 import { approvalDedupeKey, evaluateTrust, fileOrReusePendingApproval, roleOf } from '@/lib/trust/server';
 import { behaviorForDomain, DEFAULT_AI_SETTINGS, effectiveRisk } from '@/lib/ai/family-settings';
 import { loadAISettings } from '@/lib/services/ai-settings';
@@ -131,9 +132,17 @@ function argLabel(input: unknown): string | null {
   return null;
 }
 
+/** `approval_requests.title` is CHECKed to 200 characters (0093); a longer one fails the insert and files nothing. */
+const MAX_APPROVAL_TITLE = 200;
+
 function approvalTitle(tool: ToolDefinition, input: unknown): string {
   const label = argLabel(input);
-  return label ? `${firstSentence(tool.description)} — "${label}"` : firstSentence(tool.description);
+  const title = label ? `${firstSentence(tool.description)} — "${label}"` : firstSentence(tool.description);
+  if (title.length <= MAX_APPROVAL_TITLE) return title;
+  const cut = title.slice(0, MAX_APPROVAL_TITLE - 1);
+  // Never leave half of a surrogate pair behind.
+  const last = cut.charCodeAt(cut.length - 1);
+  return `${last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut}…`;
 }
 
 function issueSummary(error: { issues: { path: (string | number)[]; message: string }[] }): string {
@@ -362,7 +371,8 @@ async function gate(
   //
   // What can lift that denial in the full gate is a household rule that
   // reaches the AI ACTOR every surface here runs as: a trust policy whose
-  // subject is the role, everyone, or the AI. A per-member permission grant,
+  // subject is the role or everyone; one addressed to the AI speaks for the
+  // managers only (`allowReachesAssistant`, lib/trust/engine.ts). A per-member permission grant,
   // a delegation, or a policy naming one member does NOT — the engine matches
   // those to a member actor only — so a parent who wants one teen's assistant
   // to read the practice schedule has to allow it for the role.
@@ -370,6 +380,12 @@ async function gate(
 
   const capability: Capability = actorKind === 'ai_agent' && !tool.readOnly ? 'automate' : tool.capability;
   const confidence = opts.confidence ?? 0.85;
+  // The money this call moves, for a policy capped by `maxAmountCents`. Left
+  // out, the engine reads 0 (`conditionsSatisfied`), so "Bubaly may spend up
+  // to $50" was an uncapped allow here: a $900 `finances.updateBudget` ran
+  // with nobody asked. The planner's dry run and the rule a held step is filed
+  // under read it the same way (lib/trust/amount.ts).
+  const amountCents = readAmountCents(input);
   const title = approvalTitle(tool, input);
   const consequences = tool.consequences?.(input) ?? [];
 
@@ -418,6 +434,7 @@ async function gate(
       // approvals is scoped by `conditions.tags` to exactly one tool, and
       // must not reach its neighbours in the same domain.
       tags: [...toolTags(tool.name), `op:${tool.capability}`, `risk:${risk}`, `domain:${tool.domain}`],
+      ...(amountCents !== null ? { amountCents } : {}),
     },
   });
 
@@ -485,6 +502,10 @@ async function gate(
       const t = await getTranslations();
       return { kind: 'denied', reason: t('purchaseAdvice.privateUnavailable') };
     }
+    // "Waiting for a parent" is only true when a row exists for a parent to
+    // find. A failed approval insert filed nothing, so the honest answer is a
+    // retryable failure, not a pending card nobody can see.
+    if (!approvalId) return { kind: 'unverified', reason: (await getTranslations())('aiRuns.approvalNotFiled') };
     return {
       kind: 'pending',
       approvalId,

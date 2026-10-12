@@ -114,7 +114,7 @@ export default async function SocialSettingsPage() {
             const explicit = permByUser.get(m.user_id);
             const effective = explicit ?? defaultSocialRoleForMember(m.role);
             return (
-              <form key={m.id} action={grantAccessAction} className="flex items-center gap-2 rounded-lg border border-border px-2 py-1.5">
+              <form key={m.id} action={grantAccessAction} className="flex flex-wrap items-center gap-2 rounded-lg border border-border px-2 py-1.5">
                 <input type="hidden" name="user_id" value={m.user_id} />
                 <span className="min-w-0 flex-1 truncate text-sm">{m.display_name ?? 'Member'}</span>
                 {!explicit && <Badge tone="neutral" title={t('settings.defaultByHouseholdRole')}>default</Badge>}

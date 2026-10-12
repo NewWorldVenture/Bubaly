@@ -21,7 +21,7 @@ export const dynamic = 'force-dynamic';
 export default async function AutoOverviewPage() {
   const t = await getTranslations();
   const ctx = await requirePlanLevel(1);
-  const { vehicles, policies, rentals, renewals } = await getAutoOverview(ctx.active.familyId);
+  const { vehicles, policies, rentals, renewals } = await getAutoOverview(ctx.active.familyId, { role: ctx.active.role, userId: ctx.user.id });
 
   const activePolicies = policies.filter((p) => p.is_active);
   const activeRental = rentals.find((r) => r.status === 'active' || r.status === 'upcoming');

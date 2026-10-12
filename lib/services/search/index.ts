@@ -172,6 +172,25 @@ async function readSource(
   }
 }
 
+/** What a caller can narrow beyond the service's own per-role rules. */
+export type SearchOptions = {
+  /**
+   * Kinds this caller must not be handed even though the service's own rules
+   * would search them. Their sources are not queried at all. `withheld` stays
+   * the service's own answer; the caller names what it narrowed. The assistant
+   * passes the kinds its own read rules keep from this member
+   * (lib/ai/tools/search.ts); the search page and the command bar pass nothing.
+   */
+  withhold?: readonly SearchKind[];
+};
+
+/** The one table each kind is read from (lib/search/rank.ts: one kind per source table). */
+const SOURCE_TABLE: Record<SearchKind, string> = {
+  document: 'documents', item: 'inventory_items', trip: 'trips', vacation: 'vacations',
+  bill: 'bills', warranty: 'home_warranties', renewal: 'renewals', decision: 'family_decisions',
+  event: 'calendar_events', note: 'notes', fact: 'family_facts',
+};
+
 /**
  * Search everything the caller is allowed to see, ranked, with evidence.
  *
@@ -183,6 +202,7 @@ export async function searchHousehold(
   scope: ServiceScope,
   query: string,
   limit: number = DEFAULT_LIMIT,
+  opts: SearchOptions = {},
 ): Promise<ServiceResult<HouseholdSearch>> {
   const q = sanitizeQuery(query ?? '');
   if (q.length < MIN_QUERY_CHARS) {
@@ -440,12 +460,20 @@ export async function searchHousehold(
     );
   }
 
+  // A kind the caller withholds is not searched at all: a read whose rows are
+  // then thrown away has still been made, and a filter after ranking would
+  // also cost the caller the hits it may see.
+  const withheldTables = new Set((opts.withhold ?? []).map((kind) => SOURCE_TABLE[kind]));
+  for (let i = sources.length - 1; i >= 0; i -= 1) {
+    if (withheldTables.has(sources[i].table)) sources.splice(i, 1);
+  }
+
   const outcomes = await Promise.all(sources.map((source) => source.run()));
   const partial = outcomes.map((outcome) => outcome.failure).filter((f): f is SearchSourceFailure => f !== null);
 
   // Every source failing is not an empty household — it is an outage, and the
   // caller must be able to render a retryable error rather than "no results".
-  if (partial.length === sources.length) {
+  if (sources.length > 0 && partial.length === sources.length) {
     return fail('Could not search your household right now.', { code: SERVICE_CODES.db, retryable: true });
   }
 

@@ -121,7 +121,7 @@ function ChildRuleCard({ row, canManage }: { row: ChildRuleRow; canManage: boole
               <div className="flex items-center gap-1">
                 <input type="number" min={0} max={100} value={split[b.key]} disabled={!canManage} aria-labelledby={`${uid}-${b.key}`}
                   onChange={(e) => setBucket(b.key, parseInt(e.target.value || '0', 10))}
-                  className="w-full rounded-lg border border-border bg-surface px-2 py-1 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:opacity-60" />
+                  className="w-full rounded-lg border border-border bg-surface px-2 py-1 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand disabled:opacity-60" />
                 <span className="text-xs text-muted">%</span>
               </div>
             </div>
@@ -153,7 +153,7 @@ function ChildRuleCard({ row, canManage }: { row: ChildRuleRow; canManage: boole
             {unit.before && <span className="text-xs text-muted">{unit.symbol}</span>}
             <input type="number" min={0} step="0.01" inputMode="decimal" value={threshold} disabled={!canManage} aria-label={t('walletSettings.approvalThreshold')}
               onChange={(e) => setThreshold(e.target.value)}
-              className="w-20 rounded-lg border border-border bg-surface px-2 py-1 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:opacity-60" />
+              className="w-20 rounded-lg border border-border bg-surface px-2 py-1 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand disabled:opacity-60" />
             {!unit.before && <span className="text-xs text-muted">{unit.symbol}</span>}
           </div>
         </div>

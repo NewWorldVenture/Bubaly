@@ -15,6 +15,7 @@ import type { ConsentScope } from '@/lib/network/insights';
 import { loadAutomaticCaptureShare } from '@/lib/metric/automatic-capture-server';
 import { AutomaticCaptureCard } from '@/components/metrics/automatic-capture-card';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
+import { readsHouseholdMoney } from '@/lib/finance/household-money';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -49,6 +50,7 @@ export default async function IntelligencePage() {
   // tell a family their household is smaller than it is, and then invite them to
   // share that. The reads settle, and `previewError` below fails the whole
   // preview closed on the first error rather than previewing a lie.
+  const seesSpending = readsHouseholdMoney(ctx.active.role);
   const [members, mealPlans, teams, classes, chores, bedtimes, spend, reminders] = await settleAll([
     supabase.from('family_members').select('id, birthday, role').eq('family_id', familyId).eq('is_active', true),
     supabase.from('meal_plans').select('plan_date').eq('family_id', familyId).eq('meal_type', 'dinner').gte('plan_date', todayKey).lte('plan_date', weekEndKey),
@@ -56,7 +58,11 @@ export default async function IntelligencePage() {
     supabase.from('school_classes').select('id', { count: 'exact', head: true }).eq('family_id', familyId),
     supabase.from('chore_assignments').select('member_id').eq('family_id', familyId).in('status', [...OPEN_CHORE_STATUSES]),
     supabase.from('bedtime_routines').select('member_id, target_bedtime').eq('family_id', familyId).eq('is_active', true),
-    supabase.from('transactions').select('amount').eq('family_id', familyId).eq('type', 'expense').gte('date', spendStartKey).lte('date', todayKey),
+    // The household's spending is a parent's or adult's (the held 0514): anyone
+    // else's preview leaves the spend band out rather than band their own.
+    seesSpending
+      ? supabase.from('transactions').select('amount').eq('family_id', familyId).eq('type', 'expense').gte('date', spendStartKey).lte('date', todayKey)
+      : Promise.resolve({ data: [] as { amount: number }[], error: null }),
     supabase.from('reminders').select('id', { count: 'exact', head: true }).eq('family_id', familyId).gte('remind_at', now.toISOString()).lte('remind_at', weekEndIso),
   ]);
   const previewError = [members, mealPlans, teams, classes, chores, bedtimes, spend, reminders].map((r) => r.error).find(Boolean);
@@ -78,7 +84,7 @@ export default async function IntelligencePage() {
       .filter((b) => childIds.has(b.member_id))
       .map((b) => bedtimeToMinutes(b.target_bedtime))
       .filter((m): m is number => m !== null),
-    typicalWeeklySpend: typicalWeeklySpend((spend.data ?? []).map((t) => Number(t.amount)), SPEND_WINDOW_DAYS),
+    typicalWeeklySpend: seesSpending ? typicalWeeklySpend((spend.data ?? []).map((t) => Number(t.amount)), SPEND_WINDOW_DAYS) : null,
     remindersPerWeek: reminders.count ?? 0,
   };
 

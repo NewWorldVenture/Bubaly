@@ -21,7 +21,9 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
-import { availableWriteBackKinds, type WriteBackKind } from '@/lib/concierge/apply';
+import {
+  availableWriteBackKinds, matchesPlanSnapshot, planSnapshot, readPlanSnapshot, type WriteBackKind,
+} from '@/lib/concierge/apply';
 import { decide, materializeConciergePlan, type MaterializeResult } from '@/lib/services/approvals';
 import { classifyPayload } from '@/lib/approvals/card-data';
 import { legacyStatusFor } from '@/lib/ai/runs/states';
@@ -155,6 +157,12 @@ export async function planAcceptedAction(
   if (!read.ok) return { ok: false, error: t('aiSettings.readFailedNothingChanged') };
   const settings = read.data;
 
+  // What the card and the queued run are about: the fields that become records.
+  // Whoever says yes later materializes the plan only while it still says this
+  // (lib/services/approvals `runConciergePlan`, and the never-gated branch of
+  // executeQueuedRunAction): any member may rewrite the plan row meanwhile.
+  const filedPlan = planSnapshot(plan);
+
   // Ask the family's own trust policies what the AI may do here.
   const { decision, approvalId } = await evaluateTrust(sb, familyId, {
     actor: { kind: 'ai_agent', id: AUTOPILOT_AGENT, role: roleOf(ctx.active.role) },
@@ -163,7 +171,7 @@ export async function planAcceptedAction(
     agent: 'Concierge',
     title: approvalTitle(plan.title),
     summary: `Materialize the accepted plan across surfaces: ${pendingKinds.join(' + ')}.`,
-    payload: { plan_id: planId, kinds: pendingKinds },
+    payload: { plan_id: planId, kinds: pendingKinds, plan: filedPlan },
     context: { amountCents: plan.budget_cents ?? undefined },
   });
   const behavior = behaviorForDomain(settings, AUTOPILOT_DOMAIN);
@@ -220,7 +228,7 @@ export async function planAcceptedAction(
       result: {} as never,
       metadata: {
         plan_id: planId, kinds: pendingKinds, approval_id: approvalId ?? null,
-        basis: decision.basis, reason: decision.reason,
+        basis: decision.basis, reason: decision.reason, plan: filedPlan,
       } as never,
       created_by: ctx.user.id,
     });
@@ -235,7 +243,7 @@ export async function planAcceptedAction(
   return { ok: true, mode: 'off', applied: [], summary: null };
 }
 
-type RunMeta = { plan_id?: string; kinds?: WriteBackKind[]; approval_id?: string | null };
+type RunMeta = { plan_id?: string; kinds?: WriteBackKind[]; approval_id?: string | null; plan?: unknown };
 type GoverningApproval = { id: string; status: string; expires_at: string | null };
 
 /**
@@ -262,6 +270,15 @@ type GoverningApproval = { id: string; status: string; expires_at: string | null
  * `null` means no approval row names this plan at all: the run was never gated
  * (the autopilot dial downgraded an `allow` to "ask"), and there is no
  * threshold to honour.
+ *
+ * Only rows Bubaly filed govern. Any member may file their own approval row
+ * naming any plan (the 0255/0480 insert policy pins it to
+ * `requested_by_kind = 'member'`, and 0480 keeps the column from changing
+ * afterwards), and the decision path refuses to run one (`filedByBubaly` in
+ * lib/services/approvals). Read as governing, a planted row took the panel's
+ * approve, was refused, and then — decided, newest — answered every later tap
+ * "already decided", so a never-gated plan could no longer be approved here at
+ * all. Every legitimate row is evaluateTrust's, filed as 'ai'.
  */
 async function governingApprovalFor(
   sb: DB, familyId: string, planId: string,
@@ -270,6 +287,7 @@ async function governingApprovalFor(
     .from('approval_requests')
     .select('id, status, expires_at, payload, payload_kind, created_at')
     .eq('family_id', familyId)
+    .eq('requested_by_kind', 'ai')
     .filter('payload->>plan_id', 'eq', planId)
     .order('created_at', { ascending: false })
     .limit(20);
@@ -407,6 +425,16 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
     .eq('id', meta.plan_id).eq('family_id', familyId).maybeSingle();
   if (planReadErr) return { ok: false, error: describeActionError(planReadErr, t('actions.couldNotLoadThatPlan')) };
   if (!plan) return { ok: false, error: t('actions.planNoLongerExists') };
+
+  // The panel shows the plan as it was queued (the run's summary), and any
+  // member may rewrite the plan row since (0091 reads no role). So the plan is
+  // materialized only while it still says what planAcceptedAction queued; the
+  // snapshot sits in metadata only the server and managers write (0251/0329).
+  // A run queued before snapshots existed cannot show that, and is refused the
+  // same way: the plan's own Make it happen, or accepting it again, still works.
+  // Nothing is claimed or written before this.
+  const queued = readPlanSnapshot(meta.plan);
+  if (!queued || !matchesPlanSnapshot(plan, queued)) return { ok: false, error: t('approval.planChangedSinceAsked') };
 
   const kinds = (meta.kinds?.length ? meta.kinds : VALID).filter((k) => VALID.includes(k));
 

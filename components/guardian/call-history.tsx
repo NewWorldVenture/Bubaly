@@ -101,7 +101,7 @@ export function CallHistory({ communications }: { communications: Communication[
             className="h-10 w-full rounded-xl border border-border bg-bg pl-9 pr-3 text-sm"
           />
         </div>
-        <div className="flex gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
           {(['all', 'calls', 'sms', 'scams', 'blocked'] as const).map((f) => (
             <button
               key={f}

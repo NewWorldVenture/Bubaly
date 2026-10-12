@@ -224,7 +224,7 @@ export async function completeReminder(scope: ServiceScope, reminderId: string):
 
   const now = scopeNow(scope).toISOString();
   const rollForward = existing.remind_at && existing.recurrence !== 'none'
-    ? nextRemindAt(existing.remind_at, existing.recurrence)
+    ? nextRemindAt(existing.remind_at, existing.recurrence, scope.tz)
     : null;
 
   const update = rollForward
@@ -310,14 +310,20 @@ export async function snoozeReminder(scope: ServiceScope, reminderId: string, mi
  * Snoozed reminders are included once their snooze has elapsed — the whole
  * point of a snooze is that it comes back — which is why the two statuses are
  * queried and then filtered rather than asking only for 'active'.
+ *
+ * A zone-less `before` is a reading on the FAMILY's clock. The daily brief and
+ * three other templates pass `localTime(today, 23, 59)`, and `Date.parse` read
+ * that on the host's (UTC) clock: a Los Angeles brief's "today" ended at
+ * 4:59pm, and a Sydney one ran into the next morning.
  */
 export async function listDue(
   scope: ServiceScope,
   input: { before?: string | null; withinMinutes?: number; memberId?: string | null; limit?: number } = {},
 ): Promise<ServiceResult<FamilyReminder[]>> {
   const now = scopeNow(scope);
+  const before = input.before ? resolveRemindAt(input.before, scope.tz) : null;
   const beforeMs = input.before
-    ? Date.parse(input.before)
+    ? (before ? Date.parse(before) : Number.NaN)
     : now.getTime() + (input.withinMinutes ?? 0) * 60_000;
   if (!Number.isFinite(beforeMs)) return fail('That horizon could not be understood.', { code: SERVICE_CODES.invalidInput });
   const beforeIso = new Date(beforeMs).toISOString();
@@ -349,4 +355,15 @@ export async function listDue(
     return !Number.isFinite(until) || until <= beforeMs;
   });
   return ok(due);
+}
+
+/**
+ * A reminder time as `createReminder` stores it: zone-less on the family's
+ * clock, an offset kept as written; null when it cannot be read. For the
+ * writers that set or move `remind_at` without creating through here — the
+ * chat toolbox's add and snooze, and `reminders.snooze` — so a chat write and
+ * the same write approved and replayed land on the same instant.
+ */
+export function reminderInstant(value: string, tz: string): string | null {
+  return resolveRemindAt(value, tz);
 }

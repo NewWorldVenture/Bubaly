@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join as nativeJoin } from 'node:path';
+const join = (...parts: string[]): string => nativeJoin(...parts).replace(/\\/g, '/');
 import { describe, expect, it } from 'vitest';
 
 // DATA-015. `order by` on a non-unique column has no total order, so which rows
