@@ -48,8 +48,13 @@ type Observed = { id: string; status: string; unsubscribed_at: string | null };
 /**
  * The opt-out time this click writes: now, and in any case later than every
  * opt-out time this click has seen on the row (`latestSeen`, epoch ms), so it
- * differs from anything a reactivation in flight read — even within the same
- * millisecond, or behind a clock that stepped back.
+ * differs from any stamp this click saw a reactivation in flight read, even
+ * within the same millisecond or behind a clock that stepped back. A click that
+ * finds the row already reactivated has seen no stamp: its `now` is only later
+ * than an opt-out from before that reactivation while the clock moves forward,
+ * and a reactivation still waiting from before it could match a repeat of that
+ * exact millisecond. Closing that needs the reactivation to keep its opt-out
+ * time (a generation), which the subscribe route does not.
  */
 function optOutStamp(latestSeen: number): string {
   const now = Date.now();
