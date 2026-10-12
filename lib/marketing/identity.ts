@@ -112,11 +112,16 @@ export async function stitchVisitorIdentity(
     if (decision === 'link' && visitor) {
       // Logged on zero rows as well (a visitor row deleted since the read);
       // never raised — attribution is not the sign-in. Audit C1-S9-67.
-      const { data: stitched, error: stitchError } = await admin.from('mkt_visitors').update({ contact_id: contactId }).eq('id', visitor.id).select('id');
-      if (stitchError || wroteNoRows(stitched)) console.error('[identity] visitor stitch failed', { visitorId: visitor.id, error: stitchError ?? 'no rows updated' });
+      const { data: stitched, error: stitchError } = await admin.from('mkt_visitors').update({ contact_id: contactId })
+        .eq('id', visitor.id).eq('anonymous_id', anonymousId).is('contact_id', null).select('id');
+      if (stitchError || wroteNoRows(stitched)) {
+        console.error('[identity] visitor stitch failed', { visitorId: visitor.id, error: stitchError ?? 'no rows updated' });
+        return { decision: 'unknown', contactId };
+      }
     }
   } catch (e) {
     console.error('[identity] visitor stitch failed (mkt_visitors applied?)', e);
+    return { decision: 'unknown', contactId };
   }
 
   // 3. Carry the consent ledger forward for same-person outcomes (idempotent —

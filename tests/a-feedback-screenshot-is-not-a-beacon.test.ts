@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { normalizeIdea } from '@/lib/feedback/board';
 import { feedbackAttachmentPathFromSignedUrl } from '@/lib/storage/feedback-attachment-url';
 import { signFeedbackAttachments } from '@/lib/storage/feedback-attachment-signing';
@@ -34,6 +34,19 @@ const PATH = `${USER}/0f3c9a7e-1b2d-4e5f-8a9b-0c1d2e3f4a5b.png`;
 const OWN = `${ORIGIN}/storage/v1/object/public/feedback-attachments/${PATH}`;
 const SIGNED = `${ORIGIN}/storage/v1/object/sign/feedback-attachments/${PATH}?token=eyJ.payload.sig`;
 const draft = (imageUrl: string) => ({ title: 'Dark mode please', category: 'other', impact: 'helpful', audience: 'me', kind: 'idea', imageUrl });
+
+// URL acceptance is relative to the configured project, not the runner's URL.
+beforeEach(() => vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', ORIGIN));
+afterEach(() => vi.unstubAllEnvs());
+
+it('uses the configured project at call time and refuses a former project origin', () => {
+  const alternateOrigin = 'https://other.supabase.co';
+  vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', alternateOrigin);
+  expect(normalizeIdea(draft(OWN) as never, { authorId: USER }).ok).toBe(false);
+  const alternate = normalizeIdea(draft(OWN.replace(ORIGIN, alternateOrigin)) as never, { authorId: USER });
+  expect(alternate.ok && alternate.value.imageUrl).toBe(PATH);
+  expect(normalizeIdea(draft(PATH) as never, { authorId: USER }).ok).toBe(true);
+});
 
 describe('a feedback screenshot is not a beacon', () => {
   it('accepts what the uploader records — the bare path (0450) — and the older public URL, storing the path; and no attachment', () => {

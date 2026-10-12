@@ -1443,7 +1443,7 @@ const profileActions = readFileSync('app/(app)/dashboard/settings/profile-action
 describe('writes that were hidden as the first statement in a block (C1-S9-61)', () => {
   it('claiming a CRM lead never overwrites an owner, and is confirmed', () => {
     const body = actionBody(profileActions, 'async function resolveContactId');
-    expect(body).toContain(".update({ owner_id: userId }).eq('id', byEmail[0].id).is('owner_id', null).select('id')");
+    expect(body).toContain(".update({ owner_id: userId }).eq('id', byEmail[0].id).eq('email', contact.email).is('owner_id', null).select('id')");
     expect(body).toContain('if (!wroteNoRows(claimed)) return byEmail[0].id;');
   });
 

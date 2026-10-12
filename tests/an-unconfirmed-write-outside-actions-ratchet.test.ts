@@ -59,7 +59,7 @@ const BASELINE = new Map<string, number>([
   ['lib/guardian/callbacks.ts', 2],
   ['lib/marketing/automation-events.ts', 1],
   ['lib/marketing/automation-runner.ts', 1],
-  ['lib/marketing/identity.ts', 2],
+  ['lib/marketing/identity.ts', 1],
   // 3 since the merge with main's #581 (Audit C1-S9-92): the AEO retirement
   // in retireAeoQuestionsForPath, where zero rows is the ordinary case.
   ['lib/marketing/platform.ts', 3],
@@ -152,6 +152,8 @@ describe('the unconfirmed-write class outside server actions only shrinks (C1-S9
     // 51 since PR #548 merged main at 2eb62151 (finalaudit.md Q73): the network
     // prune's two branches are one chunked delete.
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(51);
+    // The unsafe lifecycle-only contact fallback was removed; the consent
+    // carry remains deliberately idempotent. The visitor claim is confirmed.
+    expect(total).toBe(50);
   });
 });

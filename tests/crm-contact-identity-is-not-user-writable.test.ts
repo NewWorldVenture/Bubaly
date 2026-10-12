@@ -24,7 +24,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { escapeLike } from '@/lib/supabase/escape-like';
+import { escapeLike, literalCaseInsensitivePattern } from '@/lib/supabase/escape-like';
 
 const read = (rel: string) => readFileSync(resolve(process.cwd(), rel), 'utf8');
 const onboarding = read('app/onboarding/actions.ts');
@@ -76,18 +76,23 @@ describe('the CRM identity key is the verified address', () => {
   });
 });
 
-describe('the identity lookups escape their LIKE pattern', () => {
+describe('the identity lookups use anchored literal imatch patterns', () => {
   const sites: [string, string][] = [
     ['lib/marketing/onboarding-contact.ts', contact],
     ['lib/marketing/identity.ts', identity],
     ['app/(app)/dashboard/settings/profile-actions.ts', profileActions],
   ];
 
-  it('each passes escapeLike() into .ilike on crm_contacts email', () => {
+  it('each passes literalCaseInsensitivePattern() into imatch on crm_contacts email', () => {
     for (const [name, src] of sites) {
-      const call = /\.ilike\('email',\s*([^)]+)\)/.exec(src)?.[1] ?? '';
-      expect(call, `${name} matches crm_contacts email with "${call}"`).toContain('escapeLike(');
+      const call = /\.filter\('email',\s*'imatch',\s*(literalCaseInsensitivePattern\([^)]*\))\)/.exec(src)?.[1] ?? '';
+      expect(call, `${name} matches crm_contacts email with "${call}"`).toMatch(/^literalCaseInsensitivePattern\((email|e)\)$/);
+      expect(src, `${name} must not fall back to email LIKE aliases`).not.toMatch(/\.(?:i?like)\('email'/);
     }
+  });
+
+  it('the literal pattern anchors and escapes regex syntax while preserving literal LIKE characters', () => {
+    expect(literalCaseInsensitivePattern('p%_*q@example.test')).toBe('^p%_\\*q@example\\.test$');
   });
 
   it('a wildcard stops being a wildcard', () => {
