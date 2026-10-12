@@ -57,7 +57,7 @@ vi.mock('@/lib/services/notifications', async (importOriginal) => ({
 
 const { AiHomeDashboard } = await import('@/components/dashboard/ai-home-dashboard');
 const { runAutopilotScan } = await import('@/lib/autopilot/scan');
-const { resolveSuggestion, suggestionReminderKey } = await import('@/lib/services/autopilot');
+const { resolveSuggestion, suggestionReminderKey, suggestionSourceTag } = await import('@/lib/services/autopilot');
 const { AUTOPILOT_SOURCE_TAG } = await import('@/lib/reminders/provenance');
 
 type DB = SupabaseClient<Database>;
@@ -217,7 +217,7 @@ describe('the shared lookup (lib/autopilot/reminder-cards.ts)', () => {
     const db = household();
     const reminder = await acceptedInsuranceReminder(db);
     const withoutKeys = reminderCardsReader(db, FAMILY, { onError: () => { throw new Error('the cards were readable'); } });
-    const withKeys = reminderCardsReader(db, FAMILY, { keyOf: (id) => suggestionReminderKey(FAMILY, id), onError: () => { throw new Error('the cards were readable'); } });
+    const withKeys = reminderCardsReader(db, FAMILY, { keyOf: (id) => suggestionReminderKey(FAMILY, id), sourceTagOf: suggestionSourceTag, onError: () => { throw new Error('the cards were readable'); } });
     const rows = [reminder as { idempotency_key: string | null; tags: string[] | null }];
     expect(await visibleReminders(rows, { role: 'parent', memberId: 'mum' }, withoutKeys)).toHaveLength(1);
     expect(await visibleReminders(rows, { role: 'child', memberId: 'ava' }, withoutKeys)).toHaveLength(0);

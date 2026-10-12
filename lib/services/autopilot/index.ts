@@ -6,6 +6,7 @@ import { scopeNow } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
 import { AUTOPILOT_SOURCE_TAG } from '@/lib/reminders/provenance';
 import { reminderIsoFor } from '@/lib/autopilot/reminder-time';
+import type { SuggestionStampSource } from '@/lib/autopilot/reminder-key';
 import { reminderMemberFor, suggestionVisibleTo } from '@/lib/autopilot/audience';
 
 type Suggestion = Tables<'autopilot_suggestions'>;
@@ -23,7 +24,14 @@ export function suggestionReminderKey(familyId: string, suggestionId: string): s
   return makeKey(['autopilot.createReminder', familyId, suggestionId]);
 }
 
-function sourceTag(source: Suggestion): string {
+/**
+ * The AUTOPILOT_SOURCE_TAG tag an accepted card writes on its reminder. It is
+ * copied with the tags onto a repeating reminder's next occurrence, which has
+ * no key, so a reader finds the card from it too (lib/autopilot/reminder-cards.ts
+ * `sourceTagOf`; the browser's mint is lib/autopilot/reminder-key.ts
+ * mintSuggestionSourceTag).
+ */
+export function suggestionSourceTag(source: SuggestionStampSource): string {
   // Existing tags preserve which proposal was accepted, independently of later
   // edits to the reminder. Exclude status/timestamps: our own resolution updates
   // those. A revised proposal must never inherit an older reminder's success.
@@ -61,7 +69,7 @@ export async function resolveSuggestion(scope: ServiceScope, input: ResolveSugge
           return { ok: false, code: 'unavailable' };
         }
         savedId = receipt.data.id;
-        if (!receipt.data.tags?.includes(sourceTag(source))) return { ok: false, code: 'sourceChanged', saved: true, reminderId: savedId };
+        if (!receipt.data.tags?.includes(suggestionSourceTag(source))) return { ok: false, code: 'sourceChanged', saved: true, reminderId: savedId };
         if (source.status === 'executed') return { ok: true, status: 'executed', reminderId: savedId };
       }
       // A legacy approval carries no receipt: never replay uncertain old work.
@@ -109,7 +117,7 @@ export async function resolveSuggestion(scope: ServiceScope, input: ResolveSugge
         const created = await createReminder({ ...scope, idempotencyKey: key }, {
           title, remindAt: at, notes: source.detail, memberId: reminderMember,
           kind: 'time', priority: source.urgency >= 3 ? 'high' : 'medium', aiSuggested: true,
-          tags: [sourceTag(source)],
+          tags: [suggestionSourceTag(source)],
         });
         if (!created.ok) return { ok: false, code: 'unavailable' };
         if (!created.data.id || created.data.family_id !== scope.familyId || created.data.idempotency_key !== key) {
@@ -118,7 +126,7 @@ export async function resolveSuggestion(scope: ServiceScope, input: ResolveSugge
         savedId = created.data.id;
         // The service's own duplicate/race recovery can return a row created
         // after our first probe. It must still belong to this proposal content.
-        if (!created.data.tags?.includes(sourceTag(source))) return { ok: false, code: 'sourceChanged', saved: true, reminderId: savedId };
+        if (!created.data.tags?.includes(suggestionSourceTag(source))) return { ok: false, code: 'sourceChanged', saved: true, reminderId: savedId };
       }
       return await stamp(scope, source, 'executed', savedId);
     }
@@ -204,7 +212,7 @@ async function stamp(scope: ServiceScope, source: Suggestion, status: 'executed'
   }
   // Concurrent accepts may already have committed this exact resolution.
   const current = await readSuggestion(scope, source.id);
-  if (reminderId && current.data && (sourceTag(current.data) !== sourceTag(source) || current.data.status !== source.status && current.data.status !== status)) {
+  if (reminderId && current.data && (suggestionSourceTag(current.data) !== suggestionSourceTag(source) || current.data.status !== source.status && current.data.status !== status)) {
     return { ok: false, code: 'sourceChanged', saved: true, reminderId };
   }
   if (!current.error && current.data?.id === source.id && current.data.family_id === scope.familyId && current.data.status === status) {

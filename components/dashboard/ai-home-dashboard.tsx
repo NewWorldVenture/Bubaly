@@ -10,7 +10,7 @@ import { isManager } from '@/lib/constants/roles';
 import { suggestionVisibleTo } from '@/lib/autopilot/audience';
 import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
 import { readVisiblePrefix } from '@/lib/autopilot/visible-prefix';
-import { suggestionReminderKey } from '@/lib/services/autopilot';
+import { suggestionReminderKey, suggestionSourceTag } from '@/lib/services/autopilot';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { fmtTime } from '@/lib/utils/format';
@@ -111,6 +111,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   const reminderViewer = { role: ctx.active.role, memberId: myMemberId };
   const reminderCards = reminderCardsReader(supabase, familyId, {
     keyOf: (cardId) => suggestionReminderKey(familyId, cardId),
+    sourceTagOf: suggestionSourceTag,
     onError: (error) => console.error('[dashboard-home] autopilot reminder cards read failed', error),
   });
 

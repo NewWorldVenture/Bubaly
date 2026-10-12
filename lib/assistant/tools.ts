@@ -28,7 +28,7 @@ import { normalizeEventTimes } from '@/lib/services/calendar';
 import { allDayBoundsAsDates } from '@/lib/assistant/all-day-dates';
 import { reminderInstant } from '@/lib/services/reminders';
 import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
-import { mintSuggestionReminderKey } from '@/lib/autopilot/reminder-key';
+import { mintSuggestionReminderKey, mintSuggestionSourceTag } from '@/lib/autopilot/reminder-key';
 import { SERVICE_CODES } from '@/lib/services/types';
 import { isManager, ROLE_ORDER, type MemberRole } from '@/lib/constants/roles';
 import { isSensitiveDocument } from '@/lib/documents/sensitivity';
@@ -141,6 +141,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
     viewer: { role: ctx.role, memberId: ctx.memberId },
     cards: reminderCardsReader(supabase, ctx.familyId, {
       keyOf: (cardId) => mintSuggestionReminderKey(ctx.familyId, cardId),
+      sourceTagOf: mintSuggestionSourceTag,
       onError: (cause) => console.error('[assistant] autopilot reminder cards read failed', cause),
     }),
   });
@@ -348,13 +349,18 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         if (error) return toolFailure('complete the reminder', error);
         if (wroteNoRows(completed)) return toolFailure('complete the reminder', 'no rows updated');
         // Recurring → schedule the next occurrence (core columns only, so it's
-        // safe regardless of the 0100 detail-columns migration state).
+        // safe regardless of the 0100 detail-columns migration state). The tags
+        // are core (0014), and carry an accepted Autopilot card's stamp: the
+        // next occurrence has no key, so its tag is what keeps it its card's
+        // readers' (lib/autopilot/reminder-cards.ts). Dropped, a repeating
+        // "Renew dental insurance (Smile Co)" came back linked to no card, and
+        // was Kit's to list and to move though the policy does not name him.
         const next = r.remind_at && r.recurrence !== 'none' ? nextRemindAt(r.remind_at, r.recurrence, familyTz) : null;
         if (next) {
           const { error: nextError } = await supabase.from('family_reminders').insert({
             family_id: ctx.familyId, created_by: ctx.userId, title: r.title, notes: r.notes,
             kind: r.kind, priority: r.priority, recurrence: r.recurrence, location_name: r.location_name,
-            member_id: r.member_id, remind_at: next, status: 'active',
+            member_id: r.member_id, remind_at: next, status: 'active', tags: r.tags ?? [],
           });
           if (nextError) {
             // Restoring the reminder this call just completed; zero rows is a

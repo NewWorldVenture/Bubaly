@@ -22,7 +22,7 @@ import { recordActivitySafely } from '../activity';
 import { keyedProbe, sameId, sameInstant, withIdempotency, type KeyedCreateOptions } from '../idempotency';
 import { familyInstant } from '@/lib/time/civil';
 import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
-import { mintSuggestionReminderKey } from '@/lib/autopilot/reminder-key';
+import { mintSuggestionReminderKey, mintSuggestionSourceTag } from '@/lib/autopilot/reminder-key';
 import { scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
@@ -335,9 +335,9 @@ export async function listDue(
   // does not name is not told an accepted insurance card's "Renew dental
   // insurance (Smile Co)", nor a guest a renewal's. The reader is the scope's
   // role and member; a system scope is no manager, so it is not told a
-  // policy's. The key is minted with Web Crypto (lib/autopilot/reminder-key.ts):
-  // the server's own mint lives in lib/services/autopilot, which imports this
-  // module.
+  // policy's. The key and the tag are minted with Web Crypto
+  // (lib/autopilot/reminder-key.ts): the server's own mints live in
+  // lib/services/autopilot, which imports this module.
   let malformed = false;
   const { data, error } = await readVisibleReminders(async (n) => {
     let query = scope.db
@@ -362,6 +362,7 @@ export async function listDue(
     viewer: { role: scope.role, memberId: scope.memberId },
     cards: reminderCardsReader(scope.db, scope.familyId, {
       keyOf: (cardId) => mintSuggestionReminderKey(scope.familyId, cardId),
+      sourceTagOf: mintSuggestionSourceTag,
       onError: (cause) => console.error('[service:reminders] autopilot reminder cards read failed', cause),
     }),
   });

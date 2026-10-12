@@ -348,14 +348,21 @@ describe("an accepted card's reminder whose link resolves to no card", () => {
     expect(notices.get(POLICY)).toEqual(accounts(...MANAGERS));
   });
 
-  it("a copy that carries the card's stamp and no key (the module's next occurrence) is the managers' alone", async () => {
+  // RV-R4-1: the module's next occurrence carries the card's tag and no key,
+  // and the tag finds the card (tests/a-cards-reminder-copied-without-its-key-
+  // is-read-by-its-stamp.test.ts). A tag no card mints is still unresolved.
+  it("a copy that carries the card's tag and no key (the module's next occurrence) is its card's readers'; a tag no card mints is the managers' alone", async () => {
     const db = household();
     db.seed('renewals', [{ ...PASSPORT_ROW, expires_at: '2026-10-04' }]);
     const { reminder } = await accepted(db, 'ren-1');
-    db.seed('family_reminders', [{ ...reminder, id: 'next-occurrence', title: 'Renew Passport (next)', idempotency_key: null }]);
+    db.seed('family_reminders', [
+      { ...reminder, id: 'next-occurrence', title: 'Renew Passport (next)', idempotency_key: null },
+      { ...reminder, id: 'unminted', title: 'Renew Passport (unminted)', idempotency_key: null, tags: [`autopilot-source:${'b'.repeat(64)}`] },
+    ]);
     vi.setSystemTime(new Date(DUE_AT));
     expect(await dueTo(db, PASSPORT)).toEqual(EVERYONE.filter((id) => id !== 'neighbour').sort());
-    expect(await dueTo(db, 'Renew Passport (next)')).toEqual(MANAGERS.sort());
+    expect(await dueTo(db, 'Renew Passport (next)')).toEqual(EVERYONE.filter((id) => id !== 'neighbour').sort());
+    expect(await dueTo(db, 'Renew Passport (unminted)')).toEqual(MANAGERS.sort());
   });
 
   it("a card for everyone, found, is everyone's; a person's own tag that only looks like the stamp is no link at all", async () => {

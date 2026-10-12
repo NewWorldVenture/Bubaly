@@ -35,7 +35,7 @@ import { buildHomeNeeds } from '@/lib/home/needs-build';
 import { needsHeadline, summarizeNeeds, topNeeds } from '@/lib/home/needs-attention';
 import type { AwaitingRunRow, ParentApprovalRow, RecommendationRow } from '@/lib/home/needs-sources';
 import { listPending } from '@/lib/services/approvals';
-import { suggestionReminderKey } from '@/lib/services/autopilot';
+import { suggestionReminderKey, suggestionSourceTag } from '@/lib/services/autopilot';
 import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
 import { dayKeyInTz, scopeFromUserContext, zonedDayBoundsMs } from '@/lib/services/scope';
 import { loadScheduleIntelligence } from '@/lib/schedule/intelligence-server';
@@ -372,6 +372,7 @@ export default async function HomePage() {
       .order('remind_at', { ascending: true }).limit(n),
     { limit: 20, viewer: { role: ctx.active.role, memberId: me.id }, cards: reminderCardsReader(supabase, familyId, {
       keyOf: (cardId) => suggestionReminderKey(familyId, cardId),
+      sourceTagOf: suggestionSourceTag,
       onError: (error) => console.error('[home] autopilot reminder cards read failed', error),
     }) }),
     ]),

@@ -26,7 +26,7 @@ import { readInChunks } from '@/lib/supabase/chunked-in';
 import { readAll } from '@/lib/supabase/read-all';
 import { reminderNoticeMemberIds } from '@/lib/autopilot/audience';
 import { mayBeCardReminder, reminderCardOf, reminderCardsReader, type ReminderLink } from '@/lib/autopilot/reminder-cards';
-import { suggestionReminderKey } from '@/lib/services/autopilot';
+import { suggestionReminderKey, suggestionSourceTag } from '@/lib/services/autopilot';
 
 type DB = SupabaseClient<Database>;
 type NotificationMember = Pick<Tables<'family_members'>, 'id' | 'user_id' | 'display_name' | 'role' | 'birthday'>;
@@ -287,7 +287,8 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   // what each path writes: the scan's `reminders` row names its source
   // (related_type 'renewal', related_id the renewal or policy), and an
   // accepted card's `family_reminders` row carries the card's idempotency key
-  // (lib/services/autopilot suggestionReminderKey).
+  // and its tag (lib/services/autopilot suggestionReminderKey,
+  // suggestionSourceTag) — the tag alone on a repeating one's next occurrence.
   //
   // Read once, and only when a reminder could be one (lib/autopilot/
   // reminder-cards.ts, the lookup every reader of these reminders shares). A
@@ -298,6 +299,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   // its readers are told on a later tick, once the card is there.
   const reminderCards = reminderCardsReader(supabase, familyId, {
     keyOf: (cardId) => suggestionReminderKey(familyId, cardId),
+    sourceTagOf: suggestionSourceTag,
     onError: (error) => console.error('[notifications] generation source read failed', { familyId, table: 'autopilot_suggestions', error }),
   });
   const audienceRoster = (members ?? []).map((m) => ({ id: m.id, role: m.role }));

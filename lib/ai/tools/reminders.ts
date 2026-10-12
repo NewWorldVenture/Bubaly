@@ -17,7 +17,7 @@ import { resolveAssigneeId } from './family';
 import { defineTool, describeWhen, plural, type ToolDefinition } from './types';
 import { escapeLike } from '@/lib/supabase/escape-like';
 import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
-import { mintSuggestionReminderKey } from '@/lib/autopilot/reminder-key';
+import { mintSuggestionReminderKey, mintSuggestionSourceTag } from '@/lib/autopilot/reminder-key';
 
 const KINDS = ['time', 'location', 'recurring', 'medication', 'bill', 'school', 'chore'] as const;
 const RECURRENCES = ['none', 'daily', 'weekdays', 'weekly', 'biweekly', 'monthly', 'yearly'] as const;
@@ -68,6 +68,7 @@ async function findReminder(scope: ServiceScope, title: string): Promise<Service
     viewer: { role: scope.role, memberId: scope.memberId },
     cards: reminderCardsReader(scope.db, scope.familyId, {
       keyOf: (cardId) => mintSuggestionReminderKey(scope.familyId, cardId),
+      sourceTagOf: mintSuggestionSourceTag,
       onError: (cause) => console.error('[tool:reminders] autopilot reminder cards read failed', cause),
     }),
   });
