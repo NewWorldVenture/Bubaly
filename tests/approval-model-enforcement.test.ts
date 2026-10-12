@@ -93,6 +93,13 @@ function makeStore(seed: Record<string, Row[]>) {
 }
 
 const NOW = new Date('2026-09-05T12:00:00Z');
+/**
+ * The trust gate's own filing line for the row (service-only, 0260): these
+ * rows are Bubaly's, so an approval replays exactly what was filed.
+ * (A row without it is a member's own request — tests/a-member-cannot-plant-a-parents-yes.)
+ */
+const BUBALY_FILED: Row = { id: 'audit-filed', family_id: 'fam-1', actor_kind: 'ai_agent', actor_id: 'bubaly', approval_id: 'appr-1', decision: 'require_approval' };
+
 const MEMBERS: Row[] = [
   { id: 'mum', family_id: 'fam-1', display_name: 'Mum', role: 'parent', is_active: true },
   { id: 'dad', family_id: 'fam-1', display_name: 'Dad', role: 'parent', is_active: true },
@@ -162,7 +169,7 @@ describe('decide — a two-parent request needs two parents', () => {
   });
 
   it('holds after one parent, and runs on the second — even though the row said required_approvals: 1', async () => {
-    const store = makeStore({ approval_requests: [row()], family_members: MEMBERS });
+    const store = makeStore({ approval_requests: [row()], family_members: MEMBERS, trust_audit_logs: [BUBALY_FILED] });
     const first = await decide(scopeWith(store.db, { memberId: 'mum', role: 'parent' }), 'appr-1', 'approved');
     expect(first).toMatchObject({ ok: true, data: { status: 'pending', executed: false } });
     expect(first.ok === true && first.data.summary).toMatch(/1 more parent needs to approve/);
@@ -187,6 +194,7 @@ describe('decide — consensus counts the household', () => {
     const store = makeStore({
       approval_requests: [approvalRow({ approval_model: 'consensus', required_approvals: 1 })],
       family_members: MEMBERS,
+      trust_audit_logs: [BUBALY_FILED],
     });
     const a = await decide(scopeWith(store.db, { memberId: 'mum' }), 'appr-1', 'approved');
     expect(a.ok === true && a.data.summary).toMatch(/2 more people need to approve/);
@@ -203,6 +211,7 @@ describe('decide — the deciding vote runs what the family agreed to', () => {
     const store = makeStore({
       approval_requests: [approvalRow({ approval_model: 'two_parent', required_approvals: 1 })],
       family_members: MEMBERS,
+      trust_audit_logs: [BUBALY_FILED],
     });
     const edited = await editAndApprove(scopeWith(store.db, { memberId: 'mum' }), 'appr-1', { title: 'Soccer — bring boots' });
     expect(edited).toMatchObject({ ok: true, data: { status: 'pending' } });
@@ -223,6 +232,7 @@ describe('decide — the deciding vote runs what the family agreed to', () => {
         edited_payload: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z', family_id: 'someone-elses' },
       })],
       family_members: MEMBERS,
+      trust_audit_logs: [BUBALY_FILED],
     });
     await decide(scopeWith(store.db, { memberId: 'dad' }), 'appr-1', 'approved');
     expect(executed.calls).toHaveLength(1);

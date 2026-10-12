@@ -31,6 +31,9 @@ const SOURCE_FILES = [
   // file failed on a missing textbox — which is precisely what the first test
   // below is named to catch. Its only runtime import is settle, already listed.
   'lib/voice/history.ts',
+  // The held 0517: the history shows each viewer the commands that are theirs
+  // to read, through the shared rule.
+  'lib/records/personal-scope.ts', 'lib/constants/roles.ts',
   'lib/time/zoned.ts', 'lib/supabase/settle.ts',
   // The history list stamps each command with fmtTimeAgo, which voice-module.tsx
   // takes from useFormat rather than the en-US bare exports. The real formatter

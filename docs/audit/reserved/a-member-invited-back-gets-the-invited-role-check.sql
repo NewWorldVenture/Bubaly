@@ -260,12 +260,20 @@ begin
   end;
   if not poisoned_by_policy then
     perform set_config('role','postgres', true);
+    -- The held 0512 refuses a kid login for an account that is a parent or
+    -- adult anywhere, the server's write included: a second wall over the same
+    -- hole. The question here is still what accept_invite believes, so where
+    -- 0512 is installed these rows are written past its guard.
+    if to_regprocedure('public.a_manager_is_never_a_kid_login()') is not null then
+      perform set_config('session_replication_role', 'replica', true);
+    end if;
     insert into public.child_logins (family_id, member_id, user_id, username, created_by) values
       (fam3, '00000000-0000-4000-8495-0000000000d3', v1, 'm0495poisona', um),
       (fam3, '00000000-0000-4000-8495-0000000000d4', v2, 'm0495poisonb', um),
       (fam3, '00000000-0000-4000-8495-0000000000d5', v3, 'm0495poisonc', um),
       (fam3, '00000000-0000-4000-8495-0000000000d7', v4, 'm0495poisond', um),
       (fam3, '00000000-0000-4000-8495-0000000000d8', v5, 'm0495poisone', um);
+    perform set_config('session_replication_role', 'origin', true);
     perform set_config('role','authenticated', true);
   end if;
 

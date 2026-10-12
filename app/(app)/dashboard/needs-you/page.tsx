@@ -31,6 +31,7 @@ import { listPending } from '@/lib/services/approvals';
 import { listMemories } from '@/lib/services/memory';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { settle } from '@/lib/supabase/settle';
+import { readsHouseholdMoney } from '@/lib/finance/household-money';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -72,8 +73,12 @@ export default async function NeedsYouPage() {
     settle(supabase.from('family_inbox_messages').select('id, direction, from_addr, subject, ai_summary, body, ai_intent, status, occurred_at')
       .eq('family_id', familyId).eq('status', 'new').eq('direction', 'inbound').in('ai_intent', [...REPLY_INTENTS])
       .order('occurred_at', { ascending: false }).limit(50)),
-    settle(supabase.from('paperwork_items').select('id, title, status, urgency, due_on, actions, created_at')
-      .eq('family_id', familyId).in('status', ['needs_action', 'in_progress']).order('created_at', { ascending: false }).limit(100)),
+    // Paperwork is a parent's or adult's, and whoever filed an item keeps it
+    // (the held 0514): anyone else's list is what they filed, before the limit.
+    settle((readsHouseholdMoney(ctx.active.role)
+      ? supabase.from('paperwork_items').select('id, title, status, urgency, due_on, actions, created_at').eq('family_id', familyId)
+      : supabase.from('paperwork_items').select('id, title, status, urgency, due_on, actions, created_at').eq('family_id', familyId).eq('created_by', ctx.user.id))
+      .in('status', ['needs_action', 'in_progress']).order('created_at', { ascending: false }).limit(100)),
   ]);
 
   const failures: { label: string; error: unknown }[] = [];

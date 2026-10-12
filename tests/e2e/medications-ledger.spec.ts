@@ -15,7 +15,7 @@ const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/su
 const sources = Object.fromEntries([
   'components/modules/medications-module.tsx', 'lib/hooks/use-realtime-query.ts', 'lib/realtime/own-channel.ts',
   'lib/offline/cache.ts', 'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts',
-  'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts', 'lib/constants/roles.ts', 'lib/medications/adherence.ts',
+  'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts', 'lib/constants/roles.ts', 'lib/medications/adherence.ts', 'lib/medications/readers.ts',
   // adherence.ts resolves a dose slot in the family's zone; the in-page loader
   // below throws on any module missing from this list, so its imports belong here.
   'lib/time/zoned.ts',

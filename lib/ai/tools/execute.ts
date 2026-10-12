@@ -131,9 +131,17 @@ function argLabel(input: unknown): string | null {
   return null;
 }
 
+/** `approval_requests.title` is CHECKed to 200 characters (0093); a longer one fails the insert and files nothing. */
+const MAX_APPROVAL_TITLE = 200;
+
 function approvalTitle(tool: ToolDefinition, input: unknown): string {
   const label = argLabel(input);
-  return label ? `${firstSentence(tool.description)} — "${label}"` : firstSentence(tool.description);
+  const title = label ? `${firstSentence(tool.description)} — "${label}"` : firstSentence(tool.description);
+  if (title.length <= MAX_APPROVAL_TITLE) return title;
+  const cut = title.slice(0, MAX_APPROVAL_TITLE - 1);
+  // Never leave half of a surrogate pair behind.
+  const last = cut.charCodeAt(cut.length - 1);
+  return `${last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut}…`;
 }
 
 function issueSummary(error: { issues: { path: (string | number)[]; message: string }[] }): string {
@@ -485,6 +493,10 @@ async function gate(
       const t = await getTranslations();
       return { kind: 'denied', reason: t('purchaseAdvice.privateUnavailable') };
     }
+    // "Waiting for a parent" is only true when a row exists for a parent to
+    // find. A failed approval insert filed nothing, so the honest answer is a
+    // retryable failure, not a pending card nobody can see.
+    if (!approvalId) return { kind: 'unverified', reason: (await getTranslations())('aiRuns.approvalNotFiled') };
     return {
       kind: 'pending',
       approvalId,

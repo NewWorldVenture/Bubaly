@@ -115,7 +115,7 @@ export function NavigationChoices() {
   // layout this screen edits, so it stays listed — dropping it from the list
   // would delete it on the next save — and is marked for what the rail does.
   function railAccess(item: NavItem): FeatureAccess {
-    if (!isNavItemVisibleToRole(item, { isManager: manager, isSuperAdmin })) return 'hidden';
+    if (!isNavItemVisibleToRole(item, { isManager: manager, isSuperAdmin, isGuest: role === 'guest' })) return 'hidden';
     return featureAccessByTier(featureTiers[item.href], planLevel, isSuperAdmin);
   }
 

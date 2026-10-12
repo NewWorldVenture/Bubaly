@@ -114,7 +114,7 @@ export function RemindersModule() {
   const tr = useTranslations();
   const askConfirm = useConfirm();
   const plural = usePlural();
-  const { familyId, userId, members } = useApp();
+  const { familyId, userId, members, family } = useApp();
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
 
@@ -204,7 +204,7 @@ export function RemindersModule() {
       // (the completed one stays as history, like iOS).
       let recurred = false;
       const next = reminder.remind_at && reminder.recurrence !== 'none'
-        ? nextRemindAt(reminder.remind_at, reminder.recurrence) : null;
+        ? nextRemindAt(reminder.remind_at, reminder.recurrence, family?.timezone) : null;
       if (next) {
         const nextRow = {
           family_id: familyId, created_by: userId, title: reminder.title, notes: reminder.notes,
@@ -381,7 +381,7 @@ export function RemindersModule() {
           <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={tr('reminders.searchReminders')}
-              className="w-40 rounded-xl border border-border bg-surface/60 py-2 pl-8 pr-7 text-xs outline-none transition focus:border-brand/50 sm:w-52" />
+              className="w-40 rounded-xl border border-border bg-surface/60 py-2 pl-8 pr-7 text-xs outline-none transition focus:border-brand sm:w-52" />
             {query && (
               <button onClick={() => setQuery('')} aria-label={tr('reminders.clearSearch')}
                 className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted hover:text-fg">
@@ -779,7 +779,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
           <Field label={tr('reminders.priority')}>
             {(id) => (
               <select id={id} name="priority" defaultValue={reminder?.priority ?? 'medium'}
-                className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
+                className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand focus:outline-none">
                 {PRIORITIES.map((p) => <option key={p.id} value={p.id}>{tr(p.labelKey)}</option>)}
               </select>
             )}
@@ -787,7 +787,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
           <Field label={tr('reminders.repeat')}>
             {(id) => (
               <select id={id} value={recurrence} onChange={(e) => setRecurrence(e.target.value)}
-                className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
+                className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand focus:outline-none">
                 {RECURRENCES.map((r) => <option key={r.id} value={r.id}>{tr(r.labelKey)}</option>)}
               </select>
             )}
@@ -811,7 +811,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
           <Field label={tr('reminders.assignToMember')}>
             {(id) => (
               <select id={id} name="member_id" defaultValue={reminder?.member_id ?? ''}
-                className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
+                className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand focus:outline-none">
                 <option value="">{tr('reminders.wholeFamily')}</option>
                 {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
               </select>
@@ -820,7 +820,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
           <Field label={tr('reminders.assignedToUser')}>
             {(id) => (
               <select id={id} name="assigned_to_id" defaultValue={reminder?.assigned_to_id ?? ''}
-                className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
+                className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand focus:outline-none">
                 <option value="">{tr('reminders.anyone')}</option>
                 {members.filter((m) => m.user_id).map((m) => <option key={m.user_id!} value={m.user_id!}>{m.display_name}</option>)}
               </select>
@@ -841,7 +841,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
             {(id) => (
               <select id={id} value={listId}
                 onChange={(e) => { if (e.target.value === '__new__') void createList(); else setListId(e.target.value); }}
-                className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
+                className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand focus:outline-none">
                 <option value="">{tr('reminders.noList')}</option>
                 {lists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                 <option value="__new__">{tr('reminders.newList')}</option>
@@ -851,7 +851,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
           <Field label={tr('reminders.earlyReminder')}>
             {(id) => (
               <select id={id} value={earlyMinutes} onChange={(e) => setEarlyMinutes(e.target.value)}
-                className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
+                className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand focus:outline-none">
                 {EARLY_REMINDER_OPTIONS.map((o) => <option key={String(o.minutes)} value={o.minutes ?? ''}>{earlyText(tr, plural, o.minutes)}</option>)}
               </select>
             )}

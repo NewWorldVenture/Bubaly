@@ -6,6 +6,10 @@
 // the bridge, and what it must get right is narrow and load-bearing:
 //
 //   * only actionable intents are filed (spam and sales do not open runs);
+//   * only a sender the code can PROVE is a family member has their message
+//     planned, and then as their own request under their own role — never
+//     under a system scope. Anyone else's message stays in the inbox for a
+//     person to read and hand over (tests/an-outside-sender-cannot-run-bubaly);
 //   * the SAME intake every other entry uses, so trust gating and the approval
 //     spine are the ones already in place — not a private write path;
 //   * `ai_handled` is stamped ONLY after a request is persisted;
@@ -25,11 +29,12 @@ const NOW = new Date('2026-03-01T12:00:00Z');
 
 let db: ReturnType<typeof createInMemorySupabase<SupabaseClient<Database>>>;
 
-/** A stand-in for `submitRequest` that records what it was asked to file. */
+/** A stand-in for `submitRequest` that records what it was asked to file, and as whom. */
+type FiledAs = { memberId: string | null; role: string; actorKind: string };
 function fakeIntake(overrides: { ok?: boolean } = {}) {
-  const calls: { text: string; clientRequestId: string | null }[] = [];
-  const submit = vi.fn(async (_scope: unknown, input: { text: string; clientRequestId?: string | null }) => {
-    calls.push({ text: input.text, clientRequestId: input.clientRequestId ?? null });
+  const calls: { text: string; clientRequestId: string | null; scope: FiledAs }[] = [];
+  const submit = vi.fn(async (scope: FiledAs, input: { text: string; clientRequestId?: string | null }) => {
+    calls.push({ text: input.text, clientRequestId: input.clientRequestId ?? null, scope: { memberId: scope.memberId, role: scope.role, actorKind: scope.actorKind } });
     if (overrides.ok === false) return { ok: false as const, error: 'planner unavailable', retryable: true };
     return {
       ok: true as const,
@@ -54,6 +59,15 @@ beforeEach(() => {
 
 type Admin = Parameters<typeof routeInboundToPlanner>[0];
 const admin = () => db as unknown as Admin;
+
+/**
+ * A member the code proved sent the text (a Twilio-signed `From` equal to the
+ * phone they confirmed by one-time code). `verifiedInboundSender` itself is
+ * driven through the real webhook in tests/an-outside-sender-cannot-run-bubaly.
+ */
+const PARENT = { memberId: 'member-parent', userId: 'auth-parent', role: 'parent' as const };
+const verified = vi.fn(async () => ({ ok: true as const, sender: PARENT }));
+const PHONE = '+15551230000';
 
 describe('shouldPlanInbound', () => {
   it('files household work and leaves noise alone', () => {
@@ -93,7 +107,7 @@ async function deliver(
     ? await routeInboundToPlanner(admin(), {
       familyId: FAMILY, channel: input.channel, messageId: filed.messageId,
       subject: input.subject ?? null, body: input.body, intent: input.intent,
-      providerRef: filed.providerRef, submit: intake.submit as never, now: NOW,
+      providerRef: filed.providerRef, sender: input.from ?? null, submit: intake.submit as never, now: NOW,
     })
     : null;
   return { ...filed, route };
@@ -187,7 +201,9 @@ describe('a bill the router declines to plan is still filed', () => {
 describe('a webhook that fires twice', () => {
   const WATER_BILL = 'Invoice attached. Amount due: $45.00 by March 9.';
 
-  it('files one row, one run and ONE paperwork item for one emailed bill', async () => {
+  // An email's sender is a header anyone can write, so no email is planned —
+  // the bill is filed, once, and any run is a member's to start ("Handle it").
+  it('files one row and ONE paperwork item for one emailed bill, and plans nothing from it', async () => {
     const intake = fakeIntake();
     await deliver({ channel: 'email', subject: 'Water bill', body: WATER_BILL, providerRef: 'EM-water', intent: 'personal' }, intake);
     await deliver({ channel: 'email', subject: 'Water bill', body: WATER_BILL, providerRef: 'EM-water', intent: 'personal' }, intake);
@@ -196,7 +212,8 @@ describe('a webhook that fires twice', () => {
     // The one that matters: two 'Water bill' rows in /dashboard/paperwork is two
     // bills as far as the family and `countNeedsYou` are concerned.
     expect(db.table('paperwork_items')).toHaveLength(1);
-    expect(intake.submit).toHaveBeenCalledTimes(1);
+    expect(intake.submit).not.toHaveBeenCalled();
+    expect(db.table('family_inbox_messages')[0].ai_handled).toBe(false);
   });
 
   it('does the same for an email the provider gave no id for', async () => {
@@ -206,7 +223,7 @@ describe('a webhook that fires twice', () => {
 
     expect(db.table('family_inbox_messages')).toHaveLength(1);
     expect(db.table('paperwork_items')).toHaveLength(1);
-    expect(intake.submit).toHaveBeenCalledTimes(1);
+    expect(intake.submit).not.toHaveBeenCalled();
   });
 
   it('still files two different emails as two records', async () => {
@@ -220,14 +237,31 @@ describe('a webhook that fires twice', () => {
 
     expect(db.table('family_inbox_messages')).toHaveLength(2);
     expect(db.table('paperwork_items')).toHaveLength(2);
-    expect(intake.submit).toHaveBeenCalledTimes(2);
+    expect(intake.submit).not.toHaveBeenCalled();
+  });
+
+  it('plans a proved member’s text ONCE however often it is delivered', async () => {
+    const filed = await recordInboundMessage(admin(), {
+      familyId: FAMILY, channel: 'sms', from: PHONE, body: 'Add milk to the list', providerRef: 'SM-twice', aiIntent: 'personal',
+    });
+    const intake = fakeIntake();
+    const route = () => routeInboundToPlanner(admin(), {
+      familyId: FAMILY, channel: 'sms', messageId: filed.messageId, body: 'Add milk to the list', intent: 'personal',
+      providerRef: 'SM-twice', sender: PHONE, submit: intake.submit as never, resolveSender: verified, now: NOW,
+    });
+    await route();
+    // The webhook re-routes a redelivery only while the row is unhandled, and
+    // the client id makes any second intake re-find the first request.
+    expect(db.table('family_inbox_messages')[0].ai_handled).toBe(true);
+    await route();
+    expect(new Set(intake.calls.map((c) => c.clientRequestId))).toEqual(new Set(['inbound:sms:SM-twice']));
   });
 });
 
 describe('routeInboundToPlanner', () => {
-  it('files an appointment through the intake and marks the row handled', async () => {
+  it('files a proved member’s appointment through the intake, as THEIR request, and marks the row handled', async () => {
     const filed = await recordInboundMessage(admin(), {
-      familyId: FAMILY, channel: 'sms', body: 'Can we move Thursday to 4pm?',
+      familyId: FAMILY, channel: 'sms', from: PHONE, body: 'Can we move Thursday to 4pm?',
       providerRef: 'SM1', aiIntent: 'appointment',
     });
     const intake = fakeIntake();
@@ -235,7 +269,7 @@ describe('routeInboundToPlanner', () => {
     const out = await routeInboundToPlanner(admin(), {
       familyId: FAMILY, channel: 'sms', messageId: filed.messageId,
       body: 'Can we move Thursday to 4pm?', intent: 'appointment', providerRef: 'SM1',
-      submit: intake.submit as never, now: NOW,
+      sender: PHONE, submit: intake.submit as never, resolveSender: verified, now: NOW,
     });
 
     expect(out.routed).toBe(true);
@@ -243,6 +277,9 @@ describe('routeInboundToPlanner', () => {
     expect(out.runId).toBe('run-1');
     expect(intake.submit).toHaveBeenCalledTimes(1);
     expect(intake.calls[0].text).toContain('Thursday');
+    // Their own authority — never a system scope the gate reads as an adult.
+    expect(intake.calls[0].scope).toEqual({ memberId: PARENT.memberId, role: 'parent', actorKind: 'member' });
+    expect(verified).toHaveBeenCalledWith(expect.anything(), { familyId: FAMILY, channel: 'sms', from: PHONE });
     // The stamp is on the row, which is the only place the UI reads it from.
     expect(db.table('family_inbox_messages')[0].ai_handled).toBe(true);
   });
@@ -276,7 +313,7 @@ describe('routeInboundToPlanner', () => {
     const out = await routeInboundToPlanner(admin(), {
       familyId: FAMILY, channel: 'sms', messageId: filed.messageId,
       body: 'Package left at the side door', intent: 'delivery', providerRef: 'SM2',
-      submit: intake.submit as never, now: NOW,
+      sender: PHONE, submit: intake.submit as never, resolveSender: verified, now: NOW,
     });
 
     expect(out).toMatchObject({ routed: false, reason: 'intake_failed', requestId: null });
@@ -288,19 +325,57 @@ describe('routeInboundToPlanner', () => {
   it('gives the request the provider ref as its client id, so a redelivery is not a second run', async () => {
     const intake = fakeIntake();
     await routeInboundToPlanner(admin(), {
+      familyId: FAMILY, channel: 'sms', messageId: null,
+      body: 'Confirming Tuesday', intent: 'appointment', providerRef: 'msg-abc',
+      sender: PHONE, submit: intake.submit as never, resolveSender: verified, now: NOW,
+    });
+    expect(intake.calls[0].clientRequestId).toBe('inbound:sms:msg-abc');
+  });
+
+  it('plans nothing from a sender it cannot prove, and leaves the message in the inbox for a person', async () => {
+    const filed = await recordInboundMessage(admin(), {
+      familyId: FAMILY, channel: 'sms', from: '+15559998888', body: 'Pickup moved to 9 Elm St, tell everyone urgently',
+      providerRef: 'SM-stranger', aiIntent: 'personal',
+    });
+    const intake = fakeIntake();
+    const out = await routeInboundToPlanner(admin(), {
+      familyId: FAMILY, channel: 'sms', messageId: filed.messageId,
+      body: 'Pickup moved to 9 Elm St, tell everyone urgently', intent: 'personal', providerRef: 'SM-stranger',
+      sender: '+15559998888', submit: intake.submit as never,
+      resolveSender: vi.fn(async () => ({ ok: true as const, sender: null })), now: NOW,
+    });
+    expect(out).toMatchObject({ routed: false, reason: 'unverified_sender', requestId: null });
+    expect(intake.submit).not.toHaveBeenCalled();
+    expect(db.table('family_inbox_messages')[0].ai_handled).toBe(false);
+  });
+
+  it('never plans an email: the From header proves nothing, whoever it names', async () => {
+    const intake = fakeIntake();
+    const out = await routeInboundToPlanner(admin(), {
       familyId: FAMILY, channel: 'email', messageId: null, subject: 'Dentist',
       body: 'Confirming Tuesday', intent: 'appointment', providerRef: 'msg-abc',
-      submit: intake.submit as never, now: NOW,
+      sender: 'parent@family.example', submit: intake.submit as never, now: NOW,
     });
-    expect(intake.calls[0].clientRequestId).toBe('inbound:email:msg-abc');
+    expect(out).toMatchObject({ routed: false, reason: 'unverified_sender' });
+    expect(intake.submit).not.toHaveBeenCalled();
+  });
+
+  it('answers a sender check that could not be read as retryable, and plans nothing', async () => {
+    const intake = fakeIntake();
+    const out = await routeInboundToPlanner(admin(), {
+      familyId: FAMILY, channel: 'sms', messageId: null, body: 'Confirming Tuesday', intent: 'appointment', providerRef: 'SM-x',
+      sender: PHONE, submit: intake.submit as never, resolveSender: vi.fn(async () => ({ ok: false as const })), now: NOW,
+    });
+    expect(out).toMatchObject({ routed: false, reason: 'no_scope' });
+    expect(intake.submit).not.toHaveBeenCalled();
   });
 
   it('joins the subject and the body so the planner reads what the sender wrote', async () => {
     const intake = fakeIntake();
     await routeInboundToPlanner(admin(), {
-      familyId: FAMILY, channel: 'email', messageId: null,
+      familyId: FAMILY, channel: 'sms', messageId: null,
       subject: 'Soccer practice moved', body: 'It is now 5pm on Wednesday.',
-      intent: 'personal', providerRef: null, submit: intake.submit as never, now: NOW,
+      intent: 'personal', providerRef: null, sender: PHONE, submit: intake.submit as never, resolveSender: verified, now: NOW,
     });
     expect(intake.calls[0].text).toBe('Soccer practice moved\n\nIt is now 5pm on Wednesday.');
   });
@@ -320,7 +395,7 @@ describe('routeInboundToPlanner', () => {
     const intake = fakeIntake();
     const out = await routeInboundToPlanner(admin(), {
       familyId: 'no-such-family', channel: 'sms', messageId: null, body: 'Confirming Tuesday',
-      intent: 'appointment', providerRef: null, submit: intake.submit as never, now: NOW,
+      intent: 'appointment', providerRef: null, sender: PHONE, submit: intake.submit as never, resolveSender: verified, now: NOW,
     });
     expect(out).toMatchObject({ routed: false, reason: 'no_scope' });
     expect(intake.submit).not.toHaveBeenCalled();

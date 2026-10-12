@@ -26,6 +26,8 @@
 // into the wrong month for any family west of UTC.
 import 'server-only';
 import { readAllPages } from '@/lib/supabase/read-all-pages';
+import { readAll } from '@/lib/supabase/read-all';
+import { getTranslations } from '@/lib/i18n/server';
 import type { BudgetPeriod, Json, Tables, TransactionType } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
@@ -49,7 +51,13 @@ const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
 const MONTH_KEY = /^\d{4}-\d{2}$/;
 const PERIODS: BudgetPeriod[] = ['weekly', 'monthly', 'yearly'];
 const TYPES: TransactionType[] = ['income', 'expense', 'transfer'];
-/** Hard cap on rows pulled for any analysis; a household with more has a different problem. */
+/**
+ * Ceiling on rows pulled for any analysis; a household with more has a
+ * different problem. A REAL ceiling, paged to with `readAll`: PostgREST answers
+ * one request with at most `db-max-rows` (1,000 on a default project) whatever
+ * `.limit()` asks for, so `.limit(5000)` summed the newest 1,000 rows of a
+ * window and reported the total as exact.
+ */
 const MAX_ROWS = 5000;
 
 // ── money helpers ─────────────────────────────────────────────────────────────
@@ -165,30 +173,52 @@ export function budgetWindow(period: BudgetPeriod, refDay: string): DateRange {
 
 // ── reads ─────────────────────────────────────────────────────────────────────
 
+type TransactionFilter = { type?: TransactionType | null; category?: string | null; memberId?: string | null };
+
+/** One page of a window's transactions, newest first; `id` breaks ties so pages neither repeat nor skip. */
+function transactionPage(scope: ServiceScope, range: DateRange, opts: TransactionFilter | undefined, from: number, to: number) {
+  let q = scope.db.from('transactions').select('*').eq('family_id', scope.familyId)
+    .gte('date', range.from).lte('date', range.to).order('date', { ascending: false });
+  if (opts?.type) q = q.eq('type', opts.type);
+  if (opts?.memberId) q = q.eq('member_id', opts.memberId);
+  if (opts?.category?.trim()) {
+    const term = opts.category.trim();
+    q = q.ilike('category', escapeLike(term));
+  }
+  return q.order('id').range(from, to);
+}
+
+/**
+ * Every transaction in a window, for a caller that SUMS them. Every analysis
+ * here does, so a window holding more than `MAX_ROWS` fails the call instead of
+ * totalling the newest rows as if they were all of them. `complete` lifts the
+ * ceiling for the one caller that must judge the whole year whatever its size
+ * (purchase advice).
+ */
 async function loadTransactions(
   scope: ServiceScope,
   range: DateRange,
-  opts?: { type?: TransactionType | null; category?: string | null; memberId?: string | null; limit?: number; complete?: boolean },
+  opts?: TransactionFilter & { complete?: boolean },
 ): Promise<ServiceResult<TransactionRow[]>> {
-  const query = () => {
-    let q = scope.db.from('transactions').select('*').eq('family_id', scope.familyId)
-      .gte('date', range.from).lte('date', range.to).order('date', { ascending: false });
-    if (opts?.type) q = q.eq('type', opts.type);
-    if (opts?.memberId) q = q.eq('member_id', opts.memberId);
-    if (opts?.category?.trim()) {
-      const term = opts.category.trim();
-      q = q.ilike('category', escapeLike(term));
+  const page = (from: number, to: number) => transactionPage(scope, range, opts, from, to);
+  if (opts?.complete) {
+    const { data, error } = await readAllPages(page);
+    if (error) {
+      console.error('[service:finances] transactions read failed', error);
+      return fail(describeDbError(error, 'Could not load your transactions.'), { code: SERVICE_CODES.db });
     }
-    return q;
-  };
-  const { data, error } = opts?.complete
-    ? await readAllPages((from, to) => query().order('id').range(from, to))
-    : await query().limit(Math.min(Math.max(opts?.limit ?? MAX_ROWS, 1), MAX_ROWS));
+    return ok(data ?? []);
+  }
+  const { rows, error, truncated } = await readAll<TransactionRow>(page, { max: MAX_ROWS });
+  if (truncated) {
+    console.error('[service:finances] transactions read reached its ceiling', { familyId: scope.familyId, range, max: MAX_ROWS });
+    return fail((await getTranslations())('finances.tooManyToTotal'), { code: SERVICE_CODES.invalidInput });
+  }
   if (error) {
     console.error('[service:finances] transactions read failed', error);
     return fail(describeDbError(error, 'Could not load your transactions.'), { code: SERVICE_CODES.db });
   }
-  return ok(data ?? []);
+  return ok(rows);
 }
 
 export type ListTransactionsInput = {
@@ -226,11 +256,18 @@ function toSummary(row: TransactionRow): TransactionSummary {
   };
 }
 
-/** Transactions in a window, newest first. */
+/**
+ * Transactions in a window, newest first, up to `limit` (paged, so a limit
+ * above the server's 1,000-row response cap is honoured).
+ *
+ * `total` sums the LISTED transactions. `complete` says whether those are all
+ * of the window's: when it is false the window holds more than `limit`, and
+ * `total` is the listed page's total, not the window's.
+ */
 export async function listTransactions(
   scope: ServiceScope,
   input: ListTransactionsInput = {},
-): Promise<ServiceResult<{ range: DateRange; transactions: TransactionSummary[]; total: number }>> {
+): Promise<ServiceResult<{ range: DateRange; transactions: TransactionSummary[]; total: number; complete: boolean }>> {
   const access = assertFinanceReader(scope);
   if (!access.ok) return access;
   const range = resolveRange(scope, input);
@@ -238,10 +275,19 @@ export async function listTransactions(
   if (input.type && !TYPES.includes(input.type)) {
     return fail('That transaction type is not one Bubaly knows.', { code: SERVICE_CODES.invalidInput });
   }
-  const rows = await loadTransactions(scope, range.data, { ...input, limit: input.limit ?? 200 });
-  if (!rows.ok) return rows;
-  const total = rows.data.reduce((sum, row) => sum + toCents(row.amount), 0);
-  return ok({ range: range.data, transactions: rows.data.map(toSummary), total: toDollars(total) });
+  const limit = Math.min(Math.max(input.limit ?? 200, 1), MAX_ROWS);
+  // A listing, not a sum: the newest `limit` rows are the useful prefix, and
+  // `truncated` is reported rather than raised.
+  const { rows, error, truncated } = await readAll<TransactionRow>(
+    (from, to) => transactionPage(scope, range.data, input, from, to),
+    { max: limit, failOnMax: false },
+  );
+  if (error) {
+    console.error('[service:finances] transactions read failed', error);
+    return fail(describeDbError(error, 'Could not load your transactions.'), { code: SERVICE_CODES.db });
+  }
+  const total = rows.reduce((sum, row) => sum + toCents(row.amount), 0);
+  return ok({ range: range.data, transactions: rows.map(toSummary), total: toDollars(total), complete: !truncated });
 }
 
 // ── pure analysis over rows ───────────────────────────────────────────────────

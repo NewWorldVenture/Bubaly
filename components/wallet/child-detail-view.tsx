@@ -477,7 +477,7 @@ function SendToSiblingModal({ child, siblings, onClose }: { child: Child; siblin
     router.refresh();
   }
 
-  const selectCls = 'w-full rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm focus:border-brand/40 focus:outline-none';
+  const selectCls = 'w-full rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm focus:border-brand focus:outline-none';
 
   return (
     <Modal open onClose={onClose} title={t('childDetail.sendFrom', { name: child.name })}>

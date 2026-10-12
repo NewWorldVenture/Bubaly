@@ -7,8 +7,9 @@
 // have already seen in this repo's own AI paths:
 //
 //   - Nothing is repeated blindly. Every tool call carries an idempotency key
-//     derived from (family, run, step, tool), so a retry - or a second cron
-//     invocation that recovered an expired lease - re-enters the `ai_tool_calls`
+//     derived from (family, run, tool, arguments) (`runActionKey`), so a retry
+//     - or a second cron invocation that recovered an expired lease, or a
+//     second step asking for the same thing - re-enters the `ai_tool_calls`
 //     ledger instead of creating a second calendar event (§30).
 //   - Retries are bounded and only for errors the tool reported as retryable.
 //     A denial is not a transport failure and is never retried.
@@ -34,12 +35,20 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json, NotificationType } from '@/lib/database.types';
 import { backoffDelayMs } from '@/lib/ai/retry';
 import { executeTool } from '@/lib/ai/tools/execute';
-import type { ToolOutcome } from '@/lib/ai/tools/types';
+import { getTool } from '@/lib/ai/tools/registry';
+import { recordedEditsOf, requesterEditedArgsAreProven, speaksForTheRequester, type RecordedEdit } from '@/lib/ai/tools/first-person';
+import type { ToolDefinition, ToolOutcome } from '@/lib/ai/tools/types';
+import { isManager } from '@/lib/constants/roles';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { describeDbError } from '@/lib/supabase/errors';
-import { notify } from '@/lib/services/notifications';
+import { inputDigest } from '@/lib/services/idempotency';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
+import { behaviorForDomain, effectiveRisk } from '@/lib/ai/family-settings';
+import { loadAISettings } from '@/lib/services/ai-settings';
+import { evaluateAction, riskTierStance, riskToDecision, toolTags, type ApprovalModel, type Decision } from '@/lib/trust/engine';
+import { loadTrustInputs, roleOf } from '@/lib/trust/server';
 import {
   blockedSteps, describeProgress, findDependencyCycle, isTerminalRunState, legacyStatusFor,
   selectRunnableSteps, summarizeSteps, terminalRunStateFor, type RunState, type StepState,
@@ -63,12 +72,12 @@ type StepPatch = Database['public']['Tables']['ai_plan_steps']['Update'];
  * planned for that request, and the member it acts for is the member who
  * filed the request. Anything else is a forged or corrupted row.
  */
-async function runMatchesRequest(db: SupabaseClient<Database>, run: RunSnapshot): Promise<ServiceResult<null>> {
-  if (!run.plan_id) return ok(null);
+async function runMatchesRequest(db: SupabaseClient<Database>, run: RunSnapshot): Promise<ServiceResult<{ kind: string | null }>> {
+  if (!run.plan_id) return ok({ kind: null });
   if (!run.request_id) return fail('This run names a plan but no request, so Bubaly will not act on it.', { code: SERVICE_CODES.denied });
   const [{ data: plan, error: planError }, { data: request, error: requestError }] = await settleAll([
     db.from('ai_plans').select('id, request_id, family_id').eq('id', run.plan_id).eq('family_id', run.family_id).maybeSingle(),
-    db.from('ai_requests').select('id, requested_by_member_id, family_id').eq('id', run.request_id).eq('family_id', run.family_id).maybeSingle(),
+    db.from('ai_requests').select('id, requested_by_member_id, family_id, kind').eq('id', run.request_id).eq('family_id', run.family_id).maybeSingle(),
   ]);
   if (planError || requestError) {
     console.error('[ai/runs] could not verify the run against its request', planError ?? requestError);
@@ -80,7 +89,7 @@ async function runMatchesRequest(db: SupabaseClient<Database>, run: RunSnapshot)
   if ((request.requested_by_member_id ?? null) !== (run.requested_by_member_id ?? null)) {
     return fail('This run would act for someone other than the person who asked, so Bubaly will not act on it.', { code: SERVICE_CODES.denied });
   }
-  return ok(null);
+  return ok({ kind: typeof request.kind === 'string' ? request.kind : null });
 }
 
 /** The run fields the graph reasons about. A `Pick` of the real row so the two can never drift. */
@@ -111,6 +120,12 @@ export type ApprovalSnapshot = {
   payloadKind: string | null;
   planStepIds: string[] | null;
   editedPayload: unknown;
+  /**
+   * Who the trust ledger says edited the row (`recordedEditsOf`), read when it
+   * carries an edit. Absent means unknown: an edit to words said in the
+   * requester's name is then not run (`approvedArgsFor`).
+   */
+  recordedEdits?: readonly RecordedEdit[];
 };
 
 /**
@@ -127,8 +142,19 @@ export type ApprovalSnapshot = {
  * allow-listed version. `decide()` already refuses that through `storedEdit`
  * for the rows it executes itself; this is the same derivation for the rows
  * the executor performs.
+ *
+ * A step whose words are the requester's own (lib/ai/tools/first-person.ts)
+ * runs an edit only when the ledger shows every edit is theirs. The step runs
+ * as the requester, so anyone else's wording — written to the column directly,
+ * or recorded before `editAndApprove` refused it — would go out in their name;
+ * it is set aside and the step says what they asked to say.
  */
-function approvedArgsFor(approval: ApprovalSnapshot | null): Record<string, unknown> | null {
+function approvedArgsFor(
+  approval: ApprovalSnapshot | null,
+  step: StepSnapshot,
+  requesterMemberId: string | null,
+  familyId: string,
+): Record<string, unknown> | null {
   if (!approval) return null;
   const classified = classifyPayload({
     payload: approval.payload,
@@ -138,7 +164,15 @@ function approvedArgsFor(approval: ApprovalSnapshot | null): Record<string, unkn
     plan_step_ids: approval.planStepIds,
   });
   const effective = effectiveArgsOf(classified, approval.editedPayload);
-  return effective.changed.length > 0 ? effective.args : null;
+  if (effective.changed.length === 0) return null;
+  const toolName = toolForStep(step)?.name;
+  if (toolName && speaksForTheRequester(toolName) && (!effective.args || !requesterEditedArgsAreProven(approval.recordedEdits ?? [], {
+    familyId, approvalId: approval.id, requesterMemberId, toolName,
+  }, effective.args))) {
+    console.error('[ai/runs] set aside an edit to words said in the requester’s name that the ledger does not show as theirs', { approval: approval.id, step: step.id });
+    return null;
+  }
+  return effective.args;
 }
 
 /** Everything outside the control flow, in one injectable object. */
@@ -159,7 +193,12 @@ export type ExecutorPort = {
   ): Promise<ToolOutcome>;
   requestApproval(scope: ServiceScope, run: RunSnapshot, step: StepSnapshot): Promise<ServiceResult<{ id: string }>>;
   loadApproval(scope: ServiceScope, approvalId: string): Promise<ServiceResult<ApprovalSnapshot | null>>;
-  notifyFamily(scope: ServiceScope, input: NotifyStepInput): Promise<ServiceResult<{ created: number }>>;
+  /**
+   * Deliver a notify step THROUGH the trust gate (`notifications.notify` in the
+   * registry), under the requester's role: the family's switch, its messaging
+   * dial and policies, and the risk tier all apply, exactly as for the tool.
+   */
+  notifyFamily(scope: ServiceScope, input: NotifyStepInput, opts: NotifyOpts): Promise<ServiceResult<NotifyDelivery>>;
   verify(scope: ServiceScope, spec: unknown): Promise<ServiceResult<VerificationOutcome>>;
   /**
    * Re-planning with the results gathered so far (§9's `replan` step): plans
@@ -219,6 +258,23 @@ export const MAX_REPLANS_PER_RUN = 2;
  */
 export function stepIdempotencyKey(familyId: string, runId: string, stepId: string, toolName: string): string {
   return createHash('sha256').update([familyId, runId, stepId, toolName].join(' ')).digest('hex');
+}
+
+/**
+ * The key a step's tool call is actually ledgered under: household + run +
+ * operation + the FULL normalised arguments it runs with.
+ *
+ * `stepIdempotencyKey` deduplicates a retried step, and that alone: two steps
+ * of one plan that create the identical thing carry different step ids, so
+ * both wrote (two calendar events, two to-dos). Keyed on what is done rather
+ * than on which step does it, a retry still lands on the same key (same step,
+ * same bound input) and so does a second step asking for the same thing — the
+ * ledger replays the first result instead of writing again. The whole input
+ * is keyed, never a tool's natural key: those leave out the assignee, and a
+ * plan that gives Emma and Jack each a reminder must keep both.
+ */
+export function runActionKey(familyId: string, runId: string, toolName: string, args: unknown): string {
+  return createHash('sha256').update([familyId, runId, toolName, inputDigest(args)].join(' ')).digest('hex');
 }
 
 // --- Conditions -------------------------------------------------------------
@@ -304,6 +360,113 @@ export type NotifyStepInput = {
   sendAt?: string | null;
   urgent?: boolean;
 };
+
+export type NotifyOpts = {
+  runId: string; stepId: string; requestId: string | null; idempotencyKey: string; skipTrust: boolean;
+  /**
+   * The notice reaches nobody but the person who asked (`addressedToAskerOnly`).
+   * The port decides whether that clears it (`ownNoticeClears`); everything
+   * else about the delivery is unchanged.
+   */
+  ownNotice?: boolean;
+};
+
+/** What a notify step came to: delivered, or held by the trust gate for a person. */
+export type NotifyDelivery =
+  | { created: number; pendingApproval?: undefined }
+  | { created?: undefined; pendingApproval: { approvalId: string | null; summary: string } };
+
+/** The registry tool every notify step is delivered through. */
+export const NOTIFY_TOOL = 'notifications.notify';
+
+/**
+ * A notice addressed to nobody but the person who asked: the "Your day" a
+ * daily brief, "what am I forgetting?" or the chief of staff ends with
+ * (`recipients: [viewerMemberId]`). Not urgent — skipping quiet hours is a
+ * manager's call, whoever it reaches.
+ */
+export function addressedToAskerOnly(input: NotifyStepInput, requesterMemberId: string | null | undefined): boolean {
+  if (!requesterMemberId || input.urgent === true || !Array.isArray(input.recipients)) return false;
+  return input.recipients.length > 0 && input.recipients.every((id) => id === requesterMemberId);
+}
+
+/**
+ * Whether the gate's answer for a notice to the asker alone is the one refusal
+ * that does not apply to it.
+ *
+ * No role but a parent or adult holds `automate`, so every message a teen's,
+ * child's, caregiver's or guest's assistant sends is refused by the role
+ * matrix's generic fallback — which is right for the family, the parents or
+ * another member, and wrong for the asker's own notice: it reaches no one the
+ * asker could not already write to (0388 lets a member write their own
+ * notifications), and it is how their own brief reaches them. So that fallback,
+ * and only that, is lifted here. Everything the family itself said still
+ * decides: Bubaly switched off, a "recommend" or "prepare" dial or a raised
+ * risk for messaging (the tier turns those into a refusal or a hold before
+ * this is asked), and any policy or grant of theirs.
+ *
+ * Shared by the planner's dry run (lib/ai/planner/validate.ts) and the port
+ * below, so a plan keeps exactly the own notices a run delivers.
+ */
+export function ownNoticeClears(
+  decision: Pick<Decision, 'effect' | 'basis'>,
+  input: NotifyStepInput,
+  requesterMemberId: string | null | undefined,
+  bubalyOn: boolean,
+): boolean {
+  if (!bubalyOn || !addressedToAskerOnly(input, requesterMemberId)) return false;
+  return decision.effect === 'deny' && decision.basis === 'fallback';
+}
+
+/**
+ * A notify step's input as the arguments of `notifications.notify`, so the step
+ * is gated, ledgered and approved exactly as the tool would be.
+ */
+export function notifyToolArgs(input: NotifyStepInput): Record<string, unknown> {
+  const named = Array.isArray(input.recipients);
+  return {
+    title: input.title,
+    body: input.body ?? null,
+    audience: named ? 'members' : input.recipients,
+    ...(named ? { member_ids: input.recipients } : {}),
+    type: input.type,
+    related_type: input.relatedType ?? null,
+    related_id: input.relatedId ?? null,
+    send_at: input.sendAt ?? null,
+    urgent: input.urgent === true,
+  };
+}
+
+/**
+ * Read what a notify step should send: its own input, or what an approval
+ * released. An approval the trust gate filed carries the TOOL's arguments
+ * (`audience`, `member_ids`, `send_at`), a plan-step approval the step's own
+ * shape; both mean the same notification.
+ */
+function notifyInputFrom(source: unknown): ServiceResult<NotifyStepInput> {
+  const raw = source && typeof source === 'object' && !Array.isArray(source) ? source as Record<string, unknown> : null;
+  if (raw && !('recipients' in raw) && ('audience' in raw || 'member_ids' in raw)) {
+    const ids = Array.isArray(raw.member_ids) ? raw.member_ids.filter((id): id is string => typeof id === 'string' && id.length > 0) : [];
+    return parseNotifyInput({
+      recipients: raw.audience === 'managers' ? 'managers' : ids.length ? ids : 'family',
+      type: raw.type, title: raw.title, body: raw.body, relatedType: raw.related_type,
+      relatedId: raw.related_id, sendAt: raw.send_at, urgent: raw.urgent,
+    });
+  }
+  return parseNotifyInput(source);
+}
+
+/**
+ * Whether a step changes the household: a write tool, or a notification. A
+ * read, a verify, a follow-up and a re-plan do not (a re-plan's own steps are
+ * held when they run).
+ */
+function writesHousehold(step: StepSnapshot): boolean {
+  if (step.step_type === 'notify') return true;
+  if (step.step_type !== 'act') return false;
+  const tool = step.tool_name ? getTool(step.tool_name) : null;
+  return !tool || !tool.readOnly;
+}
 
 /**
  * `public.notification_type` is an enum, so an unknown value would be rejected
@@ -827,12 +990,20 @@ async function runStep(
   // Approval gate. A step the plan marked as needing approval opens its gate
   // BEFORE any work, so the family sees the intent rather than the aftermath.
   // `approval` steps are nothing but this gate.
+  //
+  // A run acting on someone else's words (an inbox message handed to Bubaly)
+  // holds EVERY household write here, whatever the plan said: a re-plan, an
+  // edit or a plan that left the flag off cannot let that text act unasked.
   let approvedPayload: unknown = null;
-  if (step.approval_required || step.step_type === 'approval') {
+  let approved = false;
+  const heldForOutsideText = scope.untrustedRequest === true && writesHousehold(step);
+  if (step.approval_required || step.step_type === 'approval' || heldForOutsideText) {
     if (!step.approval_id) {
       const created = await port.requestApproval(scope, run, step);
       if (!created.ok) return failStep(port, run, step, created.error, created.retryable === true);
-      await port.updateStep(run, step.id, { status: 'awaiting_approval', approval_id: created.data.id });
+      await port.updateStep(run, step.id, {
+        status: 'awaiting_approval', approval_id: created.data.id, ...(step.approval_required ? {} : { approval_required: true }),
+      });
       await port.appendEvent(run, {
         eventType: 'approval_requested',
         stepId: step.id,
@@ -861,7 +1032,8 @@ async function runStep(
       });
       return { kind: 'progressed' };
     }
-    approvedPayload = approvedArgsFor(approval.data);
+    approvedPayload = approvedArgsFor(approval.data, step, run.requested_by_member_id, run.family_id);
+    approved = true;
     await port.appendEvent(run, {
       eventType: 'approval_decided',
       stepId: step.id,
@@ -893,11 +1065,11 @@ async function runStep(
   switch (step.step_type) {
     case 'act':
     case 'retrieve':
-      return runToolStep(port, scope, run, boundStep, approvedPayload, deadline);
+      return runToolStep(port, scope, run, boundStep, approvedPayload, approved, deadline);
     case 'verify':
       return runVerifyStep(port, scope, run, boundStep);
     case 'notify':
-      return runNotifyStep(port, scope, run, boundStep);
+      return runNotifyStep(port, scope, run, boundStep, approvedPayload, approved);
     case 'followup':
       return runFollowupStep(port, run, step);
     case 'replan':
@@ -945,12 +1117,51 @@ async function failStep(
   return { kind: 'progressed' };
 }
 
+/**
+ * The trust gate answered "a person must decide". The step parks on the row
+ * the gate filed — and only on a row that exists: parked on nothing, no
+ * decision could ever reach it (`reconcileApprovals` and `resumeSettledRuns`
+ * both skip a step with no approval id), so the run would wait forever on a
+ * card nobody can see. That case fails the step as retryable instead.
+ */
+async function parkOnGate(
+  port: ExecutorPort,
+  run: RunSnapshot,
+  step: StepSnapshot,
+  toolName: string,
+  approvalId: string | null,
+  summary: string,
+): Promise<StepDisposition> {
+  if (!approvalId) return failStep(port, run, step, (await getTranslations())('aiRuns.approvalNotFiled'), true);
+  await port.updateStep(run, step.id, { status: 'awaiting_approval', approval_id: approvalId });
+  await port.appendEvent(run, {
+    eventType: 'approval_requested',
+    stepId: step.id,
+    toolName,
+    message: summary || `Waiting for someone to approve "${describeStep(step)}".`,
+    payload: { approval_id: approvalId },
+  });
+  return { kind: 'awaiting_approval' };
+}
+
+/** A denial is a decision, not a fault: retrying it would ask the trust engine the same question and get the same answer. */
+async function recordDenial(port: ExecutorPort, run: RunSnapshot, step: StepSnapshot, toolName: string, reason: string): Promise<StepDisposition> {
+  await port.updateStep(run, step.id, {
+    status: 'failed', error: reason, completed_at: new Date(port.now()).toISOString(),
+  });
+  await port.appendEvent(run, {
+    eventType: 'step_failed', stepId: step.id, toolName, message: `Bubaly was not allowed to do that: ${reason}`,
+  });
+  return { kind: 'progressed' };
+}
+
 async function runToolStep(
   port: ExecutorPort,
   scope: ServiceScope,
   run: RunSnapshot,
   step: StepSnapshot,
   approvedPayload: unknown,
+  approved: boolean,
   deadline: number,
 ): Promise<StepDisposition> {
   const toolName = step.tool_name;
@@ -961,10 +1172,12 @@ async function runToolStep(
     runId: run.id,
     stepId: step.id,
     requestId: run.request_id,
-    idempotencyKey: stepIdempotencyKey(run.family_id, run.id, step.id, toolName),
+    // Keyed on what is done, not on which step does it (`runActionKey`).
+    idempotencyKey: runActionKey(run.family_id, run.id, toolName, args),
     // An approval a person already decided is not re-gated: doing so would open
-    // a second approval row for work the family has already said yes to.
-    skipTrust: approvedPayload !== null || (step.approval_required && !!step.approval_id),
+    // a second approval row for work the family has already said yes to. Only
+    // a decision this step's own approval row carries counts (`runStep`).
+    skipTrust: approved,
   });
 
   if (outcome.status === 'ok') {
@@ -995,28 +1208,10 @@ async function runToolStep(
   }
 
   if (outcome.status === 'pending_approval') {
-    await port.updateStep(run, step.id, { status: 'awaiting_approval', approval_id: outcome.approvalId ?? null });
-    await port.appendEvent(run, {
-      eventType: 'approval_requested',
-      stepId: step.id,
-      toolName,
-      message: outcome.summary || `Waiting for someone to approve "${describeStep(step)}".`,
-      payload: { approval_id: outcome.approvalId },
-    });
-    return { kind: 'awaiting_approval' };
+    return parkOnGate(port, run, step, toolName, outcome.approvalId ?? null, outcome.summary);
   }
 
-  if (outcome.status === 'denied') {
-    // A denial is a decision, not a fault: retrying it would ask the trust
-    // engine the same question and get the same answer.
-    await port.updateStep(run, step.id, {
-      status: 'failed', error: outcome.reason, completed_at: new Date(port.now()).toISOString(),
-    });
-    await port.appendEvent(run, {
-      eventType: 'step_failed', stepId: step.id, toolName, message: `Bubaly was not allowed to do that: ${outcome.reason}`,
-    });
-    return { kind: 'progressed' };
-  }
+  if (outcome.status === 'denied') return recordDenial(port, run, step, toolName, outcome.reason);
 
   if (!outcome.retryable || step.retry_count >= step.max_retries) {
     return failStep(port, run, step, outcome.error, false);
@@ -1073,22 +1268,56 @@ async function runVerifyStep(port: ExecutorPort, scope: ServiceScope, run: RunSn
   return { kind: 'progressed' };
 }
 
-async function runNotifyStep(port: ExecutorPort, scope: ServiceScope, run: RunSnapshot, step: StepSnapshot): Promise<StepDisposition> {
-  const parsed = parseNotifyInput(step.input_json);
+/**
+ * A notify step is `notifications.notify` with the planner's shape. It used to
+ * call the notifications service directly, so it skipped everything the tool
+ * answers to — "Bubaly is switched off", the messaging dial, the family's
+ * policies and the requester's role — and a guest's or child's request could
+ * push any text, urgent, to every phone in the house. It now goes through the
+ * same gate, under the requester's role, and parks on an approval like any
+ * other write.
+ *
+ * `urgent` skips quiet hours. Only a parent or adult may ask for that, or a
+ * person who approved this exact notification.
+ */
+async function runNotifyStep(
+  port: ExecutorPort,
+  scope: ServiceScope,
+  run: RunSnapshot,
+  step: StepSnapshot,
+  approvedPayload: unknown,
+  approved: boolean,
+): Promise<StepDisposition> {
+  const parsed = notifyInputFrom(approvedPayload ?? step.input_json);
   if (!parsed.ok) return failStep(port, run, step, parsed.error, false);
+  const input: NotifyStepInput = { ...parsed.data, urgent: parsed.data.urgent === true && (approved || isManager(scope.role)) };
 
-  const sent = await port.notifyFamily(scope, parsed.data);
-  if (!sent.ok) return failStep(port, run, step, sent.error, sent.retryable === true);
+  const sent = await port.notifyFamily(scope, input, {
+    runId: run.id,
+    stepId: step.id,
+    requestId: run.request_id,
+    idempotencyKey: runActionKey(run.family_id, run.id, NOTIFY_TOOL, notifyToolArgs(input)),
+    skipTrust: approved,
+    ...(!approved && scope.actorKind === 'ai' && addressedToAskerOnly(input, scope.memberId) ? { ownNotice: true } : {}),
+  });
+  if (!sent.ok) {
+    if (sent.code === SERVICE_CODES.denied) return recordDenial(port, run, step, NOTIFY_TOOL, sent.error);
+    return failStep(port, run, step, sent.error, sent.retryable === true);
+  }
+  if (sent.data.pendingApproval) {
+    return parkOnGate(port, run, step, NOTIFY_TOOL, sent.data.pendingApproval.approvalId, sent.data.pendingApproval.summary);
+  }
 
-  const summary = sent.data.created === 0
+  const created = sent.data.created ?? 0;
+  const summary = created === 0
     ? 'Nobody needed to be told (everyone already had this notification).'
-    : `Told ${sent.data.created} ${sent.data.created === 1 ? 'person' : 'people'}: ${parsed.data.title}`;
+    : `Told ${created} ${created === 1 ? 'person' : 'people'}: ${input.title}`;
   await port.updateStep(run, step.id, {
     status: 'completed',
     completed_at: new Date(port.now()).toISOString(),
-    result_json: { summary, count: sent.data.created } as Json,
+    result_json: { summary, count: created } as Json,
   });
-  await port.appendEvent(run, { eventType: 'notified', stepId: step.id, message: summary, payload: { created: sent.data.created } });
+  await port.appendEvent(run, { eventType: 'notified', stepId: step.id, message: summary, payload: { created } });
   return { kind: 'progressed' };
 }
 
@@ -1168,6 +1397,132 @@ async function runReplanStep(
 
 // --- Production wiring ------------------------------------------------------
 
+/** The registry tool a step runs: its own, or `notifications.notify` for a notify step. */
+function toolForStep(step: StepSnapshot): ToolDefinition | null {
+  if (step.step_type === 'notify') return getTool(NOTIFY_TOOL);
+  return step.tool_name ? getTool(step.tool_name) : null;
+}
+
+type ApprovalRule = { domain: string; approvalModel: ApprovalModel; requiredApprovals: number; policyId: string | null };
+
+/**
+ * A money amount in a step's arguments, for `maxAmountCents` policy
+ * conditions; null when the tool carries none.
+ *
+ * One reader for both sides of a held step: the planner's dry run
+ * (lib/ai/planner/validate.ts `dryRunGate`) and the rule its approval is filed
+ * under (`approvalRuleFor`). When only the dry run read it, a "Bubaly may spend
+ * up to $50" allow ranked above "Money needs both of us" matched a $900 budget
+ * at run time — the engine reads a missing amount as 0 — so the step the plan
+ * held for two parents was filed for one, and the requester released it alone.
+ */
+export function readAmountCents(input: unknown): number | null {
+  if (!input || typeof input !== 'object') return null;
+  const record = input as Record<string, unknown>;
+  for (const key of ['amount_cents', 'amountCents']) {
+    if (typeof record[key] === 'number' && Number.isFinite(record[key])) return Math.round(record[key] as number);
+  }
+  for (const key of ['amount', 'budget', 'target_amount', 'cost']) {
+    if (typeof record[key] === 'number' && Number.isFinite(record[key])) return Math.round((record[key] as number) * 100);
+  }
+  return null;
+}
+
+/**
+ * The rule a held step's approval is filed under: the family's own.
+ *
+ * The planner's dry run sees a "two parents" policy and holds the step, but the
+ * row filed for it carried neither model nor count, so the database defaults —
+ * one approver, `single` — applied, any one manager (the requester included)
+ * released it, and the step then ran with the gate skipped. So the family's
+ * rules are evaluated again here, for this tool under the requester's role,
+ * exactly as the run-time gate would, and a policy that requires approval
+ * decides the model, the count and the policy the row is filed under. The
+ * domain is the tool's registry domain, not a guess from its name.
+ *
+ * The context carries what the dry run's does — the step's amount included
+ * (`readAmountCents`) — so a policy whose conditions the plan found unmet is
+ * not found met here.
+ *
+ * A household whose rules cannot be read is not asked on a guess either: the
+ * step fails retryably and asks again once the rules can be read.
+ */
+async function approvalRuleFor(db: SupabaseClient<Database>, scope: ServiceScope, step: StepSnapshot): Promise<ServiceResult<ApprovalRule>> {
+  const tool = toolForStep(step);
+  const domain = tool?.domain ?? approvalDomainFor(step);
+  const trust = await loadTrustInputs(db, scope.familyId);
+  if (trust.degraded) {
+    return fail((await getTranslations())('aiRuns.approvalRulesUnreadable'), { code: SERVICE_CODES.db, retryable: true });
+  }
+  const capability = !tool || !tool.readOnly ? 'automate' : tool.capability;
+  const amountCents = readAmountCents(step.input_json);
+  const decision = evaluateAction({
+    // The role the run-time gate evaluates (`trustRoleFor` in execute.ts).
+    actor: { kind: 'ai_agent', id: 'bubaly', role: scope.role === 'system' ? 'adult' : roleOf(scope.role) },
+    domain,
+    capability,
+    context: {
+      confidence: 0.85,
+      tags: tool ? [...toolTags(tool.name), `op:${tool.capability}`, `risk:${tool.risk}`, `domain:${tool.domain}`] : [`domain:${domain}`],
+      ...(amountCents !== null ? { amountCents } : {}),
+    },
+    policies: trust.policies,
+    grants: trust.grants,
+    delegations: trust.delegations,
+    emergencyDomains: trust.emergencyDomains,
+  });
+  if (decision.effect === 'require_approval' && decision.basis === 'policy') {
+    return ok({
+      domain,
+      approvalModel: decision.approvalModel ?? 'single',
+      requiredApprovals: Math.max(1, decision.requiredApprovals ?? 1),
+      policyId: decision.policyId ?? null,
+    });
+  }
+  return ok({ domain, approvalModel: 'single', requiredApprovals: 1, policyId: null });
+}
+
+/**
+ * Whether a notice to the asker alone may go out without the gate's refusal of
+ * their role (`ownNoticeClears`). The gate's decision is worked out here
+ * without its side effects, from what it reads: the family's settings, read
+ * STRICTLY; their rules; the tier at the family's own risk for the tool. A
+ * family that switched Bubaly off, any setting or rule that cannot be read, or
+ * any answer but the role matrix's generic "no" sends the notice back through
+ * the ordinary gate, which then refuses or holds it in its own words. A parent
+ * or adult has nothing to lift: their notice is the gate's to decide.
+ */
+async function ownNoticeCleared(db: SupabaseClient<Database>, scope: ServiceScope, input: NotifyStepInput): Promise<boolean> {
+  if (scope.actorKind !== 'ai' || isManager(scope.role) || !addressedToAskerOnly(input, scope.memberId)) return false;
+  const tool = getTool(NOTIFY_TOOL);
+  if (!tool) return false;
+  const settings = await loadAISettings(scope);
+  if (!settings.ok || !settings.data.enabled) return false;
+  const trust = await loadTrustInputs(db, scope.familyId);
+  if (trust.degraded) return false;
+  const risk = effectiveRisk(settings.data, tool);
+  // The role the run-time gate evaluates (`trustRoleFor` in execute.ts).
+  const actor = { kind: 'ai_agent' as const, id: 'bubaly', role: scope.role === 'system' ? 'adult' as const : roleOf(scope.role) };
+  let decision: Decision = evaluateAction({
+    actor,
+    domain: tool.domain,
+    capability: 'automate',
+    context: { confidence: 0.85, tags: [...toolTags(tool.name), `op:${tool.capability}`, `risk:${risk}`, `domain:${tool.domain}`] },
+    policies: trust.policies,
+    grants: trust.grants,
+    delegations: trust.delegations,
+    emergencyDomains: trust.emergencyDomains,
+  });
+  const stance = riskTierStance(decision);
+  if (stance !== 'silent') {
+    const risked = riskToDecision({
+      risk, actor, domain: tool.domain, capability: 'automate', behavior: behaviorForDomain(settings.data, tool.domain), explicitAllow: false,
+    });
+    if (risked && (stance === 'speaks' || risked.effect !== 'allow')) decision = risked;
+  }
+  return ownNoticeClears(decision, input, scope.memberId, settings.data.enabled);
+}
+
 /** The trust domain an approval row is filed under, taken from the tool's dotted prefix when it names one. */
 function approvalDomainFor(step: StepSnapshot): string {
   const prefix = (step.tool_name ?? '').split('.')[0];
@@ -1246,6 +1601,9 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
       // plan (or at a plan with no request) is blocked before any tool runs.
       const consistent = await runMatchesRequest(db, run);
       if (!consistent.ok) return consistent;
+      // The request row says whose words these are. A `handle_it` request is
+      // an inbox message a member handed over (filed only by the server, 0255).
+      const untrusted = consistent.data.kind === 'handle_it';
       const scope: ServiceScope = {
         db,
         familyId: run.family_id,
@@ -1261,6 +1619,7 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
         tz: actor.data.timezone,
         runId: run.id,
         requestId: run.request_id,
+        ...(untrusted ? { untrustedRequest: true } : {}),
       };
       scopeCache.set(run.id, scope);
       return ok(scope);
@@ -1277,12 +1636,17 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
     async requestApproval(scope, run, step) {
       const input = (step.input_json ?? {}) as Record<string, unknown>;
       const consequences = Array.isArray(input.consequences) ? input.consequences : [];
+      const rule = await approvalRuleFor(db, scope, step);
+      if (!rule.ok) return rule;
       const { data, error } = await db
         .from('approval_requests')
         .insert({
           family_id: run.family_id,
-          domain: approvalDomainFor(step),
+          domain: rule.data.domain,
           capability: 'automate',
+          approval_model: rule.data.approvalModel,
+          required_approvals: rule.data.requiredApprovals,
+          policy_id: rule.data.policyId,
           requested_by_kind: 'ai',
           requested_by_member_id: run.requested_by_member_id,
           agent: 'concierge',
@@ -1320,6 +1684,12 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
         return fail(describeDbError(error, 'Bubaly could not read that approval.'), { code: SERVICE_CODES.db, retryable: true });
       }
       if (!data) return ok(null);
+      // Who edited it, for a step whose words are the requester's own
+      // (`approvedArgsFor`). Unreadable is not "nobody": the step waits.
+      const recordedEdits = data.edited_payload == null ? [] : await recordedEditsOf(db, scope.familyId, approvalId);
+      if (recordedEdits === null) {
+        return fail('Bubaly could not read that approval.', { code: SERVICE_CODES.db, retryable: true });
+      }
       return ok({
         id: data.id,
         status: data.status,
@@ -1327,12 +1697,31 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
         payloadKind: data.payload_kind ?? null,
         planStepIds: data.plan_step_ids ?? null,
         editedPayload: data.edited_payload ?? null,
+        recordedEdits,
       });
     },
-    async notifyFamily(scope, input) {
-      const res = await notify(scope, input);
-      if (!res.ok) return res;
-      return ok({ created: res.data.created });
+    async notifyFamily(scope, input, opts) {
+      const outcome = await executeTool(scope, NOTIFY_TOOL, notifyToolArgs(input), {
+        runId: opts.runId,
+        stepId: opts.stepId,
+        requestId: opts.requestId,
+        idempotencyKey: opts.idempotencyKey,
+        // An own notice the family's switch, dial and rules all let through
+        // is delivered without the role refusal; still ledgered and keyed.
+        skipTrust: opts.skipTrust || (opts.ownNotice === true && await ownNoticeCleared(db, scope, input)),
+      });
+      switch (outcome.status) {
+        case 'ok': {
+          const created = (outcome.data as { created?: unknown } | null)?.created;
+          return ok({ created: typeof created === 'number' ? created : 0 });
+        }
+        case 'pending_approval':
+          return ok({ pendingApproval: { approvalId: outcome.approvalId ?? null, summary: outcome.summary } });
+        case 'denied':
+          return fail(outcome.reason, { code: SERVICE_CODES.denied, retryable: false });
+        default:
+          return fail(outcome.error, { code: SERVICE_CODES.db, retryable: outcome.retryable });
+      }
     },
     async verify(scope, spec) {
       const parsed = parseVerificationSpec(spec);

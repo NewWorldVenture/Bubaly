@@ -15,6 +15,7 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock } from '@/components/i18n/use-format';
 import { datetimeLocalToInstant, instantToDatetimeLocal } from '@/lib/time/datetime-local';
 import { tripLabel } from '@/components/vacations/trip-labels';
+import { readsEveryonesRecords, recordsInScope, type PersonalRecordKind } from '@/lib/records/personal-scope';
 
 // ---- small presentational helpers reused across trip pages ----
 
@@ -103,7 +104,7 @@ export function fromRow(row: Row, fields: FieldDef[], timeZone: string): Record<
 }
 
 export function TripCrudSection<T extends Row>({
-  table, vacationId, title, icon, fields, renderRow, emptyText, addLabel = 'Add', orderBy,
+  table, vacationId, title, icon, fields, renderRow, emptyText, addLabel = 'Add', orderBy, personal,
 }: {
   table: string;
   vacationId: string;
@@ -114,10 +115,12 @@ export function TripCrudSection<T extends Row>({
   emptyText: string;
   addLabel?: string;
   orderBy?: (a: T, b: T) => number;
+  /** A table of records about one member (the held 0517): show each viewer the rows that rule gives them. */
+  personal?: PersonalRecordKind;
 }) {
   const t = useTranslations();
   const tr = useTranslations();
-  const { familyId, userId, members } = useApp();
+  const { familyId, userId, members, role, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const clock = useFamilyClock();
   const memberMap = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
@@ -129,9 +132,18 @@ export function TripCrudSection<T extends Row>({
       .from(table).select('*').eq('family_id', familyId).eq('vacation_id', vacationId),
   });
 
-  const rows = useMemo(() => (orderBy ? [...data].sort(orderBy) : data), [data, orderBy]);
+  const rows = useMemo(() => {
+    const visible = personal ? recordsInScope(data as (T & { member_id: string | null })[], role, selfMember?.id, personal) : data;
+    return orderBy ? [...visible].sort(orderBy) : visible;
+  }, [data, orderBy, personal, role, selfMember]);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<Record<string, string | boolean> | null>(null);
+  // A viewer who reads only their own personal records (0517) files only their
+  // own: the member picker offers themselves, and a new row starts as theirs.
+  // A row about anyone else would be saved and then unreadable to its writer.
+  const ownOnly = Boolean(personal) && !readsEveryonesRecords(role, personal);
+  const pickable = ownOnly ? members.filter((m) => m.id === selfMember?.id) : members;
+  const blankForm = () => ({ ...blankFrom(fields), ...(ownOnly && selfMember ? { member_id: selfMember.id } : {}) });
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -181,8 +193,9 @@ export function TripCrudSection<T extends Row>({
   return (
     <div className="space-y-4">
       <SectionHeader icon={icon} title={title} action={
-        <Button size="sm" onClick={() => setForm(blankFrom(fields))}><Plus className="h-4 w-4" /> {tripLabel(t, addLabel)}</Button>
+        <Button size="sm" onClick={() => setForm(blankForm())}><Plus className="h-4 w-4" /> {tripLabel(t, addLabel)}</Button>
       } />
+      {personal && !readsEveryonesRecords(role, personal) && <p className="text-xs text-muted">{t(personal === 'medical' ? 'shared.onlyYourOwnMedicalRecords' : 'shared.onlyYourOwnRecords')}</p>}
       {loading ? <LoadingBlock /> : error ? <ErrorState message={t('shared.sectionLoadFailed')} onRetry={refresh} /> : rows.length === 0 ? (
         <EmptyState icon={icon} title={emptyText} description={t('shared.addYourFirstOneTo')} />
       ) : (
@@ -228,7 +241,7 @@ export function TripCrudSection<T extends Row>({
                       if (f.type === 'member') return (
                         <Select id={id} value={val} onChange={(e) => set(e.target.value)}>
                           <option value="">{t('shared.select')}</option>
-                          {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
+                          {pickable.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                         </Select>
                       );
                       const inputType = f.type === 'money' || f.type === 'number' ? 'number' : f.type === 'datetime' ? 'datetime-local' : f.type;
