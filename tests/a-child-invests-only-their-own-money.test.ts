@@ -39,17 +39,28 @@ import { localeOrDefault } from '@/lib/i18n/locales';
 
 const mocks = vi.hoisted(() => ({
   createServer: vi.fn(),
+  db: null as unknown,
   requireUserContext: vi.fn(),
   evaluateTrust: vi.fn(),
   revalidatePath: vi.fn(),
 }));
-vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.createServer }));
+vi.mock('@/lib/supabase/server', () => ({
+  createServer: mocks.createServer,
+  // The page reads whether the family wallet is on with the service client
+  // (lib/wallet/family-wallet-status.ts); the same in-memory store answers it.
+  createServiceClient: () => mocks.db,
+}));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.requireUserContext }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('@/lib/trust/server', () => ({ evaluateTrust: mocks.evaluateTrust, roleOf: (role: string) => role }));
 vi.mock('@/lib/trust/messages', () => ({ householdPolicyBlocked: () => 'household-policy-blocked' }));
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {} }), usePathname: () => '/wallet/invest' }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: () => {} }),
+  usePathname: () => '/wallet/invest',
+  // refuseGuest (held 0509) sends a guest away from the wallet before it renders.
+  redirect: (to: string) => { throw new Error(`redirect:${to}`); },
+}));
 
 const FAMILY = 'family-a';
 const ASSET = 'asset-a';
@@ -81,6 +92,7 @@ beforeEach(() => {
   db = createInMemorySupabase();
   vi.spyOn(db, 'from');
   mocks.createServer.mockResolvedValue(db);
+  mocks.db = db;
   db.seed('child_wallets', [
     { id: MIA.wallet, family_id: FAMILY, member_id: MIA.member, is_active: true },
     { id: LEO.wallet, family_id: FAMILY, member_id: LEO.member, is_active: true },
@@ -204,11 +216,16 @@ describe('the Invest page offers an order only where one is allowed', () => {
     expect(cards.get('Leo')).toContain(' Explain ');
   });
 
-  it.each(['caregiver', 'guest'])('shows a %s no order controls on any card', async (role) => {
-    signInAs(role, `member-${role}`);
+  it('shows a caregiver no order controls on any card', async () => {
+    signInAs('caregiver', 'member-caregiver');
     const cards = await openTheInvestPage();
     expect(cards.size).toBe(2);
     for (const card of cards.values()) expect(card).not.toContain(' Request ');
+  });
+
+  it('sends a guest away before any card renders (main\'s refuseGuest)', async () => {
+    signInAs('guest', 'member-guest');
+    await expect(openTheInvestPage()).rejects.toThrow('redirect:/dashboard/grandparent-portal');
   });
 
   it.each(['parent', 'adult'])('shows a %s the order controls on every child\'s card', async (role) => {
