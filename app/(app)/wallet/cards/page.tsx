@@ -1,12 +1,14 @@
 import type { Metadata } from 'next';
 import { AlertTriangle } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { refuseGuest } from '@/lib/auth/guest-scope';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { getMoneyCapabilities } from '@/lib/stripe/capabilities';
 import { syncConnectedAccount } from '@/lib/stripe/connect';
 import { WalletActivation } from '@/components/wallet/wallet-activation';
+import { readConnectedAccountStatus, readFamilyWalletIsActive } from '@/lib/wallet/family-wallet-status';
 import { MoneyCardsView, type CardChild, type IssuedCard } from '@/components/wallet/money-cards-view';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
@@ -24,14 +26,13 @@ export default async function WalletCardsPage({
 }) {
   const t = await getTranslations();
   const { setup } = await searchParams;
-  const ctx = await requireUserContext();
+  const ctx = await requireUserContext(); refuseGuest(ctx, '/wallet/cards');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   const svc = createServiceClient();
   const dataWarnings: string[] = [];
 
-  const { data: wallet, error: walletError } = await supabase
-    .from('family_wallets').select('id, is_active').eq('family_id', familyId).maybeSingle();
+  const { data: wallet, error: walletError } = await readFamilyWalletIsActive(familyId);
   if (walletError) {
     console.error('[wallet-cards] Wallet read failed', walletError);
     return <ErrorState message={t('cards.couldNotLoadTheFamily')} />;
@@ -56,8 +57,9 @@ export default async function WalletCardsPage({
   }
 
   const [{ data: account, error: accountError }, { data: childWallets, error: childWalletsError }, { data: members, error: membersError }, { data: cards, error: cardsError }] = await settleAll([
-    supabase.from('stripe_connected_accounts')
-      .select('status, charges_enabled, details_submitted, card_issuing_enabled').eq('family_id', familyId).maybeSingle(),
+    // The account's status flags, read by the server: the row is a parent's
+    // or adult's (the held 0514), and every member's cards page turns on them.
+    readConnectedAccountStatus(familyId),
     supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true),
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId),
     supabase.from('stripe_issuing_cards')

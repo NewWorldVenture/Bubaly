@@ -57,10 +57,11 @@ export function resolveItems(
   planLevel: number,
   isSuperAdmin: boolean,
   isManager = true,
+  isGuest = false,
 ): { item: NavItem; locked: boolean; requiredLevel: 1 | 2 }[] {
   const out: { item: NavItem; locked: boolean; requiredLevel: 1 | 2 }[] = [];
   for (const item of items) {
-    if (!isNavItemVisibleToRole(item, { isManager, isSuperAdmin })) continue; // manager-only
+    if (!isNavItemVisibleToRole(item, { isManager, isSuperAdmin, isGuest })) continue; // manager-only, or withheld from a guest
     const tier = featureTiers[item.href];
     const access = featureAccessByTier(tier, planLevel, isSuperAdmin);
     if (access === 'hidden') continue; // Off → not shown at all

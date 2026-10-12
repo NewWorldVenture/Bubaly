@@ -677,6 +677,19 @@ begin
   raise notice 'A-08: injected 2 stray permissive write policies on wallet_transactions';
 end $$;
 
+-- 0275 also re-creates `<t>_select` (any family member) on its ten tables. A
+-- held migration that replaced one of those reads (0514's household money)
+-- must find its read where it left it, and so must every probe after this one:
+-- the reads standing now are recorded, and any read the re-run adds is removed
+-- at the foot of this probe. On the released schema the re-run adds none (it
+-- drops and re-creates the same `<t>_select`), so nothing is removed.
+create temp table wallet_probe_reads_before on commit preserve rows as
+  select c.relname::text as t, p.polname::text as pol
+    from pg_policy p join pg_class c on c.oid = p.polrelid join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and p.polcmd = 'r'
+     and c.relname = any (array['family_wallets','child_wallets','wallet_buckets','wallet_transactions','wallet_rules',
+                                'financial_accounts','transactions','budgets','bills','savings_goals']);
+
 \ir ../../supabase/migrations/0275_money_permissive_write_sweep.sql
 
 do $$
@@ -789,3 +802,24 @@ delete from public.family_members where id = 'a8c00000-0000-4000-8000-0000000000
 delete from auth.users where id = :'KID';
 
 select 'A-08 wallet write-RLS probe (0217 mint-lock + 0224 audit append-only + 0254 drift resilience + 0275 stray sweep): ALL INVARIANTS PASSED' as result;
+
+-- The reads the 0275 re-run above added, and only those, go again (see there).
+do $$
+declare
+  r record;
+  removed int := 0;
+begin
+  for r in
+    select c.relname::text as t, p.polname::text as pol
+      from pg_policy p join pg_class c on c.oid = p.polrelid join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public' and p.polcmd = 'r'
+       and c.relname = any (array['family_wallets','child_wallets','wallet_buckets','wallet_transactions','wallet_rules',
+                                  'financial_accounts','transactions','budgets','bills','savings_goals'])
+       and (c.relname::text, p.polname::text) not in (select b.t, b.pol from wallet_probe_reads_before b)
+  loop
+    execute format('drop policy %I on public.%I', r.pol, r.t);
+    removed := removed + 1;
+  end loop;
+  raise notice 'the 0275 re-run''s reads are put back as they were (% removed)', removed;
+end $$;
+drop table wallet_probe_reads_before;

@@ -163,8 +163,10 @@ describe('why one leftover policy mattered', () => {
     effect, conditions: {}, approvalModel: 'single' as const, requiredApprovals: 1,
     priority: 10, enabled: true,
   });
+  // A parent's assistant: an allow addressed to Bubaly reaches only requesters
+  // whose AI work is automation-trusted (tests/a-policy-for-bubaly-speaks-for-the-managers).
   const ask = {
-    actor: { kind: 'ai_agent' as const, id: 'ai', role: null },
+    actor: { kind: 'ai_agent' as const, id: 'ai', role: 'parent' as const },
     domain: 'scheduling', capability: 'automate' as const,
   };
 

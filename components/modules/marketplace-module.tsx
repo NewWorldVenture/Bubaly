@@ -31,6 +31,7 @@ import type { Tables } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useConfirm } from '@/components/ui/confirm';
 import { RESERVE_VIEW_COLUMNS, readWithReserveView } from '@/lib/marketplace/reserve-view';
+import { removeListing } from '@/lib/marketplace/remove-listing';
 
 // SEC-016: `reserve_cents` and `highest_max_cents` are not client-selectable
 // (0452), so this module names its columns — a `*` read now fails with 42501.
@@ -38,6 +39,7 @@ type Listing = Omit<Tables<'marketplace_listings'>, 'reserve_cents' | 'highest_m
 // A literal, not a joined array: supabase-js types the result by parsing this
 // string, and a computed one reads as GenericStringError.
 const LISTING_COLUMNS = `id, family_id, member_id, title, description, kind, category, condition, price_cents, rent_period, photo_url, location, status, claimed_by, claimed_at, created_by, created_at, updated_at, sale_format, auction_starts_at, auction_ends_at, starting_bid_cents, buy_now_cents, current_bid_cents, bid_count, highest_bidder_member_id, highest_bidder_family_id, anti_snipe_minutes, auction_closed_at, ${RESERVE_VIEW_COLUMNS}`;
+
 type Offer = Tables<'marketplace_offers'>;
 
 const KIND_ICON: Record<ListingKind, typeof Store> = {
@@ -178,25 +180,28 @@ export function MarketplaceModule({
   async function remove(l: Listing) {
     if (!(await askConfirm({ title: t('confirm.removeNamed', { name: l.title }), body: t('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
-    // The OBJECT goes first and its result is READ — the same ordering
-    // documents-module keeps. Deleting the row first makes a surviving file
-    // INVISIBLE: nothing references its URL any more, so nobody can see it,
-    // open it or try again, while the screen says the listing is gone. Here
-    // that survivor is worse than invisible — `marketplace-photos` is a PUBLIC
-    // bucket, so the photo stays reachable by URL to anyone who has it.
-    // Removing first cannot destroy someone else's picture: 0194 scopes storage
-    // deletes to the uploader's own folder, so another seller's object is
-    // filtered, and the seller-scoped row delete below is then refused too.
-    if (l.photo_url) {
-      const { error: photoError } = await removeMarketplacePhotoUrl(sb, l.photo_url);
-      if (photoError) { toastError(t('marketplaceModule.theUploadedPhotoCouldNot')); return; }
+    // The row goes first, and the photo only once the row is really gone: a
+    // listing other families hold records of is kept (the held 0505), and a
+    // kept listing keeps its photo. The photo removed is the one the removed
+    // row named. Whether a kept listing needs withdrawing is the server's call
+    // from the row as it is now, not this screen's (lib/marketplace/remove-listing).
+    // Under RLS a refused row comes back with no error and zero rows, which is
+    // read as "not saved". Audit C1-S9-85.
+    const outcome = await removeListing({
+      deleteRow: async () => sb.from('marketplace_listings').delete()
+        .eq('id', l.id).eq('family_id', familyId).select('id, photo_url'),
+      withdraw: async () => sb.rpc('marketplace_set_listing_status', { p_listing: l.id, p_status: 'withdrawn' }),
+      removePhoto: async (url) => removeMarketplacePhotoUrl(sb, url),
+    });
+    switch (outcome.kind) {
+      case 'removed': success(t('marketplaceModule.removed')); return;
+      // The listing is gone; its photo is not, and nothing points at it any more.
+      case 'removed_photo_left': toastError(t('marketplaceModule.removedButPhotoLeft')); return;
+      case 'withdrawn': success(t('marketplaceModule.keptAndWithdrawn')); return;
+      case 'already_kept': success(t('marketplaceModule.keptWithItsRecords')); return;
+      case 'not_saved': toastError(t('errors.thatChangeWasNotSaved')); return;
+      case 'error': toastError(describeDbError(outcome.error)); return;
     }
-    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-85.
-    const { data: removed2, error: err } = await sb.from('marketplace_listings').delete()
-      .eq('id', l.id).eq('family_id', familyId).select('id');
-    if (err) { toastError(describeDbError(err)); return; }
-    if (wroteNoRows(removed2)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
-    success(t('marketplaceModule.removed'));
   }
 
   async function withdraw(l: Listing) {

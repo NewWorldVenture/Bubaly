@@ -50,6 +50,7 @@ import { ledgerWriter } from '@/lib/trust/ledger';
 import { executeTool } from '@/lib/ai/tools/execute';
 import { markApprovedSchoolSource } from '@/lib/front-desk/school-approval';
 import { getTool } from '@/lib/ai/tools/registry';
+import { firstPersonEditProof, recordedEditsOf, requesterEditedArgsAreProven, speaksForTheRequester } from '@/lib/ai/tools/first-person';
 import { savePrivatePurchaseAnswer, scopeForApprovedPurchase } from '@/lib/services/purchases/private-result';
 import { getTranslations } from '@/lib/i18n/server';
 import { kickRun } from '@/lib/ai/runs/continue';
@@ -710,9 +711,9 @@ async function dismissConciergeRun(scope: ServiceScope, row: ApprovalRow): Promi
  *     until now NO approved write appeared in the feed at all.
  *
  * Confined to `requested_by_kind === 'ai'` — the same condition that already
- * decides `skipTrust`. A member-filed row keeps the decider's scope, because its
- * gate is re-evaluated under the approver's authority and re-labelling the actor
- * would change that evaluation.
+ * decides `skipTrust`. A member's row is not Bubaly's work: it runs, if the
+ * server filed it, as that member (`memberRequestScope`), and otherwise not at
+ * all.
  */
 export async function scopeForApprovedWork(scope: ServiceScope, row: ApprovalRow): Promise<ServiceScope> {
   if (row.requested_by_kind !== 'ai') return scope;
@@ -775,6 +776,64 @@ async function filedByBubaly(scope: ServiceScope, row: ApprovalRow): Promise<boo
     return false;
   }
   return (data ?? []).length > 0;
+}
+
+/**
+ * A row Bubaly did not file is a MEMBER's request, and it is done — if at all
+ * — as that member, never as the parent who tapped Approve.
+ *
+ * The 0255/0480 insert policy lets any member file their own approval row with
+ * a `payload` of their choosing, and the card a parent sees is built from the
+ * title and consequences the member wrote. Replayed under the approver's scope
+ * (what this used to do), a child picked any registry tool and its arguments
+ * and the write landed as the parent: a routine the cron later fires with
+ * household authority, a family message in the parent's name, an erased fact.
+ *
+ * So the requester is resolved, active, in this family, and the work runs
+ * under THEIR identity and role on the approver's session client:
+ *
+ *   - `filedByServer`: the server's own gate filed this row for that member
+ *     (`evaluateTrust` / the risk tier, under their role) and wrote the
+ *     `require_approval` audit line naming them, which 0260 lets no member
+ *     write. The approval is then the gate, and exactly that payload replays.
+ *   - otherwise the row is only what a member typed, and nothing runs
+ *     (`performApproved`). Gating it again under their role was not enough:
+ *     a member's own `create` reached tools that write through the service
+ *     role (`notifications.notify`), on the approver's session client.
+ *
+ * Null when the requester cannot be confirmed: nothing runs.
+ */
+async function memberRequestScope(
+  scope: ServiceScope,
+  row: ApprovalRow,
+): Promise<{ scope: ServiceScope; filedByServer: boolean } | null> {
+  if (!row.requested_by_member_id) return null;
+  const reader = await ledgerWriter(scope.db);
+  const [{ data: asker, error: askerError }, { data: filed, error: filedError }] = await settleAll([
+    reader.from('family_members')
+      .select('id, user_id, role, is_active, family_id')
+      .eq('id', row.requested_by_member_id)
+      .eq('family_id', scope.familyId)
+      .eq('is_active', true)
+      .maybeSingle(),
+    reader.from('trust_audit_logs')
+      .select('id')
+      .eq('family_id', scope.familyId)
+      .eq('approval_id', row.id)
+      .eq('actor_kind', 'member')
+      .eq('actor_id', row.requested_by_member_id)
+      .eq('decision', 'require_approval')
+      .limit(1),
+  ]);
+  if (askerError || filedError) {
+    console.error('[service:approvals] could not confirm who filed a member approval; nothing will run', { approvalId: row.id, error: askerError ?? filedError });
+    return null;
+  }
+  if (!asker || asker.id !== row.requested_by_member_id || asker.family_id !== scope.familyId || asker.is_active !== true) return null;
+  return {
+    scope: { ...scope, memberId: asker.id, userId: asker.user_id ?? null, role: asker.role, actorKind: 'member' },
+    filedByServer: Array.isArray(filed) && filed.length > 0,
+  };
 }
 
 /**
@@ -863,30 +922,63 @@ async function performApproved(
         return ok({ status: decisionLabel, executed: true, resumedRunId: folded.data.resumedRunId, summary });
       }
 
-      const args = edited ?? classified.args;
+      // Words said in the asker's name run as they were filed unless the
+      // ledger shows the edit is the asker's own (lib/ai/tools/first-person.ts):
+      // `edited_payload` is a column any manager may write on a pending row,
+      // so it cannot vouch for itself.
+      const othersWords = edited !== null && speaksForTheRequester(classified.name)
+        && !requesterEditedArgsAreProven(await recordedEditsOf(await ledgerWriter(scope.db), scope.familyId, row.id) ?? [], {
+          familyId: scope.familyId, approvalId: row.id, requesterMemberId: row.requested_by_member_id, toolName: classified.name,
+        }, edited);
+      const args = othersWords ? classified.args : edited ?? classified.args;
       // `requested_by_kind` is a column any manager can rewrite on a pending
       // row, so it cannot decide whether the trust gate is skipped. An 'ai' row
       // only counts as Bubaly's when the server's own ledger says so; anything
-      // else is executed as a member-filed request would be.
+      // else is a member's row.
       const bubalyFiled = await filedByBubaly(scope, row);
       const provenRow: ApprovalRow = bubalyFiled ? row : { ...row, requested_by_kind: 'member' };
+      // A member's row runs its `{name, args}` only when the server's own gate
+      // filed it for them (`memberRequestScope`). Anything else is a payload a
+      // member typed under a card they wrote, and nothing of it runs: re-gating
+      // it lent the approver's session client and a member's own `create` to a
+      // tool whose limits live in RLS or nowhere — `notifications.notify`
+      // writes through the service role, so a child's "Can I go to Sam's?"
+      // sent the whole family an urgent push. No server code files a member row
+      // with a payload it did not gate, so nothing legitimate is refused.
+      const asker = bubalyFiled ? null : await memberRequestScope(scope, row);
+      if (!bubalyFiled && !asker?.filedByServer) {
+        const refused = (await getTranslations())(asker ? 'approval.memberPayloadNotRun' : 'approval.requesterUnconfirmed');
+        await stampExecution(scope, row.id, `error: ${refused}`);
+        await auditDecision(scope, row, 'approved_execution', `Execution refused: ${refused}`, { tool: classified.name, ok: false });
+        return fail(refused, { code: SERVICE_CODES.denied, retryable: false });
+      }
       const privatePurchase = classified.name === 'finances.advisePurchase';
       const requester = privatePurchase ? await scopeForApprovedPurchase(scope, provenRow) : null;
       if (requester && !requester.ok) {
         await stampExecution(scope, row.id, (await getTranslations())('purchaseAdvice.privateUnavailable'));
         return requester;
       }
-      const actingScope = requester?.ok ? requester.data : await scopeForApprovedWork(scope, provenRow);
+      // The approval IS the gate — the server filed it. A row Bubaly filed
+      // replays as Bubaly for its asker; a row the gate filed for a member
+      // replays as that member (`memberRequestScope`).
+      let actingScope: ServiceScope;
+      let skipTrust: boolean;
+      if (requester?.ok) {
+        actingScope = requester.data;
+        skipTrust = bubalyFiled;
+      } else if (bubalyFiled) {
+        actingScope = await scopeForApprovedWork(scope, provenRow);
+        skipTrust = true;
+      } else {
+        actingScope = asker!.scope;
+        skipTrust = true;
+      }
       const outcome = await executeTool(
         { ...actingScope, requestId: row.request_id ?? scope.requestId ?? null, runId: row.run_id ?? null },
         classified.name,
         args,
         {
-          // The approval IS the gate — when Bubaly filed it. A row a member
-          // filed themselves (requested_by_kind = 'member') is not a decision
-          // Bubaly made, so the tool is evaluated again under the approver's
-          // role rather than executed on the strength of the row's contents.
-          skipTrust: bubalyFiled,
+          skipTrust,
           requestId: row.request_id ?? null,
           runId: row.run_id ?? null,
           // A retried decision (network blip after the flip) must not write twice.
@@ -1127,6 +1219,20 @@ function storedEdit(row: ApprovalRow, classified: ClassifiedPayload): Record<str
 }
 
 /**
+ * Whether the work this row releases speaks in its asker's first person
+ * (lib/ai/tools/first-person.ts): the tool a `tool` row names, or the tool of
+ * a step the server parked on a `plan_steps` row — found by the steps' own
+ * `approval_id`, as `foldIntoRun` finds what a decision releases.
+ */
+async function requesterSpeechTools(scope: ServiceScope, row: ApprovalRow, classified: ClassifiedPayload): Promise<ServiceResult<string[]>> {
+  if (classified.kind === 'tool') return ok(speaksForTheRequester(classified.name) ? [classified.name] : []);
+  if (classified.kind !== 'plan_steps') return ok([]);
+  const waiting = await stepsWaitingOn(ledgerClient(scope), scope.familyId, row.id);
+  if (!waiting.ok) return waiting;
+  return ok(waiting.data.filter((step) => step.step_type !== 'notify' && speaksForTheRequester(step.tool_name)).map((step) => step.tool_name!));
+}
+
+/**
  * Change what an approval would do, then approve the changed version.
  *
  * The edits are merged over the stored arguments so a field the form did not
@@ -1163,7 +1269,19 @@ export async function editAndApprove(
   // re-derived, allow-listed, schema-checked version of that column, so
   // nothing a manager wrote straight to `edited_payload` is trusted here
   // either.
-  const base = storedEdit(row, classified) ?? original;
+  const speechTools = await requesterSpeechTools(scope, row, classified);
+  if (!speechTools.ok) return speechTools;
+  let stored = storedEdit(row, classified);
+  if (stored && speechTools.data.length) {
+    const recorded = await recordedEditsOf(await ledgerWriter(scope.db), scope.familyId, row.id);
+    // An unchanged second vote must not certify words written directly to the
+    // pending column. Rebase on the original if the existing edit is unproven;
+    // the requester can submit their own words, but no other voter can do so.
+    if (!speechTools.data.every((toolName) => requesterEditedArgsAreProven(recorded ?? [], {
+      familyId: scope.familyId, approvalId: row.id, requesterMemberId: row.requested_by_member_id, toolName,
+    }, stored!))) stored = null;
+  }
+  const base = stored ?? original;
   // Only the fields the card offered may change: an edit is a correction of
   // what was shown, never a way to smuggle in new arguments. The allow-list is
   // derived from the ORIGINAL, so an earlier edit can never widen it.
@@ -1188,6 +1306,32 @@ export async function editAndApprove(
     return fail('Keep at least one thing for Bubaly to do, or decline instead.', { code: SERVICE_CODES.invalidInput });
   }
 
+  // Two deltas, because they answer different questions. `changed` is the
+  // cumulative difference from what Bubaly proposed — what the family is
+  // actually agreeing to. `changedByMe` is this approver's own contribution;
+  // without it the activity line credited one parent with the other's wording.
+  const changed = Object.keys(merged).filter((k) => merged[k] !== original[k]);
+  const changedByMe = Object.keys(merged).filter((k) => merged[k] !== base[k]);
+
+  // Words said in someone's name are theirs to change (lib/ai/tools/first-person.ts).
+  // The approved work runs AS the person who asked — a run step on the service
+  // client, a Bubaly-filed row replayed for its asker — so another manager's
+  // rewording of a family message went out with the asker's name on it.
+  // Approving or declining it exactly as written stays open to every approver.
+  if (changedByMe.length > 0 && memberId !== row.requested_by_member_id) {
+    if (speechTools.data.length) return fail((await getTranslations())('approval.notYoursToReword'), { code: SERVICE_CODES.denied });
+  }
+
+  // Only a requester actually changing the safe base can author a new proof.
+  // A voter re-submitting a proven edit unchanged leaves its prior proof intact.
+  const proof = speechTools.data.length && changedByMe.length > 0
+    ? firstPersonEditProof({ familyId: scope.familyId, approvalId: row.id, requesterMemberId: row.requested_by_member_id }, speechTools.data, merged)
+    : null;
+  if (speechTools.data.length && changedByMe.length > 0 && !proof) {
+    return fail('Bubaly could not verify those edited details, so nothing was changed.', { code: SERVICE_CODES.invalidInput });
+  }
+  const editEvidence = proof ? { firstPersonEdit: proof } : {};
+
   const nowIso = scopeNow(scope).toISOString();
   const cleanNote = note?.trim() || null;
   const prior = priorVotes(row);
@@ -1200,12 +1344,6 @@ export async function editAndApprove(
     return fail('This one needs two parents to agree. Ask a parent to approve it.', { code: SERVICE_CODES.denied });
   }
   const votes: Vote[] = [...prior, { member_id: memberId, decision: 'approved', note: cleanNote, at: nowIso, role: scope.role ?? null }];
-  // Two deltas, because they answer different questions. `changed` is the
-  // cumulative difference from what Bubaly proposed — what the family is
-  // actually agreeing to. `changedByMe` is this approver's own contribution;
-  // without it the activity line credited one parent with the other's wording.
-  const changed = Object.keys(merged).filter((k) => merged[k] !== original[k]);
-  const changedByMe = Object.keys(merged).filter((k) => merged[k] !== base[k]);
 
   // An edit is still one vote. A two-parent rule stays a two-parent rule:
   // record the edited payload and this approval, and wait for the rest.
@@ -1224,7 +1362,7 @@ export async function editAndApprove(
       if (attempt < VOTE_RETRIES) return editAndApprove(scope, approvalId, edits, note, attempt + 1);
       return fail('This request was already decided.', { code: SERVICE_CODES.invalidInput });
     }
-    await auditDecision(scope, row, 'modified', cleanNote ?? `Edited ${changedByMe.length ? changedByMe.join(', ') : 'nothing'}; approval ${approvedCount} of ${required} recorded.`, { changed, changedByMe, votes: votes.length, required });
+    await auditDecision(scope, row, 'modified', cleanNote ?? `Edited ${changedByMe.length ? changedByMe.join(', ') : 'nothing'}; approval ${approvedCount} of ${required} recorded.`, { changed, changedByMe, votes: votes.length, required, ...editEvidence });
     const remaining = required - approvedCount;
     return ok({
       status: 'pending', resumedRunId: null,
@@ -1244,7 +1382,7 @@ export async function editAndApprove(
   if (!flipped.ok) return flipped;
   if (!flipped.data) return fail('This request was already decided.', { code: SERVICE_CODES.invalidInput });
 
-  await auditDecision(scope, row, 'modified', cleanNote ?? `Edited ${changedByMe.length ? changedByMe.join(', ') : 'nothing'} and approved.`, { changed, changedByMe });
+  await auditDecision(scope, row, 'modified', cleanNote ?? `Edited ${changedByMe.length ? changedByMe.join(', ') : 'nothing'} and approved.`, { changed, changedByMe, ...editEvidence });
 
   const done = await performApproved(scope, row, classified, merged, 'modified');
   if (!done.ok) return done;

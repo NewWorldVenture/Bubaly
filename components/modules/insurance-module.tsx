@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { isManager } from '@/lib/constants/roles';
+import { readsEveryonesRecords, recordsInScope } from '@/lib/records/personal-scope';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
@@ -61,7 +62,7 @@ export function InsuranceModule() {
   const format = useFormat();
   const fmtDate = (d: string) => policyDate(d, format.fmtDate);
 
-  const { familyId, userId, members, role } = useApp();
+  const { familyId, userId, members, role, selfMember } = useApp();
   // 0416 gives this table the manager-gated writes its twin `insurance_policies`
   // has always had. The controls follow, the way medications-module.tsx does —
   // a button that renders and then fails is worse than one never offered.
@@ -74,15 +75,18 @@ export function InsuranceModule() {
     deps: [familyId],
   });
 
+  // The held 0517: a policy is a parent's, an adult's or its member's to read;
+  // the page asks for exactly that, and the summaries are of what it shows.
+  const visiblePolicies = useMemo(() => recordsInScope(policies.data, role, selfMember?.id), [policies.data, role, selfMember]);
   const [addOpen, setAddOpen] = useState(false);
   const [selected, setSelected] = useState<Policy | null>(null);
 
   // Renewals are date-only: count them from the family's calendar day (TIME-003).
   const clock = useFamilyClock();
   const today = useFamilyCalendarToday();
-  const summary = useMemo(() => insuranceSummary(policies.data, today), [policies.data, today]);
-  const renewals = useMemo(() => upcomingRenewals(policies.data, today).filter((r) => r.urgency !== 'upcoming').slice(0, 6), [policies.data, today]);
-  const byType = useMemo(() => premiumByType(policies.data).slice(0, 5), [policies.data]);
+  const summary = useMemo(() => insuranceSummary(visiblePolicies, today), [visiblePolicies, today]);
+  const renewals = useMemo(() => upcomingRenewals(visiblePolicies, today).filter((r) => r.urgency !== 'upcoming').slice(0, 6), [visiblePolicies, today]);
+  const byType = useMemo(() => premiumByType(visiblePolicies).slice(0, 5), [visiblePolicies]);
 
   async function removePolicy(id: string) {
     if (!confirm(tr('insuranceModule.removeThisPolicy'))) return;
@@ -107,8 +111,9 @@ export function InsuranceModule() {
         description={tr('insuranceModule.everyHouseholdPolicyInOne')}
         action={<div className="flex items-center gap-2"><AiInsight kind="insurance" iconOnly />{canEdit && <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('insurance.addPolicy')}</Button>}</div>}
       />
+      {!readsEveryonesRecords(role) && <p className="text-xs text-muted">{tr('insuranceModule.onlyPoliciesThatNameYou')}</p>}
 
-      {policies.data.length > 0 && (
+      {visiblePolicies.length > 0 && (
         <div className="grid gap-4 lg:grid-cols-3">
           {/* Spend */}
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
@@ -173,11 +178,11 @@ export function InsuranceModule() {
         </div>
       )}
 
-      {policies.data.length === 0 ? (
+      {visiblePolicies.length === 0 ? (
         <EmptyState icon={ShieldCheck} title={tr('insurance.noPoliciesYet')} description={tr('insuranceModule.addYourHealthAutoHome')} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {policies.data.map((p) => {
+          {visiblePolicies.map((p) => {
             const meta = policyTypeMeta(p.policy_type);
             const u = renewalUrgency(p.renewal_date, today);
             const covers = memberName(p.member_id);

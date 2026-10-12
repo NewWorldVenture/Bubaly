@@ -83,7 +83,7 @@ export function SubscribeForm({ source, variant = 'card', className }: Props) {
       placeholder={t('subscribe.enterYourEmail')}
       aria-label={t('subscribe.emailAddress')}
       className={cn(
-        'rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm outline-none placeholder:text-white/35 focus:border-violet-400/50 sm:text-base',
+        'rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm outline-none placeholder:text-white/35 focus:border-brand sm:text-base',
         variant === 'card' ? 'w-full py-2.5' : 'min-w-0 flex-1 py-3',
       )}
     />

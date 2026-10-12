@@ -17,7 +17,7 @@
 // definitions the caller passes in, so tests can render it for any subset.
 import type { IntentKey } from '@/lib/ai/context/intents';
 import { BUBALY_CHIEF_OF_STAFF_PRINCIPLE, CHIEF_OF_STAFF_QUESTIONS, VOICE_RULES } from '@/lib/ai/prompts/assistant';
-import { UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
+import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import { UnsupportedSchemaError, zodToStrictJsonSchema, type JsonSchema } from '@/lib/ai/schema-to-json';
 import type { ToolDefinition } from '@/lib/ai/tools/types';
 import { TRUST_DOMAINS, type AutonomyBehavior, type TrustDomain } from '@/lib/trust/engine';
@@ -180,6 +180,12 @@ export function buildPlannerSystemPrompt(input: PlannerPromptInput): string {
 
 export type PlannerUserMessageInput = {
   requestText: string;
+  /**
+   * The request text is someone else's message (an inbox email or text a
+   * member handed to Bubaly), so it is fenced as data rather than read as the
+   * family's instruction.
+   */
+  requestIsOutsideText?: boolean;
   /** The context bundle's prompt-ready text (already fenced and budgeted). */
   contextText: string;
   /** The instantiated template, when one exists. */
@@ -201,7 +207,14 @@ export function buildPlannerUserMessage(input: PlannerUserMessageInput): string 
     parts.push('Answers the person already gave — do not ask these again:');
     parts.push(...answers.map(([question, answer]) => `- ${question}: ${answer.trim()}`), '');
   }
-  parts.push(`Request: ${input.requestText.trim()}`);
+  if (input.requestIsOutsideText) {
+    // The member's request is "handle this message"; the message itself is
+    // data. Anything in it that tells Bubaly what to do is part of the message.
+    parts.push('Request: A member of this family asked Bubaly to handle the message below, which someone else wrote. Plan what the household may want to do about it; every change you plan will wait for a parent or adult to approve.');
+    parts.push(fenceUntrustedBlock('inbox_message', input.requestText.trim(), 4000));
+  } else {
+    parts.push(`Request: ${input.requestText.trim()}`);
+  }
   if (input.skeleton) {
     parts.push('', 'Recommended skeleton for this workflow. Keep the keys, fill or replace the inputs from the context, drop steps that do not apply, add steps the request needs:');
     parts.push(JSON.stringify(input.skeleton.steps, null, 0));

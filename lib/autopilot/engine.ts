@@ -50,6 +50,14 @@ export type SuggestionDraft = {
    * Not stored: the card itself still names what it is about.
    */
   notificationTitle?: string;
+  /**
+   * Who the push/email goes to when it is not the whole family.
+   * `medication-readers`: a parent or adult, a caregiver, and the member the
+   * medication is for if it names one (the held 0511's readers), so
+   * `notificationTitle` may name the drug while the card the whole household
+   * reads does not.
+   */
+  audience?: 'medication-readers';
 };
 
 // ---- normalized inputs the route maps real Supabase rows into ----
@@ -516,6 +524,12 @@ export function burnoutSuggestions(s: FamilySnapshot, threshold = 5): Suggestion
  * reminder lead time. Health-critical, so high confidence — creating a refill
  * reminder is safe + reversible, which makes it eligible for auto-execution
  * once it crosses the ≥90 threshold (due within ~2 days).
+ *
+ * A medication is read by a parent or adult, a caregiver and the member it is
+ * for (the held 0511, the owner's decision; one saved with no member, by the
+ * first two). The card and the reminder it creates are read by the whole
+ * household, so they say "a prescription", and only the notification, sent to
+ * those readers, names the drug.
  */
 export function medicationSuggestions(s: FamilySnapshot): SuggestionDraft[] {
   return s.medications
@@ -524,22 +538,23 @@ export function medicationSuggestions(s: FamilySnapshot): SuggestionDraft[] {
     .map(({ m, d }) => {
       const overdue = d < 0;
       const confidence = d <= 2 ? 92 : 80; // due within 2 days → auto-tier (reversible reminder)
+      const days = `${d} day${d === 1 ? '' : 's'}`;
       return {
         kind: 'medication',
-        title: overdue
-          ? `Refill overdue: ${m.name}`
-          : d === 0 ? `Refill ${m.name} today` : `Refill ${m.name} in ${d} day${d === 1 ? '' : 's'}`,
-        detail: 'Reorder or pick up before the prescription runs out.',
+        title: overdue ? 'Prescription refill overdue' : d === 0 ? 'Prescription refill due today' : `Prescription refill due in ${days}`,
+        detail: 'Open Medications to see which one. Reorder or pick up before it runs out.',
         confidence,
         urgency: clampUrgency(d <= 1 ? 3 : 2),
         actionType: 'create_reminder',
         actionLabel: 'Remind me to refill',
-        payload: { title: `Refill ${m.name}`, at: localMorningIso(s, isoDay(m.refillOn)) },
+        payload: { title: 'Refill a prescription', at: localMorningIso(s, isoDay(m.refillOn)) },
         sourceKind: 'medications',
         sourceId: m.id,
         memberId: m.memberId,
         dedupeKey: `med-refill:${m.id}:${isoDay(m.refillOn)}`,
         expiresAt: `${addDaysIso(m.refillOn, 7)}T23:59:59Z`,
+        notificationTitle: overdue ? `Refill overdue: ${m.name}` : d === 0 ? `Refill ${m.name} today` : `Refill ${m.name} in ${days}`,
+        audience: 'medication-readers' as const,
       };
     });
 }

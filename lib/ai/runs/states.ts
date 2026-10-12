@@ -55,6 +55,14 @@ export const TERMINAL_STEP_STATES: readonly StepState[] = ['completed', 'skipped
  */
 export const SATISFYING_STEP_STATES: readonly StepState[] = ['completed', 'skipped', 'partially_completed'] as const;
 
+/**
+ * Step states a manager may still change before they run (or run again). The
+ * run page offers Edit in these (lib/ai/runs/detail.ts) and `editStepInput`
+ * refuses any other, so a step that already did its work is never re-done by
+ * an edit.
+ */
+export const EDITABLE_STEP_STATES: readonly StepState[] = ['queued', 'ready', 'awaiting_approval', 'failed', 'blocked', 'cancelled'];
+
 /** A dependency in one of these can never be satisfied, so its dependents are blocked, not queued. */
 export const UNSATISFIABLE_STEP_STATES: readonly StepState[] = ['failed', 'cancelled', 'blocked'] as const;
 

@@ -425,7 +425,7 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
     if (entry === 'node_modules' || entry === '.next' || entry.startsWith('.')) continue;
     const p = join(dir, entry);
     if (statSync(p).isDirectory()) sourceFiles(p, out);
-    else if (['.ts', '.tsx'].includes(extname(p))) out.push(p);
+    else if (['.ts', '.tsx'].includes(extname(p))) out.push(p.replaceAll('\\', '/'));
   }
   return out;
 }

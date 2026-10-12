@@ -298,7 +298,19 @@ function policyApplies(p: Policy, actor: Actor, domain: string, capability: Capa
   if (p.capability !== 'all' && p.capability !== capability) return false;
   switch (p.subjectKind) {
     case 'everyone': return true;
-    case 'ai': return actor.kind === 'ai_agent';
+    case 'ai':
+      if (actor.kind !== 'ai_agent') return false;
+      // A policy addressed to Bubaly — a learned Autopilot allow, the Autopilot
+      // dial, "Bubaly may act on the calendar" — speaks for the household's
+      // managers, and an agent's `role` is the role of the person it acts FOR.
+      // An allow must never hand an assistant more than that person may have
+      // done unasked, so it reaches only roles whose AI work is automation-
+      // trusted (parent, adult). For a guest, child, caregiver or teen the
+      // policy is not about them: the role matrix and the risk tier decide, as
+      // they would with no policy at all. A deny or require_approval still
+      // binds every role — those only ever tighten.
+      if ((p.effect === 'allow' || p.effect === 'auto_approve') && !ROLE_DEFAULTS[actor.role]?.automationTrusted) return false;
+      return true;
     case 'role': return p.subjectRole === actor.role;
     case 'member': return p.subjectMemberId === actor.id && actor.kind === 'member';
     default: return false;

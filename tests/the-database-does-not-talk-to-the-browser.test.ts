@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -26,7 +26,7 @@ const ROOT = process.cwd();
 /** Files this rule governs: everything under app/ and lib/ that is not a
  *  client component, and not the normaliser itself. */
 function serverModules(): string[] {
-  const all = execSync("git ls-files 'app/*.ts' 'app/*.tsx' 'lib/*.ts' 'lib/*.tsx'", { encoding: 'utf8' })
+  const all = execFileSync('git', ['ls-files', '--', 'app/*.ts', 'app/*.tsx', 'lib/*.ts', 'lib/*.tsx'], { encoding: 'utf8' })
     .split('\n').filter(Boolean);
   expect(all.length, 'the file list has gone stale').toBeGreaterThan(200);
   return all.filter((f) => {

@@ -26,6 +26,7 @@ import { updateMyLocation, setLocationSharing, savePlace, deletePlace, setGeofen
 import type { Tables } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useFormat } from '@/components/i18n/use-format';
+import { historyInScope, readsEveryonesHistory } from '@/lib/location/history-scope';
 
 type MemberLocation = Tables<'member_locations'>;
 type Place = Tables<'family_places'>;
@@ -144,13 +145,17 @@ export function LocatorModule() {
     return new Map(projectPoints(pts).map((p) => [p.id, p]));
   }, [places, liveMembers, locByMember]);
 
-  const alerts = useMemo(() => arrivalAlerts(events ?? [], 6), [events]);
+  // The held 0516: a parent, an adult or a caregiver reads everyone's history;
+  // anyone else their own. Live location keeps its own sharing rule.
+  const seesEveryonesHistory = readsEveryonesHistory(role);
+  const visibleEvents = useMemo(() => historyInScope(events ?? [], role, selfMember?.id), [events, role, selfMember]);
+  const alerts = useMemo(() => arrivalAlerts(visibleEvents, 6), [visibleEvents]);
   // The day headings follow the reader: two words from the catalogue, the date
   // from the locale.
   const history = useMemo(() => groupHistoryByDay(
-    (events ?? []).map((e) => ({ id: e.id, member_id: e.member_id, place_name: e.place_name, event_type: e.event_type, occurred_at: e.occurred_at })),
+    visibleEvents.map((e) => ({ id: e.id, member_id: e.member_id, place_name: e.place_name, event_type: e.event_type, occurred_at: e.occurred_at })),
     now, locale.code, tr,
-  ), [events, now, locale.code, tr]);
+  ), [visibleEvents, now, locale.code, tr]);
 
   useEffect(() => {
     if (selfMember) setSharing(locByMember.get(selfMember.id)?.is_sharing ?? false);
@@ -483,6 +488,7 @@ export function LocatorModule() {
           <div className="mb-3 flex items-center justify-between">
             <p className="flex items-center gap-1.5 text-sm font-semibold"><Bell className="h-4 w-4 text-brand-text" /> {tr('locator.locationHistory')}</p>
           </div>
+          {!seesEveryonesHistory && <p className="mb-2 text-xs text-muted">{tr('locator.onlyYourOwnHistory')}</p>}
           {history.length === 0 ? (
             <p className="text-xs text-muted">{tr('locator.noHistoryYet')}</p>
           ) : (
