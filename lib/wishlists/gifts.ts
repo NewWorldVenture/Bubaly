@@ -37,10 +37,17 @@ export function canToggleClaim(item: WishLike, viewerMemberId: string | null): b
 
 const PRIORITY_RANK: Record<WishPriority, number> = { high: 0, medium: 1, low: 2 };
 
-/** Sorts by priority (high→low), unpurchased before purchased, then title. */
-export function sortWishes<T extends WishLike>(items: T[]): T[] {
+/**
+ * Sorts by priority (high→low), unpurchased before purchased, then title.
+ *
+ * With a `viewerMemberId`, purchase state orders only the wishes that viewer
+ * may see it on (`canSeeClaim`). The owner's own list sorted bought wishes to
+ * the bottom, so the order alone told them which presents were already bought.
+ */
+export function sortWishes<T extends WishLike>(items: T[], opts: { viewerMemberId?: string | null } = {}): T[] {
+  const bought = (w: T) => w.is_purchased && (!('viewerMemberId' in opts) || canSeeClaim(w, opts.viewerMemberId ?? null));
   return [...items].sort((a, b) => {
-    if (a.is_purchased !== b.is_purchased) return a.is_purchased ? 1 : -1;
+    if (bought(a) !== bought(b)) return bought(a) ? 1 : -1;
     if (PRIORITY_RANK[a.priority] !== PRIORITY_RANK[b.priority]) return PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
     return a.title.localeCompare(b.title);
   });

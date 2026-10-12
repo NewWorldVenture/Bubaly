@@ -4,12 +4,16 @@ import { createServer } from '@/lib/supabase/server';
 import { readAll } from '@/lib/supabase/read-all';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
+import { dayKeyIn } from '@/lib/time/zoned';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
+import { fenceUntrusted, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
+import { doneDates } from '@/lib/habits/presets';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { buildCoachPrompt, parseCoachResponse, type HabitStat } from '@/lib/habits/ai';
 import {
-  currentStreak, longestStreak, completionRate, isDoneToday, toISODate, type HabitLike,
+  currentStreak, longestStreak, completionRate, isDoneToday, addDays, type HabitLike,
 } from '@/lib/habits/streaks';
 
 // AI Life Coach for the Habit Tracker: reads the family's active habits + the
@@ -24,13 +28,20 @@ export async function POST() {
     // No key: say so before any work, rather than let the provider's throw
     // reach the catch below as a generic failure.
     if (!(await isAIConfigured())) return NextResponse.json({ error: t('ai.theAiEngineIsnT'), code: 'not_configured' }, { status: 503 });
+    // The page in front of this is feature-gated; this endpoint was not, and it
+    // calls a model. Same resolver, so the two cannot disagree.
+    const refused = await refuseUnlessEntitled(supabase, familyId, ['/dashboard/habits']);
+    if (refused) return refused;
     const limited = await enforceAIRateLimit(supabase, `ai-habits:${ctx.user.id}`, { limit: 15 });
     if (!limited.ok) return NextResponse.json(
       { error: t('habits.tooManyHabitCoachRequests') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
-    const today = toISODate(new Date());
-    const since = toISODate(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000));
+    // The FAMILY's day, the one the module writes `habit_logs.log_date` in.
+    // Greenwich's day told a Los Angeles evening that today's check-ins had not
+    // happened, and a Tokyo morning that yesterday's were today's.
+    const today = dayKeyIn(new Date(), ctx.active.family?.timezone || 'UTC');
+    const since = addDays(today, -90);
 
     // `.limit(5000)` used to stand here and was never 5,000: PostgREST caps a
     // response at db-max-rows whatever the client asks for, so a household with
@@ -46,9 +57,9 @@ export async function POST() {
         .eq('family_id', familyId)
         .eq('is_active', true)
         .limit(50),
-      readAll<{ habit_id: string; log_date: string }>((from, to) => supabase
+      readAll<{ habit_id: string; log_date: string; count: number }>((from, to) => supabase
         .from('habit_logs')
-        .select('habit_id, log_date')
+        .select('habit_id, log_date, count')
         .eq('family_id', familyId)
         .gte('log_date', since)
         .order('id')
@@ -81,18 +92,19 @@ export async function POST() {
       return NextResponse.json({ error: t('habits.addAHabitFirstThen') }, { status: 400 });
     }
 
+    // A day counts once the habit's daily target is met, as the module counts
+    // it (doneDates): a half-finished "8 cups of water" day is not done, and
+    // the coach and the screen must agree on the streak.
     const logsByHabit = new Map<string, string[]>();
-    for (const l of logs ?? []) {
-      const arr = logsByHabit.get(l.habit_id) ?? [];
-      arr.push(l.log_date);
-      logsByHabit.set(l.habit_id, arr);
-    }
+    for (const h of habits) logsByHabit.set(h.id, doneDates(logs ?? [], h.id, h.cadence === 'daily' ? h.target_per_period : 1));
 
     const stats: HabitStat[] = habits.map((h) => {
       const habit: HabitLike = { cadence: h.cadence, target_per_period: h.target_per_period, weekdays: h.weekdays };
       const dates = logsByHabit.get(h.id) ?? [];
       return {
-        title: h.title,
+        // Every member writes habit titles, and one member's title reaches the
+        // coaching another reads: household text, fenced (and capped) as data.
+        title: fenceUntrusted('habit', h.title),
         cadence: h.cadence,
         currentStreak: currentStreak(habit, dates, today),
         longestStreak: longestStreak(habit, dates),
@@ -109,7 +121,7 @@ export async function POST() {
       async (obs) => {
         const provider = await resolveProvider();
         const done = await provider.complete({
-          system,
+          system: `${system}\n\n${UNTRUSTED_CONTENT_RULE}`,
           messages: [{ role: 'user', content: user }],
           tools: [],
           maxTokens: 600,

@@ -6,6 +6,7 @@ import { scopeNow } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
 import { AUTOPILOT_SOURCE_TAG } from '@/lib/reminders/provenance';
 import { reminderIsoFor } from '@/lib/autopilot/reminder-time';
+import { reminderMemberFor, suggestionVisibleTo } from '@/lib/autopilot/audience';
 
 type Suggestion = Tables<'autopilot_suggestions'>;
 export type ResolutionResult =
@@ -46,6 +47,9 @@ export async function resolveSuggestion(scope: ServiceScope, input: ResolveSugge
     if (read.error) return { ok: false, code: 'unavailable' };
     const source = read.data;
     if (!source || source.id !== input.suggestionId || source.family_id !== scope.familyId) return { ok: false, code: 'notFound' };
+    // A card the reader is not shown (lib/autopilot/audience.ts) is not theirs
+    // to accept or dismiss either; answered as absent, like another family's.
+    if (!suggestionVisibleTo(source, { role: scope.role, memberId: scope.memberId })) return { ok: false, code: 'notFound' };
 
     if (input.action === 'reminder') {
       if (source.kind === 'policy' || source.action_type !== 'create_reminder') return { ok: false, code: 'unsupported' };
@@ -87,18 +91,23 @@ export async function resolveSuggestion(scope: ServiceScope, input: ResolveSugge
         // remind anyone of, and the card has changed under the reader.
         const at = reminderIsoFor(source.source_kind, rawAt, scopeNow(scope), scope.tz || 'UTC', source.expires_at);
         if (!at) return { ok: false, code: 'changed' };
+        // Who the reminder is FOR: the card's member, except on an insurance
+        // card, whose member is whose policy it is and not who renews it — the
+        // notice goes to the card's readers instead (lib/autopilot/audience.ts
+        // reminderMemberFor; lib/server/notifications.ts).
+        const reminderMember = reminderMemberFor(source);
         // A member_id is a family_members FK, not an auth user ID. Check the
         // source recipient belongs here instead of trusting the stored payload.
-        if (source.member_id) {
+        if (reminderMember) {
           const member = await scope.db.from('family_members').select('id, family_id, is_active')
-            .eq('id', source.member_id).eq('family_id', scope.familyId).eq('is_active', true).maybeSingle();
+            .eq('id', reminderMember).eq('family_id', scope.familyId).eq('is_active', true).maybeSingle();
           if (member.error) return { ok: false, code: 'unavailable' };
-          if (!member.data || member.data.id !== source.member_id || member.data.family_id !== scope.familyId || !member.data.is_active) {
+          if (!member.data || member.data.id !== reminderMember || member.data.family_id !== scope.familyId || !member.data.is_active) {
             return { ok: false, code: 'invalid' };
           }
         }
         const created = await createReminder({ ...scope, idempotencyKey: key }, {
-          title, remindAt: at, notes: source.detail, memberId: source.member_id,
+          title, remindAt: at, notes: source.detail, memberId: reminderMember,
           kind: 'time', priority: source.urgency >= 3 ? 'high' : 'medium', aiSuggested: true,
           tags: [sourceTag(source)],
         });

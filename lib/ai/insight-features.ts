@@ -27,6 +27,7 @@ export const INSIGHT_FEATURE_HREFS: Partial<Record<InsightKind, readonly string[
   binder: ['/dashboard/binder'],
   care: ['/dashboard/care'],
   career: ['/dashboard/career'],
+  celebrations: ['/dashboard/celebrations'],
   closet: ['/dashboard/closet'],
   declutter: ['/dashboard/declutter'],
   expenses: ['/dashboard/expenses'],
@@ -44,6 +45,7 @@ export const INSIGHT_FEATURE_HREFS: Partial<Record<InsightKind, readonly string[
   pantry: ['/dashboard/pantry'],
   pets: ['/dashboard/pets'],
   projects: ['/dashboard/projects'],
+  purchase_advisor: ['/dashboard/wishlists'],
   recipes: ['/dashboard/recipes'],
   renewals: ['/dashboard/renewals'],
   rewards: ['/dashboard/rewards'],
@@ -61,4 +63,5 @@ export const INSIGHT_FEATURE_HREFS: Partial<Record<InsightKind, readonly string[
   utilities: ['/dashboard/utilities'],
   votes: ['/dashboard/voting'],
   watchlist: ['/dashboard/watchlist'],
+  wishlists: ['/dashboard/wishlists'],
 };

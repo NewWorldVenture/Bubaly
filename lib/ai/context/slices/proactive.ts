@@ -20,6 +20,7 @@ import { loadReasoningReport } from '@/lib/reasoning/engine-server';
 import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { settle } from '@/lib/supabase/settle';
+import { suggestionVisibleTo } from '@/lib/autopilot/audience';
 import { dayKeyInZone, zonedTimeMs } from '@/lib/schedule/zoned';
 import type { SliceDefinition } from '../policy';
 
@@ -145,7 +146,7 @@ export const proactiveSlice: SliceDefinition = {
       loadSignals(scope.familyId, env.tz, env.now),
       loadReasoningReport(scope.db, scope.familyId, env.tz, MODEL_LOCALE, modelText, env.now),
       settle(scope.db.from('family_signals').select('kind, title, detail, score, evidence').eq('family_id', scope.familyId).eq('status', 'active').order('score', { ascending: false }).limit(MAX_SIGNALS)),
-      settle(scope.db.from('autopilot_suggestions').select('id, title, detail, urgency, action_label').eq('family_id', scope.familyId).eq('status', 'open').order('urgency', { ascending: false }).limit(MAX_SUGGESTIONS)),
+      settle(scope.db.from('autopilot_suggestions').select('id, title, detail, urgency, action_label, kind, source_kind, member_id').eq('family_id', scope.familyId).eq('status', 'open').order('urgency', { ascending: false }).limit(MAX_SUGGESTIONS)),
       settle(scope.db.from('family_ai_recommendations').select('id, title, body, priority, category').eq('family_id', scope.familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(MAX_SUGGESTIONS)),
       // The four life-event reads take settle() like the three above them: this
       // slice loads inside a context build, and a rejected read here would throw
@@ -208,7 +209,12 @@ export const proactiveSlice: SliceDefinition = {
       },
       signals: (liveSignals.data ?? []).map((s) => ({ kind: s.kind, ...signalWordsFor(s, MODEL_LOCALE, modelText), score: s.score }))
         .filter((s) => keep(s.kind, s.title, s.detail)),
-      autopilot: (autopilot.data ?? []).filter((s) => keep(s.title, s.detail, s.action_label)).map((s) => ({ id: s.id, title: s.title, detail: s.detail, urgency: s.urgency, actionLabel: s.action_label })),
+      // The card's own audience first (lib/autopilot/audience.ts): an unused-
+      // subscription flag carries no word the filter below knows, and it is not
+      // a guest's to read whatever its wording.
+      autopilot: (autopilot.data ?? [])
+        .filter((s) => canManage || suggestionVisibleTo(s, { role: env.viewer.role, memberId: env.viewer.memberId }))
+        .filter((s) => keep(s.title, s.detail, s.action_label)).map((s) => ({ id: s.id, title: s.title, detail: s.detail, urgency: s.urgency, actionLabel: s.action_label })),
       recommendations: (recommendations.data ?? []).filter((r) => keep(r.category, r.title, r.body)).map((r) => ({ id: r.id, title: r.title, body: r.body, priority: r.priority, category: r.category })),
       lifeEvents,
       withheld,

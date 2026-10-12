@@ -47,6 +47,7 @@ import { archiveStaleSuggestions } from '@/lib/autopilot/history';
 import { draftHasLapsed, reminderIsoFor } from '@/lib/autopilot/reminder-time';
 import { notify, type NotifyRecipients } from '@/lib/services/notifications';
 import { activeRoster, medicationReaderIds, type RosterMember } from '@/lib/autopilot/medication-readers';
+import { audienceMemberIds, reminderMemberFor, suggestionAudience } from '@/lib/autopilot/audience';
 import { sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
 import { addDaysToDayKey, dayKeyInTz, systemScopeForFamily, zonedTimeMs } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
@@ -188,7 +189,7 @@ export async function runAutopilotScan(
     supabase.from('family_digital_twin_profiles').select('id, member_id, metadata').eq('family_id', familyId).limit(50),
     // Meal Agent / Family Memory: 90d of dinner history + the next few days' plans.
     supabase.from('meal_plans').select('plan_date, meal_type, meals(name)').eq('family_id', familyId).eq('meal_type', 'dinner').gte('plan_date', since90Key).limit(500),
-    supabase.from('family_insurance_policies').select('id, policy_type, insurer, renewal_date').eq('family_id', familyId).eq('is_active', true).not('renewal_date', 'is', null).lte('renewal_date', in30Key).limit(100),
+    supabase.from('family_insurance_policies').select('id, policy_type, insurer, renewal_date, member_id').eq('family_id', familyId).eq('is_active', true).not('renewal_date', 'is', null).lte('renewal_date', in30Key).limit(100),
     // Family Memory: wish-list items → gift ideas for upcoming birthdays.
     // ALL of them, bought or not. The suggestion is about the member whose
     // birthday it is, it is notified to the whole family (that member too)
@@ -283,7 +284,7 @@ export async function runAutopilotScan(
     medications: (meds ?? []).map((x) => ({ id: x.id, name: x.name, memberId: x.member_id, refillOn: x.refill_on as string, reminderDays: x.refill_reminder_days })),
     favoriteMeals,
     plannedDinnerDays,
-    insurance: (insurance ?? []).map((p) => ({ id: p.id, label: `${p.policy_type} insurance (${p.insurer})`, renewalOn: p.renewal_date as string })),
+    insurance: (insurance ?? []).map((p) => ({ id: p.id, label: `${p.policy_type} insurance (${p.insurer})`, renewalOn: p.renewal_date as string, memberId: p.member_id ?? null })),
   };
 
   // Digital Twin: learn per-member reliability from chore history, persist it to
@@ -373,11 +374,15 @@ export async function runAutopilotScan(
       if (!at) continue;
       const relatedType = d.sourceKind === 'appointments' ? 'appointment'
         : d.sourceKind === 'calendar_events' ? 'event' : 'renewal';
+      // The member the reminder is FOR, which is not always the card's member:
+      // an insurance card names whose policy it is, not who renews it, and its
+      // reminder is told to the card's readers by the notifications generator
+      // (lib/autopilot/audience.ts reminderMemberFor).
       const { data: reminder, error: remErr } = await supabase.from('reminders').insert({
         family_id: familyId,
         title: (d.payload.title as string) ?? d.title,
         remind_at: at,
-        member_id: d.memberId,
+        member_id: reminderMemberFor({ kind: d.kind, source_kind: d.sourceKind, member_id: d.memberId }),
         related_type: relatedType,
         related_id: d.sourceId,
         created_by: userId,
@@ -478,6 +483,15 @@ export async function runAutopilotScan(
         if (d.audience === 'medication-readers') {
           const members = await (roster ?? (roster = activeRoster(supabase, familyId)));
           privateTo = members ? medicationReaderIds(members, d.memberId) : 'managers';
+        }
+        // A subscription charge or a renewal is not a guest's (0481 refuses a
+        // guest both tables), and an insurance renewal is the managers' and the
+        // member the policy names (lib/autopilot/audience.ts). 'family' sent
+        // both to every member with a login, guests included.
+        const audience = suggestionAudience({ kind: d.kind, source_kind: d.sourceKind, member_id: d.memberId });
+        if (!privateTo && audience !== 'everyone') {
+          const members = await (roster ?? (roster = activeRoster(supabase, familyId)));
+          privateTo = members ? audienceMemberIds(audience, members, d.memberId) : 'managers';
         }
         const sent = await notify(scope, {
           recipients: privateTo ?? 'family',

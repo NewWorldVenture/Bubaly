@@ -30,6 +30,8 @@ export const GUEST_WITHHELD_PREFIXES = [
   '/dashboard/payments',
   '/dashboard/savings',
   '/dashboard/subscriptions',
+  // utility_bills is on the held 0509's money list (provider, month, amount).
+  '/dashboard/utilities',
   '/wallet',
   // medical and insurance
   '/dashboard/medical',
