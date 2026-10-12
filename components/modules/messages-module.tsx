@@ -38,7 +38,11 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { clearConfirmedDraft, createThreadOwner, mergeThreadRows, reconcileLatestThreadRows, messageReadByOthers, shouldSendOnEnter, type ThreadDraft } from '@/lib/messages/thread-state';
 import { fellBackForMissing, MESSAGING_SCHEMA } from '@/lib/messages/schema-compat';
 import { readDeviceMutes, writeDeviceMutes } from '@/lib/messages/legacy-schema';
-import { readConversationInbox, readConversationOverview, readMessageWindow } from '@/lib/messages/reads';
+import { readMessageWindow } from '@/lib/messages/reads';
+import {
+  createFamilyConversation, ensureFamilyChat, familyChatOf, loadConversationSummaries, loadInbox,
+  markConversationReadThrough, presenceChannelConfig, presenceSchemaOf, receiptLanded, toggleMessageReaction, type PresenceSchema,
+} from '@/lib/messages/workspace-paths';
 
 type Conversation = Tables<'family_conversations'>;
 type Message = Tables<'family_messages'>;
@@ -72,15 +76,11 @@ type ConvInsert = {
 
 /**
  * Validate membership and deduplicate direct chats in one database transaction.
- * Before 0475 there is no such RPC: insert directly, as main did.
+ * Required privacy schema must be available; a missing RPC returns an error
+ * rather than reusing old audiences or inserting directly.
  */
 async function createConversation(payload: ConvInsert) {
-  const supabase = createClient();
-  const res = await supabase.rpc('create_family_conversation', {
-    p_family_id: payload.family_id, p_participant_ids: payload.participant_ids,
-    p_name: payload.name, p_kind: payload.kind, p_avatar_emoji: payload.avatar_emoji ?? undefined,
-  });
-  return res;
+  return createFamilyConversation(createClient(), payload);
 }
 
 export function MessagesModule() {
@@ -197,9 +197,14 @@ function MessagesWorkspace() {
   const [onlineIds, setOnlineIds] = useState<Set<string>>(new Set());
   const [mutedIds, setMutedIds] = useState(new Set<string>());
   const [muteLoading, setMuteLoading] = useState(false);
-  // Set when this database turns out not to have 0475 / 0476 yet: the paths
-  // that need them fall back to main's behaviour or hide (schema-compat.ts).
+  // Set when required messaging schema is unavailable; protected paths
+  // return an error and clear any stale conversation data.
   const [legacy0475, setLegacy0475] = useState(false);
+  // Presence requires a verified current inbox and always uses a private topic.
+  const [presenceSchema, setPresenceSchema] = useState<PresenceSchema>('unknown');
+  // Realtime waits for the first Family Chat ensure, which settles the schema:
+  // a private topic is joined only once 0475 is known to authorize it.
+  const [schemaSettled, setSchemaSettled] = useState(false);
   const [legacy0476, setLegacy0476] = useState(false);
   const legacy0476Ref = useRef(false);
   legacy0476Ref.current = legacy0476;
@@ -243,25 +248,31 @@ function MessagesWorkspace() {
   const loadConversations = useCallback(async () => {
     const request = ++listRequest.current;
     const supabase = createClient();
-    const { data, error } = await readConversationInbox(supabase, familyId);
+    const { rows, legacy, error } = await loadInbox(supabase, { familyId, userId, selfMemberId: selfMember?.id });
     if (!alive.current || request !== listRequest.current) return;
-    if (error) {
+    if (error || !rows) {
       // Fail visibly instead of showing an empty inbox on a failed load — an empty
       // list here would make the user think they have no conversations.
+      if (error?.code === 'messaging_schema_unavailable') {
+        // Privacy schema is unavailable: retain no selected history or public
+        // presence while it cannot validate the recorded audience.
+        setPresenceSchema('unknown');
+        setLegacy0475(true);
+        owner.current.select(null);
+        setActiveConv(null);
+        setConversations([]);
+        setMessages([]);
+        setText(''); setReplyTo(null); setEditMessage(null);
+      }
       setInboxError(describeDbError(error));
       toastError(describeDbError(error));
       setLoadingConvs(false);
       return;
     }
     setInboxError(null);
-    // Without the participant schema, do not render a family-wide legacy inbox.
-    if (data?.some((row) => !('is_family_chat' in row))) {
-      setLegacy0475(true); setConversations([]); setActiveConv(null); setLoadingConvs(false);
-      toastError(tr('messagesModule.couldNotCreateConversation')); return;
-    }
-    const rows = (data ?? []).filter((row) => row.is_family_chat
-      || row.participant_ids?.includes(selfMember?.id ?? '') || row.member_ids?.includes(userId)
-      || (!row.participant_ids?.length && !row.member_ids?.length && row.created_by === userId));
+    // Only a verified canonical marker admits the recorded audience.
+    setLegacy0475(legacy);
+    setPresenceSchema(presenceSchemaOf({ legacy }));
     setConversations(rows);
     setLoadingConvs(false);
     const selected = owner.current.capture().conversationId;
@@ -271,12 +282,12 @@ function MessagesWorkspace() {
       if (!current) { owner.current.select(null); setMessages([]); setText(''); setReplyTo(null); setEditMessage(null); }
     } else if (rows.length > 0) {
       const requested = rows.find((conv) => conv.id === new URLSearchParams(window.location.search).get('conversation'));
-      const familyChat = rows.find((conv) => conv.is_family_chat && !conv.is_archived);
+      const familyChat = familyChatOf(rows, legacy);
       const group = requested ?? familyChat ?? rows.find((conv) => !conv.is_archived);
       if (requested) { setMobileShowThread(true); setShowArchived(requested.is_archived); }
       if (group) { owner.current.select(group.id); setActiveConv(group); setShowArchived(Boolean(group.is_archived)); }
     }
-  }, [familyId, userId, selfMember?.id, toastError, tr]);
+  }, [familyId, userId, selfMember?.id, toastError]);
 
   useEffect(() => { void loadConversations(); }, [loadConversations]);
 
@@ -285,10 +296,12 @@ function MessagesWorkspace() {
     let active = true;
     (async () => {
       const supabase = createClient();
-      let { error } = await settle(supabase.rpc('ensure_family_conversation', { p_family_id: familyId }));
+      const { error, legacy } = await ensureFamilyChat(supabase, {
+        familyId, userId, name: tr('messagesModule.familyChat'), members: membersRef.current,
+      });
       if (!alive.current || !active) return;
-      if (fellBackForMissing(error, MESSAGING_SCHEMA.ensureFamilyConversation,
-        'The separate family chat is unavailable until this migration is applied.')) setLegacy0475(true);
+      if (legacy) setLegacy0475(true);
+      setSchemaSettled(true);
       if (error) toastError(describeDbError(error, tr('messagesModule.couldNotCreateConversation')));
       else void loadConversations();
     })();
@@ -398,35 +411,32 @@ function MessagesWorkspace() {
 
   // ── Realtime for conversations ──────────────────────────────
   useEffect(() => {
+    // Do not open or retain a subscription without a verified current inbox.
+    if (presenceSchema !== 'current') return;
     const supabase = createClient();
     const ch = ownChannel(supabase, `convs:${familyId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'family_conversations', filter: `family_id=eq.${familyId}` },
         () => { void loadConversations(); })
       .subscribe();
     return () => { void supabase.removeChannel(ch); };
-  }, [familyId, loadConversations]);
+  }, [familyId, loadConversations, presenceSchema]);
 
   // ── Per-conversation previews + unread counts ───────────────
   // The membership-scoped overview returns exact unread counts across history.
   const loadSummaries = useCallback(async () => {
     const request = ++summaryRequest.current;
     const supabase = createClient();
-    const { data, error } = await readConversationOverview(supabase, familyId);
+    const { data, error } = await loadConversationSummaries(supabase, { familyId, userId });
     if (!alive.current || request !== summaryRequest.current) return;
-    if (error) {
+    if (error || !data) {
       // Previews/unread badges are an enhancement over the conversation list;
       // on a failed load, surface it and keep the prior summaries rather than
       // silently wiping every preview + unread badge to zero.
       toastError(describeDbError(error));
       return;
     }
-    const next: ReturnType<typeof summarizeConversations> = { lastByConv: new Map(), unreadByConv: new Map() };
-    for (const row of data ?? []) {
-      if (row.last_message) next.lastByConv.set(row.conversation_id, row.last_message as unknown as Message);
-      next.unreadByConv.set(row.conversation_id, Number(row.unread_count));
-    }
-    setSummaries(next);
-  }, [familyId, toastError]);
+    setSummaries(data);
+  }, [familyId, userId, toastError]);
 
   useEffect(() => { void loadSummaries(); }, [conversations, loadSummaries]);
 
@@ -479,7 +489,7 @@ function MessagesWorkspace() {
   useEffect(() => {
     // Typing rides a private Realtime topic that only 0475 authorizes; main
     // had no typing indicator, so without 0475 there is none.
-    if (!activeConvId || legacy0475) return;
+    if (!activeConvId || !schemaSettled || legacy0475) return;
     const ticket = owner.current.capture();
     const supabase = createClient();
     const typers = new Map<string, number>();
@@ -493,7 +503,7 @@ function MessagesWorkspace() {
     typingChannel.current = channel;
     const timer = setInterval(publish, 1500);
     return () => { typingChannel.current = null; clearInterval(timer); setTypingIds([]); void supabase.removeChannel(channel); };
-  }, [activeConvId, userId, members, legacy0475]);
+  }, [activeConvId, userId, members, schemaSettled, legacy0475]);
 
   useEffect(() => {
     const channel = typingChannel.current;
@@ -511,12 +521,15 @@ function MessagesWorkspace() {
     readPending.current = true;
     const supabase = createClient();
     void (async () => {
-      let { error } = await settle(supabase.rpc('mark_conversation_read_through', { p_conversation_id: activeConvId, p_message_id: newest.id }));
+      const { error, legacy, readIds } = await markConversationReadThrough(supabase, { conversationId: activeConvId, messageId: newest.id, familyId, userId, rows: messages });
       if (!isCurrent()) return;
+      if (legacy) setLegacy0475(true);
       readPending.current = false;
-      if (error) { toastError(describeDbError(error)); return; }
+      // Only receipts that landed are shown: on a failure the rest stay unread to retry.
+      if (error) toastError(describeDbError(error));
+      if (error && !readIds?.length) return;
       setMessages((rows) => rows.map((row) => {
-        if (row.created_at > newest.created_at || (row.created_at === newest.created_at && row.id > newest.id)) return row;
+        if (!receiptLanded(row, newest, readIds)) return row;
         const read = { ...row, read_by: [...new Set([...(row.read_by ?? []), userId])] };
         liveRows.current.set(row.id, read);
         return read;
@@ -527,10 +540,13 @@ function MessagesWorkspace() {
 
   // ── Presence: who in the family is online right now ─────────
   useEffect(() => {
+    if (!schemaSettled) return;
+    // A verified current inbox authorizes the private family topic.
+    // An unavailable canonical marker never authorizes a public topic.
+    const config = presenceChannelConfig(presenceSchema, userId);
+    if (!config) return;
     const supabase = createClient();
-    // 0475 authorizes the private family topic; before it, main's public one.
-    if (legacy0475) return;
-    const ch = supabase.channel(`presence:family:${familyId}`, { config: { private: true, presence: { key: userId } } });
+    const ch = supabase.channel(`presence:family:${familyId}`, { config });
     ch.on('presence', { event: 'sync' }, () => {
       const state = ch.presenceState() as Record<string, Array<{ user_id?: string }>>;
       const ids = new Set<string>();
@@ -540,7 +556,7 @@ function MessagesWorkspace() {
       if (status === 'SUBSCRIBED') await ch.track({ user_id: userId, at: Date.now() });
     });
     return () => { void supabase.removeChannel(ch); };
-  }, [familyId, userId, legacy0475]);
+  }, [familyId, userId, schemaSettled, presenceSchema]);
 
   function acceptMessage(message: Message) {
     if (!alive.current) return;
@@ -878,7 +894,8 @@ function MessagesWorkspace() {
     const operation = beginMessageAction(msg, 'reaction'); if (!operation) return;
     setMsgMenu(null);
     try {
-      const { data, error } = await settle(createClient().rpc('toggle_family_message_reaction', { p_message_id: msg.id, p_emoji: emoji }));
+      const { data, error, legacy } = await toggleMessageReaction(createClient(), { message: msg, emoji, userId, familyId });
+      if (legacy) setLegacy0475(true);
       if (!currentMessageAction(operation, msg, 'reaction')) return;
       if (error) toastError(describeDbError(error));
       else if (!data || !matchesMessageActionResult(data, msg) || data.deleted_at) toastError(tr('errors.thatChangeWasNotSaved'));
@@ -983,9 +1000,11 @@ function MessagesWorkspace() {
     return row !== null && snapshot !== null && row.id === snapshot.id && row.family_id === snapshot.family_id
       && row.created_by === snapshot.created_by && row.is_family_chat === snapshot.is_family_chat && row.is_archived === snapshot.is_archived;
   }
+  // Before 0475 no row marks the family chat and the previous build had no
+  // archive action: archiving the old family group would split the chat.
   function canArchiveConversation() {
     return sameArchiveRow(activeConversationRef.current, activeConv) && alive.current && archiveScopeRef.current === archiveScope && archiveScope.active !== false
-      && activeConv?.family_id === familyId && !activeConv.is_family_chat
+      && activeConv?.family_id === familyId && !activeConv.is_family_chat && !legacy0475
       && (activeConv.created_by === userId || role === 'parent' || role === 'adult');
   }
   function openArchiveAction() {
@@ -1328,7 +1347,7 @@ function MessagesWorkspace() {
                                 'mb-1 rounded-lg border-l-2 border-brand/60 bg-elevated/60 px-3 py-1.5 text-xs text-muted',
                                 isMine ? 'border-r-2 border-l-0 text-right' : '',
                               )}>
-                                <span className="font-semibold text-brand-text/80">{replyMsg.sender_name}</span>
+                                <span className="font-semibold text-brand-text">{replyMsg.sender_name}</span>
                                 <p className="truncate">{replyMsg.deleted_at ? tr('messages.messageDeleted') : replyMsg.content || previewText(replyMsg, userId)}</p>
                               </div>
                             )}
@@ -1361,14 +1380,14 @@ function MessagesWorkspace() {
                                     aria-disabled={media(msg.attachment_url) ? undefined : true}
                                     className={cn(
                                       'flex min-w-[13rem] items-center gap-3 rounded-xl border p-2.5',
-                                      isMine ? 'border-brand-fg/25 bg-brand-fg/10' : 'border-border bg-surface/50',
+                                      isMine ? 'border-brand-fg/40' : 'border-border bg-surface/50',
                                     )}>
                                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-rose-500/15 text-rose-300">
                                       <FileText className="h-5 w-5" />
                                     </span>
                                     <span className="min-w-0 flex-1">
                                       <span className="block truncate text-sm font-medium">{msg.attachment_name ?? 'File'}</span>
-                                      <span className="block text-[11px] opacity-70">
+                                      <span className="block text-[11px]">
                                         {(msg.attachment_mime?.split('/')[1] ?? 'file').toUpperCase()}
                                       </span>
                                     </span>
@@ -1386,7 +1405,7 @@ function MessagesWorkspace() {
                                 {msg.content && <span className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{msg.content}</span>}
 
                                 {/* Timestamp inside bubble */}
-                                <span className={cn('ml-2 text-[10px] opacity-60', isMine ? 'text-brand-fg' : 'text-muted')}>
+                                <span className={cn('ml-2 text-[10px]', isMine ? 'text-brand-fg' : 'text-muted')}>
                                   {fmtDate(msg.created_at, 'h:mm a')}
                                   {msg.edited_at && <span> · {tr('messagesChat.edited')}</span>}
                                   {isMine && (messageReadByOthers(msg.read_by, msg.sender_id) ? <span title={tr('messagesChat.read')} aria-label={tr('messagesChat.read')}><CheckCheck className="ml-0.5 inline h-3 w-3" /></span> : <span title={tr('messagesChat.sent')} aria-label={tr('messagesChat.sent')}><Check className="ml-0.5 inline h-3 w-3" /></span>)}
@@ -1603,7 +1622,7 @@ function MessagesWorkspace() {
               <Search className="h-5 w-5" /> {tr('messages.search')}
             </button>
             <button type="button" onClick={() => void toggleMute()} disabled={muteLoading} aria-pressed={mutedIds.has(activeConv.id)} className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg disabled:opacity-50"><BellOff className="h-5 w-5" />{mutedIds.has(activeConv.id) ? tr('messagesChat.unmute') : tr('messagesChat.mute')}</button>
-            {canManageConversation && !activeConv.is_family_chat && <button type="button" onClick={openArchiveAction} className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg"><Archive className="h-5 w-5" />{activeConv.is_archived ? tr('messagesChat.restore') : tr('messagesChat.archive')}</button>}
+            {canManageConversation && !activeConv.is_family_chat && !legacy0475 && <button type="button" onClick={openArchiveAction} className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg"><Archive className="h-5 w-5" />{activeConv.is_archived ? tr('messagesChat.restore') : tr('messagesChat.archive')}</button>}
             {canManageConversation && activeConv.kind !== 'direct' && <button type="button" onClick={() => setSettingsOpen(true)} className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg">
               <Settings className="h-5 w-5" /> {tr('messages.settings')}
             </button>}

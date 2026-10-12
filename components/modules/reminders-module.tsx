@@ -196,7 +196,7 @@ export function RemindersModule() {
       // snoozed reminder can be completed too. Audit C1-S9-77.
       const { data: completedRows, error } = await supabase.from('family_reminders')
         .update({ status: 'completed', completed_at: new Date().toISOString() })
-        .eq('id', reminder.id).neq('status', 'completed').select('id');
+        .eq('id', reminder.id).eq('family_id', familyId).neq('status', 'completed').select('id');
       if (error) throw error;
       if (wroteNoRows(completedRows)) { toastError(tr('errors.thatChangeWasNotSaved')); void refresh(); return; }
 
@@ -231,7 +231,7 @@ export function RemindersModule() {
       const next = normalizeSubtasks(reminder.subtasks).map((s) => s.id === subtaskId ? { ...s, done: !s.done } : s);
       const supabase = createClient();
       const { data: ticked, error } = await supabase.from('family_reminders')
-        .update({ subtasks: next as unknown as Reminder['subtasks'] }).eq('id', reminder.id).select('id');
+        .update({ subtasks: next as unknown as Reminder['subtasks'] }).eq('id', reminder.id).eq('family_id', familyId).select('id');
       // Pre-0100 the subtasks column may not exist yet — degrade silently.
       if (error && !isMissingRelationError(error)) throw error;
       // A refused row is no error and zero rows: the box ticked, and nothing
@@ -397,7 +397,7 @@ export function RemindersModule() {
           </button>
           {/* Kind filter */}
           <select value={filterKind} onChange={(e) => setFilterKind(e.target.value)} aria-label={tr('reminders.type')}
-            className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-xs text-muted focus:outline-none">
+            className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-xs text-muted focus-ring">
             <option value="all">{tr('reminders.allTypes')}</option>
             {KINDS.map((k) => <option key={k.id} value={k.id}>{tr(k.labelKey)}</option>)}
           </select>
@@ -405,7 +405,7 @@ export function RemindersModule() {
           {(lists ?? []).length > 0 && (
             <div className="flex items-center gap-1">
               <select value={filterList} onChange={(e) => setFilterList(e.target.value)} aria-label={tr('reminders.list')}
-                className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-xs text-muted focus:outline-none">
+                className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-xs text-muted focus-ring">
                 <option value="all">{tr('reminders.allLists')}</option>
                 {(lists ?? []).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                 <option value="none">{tr('reminders.noList')}</option>
@@ -464,7 +464,6 @@ export function RemindersModule() {
               <div key={reminder.id}
                 className={cn(
                   'group relative flex items-start gap-4 rounded-2xl border p-4 transition',
-                  completed && 'opacity-50',
                   overdue && !completed ? 'border-danger/30 bg-danger/5' : 'border-border bg-surface/30 hover:bg-surface/50',
                   snoozed && 'border-warning/30 bg-warning/5',
                 )}>
@@ -492,7 +491,7 @@ export function RemindersModule() {
                     {snoozed && <Badge tone="warning">{tr('reminders.snoozed')}</Badge>}
                     {overdue && !completed && <Badge tone="danger">{tr('reminders.overdue')}</Badge>}
                     {reminder.ai_suggested && (
-                      <span className="flex items-center gap-0.5 text-[10px] text-brand-text/70">
+                      <span className="flex items-center gap-0.5 text-[10px] text-brand-text">
                         <Sparkles className="h-2.5 w-2.5" /> AI
                       </span>
                     )}
@@ -581,12 +580,12 @@ export function RemindersModule() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                <div className="flex items-center gap-1 opacity-100 sm:opacity-0 transition-opacity sm:group-hover:opacity-100 focus-within:opacity-100 coarse:opacity-100">
                   {!completed && (
                     <div className="relative">
                       <details className="group/snooze">
-                        <summary className="list-none cursor-pointer rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-warning">
-                          <AlarmClock className="h-4 w-4" />
+                        <summary aria-label={tr('reminders.snoozeReminder')} className="list-none cursor-pointer rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-warning">
+                          <AlarmClock className="h-4 w-4" aria-hidden />
                         </summary>
                         <div className="absolute right-0 top-8 z-10 rounded-xl border border-border bg-elevated p-1.5 shadow-xl min-w-[140px]">
                           {[[15,'15 min'],[60,'1 hour'],[180,'3 hours'],[1440,'Tomorrow']].map(([m, l]) => (
@@ -733,7 +732,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
       // Both branches read back the row they wrote: under RLS a refused edit is
       // no error and zero rows, and this said "Reminder updated". Audit C1-S9-85.
       const run = (uStrip: typeof fullUpdate, iStrip: typeof fullInsert) => reminder
-        ? supabase.from('family_reminders').update(uStrip).eq('id', reminder.id).select('id')
+        ? supabase.from('family_reminders').update(uStrip).eq('id', reminder.id).eq('family_id', familyId).select('id')
         : supabase.from('family_reminders').insert(iStrip).select('id');
 
       let { data: saved, error } = await run(fullUpdate, fullInsert);

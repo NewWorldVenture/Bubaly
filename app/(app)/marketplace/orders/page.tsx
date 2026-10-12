@@ -10,6 +10,8 @@ import { formatCents } from '@/lib/marketplace/listings';
 import { marketplaceServiceFeeCents, orderFeeBreakdown } from '@/lib/marketplace/fee-policy';
 import { returnStatus, returnLabel } from '@/lib/marketplace/returns';
 import { todayKeyFor } from '@/lib/services/scope';
+import { readFamilyOrders } from '@/lib/marketplace/schema-compat';
+import { readCircleTitles } from '@/lib/marketplace/circle-reads';
 import { cn } from '@/lib/utils/cn';
 import { ErrorState } from '@/components/ui/states';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
@@ -52,12 +54,15 @@ export default async function MarketplaceOrdersPage() {
   const todayKey = todayKeyFor(ctx, now);
   const dataWarnings: string[] = [];
 
-  const { data: orders, error: ordersError } = await sb
+  // Orders on either side: one this family won at auction, bought outright or
+  // agreed in a negotiation carries the SELLER's family_id and this family as
+  // buyer_family_id (proposed economy SQL, section 2). Without that column it
+  // is the seller-family read it always was (readFamilyOrders).
+  const { data: orders, error: ordersError } = await readFamilyOrders(familyId, (scope) => scope(sb
     .from('marketplace_orders')
-    .select('id, listing_id, buyer_member, seller_member, kind, status, amount_cents, ends_on, returned_at, created_at')
-    .eq('family_id', familyId)
+    .select('id, listing_id, buyer_member, seller_member, kind, status, amount_cents, ends_on, returned_at, created_at'))
     .order('created_at', { ascending: false })
-    .limit(100);
+    .limit(100));
 
   if (ordersError) {
     console.error('[marketplace-orders] Orders read failed', ordersError);
@@ -88,11 +93,17 @@ export default async function MarketplaceOrdersPage() {
   const { data: listings, error: listingsError } = listingIds.length
     ? await sb.from('marketplace_listings').select('id, title').in('id', listingIds)
     : { data: [], error: null };
-  if (listingsError) {
-    console.error('[marketplace-orders] Listing titles read failed', listingsError);
+  // A won listing is another family's: the table no longer returns it once
+  // the circle view exists, so its title comes from the view.
+  const found = new Set((listings ?? []).map((l) => l.id));
+  const { data: circleTitles, error: circleTitlesError } = listingsError
+    ? { data: [], error: null }
+    : await readCircleTitles(sb, listingIds.filter((id) => !found.has(id)));
+  if (listingsError || circleTitlesError) {
+    console.error('[marketplace-orders] Listing titles read failed', listingsError ?? circleTitlesError);
     dataWarnings.push('Listing titles');
   }
-  const titleOf = new Map((listings ?? []).map((l) => [l.id, l.title]));
+  const titleOf = new Map([...(listings ?? []), ...(circleTitles ?? [])].map((l) => [l.id, l.title]));
 
   const { data: members, error: membersError } = await sb.from('family_members').select('id, display_name').eq('family_id', familyId);
   if (membersError) {

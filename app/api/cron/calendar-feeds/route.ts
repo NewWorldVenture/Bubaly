@@ -19,7 +19,12 @@ export async function GET(req: NextRequest) {
   // Every one, not the first thousand: an unbounded select stops at PostgREST's
   // row ceiling and reports nothing, so the reminders past it would simply never
   // be sent. Every page is checked against the same exact count and identities.
-  const query = () => supabase.from('calendar_feeds').select('id, family_id, url', { count: 'exact' }).order('id');
+  // Feeds of OPEN families only (families.closed_at): a closed account's
+  // calendar is not refreshed. Filtered in the query so the exact count the
+  // pages are checked against is the same filtered set.
+  const query = () => supabase.from('calendar_feeds')
+    .select('id, family_id, url, family:families!inner(closed_at)', { count: 'exact' })
+    .is('family.closed_at', null).order('id');
   const { data: feeds, error } = await readCountedRows<{ id: string; family_id: string; url: string }>(
     () => query().limit(1000), (from, to) => query().range(from, to), 1_000_000, 'calendar feeds');
   if (error) {

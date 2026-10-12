@@ -27,6 +27,7 @@ import { ALREADY_SAVED, makeKey } from '@/lib/services/idempotency';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { isSubmissionId } from '@/lib/utils/submission-id';
 import { describeActionError } from '@/lib/supabase/errors';
+import { isManager } from '@/lib/constants/roles';
 
 const PATH = '/dashboard/todos';
 
@@ -176,12 +177,46 @@ export async function completeTodoAction(todoId: string, done: boolean): Promise
   }
 }
 
+/**
+ * Who may remove a to-do.
+ *
+ * The service scopes by id + family_id and the RLS is `is_family_member` for
+ * all, so any active member — a guest ("view limited shared events only") or a
+ * caregiver ("view only the areas assigned to them") included — could delete
+ * every family task. A manager may remove any; a teen or child only one they
+ * created; a guest or caregiver none.
+ *
+ * Authorship only: `assigned_to_id` is not ownership. updateTodoAction lets any
+ * member set it, so accepting it let a teen reassign a parent's task to
+ * themselves and then delete it. `todo_items.created_by` references
+ * family_members (0015), so it is compared with the caller's member id.
+ */
+async function canDeleteTodo(
+  scope: Awaited<ReturnType<typeof todoScope>>['scope'],
+  todoId: string,
+): Promise<boolean> {
+  if (isManager(scope.role)) return true;
+  if (scope.role !== 'teen' && scope.role !== 'child') return false;
+  if (!scope.memberId) return false;
+  const { data } = await scope.db
+    .from('todo_items')
+    .select('created_by')
+    .eq('id', todoId)
+    .eq('family_id', scope.familyId)
+    .maybeSingle();
+  if (!data) return false;
+  return data.created_by === scope.memberId;
+}
+
 export async function deleteTodoAction(todoId: string): Promise<TodoActionResult> {
   const t = await getTranslations();
   if (!todoId) return { ok: false, error: t('actions.thatTaskCouldNotBe') };
   const { scope } = await todoScope();
 
   try {
+    if (!(await canDeleteTodo(scope, todoId))) {
+      return { ok: false, error: t('actions.onlyAParentGuardianCan16') };
+    }
     const result = await deleteTodo(scope, todoId);
     if (!result.ok) return { ok: false, error: result.error };
 

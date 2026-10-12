@@ -69,6 +69,13 @@ export const SCHEDULES = {
   '/api/cron/model-refresh': '0 4,16 * * *',
   '/api/cron/network-aggregate': '0 3 * * *',
   '/api/cron/guardian-learning': '0 2 * * *',
+  // /api/cron/location-retention (deletes old location_events, clears their
+  // coordinates) is HELD: its route file sits at
+  // held/api/cron/location-retention/route.ts, outside app/, so Next does not
+  // route it and no deployment exposes it, and it is in neither this table nor
+  // vercel.json. A destructive retention sweep stays out of the candidate until
+  // the owner sets a retention policy. tests/cron-schedule-registration.test.ts
+  // holds it by name, with the reason.
   '/api/cron/provider-sync': '15 */4 * * *',
   '/api/cron/journey-recovery': '0 9,15,21 * * *',
   '/api/cron/close-auctions': '*/5 * * * *',

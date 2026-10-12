@@ -144,6 +144,11 @@ describe('what Bubaly says back', () => {
 
 type Write = { table: string; payload: Record<string, unknown> };
 
+// A database without 0443 (DATA-007): the default-list get-or-create answers
+// "function missing", and the capture falls back to the read-then-insert these
+// cases were written against.
+const missingDefaultListRpc = async () => ({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } });
+
 function fakeDb(writes: Write[]) {
   const builder = (table: string): Record<string, unknown> => {
     const chain: Record<string, unknown> = {
@@ -179,7 +184,7 @@ function fakeDb(writes: Write[]) {
     };
     return chain;
   };
-  return { from: (table: string) => builder(table) } as never;
+  return { from: (table: string) => builder(table), rpc: missingDefaultListRpc } as never;
 }
 
 const link: AssistantLink = {

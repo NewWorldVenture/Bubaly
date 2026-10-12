@@ -150,3 +150,34 @@ describe('cancelling a marketplace order', () => {
     errors.mockRestore();
   });
 });
+
+describe('cancelling an order between two households', () => {
+  // The order and its pickup row carry the SELLER's family; the buyer's
+  // household is buyer_family_id, and the event the buyer confirmed is on the
+  // buyer's own calendar.
+  it('cancels the pickup in the order\'s family and takes the event off the buyer\'s calendar', async () => {
+    const db = createInMemorySupabase();
+    harness.db = db;
+    harness.memberId = 'member-b';
+    db.seed('marketplace_orders', [{
+      id: 'order-x', family_id: 'family-S', buyer_family_id: 'family-1', listing_id: 'listing-x',
+      buyer_member: 'member-b', seller_member: 'member-s', kind: 'buy', status: 'confirmed',
+    }]);
+    db.seed('calendar_events', [
+      { id: 'event-buyer', family_id: 'family-1', title: 'Marketplace pickup · Library', starts_at: MEET_AT },
+      { id: 'event-other', family_id: 'family-1', title: 'Swim practice', starts_at: MEET_AT },
+    ]);
+    db.seed('marketplace_handoffs', [{
+      id: 'handoff-x', order_id: 'order-x', family_id: 'family-S', listing_id: 'listing-x',
+      proposed_by: 'member-s', proposer_role: 'seller', status: 'confirmed', location_label: 'Library',
+      meet_at: MEET_AT, confirm_code: 'K7Q4', calendar_event_id: 'event-buyer',
+    }]);
+
+    expect(await setOrderStatusAction('order-x', 'cancelled')).toEqual({ ok: true });
+
+    expect(db.table('marketplace_orders')[0]).toMatchObject({ status: 'cancelled' });
+    expect(db.table('marketplace_handoffs')[0]).toMatchObject({ status: 'cancelled' });
+    expect(db.table('calendar_events').map((e) => e.id)).toEqual(['event-other']);
+  });
+});
+

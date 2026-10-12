@@ -36,6 +36,8 @@ function fixture({advances=false,inactive=false,receiptError=false,generation=''
     if(table==='push_deliveries'&&receiptError&&method==='GET')return reply({code:'XX000',message:'Synthetic receipt refusal'},500);
     const matches=(row:any)=>[...url.searchParams].every(([key,raw])=>{
       if(['select','order','limit','offset','on_conflict'].includes(key))return true;
+      // The `family:families!inner(closed_at)` embed's filter: every family here is open.
+      if(key.startsWith('family.'))return raw==='is.null';
       if(key==='or') { if(raw.includes('related_type.is.null')) return row.related_type==null || row.related_type!=='family_message'; const wrap=raw.includes('created_at.lt.'); const keyCursor={id:raw.match(/id\.(?:lte|gt)\.([^),]+)/)![1]}; const equalTime=row.created_at===now.toISOString();return wrap?(row.created_at<now.toISOString()||(equalTime&&row.id<=keyCursor.id)):(row.created_at>now.toISOString()||(equalTime&&row.id>keyCursor.id));}
       const [op,...parts]=raw.split('.');const value=parts.join('.');
       if(op==='eq')return String(row[key])===value;if(op==='is')return value==='null'?row[key]===null:false;
@@ -47,7 +49,10 @@ function fixture({advances=false,inactive=false,receiptError=false,generation=''
     if(method==='GET'){
       rows=rows.slice(Number(url.searchParams.get('offset')??0));const limit=url.searchParams.get('limit');if(limit)rows=rows.slice(0,Number(limit));
       if(table==='notifications'&&rows.length&&barrier){pendingReads++;firstPending.resolve();if(pendingReads===2)bothPending.resolve();await releasePending.promise;}
-      const select=url.searchParams.get('select');if(select&&select!=='*')rows=rows.map((r:any)=>Object.fromEntries(select.split(',').map(k=>[k.trim(),r[k.trim()]])));
+      const select=url.searchParams.get('select');if(select&&select!=='*')rows=rows.map((r:any)=>table==='family_members'&&select.includes('family:families!inner(')
+        // These finite original cursor fixtures declare every family open above.
+        ? {user_id:r.user_id,family_id:r.family_id,is_active:r.is_active,family:{id:r.family_id,closed_at:null}}
+        : Object.fromEntries(select.split(',').map(k=>[k.trim(),r[k.trim()]])));
       return reply(object(rows));
     }
     if(table==='push_deliveries'&&method==='POST'){if(!tables.push_deliveries.some((r:any)=>r.notification_id===body.notification_id&&r.device_id===body.device_id))tables.push_deliveries.push(body);return reply(null,201);}

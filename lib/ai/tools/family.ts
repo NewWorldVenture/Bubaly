@@ -39,7 +39,24 @@ export async function resolveAssigneeId(
   scope: ServiceScope,
   input: { assignee_id?: string | null; assignee?: string | null },
 ): Promise<ServiceResult<string | null>> {
-  if (input.assignee_id) return ok(input.assignee_id);
+  if (input.assignee_id) {
+    // An id is untrusted model input like a name is: the FKs these ids land in
+    // accept any household's member, so the family boundary is checked here.
+    // Inactive members still resolve, so a search for a former member's items
+    // keeps working; write paths that need a current member check that too.
+    const { data, error } = await scope.db
+      .from('family_members')
+      .select('id')
+      .eq('id', input.assignee_id)
+      .eq('family_id', scope.familyId)
+      .maybeSingle();
+    if (error) {
+      console.error('[tools:family] assignee lookup failed', error);
+      return fail('Could not check who that is.', { code: SERVICE_CODES.db });
+    }
+    if (!data) return fail('That person is not in this family.', { code: SERVICE_CODES.notFound });
+    return ok(data.id);
+  }
   const name = input.assignee?.trim();
   if (!name) return ok(null);
 

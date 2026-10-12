@@ -37,7 +37,9 @@ const REQ = {
  * PostgREST reports it.
  */
 function makeDb(opts: { blindLookups?: number } = {}) {
-  const rows: Array<{ id: string; family_id: string; dedupe_key: string | null; status: string }> = [];
+  // Rows keep every column the filer wrote: a resend is matched on what the
+  // row says (filer, payload), not only on its key.
+  const rows: Array<Record<string, unknown> & { id: string; family_id: string; dedupe_key: string | null; status: string }> = [];
   let n = 0;
   let blind = opts.blindLookups ?? 0;
   const inserts: Array<Record<string, unknown>> = [];
@@ -56,7 +58,7 @@ function makeDb(opts: { blindLookups?: number } = {}) {
           if (blind > 0) { blind -= 1; return Promise.resolve({ data: null, error: null }); }
           const hit = rows.find((r) => r.family_id === filters.family_id
             && r.dedupe_key === filters.dedupe_key && r.status === filters.status);
-          return Promise.resolve({ data: hit ? { id: hit.id } : null, error: null });
+          return Promise.resolve({ data: hit ? { ...hit } : null, error: null });
         },
         insert: (payload: Record<string, unknown>) => {
           inserts.push(payload);
@@ -67,7 +69,7 @@ function makeDb(opts: { blindLookups?: number } = {}) {
             select: () => ({
               single: () => {
                 if (clash) return Promise.resolve({ data: null, error: { code: '23505', message: 'duplicate key' } });
-                const row = { id: `appr-${++n}`, family_id: payload.family_id as string, dedupe_key: key, status: 'pending' };
+                const row = { ...payload, id: `appr-${++n}`, family_id: payload.family_id as string, dedupe_key: key, status: 'pending' };
                 rows.push(row);
                 return Promise.resolve({ data: { id: row.id }, error: null });
               },
@@ -186,19 +188,74 @@ describe('both filers use one definition of "the same action"', () => {
 
   it('the registry path stamps a key rather than filing keyless rows', () => {
     // A keyless row is exempt from 0273's partial index by design, so forgetting
-    // the key here is silent: no error, no duplicate protection.
+    // the key here is silent: no error, no duplicate protection. The key goes
+    // through the shared filer, which stamps it on every insert except the one
+    // filed beside a row planted under the key (see approval-dedupe-reuse).
     expect(src).toContain('approvalDedupeKey(scope.familyId');
-    expect(src).toContain('dedupe_key: dedupeKey');
+    expect(src).toMatch(/fileOrReusePendingApproval\(writer, scope\.familyId, dedupeKey,/);
+    expect(src).toContain('dedupe_key: key');
   });
 
   it('it checks before inserting and recovers from the race', () => {
-    expect(src).toContain("eq('dedupe_key', dedupeKey).eq('status', 'pending')");
-    expect(src).toContain("error?.code === '23505'");
+    // Both filers share one lookup-insert-23505 routine, so the registry path
+    // cannot drift from the chat path that the race tests above exercise.
+    const shared = readFileSync('lib/trust/server.ts', 'utf8');
+    expect(shared).toContain(".eq('family_id', familyId).eq('dedupe_key', dedupeKey).eq('status', 'pending')");
+    expect(shared).toContain("first.error?.code === '23505'");
+    expect(src).not.toContain(".from('approval_requests')\n    .select('id').eq('family_id', scope.familyId).eq('dedupe_key'");
   });
 
   it('imports the shared key rather than hand-rolling a second one', () => {
     // Two hashes of "the same action" that disagree are worse than one: each
     // path would dedupe against itself and neither against the other.
     expect(src).toMatch(/import \{[^}]*approvalDedupeKey[^}]*\} from '@\/lib\/trust\/server'/);
+  });
+});
+
+// `dedupe_key` is not pinned by the member insert policy (0255) and the key is
+// a sha256 of values the asker knows. Reusing ANY pending row under the key let
+// an adult plant `{malicious payload, dedupe_key = K}`, ask Bubaly for the
+// harmless thing, have the gate "reuse" their row and write Bubaly's ai_agent
+// audit line against it, flip requested_by_kind to 'ai', and approve alone —
+// `filedByBubaly` then said yes and the trust gate was skipped.
+describe('a row planted under the key is never reused as Bubaly\'s', () => {
+  const K = approvalDedupeKey('fam-1', REQ);
+  const genuine = { family_id: 'fam-1', dedupe_key: K, status: 'pending', requested_by_kind: 'ai', requested_by_member_id: 'member-teen', domain: 'tasks', capability: 'create', payload: REQ.payload };
+  const cases: Array<[string, Record<string, unknown>]> = [
+    ['a different payload, filed by the member', { requested_by_kind: 'member', payload: { name: 'transfer_money', args: { cents: 99999 } } }],
+    ['a different payload, already flipped to ai', { payload: { name: 'transfer_money', args: { cents: 99999 } } }],
+    ['the same payload but a member filer', { requested_by_kind: 'member' }],
+    ['the same payload but another asker', { requested_by_member_id: 'member-parent' }],
+    ['another capability', { capability: 'delete' }],
+  ];
+  for (const [label, over] of cases) {
+    it(`files its own row beside one with ${label}`, async () => {
+      const { db, rows, inserts } = makeDb();
+      rows.push({ ...genuine, ...over, id: 'planted' });
+      const opened = await openApprovalRequest(db, 'fam-1', REQ, DECISION);
+      expect(opened).not.toBeNull();
+      expect(opened?.id).not.toBe('planted');
+      expect(opened?.alreadyPending).toBe(false);
+      // Keyless, so 0273's index (which the planted row holds) cannot refuse it.
+      expect(inserts).toHaveLength(1);
+      expect(inserts[0].dedupe_key).toBeNull();
+      expect(inserts[0].payload).toEqual(REQ.payload);
+    });
+  }
+
+  it('also when the planted row only appears after the race (23505 recovery)', async () => {
+    const { db, rows, inserts } = makeDb({ blindLookups: 1 });
+    rows.push({ ...genuine, requested_by_kind: 'member', payload: { name: 'transfer_money', args: {} }, id: 'planted' });
+    const opened = await openApprovalRequest(db, 'fam-1', REQ, DECISION);
+    expect(opened?.id).not.toBe('planted');
+    expect(opened?.alreadyPending).toBe(false);
+    expect(inserts.map((i) => i.dedupe_key)).toEqual([K, null]);
+  });
+
+  it('still reuses the genuine row (not over-tightened)', async () => {
+    const { db, rows, inserts } = makeDb();
+    rows.push({ ...genuine, id: 'genuine' });
+    expect(await openApprovalRequest(db, 'fam-1', REQ, DECISION)).toEqual({ id: 'genuine', alreadyPending: true });
+    expect(inserts).toHaveLength(0);
   });
 });

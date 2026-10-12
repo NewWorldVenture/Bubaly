@@ -231,7 +231,7 @@ export function PasswordsModule() {
                     <p className="truncate text-xs text-muted">{t(meta.labelKey)}{owner ? ` · ${firstName(owner.display_name)}` : ''}</p>
                   </div>
                   <div className="relative">
-                    <button onClick={() => setMenuId(menuId === c.id ? null : c.id)} aria-label={t('passwordsModule.actionsFor', { name: c.label })} className="grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-elevated">
+                    <button onClick={() => setMenuId(menuId === c.id ? null : c.id)} aria-label={t('passwordsModule.actionsFor', { name: c.label })} className="grid h-7 w-7 place-items-center rounded-lg text-muted hover:bg-elevated">
                       <MoreHorizontal className="h-4 w-4" />
                     </button>
                     {menuId === c.id && (

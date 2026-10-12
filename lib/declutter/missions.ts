@@ -7,6 +7,7 @@
 
 import type { DeclutterMissionStatus, DeclutterZoneKind } from '@/lib/database.types';
 import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+import { dayKeyIn } from '@/lib/time/zoned';
 
 export type MissionTemplate = { title: string; minutes: number; points: number };
 
@@ -77,11 +78,37 @@ export const SCORE_LABEL_KEYS: Record<number, string> = {
 
 export type ZoneLike = { id: string; name: string; room: string | null; kind: DeclutterZoneKind; clutter_score: number; last_reset_at: string | null; is_active: boolean };
 export type MissionLike = { id: string; zone_id: string | null; title: string; minutes: number; assignee_id: string | null; status: DeclutterMissionStatus; scheduled_for: string | null; completed_at: string | null; items_removed: number; points: number };
-export type SessionLike = { started_at: string; minutes: number; items_removed: number; member_id: string | null };
+/**
+ * `missions_done` is how a session says where it came from: CompleteForm writes
+ * a session with `missions_done: 1` beside the mission it completes, carrying
+ * the SAME `items_removed`; a session logged by hand has 0.
+ */
+export type SessionLike = { started_at: string; minutes: number; items_removed: number; member_id: string | null; missions_done: number };
 
 const DAY_MS = 86_400_000;
 const dateOnly = (v: string | Date) => (typeof v === 'string' ? new Date(`${v.slice(0, 10)}T00:00:00`) : new Date(v.getFullYear(), v.getMonth(), v.getDate()));
 export const dayDiff = (from: string | Date, to: string | Date) => Math.round((dateOnly(to).getTime() - dateOnly(from).getTime()) / DAY_MS);
+
+/** An ISO timestamp with its zone: what PostgREST returns for a timestamptz. */
+const ZONED_INSTANT = /T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}(?::?\d{2})?)$/i;
+
+/**
+ * The family's calendar day a stored value belongs to, as `YYYY-MM-DD`.
+ *
+ * `completed_at`, `started_at` and `last_reset_at` are timestamptz columns, and
+ * PostgREST hands them back in UTC ('2026-10-11T01:30:00+00:00'). Their first
+ * ten characters are GREENWICH's date: a Los Angeles family's 18:30 session is
+ * filed under tomorrow, so it left "This week", "Gone this month" and the
+ * streak until the family's own midnight, and a first evening session showed
+ * "Streak 0". Such an instant is read in the family's zone. A DATE column
+ * (`scheduled_for`) and a zone-less wall-clock string already name their day
+ * and are taken as written.
+ */
+export function familyDay(value: string, timeZone?: string | null): string {
+  if (!timeZone || !ZONED_INSTANT.test(value)) return value.slice(0, 10);
+  const instant = new Date(value);
+  return Number.isNaN(instant.getTime()) ? value.slice(0, 10) : dayKeyIn(instant, timeZone);
+}
 export const isoDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 // A calendar day on, not 24 hours on: a day with a daylight-saving change is 23
 // or 25 hours long, and a step of 86,400,000 ms from a midnight lands on the
@@ -99,10 +126,10 @@ export function missionsForZone(zone: ZoneLike): MissionTemplate[] {
 export type ZoneHealth = 'fresh' | 'due' | 'overdue' | 'never';
 
 /** A zone "decays": the worse its score, the sooner it needs a reset. */
-export function zoneHealth(zone: ZoneLike, today: Date): { health: ZoneHealth; daysSinceReset: number | null; intervalDays: number } {
+export function zoneHealth(zone: ZoneLike, today: Date, timeZone?: string | null): { health: ZoneHealth; daysSinceReset: number | null; intervalDays: number } {
   const intervalDays = zone.clutter_score >= 4 ? 7 : zone.clutter_score === 3 ? 14 : 30;
   if (!zone.last_reset_at) return { health: 'never', daysSinceReset: null, intervalDays };
-  const days = dayDiff(zone.last_reset_at, today);
+  const days = dayDiff(familyDay(zone.last_reset_at, timeZone), today);
   return { health: days > intervalDays * 1.5 ? 'overdue' : days > intervalDays ? 'due' : 'fresh', daysSinceReset: days, intervalDays };
 }
 
@@ -113,7 +140,7 @@ export type PlannedMission = { day: string; dayLabel: string; zone: ZoneLike; te
  * at most `perDay` missions a day, assignees round-robin. Zones that already
  * have a planned mission this week are skipped so re-planning never duplicates.
  */
-export function weeklyPlan(zones: ZoneLike[], existing: MissionLike[], memberIds: string[], today: Date, perDay = 2, locale: LocaleCode = DEFAULT_LOCALE): PlannedMission[] {
+export function weeklyPlan(zones: ZoneLike[], existing: MissionLike[], memberIds: string[], today: Date, perDay = 2, locale: LocaleCode = DEFAULT_LOCALE, timeZone?: string | null): PlannedMission[] {
   // The day chip on a seven-day plan reads "Mon"/"Mo"/"lun." — the reader's.
   const weekday = new Intl.DateTimeFormat(locale, { weekday: 'short' });
   const weekStart = isoDate(today);
@@ -121,7 +148,7 @@ export function weeklyPlan(zones: ZoneLike[], existing: MissionLike[], memberIds
   const alreadyPlanned = new Set(existing.filter((m) => m.status === 'planned' && m.scheduled_for && m.scheduled_for >= weekStart && m.scheduled_for <= weekEnd).map((m) => m.zone_id));
   const candidates = zones
     .filter((z) => z.is_active && z.clutter_score > 1 && !alreadyPlanned.has(z.id))
-    .sort((a, b) => b.clutter_score - a.clutter_score || (zoneHealth(b, today).daysSinceReset ?? 9999) - (zoneHealth(a, today).daysSinceReset ?? 9999) || a.name.localeCompare(b.name));
+    .sort((a, b) => b.clutter_score - a.clutter_score || (zoneHealth(b, today, timeZone).daysSinceReset ?? 9999) - (zoneHealth(a, today, timeZone).daysSinceReset ?? 9999) || a.name.localeCompare(b.name));
   const plan: PlannedMission[] = [];
   let slot = 0;
   for (const zone of candidates) {
@@ -137,9 +164,9 @@ export function weeklyPlan(zones: ZoneLike[], existing: MissionLike[], memberIds
   return plan;
 }
 
-/** Consecutive days (ending today or yesterday) with at least one session. */
-export function sessionStreak(sessions: SessionLike[], today: Date): number {
-  const days = new Set(sessions.map((s) => isoDate(dateOnly(s.started_at))));
+/** Consecutive days (ending today or yesterday) with at least one session — the family's days. */
+export function sessionStreak(sessions: Pick<SessionLike, 'started_at'>[], today: Date, timeZone?: string | null): number {
+  const days = new Set(sessions.map((s) => familyDay(s.started_at, timeZone)));
   let streak = 0;
   let cursor = dateOnly(today);
   if (!days.has(isoDate(cursor))) cursor = addCalendarDays(cursor, -1);
@@ -159,16 +186,29 @@ export type DeclutterSummary = {
   text: string;
 };
 
-export function declutterSummary(zones: ZoneLike[], missions: MissionLike[], sessions: SessionLike[], today: Date): DeclutterSummary {
+/**
+ * The four summary cards. `timeZone` is the family's: every instant is counted
+ * on the family's day (see `familyDay`), the day `today` already is.
+ *
+ * Items are counted ONCE. Finishing a mission writes the mission's
+ * `items_removed` AND a session carrying the same number (`missions_done: 1`),
+ * and this used to add both, so seven things out of the house read as
+ * fourteen. Done missions count their own items; sessions count only the ones
+ * logged by hand. A completion whose session insert failed still counts,
+ * through its mission.
+ */
+export function declutterSummary(zones: ZoneLike[], missions: MissionLike[], sessions: SessionLike[], today: Date, timeZone: string | null): DeclutterSummary {
   const active = zones.filter((z) => z.is_active);
   const avgScore = active.length ? Math.round((active.reduce((a, z) => a + z.clutter_score, 0) / active.length) * 10) / 10 : null;
   const worst = [...active].sort((a, b) => b.clutter_score - a.clutter_score)[0] ?? null;
-  const dueZones = active.filter((z) => { const h = zoneHealth(z, today).health; return h === 'due' || h === 'overdue'; }).length;
-  const doneThisWeek = missions.filter((m) => m.status === 'done' && m.completed_at && dayDiff(m.completed_at, today) >= 0 && dayDiff(m.completed_at, today) < 7).length;
-  const month = sessions.filter((s) => dayDiff(s.started_at, today) >= 0 && dayDiff(s.started_at, today) < 30);
-  const itemsRemovedMonth = month.reduce((a, s) => a + s.items_removed, 0) + missions.filter((m) => m.status === 'done' && m.completed_at && dayDiff(m.completed_at, today) < 30).reduce((a, m) => a + m.items_removed, 0);
+  const dueZones = active.filter((z) => { const h = zoneHealth(z, today, timeZone).health; return h === 'due' || h === 'overdue'; }).length;
+  const ago = (instant: string) => dayDiff(familyDay(instant, timeZone), today);
+  const doneThisWeek = missions.filter((m) => m.status === 'done' && m.completed_at && ago(m.completed_at) >= 0 && ago(m.completed_at) < 7).length;
+  const month = sessions.filter((s) => ago(s.started_at) >= 0 && ago(s.started_at) < 30);
+  const itemsRemovedMonth = month.filter((s) => !(s.missions_done > 0)).reduce((a, s) => a + s.items_removed, 0)
+    + missions.filter((m) => m.status === 'done' && m.completed_at && ago(m.completed_at) < 30).reduce((a, m) => a + m.items_removed, 0);
   const minutesMonth = month.reduce((a, s) => a + s.minutes, 0);
-  const streak = sessionStreak(sessions, today);
+  const streak = sessionStreak(sessions, today, timeZone);
   const text = active.length === 0 ? 'No zones yet' : avgScore !== null && avgScore <= 1.5 ? 'Home is in great shape' : `${dueZones} zone${dueZones === 1 ? '' : 's'} due · avg clutter ${avgScore}/5`;
   return { zones: active.length, avgScore, worst, dueZones, doneThisWeek, itemsRemovedMonth, minutesMonth, streak, text };
 }

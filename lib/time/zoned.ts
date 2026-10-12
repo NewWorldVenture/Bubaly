@@ -38,6 +38,76 @@ export function isValidTimezone(timezone: string): boolean {
   }
 }
 
+let supportedZones: Map<string, string> | null = null;
+/** ICU's zone names, keyed by their lower-case spelling. */
+function supportedZoneNames(): Map<string, string> {
+  if (!supportedZones) {
+    let names: string[] = [];
+    try {
+      names = (Intl as unknown as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf?.('timeZone') ?? [];
+    } catch {
+      names = [];
+    }
+    supportedZones = new Map(names.map((name) => [name.toLowerCase(), name]));
+  }
+  return supportedZones;
+}
+
+/**
+ * The zone name to STORE for what a person typed, or null when it is not an
+ * IANA zone name.
+ *
+ * `isValidTimezone` asks only whether Intl can format in a zone, and Intl
+ * (V8/ICU) also takes 'asia/tokyo', 'JST', 'PST' and '+09:00'. Stored as typed,
+ * those fail the confirmation-import RPC, which looks the trip's zone up in
+ * `pg_timezone_names` by exact, case-sensitive name — so every import for the
+ * trip was refused while the editor said the zone was saved. The rule here:
+ *
+ *   - 'UTC' (in any case) is 'UTC';
+ *   - otherwise it must be shaped like an IANA name (`Area/Location`), which
+ *     refuses abbreviations, offsets and bare links such as 'Japan';
+ *   - its spelling is corrected to ICU's when ICU lists it ('asia/tokyo' →
+ *     'Asia/Tokyo'), and kept as typed when ICU does not list it but every
+ *     part is capitalised the IANA way ('Asia/Kolkata', 'Europe/Kyiv' — ICU
+ *     still names these by their older aliases, and rewriting a name the
+ *     family typed correctly into one a server's tzdata may lack would break
+ *     what works); anything else is refused.
+ *
+ * Pure and safe in a client bundle, so the create form, the trip editor and
+ * the service apply the same rule.
+ */
+export function canonicalTimezone(input: string | null | undefined): string | null {
+  const typed = (input ?? '').trim();
+  if (!typed) return null;
+  if (/^(?:etc\/)?utc$/i.test(typed)) return 'UTC';
+  if (!/^[A-Za-z][A-Za-z_-]*(?:\/[A-Za-z0-9][A-Za-z0-9_+-]*)+$/.test(typed)) return null;
+  if (!isValidTimezone(typed)) return null;
+  const listed = supportedZoneNames().get(typed.toLowerCase());
+  if (listed) return listed;
+  return typed.split('/').every((part) => /^[A-Z]/.test(part)) ? typed : null;
+}
+
+/**
+ * A zone nobody typed — the family's own, used as a trip's default — as one
+ * `canonicalTimezone` accepts. 0449 lets a family keep a legacy abbreviation
+ * ('CST'); refusing it would refuse a form the person left blank, so here an
+ * alias ICU resolves to an IANA name is taken as that name. Null when even
+ * that fails: an unset trip zone, which the editor can fix, rather than one
+ * every import refuses.
+ */
+export function canonicalDefaultTimezone(input: string | null | undefined): string | null {
+  const direct = canonicalTimezone(input);
+  if (direct) return direct;
+  const typed = (input ?? '').trim();
+  if (!typed || !isValidTimezone(typed)) return null;
+  try {
+    // No locale: the resolved zone does not depend on one.
+    return canonicalTimezone(new Intl.DateTimeFormat(undefined, { timeZone: typed }).resolvedOptions().timeZone);
+  } catch {
+    return null;
+  }
+}
+
 const partsCache = new Map<string, Intl.DateTimeFormat>();
 function formatterFor(timezone: string): Intl.DateTimeFormat {
   let dtf = partsCache.get(timezone);

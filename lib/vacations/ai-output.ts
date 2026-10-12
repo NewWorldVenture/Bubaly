@@ -58,3 +58,17 @@ export function parseVacationAIOutput(text: unknown, tripDayCount: number): Vaca
     return null;
   }
 }
+
+/**
+ * The provenance stamp on every activity and itinerary item the concierge
+ * builder writes, carried in `notes`: neither table has a source column, and
+ * the disruption note in lib/services/trips marks itself in the same column
+ * the same way, so this needs no new schema. An explicit rebuild replaces
+ * exactly the rows that carry it. A row a parent added by hand never does, and
+ * a parent who clears the note has made the row theirs.
+ */
+export const CONCIERGE_PLAN_MARKER = '[concierge plan]';
+
+export function isConciergePlanRow(row: { notes: string | null }): boolean {
+  return (row.notes ?? '').includes(CONCIERGE_PLAN_MARKER);
+}

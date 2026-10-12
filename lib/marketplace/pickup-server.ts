@@ -31,16 +31,21 @@ export async function removePickupFromCalendar(sb: Db, familyId: string, eventId
  * calendar: the order it was arranged for is off. No open pickup is the
  * ordinary case and does nothing.
  *
+ * Two families, because an order between two households has two: the pickup
+ * row carries the ORDER's family (`orderFamilyId`), while its calendar event is
+ * in the family of whoever confirmed it, and the caller can only remove one
+ * from their own (`actorFamilyId`). Within one family they are the same.
+ *
  * Called after the order's own cancel landed, which is the answer the person
  * gets; a pickup that cannot be cancelled is logged, not returned.
  */
-export async function cancelOrderPickup(sb: Db, orderId: string, familyId: string): Promise<void> {
+export async function cancelOrderPickup(sb: Db, orderId: string, orderFamilyId: string, actorFamilyId: string): Promise<void> {
   const { data: cancelled, error } = await sb.from('marketplace_handoffs').update({ status: 'cancelled' })
-    .eq('order_id', orderId).eq('family_id', familyId).in('status', ['proposed', 'confirmed'])
+    .eq('order_id', orderId).eq('family_id', orderFamilyId).in('status', ['proposed', 'confirmed'])
     .select('id, calendar_event_id');
   if (error) {
     console.error('[marketplace-handoff] the cancelled order kept its pickup', error);
     return;
   }
-  for (const row of cancelled ?? []) await removePickupFromCalendar(sb, familyId, row.calendar_event_id);
+  for (const row of cancelled ?? []) await removePickupFromCalendar(sb, actorFamilyId, row.calendar_event_id);
 }

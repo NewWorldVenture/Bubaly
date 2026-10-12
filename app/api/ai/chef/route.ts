@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { settleAll } from '@/lib/supabase/settle';
+import { describeReadError, settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
@@ -64,6 +64,25 @@ export async function POST(req: Request) {
     supabase.from('leftover_inventory').select('name, source_meal, use_by').eq('family_id', familyId).eq('status', 'fresh').limit(20),
   ]);
 
+  // A failed read is not an empty kitchen. Each of these used to become `[]`,
+  // so a refused pantry read was "nothing expiring", a failed calendar read was
+  // "no busy nights", and the chef planned a two-hour braise for the night of
+  // the away game — at HTTP 200. /api/ai/meals/plan fails closed on exactly
+  // this; so does this route now. Only a leftovers table that is not migrated
+  // yet is a genuine absence.
+  const readFailures = ([
+    ['family_recipes', recipesRes.error],
+    ['pantry_items', pantryRes.error],
+    ['calendar', eventsRes.error],
+    ['leftover_inventory', isMissingTableError(leftoverRes.error) ? null : leftoverRes.error],
+  ] as const).filter(([, error]) => Boolean(error));
+  if (readFailures.length > 0) {
+    console.error('[ai/chef] context read failed', {
+      familyId, reads: readFailures.map(([read, error]) => ({ read, detail: describeReadError(error) })),
+    });
+    return NextResponse.json({ error: t('chef.kitchenDataIsTemporarilyUnavailable') }, { status: 503 });
+  }
+
   const recipeNames = (recipesRes.data ?? []).map((r) => r.name);
   const pantry = pantryRes.data ?? [];
   const pantryItems = pantry.map((p) => p.name);
@@ -95,10 +114,19 @@ export async function POST(req: Request) {
   };
 
   // Deterministic fallback first, upgraded by AI when configured.
-  let reply = fallbackChefReply(chefCtx);
-  let source: 'ai' | 'fallback' = 'fallback';
+  //
+  // `source` says which of three things happened, because the screen tells
+  // the family different things for each: 'fallback' is "no AI provider is
+  // configured", 'unavailable' is "the provider was asked and did not give a
+  // usable answer". Both used to read 'fallback', so every provider error was
+  // shown as "AI isn't configured — connect a provider" to a family whose AI
+  // was configured.
+  const aiConfigured = await isAIConfigured();
+  let reply = fallbackChefReply(chefCtx, { aiConfigured });
+  let source: 'ai' | 'fallback' | 'unavailable' = 'fallback';
 
-  if (await isAIConfigured()) {
+  if (aiConfigured) {
+    source = 'unavailable';
     try {
       // Two ways this surface disappoints a family and they look identical from
       // the outside: the provider throws, or it answers something
@@ -121,8 +149,10 @@ export async function POST(req: Request) {
         },
       );
       if (parsed) { reply = parsed; source = 'ai'; }
-    } catch {
-      // keep fallback
+    } catch (error) {
+      // Keep the deterministic plan, and say the AI was unavailable rather
+      // than unconfigured.
+      console.error('[ai/chef] provider request failed', describeReadError(error));
     }
   }
 

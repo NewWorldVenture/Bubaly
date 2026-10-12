@@ -5,6 +5,7 @@ import { captureBrowserSessionSnapshot, clearBrowserSessionSnapshot, type Browse
 import { notifySessionStorageChanged } from './session-change';
 import { revokeSessionToken, type SessionRevocation } from './revoke-session';
 import { clearAllCache } from '@/lib/offline/cache';
+import { detachPushDevice } from '@/lib/push/device-registration';
 import { createClient } from '@/lib/supabase/client';
 
 // A readable session ID survives normal token rotation. Providers without one
@@ -56,8 +57,12 @@ export function signOutBrowserSession(
       if (key) void createClient().realtime.setAuth(key).catch(() => {});
     } catch { /* Cookie deletion and cache retirement already succeeded. */ }
     notifySessionStorageChanged();
-    const revocation = current?.accessToken && options.revoke !== false
-      ? revokeSessionToken(current.accessToken)
+    // This device's push registration leaves with the account: otherwise the
+    // next person on a shared device receives this account's notifications.
+    // Revocation waits for it, because a revoked token cannot remove the row.
+    const accessToken = current?.accessToken;
+    const revocation = accessToken && options.revoke !== false
+      ? (detachPushDevice(accessToken)?.then(() => revokeSessionToken(accessToken)) ?? revokeSessionToken(accessToken))
       : Promise.resolve<SessionRevocation>(options.revocation ?? (current ? 'unconfirmed' : 'confirmed'));
     return { status: 'signed-out', revocation };
   } catch { return { status: 'unavailable' }; }

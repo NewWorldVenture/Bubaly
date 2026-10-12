@@ -36,6 +36,18 @@ export type GuardianClaimOutcome =
   /** The claim could not be read or written. Ask the provider to retry. */
   | 'unavailable';
 
+export type GuardianClaimOptions = {
+  /**
+   * An `error` text that makes a claim final. A claim parked as `error` with
+   * exactly this text is never reclaimed, however old: the caller parks it so
+   * when its side effects went out and only their record failed, and a reclaim
+   * would send them again. (The emergency escalation's mark; every other
+   * `error` row is still reclaimable after ten minutes.) Written into a
+   * PostgREST `or` filter, so it may not hold `,`, `(`, `)`, `"` or `\`.
+   */
+  finalError?: string;
+};
+
 /**
  * Atomically claim a Twilio callback. A retry of an active or completed claim
  * is a no-op; claims abandoned by a crashed worker can be reclaimed later.
@@ -44,7 +56,10 @@ export async function claimGuardianCallback(
   client: CallbackClient,
   callbackType: string,
   eventId: string,
+  options: GuardianClaimOptions = {},
 ): Promise<GuardianClaimOutcome> {
+  const { finalError } = options;
+  if (finalError !== undefined && !/^[^,()"\\]+$/.test(finalError)) throw new TypeError('A final claim error must be plain text a PostgREST filter can carry.');
   // A malformed id or callback type is unprocessable, and a retry cannot make
   // it well-formed. Settled rather than unavailable, so the provider stops.
   if (!isValidGuardianEventId(eventId) || !callbackType || callbackType.length > 80) return 'settled';
@@ -60,12 +75,18 @@ export async function claimGuardianCallback(
   if (error.code !== '23505') return 'unavailable';
 
   const cutoff = new Date(Date.now() - STALE_CLAIM_MS).toISOString();
-  const { data, error: reclaimError } = await client
+  let reclaim = client
     .from('guardian_callback_events')
     .update({ received_at: new Date().toISOString(), status: 'processing', error: null })
     .eq('event_id', eventId)
     .in('status', ['processing', 'error'])
-    .lt('received_at', cutoff)
+    .lt('received_at', cutoff);
+  // A final claim is left where it is. Checked in the reclaim's own statement,
+  // not in a read before it, so nothing can park it final in between. `is null`
+  // as well: a held or abandoned claim has no error text, and `<>` alone reads
+  // a NULL as not reclaimable.
+  if (finalError !== undefined) reclaim = reclaim.or(`error.is.null,error.neq.${finalError}`);
+  const { data, error: reclaimError } = await reclaim
     .select('event_id')
     .maybeSingle();
   // The same distinction one level down: this branch used to discard the error

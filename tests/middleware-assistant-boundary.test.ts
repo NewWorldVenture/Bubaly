@@ -81,7 +81,7 @@ beforeEach(() => {
       expect(init.method ?? 'GET').toBe('GET');
       expect(url.searchParams.get('token_hash')).toBe(`eq.${hashAssistantToken(TOKEN)}`);
       expect(url.searchParams.get('revoked_at')).toBe('is.null');
-      return Response.json(linkExists ? [{ id: USER, family_id: FAMILY, user_id: USER, provider: 'other', scopes: ['read'], revoked_at: null, families: { timezone: 'UTC' } }] : []);
+      return Response.json(linkExists ? [{ id: USER, family_id: FAMILY, user_id: USER, created_by: USER, provider: 'other', scopes: ['read'], revoked_at: null, families: { timezone: 'UTC' } }] : []);
     } },
   });
   mocks.admin.mockReturnValue(client);

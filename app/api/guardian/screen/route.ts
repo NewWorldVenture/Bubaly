@@ -2,7 +2,7 @@
 // Twilio Gather callback — called each time the caller speaks during AI screening.
 // Continues the conversation or ends it with a decision.
 
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { screeningTurn, summarizeScreening, type ScreeningTurn, type ScreeningDecision } from '@/lib/guardian/ai-screen';
@@ -19,6 +19,9 @@ import { claimGuardianCallback, isValidGuardianEventId, markGuardianCallbackProc
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import { appBaseUrl } from '@/lib/server/app-url';
+import { escalateGuardianEmergency } from '@/lib/guardian/escalate';
+import { guardianEscalationDescription, type GuardianEscalationInput } from '@/lib/guardian/escalation';
+import { oweGuardianEscalation } from '@/lib/guardian/escalation-owed';
 
 export const runtime = 'nodejs';
 
@@ -143,7 +146,7 @@ export async function POST(req: NextRequest) {
     }
     calledMemberId = (comm as { member_id?: string | null } | null)?.member_id ?? null;
   }
-  const profiles = supabase.from('guardian_member_profiles').select('*').eq('family_id', sess.family_id);
+  const profiles = supabase.from('guardian_member_profiles').select('*').eq('family_id', sess.family_id).eq('is_active', true);
   const { data: profileRows, error: profileError } = await (calledMemberId ? profiles.eq('member_id', calledMemberId) : profiles).limit(2);
   if (profileError) {
     console.error('[guardian/screen] member profile read failed; letting Twilio fall back', { sessionId, error: profileError.message });
@@ -154,7 +157,11 @@ export async function POST(req: NextRequest) {
   const memberProfile = profileRows?.length === 1 ? profileRows[0] : null;
 
   const { data: memberData } = memberProfile
-    ? await supabase.from('family_members').select('display_name, phone').eq('id', (memberProfile as { member_id: string }).member_id).maybeSingle()
+    // Inside the session's family, and still in it: a profile naming another
+    // family's member must not dial them (see inbound/voice), and a removed
+    // member keeps a phone on file that must not be dialled either — the
+    // removal does not deactivate their Guardian profile.
+    ? await supabase.from('family_members').select('display_name, phone').eq('id', (memberProfile as { member_id: string }).member_id).eq('family_id', sess.family_id).eq('is_active', true).maybeSingle()
     : { data: null };
   const memberName = (memberData as { display_name?: string } | null)?.display_name ?? 'the family member';
 
@@ -230,6 +237,7 @@ export async function POST(req: NextRequest) {
           callerName: decision?.callerName ?? formatPhone(sess.caller_number),
           summary: decision?.summary ?? 'Incoming call transferred.',
           urgency: decision?.urgency ?? 'medium',
+          callerNumber: sess.caller_number,
         });
       }
 
@@ -273,6 +281,7 @@ export async function POST(req: NextRequest) {
         callerName: decision?.callerName ?? formatPhone(sess.caller_number),
         summary,
         urgency: decision?.urgency ?? 'low',
+        callerNumber: sess.caller_number,
       });
     }
 
@@ -353,7 +362,7 @@ async function notifyFamily(
   supabase: ReturnType<typeof createServiceClient>,
   familyId: string,
   memberProfile: { member_id: string } | null,
-  opts: { commId: string; callerName: string; summary: string; urgency: string },
+  opts: { commId: string; callerName: string; summary: string; urgency: string; callerNumber: string | null },
 ) {
   // Non-fatal, but not invisible: the insert RESOLVES with an error rather than
   // throwing, so this catch never saw a failed write and a screened emergency
@@ -373,6 +382,60 @@ async function notifyFamily(
     if (error) console.error('[guardian] screening notification write failed', error);
   } catch (error) {
     console.error('[guardian] screening notification write threw', error);
+  }
+
+  // An emergency the screening AI recognised is not just an in-app row: text
+  // and call the managers. Keyed on the communication, so a retried turn is
+  // answered by the escalation's own claim instead of alarming twice. Logged,
+  // never raised — the caller is still on the line.
+  if (opts.urgency === 'emergency') {
+    const input: GuardianEscalationInput = {
+      familyId,
+      commId: opts.commId,
+      escalationType: 'emergency_call',
+      severity: 'critical',
+      description: guardianEscalationDescription(`Emergency call from ${opts.callerName}: ${opts.summary}`),
+      ...(opts.callerNumber ? { callerNumber: opts.callerNumber.slice(0, 64) } : {}),
+    };
+    const escalate = async () => {
+      try {
+        const escalation = await escalateGuardianEmergency(supabase, input);
+        // The TwiML has gone out, so nothing here can ask Twilio for a retry,
+        // and the sweep on the Guardian recovery cron reads only escalation
+        // records and the work items they are landed from
+        // (lib/guardian/escalation-owed.ts). An escalation that was attempted
+        // and reached nobody leaves one or the other itself.
+        if (escalation.kind === 'claim_unavailable' || escalation.kind === 'read_failed') {
+          // Refused before anything was sent: its claim could not be taken,
+          // or a read the alert needs failed. It wrote neither, and this used
+          // only to be logged, so nothing ever tried again. Leave the work
+          // item now: the sweep lands the record from it (nobody reached, no
+          // in-app alert yet) and re-attempts it from there, under this
+          // escalation's own claim, so a manager is still texted only once.
+          const owed = await oweGuardianEscalation(supabase, input, { pushSent: false });
+          console.error(owed
+            ? '[guardian/screen] emergency escalation could not run; left for the retry sweep'
+            : '[guardian/screen] emergency escalation could not run and could not be left for the retry sweep; nothing will retry it', { familyId, commId: opts.commId, outcome: escalation.kind });
+        } else if ((escalation.kind === 'undelivered' || escalation.kind === 'interrupted') && !escalation.recorded && !escalation.owed) {
+          // Only with neither the record nor its work item is it lost.
+          console.error('[guardian/screen] emergency escalation reached no manager and could not be recorded; nothing will retry it', { familyId, commId: opts.commId, outcome: escalation.kind });
+        } else if (escalation.kind !== 'delivered' && escalation.kind !== 'duplicate') {
+          console.error('[guardian/screen] emergency escalation did not reach a manager', { familyId, commId: opts.commId, outcome: escalation.kind });
+        }
+      } catch (error) {
+        console.error('[guardian/screen] emergency escalation threw', { familyId, commId: opts.commId, error });
+      }
+    };
+    // Twilio gives this webhook 15 seconds for its TwiML, and the fan-out is
+    // two Twilio requests per manager with 15-second deadlines each: awaited
+    // here, it could outlive the response and drop the live call. `after()`
+    // runs it once the TwiML has gone out, inside the same invocation (the
+    // precedent is lib/reasoning/auto-refresh.ts). It throws outside a request
+    // scope — a direct call, or a test — and then the escalation runs inline.
+    // Either way the recovery cron's sweep can retry it only from what it
+    // left: its record, or the work item written in the record's place (by
+    // the escalation, or above when it could not run).
+    try { after(escalate); } catch { await escalate(); }
   }
 }
 

@@ -291,7 +291,7 @@ export function PhotosModule() {
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="photos" iconOnly />
-            <div className="flex items-center gap-1 rounded-xl border border-border bg-surface/60 px-3 py-1.5">
+            <div className="flex items-center gap-1 rounded-xl border border-border bg-surface/60 px-3 py-1.5 focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg">
               <Search className="h-3.5 w-3.5 text-muted" />
               <input value={search} inputMode="search" enterKeyHint="search" onChange={(e) => setSearch(e.target.value)}
                 placeholder={tr('photos.searchPhotos')}
@@ -316,7 +316,7 @@ export function PhotosModule() {
           <button key={key} onClick={() => { setTab(key); setActiveAlbum(null); }}
             className={cn('tab-item', tab === key ? 'tab-item-active' : 'tab-item-inactive')}>
             {tr(labelKey)}
-            {key === 'favorites' && <span className="ml-1 rounded-full bg-fg/10 px-1.5 text-[10px]">
+            {key === 'favorites' && <span className="ml-1 text-[10px]">
               {allPhotos.filter((p) => p.is_favorite).length}
             </span>}
           </button>
@@ -430,7 +430,7 @@ export function PhotosModule() {
                     </div>
                   )}
                   {/* Hover overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition-opacity">
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 coarse:opacity-100 transition-opacity">
                     <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
                       {photo.caption && <p className="truncate text-[11px] text-white">{photo.caption}</p>}
                       <div className="ml-auto flex gap-1.5">
@@ -682,7 +682,8 @@ function UploadModal({ onClose, onUpload, progress }: {
           className={cn(
             'flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed p-10 text-center transition',
             'focus:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40',
-            busy ? 'cursor-not-allowed border-border opacity-60' : 'cursor-pointer',
+            'aria-disabled:cursor-not-allowed aria-disabled:opacity-60',
+                busy ? 'border-border' : 'cursor-pointer',
             dragging ? 'border-brand bg-brand/10' : !busy && 'border-border hover:border-brand/50 hover:bg-brand/5',
           )}>
           <Upload className="h-10 w-10 text-muted" />

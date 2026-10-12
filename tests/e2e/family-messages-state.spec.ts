@@ -113,6 +113,8 @@ async function fixture(page: Page, { holdA = false, mobile = false, olderHistory
     p.releaseUploads=async()=>{p.holdUpload=false;for(const resolve of p.pendingUploads.splice(0))resolve();await p.flush();};
     const db={storage:{from:bucket=>({upload:async(path,file,options)=>{p.uploads.push({bucket,path,name:file.name,options});if(p.holdUpload)await new Promise(resolve=>p.pendingUploads.push(resolve));return{data:{path},error:null};}})},from:query,rpc:(name,args)=>{
       if(!legacy&&name==='family_conversation_overview'){let offset=0,limit=Infinity;const rows=convs.map(conv=>{const rows=p.rows.filter(row=>row.conversation_id===conv.id);return{conversation_id:conv.id,last_message:rows.at(-1)||null,unread_count:rows.filter(row=>row.sender_id!==userId&&!row.read_by.includes(userId)).length};}).sort((a,b)=>a.conversation_id.localeCompare(b.conversation_id));const q={order:()=>q,limit:n=>{limit=n;return q;},range:(from,to)=>{offset=from;limit=to-from+1;return q;},then:(resolve,reject)=>Promise.resolve({data:rows.slice(offset,offset+limit),count:rows.length,error:null}).then(resolve,reject)};return q;}
+      // Like the SDK, an RPC is a filter builder even when PostgREST answers that it is missing.
+      if(legacy&&name==='family_conversation_overview'){const missing={data:null,count:null,error:{code:'PGRST202',message:'Could not find the function public.'+name+'('+Object.keys(args).join(', ')+') in the schema cache'}};const q={order:()=>q,limit:()=>q,range:()=>q,then:(resolve,reject)=>Promise.resolve(missing).then(resolve,reject)};return q;}
       return (async()=>{
       if(legacy&&name==='mark_conversation_read'){p.reads.push({legacy:name,...args});for(const row of p.rows)if(row.conversation_id===args.p_conversation_id)row.read_by=[...new Set([...row.read_by,userId])];return{data:null,error:null};}
       if(legacy)return{data:null,error:{code:'PGRST202',message:'Could not find the function public.'+name+'('+Object.keys(args).join(', ')+') in the schema cache'}};
@@ -388,15 +390,24 @@ test('shared archive is explicit and read-only; recorded participants remain imm
   await clean(page);
 });
 
-// A missing participant schema must never adopt/render a family-wide legacy
-// inbox or retry a privacy-sensitive operation under weaker authorization.
-test('without 0475/0476 the workspace refuses legacy adoption and private reads', async ({ page }) => {
+// Original participants keep their history; missing privacy schema must not
+// expose the old groups as Family Chat or silently use non-atomic receipts.
+test('without 0475/0476 the workspace refuses old history and visibly offers retry', async ({ page }) => {
   await fixture(page, { legacy: true });
-  await expect(page.locator('[id^="message-"]')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /^💬 Chat/ })).toHaveCount(0);
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByRole('alert').getByRole('button')).toBeVisible();
+  await expect(page.getByRole('button', { name: /^💬 Chat A/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^💬 Chat B/ })).toHaveCount(0);
+  await expect(page.getByText('Message from A', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Message from B', { exact: true })).toHaveCount(0);
   await expect(composer(page)).toHaveCount(0);
-  expect(await page.evaluate(() => (window as any).__familyChat.writes)).toEqual([]);
-  expect(await page.evaluate(() => (window as any).__familyChat.reads)).toEqual([]);
+  await expect.poll(() => page.evaluate(() => (window as any).__familyChat.notices.length)).toBeGreaterThan(0);
+  const state = await page.evaluate(() => {
+    const p = (window as any).__familyChat;
+    return { reads: p.reads, writes: p.writes, insertIds: p.insertIds,
+      channels: p.channels, readBy: p.rows.map((row: { read_by: string[] }) => row.read_by) };
+  });
+  expect(state).toEqual({ reads: [], writes: [], insertIds: [], channels: [], readBy: [[], []] });
   await clean(page);
 });
 

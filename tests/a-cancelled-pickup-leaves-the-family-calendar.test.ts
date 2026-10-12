@@ -190,3 +190,63 @@ describe('a confirm that loses its claim', () => {
     expect(eventIds(db)).toEqual(['event-other', handoff.calendar_event_id]);
   });
 });
+
+describe('a pickup between two households', () => {
+  // An order won from another household carries the SELLER's family_id and the
+  // buyer's household as buyer_family_id (lib/marketplace/schema-compat.ts), and
+  // a confirmed pickup's event is in the confirming party's own family (the
+  // other family's calendar is not theirs to write). So that is where it is
+  // taken down from.
+  let db: InMemorySupabase;
+  beforeEach(() => {
+    db = createInMemorySupabase();
+    harness.db = db;
+    harness.memberId = 'member-b';
+    db.seed('marketplace_orders', [{
+      id: 'order-x', family_id: 'family-S', buyer_family_id: 'family-1', listing_id: 'listing-x',
+      buyer_member: 'member-b', seller_member: 'member-s', status: 'confirmed',
+    }]);
+    db.seed('calendar_events', [
+      { id: 'event-buyer', family_id: 'family-1', title: 'Marketplace pickup · Library', starts_at: MEET_AT },
+      { id: 'event-other', family_id: 'family-1', title: 'Swim practice', starts_at: MEET_AT },
+    ]);
+  });
+
+  it('comes off the buyer\'s calendar when the buyer, who confirmed it, cancels', async () => {
+    db.seed('marketplace_handoffs', [{
+      id: 'handoff-x', order_id: 'order-x', family_id: 'family-S', listing_id: 'listing-x',
+      proposed_by: 'member-s', proposer_role: 'seller', status: 'confirmed', location_label: 'Library',
+      meet_at: MEET_AT, confirm_code: 'K7Q4', calendar_event_id: 'event-buyer',
+    }]);
+
+    expect(await cancelHandoffAction('order-x')).toEqual({ ok: true });
+
+    expect(db.table('marketplace_handoffs')[0]).toMatchObject({ status: 'cancelled' });
+    expect(eventIds(db)).toEqual(['event-other']);
+  });
+
+  it('takes back the event a lost confirm put on the buyer\'s calendar', async () => {
+    db.seed('marketplace_handoffs', [{
+      id: 'handoff-x', order_id: 'order-x', family_id: 'family-S', listing_id: 'listing-x',
+      proposed_by: 'member-s', proposer_role: 'seller', status: 'proposed', location_label: 'Library',
+      meet_at: MEET_AT, confirm_code: null, calendar_event_id: null,
+    }]);
+    const realFrom = db.from.bind(db);
+    db.from = ((table: string) => {
+      const builder = realFrom(table);
+      if (table === 'calendar_events') {
+        const insert = builder.insert.bind(builder);
+        builder.insert = (rows) => {
+          db.table('marketplace_handoffs')[0].status = 'cancelled';
+          return insert(rows);
+        };
+      }
+      return builder;
+    }) as typeof db.from;
+
+    expect((await confirmHandoffAction('order-x')).ok).toBe(false);
+
+    expect(eventIds(db)).toEqual(['event-buyer', 'event-other']);
+  });
+});
+

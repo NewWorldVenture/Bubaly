@@ -67,7 +67,9 @@ const CASES: Case[] = [
     familyToday: '2026-09-20', greenwichToday: '2026-09-21',
     expiresToday: '2026-09-20', expiresIn30: '2026-10-20',
     choreDueLastNight: '2026-09-20T03:00:00Z', // 20:00 on the 19th, PDT
-    apptToday: '2026-09-21T02:00:00Z',        // 19:00 on the 20th, PDT — Greenwich calls it the 21st
+    // 23:30 on the 20th, PDT — Greenwich calls it the 21st. Still AHEAD of
+    // `now` (23:00): an appointment already past is not offered at all.
+    apptToday: '2026-09-21T06:30:00Z',
   },
   {
     // 05:00 on the 22nd, JST (UTC+9). Greenwich is still on the 21st.
@@ -221,10 +223,16 @@ describe('the scan answers the family’s day end to end', () => {
     expect(titles).not.toContain('Dentist is tomorrow');
 
     // The auto-created reminder fires at nine on the family's clock, not at
-    // 09:00Z — which is two in the morning in Los Angeles.
+    // 09:00Z — which is two in the morning in Los Angeles. And at a nine still
+    // to come: when the family's 09:00 today has already passed, the notifier
+    // (which reads only reminders ahead of it) would never deliver it, so it
+    // is the next morning's.
     const reminders = db.table('reminders');
     expect(reminders).toHaveLength(1);
+    const nineToday = Date.parse(defaultReminderIso(c.familyToday, c.tz));
+    const nextDay = new Date(Date.parse(`${c.familyToday}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
     expect(wall(String(reminders[0].remind_at), c.tz))
-      .toEqual({ day: c.familyToday, hour: 9, minute: 0 });
+      .toEqual({ day: nineToday > Date.parse(c.now) ? c.familyToday : nextDay, hour: 9, minute: 0 });
+    expect(Date.parse(String(reminders[0].remind_at))).toBeGreaterThan(Date.parse(c.now));
   });
 });

@@ -86,6 +86,17 @@ export const DELETE_BLIND_ACCEPTED: ReadonlySet<string> = new Set([
   // Published by 0091/0093/0098 and subscribed by nothing at all, so their
   // DELETE behaviour reaches no one either way.
   'departure_plans', 'permission_grants', 'trip_plans', 'trust_policies',
+  // The household modules (0240–0248, plus family_places, relationship_* and
+  // reminder_lists). These ARE subscribed — each by its own module through
+  // useRealtimeQuery — and this list used to file them with the four above as
+  // "subscribed by nothing", which is how their delete handlers came to rely on
+  // an event that never arrives: the confirmed delete said "removed" and the
+  // row stayed on screen (H3). The delete handlers in the sleep, inventory,
+  // moving, closet, declutter, career, language, projects and watchlist
+  // modules now remove the row from their own list (setData) or read back
+  // (refresh) once the delete is confirmed; a new delete path on any of these
+  // tables has to do the same. What stays DELETE-blind is another device's
+  // delete, which waits for the next refetch.
   'bedtime_routines', 'career_profiles', 'declutter_missions', 'declutter_sessions',
   'declutter_zones', 'family_places', 'home_locations', 'home_projects',
   'inventory_items', 'inventory_moves', 'job_applications', 'language_goals',
@@ -94,6 +105,13 @@ export const DELETE_BLIND_ACCEPTED: ReadonlySet<string> = new Set([
   'relationship_gift_ideas', 'reminder_lists', 'resume_versions', 'sleep_checkins',
   'sleep_logs', 'vocab_cards', 'wardrobe_items', 'watch_sessions',
   'watchlist_titles', 'watchlist_votes',
+  // Deleted only by the location-retention cron, with the service role, once
+  // an arrival/departure event is older than the retention window (0335 keeps
+  // the table append-only for clients). A months-old timeline entry leaving
+  // the screen at the next refetch rather than live is the intended shape.
+  // That cron's route is held under held/ (not deployed) and unscheduled pending
+  // the owner's retention decision, so until then nothing deletes them.
+  'location_events',
 ]);
 
 /**
