@@ -133,7 +133,7 @@ export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: numb
 
       let actions: string[];
       try {
-        actions = await runSteps(steps, { email: c.ownerEmail, name: c.name }, fallback, previous);
+        actions = await runSteps(steps, { email: c.ownerEmail, name: c.name }, fallback, supabase, undefined, previous);
       } catch (error) {
         console.error('[marketing automation] scheduled steps failed', error);
         // Keep what the earlier attempt delivered: a bare failure here would

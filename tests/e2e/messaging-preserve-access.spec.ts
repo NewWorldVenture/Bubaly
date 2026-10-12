@@ -118,7 +118,7 @@ async function start(page: Page, config: Config) {
     window.addEventListener('error', e => p.errors.push(e.message));
     window.addEventListener('unhandledrejection', e => { p.errors.push(String(e.reason)); e.preventDefault(); });
     let scope = { familyId: ${JSON.stringify(FAMILY_A)}, userId: ${JSON.stringify(USER_A)},
-      members: [], selfMember: { display_name: 'Synthetic self' } };
+      members: [], selfMember: { id: 'synthetic-member-'+${JSON.stringify(FAMILY_A)}+':'+${JSON.stringify(USER_A)}, family_id: ${JSON.stringify(FAMILY_A)}, user_id: ${JSON.stringify(USER_A)}, is_active: true, role: 'parent', display_name: 'Synthetic self' } };
     const tr = key => key;
     const clone = value => JSON.parse(JSON.stringify(value));
     const respond = reply => new Response(JSON.stringify(reply.error || reply.data), {
@@ -317,7 +317,7 @@ async function start(page: Page, config: Config) {
     const ToastProvider = load('@/components/ui/toast').ToastProvider;
     const root = ReactDOM.createRoot(document.getElementById('root'));
     const render = () => ReactDOM.flushSync(() => root.render(React.createElement(ToastProvider, null, React.createElement(Messages))));
-    p.switchScope = (familyId, userId) => { scope = { ...scope, familyId, userId }; render(); };
+    p.switchScope = (familyId, userId) => { scope = { ...scope, familyId, userId, selfMember: { ...scope.selfMember, id: 'synthetic-member-'+familyId+':'+userId, family_id: familyId, user_id: userId, is_active: true } }; render(); };
     p.unmount = () => ReactDOM.flushSync(() => root.unmount());
     render();
   })();` });

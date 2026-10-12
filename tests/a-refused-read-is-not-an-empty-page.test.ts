@@ -1,5 +1,12 @@
-import { readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { readFileSync, readdirSync } from 'node:fs';
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const file = dir + '/' + entry.name;
+    return entry.isDirectory() ? sourceFiles(file) : entry.isFile() ? [file] : [];
+  });
+}
+
+
 import { describe, expect, it } from 'vitest';
 import { at, between, bodyOf } from './helpers/source-order';
 
@@ -428,7 +435,7 @@ describe('the page-side sweep is closed with a ratchet (C1-S9-45)', () => {
       // submission, so a failed read costs one retyped name.
       'app/onboarding/page.tsx::profile',
     ]);
-    const files = execSync("find app -name 'page.tsx' -o -name 'layout.tsx'", { encoding: 'utf8' }).trim().split('\n');
+    const files = sourceFiles('app').filter(file => /\/(?:page|layout)\.tsx$/.test(file));
     const found = new Set<string>();
     for (const file of files) {
       const source = readFileSync(file, 'utf8')

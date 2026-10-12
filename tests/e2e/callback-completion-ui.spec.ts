@@ -445,3 +445,86 @@ test('recovery page received after another login does not begin exchange or gran
   expect(await page.evaluate(() => window.__callbackUi.user())).toBe(userB);
   expect(await page.evaluate(key => sessionStorage.getItem(key), grantKey)).toBeNull();
 });
+
+
+test('no-code fallback keeps the current login and destination through provider503', async ({ page }) => {
+  const destination = '/dashboard/meals?week=next';
+  const state = await fixture(page, { noCode: true, existing: 'B', hold: 'user', next: destination });
+  await expect.poll(() => state.userReads).toBe(1);
+  const before = (await page.context().cookies()).filter(cookie => cookie.name.startsWith(cookieKey));
+  const stored = before.filter(cookie => cookie.name === cookieKey || cookie.name.startsWith(cookieKey + '.'))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })).map(cookie => cookie.value).join('');
+  expect(stored.startsWith('base64-')).toBe(true);
+  const owned = JSON.parse(Buffer.from(stored.slice('base64-'.length), 'base64url').toString());
+  expect(owned.user.id).toBe(userB);
+  expect(JSON.parse(Buffer.from(owned.access_token.split('.')[1], 'base64url').toString()).session_id).toBe(sidB);
+  expect(state.calls).toEqual([]);
+  expect(await page.evaluate(() => window.__callbackUi.routes)).toEqual([]);
+  const unavailable = page.waitForResponse(response => new URL(response.url()).origin === provider
+    && new URL(response.url()).pathname === '/auth/v1/user' && response.status() === 503);
+  state.failUser = true;
+  await state.release('user');
+  const response = await unavailable;
+  expect(response.request().method()).toBe('GET');
+  expect(response.status()).toBe(503);
+  await test.info().attach('provider503-observation', { contentType: 'application/json',
+    body: Buffer.from(JSON.stringify({ method: response.request().method(), path: new URL(response.url()).pathname, status: response.status() })) });
+  await navigated(page, destination);
+  expect(state.userReads).toBe(1);
+  expect(state.calls).toEqual([]);
+  expect((await page.context().cookies()).filter(cookie => cookie.name.startsWith(cookieKey))).toEqual(before);
+  expect(await page.evaluate(() => window.__callbackUi.user())).toBe(userB);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Try again', exact: true })).toHaveCount(0);
+});
+
+test('no-code recovery refuses to treat the existing login as recovery authority', async ({ page }) => {
+  const state = await fixture(page, { noCode: true, existing: 'B', recovery: true });
+  const before = (await page.context().cookies()).filter(cookie => cookie.name.startsWith(cookieKey));
+  await expect(page.getByRole('alert')).toContainText('This sign-in link is invalid');
+  expect(state.userReads).toBe(0);
+  expect(state.calls).toEqual([]);
+  expect(await page.evaluate(() => window.__callbackUi.routes)).toEqual([]);
+  expect(await page.evaluate(() => window.__callbackUi.user())).toBe(userB);
+  expect((await page.context().cookies()).filter(cookie => cookie.name.startsWith(cookieKey))).toEqual(before);
+  expect((await page.context().cookies()).filter(cookie => cookie.name === cookieKey || cookie.name.startsWith(cookieKey + '.'))
+    .map(({ name, value }) => ({ name, value }))).toEqual(state.sessionCookies);
+  expect(await page.evaluate(key => sessionStorage.getItem(key), grantKey)).toBeNull();
+});
+
+
+test('a held no-code user response cannot navigate or change the existing login after completion unmount', async ({ page }) => {
+  const state = await fixture(page, { noCode: true, existing: 'B', hold: 'user', next: '/dashboard/meals?week=next' });
+  await expect.poll(() => state.userReads).toBe(1);
+  await expect(page.getByRole('status')).toBeVisible();
+  expect(await page.evaluate(() => window.__callbackUi.routes)).toEqual([]);
+  const before = (await page.context().cookies()).filter(cookie => cookie.name.startsWith(cookieKey));
+  const stored = before.filter(cookie => cookie.name === cookieKey || cookie.name.startsWith(cookieKey + '.'))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })).map(cookie => cookie.value).join('');
+  const owned = JSON.parse(Buffer.from(stored.slice('base64-'.length), 'base64url').toString());
+  expect(owned.user.id).toBe(userB);
+  expect(JSON.parse(Buffer.from(owned.access_token.split('.')[1], 'base64url').toString()).session_id).toBe(sidB);
+  const completed = page.waitForResponse(response => new URL(response.url()).origin === provider
+    && new URL(response.url()).pathname === '/auth/v1/user' && response.status() === 200);
+  await page.evaluate(() => window.__callbackUi.retire());
+  await expect(page.getByText('Other route', { exact: true })).toBeVisible();
+  await expect(page.getByRole('status')).toHaveCount(0);
+  await state.release('user');
+  const response = await completed;
+  expect(response.request().method()).toBe('GET');
+  expect(response.status()).toBe(200);
+  expect(await response.finished()).toBeNull();
+  await test.info().attach('provider200-after-unmount', { body: JSON.stringify({ method: 'GET', path: '/auth/v1/user', status: response.status() }), contentType: 'application/json' });
+  // getSession waits behind the held SDK user-read lock; this is a real SDK settlement checkpoint.
+  expect(await page.evaluate(() => window.__callbackUi.user())).toBe(userB);
+  await page.clock.runFor(36_000);
+  await expect(page.getByText('Other route', { exact: true })).toBeVisible();
+  await expect(page.getByRole('status')).toHaveCount(0);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  expect(await page.evaluate(() => window.__callbackUi.routes)).toEqual([]);
+  expect(await page.evaluate(() => window.__callbackUi.errors)).toEqual([]);
+  expect(state.calls).toEqual([]);
+  expect(state.userReads).toBe(1);
+  expect(await page.evaluate(() => window.__callbackUi.user())).toBe(userB);
+  expect((await page.context().cookies()).filter(cookie => cookie.name.startsWith(cookieKey))).toEqual(before);
+});

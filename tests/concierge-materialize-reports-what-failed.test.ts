@@ -3,6 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { materializeConciergePlan } from '@/lib/services/approvals';
 import { at } from './helpers/source-order';
 
+// This recorder owns its injected ledger; do not switch to an ambient service client.
+// Real service-role escalation remains covered independently.
+vi.mock('@/lib/trust/ledger', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/lib/trust/ledger')>();
+  return { ...original, ledgerWriter: async <T>(db: T): Promise<T> => db };
+});
+
 /**
  * Audit C1-S9-72. `materializeConciergePlan` returned a bare list of applied
  * kinds, so "already in place", "the ledger was unreadable" and "every insert

@@ -14,12 +14,13 @@
 // is 32 CSPRNG bytes stored as a SHA-256 and the keyspace is the defence. What
 // the limit is for is cost.
 import { readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import ts from 'typescript';
 
 const routes = () =>
-  execSync("git ls-files 'app/api/**/route.ts'", { encoding: 'utf8' }).split('\n').filter(Boolean);
+  execFileSync('git', ["ls-files","-z","app/api/**/route.ts"], { encoding: 'utf8' })
+    .split('\0').filter(Boolean).filter(Boolean);
 
 const DURABLE = /rateLimitDb\(|enforceRequestRateLimit\(|enforceAIRateLimit\(/;
 const isFnLike = (n: ts.Node) =>

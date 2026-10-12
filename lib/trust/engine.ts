@@ -292,25 +292,53 @@ function conditionsSatisfied(c: PolicyConditions, ctx: ActionContext): boolean {
   return true;
 }
 
+/**
+ * Whether an ALLOW may reach an assistant acting for this person, whatever the
+ * policy's subject.
+ *
+ * An agent's `role` is the role of the person it acts FOR, and an assistant
+ * must never get more than that person may do unasked. For a parent or an
+ * adult — the roles whose AI work is automation-trusted — every allow reaches
+ * their assistant as written. For a guest, child, caregiver or teen:
+ *
+ *   - A policy addressed to Bubaly (subject 'ai') — a learned Autopilot allow,
+ *     the Autopilot dial, "Bubaly may act on the calendar" — speaks for the
+ *     household's managers and is not about them at all.
+ *   - A READ ('view') answers to the rule the person themselves reads under:
+ *     an assistant reading what the family shared with that role, or with
+ *     everyone, gets nothing the person could not open in the app. This is how
+ *     a parent lets a teen's assistant read the practice schedule.
+ *   - A WRITE is automation, which these roles are not trusted with. A blanket
+ *     — subject 'everyone', or capability 'all' — was written about what
+ *     PEOPLE may do, and only incidentally covered `automate`: "everyone may do
+ *     anything on the calendar" handed a guest's assistant every calendar
+ *     write with the risk tier silent, a deletion included. So a write is
+ *     reached only by a rule that names this role AND the capability itself —
+ *     "children's assistants may send family messages" — which is the family
+ *     extending automation to that role on purpose.
+ *
+ * Where an allow does not reach, the policy is not about this assistant: the
+ * role matrix and the risk tier decide, as they would with no policy at all.
+ * A deny or require_approval still binds every actor — those only tighten —
+ * and a member acting directly is matched exactly as before.
+ */
+function allowReachesAssistant(p: Policy, actor: Actor, capability: Capability): boolean {
+  if (actor.kind !== 'ai_agent') return true;
+  if (p.effect !== 'allow' && p.effect !== 'auto_approve') return true;
+  if (ROLE_DEFAULTS[actor.role]?.automationTrusted) return true;
+  if (p.subjectKind === 'ai') return false;
+  if (capability === 'view') return true;
+  return p.subjectKind === 'role' && p.subjectRole === actor.role && p.capability === capability;
+}
+
 function policyApplies(p: Policy, actor: Actor, domain: string, capability: Capability): boolean {
   if (!p.enabled) return false;
   if (p.domain !== 'all' && p.domain !== domain) return false;
   if (p.capability !== 'all' && p.capability !== capability) return false;
+  if (!allowReachesAssistant(p, actor, capability)) return false;
   switch (p.subjectKind) {
     case 'everyone': return true;
-    case 'ai':
-      if (actor.kind !== 'ai_agent') return false;
-      // A policy addressed to Bubaly — a learned Autopilot allow, the Autopilot
-      // dial, "Bubaly may act on the calendar" — speaks for the household's
-      // managers, and an agent's `role` is the role of the person it acts FOR.
-      // An allow must never hand an assistant more than that person may have
-      // done unasked, so it reaches only roles whose AI work is automation-
-      // trusted (parent, adult). For a guest, child, caregiver or teen the
-      // policy is not about them: the role matrix and the risk tier decide, as
-      // they would with no policy at all. A deny or require_approval still
-      // binds every role — those only ever tighten.
-      if ((p.effect === 'allow' || p.effect === 'auto_approve') && !ROLE_DEFAULTS[actor.role]?.automationTrusted) return false;
-      return true;
+    case 'ai': return actor.kind === 'ai_agent';
     case 'role': return p.subjectRole === actor.role;
     case 'member': return p.subjectMemberId === actor.id && actor.kind === 'member';
     default: return false;

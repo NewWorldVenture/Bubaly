@@ -62,6 +62,24 @@ const FIELD: Record<string, 'opens' | 'clicks' | 'bounces' | 'unsubscribes'> = {
   'email.complained': 'unsubscribes',
 };
 
+/**
+ * Whether an email.clicked event is a click on the mail's own Unsubscribe link.
+ * That click is an opt-out, not engagement: it must never start an
+ * email_clicked workflow ("thanks for clicking"). The opt-out row is written by
+ * the browser's GET of the same link, which Resend's webhook can outrun, so the
+ * suppression check alone does not stop that mail.
+ */
+function clickedUnsubscribe(data: unknown): boolean {
+  const click = data && typeof data === 'object' ? (data as { click?: unknown }).click : undefined;
+  const link = click && typeof click === 'object' ? (click as { link?: unknown }).link : undefined;
+  if (typeof link !== 'string' || !link) return false;
+  try {
+    return new URL(link).pathname.replace(/\/+$/, '') === '/api/marketing/unsubscribe';
+  } catch {
+    return false;
+  }
+}
+
 const eventSchema = z.object({
   type: z.string().min(1),
   data: z.object({
@@ -215,7 +233,7 @@ export async function POST(req: NextRequest) {
     // Engagement workflows retain their existing best-effort contract. Their
     // own durable workflow/subject key prevents repeated completed runs.
     const trigger = EVENT_TRIGGER[event.type];
-    if (trigger && isEventTrigger(trigger)) {
+    if (trigger && isEventTrigger(trigger) && !(trigger === 'email_clicked' && clickedUnsubscribe(event.data))) {
       const recipient = Array.isArray(event.data?.to) ? event.data?.to[0] : event.data?.to;
       if (recipient) {
         try {

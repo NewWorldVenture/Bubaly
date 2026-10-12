@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { emailsSent, failedAttempt, recordedActions, runSteps, type Step } from '@/lib/marketing/automation-steps';
+import { emailsSent, failedAttempt, recordedActions, runSteps, type SendAdmission, type Step } from '@/lib/marketing/automation-steps';
 import { EVENT_DEFAULT_COPY, type EventTrigger } from '@/lib/marketing/automation-triggers';
 import { wroteNoRows } from '@/lib/supabase/errors';
 
@@ -16,6 +16,14 @@ export type FireEventParams = {
   subjectKey: string;
   /** Extra context stored on the run for auditing. */
   context?: Record<string, unknown>;
+  /**
+   * Asked before EVERY mail this event would send, across every matching
+   * workflow and every send_email step in each (runSteps). One event fans out
+   * that far, so a per-recipient bound checked once, on the event, bounds
+   * nothing per inbox. Omitted, every admitted step sends, as account and
+   * campaign automations for verified addresses always have.
+   */
+  admitSend?: SendAdmission;
 };
 
 export type FireEventResult = { workflows: number; emails: number; failures: number };
@@ -75,7 +83,7 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
     const steps = Array.isArray(flow.steps) ? (flow.steps as unknown as Step[]) : [];
     let actions: string[];
     try {
-      actions = await runSteps(steps, { email: params.email ?? null, name: params.name ?? null }, fallback, previous);
+      actions = await runSteps(steps, { email: params.email ?? null, name: params.name ?? null }, fallback, supabase, params.admitSend, previous);
     } catch (error) {
       console.error('[marketing automation] event-driven steps failed', error);
       // Keep what the earlier attempt delivered: a bare failure here would

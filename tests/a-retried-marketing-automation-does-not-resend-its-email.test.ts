@@ -30,6 +30,8 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/email', () => ({
+  // Automation mail carries an unsubscribe link built on it.
+  APP_URL: 'https://app.synthetic.invalid',
   FROM_EMAIL: 'Synthetic <synthetic@synthetic.invalid>',
   emailEnabled: () => true,
   getResend: () => ({

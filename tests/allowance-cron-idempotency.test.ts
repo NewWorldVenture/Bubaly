@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -27,8 +27,8 @@ import { describe, expect, it } from 'vitest';
 //
 // So the guard now DISCOVERS every site that advances a schedule and requires the
 // claim of each. A third implementation cannot ship without one.
-const FILES = execSync("git ls-files 'app/**/*.ts' 'lib/**/*.ts'", { encoding: 'utf8' })
-  .split('\n')
+const FILES = execFileSync('git', ["ls-files","-z","app/**/*.ts","lib/**/*.ts"], { encoding: 'utf8' })
+    .split('\0').filter(Boolean)
   .filter(Boolean);
 
 /**
