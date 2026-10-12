@@ -5,6 +5,7 @@ import { X } from 'lucide-react';
 import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
+import { detectGPC, initialConsent, readLocalConsent } from '@/lib/marketing/visitor';
 
 type Offer = {
   id: string;
@@ -16,6 +17,7 @@ type Offer = {
 };
 
 const SEEN_KEY = 'bubaly-ei-seen'; // at most one exit-intent per visitor per window
+const VISITED_KEY = 'bubaly-visited'; // returning-visitor marker; written only with personalisation consent
 const SEEN_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 function recentlySeen(): boolean {
@@ -54,8 +56,19 @@ export function ExitIntent() {
     if (recentlySeen()) return;
     let cancelled = false;
     const params = new URLSearchParams(window.location.search);
-    const isReturning = (() => { try { return localStorage.getItem('bubaly-visited') === '1'; } catch { return false; } })();
-    try { localStorage.setItem('bubaly-visited', '1'); } catch { /* ignore */ }
+    // Whether this browser has been here before is visit history, and choosing
+    // an offer by it is personalisation — opt-in (lib/marketing/consent.ts) and
+    // off under GPC. Without that consent the device is not marked and the
+    // offer is chosen from the page and its link alone; a marker left by an
+    // earlier visit is cleared rather than kept for later.
+    const personalize = (readLocalConsent()?.state ?? initialConsent(detectGPC())).personalization;
+    let isReturning = false;
+    if (personalize) {
+      try { isReturning = localStorage.getItem(VISITED_KEY) === '1'; } catch { /* ignore */ }
+      try { localStorage.setItem(VISITED_KEY, '1'); } catch { /* ignore */ }
+    } else {
+      try { localStorage.removeItem(VISITED_KEY); } catch { /* ignore */ }
+    }
 
     fetch('/api/exit-intent/resolve', {
       method: 'POST',
@@ -65,7 +78,7 @@ export function ExitIntent() {
         source: params.get('utm_source'),
         medium: params.get('utm_medium'),
         campaign: params.get('utm_campaign'),
-        returning: isReturning,
+        ...(personalize ? { returning: isReturning } : {}),
       }),
     })
       .then((r) => r.json())

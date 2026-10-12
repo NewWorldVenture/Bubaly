@@ -6,6 +6,7 @@ import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { normalizeEmail, normalizeSource, normalizeVisitorId } from '@/lib/blog/engagement';
+import { canonicalMailbox } from '@/lib/server/canonical-mailbox';
 import { sendSubscribeNotice, type SubscribeOutcome } from '@/lib/blog/subscribe-notice';
 import { carriedVisitorId, namesAnotherVisitor } from '@/lib/marketing/visitor-cookie';
 
@@ -16,7 +17,8 @@ export const runtime = 'nodejs';
 // Bot defenses: honeypot field (silently accepted, never written), IP rate
 // limit, per-address mail throttle, bounded body, strict email normalization.
 // Re-subscribing after an unsubscribe re-activates — a fresh explicit opt-in is
-// new consent.
+// new consent — but only when the address is mailed that it happened; a
+// submission whose notice is throttled leaves the opt-out standing.
 //
 // EVERY ACCEPTED SUBMISSION GETS THE SAME ANSWER, AND THAT IS THE POINT.
 //
@@ -123,8 +125,15 @@ export async function POST(req: NextRequest) {
   // subscribe would be the thing that tripped it. Applied before the lookup and
   // keyed on the submitted string, so it behaves identically for an address we
   // know and one we have never seen.
+  //
+  // Keyed on the canonical INBOX, not the string as typed. `victim+1@gmail.com`,
+  // `victim+2@gmail.com` and `v.ictim@gmail.com` are one inbox, and as three
+  // keys they were three allowances — each a new row and a new notice, so one
+  // IP walked the limit off one `+tag` at a time. The canonical form is still a
+  // function of the submitted string alone, so the anti-oracle property above
+  // holds; the row keeps the address exactly as it was typed.
   const mailable = await enforceRequestRateLimit(
-    supabase, `blogsub:addr:${email}`, { limit: 3, windowMs: 3_600_000 },
+    supabase, `blogsub:addr:${canonicalMailbox(email)}`, { limit: 3, windowMs: 3_600_000 },
   );
 
   const { data: existing, error: lookupError } = await supabase
@@ -148,16 +157,23 @@ export async function POST(req: NextRequest) {
 
   if (existing) {
     const wasActive = existing.status === 'active';
-    outcome = wasActive ? 'already' : 'reactivated';
     token = existing.unsubscribe_token;
-    // Unconditional on purpose: both states issue exactly one UPDATE, so the
-    // request does the same work whichever one it found. For a row that is
-    // already active this re-asserts the status it already had and leaves
+    // An opt-out is reversed only when the address is told it was. Nobody has
+    // to own the address to submit it, so the notice is the owner's one chance
+    // to undo it — and the notice is throttled. Reactivating regardless let a
+    // caller spend the address's notices, wait for the owner to unsubscribe,
+    // and silently put them back on the list. With no notice to send, the row
+    // is left as it is.
+    const reactivate = !wasActive && mailable.ok && Boolean(token);
+    outcome = wasActive ? 'already' : 'reactivated';
+    // Unconditional on purpose: every state issues exactly one UPDATE, so the
+    // request does the same work whichever one it found. For a row that is not
+    // being reactivated this re-asserts the status it already had and leaves
     // attribution alone — re-writing `source` there would let an anonymous
     // caller rewrite a subscriber's attribution by guessing their address.
-    const patch = wasActive
-      ? { status: 'active' }
-      : { status: 'active', source, unsubscribed_at: null, ...(visitorId ? { visitor_id: visitorId } : {}) };
+    const patch = reactivate
+      ? { status: 'active', source, unsubscribed_at: null, ...(visitorId ? { visitor_id: visitorId } : {}) }
+      : { status: existing.status };
     const { data: patched, error } = await supabase
       .from('blog_subscribers')
       .update(patch)
