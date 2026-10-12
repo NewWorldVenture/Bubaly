@@ -377,3 +377,55 @@ export async function resetChildPinAction(input: { memberId: string; pin: string
   });
   return { ok: true };
 }
+
+/**
+ * Remove a member's kid login: the mapping, the member's link to the account,
+ * and the PIN account itself. Manager only. The member row stays, with no
+ * login, so a parent can then do what the held 0512 asks before a member is
+ * made a parent or adult (a PIN must never guard a manager; they sign in with
+ * their own email, through an invite).
+ *
+ * The same provenance as a PIN reset before anything is touched: the mapping
+ * and the member row must agree, and the account must be this kid login's
+ * synthetic address, so a tampered mapping cannot delete somebody's real
+ * account. The removal itself is the create action's rollback, whose every
+ * step is confirmed.
+ */
+export async function removeChildLoginAction(input: { memberId: string }): Promise<Result> {
+  const t = await getTranslations();
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('childLoginActions.onlyAParentOrGuardian2') };
+
+  const admin = createServiceClient();
+  const { data: row, error: rowReadError } = await admin.from('child_logins')
+    .select('user_id, username, family_id').eq('member_id', input.memberId).maybeSingle();
+  if (rowReadError) return { ok: false, error: describeActionError(rowReadError, t('actions.couldNotCheckThatRefresh')) };
+  if (!row || row.family_id !== ctx.active.familyId) return { ok: false, error: t('childLoginActions.loginNotFound') };
+
+  const { data: member, error: memberError } = await admin.from('family_members')
+    .select('id, family_id, user_id').eq('id', input.memberId).maybeSingle();
+  if (memberError) return { ok: false, error: describeActionError(memberError, t('actions.couldNotCheckThatRefresh')) };
+  if (!member || member.family_id !== ctx.active.familyId || member.user_id !== row.user_id) {
+    console.error('[child-login] refusing a removal whose mapping does not match the member row', {
+      memberId: input.memberId, familyId: ctx.active.familyId,
+    });
+    return { ok: false, error: t('childLoginActions.couldNotRemoveTheLogin') };
+  }
+  const { data: account, error: accountError } = await admin.auth.admin.getUserById(row.user_id);
+  if (accountError || !account?.user
+      || (account.user.email ?? '').trim().toLowerCase() !== syntheticChildEmail(row.username).toLowerCase()) {
+    console.error('[child-login] refusing a removal for an account that is not this kid login', {
+      memberId: input.memberId, familyId: ctx.active.familyId, error: accountError?.message ?? null,
+    });
+    return { ok: false, error: t('childLoginActions.couldNotRemoveTheLogin') };
+  }
+
+  const removed = await rollbackChildLogin(admin, { memberId: member.id, childUserId: row.user_id, removeLoginRow: true });
+  if (!removed) return { ok: false, error: t('childLoginActions.couldNotRemoveTheLogin') };
+
+  await logAudit(admin, {
+    familyId: row.family_id, actorId: ctx.user.id, action: 'delete',
+    resource: 'child_logins', resourceId: input.memberId, metadata: { username: row.username },
+  });
+  return { ok: true };
+}

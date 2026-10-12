@@ -300,6 +300,9 @@ describe('a second approver decides on what will actually run', () => {
   beforeEach(() => {
     store.seed('family_members', MEMBERS);
     store.seed('approval_requests', [approvalRow()]);
+    // The trust gate's own filing line (service-only, 0260): Bubaly filed this
+    // row, so the deciding vote replays exactly what the family agreed to.
+    store.seed('trust_audit_logs', [{ family_id: FAMILY, actor_kind: 'ai_agent', actor_id: 'bubaly', approval_id: APPROVAL, decision: 'require_approval' }]);
   });
 
   it('keeps the first approver’s wording when the second edits a different field', async () => {

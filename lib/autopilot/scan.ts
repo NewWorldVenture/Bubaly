@@ -45,14 +45,14 @@ import { isPolicySuggestionKey } from '@/lib/autopilot/policy-candidates';
 import { runPolicyScan } from '@/lib/autopilot/policy-scan';
 import { archiveStaleSuggestions } from '@/lib/autopilot/history';
 import { draftHasLapsed, reminderIsoFor } from '@/lib/autopilot/reminder-time';
-import { notify } from '@/lib/services/notifications';
+import { notify, type NotifyRecipients } from '@/lib/services/notifications';
+import { activeRoster, medicationReaderIds, type RosterMember } from '@/lib/autopilot/medication-readers';
 import { sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
 import { addDaysToDayKey, dayKeyInTz, systemScopeForFamily, zonedTimeMs } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
-import { isManager } from '@/lib/constants/roles';
 import type { LocaleCode } from '@/lib/i18n/locales';
 
 type DB = SupabaseClient<Database>;
@@ -161,6 +161,7 @@ export async function runAutopilotScan(
   // quiet hours evaluated in the wrong zone hold a notice at six in the evening
   // and let one through at two in the morning.
   let notifyScope: ServiceScope | null = null;
+  let roster: Promise<RosterMember[] | null> | null = null;
   const { todayKey, in30Key, since8Key, since90Key, horizonEndKey, startIso, in3Iso, since90Iso } = scanWindow(tz, now);
   const [
     renewalsResult, apptsResult, choreRowsResult,
@@ -342,23 +343,6 @@ export async function runAutopilotScan(
   //    without anyone opening the app.
   let autoExecuted = 0;
   let notified = 0;
-  // Who hears about a prescription: the person it is written for and the
-  // family's managers (F-G09), never the whole household ('family'). A
-  // refill is always urgent enough to notify, and the cron runs this on the
-  // service client, so no RLS stands between a parent's Sertraline and a
-  // child's, a babysitter's or a guest's bell. Read once, and only when a
-  // refill is due; `null` means the household could not be read, and then
-  // the alert is not sent rather than sent to everyone.
-  let household: { id: string; role: string }[] | null | undefined;
-  const prescriptionAudience = async (memberId: string | null): Promise<string[] | null> => {
-    if (household === undefined) {
-      const { data, error } = await supabase.from('family_members').select('id, role')
-        .eq('family_id', familyId).eq('is_active', true);
-      if (error) console.error('[autopilot] could not read who a refill alert is for; not sending it', { familyId, error });
-      household = error ? null : (data ?? []);
-    }
-    return household ? household.filter((m) => isManager(m.role) || m.id === memberId).map((m) => m.id) : null;
-  };
   for (const d of drafts) {
     const prior = existingByKey.get(d.dedupeKey);
     if (prior) continue; // respect prior state (resolved or already-open); avoid churn
@@ -481,14 +465,22 @@ export async function runAutopilotScan(
     //
     // NOT urgent: an autopilot suggestion is a courtesy. It is still delivered,
     // just at the hour the family said they were willing to hear from Bubaly.
-    const recipients = d.sourceKind === 'medications' ? await prescriptionAudience(d.memberId) : 'family' as const;
-    if ((d.urgency >= 2 || status === 'auto_executed') && (recipients === 'family' || (recipients && recipients.length > 0))) {
+    if (d.urgency >= 2 || status === 'auto_executed') {
       const scope = notifyScope ?? (notifyScope = await systemScopeForFamily(supabase, familyId));
       if (scope) {
+        // A refill names the drug, so it goes only to the people the held 0511
+        // lets read that medication; the family hears nothing of it.
+        let privateTo: NotifyRecipients | null = null;
+        if (d.audience === 'medication-readers') {
+          const members = await (roster ?? (roster = activeRoster(supabase, familyId)));
+          privateTo = members ? medicationReaderIds(members, d.memberId) : 'managers';
+        }
         const sent = await notify(scope, {
-          recipients,
+          recipients: privateTo ?? 'family',
           type: 'system',
-          title: status === 'auto_executed' ? `Autopilot handled: ${d.title}` : (d.notificationTitle ?? d.title),
+          title: status === 'auto_executed'
+            ? `Autopilot handled: ${privateTo ? (d.notificationTitle ?? d.title) : d.title}`
+            : (d.notificationTitle ?? d.title),
           body: d.detail,
           relatedType: 'autopilot_suggestions',
           relatedId: inserted.id,

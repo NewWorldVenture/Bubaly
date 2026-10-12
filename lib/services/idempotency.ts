@@ -74,8 +74,13 @@ export function scopeKey(scope: ServiceScope, operation: string, input: unknown)
     scope.stepId ?? null,
     scope.requestId ?? null,
     operation,
-    createHash('sha256').update(JSON.stringify(stableValue(input))).digest('hex'),
+    inputDigest(input),
   ]);
+}
+
+/** A sha256 of an argument object, normalised first so key order and blank padding do not change it. */
+export function inputDigest(input: unknown): string {
+  return createHash('sha256').update(JSON.stringify(stableValue(input))).digest('hex');
 }
 
 export type IdempotencyProbe<T> = (key: string) => Promise<ServiceResult<T | null>>;
