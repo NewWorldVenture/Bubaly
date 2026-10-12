@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join as nativeJoin } from 'node:path';
+const join = (...parts: string[]): string => nativeJoin(...parts).replace(/\\/g, '/');
 import { describe, expect, it } from 'vitest';
 
 // `rate_limit_hit` (0179) refuses a key from a signed-in caller unless the key

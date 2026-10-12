@@ -33,7 +33,7 @@ export function TripDocuments({ vacationId }: { vacationId: string }) {
   const t = useTranslations();
   return (
     <TripCrudSection<Doc>
-      table="vacation_documents" vacationId={vacationId} title={t('tripDocuments.travelDocuments')} icon={FolderLock}
+      table="vacation_documents" vacationId={vacationId} title={t('tripDocuments.travelDocuments')} icon={FolderLock} personal="personal"
       fields={fields} emptyText={t('tripDocuments.noDocumentsYet')} addLabel="Add document"
       orderBy={(a, b) => a.title.localeCompare(b.title)}
       renderRow={(d, members) => {

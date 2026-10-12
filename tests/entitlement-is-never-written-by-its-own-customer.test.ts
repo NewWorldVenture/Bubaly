@@ -1,5 +1,4 @@
-import { readFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 // 0429 is the real boundary: `subscriptions` and `billing_customers` take no
@@ -24,18 +23,14 @@ import { describe, expect, it } from 'vitest';
 
 /** Every `.from('<table>')` in app/ and lib/, with the file it sits in. */
 function callSites(table: string): { file: string; line: number; text: string }[] {
-  const out = execFileSync(
-    'grep',
-    ['-rn', '--include=*.ts', '--include=*.tsx', `from('${table}')`, 'app', 'lib'],
-    { encoding: 'utf8' },
-  );
-  return out
-    .split('\n')
-    .filter(Boolean)
-    .map((row) => {
-      const [file, line, ...rest] = row.split(':');
-      return { file, line: Number(line), text: rest.join(':') };
-    });
+  const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const file = dir + '/' + entry.name;
+    return entry.isDirectory() ? files(file)
+      : entry.isFile() && /\.tsx?$/.test(entry.name) ? [file] : [];
+  });
+  return ['app', 'lib'].flatMap(files).flatMap(file =>
+    readFileSync(file, 'utf8').split('\n').flatMap((text, index) =>
+      text.includes(`from('${table}')`) ? [{ file, line: index + 1, text }] : []));
 }
 
 /**

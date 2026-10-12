@@ -10,7 +10,9 @@
 //    that error, because the defaults are "Bubaly on, `execute`, memory on":
 //    handing them to an enforcing caller turned a family's "switch Bubaly off"
 //    or "don't remember" back on for as long as the failure lasted (SEC-009).
-//    The enforcing callers today: the tool gate (lib/ai/tools/execute.ts), the
+//    The enforcing callers today: the tool gate (lib/ai/tools/execute.ts) and
+//    the run executor's check of a notice to the asker alone
+//    (lib/ai/runs/executor.ts `ownNoticeCleared`), the
 //    shared AI gate for chat, Magic Import and the school desk
 //    (lib/trust/ai-gate.ts), the routine cron
 //    (app/api/cron/family-routines/route.ts), the speaker capture

@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 
 // MAIN-F-D05. Thirteen signed-in pages rendered no <h1>, eleven of them no
@@ -12,7 +12,8 @@ import { describe, expect, it } from 'vitest';
 // (two levels deep), or a layout between it and app/(app) contains an <h1> or a
 // PageHeader (which renders one). A pure redirect renders nothing and is skipped.
 
-const pages = execSync("git ls-files 'app/(app)/**/page.tsx'", { encoding: 'utf8' }).trim().split('\n');
+const pages = execFileSync('git', ["ls-files","-z","app/(app)/**/page.tsx"], { encoding: 'utf8' })
+    .split('\0').filter(Boolean);
 const H1 = /<h1\b|<PageHeader\b/;
 
 function resolve(spec: string, from: string): string | null {

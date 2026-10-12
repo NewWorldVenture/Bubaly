@@ -45,13 +45,14 @@ import { isPolicySuggestionKey } from '@/lib/autopilot/policy-candidates';
 import { runPolicyScan } from '@/lib/autopilot/policy-scan';
 import { archiveStaleSuggestions } from '@/lib/autopilot/history';
 import { draftHasLapsed, reminderIsoFor } from '@/lib/autopilot/reminder-time';
-import { notify } from '@/lib/services/notifications';
+import { notify, type NotifyRecipients } from '@/lib/services/notifications';
+import { activeRoster, medicationReaderIds, type RosterMember } from '@/lib/autopilot/medication-readers';
 import { sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
 import { addDaysToDayKey, dayKeyInTz, systemScopeForFamily, zonedTimeMs } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { wroteNoRows } from '@/lib/supabase/errors';
-import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
+import { ensureDefaultGroceryListId, openGroceryListIds } from '@/lib/services/groceries';
 import type { LocaleCode } from '@/lib/i18n/locales';
 
 type DB = SupabaseClient<Database>;
@@ -160,7 +161,12 @@ export async function runAutopilotScan(
   // quiet hours evaluated in the wrong zone hold a notice at six in the evening
   // and let one through at two in the morning.
   let notifyScope: ServiceScope | null = null;
+  let roster: Promise<RosterMember[] | null> | null = null;
   const { todayKey, in30Key, since8Key, since90Key, horizonEndKey, startIso, in3Iso, since90Iso } = scanWindow(tz, now);
+  // "Still need: X" is only asked about items on a list the family has not
+  // archived; a leftover on an archived list is off the shopping page.
+  const openLists = await openGroceryListIds(supabase, familyId);
+  if (!openLists.ok) throw new Error('Autopilot could not read the required family data');
   const [
     renewalsResult, apptsResult, choreRowsResult,
     membersResult, groceriesResult, apptRemindersResult,
@@ -171,7 +177,7 @@ export async function runAutopilotScan(
     supabase.from('appointments').select('id, title, starts_at, member_id').eq('family_id', familyId).gte('starts_at', startIso).lt('starts_at', in3Iso).limit(50),
     supabase.from('chore_assignments').select('id, due_at, member_id, status, chores(title)').eq('family_id', familyId).in('status', ['todo', 'in_progress']).lt('due_at', startIso).limit(100),
     supabase.from('family_members').select('id, display_name, birthday').eq('family_id', familyId).eq('is_active', true).not('birthday', 'is', null).limit(50),
-    supabase.from('grocery_items').select('id, name, created_at, is_checked').eq('family_id', familyId).eq('is_checked', false).limit(200),
+    supabase.from('grocery_items').select('id, name, created_at, is_checked').eq('family_id', familyId).in('list_id', openLists.ids).eq('is_checked', false).limit(200),
     supabase.from('reminders').select('related_id').eq('family_id', familyId).eq('related_type', 'appointment').eq('is_done', false).limit(200),
     supabase.from('calendar_events').select('id, title, starts_at, ends_at, assignee_id, all_day, location, feed_id, external_uid').eq('family_id', familyId).gte('starts_at', startIso).lt('starts_at', in3Iso).limit(100),
     supabase.from('subscriptions_tracked').select('id, name, cost_cents, cadence, next_charge, last_used, status').eq('family_id', familyId).in('status', ['active', 'trial']).limit(200),
@@ -466,10 +472,19 @@ export async function runAutopilotScan(
     if (d.urgency >= 2 || status === 'auto_executed') {
       const scope = notifyScope ?? (notifyScope = await systemScopeForFamily(supabase, familyId));
       if (scope) {
+        // A refill names the drug, so it goes only to the people the held 0511
+        // lets read that medication; the family hears nothing of it.
+        let privateTo: NotifyRecipients | null = null;
+        if (d.audience === 'medication-readers') {
+          const members = await (roster ?? (roster = activeRoster(supabase, familyId)));
+          privateTo = members ? medicationReaderIds(members, d.memberId) : 'managers';
+        }
         const sent = await notify(scope, {
-          recipients: 'family',
+          recipients: privateTo ?? 'family',
           type: 'system',
-          title: status === 'auto_executed' ? `Autopilot handled: ${d.title}` : (d.notificationTitle ?? d.title),
+          title: status === 'auto_executed'
+            ? `Autopilot handled: ${privateTo ? (d.notificationTitle ?? d.title) : d.title}`
+            : (d.notificationTitle ?? d.title),
           body: d.detail,
           relatedType: 'autopilot_suggestions',
           relatedId: inserted.id,

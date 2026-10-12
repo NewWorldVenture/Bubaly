@@ -273,7 +273,7 @@ export function CaptureShell({ initialShortcuts = null, initialText = '' }: {
         <a className="mb-4 block text-sm text-brand-text underline" href={`/capture/link?url=${encodeURIComponent(documentLinkCandidates(text)[0] ?? '')}`}>{t('documentLink.title')}</a>
         {mode === 'photo' || mode === 'document' ? <DocumentCapture photo={mode === 'photo'} /> : <>
         {/* Input area */}
-        <div className="relative mb-4 overflow-hidden rounded-2xl border border-border bg-surface/40 focus-within:border-brand/50 focus-within:ring-1 focus-within:ring-brand/30">
+        <div className="relative mb-4 overflow-hidden rounded-2xl border border-border bg-surface/40 focus-within:border-brand focus-within:ring-1 focus-within:ring-brand/30">
           {recording ? (
             <div className="flex min-h-[120px] flex-col items-center justify-center gap-3 p-6">
               <div className="relative">

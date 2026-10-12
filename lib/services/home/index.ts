@@ -21,7 +21,7 @@ import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
 import { withIdempotency } from '../idempotency';
-import { dayKeyInTz, scopeNow } from '../scope';
+import { dayKeyInTz, familyInstantIso, scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { escapeLike } from '@/lib/supabase/escape-like';
 
@@ -216,6 +216,8 @@ export async function saveContractor(scope: ServiceScope, input: SaveContractorI
       .update(patch)
       .eq('id', targetId)
       .eq('family_id', scope.familyId)
+      // A deleted contractor is not edited back into a hidden row: it is not found.
+      .is('deleted_at', null)
       .select('*')
       .maybeSingle();
     if (error) {
@@ -340,6 +342,20 @@ export async function createServiceRecord(scope: ServiceScope, input: CreateServ
       },
     },
     async () => {
+      // The contractor must be one the family still has. The foreign key only
+      // proves the id exists somewhere: a deleted contractor would get a new
+      // visit on its hidden row, and another family's id would be stored here.
+      // Checked inside the create, so a retry of a visit already saved still
+      // answers with it.
+      if (input.contractorId) {
+        const { data: live, error: contractorReadError } = await scope.db.from('home_contractors').select('id')
+          .eq('id', input.contractorId).eq('family_id', scope.familyId).is('deleted_at', null).maybeSingle();
+        if (contractorReadError) {
+          console.error('[service:home] contractor check failed', contractorReadError);
+          return fail(describeDbError(contractorReadError, 'Could not check that contractor.'), { code: SERVICE_CODES.db });
+        }
+        if (!live) return fail('That contractor could not be found.', { code: SERVICE_CODES.notFound });
+      }
       const { data, error } = await scope.db
         .from('home_service_records')
         .insert({
@@ -375,7 +391,8 @@ export async function createServiceRecord(scope: ServiceScope, input: CreateServ
       }
       if (input.contractorId) {
         const { data: contractorTouched, error: contractorError } = await scope.db.from('home_contractors')
-          .update({ last_used_on: serviceDate, updated_by: scope.userId }).eq('id', input.contractorId).eq('family_id', scope.familyId).select('id');
+          .update({ last_used_on: serviceDate, updated_by: scope.userId }).eq('id', input.contractorId).eq('family_id', scope.familyId)
+          .is('deleted_at', null).select('id');
         if (contractorError || wroteNoRows(contractorTouched)) {
           console.error('[service:home] home_contractors last_used_on update failed', contractorError ?? { contractorId: input.contractorId, error: 'no rows updated' });
         }
@@ -404,9 +421,10 @@ export async function createMaintenanceTask(scope: ServiceScope, input: CreateMa
   if (!title) return fail('A maintenance task needs a title.', { code: SERVICE_CODES.invalidInput });
   let dueAt: string | null = null;
   if (input.dueAt) {
-    const ms = Date.parse(input.dueAt);
-    if (!Number.isFinite(ms)) return fail('That due date could not be understood.', { code: SERVICE_CODES.invalidInput });
-    dueAt = new Date(ms).toISOString();
+    // On the FAMILY's clock: `Date.parse` read "Friday 17:00" as 17:00Z (10am in
+    // Los Angeles) and a bare date as UTC midnight, the evening before.
+    dueAt = familyInstantIso(input.dueAt, scope.tz);
+    if (!dueAt) return fail('That due date could not be understood.', { code: SERVICE_CODES.invalidInput });
   }
   if (input.priority && !PRIORITIES.includes(input.priority)) return fail('Priority is low, medium or high.', { code: SERVICE_CODES.invalidInput });
   if (input.intervalDays != null && (!Number.isInteger(input.intervalDays) || input.intervalDays <= 0)) {
@@ -482,9 +500,10 @@ export async function listOpenMaintenance(
     .order('due_at', { ascending: true, nullsFirst: false })
     .limit(Math.min(Math.max(input.limit ?? 100, 1), 500));
   if (input.dueBefore) {
-    const ms = Date.parse(input.dueBefore);
-    if (!Number.isFinite(ms)) return fail('That date could not be understood.', { code: SERVICE_CODES.invalidInput });
-    query = query.lte('due_at', new Date(ms).toISOString());
+    // The family's day boundary, not UTC midnight (see createMaintenanceTask).
+    const dueBefore = familyInstantIso(input.dueBefore, scope.tz);
+    if (!dueBefore) return fail('That date could not be understood.', { code: SERVICE_CODES.invalidInput });
+    query = query.lte('due_at', dueBefore);
   }
   if (input.assetId) query = query.eq('asset_id', input.assetId);
   const { data, error } = await query;

@@ -7,7 +7,7 @@ import type { Database } from '@/lib/database.types';
 import {
   normalizeAnswer, type ProfileField, type KnownProfile,
 } from '@/lib/marketing/progressive-profile';
-import { escapeLike } from '@/lib/supabase/escape-like';
+import { literalCaseInsensitivePattern } from '@/lib/supabase/escape-like';
 import { wroteNoRows } from '@/lib/supabase/errors';
 
 type Admin = SupabaseClient<Database>;
@@ -44,26 +44,28 @@ async function resolveContactId(admin: Admin, userId: string, email: string | nu
 
   const e = (email ?? '').trim().toLowerCase();
   if (e) {
-    const { data: byEmail, error: byEmailError } = await admin.from('crm_contacts').select('id, owner_id').ilike('email', escapeLike(e)).limit(1);
+    const { data: byEmail, error: byEmailError } = await admin.from('crm_contacts').select('id, email, owner_id').filter('email', 'imatch', literalCaseInsensitivePattern(e)).limit(1);
     if (byEmailError || !Array.isArray(byEmail)) throw unanswered('contact lookup by email failed', { error: byEmailError ?? 'no result list' });
     if (byEmail[0]?.id) {
+      const contact = byEmail[0];
+      if (typeof contact.email !== 'string' || contact.email.trim().toLowerCase() !== e) throw unanswered('contact email did not match', { contactId: contact.id });
       if (byEmail[0].owner_id == null) {
         // The read above saw no owner; the WRITE now says so too. Without
         // `.is('owner_id', null)` a lead claimed in between — the same person in
         // a second tab, or a CRM import — was overwritten, and the account was
         // tied to a record whose owner had just changed under it. Zero rows
-        // claimed means it is no longer ours to take, so fall through and
-        // create this user their own lead rather than return one they may not
-        // hold. Audit C1-S9-61.
+        // claimed means the identity changed. Refuse this call without reading
+        // that profile or inserting a replacement based on a stale lookup.
         //
         // A claim that ERRORS is raised like every other failure here, not
         // returned: the lead may have changed hands, and a fresh lead would
         // duplicate the contact. The action rejects, the nudge keeps the
         // question, and the next call finds it by email and retries.
         const { data: claimed, error: claimError } = await admin.from('crm_contacts')
-          .update({ owner_id: userId }).eq('id', byEmail[0].id).is('owner_id', null).select('id');
+          .update({ owner_id: userId }).eq('id', byEmail[0].id).eq('email', contact.email).is('owner_id', null).select('id');
         if (claimError) throw unanswered('contact owner claim failed', { contactId: byEmail[0].id, error: claimError });
         if (!wroteNoRows(claimed)) return byEmail[0].id;
+        throw unanswered('contact identity changed before claim', { contactId: contact.id });
       } else if (byEmail[0].owner_id === userId) {
         return byEmail[0].id;
       }

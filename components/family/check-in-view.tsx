@@ -16,6 +16,7 @@ import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { CHECK_IN_STATUS, relTime as relTimeIn } from '@/lib/family/safety';
+import { historyInScope, readsEveryonesHistory } from '@/lib/location/history-scope';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type CheckIn = Tables<'safety_check_ins'>;
@@ -28,14 +29,26 @@ export function CheckInView() {
   // "30m ago" on a safety surface follows the reader.
   const locale = useLocale();
   const relTime = (iso: string) => relTimeIn(iso, new Date(), locale.code);
-  const { familyId, userId, members, selfMember } = useApp();
+  const { familyId, userId, members, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
+  // The held 0516: a parent, an adult or a caregiver reads everyone's
+  // check-ins; anyone else their own (a guest too: the held 0509 keeps a
+  // guest's own rows). Narrowed before the limit, so a restricted reader's own
+  // check-ins are not crowded out and nobody else's reach their browser; with
+  // no member record of their own there is nothing of theirs to read.
+  const seesEveryones = readsEveryonesHistory(role);
+  const selfId = selfMember?.id ?? null;
   const { data: rows, loading, error, refresh } = useRealtimeQuery<CheckIn>({
-    table: 'safety_check_ins', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('safety_check_ins').select('*').eq('family_id', familyId).order('created_at', { ascending: false }).limit(100),
+    table: 'safety_check_ins', familyId, deps: [familyId, role, selfId],
+    fetcher: (sb) => {
+      if (!seesEveryones && !selfId) return Promise.resolve({ data: [] as CheckIn[], error: null });
+      const query = sb.from('safety_check_ins').select('*').eq('family_id', familyId);
+      return (seesEveryones ? query : query.eq('member_id', selfId!)).order('created_at', { ascending: false }).limit(100);
+    },
   });
+  const visible = useMemo(() => historyInScope(rows ?? [], role, selfMember?.id), [rows, role, selfMember]);
 
   const [place, setPlace] = useState('');
   const [note, setNote] = useState('');
@@ -93,7 +106,7 @@ export function CheckInView() {
             const meta = CHECK_IN_STATUS[s];
             return (
               <button key={s} onClick={() => checkIn(s)} disabled={busy !== null}
-                className={cn('flex flex-col items-center gap-1 rounded-xl border border-border p-3 text-sm font-semibold transition hover:border-brand/40 hover:bg-elevated disabled:opacity-50', busy === s && 'opacity-60')}>
+                className={cn('flex flex-col items-center gap-1 rounded-xl border border-border p-3 text-sm font-semibold transition hover:border-brand/40 hover:bg-elevated disabled:opacity-50')}>
                 <span className="text-xl">{meta.emoji}</span>
                 {meta.label}
               </button>
@@ -103,11 +116,12 @@ export function CheckInView() {
       </div>
 
       {/* Feed */}
-      {loading ? <SkeletonList /> : error ? <ErrorState message={t('checkInView.couldNotLoadFamilyCheck')} onRetry={refresh} /> : (rows ?? []).length === 0 ? (
+      {!seesEveryones && <p className="text-xs text-muted">{t('checkInView.onlyYourOwnCheckIns')}</p>}
+      {loading ? <SkeletonList /> : error ? <ErrorState message={t('checkInView.couldNotLoadFamilyCheck')} onRetry={refresh} /> : visible.length === 0 ? (
         <EmptyState icon={ShieldCheck} title={t('checkIn.noCheckInsYet')} description={t('checkInView.tapAStatusAboveTo')} />
       ) : (
         <div className="space-y-2">
-          {(rows ?? []).map((c) => {
+          {visible.map((c) => {
             const m = c.member_id ? memberById.get(c.member_id) : null;
             const meta = CHECK_IN_STATUS[c.status] ?? CHECK_IN_STATUS.safe;
             const mine = c.created_by === userId;
@@ -125,7 +139,7 @@ export function CheckInView() {
                     {c.latitude != null && <a href={`https://maps.google.com/?q=${c.latitude},${c.longitude}`} target="_blank" rel="noreferrer" className="ml-1 inline-flex items-center gap-0.5 text-brand-text"><MapPin className="h-3 w-3" /> map</a>}
                   </p>
                 </div>
-                {mine && <button onClick={() => remove(c)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={t('checkInView.delete')}><Trash2 className="h-4 w-4" /></button>}
+                {mine && <button onClick={() => remove(c)} className="rounded-lg p-1.5 text-muted opacity-100 sm:opacity-0 transition hover:text-danger sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100" aria-label={t('checkInView.delete')}><Trash2 className="h-4 w-4" /></button>}
               </div>
             );
           })}

@@ -8,6 +8,7 @@ import {
   Search, X, Sparkles, FolderLock, Star,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { readsHouseholdMoney, transactionsInScope } from '@/lib/finance/household-money';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useToast } from '@/components/ui/toast';
 import { reportRefusal } from '@/lib/auth/step-up-client';
@@ -57,17 +58,30 @@ export function WalletHub() {
   const fmtDollars = (n: number) => fmtDollarsIn(n, locale.code);
   const fmtCount = (n: number) => fmtCountIn(n, locale.code);
   const tr = useTranslations();
-  const { familyId } = useApp();
+  const { familyId, role, selfMember } = useApp();
   const { success, error: toastError } = useToast();
+  // The held 0514: the household's accounts are a parent's or adult's, and so
+  // is its spending, except the transactions tagged to the viewer, which are
+  // read before the limit so the household's newer spending does not crowd
+  // them out. Nobody else's session asks for the accounts.
+  const seesAll = readsHouseholdMoney(role);
+  const selfId = selfMember?.id ?? null;
 
   const { data: accounts, loading: la, error: accountsError, refresh: refreshAccounts } = useRealtimeQuery<Account>({
-    table: 'financial_accounts', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('financial_accounts').select('*').eq('family_id', familyId).order('created_at', { ascending: true }),
+    table: 'financial_accounts', familyId, deps: [familyId, seesAll],
+    fetcher: (sb) => seesAll
+      ? sb.from('financial_accounts').select('*').eq('family_id', familyId).order('created_at', { ascending: true })
+      : Promise.resolve({ data: [] as Account[], error: null }),
   });
-  const { data: txns, loading: lt, error: txnsError, refresh: refreshTxns } = useRealtimeQuery<Txn>({
-    table: 'transactions', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('transactions').select('*').eq('family_id', familyId).order('date', { ascending: false }).limit(500),
+  const { data: txnRows, loading: lt, error: txnsError, refresh: refreshTxns } = useRealtimeQuery<Txn>({
+    table: 'transactions', familyId, deps: [familyId, role, selfId],
+    fetcher: (sb) => {
+      if (!seesAll && !selfId) return Promise.resolve({ data: [] as Txn[], error: null });
+      const query = sb.from('transactions').select('*').eq('family_id', familyId);
+      return (seesAll ? query : query.eq('member_id', selfId!)).order('date', { ascending: false }).limit(500);
+    },
   });
+  const txns = useMemo(() => transactionsInScope(txnRows, role, selfId), [txnRows, role, selfId]);
   const { data: cards, error: cardsError, refresh: refreshCards } = useRealtimeQuery<Card>({
     table: 'wallet_cards', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('wallet_cards').select('*').eq('family_id', familyId).eq('is_active', true).order('sort_order'),
@@ -149,6 +163,7 @@ export function WalletHub() {
           <div className="min-w-0">
             <h1 className="text-xl font-bold tracking-tight sm:text-2xl lg:text-3xl">{tr('wallet.myWallet')}</h1>
             <p className="mt-0.5 text-xs text-muted sm:text-sm">{tr('wallet.allYourMoneyCardsPassesAnd')}</p>
+            {!seesAll && <p className="mt-1 text-xs text-muted">{tr('householdMoney.onlyYourOwnSpending')}</p>}
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -379,7 +394,7 @@ function Row({ children, onDelete }: { children: React.ReactNode; onDelete?: () 
     <div className="group flex items-center gap-3 rounded-xl px-1 py-2.5 hover:bg-elevated/40">
       {children}
       {onDelete && (
-        <button onClick={onDelete} className="rounded-lg p-1 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={tr('wallet.remove')}>
+        <button onClick={onDelete} className="rounded-lg p-1 text-muted opacity-100 sm:opacity-0 transition hover:text-danger sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100" aria-label={tr('wallet.remove')}>
           <Trash2 className="h-4 w-4" />
         </button>
       )}
@@ -399,7 +414,7 @@ function CardRow({ card, onDelete }: { card: Card; onDelete: () => void }) {
         <p className="text-[11px] text-muted">···· {card.last_four ?? '••••'} · {card.kind}</p>
       </div>
       <div className="text-right"><p className="text-sm font-bold tabular-nums">{fmtUsd(card.available_cents)}</p><p className="text-[10px] text-muted">{tr('wallet.available')}</p></div>
-      <button onClick={onDelete} className="absolute right-1 top-1 rounded-lg p-1 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={tr('wallet.remove')}><Trash2 className="h-3.5 w-3.5" /></button>
+      <button onClick={onDelete} className="absolute right-1 top-1 rounded-lg p-1 text-muted opacity-100 sm:opacity-0 transition hover:text-danger sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100" aria-label={tr('wallet.remove')}><Trash2 className="h-3.5 w-3.5" /></button>
     </div>
   );
 }

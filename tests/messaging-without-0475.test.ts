@@ -1,10 +1,7 @@
 // The messages workspace on production's schema, which has not taken 0475.
 //
-// Owner decision: until 0475_messaging_conversation_privacy_and_delivery.sql
-// is applied, each path the workspace loads or writes through does what the
-// previous production build (82f2db1) did, and the new path runs unchanged
-// once the object exists. Only PostgREST's exact missing-object answer naming
-// that object selects a fallback; any other error is still the module's error.
+// Original participant access and an empty canonical Family Chat are required.
+// Missing atomic/privacy schema reports unavailable instead of adopting history.
 //
 // These drive the functions MessagesModule calls (lib/messages/workspace-paths)
 // against one in-memory PostgREST stand-in, with and without 0475. The module
@@ -18,6 +15,7 @@ import {
   createFamilyConversation, ensureFamilyChat, familyChatOf, loadConversationSummaries, loadInbox,
   markConversationReadThrough, presenceChannelConfig, presenceSchemaOf, receiptLanded, toggleMessageReaction,
 } from '@/lib/messages/workspace-paths';
+import { legacyMarkConversationRead } from '@/lib/messages/legacy-schema';
 import { resetMissingMigrationWarnings } from '@/lib/messages/schema-compat';
 
 type Row = Record<string, unknown>;
@@ -195,6 +193,12 @@ function memoryDb(options: {
   return { db: { from, rpc } as unknown as SupabaseClient<Database>, calls, tables };
 }
 
+// Preserve the original five low-level receipt mutation/refusal assertions.
+// This historical helper is no longer a missing-schema workspace fallback.
+async function retainedLegacyReceiptProof(db: SupabaseClient<Database>, input: Parameters<typeof legacyMarkConversationRead>[1] & { messageId: string }) {
+  return { ...(await legacyMarkConversationRead(db, input)), legacy: true };
+}
+
 const MEMBERS = [{ id: ME_MEMBER, user_id: ME }, { id: 'member-kid', user_id: null }];
 const asMessage = (row: Row) => row as unknown as Tables<'family_messages'>;
 
@@ -213,119 +217,97 @@ let warn: ReturnType<typeof vi.spyOn>;
 beforeEach(() => { resetMissingMigrationWarnings(); warn = vi.spyOn(console, 'warn').mockImplementation(() => {}); });
 afterEach(() => { warn.mockRestore(); });
 
-describe('without 0475 the workspace behaves as the previous production build', () => {
-  it('lists every existing conversation and opens the old family group, with no error to toast', async () => {
-    const { db } = memoryDb({ has0475: false, ...seed(false) });
+describe('without 0475 the workspace preserves audiences and reports unavailable', () => {
+  it("missing marker refuses the inbox without exposing other conversations", async () => {
+    const { db, tables } = memoryDb({ has0475: false, ...seed(false) });
+    const history = JSON.stringify(tables);
     const inbox = await loadInbox(db, { familyId: FAMILY, userId: ME, selfMemberId: ME_MEMBER });
-    expect(inbox.error).toBeNull();
-    expect(inbox.legacy).toBe(true);
-    // Every row the family-wide read returns, as 82f2db1 listed them.
-    expect(inbox.rows?.map((row) => row.id).sort()).toEqual(['dm-with-blair', 'family-group', 'someone-elses-group']);
-    // The first group that is not a DM in the inbox's order, as 82f2db1 opened.
-    expect(familyChatOf(inbox.rows!, inbox.legacy)?.id).toBe('family-group');
-    expect(String(warn.mock.calls[0]?.[0])).toContain('0475_messaging_conversation_privacy_and_delivery.sql');
+    expect(inbox.error).toMatchObject({ code: 'messaging_schema_unavailable' });
+    expect(inbox.rows).toBeNull();
+    expect(JSON.stringify(tables)).toBe(history);
+    expect(presenceChannelConfig(presenceSchemaOf(inbox), ME)).toBeNull();
   });
 
-  it('ensures the family chat by looking up the group chat, and creates one only when there is none', async () => {
-    const existing = memoryDb({ has0475: false, ...seed(false) });
-    expect(await ensureFamilyChat(existing.db, { familyId: FAMILY, userId: ME, name: 'Family Chat', members: MEMBERS }))
-      .toEqual({ error: null, legacy: true });
-    expect(existing.calls.filter((c) => c.kind === 'insert')).toEqual([]);
-
-    const empty = memoryDb({ has0475: false, conversations: [], messages: [] });
-    expect(await ensureFamilyChat(empty.db, { familyId: FAMILY, userId: ME, name: 'Family Chat', members: MEMBERS }))
-      .toEqual({ error: null, legacy: true });
-    expect(empty.calls.filter((c) => c.kind === 'insert')).toEqual([{ kind: 'insert', name: 'family_conversations', args: {
-      family_id: FAMILY, name: 'Family Chat', kind: 'group', avatar_emoji: '👨‍👩‍👧‍👦', created_by: ME,
-      member_ids: [ME], participant_ids: [ME_MEMBER, 'member-kid'],
-    } }]);
+  it("missing canonical RPC neither adopts an old group nor creates an unmarked chat", async () => {
+    for (const conversations of [seed(false).conversations, []]) {
+      const { db, calls, tables } = memoryDb({ has0475: false, conversations, messages: [] });
+      const history = JSON.stringify(tables);
+      const result = await ensureFamilyChat(db, { familyId: FAMILY, userId: ME, name: 'Family Chat', members: MEMBERS });
+      expect(result.error).toMatchObject({ code: 'messaging_schema_unavailable' });
+      expect(calls.map((c) => c.name)).toEqual(['ensure_family_conversation']);
+      expect(JSON.stringify(tables)).toBe(history);
+    }
   });
 
-  it('computes previews and unread badges from the bounded message scan', async () => {
+  it("missing overview refuses without a family-wide message scan", async () => {
     const { db, calls } = memoryDb({ has0475: false, ...seed(false) });
-    const { data, error } = await loadConversationSummaries(db, { familyId: FAMILY, userId: ME });
-    expect(error).toBeNull();
-    expect(Object.fromEntries(data!.unreadByConv)).toEqual({ 'family-group': 2 });
-    expect(data!.lastByConv.get('family-group')?.content).toBe('text m-2');
-    expect(data!.lastByConv.get('dm-with-blair')?.content).toBe('text m-3');
-    expect(calls.find((c) => c.kind === 'select' && c.name === 'family_messages')?.args).toEqual({ family_id: FAMILY, deleted_at: null });
+    const result = await loadConversationSummaries(db, { familyId: FAMILY, userId: ME });
+    expect(result).toMatchObject({ data: null, error: { code: 'messaging_schema_unavailable' } });
+    expect(calls.map((c) => c.name)).toEqual(['family_conversation_overview']);
   });
 
-  it("marks read through 0163's mark_conversation_read", async () => {
+  it("missing atomic read-through refuses instead of using the legacy receipt RPC", async () => {
     const { db, calls, tables } = memoryDb({ has0475: false, ...seed(false) });
+    const history = JSON.stringify(tables);
     const rows = tables.family_messages.filter((m) => m.conversation_id === 'family-group').map(asMessage);
-    expect(await markConversationReadThrough(db, { conversationId: 'family-group', messageId: 'm-2', familyId: FAMILY, userId: ME, rows }))
-      .toEqual({ error: null, legacy: true, readIds: null });
-    expect(calls.filter((c) => c.kind === 'rpc').map((c) => c.name)).toEqual(['mark_conversation_read_through', 'mark_conversation_read']);
-    expect(calls.filter((c) => c.kind === 'update')).toEqual([]);
-    expect(tables.family_messages.filter((m) => m.conversation_id === 'family-group').every((m) => (m.read_by as string[]).includes(ME))).toBe(true);
+    expect((await markConversationReadThrough(db, { conversationId: 'family-group', messageId: 'm-2', familyId: FAMILY, userId: ME, rows })).error).toMatchObject({ code: 'messaging_schema_unavailable' });
+    expect(calls.map((c) => c.name)).toEqual(['mark_conversation_read_through']);
+    expect(JSON.stringify(tables)).toBe(history);
   });
 
-  it('falls back per row when mark_conversation_read itself fails, appending only the reader', async () => {
+  it("missing atomic read-through never attempts raw receipt updates", async () => {
     const { db, calls, tables } = memoryDb({ has0475: false, ...seed(false), rpcErrors: { mark_conversation_read: { code: '42501', message: 'permission denied' } } });
     tables.family_messages[0].read_by = [OTHER];
+    const history = JSON.stringify(tables);
     const rows = tables.family_messages.filter((m) => m.conversation_id === 'family-group').map(asMessage);
-    expect(await markConversationReadThrough(db, { conversationId: 'family-group', messageId: 'm-2', familyId: FAMILY, userId: ME, rows }))
-      .toEqual({ error: null, legacy: true, readIds: ['m-1', 'm-2'] });
-    expect(calls.filter((c) => c.kind === 'update').map((c) => c.args)).toEqual([{ read_by: [OTHER, ME] }, { read_by: [ME] }]);
+    expect((await markConversationReadThrough(db, { conversationId: 'family-group', messageId: 'm-2', familyId: FAMILY, userId: ME, rows })).error).toMatchObject({ code: 'messaging_schema_unavailable' });
+    expect(calls.filter((c) => c.kind === 'update')).toEqual([]);
+    expect(JSON.stringify(tables)).toBe(history);
   });
 
-  it('toggles a reaction by updating the message', async () => {
-    const { db, calls } = memoryDb({ has0475: false, ...seed(false) });
-    const result = await toggleMessageReaction(db, { message: asMessage(message('m-1', 'family-group')), emoji: '👍', userId: ME, familyId: FAMILY });
-    expect(result).toMatchObject({ error: null, legacy: true, data: { id: 'm-1', reactions: { '👍': [ME] } } });
-    expect(calls.find((c) => c.kind === 'update')?.args).toEqual({ reactions: { '👍': [ME] } });
+  it("missing atomic reaction refuses instead of raw-updating the reactions map", async () => {
+    const { db, calls, tables } = memoryDb({ has0475: false, ...seed(false) });
+    const history = JSON.stringify(tables);
+    expect(await toggleMessageReaction(db, { message: asMessage(message('m-1', 'family-group')), emoji: '👍', userId: ME, familyId: FAMILY })).toMatchObject({ data: null, error: { code: 'messaging_schema_unavailable' } });
+    expect(calls.filter((c) => c.kind === 'update')).toEqual([]);
+    expect(JSON.stringify(tables)).toBe(history);
   });
 
-  it('creates a conversation by direct insert, retrying without participant_ids on a pre-0017 schema', async () => {
+  it("missing atomic create never retries a direct insert without participant identities", async () => {
     const payload = { family_id: FAMILY, name: 'Blair', kind: 'direct', avatar_emoji: null, created_by: ME, member_ids: [ME, OTHER], participant_ids: [ME_MEMBER, 'member-other'] };
-    const direct = memoryDb({ has0475: false, conversations: [], messages: [] });
-    const created = await createFamilyConversation(direct.db, payload);
-    expect(created.error).toBeNull();
-    expect(direct.calls.filter((c) => c.kind === 'insert').map((c) => c.args)).toEqual([payload]);
-
-    const pre0017 = memoryDb({ has0475: false, conversations: [], messages: [], insertErrors: [
-      { code: 'PGRST204', message: "Could not find the 'participant_ids' column of 'family_conversations' in the schema cache" }] });
-    expect((await createFamilyConversation(pre0017.db, payload)).error).toBeNull();
-    const { participant_ids: _dropped, ...withoutParticipants } = payload;
-    expect(pre0017.calls.filter((c) => c.kind === 'insert').map((c) => c.args)).toEqual([payload, withoutParticipants]);
+    for (const insertErrors of [[], [{ code: 'PGRST204', message: "Could not find the 'participant_ids' column of 'family_conversations' in the schema cache" }]]) {
+      const { db, calls } = memoryDb({ has0475: false, conversations: [], messages: [], insertErrors });
+      expect((await createFamilyConversation(db, payload)).error).toMatchObject({ code: 'messaging_schema_unavailable' });
+      expect(calls.filter((c) => c.kind === 'insert')).toEqual([]);
+    }
   });
 
-  it('reuses an existing 1:1 chat with the same person instead of inserting a duplicate', async () => {
+  it("missing atomic create refuses without adopting even a matching legacy DM", async () => {
     const payload = { family_id: FAMILY, name: 'Blair', kind: 'direct', avatar_emoji: null, created_by: ME, member_ids: [ME, OTHER], participant_ids: ['member-other', ME_MEMBER] };
-    const { db, calls } = memoryDb({ has0475: false, ...seed(false) });
-    const reused = await createFamilyConversation(db, payload);
-    expect(reused).toMatchObject({ error: null, data: { id: 'dm-with-blair' } });
-    expect(calls.some((c) => c.kind === 'insert')).toBe(false);
-    expect(calls.find((c) => c.kind === 'select')?.args).toEqual({ family_id: FAMILY, kind: 'direct' });
-
-    // A second DM to the same person on the old schema: the first one again.
-    const fresh = memoryDb({ has0475: false, conversations: [], messages: [] });
-    const first = await createFamilyConversation(fresh.db, payload);
-    const second = await createFamilyConversation(fresh.db, payload);
-    expect(second.data?.id).toBe(first.data?.id);
-    expect(fresh.calls.filter((c) => c.kind === 'insert')).toHaveLength(1);
+    for (const conversations of [seed(false).conversations, []]) {
+      const { db, calls, tables } = memoryDb({ has0475: false, conversations, messages: [] });
+      const history = JSON.stringify(tables);
+      expect((await createFamilyConversation(db, payload)).error).toMatchObject({ code: 'messaging_schema_unavailable' });
+      expect(calls.map((c) => c.name)).toEqual(['create_family_conversation']);
+      expect(JSON.stringify(tables)).toBe(history);
+    }
   });
 
-  it('matches a DM recorded before participant ids on its account holders, and a different person gets a new chat', async () => {
-    const { db, calls } = memoryDb({ has0475: false, conversations: [
-      conversation('old-dm', { kind: 'direct', member_ids: [OTHER, ME], participant_ids: [] }, false),
-    ], messages: [] });
+  it("missing atomic create leaves old account-holder DMs unchanged for both same and different rosters", async () => {
+    const { db, calls, tables } = memoryDb({ has0475: false, conversations: [conversation('old-dm', { kind: 'direct', member_ids: [OTHER, ME], participant_ids: [] }, false)], messages: [] });
+    const history = JSON.stringify(tables);
     const base = { family_id: FAMILY, name: 'Blair', kind: 'direct', avatar_emoji: null, created_by: ME };
-    expect((await createFamilyConversation(db, { ...base, member_ids: [ME, OTHER], participant_ids: [ME_MEMBER, 'member-other'] })).data?.id).toBe('old-dm');
+    for (const audience of [{ member_ids: [ME, OTHER], participant_ids: [ME_MEMBER, 'member-other'] }, { member_ids: [ME], participant_ids: [ME_MEMBER, 'member-kid'] }]) expect((await createFamilyConversation(db, { ...base, ...audience })).error).toMatchObject({ code: 'messaging_schema_unavailable' });
     expect(calls.some((c) => c.kind === 'insert')).toBe(false);
-    const other = await createFamilyConversation(db, { ...base, member_ids: [ME], participant_ids: [ME_MEMBER, 'member-kid'] });
-    expect(other.error).toBeNull();
-    expect(other.data?.id).not.toBe('old-dm');
-    expect(calls.filter((c) => c.kind === 'insert')).toHaveLength(1);
+    expect(JSON.stringify(tables)).toBe(history);
   });
 
-  it('a failed DM lookup is the error and inserts nothing', async () => {
+  it("a missing atomic DM create does not attempt a family-wide lookup even if it would fail", async () => {
     const denied: Err = { code: '42501', message: 'permission denied for table family_conversations' };
     const { db, calls } = memoryDb({ has0475: false, ...seed(false), selectErrors: { family_conversations: denied } });
     const res = await createFamilyConversation(db, { family_id: FAMILY, name: 'Blair', kind: 'direct', avatar_emoji: null, created_by: ME, member_ids: [ME, OTHER], participant_ids: [ME_MEMBER, 'member-other'] });
-    expect(res).toEqual({ data: null, error: denied });
-    expect(calls.some((c) => c.kind === 'insert')).toBe(false);
+    expect(res).toMatchObject({ data: null, error: { code: 'messaging_schema_unavailable' } });
+    expect(calls.map((c) => c.name)).toEqual(['create_family_conversation']);
   });
 
   it('warns once per missing object, naming the migration', async () => {
@@ -423,7 +405,7 @@ describe('a read receipt that did not land is not shown as read', () => {
     const refusal: Err = { code: '42501', message: "A read receipt is only its reader's to add or remove" };
     const { db, tables } = memoryDb({ has0475: false, ...seed(false), rpcErrors: rpcRefused, updateOutcomes: [refusal] });
     const rows = tables.family_messages.filter((m) => m.conversation_id === 'family-group');
-    const res = await markConversationReadThrough(db, { conversationId: 'family-group', messageId: 'm-2', familyId: FAMILY, userId: ME, rows: onScreen(rows) });
+    const res = await retainedLegacyReceiptProof(db, { conversationId: 'family-group', messageId: 'm-2', familyId: FAMILY, userId: ME, rows: onScreen(rows) });
     expect(res).toEqual({ error: refusal, legacy: true, readIds: [] });
     expect(through(rows, res.readIds)).toEqual([]);
     expect(rows.every((m) => !(m.read_by as string[]).includes(ME))).toBe(true);
@@ -432,7 +414,7 @@ describe('a read receipt that did not land is not shown as read', () => {
   it('a per-row append that writes no row is an error, and only the receipts before it are shown', async () => {
     const { db, tables } = memoryDb({ has0475: false, ...seed(false), rpcErrors: rpcRefused, updateOutcomes: [undefined, 'no-rows'] });
     const rows = tables.family_messages.filter((m) => m.conversation_id === 'family-group');
-    const res = await markConversationReadThrough(db, { conversationId: 'family-group', messageId: 'm-2', familyId: FAMILY, userId: ME, rows: onScreen(rows) });
+    const res = await retainedLegacyReceiptProof(db, { conversationId: 'family-group', messageId: 'm-2', familyId: FAMILY, userId: ME, rows: onScreen(rows) });
     expect(res.error).not.toBeNull();
     expect(res.readIds).toEqual(['m-1']);
     expect(through(rows, res.readIds)).toEqual(['m-1']);
@@ -441,7 +423,7 @@ describe('a read receipt that did not land is not shown as read', () => {
   it("0163's RPC succeeding without touching a row is an error, read back rather than assumed", async () => {
     const { db, calls, tables } = memoryDb({ has0475: false, ...seed(false), rpcNoops: ['mark_conversation_read'] });
     const rows = tables.family_messages.filter((m) => m.conversation_id === 'family-group');
-    const res = await markConversationReadThrough(db, { conversationId: 'family-group', messageId: 'm-2', familyId: FAMILY, userId: ME, rows: onScreen(rows) });
+    const res = await retainedLegacyReceiptProof(db, { conversationId: 'family-group', messageId: 'm-2', familyId: FAMILY, userId: ME, rows: onScreen(rows) });
     expect(res.error).not.toBeNull();
     expect(res.readIds).toEqual([]);
     expect(through(rows, res.readIds)).toEqual([]);
@@ -452,14 +434,14 @@ describe('a read receipt that did not land is not shown as read', () => {
     const readFailed: Err = { message: 'fetch failed' };
     const { db, tables } = memoryDb({ has0475: false, ...seed(false), selectErrors: { family_messages: readFailed } });
     const rows = tables.family_messages.filter((m) => m.conversation_id === 'family-group');
-    const res = await markConversationReadThrough(db, { conversationId: 'family-group', messageId: 'm-2', familyId: FAMILY, userId: ME, rows: onScreen(rows) });
+    const res = await retainedLegacyReceiptProof(db, { conversationId: 'family-group', messageId: 'm-2', familyId: FAMILY, userId: ME, rows: onScreen(rows) });
     expect(res).toEqual({ error: readFailed, legacy: true, readIds: [] });
   });
 
   it('a successful receipt still shows every row through the newest as read', async () => {
     const { db, tables } = memoryDb({ has0475: false, ...seed(false) });
     const rows = tables.family_messages.filter((m) => m.conversation_id === 'family-group');
-    const res = await markConversationReadThrough(db, { conversationId: 'family-group', messageId: 'm-2', familyId: FAMILY, userId: ME, rows: onScreen(rows) });
+    const res = await retainedLegacyReceiptProof(db, { conversationId: 'family-group', messageId: 'm-2', familyId: FAMILY, userId: ME, rows: onScreen(rows) });
     expect(res.error).toBeNull();
     expect(through(rows, res.readIds)).toEqual(['m-1', 'm-2']);
     expect(rows.every((m) => (m.read_by as string[]).includes(ME))).toBe(true);
@@ -481,24 +463,25 @@ describe('MessagesModule takes these paths', () => {
     expect(mark).toContain('if (!receiptLanded(row, newest, readIds)) return row;');
   });
 
-  it('no longer blanks the inbox or toasts when the old schema is detected', () => {
-    expect(source).not.toContain('setConversations([])');
+  it("clears unauthorized history and shows a failure when privacy schema is unavailable", () => {
+    const load = source.slice(source.indexOf('// ── Load conversations'), source.indexOf('// ── Ensure Family Chat exists'));
+    expect(load).toContain("if (error?.code === 'messaging_schema_unavailable')");
+    for (const command of ["setPresenceSchema('unknown')", 'owner.current.select(null)', 'setConversations([])', 'setMessages([])', 'setActiveConv(null)']) expect(load).toContain(command);
     const ensure = source.slice(source.indexOf('// ── Ensure Family Chat exists'), source.indexOf('// ── Load messages for active conv'));
-    expect(ensure).toContain("if (error && legacy) console.error('[messages] family chat fallback failed'");
-    expect(ensure).toMatch(/else if \(error\) toastError\(/);
+    expect(ensure).not.toContain('family chat fallback failed');
+    expect(ensure).toContain('if (error) toastError(');
   });
 
-  it('joins the old public presence topic only on the inbox read evidence, never on the RPC-wide legacy flag', () => {
+  it("joins presence only through verified inbox configuration and clears it on privacy schema failure", () => {
     const presence = source.slice(source.indexOf('// ── Presence: who in the family is online'), source.indexOf('function acceptMessage'));
     expect(presence).toContain('const config = presenceChannelConfig(presenceSchema, userId);');
     expect(presence).toContain('if (!config) return;');
     expect(presence).toContain('supabase.channel(`presence:family:${familyId}`, { config });');
     expect(presence).toContain('}, [familyId, userId, schemaSettled, presenceSchema]);');
     expect(presence).not.toContain('legacy0475');
-    // The presence schema is set from the inbox read alone, never from an RPC fallback.
-    expect(source.match(/setPresenceSchema\(/g)).toHaveLength(1);
     const load = source.slice(source.indexOf('// ── Load conversations'), source.indexOf('// ── Ensure Family Chat exists'));
     expect(load).toContain('setPresenceSchema(presenceSchemaOf({ legacy }));');
+    expect(load).toContain("setPresenceSchema('unknown')");
   });
 
   it('joins no realtime topic until the first Family Chat ensure has settled the schema', () => {
@@ -517,13 +500,13 @@ describe('MessagesModule takes these paths', () => {
 });
 
 describe('presence follows only the evidence that 0475 is wholly absent', () => {
-  const PUBLIC = { presence: { key: ME } };
   const PRIVATE = { private: true, presence: { key: ME } };
 
-  it('fully absent: the inbox read lacks is_family_chat and the previous public topic is kept', async () => {
+  it("fully absent privacy marker authorizes no presence topic", async () => {
     const { db } = memoryDb({ has0475: false, ...seed(false) });
     const inbox = await loadInbox(db, { familyId: FAMILY, userId: ME, selfMemberId: ME_MEMBER });
-    expect(presenceChannelConfig(presenceSchemaOf(inbox), ME)).toEqual(PUBLIC);
+    expect(inbox.error).toMatchObject({ code: 'messaging_schema_unavailable' });
+    expect(presenceChannelConfig(presenceSchemaOf(inbox), ME)).toBeNull();
   });
 
   it('fully present: the private topic, unchanged', async () => {
@@ -534,18 +517,16 @@ describe('presence follows only the evidence that 0475 is wholly absent', () => 
     expect(presenceChannelConfig(presenceSchemaOf(inbox), ME)).toEqual(PRIVATE);
   });
 
-  it('partially migrated: the column is there but RPCs are missing, and presence stays private', async () => {
-    const rpcErrors = {
-      toggle_family_message_reaction: missingFunction('toggle_family_message_reaction', { p_emoji: '', p_message_id: '' }),
-      mark_conversation_read_through: missingFunction('mark_conversation_read_through', { p_conversation_id: '', p_message_id: '' }),
-    };
+  it("partial schema refuses missing atomic mutations while verified presence stays private", async () => {
+    const rpcErrors = { toggle_family_message_reaction: missingFunction('toggle_family_message_reaction', { p_emoji: '', p_message_id: '' }), mark_conversation_read_through: missingFunction('mark_conversation_read_through', { p_conversation_id: '', p_message_id: '' }) };
     const { db, tables } = memoryDb({ has0475: true, ...seed(true), rpcErrors });
+    const history = JSON.stringify(tables);
     const inbox = await loadInbox(db, { familyId: FAMILY, userId: ME, selfMemberId: ME_MEMBER });
     const rows = tables.family_messages.map(asMessage);
-    // The RPC fallbacks report legacy (the module's legacy0475 flag), yet presence is unmoved.
-    expect((await toggleMessageReaction(db, { message: rows[0], emoji: '👍', userId: ME, familyId: FAMILY })).legacy).toBe(true);
-    expect((await markConversationReadThrough(db, { conversationId: 'family-group', messageId: 'm-2', familyId: FAMILY, userId: ME, rows })).legacy).toBe(true);
+    expect((await toggleMessageReaction(db, { message: rows[0], emoji: '👍', userId: ME, familyId: FAMILY })).error).toMatchObject({ code: 'messaging_schema_unavailable' });
+    expect((await markConversationReadThrough(db, { conversationId: 'family-group', messageId: 'm-2', familyId: FAMILY, userId: ME, rows })).error).toMatchObject({ code: 'messaging_schema_unavailable' });
     expect(presenceChannelConfig(presenceSchemaOf(inbox), ME)).toEqual(PRIVATE);
+    expect(JSON.stringify(tables)).toBe(history);
   });
 
   it('joins nothing until an inbox read has answered', () => {

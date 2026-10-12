@@ -65,7 +65,15 @@ describe('analytics', () => {
   });
   it('correlates check-in habits with sleep from the member’s own nights', () => {
     const nights = [night(0, 21, 9), night(1, 21, 7), night(2, 21, 9), night(3, 21, 7)];
-    const checkins: CheckinLike[] = nights.map((n, i) => ({ member_id: 'kid', checkin_date: n.sleep_date, energy: 3, mood: 3, caffeine_after_2pm: false, screens_in_bed: i % 2 === 1, exercised: i % 2 === 0 }));
+    // A check-in is that DAY's habits; the night they shape is the one that
+    // began that evening, filed under the next morning's sleep_date (H9). So
+    // each night's check-in is dated the day before its sleep_date.
+    const eveningBefore = (sleepDate: string) => {
+      const d = new Date(`${sleepDate}T12:00:00Z`);
+      d.setUTCDate(d.getUTCDate() - 1);
+      return d.toISOString().slice(0, 10);
+    };
+    const checkins: CheckinLike[] = nights.map((n, i) => ({ member_id: 'kid', checkin_date: eveningBefore(n.sleep_date), energy: 3, mood: 3, caffeine_after_2pm: false, screens_in_bed: i % 2 === 1, exercised: i % 2 === 0 }));
     const c = habitCorrelations(nights, checkins);
     expect(c.find((x) => x.factor === 'Screens in bed')).toMatchObject({ withFactor: 420, withoutFactor: 540, deltaMinutes: -120, nights: 4 });
     expect(c.find((x) => x.factor === 'Caffeine after 2pm')?.withFactor).toBeNull();

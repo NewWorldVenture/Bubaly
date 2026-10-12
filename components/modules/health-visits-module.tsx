@@ -35,6 +35,12 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
   // controls follow it, the way medications-module.tsx already does — a button
   // that renders and then fails is worse than one that was never offered.
   const canEdit = isManager(role);
+  // Whom the filter offers. A manager reads everyone's records; anyone else
+  // reads their own, which is all the held 0506 lets them see.
+  const filterMembers = useMemo(
+    () => (canEdit ? members : members.filter((m) => m.user_id === userId)),
+    [canEdit, members, userId],
+  );
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
@@ -122,13 +128,13 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="flex items-center gap-2 text-base font-semibold"><Stethoscope className="h-4 w-4 text-brand-text" /> {title}</h3>
-        <div className="flex items-center gap-2">
-          {members.length > 0 && (
-            <select value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} aria-label={t('healthVisits.familyMember')} className="h-9 rounded-lg border border-border bg-surface px-2 text-sm">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+          {filterMembers.length > 0 && (
+            <select value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} aria-label={t('healthVisits.familyMember')} className="h-9 min-w-0 max-w-full rounded-lg border border-border bg-surface px-2 text-sm">
               <option value="all">{t('healthVisits.everyone')}</option>
-              {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
+              {filterMembers.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </select>
           )}
           {canEdit && <Button size="sm" onClick={() => setForm(blank(defaultKind ?? 'medical', family?.timezone ?? 'UTC'))}><Plus className="h-4 w-4" /> {t('healthVisits.addVisit')}</Button>}

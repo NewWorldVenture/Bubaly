@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables, GameResult } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { datetimeLocalToInstant } from '@/lib/time/datetime-local';
 
 type SportsEvent = Tables<'sports_events'>;
 type Team = Tables<'teams'>;
@@ -110,12 +111,16 @@ export function SportsModule() {
   // --- CRUD ---
   async function saveEvent() {
     if (!eventForm.title || !eventForm.starts_at) return;
+    // The `datetime-local` reading is on the FAMILY's clock, not the device's:
+    // a parent entering a 5pm practice while travelling must not shift it.
+    const startsAt = datetimeLocalToInstant(eventForm.starts_at, clock.timeZone);
+    if (!startsAt) { toastError(tr('sportsModule.failedToSaveEvent')); return; }
     setSaving(true);
     const sb = createClient();
     const { error: err } = await sb.from('sports_events').insert({
       family_id: familyId, title: eventForm.title, event_type: eventForm.event_type || null,
       sport: eventForm.sport || null, team: eventForm.team || null,
-      starts_at: new Date(eventForm.starts_at).toISOString(), location: eventForm.location || null,
+      starts_at: startsAt, location: eventForm.location || null,
       created_by: userId, member_id: eventForm.member_id || null,
     });
     setSaving(false);
@@ -294,7 +299,7 @@ export function SportsModule() {
                           <td className="px-4 py-3.5">
                             <span className={cn('rounded-full px-2.5 py-1 text-xs font-bold', isGame ? 'bg-violet-500/15 text-violet-300 border border-violet-500/25' : 'bg-blue-500/15 text-blue-300 border border-blue-500/25')}>{e.event_type}</span>
                           </td>
-                          <td className="px-4 py-3.5"><button type="button" onClick={() => void removeEvent(e.id, e.title)} aria-label={tr('sportsModule.deleteEventTitle', { title: e.title })} className="text-muted/60 hover:text-danger focus-ring rounded"><Trash2 className="h-4 w-4" /></button></td>
+                          <td className="px-4 py-3.5"><button type="button" onClick={() => void removeEvent(e.id, e.title)} aria-label={tr('sportsModule.deleteEventTitle', { title: e.title })} className="text-muted hover:text-danger focus-ring rounded"><Trash2 className="h-4 w-4" /></button></td>
                         </tr>
                       );
                     })}

@@ -24,9 +24,11 @@ type Inspection = Tables<'vehicle_inspections'>;
 type Vehicle = Tables<'vehicles'>;
 
 export function RegistrationClient({
-  registrations, inspections, vehicles,
+  registrations, inspections, vehicles, ownOnly = false,
 }: {
   registrations: Registration[]; inspections: Inspection[]; vehicles: Vehicle[];
+  /** The viewer reads only the registrations they added (the held 0514). */
+  ownOnly?: boolean;
 }) {
   const { fmtDate } = useFormat();
   const tr = useTranslations();
@@ -47,6 +49,7 @@ export function RegistrationClient({
           <h2 className="flex items-center gap-2 text-sm font-semibold"><FileText className="h-4 w-4 text-brand-text" /> {tr('registrationClient.registrations')}</h2>
           <Button onClick={() => { setRegEdit(null); setRegOpen(true); }}><Plus className="h-4 w-4" /> Add</Button>
         </div>
+        {ownOnly && <p className="text-xs text-muted">{tr('householdMoney.onlyWhatYouAdded')}</p>}
         {registrations.length === 0 ? (
           <EmptyState icon={FileText} title={tr('registrationClient.noRegistrations')} description={tr('registrationClient.trackEachVehicleSRegistration')} />
         ) : (

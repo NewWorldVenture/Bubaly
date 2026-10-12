@@ -31,7 +31,8 @@
 // groups like `group/snooze`.
 
 import { readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
 import postcss from 'postcss';
 import tailwindcss from 'tailwindcss';
@@ -182,7 +183,7 @@ function unescapeSelector(name) {
 
 /** Compile the stylesheet against `tokens` and return the class names it emits. */
 async function emittedFor(tokens, configOverride) {
-  const config = configOverride ?? (await import(`${process.cwd()}/tailwind.config.ts`)).default;
+  const config = configOverride ?? (await import(pathToFileURL(`${process.cwd()}/tailwind.config.ts`).href)).default;
   const raw = [...tokens].map((token) => `<i class="${token}">`).join('\n');
   const result = await postcss([
     tailwindcss({ ...config, content: [{ raw, extension: 'html' }] }),
@@ -194,9 +195,9 @@ async function emittedFor(tokens, configOverride) {
   return emitted;
 }
 
-export function sourceFiles() {
-  return execSync("git ls-files 'app/**/*.tsx' 'app/**/*.ts' 'components/**/*.tsx' 'components/**/*.ts' 'lib/**/*.tsx'", { encoding: 'utf8' })
-    .split('\n')
+export function sourceFiles(repositoryRoot = process.cwd()) {
+  return execFileSync('git', ["ls-files","-z","app/**/*.tsx","app/**/*.ts","components/**/*.tsx","components/**/*.ts","lib/**/*.tsx"], { cwd: repositoryRoot, encoding: 'utf8' })
+    .split('\0').filter(Boolean)
     .filter(Boolean);
 }
 
@@ -261,7 +262,7 @@ export async function auditUnstyledClasses(files = sourceFiles()) {
   };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const audit = await auditUnstyledClasses();
   console.log(`${audit.files} files · ${audit.classLists} class lists · ${audit.tokensSeen} tokens seen · ${audit.recognised} recognised`);
   console.log(`${audit.offenders.length} class name(s) style nothing:`);

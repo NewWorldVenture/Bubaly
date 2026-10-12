@@ -109,6 +109,11 @@ beforeEach(() => {
       Object.assign(query, {
         select: () => query,
         eq: () => query,
+        // The open-list read (openGroceryListIds) and its items. Without these
+        // the grocery read threw, which the route now reports instead of
+        // briefing an empty list (AUD-1022-L2).
+        is: () => query,
+        in: () => query,
         gte: () => query,
         lte: () => query,
         order: () => query,

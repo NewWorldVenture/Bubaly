@@ -6,6 +6,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
 import { dayKeyInTz, scopeFromUserContext } from '@/lib/services/scope';
+import { familyInstant } from '@/lib/time/civil';
 import { AI_TOOLS, runAction } from '@/lib/ai/actions';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { roleOf } from '@/lib/trust/server';
@@ -13,9 +14,14 @@ import { gateAiAction } from '@/lib/trust/ai-gate';
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { buildProposal, classify } from '@/lib/front-desk/school-sports';
+import { getTool } from '@/lib/ai/tools/registry';
 
-// Map a Magic-Import action to a Trust Engine domain so the governance layer can
-// allow / block / require-approval before the AI writes anything.
+// The actions Magic Import proposes (phase 1) and may carry out (phase 2), each
+// with the Trust Engine domain it is governed under. Phase 2 accepts NOTHING
+// outside this set: `confirm` items come straight from the client, and an
+// unlisted name used to be gated under a 'tasks' fallback — so a registry tool
+// like `finances.createTransaction` was evaluated as a task, allowed for an
+// automation-trusted role, and then run with the registry's own gate skipped.
 const ACTION_DOMAIN: Record<string, string> = {
   create_calendar_event: 'calendar',
   create_chore: 'chores',
@@ -23,6 +29,11 @@ const ACTION_DOMAIN: Record<string, string> = {
   add_grocery_item: 'shopping',
   create_meal_plan_entry: 'meal_planning',
 };
+
+/** True for a name Magic Import proposed and the registry can resolve. */
+function isMagicImportAction(name: unknown): name is string {
+  return typeof name === 'string' && Object.hasOwn(ACTION_DOMAIN, name) && getTool(name) !== null;
+}
 
 export const runtime = 'nodejs';
 
@@ -32,11 +43,18 @@ type Item = { name: string; args: Record<string, unknown>; summary: string };
 // date) is the date it says. Rendered on the host's clock, a 6pm event read as
 // the next day's small hours and a date-only item slipped a day west of
 // Greenwich.
+//
+// A timed value with no offset is a reading on that clock, so it is resolved
+// the way the write resolves it (`familyInstant`, as tasks.createChore and
+// reminders.create do). `new Date()` read it on the HOST's clock instead, and
+// the confirm list and the approval card — this summary is both — showed
+// 10:00 AM for an import the write then stored at 5 PM in Los Angeles.
 function fmtWhen(value: unknown, tz: string): string {
   if (typeof value !== 'string' || !value) return '';
-  const d = new Date(value);
+  const timed = /^\s*\d{4}-\d{2}-\d{2}[Tt ]\d/.test(value);
+  const d = timed ? (familyInstant(value, tz) ?? new Date(Number.NaN)) : new Date(value);
   if (Number.isNaN(d.getTime())) return ` (${value})`;
-  const hasTime = value.includes('T') && !value.endsWith('T00:00:00.000Z');
+  const hasTime = timed && !value.endsWith('T00:00:00.000Z');
   return ` (${d.toLocaleString('en-US', {
     month: 'short', day: 'numeric',
     ...(hasTime ? { hour: 'numeric', minute: '2-digit', timeZone: tz } : { timeZone: 'UTC' }),
@@ -159,9 +177,18 @@ export async function POST(req: NextRequest) {
     // allow → execute · require_approval → queue (don't execute) · deny → block.
     if (Array.isArray(body.confirm)) {
       const actorRole = roleOf(ctx.active.role);
+      const confirmed = body.confirm.slice(0, 50);
+      // Refused whole, before any item is gated or run: a confirm list naming
+      // an action this surface never proposed is not a Magic Import.
+      if (confirmed.some((item) => !item || typeof item !== 'object' || !isMagicImportAction(item.name))) {
+        return NextResponse.json({ error: t('import.magicImportCanOnlyCarryOut') }, { status: 400 });
+      }
       const results = await Promise.all(
-        body.confirm.slice(0, 50).map(async (item) => {
-          const domain = ACTION_DOMAIN[item.name] ?? 'tasks';
+        confirmed.map(async (item) => {
+          // The tool's OWN domain, as the registry declares it (the five names
+          // are registry aliases), never a fallback: that is the domain the
+          // family's policies and the autonomy dial are written against.
+          const domain = getTool(item.name)?.domain ?? ACTION_DOMAIN[item.name];
           // The shared AI gate (lib/trust/ai-gate.ts), same as chat and the
           // tool registry. Magic Import used to call the bare engine, so a
           // family who had switched Bubaly off — or set a category to
@@ -172,6 +199,10 @@ export async function POST(req: NextRequest) {
             domain,
             actorId: 'magic_import',
             actorRole,
+            // Who Bubaly is importing FOR, as chat and the school desk say. A
+            // row without it names no asker, merges with anyone else's identical
+            // import, and replays as the parent who approved it.
+            onBehalfOfMemberId: ctx.active.member.id,
             agent: 'Magic Import',
             title: item.summary,
             payload: { name: item.name, args: item.args },
@@ -211,6 +242,7 @@ Today is ${now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', m
 
 Use the provided tools to capture: calendar events, chores, reminders, grocery items, and planned meals. Rules:
 - Resolve relative dates ("next Friday", "tomorrow", "the 14th") to absolute ISO 8601 using today's date. Assume the current or next occurrence.
+- Times are the family's local time in ${tz}, written without an offset or "Z", e.g. 2026-10-16T17:00:00 for 5pm. A day with no time is just the date, e.g. 2026-10-16.
 - Prefer create_calendar_event for anything with a date/time; use create_reminder for to-dos with a deadline but no fixed time.
 - Extract multiple items if present. Do not invent details that aren't in the text.
 - If nothing is actionable, make no tool calls.

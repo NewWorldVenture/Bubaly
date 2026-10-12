@@ -163,12 +163,12 @@ export function BillsView({ mode }: { mode: BillsMode }) {
         {canManage && <div className="flex shrink-0 items-center gap-1">
           {isManager(role) && b.is_recurring && <Button size="sm" variant="outline" onClick={() => openSchedule(b)}>{t('bills.editSchedule')}</Button>}
           {mode !== 'due' && (
-            <button onClick={() => toggleAutopay(b)} title={t('bills.toggleAutoPay')}
-              className={cn('rounded-lg p-1.5 transition', b.autopay ? 'text-brand-text' : 'text-muted/50 hover:text-fg')}><Repeat className="h-4 w-4" /></button>
+            <button onClick={() => toggleAutopay(b)} title={t('bills.toggleAutoPay')} aria-pressed={!!b.autopay}
+              className={cn('rounded-lg p-1.5 transition', b.autopay ? 'text-brand-text' : 'text-muted hover:text-fg')}><Repeat className="h-4 w-4" /></button>
           )}
           <button onClick={() => markPaid(b)} title={b.status === 'paid' ? 'Reopen' : 'Mark paid'}
-            className="rounded-lg p-1.5 text-muted/50 transition hover:text-emerald-400">{b.status === 'paid' ? <RotateCcw className="h-4 w-4" /> : <Check className="h-4 w-4" />}</button>
-          <button onClick={() => remove(b.id)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={t('bills.delete')}><Trash2 className="h-4 w-4" /></button>
+            className="rounded-lg p-1.5 text-muted transition hover:text-emerald-400">{b.status === 'paid' ? <RotateCcw className="h-4 w-4" /> : <Check className="h-4 w-4" />}</button>
+          <button onClick={() => remove(b.id)} className="rounded-lg p-1.5 text-muted opacity-100 sm:opacity-0 transition hover:text-danger sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100" aria-label={t('bills.delete')}><Trash2 className="h-4 w-4" /></button>
         </div>}
       </div>
     );

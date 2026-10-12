@@ -312,7 +312,7 @@ function ReconnectDrafter({ contactId, name }: { contactId: string; name: string
             <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted"><Loader2 className="h-3.5 w-3.5 animate-spin" /> {tr('contactTimeline.writing')}</p>
           ) : message ? (
             <>
-              <p className={cn('mt-2 whitespace-pre-wrap text-sm leading-relaxed text-fg', pending && 'opacity-50')}>{message}</p>
+              <p className={cn('mt-2 whitespace-pre-wrap text-sm leading-relaxed', pending ? 'text-muted' : 'text-fg')}>{message}</p>
               <div className="mt-2.5 flex items-center gap-2">
                 <button onClick={copy}
                   className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-3 text-xs font-bold text-brand-fg transition hover:opacity-90">

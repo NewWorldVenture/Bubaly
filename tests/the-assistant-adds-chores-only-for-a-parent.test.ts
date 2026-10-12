@@ -12,12 +12,12 @@ import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memo
  * ... mint chores assigned to a sibling"). The assistant reaches the same
  * writes through `createChore` / `assignChore` (lib/services/tasks), which
  * checked no role, and the gate in front of them does not stand in for one:
- *   - `riskToDecision` lets a TEEN's low-risk AI writes through, and
- *     `tasks.createChore`, `tasks.assignChore` and the chat's `add_chore` are
- *     all low risk in a non-sensitive domain;
- *   - a family policy for `subject_kind = 'ai'` that allows chores admits every
- *     role's assistant, a child or a caregiver included.
- * Nothing in the database narrows `chores` or `chore_assignments` by role.
+ * `riskToDecision` lets a TEEN's low-risk AI writes through, and
+ * `tasks.createChore`, `tasks.assignChore` and the chat's `add_chore` are all
+ * low risk in a non-sensitive domain. (A family policy allowing Bubaly on
+ * chores now speaks only for a parent or adult; the child and caregiver cases
+ * below pin that it stays so on these paths.) Nothing in the database narrows
+ * `chores` or `chore_assignments` by role.
  *
  * Driven end to end on the in-memory client: the real trust gate, the real
  * registry tools and the real chat wrapper.
@@ -168,14 +168,15 @@ describe('the paths that stay open', () => {
     expect(db.table('chore_assignments')).toEqual([expect.objectContaining({ member_id: 'm-child' })]);
   });
 
-  it('a child finishing their own repeating chore still gets the next one', async () => {
+  it('a teen finishing their own repeating chore still gets the next one', async () => {
+    // The respawn goes through `assignChore` under the teen's own scope, which
+    // is why the manager rule is not applied inside it.
     db.seed('chores', [{ id: 'chore-r', family_id: FAMILY, title: 'Feed the cat', points: 5, requires_approval: false, recurrence: 'daily' }]);
-    db.seed('chore_assignments', [{ id: 'a-1', family_id: FAMILY, chore_id: 'chore-r', member_id: 'm-child', status: 'todo', due_at: '2026-10-10T08:00:00.000Z' }]);
-    allowBubalyOnChores();
-    const out = await executeTool(aiScope('child'), 'tasks.completeChore', { assignment_id: 'a-1' });
+    db.seed('chore_assignments', [{ id: 'a-1', family_id: FAMILY, chore_id: 'chore-r', member_id: 'm-teen', status: 'todo', due_at: '2026-10-10T08:00:00.000Z' }]);
+    const out = await executeTool(aiScope('teen'), 'tasks.completeChore', { assignment_id: 'a-1' });
     expect(out.status).toBe('ok');
     const rows = db.table('chore_assignments');
     expect(rows.find((a) => a.id === 'a-1')).toMatchObject({ status: 'done' });
-    expect(rows.filter((a) => a.id !== 'a-1')).toEqual([expect.objectContaining({ chore_id: 'chore-r', member_id: 'm-child', status: 'todo' })]);
+    expect(rows.filter((a) => a.id !== 'a-1')).toEqual([expect.objectContaining({ chore_id: 'chore-r', member_id: 'm-teen', status: 'todo' })]);
   });
 });

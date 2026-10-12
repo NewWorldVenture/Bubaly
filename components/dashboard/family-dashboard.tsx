@@ -102,8 +102,12 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
     calendarRead,
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).in('status', ['todo', 'in_progress']),
+    // Due today is the family's day, as a range (the home page's): `due_at` is
+    // a timestamptz and a date-only board chore is due at the family's
+    // midnight (`choreDueAt`), so an equality on the bare date — UTC midnight
+    // to Postgres — counted none of them outside UTC.
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
-      .eq('family_id', familyId).eq('due_at', start.toISOString().slice(0, 10)).in('status', ['todo', 'in_progress']),
+      .eq('family_id', familyId).gte('due_at', start.toISOString()).lt('due_at', end.toISOString()).in('status', ['todo', 'in_progress']),
     supabase.from('meal_plans').select('plan_date, meal_type, meal_id')
       .eq('family_id', familyId)
       .gte('plan_date', weekStart.toISOString().slice(0, 10))
@@ -121,8 +125,11 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
       .eq('family_id', familyId),
     supabase.from('family_reminders').select('id, title, remind_at').eq('family_id', familyId)
       .not('status', 'in', '(done,dismissed)').lt('remind_at', start.toISOString()).order('remind_at').limit(3),
+    // Unread means waiting for ME: not deleted, not my own (a sender is never
+    // in `read_by`), not yet read. The same filters as the sidebar badge.
     supabase.from('family_messages').select('id', { count: 'exact', head: true })
-      .eq('family_id', familyId).not('read_by', 'cs', `{${ctx.active.member.user_id}}`),
+      .eq('family_id', familyId).is('deleted_at', null).neq('sender_id', ctx.user.id)
+      .not('read_by', 'cs', `{${ctx.user.id}}`),
   ]);
   const calendarData = calendarRes && 'ok' in calendarRes && calendarRes.ok ? calendarRes.data : null;
   const calendarUnavailable = calendarData === null;

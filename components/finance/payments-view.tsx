@@ -11,6 +11,7 @@ import type { Tables } from '@/lib/database.types';
 import { usd as usdIn, fmtDueDate as fmtDueDateIn } from '@/lib/finance/hub';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { readsHouseholdMoney, transactionsInScope } from '@/lib/finance/household-money';
 
 type Txn = Tables<'transactions'>;
 const FILTERS = ['all', 'income', 'expense', 'transfer'] as const;
@@ -23,16 +24,26 @@ export function PaymentsView() {
   // Money and dates follow the reader; the currency stays the money's own.
   const usd = (amount: number) => usdIn(amount, locale.code);
   const fmtDueDate = (iso: string) => fmtDueDateIn(iso, locale.code);
-  const { familyId } = useApp();
+  const { familyId, role, selfMember } = useApp();
+  // The held 0514: a parent or adult reads every transaction; anyone else the
+  // ones tagged to them, narrowed before the limit so the household's newer
+  // spending does not crowd theirs out. With no member record of their own
+  // there is nothing of theirs to read.
+  const seesAll = readsHouseholdMoney(role);
+  const selfId = selfMember?.id ?? null;
 
   const { data: rows, loading, error: readError, stale, refresh } = useRealtimeQuery<Txn>({
-    table: 'transactions', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('transactions').select('*').eq('family_id', familyId).order('date', { ascending: false }).limit(500),
+    table: 'transactions', familyId, deps: [familyId, role, selfId],
+    fetcher: (sb) => {
+      if (!seesAll && !selfId) return Promise.resolve({ data: [] as Txn[], error: null });
+      const query = sb.from('transactions').select('*').eq('family_id', familyId);
+      return (seesAll ? query : query.eq('member_id', selfId!)).order('date', { ascending: false }).limit(500);
+    },
   });
 
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('all');
-  const txns = useMemo(() => rows ?? [], [rows]);
+  const txns = useMemo(() => transactionsInScope(rows ?? [], role, selfId), [rows, role, selfId]);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -72,6 +83,7 @@ export function PaymentsView() {
   return (
     <div className="module-page">
       <PageHeader title={tr('payments.paymentHistory')} description={tr('paymentsView.everyTransactionAcrossYourFamily')} />
+      {!seesAll && <p className="text-xs text-muted">{tr('householdMoney.onlyYourOwnSpending')}</p>}
 
       {/* This month at a glance */}
       {/* A +$0.00 is a statement about this family's money, so the whole grid
