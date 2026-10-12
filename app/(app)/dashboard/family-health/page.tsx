@@ -5,6 +5,7 @@ import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
+import { readsEveryMedication } from '@/lib/medications/readers';
 import { PageHeader } from '@/components/app/page-header';
 import { StatTile, SectionCard, MiniEmpty } from '@/components/family/shell';
 import { ErrorState } from '@/components/ui/states';
@@ -35,13 +36,14 @@ export default async function FamilyHealthPage() {
 
   // Health data is sensitive — surfaced only to managers in summary form here.
   const manager = isManager(ctx.active.role);
-  // F-G09: a non-manager sees the prescriptions written for THEM, as on the
-  // Medications page and in the health coach. 0465 would make the database say
-  // so and is not applied, so until it is a child's read of `medications`
-  // returns every member's rows, and this list showed a babysitter or a teen
-  // each sibling's and parent's medicine and dose. No member row asks for the
-  // nil UUID, which matches nothing, never everything.
-  const ownMedsOnly = manager ? null : (ctx.active.member?.id ?? NIL_UUID);
+  // Who reads which medicines is the held 0511's rule (the owner's decision),
+  // the one the Medications page asks by: a parent, an adult or a caregiver
+  // reads the household's; anyone else reads the ones prescribed to them
+  // (F-G09). Until 0511 is applied a child's read of `medications` returns
+  // every member's rows, and this list showed a teen or a guest each
+  // sibling's and parent's medicine and dose. No member row asks for the nil
+  // UUID, which matches nothing, never everything.
+  const ownMedsOnly = readsEveryMedication(ctx.active.role) ? null : (ctx.active.member?.id ?? NIL_UUID);
   const activeMeds = supabase.from('medications').select('*').eq('family_id', familyId).eq('is_active', true);
 
   const [membersRes, apptsRes, medsRes, profilesRes, providersRes] = await Promise.all([

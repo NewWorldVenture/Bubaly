@@ -1,27 +1,25 @@
-// The Family Health page shows a child, teen, caregiver or guest only their
-// OWN prescriptions.
+// The Family Health page shows a child, teen or guest only their OWN
+// prescriptions; a parent, an adult or a caregiver reads the household's.
 //
 // THE DEFECT. `app/(app)/dashboard/family-health/page.tsx` read every active
 // `medications` row in the family, for any role, and listed each one's name,
 // dosage and member. The page has no role gate (only the plan's), and its own
 // comment says health data is "surfaced only to managers in summary form here".
 //
-// The product rule is F-G09: a non-manager sees the medicines prescribed to
-// THEM. Migration 0465 would make the database say so, but it is a branch
-// candidate, not on main — until an operator applies it, a child's read of
-// `medications` returns every member's rows. So the rule lives in app code:
-// `components/modules/medications-module.tsx` asks only for the reader's own
-// rows, and so does the AI health coach
-// (tests/the-health-coach-tells-a-child-only-their-own-health.test.ts). This
-// page was the one that did not, so a babysitter opening "Health Coordinator"
-// read "SiblingSertraline 50mg · Sibling" and "ParentStatin 10mg · Parent".
+// The rule is the held 0511's (the owner's decision, lib/medications/readers.ts):
+// a parent, an adult or a caregiver (who may give them) reads every medicine;
+// anyone else reads the ones prescribed to them (F-G09). Until 0511 is applied
+// a child's read of `medications` returns every member's rows, so the rule
+// lives in app code: `components/modules/medications-module.tsx` asks by it.
+// This page did not, so a teen or a guest opening "Health Coordinator" read
+// "SiblingSertraline 50mg · Sibling" and "ParentStatin 10mg · Parent".
 //
 // WHAT IS ASSERTED, on the page as rendered: the fake database returns every
 // family row to any member, as it does before 0465. A child sees their own
 // prescription and no one else's, and the Active Meds tile counts theirs; a
-// caregiver or guest, who is prescribed nothing here, sees none; a member with
-// no member row matches nothing rather than everything. A parent or adult
-// still sees the whole family's.
+// guest, who is prescribed nothing here, sees none; a member with no member
+// row matches nothing rather than everything. A parent, an adult or a
+// caregiver still sees the whole family's.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import type React from 'react';
@@ -109,7 +107,7 @@ describe('a non-manager on the Family Health page', () => {
     expect(activeMedsTile(page)).toBe('1');
   });
 
-  it.each(['caregiver', 'guest'])('a %s, prescribed nothing here, sees no one\'s', async (role) => {
+  it.each(['guest'])('a %s, prescribed nothing here, sees no one\'s', async (role) => {
     harness.role = role;
     harness.member = `member-${role}`;
     const page = await openTheHealthPage();
@@ -126,8 +124,8 @@ describe('a non-manager on the Family Health page', () => {
   });
 });
 
-describe('a manager on the Family Health page', () => {
-  it.each(['parent', 'adult'])('a %s still sees the whole family\'s prescriptions', async (role) => {
+describe('a reader of every medicine on the Family Health page', () => {
+  it.each(['parent', 'adult', 'caregiver'])('a %s still sees the whole family\'s prescriptions', async (role) => {
     harness.role = role;
     harness.member = PARENT;
     const page = await openTheHealthPage();
