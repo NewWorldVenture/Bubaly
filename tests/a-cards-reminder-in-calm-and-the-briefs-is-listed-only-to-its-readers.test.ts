@@ -207,7 +207,7 @@ describe('the Calm inbox lists the scan-made reminder only to its card\'s reader
 
   it('a failed read of the cards lists them to the managers alone', async () => {
     const db = await scannedHousehold();
-    h.db = withFaults(db, (table, calls) => (table === 'autopilot_suggestions' && calls.some((c) => c.method === 'or') ? { message: 'Fixture read refused' } : null));
+    h.db = withFaults(db, (table, calls) => (table === 'autopilot_suggestions' && calls.some((c) => c.method === 'eq' && c.args[0] === 'action_type') ? { message: 'Fixture read refused' } : null));
     expect(await calmReminders('mum')).toEqual([POLICY, PASSPORT].sort());
     for (const reader of ['ava', 'kit', 'neighbour']) expect(await calmReminders(reader), reader).toEqual([]);
     expect(console.error).toHaveBeenCalledWith('[dashboard-calm] autopilot reminder cards read failed', expect.anything());

@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils/cn';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { getFormat } from '@/lib/utils/format-server';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
-import { suggestionReminderKey } from '@/lib/services/autopilot';
+import { suggestionReminderKey, suggestionSourceTag } from '@/lib/services/autopilot';
 import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -105,6 +105,7 @@ export default async function PlanningPage() {
   // soonest this reader may be shown.
   const reminderCards = reminderCardsReader(supabase, familyId, {
     keyOf: (cardId) => suggestionReminderKey(familyId, cardId),
+    sourceTagOf: suggestionSourceTag,
     onError: (error) => console.error('[planning] autopilot reminder cards read failed', error),
   });
   const readPlanningReminders = async () => {

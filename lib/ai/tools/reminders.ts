@@ -16,6 +16,8 @@ import { describeDbError } from '@/lib/supabase/errors';
 import { resolveAssigneeId } from './family';
 import { defineTool, describeWhen, plural, type ToolDefinition } from './types';
 import { escapeLike } from '@/lib/supabase/escape-like';
+import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
+import { mintSuggestionReminderKey, mintSuggestionSourceTag } from '@/lib/autopilot/reminder-key';
 
 const KINDS = ['time', 'location', 'recurring', 'medication', 'bill', 'school', 'chore'] as const;
 const RECURRENCES = ['none', 'daily', 'weekdays', 'weekly', 'biweekly', 'monthly', 'yearly'] as const;
@@ -34,9 +36,16 @@ const reminderOutput = z.object({
 
 /**
  * Find the reminder a partial title refers to: the soonest still-live one that
- * matches. A read failure is fatal rather than "no match" — telling a family
- * their reminder does not exist when the database merely hiccuped is worse
- * than asking them to try again.
+ * matches AND that this reader may be shown. A read failure is fatal rather
+ * than "no match" — telling a family their reminder does not exist when the
+ * database merely hiccuped is worse than asking them to try again.
+ *
+ * Shown, as `reminders.listDue` shows: a reminder an Autopilot card made is
+ * its card's readers' (lib/autopilot/reminder-cards.ts). Matched on the title
+ * alone, Kit's "renew" found the managers' "Renew dental insurance (Smile Co)"
+ * ahead of his own "Renew library books", completed it, and read its title
+ * back to him. A hidden reminder is no match, and the soonest one he may see
+ * is the one acted on.
  */
 async function findReminder(scope: ServiceScope, title: string): Promise<ServiceResult<{ id: string; title: string }>> {
   // Escaped ONCE, at the call site below. Escaping here as well produced
@@ -47,21 +56,29 @@ async function findReminder(scope: ServiceScope, title: string): Promise<Service
   const term = title.trim();
   if (!term) return fail('Which reminder did you mean?', { code: SERVICE_CODES.invalidInput });
 
-  const { data, error } = await scope.db
+  const { data, error } = await readVisibleReminders((n) => scope.db
     .from('family_reminders')
-    .select('id, title')
+    .select('id, title, idempotency_key, tags')
     .eq('family_id', scope.familyId)
     .in('status', ['active', 'snoozed'])
     .ilike('title', `%${escapeLike(term)}%`)
     .order('remind_at', { ascending: true, nullsFirst: false })
-    .limit(1);
+    .limit(n), {
+    limit: 1,
+    viewer: { role: scope.role, memberId: scope.memberId },
+    cards: reminderCardsReader(scope.db, scope.familyId, {
+      keyOf: (cardId) => mintSuggestionReminderKey(scope.familyId, cardId),
+      sourceTagOf: mintSuggestionSourceTag,
+      onError: (cause) => console.error('[tool:reminders] autopilot reminder cards read failed', cause),
+    }),
+  });
   if (error) {
     console.error('[tool:reminders] lookup failed', error);
     return fail(describeDbError(error, 'Could not look up that reminder.'), { code: SERVICE_CODES.db });
   }
   const row = data?.[0];
   if (!row) return fail(`No active reminder matching "${title}".`, { code: SERVICE_CODES.notFound });
-  return ok(row);
+  return ok({ id: row.id, title: row.title });
 }
 
 export const reminderTools: ToolDefinition[] = [

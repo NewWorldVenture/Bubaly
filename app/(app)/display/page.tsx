@@ -27,7 +27,7 @@ import { addDaysToDayKey, dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/sc
 import type { LocaleCode } from '@/lib/i18n/locales';
 import type { AudienceViewer } from '@/lib/autopilot/audience';
 import { reminderCardsReader, visibleReminders } from '@/lib/autopilot/reminder-cards';
-import { suggestionReminderKey } from '@/lib/services/autopilot';
+import { suggestionReminderKey, suggestionSourceTag } from '@/lib/services/autopilot';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -154,6 +154,7 @@ async function loadDisplay(
     if (read.error) return read;
     const cards = reminderCardsReader(supabase, familyId, {
       keyOf: (cardId) => suggestionReminderKey(familyId, cardId),
+      sourceTagOf: suggestionSourceTag,
       onError: (error) => console.error('[display] autopilot reminder cards read failed', error),
     });
     return { data: await visibleReminders(read.data ?? [], viewer, cards), error: null };

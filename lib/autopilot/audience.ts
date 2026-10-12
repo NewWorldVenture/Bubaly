@@ -91,11 +91,3 @@ export function reminderNoticeMemberIds(row: AudienceRow, roster: { id: string; 
   const audience = suggestionAudience(row);
   return audience === 'everyone' ? null : audienceMemberIds(audience, roster, row.member_id ?? null);
 }
-
-/**
- * A PostgREST `or` filter for the cards whose audience is narrower than
- * everyone. A pre-filter for a read, built from the same names as
- * `suggestionAudience`, which stays the rule.
- */
-export const NARROWER_THAN_EVERYONE_FILTER =
-  `kind.in.(insurance,finance),source_kind.in.(family_insurance_policies,${[...NOT_GUESTS].join(',')})`;

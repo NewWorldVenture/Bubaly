@@ -19,31 +19,75 @@
 // So whoever reads these reminders looks the card up here and applies the
 // card's rule: the notifications generator to address the notice, and every
 // screen and brief that lists a reminder's title to drop it for a reader the
-// card is not for. A failed read of the cards never widens: a reminder that
-// could be a card's is then the managers', who read every card.
+// card is not for.
+//
+// A LINK THAT FINDS NO CARD IS THE MANAGERS' ALONE. Only a card positively
+// found widens a linked reminder past them, so every card a reminder can be
+// made from is read — the everyone cards too (a refill's "Refill a
+// prescription", an appointment's) — and not only the narrower ones: read that
+// way, a broad card and a link that resolves to nothing looked the same, and
+// both were listed and announced to everyone. A link resolves to nothing
+//
+//   - between the scan's two writes. It commits the reminder first and its
+//     card second (the order that lets it remove the reminder when the card
+//     cannot be saved, and never announce a card whose reminder was not
+//     written), so a reader or a notification tick in between found the
+//     policy's reminder and no card: a guest was listed it, and the whole
+//     family was told it;
+//   - after a scan whose card failed to save and whose clean-up of the
+//     reminder failed or removed nothing: the reminder outlives its card;
+//   - for a legacy or ambiguous link: a 'renewal' reminder whose card has
+//     since been deleted; an accepted card's key no card mints, beside a tag
+//     no card mints either (the card deleted, or its title, member or payload
+//     changed since the tag was minted); a row whose tags name two different
+//     cards. Nothing else on such a row says whose it is — its title is
+//     display text, never provenance — so it stays with the managers, who
+//     read every card, rather than reaching readers its card may refuse. A
+//     manager still sees it, and can reassign or delete it.
+//
+// An accepted card's row carries two stamps, and either finds its card: the
+// key (`idempotency_key`) is that one row's, and the tag (AUTOPILOT_SOURCE_TAG,
+// a sha-256 of the card's own identity and content) travels with the tags onto
+// the next occurrence of a repeating one, which the reminders module and the
+// assistant's complete_reminder write without a key. Read by the key alone,
+// the next occurrence of Kit's refill — a card for everyone, assigned to him —
+// was listed to the managers and told to them, and Kit never heard of his own
+// reminder.
+//
+// A failed read of the cards is the same answer for every linked reminder. A
+// reminder with no link — one somebody wrote, or the scan's reminder for an
+// appointment or an event, whose cards are everyone's — is read and addressed
+// as before.
 //
 // Client-safe: the briefing module's kitchen list, the Health page and the
-// reminders module read their reminders in the browser. The key an accepted
-// card stamps is a sha-256 (suggestionReminderKey), so a reader of
-// `family_reminders` passes it in as `keyOf` — the server's mint, or the
-// browser's (lib/autopilot/reminder-key.ts mintSuggestionReminderKey); without
-// it such a row is treated as unreadable, never as nobody's card.
+// reminders module read their reminders in the browser. The stamps an
+// accepted card writes are sha-256s (suggestionReminderKey,
+// suggestionSourceTag), so a reader of `family_reminders` passes their mints
+// in as `keyOf` and `sourceTagOf` — the server's, or the browser's
+// (lib/autopilot/reminder-key.ts); without them such a row is unresolved,
+// never nobody's card.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
 import { readAll } from '@/lib/supabase/read-all';
-import { AUTOPILOT_SOURCE_TAG } from '@/lib/reminders/provenance';
-import { NARROWER_THAN_EVERYONE_FILTER, suggestionVisibleTo, type AudienceRow, type AudienceViewer } from '@/lib/autopilot/audience';
+import { hasReminderProvenance, reminderProvenanceTags } from '@/lib/reminders/provenance';
+import { suggestionVisibleTo, type AudienceRow, type AudienceViewer } from '@/lib/autopilot/audience';
+import type { SuggestionStampSource } from '@/lib/autopilot/reminder-key';
 
 type DB = SupabaseClient<Database>;
 
 export type ReminderCard = AudienceRow & { id: string; source_id: string | null };
 
 /**
- * The family's narrower cards, by the two links a reminder carries back to
- * one. `byReminderKey` is null when the reader did not say how a key is minted.
+ * The family's reminder cards, whatever their audience, by the three links a
+ * reminder carries back to one. `byReminderKey` and `bySourceTag` are null
+ * when the reader did not say how an accepted card's stamps are minted.
  */
-export type ReminderCards = { bySource: Map<string, ReminderCard>; byReminderKey: Map<string, ReminderCard> | null };
+export type ReminderCards = {
+  bySource: Map<string, ReminderCard>;
+  byReminderKey: Map<string, ReminderCard> | null;
+  bySourceTag: Map<string, ReminderCard> | null;
+};
 
 /** What a reminder row carries back to its card: `reminders` has the first two, `family_reminders` the last two. */
 export type ReminderLink = {
@@ -53,13 +97,29 @@ export type ReminderLink = {
   tags?: string[] | null;
 };
 
-export type ReminderCardsOptions = {
-  /**
-   * How an accepted card's reminder key is minted: lib/services/autopilot
-   * suggestionReminderKey on the server, lib/autopilot/reminder-key.ts
-   * mintSuggestionReminderKey in the browser. A mint that fails is a failed read.
-   */
-  keyOf?: (cardId: string) => string | PromiseLike<string>;
+/**
+ * How an accepted card's two stamps are minted, both or neither: a reader of
+ * `family_reminders` that resolved the key alone would leave every next
+ * occurrence of a repeating one with the managers.
+ */
+type StampMints =
+  | {
+    /**
+     * The card's reminder key: lib/services/autopilot suggestionReminderKey on
+     * the server, lib/autopilot/reminder-key.ts mintSuggestionReminderKey in
+     * the browser. A mint that fails is a failed read.
+     */
+    keyOf: (cardId: string) => string | PromiseLike<string>;
+    /**
+     * The card's tag: lib/services/autopilot suggestionSourceTag on the
+     * server, lib/autopilot/reminder-key.ts mintSuggestionSourceTag in the
+     * browser. A mint that fails is a failed read.
+     */
+    sourceTagOf: (card: SuggestionStampSource) => string | PromiseLike<string>;
+  }
+  | { keyOf?: undefined; sourceTagOf?: undefined };
+
+export type ReminderCardsOptions = StampMints & {
   /** Told when the cards could not be read; the reader then answers null. */
   onError: (error: unknown) => void;
 };
@@ -69,48 +129,63 @@ function scanSource(row: ReminderLink): string | null {
   return row.related_type === 'renewal' && row.related_id ? row.related_id : null;
 }
 
-/** The key an accepted card's reminder carries, or null. */
-function acceptedKey(row: ReminderLink): string | null {
-  return row.idempotency_key && (row.tags ?? []).some((tag) => tag.startsWith(AUTOPILOT_SOURCE_TAG)) ? row.idempotency_key : null;
+/**
+ * Whether this row carries the stamp an accepted card writes: the exact one
+ * resolveSuggestion makes (lib/reminders/provenance.ts), not any tag that only
+ * starts like it. A person's own "autopilot-source:notes" is a tag, and their
+ * reminder stays theirs.
+ */
+function accepted(row: ReminderLink): boolean {
+  return hasReminderProvenance(row.tags);
 }
 
-/** Whether this reminder could have been made from a card at all. */
+/** Whether this reminder carries a link back to a card at all. */
 export function mayBeCardReminder(row: ReminderLink): boolean {
-  return scanSource(row) !== null || acceptedKey(row) !== null;
+  return scanSource(row) !== null || accepted(row);
 }
 
 /**
- * The family's Autopilot reminder cards whose audience is narrower than
- * everyone. Newest card first for a source, so a policy renewed every year
- * answers with this year's. Every page, so a card is never missed for being
- * old; null when the read failed.
+ * Every Autopilot card of the family's that a reminder can be made from — the
+ * ones whose audience is everyone too, so that a link to one of them is known
+ * to be everyone's rather than unresolved. Newest card first for a source, so
+ * a policy renewed every year answers with this year's. Every page, so a card
+ * is never missed for being old; null when the read failed.
  */
 export async function readReminderCards(db: DB, familyId: string, opts: ReminderCardsOptions): Promise<ReminderCards | null> {
-  const read = await readAll<ReminderCard>((from, to) => db.from('autopilot_suggestions')
-    .select('id, kind, source_kind, source_id, member_id')
-    .eq('family_id', familyId).eq('action_type', 'create_reminder').or(NARROWER_THAN_EVERYONE_FILTER)
+  // The audience and the links, and what the card's tag is minted from.
+  const read = await readAll<ReminderCard & SuggestionStampSource>((from, to) => db.from('autopilot_suggestions')
+    .select('id, family_id, kind, source_kind, source_id, member_id, action_type, title, detail, urgency, payload')
+    .eq('family_id', familyId).eq('action_type', 'create_reminder')
     .order('created_at', { ascending: false }).order('id').range(from, to));
   if (read.error) {
     opts.onError(read.error);
     return null;
   }
-  const { keyOf } = opts;
-  let keys: string[] | null = null;
-  if (keyOf) {
+  const { keyOf, sourceTagOf } = opts;
+  let stamps: { keys: string[]; tags: string[] } | null = null;
+  if (keyOf && sourceTagOf) {
     try {
-      keys = await Promise.all(read.rows.map((card) => keyOf(card.id)));
+      const [keys, tags] = await Promise.all([
+        Promise.all(read.rows.map((card) => keyOf(card.id))),
+        Promise.all(read.rows.map((card) => sourceTagOf(card))),
+      ]);
+      stamps = { keys, tags };
     } catch (error) {
       opts.onError(error);
       return null;
     }
   }
   const bySource = new Map<string, ReminderCard>();
-  const byReminderKey = keys ? new Map<string, ReminderCard>() : null;
+  const byReminderKey = stamps ? new Map<string, ReminderCard>() : null;
+  const bySourceTag = stamps ? new Map<string, ReminderCard>() : null;
   read.rows.forEach((card, i) => {
     if (card.source_id && !bySource.has(card.source_id)) bySource.set(card.source_id, card);
-    if (keys) byReminderKey?.set(keys[i], card);
+    if (stamps) {
+      byReminderKey?.set(stamps.keys[i], card);
+      bySourceTag?.set(stamps.tags[i], card);
+    }
   });
-  return { bySource, byReminderKey };
+  return { bySource, byReminderKey, bySourceTag };
 }
 
 /** `readReminderCards`, read once on first use and shared by every caller after. */
@@ -120,28 +195,42 @@ export function reminderCardsReader(db: DB, familyId: string, opts: ReminderCard
 }
 
 /**
- * The narrower card this reminder was made from: found, none (undefined —
- * a reminder somebody wrote, or an everyone card's), or unknown (null — an
- * accepted card's row read without `keyOf`).
+ * The card this reminder was made from: found, whatever its audience; no link
+ * at all (undefined — a reminder somebody wrote); or unresolved (null — a link
+ * no card answers: the scan's reminder before its card is saved or after the
+ * card failed to save, a key and a tag no card mints, tags naming two cards,
+ * or an accepted card's row read without `keyOf` and `sourceTagOf`).
+ *
+ * An accepted card's row is found by its key first, the stamp that row was
+ * written under; then by its tag, which a next occurrence carries without
+ * the key.
  */
 export function reminderCardOf(cards: ReminderCards, row: ReminderLink): ReminderCard | undefined | null {
   const source = scanSource(row);
-  if (source) return cards.bySource.get(source);
-  const key = acceptedKey(row);
-  if (!key) return undefined;
-  return cards.byReminderKey ? cards.byReminderKey.get(key) : null;
+  if (source) return cards.bySource.get(source) ?? null;
+  if (!accepted(row)) return undefined;
+  const byKey = row.idempotency_key ? cards.byReminderKey?.get(row.idempotency_key) : undefined;
+  return byKey ?? stampedCard(cards, row);
+}
+
+/** The one card this row's tags name, or null: none does, or they name two. */
+function stampedCard(cards: ReminderCards, row: ReminderLink): ReminderCard | null {
+  const { bySourceTag } = cards;
+  if (!bySourceTag) return null;
+  const named = new Set(reminderProvenanceTags(row.tags).flatMap((tag) => bySourceTag.get(tag) ?? []));
+  return named.size === 1 ? [...named][0] : null;
 }
 
 /**
- * Whether `viewer` may be shown this reminder. `cards` null is a failed read:
- * a reminder that could be a card's is then the managers' alone.
+ * Whether `viewer` may be shown this reminder. A linked one goes past the
+ * managers only when its card is found and admits the viewer: `cards` null
+ * (a failed read) and an unresolved link leave it the managers' alone.
  */
 export function reminderVisibleTo(row: ReminderLink, cards: ReminderCards | null, viewer: AudienceViewer): boolean {
   if (!mayBeCardReminder(row)) return true;
-  if (!cards) return isManager(viewer.role);
-  const card = reminderCardOf(cards, row);
-  if (card === null) return isManager(viewer.role);
-  return !card || suggestionVisibleTo(card, viewer);
+  const card = cards ? reminderCardOf(cards, row) : null;
+  if (!card) return isManager(viewer.role);
+  return suggestionVisibleTo(card, viewer);
 }
 
 /** The rows `viewer` may be shown; the cards are read only when a row could be a card's. */

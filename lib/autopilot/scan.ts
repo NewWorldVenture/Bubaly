@@ -378,6 +378,15 @@ export async function runAutopilotScan(
       // an insurance card names whose policy it is, not who renews it, and its
       // reminder is told to the card's readers by the notifications generator
       // (lib/autopilot/audience.ts reminderMemberFor).
+      //
+      // Written BEFORE its card, and kept so: the card's status says whether
+      // the reminder exists ('auto_executed' or 'open'), and a card saved
+      // first would claim a reminder that may never be written. So there is
+      // a moment — and, when the card fails to save and the clean-up below
+      // fails too, no end to it — in which this reminder links to a source no
+      // card names yet. Every reader treats such a link as the managers'
+      // alone (lib/autopilot/reminder-cards.ts), so it reaches no reader the
+      // card would refuse before the card is there to say who may.
       const { data: reminder, error: remErr } = await supabase.from('reminders').insert({
         family_id: familyId,
         title: (d.payload.title as string) ?? d.title,
