@@ -53,13 +53,20 @@ type ApprovalRow = Database['public']['Tables']['approval_requests']['Row'];
 /** The columns that say how, for whom and under which rule a held request was filed. */
 export type FiledRequest = Pick<
   ApprovalRow,
-  'family_id' | 'domain' | 'capability' | 'requested_by_kind' | 'requested_by_member_id'
+  'id' | 'family_id' | 'domain' | 'capability' | 'requested_by_kind' | 'requested_by_member_id'
   | 'approval_model' | 'required_approvals' | 'policy_id' | 'confidence'
 >;
 
 /** `FiledRequest`'s columns, for a select. */
 export const FILED_REQUEST_COLUMNS =
-  'family_id, domain, capability, requested_by_kind, requested_by_member_id, approval_model, required_approvals, policy_id, confidence';
+  'id, family_id, domain, capability, requested_by_kind, requested_by_member_id, approval_model, required_approvals, policy_id, confidence';
+
+/**
+ * The confidence the run executor's `approvalRuleFor` weighs a held step at.
+ * A held step's card is re-weighed at the same value, never at the row's
+ * `confidence` column (see `filingConfidence`).
+ */
+export const HELD_STEP_CONFIDENCE = 0.85;
 
 type RuleTool = Pick<ToolDefinition, 'name' | 'domain' | 'capability' | 'risk' | 'readOnly' | 'input'>;
 
@@ -213,6 +220,39 @@ export function filedRuleStillHolds(
 }
 
 /**
+ * The confidence the request was filed at, from a record no approver can
+ * change. The row's own `confidence` column is NOT that: 0251 lets a manager
+ * rewrite any column of a pending row that 0381/0389/0480 do not pin, and
+ * confidence is not pinned, so raising it would let a rule conditioned on
+ * `minConfidence` release a card (or an edit) that today's rules would send
+ * to more people (#1028 review: RV-1028-CONF, AMT-EDIT-CONF).
+ *
+ *  - A held step was weighed at HELD_STEP_CONFIDENCE, always.
+ *  - A card a gate filed has the confidence that gate weighed in its filing
+ *    line in `trust_audit_logs` (`evaluateTrust` writes it with the
+ *    approval's id), a table only the service role writes (0260).
+ *
+ * No filing line, or none that recorded a confidence, is read as 0: a rule
+ * that needs Bubaly to be sure never relaxes a release it cannot prove. Null
+ * when the ledger cannot be read, so the caller answers "unreadable".
+ */
+async function filingConfidence(db: DB, request: ReleasedRequest): Promise<number | null> {
+  if (request.filedBy.kind === 'step') return HELD_STEP_CONFIDENCE;
+  const { data, error } = await db.from('trust_audit_logs')
+    .select('confidence, created_at')
+    .eq('family_id', request.row.family_id)
+    .eq('approval_id', request.row.id)
+    .order('created_at', { ascending: true })
+    .limit(1);
+  if (error) {
+    console.error('[trust/edit-rule] could not read the confidence a request was filed at', { approvalId: request.row.id, code: error.code });
+    return null;
+  }
+  const filed = (data ?? [])[0]?.confidence;
+  return typeof filed === 'number' ? filed : 0;
+}
+
+/**
  * The family's answer for this request at a given amount, evaluated as the
  * gate that filed it evaluated the ask. Null when what that needs cannot be read.
  */
@@ -234,11 +274,13 @@ async function ruleFor(db: DB, request: ReleasedRequest): Promise<((amountCents:
   const capability: Capability = request.filedBy.kind === 'step'
     ? (!request.tool || !request.tool.readOnly ? 'automate' : request.tool.capability)
     : row.capability as Capability;
+  const confidence = await filingConfidence(db, request);
+  if (confidence === null) return null;
   return (amountCents) => evaluateAction({
     actor,
     domain: row.domain,
     capability,
-    context: { confidence: row.confidence ?? 0.85, tags, ...(amountCents !== null ? { amountCents } : {}) },
+    context: { confidence, tags, ...(amountCents !== null ? { amountCents } : {}) },
     policies: trust.policies,
     grants: trust.grants,
     delegations: trust.delegations,

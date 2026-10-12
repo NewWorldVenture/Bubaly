@@ -49,7 +49,7 @@ import { behaviorForDomain, effectiveRisk } from '@/lib/ai/family-settings';
 import { loadAISettings } from '@/lib/services/ai-settings';
 import { evaluateAction, riskTierStance, riskToDecision, toolTags, type ApprovalModel, type Decision } from '@/lib/trust/engine';
 import { carriesAmount, readAmountCents, UNKNOWN_AMOUNT_CENTS } from '@/lib/trust/amount';
-import { FILED_REQUEST_COLUMNS, refusesOutright, releaseStaysWithinFiledRule, type FiledRequest } from '@/lib/trust/edit-rule';
+import { FILED_REQUEST_COLUMNS, HELD_STEP_CONFIDENCE, refusesOutright, releaseStaysWithinFiledRule, type FiledRequest } from '@/lib/trust/edit-rule';
 import { localizedTrustReason } from '@/lib/trust/messages';
 import { loadTrustInputs, roleOf } from '@/lib/trust/server';
 import { conformNulls } from '@/lib/ai/schema-to-json';
@@ -1537,7 +1537,7 @@ async function approvalRuleFor(
     domain,
     capability,
     context: {
-      confidence: 0.85,
+      confidence: HELD_STEP_CONFIDENCE,
       tags: tool ? [...toolTags(tool.name), `op:${tool.capability}`, `risk:${tool.risk}`, `domain:${tool.domain}`] : [`domain:${domain}`],
       ...(amountCents !== null ? { amountCents } : {}),
     },

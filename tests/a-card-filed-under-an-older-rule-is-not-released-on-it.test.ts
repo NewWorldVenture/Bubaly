@@ -80,6 +80,12 @@ const ALL_OF_US = policy({
   conditions: {}, approval_model: 'consensus', required_approvals: 1, priority: 200,
 });
 
+/** "Bubaly may set budgets when it is 95% sure" — an allow a raised confidence would reach. */
+const SURE = policy({
+  id: '00000000-0000-4000-8000-00000000d246', name: 'Bubaly may set budgets when 95% sure', effect: 'allow',
+  conditions: { minConfidence: 0.95 }, priority: 250,
+});
+
 let db: InMemorySupabase;
 const client = () => db as unknown as SupabaseClient<Database>;
 const asParent = (who: Who): ServiceScope => ({
@@ -246,6 +252,47 @@ describe('a standalone card the tool gate filed "one of us" for $900, before it 
       expect(db.table('ai_tool_calls')).toEqual([]);
     });
   }
+});
+
+// #1028 review (RV-1028-CONF): the release check read the row's `confidence`,
+// a pending-row column any manager may rewrite (0251; 0381/0389/0480 do not pin
+// it). Raising it let a "when 95% sure" allow release a stale card one yes. The
+// confidence a card is weighed at now comes from where it was filed: the
+// executor's fixed value for a held step, the gate's filing line for a card.
+describe('a raised confidence does not release a stale card', () => {
+  it('a gate-filed $900 card: the manager raises its confidence, and a plain yes is still refused', async () => {
+    db.seed('trust_policies', [UNDER_FIFTY, BOTH_OF_US, SURE]);
+    seedToolCard(900, { approval_model: 'single', required_approvals: 1, policy_id: UNDER_FIFTY.id });
+    approvalRow(CARD).confidence = 0.99;
+
+    const res = await decide(asParent(ALEX), CARD, 'approved');
+
+    expect(res).toMatchObject({ ok: false, code: 'denied', error: NO_LONGER });
+    expect(approvalRow(CARD)).toMatchObject({ status: 'pending', approvals: [] });
+    expect(groceries()).toMatchObject({ amount: 400 });
+    expect(db.table('ai_tool_calls')).toEqual([]);
+  });
+
+  it('a held-step $900 card: the manager raises its confidence, and a plain yes is still refused', async () => {
+    db.seed('trust_policies', [UP_TO_FIFTY, BOTH_OF_US, SURE]);
+    seedParkedCard(900, OLD_RULE);
+    approvalRow(CARD).confidence = 0.99;
+
+    const res = await decide(asParent(ALEX), CARD, 'approved');
+
+    expect(res).toMatchObject({ ok: false, code: 'denied', error: NO_LONGER });
+    expect(approvalRow(CARD)).toMatchObject({ status: 'pending', approvals: [] });
+    expect(groceries()).toMatchObject({ amount: 400 });
+  });
+
+  it('a gate-filed $40 card filed under today\'s rules still releases on one yes (positive control)', async () => {
+    db.seed('trust_policies', [UNDER_FIFTY, BOTH_OF_US, SURE]);
+    seedToolCard(40, { approval_model: 'single', required_approvals: 1, policy_id: UNDER_FIFTY.id });
+    approvalRow(CARD).confidence = 0.99;
+
+    expect(await decide(asParent(ALEX), CARD, 'approved')).toMatchObject({ ok: true });
+    expect(groceries()).toMatchObject({ amount: 40 });
+  });
 });
 
 describe('a card filed under the rules as they are is released as before (positive controls)', () => {
