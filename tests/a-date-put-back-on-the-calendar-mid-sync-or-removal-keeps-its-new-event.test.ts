@@ -455,3 +455,67 @@ describe('a removal deletes the date only while its link is the event it removed
     expect(date()).toBeDefined();
   });
 });
+
+describe('a toggle keeps a link another toggle wrote in between', () => {
+  // Review on #1031 (6133265985): toggle-off deleted A, the foreign key nulled
+  // the link, a toggle-on linked B, and toggle-off's unconditional unlink then
+  // cleared B, leaving B on the calendar with nothing pointing at it.
+  it('a toggle-off whose unlink lands after a toggle-on linked B leaves B linked and reports the conflict (foreign key on)', async () => {
+    const a = await onTheCalendar();
+    const fk = withSetNullOnEventDelete(db);
+    const stale = holdWrites(fk.client, 'relationship_dates', 'update');
+    h.db = stale.client;
+    const turningOff = relationship.toggleDateOnCalendarAction('date-1');
+    await vi.waitFor(() => expect(stale.held).toHaveLength(1));
+    expect(fk.cleared).toEqual(['date-1']);
+    expect(link()).toBeNull();
+    expect(event(a)).toBeUndefined();
+
+    h.db = fk.client;
+    expect(await relationship.toggleDateOnCalendarAction('date-1')).toMatchObject({ ok: true, onCalendar: true });
+    const b = link()!;
+    expect(b).toBeTruthy();
+    expect(b).not.toBe(a);
+    expect(event(b)).toBeTruthy();
+
+    stale.held[0].release();
+    expect(await turningOff).toEqual({ ok: false, error: 'actions.theDateWasPutBackOnTheCalendarWhileSaving' });
+    expect(link()).toBe(b);
+    expect(event(b)).toBeTruthy();
+  });
+
+  it('control: a toggle-off after the foreign key already nulled the link is a clean success', async () => {
+    const a = await onTheCalendar();
+    h.db = withSetNullOnEventDelete(db).client;
+
+    expect(await relationship.toggleDateOnCalendarAction('date-1')).toEqual({ ok: true, onCalendar: false, eventId: null });
+    expect(link()).toBeNull();
+    expect(event(a)).toBeUndefined();
+  });
+
+  it('control: a toggle-off with no foreign key in play clears the link it removed', async () => {
+    const a = await onTheCalendar();
+
+    expect(await relationship.toggleDateOnCalendarAction('date-1')).toEqual({ ok: true, onCalendar: false, eventId: null });
+    expect(link()).toBeNull();
+    expect(event(a)).toBeUndefined();
+  });
+
+  it('two toggles on at once leave one event linked and remove the loser\'s duplicate', async () => {
+    const first = holdWrites(db, 'relationship_dates', 'update');
+    h.db = first.client;
+    const firstOn = relationship.toggleDateOnCalendarAction('date-1');
+    await vi.waitFor(() => expect(first.held).toHaveLength(1));
+    expect(events()).toHaveLength(1);
+
+    h.db = db;
+    expect(await relationship.toggleDateOnCalendarAction('date-1')).toMatchObject({ ok: true, onCalendar: true });
+    const winner = link()!;
+    expect(events()).toHaveLength(2);
+
+    first.held[0].release();
+    expect(await firstOn).toEqual({ ok: true, onCalendar: true, eventId: winner });
+    expect(link()).toBe(winner);
+    expect(events().map((e) => e.id)).toEqual([winner]);
+  });
+});

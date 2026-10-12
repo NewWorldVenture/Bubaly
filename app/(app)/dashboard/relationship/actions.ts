@@ -79,14 +79,33 @@ export async function toggleDateOnCalendarAction(dateId: string): Promise<Toggle
       // leaves `calendar_event_id` pointing at a deleted event, and the next
       // sync treats the date as already on the calendar — so it never goes back
       // on. Audit C1-S9-58.
+      //
+      // Only while the link still names the event this toggle removed, or is
+      // already null (00980's ON DELETE SET NULL clears it in the delete's own
+      // statement): a toggle-on that linked a NEW event in between keeps it.
+      // Not atomic with the delete above; this refuses the stale write only.
       const { data: unlinked, error: unlinkError } = await supabase
         .from('relationship_dates')
         .update({ calendar_event_id: null })
         .eq('id', row.id)
         .eq('family_id', ctx.active.familyId)
+        .or(`calendar_event_id.is.null,calendar_event_id.eq.${row.calendar_event_id}`)
         .select('id');
-      if (unlinkError || wroteNoRows(unlinked)) {
-        console.error('[relationship-action] unlink failed', unlinkError ?? 'no rows updated');
+      if (unlinkError) {
+        console.error('[relationship-action] unlink failed', unlinkError);
+        return { ok: false, error: t('actions.theEventWasRemovedBut') };
+      }
+      if (wroteNoRows(unlinked)) {
+        const { data: current, error: rereadError } = await supabase
+          .from('relationship_dates')
+          .select('calendar_event_id')
+          .eq('id', row.id)
+          .eq('family_id', ctx.active.familyId)
+          .maybeSingle();
+        if (!rereadError && current?.calendar_event_id && !sameId(current.calendar_event_id, row.calendar_event_id)) {
+          return { ok: false, error: t('actions.theDateWasPutBackOnTheCalendarWhileSaving') };
+        }
+        console.error('[relationship-action] unlink failed', rereadError ?? 'no rows updated');
         return { ok: false, error: t('actions.theEventWasRemovedBut') };
       }
 
@@ -129,12 +148,33 @@ export async function toggleDateOnCalendarAction(dateId: string): Promise<Toggle
     // The event exists by now. A link matching no rows leaves the date not
     // knowing about it, so the next run creates a SECOND event for the same
     // anniversary — the failure is duplication, not absence.
+    //
+    // Only while the date is still off the calendar, as it was when read: two
+    // toggles on at once each create an event, and the second unconditional
+    // link would orphan the first. The one that loses removes its own event.
     const { data: linked, error: linkError } = await supabase
       .from('relationship_dates')
       .update({ calendar_event_id: created.data.id })
       .eq('id', row.id)
       .eq('family_id', ctx.active.familyId)
+      .is('calendar_event_id', null)
       .select('id');
+    if (!linkError && wroteNoRows(linked)) {
+      const { data: current, error: rereadError } = await supabase
+        .from('relationship_dates')
+        .select('calendar_event_id')
+        .eq('id', row.id)
+        .eq('family_id', ctx.active.familyId)
+        .maybeSingle();
+      if (!rereadError && current?.calendar_event_id && !sameId(current.calendar_event_id, created.data.id)) {
+        const duplicate = await deleteEvent(scope, created.data.id);
+        if (duplicate.ok || duplicate.code === SERVICE_CODES.notFound) {
+          revalidatePath(PATH);
+          return { ok: true, onCalendar: true, eventId: current.calendar_event_id };
+        }
+        console.error('[relationship-action] duplicate event cleanup failed', { dateId: row.id, eventId: created.data.id, error: duplicate.error });
+      }
+    }
     if (linkError || wroteNoRows(linked)) {
       // The event exists and the family can see it; only the link is missing, so
       // report rather than delete work they can already use. Logged so a second
