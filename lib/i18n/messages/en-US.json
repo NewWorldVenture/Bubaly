@@ -16482,6 +16482,8 @@
   "actions.theCalendarEventChangedWhileSaving": "The calendar event changed while this was saving, so it was not updated. Try again.",
   "actions.thatPickupTimeCouldNotBeRead": "That pickup time is not a real date and time, so nothing was saved.",
   "actions.thatReturnTimeCouldNotBeRead": "That return time is not a real date and time, so nothing was saved.",
+  "actions.theDateWasPutBackOnTheCalendarWhileSaving": "This date was put back on the calendar while this was saving, so its new event was left as it is. Try again.",
+  "actions.theDateWasPutBackOnTheCalendarWhileRemoving": "This date was put back on the calendar while it was being removed, so it was kept. Try again.",
   "familyModule.memberUpdated": "Member updated",
   "familyModule.memberAdded": "Member added",
   "familyModule.role.parent": "Parent",

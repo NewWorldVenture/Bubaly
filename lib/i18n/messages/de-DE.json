@@ -16320,6 +16320,8 @@
   "actions.theCalendarEventChangedWhileSaving": "Der Kalendertermin wurde während des Speicherns geändert und daher nicht aktualisiert. Versuchen Sie es erneut.",
   "actions.thatPickupTimeCouldNotBeRead": "Diese Abholzeit ist kein gültiges Datum mit Uhrzeit, daher wurde nichts gespeichert.",
   "actions.thatReturnTimeCouldNotBeRead": "Diese Rückgabezeit ist kein gültiges Datum mit Uhrzeit, daher wurde nichts gespeichert.",
+  "actions.theDateWasPutBackOnTheCalendarWhileSaving": "Dieses Datum wurde während des Speicherns wieder in den Kalender eingetragen, daher wurde der neue Termin nicht verändert. Versuchen Sie es erneut.",
+  "actions.theDateWasPutBackOnTheCalendarWhileRemoving": "Dieses Datum wurde während des Entfernens wieder in den Kalender eingetragen und daher behalten. Versuchen Sie es erneut.",
   "familyModule.memberUpdated": "Mitglied aktualisiert",
   "familyModule.memberAdded": "Mitglied hinzugefügt",
   "adminInvite.cancel": "Abbrechen",
