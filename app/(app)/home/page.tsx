@@ -35,6 +35,8 @@ import { buildHomeNeeds } from '@/lib/home/needs-build';
 import { needsHeadline, summarizeNeeds, topNeeds } from '@/lib/home/needs-attention';
 import type { AwaitingRunRow, ParentApprovalRow, RecommendationRow } from '@/lib/home/needs-sources';
 import { listPending } from '@/lib/services/approvals';
+import { suggestionReminderKey } from '@/lib/services/autopilot';
+import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
 import { dayKeyInTz, scopeFromUserContext, zonedDayBoundsMs } from '@/lib/services/scope';
 import { loadScheduleIntelligence } from '@/lib/schedule/intelligence-server';
 import { TimeSavedBanner } from '@/components/metric/time-saved-banner';
@@ -360,9 +362,18 @@ export default async function HomePage() {
       .eq('family_id', familyId).eq('is_done', false).lte('due_date', todayKey).order('due_date', { ascending: true }).limit(20),
     supabase.from('chore_assignments').select('id, chore_id, member_id, status, due_at')
       .eq('family_id', familyId).in('status', ['todo', 'in_progress']).lt('due_at', dayEndIso).order('due_at', { ascending: true }).limit(20),
-    supabase.from('family_reminders').select('id, title, remind_at, member_id, priority')
+    // A reminder an Autopilot card made is listed only to the card's readers
+    // (lib/autopilot/reminder-cards.ts), as the dashboard lists it: an accepted
+    // insurance card's unassigned "Renew dental insurance (Smile Co)" is the
+    // managers' and the member the policy names, a renewal's is not a guest's.
+    // Every other reminder is on Today as before, whoever it is for.
+    readVisibleReminders((n) => supabase.from('family_reminders').select('id, title, remind_at, member_id, priority, idempotency_key, tags')
       .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null).lte('remind_at', dayEndIso)
-      .order('remind_at', { ascending: true }).limit(20),
+      .order('remind_at', { ascending: true }).limit(n),
+    { limit: 20, viewer: { role: ctx.active.role, memberId: me.id }, cards: reminderCardsReader(supabase, familyId, {
+      keyOf: (cardId) => suggestionReminderKey(familyId, cardId),
+      onError: (error) => console.error('[home] autopilot reminder cards read failed', error),
+    }) }),
     ]),
   ]);
   for (const [label, res] of [
