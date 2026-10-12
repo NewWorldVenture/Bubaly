@@ -131,13 +131,13 @@ async function fixture(page: Page, { holdA = false, mobile = false, olderHistory
       if(name==='leave_family_conversation'){const index=convs.findIndex(conv=>conv.id===args.p_conversation_id);if(index>=0)convs.splice(index,1);return{data:null,error:null};}
       throw new Error('Unexpected RPC '+name);
       })();
-    },channel:name=>{const c={on:()=>c,subscribe:()=>c,track:async()=>{},untrack:async()=>{},send:async()=>{},presenceState:()=>({})};p.channels.push(name);return c;},removeChannel:async()=>{}};
+    },channel:name=>{const c={on:(kind,filter,callback)=>{(p.realtimeHandlers??=[]).push({name,kind,filter,callback});return c;},subscribe:()=>c,track:async()=>{},untrack:async()=>{},send:async()=>{},presenceState:()=>({})};p.channels.push(name);return c;},removeChannel:async()=>{}};
     const translate=(key,vars={})=>Object.entries(vars).reduce((text,[name,value])=>text.split('{'+name+'}').join(String(value)),catalogue[key]||key);
     const fmt={fmtDate:iso=>new Date(iso).toLocaleDateString('en-US'),fmtTime:iso=>new Date(iso).toLocaleTimeString('en-US')};
     const clock={dayKeyOf:iso=>iso.slice(0,10),todayKey:()=> '2026-10-02',wallKey:()=> '2026-10-01',addDays:x=>x,wallToday:()=>new Date('2026-10-02')};
     const toast={error:message=>p.notices.push(message),success:message=>p.notices.push(message)};
     const mocks={react:React,'react-dom':ReactDOM,'lucide-react':window.LucideReact,
-      '@/components/app/app-context':{useApp:()=>({familyId,userId,members,selfMember:members[0],role:sessionRole})},
+      '@/components/app/app-context':{useApp:()=>({familyId,userId,members,selfMember:p.missingSelfMember?null:members[0],role:sessionRole})},
       '@/components/i18n/locale-provider':{useTranslations:()=>translate,useLocale:()=>({code:'en-US'})},
       '@/components/i18n/use-format':{useFormat:()=>fmt,useFamilyClock:()=>clock},
       '@/lib/utils/format':{firstName:name=>name.split(' ')[0],initials:name=>name.slice(0,2),createFormat:()=>fmt},
@@ -148,6 +148,7 @@ async function fixture(page: Page, { holdA = false, mobile = false, olderHistory
     const root=ReactDOM.createRoot(document.getElementById('root'));
     const render=()=>ReactDOM.flushSync(()=>root.render(h(load(entry).MessagesModule)));
     p.setAuthority=(role,active=true)=>{sessionRole=role;members[0]={...members[0],role,is_active:active};render();};
+    p.retireMembership=kind=>{if(kind==='inactive')members[0]={...members[0],is_active:false};else if(kind==='missing')p.missingSelfMember=true;else if(kind==='replacement'){p.holdA=true;members[0]={...members[0],id:'replacement-self-member'};}else throw new Error('Unknown synthetic membership retirement');render();};
     p.resolveArchive=(outcome='success')=>{const resolve=p.pendingArchive.shift();if(!resolve)throw new Error('No synthetic pending archive');resolve(outcome);};
     p.unmount=()=>ReactDOM.flushSync(()=>root.unmount());
     render();
@@ -573,12 +574,22 @@ for (const action of ['delete', 'pin', 'reaction'] as const) {
   for (const retirement of ['thread', 'ABA', 'inactive'] as const) test(`retained ${action} refuses ${retirement} before sending or closing the current menu`, async ({ page }) => {
     await fixture(page, { ownMessage: true }); await retainRowAction(page, action);
     await select(page, 'B'); if (retirement === 'ABA') await select(page, 'A');
-    if (retirement === 'inactive') await page.evaluate(() => (window as any).__familyChat.setAuthority('parent', false));
     const current = page.locator(retirement === 'ABA' ? '#message-40000000-0000-4000-8000-000000000001' : '#message-40000000-0000-4000-8000-000000000002');
-    await current.getByRole('button', { name: 'More actions' }).click();
+    if (retirement === 'inactive') {
+      await expect(current).toBeVisible();
+      await page.evaluate(() => (window as any).__familyChat.setAuthority('parent', false));
+      await expect(current).toHaveCount(0);
+    } else {
+      await current.getByRole('button', { name: 'More actions' }).click();
+    }
     await page.evaluate(async () => { const state = (window as any).__familyChat; await state.retainedRowAction(); await state.flush(); });
     expect(await page.evaluate(() => (window as any).__familyChat.messageCalls)).toEqual([]);
-    await expect(current.getByRole('button', { name: 'More actions' })).toHaveAttribute('aria-expanded', 'true');
+    if (retirement === 'inactive') {
+      await expect(current).toHaveCount(0);
+      await expect(current.getByRole('button', { name: 'More actions' })).toHaveCount(0);
+    } else {
+      await expect(current.getByRole('button', { name: 'More actions' })).toHaveAttribute('aria-expanded', 'true');
+    }
     expect(await page.evaluate(() => (window as any).__familyChat.notices)).toEqual([]); await clean(page);
   });
   test(`retired pending ${action} refusal cannot publish feedback or close B menu`, async ({ page }) => {
@@ -614,3 +625,47 @@ for (const action of ['delete', 'pin', 'reaction'] as const) {
     expect(await page.evaluate(() => (window as any).__familyChat.notices.length)).toBe(1); await clean(page);
   });
 }
+
+// Observed membership retirement: already displayed data and pending history are private state.
+test.describe('observed membership retirement first RED', () => {
+  test('healthy active parent to adult preserves authorized readable history', async ({page}) => {
+    await fixture(page);
+    await expect(page.locator('#message-40000000-0000-4000-8000-000000000001')).toBeVisible();
+    await page.evaluate(() => (window as any).__familyChat.setAuthority('adult', true));
+    await expect(page.locator('#message-40000000-0000-4000-8000-000000000001')).toBeVisible();
+    await expect(composer(page)).toBeVisible();
+    await clean(page);
+  });
+  for(const retirement of ['inactive', 'missing', 'replacement'] as const) test('observed '+retirement+' retires displayed private history', async ({page}) => {
+    await fixture(page);
+    await expect(page.locator('#message-40000000-0000-4000-8000-000000000001')).toBeVisible();
+    await composer(page).fill('Private unsubmitted draft');
+    await page.evaluate(kind => (window as any).__familyChat.retireMembership(kind), retirement);
+    await page.evaluate(() => (window as any).__familyChat.flush());
+    await expect(page.locator('#message-40000000-0000-4000-8000-000000000001')).toHaveCount(0);
+    if(retirement !== 'replacement') await expect(page.locator('textarea')).toHaveCount(0);
+    else await expect(composer(page)).not.toHaveValue('Private unsubmitted draft');
+    await clean(page);
+  });
+  test('an inactive actor cannot receive a previously pending private history reply', async ({page}) => {
+    await fixture(page, {holdA:true});
+    await expect.poll(() => page.evaluate(() => (window as any).__familyChat.pending.length)).toBeGreaterThan(0);
+    await expect(page.locator('#message-40000000-0000-4000-8000-000000000001')).toHaveCount(0);
+    await page.evaluate(() => (window as any).__familyChat.retireMembership('inactive'));
+    await page.evaluate(() => (window as any).__familyChat.releaseA());
+    await expect(page.locator('#message-40000000-0000-4000-8000-000000000001')).toHaveCount(0);
+    await expect(page.locator('textarea')).toHaveCount(0);
+    await clean(page);
+  });
+});
+
+test('retained realtime callback after observed inactive cannot display a new private row', async ({page}) => {
+  await fixture(page);
+  await expect(page.locator('#message-40000000-0000-4000-8000-000000000001')).toBeVisible();
+  await expect(page.locator('#message-40000000-0000-4000-8000-000000000099')).toHaveCount(0);
+  await page.evaluate(() => { const p=(window as any).__familyChat;const h=p.realtimeHandlers.find((h:any)=>h.kind==='postgres_changes'&&h.filter.table==='family_messages'&&h.filter.event==='INSERT'&&h.filter.filter==='conversation_id=eq.10000000-0000-4000-8000-000000000001');if(!h)throw new Error('No genuine registered active thread INSERT handler');p.retainedInsert=h.callback;});
+  await page.evaluate(() => {const p=(window as any).__familyChat;p.retireMembership('inactive');p.retainedInsert({new:{...p.rows[0],id:'40000000-0000-4000-8000-000000000099',content:'New private realtime content after retirement'}});});
+  await page.evaluate(() => (window as any).__familyChat.flush());
+  await expect(page.locator('#message-40000000-0000-4000-8000-000000000099')).toHaveCount(0);
+  await clean(page);
+});
