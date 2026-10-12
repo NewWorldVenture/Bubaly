@@ -72,7 +72,7 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
     const steps = Array.isArray(flow.steps) ? (flow.steps as unknown as Step[]) : [];
     let actions: string[];
     try {
-      actions = await runSteps(steps, { email: params.email ?? null, name: params.name ?? null }, fallback);
+      actions = await runSteps(steps, { email: params.email ?? null, name: params.name ?? null }, fallback, supabase);
     } catch (error) {
       console.error('[marketing automation] event-driven steps failed', error);
       actions = ['automation:failed'];
