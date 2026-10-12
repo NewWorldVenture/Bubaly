@@ -464,25 +464,35 @@ describe('files attached while the asset is being deleted', () => {
     expect(home.db.table('documents').some((doc) => doc.id === 'doc-own-pending')).toBe(true);
   });
 
-  // KNOWN GAP, kept visible rather than green (AUD-1022-L1, coordinator comment
-  // 6126447785): a late sensitive row whose file is stored OUTSIDE the two
-  // swept folders, committed between the last read and the asset DELETE. The
+  // UNRESOLVED-MODEL DIAGNOSTIC, not a closure gate (AUD-1022-L1, coordinator
+  // comments 6126447785 and 6127511486). A late sensitive row whose file is
+  // stored OUTSIDE the two swept folders, committed between the last read and
+  // the asset DELETE: under the cascade this file's household() models, the
   // cascade takes its row, the folder sweep cannot see its file, and the file
-  // is left with nothing protecting it. Only the database can close this: the
-  // owner's SQL turns 0007's ON DELETE CASCADE into ON DELETE NO ACTION.
-  // `it.fails` passes while the gap is there and turns red once it is closed,
-  // so it is revisited rather than forgotten.
-  it.fails('without the database guard, a late file outside the asset folders keeps a protecting row', async () => {
+  // is left with nothing protecting it. This test pins exactly that state, so
+  // it passes while the gap is modelled and turns red the moment anything
+  // changes it. It does NOT read the schema: applying the owner's NO ACTION
+  // SQL alone cannot change it. Closing L1 needs that SQL plus a harness that
+  // models it (like the NO ACTION block below) or a runtime gate against the
+  // real database; then this diagnostic is replaced, not merely flipped.
+  it('unresolved model diagnostic: under the modelled cascade, a late file outside the asset folders is left with no protecting row', async () => {
     const home = household();
     const ELSEWHERE = `${FAMILY}/cloud/1790000000012-late-sensitive.pdf`;
+    let committed = false;
     const late = () => {
+      committed = true;
       home.store.objects.add(ELSEWHERE);
       home.db.table('documents').push({ ...lateRow, id: 'doc-late-elsewhere', storage_path: ELSEWHERE });
     };
 
-    await removeHomeAsset(committingBeforeAssetDelete(home, late), FAMILY, 'asset-fridge');
-    // The protection requirement: a stored sensitive object keeps a row that protects it.
-    expect(home.store.objects.has(ELSEWHERE) ? guarding(home, ELSEWHERE).length : 1).toBeGreaterThan(0);
+    const result = await removeHomeAsset(committingBeforeAssetDelete(home, late), FAMILY, 'asset-fridge');
+    // Each step asserted, so an unrelated failure cannot stand in for the gap.
+    expect(committed, 'the late row was committed after the last read').toBe(true);
+    expect(result, 'the helper reports success').toEqual({ ok: true });
+    expect(home.db.table('home_assets').some((asset) => asset.id === 'asset-fridge')).toBe(false);
+    expect(home.db.table('documents').some((doc) => doc.id === 'doc-late-elsewhere'), 'the modelled cascade took its row').toBe(false);
+    expect(home.store.objects.has(ELSEWHERE), 'its file outside the swept folders is still stored').toBe(true);
+    expect(guarding(home, ELSEWHERE), 'and nothing protects it: the open L1 gap').toHaveLength(0);
   });
 
   it('still removes the file when the guarding row cannot be written', async () => {
