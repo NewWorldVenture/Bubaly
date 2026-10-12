@@ -1072,14 +1072,17 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
         ...r(d, 'family_members').map((m) => ({ name: `${String(m.display_name ?? '')}'s birthday`, type: 'birthday', date: String(m.birthday ?? '') })),
       ];
       // The route always supplies the family's day. Without one there is no day
-      // to count from: the host's UTC date is a different family's day.
-      const today = d.todayKey ?? '';
-      const upcoming = all
+      // to count from (the host's UTC date is a different family's day), so the
+      // prompt says the countdown is unknown rather than "none found".
+      const today = d.todayKey;
+      const upcoming = today ? all
         .map((c) => ({ ...c, inDays: daysUntilNextOn(c.date, today) }))
         .filter((c): c is typeof c & { inDays: number } => c.inDays !== null && c.inDays <= 60)
         .sort((a, b) => a.inDays - b.inDays)
-        .slice(0, 20);
-      return `Family: ${d.familyName}. Now: ${d.now}. Members: ${d.members.map((m) => m.name).join(', ')}.\n\nUpcoming celebrations (next 60 days): ${upcoming.length > 0 ? JSON.stringify(upcoming) : 'none found'}. Total saved dates: ${dates.length}.\n\nGive: (1) alert for any celebration within 2 weeks, (2) two creative ideas for the soonest upcoming occasion, (3) one year-round tradition to start.${q(d)}`;
+        .slice(0, 20) : null;
+      const listed = upcoming === null ? "unknown (the family's day was not supplied)"
+        : upcoming.length > 0 ? JSON.stringify(upcoming) : 'none found';
+      return `Family: ${d.familyName}. Now: ${d.now}. Members: ${d.members.map((m) => m.name).join(', ')}.\n\nUpcoming celebrations (next 60 days): ${listed}. Total saved dates: ${dates.length}.\n\nGive: (1) alert for any celebration within 2 weeks, (2) two creative ideas for the soonest upcoming occasion, (3) one year-round tradition to start.${q(d)}`;
     },
   },
 

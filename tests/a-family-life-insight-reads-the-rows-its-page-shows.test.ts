@@ -161,6 +161,23 @@ describe('celebrations reads event_date and the members\' birthdays (F29)', () =
     expect(text).not.toContain('none found');
     expect(text).toContain('Total saved dates: 1');
   });
+
+  it('counts from the day it is given, and says so when it is given none', async () => {
+    // The fake clock reads 2026-10-13T01:00Z: the 12th west of UTC, the 13th
+    // in UTC. The prompt counts from the family's day it is handed and never
+    // falls back to the host's UTC date (AUD-1031: the old fallback).
+    const { INSIGHTS } = await import('@/lib/ai/insights');
+    const data = (todayKey?: string) => ({
+      familyName: 'Rivera', now: 'Monday', members: [], todayKey,
+      rows: { family_dates: [{ title: 'Gotcha day', kind: 'other', event_date: '2019-10-13' }], family_members: [] },
+    });
+    expect(INSIGHTS.celebrations.buildUser(data('2026-10-12'))).toContain('"name":"Gotcha day","type":"other","date":"2019-10-13","inDays":1');
+    expect(INSIGHTS.celebrations.buildUser(data('2026-10-13'))).toContain('"inDays":0');
+    const unknown = INSIGHTS.celebrations.buildUser(data(undefined));
+    expect(unknown).toContain("Upcoming celebrations (next 60 days): unknown (the family's day was not supplied).");
+    expect(unknown).not.toContain('Gotcha day');
+    expect(unknown).not.toContain('none found');
+  });
 });
 
 describe('rides counts what is ahead and what is unconfirmed (F31)', () => {
