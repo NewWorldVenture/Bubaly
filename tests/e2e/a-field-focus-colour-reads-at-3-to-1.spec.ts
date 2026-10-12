@@ -15,6 +15,28 @@ import { expect, test, type Page } from '@playwright/test';
 // fill as well.
 test.use({ locale: 'en-US', trace: 'off', screenshot: 'off', video: 'off', serviceWorkers: 'block' });
 
+// Every original CSS case keeps its assertions and also reports browser failures.
+const browserFailures = new WeakMap<Page, string[]>();
+test.beforeEach(({ page }) => {
+  const failures: string[] = [];
+  browserFailures.set(page, failures);
+  page.on('console', message => {
+    if (message.type() === 'error' || message.type() === 'warning') {
+      failures.push('console ' + message.type() + ': ' + message.text());
+    }
+  });
+  page.on('pageerror', error => failures.push('page error: ' + error.message));
+  page.on('requestfailed', request => failures.push('request failed: ' + request.url() + ': ' + (request.failure()?.errorText ?? 'unknown')));
+  page.on('response', response => {
+    if (response.status() >= 400) failures.push('HTTP ' + response.status() + ': ' + response.url());
+  });
+});
+test.afterEach(({ page }) => {
+  const failures = browserFailures.get(page);
+  expect(failures, 'browser collectors were installed for this original case').toBeDefined();
+  expect(failures, 'original CSS case has no console, page, request or HTTP failures').toEqual([]);
+});
+
 function sourceString(file: string, pattern: RegExp, what: string): string {
   const m = readFileSync(file, 'utf8').match(pattern);
   if (!m) throw new Error(`${what} not found in ${file}`);

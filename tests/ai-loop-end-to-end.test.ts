@@ -207,12 +207,14 @@ describe('Ask Bubaly → plan → run → household rows → run page (scripted 
     // Every WRITE went through the ledger under this family and the run — one
     // row per act tool, each closed as succeeded, each under its own
     // idempotency key. Reads are deliberately not ledgered (`executeTool`
-    // skips the reservation for read-only tools), so four rows is exact.
+    // skips the reservation for read-only tools), so five rows is exact: the
+    // four act tools and the family notification, which a notify step now
+    // delivers as `notifications.notify` through the same gate and ledger.
     const ledger = db.table('ai_tool_calls');
-    expect(ledger).toHaveLength(4);
+    expect(ledger).toHaveLength(5);
     expect(ledger.every((c) => c.family_id === FAMILY && c.run_id === runId && c.state === 'succeeded')).toBe(true);
     expect(new Set(ledger.map((c) => c.idempotency_key)).size).toBe(ledger.length);
-    expect(ledger.map((c) => c.tool_name).sort()).toEqual(['groceries.addFromMealPlan', 'meals.planWeek', 'reminders.create', 'tasks.createTodo']);
+    expect(ledger.map((c) => c.tool_name).sort()).toEqual(['groceries.addFromMealPlan', 'meals.planWeek', 'notifications.notify', 'reminders.create', 'tasks.createTodo']);
     expect(ledger.every((c) => typeof c.plan_step_id === 'string' && c.request_id === requestId)).toBe(true);
 
     // …and left household rows behind: three dinners, their groceries, the
@@ -265,9 +267,12 @@ describe('Ask Bubaly → plan → run → household rows → run page (scripted 
     expect(db.table('family_automation_runs').find((r) => r.id === runId)).toMatchObject({ state: 'completed', lease_owner: null, error: null });
     expect(db.table('ai_requests').find((r) => r.id === requestId)).toMatchObject({ status: 'completed' });
     expect(db.table('ai_plan_steps').filter((s) => s.plan_id === planId).every((s) => s.status === 'completed')).toBe(true);
-    // No tool ran again — the four earlier writes are the whole ledger — and
-    // the only new household row is the mid-week reminder to the parents.
-    expect(db.table('ai_tool_calls')).toHaveLength(before);
+    // No tool ran again — the earlier writes are all still the only ones — and
+    // the only new write is the mid-week reminder to the parents, delivered as
+    // `notifications.notify` through the gate like every notify step.
+    expect(db.table('ai_tool_calls')).toHaveLength(before + 1);
+    expect(db.table('ai_tool_calls').slice(before).map((c) => [c.tool_name, (c.inputs as Record<string, unknown>).title]))
+      .toEqual([['notifications.notify', 'Bubaly follow-up']]);
     expect(db.table('meal_plans').filter((m) => m.family_id === FAMILY)).toHaveLength(3);
     const notifications = db.table('notifications').filter((n) => n.family_id === FAMILY);
     expect(notifications).toHaveLength(2);

@@ -9,7 +9,7 @@
 // layer where every other caller already has an id.
 import 'server-only';
 import { z } from 'zod';
-import { completeReminder, createReminder, listDue, snoozeReminder } from '@/lib/services/reminders';
+import { completeReminder, createReminder, listDue, reminderInstant, snoozeReminder } from '@/lib/services/reminders';
 import { scopeNow } from '@/lib/services/scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -197,12 +197,17 @@ export const reminderTools: ToolDefinition[] = [
       }
 
       // The service snoozes by a length from now; a caller-supplied absolute
-      // time is converted here so both dialects reach one implementation.
+      // time is converted here so both dialects reach one implementation. A
+      // zone-less time is on the FAMILY's clock — the planner is told to write
+      // them that way, and a chat snooze approved later replays its own
+      // `remind_at` through here. `Date.parse` read it on the host's (UTC)
+      // clock: "9am" moved a Los Angeles reminder to 2am, or was refused as
+      // "only forward" once 09:00Z had passed with 9am still ahead.
       let minutes = input.minutes ?? null;
       if (minutes === null && input.remind_at) {
-        const target = Date.parse(input.remind_at);
-        if (!Number.isFinite(target)) return fail('That new time could not be understood.', { code: SERVICE_CODES.invalidInput });
-        minutes = Math.round((target - scopeNow(scope).getTime()) / 60_000);
+        const target = reminderInstant(input.remind_at, scope.tz);
+        if (!target) return fail('That new time could not be understood.', { code: SERVICE_CODES.invalidInput });
+        minutes = Math.round((Date.parse(target) - scopeNow(scope).getTime()) / 60_000);
       }
       if (minutes === null) return fail('Say how long to snooze it for.', { code: SERVICE_CODES.invalidInput });
       if (minutes <= 0) return fail('A reminder can only be moved forward.', { code: SERVICE_CODES.invalidInput });

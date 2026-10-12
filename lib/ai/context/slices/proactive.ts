@@ -54,7 +54,7 @@ const MODEL_LOCALE: LocaleCode = 'en-US';
 const modelText = (key: string, params?: Record<string, string | number>) => translate(getMessages(MODEL_LOCALE), key, params);
 
 export type ProactiveSliceData = {
-  counts: FamilySignals['counts'] | null;
+  counts: (Omit<FamilySignals['counts'], 'homeworkDueSoon' | 'sportsThisWeek'> & Partial<Pick<FamilySignals['counts'], 'homeworkDueSoon' | 'sportsThisWeek'>>) | null;
   stress: { score: number; level: string } | null;
   report: {
     allClear: boolean;
@@ -132,6 +132,15 @@ export const proactiveSlice: SliceDefinition = {
     const termHorizon = addDaysInZone(todayKey, SCHOOL_START_WINDOW_DAYS);
     const petSince = addDaysInZone(todayKey, -8);
 
+    // A guest is not handed the children's school and sports through this
+    // slice. The activities slice carries them, and education and homework are
+    // the household's own, not a guest's; this slice must not be the side door
+    // to the same rows. So for a guest the term-start read is not made (no
+    // school_start transition, no camp it implies) and the counts line leaves
+    // out homework and sports. Children, teens and caregivers keep both.
+    const schoolVisible = env.viewer.canManage || env.viewer.role !== 'guest';
+    const noTerms: { data: { title: string; starts_at: string }[]; error: null } = { data: [], error: null };
+
     const [signals, report, liveSignals, autopilot, recommendations, terms, pets, projects, plans] = await Promise.all([
       loadSignals(scope.familyId, env.tz, env.now),
       loadReasoningReport(scope.db, scope.familyId, env.tz, MODEL_LOCALE, modelText, env.now),
@@ -141,7 +150,9 @@ export const proactiveSlice: SliceDefinition = {
       // The four life-event reads take settle() like the three above them: this
       // slice loads inside a context build, and a rejected read here would throw
       // out of the whole build rather than degrade one slice.
-      settle(scope.db.from('school_events').select('title, starts_at').eq('family_id', scope.familyId).gte('starts_at', dayStartIso(todayKey)).lte('starts_at', dayEndIso(termHorizon)).limit(50)),
+      schoolVisible
+        ? settle(scope.db.from('school_events').select('title, starts_at').eq('family_id', scope.familyId).gte('starts_at', dayStartIso(todayKey)).lte('starts_at', dayEndIso(termHorizon)).limit(50))
+        : Promise.resolve(noTerms),
       settle(scope.db.from('pets').select('name, created_at').eq('family_id', scope.familyId).gte('created_at', dayStartIso(petSince)).limit(20)),
       settle(scope.db.from('home_projects').select('title, status').eq('family_id', scope.familyId).in('status', ['idea', 'planning', 'quoting']).limit(20)),
       // ACTIVE only — a completed plan is history, not a live plan, and
@@ -171,8 +182,17 @@ export const proactiveSlice: SliceDefinition = {
       return false;
     };
 
+    // The structured slice is persisted as requester-readable context too.
+    // Redact before returning it, rather than hiding only the prompt words.
+    // Copy the source counts so one guest build cannot change another reader's.
+    const counts: ProactiveSliceData['counts'] = signals ? { ...signals.counts } : null;
+    if (counts && !schoolVisible) {
+      delete counts.homeworkDueSoon;
+      delete counts.sportsThisWeek;
+    }
+
     const data: ProactiveSliceData = {
-      counts: signals?.counts ?? null,
+      counts,
       stress: signals ? { score: signals.stress.score, level: signals.stress.level } : null,
       report: {
         allClear: report.allClear,
@@ -202,8 +222,7 @@ export const proactiveSlice: SliceDefinition = {
         `${c.overdueTasks} overdue task${c.overdueTasks === 1 ? '' : 's'}`,
         `${c.dueTodayTasks} due today`,
         ...(canManage ? [`${c.overdueBills} overdue bill${c.overdueBills === 1 ? '' : 's'}`, `${c.billsDueSoon} due soon`] : []),
-        `${c.homeworkDueSoon} homework due soon`,
-        `${c.sportsThisWeek} sports this week`,
+        ...(schoolVisible ? [`${c.homeworkDueSoon} homework due soon`, `${c.sportsThisWeek} sports this week`] : []),
         `${c.plannedMeals} meals planned`,
       ];
       if (c.emptyGrocery) bits.push('grocery list empty');

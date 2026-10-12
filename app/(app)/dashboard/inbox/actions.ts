@@ -5,10 +5,14 @@
 //
 // It files the message through the SAME intake every Ask Bubaly entry uses
 // (`submitRequest`, intent classified from the text), so the trust gating, the
-// approval spine and the run ledger are the ones already in place. Nothing here
-// bypasses `gateAiAction` / `approval_requests`: this action files a request,
-// the planner decides what it needs, and anything risky still waits for a
-// parent exactly as it does from the Ask bar.
+// approval spine and the run ledger are the ones already in place.
+//
+// THE WORDS ARE SOMEONE ELSE'S. The member asked for the message to be dealt
+// with; they did not write it, and whoever did can put anything in it. So it is
+// filed as an inbox hand-off (`origin: 'inbox'`, a `handle_it` request): the
+// planner reads the message fenced as data, and every change the plan would
+// make — an event, a task, a notification — waits for a parent or adult to
+// approve it, whoever pressed the button (lib/ai/runs/executor.ts runStep).
 //
 // THE HANDLED CLAIM: `ai_handled` is written only after `submitRequest`
 // returns, i.e. only once an `ai_requests` row exists. If the intake fails, the
@@ -92,7 +96,7 @@ export async function handleInboxMessageAction(
 
   const filed = await submitRequest(
     scope,
-    { text, context: { module: 'inbox' }, clientRequestId: clientRequestId ?? null },
+    { text, context: { module: 'inbox' }, clientRequestId: clientRequestId ?? null, origin: 'inbox' },
     { startedAtMs: startedAt },
   );
   if (!filed.ok) return { ok: false, error: filed.error, code: filed.code };

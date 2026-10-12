@@ -52,7 +52,7 @@ describe('email retries complete saved entity enrichment', () => {
     expect(mocks.sendEmail).not.toHaveBeenCalled();
   });
 
-  it('returns 503 after capture, then enriches and plans once on redelivery, retaining the saved sender', async () => {
+  it('returns 503 after capture, then enriches on redelivery, retaining the saved sender — and plans nothing from an email', async () => {
     const from = db.from.bind(db);
     const outage = vi.spyOn(db, 'from').mockImplementation(((table: string) => {
       if (table === 'family_ai_settings') throw new Error('offline');
@@ -72,10 +72,14 @@ describe('email retries complete saved entity enrichment', () => {
       title: 'My own title', sender: 'School office <office@oak.example>',
       meta: { entity_matches: [{ key: 'family_facts:school-contact', label: 'Oak School', matchedBy: 'sender' }], entity_resolution: { status: 'complete' } },
     });
-    expect(mocks.submit).toHaveBeenCalledOnce();
-    expect(db.table('family_inbox_messages')[0].ai_handled).toBe(true);
+    // An email's From is a header anyone can write, so nothing is planned from
+    // it: the message waits, unhandled, for a member to hand it to Bubaly
+    // (tests/an-outside-sender-cannot-run-bubaly.test.ts).
+    expect(mocks.submit).not.toHaveBeenCalled();
+    expect(db.table('family_inbox_messages')[0].ai_handled).toBe(false);
     expect((await POST(request())).status).toBe(200);
-    expect(mocks.submit).toHaveBeenCalledOnce();
+    expect(mocks.submit).not.toHaveBeenCalled();
+    expect(db.table('paperwork_items')).toHaveLength(1);
   });
 
   it('returns retryable status when a duplicate delivery handled-state read fails', async () => {

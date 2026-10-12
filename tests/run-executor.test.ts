@@ -12,8 +12,8 @@ import type { ToolOutcome } from '@/lib/ai/tools/types';
 import type { ServiceScope } from '@/lib/services/types';
 import { ok, fail } from '@/lib/services/types';
 import {
-  BUDGET_RESERVE_MS, MAX_REPLANS_PER_RUN, MAX_STEP_CONCURRENCY, evaluateCondition, parseNotifyInput, runGraphWith,
-  stepIdempotencyKey, type ExecutorPort, type RunSnapshot, type StepSnapshot,
+  BUDGET_RESERVE_MS, MAX_REPLANS_PER_RUN, MAX_STEP_CONCURRENCY, evaluateCondition, parseNotifyInput, runActionKey, runGraphWith,
+  type ExecutorPort, type RunSnapshot, type StepSnapshot,
 } from '@/lib/ai/runs/executor';
 import type { RunEventInput, RunRow } from '@/lib/ai/runs/store';
 
@@ -498,7 +498,8 @@ describe('failure handling', () => {
 
     const keys = new Set(fake.calls.map((c) => c.opts.idempotencyKey));
     expect(keys.size).toBe(1);
-    expect([...keys][0]).toBe(stepIdempotencyKey(FAMILY, RUN_ID, 's1', 'calendar.createEvent'));
+    // Household + run + operation + the arguments it runs with (`runActionKey`).
+    expect([...keys][0]).toBe(runActionKey(FAMILY, RUN_ID, 'calendar.createEvent', {}));
   });
 
   it('never retries a denial', async () => {
