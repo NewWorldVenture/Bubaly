@@ -16,6 +16,9 @@ type Offer = {
   trigger: { mode: 'mouseleave' | 'scroll'; delayMs: number; scrollPercent: number };
 };
 
+/** An offer, and whether visit history went into choosing it (it was asked for with `returning`). */
+type Resolved = { offer: Offer; byHistory: boolean };
+
 const SEEN_KEY = 'bubaly-ei-seen'; // at most one exit-intent per visitor per window
 const VISITED_KEY = 'bubaly-visited'; // returning-visitor marker; written only with personalisation consent
 const SEEN_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -28,6 +31,20 @@ function recentlySeen(): boolean {
 }
 
 /**
+ * Whether visit history may be kept and used: personalisation consent
+ * (lib/marketing/consent.ts), opt-in and off under GPC. Read afresh at every
+ * decision, never cached for the life of the page: the consent banner can
+ * withdraw it at any moment, and it writes the choice before anything else.
+ */
+function historyAllowed(): boolean {
+  return (readLocalConsent()?.state ?? initialConsent(detectGPC())).personalization;
+}
+
+function forgetVisits() {
+  try { localStorage.removeItem(VISITED_KEY); } catch { /* ignore */ }
+}
+
+/**
  * Mounts on the public marketing site. Resolves the best exit-intent offer for
  * this visitor, then shows it once (per 7-day window) on mouseleave or after a
  * scroll threshold. Records an impression on show and a conversion on CTA click
@@ -35,8 +52,13 @@ function recentlySeen(): boolean {
  */
 export function ExitIntent() {
   const t = useTranslations();
-  const [offer, setOffer] = useState<Offer | null>(null);
+  const [resolved, setResolved] = useState<Resolved | null>(null);
   const [open, setOpen] = useState(false);
+  // Bumped each time an offer chosen with visit history is dropped because
+  // personalisation consent was withdrawn after it was asked for; the resolve
+  // effect below then asks again from the page and its link alone.
+  const [withdrawals, setWithdrawals] = useState(0);
+  const offer = resolved?.offer ?? null;
 
   // Lock background scroll while the offer modal is showing (mobile scroll-bleed).
   useLockBodyScroll(Boolean(offer) && open);
@@ -51,23 +73,25 @@ export function ExitIntent() {
   // is not a modal and must not freeze the page behind it.
   useDialogBehavior(dialogRef, Boolean(offer) && open, { onClose: closeOffer, lockScroll: false });
 
-  // Resolve once on mount (skip entirely if we've shown one recently).
+  // Resolve once on mount (skip entirely if we've shown one recently), and
+  // again — without visit history — after a withdrawal dropped the offer.
   useEffect(() => {
-    if (recentlySeen()) return;
-    let cancelled = false;
-    const params = new URLSearchParams(window.location.search);
     // Whether this browser has been here before is visit history, and choosing
     // an offer by it is personalisation — opt-in (lib/marketing/consent.ts) and
     // off under GPC. Without that consent the device is not marked and the
     // offer is chosen from the page and its link alone; a marker left by an
-    // earlier visit is cleared rather than kept for later.
-    const personalize = (readLocalConsent()?.state ?? initialConsent(detectGPC())).personalization;
+    // earlier visit is cleared rather than kept for later. Cleared BEFORE the
+    // recently-seen return below: a visitor who declined is not marked for a
+    // week because an offer happened to have been shown to them.
+    const personalize = historyAllowed();
+    if (!personalize) forgetVisits();
+    if (recentlySeen()) return;
+    let cancelled = false;
+    const params = new URLSearchParams(window.location.search);
     let isReturning = false;
     if (personalize) {
       try { isReturning = localStorage.getItem(VISITED_KEY) === '1'; } catch { /* ignore */ }
       try { localStorage.setItem(VISITED_KEY, '1'); } catch { /* ignore */ }
-    } else {
-      try { localStorage.removeItem(VISITED_KEY); } catch { /* ignore */ }
     }
 
     fetch('/api/exit-intent/resolve', {
@@ -82,20 +106,42 @@ export function ExitIntent() {
       }),
     })
       .then((r) => r.json())
-      .then((d) => { if (!cancelled && d?.offer) setOffer(d.offer as Offer); })
+      .then((d) => {
+        if (cancelled) return;
+        // Consent can be withdrawn while the answer is in flight. Then the
+        // marker written above goes, and an offer chosen with the history it
+        // carried is not armed: the page asks again without it.
+        if (personalize && !historyAllowed()) {
+          forgetVisits();
+          if (d?.offer) setWithdrawals((n) => n + 1);
+          return;
+        }
+        if (d?.offer) setResolved({ offer: d.offer as Offer, byHistory: personalize });
+      })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, []);
+  }, [withdrawals]);
 
   // Arm the trigger once we have an offer.
   useEffect(() => {
-    if (!offer) return;
+    if (!resolved) return;
+    const { offer, byHistory } = resolved;
     const armedAt = Date.now();
     let done = false;
 
     const fire = () => {
       if (done || recentlySeen()) return;
       done = true;
+      // Consent withdrawn while the offer was armed: an offer chosen by visit
+      // history is not shown and not counted, the marker goes, and the page
+      // asks again from its context alone. An offer chosen without history
+      // never depended on it and shows as it would have.
+      if (byHistory && !historyAllowed()) {
+        forgetVisits();
+        setResolved(null);
+        setWithdrawals((n) => n + 1);
+        return;
+      }
       try { localStorage.setItem(SEEN_KEY, String(Date.now())); } catch { /* ignore */ }
       setOpen(true);
       track(offer.id, 'impression');
@@ -122,7 +168,7 @@ export function ExitIntent() {
       document.removeEventListener('mouseout', onMouseOut);
       window.removeEventListener('scroll', onScroll);
     };
-  }, [offer]);
+  }, [resolved]);
 
   if (!offer || !open) return null;
 

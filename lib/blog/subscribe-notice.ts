@@ -64,19 +64,22 @@ export function subscribeNoticeHtml(outcome: SubscribeOutcome, token: string): s
 }
 
 /**
- * Mail the notice.
+ * Mail the notice. True only when the provider accepted it — not when it
+ * failed, was skipped for want of a provider, or threw.
  *
- * Never throws and never reports back: the route's answer is fixed before this
- * runs and must not move, so a provider outage cannot become the oracle the
- * response body no longer is. The address is kept out of the log line for the
- * same reason it is kept out of the response — it is somebody's identity, and
- * this endpoint is unauthenticated.
+ * Never throws, and what it returns never reaches the HTTP answer: the route's
+ * response must not move with a provider outage, or that would become the
+ * oracle the response body no longer is. The route uses it for one thing — an
+ * opt-out is reversed only once the address has actually been told
+ * (app/api/blog/subscribe/route.ts). The address is kept out of the log line
+ * for the same reason it is kept out of the response — it is somebody's
+ * identity, and this endpoint is unauthenticated.
  */
 export async function sendSubscribeNotice(
   to: string,
   outcome: SubscribeOutcome,
   token: string,
-): Promise<void> {
+): Promise<boolean> {
   try {
     const sent = await sendEmail({
       to,
@@ -85,7 +88,9 @@ export async function sendSubscribeNotice(
     });
     if (!sent.ok) console.error('[blog-subscribe] notice email was not delivered', { outcome });
     else if (sent.skipped) console.warn('[blog-subscribe] notice email not sent: no mail provider', { outcome });
+    return sent.ok && !sent.skipped;
   } catch (error) {
     console.error('[blog-subscribe] notice email threw', { outcome, error });
+    return false;
   }
 }

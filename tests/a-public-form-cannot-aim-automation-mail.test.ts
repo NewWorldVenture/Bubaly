@@ -148,7 +148,10 @@ describe('one inbox gets one automation mail a day, however it is spelled or sen
   });
 });
 
-describe('the greeting carries no text of the caller’s', () => {
+// A bound, not an elimination: a short name-shaped run of letters still
+// reaches the greeting (tests/a-public-form-inbox-allowance-holds-at-every-send.test.ts
+// pins exactly how much).
+describe('the greeting carries no sentence or URL of the caller’s', () => {
   const LURE = 'there - your Bubaly account will be closed today. Keep it at bubaly-verify.example/login';
 
   it('contact: a sentence and a URL in the name field never reach the mail', async () => {

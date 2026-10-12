@@ -1,5 +1,6 @@
 import 'server-only';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
+import type { SendAdmission } from '@/lib/marketing/automation-steps';
 import { canonicalMailbox } from '@/lib/server/canonical-mailbox';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { createServiceClient } from '@/lib/supabase/server';
@@ -12,14 +13,23 @@ import { createServiceClient } from '@/lib/supabase/server';
 // nothing dedups"), and every mail opened with the caller's words — a URL and
 // "your account will be closed" read fine after HTML escaping.
 //
-// Two bounds, both decided BEFORE the event and neither allowed to reach the
-// HTTP response (the routes answer the same whatever happens here):
+// Two bounds, neither allowed to reach the HTTP response (the routes answer the
+// same whatever happens here):
 //
 //   • one automation mail per inbox per day, keyed on the canonical mailbox
 //     (lib/server/canonical-mailbox.ts), so neither rotating IPs nor `+tags`
-//     lifts it — the per-address control /api/blog/subscribe already had;
-//   • the greeting takes a name only when it plainly IS one (greetingName), and
-//     says "there" otherwise, so the caller has no sentence of their own in it.
+//     lifts it — the per-address control /api/blog/subscribe already had. The
+//     inbox's daily claim is taken before the event, and the ONE mail it buys
+//     is spent at the send: the event fans out to every active form_submitted
+//     workflow and every send_email step in each, so a claim checked only on
+//     the event bounded events, not mail — two workflows of two steps sent
+//     four. Every send after the first is refused (`send_email:throttled`);
+//   • the greeting takes a name only when it reads as one (greetingName), and
+//     says "there" otherwise. That BOUNDS what the caller can put in the mail —
+//     at most 40 characters and three words of letters (apostrophes and
+//     hyphens aside), so no URL, digits or sentence — it does not eliminate
+//     it: "Hi Verify Your Account," is three plain words and still gets
+//     through.
 
 export const PUBLIC_AUTOMATION_WINDOW_MS = 86_400_000;
 
@@ -28,7 +38,8 @@ export const PUBLIC_AUTOMATION_WINDOW_MS = 86_400_000;
  * spaces, apostrophes and hyphens, at most 40 characters and three words.
  * Anything else — a URL, digits, punctuation, a paragraph, or a short sentence
  * with no punctuation at all ("there your Bubaly account will be closed") — is
- * null, and the greeting falls back to its fixed "there".
+ * null, and the greeting falls back to its fixed "there". A bound on the
+ * caller's text, not its removal: three words of letters still pass.
  */
 export function greetingName(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
@@ -47,8 +58,24 @@ export type PublicFormSubmitted = {
 };
 
 /**
- * Fire form_submitted for a public submission, at most once per inbox per day.
- * Returns what it did, for logs and tests; callers must not answer from it.
+ * The one mail an inbox's daily claim buys, as a send admission: the first
+ * send_email to reach the provider takes it, and every later one in the same
+ * event — another step, another matching workflow — is refused.
+ */
+function oneMailAdmission(): SendAdmission {
+  let spent = false;
+  return async () => {
+    if (spent) return false;
+    spent = true;
+    return true;
+  };
+}
+
+/**
+ * Fire form_submitted for a public submission: at most one event per inbox
+ * per day, and at most ONE mail from that event, however many workflows and
+ * send steps match. Returns what it did, for logs and tests; callers must not
+ * answer from it.
  *
  * On the SERVICE client, always: the per-inbox key names an address, not a
  * signed-in caller, and rate_limit_hit (0179) refuses such a key from a session.
@@ -69,6 +96,7 @@ export async function firePublicFormSubmitted(params: PublicFormSubmitted): Prom
     name: greetingName(params.name),
     subjectKey: params.subjectKey,
     context: params.context,
+    admitSend: oneMailAdmission(),
   });
   return 'fired';
 }
