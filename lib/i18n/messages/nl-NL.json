@@ -16320,6 +16320,8 @@
   "actions.theCalendarEventChangedWhileSaving": "De gebeurtenis in de agenda is tijdens het opslaan gewijzigd en daarom niet bijgewerkt. Probeer het opnieuw.",
   "actions.thatPickupTimeCouldNotBeRead": "Die ophaaltijd is geen geldige datum en tijd, dus er is niets opgeslagen.",
   "actions.thatReturnTimeCouldNotBeRead": "Die inlevertijd is geen geldige datum en tijd, dus er is niets opgeslagen.",
+  "actions.theDateWasPutBackOnTheCalendarWhileSaving": "Deze datum is tijdens het opslaan opnieuw in de agenda gezet, dus de nieuwe gebeurtenis is ongewijzigd gelaten. Probeer het opnieuw.",
+  "actions.theDateWasPutBackOnTheCalendarWhileRemoving": "Deze datum is tijdens het verwijderen opnieuw in de agenda gezet en is daarom behouden. Probeer het opnieuw.",
   "familyModule.memberUpdated": "Lid bijgewerkt",
   "familyModule.memberAdded": "Lid toegevoegd",
   "adminInvite.cancel": "Annuleren",

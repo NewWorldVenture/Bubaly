@@ -16322,6 +16322,8 @@
   "actions.theCalendarEventChangedWhileSaving": "L’evento del calendario è cambiato durante il salvataggio, quindi non è stato aggiornato. Riprova.",
   "actions.thatPickupTimeCouldNotBeRead": "Quell’orario di ritiro non è una data e un’ora valide, quindi non è stato salvato nulla.",
   "actions.thatReturnTimeCouldNotBeRead": "Quell’orario di riconsegna non è una data e un’ora valide, quindi non è stato salvato nulla.",
+  "actions.theDateWasPutBackOnTheCalendarWhileSaving": "Questa data è stata rimessa nel calendario durante il salvataggio, quindi il nuovo evento è stato lasciato com’era. Riprova.",
+  "actions.theDateWasPutBackOnTheCalendarWhileRemoving": "Questa data è stata rimessa nel calendario durante la rimozione, quindi è stata mantenuta. Riprova.",
   "familyModule.memberUpdated": "Membro aggiornato",
   "familyModule.memberAdded": "Membro aggiunto",
   "adminInvite.cancel": "Annulla",

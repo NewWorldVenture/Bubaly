@@ -22,6 +22,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { createEvent, deleteEvent, updateEvent } from '@/lib/services/calendar';
 import { buildCalendarEventForDate } from '@/lib/relationship/calendar';
+import { sameId } from '@/lib/services/idempotency';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { SERVICE_CODES } from '@/lib/services/types';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
@@ -233,12 +234,53 @@ export async function syncDateOnCalendarAction(dateId: string): Promise<Relation
       .eq('family_id', ctx.active.familyId)
       .eq('calendar_event_id', row.calendar_event_id)
       .select('id');
-    if (unlinkError || wroteNoRows(unlinked)) {
-      console.error('[relationship-action] unlink after a missing event failed', unlinkError ?? 'no rows updated');
+    if (unlinkError) {
+      console.error('[relationship-action] unlink after a missing event failed', unlinkError);
       return { ok: false, error: t('actions.couldNotUpdateYourCalendar') };
     }
-    revalidatePath(PATH);
-    return { ok: true };
+    if (!wroteNoRows(unlinked)) {
+      revalidatePath(PATH);
+      return { ok: true };
+    }
+
+    // The guard matched nothing, so the link is no longer the one this sync
+    // read. That alone is not this sync's failure — reading "no rows" as one is
+    // how a second sync of the same deleted event, or a sync overlapping a
+    // toggle off, reported "Could not update your calendar" over a date that
+    // already said what it wanted. Read the link again to learn what it is now:
+    //
+    //   null            already unlinked: the other sync, the toggle, or — on
+    //                   the real schema — the event's own deletion through
+    //                   `ON DELETE SET NULL` got there first. Done.
+    //   another event   a toggle put the date back on the calendar in between.
+    //                   That link is live and is left exactly as it is; the
+    //                   sync is refused as a conflict, so saving again brings
+    //                   the NEW event in line with the date.
+    //   the same event  the unlink itself was refused (a filtered write): the
+    //                   failure it always was.
+    //
+    // The guard keeps this sync from clearing a link it never read. It does not
+    // make update → re-check → unlink one atomic step; each is its own statement.
+    const { data: current, error: rereadError } = await supabase
+      .from('relationship_dates')
+      .select('id, calendar_event_id')
+      .eq('id', row.id)
+      .eq('family_id', ctx.active.familyId)
+      .maybeSingle();
+    if (rereadError) {
+      console.error('[relationship-action] link re-read after a lost unlink failed', rereadError);
+      return { ok: false, error: t('actions.couldNotUpdateYourCalendar') };
+    }
+    if (!current) return { ok: false, error: t('actions.thatDateCouldNotBe') };
+    if (current.calendar_event_id === null) {
+      revalidatePath(PATH);
+      return { ok: true };
+    }
+    if (!sameId(current.calendar_event_id, row.calendar_event_id)) {
+      return { ok: false, error: t('actions.theDateWasPutBackOnTheCalendarWhileSaving') };
+    }
+    console.error('[relationship-action] unlink after a missing event failed', 'no rows updated');
+    return { ok: false, error: t('actions.couldNotUpdateYourCalendar') };
   } catch (err) {
     console.error('[relationship-action] calendar sync failed', err);
     return { ok: false, error: describeActionError(err, t('actions.couldNotUpdateYourCalendar')) };
@@ -253,6 +295,15 @@ export async function syncDateOnCalendarAction(dateId: string): Promise<Relation
  * event: an anniversary deleted here stayed on the family calendar every year.
  * The event goes first; a date whose event could not be removed is kept, so the
  * family can still take it off from here.
+ *
+ * NOT ATOMIC. The event's deletion and the date's are two statements with no
+ * transaction around them, and a toggle can run between them. The conditional
+ * delete below refuses the one stale write that race produced (deleting a date
+ * that a toggle has just linked to a NEW event); it does not make the lifecycle
+ * one step. A failure between the two leaves a date whose link the foreign key
+ * has cleared — "not on your calendar", and removable again — which is a state
+ * the family can see and act on. Doing both inside one database function is the
+ * atomic version, and needs a migration this change does not make.
  */
 export async function removeRelationshipDateAction(dateId: string): Promise<RelationshipDateResult> {
   const t = await getTranslations();
@@ -280,14 +331,46 @@ export async function removeRelationshipDateAction(dateId: string): Promise<Rela
       if (!removed.ok && removed.code !== SERVICE_CODES.notFound) return { ok: false, error: removed.error };
     }
 
+    // The date goes only while its link is one this removal accounted for: the
+    // event it just took off the calendar, or no event at all. Null is not a
+    // stranger here — deleting that event fires `ON DELETE SET NULL`, so on the
+    // real schema the link the date carries by now is normally null, and
+    // demanding the old id would refuse every healthy removal. What must stop
+    // the delete is a DIFFERENT event: a toggle that put the date back on the
+    // calendar after the read above. Deleting the date then left that new event
+    // on the family calendar with nothing pointing at it, and no date left to
+    // take it off from. The id interpolated below is the `uuid` column read
+    // above, so it carries nothing the filter grammar would read as syntax.
+    const linkAccountedFor = row.calendar_event_id
+      ? `calendar_event_id.is.null,calendar_event_id.eq.${row.calendar_event_id}`
+      : 'calendar_event_id.is.null';
     const { data: deleted, error: deleteError } = await supabase
       .from('relationship_dates')
       .delete()
       .eq('id', row.id)
       .eq('family_id', ctx.active.familyId)
+      .or(linkAccountedFor)
       .select('id');
     if (deleteError) return { ok: false, error: describeActionError(deleteError, t('errors.thatChangeWasNotSaved')) };
-    if (wroteNoRows(deleted)) return { ok: false, error: t('errors.thatChangeWasNotSaved') };
+    if (wroteNoRows(deleted)) {
+      // Which refusal: a date now naming another event is kept, with that event,
+      // and the family is told it changed; anything else is the filtered write
+      // it always was.
+      const { data: current, error: rereadError } = await supabase
+        .from('relationship_dates')
+        .select('id, calendar_event_id')
+        .eq('id', row.id)
+        .eq('family_id', ctx.active.familyId)
+        .maybeSingle();
+      if (rereadError) {
+        console.error('[relationship-action] link re-read after a refused removal failed', rereadError);
+        return { ok: false, error: t('errors.thatChangeWasNotSaved') };
+      }
+      if (current?.calendar_event_id && !sameId(current.calendar_event_id, row.calendar_event_id)) {
+        return { ok: false, error: t('actions.theDateWasPutBackOnTheCalendarWhileRemoving') };
+      }
+      return { ok: false, error: t('errors.thatChangeWasNotSaved') };
+    }
 
     revalidatePath(PATH);
     return { ok: true };

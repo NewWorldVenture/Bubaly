@@ -16322,6 +16322,8 @@
   "actions.theCalendarEventChangedWhileSaving": "L’événement de l’agenda a été modifié pendant l’enregistrement, il n’a donc pas été mis à jour. Réessayez.",
   "actions.thatPickupTimeCouldNotBeRead": "Cette heure de retrait n’est pas une date et une heure valides, rien n’a donc été enregistré.",
   "actions.thatReturnTimeCouldNotBeRead": "Cette heure de retour n’est pas une date et une heure valides, rien n’a donc été enregistré.",
+  "actions.theDateWasPutBackOnTheCalendarWhileSaving": "Cette date a été remise dans l’agenda pendant l’enregistrement, son nouvel événement n’a donc pas été modifié. Réessayez.",
+  "actions.theDateWasPutBackOnTheCalendarWhileRemoving": "Cette date a été remise dans l’agenda pendant sa suppression, elle a donc été conservée. Réessayez.",
   "familyModule.memberUpdated": "Membre mis à jour",
   "familyModule.memberAdded": "Membre ajouté",
   "adminInvite.cancel": "Annuler",

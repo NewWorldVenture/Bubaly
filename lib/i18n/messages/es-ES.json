@@ -16322,6 +16322,8 @@
   "actions.theCalendarEventChangedWhileSaving": "El evento del calendario cambió mientras se guardaba, así que no se ha actualizado. Inténtalo de nuevo.",
   "actions.thatPickupTimeCouldNotBeRead": "Esa hora de recogida no es una fecha y hora válidas, así que no se ha guardado nada.",
   "actions.thatReturnTimeCouldNotBeRead": "Esa hora de devolución no es una fecha y hora válidas, así que no se ha guardado nada.",
+  "actions.theDateWasPutBackOnTheCalendarWhileSaving": "Esta fecha se volvió a añadir al calendario mientras se guardaba, así que su nuevo evento se ha dejado como estaba. Inténtalo de nuevo.",
+  "actions.theDateWasPutBackOnTheCalendarWhileRemoving": "Esta fecha se volvió a añadir al calendario mientras se eliminaba, así que se ha conservado. Inténtalo de nuevo.",
   "familyModule.memberUpdated": "Miembro actualizado",
   "familyModule.memberAdded": "Miembro añadido",
   "adminInvite.cancel": "Cancelar",
