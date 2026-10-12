@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
       { data: appointments },
       { data: choresDueAhead },
       { data: mealPlans },
-      { data: groceryItems },
+      groceryResult,
       { data: reminders },
       { data: recapChores },
       { data: recapEvents },
@@ -82,6 +82,14 @@ export async function POST(req: NextRequest) {
       supabase.from('chore_assignments').select('status, due_at, member_id').eq('family_id', familyId).gte('due_at', w.recapStart).lte('due_at', w.recapEnd),
       readCalendarOccurrences(supabase, familyId, instantCalendarBounds(w.recapStart, w.recapEnd, tz), tz, { columns: ['title', 'starts_at', 'category'], limit: 40 }),
     ]);
+
+    // A failed read is not an empty list (AUD-1022-L2): if the open lists or
+    // their items could not be read, the prompt says the groceries are
+    // unavailable instead of "(0) - none". `settleAll` has already turned a
+    // rejected read into `{ data, error }`.
+    const groceriesUnavailable = Boolean(groceryResult.error);
+    if (groceriesUnavailable) console.error('[api/ai/weekly-briefing] grocery read failed', groceryResult.error);
+    const groceryItems = groceriesUnavailable ? [] : groceryResult.data ?? [];
 
     const memberMap = new Map((members ?? []).map((m) => [m.id, m]));
     const firstName = ctx.active.member?.display_name?.split(' ')[0] ?? 'there';
@@ -154,8 +162,9 @@ ${(mealPlans ?? []).map((m) => {
   return `- ${meal.plan_date} ${meal.meal_type}: ${meal.meals?.name ?? 'TBD'}`;
 }).join('\n') || '- none planned'}
 
-GROCERIES STILL NEEDED (${(groceryItems ?? []).length}):
-${(groceryItems ?? []).map((g) => `- ${g.name}${g.category ? ` (${g.category})` : ''}`).join('\n') || '- none'}
+${groceriesUnavailable
+  ? 'GROCERIES STILL NEEDED: unavailable. The shopping list could not be read; do not say it is empty or that nothing is needed.'
+  : `GROCERIES STILL NEEDED (${groceryItems.length}):\n${groceryItems.map((g) => `- ${g.name}${g.category ? ` (${g.category})` : ''}`).join('\n') || '- none'}`}
 
 UPCOMING REMINDERS:
 ${(reminders ?? []).map((r) => `- ${r.remind_at ? dayOf(r.remind_at) : 'soon'}: ${r.title}`).join('\n') || '- none'}

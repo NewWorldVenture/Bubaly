@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
       { data: choresDue },
       { data: schoolEvents },
       { data: sportsEvents },
-      { data: groceryItems },
+      groceryResult,
       { data: reminders },
       { data: mealPlans },
       { data: appointments },
@@ -172,6 +172,14 @@ export async function POST(req: NextRequest) {
         .eq('family_id', familyId).eq('kind', 'action').eq('status', 'done').gte('created_at', todayStart)
         .order('created_at', { ascending: false }).limit(5),
     ]);
+
+    // A FAILED READ IS NOT AN EMPTY LIST (AUD-1022-L2), as with the also-today
+    // notices below: if the open lists or their items could not be read, the
+    // prompt says the groceries are unavailable instead of "(0 items) - None".
+    // `settleAll` has already turned a rejected read into `{ data, error }`.
+    const groceriesUnavailable = Boolean(groceryResult.error);
+    if (groceriesUnavailable) console.error('[api/ai/briefing] grocery read failed', groceryResult.error);
+    const groceryItems = groceriesUnavailable ? [] : groceryResult.data ?? [];
 
     // A failed required calendar read is unavailable, never an empty day. The
     // settled result also covers transport rejection before optional AI work.
@@ -265,8 +273,9 @@ ${(sportsEvents ?? []).map(e => {
   return `- ${fmtDate(e.starts_at)} ${fmt(e.starts_at)} ${e.title} (${e.sport})${member ? ` [${member}]` : ''}${e.location ? ` @ ${e.location}` : ''}`;
 }).join('\n') || '- None'}
 
-GROCERIES STILL NEEDED (${(groceryItems ?? []).length} items):
-${(groceryItems ?? []).map(g => `- ${g.name}${g.category ? ` (${g.category})` : ''}`).join('\n') || '- None'}
+${groceriesUnavailable
+  ? 'GROCERIES STILL NEEDED: unavailable. The shopping list could not be read; do not say it is empty or that nothing is needed.'
+  : `GROCERIES STILL NEEDED (${groceryItems.length} items):\n${groceryItems.map(g => `- ${g.name}${g.category ? ` (${g.category})` : ''}`).join('\n') || '- None'}`}
 
 UPCOMING REMINDERS:
 ${(reminders ?? []).map(r => `- ${r.remind_at ? dayKeyInTz(new Date(r.remind_at), tz) : 'soon'}: ${r.title}${r.notes ? ': ' + r.notes : ''}`).join('\n') || '- None'}

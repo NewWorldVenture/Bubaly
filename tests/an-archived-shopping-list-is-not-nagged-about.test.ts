@@ -149,4 +149,56 @@ describe('the briefings', () => {
     expect(sent).not.toContain('Party hats');
     expect(sent).not.toContain('Rye flour');
   });
+
+  // AUD-1022-L2. A grocery read that failed is unavailable, not an empty list:
+  // "GROCERIES STILL NEEDED (0 items) - None" told the model there was nothing
+  // to buy. Both shapes of failure, a returned error and a rejected read, and
+  // for both lookups (the open lists, then their items), mark the section
+  // unavailable, the way a failed also-today read is marked; the rest of the
+  // briefing still goes out.
+  type Failure = 'returned' | 'rejected';
+  function failing(table: 'grocery_lists' | 'grocery_items', how: Failure) {
+    const reply = { data: null, count: null, error: { code: '08006', message: 'connection lost', details: null, hint: null } };
+    const chain: Record<string, unknown> = {};
+    for (const method of ['select', 'eq', 'is', 'in', 'order', 'limit']) chain[method] = () => chain;
+    chain.then = (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => how === 'returned'
+      ? Promise.resolve(reply).then(resolve, reject)
+      : Promise.reject(new TypeError('fetch failed')).then(resolve, reject);
+    mocks.server.mockResolvedValue({
+      from: (name: string) => (name === table ? chain : db.from(name)),
+      rpc: db.rpc.bind(db),
+      auth: db.auth,
+    });
+  }
+  const cases = [
+    ['grocery_lists', 'returned'], ['grocery_lists', 'rejected'], ['grocery_items', 'returned'], ['grocery_items', 'rejected'],
+  ] as const;
+
+  it.each(cases)('the daily briefing calls the groceries unavailable when the %s read is %s', async (table, how) => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    failing(table, how);
+
+    const response = await dailyBriefing(new NextRequest('http://localhost/api/ai/briefing', { method: 'POST', body: JSON.stringify({ type: 'morning' }) }));
+
+    expect(response.status).toBe(200);
+    const sent = prompt();
+    expect(sent).toContain('GROCERIES STILL NEEDED: unavailable.');
+    expect(sent).not.toContain('GROCERIES STILL NEEDED (');
+    expect(sent).not.toContain('Milk');
+    expect(err.mock.calls.map((call) => String(call[0]))).toContain('[api/ai/briefing] grocery read failed');
+  });
+
+  it.each(cases)('the weekly briefing calls the groceries unavailable when the %s read is %s', async (table, how) => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    failing(table, how);
+
+    const response = await weeklyBriefing(new NextRequest('http://localhost/api/ai/weekly-briefing', { method: 'POST', body: JSON.stringify({}) }));
+
+    expect(response.status).toBe(200);
+    const sent = prompt();
+    expect(sent).toContain('GROCERIES STILL NEEDED: unavailable.');
+    expect(sent).not.toContain('GROCERIES STILL NEEDED (');
+    expect(sent).not.toContain('Milk');
+    expect(err.mock.calls.map((call) => String(call[0]))).toContain('[api/ai/weekly-briefing] grocery read failed');
+  });
 });
