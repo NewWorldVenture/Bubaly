@@ -1050,3 +1050,53 @@ describe('a later batch starts only on what is true now', () => {
     expect(asked).toBe(2);
   });
 });
+
+describe('a requester read that failed between batches is not a removal', () => {
+  // Review on #1028: a transient failure reading the requester before a later
+  // batch reached the same permanent block as a removed member, although
+  // nothing had shown they were gone. It now runs nothing more and leaves the
+  // run as it was for the next claim; a confirmed refusal still blocks.
+  const chain = () => [{ id: 's1' }, { id: 's2', dependency_ids: ['s1'] }];
+
+  for (const [label, failure] of [
+    ['a database error', { code: 'db', retryable: true }],
+    ['a retryable failure with no code', { retryable: true }],
+  ] as const) {
+    it(`${label} stops the next batch without blocking the run`, async () => {
+      const fake = makeFake({ steps: chain() });
+      const scopeFor = fake.port.scopeFor;
+      let asked = 0;
+      fake.port.scopeFor = async (run) => {
+        asked += 1;
+        return asked === 1 ? scopeFor(run) : fail('Bubaly could not confirm who this run is for.', failure);
+      };
+
+      const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+      expect(asked).toBe(2);
+      expect(fake.calls.map((c) => c.opts.stepId)).toEqual(['s1']);
+      expect(result.status).toBe('error');
+      expect(fake.run.state).toBe('executing');
+      expect(fake.requestStates).not.toContain('blocked');
+      expect(fake.eventTypes()).not.toContain('blocked');
+      expect(fake.step('s1').status).toBe('completed');
+      expect(fake.step('s2').status).toBe('queued');
+    });
+  }
+
+  it('a refusal that is not retryable still blocks (control)', async () => {
+    const fake = makeFake({ steps: chain() });
+    const scopeFor = fake.port.scopeFor;
+    let asked = 0;
+    fake.port.scopeFor = async (run) => {
+      asked += 1;
+      return asked === 1 ? scopeFor(run) : fail('This run would act for someone other than the person who asked, so Bubaly will not act on it.', { code: 'denied' });
+    };
+
+    const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(fake.calls.map((c) => c.opts.stepId)).toEqual(['s1']);
+    expect(result.status).toBe('blocked');
+    expect(fake.run.state).toBe('blocked');
+  });
+});

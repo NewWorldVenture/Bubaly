@@ -719,6 +719,9 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
       // they held when the run was claimed.
       const rescoped = await port.scopeFor(run);
       if (!rescoped.ok) {
+        // A read that failed has not shown the requester gone: nothing more
+        // runs, and the run keeps its state for the next claim to read again.
+        if (rescoped.code === SERVICE_CODES.db || rescoped.retryable) return summarize('error', steps);
         await blockForRequester(port, run, rescoped.error);
         return summarize('blocked', steps);
       }
