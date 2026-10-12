@@ -25,6 +25,11 @@ const BATCH = 25;
 // push dispatch does), wrapping at the end: every account gets its turn
 // whatever the last outcome. Two overlapping runs can still share a batch.
 const CURSOR_KEY = 'provider_sync_cursor:v1';
+// A run stops taking new accounts once this much of maxDuration is spent, so
+// it ends on its own and records where it got to; the next run goes on from
+// there. One provider call can still outlast the rest of maxDuration: the
+// cursor already names that account, so the next run starts after it.
+const RUN_BUDGET_MS = 240_000;
 
 function cursorAfter(value: unknown): string | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -33,6 +38,7 @@ function cursorAfter(value: unknown): string | null {
 }
 
 export async function GET(req: NextRequest) {
+  const startedAt = Date.now();
   const t = await getTranslations();
   if (!hasCronAuthorization(req)) {
     return NextResponse.json({ error: t('providerSync.unauthorized') }, { status: 401 });
@@ -60,33 +66,58 @@ export async function GET(req: NextRequest) {
     .limit(size);
   let { data: accounts, error } = await (after ? enabled(BATCH).gt('id', after) : enabled(BATCH));
   if (!error && after && (accounts?.length ?? 0) < BATCH) {
-    // End of the list: wrap round to the start, up to where this pass began.
-    const wrapped = await enabled(BATCH - (accounts?.length ?? 0)).lte('id', after);
-    if (wrapped.error) error = wrapped.error;
-    else accounts = [...(accounts ?? []), ...(wrapped.data ?? [])];
+    // A short page is the end of the list only when nothing follows its last
+    // row. PostgREST's db-max-rows hands back fewer rows than asked for without
+    // saying so, and wrapping on such a page skipped every account past it.
+    const lastRead = accounts?.[accounts.length - 1]?.id;
+    const following = lastRead ? await enabled(1).gt('id', lastRead) : null;
+    if (following?.error) error = following.error;
+    else if (!following?.data?.length) {
+      // End of the list: wrap round to the start, up to where this pass began.
+      const wrapped = await enabled(BATCH - (accounts?.length ?? 0)).lte('id', after);
+      if (wrapped.error) error = wrapped.error;
+      else accounts = [...(accounts ?? []), ...(wrapped.data ?? [])];
+    }
   }
   if (error) {
     console.error('Provider-sync cron read failed:', error);
     return NextResponse.json({ ok: false, error: t('providerSync.providerSynchronizationFailed') }, { status: 500 });
   }
-  // Saved before any sync, so an account that throws or times out mid-batch
-  // cannot hold the next run at the same place.
-  const last = accounts?.[accounts.length - 1]?.id;
-  if (last) {
+
+  let synced = 0, skipped = 0, failed = 0, auditFailed = 0, attempted = 0;
+  const details: Record<string, unknown>[] = [];
+
+  // The cursor names the last account this run took its turn at. It moves
+  // just before each account is tried, so a run that dies on one (a provider
+  // call that never returns) leaves the next run starting after it, not back
+  // at the head of a batch it never got through.
+  let cursorAt = after;
+  let reached: string | null = null;
+  const moveCursorTo = async (id: string) => {
+    if (id === cursorAt) return true;
     const { error: cursorWriteError } = await admin.from('app_settings')
-      .upsert({ key: CURSOR_KEY, value: { id: last }, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+      .upsert({ key: CURSOR_KEY, value: { id }, updated_at: new Date().toISOString() }, { onConflict: 'key' });
     if (cursorWriteError) {
       console.error('Provider-sync cursor write failed:', cursorWriteError);
-      return NextResponse.json({ ok: false, error: t('providerSync.providerSynchronizationFailed') }, { status: 500 });
+      return false;
     }
-  }
-
-  let synced = 0, skipped = 0, failed = 0, auditFailed = 0;
-  const details: Record<string, unknown>[] = [];
+    cursorAt = id;
+    return true;
+  };
+  // Without the cursor the next run would repeat this one: stop here.
+  const cursorRefused = () => NextResponse.json(
+    { ok: false, error: t('providerSync.providerSynchronizationFailed'), synced, skipped, failed, auditFailed, scanned: accounts?.length ?? 0, details },
+    { status: 500 },
+  );
 
   for (const account of accounts ?? []) {
     const adapter = getAdapter(account.provider as SyncProviderEnum);
-    if (!adapter || !adapter.isConfigured()) { skipped++; continue; }
+    if (!adapter || !adapter.isConfigured()) { skipped++; reached = account.id; continue; }
+    // At least one account per run, so every run makes progress.
+    if (attempted > 0 && Date.now() - startedAt >= RUN_BUDGET_MS) break;
+    if (!(await moveCursorTo(account.id))) return cursorRefused();
+    reached = account.id;
+    attempted++;
     try {
       // A connection whose owner has been removed from the family is switched
       // OFF rather than synced. Removal is a soft `is_active = false` that
@@ -138,6 +169,9 @@ export async function GET(req: NextRequest) {
       details.push({ account: account.id, provider: account.provider, error: t('providerSync.providerSynchronizationFailed') });
     }
   }
+
+  // Where this run got to, past any accounts it skipped after the last one tried.
+  if (reached && !(await moveCursorTo(reached))) return cursorRefused();
 
   const ok = failed === 0 && auditFailed === 0;
   return NextResponse.json(
