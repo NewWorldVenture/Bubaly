@@ -1,5 +1,5 @@
-// lib/trust/edit-rule.ts — whether an approver's edit keeps a held request
-// under the rule it was filed under.
+// lib/trust/edit-rule.ts — whether releasing a held request, edited or as
+// asked, keeps it under the rule it was filed under.
 //
 // A held request is filed under a rule — "Under $50, one of us" (single), or
 // "Money needs both of us" (two parents) — chosen by the family's policies for
@@ -20,7 +20,21 @@
 // Only the amount is read from the arguments (`conditionsSatisfied` reads
 // `amountCents` and nothing else of them; the tags are the tool's, the subject
 // and role the asker's), so an edit that leaves the amount where it was cannot
-// move the request to another rule, and is answered without reading anything.
+// move the request to another rule.
+//
+// THE RULE NOW, NOT ONLY THE EDIT (AUD-1028-AI-LEGACY). A card keeps the rule
+// it was filed under for as long as it waits, and a plain yes released it on
+// that rule without asking whether it still holds. A card filed before the
+// held-step rule read its bound amount, or before a held step answered to a
+// family's deny, carries "one of us" (single, no policy) for a $900 the
+// family's rules now send to both parents, or refuse outright — and one yes
+// released it, with the gate skipped. So every release — a plain yes, an edit,
+// and the run executor resuming a step on a decided card — is weighed against
+// the family's rules as they are now, for what it will run: a rule that
+// refuses it outright, or that asks for more approvals or narrower approvers
+// than the card carries, means this card cannot release it. Nothing is written,
+// and the family declines it and asks Bubaly again. A card filed under the
+// current rules is untouched by this: its own rule is the answer.
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
@@ -30,7 +44,7 @@ import type { ToolDefinition } from '@/lib/ai/tools/types';
 import { thresholdFor } from '@/lib/approvals/threshold';
 import { loadAISettingsFor } from '@/lib/services/ai-settings';
 import { carriesAmount, readAmountCents, UNKNOWN_AMOUNT_CENTS } from '@/lib/trust/amount';
-import { evaluateAction, toolTags, type Actor, type Capability, type Decision, type TrustRole } from '@/lib/trust/engine';
+import { evaluateAction, riskTierStance, toolTags, type Actor, type Capability, type Decision, type TrustRole } from '@/lib/trust/engine';
 import { loadTrustInputs, roleOf } from '@/lib/trust/server';
 
 type DB = SupabaseClient<Database>;
@@ -49,7 +63,7 @@ export const FILED_REQUEST_COLUMNS =
 
 type RuleTool = Pick<ToolDefinition, 'name' | 'domain' | 'capability' | 'risk' | 'readOnly' | 'input'>;
 
-export type EditedRequest = {
+export type ReleasedRequest = {
   row: FiledRequest;
   /**
    * Which gate filed it, which decides the context it evaluated:
@@ -63,11 +77,26 @@ export type EditedRequest = {
   filedBy: { kind: 'tool'; filedName: string } | { kind: 'step' };
   /** The registry tool the arguments are for; null when none is known. */
   tool: RuleTool | null;
-  original: unknown;
-  edited: unknown;
+  /** The ask as filed (a held step's bindings resolved): what an edit is measured from. */
+  asked: unknown;
+  /** What the release runs: the approver's edit, or the ask itself. */
+  released: unknown;
+  /** Whether `released` is an approver's edit of `asked`. */
+  edited: boolean;
+  /**
+   * False for a release that runs nothing itself — a plan's pure approval
+   * step, or a row with no step parked on it — where only an edit is weighed.
+   */
+  runsWork?: boolean;
 };
 
-export type EditRuleVerdict = { ok: true } | { ok: false; reason: 'outside_rule' | 'unreadable' };
+/**
+ * - `outside_rule`: the approver's edit moved the request to another rule.
+ * - `rule_changed`: the family's rules no longer let this card release what it
+ *   runs — they refuse it outright, or ask more of it than the card carries.
+ * - `unreadable`: the rules could not be read, and nothing is released on a guess.
+ */
+export type ReleaseVerdict = { ok: true } | { ok: false; reason: 'outside_rule' | 'rule_changed' | 'unreadable' };
 
 /**
  * The amount the gate reads from these arguments: through the tool's own schema
@@ -101,14 +130,14 @@ async function askerRole(db: DB, row: FiledRequest): Promise<{ ok: true; role: T
     .eq('is_active', true)
     .maybeSingle();
   if (error) {
-    console.error('[trust/edit-rule] could not read who asked; the edit is not checked on a guess', { familyId: row.family_id, error });
+    console.error('[trust/edit-rule] could not read who asked; the release is not checked on a guess', { familyId: row.family_id, error });
     return { ok: false };
   }
   return { ok: true, role: roleOf((data as { role?: string } | null)?.role ?? null) };
 }
 
 /** The tags the filing gate put on the context; null when the family's settings could not be read. */
-async function gateTags(db: DB, request: EditedRequest): Promise<string[] | null> {
+async function gateTags(db: DB, request: ReleasedRequest): Promise<string[] | null> {
   const { tool, filedBy, row } = request;
   if (filedBy.kind === 'step') {
     return tool
@@ -119,6 +148,30 @@ async function gateTags(db: DB, request: EditedRequest): Promise<string[] | null
   const settings = await loadAISettingsFor(db, row.family_id);
   if (!settings.ok) return null;
   return [...toolTags(tool.name), `op:${tool.capability}`, `risk:${effectiveRisk(settings.data, tool)}`, `domain:${tool.domain}`];
+}
+
+/**
+ * Whether a decision is a refusal no approval may lift: a rule the household
+ * wrote about this very action — a deny policy (the Autopilot dial's "off"
+ * included) or a member's deny grant. The gate leaves those standing whatever
+ * the risk tier says (`riskTierStance` is `silent`), so it never files a card
+ * for one. The role matrix's generic "no" (`fallback`) is not such a refusal:
+ * the gate's risk tier speaks over it, and may itself ask a person.
+ */
+export function refusesOutright(decision: Decision): boolean {
+  return decision.effect === 'deny' && riskTierStance(decision) === 'silent';
+}
+
+/** Whether `decision` asks for more approvals, or narrower approvers, than the row was filed with. */
+function asksMoreThanFiled(
+  decision: Decision,
+  row: Pick<FiledRequest, 'approval_model' | 'required_approvals'>,
+): boolean {
+  const now = thresholdFor(decision.approvalModel ?? 'single', decision.requiredApprovals ?? 1, 1);
+  const filed = thresholdFor(row.approval_model ?? 'single', row.required_approvals ?? 1, 1);
+  if (now.parentsOnly && !filed.parentsOnly) return true;
+  if (decision.approvalModel === 'consensus' && row.approval_model !== 'consensus') return true;
+  return now.required > filed.required;
 }
 
 /**
@@ -135,25 +188,42 @@ export function withinFiledRule(
   if (decision.effect === 'allow') return true;
   if (decision.effect === 'deny') return false;
   if (decision.basis === 'policy' && (decision.policyId ?? null) !== (row.policy_id ?? null)) return false;
-  const now = thresholdFor(decision.approvalModel ?? 'single', decision.requiredApprovals ?? 1, 1);
-  const filed = thresholdFor(row.approval_model ?? 'single', row.required_approvals ?? 1, 1);
-  if (now.parentsOnly && !filed.parentsOnly) return false;
-  if (decision.approvalModel === 'consensus' && row.approval_model !== 'consensus') return false;
-  return now.required <= filed.required;
+  return !asksMoreThanFiled(decision, row);
 }
 
-export async function editStaysWithinFiledRule(db: DB, request: EditedRequest): Promise<EditRuleVerdict> {
-  const before = amountOf(request.tool, request.original);
-  const after = amountOf(request.tool, request.edited);
-  if (before === after) return { ok: true };
+/**
+ * Whether the card may still release what it was filed for, by the family's
+ * rules as they are now. Not when a rule refuses it outright, nor when a rule
+ * asks for more approvals or narrower approvers than the card carries — a
+ * single card filed before "Money needs both of us" read its amount. Any other
+ * answer (an allow, the role matrix's own "ask a person", a no the gate's risk
+ * tier speaks over) is one the card's own rule already covers.
+ *
+ * Laxer than `withinFiledRule` about WHICH policy: a card filed under one rule
+ * that a family re-saved, or that now matches a different rule asking no more,
+ * still releases. What a release must never do is need less than today's rule.
+ */
+export function filedRuleStillHolds(
+  decision: Decision,
+  row: Pick<FiledRequest, 'approval_model' | 'required_approvals'>,
+): boolean {
+  if (refusesOutright(decision)) return false;
+  if (decision.effect === 'require_approval') return !asksMoreThanFiled(decision, row);
+  return true;
+}
 
+/**
+ * The family's answer for this request at a given amount, evaluated as the
+ * gate that filed it evaluated the ask. Null when what that needs cannot be read.
+ */
+async function ruleFor(db: DB, request: ReleasedRequest): Promise<((amountCents: number | null) => Decision) | null> {
   const { row } = request;
   const role = await askerRole(db, row);
-  if (!role.ok) return { ok: false, reason: 'unreadable' };
+  if (!role.ok) return null;
   const trust = await loadTrustInputs(db, row.family_id);
-  if (trust.degraded) return { ok: false, reason: 'unreadable' };
+  if (trust.degraded) return null;
   const tags = await gateTags(db, request);
-  if (!tags) return { ok: false, reason: 'unreadable' };
+  if (!tags) return null;
 
   const actor: Actor = row.requested_by_kind === 'ai'
     ? { kind: 'ai_agent', id: 'bubaly', role: role.role }
@@ -164,15 +234,34 @@ export async function editStaysWithinFiledRule(db: DB, request: EditedRequest): 
   const capability: Capability = request.filedBy.kind === 'step'
     ? (!request.tool || !request.tool.readOnly ? 'automate' : request.tool.capability)
     : row.capability as Capability;
-  const decision = evaluateAction({
+  return (amountCents) => evaluateAction({
     actor,
     domain: row.domain,
     capability,
-    context: { confidence: row.confidence ?? 0.85, tags, ...(after !== null ? { amountCents: after } : {}) },
+    context: { confidence: row.confidence ?? 0.85, tags, ...(amountCents !== null ? { amountCents } : {}) },
     policies: trust.policies,
     grants: trust.grants,
     delegations: trust.delegations,
     emergencyDomains: trust.emergencyDomains,
   });
-  return withinFiledRule(decision, row) ? { ok: true } : { ok: false, reason: 'outside_rule' };
+}
+
+/**
+ * Whether releasing this request keeps it under the rule it was filed under:
+ * an approver's edit that moved the amount is weighed as `withinFiledRule`
+ * weighs it, and whatever runs — the edit or the ask — must still be
+ * releasable by this card under the family's rules now (`filedRuleStillHolds`).
+ */
+export async function releaseStaysWithinFiledRule(db: DB, request: ReleasedRequest): Promise<ReleaseVerdict> {
+  const after = amountOf(request.tool, request.released);
+  const weighsEdit = request.edited && amountOf(request.tool, request.asked) !== after;
+  const weighsRule = request.runsWork !== false;
+  if (!weighsEdit && !weighsRule) return { ok: true };
+
+  const rule = await ruleFor(db, request);
+  if (!rule) return { ok: false, reason: 'unreadable' };
+  const decision = rule(after);
+  if (weighsEdit && !withinFiledRule(decision, request.row)) return { ok: false, reason: 'outside_rule' };
+  if (weighsRule && !filedRuleStillHolds(decision, request.row)) return { ok: false, reason: 'rule_changed' };
+  return { ok: true };
 }
