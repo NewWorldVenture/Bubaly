@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { at } from './helpers/source-order';
+import { at, bodyOf } from './helpers/source-order';
 
 /**
  * Audit C1-S9-62 — the first tranche of the unconfirmed-write class OUTSIDE
@@ -66,9 +66,20 @@ describe('newsletter consent (C1-S9-62)', () => {
     expect(code(b)).not.toMatch(/return NextResponse\.json\(\{ ok: true/);
   });
 
-  it('unsubscribing stays ungated on rows — gone is unsubscribed', () => {
-    const w = unsubscribe.slice(at(unsubscribe, 'const { error: updateError }'));
-    expect(w.slice(0, 220)).not.toContain('.select(');
+  it('unsubscribing writes only over the row it read, and gone is still unsubscribed (AUD-1028-M1-ABA)', () => {
+    // C1-S9-62 left this write unconfirmed on purpose: on the service role,
+    // zero rows could only mean the row was deleted, and a person with no row
+    // is not on the list. AUD-1028-M1-ABA guards it on the status and opt-out
+    // time the click read, so zero rows now also means a newer write overtook
+    // it — told apart by a re-read by id, and proved end to end in
+    // tests/an-unsubscribe-click-outlasts-a-reactivation-in-flight.test.ts.
+    const w = bodyOf(unsubscribe, 'const advance = supabase', ".select('id');");
+    expect(w).toContain(".eq('status', observed.status)");
+    expect(w).toContain("advance.is('unsubscribed_at', null)");
+    expect(w).toContain("advance.eq('unsubscribed_at', seenStamp)");
+    const overtaken = bodyOf(unsubscribe, 'if (!wroteNoRows(advanced)) break;', 'observed = fresh;');
+    expect(overtaken).toContain(".eq('id', observed.id)\n      .maybeSingle();");
+    expect(overtaken).toContain('if (!fresh) break;');
     expect(unsubscribe).toContain('a person with no row is not on the list');
   });
 

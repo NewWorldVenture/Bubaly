@@ -41,7 +41,6 @@ const BASELINE = new Map<string, number>([
   ['app/api/ai/briefing/route.ts', 1],
   ['app/api/blog/like/route.ts', 1],
   ['app/api/blog/save/route.ts', 1],
-  ['app/api/blog/unsubscribe/route.ts', 1],
   ['app/api/cron/checkout-abandoned/route.ts', 1],
   ['app/api/cron/family-routines/route.ts', 3],
   ['app/api/cron/guardian-learning/route.ts', 1],
@@ -151,9 +150,12 @@ describe('the unconfirmed-write class outside server actions only shrinks (C1-S9
     // 52 since the merge with main's #581 (Audit C1-S9-92): the AEO retirement.
     // 51 since PR #548 merged main at 2eb62151 (finalaudit.md Q73): the network
     // prune's two branches are one chunked delete.
+    // 50 since AUD-1028-M1-ABA: the blog unsubscribe writes only over the row
+    // it read, so it confirms what it wrote.
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
     // The unsafe lifecycle-only contact fallback was removed; the consent
     // carry remains deliberately idempotent. The visitor claim is confirmed.
-    expect(total).toBe(50);
+    // Together with main's confirmed blog unsubscribe, the total is 49.
+    expect(total).toBe(49);
   });
 });
