@@ -66,3 +66,8 @@ export function escapeLike(value: string): string {
 export function escapeOrValue(value: string): string {
   return escapeLike(value.replace(/[(),]/g, ' ')).trim();
 }
+
+/** Exact case-insensitive text for PostgREST imatch (~*), without LIKE's '*' alias. */
+export function literalCaseInsensitivePattern(value: string): string {
+  return `^${value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`;
+}

@@ -2,7 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { decideStitch, shouldCarryConsent, type StitchDecision } from './identity-core';
-import { escapeLike } from '@/lib/supabase/escape-like';
+import { literalCaseInsensitivePattern } from '@/lib/supabase/escape-like';
 import { wroteNoRows } from '@/lib/supabase/errors';
 
 type Admin = SupabaseClient<Database>;
@@ -36,7 +36,7 @@ export async function stitchVisitorIdentity(
   let contactId: string;
   try {
     const { data: existing, error: lookupError } = await admin
-      .from('crm_contacts').select('id, owner_id').ilike('email', escapeLike(email)).limit(1);
+      .from('crm_contacts').select('id, email, owner_id').filter('email', 'imatch', literalCaseInsensitivePattern(email)).limit(1);
     // Only a list that came back says "no contact with this email". An error —
     // or a result that is not a list (postgrest-js resolves an empty-bodied 404
     // with neither data nor error) — says nothing, and inserting on it forks this
@@ -48,28 +48,26 @@ export async function stitchVisitorIdentity(
       return { decision: 'unknown', contactId: null };
     }
     if (existing[0]?.id) {
+      const contact = existing[0];
+      if (typeof contact.email !== 'string' || contact.email.trim().toLowerCase() !== email) {
+        console.error('[identity] contact email did not match the signed-in identity');
+        return { decision: 'unknown', contactId: null };
+      }
       contactId = existing[0].id;
       const patch: Record<string, unknown> = { lifecycle_stage: 'customer' };
       const claiming = existing[0].owner_id == null;
       if (claiming) patch.owner_id = params.userId;
-      // The read saw no owner; the WRITE now says so too. Filtered on `id` alone,
-      // a lead claimed in between — a CRM import, another sign-in — was
-      // overwritten: the same race C1-S9-61 closed in resolveContactId. Zero rows
-      // on a claim means it is no longer ours to take, so the owner is left
-      // alone and only the lifecycle stage is applied. Audit C1-S9-67.
-      let write = admin.from('crm_contacts').update(patch as never).eq('id', contactId);
+      // Bind the raw email and owner that established identity. A changed row
+      // is unknown; never attach a visitor or consent to that stale contact.
+      let write = admin.from('crm_contacts').update(patch as never).eq('id', contactId).eq('email', contact.email);
       if (claiming) write = write.is('owner_id', null);
+      else write = write.eq('owner_id', contact.owner_id!);
       const { data: patched, error: patchError } = await write.select('id');
       // Read, because the catch below cannot see a resolved PostgREST error and
       // its message claims otherwise.
-      if (patchError) console.error('[identity] contact patch failed', { contactId, error: patchError });
-      else if (wroteNoRows(patched)) {
-        if (claiming) {
-          const { error: stageError } = await admin.from('crm_contacts').update({ lifecycle_stage: 'customer' } as never).eq('id', contactId);
-          console.error('[identity] contact was claimed by another owner before this sign-in; owner left unchanged', { contactId, stageError });
-        } else {
-          console.error('[identity] contact patch matched no row', { contactId });
-        }
+      if (patchError || wroteNoRows(patched)) {
+        console.error('[identity] contact patch failed or identity changed', { contactId, error: patchError ?? 'no rows updated' });
+        return { decision: 'unknown', contactId: null };
       }
     } else {
       const { data: created, error: createError } = await admin.from('crm_contacts').insert({
