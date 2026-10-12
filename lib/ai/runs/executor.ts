@@ -48,7 +48,11 @@ import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '
 import { behaviorForDomain, effectiveRisk } from '@/lib/ai/family-settings';
 import { loadAISettings } from '@/lib/services/ai-settings';
 import { evaluateAction, riskTierStance, riskToDecision, toolTags, type ApprovalModel, type Decision } from '@/lib/trust/engine';
+import { carriesAmount, readAmountCents, UNKNOWN_AMOUNT_CENTS } from '@/lib/trust/amount';
+import { FILED_REQUEST_COLUMNS, HELD_STEP_CONFIDENCE, recordedQuorum, refusesOutright, releaseStaysWithinFiledRule, type FiledRequest } from '@/lib/trust/edit-rule';
+import { localizedTrustReason } from '@/lib/trust/messages';
 import { loadTrustInputs, roleOf } from '@/lib/trust/server';
+import { conformNulls } from '@/lib/ai/schema-to-json';
 import {
   blockedSteps, describeProgress, findDependencyCycle, isTerminalRunState, legacyStatusFor,
   selectRunnableSteps, summarizeSteps, terminalRunStateFor, type RunState, type StepState,
@@ -59,7 +63,7 @@ import {
   type RunEventInput, type RunRow, type StepRow,
 } from './store';
 import { parseVerificationSpec, runVerification, type VerificationOutcome } from './verify';
-import { resolveBindings } from './bindings';
+import { resolveBindings, type Resolution } from './bindings';
 // Pure, and shared with the approval card and `decide()`: what an approved step
 // runs must be derived by the one rule that decided what the approvers saw.
 import { classifyPayload, effectiveArgsOf } from '@/lib/approvals/card-data';
@@ -175,6 +179,18 @@ function approvedArgsFor(
   return effective.args;
 }
 
+/** What a decided step would run, for `releaseWithinFiledRule`. */
+export type StepRelease = {
+  /** The step's own input, bindings resolved: the ask as filed. */
+  asked: unknown;
+  /** What runs: the approver's edit, or `asked`. */
+  released: unknown;
+  /** Whether `released` is an approver's edit. */
+  edited: boolean;
+};
+
+export type ReleaseOutcome = 'within' | 'outside_rule' | 'rule_changed';
+
 /** Everything outside the control flow, in one injectable object. */
 export type ExecutorPort = {
   loadRun(runId: string): Promise<ServiceResult<RunSnapshot | null>>;
@@ -191,8 +207,28 @@ export type ExecutorPort = {
     args: unknown,
     opts: { runId: string; stepId: string; requestId: string | null; idempotencyKey: string; skipTrust: boolean },
   ): Promise<ToolOutcome>;
-  requestApproval(scope: ServiceScope, run: RunSnapshot, step: StepSnapshot): Promise<ServiceResult<{ id: string }>>;
+  /**
+   * File the approval a held step waits on. `bound` is the step's input with
+   * its bindings resolved against the steps it depends on — what the tool will
+   * actually run with — so the rule it is filed under reads that amount, not a
+   * `{ "$fromStep": … }` placeholder (`approvalRuleFor`).
+   *
+   * A family rule that refuses the step outright is not filed at all: the
+   * result is a failure with code `denied` and the rule's own reason, and the
+   * step is recorded as refused (AUD-1028-AI-DENY).
+   */
+  requestApproval(scope: ServiceScope, run: RunSnapshot, step: StepSnapshot, bound: Resolution): Promise<ServiceResult<{ id: string }>>;
   loadApproval(scope: ServiceScope, approvalId: string): Promise<ServiceResult<ApprovalSnapshot | null>>;
+  /**
+   * Whether what a decided step is about to run — an approver's edit
+   * (`approvedArgsFor`), or the ask itself, bindings resolved — is still this
+   * approval's to release under the family's rules now (lib/trust/edit-rule.ts):
+   * `outside_rule` for an edit that moved it to another rule, `rule_changed`
+   * for a rule that now refuses it or asks more than the card carries. Either
+   * way the step does not run it. An error: the rules could not be read, and
+   * nothing runs on a guess.
+   */
+  releaseWithinFiledRule(scope: ServiceScope, step: StepSnapshot, approvalId: string, release: StepRelease): Promise<ServiceResult<ReleaseOutcome>>;
   /**
    * Deliver a notify step THROUGH the trust gate (`notifications.notify` in the
    * registry), under the requester's role: the family's switch, its messaging
@@ -572,14 +608,11 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
 
   const scoped = await port.scopeFor(run);
   if (!scoped.ok) {
-    // An inactive or demoted requester must never have their run finished with
-    // their old authority - it is blocked for a person to look at, not failed.
-    await port.updateRun(run, { state: 'blocked', status: legacyStatusFor('blocked'), error: scoped.error });
-    await port.appendEvent(run, { eventType: 'blocked', message: scoped.error });
-    await port.setRequestState(run, 'blocked', scoped.error);
+    if (unconfirmedRefusal(scoped)) return { status: 'error', ...empty };
+    await blockForRequester(port, run, scoped.error);
     return { status: 'blocked', ...empty };
   }
-  const scope = scoped.data;
+  let scope = scoped.data;
 
   const firstSteps = await port.loadSteps(run);
   if (!firstSteps.ok) return { status: 'error', ...empty };
@@ -633,15 +666,17 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
   for (let pass = 0; pass < MAX_PASSES; pass += 1) {
     // Pause and cancel arrive as writes from another request, so both are
     // re-read every pass - that is what makes "Cancel" stop a run in flight
-    // rather than after it finishes.
+    // rather than after it finishes. A pass that cannot see the run starts
+    // nothing: the last snapshot predates whatever the steps just run, or a
+    // person, did to it. The run keeps its state and the next claim reads it.
     const refreshed = await port.loadRun(runId);
-    if (refreshed.ok && refreshed.data) {
-      run = refreshed.data;
-      if (run.cancel_requested_at) return finalizeCancelled(port, run, steps);
-      if (run.paused_at || run.state === 'paused') {
-        await port.appendEvent(run, { eventType: 'paused', message: 'Paused - Bubaly stopped after the steps already in flight.' });
-        return summarize('paused', steps);
-      }
+    if (!refreshed.ok) return summarize('error', steps);
+    if (!refreshed.data) return summarize('not_found', steps);
+    run = refreshed.data;
+    if (run.cancel_requested_at) return finalizeCancelled(port, run, steps);
+    if (run.paused_at || run.state === 'paused') {
+      await port.appendEvent(run, { eventType: 'paused', message: 'Paused - Bubaly stopped after the steps already in flight.' });
+      return summarize('paused', steps);
     }
 
     // Everything downstream of a failure can never run; say so once, then finish.
@@ -677,6 +712,19 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
       // re-plan must see that decision, so the run parks (finalizeRun reports
       // `awaiting_approval` when anything is) and resumes when it lands.
       return finalizeRun(port, run, steps);
+    }
+    if (pass > 0) {
+      // Who the requester is now, read again before every later batch: a
+      // member removed while the first steps ran stops the rest, and one whose
+      // role changed has the rest run with the role they hold now, not the one
+      // they held when the run was claimed.
+      const rescoped = await port.scopeFor(run);
+      if (!rescoped.ok) {
+        if (unconfirmedRefusal(rescoped)) return summarize('error', steps);
+        await blockForRequester(port, run, rescoped.error);
+        return summarize('blocked', steps);
+      }
+      scope = rescoped.data;
     }
     const settled = await Promise.allSettled(batch.map((step) => runStep(port, scope, run, step, steps, deadline)));
 
@@ -737,6 +785,27 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
   // Reaching the pass cap means the graph stopped converging; finishing
   // honestly beats spinning until the function is killed.
   return finalizeRun(port, run, steps);
+}
+
+/**
+ * A requester read that failed (a database error, or anything marked
+ * retryable) has not shown the requester gone. Nothing runs on it, and nothing
+ * is written: the run keeps its state for the next claim to read again, where
+ * a blocked run would wait for a person.
+ */
+function unconfirmedRefusal(result: { code?: string; retryable?: boolean }): boolean {
+  return result.code === SERVICE_CODES.db || result.retryable === true;
+}
+
+/**
+ * A requester who is no longer an active member, or whose run no longer
+ * matches their request, must never have it finished with their old
+ * authority: the run is blocked for a person to look at, not failed.
+ */
+async function blockForRequester(port: ExecutorPort, run: RunSnapshot, error: string): Promise<void> {
+  await port.updateRun(run, { state: 'blocked', status: legacyStatusFor('blocked'), error });
+  await port.appendEvent(run, { eventType: 'blocked', message: error });
+  await port.setRequestState(run, 'blocked', error);
 }
 
 /**
@@ -999,8 +1068,21 @@ async function runStep(
   const heldForOutsideText = scope.untrustedRequest === true && writesHousehold(step);
   if (step.approval_required || step.step_type === 'approval' || heldForOutsideText) {
     if (!step.approval_id) {
-      const created = await port.requestApproval(scope, run, step);
-      if (!created.ok) return failStep(port, run, step, created.error, created.retryable === true);
+      // The rule the ask is filed under reads the amount the step will run
+      // with. Its dependencies are done by now, so a value bound from one of
+      // them is already known; filed before resolving, a bound $900 read as no
+      // amount at all, and a rule capped at $50 matched it. A binding that
+      // does not resolve still fails the step below, after the decision.
+      //
+      // A family rule that refuses the step outright is the gate's answer
+      // whatever the plan said (AUD-1028-AI-DENY). Filed anyway, as "one of
+      // us" with no policy, one yes released it and it ran with the gate
+      // skipped — a deny turned into a vote. Nothing is filed and nothing runs.
+      const created = await port.requestApproval(scope, run, step, resolveBindings(step.input_json as Json, depByIdResults));
+      if (!created.ok) {
+        if (created.code === SERVICE_CODES.denied) return recordDenial(port, run, step, toolForStep(step)?.name ?? step.tool_name, created.error);
+        return failStep(port, run, step, created.error, created.retryable === true);
+      }
       await port.updateStep(run, step.id, {
         status: 'awaiting_approval', approval_id: created.data.id, ...(step.approval_required ? {} : { approval_required: true }),
       });
@@ -1056,6 +1138,32 @@ async function runStep(
   const bound = resolveBindings(step.input_json as Json, depByIdResults);
   if (!bound.ok) return failStep(port, run, step, bound.error, false);
   const boundStep: StepSnapshot = { ...step, input_json: bound.value };
+
+  // A decided step runs only what its approval may still release. An edit runs
+  // under the decision only while it stays under the rule the approval was
+  // filed under: `editAndApprove` and `decide()` refuse one that does not, but
+  // the column is any manager's to write on a pending row, and a row decided
+  // before they did is still waiting here. And the ask itself runs only while
+  // the family's rules now let this card release it (AUD-1028-AI-LEGACY): a
+  // card filed "one of us" before the rule read its bound amount, or before a
+  // held step answered to a deny, was decided on a rule the family does not
+  // have — and the step below runs with the gate skipped. Either way nothing
+  // is run, and the step fails and says to ask again.
+  if (approved && step.approval_id) {
+    // An edit is weighed with the step's bindings resolved, as `decide()` and
+    // `editAndApprove` weighed it.
+    const edit = approvedPayload === null ? null : resolveBindings(approvedPayload as Json, depByIdResults);
+    const within = await port.releaseWithinFiledRule(scope, step, step.approval_id, {
+      asked: bound.value,
+      released: edit === null ? bound.value : edit.ok ? edit.value : approvedPayload,
+      edited: approvedPayload !== null,
+    });
+    if (!within.ok) return failStep(port, run, step, within.error, within.retryable === true);
+    if (within.data !== 'within') {
+      const t = await getTranslations();
+      return failStep(port, run, step, within.data === 'outside_rule' ? t('aiRuns.editOutsideFiledRule') : t('aiRuns.ruleNoLongerReleases'), false);
+    }
+  }
 
   await port.updateStep(run, step.id, { status: 'executing', started_at: new Date(port.now()).toISOString() });
   await port.appendEvent(run, {
@@ -1145,7 +1253,7 @@ async function parkOnGate(
 }
 
 /** A denial is a decision, not a fault: retrying it would ask the trust engine the same question and get the same answer. */
-async function recordDenial(port: ExecutorPort, run: RunSnapshot, step: StepSnapshot, toolName: string, reason: string): Promise<StepDisposition> {
+async function recordDenial(port: ExecutorPort, run: RunSnapshot, step: StepSnapshot, toolName: string | null, reason: string): Promise<StepDisposition> {
   await port.updateStep(run, step.id, {
     status: 'failed', error: reason, completed_at: new Date(port.now()).toISOString(),
   });
@@ -1406,26 +1514,24 @@ function toolForStep(step: StepSnapshot): ToolDefinition | null {
 type ApprovalRule = { domain: string; approvalModel: ApprovalModel; requiredApprovals: number; policyId: string | null };
 
 /**
- * A money amount in a step's arguments, for `maxAmountCents` policy
- * conditions; null when the tool carries none.
+ * The amount a held step's rule reads: from the input the tool will run with —
+ * its bindings resolved — parsed by the tool's own schema, as `executeTool`
+ * parses it, so a key the schema drops (a stray `amount_cents` beside the
+ * `amount` that runs) cannot speak for it. Null when the step moves no money.
  *
- * One reader for both sides of a held step: the planner's dry run
- * (lib/ai/planner/validate.ts `dryRunGate`) and the rule its approval is filed
- * under (`approvalRuleFor`). When only the dry run read it, a "Bubaly may spend
- * up to $50" allow ranked above "Money needs both of us" matched a $900 budget
- * at run time — the engine reads a missing amount as 0 — so the step the plan
- * held for two parents was filed for one, and the requester released it alone.
+ * An amount that cannot be read — money fields beside a binding that did not
+ * resolve, or money fields the schema refuses — is `UNKNOWN_AMOUNT_CENTS`:
+ * unbounded, so a rule capped by `maxAmountCents` does not match it. Read as
+ * "none", it was 0, and "Bubaly may spend up to $50" covered whatever the step
+ * finally moved.
  */
-export function readAmountCents(input: unknown): number | null {
-  if (!input || typeof input !== 'object') return null;
-  const record = input as Record<string, unknown>;
-  for (const key of ['amount_cents', 'amountCents']) {
-    if (typeof record[key] === 'number' && Number.isFinite(record[key])) return Math.round(record[key] as number);
+function ruleAmountCents(tool: ToolDefinition | null, input: unknown, bound: Resolution): number | null {
+  if (!bound.ok) return carriesAmount(input) ? UNKNOWN_AMOUNT_CENTS : null;
+  if (tool) {
+    const parsed = tool.input.safeParse(conformNulls(tool.input, bound.value));
+    if (parsed.success) return readAmountCents(parsed.data);
   }
-  for (const key of ['amount', 'budget', 'target_amount', 'cost']) {
-    if (typeof record[key] === 'number' && Number.isFinite(record[key])) return Math.round((record[key] as number) * 100);
-  }
-  return null;
+  return carriesAmount(bound.value) ? UNKNOWN_AMOUNT_CENTS : null;
 }
 
 /**
@@ -1441,13 +1547,15 @@ export function readAmountCents(input: unknown): number | null {
  * domain is the tool's registry domain, not a guess from its name.
  *
  * The context carries what the dry run's does — the step's amount included
- * (`readAmountCents`) — so a policy whose conditions the plan found unmet is
+ * (`ruleAmountCents`) — so a policy whose conditions the plan found unmet is
  * not found met here.
  *
  * A household whose rules cannot be read is not asked on a guess either: the
  * step fails retryably and asks again once the rules can be read.
  */
-async function approvalRuleFor(db: SupabaseClient<Database>, scope: ServiceScope, step: StepSnapshot): Promise<ServiceResult<ApprovalRule>> {
+async function approvalRuleFor(
+  db: SupabaseClient<Database>, scope: ServiceScope, step: StepSnapshot, bound: Resolution,
+): Promise<ServiceResult<ApprovalRule>> {
   const tool = toolForStep(step);
   const domain = tool?.domain ?? approvalDomainFor(step);
   const trust = await loadTrustInputs(db, scope.familyId);
@@ -1455,14 +1563,14 @@ async function approvalRuleFor(db: SupabaseClient<Database>, scope: ServiceScope
     return fail((await getTranslations())('aiRuns.approvalRulesUnreadable'), { code: SERVICE_CODES.db, retryable: true });
   }
   const capability = !tool || !tool.readOnly ? 'automate' : tool.capability;
-  const amountCents = readAmountCents(step.input_json);
+  const amountCents = ruleAmountCents(tool, step.input_json, bound);
   const decision = evaluateAction({
     // The role the run-time gate evaluates (`trustRoleFor` in execute.ts).
     actor: { kind: 'ai_agent', id: 'bubaly', role: scope.role === 'system' ? 'adult' : roleOf(scope.role) },
     domain,
     capability,
     context: {
-      confidence: 0.85,
+      confidence: HELD_STEP_CONFIDENCE,
       tags: tool ? [...toolTags(tool.name), `op:${tool.capability}`, `risk:${tool.risk}`, `domain:${tool.domain}`] : [`domain:${domain}`],
       ...(amountCents !== null ? { amountCents } : {}),
     },
@@ -1471,6 +1579,13 @@ async function approvalRuleFor(db: SupabaseClient<Database>, scope: ServiceScope
     delegations: trust.delegations,
     emergencyDomains: trust.emergencyDomains,
   });
+  // A rule that refuses the step outright — a deny policy, the dial's "off" —
+  // is not a rule to file a card under: the gate refuses the step unheld, and
+  // holding it must not turn that refusal into one person's yes. A pure
+  // approval step runs nothing itself, so it is still asked.
+  if (step.step_type !== 'approval' && refusesOutright(decision)) {
+    return fail(localizedTrustReason(await getTranslations(), decision), { code: SERVICE_CODES.denied, retryable: false });
+  }
   if (decision.effect === 'require_approval' && decision.basis === 'policy') {
     return ok({
       domain,
@@ -1549,8 +1664,6 @@ export type ExecutorPortOptions = {
  * boundary here is the code, not the database.
  */
 export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorPortOptions = {}): ExecutorPort {
-  const scopeCache = new Map<string, ServiceScope>();
-
   // A minimal system scope for the bookkeeping writes, which only ever need the
   // family id and the service client. The EXECUTING scope (with the requester's
   // re-read role and the family's real timezone) is built by `scopeFor`.
@@ -1591,8 +1704,8 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
       if (run.lease_owner) await heartbeatRun(db, run.id, run.lease_owner);
     },
     async scopeFor(run) {
-      const cached = scopeCache.get(run.id);
-      if (cached) return ok(cached);
+      // Read every time it is asked: the graph asks again before each later
+      // batch, and a cached answer would be the requester as they were.
       const actor = await loadRunActor(db, run.family_id, run.requested_by_member_id);
       if (!actor.ok) return actor;
       // Defense in depth behind the 0252 INSERT policy: a run that names a
@@ -1621,7 +1734,6 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
         requestId: run.request_id,
         ...(untrusted ? { untrustedRequest: true } : {}),
       };
-      scopeCache.set(run.id, scope);
       return ok(scope);
     },
     runTool(scope, name, args, opts) {
@@ -1633,10 +1745,10 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
         skipTrust: opts.skipTrust,
       });
     },
-    async requestApproval(scope, run, step) {
+    async requestApproval(scope, run, step, bound) {
       const input = (step.input_json ?? {}) as Record<string, unknown>;
       const consequences = Array.isArray(input.consequences) ? input.consequences : [];
-      const rule = await approvalRuleFor(db, scope, step);
+      const rule = await approvalRuleFor(db, scope, step, bound);
       if (!rule.ok) return rule;
       const { data, error } = await db
         .from('approval_requests')
@@ -1699,6 +1811,39 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
         editedPayload: data.edited_payload ?? null,
         recordedEdits,
       });
+    },
+    async releaseWithinFiledRule(scope, step, approvalId, release) {
+      // The row as filed: who asked and under which rule. 0480 keeps both as
+      // filed. And the yeses it was decided on, which 0389 freezes: a
+      // consensus is weighed at the quorum the decision was taken on, not at
+      // whoever the household counts by the time the run resumes
+      // (AUD-1028-AI-QUORUM, lib/trust/edit-rule.ts).
+      const { data, error } = await db
+        .from('approval_requests')
+        .select(`${FILED_REQUEST_COLUMNS}, payload, payload_kind, plan_step_ids, approvals`)
+        .eq('id', approvalId)
+        .eq('family_id', scope.familyId)
+        .maybeSingle();
+      if (error || !data) {
+        if (error) console.error('[ai/runs] failed to read the rule an approval was filed under', error);
+        return fail((await getTranslations())('aiRuns.approvalRulesUnreadable'), { code: SERVICE_CODES.db, retryable: true });
+      }
+      const row = data as unknown as FiledRequest & { payload: unknown; payload_kind: string | null; plan_step_ids: string[] | null; approvals: unknown };
+      const classified = classifyPayload({
+        payload: row.payload, payload_kind: row.payload_kind, run_id: null, plan_step_id: null, plan_step_ids: row.plan_step_ids,
+      });
+      const verdict = await releaseStaysWithinFiledRule(db, {
+        row,
+        filedBy: classified?.kind === 'tool' ? { kind: 'tool', filedName: classified.name } : { kind: 'step' },
+        tool: toolForStep(step),
+        asked: release.asked,
+        released: release.released,
+        edited: release.edited,
+        quorum: recordedQuorum(row.approvals),
+      });
+      if (verdict.ok) return ok('within');
+      if (verdict.reason !== 'unreadable') return ok(verdict.reason);
+      return fail((await getTranslations())('aiRuns.approvalRulesUnreadable'), { code: SERVICE_CODES.db, retryable: true });
     },
     async notifyFamily(scope, input, opts) {
       const outcome = await executeTool(scope, NOTIFY_TOOL, notifyToolArgs(input), {

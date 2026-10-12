@@ -92,7 +92,9 @@ function held(result: { applied: string[]; failed: string[] } | Error) {
 
 const pending = (): Row => ({
   id: 'run-1', family_id: 'fam-1', status: 'pending', state: 'awaiting_approval',
-  approved_by: null, approved_at: null, metadata: { plan_id: 'plan-1', kinds: ['calendar'] },
+  approved_by: null, approved_at: null,
+  // What planAcceptedAction queues, the plan as it was queued included.
+  metadata: { plan_id: 'plan-1', kinds: ['calendar'], plan: { title: 'Beach day', description: null, location: null, planned_for: '2026-10-10' } },
 });
 
 /** What `pauseRun` writes (lib/ai/runs/controls.ts): the legacy status stays `approved`. */

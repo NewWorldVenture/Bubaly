@@ -162,11 +162,19 @@ function seedQueuedConciergePlan(over: Record<string, unknown> = {}): void {
   }]);
   store.seed('approval_requests', [approvalRow({
     domain: 'scheduling',
-    payload: { plan_id: PLAN, kinds: ['calendar', 'reminder', 'task'] },
+    // What planAcceptedAction files: the plan as it was asked about rides along.
+    payload: {
+      plan_id: PLAN, kinds: ['calendar', 'reminder', 'task'],
+      plan: { title: 'Soccer Saturday', description: 'At the park', location: 'Riverside Park', planned_for: '2026-09-06' },
+    },
     payload_kind: 'concierge_plan',
     title: 'Materialize: Soccer Saturday',
     ...over,
   })]);
+  // The trust engine's own filing line (evaluateTrust, written by the service
+  // role only, 0260): the proof that Bubaly filed this row, without which a
+  // concierge plan approval runs nothing (lib/services/approvals `filedByBubaly`).
+  store.seed('trust_audit_logs', [{ family_id: FAMILY, actor_kind: 'ai_agent', actor_id: 'concierge', approval_id: APPROVAL, decision: 'require_approval' }]);
   store.seed('family_automation_runs', [{
     id: RUN, family_id: FAMILY, trigger_type: 'plan_accepted', status: 'pending',
     state: 'awaiting_approval', requested_by_member_id: MUM,
