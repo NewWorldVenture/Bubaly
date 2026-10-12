@@ -10,14 +10,14 @@ import type { Database } from '@/lib/database.types';
 // recurring bill without a named cadence is not stepped as monthly: the page
 // asks for its schedule to be confirmed, as it does with the column.
 const h = vi.hoisted(() => ({ db: null as unknown }));
-vi.mock('@/lib/supabase/auth', () => ({ requireFeature: async () => ({ active: { familyId: 'family', family: { timezone: 'UTC' } } }) }));
+vi.mock('@/lib/supabase/auth', () => ({ requireFeature: async () => ({ active: { familyId: 'family', role: 'parent', family: { timezone: 'UTC' } } }) }));
 vi.mock('@/lib/auth/require-aal2', () => ({ requireAal2: async () => {} }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => h.db }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key, getLocaleContext: async () => ({ locale: { code: 'en-US' } }) }));
 vi.mock('@/lib/utils/format-server', () => ({ getFormat: async () => ({ fmtMoney: (cents: number) => `USD:${cents}` }) }));
 vi.mock('@/components/app/page-header', () => ({ PageHeader: 'PageHeader' }));
 vi.mock('@/components/family/shell', () => ({ StatTile: 'StatTile', SectionCard: 'SectionCard', MiniEmpty: 'MiniEmpty' }));
-vi.mock('@/components/ui/states', () => ({ ErrorState: 'ErrorState' }));
+vi.mock('@/components/ui/states', () => ({ ErrorState: 'ErrorState', EmptyState: 'EmptyState' }));
 vi.mock('@/components/modules/handle-it-button', () => ({ HandleItButton: 'HandleItButton' }));
 vi.mock('@/components/finance/affordability-scenario', () => ({ AffordabilityScenario: 'AffordabilityScenario' }));
 import FamilyCfoPage from '@/app/(app)/dashboard/family-cfo/page';

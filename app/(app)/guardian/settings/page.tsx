@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { refuseGuest } from '@/lib/auth/guest-scope';
 import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { RoutingSettings } from '@/components/guardian/routing-settings';
@@ -18,7 +19,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function GuardianSettingsPage() {
   const t = await getTranslations();
-  const ctx = await requireUserContext();
+  const ctx = await requireUserContext(); refuseGuest(ctx, '/guardian/settings');
   const familyId = ctx.active.familyId;
   const memberId = ctx.active.member.id;
   const supabase = await createServer();

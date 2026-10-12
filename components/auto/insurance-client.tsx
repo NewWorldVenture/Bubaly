@@ -75,7 +75,8 @@ export function PolicyDetails({ policy: p }: { policy: Policy }) {
   );
 }
 
-export function InsuranceClient({ policies, vehicles }: { policies: Policy[]; vehicles: Vehicle[] }) {
+/** `ownOnly`: the viewer reads only the policies they added (the held 0514). */
+export function InsuranceClient({ policies, vehicles, ownOnly = false }: { policies: Policy[]; vehicles: Vehicle[]; ownOnly?: boolean }) {
   const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Policy | null>(null);
@@ -91,6 +92,7 @@ export function InsuranceClient({ policies, vehicles }: { policies: Policy[]; ve
         <div>
           <h2 className="text-sm font-semibold">{t('insuranceClient.autoInsurance')}</h2>
           <p className="text-xs text-muted">{t('insuranceClient.fullPolicyDetailsPlusAOne')}</p>
+          {ownOnly && <p className="text-xs text-muted">{t('householdMoney.onlyWhatYouAdded')}</p>}
         </div>
         <Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> {t('insuranceClient.addPolicy')}</Button>
       </div>

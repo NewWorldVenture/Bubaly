@@ -52,6 +52,14 @@ declare
   ctl_goal   uuid;
   why        text;
   n          int;
+  -- The held 0514 makes the household's accounts a parent's or adult's to READ
+  -- as well. Read from its policy, by name and exact predicate, so this probe
+  -- holds on the released schema and on one with 0514 installed.
+  held_0514  boolean := exists (
+    select 1 from pg_policy
+     where polrelid = 'public.financial_accounts'::regclass and polcmd = 'r' and polpermissive
+       and polname = 'Household money is read by a parent or adult'
+       and pg_get_expr(polqual, polrelid) = '(is_family_member(family_id) AND can_manage_family(family_id))');
   blocked    boolean;
   r          record;
 begin
@@ -146,8 +154,16 @@ begin
   set local role authenticated;
 
   -- Reading is unchanged and deliberately so: this migration closes writes.
+  -- The held 0514 closes the accounts' read to a teen as well, so there check
+  -- 1 below is a visibility refusal too; what it would credit to the write
+  -- boundary is proved by the loop above, which holds every write policy on
+  -- the five tables to `can_manage_family(family_id)` exactly.
   select count(*) into n from public.financial_accounts where family_id = fam;
-  if n <> 1 then raise exception 'reads changed; 0267 was meant to leave them alone'; end if;
+  if n <> (case when held_0514 then 0 else 1 end) then
+    raise exception 'the teen reads % household account(s); expected % (%)', n,
+      (case when held_0514 then 0 else 1 end),
+      (case when held_0514 then 'the held 0514 makes them a parent''s or adult''s' else '0267 was meant to leave reads alone' end);
+  end if;
 
   -- The same read assertion for the three tables checks 2-4 write to, and it is
   -- load-bearing for exactly the same reason. Checks 2, 3 and 4 are SILENT

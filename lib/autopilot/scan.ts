@@ -45,7 +45,8 @@ import { isPolicySuggestionKey } from '@/lib/autopilot/policy-candidates';
 import { runPolicyScan } from '@/lib/autopilot/policy-scan';
 import { archiveStaleSuggestions } from '@/lib/autopilot/history';
 import { draftHasLapsed, reminderIsoFor } from '@/lib/autopilot/reminder-time';
-import { notify } from '@/lib/services/notifications';
+import { notify, type NotifyRecipients } from '@/lib/services/notifications';
+import { activeRoster, medicationReaderIds, type RosterMember } from '@/lib/autopilot/medication-readers';
 import { sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
 import { addDaysToDayKey, dayKeyInTz, systemScopeForFamily, zonedTimeMs } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
@@ -160,6 +161,7 @@ export async function runAutopilotScan(
   // quiet hours evaluated in the wrong zone hold a notice at six in the evening
   // and let one through at two in the morning.
   let notifyScope: ServiceScope | null = null;
+  let roster: Promise<RosterMember[] | null> | null = null;
   const { todayKey, in30Key, since8Key, since90Key, horizonEndKey, startIso, in3Iso, since90Iso } = scanWindow(tz, now);
   // "Still need: X" is only asked about items on a list the family has not
   // archived; a leftover on an archived list is off the shopping page.
@@ -470,10 +472,19 @@ export async function runAutopilotScan(
     if (d.urgency >= 2 || status === 'auto_executed') {
       const scope = notifyScope ?? (notifyScope = await systemScopeForFamily(supabase, familyId));
       if (scope) {
+        // A refill names the drug, so it goes only to the people the held 0511
+        // lets read that medication; the family hears nothing of it.
+        let privateTo: NotifyRecipients | null = null;
+        if (d.audience === 'medication-readers') {
+          const members = await (roster ?? (roster = activeRoster(supabase, familyId)));
+          privateTo = members ? medicationReaderIds(members, d.memberId) : 'managers';
+        }
         const sent = await notify(scope, {
-          recipients: 'family',
+          recipients: privateTo ?? 'family',
           type: 'system',
-          title: status === 'auto_executed' ? `Autopilot handled: ${d.title}` : (d.notificationTitle ?? d.title),
+          title: status === 'auto_executed'
+            ? `Autopilot handled: ${privateTo ? (d.notificationTitle ?? d.title) : d.title}`
+            : (d.notificationTitle ?? d.title),
           body: d.detail,
           relatedType: 'autopilot_suggestions',
           relatedId: inserted.id,

@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { PiggyBank, Plus, Trash2 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { readsHouseholdMoney, transactionsInScope } from '@/lib/finance/household-money';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { deleteBudgetAction, setBudgetAction } from '@/app/(app)/dashboard/billing/actions';
@@ -35,7 +36,11 @@ export function BudgetsView() {
   // budgetSpent reads its date's local calendar fields: the FAMILY's day.
   const familyToday = useFamilyCalendarToday();
   const usd = (amount: number) => usdIn(amount, locale.code);
-  const { familyId, userId } = useApp();
+  const { familyId, userId, role, selfMember } = useApp();
+  // The held 0514: a parent or adult reads every transaction; anyone else the
+  // ones tagged to them, so their spend-to-date is their own and says so.
+  const seesAll = readsHouseholdMoney(role);
+  const selfId = selfMember?.id ?? null;
   const { success, error: toastError } = useToast();
 
   const { data: budgets, loading, error: budgetsError, stale, refresh: refreshBudgets } = useRealtimeQuery<Budget>({
@@ -45,14 +50,18 @@ export function BudgetsView() {
   // The transactions read matters as much as the budgets one: spend-to-date is
   // computed from it, so losing it silently reports every category as untouched.
   const { data: txns, loading: txnsLoading, error: txnsError, stale: txnsStale, refresh: refreshTxns } = useRealtimeQuery<Txn>({
-    table: 'transactions', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('transactions').select('*').eq('family_id', familyId).gte('date', `${yearStartYear}-01-01`),
+    table: 'transactions', familyId, deps: [familyId, role, selfId],
+    fetcher: (sb) => {
+      if (!seesAll && !selfId) return Promise.resolve({ data: [] as Txn[], error: null });
+      const query = sb.from('transactions').select('*').eq('family_id', familyId);
+      return (seesAll ? query : query.eq('member_id', selfId!)).gte('date', `${yearStartYear}-01-01`);
+    },
   });
   const readError = budgetsError || txnsError;
 
   const [form, setForm] = useState(false);
   const rows = budgets ?? [];
-  const allTxns = useMemo(() => (txns ?? []) as unknown as { type: string; category: string | null; amount: number; date: string }[], [txns]);
+  const allTxns = useMemo(() => transactionsInScope(txns ?? [], role, selfId) as unknown as { type: string; category: string | null; amount: number; date: string }[], [txns, role, selfId]);
 
   async function remove(id: string) {
     if (!confirm(t('budgetsView.deleteThisBudget'))) return;
@@ -65,6 +74,7 @@ export function BudgetsView() {
     <div className="module-page">
       <PageHeader title={t('budgets.budgetPlanner')} description={t('budgetsView.setCategoryBudgetsAndTrack')}
         action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('budgets.addBudget')}</Button>} />
+      {!seesAll && <p className="text-xs text-muted">{t('householdMoney.onlyYourOwnSpending')}</p>}
 
       {readError ? (
         <ErrorState message={t('budgetsView.couldNotLoadBudgets')} onRetry={() => { void refreshBudgets(); void refreshTxns(); }} />

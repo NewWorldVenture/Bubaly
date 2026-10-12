@@ -17,8 +17,8 @@ export const ROLE_DESCRIPTIONS: Record<MemberRole, string> = {
   adult: 'Manage shared household data and approve chores.',
   teen: 'Manage their own tasks, activities, and calendar.',
   child: 'Complete assigned chores and view their items.',
-  caregiver: 'View only the areas assigned to them.',
-  guest: 'View limited shared events only.',
+  caregiver: "Help with shared household and care information where access is granted. Access varies by area. Can't manage members or billing.",
+  guest: "View the shared calendar, lists and plans. Access to other information depends on the area's permissions.",
 };
 
 /**
@@ -77,6 +77,16 @@ export function assignableMemberRoles(actorRole?: string | null, currentRole?: s
   if (isAdmin(actorRole)) return [...ROLE_ORDER];
   if (currentRole === 'parent') return ['parent'];
   return ROLE_ORDER.filter((r) => r !== 'parent');
+}
+
+/**
+ * The roles a member who signs in with a kid PIN may be given from the editor
+ * (the held 0512, the owner's decision): never parent or adult, because a PIN
+ * must not guard a manager's account. A row that already has one keeps it on
+ * offer, so editing its name sends the role it has, which the database allows.
+ */
+export function rolesForAKidLogin(options: readonly MemberRole[], currentRole?: string | null): MemberRole[] {
+  return options.filter((r) => !isManager(r) || r === currentRole);
 }
 
 /**
