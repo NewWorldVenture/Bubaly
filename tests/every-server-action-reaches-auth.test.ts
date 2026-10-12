@@ -31,7 +31,8 @@
 // Audit C1-S7-02.
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join as nativeJoin } from 'node:path';
+const join = (...parts: string[]): string => nativeJoin(...parts).replace(/\\/g, '/');
 
 const SKIP = new Set(['node_modules', '.next', '.git', 'dist', 'build', 'coverage', 'supabase', 'mobile']);
 
@@ -153,7 +154,7 @@ function analyse(): Action[] {
       ...[...source.matchAll(/export\s+(?:async\s+)?function\s+(\w+)/g)].map((m) => m[1]),
       ...[...source.matchAll(/export\s+const\s+(\w+)\s*=/g)].map((m) => m[1]),
     ]);
-    const rel = file.slice(process.cwd().length + 1);
+    const rel = file.slice(process.cwd().length + 1).replace(/\\/g, '/');
     for (const name of exported) {
       if (!bodies.has(name)) continue;
       actions.push({ key: `${rel}::${name}`, guarded: guarded.has(name) });

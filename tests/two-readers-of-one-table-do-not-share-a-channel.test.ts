@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -65,8 +65,8 @@ describe('two readers of one table do not share a channel (C1-S9-94)', () => {
   });
 
   it('every postgres_changes subscription in the app goes through ownChannel', () => {
-    const files = execSync("git ls-files 'app/**/*.ts' 'app/**/*.tsx' 'components/**/*.ts' 'components/**/*.tsx' 'lib/**/*.ts' 'lib/**/*.tsx'", { encoding: 'utf8' })
-      .split('\n').filter(Boolean).filter((f) => f !== 'lib/realtime/own-channel.ts');
+    const files = execFileSync('git', ["ls-files","-z","app/**/*.ts","app/**/*.tsx","components/**/*.ts","components/**/*.tsx","lib/**/*.ts","lib/**/*.tsx"], { encoding: 'utf8' })
+    .split('\0').filter(Boolean).filter(Boolean).filter((f) => f !== 'lib/realtime/own-channel.ts');
     const offenders: string[] = [];
     for (const f of files) {
       const src = readFileSync(f, 'utf8');

@@ -12,7 +12,7 @@ import { authScreenHref, resolveAuthSelection, type ReviewPlan } from '@/lib/bil
 const mock = vi.hoisted(() => ({
   exchange: vi.fn(), stored: vi.fn(), user: vi.fn(), admin: vi.fn(), membership: vi.fn(), stitch: vi.fn(),
   allowlisted: false, middlewareUser: null as { id: string } | null,
-  middlewareError: null as unknown, refresh: false, fetch: vi.fn(), cookieHeader: '', verifierFingerprint: '', completing: false,
+  middlewareCookies: vi.fn(), middlewareError: null as unknown, refresh: false, fetch: vi.fn(), cookieHeader: '', verifierFingerprint: '', completing: false,
 }));
 vi.mock('@/lib/supabase/server', () => ({
   createServer: () => { throw new Error('Callback admission must not publish ambient cookies'); },
@@ -24,7 +24,7 @@ vi.mock('@/lib/marketing/identity', () => ({ stitchVisitorIdentity: mock.stitch 
 vi.mock('@supabase/ssr', async original => ({
   ...await original<typeof import('@supabase/ssr')>(),
   createServerClient: (_url: string, _key: string, options: {
-    cookies: { setAll: (items: { name: string; value: string; options: object }[], headers: Record<string, string>) => void };
+    cookies: { getAll: () => { name: string; value: string }[]; setAll: (items: { name: string; value: string; options: object }[], headers: Record<string, string>) => void };
   }) => mock.completing ? {
     // Only provider results are synthetic: the production cookie factory,
     // canonical initiation parser and ownership comparison all execute.
@@ -41,6 +41,7 @@ vi.mock('@supabase/ssr', async original => ({
       return query;
     },
   } : ({ auth: { getUser: async () => {
+    mock.middlewareCookies(options.cookies.getAll());
     if (mock.refresh) options.cookies.setAll([
       { name: 'sb-fixture-auth-token', value: 'synthetic-rotated', options: { path: '/', maxAge: 34560000 } },
     ], { 'cache-control': 'private, no-store', expires: '0', pragma: 'no-cache' });
@@ -243,14 +244,43 @@ describe('protected review link middleware', () => {
     expect(selected.pathname + selected.search).toBe('/onboarding?reviewPlan=plus_annual');
   });
   it('admits a no-code visit without forcing a signed-in visitor to the login page', async () => {
+    // Admission continuation and later protected middleware only; this fixture
+    // does not render the completion UI or prove provider session lifetime.
     // A stale link, a back-navigation, or cancelling at the provider is a
     // sign-in that did not HAPPEN — it must not end the session the visitor
     // already has. Their plan choice rides along in `next`.
+    const signedIn = providerSession();
+    const storedValue = `base64-${Buffer.from(JSON.stringify(signedIn)).toString('base64url')}`;
+    mock.middlewareUser = { id: signedIn.user.id };
+    mock.cookieHeader = `${STORAGE_KEY}=${encodeURIComponent(storedValue)}; ${STORAGE_KEY}-logout-generation=fixture-generation`;
     const next = '/onboarding?reviewPlan=plus_annual';
     const admitted = await admit(new URLSearchParams({ next }));
     expect(admitted.searchParams.get('next')).toBe(next);
     expect(mock.exchange).not.toHaveBeenCalled();
     expect(mock.user).not.toHaveBeenCalled();
+    expect(mock.middlewareCookies).not.toHaveBeenCalled();
+    const request = new NextRequest('https://bubaly.test/dashboard/billing?view=manage&reviewPlan=plus_annual', {
+      headers: { cookie: mock.cookieHeader },
+    });
+    const response = await middleware(request);
+    expect(mock.middlewareCookies).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('location')).toBeNull();
+    const stored = request.cookies.get(STORAGE_KEY)?.value;
+    expect(stored).toBeTruthy();
+    const decoded = JSON.parse(Buffer.from(stored!.slice('base64-'.length), 'base64url').toString());
+    expect(decoded.user.id).toBe(userId);
+    expect(mock.middlewareUser?.id).toBe(decoded.user.id);
+    expect(mock.middlewareCookies.mock.calls[0][0]).toContainEqual({ name: STORAGE_KEY, value: stored });
+    expect(mock.cookieHeader).toContain(`${STORAGE_KEY}=${encodeURIComponent(stored!)}`);
+    expect(response.cookies.getAll()).toEqual([]);
+    expect(mock.exchange).not.toHaveBeenCalled();
+    expect(mock.user).not.toHaveBeenCalled();
+    mock.middlewareUser = null;
+    const signedOut = await middleware(new NextRequest('https://bubaly.test/dashboard/billing?view=manage&reviewPlan=plus_annual'));
+    expect(signedOut.status).toBe(307);
+    expect(location(signedOut).pathname).toBe('/login');
+    expect(resolveAuthSelection(location(signedOut).searchParams).next).toBe('/dashboard/billing?view=manage&reviewPlan=plus_annual');
   });
   it('does not weaken encoded-slash rejection to preserve an unsafe query', async () => {
     const response = await middleware(new NextRequest('https://bubaly.test/dashboard/billing?next=%2Fadmin&view=manage'));
