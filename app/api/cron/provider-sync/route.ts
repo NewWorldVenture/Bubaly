@@ -11,10 +11,26 @@ export const maxDuration = 300;
 
 // Scheduled two-way provider sync (item #3): keeps every connected
 // Google/Microsoft account in sync WITHOUT anyone pressing "Sync now" — the
-// piece that turns manual sync into real background two-way sync. Oldest-synced
-// accounts first, bounded batch so the run always finishes inside maxDuration.
+// piece that turns manual sync into real background two-way sync. A bounded
+// batch so the run always finishes inside maxDuration, taken in turn (below).
 // Accounts whose provider keys aren't configured are skipped (key-gated).
 const BATCH = 25;
+
+// The batch used to be the 25 accounts with the oldest `last_synced_at`, and
+// only a SUCCESS advances that column. An account refused or failing every
+// time (a revoked grant, an unconfigured provider, a policy refusal) kept its
+// place at the head for ever, so 25 of them anywhere in the product took every
+// run and no healthy family was synced in the background again. The run now
+// walks enabled accounts in id order from a cursor kept in app_settings (as
+// push dispatch does), wrapping at the end: every account gets its turn
+// whatever the last outcome. Two overlapping runs can still share a batch.
+const CURSOR_KEY = 'provider_sync_cursor:v1';
+
+function cursorAfter(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const id = (value as { id?: unknown }).id;
+  return typeof id === 'string' && id.length > 0 && id.length <= 64 ? id : null;
+}
 
 export async function GET(req: NextRequest) {
   const t = await getTranslations();
@@ -23,21 +39,46 @@ export async function GET(req: NextRequest) {
   }
 
   const admin = createServiceClient();
+  const { data: stored, error: cursorReadError } = await admin
+    .from('app_settings').select('value').eq('key', CURSOR_KEY).maybeSingle();
+  if (cursorReadError) {
+    // Without the cursor this run would start over at the same batch.
+    console.error('Provider-sync cursor read failed:', cursorReadError);
+    return NextResponse.json({ ok: false, error: t('providerSync.providerSynchronizationFailed') }, { status: 500 });
+  }
+  const after = cursorAfter(stored?.value);
   // Only accounts of OPEN families. A closed family (families.closed_at) keeps
   // its stored provider tokens so it can reopen, but nothing uses them while it
-  // is closed. Filtered in the query, not after it: this read is oldest-first
-  // and bounded, so closed families' accounts — never synced again — would
-  // otherwise sit at the head of every batch and starve the open ones.
-  const { data: accounts, error } = await admin
+  // is closed. Filtered in the query, not after it, so a closed family's
+  // accounts never take a place in the batch.
+  const enabled = (size: number) => admin
     .from('sync_accounts')
     .select('id, user_id, family_id, external_id, provider, family:families!inner(closed_at)')
     .is('family.closed_at', null)
     .in('sync_direction', ['import', 'export', 'two_way'])
-    .order('last_synced_at', { ascending: true, nullsFirst: true })
-    .limit(BATCH);
+    .order('id', { ascending: true })
+    .limit(size);
+  let { data: accounts, error } = await (after ? enabled(BATCH).gt('id', after) : enabled(BATCH));
+  if (!error && after && (accounts?.length ?? 0) < BATCH) {
+    // End of the list: wrap round to the start, up to where this pass began.
+    const wrapped = await enabled(BATCH - (accounts?.length ?? 0)).lte('id', after);
+    if (wrapped.error) error = wrapped.error;
+    else accounts = [...(accounts ?? []), ...(wrapped.data ?? [])];
+  }
   if (error) {
     console.error('Provider-sync cron read failed:', error);
     return NextResponse.json({ ok: false, error: t('providerSync.providerSynchronizationFailed') }, { status: 500 });
+  }
+  // Saved before any sync, so an account that throws or times out mid-batch
+  // cannot hold the next run at the same place.
+  const last = accounts?.[accounts.length - 1]?.id;
+  if (last) {
+    const { error: cursorWriteError } = await admin.from('app_settings')
+      .upsert({ key: CURSOR_KEY, value: { id: last }, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+    if (cursorWriteError) {
+      console.error('Provider-sync cursor write failed:', cursorWriteError);
+      return NextResponse.json({ ok: false, error: t('providerSync.providerSynchronizationFailed') }, { status: 500 });
+    }
   }
 
   let synced = 0, skipped = 0, failed = 0, auditFailed = 0;
@@ -54,8 +95,7 @@ export async function GET(req: NextRequest) {
       // pushing the household's events out to them — with nobody left able to
       // disconnect it (the owner has no family; managers are not the owner).
       // loadSyncExecutionPolicy (inside runProviderSync) refuses such an
-      // account too; disabling it here also keeps it from sitting first in
-      // this oldest-first batch forever.
+      // account too; disabling it here also takes it out of the rotation.
       const { data: owner, error: ownerError } = await admin.from('family_members').select('id')
         .eq('family_id', account.family_id).eq('user_id', account.user_id).eq('is_active', true).limit(1);
       if (ownerError) throw ownerError;
