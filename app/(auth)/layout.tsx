@@ -25,6 +25,7 @@ export default async function AuthLayout({ children }: { children: React.ReactNo
       </main>
       <footer className="flex flex-col items-center gap-4 px-5 py-6 text-center text-xs text-muted">
         <LanguageBar />
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- Auth return links require document navigation to avoid the observed aborted RSC lifecycle. */}
         <a href="/" className="hover:text-fg">{t('app.backToHome')}</a>
       </footer>
     </div>

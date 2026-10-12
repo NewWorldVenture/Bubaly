@@ -1,5 +1,4 @@
-import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { at, between } from './helpers/source-order';
 
@@ -58,9 +57,20 @@ function sites(file: string): { action: string; text: string }[] {
   return out;
 }
 
+/** Same complete app/components TSX discovery as the original grep, without a Unix shell. */
+function actionFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true })
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .flatMap((entry) => {
+      const file = `${directory}/${entry.name}`;
+      if (entry.isDirectory()) return actionFiles(file);
+      return entry.isFile() && file.endsWith('.tsx')
+        && /void [a-zA-Z]+Action\(/.test(readFileSync(file, 'utf8')) ? [file] : [];
+    });
+}
+
 function allSites() {
-  const files = execSync("grep -rlE 'void [a-zA-Z]+Action\\(' app components --include=*.tsx || true", { encoding: 'utf8' })
-    .trim().split('\n').filter(Boolean);
+  const files = ['app', 'components'].flatMap(actionFiles);
   return files.flatMap((f) => sites(f).map((s) => ({ key: `${f}::${s.action}`, ...s })));
 }
 
