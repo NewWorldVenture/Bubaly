@@ -49,6 +49,7 @@ import { getLocaleContext } from '@/lib/i18n/server';
 import { translate } from '@/lib/i18n/messages';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { dayPhase, phaseGreeting } from '@/lib/home/time-of-day';
+import { readOnOpenGroceryLists } from '@/lib/services/groceries';
 
 function todayLabel(locale: LocaleCode) {
   return new Date().toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric' });
@@ -125,8 +126,9 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('member_id', myMemberId).in('status', ['todo', 'in_progress']),
     readDisplayCalendarOccurrences(supabase, familyId, todayWindow, tz, { overlap: true }),
-    supabase.from('grocery_items').select('id', { count: 'exact', head: true })
-      .eq('family_id', familyId).eq('is_checked', false),
+    // Only lists the family has not archived (readOnOpenGroceryLists).
+    readOnOpenGroceryLists(supabase, familyId, (lists) => supabase.from('grocery_items').select('id', { count: 'exact', head: true })
+      .eq('family_id', familyId).in('list_id', lists).eq('is_checked', false)),
     supabase.from('medications').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('is_active', true).limit(1),
     manager

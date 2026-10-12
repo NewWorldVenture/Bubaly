@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils/cn';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 import { getFormat } from '@/lib/utils/format-server';
+import { readOnOpenGroceryLists } from '@/lib/services/groceries';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -108,8 +109,9 @@ export default async function FoodPage() {
       .eq('family_id', familyId).eq('meal_type', 'dinner').gte('plan_date', todayIso).lte('plan_date', weekEnd).order('plan_date')),
     safe('recipes', supabase.from('family_recipes').select('id, name, rating', { count: 'exact' })
       .eq('family_id', familyId).order('created_at', { ascending: false }).limit(4)),
-    safe('grocery_items', supabase.from('grocery_items').select('id, name', { count: 'exact' })
-      .eq('family_id', familyId).eq('is_checked', false).limit(4)),
+    // Only lists the family has not archived (readOnOpenGroceryLists).
+    safe('grocery_items', readOnOpenGroceryLists(supabase, familyId, (lists) => supabase.from('grocery_items').select('id, name', { count: 'exact' })
+      .eq('family_id', familyId).in('list_id', lists).eq('is_checked', false).limit(4))),
     safe('pantry_items', supabase.from('pantry_items').select('id, name, expires_at, quantity, unit', { count: 'exact' })
       .eq('family_id', familyId).lte('expires_at', expSoon).order('expires_at', { ascending: true, nullsFirst: false }).limit(4)),
     safe('favorites', supabase.from('family_recipes').select('id, name, rating', { count: 'exact' })

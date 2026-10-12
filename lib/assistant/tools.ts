@@ -21,7 +21,7 @@ import { dayKeyInTz, familyInstantIso, zonedDayBoundsMs } from '@/lib/services/s
 import { nextRemindAt } from '@/lib/reminders/details';
 import { escapeLike } from '@/lib/supabase/escape-like';
 import { wroteNoRows } from '@/lib/supabase/errors';
-import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
+import { ensureDefaultGroceryListId, readOnOpenGroceryLists } from '@/lib/services/groceries';
 import { ensureTodoListId } from '@/lib/services/tasks';
 import { createGoal } from '@/lib/services/goals';
 import { normalizeEventTimes } from '@/lib/services/calendar';
@@ -539,7 +539,8 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
           manager
             ? supabase.from('chore_assignments').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('status', 'submitted')
             : Promise.resolve({ count: 0, error: null }),
-          supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('is_checked', false),
+          // Only lists the family has not archived (readOnOpenGroceryLists).
+          readOnOpenGroceryLists(supabase, ctx.familyId, (lists) => supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).in('list_id', lists).eq('is_checked', false)),
           supabase.from('todo_items').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('is_done', false),
         ]);
         const pendingError = [appr, ren, docs, dueRem, convEvents, signoff, grocery, todos].find((result) => result.error)?.error;
