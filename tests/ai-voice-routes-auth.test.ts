@@ -18,6 +18,10 @@ const fetchWithDeadline = vi.fn();
 const cookieClient = { from: () => cookieClient, auth: { getUser: async () => ({ data: { user: { id: 'user-1' } } }) } } as Record<string, unknown>;
 const bearerClient = { from: () => bearerClient } as Record<string, unknown>;
 
+// The account-standing gate (a closed or trial-ended family is refused) has its
+// own test, tests/the-free-ai-helpers-refuse-a-closed-or-trial-ended-family.test.ts.
+// The family here is open, so the gate is answered rather than seeded.
+vi.mock('@/lib/server/account-standing', () => ({ refuseClosedOrTrialEnded: async () => null }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => cookieClient }));
 vi.mock('@/lib/supabase/auth', () => ({ getUserContext: () => getUserContext() }));

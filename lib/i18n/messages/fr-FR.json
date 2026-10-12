@@ -16967,6 +16967,10 @@
   "householdMoney.keptByParentsBody": "Les comptes, les soldes et les dépenses du foyer sont réservés à un parent ou à un adulte du foyer. Demandez-leur si vous avez besoin de quelque chose.",
   "householdMoney.onlyYourOwnSpending": "Tu vois ici les dépenses qui te sont attribuées. Un parent ou un adulte voit les comptes du foyer et toutes ses dépenses.",
   "householdMoney.onlyWhatYouAdded": "Tu vois ici les fiches que tu as ajoutées. Un parent ou un adulte voit celles de tout le monde.",
+  "accountStanding.accountClosed": "Ce compte Bubaly est fermé. Rouvrez-le pour continuer.",
+  "accountStanding.trialEnded": "Votre essai gratuit est terminé. Choisissez Family Basic ou Family+ pour continuer à utiliser Bubaly.",
+  "accountStanding.unavailable": "Bubaly n'a pas pu vérifier le compte de votre famille pour le moment. Réessayez dans un instant.",
+  "gift.ideasAreNotAvailableForThisFamily": "Les idées de cadeaux ne sont pas disponibles pour cette famille pour le moment.",
   "handoff.pickupChangedRefresh": "Ce retrait vient d’être modifié. Actualisez la page pour voir où il en est.",
   "marketplace.onlyTheSellerFinishesAnOrder": "Seule la personne qui l’a vendu ou prêté peut le marquer comme rendu ou terminé."
 }

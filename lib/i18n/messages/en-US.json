@@ -16967,6 +16967,10 @@
   "householdMoney.keptByParentsBody": "The household's accounts, balances and spending are for a parent or adult of the household. Ask one of them if you need something from them.",
   "householdMoney.onlyYourOwnSpending": "You see the spending tagged to you here. A parent or adult sees the household's accounts and all of its spending.",
   "householdMoney.onlyWhatYouAdded": "You see the records you added here. A parent or adult sees everyone's.",
+  "accountStanding.accountClosed": "This Bubaly account is closed. Reopen it to continue.",
+  "accountStanding.trialEnded": "Your free trial has ended. Choose Family Basic or Family+ to keep using Bubaly.",
+  "accountStanding.unavailable": "Bubaly could not check your family's account right now. Try again in a moment.",
+  "gift.ideasAreNotAvailableForThisFamily": "Gift ideas aren't available for this family right now.",
   "handoff.pickupChangedRefresh": "This pickup changed a moment ago. Refresh to see where it stands.",
   "marketplace.onlyTheSellerFinishesAnOrder": "Only the person who sold or lent this can mark it returned or complete."
 }
