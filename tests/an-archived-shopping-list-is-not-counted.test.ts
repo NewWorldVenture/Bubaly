@@ -108,7 +108,7 @@ const dashboardCtx = {
 
 const pendingDecisions = async () => {
   const tool = buildAssistantTools(db as unknown as SupabaseClient<Database>, {
-    familyId: FAMILY, userId: 'me', memberId: 'member', members: [{ id: 'member', display_name: 'Sam' }], tz: 'America/New_York',
+    familyId: FAMILY, userId: 'me', memberId: 'member', role: 'parent', members: [{ id: 'member', display_name: 'Sam' }], tz: 'America/New_York',
   }).find((candidate) => candidate.name === 'list_pending_decisions');
   return await tool!.execute({}) as { ok: boolean; items: { title: string }[] };
 };
