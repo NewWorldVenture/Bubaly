@@ -81,15 +81,15 @@ export function RelationshipModule() {
     table: 'relationship_dates', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('relationship_dates').select('*').eq('family_id', familyId),
   });
-  const { data: gifts, error: giftsError } = useRealtimeQuery<Gift_>({
+  const { data: gifts, loading: giftsLoading, error: giftsError } = useRealtimeQuery<Gift_>({
     table: 'relationship_gift_ideas', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('relationship_gift_ideas').select('*').eq('family_id', familyId),
   });
-  const { data: profileRows, error: profileError } = useRealtimeQuery<Profile>({
+  const { data: profileRows, loading: profileLoading, error: profileError } = useRealtimeQuery<Profile>({
     table: 'relationship_profile', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('relationship_profile').select('*').eq('family_id', familyId),
   });
-  const { data: wishes, error: wishesError } = useRealtimeQuery<Wish>({
+  const { data: wishes, loading: wishesLoading, error: wishesError } = useRealtimeQuery<Wish>({
     table: 'wishlist_items', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('wishlist_items').select('*').eq('family_id', familyId),
   });
@@ -130,10 +130,20 @@ export function RelationshipModule() {
   // them: only the ones they recorded themselves. Everyone else in the family
   // reads the list as before (00980's policy is family-wide, so this is the
   // screen's half; the database half is recorded with the audit).
-  const viewerIsRecipient = !!profile?.partner_member_id && profile.partner_member_id === selfMember?.id;
+  //
+  // Which of the two the viewer is comes from the profile, and the four reads
+  // land independently. A profile still loading (or failed) is not "not the
+  // recipient": read that way, gifts arriving first showed the recipient the
+  // whole plan until the profile caught up. So nothing that depends on it —
+  // the gift list and its totals, the wish-list candidates, the AI digest —
+  // renders until the profile has answered without an error, together with
+  // the gifts and wishes it filters. A viewer whose own member row is not known
+  // yet is held to their own gifts until it is.
+  const recipientKnown = !profileLoading && !profileError && !giftsLoading && !giftsError && !wishesLoading && !wishesError;
+  const viewerIsRecipient = !!profile?.partner_member_id && (!selfMember || profile.partner_member_id === selfMember.id);
   const readableGifts = useMemo(
-    () => (gifts ?? []).filter((g) => !viewerIsRecipient || g.created_by === userId),
-    [gifts, viewerIsRecipient, userId],
+    () => (recipientKnown ? (gifts ?? []).filter((g) => !viewerIsRecipient || g.created_by === userId) : []),
+    [recipientKnown, gifts, viewerIsRecipient, userId],
   );
   const giftSummary = useMemo(() => summarizeGifts(readableGifts.map((g) => ({ status: g.status, price_cents: g.price_cents }))), [readableGifts]);
   const visibleGifts = useMemo(() => readableGifts.filter((g) => giftFilter === 'all' || g.status === giftFilter), [readableGifts, giftFilter]);
@@ -161,8 +171,10 @@ export function RelationshipModule() {
   // already claimed or bought, so the partner reading them could see which of
   // their wishes someone is getting them.
   const partnerWishes = useMemo(
-    () => (wishes ?? []).filter((w) => profile?.partner_member_id && w.member_id === profile.partner_member_id && w.member_id !== selfMember?.id),
-    [wishes, profile?.partner_member_id, selfMember?.id],
+    () => (recipientKnown && !viewerIsRecipient
+      ? (wishes ?? []).filter((w) => profile?.partner_member_id && w.member_id === profile.partner_member_id && w.member_id !== selfMember?.id)
+      : []),
+    [recipientKnown, viewerIsRecipient, wishes, profile?.partner_member_id, selfMember?.id],
   );
   const wishSuggestions = useMemo(
     () => suggestGiftsFromWishlist(partnerWishes as unknown as WishItemLite[], { maxBudgetCents: profile?.gift_budget_cents ?? null, limit: 12 }),
@@ -330,6 +342,9 @@ export function RelationshipModule() {
 
   // ── AI ──
   async function runAi() {
+    // The digest is built for the recipient the profile names; asked before
+    // the profile has answered, it would be asked for nobody in particular.
+    if (!recipientKnown) return;
     const request = digestScope.begin();
     // Also guard the existing finally cleanup against a newer request.
     function setAiLoading(loading: boolean) {
@@ -367,7 +382,7 @@ export function RelationshipModule() {
         action={
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={openProfile} className="gap-1.5"><SlidersHorizontal className="h-4 w-4" /> {t('relationship.preferences')}</Button>
-            <Button onClick={() => runAi()} disabled={aiLoading} className="gap-1.5">
+            <Button onClick={() => runAi()} disabled={aiLoading || !recipientKnown} className="gap-1.5">
               {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />} {t('relationship.aiSuggestions')}
             </Button>
           </div>
@@ -375,7 +390,7 @@ export function RelationshipModule() {
       />
 
       {/* AI digest */}
-      {digest && (
+      {digest && recipientKnown && (
         <div className="mb-6 rounded-2xl border border-brand/30 bg-brand/5 p-5">
           <div className="flex items-start gap-3">
             <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand-text"><Sparkles className="h-5 w-5" /></div>
@@ -486,13 +501,15 @@ export function RelationshipModule() {
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">{t('relationship.giftIdeas')}</h2>
           <div className="flex flex-wrap gap-1.5">
-            {profile?.partner_member_id && wishSuggestions.length > 0 && (
+            {recipientKnown && profile?.partner_member_id && wishSuggestions.length > 0 && (
               <Button size="sm" variant="outline" onClick={() => setWishModal(true)} className="gap-1"><Gift className="h-3.5 w-3.5" /> {t('relationship.fromWishlist')}</Button>
             )}
             <Button size="sm" onClick={openNewGift} className="gap-1"><Plus className="h-3.5 w-3.5" /> {t('relationship.addIdea')}</Button>
           </div>
         </div>
-        {readableGifts.length === 0 ? (
+        {!recipientKnown ? (
+          <SkeletonList count={3} />
+        ) : readableGifts.length === 0 ? (
           <EmptyState icon={Gift} title={t('relationship.noGiftIdeasYet')}
             description={profile?.partner_member_id ? t('relationship.ideasHintWithPartner', { name: partnerName }) : t('relationship.ideasHint')}
             action={<Button onClick={openNewGift} className="gap-1.5"><Plus className="h-4 w-4" /> {t('relationship.addAGiftIdea')}</Button>} />
@@ -680,7 +697,7 @@ export function RelationshipModule() {
       </Modal>
 
       {/* From-wishlist modal */}
-      <Modal open={wishModal} onClose={() => setWishModal(false)} title={partnerName === 'your partner' ? t('relationship.addFromYourPartnersWishlist') : t('relationship.addFromWishlistOf', { name: partnerName })}>
+      <Modal open={wishModal && recipientKnown} onClose={() => setWishModal(false)} title={partnerName === 'your partner' ? t('relationship.addFromYourPartnersWishlist') : t('relationship.addFromWishlistOf', { name: partnerName })}>
         <div className="space-y-2">
           {wishSuggestions.length === 0
             ? <p className="text-sm text-muted">{t('relationship.noAvailableWishlistItemsToAdd')}</p>

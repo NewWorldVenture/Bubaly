@@ -203,13 +203,35 @@ export async function syncDateOnCalendarAction(dateId: string): Promise<Relation
     }
     if (updated.code !== SERVICE_CODES.notFound) return { ok: false, error: updated.error };
 
-    // The event is already gone (deleted from the calendar itself): clear the
-    // dangling link, as the toggle does, so the date stops claiming it.
+    // `notFound` answers two different things. The event may be gone (deleted
+    // from the calendar itself), or the service's guard on the start, end and
+    // all-day it read may have lost to a write that landed in between — a
+    // second sync of this same date, an edit on the calendar. Clearing the link
+    // on the second unlinked an event that is still there and reported success.
+    // So read the event back: only a row absent for this family is gone. One
+    // that is still there keeps its link, and the sync is refused so the family
+    // can save again (the module keeps the edit open on this error).
+    const { data: stillThere, error: recheckError } = await supabase
+      .from('calendar_events')
+      .select('id')
+      .eq('id', row.calendar_event_id)
+      .eq('family_id', ctx.active.familyId)
+      .maybeSingle();
+    if (recheckError) {
+      console.error('[relationship-action] event re-check after a missed update failed', recheckError);
+      return { ok: false, error: t('actions.couldNotUpdateYourCalendar') };
+    }
+    if (stillThere) return { ok: false, error: t('actions.theCalendarEventChangedWhileSaving') };
+
+    // Confirmed gone: clear the dangling link, as the toggle does, so the date
+    // stops claiming it — and only the link to THAT event, so one a concurrent
+    // toggle has put there since is not cleared with it.
     const { data: unlinked, error: unlinkError } = await supabase
       .from('relationship_dates')
       .update({ calendar_event_id: null })
       .eq('id', row.id)
       .eq('family_id', ctx.active.familyId)
+      .eq('calendar_event_id', row.calendar_event_id)
       .select('id');
     if (unlinkError || wroteNoRows(unlinked)) {
       console.error('[relationship-action] unlink after a missing event failed', unlinkError ?? 'no rows updated');
