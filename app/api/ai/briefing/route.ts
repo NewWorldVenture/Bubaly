@@ -26,6 +26,7 @@ import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
 import { qualifyBriefEvents, briefEventIsOccupied } from '@/lib/onboarding/first-brief';
 import { readDisplayCalendarOccurrences, type CalendarDisplayOccurrence } from '@/lib/calendar/display-occurrences';
 import { projectCalendarDay, projectCalendarWindow } from '@/lib/calendar/consumer-spans';
+import { openGroceryListIds } from '@/lib/services/groceries';
 
 function normalizeBriefTimezone(candidate: string): string {
   try {
@@ -119,7 +120,7 @@ export async function POST(req: NextRequest) {
       { data: choresDue },
       { data: schoolEvents },
       { data: sportsEvents },
-      { data: groceryItems },
+      groceryResult,
       { data: reminders },
       { data: mealPlans },
       { data: appointments },
@@ -140,7 +141,12 @@ export async function POST(req: NextRequest) {
       supabase.from('chore_assignments').select('status, due_at, member_id').eq('family_id', familyId).in('status', ['todo', 'in_progress']).lte('due_at', todayEnd),
       supabase.from('school_events').select('title, starts_at, event_type, notes, member_id').eq('family_id', familyId).gte('starts_at', todayStart).lte('starts_at', weekEnd).order('starts_at').limit(10),
       supabase.from('sports_events').select('title, starts_at, sport, team, location, member_id').eq('family_id', familyId).gte('starts_at', todayStart).lte('starts_at', weekEnd).order('starts_at').limit(10),
-      supabase.from('grocery_items').select('name, category').eq('family_id', familyId).eq('is_checked', false).limit(15),
+      // Only items on a list the family has not archived (openGroceryListIds).
+      (async () => {
+        const lists = await openGroceryListIds(supabase, familyId);
+        if (!lists.ok) return { data: null, error: lists.error };
+        return supabase.from('grocery_items').select('name, category').eq('family_id', familyId).in('list_id', lists.ids).eq('is_checked', false).limit(15);
+      })(),
       supabase.from('reminders').select('title, notes, remind_at').eq('family_id', familyId).eq('is_done', false).lte('remind_at', weekEnd).order('remind_at').limit(8),
       supabase.from('meal_plans').select('plan_date, meal_type, meals(name)').eq('family_id', familyId).gte('plan_date', today).lte('plan_date', weekEndKey).order('plan_date').limit(14),
       supabase.from('appointments').select('title, starts_at, provider, location, member_id').eq('family_id', familyId).gte('starts_at', todayStart).lte('starts_at', weekEnd).order('starts_at').limit(6),
@@ -153,7 +159,8 @@ export async function POST(req: NextRequest) {
         : withheld<MedicationScheduleRow>(),
       // On an open repeating task, completed_at records the last completion.
       supabase.from('maintenance_tasks').select('title, due_at, status, completed_at').eq('family_id', familyId).in('status', ['todo', 'in_progress']).not('due_at', 'is', null).lte('due_at', `${horizon}T23:59:59.999Z`).order('due_at').limit(20),
-      supabase.from('home_warranties').select('name, expires_on').eq('family_id', familyId).not('expires_on', 'is', null).lte('expires_on', horizon).order('expires_on').limit(20),
+      // A deleted warranty is soft-deleted (`deleted_at`), like on every other reader of this table.
+      supabase.from('home_warranties').select('name, expires_on').eq('family_id', familyId).is('deleted_at', null).not('expires_on', 'is', null).lte('expires_on', horizon).order('expires_on').limit(20),
       supabase.from('vacations').select('title, destination, start_date, end_date, status').eq('family_id', familyId).not('status', 'in', '("completed","cancelled")').not('start_date', 'is', null).limit(20),
       supabase.from('pantry_items').select('name, expires_at').eq('family_id', familyId).not('expires_at', 'is', null).lte('expires_at', horizon).order('expires_at').limit(25),
       // What Bubaly actually finished. Not for the prompt — for the answer:
@@ -172,6 +179,14 @@ export async function POST(req: NextRequest) {
       console.error('[api/ai/briefing] calendar read failed', { today: todayEventsResult.error, upcoming: tomorrowEventsResult.error });
       return NextResponse.json({ error: tr('briefing.failedToGenerateBriefing') }, { status: 503 });
     }
+    // The same for groceries: a list the brief could not read is unavailable,
+    // not "None" still needed. A returned error and a rejected read (settled
+    // above) both arrive here, before any model is asked.
+    if (groceryResult.error) {
+      console.error('[api/ai/briefing] grocery read failed', groceryResult.error);
+      return NextResponse.json({ error: tr('briefing.failedToGenerateBriefing') }, { status: 503 });
+    }
+    const groceryItems = groceryResult.data;
     const todayEvents = projectCalendarDay(todayEventsResult.data??[],today,tz);
     const tomorrowBounds=briefingCalendarBounds(today,tz,1,7);
     const tomorrowEvents = projectCalendarWindow(tomorrowEventsResult.data??[],tomorrowBounds.allDayFromDay,tomorrowBounds.allDayToDay,tz).slice(0,8);

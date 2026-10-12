@@ -67,9 +67,10 @@ export async function saveWarrantyAction(fd: FormData) {
   };
   // Only the UPDATE branch needs confirming: an insert either inserts or
   // errors, so it cannot match zero rows. Same split as `saveRow` in
-  // `dashboard/auto/actions.ts`. Audit C1-S9-47.
+  // `dashboard/auto/actions.ts`. Audit C1-S9-47. A deleted row (`deleted_at`)
+  // matches nothing, so an edit to it is refused rather than saved out of sight.
   const { data: saved, error } = id
-    ? await supabase.from('home_warranties').update(row).eq('id', id).eq('family_id', familyId).select('id')
+    ? await supabase.from('home_warranties').update(row).eq('id', id).eq('family_id', familyId).is('deleted_at', null).select('id')
     : await supabase.from('home_warranties').insert({ ...row, family_id: familyId, created_by: userId });
   if (error) throw refusalError(describeActionError(error, tr('actions.couldNotSaveThatWarranty')), refusalForError(error));
   if (id && wroteNoRows(saved)) throw new Error(tr('actions.couldNotSaveThatWarranty'));
@@ -110,7 +111,7 @@ export async function saveContractorAction(fd: FormData) {
   // errors, so it cannot match zero rows. Same split as `saveRow` in
   // `dashboard/auto/actions.ts`. Audit C1-S9-47.
   const { data: saved, error } = id
-    ? await supabase.from('home_contractors').update(row).eq('id', id).eq('family_id', familyId).select('id')
+    ? await supabase.from('home_contractors').update(row).eq('id', id).eq('family_id', familyId).is('deleted_at', null).select('id')
     : await supabase.from('home_contractors').insert({ ...row, family_id: familyId, created_by: userId });
   if (error) throw refusalError(describeActionError(error, tr('actions.couldNotSaveThatContractor')), refusalForError(error));
   if (id && wroteNoRows(saved)) throw new Error(tr('actions.couldNotSaveThatContractor'));

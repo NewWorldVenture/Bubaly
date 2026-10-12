@@ -1,11 +1,13 @@
 import type { Metadata } from 'next';
 import { AlertTriangle } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { refuseGuest } from '@/lib/auth/guest-scope';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { balanceFromLedger, bucketBalances, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
 import { WalletActivation } from '@/components/wallet/wallet-activation';
+import { readFamilyWalletIsActive } from '@/lib/wallet/family-wallet-status';
 import { TreasuryView, type TreasuryChild } from '@/components/wallet/treasury-view';
 import { ErrorState } from '@/components/ui/states';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
@@ -23,13 +25,12 @@ export default async function WalletTreasuryPage() {
   const tr = await getTranslations();
   // A server page: the locale comes from the request, as the translator does.
   const { locale } = await getLocaleContext();
-  const ctx = await requireUserContext();
+  const ctx = await requireUserContext(); refuseGuest(ctx, '/wallet/treasury');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   const dataWarnings: string[] = [];
 
-  const { data: wallet, error: walletError } = await supabase
-    .from('family_wallets').select('id, is_active').eq('family_id', familyId).maybeSingle();
+  const { data: wallet, error: walletError } = await readFamilyWalletIsActive(familyId);
   if (walletError) {
     console.error('[wallet-treasury] Wallet read failed', walletError);
     return <ErrorState message={tr('treasury.couldNotLoadTheFamily')} />;

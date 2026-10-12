@@ -178,14 +178,30 @@ begin
   exception when insufficient_privilege then null;
   end;
 
-  -- 9. Reads are untouched: the map and the history render for every member.
+  -- 9. Reads are this migration's to leave alone: the map renders for every
+  --    member. The history did too until the owner decided otherwise: under
+  --    the held 0516 a child reads their own location history (a manager, the
+  --    member or a caregiver reads a row), so the count asked for depends on
+  --    which rule is installed.
   select count(*) into n from public.member_locations where family_id = fam;
   if n < 2 then
     failures := array_append(failures, format('a child now reads only %s member_locations row(s) — the family map renders for whoever is signed in; narrowing SELECT is a product decision, not this migration''s', n));
   end if;
-  select count(*) into n from public.location_events where family_id = fam;
-  if n < 2 then
-    failures := array_append(failures, format('a child now reads only %s location_events row(s) — the day-grouped history and the alerts strip read for every member', n));
+  if exists (select 1 from pg_policy where polrelid = 'public.location_events'::regclass
+                and polname = 'History is read by a manager, the member or a caregiver') then
+    select count(*) into n from public.location_events where family_id = fam and member_id is distinct from m_kid;
+    if n <> 0 then
+      failures := array_append(failures, format('under the held 0516 a child still reads %s location_events row(s) about another member', n));
+    end if;
+    select count(*) into n from public.location_events where family_id = fam and member_id = m_kid;
+    if n < 1 then
+      failures := array_append(failures, 'under the held 0516 a child no longer reads their own location history');
+    end if;
+  else
+    select count(*) into n from public.location_events where family_id = fam;
+    if n < 2 then
+      failures := array_append(failures, format('a child now reads only %s location_events row(s) — the day-grouped history and the alerts strip read for every member', n));
+    end if;
   end if;
 
   -- 6. The erasures. No application path performs either.

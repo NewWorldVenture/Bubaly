@@ -10,6 +10,7 @@ import { chooseActiveMembership } from '@/lib/auth/active-membership';
 import type { MemberRole } from '@/lib/constants/roles';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Tables } from '@/lib/database.types';
+import { refuseGuest } from '@/lib/auth/guest-scope';
 
 export type FamilyMembership = {
   familyId: string;
@@ -243,6 +244,9 @@ export async function requirePlanLevel(minLevel: 1 | 2): Promise<UserContext> {
  */
 export async function requireFeature(key: string): Promise<UserContext> {
   const ctx = await requireUserContext();
+  // A guest does not see the household's most sensitive areas (held 0509),
+  // whatever the plan; lib/auth/guest-scope.ts lists them.
+  refuseGuest(ctx, key);
 
   // Super administrators bypass tier gating entirely (including Off).
   if (await isSuperAdmin()) return ctx;

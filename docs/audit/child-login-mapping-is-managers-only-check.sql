@@ -122,7 +122,40 @@ insert into public.family_members (id, family_id, user_id, display_name, role, i
 insert into public.family_members (id, family_id, user_id, display_name, role, is_active)
   values (:'MW',:'FD',:'UW','Ward','child',true) on conflict do nothing;
 
-grant select, insert, update, delete on public.child_logins to authenticated;
+-- Under 0297 the manager rule is RLS over the client's table grants, restated
+-- here. The held 0504 revokes those grants (the table is the server's to
+-- write), and restating them would undo exactly what it proves, so they are
+-- restated only while 0297's manager policy is the rule.
+do $grant$
+begin
+  if exists (select 1 from pg_policy where polrelid = 'public.child_logins'::regclass
+                and polname = 'Managers manage child_logins') then
+    grant select, insert, update, delete on public.child_logins to authenticated;
+  end if;
+end
+$grant$;
+
+-- One write as one signed-in user: 'refused' only for 0504's own refusal, the
+-- table privilege the client no longer holds (42501, "permission denied for
+-- table child_logins"; an RLS refusal is 42501 too, and is not this); anything
+-- else is reported as what happened.
+create or replace function pg_temp.c0504_write(p_uid uuid, p_sql text) returns text
+language plpgsql as $fn$
+declare n bigint;
+begin
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claim.sub', p_uid::text, true);
+  execute p_sql;
+  get diagnostics n = row_count;
+  return 'OK ' || n;
+exception
+  when others then
+    if sqlstate = '42501' and sqlerrm = 'permission denied for table child_logins' then
+      return 'refused';
+    end if;
+    return sqlstate || ': ' || sqlerrm;
+end
+$fn$;
 
 do $$
 declare
@@ -141,7 +174,43 @@ declare
   ctl_m     constant uuid := '00000000-0000-4000-8000-0000000000cc';
   ctl_row   constant uuid := '00000000-0000-4000-8000-0000000000cd';
   control_ok boolean := true;
+  got        text;
 begin
+  -- ── The held 0504: nobody but the server writes a mapping ───────────────
+  -- Where 0297's manager policy is gone and no client role holds a write,
+  -- every signed-in write is refused outright (42501), a manager's included:
+  -- the child in the family they DO manage, and the parent of the family
+  -- under test. Reads stay open. Each refusal must be the privilege refusal,
+  -- not some other error.
+  if not exists (select 1 from pg_policy where polrelid = 'public.child_logins'::regclass
+                    and polname = 'Managers manage child_logins')
+     and not has_table_privilege('authenticated', 'public.child_logins', 'insert') then
+    perform set_config('role','authenticated', true);
+    for got in
+      select who || ' ' || verb from (values
+        (kid_u, 'the child, in the family they manage', 'insert', format('insert into public.child_logins (id, family_id, member_id, user_id, username, created_by) values (%L, %L, %L, %L, %L, %L)', ctl_row, ctl_fam, ctl_m, ctl_u, 'ward-of-the-kid', kid_u)),
+        (parent_u, 'the parent', 'update', format('update public.child_logins set username = %L where id = %L', 'sibling2', row_id)),
+        (parent_u, 'the parent', 'delete', format('delete from public.child_logins where id = %L', row_id)),
+        (parent_u, 'the parent', 'insert', format('insert into public.child_logins (family_id, member_id, user_id, username, created_by) values (%L, %L, %L, %L, %L)', fam, third_m, third_u, 'third-login', parent_u))
+      ) as v(uid, who, verb, stmt)
+      where (pg_temp.c0504_write(uid, stmt)) is distinct from 'refused'
+    loop
+      failures := array_append(failures, format('0504: %s was not refused outright', got));
+    end loop;
+    perform set_config('role','authenticated', true);
+    perform set_config('request.jwt.claim.sub', kid_u::text, true);
+    select count(*) into n from public.child_logins where id = row_id;
+    if n <> 1 then
+      failures := array_append(failures, 'a child can no longer READ a login mapping — that is a change of decision; update finalaudit.md and this probe');
+    end if;
+    perform set_config('role','postgres', true);
+    if array_length(failures, 1) is not null then
+      raise exception 'child login mapping boundary failed: %', array_to_string(failures, ' | ');
+    end if;
+    raise notice 'OK child_logins (0504): nobody but the server writes a mapping — the child in the family they manage and the parent were each refused an INSERT, UPDATE or DELETE outright; reads stay open';
+    return;
+  end if;
+
   -- ── As the child ────────────────────────────────────────────────────────
   perform set_config('role','authenticated', true);
   perform set_config('request.jwt.claim.sub', kid_u::text, true);
