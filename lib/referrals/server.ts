@@ -284,6 +284,38 @@ async function existingRewardCredit(
   throw new Error(`more than ${REWARD_LOOKUP_PAGES * 100} balance transactions; cannot tell whether this referral was already credited`);
 }
 
+type RewardAttempt = {
+  customer: string;
+  params: { amount: number; currency: string; description: string; metadata: { referral_id: string; family_id: string; side: ReferralRewardSide } };
+  idempotencyKey: string;
+};
+
+function rewardAttemptsFrom(metadata: unknown): Record<string, unknown> {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return {};
+  const raw = (metadata as Record<string, unknown>).reward_attempts;
+  if (raw === undefined) return {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Referral attempt ownership is malformed');
+  return raw as Record<string, unknown>;
+}
+
+function rewardAttemptFrom(metadata: unknown, referralId: string, familyId: string, side: ReferralRewardSide): RewardAttempt | null {
+  const raw = rewardAttemptsFrom(metadata)[side];
+  if (raw === undefined) return null;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Referral attempt is malformed');
+  const value = raw as Partial<RewardAttempt>;
+  const params = value.params;
+  if (typeof value.customer !== 'string' || !value.customer || value.idempotencyKey !== rewardIdempotencyKey(referralId, side)
+    || !params || typeof params !== 'object' || Array.isArray(params) || !Number.isSafeInteger(params.amount) || params.amount >= 0
+    || typeof params.currency !== 'string' || !params.currency || typeof params.description !== 'string'
+    || params.metadata?.referral_id !== referralId || params.metadata?.family_id !== familyId || params.metadata?.side !== side) {
+    throw new Error('Referral attempt ownership does not match this reward');
+  }
+  return { customer: value.customer, idempotencyKey: value.idempotencyKey, params: {
+    amount: params.amount, currency: params.currency, description: params.description,
+    metadata: { referral_id: referralId, family_id: familyId, side },
+  } };
+}
+
 async function customerRefForFamily(service: DB, familyId: string): Promise<{ ref: string | null; error: unknown }> {
   const { data, error } = await service.from('billing_customers').select('customer_ref').eq('family_id', familyId).maybeSingle();
   return { ref: data?.customer_ref ?? null, error };
@@ -323,25 +355,33 @@ export async function rewardReferral(service: DB, referralId: string, deps: Rewa
 
   let metadata: unknown = row.metadata;
   const persistMetadata = async (next: Record<string, unknown>): Promise<string | null> => {
-    const { data, error } = await service
-      .from('referrals')
-      .update({ metadata: next as ReferralMetadata })
-      .eq('id', referralId)
-      // A run that started before another one flipped the row to rewarded must
-      // not write its stale copy of the record over the finished one.
-      .eq('status', 'converted')
-      .select('id')
-      .maybeSingle();
+    const query = service.from('referrals').update({ metadata: next as ReferralMetadata })
+      .eq('id', referralId).eq('status', 'converted');
+    // Compare the whole previous JSON document, not just converted status: an
+    // overlapping worker must not replace either side's saved attempt or id.
+    const guarded = metadata == null ? query.is('metadata', null) : query.eq('metadata', JSON.stringify(metadata));
+    const { data, error } = await guarded.select('id').maybeSingle();
     if (error || !data) return error?.message ?? 'referral row vanished';
     metadata = next;
     return null;
   };
 
   for (const side of rewardSidesOwed(rewardRecordFrom(metadata))) {
+    // A same-attempt CAS loser can refresh the entire record below; another
+    // side already settled in that refresh must stay settled.
+    if (!rewardSidesOwed(rewardRecordFrom(metadata)).includes(side)) continue;
     const amount = side === 'referrer' ? row.referrer_reward_cents : row.referred_reward_cents;
     const familyId = side === 'referrer' ? row.referrer_family_id : row.referred_family_id;
-
-    if (!Number.isFinite(amount) || amount <= 0) {
+    const creditFailed = (err: unknown): RewardOutcome => {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('[referrals/reward] Stripe credit failed', { referralId, side, familyId, error: message });
+      return { outcome: 'credit_failed', referralId, side, error: message };
+    };
+    let ownedRaw: unknown;
+    try { ownedRaw = rewardAttemptsFrom(metadata)[side]; } catch (err) { return creditFailed(err); }
+    // A config edit to zero cannot erase a possibly submitted positive credit.
+    const previousCustomer = side === 'referrer' ? rewardRecordFrom(metadata).referrer_customer : rewardRecordFrom(metadata).referred_customer;
+    if ((!Number.isFinite(amount) || amount <= 0) && ownedRaw === undefined && !previousCustomer) {
       const err = await persistMetadata(withRewardRecord(metadata, { [`${side}_skipped`]: 'zero_amount' }));
       if (err) return { outcome: 'persist_failed', referralId, error: err };
       continue;
@@ -351,7 +391,15 @@ export async function rewardReferral(service: DB, referralId: string, deps: Rewa
       return { outcome: 'missing_customer', referralId, side };
     }
 
-    const { ref: storedRef, error: customerError } = await customerRefForFamily(service, familyId);
+    const record = rewardRecordFrom(metadata);
+    const attempted = (side === 'referrer' ? record.referrer_customer : record.referred_customer) ?? null;
+    let attempt: RewardAttempt | null;
+    try { attempt = rewardAttemptFrom(metadata, referralId, familyId, side); } catch (err) { return creditFailed(err); }
+    // An unresolved owned attempt remains on its original customer even when
+    // a later checkout changes (or temporarily removes) the billing reference.
+    const { ref: storedRef, error: customerError } = attempt
+      ? { ref: attempt.customer, error: null }
+      : await customerRefForFamily(service, familyId);
     if (customerError) {
       console.error('[referrals/reward] billing customer read failed', { referralId, side, familyId, error: customerError });
       return { outcome: 'read_failed', referralId };
@@ -362,14 +410,7 @@ export async function rewardReferral(service: DB, referralId: string, deps: Rewa
       return { outcome: 'missing_customer', referralId, side };
     }
 
-    const record = rewardRecordFrom(metadata);
-    const attempted = (side === 'referrer' ? record.referrer_customer : record.referred_customer) ?? null;
-    const creditFailed = (err: unknown): RewardOutcome => {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error('[referrals/reward] Stripe credit failed', { referralId, side, familyId, error: message });
-      return { outcome: 'credit_failed', referralId, side, error: message };
-    };
-
+    let creditCustomer = customerRef;
     let stripe: StripeCustomerCredits;
     let currency: string;
     let txnId: string | null = null;
@@ -383,44 +424,70 @@ export async function rewardReferral(service: DB, referralId: string, deps: Rewa
         console.warn('[referrals/reward] Stripe customer is deleted; leaving converted', { referralId, side, familyId });
         return { outcome: 'missing_customer', referralId, side };
       }
-      currency = customer.currency ?? 'usd';
-      // Where this side's credit may already be: the customer an earlier attempt
-      // was made on, and the one the family has now. A customer Stripe no longer
-      // has holds no credit to find.
-      for (const ref of [...new Set([attempted, customerRef].filter((c): c is string => Boolean(c)))]) {
-        try {
-          txnId = await existingRewardCredit(stripe, ref, referralId, side, since);
-        } catch (lookupError) {
-          if (ref !== customerRef && (lookupError as { code?: string })?.code === 'resource_missing') continue;
-          throw lookupError;
-        }
+      currency = attempt?.params.currency ?? customer.currency ?? 'usd';
+      // Every known prior customer must be reconciled. An unavailable legacy
+      // history cannot prove the old request made no credit: leave converted
+      // for manual reconciliation instead of replacing that unknown attempt.
+      for (const ref of [...new Set((attempt ? [attempt.customer] : [attempted, customerRef]).filter((c): c is string => Boolean(c)))]) {
+        txnId = await existingRewardCredit(stripe, ref, referralId, side, since);
         if (txnId) break;
+        if (ref === attempted) creditCustomer = ref;
+      }
+      if (!attempt && creditCustomer !== customerRef) {
+        const prior = await stripe.customers.retrieve(creditCustomer);
+        if (prior.deleted) throw new Error('Prior referral customer is unavailable; reconcile its attempt before replacement');
+        currency = prior.currency ?? 'usd';
       }
     } catch (err) {
       return creditFailed(err);
     }
 
     if (!txnId) {
-      if (attempted !== customerRef) {
-        // Recorded before the credit, so that if its answer is lost the retry
-        // looks on this customer even if the family's customer changes first.
-        const recordError = await persistMetadata(withRewardRecord(metadata, { [`${side}_customer`]: customerRef }));
-        if (recordError) return { outcome: 'persist_failed', referralId, error: recordError };
+      // A prior pointer with no observable transaction is an unknown outcome,
+      // not proof that the provider never received the old request.
+      if (!attempt && attempted) return creditFailed(new Error('Prior referral attempt has no confirmed outcome; manual reconciliation required'));
+      let maySubmit = false;
+      if (!attempt) {
+        const wanted: RewardAttempt = { customer: creditCustomer, params: {
+          amount: -Math.round(amount), currency, description: `Bubaly referral credit (${row.code})`,
+          metadata: { referral_id: referralId, family_id: familyId, side },
+        }, idempotencyKey: rewardIdempotencyKey(referralId, side) };
+        const next = withRewardRecord(metadata, { [`${side}_customer`]: creditCustomer });
+        next.reward_attempts = { ...rewardAttemptsFrom(metadata), [side]: wanted };
+        const recordError = await persistMetadata(next);
+        if (recordError) {
+          const { data: current, error } = await service.from('referrals').select('status, metadata').eq('id', referralId).maybeSingle();
+          if (error || !current || current.status !== 'converted') return { outcome: 'persist_failed', referralId, error: recordError };
+          let owned: RewardAttempt | null;
+          try { owned = rewardAttemptFrom(current.metadata, referralId, familyId, side); } catch (err) { return creditFailed(err); }
+          if (!owned || owned.customer !== wanted.customer || owned.idempotencyKey !== wanted.idempotencyKey
+            || JSON.stringify(owned.params) !== JSON.stringify(wanted.params)) return creditFailed(new Error('Another worker owns this referral attempt; retry from its saved record'));
+          // A same-attempt worker may continue with the immutable provider
+          // parameters, but only from the current whole-metadata snapshot.
+          metadata = current.metadata;
+          txnId = (side === 'referrer' ? rewardRecordFrom(metadata).referrer_txn : rewardRecordFrom(metadata).referred_txn) ?? null;
+          attempt = owned;
+          // Our first history snapshot may predate the winning worker's credit.
+          // Reconcile fresh history, but never submit the saved attempt again.
+          if (!txnId) {
+            try { txnId = await existingRewardCredit(stripe, owned.customer, referralId, side, since); }
+            catch (err) { return creditFailed(err); }
+          }
+        } else { attempt = wanted; maySubmit = true; }
       }
-      try {
-        const txn = await stripe.customers.createBalanceTransaction(
-          customerRef,
-          {
-            amount: -Math.round(amount),
-            currency,
-            description: `Bubaly referral credit (${row.code})`,
-            metadata: { referral_id: referralId, family_id: familyId, side },
-          },
-          { idempotencyKey: rewardIdempotencyKey(referralId, side) },
-        );
-        txnId = txn.id;
-      } catch (err) {
-        return creditFailed(err);
+      if (!txnId) {
+        // Only the worker that acquired this attempt may submit it once. Key
+        // retention cannot prove an old request is absent after a lost answer.
+        if (!maySubmit) return creditFailed(new Error('Saved referral attempt has no confirmed outcome; manual reconciliation required'));
+        try {
+          const txn = await stripe.customers.createBalanceTransaction(
+            attempt.customer, attempt.params,
+            { idempotencyKey: rewardIdempotencyKey(referralId, side) },
+          );
+          txnId = txn.id;
+        } catch (err) {
+          return creditFailed(err);
+        }
       }
     }
 
@@ -436,13 +503,11 @@ export async function rewardReferral(service: DB, referralId: string, deps: Rewa
 
   // Both sides confirmed by Stripe (or deliberately skipped) → rewarded. The
   // status guard keeps a concurrent retry from double-flipping.
-  const { data: flipped, error: flipError } = await service
-    .from('referrals')
+  const flipQuery = service.from('referrals')
     .update({ status: 'rewarded', rewarded_at: now.toISOString(), metadata: metadata as ReferralMetadata })
-    .eq('id', referralId)
-    .eq('status', 'converted')
-    .select('id')
-    .maybeSingle();
+    .eq('id', referralId).eq('status', 'converted');
+  const flipGuard = metadata == null ? flipQuery.is('metadata', null) : flipQuery.eq('metadata', JSON.stringify(metadata));
+  const { data: flipped, error: flipError } = await flipGuard.select('id').maybeSingle();
   if (flipError || !flipped) {
     const message = flipError?.message ?? 'referral was no longer converted';
     console.error('[referrals/reward] rewarded flip failed', { referralId, error: message });
@@ -502,12 +567,13 @@ export async function recordReferralEmailInvite(service: DB, input: {
 
   const existing = (rows ?? []).find((r) => (r.referred_email ?? '').toLowerCase() === email);
   if (existing) {
-    const { data, error: updateError } = await service
-      .from('referrals')
+    const query = service.from('referrals')
       .update({ metadata: withReferralEmailSent(existing.metadata, now) as ReferralMetadata })
-      .eq('id', existing.id)
-      .select('id')
-      .maybeSingle();
+      .eq('id', existing.id).eq('status', existing.status);
+    // A send read may predate a reward claim, transaction or final status.
+    // Never erase that newer record with a stale whole-metadata document.
+    const guarded = existing.metadata == null ? query.is('metadata', null) : query.eq('metadata', JSON.stringify(existing.metadata));
+    const { data, error: updateError } = await guarded.select('id').maybeSingle();
     if (updateError || !data) {
       console.error('[referrals/email] referral send record failed', { id: existing.id, error: updateError });
       return { ok: false, reason: 'write_failed' };
@@ -550,7 +616,7 @@ export async function rollbackReferralEmailInvite(service: DB, input: { rowId: s
     }
     return;
   }
-  const { data, error } = await service.from('referrals').select('metadata').eq('id', input.rowId).maybeSingle();
+  const { data, error } = await service.from('referrals').select('status, metadata').eq('id', input.rowId).maybeSingle();
   if (error || !data) {
     console.error('[referrals/email] invite rollback read failed', { id: input.rowId, error });
     return;
@@ -558,11 +624,12 @@ export async function rollbackReferralEmailInvite(service: DB, input: { rowId: s
   const stamp = input.sentAt.toISOString();
   const kept = referralEmailSendTimes(data.metadata).filter((iso) => iso !== stamp);
   const base = data.metadata && typeof data.metadata === 'object' && !Array.isArray(data.metadata) ? { ...(data.metadata as Record<string, unknown>) } : {};
-  const { data: unstamped, error: updateError } = await service
-    .from('referrals')
+  const query = service.from('referrals')
     .update({ metadata: { ...base, email_sent_at: kept } as ReferralMetadata })
-    .eq('id', input.rowId)
-    .select('id');
+    .eq('id', input.rowId).eq('status', data.status);
+  // Failed delivery cannot undo a newer reward or another send's timestamp.
+  const guarded = data.metadata == null ? query.is('metadata', null) : query.eq('metadata', JSON.stringify(data.metadata));
+  const { data: unstamped, error: updateError } = await guarded.select('id');
   if (updateError || wroteNoRows(unstamped)) {
     console.error('[referrals/email] invite rollback update failed', { id: input.rowId, error: updateError ?? 'no rows updated' });
   }

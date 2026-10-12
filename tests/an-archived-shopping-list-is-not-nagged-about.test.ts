@@ -50,6 +50,7 @@ vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => (
 vi.mock('@/lib/metric/time-saved-server', () => ({ countHandledThisWeek: async () => ({ total: 0 }) }));
 import { POST as dailyBriefing } from '@/app/api/ai/briefing/route';
 import { POST as weeklyBriefing } from '@/app/api/ai/weekly-briefing/route';
+import { getMessages, translate } from '@/lib/i18n/messages';
 
 type DB = SupabaseClient<Database>;
 const NOW = new Date('2026-09-07T12:00:00Z');
@@ -148,5 +149,52 @@ describe('the briefings', () => {
     expect(sent).toContain('Milk');
     expect(sent).not.toContain('Party hats');
     expect(sent).not.toContain('Rye flour');
+  });
+
+  // AUD-1022-L2. A list the briefing could not read is not an empty list: told
+  // "GROCERIES STILL NEEDED (0)", the model writes a confident "nothing to buy".
+  // Both ways a read fails: the database answers an error, or the request never
+  // completes and the promise rejects (settleAll turns that into an error too).
+  const RAW = 'raw-detail-08006 connection to 10.0.0.7 lost';
+
+  /** The household, with one grocery table's reads failing the given way. */
+  function failing(table: 'grocery_lists' | 'grocery_items', mode: 'returns an error' | 'rejects') {
+    return new Proxy(db, {
+      get(target, key, receiver) {
+        if (key !== 'from') return Reflect.get(target, key, receiver);
+        return (name: string) => {
+          if (name !== table) return target.from(name);
+          const chain: Record<string, unknown> = {};
+          for (const method of ['select', 'eq', 'neq', 'is', 'in', 'not', 'gte', 'lte', 'order', 'limit']) chain[method] = () => chain;
+          chain.then = (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => (mode === 'rejects'
+            ? Promise.reject(new TypeError(`fetch failed: ${RAW}`))
+            : Promise.resolve({ data: null, error: { code: '08006', message: RAW, details: null, hint: null } })).then(resolve, reject);
+          return chain;
+        };
+      },
+    });
+  }
+
+  const routes = {
+    daily: { post: dailyBriefing, url: 'http://localhost/api/ai/briefing', body: { type: 'morning' }, key: 'briefing.failedToGenerateBriefing', log: '[api/ai/briefing] grocery read failed' },
+    weekly: { post: weeklyBriefing, url: 'http://localhost/api/ai/weekly-briefing', body: {}, key: 'weeklyBriefing.failedToGenerateWeeklyBriefing', log: '[api/ai/weekly-briefing] grocery read failed' },
+  } as const;
+  const cases = (['daily', 'weekly'] as const).flatMap((route) => (['grocery_lists', 'grocery_items'] as const)
+    .flatMap((table) => (['returns an error', 'rejects'] as const).map((mode) => [route, table, mode] as const)));
+
+  it.each(cases)('the %s briefing is unavailable, not empty, when the %s read %s', async (route, table, mode) => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mocks.server.mockResolvedValue(failing(table, mode));
+    const { post, url, body, key, log } = routes[route];
+
+    const res = await post(new NextRequest(url, { method: 'POST', body: JSON.stringify(body) }));
+
+    expect(res.status).toBe(503);
+    const answer = await res.json();
+    // The route's own message, in the reader's language; never the database's words.
+    expect(answer).toEqual({ error: translate(getMessages('en-US'), key) });
+    expect(JSON.stringify(answer)).not.toContain('raw-detail');
+    expect(mocks.complete).not.toHaveBeenCalled();
+    expect(err).toHaveBeenCalledWith(log, expect.objectContaining({ message: expect.stringContaining(RAW) }));
   });
 });

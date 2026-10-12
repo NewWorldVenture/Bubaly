@@ -289,20 +289,26 @@ describe('a family whose Stripe customer changed between attempts', () => {
     expect(control.credits('cus_referrer')).toHaveLength(0);
   });
 
-  it('credits the current customer when the first one is gone from Stripe', async () => {
+  it('holds an unavailable legacy customer history instead of guessing that replacement is safe', async () => {
     seed();
     db.table('billing_customers').find((r) => r.family_id === REFERRER)!.customer_ref = 'cus_referrer_first';
     const { stripe, control } = fakeStripe();
-    control.listFails = true; // the first attempt never reached a credit
+    control.listFails = true; // This first read failed before any attempt was saved.
     await rewardReferral(client, REFERRAL_ID, { stripe });
     control.listFails = false;
     expect(rewardRecordFrom(row().metadata).referrer_customer ?? null).toBeNull();
-    // A first attempt that did record its customer, which Stripe then deleted:
+    // The legacy pointer alone does not say whether the old answer was lost.
+    control.txns.push({ id: 'cbtxn_legacy_unknown', customer: 'cus_deleted', amount: -1000,
+      metadata: { referral_id: REFERRAL_ID, family_id: REFERRER, side: 'referrer' }, created: AFTER_CONVERSION });
     db.table('referrals')[0].metadata = { reward: { referrer_customer: 'cus_deleted' } };
     control.gone.add('cus_deleted');
+    control.forgetKeys();
     db.table('billing_customers').find((r) => r.family_id === REFERRER)!.customer_ref = 'cus_referrer';
-    expect(await rewardReferral(client, REFERRAL_ID, { stripe })).toEqual({ outcome: 'rewarded', referralId: REFERRAL_ID });
-    expect(control.credits('cus_referrer')).toHaveLength(1);
+    expect(await rewardReferral(client, REFERRAL_ID, { stripe })).toMatchObject({ outcome: 'credit_failed', side: 'referrer' });
+    expect(control.credits('cus_referrer')).toHaveLength(0);
+    expect(control.credits('cus_deleted')).toHaveLength(1);
+    expect(row().status).toBe('converted');
+    expect(rewardRecordFrom(row().metadata).referrer_customer).toBe('cus_deleted');
   });
 
   it('when the event\'s customer stood in for a missing billing row, a lost answer is not credited twice', async () => {

@@ -22,7 +22,7 @@ import { isManager } from '@/lib/constants/roles';
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument } from '@/lib/storage/documents';
 import { MANUAL_CATEGORY, WARRANTY_CATEGORY } from '@/lib/home/asset-detail';
 import { writeMaintenanceCompletion } from '@/lib/home/maintenance-rollover';
-import { removeHomeAsset } from '@/lib/home/remove-asset';
+import { assetDocumentFolder, removeHomeAsset } from '@/lib/home/remove-asset';
 import type { Tables } from '@/lib/database.types';
 import { preOpenWindow } from '@/lib/utils/open-url';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -429,7 +429,9 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
     const supabase = createClient();
     const manual = docKind === MANUAL_CATEGORY;
     const { path, error: uploadError } = await uploadFamilyDocument(supabase, {
-      familyId, folder: `${manual ? 'manuals' : 'warranties'}/${asset.id}`, file,
+      // The folder removeHomeAsset sweeps after the asset is gone: a file
+      // attached while it is being deleted is still found there.
+      familyId, folder: assetDocumentFolder(manual ? 'manuals' : 'warranties', asset.id), file,
     });
     if (uploadError || !path) {
       setUploading(false);

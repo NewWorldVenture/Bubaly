@@ -18,7 +18,7 @@
 // so its files stay findable and a second press finishes the job.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { removeHomeAsset } from '@/lib/home/remove-asset';
+import { ASSET_DOCUMENT_KINDS, removeHomeAsset } from '@/lib/home/remove-asset';
 import { createInMemorySupabase, type InMemorySupabase, type Row } from './helpers/in-memory-supabase';
 import { at, bodyOf } from './helpers/source-order';
 
@@ -217,5 +217,130 @@ describe('the Home page deletes an asset through it', () => {
 
   it('says so when the delete did not happen', () => {
     expect(at(removeAsset, 'if (!removed.ok)')).toBeLessThan(at(removeAsset, "success(tr('homeModule.assetRemoved'))"));
+  });
+});
+
+// AUD-1022-L1. The asset delete is its own statement, so the cascade takes
+// every row linked at THAT moment: rows a capped read never returned, and rows
+// committed after the last read. Each loses the row that hid its object from a
+// child (0303 lets the family read an object no row names).
+describe('files attached while the asset is being deleted', () => {
+  const LATE = `${FAMILY}/warranties/asset-fridge/1790000000009-late-policy.pdf`;
+  const lateRow = { id: 'doc-late', family_id: FAMILY, asset_id: 'asset-fridge', title: 'Late policy', category: 'warranty', is_secure: true, storage_path: LATE };
+
+  /** The same client, with `commit` run as the asset DELETE is issued: after every read of the asset's files. */
+  function committingBeforeAssetDelete(home: Household, commit: () => void) {
+    const base = client(home) as unknown as { from: (table: string) => unknown; storage: unknown };
+    return {
+      ...base,
+      from: (table: string) => {
+        const query = base.from(table) as { delete: () => unknown };
+        if (table !== 'home_assets') return query;
+        const remove = query.delete.bind(query);
+        query.delete = () => { commit(); return remove(); };
+        return query;
+      },
+    } as unknown as Parameters<typeof removeHomeAsset>[0];
+  }
+
+  /** A vaulted file uploaded object-first, row-second, as the Home page does. */
+  function attachLate(home: Household) {
+    home.store.objects.add(LATE);
+    home.db.table('documents').push({ ...lateRow });
+  }
+
+  it('removes the file of a row committed after the last read, which the cascade took', async () => {
+    const home = household();
+    let committed = false;
+    const result = await removeHomeAsset(committingBeforeAssetDelete(home, () => { committed = true; attachLate(home); }), FAMILY, 'asset-fridge');
+
+    expect(committed).toBe(true);
+    expect(result).toEqual({ ok: true });
+    expect(home.db.table('documents').some((doc) => doc.id === 'doc-late')).toBe(false);
+    // The row went with the asset, so the object must not outlive it.
+    expect(home.store.objects.has(LATE)).toBe(false);
+    expect(home.db.table('home_assets').some((asset) => asset.id === 'asset-fridge')).toBe(false);
+  });
+
+  it('reports a sweep it could not finish, and a second press finishes it', async () => {
+    const home = household();
+    home.store.refuse.add(LATE);
+    const first = await removeHomeAsset(committingBeforeAssetDelete(home, () => attachLate(home)), FAMILY, 'asset-fridge');
+
+    expect(first.ok).toBe(false);
+    expect(first).toHaveProperty('error');
+    expect(home.store.objects.has(LATE)).toBe(true);
+
+    home.store.refuse.clear();
+    const retry = await removeHomeAsset(client(home), FAMILY, 'asset-fridge');
+
+    // This press deleted no asset, and says so; the file is gone all the same.
+    expect(retry).toEqual({ ok: false, notSaved: true });
+    expect(home.store.objects.has(LATE)).toBe(false);
+  });
+
+  // Stored outside the asset's folders (linked some other way than the Home
+  // page's upload), so only reading every row can find these files.
+  it('reads every linked row when the server returns fewer than a page', async () => {
+    const db = createInMemorySupabase({ maxRows: 2 });
+    const replace = db.replace.bind(db);
+    db.replace = (name: string, rows: Row[]) => {
+      if (name === 'home_assets') {
+        const kept = new Set(rows.map((row) => row.id));
+        const gone = new Set(db.table('home_assets').filter((row) => !kept.has(row.id)).map((row) => row.id));
+        replace('documents', db.table('documents').filter((doc) => !gone.has(doc.asset_id)));
+      }
+      replace(name, rows);
+    };
+    const paths = Array.from({ length: 5 }, (_, i) => `${FAMILY}/cloud/179000000001${i}-linked.pdf`);
+    db.seed('home_assets', [{ id: 'asset-fridge', family_id: FAMILY, name: 'Fridge' }]);
+    db.seed('documents', paths.map((path, i) => ({ id: `doc-page-${i}`, family_id: FAMILY, asset_id: 'asset-fridge', category: 'manual', is_secure: true, storage_path: path })));
+    const home: Household = { db, store: bucket(paths), failDocumentReads: false, refuseDocumentDeletes: false };
+
+    expect(await removeHomeAsset(client(home), FAMILY, 'asset-fridge')).toEqual({ ok: true });
+    expect([...home.store.objects]).toEqual([]);
+    expect(db.table('documents')).toEqual([]);
+  });
+
+  it('leaves an object in the asset folder that a surviving row still names', async () => {
+    const home = household();
+    const kept = `${FAMILY}/manuals/asset-fridge/1790000000020-kept.pdf`;
+    home.store.objects.add(kept);
+    home.db.table('documents').push({ id: 'doc-unlinked', family_id: FAMILY, asset_id: null, title: 'Kept', category: 'manual', is_secure: true, storage_path: kept });
+
+    expect(await removeHomeAsset(client(home), FAMILY, 'asset-fridge')).toEqual({ ok: true });
+    expect(home.store.objects.has(kept)).toBe(true);
+    expect(home.db.table('documents').some((doc) => doc.id === 'doc-unlinked')).toBe(true);
+  });
+
+  it('leaves the folders of an asset whose delete did not happen', async () => {
+    const home = household();
+    // Uploaded, row not yet inserted: the asset still exists, so it may yet be.
+    const inFlight = `${FAMILY}/warranties/asset-fridge/1790000000030-in-flight.pdf`;
+    home.store.objects.add(inFlight);
+    const base = client(home) as unknown as { from: (table: string) => unknown; storage: unknown };
+    const filtered = {
+      ...base,
+      from: (table: string) => (table === 'home_assets'
+        ? { delete: () => answering(FILTERED), select: (list: string) => home.db.from(table).select(list) }
+        : base.from(table)),
+    } as unknown as Parameters<typeof removeHomeAsset>[0];
+
+    expect(await removeHomeAsset(filtered, FAMILY, 'asset-fridge')).toEqual({ ok: false, notSaved: true });
+    expect(home.store.objects.has(inFlight)).toBe(true);
+    expect(home.db.table('home_assets').some((asset) => asset.id === 'asset-fridge')).toBe(true);
+  });
+});
+
+describe('the Home page uploads an asset’s files where the sweep looks', () => {
+  const source = readFileSync('components/modules/home-module.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/[^\n]*/g, '');
+  const handleFile = bodyOf(source, 'async function handleFile', 'const { error: insertError }');
+
+  it('names the folder through assetDocumentFolder, one of the swept kinds', () => {
+    expect(at(handleFile, 'uploadFamilyDocument(supabase, {'))
+      .toBeLessThan(at(handleFile, "folder: assetDocumentFolder(manual ? 'manuals' : 'warranties', asset.id)"));
+    expect([...ASSET_DOCUMENT_KINDS].sort()).toEqual(['manuals', 'warranties']);
   });
 });

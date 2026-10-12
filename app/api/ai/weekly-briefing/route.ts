@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
       { data: appointments },
       { data: choresDueAhead },
       { data: mealPlans },
-      { data: groceryItems },
+      groceryResult,
       { data: reminders },
       { data: recapChores },
       { data: recapEvents },
@@ -82,6 +82,15 @@ export async function POST(req: NextRequest) {
       supabase.from('chore_assignments').select('status, due_at, member_id').eq('family_id', familyId).gte('due_at', w.recapStart).lte('due_at', w.recapEnd),
       readCalendarOccurrences(supabase, familyId, instantCalendarBounds(w.recapStart, w.recapEnd, tz), tz, { columns: ['title', 'starts_at', 'category'], limit: 40 }),
     ]);
+
+    // A grocery list that could not be read is unavailable, not "- none" still
+    // needed. A returned error and a rejected read (settled above) both arrive
+    // here, before any model is asked.
+    if (groceryResult.error) {
+      console.error('[api/ai/weekly-briefing] grocery read failed', groceryResult.error);
+      return NextResponse.json({ error: t('weeklyBriefing.failedToGenerateWeeklyBriefing') }, { status: 503 });
+    }
+    const groceryItems = groceryResult.data;
 
     const memberMap = new Map((members ?? []).map((m) => [m.id, m]));
     const firstName = ctx.active.member?.display_name?.split(' ')[0] ?? 'there';
