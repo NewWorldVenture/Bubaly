@@ -712,7 +712,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
           <Field label={tr('recipes.category')}>
             {(id) => (
               <select id={id} name="category" defaultValue={recipe?.category ?? 'dinner'}
-                className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
+                className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand focus:outline-none">
                 {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.emoji} {tr(c.labelKey)}</option>)}
               </select>
             )}
@@ -720,7 +720,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
           <Field label={tr('recipes.difficulty')}>
             {(id) => (
               <select id={id} name="difficulty" defaultValue={recipe?.difficulty ?? 'medium'}
-                className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
+                className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand focus:outline-none">
                 {DIFFICULTIES.map((d) => <option key={d.id} value={d.id}>{tr(d.labelKey)}</option>)}
               </select>
             )}

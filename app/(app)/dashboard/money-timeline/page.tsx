@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { refuseGuest } from '@/lib/auth/guest-scope';
 import { requireAal2 } from '@/lib/auth/require-aal2';
 import { createServer } from '@/lib/supabase/server';
 import { loadMoneyTimeline } from '@/lib/finance/timeline-load';
@@ -23,7 +24,7 @@ export const dynamic = 'force-dynamic';
  * plain-language insights the family can acknowledge or dismiss.
  */
 export default async function MoneyTimelinePage() {
-  const ctx = await requireUserContext();
+  const ctx = await requireUserContext(); refuseGuest(ctx, '/dashboard/money-timeline');
   await requireAal2(ctx, 'money', '/dashboard/money-timeline');
   const supabase = await createServer();
   const familyId = ctx.active.familyId;

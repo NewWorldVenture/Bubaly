@@ -6,6 +6,7 @@ import { notifySessionStorageChanged } from './session-change';
 import { callbackAdmissionMaterial, parseCallbackAdmissionCookies } from './callback-witness';
 import { pkceInitiationCookieName, readPkceInitiationSlot } from './pkce-initiation';
 import { isLikelyE164, isValidOtp } from './otp';
+import { admitPasswordOperation } from './password-origin-admission';
 
 type Cookie = { name: string; value: string; options: CookieOptions };
 type Tokens = { access_token: string; refresh_token: string };
@@ -72,6 +73,7 @@ async function withOwnedClient(
   canAdoptSession: (session: Session) => boolean = () => true,
   boundary?: OwnedSessionBoundary,
   ownership?: { allowSessionRefresh: boolean; onLost: () => void },
+  passwordAdmission = false,
 ): Promise<AuthTokenResponsePassword> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const key = `sb-${new URL(url).hostname.split('.')[0]}-auth-token`;
@@ -103,6 +105,11 @@ async function withOwnedClient(
     ownership?.onLost();
     return false;
   };
+  const admitted = passwordAdmission ? await admitPasswordOperation(key, owns) : undefined;
+  const sdkKey = admitted ? `${key}-password-${admitted.nonce}` : key;
+  const fromSdk = (name: string) => admitted && name.startsWith(sdkKey) ? key + name.slice(sdkKey.length) : name;
+  const toSdk = (name: string) => admitted && (isSession(name)) ? sdkKey + name.slice(key.length) : name;
+  const staged: Cookie[] = [];
   if (!boundary) {
     // A deliberate password/child/SMS login claims the same pending decision slot
     // before any await. Its marker cannot authorize PKCE exchange, and does not
@@ -123,20 +130,35 @@ async function withOwnedClient(
   let timer: ReturnType<typeof setTimeout> | undefined;
   const client = createBrowserClient(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
     isSingleton: false,
-    cookieOptions: { ...durableCookieOptions(isSecureOrigin(window.location.origin)), name: key },
+    cookieOptions: { ...durableCookieOptions(isSecureOrigin(window.location.origin)), name: sdkKey },
     auth: { persistSession: true, autoRefreshToken: false, detectSessionInUrl: false, skipAutoInitialize: true, flowType: 'pkce' },
     global: { fetch: (input, init) => {
       if (!exposed || !owns()) throw interrupted();
       return fetch(input, { ...init, signal: controller.signal, credentials: 'omit' });
     } },
     cookies: {
-      getAll: () => exposed ? read() : [],
+      getAll: () => {
+        if (!exposed) return [];
+        if (!admitted) return read();
+        const values = new Map(read().map(cookie => [cookie.name, cookie.value]));
+        for (const cookie of staged) { if (cookie.options.maxAge === 0) values.delete(cookie.name); else values.set(cookie.name, cookie.value); }
+        return [...values].map(([name, value]) => ({ name: toSdk(name), value }));
+      },
       setAll: cookies => {
         // Password login must not consume a pending OAuth/signup verifier.
-        const writes = cookies.filter(cookie => isSession(cookie.name));
+        const writes = admitted
+          ? cookies.filter(cookie => isChunkLike(cookie.name, sdkKey) || isChunkLike(cookie.name, `${sdkKey}-user`))
+            .map(cookie => ({ ...cookie, name: fromSdk(cookie.name) }))
+          : cookies.filter(cookie => isSession(cookie.name));
         if (!writes.length) return;
         const candidate = sessionFromWrites(writes, key);
         if (!candidate || !canAdoptSession(candidate) || !exposed || !owns()) throw interrupted();
+        if (admitted) {
+          // The disposable SDK can read its own staged result, but neither
+          // cookies nor the shared SDK channel receive credentials yet.
+          staged.push(...writes);
+          return;
+        }
         const intended = new Map(read().filter(cookie => isOwnership(cookie.name)).map(cookie => [cookie.name, cookie.value]));
         for (const cookie of writes) {
           if (cookie.options.maxAge === 0) intended.delete(cookie.name);
@@ -166,6 +188,30 @@ async function withOwnedClient(
       const result = await run(client, owns);
       if (ownership && !owns()) throw interrupted();
       if (result.error) return result;
+      if (admitted) {
+        const candidate = result.data.session;
+        const finalWrites = [...new Map(staged.map(cookie => [cookie.name, cookie])).values()];
+        const stagedCandidate = sessionFromWrites(finalWrites, key);
+        if (!validSession(candidate) || !stagedCandidate || !staged.length || !canAdoptSession(candidate) || !owns()
+          || stagedCandidate.access_token !== candidate.access_token || stagedCandidate.refresh_token !== candidate.refresh_token) throw interrupted();
+        // The authenticated password endpoint is the provider admission.
+        // Existing exact token/user checks stay intact; no extra SDK read or
+        // refresh is added to this explicit action or the reconnect budget.
+        const committed = await admitted.commit(owns, () => {
+          const intended = new Map(read().filter(cookie => isOwnership(cookie.name)).map(cookie => [cookie.name, cookie.value]));
+          for (const cookie of staged) {
+            if (cookie.options.maxAge === 0) intended.delete(cookie.name); else intended.set(cookie.name, cookie.value);
+          }
+          if (!owns()) throw interrupted();
+          for (const cookie of staged) document.cookie = serializeCookieHeader(cookie.name, cookie.value, cookie.options);
+          expected = snapshot();
+          expectedDecision = decision();
+          const planned = JSON.stringify([...intended].map(([name, value]) => ({ name, value })).sort((a, b) => a.name.localeCompare(b.name)));
+          if (expected !== planned || !isPasswordSessionCurrent(candidate)) throw interrupted();
+          adopted = candidate;
+        });
+        if (!committed) throw interrupted();
+      }
       if (!validSession(result.data.session) || !canAdoptSession(result.data.session) || !adopted || !active || !canCommitSession()
         || (boundary && !boundary.isCurrent()) || (ownership && !owns()) || !isPasswordSessionCurrent(result.data.session)) throw interrupted();
       notifySessionStorageChanged();
@@ -194,7 +240,7 @@ async function withOwnedClient(
 }
 
 export function signInWithOwnedSession(credentials: SignInWithPasswordCredentials, canCommitSession: () => boolean): Promise<AuthTokenResponsePassword> {
-  return withOwnedClient(client => client.auth.signInWithPassword(credentials), canCommitSession).catch(unavailable);
+  return withOwnedClient(client => client.auth.signInWithPassword(credentials), canCommitSession, () => true, undefined, undefined, true).catch(unavailable);
 }
 
 /** Verify SMS through isolated storage owned before the provider request begins. */

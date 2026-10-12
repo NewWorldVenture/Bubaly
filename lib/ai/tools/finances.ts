@@ -56,7 +56,12 @@ export const financeTools: ToolDefinition[] = [
       member_id: z.string().nullish(),
       limit: z.number().int().nullish(),
     }),
-    output: z.object({ range, total: z.number(), transactions: z.array(transaction) }),
+    output: z.object({
+      range,
+      total: z.number().describe('Dollars: the sum of the transactions LISTED here'),
+      complete: z.boolean().describe('False when the window holds more transactions than were listed, so `total` covers only these'),
+      transactions: z.array(transaction),
+    }),
     summarize: (_input, output) => (output.transactions.length === 0
       ? `No transactions between ${output.range.from} and ${output.range.to}`
       : `${plural(output.transactions.length, 'transaction')} totalling ${formatDollars(toCents(output.total))} (${output.range.from} to ${output.range.to})`),
@@ -69,6 +74,7 @@ export const financeTools: ToolDefinition[] = [
       return ok({
         range: res.data.range,
         total: res.data.total,
+        complete: res.data.complete,
         transactions: res.data.transactions.map((t) => ({
           id: t.id, name: t.name, merchant: t.merchant, amount: t.amount, category: t.category, date: t.date, type: t.type, member_id: t.memberId,
         })),

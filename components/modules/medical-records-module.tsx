@@ -10,6 +10,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { uploadFamilyDocument, getDocumentSignedUrl } from '@/lib/storage/documents';
 import { isManager } from '@/lib/constants/roles';
+import { readsEveryonesRecords, recordsInScope } from '@/lib/records/personal-scope';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -88,11 +89,11 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   const k = (name: string) => t(`medicalRecordsModule.${kind}.${name}`);
 
   // ── Data ──────────────────────────────────────────────────
-  const { data: providers, loading: pLoading, error: pError, refresh: refreshProviders } = useRealtimeQuery<Provider>({
+  const { data: rawProviders, loading: pLoading, error: pError, refresh: refreshProviders } = useRealtimeQuery<Provider>({
     table: 'health_providers', familyId, deps: [familyId, kind],
     fetcher: (sb) => sb.from('health_providers').select('*').eq('family_id', familyId).eq('kind', kind).order('is_primary', { ascending: false }).order('name'),
   });
-  const { data: policies, loading: polLoading, error: polError, refresh: refreshPolicies } = useRealtimeQuery<Policy>({
+  const { data: rawPolicies, loading: polLoading, error: polError, refresh: refreshPolicies } = useRealtimeQuery<Policy>({
     table: 'insurance_policies', familyId, deps: [familyId, kind],
     fetcher: (sb) => sb.from('insurance_policies').select('*').eq('family_id', familyId).eq('kind', kind).order('is_primary', { ascending: false }),
   });
@@ -105,6 +106,10 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
     fetcher: (sb) => sb.from('medications').select('*').eq('family_id', familyId).eq('is_active', true),
   });
 
+  // The held 0517: a policy is a parent's, an adult's or its member's to read;
+  // a provider also a caregiver's. The page asks for exactly that.
+  const policies = useMemo(() => recordsInScope(rawPolicies, role, selfMember?.id), [rawPolicies, role, selfMember]);
+  const providers = useMemo(() => recordsInScope(rawProviders, role, selfMember?.id, 'medical'), [rawProviders, role, selfMember]);
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
   const profileByMember = useMemo(() => new Map(profiles.map((p) => [p.member_id, p])), [profiles]);
   const loading = pLoading || polLoading || profLoading || medsLoading;
@@ -309,6 +314,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
           <h2 className="flex items-center gap-2 font-semibold"><ShieldCheck className="h-4 w-4 text-brand-text" /> {t('medicalRecords.insuranceCards')}</h2>
           {canEdit && <button onClick={() => setPolicyForm({ ...blankPolicy })} className="text-xs font-semibold text-brand-text">{t('medicalRecords.addInsurance')}</button>}
         </div>
+        {!readsEveryonesRecords(role) && <p className="mb-3 text-xs text-muted">{t('medicalRecordsModule.onlyYourOwnInsurance')}</p>}
         {policies.length === 0 ? (
           <EmptyState icon={ShieldCheck} title={t('medicalRecords.noInsuranceOnFile')} description={canEdit ? k('noInsuranceBody') : t('medicalRecordsModule.noInsuranceYet')} action={canEdit ? <Button onClick={() => setPolicyForm({ ...blankPolicy })} className="btn-cta"><Plus className="h-4 w-4" /> {t('medicalRecords.addInsurance')}</Button> : undefined} />
         ) : (
@@ -357,6 +363,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
           <h2 className="flex items-center gap-2 font-semibold"><Icon className="h-4 w-4 text-brand-text" /> {k('providers')}</h2>
           {canEdit && <button onClick={() => setProviderForm({ ...blankProvider })} className="text-xs font-semibold text-brand-text">{k('add')}</button>}
         </div>
+        {!readsEveryonesRecords(role, 'medical') && <p className="mb-3 text-xs text-muted">{t('medicalRecordsModule.onlyYourOwnProviders')}</p>}
         {providerGroups.length === 0 ? (
           <EmptyState icon={Icon} title={k('noneYet')} description={canEdit ? k('noneYetBody') : t('medicalRecordsModule.noProvidersYet')} action={canEdit ? <Button onClick={() => setProviderForm({ ...blankProvider })} className="btn-cta"><Plus className="h-4 w-4" /> {k('add')}</Button> : undefined} />
         ) : (

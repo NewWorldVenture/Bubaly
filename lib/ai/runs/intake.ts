@@ -171,7 +171,16 @@ function runStatusCard(outcome: Extract<PlanOutcome, { kind: 'plan' | 'clarifica
  */
 export async function submitRequest(
   scope: ServiceScope,
-  input: { text: string; conversationId?: string | null; context?: AIRequestContext | null; answers?: Record<string, string> | null; clientRequestId?: string | null },
+  input: {
+    text: string; conversationId?: string | null; context?: AIRequestContext | null; answers?: Record<string, string> | null; clientRequestId?: string | null;
+    /**
+     * 'inbox': the text is someone else's message a member handed to Bubaly
+     * ("Handle it"). Filed as a `handle_it` request — a kind only the server
+     * can file (0255) — so the planner fences it as data and every write it
+     * leads to waits for a parent or adult, here and in the executor.
+     */
+    origin?: 'inbox';
+  },
   opts: IntakeOptions = {},
 ): Promise<ServiceResult<IntakeResult>> {
   const text = input.text.trim();
@@ -195,7 +204,8 @@ export async function submitRequest(
   // Through the caller's OWN client on purpose: 0250 gives members INSERT on
   // ai_requests with `requested_by = auth.uid()`, so RLS proves the requester.
   const clientRequestId = input.clientRequestId ?? null;
-  const created = await createRequest(scope, { requestText: text, kind: 'concierge', conversationId, clientRequestId });
+  const outsideText = input.origin === 'inbox';
+  const created = await createRequest(scope, { requestText: text, kind: outsideText ? 'handle_it' : 'concierge', conversationId, clientRequestId });
   if (!created.ok) return created;
   // A retried POST (a dropped connection, a double tap) lands here: the key
   // already names a request, so the answer is the one that request got —
@@ -232,6 +242,7 @@ export async function submitRequest(
     planRequest(requestScope, {
       requestId, requestText: text, intent, context: context.data, conversationId,
       answers: input.answers ?? null, entities: classified.entities, pageContext: input.context ?? null, runIdempotencyKey,
+      ...(outsideText ? { outsideText: true } : {}),
     }),
     opts.plannerBudgetMs ?? DEFAULT_PLANNER_BUDGET_MS,
   ));
@@ -442,8 +453,13 @@ export async function answerClarification(
     return fail(context.error, { code: INTAKE_CODES.context, retryable: context.retryable });
   }
 
+  // An inbox hand-off stays someone else's words after a clarification: the
+  // re-plan fences the message and holds every write, as the first plan did.
   const planned = settlePlanner(await withDeadline(
-    planRequest(requestScope, { requestId, requestText: request.request_text, intent, context: context.data, conversationId: request.conversation_id, answers: answersFrom(clarifications, null) }),
+    planRequest(requestScope, {
+      requestId, requestText: request.request_text, intent, context: context.data, conversationId: request.conversation_id, answers: answersFrom(clarifications, null),
+      ...(request.kind === 'handle_it' ? { outsideText: true } : {}),
+    }),
     opts.plannerBudgetMs ?? DEFAULT_PLANNER_BUDGET_MS,
   ));
   if (!planned.ok) {

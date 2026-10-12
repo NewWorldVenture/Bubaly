@@ -57,6 +57,12 @@ export type ServiceScope = {
   idempotencyKey?: string | null;
   /** Private executor-issued reserved-operation identity and existing ledger client, not caller input. */
   toolOperation?: { id: string; db: SupabaseClient<Database> };
+  /**
+   * Set by the run executor, from the request row, when the words being acted
+   * on are someone else's — an inbox message a member handed to Bubaly. Every
+   * write such a run makes waits for a parent or adult first.
+   */
+  untrustedRequest?: boolean;
 };
 
 export type ServiceResult<T> =

@@ -40,6 +40,7 @@ import { listTools } from '@/lib/ai/tools/registry';
 import { scopeNow } from '@/lib/services/scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { describeDbError } from '@/lib/supabase/errors';
+import { fenceUntrusted } from '@/lib/ai/safety/untrusted';
 import { loadTrustInputs, roleOf } from '@/lib/trust/server';
 import { getAISettings } from '@/lib/services/ai-settings';
 import type { AutonomyBehavior, TrustRole } from '@/lib/trust/engine';
@@ -76,6 +77,12 @@ export type PlanRequestInput = {
    * re-finds the run instead of starting a second one over the same plan.
    */
   runIdempotencyKey?: string | null;
+  /**
+   * The request's words are someone else's — an inbox message a member handed
+   * to Bubaly (`ai_requests.kind = 'handle_it'`). The prompt fences them as
+   * data, and every write the plan makes waits for a parent or adult.
+   */
+  outsideText?: boolean;
 };
 
 export type PlanRequestOptions = {
@@ -138,6 +145,18 @@ function templateContextFor(input: PlanRequestInput, scope: ServiceScope, now: D
     trips: (travel?.trips ?? []).map((t) => ({ id: t.id, title: t.title, startDate: t.startDate, daysUntil: t.daysUntil })),
     move: moveContextFrom(moving),
   });
+}
+
+/**
+ * Hold every household write of a plan made from someone else's words for a
+ * parent or adult. The planner cannot be the only line — the text may steer
+ * the model — so the executor holds the same steps again when they run
+ * (lib/ai/runs/executor.ts `runStep`); this makes the plan say so up front.
+ */
+function holdEveryWrite(steps: ValidatedStep[]): ValidatedStep[] {
+  return steps.map((step) => (step.stepType === 'act' || step.stepType === 'notify') && !step.approvalRequired
+    ? { ...step, approvalRequired: true }
+    : step);
 }
 
 /** `PlanStepInput` rows for `savePlan`, in the validator's order (reads first, then what depends on them). */
@@ -277,6 +296,7 @@ export async function planRequest(
     emergencyDomains: trust.emergencyDomains,
     settings,
     role: plannerTrustRole(scope.role),
+    memberId: scope.memberId,
     now,
     tz: input.context.header.tz,
     allowedTools: catalogueNames(tools),
@@ -292,6 +312,7 @@ export async function planRequest(
   const system = buildPlannerSystemPrompt({ intent, template, tools, behavior: behaviorHint, viewerRole: scope.role });
   const user = buildPlannerUserMessage({
     requestText: input.requestText,
+    requestIsOutsideText: input.outsideText === true,
     contextText: input.context.text,
     skeleton,
     skeletonHints: (template ? templateSteps(template, ctx) : []).filter((s) => s.modelFills).map((s) => ({ key: s.key, hint: s.modelFills as string })),
@@ -347,14 +368,15 @@ export async function planRequest(
   }
 
   // ── A runnable plan ─────────────────────────────────────────────────────
+  const plannedSteps = input.outsideText ? holdEveryWrite(validation.steps) : validation.steps;
   const saved = await savePlan(scope, requestId, {
     objective: validation.objective,
     reasoningSummary: validation.reasoningSummary,
     riskLevel: validation.riskLevel,
-    requiresApproval: validation.requiresApproval,
+    requiresApproval: plannedSteps.some((s) => s.approvalRequired),
     plannerModel: provider.model,
     plannerPromptVersion: PLANNER_PROMPT_VERSION,
-    steps: toStoreSteps(validation.steps),
+    steps: toStoreSteps(plannedSteps),
   }, { db: ledger });
   if (!saved.ok) {
     await updateRequest(scope, requestId, { status: 'failed', error: saved.error, completed_at: now.toISOString() }, { db: ledger });
@@ -375,8 +397,8 @@ export async function planRequest(
     return run;
   }
 
-  const stepCount = validation.steps.length;
-  const heldForApproval = validation.steps.filter((s) => s.approvalRequired).length;
+  const stepCount = plannedSteps.length;
+  const heldForApproval = plannedSteps.filter((s) => s.approvalRequired).length;
   await appendEvent(scope, run.data.id, {
     eventType: 'planned',
     requestId,
@@ -421,7 +443,7 @@ export async function planRequest(
     runId: run.data.id,
     stepCount,
     riskLevel: validation.riskLevel,
-    requiresApproval: validation.requiresApproval,
+    requiresApproval: plannedSteps.some((s) => s.approvalRequired),
     summary: validation.reasoningSummary || validation.objective,
   });
 }
@@ -537,18 +559,29 @@ async function recordRecommendation(
 type RunLike = Pick<RunRow, 'id' | 'family_id' | 'plan_id' | 'request_id' | 'requested_by_member_id'>;
 type StepLike = Pick<StepRow, 'id' | 'step_type' | 'tool_name' | 'description' | 'input_json' | 'dependency_ids' | 'condition' | 'status' | 'approval_required' | 'approval_id' | 'risk_level' | 'result_json' | 'error'>;
 
-/** A carried step's line in the re-plan prompt: what it was and how it ended. */
+/**
+ * A carried step's line in the re-plan prompt: what it was and how it ended.
+ *
+ * The summary and the error are FENCED. A tool's summary quotes household rows
+ * verbatim — `calendar.searchEvents` names the first event's title, which can
+ * come from a synced feed anyone can send an invite into — and an error can
+ * quote one too. Unfenced, that text reached the planning model as part of
+ * the prompt's own instructions, with the authority to plan new writes. The
+ * label is the planner's own description of its step.
+ */
 function describeOutcome(step: StepLike): string {
   const label = step.description ?? step.tool_name ?? step.step_type;
-  const summary = step.result_json && typeof step.result_json === 'object' && !Array.isArray(step.result_json)
+  const rawSummary = step.result_json && typeof step.result_json === 'object' && !Array.isArray(step.result_json)
     ? String((step.result_json as Record<string, unknown>).summary ?? '')
     : '';
+  const summary = fenceUntrusted('step_result', rawSummary);
+  const error = fenceUntrusted('step_error', step.error);
   switch (step.status) {
     case 'completed': return `- ${label}: ${summary || 'done'}`;
     case 'skipped': return `- ${label}: skipped${summary ? ` (${summary})` : ''}`;
     case 'partially_completed': return `- ${label}: done, but could not be confirmed${summary ? ` (${summary})` : ''}`;
-    case 'failed': return `- ${label}: FAILED${step.error ? ` (${step.error})` : ''}`;
-    case 'cancelled': return `- ${label}: DECLINED by a person${step.error ? ` (${step.error})` : ''}; do not plan it again`;
+    case 'failed': return `- ${label}: FAILED${error ? ` (${error})` : ''}`;
+    case 'cancelled': return `- ${label}: DECLINED by a person${error ? ` (${error})` : ''}; do not plan it again`;
     default: return `- ${label}: ${step.status}`;
   }
 }
@@ -592,6 +625,8 @@ export async function replanRun(
   }
   const row = request as RequestRow;
   const intent = (row.interpreted_intent ?? 'other') as IntentKey;
+  // Someone else's words stay someone else's words on every version of the plan.
+  const outsideText = row.kind === 'handle_it';
 
   const context = await buildContext(scope, { intent, requestId: row.id });
   if (!context.ok) return context;
@@ -616,7 +651,7 @@ export async function replanRun(
   const inputs: ValidationInputs = {
     policies: trust.policies, grants: trust.grants, delegations: trust.delegations, emergencyDomains: trust.emergencyDomains,
     settings: await getAISettings(scope),
-    role: plannerTrustRole(scope.role), now, tz: context.data.header.tz, allowedTools: catalogueNames(tools),
+    role: plannerTrustRole(scope.role), memberId: scope.memberId, now, tz: context.data.header.tz, allowedTools: catalogueNames(tools),
   };
 
   const settled = steps.filter((s) => s.id !== step.id && TERMINAL_STEP_STATES.includes(s.status));
@@ -629,7 +664,7 @@ export async function replanRun(
     behavior: dominantBehavior(tools.filter((t) => !t.readOnly).map((t) => behaviorFor(inputs, t.domain))),
   });
   const user = [
-    buildPlannerUserMessage({ requestText: row.request_text, contextText: context.data.text, skeleton: null, skeletonHints: [] }),
+    buildPlannerUserMessage({ requestText: row.request_text, requestIsOutsideText: outsideText, contextText: context.data.text, skeleton: null, skeletonHints: [] }),
     '',
     'This request is already under way. What has happened so far:',
     ...(settled.length ? settled.map(describeOutcome) : ['- nothing yet']),
@@ -687,13 +722,13 @@ export async function replanRun(
     approvalId: null,
     error: null,
   });
-  const fresh = toStoreSteps(validation.steps);
+  const fresh = toStoreSteps(outsideText ? holdEveryWrite(validation.steps) : validation.steps);
 
   const saved = await savePlan(scope, row.id, {
     objective: validation.objective,
     reasoningSummary: validation.reasoningSummary,
     riskLevel: validation.riskLevel,
-    requiresApproval: validation.requiresApproval,
+    requiresApproval: validation.requiresApproval || fresh.some((s) => s.approvalRequired === true),
     plannerModel: provider.model,
     plannerPromptVersion: PLANNER_PROMPT_VERSION,
     steps: [...carried, ...fresh],

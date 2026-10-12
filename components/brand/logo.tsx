@@ -33,18 +33,21 @@ export function LogoMark({
 
 export function Logo({
   href = '/',
+  documentNavigation = false,
   className,
   showText = true,
   markVariant = 'family',
 }: {
   href?: string;
+  documentNavigation?: boolean;
   className?: string;
   showText?: boolean;
   markVariant?: 'family' | 'home';
 }) {
   const t = useTranslations();
+  const HomeLink = documentNavigation ? 'a' : Link;
   return (
-    <Link
+    <HomeLink
       href={href}
       aria-label={t('logo.bubalyHome')}
       className={cn('inline-flex shrink-0 items-center', className)}
@@ -61,6 +64,6 @@ export function Logo({
       ) : (
         <LogoMark className="h-8 w-14" variant={markVariant} />
       )}
-    </Link>
+    </HomeLink>
   );
 }

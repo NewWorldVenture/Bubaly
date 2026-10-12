@@ -2,14 +2,14 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { KeyRound, Loader2, Check, RefreshCw } from 'lucide-react';
+import { KeyRound, Loader2, Check, RefreshCw, Trash2 } from 'lucide-react';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { normalizePin, isValidPin } from '@/lib/onboarding/pin';
 import { normalizeUsername, isValidUsername, suggestUsername } from '@/lib/onboarding/child-login';
-import { createChildLoginAction, resetChildPinAction } from '@/app/(app)/family/child-login-actions';
+import { createChildLoginAction, removeChildLoginAction, resetChildPinAction } from '@/app/(app)/family/child-login-actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type AccessMember = {
@@ -66,10 +66,23 @@ function CreateRow({ member }: { member: AccessMember }) {
 
 function ResetRow({ member }: { member: AccessMember }) {
   const t = useTranslations();
+  const router = useRouter();
   const { success, error: toastError } = useToast();
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
+
+  // The held 0512: a member with a kid login cannot be made a parent or adult.
+  // Removing the login (its account goes with it) is the step that allows it.
+  async function remove() {
+    if (busy || !confirm(t('childAccessManager.removeTheKidLoginConfirm', { name: member.display_name }))) return;
+    setBusy(true);
+    const res = await removeChildLoginAction({ memberId: member.id });
+    setBusy(false);
+    if (!res.ok) { toastError(res.error); return; }
+    success(t('childAccessManager.loginRemovedFor', { name: member.display_name }));
+    router.refresh();
+  }
 
   async function reset() {
     if (!isValidPin(pin) || busy) return;
@@ -93,10 +106,16 @@ function ResetRow({ member }: { member: AccessMember }) {
           </Button>
         </>
       ) : (
-        <button onClick={() => setOpen(true)}
-          className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted transition hover:text-brand-text">
-          <RefreshCw className="h-3.5 w-3.5" /> {t('childAccessManager.resetPin')}
-        </button>
+        <>
+          <button onClick={() => setOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted transition hover:text-brand-text">
+            <RefreshCw className="h-3.5 w-3.5" /> {t('childAccessManager.resetPin')}
+          </button>
+          <button onClick={remove} disabled={busy} aria-label={t('childAccessManager.removeLoginFor', { name: member.display_name })}
+            className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted transition hover:text-rose-400">
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} {t('childAccessManager.removeLogin')}
+          </button>
+        </>
       )}
     </div>
   );
