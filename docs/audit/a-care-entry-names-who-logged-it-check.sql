@@ -36,7 +36,10 @@
 --   8. a parent can still EDIT a child's entry, which `openEdit` allows and no
 --      role check forbids — the reason UPDATE is a preserving trigger rather
 --      than a checking policy;
---   9. reads stay `is_family_member` on all four;
+--   9. reads stay `is_family_member` on all four; under the held 0510 a
+--      care or behaviour note is read by a manager, its author or a
+--      caregiver, so the child reads the notes they wrote and not the
+--      parent's;
 --  10. `anon` holds no INSERT;
 --  11. NEGATIVE CONTROL: drop the guards and require the forgery to land again.
 --
@@ -87,6 +90,12 @@ declare
   med_id   uuid;
   sch_id   uuid;
   rendered text;
+  -- The held 0510 (the owner's decision: a note about a member is read by a
+  -- manager, its author or a caregiver), per table.
+  care_narrowed boolean := exists (select 1 from pg_policy where polrelid = 'public.care_log'::regclass
+                                      and polname = 'A note is read by a manager, its author or a caregiver');
+  beh_narrowed  boolean := exists (select 1 from pg_policy where polrelid = 'public.behavior_logs'::regclass
+                                      and polname = 'A note is read by a manager, its author or a caregiver');
 begin
   -- A medication and a schedule for the dose half, written before the role
   -- switch so the probe is testing the dose policy and not this setup.
@@ -192,7 +201,12 @@ begin
   -- 7. Immutable after insert — the direct UPDATE the app never performs.
   --    Once with a created_by column and once without, because the trigger
   --    branches on `to_jsonb(new) ? 'created_by'`.
+  --    What is stored is read back as the owner: the held 0510 hides the
+  --    parent's entries from the child, and a zero must mean a re-signed row,
+  --    not an unread one.
   update public.care_log set logged_by = kid_m, note = 'edited' where id = genuine;
+  update public.behavior_logs set logged_by = kid_u, note = 'edited' where id = beh_row;
+  perform set_config('role','postgres', true);
   select count(*) into n from public.care_log where id = genuine and logged_by = parent_m;
   if n <> 1 then
     failures := array_append(failures, 'a child RE-SIGNED an existing care entry through a direct UPDATE — the attribution is not immutable');
@@ -201,13 +215,12 @@ begin
   if n <> 1 then
     failures := array_append(failures, 'a child rewrote care_log.created_by through a direct UPDATE');
   end if;
-
-  update public.behavior_logs set logged_by = kid_u, note = 'edited' where id = beh_row;
   select count(*) into n from public.behavior_logs where id = beh_row and logged_by = parent_u;
   if n <> 1 then
     failures := array_append(failures,
       'a child re-signed a behaviour note through a direct UPDATE — the trigger''s no-created_by branch does not preserve logged_by');
   end if;
+  perform set_config('role','authenticated', true);
 
   -- 8. A parent may still EDIT a child's entry. This is why UPDATE is a
   --    preserving trigger and not a checking policy: a policy pinning
@@ -235,12 +248,19 @@ begin
     failures := array_append(failures, 'a PARENT re-signed a care entry through a direct UPDATE — the attribution is not immutable');
   end if;
 
-  -- 9. Reads stay open to the household on all four.
+  -- 9. Reads. Released: the household reads every entry. Under the held 0510
+  --    the child reads the entries they wrote and not the parent's.
   perform set_config('request.jwt.claim.sub', kid_u::text, true);
   select count(*) into n from public.care_log where id = genuine;
-  if n = 0 then failures := array_append(failures, 'a child can no longer READ the care timeline'); end if;
+  if not care_narrowed and n = 0 then failures := array_append(failures, 'a child can no longer READ the care timeline'); end if;
+  if care_narrowed and n <> 0 then failures := array_append(failures, 'under the held 0510 a child still READS the parent''s care entry about them'); end if;
+  select count(*) into n from public.care_log where family_id = fam and created_by = kid_u and logged_by = kid_m;
+  if n = 0 then failures := array_append(failures, 'a child can no longer READ the care entries they wrote'); end if;
   select count(*) into n from public.behavior_logs where id = beh_row;
-  if n = 0 then failures := array_append(failures, 'a child can no longer READ the behaviour log'); end if;
+  if not beh_narrowed and n = 0 then failures := array_append(failures, 'a child can no longer READ the behaviour log'); end if;
+  if beh_narrowed and n <> 0 then failures := array_append(failures, 'under the held 0510 a child still READS the parent''s behaviour note about them'); end if;
+  select count(*) into n from public.behavior_logs where family_id = fam and logged_by = kid_u and note = 'Read a book';
+  if n <> 1 then failures := array_append(failures, 'a child can no longer READ the behaviour note they wrote'); end if;
 
   -- 10. The grant layer, which a `to authenticated` policy cannot reach.
   perform set_config('role','postgres', true);
@@ -284,7 +304,7 @@ begin
   if array_length(failures, 1) is not null then
     raise exception E'a household ledger entry does not say who logged it:\n  - %', array_to_string(failures, E'\n  - ');
   end if;
-  raise notice 'a-care-entry-names-who-logged-it: OK (every member still logs in their own name on all four ledgers, nobody signs for anyone else, care_log still accepts a NULL logged_by, attribution is immutable after insert on tables with and without created_by, a parent can still edit a child''s entry, reads unchanged, anon holds no INSERT, negative control rendered the forgery as "by <parent>")';
+  raise notice 'a-care-entry-names-who-logged-it: OK (every member still logs in their own name on all four ledgers, nobody signs for anyone else, care_log still accepts a NULL logged_by, attribution is immutable after insert on tables with and without created_by, a parent can still edit a child''s entry, reads as the rule in force says (the household, or under the held 0510 the author and the managers), anon holds no INSERT, negative control rendered the forgery as "by <parent>")';
 end $$;
 
 rollback;

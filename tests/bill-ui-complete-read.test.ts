@@ -104,7 +104,7 @@ describe.each(consumers)('$file complete bills', ({ options }) => {
 });
 
 const ui = vi.hoisted(() => ({ siblings: {} as Record<string, {loading?: boolean; error?: string | null}>, bills: { data: [] as unknown[], loading: false, stale: false, error: null as string | null } }));
-vi.mock('@/components/app/app-context', () => ({ useApp: () => ({ familyId: 'synthetic-family', userId: 'owner-a', role: 'owner', members: [] }) }));
+vi.mock('@/components/app/app-context', () => ({ useApp: () => ({ familyId: 'synthetic-family', userId: 'owner-a', role: 'parent', members: [] }) }));
 vi.mock('@/lib/hooks/use-realtime-query', () => ({ useRealtimeQuery: ({ table }: { table: string }) => ({
   ...(table === 'bills' ? ui.bills : { data: [], loading: false, stale: false, error: null, ...ui.siblings[table] }), refresh() {},
 }) }));

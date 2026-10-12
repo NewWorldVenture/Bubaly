@@ -15,6 +15,7 @@ import { escapeLike } from '@/lib/supabase/escape-like';
 import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { readsHouseholdMoney } from '@/lib/finance/household-money';
 
 // Decision Simulator server action (Digital Twin, pillar #2). Assembles the real
 // household context for the proposed decision and runs the pure simulator. All
@@ -67,6 +68,13 @@ export async function simulateDecisionAction(input: SimFormInput): Promise<SimRe
   }
 
   // spend
+  // A purchase is checked against the household's budget and spending, which
+  // are a parent's or adult's (the held 0514). Anyone else's session reads only
+  // their own spending, so a simulation would understate it and say a purchase
+  // fits; they are told whose the budget is instead.
+  if (!readsHouseholdMoney(ctx.active.role)) {
+    return { verdict: 'conflict', headline: tr('householdMoney.keptByParents'), impacts: [{ severity: 'blocker', title: tr('householdMoney.keptByParentsBody') }] };
+  }
   const amountCents = Math.round((input.amountDollars || 0) * 100);
   if (!input.category || !(amountCents > 0)) {
     return { verdict: 'conflict', headline: 'Pick a budget and an amount to simulate.', impacts: [{ severity: 'blocker', title: 'Incomplete decision' }] };
