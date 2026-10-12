@@ -285,16 +285,19 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   // Passport" reached a guest, and with the policy's member it was that child
   // alone, so the parents who renew the policy heard nothing. Linked through
   // what each path writes: the scan's `reminders` row names its source
-  // (related_type 'renewal', related_id the renewal or policy), and an
-  // accepted card's `family_reminders` row carries the card's idempotency key
-  // and its tag (lib/services/autopilot suggestionReminderKey,
-  // suggestionSourceTag) — the tag alone on a repeating one's next occurrence.
+  // (related_type 'renewal', related_id the renewal or policy) and is found by
+  // the card that records its id — never by an older card for the same
+  // source, which may name another member — and an accepted card's
+  // `family_reminders` row carries the card's idempotency key and its tag
+  // (lib/services/autopilot suggestionReminderKey, suggestionSourceTag) — the
+  // tag alone on a repeating one's next occurrence.
   //
   // Read once, and only when a reminder could be one (lib/autopilot/
   // reminder-cards.ts, the lookup every reader of these reminders shares). A
   // linked reminder is addressed past the managers only when its card is
   // found: a failed read, and a link no card answers — the scan's reminder in
-  // the moment before its card is saved, or one whose card never was — go to
+  // the moment before its card is saved, one whose card never was, or an
+  // insurance renewal's written before cards recorded their reminder — go to
   // the managers, who read every card, and never to the family. The rest of
   // its readers are told on a later tick, once the card is there.
   const reminderCards = reminderCardsReader(supabase, familyId, {

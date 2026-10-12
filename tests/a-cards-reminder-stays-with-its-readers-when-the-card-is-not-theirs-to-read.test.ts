@@ -44,7 +44,11 @@ const BINS = 'Put the bins out';
 const CAKE = 'Pick up the cake';
 const NOTES = 'Read the school notes';
 
-/** The scan's auto-executed reminder cards, one per source, as lib/autopilot/scan.ts writes them. */
+/**
+ * The scan's auto-executed reminder cards, one per source, as lib/autopilot/scan.ts
+ * writes them: each records the reminder written for it (`reminder_id`, the
+ * `r-<card>` rows of SCAN_REMINDERS below).
+ */
 const CARDS = [
   { id: 'c-passport', kind: 'document', source_kind: 'renewals', source_id: 'ren-1', member_id: null, title: PASSPORT },
   { id: 'c-home', kind: 'insurance', source_kind: 'family_insurance_policies', source_id: 'pol-home', member_id: null, title: HOME },
@@ -52,7 +56,7 @@ const CARDS = [
   // An everyone card whose reminder is also related_type 'renewal'.
   { id: 'c-refill', kind: 'medication', source_kind: 'medications', source_id: 'med-1', member_id: null, title: REFILL },
 ].map((c, i) => ({
-  ...c, family_id: FAMILY, action_type: 'create_reminder', status: 'auto_executed', detail: null, payload: {},
+  ...c, family_id: FAMILY, action_type: 'create_reminder', status: 'auto_executed', detail: null, payload: { reminder_id: `r-${c.id}` },
   dedupe_key: `k-${c.id}`, created_at: `2026-09-2${i}T06:30:00Z`, updated_at: `2026-09-2${i}T06:30:00Z`,
 }));
 type CardId = (typeof CARDS)[number]['id'];
@@ -170,7 +174,7 @@ describe('a reminder that looks like a card\'s whose card was never written is t
     db.seed('autopilot_suggestions', CARDS);
     db.seed('reminders', [
       { id: 'r-orphan', family_id: FAMILY, title: 'Renew Gym pass', remind_at: '2026-10-01T18:00:00Z', member_id: null, is_done: false, related_type: 'renewal', related_id: 'ren-gone' },
-      { id: 'r-refill', family_id: FAMILY, title: REFILL, remind_at: '2026-10-01T18:00:00Z', member_id: null, is_done: false, related_type: 'renewal', related_id: 'med-1' },
+      { id: 'r-c-refill', family_id: FAMILY, title: REFILL, remind_at: '2026-10-01T18:00:00Z', member_id: null, is_done: false, related_type: 'renewal', related_id: 'med-1' },
       { id: 'r-bins', family_id: FAMILY, title: BINS, remind_at: '2026-10-01T18:00:00Z', member_id: null, is_done: false, related_type: null, related_id: null },
     ]);
     vi.setSystemTime(new Date('2026-10-01T06:00:00Z'));

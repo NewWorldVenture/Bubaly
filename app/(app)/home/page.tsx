@@ -367,9 +367,9 @@ export default async function HomePage() {
     // insurance card's unassigned "Renew dental insurance (Smile Co)" is the
     // managers' and the member the policy names, a renewal's is not a guest's.
     // Every other reminder is on Today as before, whoever it is for.
-    readVisibleReminders((n) => supabase.from('family_reminders').select('id, title, remind_at, member_id, priority, idempotency_key, tags')
+    readVisibleReminders((from, to) => supabase.from('family_reminders').select('id, title, remind_at, member_id, priority, idempotency_key, tags')
       .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null).lte('remind_at', dayEndIso)
-      .order('remind_at', { ascending: true }).limit(n),
+      .order('remind_at', { ascending: true }).order('id').range(from, to),
     { limit: 20, viewer: { role: ctx.active.role, memberId: me.id }, cards: reminderCardsReader(supabase, familyId, {
       keyOf: (cardId) => suggestionReminderKey(familyId, cardId),
       sourceTagOf: suggestionSourceTag,

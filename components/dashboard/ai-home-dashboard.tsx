@@ -178,17 +178,17 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       .eq('family_id', familyId).is('deleted_at', null).in('scope', ['user', 'family']),
     supabase.from('relationship_dates').select('id, kind, title, event_date, recurs_annually, reminder_days_before, status')
       .eq('family_id', familyId).neq('status', 'cancelled').limit(100),
-    readVisibleReminders((n) => supabase.from('family_reminders').select('id, title, remind_at, status, member_id, priority, idempotency_key, tags')
+    readVisibleReminders((from, to) => supabase.from('family_reminders').select('id, title, remind_at, status, member_id, priority, idempotency_key, tags')
       .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null)
       .or(`member_id.eq.${myMemberId},member_id.is.null`)
-      .lte('remind_at', todayEnd.toISOString()).order('remind_at', { ascending: true }).limit(n),
+      .lte('remind_at', todayEnd.toISOString()).order('remind_at', { ascending: true }).order('id').range(from, to),
     { limit: 100, viewer: reminderViewer, cards: reminderCards }),
-    readVisibleReminders((n) => supabase.from('family_reminders').select('id, title, remind_at, idempotency_key, tags')
+    readVisibleReminders((from, to) => supabase.from('family_reminders').select('id, title, remind_at, idempotency_key, tags')
       .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null)
       .or(`member_id.eq.${myMemberId},member_id.is.null`)
       .gt('remind_at', todayEnd.toISOString())
       .lte('remind_at', new Date(Date.now() + 7 * 86400000).toISOString())
-      .order('remind_at').limit(n),
+      .order('remind_at').order('id').range(from, to),
     { limit: 10, viewer: reminderViewer, cards: reminderCards }),
     // Money decisions waiting on a parent (wallet/cards/allowance) — managers only.
     manager

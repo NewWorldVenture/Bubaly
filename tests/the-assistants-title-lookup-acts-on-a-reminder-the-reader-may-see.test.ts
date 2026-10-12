@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type { ServiceScope } from '@/lib/services/types';
-import { createInMemorySupabase } from './helpers/in-memory-supabase';
+import { createInMemorySupabase, withFaults } from './helpers/in-memory-supabase';
 
 // FL-R4-R1-1. The assistant finds a reminder by part of its title — "mark the
 // renew thing done", "push the e one" — in four places: reminders.complete and
@@ -158,5 +158,74 @@ describe('the legacy complete_reminder and snooze_reminder find only a reminder 
     const db = await household();
     expect(await legacyTool(db, 'mum', 'complete_reminder', { title: 'renew' })).toEqual({ ok: true, summary: `Completed “${POLICY}”.` });
     expect(reminderRow(db, LIBRARY).status).toBe('active');
+  });
+});
+
+// AUD-1031-VISIBLE-PREFIX, R5. The lookup takes the soonest match the reader
+// may be shown (lib/autopilot/reminder-cards.ts readVisibleReminders), and a
+// page the server capped ended it: on a server answering one row per response
+// (db-max-rows 1), Kit's "renew" read the policy's reminder, hidden from him,
+// asked for two rows and was handed one, took that short answer for the end,
+// and told him there was no reminder — his library books, the second match,
+// never read. A page now starts where the rows returned end, and only an
+// empty page ends the lookup.
+describe('a page the server capped is not the end of the lookup', () => {
+  /** The same household, on a server that answers at most one row per response. */
+  async function oneRowAtATime(): Promise<Memory> {
+    const db = await household();
+    const capped = createInMemorySupabase<DB>({
+      maxRows: 1,
+      uniques: { autopilot_suggestions: [['family_id', 'dedupe_key']], family_reminders: [['family_id', 'idempotency_key']] },
+      defaults: { reminders: { is_done: false, notes: null, recurrence: 'none' } },
+    });
+    for (const table of ['families', 'family_members', 'family_insurance_policies', 'autopilot_suggestions', 'family_reminders', 'reminders']) {
+      capped.seed(table, db.table(table).map((row) => ({ ...row })));
+    }
+    return capped;
+  }
+
+  /** The same database, recording the range of each page of the lookup by title. */
+  function recordingPages(db: Memory) {
+    const pages: unknown[] = [];
+    const client = withFaults(db, (table, calls) => {
+      const range = calls.find((c) => c.method === 'range');
+      if (table === 'family_reminders' && range && calls.some((c) => c.method === 'ilike')) pages.push(range.args);
+      return null;
+    });
+    return { client, pages };
+  }
+
+  it("Kit's \"renew\" still finds his library books behind the policy's reminder; a manager's soonest match is one round trip", async () => {
+    const db = await oneRowAtATime();
+    const kit = recordingPages(db);
+    expect(await aiTool(kit.client, 'kit', 'reminders.complete', { title: 'renew' })).toMatchObject({ ok: true, data: { title: LIBRARY } });
+    expect(kit.pages).toEqual([[0, 0], [1, 2]]);
+    expect(reminderRow(db, LIBRARY).status).toBe('completed');
+    expect(reminderRow(db, POLICY).status).toBe('active');
+
+    const legacy = await oneRowAtATime();
+    expect(await legacyTool(legacy, 'kit', 'complete_reminder', { title: 'renew' })).toEqual({ ok: true, summary: `Completed “${LIBRARY}”.` });
+    expect(reminderRow(legacy, POLICY).status).toBe('active');
+
+    const managers = await oneRowAtATime();
+    const mum = recordingPages(managers);
+    expect(await aiTool(mum.client, 'mum', 'reminders.complete', { title: 'renew' })).toMatchObject({ ok: true, data: { title: POLICY } });
+    expect(mum.pages).toEqual([[0, 0]]);
+  });
+
+  it('a page that fails after a capped one fails the lookup, and nothing is completed or named', async () => {
+    const db = await oneRowAtATime();
+    const failing = withFaults(db, (table, calls) => (table === 'family_reminders' && calls.some((c) => c.method === 'ilike')
+      && calls.some((c) => c.method === 'range' && c.args[0] === 1) ? { message: 'Fixture page refused' } : null));
+    const res = await aiTool(failing, 'kit', 'reminders.complete', { title: 'renew' });
+    expect(res).toMatchObject({ ok: false, code: 'db' });
+    const legacy = await legacyTool(failing, 'kit', 'complete_reminder', { title: 'renew' });
+    expect(legacy).toEqual({ ok: false, error: 'Could not find the reminder.' });
+    for (const answer of [res, legacy]) {
+      expect(JSON.stringify(answer)).not.toContain('Fixture page refused');
+      expect(JSON.stringify(answer)).not.toContain(POLICY);
+    }
+    expect(reminderRow(db, LIBRARY).status).toBe('active');
+    expect(reminderRow(db, POLICY).status).toBe('active');
   });
 });

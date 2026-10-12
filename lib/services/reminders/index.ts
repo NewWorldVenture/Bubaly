@@ -339,7 +339,7 @@ export async function listDue(
   // (lib/autopilot/reminder-key.ts): the server's own mints live in
   // lib/services/autopilot, which imports this module.
   let malformed = false;
-  const { data, error } = await readVisibleReminders(async (n) => {
+  const { data, error } = await readVisibleReminders(async (from, to) => {
     let query = scope.db
       .from('family_reminders')
       .select('*')
@@ -348,7 +348,8 @@ export async function listDue(
       .not('remind_at', 'is', null)
       .lte('remind_at', beforeIso)
       .order('remind_at', { ascending: true })
-      .limit(n);
+      .order('id')
+      .range(from, to);
     if (input.memberId) query = query.eq('member_id', input.memberId);
     const page = await query;
     // A reply that is not a list is not a page of reminders, empty or otherwise.

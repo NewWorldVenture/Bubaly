@@ -252,8 +252,9 @@ describe('the Calm inbox takes its cards after the reader\'s rule, not before', 
     const inbox = h.inbox as { needsYou: { source: string; title: string }[]; today: { source: string; title: string }[]; later?: { source: string; title: string }[] };
     return [...inbox.needsYou, ...inbox.today, ...(inbox.later ?? [])].filter((i) => i.source === 'autopilot').map((i) => i.title);
   }
-  function household(hidden: number): void {
-    const db = createInMemorySupabase<DB>();
+  /** `maxRows`: the server's cap on one response (PostgREST's db-max-rows); none by default. */
+  function household(hidden: number, maxRows?: number): void {
+    const db = createInMemorySupabase<DB>(maxRows === undefined ? {} : { maxRows });
     db.seed('families', [{ id: FAMILY, timezone: 'UTC', name: 'Family' }]);
     db.seed('family_members', ROSTER.map((m) => ({ ...m, family_id: FAMILY, user_id: `u-${m.id}`, display_name: m.id, is_active: true, birthday: null })));
     db.seed('autopilot_suggestions', [
@@ -281,5 +282,17 @@ describe('the Calm inbox takes its cards after the reader\'s rule, not before', 
     household(100);
     const cards = await calmCards('mum');
     expect(cards).toContain('Renew policy 0');
+  });
+
+  // AUD-1031-VISIBLE-PREFIX, R5: a page the server capped (db-max-rows) is not
+  // the end of the read. Asked for rows 100–299 after a hundred hidden ones, a
+  // server capping at a hundred answered 100–199, and that short page ended
+  // the read before Kit's card at row 200.
+  it('two hundred cards hidden from Kit, from a server capping every response at a hundred, still leave his card in his inbox', async () => {
+    household(200, 100);
+    const kit = await calmCards('kit');
+    expect(kit).toContain(SNACKS);
+    expect(kit).not.toContain('Renew policy 0');
+    expect(await calmCards('mum')).toContain('Renew policy 0');
   });
 });

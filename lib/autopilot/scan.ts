@@ -443,7 +443,11 @@ export async function runAutopilotScan(
       status,
       action_type: d.actionType,
       action_label: d.actionLabel,
-      payload: d.payload as never,
+      // The card names the reminder written for it above (`reminder_id`), so a
+      // reader finds this occurrence's card by the reminder's own id and never
+      // by its source alone: an older card for the same policy, naming another
+      // member, is not this reminder's (lib/autopilot/reminder-cards.ts).
+      payload: (createdReminderId ? { ...d.payload, reminder_id: createdReminderId } : d.payload) as never,
       source_kind: d.sourceKind,
       source_id: d.sourceId,
       dedupe_key: d.dedupeKey,

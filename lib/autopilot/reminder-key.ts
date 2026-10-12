@@ -28,6 +28,10 @@
 // tests/a-cards-reminder-copied-without-its-key-is-read-by-its-stamp.test.ts
 // the tags.
 //
+// The tag is minted from the card's payload without SCAN_REMINDER_ID_KEY
+// (stampedPayload): the scan's record of the reminder it wrote for an
+// auto-executed card is bookkeeping, not what the card proposed.
+//
 // Client-safe.
 import type { Tables } from '@/lib/database.types';
 import { AUTOPILOT_SOURCE_TAG } from '@/lib/reminders/provenance';
@@ -35,6 +39,30 @@ import { AUTOPILOT_SOURCE_TAG } from '@/lib/reminders/provenance';
 /** What a card's tag is minted from (lib/services/autopilot suggestionSourceTag). */
 export type SuggestionStampSource = Pick<Tables<'autopilot_suggestions'>,
   'family_id' | 'id' | 'kind' | 'action_type' | 'title' | 'detail' | 'member_id' | 'urgency' | 'payload'>;
+
+/**
+ * The payload key under which the scan records, on an auto-executed card, the
+ * id of the `reminders` row it wrote for that card just before saving it
+ * (lib/autopilot/scan.ts). A reader finds the scan's reminder's card by it
+ * (lib/autopilot/reminder-cards.ts).
+ */
+export const SCAN_REMINDER_ID_KEY = 'reminder_id';
+
+/**
+ * The payload a card's tag is minted from: the card's own, less the scan's
+ * record of the reminder it wrote (SCAN_REMINDER_ID_KEY). That record is
+ * bookkeeping saved with the card, not what the card proposed — as the
+ * status and timestamps the tag already leaves out are — so it never changes
+ * a tag. A payload without one (every card saved before the scan recorded it,
+ * and every open card, the only kind a manager accepts) is the very object
+ * it was, and mints the tag it always minted.
+ */
+export function stampedPayload(payload: SuggestionStampSource['payload']): SuggestionStampSource['payload'] {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload) || !(SCAN_REMINDER_ID_KEY in payload)) return payload;
+  const proposed = { ...payload };
+  delete proposed[SCAN_REMINDER_ID_KEY];
+  return proposed;
+}
 
 /** makeKey (lib/services/idempotency) over flat parts, with Web Crypto. */
 async function mintKey(parts: (string | number | null | undefined)[]): Promise<string> {
@@ -58,5 +86,5 @@ export async function mintSuggestionReminderKey(familyId: string, suggestionId: 
  */
 export async function mintSuggestionSourceTag(card: SuggestionStampSource): Promise<string> {
   return `${AUTOPILOT_SOURCE_TAG}${await mintKey([card.family_id, card.id, card.kind, card.action_type,
-    card.title, card.detail, card.member_id, card.urgency, JSON.stringify(card.payload)])}`;
+    card.title, card.detail, card.member_id, card.urgency, JSON.stringify(stampedPayload(card.payload))])}`;
 }

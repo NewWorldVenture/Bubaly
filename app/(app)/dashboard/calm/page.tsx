@@ -78,8 +78,9 @@ export default async function CalmPage() {
       .eq('family_id', familyId).order('as_of_date', { ascending: false }).limit(1)),
     safe(supabase.from('approval_requests').select('id, title')
       .eq('family_id', familyId).eq('status', 'pending').limit(50)),
-    safe(readVisibleReminders((n) => supabase.from('reminders').select('id, title, remind_at, related_type, related_id')
-      .eq('family_id', familyId).eq('is_done', false).gte('remind_at', now.toISOString()).lte('remind_at', in24).limit(n),
+    safe(readVisibleReminders((from, to) => supabase.from('reminders').select('id, title, remind_at, related_type, related_id')
+      .eq('family_id', familyId).eq('is_done', false).gte('remind_at', now.toISOString()).lte('remind_at', in24)
+      .order('id').range(from, to),
     { limit: 50, viewer, cards: reminderCards })),
   ]);
 

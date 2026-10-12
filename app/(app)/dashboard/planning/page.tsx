@@ -110,9 +110,9 @@ export default async function PlanningPage() {
   });
   const readPlanningReminders = async () => {
     let count: number | null = null;
-    const read = await readVisibleReminders(async (n) => {
+    const read = await readVisibleReminders(async (from, to) => {
       const page = await supabase.from('family_reminders').select('id, title, remind_at, idempotency_key, tags', { count: 'exact' })
-        .eq('family_id', familyId).eq('status', 'active').order('remind_at', { ascending: true, nullsFirst: false }).limit(n);
+        .eq('family_id', familyId).eq('status', 'active').order('remind_at', { ascending: true, nullsFirst: false }).order('id').range(from, to);
       count ??= page.count;
       return page;
     }, { limit: 4, viewer: { role: ctx.active.role, memberId: ctx.active.member?.id ?? null }, cards: reminderCards });

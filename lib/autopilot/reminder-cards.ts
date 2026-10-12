@@ -26,24 +26,47 @@
 // made from is read — the everyone cards too (a refill's "Refill a
 // prescription", an appointment's) — and not only the narrower ones: read that
 // way, a broad card and a link that resolves to nothing looked the same, and
-// both were listed and announced to everyone. A link resolves to nothing
+// both were listed and announced to everyone.
 //
-//   - between the scan's two writes. It commits the reminder first and its
-//     card second (the order that lets it remove the reminder when the card
-//     cannot be saved, and never announce a card whose reminder was not
-//     written), so a reader or a notification tick in between found the
-//     policy's reminder and no card: a guest was listed it, and the whole
-//     family was told it;
-//   - after a scan whose card failed to save and whose clean-up of the
-//     reminder failed or removed nothing: the reminder outlives its card;
-//   - for a legacy or ambiguous link: a 'renewal' reminder whose card has
-//     since been deleted; an accepted card's key no card mints, beside a tag
-//     no card mints either (the card deleted, or its title, member or payload
-//     changed since the tag was minted); a row whose tags name two different
-//     cards. Nothing else on such a row says whose it is — its title is
-//     display text, never provenance — so it stays with the managers, who
-//     read every card, rather than reaching readers its card may refuse. A
-//     manager still sees it, and can reassign or delete it.
+// THE SCAN'S REMINDER IS FOUND BY ITS OWN ID, NOT BY ITS SOURCE. A source has
+// a card per occurrence — a policy renewed every year, a passport renewed
+// again — and the scan writes each occurrence's reminder before its card (the
+// order that lets it remove the reminder when the card cannot be saved, and
+// never announce a card whose reminder was not written). Found by its source,
+// the reminder took the newest card for it, so between the two writes this
+// year's renewal — meant for Ben, whose policy it now names — was classified
+// by last year's card naming Ava: listed to Ava and told to her, and not to
+// Ben. So the scan now saves the card with the reminder's id in its payload
+// (SCAN_REMINDER_ID_KEY, lib/autopilot/scan.ts), and a 'renewal' reminder R
+// for source S is answered by
+//
+//   1. the card that records R — R's own card, whoever it names (a card that
+//      records R under another source, or two cards that both record R, are
+//      no answer: unresolved);
+//   2. no card for S at all: unresolved;
+//   3. a card for S that records a reminder, none of them R: unresolved. That
+//      is R between its commit and its card's; R after a scan whose card
+//      failed to save and whose clean-up of R failed or removed nothing (R
+//      outlives its card); and a reminder written before cards recorded their
+//      reminder, of a source that has had a card since;
+//   4. every card for S written before cards recorded their reminder: THE
+//      CONSERVATIVE LEGACY RULE. Nothing on such a reminder says which of S's
+//      occurrences it is, so they answer only where that cannot matter: every
+//      one of S's cards has the same audience (lib/autopilot/audience.ts), and
+//      it is one that admits a reader whoever the card names — everyone (a
+//      refill's), or everyone but a guest (a renewal's) — and then the newest
+//      decides. An insurance renewal's audience is the managers and the member
+//      the policy names, which is a different member from one year's card to
+//      the next, so A PRE-CHANGE INSURANCE RENEWAL REMINDER IS THE MANAGERS'
+//      ALONE: never told to a member a year's card may not have named. A
+//      manager still sees it, and can reassign or delete it.
+//
+// Its title is display text, never provenance, and nothing is inferred from
+// it. A link otherwise resolves to nothing for an accepted card's key no card
+// mints, beside a tag no card mints either (the card deleted, or its title,
+// member or payload changed since the tag was minted), and for a row whose
+// tags name two different cards; it stays with the managers, who read every
+// card, rather than reaching readers its card may refuse.
 //
 // An accepted card's row carries two stamps, and either finds its card: the
 // key (`idempotency_key`) is that one row's, and the tag (AUTOPILOT_SOURCE_TAG,
@@ -55,9 +78,9 @@
 // reminder.
 //
 // A failed read of the cards is the same answer for every linked reminder. A
-// reminder with no link — one somebody wrote, or the scan's reminder for an
-// appointment or an event, whose cards are everyone's — is read and addressed
-// as before.
+// reminder with no link — one somebody wrote or assigned, or the scan's
+// reminder for an appointment or an event, whose cards are everyone's — is
+// read and addressed as before.
 //
 // Nor does a card the reader cannot find. Under 0486 a reader reads only the
 // cards that are theirs (the RLS twin of lib/autopilot/audience.ts), so a
@@ -78,30 +101,39 @@
 // (lib/autopilot/reminder-key.ts); without them such a row is unresolved,
 // never nobody's card.
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '@/lib/database.types';
+import type { Database, Json } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
 import { readAll } from '@/lib/supabase/read-all';
 import { hasReminderProvenance, reminderProvenanceTags } from '@/lib/reminders/provenance';
-import { suggestionVisibleTo, type AudienceRow, type AudienceViewer } from '@/lib/autopilot/audience';
-import type { SuggestionStampSource } from '@/lib/autopilot/reminder-key';
+import { suggestionAudience, suggestionVisibleTo, type AudienceRow, type AudienceViewer, type SuggestionAudience } from '@/lib/autopilot/audience';
+import { SCAN_REMINDER_ID_KEY, type SuggestionStampSource } from '@/lib/autopilot/reminder-key';
+import { readKeptPrefix, type PrefixPage } from '@/lib/autopilot/visible-prefix';
 
 type DB = SupabaseClient<Database>;
 
-export type ReminderCard = AudienceRow & { id: string; source_id: string | null };
+export type ReminderCard = AudienceRow & { id: string; source_id: string | null; payload?: Json };
 
 /**
- * The family's reminder cards, whatever their audience, by the three links a
+ * The family's reminder cards, whatever their audience, by the links a
  * reminder carries back to one. `byReminderKey` and `bySourceTag` are null
  * when the reader did not say how an accepted card's stamps are minted.
  */
 export type ReminderCards = {
-  bySource: Map<string, ReminderCard>;
+  /** Every card made from a source, newest first. */
+  bySource: Map<string, ReminderCard[]>;
+  /** The card that records writing this scan reminder (SCAN_REMINDER_ID_KEY); null when two cards record it. */
+  byReminderId: Map<string, ReminderCard | null>;
   byReminderKey: Map<string, ReminderCard> | null;
   bySourceTag: Map<string, ReminderCard> | null;
 };
 
-/** What a reminder row carries back to its card: `reminders` has the first two, `family_reminders` the last two. */
+/**
+ * What a reminder row carries back to its card: its own id; `reminders` has
+ * the source (`related_type`, `related_id`), `family_reminders` the stamps.
+ */
 export type ReminderLink = {
+  /** The row's id: the scan's reminder is found by the card that records it. */
+  id: string;
   related_type?: string | null;
   related_id?: string | null;
   idempotency_key?: string | null;
@@ -140,6 +172,28 @@ function scanSource(row: ReminderLink): string | null {
   return row.related_type === 'renewal' && row.related_id ? row.related_id : null;
 }
 
+/** The reminder the scan recorded writing for this card (SCAN_REMINDER_ID_KEY), or null: none recorded. */
+function recordedReminderId(card: ReminderCard): string | null {
+  const { payload } = card;
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  const id = payload[SCAN_REMINDER_ID_KEY];
+  return typeof id === 'string' && id ? id : null;
+}
+
+/**
+ * Whether who may read a card of this audience depends on the member it
+ * names — so that two cards of it, naming different members, may admit
+ * different readers. Every audience is answered here, so one added later
+ * must be.
+ */
+function readersDependOnMember(audience: SuggestionAudience): boolean {
+  switch (audience) {
+    case 'policy-readers': return true;
+    case 'not-guests': return false;
+    case 'everyone': return false;
+  }
+}
+
 /**
  * Whether this row carries the stamp an accepted card writes: the exact one
  * resolveSuggestion makes (lib/reminders/provenance.ts), not any tag that only
@@ -158,9 +212,9 @@ export function mayBeCardReminder(row: ReminderLink): boolean {
 /**
  * Every Autopilot card of the family's that a reminder can be made from — the
  * ones whose audience is everyone too, so that a link to one of them is known
- * to be everyone's rather than unresolved. Newest card first for a source, so
- * a policy renewed every year answers with this year's. Every page, so a card
- * is never missed for being old; null when the read failed.
+ * to be everyone's rather than unresolved. Newest card first for a source.
+ * Every page, so a card is never missed for being old; null when the read
+ * failed.
  */
 export async function readReminderCards(db: DB, familyId: string, opts: ReminderCardsOptions): Promise<ReminderCards | null> {
   // The audience and the links, and what the card's tag is minted from.
@@ -186,17 +240,20 @@ export async function readReminderCards(db: DB, familyId: string, opts: Reminder
       return null;
     }
   }
-  const bySource = new Map<string, ReminderCard>();
+  const bySource = new Map<string, ReminderCard[]>();
+  const byReminderId = new Map<string, ReminderCard | null>();
   const byReminderKey = stamps ? new Map<string, ReminderCard>() : null;
   const bySourceTag = stamps ? new Map<string, ReminderCard>() : null;
   read.rows.forEach((card, i) => {
-    if (card.source_id && !bySource.has(card.source_id)) bySource.set(card.source_id, card);
+    if (card.source_id) bySource.set(card.source_id, [...(bySource.get(card.source_id) ?? []), card]);
+    const reminderId = recordedReminderId(card);
+    if (reminderId) byReminderId.set(reminderId, byReminderId.has(reminderId) ? null : card);
     if (stamps) {
       byReminderKey?.set(stamps.keys[i], card);
       bySourceTag?.set(stamps.tags[i], card);
     }
   });
-  return { bySource, byReminderKey, bySourceTag };
+  return { bySource, byReminderId, byReminderKey, bySourceTag };
 }
 
 /** `readReminderCards`, read once on first use and shared by every caller after. */
@@ -209,19 +266,38 @@ export function reminderCardsReader(db: DB, familyId: string, opts: ReminderCard
  * The card this reminder was made from: found, whatever its audience; no link
  * at all (undefined — a reminder somebody wrote); or unresolved (null — a link
  * no card answers: the scan's reminder before its card is saved or after the
- * card failed to save, a key and a tag no card mints, tags naming two cards,
- * or an accepted card's row read without `keyOf` and `sourceTagOf`).
+ * card failed to save, a pre-change insurance renewal's, a key and a tag no
+ * card mints, tags naming two cards, or an accepted card's row read without
+ * `keyOf` and `sourceTagOf`).
  *
- * An accepted card's row is found by its key first, the stamp that row was
- * written under; then by its tag, which a next occurrence carries without
- * the key.
+ * The scan's reminder is found by the card that records its id (scanCard,
+ * and the header's four steps). An accepted card's row is found by its key
+ * first, the stamp that row was written under; then by its tag, which a next
+ * occurrence carries without the key.
  */
 export function reminderCardOf(cards: ReminderCards, row: ReminderLink): ReminderCard | undefined | null {
   const source = scanSource(row);
-  if (source) return cards.bySource.get(source) ?? null;
+  if (source) return scanCard(cards, source, row.id);
   if (!accepted(row)) return undefined;
   const byKey = row.idempotency_key ? cards.byReminderKey?.get(row.idempotency_key) : undefined;
   return byKey ?? stampedCard(cards, row);
+}
+
+/** The card of the scan's reminder `reminderId`, made from `source`, or null: the header's four steps. */
+function scanCard(cards: ReminderCards, source: string, reminderId: string): ReminderCard | null {
+  // 1. The card that records this reminder, if it names the same source.
+  const recorded = cards.byReminderId.get(reminderId);
+  if (recorded !== undefined) return recorded?.source_id === source ? recorded : null;
+  // 2. No card for the source at all.
+  const made = cards.bySource.get(source) ?? [];
+  if (made.length === 0) return null;
+  // 3. The source's cards record their reminders, and none records this one.
+  if (made.some((card) => recordedReminderId(card) !== null)) return null;
+  // 4. Cards from before cards recorded their reminder: an answer only where
+  //    it cannot depend on which occurrence this reminder is.
+  const audience = suggestionAudience(made[0]);
+  if (readersDependOnMember(audience) || made.some((card) => suggestionAudience(card) !== audience)) return null;
+  return made[0];
 }
 
 /** The one card this row's tags name, or null: none does, or they name two. */
@@ -256,23 +332,21 @@ export async function visibleReminders<T extends ReminderLink>(
 /**
  * Up to `limit` rows of a reminder read that `viewer` may be shown.
  *
- * `read(n)` is the caller's query with `.limit(n)`. It is asked for `limit`
- * first — the query it always made — and asked again for twice as many only
- * while hidden rows leave this reader short and the answer was full, so a
- * guest's ten soonest are not cut to the three a read of ten leaves them. Each
- * answer is whole on its own (no page is stitched to another), and a short
- * answer ends it: the rows ran out, or the server capped the read. A failed
- * read fails, as the one query would.
+ * `page(from, to)` is the caller's query with `.range(from, to)`, ordered by
+ * its own keys and then by `id`, so pages neither repeat nor skip a row. It
+ * is paged as the card lists are (lib/autopilot/visible-prefix.ts
+ * readKeptPrefix): `limit` rows first — the read the caller always made, one
+ * round trip for a reader who may be shown them all — then twice as many,
+ * from where the rows returned end, while hidden rows leave this reader short;
+ * until a page comes back empty, and never on a short page, which may be the
+ * server's cap rather than the end: read as the end, a title lookup on a
+ * server capping at one row met the managers' match first and told the
+ * reader there was no reminder of theirs. A failed page fails, as the one
+ * query would.
  */
 export async function readVisibleReminders<T extends ReminderLink, E = unknown>(
-  read: (n: number) => PromiseLike<{ data: T[] | null; error: E | null }>,
+  page: PrefixPage<T, E>,
   opts: { limit: number; viewer: AudienceViewer; cards: () => Promise<ReminderCards | null> },
 ): Promise<{ data: T[] | null; error: E | null }> {
-  for (let n = opts.limit; ; n *= 2) {
-    const { data, error } = await read(n);
-    if (error) return { data: null, error };
-    const rows = data ?? [];
-    const kept = await visibleReminders(rows, opts.viewer, opts.cards);
-    if (kept.length >= opts.limit || rows.length < n) return { data: kept.slice(0, opts.limit), error: null };
-  }
+  return readKeptPrefix(page, opts.limit, (rows) => visibleReminders(rows, opts.viewer, opts.cards));
 }
