@@ -194,7 +194,11 @@ export async function POST(req: NextRequest) {
     // with `active`, by the re-assert as much as by a reactivation. The write
     // lands only while the row still has the status and opt-out time this
     // request saw; anything else matches no row, writes nothing, and the newer
-    // state stands (below).
+    // state stands (below). A click on the unsubscribe link moves the opt-out
+    // time even on a row that already says `unsubscribed`
+    // (app/api/blog/unsubscribe/route.ts), so the owner refusing this very
+    // notice while the provider is still answering is a newer state too
+    // (AUD-1028-M1-REPEAT).
     const guarded = supabase
       .from('blog_subscribers')
       .update(patch)

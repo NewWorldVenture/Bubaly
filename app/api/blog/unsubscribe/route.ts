@@ -7,8 +7,30 @@ export const runtime = 'nodejs';
 // (?token=<unsubscribe_token>). Token-keyed so it works with no session, and
 // idempotent: unsubscribing twice is still unsubscribed. Redirects to the blog
 // with a human-readable confirmation instead of returning bare JSON.
+//
+// EVERY VALID CLICK IS WRITTEN, AN ADDRESS ALREADY OPTED OUT INCLUDED
+// (AUD-1028-M1-REPEAT). /api/blog/subscribe reverses an opt-out only after the
+// address has been mailed that it happened, so it reads the row, waits on the
+// mail provider, and then writes guarded on the status and opt-out time it
+// read (app/api/blog/subscribe/route.ts). A click on the link in that very
+// notice lands DURING the wait, on a row that still says `unsubscribed`; this
+// route used to leave such a row untouched, so both guarded columns still
+// matched and the reactivation the owner had just refused went through. Each
+// click now re-stamps the opt-out with a time later than the one on the row,
+// which no reactivation read before it can match.
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * The opt-out time this click writes: now, and in any case later than the one
+ * already on the row, so it differs from anything a reactivation in flight
+ * read — even within the same millisecond, or behind a clock that stepped back.
+ */
+function optOutStamp(previous: string | null | undefined): string {
+  const now = Date.now();
+  const before = previous ? Date.parse(previous) : Number.NaN;
+  return new Date(Number.isFinite(before) && before >= now ? before + 1 : now).toISOString();
+}
 
 export async function GET(req: NextRequest) {
   const token = (req.nextUrl.searchParams.get('token') ?? '').trim();
@@ -37,7 +59,7 @@ export async function GET(req: NextRequest) {
   const supabase = createServiceClient();
   const { data, error: lookupError } = await supabase
     .from('blog_subscribers')
-    .select('id, status')
+    .select('id, status, unsubscribed_at')
     .eq('unsubscribe_token', token)
     .maybeSingle();
 
@@ -47,7 +69,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(home);
   }
 
-  if (data && data.status !== 'unsubscribed') {
+  if (data) {
+    // Written whatever status was read, so a reactivation waiting on its notice
+    // cannot outlast this click (see the top of this file). Unguarded: a row a
+    // reactivation moved to `active` since the read is opted out again.
     // Deliberately NOT confirmed. This runs on the service role, so RLS cannot be
     // what makes it match nothing: zero rows means the row was deleted since the
     // read, and a person with no row is not on the list — which is what they
@@ -55,7 +80,7 @@ export async function GET(req: NextRequest) {
     // Audit C1-S9-62.
     const { error: updateError } = await supabase
       .from('blog_subscribers')
-      .update({ status: 'unsubscribed', unsubscribed_at: new Date().toISOString() })
+      .update({ status: 'unsubscribed', unsubscribed_at: optOutStamp(data.unsubscribed_at) })
       .eq('id', data.id);
     if (updateError) {
       console.error('[blog-unsubscribe] unsubscribe write failed', { subscriberId: data.id, error: updateError });

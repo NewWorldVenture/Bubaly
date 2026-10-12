@@ -105,12 +105,17 @@ describe('the blog unsubscribe says only what it can support', () => {
     expect(outcome(await call('not-a-uuid'))).toBe('invalid');
   });
 
-  it('does not re-write a subscriber who already unsubscribed', async () => {
+  it('re-stamps a subscriber who already unsubscribed, and still confirms it (AUD-1028-M1-REPEAT)', async () => {
+    // Idempotent in what the reader sees — unsubscribing twice is still
+    // unsubscribed — but no longer a no-op: a second click that wrote nothing
+    // left a reactivation waiting on its notice, guarded on the status and
+    // opt-out time it had read, free to land over it. Proved end to end in
+    // tests/an-unsubscribe-click-outlasts-a-reactivation-in-flight.test.ts.
     const { client, updates } = subscriberClient({ data: { id: 'sub-1', status: 'unsubscribed' }, error: null });
     createServiceClient.mockReturnValue(client);
 
     expect(outcome(await call(TOKEN))).toBe('1');
-    expect(updates, 'idempotent — unsubscribing twice is still unsubscribed').toEqual([]);
+    expect(updates, 'every valid click moves the opt-out').toEqual(['sub-1']);
   });
 
   it('the page can render the third outcome it is now sent', async () => {

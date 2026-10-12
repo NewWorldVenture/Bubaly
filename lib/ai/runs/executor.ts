@@ -49,7 +49,8 @@ import { behaviorForDomain, effectiveRisk } from '@/lib/ai/family-settings';
 import { loadAISettings } from '@/lib/services/ai-settings';
 import { evaluateAction, riskTierStance, riskToDecision, toolTags, type ApprovalModel, type Decision } from '@/lib/trust/engine';
 import { carriesAmount, readAmountCents, UNKNOWN_AMOUNT_CENTS } from '@/lib/trust/amount';
-import { editStaysWithinFiledRule, FILED_REQUEST_COLUMNS, type FiledRequest } from '@/lib/trust/edit-rule';
+import { FILED_REQUEST_COLUMNS, refusesOutright, releaseStaysWithinFiledRule, type FiledRequest } from '@/lib/trust/edit-rule';
+import { localizedTrustReason } from '@/lib/trust/messages';
 import { loadTrustInputs, roleOf } from '@/lib/trust/server';
 import { conformNulls } from '@/lib/ai/schema-to-json';
 import {
@@ -65,7 +66,7 @@ import { parseVerificationSpec, runVerification, type VerificationOutcome } from
 import { resolveBindings, type Resolution } from './bindings';
 // Pure, and shared with the approval card and `decide()`: what an approved step
 // runs must be derived by the one rule that decided what the approvers saw.
-import { classifyPayload, editableArgsOf, effectiveArgsOf } from '@/lib/approvals/card-data';
+import { classifyPayload, effectiveArgsOf } from '@/lib/approvals/card-data';
 
 type RunPatch = Database['public']['Tables']['family_automation_runs']['Update'];
 type StepPatch = Database['public']['Tables']['ai_plan_steps']['Update'];
@@ -178,6 +179,18 @@ function approvedArgsFor(
   return effective.args;
 }
 
+/** What a decided step would run, for `releaseWithinFiledRule`. */
+export type StepRelease = {
+  /** The step's own input, bindings resolved: the ask as filed. */
+  asked: unknown;
+  /** What runs: the approver's edit, or `asked`. */
+  released: unknown;
+  /** Whether `released` is an approver's edit. */
+  edited: boolean;
+};
+
+export type ReleaseOutcome = 'within' | 'outside_rule' | 'rule_changed';
+
 /** Everything outside the control flow, in one injectable object. */
 export type ExecutorPort = {
   loadRun(runId: string): Promise<ServiceResult<RunSnapshot | null>>;
@@ -199,16 +212,23 @@ export type ExecutorPort = {
    * its bindings resolved against the steps it depends on — what the tool will
    * actually run with — so the rule it is filed under reads that amount, not a
    * `{ "$fromStep": … }` placeholder (`approvalRuleFor`).
+   *
+   * A family rule that refuses the step outright is not filed at all: the
+   * result is a failure with code `denied` and the rule's own reason, and the
+   * step is recorded as refused (AUD-1028-AI-DENY).
    */
   requestApproval(scope: ServiceScope, run: RunSnapshot, step: StepSnapshot, bound: Resolution): Promise<ServiceResult<{ id: string }>>;
   loadApproval(scope: ServiceScope, approvalId: string): Promise<ServiceResult<ApprovalSnapshot | null>>;
   /**
-   * Whether an approver's edit (`approvedArgsFor`) keeps this step under the
-   * rule its approval was filed under (lib/trust/edit-rule.ts). False: the
-   * step does not run it. An error: the rules could not be read, and nothing
-   * runs on a guess.
+   * Whether what a decided step is about to run — an approver's edit
+   * (`approvedArgsFor`), or the ask itself, bindings resolved — is still this
+   * approval's to release under the family's rules now (lib/trust/edit-rule.ts):
+   * `outside_rule` for an edit that moved it to another rule, `rule_changed`
+   * for a rule that now refuses it or asks more than the card carries. Either
+   * way the step does not run it. An error: the rules could not be read, and
+   * nothing runs on a guess.
    */
-  editWithinFiledRule(scope: ServiceScope, step: StepSnapshot, approvalId: string, args: Record<string, unknown>): Promise<ServiceResult<boolean>>;
+  releaseWithinFiledRule(scope: ServiceScope, step: StepSnapshot, approvalId: string, release: StepRelease): Promise<ServiceResult<ReleaseOutcome>>;
   /**
    * Deliver a notify step THROUGH the trust gate (`notifications.notify` in the
    * registry), under the requester's role: the family's switch, its messaging
@@ -1020,8 +1040,16 @@ async function runStep(
       // them is already known; filed before resolving, a bound $900 read as no
       // amount at all, and a rule capped at $50 matched it. A binding that
       // does not resolve still fails the step below, after the decision.
+      //
+      // A family rule that refuses the step outright is the gate's answer
+      // whatever the plan said (AUD-1028-AI-DENY). Filed anyway, as "one of
+      // us" with no policy, one yes released it and it ran with the gate
+      // skipped — a deny turned into a vote. Nothing is filed and nothing runs.
       const created = await port.requestApproval(scope, run, step, resolveBindings(step.input_json as Json, depByIdResults));
-      if (!created.ok) return failStep(port, run, step, created.error, created.retryable === true);
+      if (!created.ok) {
+        if (created.code === SERVICE_CODES.denied) return recordDenial(port, run, step, toolForStep(step)?.name ?? step.tool_name, created.error);
+        return failStep(port, run, step, created.error, created.retryable === true);
+      }
       await port.updateStep(run, step.id, {
         status: 'awaiting_approval', approval_id: created.data.id, ...(step.approval_required ? {} : { approval_required: true }),
       });
@@ -1067,17 +1095,6 @@ async function runStep(
       });
       return { kind: 'progressed' };
     }
-    // An edit runs under the decision only while it stays under the rule the
-    // approval was filed under. `editAndApprove` and `decide()` refuse one that
-    // does not, but the column is any manager's to write on a pending row, and
-    // a row decided before they did is still waiting here. Such an edit is not
-    // run, and neither is the original nobody approved last: the step fails
-    // and says to ask again.
-    if (approvedPayload !== null) {
-      const within = await port.editWithinFiledRule(scope, step, step.approval_id, approvedPayload as Record<string, unknown>);
-      if (!within.ok) return failStep(port, run, step, within.error, within.retryable === true);
-      if (!within.data) return failStep(port, run, step, (await getTranslations())('aiRuns.editOutsideFiledRule'), false);
-    }
   }
 
   // Fill in what an earlier step produced. A plan can say "add the packing list
@@ -1088,6 +1105,32 @@ async function runStep(
   const bound = resolveBindings(step.input_json as Json, depByIdResults);
   if (!bound.ok) return failStep(port, run, step, bound.error, false);
   const boundStep: StepSnapshot = { ...step, input_json: bound.value };
+
+  // A decided step runs only what its approval may still release. An edit runs
+  // under the decision only while it stays under the rule the approval was
+  // filed under: `editAndApprove` and `decide()` refuse one that does not, but
+  // the column is any manager's to write on a pending row, and a row decided
+  // before they did is still waiting here. And the ask itself runs only while
+  // the family's rules now let this card release it (AUD-1028-AI-LEGACY): a
+  // card filed "one of us" before the rule read its bound amount, or before a
+  // held step answered to a deny, was decided on a rule the family does not
+  // have — and the step below runs with the gate skipped. Either way nothing
+  // is run, and the step fails and says to ask again.
+  if (approved && step.approval_id) {
+    // An edit is weighed with the step's bindings resolved, as `decide()` and
+    // `editAndApprove` weighed it.
+    const edit = approvedPayload === null ? null : resolveBindings(approvedPayload as Json, depByIdResults);
+    const within = await port.releaseWithinFiledRule(scope, step, step.approval_id, {
+      asked: bound.value,
+      released: edit === null ? bound.value : edit.ok ? edit.value : approvedPayload,
+      edited: approvedPayload !== null,
+    });
+    if (!within.ok) return failStep(port, run, step, within.error, within.retryable === true);
+    if (within.data !== 'within') {
+      const t = await getTranslations();
+      return failStep(port, run, step, within.data === 'outside_rule' ? t('aiRuns.editOutsideFiledRule') : t('aiRuns.ruleNoLongerReleases'), false);
+    }
+  }
 
   await port.updateStep(run, step.id, { status: 'executing', started_at: new Date(port.now()).toISOString() });
   await port.appendEvent(run, {
@@ -1177,7 +1220,7 @@ async function parkOnGate(
 }
 
 /** A denial is a decision, not a fault: retrying it would ask the trust engine the same question and get the same answer. */
-async function recordDenial(port: ExecutorPort, run: RunSnapshot, step: StepSnapshot, toolName: string, reason: string): Promise<StepDisposition> {
+async function recordDenial(port: ExecutorPort, run: RunSnapshot, step: StepSnapshot, toolName: string | null, reason: string): Promise<StepDisposition> {
   await port.updateStep(run, step.id, {
     status: 'failed', error: reason, completed_at: new Date(port.now()).toISOString(),
   });
@@ -1503,6 +1546,13 @@ async function approvalRuleFor(
     delegations: trust.delegations,
     emergencyDomains: trust.emergencyDomains,
   });
+  // A rule that refuses the step outright — a deny policy, the dial's "off" —
+  // is not a rule to file a card under: the gate refuses the step unheld, and
+  // holding it must not turn that refusal into one person's yes. A pure
+  // approval step runs nothing itself, so it is still asked.
+  if (step.step_type !== 'approval' && refusesOutright(decision)) {
+    return fail(localizedTrustReason(await getTranslations(), decision), { code: SERVICE_CODES.denied, retryable: false });
+  }
   if (decision.effect === 'require_approval' && decision.basis === 'policy') {
     return ok({
       domain,
@@ -1732,9 +1782,9 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
         recordedEdits,
       });
     },
-    async editWithinFiledRule(scope, step, approvalId, args) {
-      // The row as filed: who asked, under which rule, and the ask the edit
-      // was merged over (`approvedArgsFor`). 0480 keeps the first two as filed.
+    async releaseWithinFiledRule(scope, step, approvalId, release) {
+      // The row as filed: who asked and under which rule. 0480 keeps both as
+      // filed.
       const { data, error } = await db
         .from('approval_requests')
         .select(`${FILED_REQUEST_COLUMNS}, payload, payload_kind, plan_step_ids`)
@@ -1742,22 +1792,23 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
         .eq('family_id', scope.familyId)
         .maybeSingle();
       if (error || !data) {
-        if (error) console.error('[ai/runs] failed to read the rule an edited approval was filed under', error);
+        if (error) console.error('[ai/runs] failed to read the rule an approval was filed under', error);
         return fail((await getTranslations())('aiRuns.approvalRulesUnreadable'), { code: SERVICE_CODES.db, retryable: true });
       }
       const row = data as unknown as FiledRequest & { payload: unknown; payload_kind: string | null; plan_step_ids: string[] | null };
       const classified = classifyPayload({
         payload: row.payload, payload_kind: row.payload_kind, run_id: null, plan_step_id: null, plan_step_ids: row.plan_step_ids,
       });
-      const verdict = await editStaysWithinFiledRule(db, {
+      const verdict = await releaseStaysWithinFiledRule(db, {
         row,
         filedBy: classified?.kind === 'tool' ? { kind: 'tool', filedName: classified.name } : { kind: 'step' },
         tool: toolForStep(step),
-        original: editableArgsOf(classified) ?? {},
-        edited: args,
+        asked: release.asked,
+        released: release.released,
+        edited: release.edited,
       });
-      if (verdict.ok) return ok(true);
-      if (verdict.reason === 'outside_rule') return ok(false);
+      if (verdict.ok) return ok('within');
+      if (verdict.reason !== 'unreadable') return ok(verdict.reason);
       return fail((await getTranslations())('aiRuns.approvalRulesUnreadable'), { code: SERVICE_CODES.db, retryable: true });
     },
     async notifyFamily(scope, input, opts) {
