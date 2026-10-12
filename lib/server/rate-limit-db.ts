@@ -19,21 +19,41 @@ import type { Database } from '@/lib/database.types';
 // The forms replaced are the ones `clientIp` produces — an IPv4 address or an
 // IPv6 /64 — and anything shaped like an email address. The digest is keyed on
 // a server secret, so it cannot be reversed by hashing the IPv4 space.
+//
+// ONLY while that secret is one. With neither INTERNAL_SECRET nor
+// SUPABASE_SERVICE_ROLE_KEY set, the key used to fall back to the constant
+// below — which is in this public repository, so every stored digest could be
+// reversed by hashing the IPv4 space with it, and the table was the visitor log
+// again. In production that configuration now FAILS CLOSED: a key that needs a
+// digest throws, rateLimitDb answers "unavailable" (refused, unless the caller
+// chose failOpen), and nothing is written. Development and tests, where no
+// production secret exists, keep the constant so limiting still works there.
+// A key with no IP or address in it (a signed-in caller's own id) needs no
+// digest and is unaffected.
 const IPV4 = /(?<![\d.])\d{1,3}(?:\.\d{1,3}){3}(?![\d.])/g;
 const IPV6_64 = /(?<![0-9a-f])[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){3}::\/64/gi;
 const EMAIL = /[^\s:@]+@[^\s:@]+/g;
+const DEV_SUBJECT_KEY = 'bubaly-dev-rate-limit-subject';
 
 function subjectKey(): string {
   const configured = [process.env.INTERNAL_SECRET, process.env.SUPABASE_SERVICE_ROLE_KEY]
     .find((value) => typeof value === 'string' && value.trim() !== '');
-  return configured ?? 'bubaly-dev-rate-limit-subject';
+  if (configured) return configured;
+  if (process.env.NODE_ENV === 'production') {
+    console.error('[rate-limit] no INTERNAL_SECRET or SUPABASE_SERVICE_ROLE_KEY: refusing to store a bucket key under the public development key');
+    throw new Error('The rate-limit subject key is not configured.');
+  }
+  return DEV_SUBJECT_KEY;
 }
 
 function digest(value: string): string {
   return `h.${createHmac('sha256', subjectKey()).update('rate-limit-subject\0').update(value).digest('hex').slice(0, 32)}`;
 }
 
-/** The bucket key as stored: IP and email parts replaced by a keyed digest. */
+/**
+ * The bucket key as stored: IP and email parts replaced by a keyed digest.
+ * Throws in production when a part needs a digest and no secret is configured.
+ */
 export function storedBucketKey(key: string): string {
   return key
     .replace(EMAIL, (match) => digest(match.toLowerCase()))

@@ -10,6 +10,8 @@ type DB = SupabaseClient<Database>;
 
 export type Step = { action: string; subject?: string; body?: string };
 export type Recipient = { email: string | null; name?: string | null };
+/** Asked once per mail, just before it is sent: may one more go to this recipient? */
+export type SendAdmission = () => Promise<boolean>;
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char] ?? char));
@@ -29,21 +31,61 @@ function escapeHtml(value: string): string {
  * (lib/server/canonical-mailbox.ts). A public form takes any spelling, so
  * `victim+day1@gmail.com` would otherwise reach the inbox that unsubscribed as
  * `victim@gmail.com`, once a day, a new `+tag` each time.
+ *
+ * That only helps when the ledger holds the inbox. /api/marketing/unsubscribe
+ * now records it beside the spelling that was mailed, but a row written before
+ * it did holds ONLY that spelling — `victim+news@gmail.com` — and neither
+ * `victim@gmail.com` nor `victim+other@gmail.com` names it. So when the exact
+ * read finds nothing, a second read takes every stored spelling that could be
+ * the same inbox (a LIKE that is a superset) and keeps those whose canonical
+ * inbox IS this one. No row is rewritten: the old rows are honoured as they are.
+ * A superset too large to read whole is `unknown`, never `mailable`.
  */
 async function suppressionFor(supabase: DB, email: string): Promise<'mailable' | 'suppressed' | 'unknown'> {
   try {
     const typed = email.trim().toLowerCase();
-    const spellings = [...new Set([typed, canonicalMailbox(typed)])];
+    const inbox = canonicalMailbox(typed);
     const { data, error } = await supabase
       .from('marketing_suppressions')
       .select('email')
-      .in('email', spellings)
+      .in('email', [...new Set([typed, inbox])])
       .limit(1);
     if (error || !Array.isArray(data)) return 'unknown';
-    return data.length > 0 ? 'suppressed' : 'mailable';
+    if (data.length > 0) return 'suppressed';
+
+    const pattern = spellingsOf(inbox);
+    if (!pattern) return 'mailable';
+    const { data: near, error: nearError } = await supabase
+      .from('marketing_suppressions')
+      .select('email')
+      .like('email', pattern)
+      .limit(SPELLING_SCAN_LIMIT);
+    if (nearError || !Array.isArray(near)) return 'unknown';
+    if (near.some((row) => typeof row.email === 'string' && canonicalMailbox(row.email) === inbox)) return 'suppressed';
+    return near.length < SPELLING_SCAN_LIMIT ? 'mailable' : 'unknown';
   } catch {
     return 'unknown';
   }
+}
+
+/** Rows the spelling read takes before it stops trusting that it saw them all. */
+const SPELLING_SCAN_LIMIT = 500;
+
+/**
+ * A LIKE pattern matched by every stored spelling whose canonical inbox is
+ * `inbox` (and by some that are not; suppressionFor compares exactly). Outside
+ * Gmail a spelling differs from its inbox only by a `+tag`; Gmail also ignores
+ * dots anywhere in the local part and answers to googlemail.com. The local
+ * part's own LIKE metacharacters are escaped.
+ */
+function spellingsOf(inbox: string): string | null {
+  const at = inbox.lastIndexOf('@');
+  if (at <= 0) return null;
+  const escape = (value: string) => value.replace(/[\\%_]/g, (char) => `\\${char}`);
+  const local = inbox.slice(0, at);
+  const domain = inbox.slice(at + 1);
+  if (domain === 'gmail.com') return `${[...local].map(escape).join('%')}%@g%mail.com%`;
+  return `${escape(local)}+%@${escape(domain)}%`;
 }
 
 /** The signed one-click way out every automation mail carries, as campaign mail does. */
@@ -61,8 +103,21 @@ function unsubscribeFooter(url: string): string {
  * A suppressed recipient is recorded as `send_email:suppressed`, which is NOT a
  * failure: the run did what it should, and a failed run is re-claimed by the
  * scheduled runner on every tick, which would re-read the opt-out forever.
+ *
+ * `admit`, when given, is asked immediately before each mail is handed to the
+ * provider — after the opt-out read, so a suppressed recipient spends nothing —
+ * and a refusal is recorded as `send_email:throttled`, also not a failure (the
+ * bound held). It is how a caller's per-recipient allowance is enforced on the
+ * mail actually sent rather than on the event that started it: one event fans
+ * out to every matching workflow and every send_email step in each.
  */
-export async function runSteps(steps: Step[], recipient: Recipient, fallback: Copy, supabase: DB): Promise<string[]> {
+export async function runSteps(
+  steps: Step[],
+  recipient: Recipient,
+  fallback: Copy,
+  supabase: DB,
+  admit?: SendAdmission,
+): Promise<string[]> {
   const done: string[] = [];
   let consent: 'mailable' | 'suppressed' | 'unknown' | null = null;
   for (const step of steps) {
@@ -83,6 +138,15 @@ export async function runSteps(steps: Step[], recipient: Recipient, fallback: Co
       const subject = step.subject || fallback.subject;
       const html = `<p>Hi ${escapeHtml(recipient.name || 'there')},</p><p>${escapeHtml(step.body || fallback.body)}</p><p>— The Bubaly Team</p>`;
       if (emailEnabled()) {
+        // A refusal, and an admission that could not be decided, both send nothing.
+        let admitted = true;
+        if (admit) {
+          try { admitted = await admit(); } catch { admitted = false; }
+        }
+        if (!admitted) {
+          done.push('send_email:throttled');
+          continue;
+        }
         try {
           const unsubscribe = unsubUrl(APP_URL, recipient.email);
           const { error } = await getResend().emails.send({
