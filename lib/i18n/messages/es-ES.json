@@ -7710,7 +7710,7 @@
   "homeModule.addAppliancesAndItemsTo": "Añade electrodomésticos y objetos para seguir garantías y mantenimiento.",
   "homeModule.addMaintenanceTasksToStay": "Añade tareas de mantenimiento para tener la casa bajo control.",
   "homeModule.assetAdded": "Activo añadido",
-  "homeModule.assetKeptFileAttached": "Este elemento no se ha eliminado: todavía tiene un archivo adjunto, quizá uno añadido mientras lo eliminabas. Vuelve a eliminarlo para quitarlo junto con sus archivos.",
+  "homeModule.assetKeptFileAttached": "Este elemento no se ha eliminado: todavía tiene un archivo adjunto, quizá uno añadido mientras lo eliminabas. Intenta eliminarlo de nuevo. Si sigue ahí, quita primero sus archivos.",
   "homeModule.assetRemoved": "Activo eliminado",
   "homeModule.assetRemovedFileKept": "Activo eliminado, pero uno de sus archivos no se pudo borrar. Se guarda en la caja fuerte segura, que solo pueden abrir los progenitores y otros adultos; bórralo desde allí en Archivos.",
   "homeModule.fileRemoved": "Archivo eliminado",

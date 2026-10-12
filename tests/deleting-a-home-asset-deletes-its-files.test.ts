@@ -283,7 +283,13 @@ describe('files attached while the asset is being deleted', () => {
     expect(home.db.table('home_assets').some((asset) => asset.id === 'asset-fridge')).toBe(false);
   });
 
-  it('reports a sweep it could not finish, and a second press finishes it', async () => {
+  // AUD-1022-L1-GUARD: a later press used to recognise the guarding row by its
+  // category and clear it with its file. A category is text any family member
+  // can give a document, so a later sweep now leaves every row it finds alone:
+  // the guarded file stays in the vault, protected, for a parent to delete in
+  // Files. (After a failed delete the Home page shows the asset gone, so the
+  // vault is the way back to it anyway.)
+  it('reports a sweep it could not finish; a second press leaves the guarded file in the vault', async () => {
     const home = household();
     home.store.refuse.add(LATE);
     const first = await removeHomeAsset(committingBeforeAssetDelete(home, () => attachLate(home)), FAMILY, 'asset-fridge');
@@ -295,9 +301,10 @@ describe('files attached while the asset is being deleted', () => {
     home.store.refuse.clear();
     const retry = await removeHomeAsset(client(home), FAMILY, 'asset-fridge');
 
-    // This press deleted no asset, and says so; the file is gone all the same.
+    // This press deleted no asset, and says so; the guarded file is untouched.
     expect(retry).toEqual({ ok: false, notSaved: true });
-    expect(home.store.objects.has(LATE)).toBe(false);
+    expect(home.store.objects.has(LATE)).toBe(true);
+    expect(guarding(home, LATE)).toHaveLength(1);
   });
 
   // Stored outside the asset's folders (linked some other way than the Home
@@ -408,17 +415,74 @@ describe('files attached while the asset is being deleted', () => {
     });
   });
 
-  it('clears the kept row once a later sweep removes the file', async () => {
+  it('a later sweep leaves the kept row and its file alone; every other row stays where it was', async () => {
     const home = household();
     home.store.refuse.add(LATE);
     await removeHomeAsset(committingBeforeAssetDelete(home, () => attachLate(home)), FAMILY, 'asset-fridge');
     home.store.refuse.clear();
 
     expect(await removeHomeAsset(client(home), FAMILY, 'asset-fridge')).toEqual({ ok: false, notSaved: true });
+    expect(home.store.objects.has(LATE)).toBe(true);
+    expect(guarding(home, LATE)).toHaveLength(1);
+    expect(ids(home.db.table('documents').filter((doc) => doc.family_id === FAMILY && doc.storage_path !== LATE)))
+      .toEqual(['doc-boiler', 'doc-loose']);
+  });
+
+  // AUD-1022-L1-GUARD control: a document of the family's own, filed under the
+  // same "pending removal" folder, with no asset, in the deleted asset's folder
+  // (one that was detached from the asset before it was deleted). The sweep
+  // must not take it for a guard: its file and its row both survive.
+  it('keeps an ordinary detached document filed as "pending removal" in the asset folder', async () => {
+    const home = household();
+    const OWN = `${FAMILY}/warranties/asset-fridge/1790000000011-kept-receipt.pdf`;
+    home.store.objects.add(OWN);
+    home.db.table('documents').push({
+      id: 'doc-own-pending', family_id: FAMILY, asset_id: null, title: 'Receipt I filed myself',
+      category: PENDING_REMOVAL_CATEGORY, is_secure: true, storage_path: OWN,
+    });
+
+    expect(await removeHomeAsset(client(home), FAMILY, 'asset-fridge')).toEqual({ ok: true });
+    expect(home.store.objects.has(OWN)).toBe(true);
+    expect(home.db.table('documents').some((doc) => doc.id === 'doc-own-pending')).toBe(true);
+  });
+
+  it('clears only the guarding row this sweep wrote, by its id (positive control)', async () => {
+    const home = household();
+    const OWN = `${FAMILY}/warranties/asset-fridge/1790000000011-kept-receipt.pdf`;
+    home.store.objects.add(OWN);
+    home.db.table('documents').push({
+      id: 'doc-own-pending', family_id: FAMILY, asset_id: null, title: 'Receipt I filed myself',
+      category: PENDING_REMOVAL_CATEGORY, is_secure: true, storage_path: OWN,
+    });
+
+    expect(await removeHomeAsset(committingBeforeAssetDelete(home, () => attachLate(home)), FAMILY, 'asset-fridge')).toEqual({ ok: true });
+    // The late file, whose row the cascade took, was guarded, removed, and its guard cleared.
     expect(home.store.objects.has(LATE)).toBe(false);
     expect(home.db.table('documents').some((doc) => doc.storage_path === LATE)).toBe(false);
-    // Only the guard went: every other row of the family is where it was.
-    expect(ids(home.db.table('documents').filter((doc) => doc.family_id === FAMILY))).toEqual(['doc-boiler', 'doc-loose']);
+    // The family's own "pending removal" document beside it is untouched.
+    expect(home.store.objects.has(OWN)).toBe(true);
+    expect(home.db.table('documents').some((doc) => doc.id === 'doc-own-pending')).toBe(true);
+  });
+
+  // KNOWN GAP, kept visible rather than green (AUD-1022-L1, coordinator comment
+  // 6126447785): a late sensitive row whose file is stored OUTSIDE the two
+  // swept folders, committed between the last read and the asset DELETE. The
+  // cascade takes its row, the folder sweep cannot see its file, and the file
+  // is left with nothing protecting it. Only the database can close this: the
+  // owner's SQL turns 0007's ON DELETE CASCADE into ON DELETE NO ACTION.
+  // `it.fails` passes while the gap is there and turns red once it is closed,
+  // so it is revisited rather than forgotten.
+  it.fails('without the database guard, a late file outside the asset folders keeps a protecting row', async () => {
+    const home = household();
+    const ELSEWHERE = `${FAMILY}/cloud/1790000000012-late-sensitive.pdf`;
+    const late = () => {
+      home.store.objects.add(ELSEWHERE);
+      home.db.table('documents').push({ ...lateRow, id: 'doc-late-elsewhere', storage_path: ELSEWHERE });
+    };
+
+    await removeHomeAsset(committingBeforeAssetDelete(home, late), FAMILY, 'asset-fridge');
+    // The protection requirement: a stored sensitive object keeps a row that protects it.
+    expect(home.store.objects.has(ELSEWHERE) ? guarding(home, ELSEWHERE).length : 1).toBeGreaterThan(0);
   });
 
   it('still removes the file when the guarding row cannot be written', async () => {

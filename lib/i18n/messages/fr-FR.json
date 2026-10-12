@@ -7710,7 +7710,7 @@
   "homeModule.addAppliancesAndItemsTo": "Ajoutez appareils et objets pour suivre garanties et entretien.",
   "homeModule.addMaintenanceTasksToStay": "Ajoutez des tâches d’entretien pour garder la main sur votre logement.",
   "homeModule.assetAdded": "Bien ajouté",
-  "homeModule.assetKeptFileAttached": "Cet élément n’a pas été supprimé : un fichier y est encore joint, peut-être ajouté pendant la suppression. Supprimez-le à nouveau pour l’effacer avec ses fichiers.",
+  "homeModule.assetKeptFileAttached": "Cet élément n’a pas été supprimé : un fichier y est encore joint, peut-être ajouté pendant la suppression. Essayez de le supprimer à nouveau. S’il reste, retirez d’abord ses fichiers.",
   "homeModule.assetRemoved": "Bien supprimé",
   "homeModule.assetRemovedFileKept": "Bien supprimé, mais l’un de ses fichiers n’a pas pu être effacé. Il est conservé dans le coffre-fort sécurisé, que seuls les parents et les autres adultes peuvent ouvrir ; supprimez-le depuis Fichiers.",
   "homeModule.fileRemoved": "Fichier supprimé",

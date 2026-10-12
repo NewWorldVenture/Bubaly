@@ -7710,7 +7710,7 @@
   "homeModule.addAppliancesAndItemsTo": "Voeg apparaten en spullen toe om garanties en onderhoud te volgen.",
   "homeModule.addMaintenanceTasksToStay": "Voeg onderhoudstaken toe om je huis onder controle te houden.",
   "homeModule.assetAdded": "Bezit toegevoegd",
-  "homeModule.assetKeptFileAttached": "Dit item is niet verwijderd: er is nog een bestand aan gekoppeld, misschien een dat tijdens het verwijderen is toegevoegd. Verwijder het opnieuw om het met de bestanden te wissen.",
+  "homeModule.assetKeptFileAttached": "Dit item is niet verwijderd: er is nog een bestand aan gekoppeld, misschien een dat tijdens het verwijderen is toegevoegd. Probeer het opnieuw te verwijderen. Blijft het staan, verwijder dan eerst de bestanden.",
   "homeModule.assetRemoved": "Bezit verwijderd",
   "homeModule.assetRemovedFileKept": "Bezit verwijderd, maar een van de bestanden kon niet worden gewist. Het blijft in de beveiligde kluis, die alleen ouders en andere volwassenen kunnen openen; verwijder het daar via Bestanden.",
   "homeModule.fileRemoved": "Bestand verwijderd",

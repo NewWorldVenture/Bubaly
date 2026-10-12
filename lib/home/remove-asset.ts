@@ -55,8 +55,11 @@
 //
 // A removal storage refuses leaves the object AND its guarding row: a vault
 // file a parent sees in Files after any reload and deletes there (object
-// first, confirmed), and a record the next sweep of these folders picks up and
-// finishes. The caller is told the file was kept in the vault. If the guarding
+// first, confirmed). The caller is told the file was kept in the vault. A
+// sweep only ever clears the guarding rows it wrote itself, by the ids its own
+// insert returned: a row's category, title and asset link are all text a
+// family can set on any document, so none of them proves a row is a guard,
+// and a later sweep leaves every row it finds alone (AUD-1022-L1-GUARD). If the guarding
 // row cannot be written the removal is still tried, because removing the file
 // is the point and the guard only covers its failing.
 //
@@ -89,9 +92,9 @@ const MAX_SWEEP_ROUNDS = 5;
 
 /**
  * The folder a guarding row is filed under. Stored data, like the Home page's
- * 'manual' and 'warranty': it is the folder name a parent sees in Files, and
- * what tells a later sweep that the row is a guard it may clear rather than a
- * document of the family's to leave alone.
+ * 'manual' and 'warranty': it is the folder name a parent sees in Files. It is
+ * NOT proof that a row is a guard (anyone can file a document under it), so no
+ * sweep ever decides from it what to delete.
  */
 export const PENDING_REMOVAL_CATEGORY = 'pending removal';
 
@@ -153,26 +156,22 @@ async function listFolder(bucket: AssetBucket, folder: string): Promise<{ paths:
 }
 
 /**
- * Which of these objects rows of this family name: `guarded` by a guarding row
- * an earlier sweep left (pending removal), `kept` by any other row (a document
- * of the family's, left alone).
+ * Which of these objects a row of this family names. Every such row is left
+ * alone, with its object, whatever it says about itself: a guarding row an
+ * earlier sweep left included, because nothing a family cannot also write
+ * tells it apart from their own document.
  */
 async function rowsNaming(
   db: AssetRemovalDb, familyId: string, paths: string[],
-): Promise<{ kept: Set<string>; guarded: Set<string> } | { failed: AssetRemoval }> {
+): Promise<{ kept: Set<string> } | { failed: AssetRemoval }> {
   const kept = new Set<string>();
-  const guarded = new Set<string>();
   for (let i = 0; i < paths.length; i += PATH_CHUNK) {
-    const { data, error } = await db.from('documents').select('storage_path, asset_id, category')
+    const { data, error } = await db.from('documents').select('storage_path')
       .eq('family_id', familyId).in('storage_path', paths.slice(i, i + PATH_CHUNK));
     if (error) return { failed: { ok: false, error: describeDbError(error) } };
-    for (const row of data ?? []) {
-      if (!row.storage_path) continue;
-      if (!row.asset_id && row.category === PENDING_REMOVAL_CATEGORY) guarded.add(row.storage_path);
-      else kept.add(row.storage_path);
-    }
+    for (const row of data ?? []) if (row.storage_path) kept.add(row.storage_path);
   }
-  return { kept, guarded };
+  return { kept };
 }
 
 /** A guarding row's title: the stored file name, without the upload's timestamp prefix. */
@@ -183,21 +182,25 @@ function fileTitle(path: string): string {
 
 /**
  * Guard objects nothing names with one vaulted row each, read back. Answers
- * the paths now guarded; an empty answer means the guard could not be written,
- * and the sweep goes on to remove them unguarded rather than not at all.
+ * each guarded path with the id of the row this call wrote for it, which is
+ * the only thing the sweep may later delete; an empty answer means the guard
+ * could not be written, and the sweep goes on to remove them unguarded rather
+ * than not at all.
  */
-async function guardObjects(db: AssetRemovalDb, familyId: string, assetId: string, paths: string[]): Promise<string[]> {
-  if (paths.length === 0) return [];
+async function guardObjects(db: AssetRemovalDb, familyId: string, assetId: string, paths: string[]): Promise<Map<string, string>> {
+  const written = new Map<string, string>();
+  if (paths.length === 0) return written;
   const { data: guards, error } = await db.from('documents').insert(paths.map((path) => ({
     family_id: familyId, asset_id: null, storage_path: path, title: fileTitle(path),
     category: PENDING_REMOVAL_CATEGORY, is_secure: true,
-  }))).select('storage_path');
+  }))).select('id, storage_path');
   // One statement, so all of them or none: a short read-back is treated as none.
   if (error || !guards || guards.length !== paths.length) {
     console.error('[home/remove-asset] could not guard the files of a deleted asset', { familyId, assetId, code: error?.code ?? 'short read-back' });
-    return [];
+    return written;
   }
-  return paths;
+  for (const guard of guards) if (guard.id && guard.storage_path) written.set(guard.storage_path, guard.id);
+  return written.size === paths.length ? written : new Map();
 }
 
 /**
@@ -222,9 +225,7 @@ async function sweepAssetFolders(db: AssetRemovalDb, familyId: string, assetId: 
     const pending = found.filter((path) => !named.kept.has(path));
     if (pending.length === 0) return null;
 
-    const guarded = new Set([...named.guarded].filter((path) => !named.kept.has(path)));
-    const newlyGuarded = await guardObjects(db, familyId, assetId, pending.filter((path) => !guarded.has(path)));
-    for (const path of newlyGuarded) guarded.add(path);
+    const guarded = await guardObjects(db, familyId, assetId, pending);
 
     for (const path of pending) {
       const { error: storageError } = await removeConfirmed(bucket, path);
@@ -232,11 +233,12 @@ async function sweepAssetFolders(db: AssetRemovalDb, familyId: string, assetId: 
         console.error('[home/remove-asset] an object of a deleted asset is still stored', { familyId, assetId, path, guarded: guarded.has(path) });
         return guarded.has(path) ? { ok: false, error: storageError, keptInVault: true } : { ok: false, error: storageError };
       }
-      if (!guarded.has(path)) continue;
-      // The object is confirmed gone, so the row guarding it goes too.
+      const guardId = guarded.get(path);
+      if (!guardId) continue;
+      // The object is confirmed gone, so the row this sweep wrote to guard it
+      // goes too: that row by its id, and no other.
       const { data: cleared, error: clearError } = await db.from('documents').delete()
-        .eq('family_id', familyId).eq('storage_path', path).is('asset_id', null)
-        .eq('category', PENDING_REMOVAL_CATEGORY).select('id');
+        .eq('id', guardId).eq('family_id', familyId).select('id');
       if (clearError) return { ok: false, error: describeDbError(clearError) };
       if (wroteNoRows(cleared)) return { ok: false, notSaved: true };
     }
