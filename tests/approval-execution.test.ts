@@ -379,6 +379,8 @@ describe('decide — concierge_plan', () => {
       concierge_plans: [{ id: 'plan-9', family_id: 'fam-1', title: 'Zoo trip', description: 'Take the kids', location: 'City Zoo', planned_for: '2026-09-12', budget_cents: 5000 }],
       concierge_plan_actions: [{ id: 'cpa-1', family_id: 'fam-1', plan_id: 'plan-9', action_kind: 'reminder' }],
       family_automation_runs: [{ id: 'legacy-run', family_id: 'fam-1', status: 'pending', metadata: { plan_id: 'plan-9', approval_id: 'appr-1' } }],
+      // The concierge gate's own filing line: what proves Bubaly filed this row.
+      trust_audit_logs: [bubalyFiledMarker()],
     });
     holder.service = store.db;
 

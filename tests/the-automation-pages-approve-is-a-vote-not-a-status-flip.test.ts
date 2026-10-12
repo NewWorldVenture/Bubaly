@@ -113,6 +113,10 @@ function seedTwoParentApproval(over: Record<string, unknown> = {}): void {
     reviewed_by: null, review_note: null, created_at: '2026-09-05T10:00:00Z',
     ...over,
   }]);
+  // The trust engine's own filing line (evaluateTrust, written by the service
+  // role only, 0260): the proof that Bubaly filed this row, without which a
+  // concierge plan approval runs nothing (lib/services/approvals `filedByBubaly`).
+  store.seed('trust_audit_logs', [{ family_id: FAMILY, actor_kind: 'ai_agent', actor_id: 'concierge', approval_id: APPROVAL, decision: 'require_approval' }]);
 }
 
 /** The Autopilot line planAcceptedAction writes beside it, exactly as the server writes it. */

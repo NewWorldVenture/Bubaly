@@ -3980,6 +3980,7 @@
   "chores.allTime": "Aller tijden",
   "chores.approve": "Goedkeuren",
   "chores.approvedIsSettled": "Die klus is al goedgekeurd. Alleen een ouder of volwassene kan hem nu nog wijzigen.",
+  "chores.changedBeforeCompleting": "Die klus is veranderd voordat hij als klaar kon worden gemarkeerd, dus er is niets gewijzigd. Bekijk hem opnieuw en probeer het nog eens.",
   "chores.approvedPlusPoints": "Goedgekeurd! +{points} pnt",
   "chores.assignTo": "Toewijzen aan",
   "chores.assignee": "Toegewezen aan",

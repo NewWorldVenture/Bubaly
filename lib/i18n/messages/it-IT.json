@@ -3980,6 +3980,7 @@
   "chores.allTime": "Sempre",
   "chores.approve": "Approva",
   "chores.approvedIsSettled": "Quel compito è già approvato. Ora solo un genitore o un adulto può modificarlo.",
+  "chores.changedBeforeCompleting": "Quel compito è cambiato prima che potesse essere segnato come fatto, quindi non è stato modificato nulla. Ricontrollalo e riprova.",
   "chores.approvedPlusPoints": "Approvato! +{points} pt",
   "chores.assignTo": "Assegna a",
   "chores.assignee": "Assegnatario",

@@ -3981,6 +3981,7 @@
   "chores.allTime": "Sempre",
   "chores.approve": "Aprovar",
   "chores.approvedIsSettled": "Essa tarefa já está aprovada. Agora só um dos pais ou um adulto a pode alterar.",
+  "chores.changedBeforeCompleting": "Essa tarefa mudou antes de poder ser marcada como feita, por isso nada foi alterado. Volta a vê-la e tenta de novo.",
   "chores.approvedPlusPoints": "Aprovado! +{points} pts",
   "chores.assignTo": "Atribuir a",
   "chores.assignee": "Responsável",

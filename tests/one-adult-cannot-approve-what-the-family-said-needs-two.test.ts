@@ -167,6 +167,10 @@ function seedQueuedConciergePlan(over: Record<string, unknown> = {}): void {
     title: 'Materialize: Soccer Saturday',
     ...over,
   })]);
+  // The trust engine's own filing line (evaluateTrust, written by the service
+  // role only, 0260): the proof that Bubaly filed this row, without which a
+  // concierge plan approval runs nothing (lib/services/approvals `filedByBubaly`).
+  store.seed('trust_audit_logs', [{ family_id: FAMILY, actor_kind: 'ai_agent', actor_id: 'concierge', approval_id: APPROVAL, decision: 'require_approval' }]);
   store.seed('family_automation_runs', [{
     id: RUN, family_id: FAMILY, trigger_type: 'plan_accepted', status: 'pending',
     state: 'awaiting_approval', requested_by_member_id: MUM,

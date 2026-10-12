@@ -887,6 +887,22 @@ async function performApproved(
     }
 
     case 'concierge_plan': {
+      // The one filer of these rows is the concierge's own gate
+      // (planAcceptedAction → evaluateTrust, as Bubaly), which writes the
+      // `ai_agent` audit line `filedByBubaly` reads and no member can write
+      // (0260). Anything else is a payload a member typed — any member may
+      // file their own approval row (0255/0480) and create a plan row (0091's
+      // concierge_plans policy reads no role), and `classifyPayload`'s shape
+      // fallback routes `{plan_id, kinds}` here — and materializing it wrote
+      // calendar events and reminders as the APPROVER with no gate at all, a
+      // guest's included. So, as for a tool row nobody on the server filed,
+      // nothing runs and the row says so.
+      if (!await filedByBubaly(scope, row)) {
+        const refused = (await getTranslations())('approval.memberPayloadNotRun');
+        await stampExecution(scope, row.id, `error: ${refused}`);
+        await auditDecision(scope, row, 'approved_execution', `Execution refused: ${refused}`, { plan_id: classified.planId, ok: false });
+        return fail(refused, { code: SERVICE_CODES.denied, retryable: false });
+      }
       const kinds = edited
         ? WRITE_BACK_KINDS.filter((k) => edited[k] === true)
         : classified.kinds;

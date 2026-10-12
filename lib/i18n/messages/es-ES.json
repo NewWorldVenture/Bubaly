@@ -3980,6 +3980,7 @@
   "chores.allTime": "Desde siempre",
   "chores.approve": "Aprobar",
   "chores.approvedIsSettled": "Esa tarea ya está aprobada. Ahora solo un progenitor o un adulto puede cambiarla.",
+  "chores.changedBeforeCompleting": "Esa tarea cambió antes de que se pudiera marcar como hecha, así que no se ha cambiado nada. Vuelve a mirarla e inténtalo de nuevo.",
   "chores.approvedPlusPoints": "¡Aprobado! +{points} pts",
   "chores.assignTo": "Asignar a",
   "chores.assignee": "Responsable",

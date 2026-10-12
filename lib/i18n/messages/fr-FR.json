@@ -3980,6 +3980,7 @@
   "chores.allTime": "Depuis toujours",
   "chores.approve": "Approuver",
   "chores.approvedIsSettled": "Cette tâche est déjà approuvée. Seul un parent ou un adulte peut encore la modifier.",
+  "chores.changedBeforeCompleting": "Cette tâche a changé avant d'avoir pu être marquée comme faite, donc rien n'a été modifié. Vérifiez-la et réessayez.",
   "chores.approvedPlusPoints": "Approuvé ! +{points} pts",
   "chores.assignTo": "Attribuer à",
   "chores.assignee": "Responsable",

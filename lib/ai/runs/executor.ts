@@ -48,6 +48,7 @@ import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '
 import { behaviorForDomain, effectiveRisk } from '@/lib/ai/family-settings';
 import { loadAISettings } from '@/lib/services/ai-settings';
 import { evaluateAction, riskTierStance, riskToDecision, toolTags, type ApprovalModel, type Decision } from '@/lib/trust/engine';
+import { readAmountCents } from '@/lib/trust/amount';
 import { loadTrustInputs, roleOf } from '@/lib/trust/server';
 import {
   blockedSteps, describeProgress, findDependencyCycle, isTerminalRunState, legacyStatusFor,
@@ -1404,29 +1405,6 @@ function toolForStep(step: StepSnapshot): ToolDefinition | null {
 }
 
 type ApprovalRule = { domain: string; approvalModel: ApprovalModel; requiredApprovals: number; policyId: string | null };
-
-/**
- * A money amount in a step's arguments, for `maxAmountCents` policy
- * conditions; null when the tool carries none.
- *
- * One reader for both sides of a held step: the planner's dry run
- * (lib/ai/planner/validate.ts `dryRunGate`) and the rule its approval is filed
- * under (`approvalRuleFor`). When only the dry run read it, a "Bubaly may spend
- * up to $50" allow ranked above "Money needs both of us" matched a $900 budget
- * at run time — the engine reads a missing amount as 0 — so the step the plan
- * held for two parents was filed for one, and the requester released it alone.
- */
-export function readAmountCents(input: unknown): number | null {
-  if (!input || typeof input !== 'object') return null;
-  const record = input as Record<string, unknown>;
-  for (const key of ['amount_cents', 'amountCents']) {
-    if (typeof record[key] === 'number' && Number.isFinite(record[key])) return Math.round(record[key] as number);
-  }
-  for (const key of ['amount', 'budget', 'target_amount', 'cost']) {
-    if (typeof record[key] === 'number' && Number.isFinite(record[key])) return Math.round((record[key] as number) * 100);
-  }
-  return null;
-}
 
 /**
  * The rule a held step's approval is filed under: the family's own.

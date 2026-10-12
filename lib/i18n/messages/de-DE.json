@@ -3980,6 +3980,7 @@
   "chores.allTime": "Gesamt",
   "chores.approve": "Genehmigen",
   "chores.approvedIsSettled": "Diese Aufgabe ist bereits freigegeben. Nur ein Elternteil oder Erwachsener kann sie jetzt noch ändern.",
+  "chores.changedBeforeCompleting": "Diese Aufgabe hat sich geändert, bevor sie als erledigt markiert werden konnte, daher wurde nichts geändert. Sieh sie dir noch einmal an und versuche es erneut.",
   "chores.approvedPlusPoints": "Genehmigt! +{points} Pkt.",
   "chores.assignTo": "Zuweisen an",
   "chores.assignee": "Zuständig",

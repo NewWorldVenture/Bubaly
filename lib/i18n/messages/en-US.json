@@ -4141,6 +4141,7 @@
   "chores.allTime": "All Time",
   "chores.approve": "Approve",
   "chores.approvedIsSettled": "That chore is already approved. Only a parent or adult can change it now.",
+  "chores.changedBeforeCompleting": "That chore changed before it could be marked done, so nothing was changed. Take another look and try again.",
   "chores.approvedPlusPoints": "Approved! +{points} pts",
   "chores.assignTo": "Assign to",
   "chores.assignee": "Assignee",

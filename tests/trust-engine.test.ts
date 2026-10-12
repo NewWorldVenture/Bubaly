@@ -296,3 +296,78 @@ describe('evaluateAction — a tag-scoped AI policy allows only the named tool',
     expect(toolTags('a', null, undefined, ' ', 'a')).toEqual(['a', 'tool:a']);
   });
 });
+
+// A policy for everyone, or for a role, with capability 'all' is written about
+// what PEOPLE may do — and `all` includes `automate`. So "everyone may do
+// anything on the calendar" handed a guest's or child's ASSISTANT every
+// calendar write as an allow with `basis: 'policy'`, which names its domain and
+// silences the risk tier, a deletion included. Only a policy addressed to the
+// AI was bounded by the requester's automation trust (AI7/AI12); the same
+// bound now holds whatever the subject.
+describe('evaluateAction — an allow reaches an assistant only as far as the person it acts for', () => {
+  const assistantFor = (role: Actor['role']): Actor => ({ kind: 'ai_agent', id: 'bubaly', role });
+  const memberAs = (role: Actor['role']): Actor => ({ kind: 'member', id: `m-${role}`, role });
+  const everyoneOnTheCalendar = policy({ id: 'everyone-calendar', domain: 'calendar', capability: 'all', subjectKind: 'everyone', effect: 'allow', priority: 200 });
+  const automate = (actor: Actor, policies: Policy[], domain = 'calendar') => evaluateAction({ actor, domain, capability: 'automate', policies });
+
+  it('does not hand a guest’s, child’s, caregiver’s or teen’s assistant automation through an everyone/all allow', () => {
+    for (const role of ['guest', 'child', 'caregiver', 'teen'] as const) {
+      const d = automate(assistantFor(role), [everyoneOnTheCalendar]);
+      expect(d.policyId, role).toBeUndefined();
+      // None of these roles holds `automate`: the role matrix answers, and the
+      // risk tier speaks over it (riskTierStance), as with no policy at all.
+      expect(d, role).toMatchObject({ effect: 'deny', basis: 'fallback' });
+    }
+  });
+
+  it('nor through an auto_approve, nor one that names `automate` for everyone', () => {
+    const autoApprove = policy({ ...everyoneOnTheCalendar, id: 'everyone-auto', effect: 'auto_approve' });
+    const everyoneAutomates = policy({ ...everyoneOnTheCalendar, id: 'everyone-automate', capability: 'automate' });
+    for (const p of [autoApprove, everyoneAutomates]) {
+      expect(automate(assistantFor('guest'), [p]), p.id).toMatchObject({ effect: 'deny', basis: 'fallback' });
+    }
+  });
+
+  it('does not hand it through a role allow with capability all either', () => {
+    const guestsOnTheCalendar = policy({ id: 'guests-calendar', domain: 'calendar', capability: 'all', subjectKind: 'role', subjectRole: 'guest', effect: 'allow' });
+    expect(automate(assistantFor('guest'), [guestsOnTheCalendar])).toMatchObject({ effect: 'deny', basis: 'fallback' });
+  });
+
+  it('leaves what the policy means for a member acting directly exactly as it was', () => {
+    for (const role of ['guest', 'child', 'teen'] as const) {
+      for (const capability of ['create', 'edit', 'delete'] as const) {
+        const d = evaluateAction({ actor: memberAs(role), domain: 'calendar', capability, policies: [everyoneOnTheCalendar] });
+        expect(d, `${role} ${capability}`).toMatchObject({ effect: 'allow', basis: 'policy', policyId: 'everyone-calendar' });
+      }
+    }
+  });
+
+  it('still reaches a parent’s or adult’s assistant as written', () => {
+    for (const role of ['parent', 'adult'] as const) {
+      expect(automate(assistantFor(role), [everyoneOnTheCalendar]), role)
+        .toMatchObject({ effect: 'allow', basis: 'policy', policyId: 'everyone-calendar', policyScope: 'specific' });
+    }
+  });
+
+  it('lets an assistant read what the family shared with that person — no more than they may open themselves', () => {
+    const everyoneSeesSchool = policy({ id: 'everyone-school', domain: 'education', capability: 'view', subjectKind: 'everyone', effect: 'allow' });
+    const d = evaluateAction({ actor: assistantFor('guest'), domain: 'education', capability: 'view', policies: [everyoneSeesSchool] });
+    expect(d).toMatchObject({ effect: 'allow', basis: 'policy', policyId: 'everyone-school' });
+  });
+
+  it('keeps a rule that names the role AND automation: the family extending automation to that role on purpose', () => {
+    const kidsMayMessage = policy({ id: 'kids-message', domain: 'messaging', capability: 'automate', subjectKind: 'role', subjectRole: 'child', effect: 'allow' });
+    expect(automate(assistantFor('child'), [kidsMayMessage], 'messaging')).toMatchObject({ effect: 'allow', basis: 'policy', policyId: 'kids-message' });
+    // ... and it is about that role only.
+    expect(automate(assistantFor('guest'), [kidsMayMessage], 'messaging').policyId).toBeUndefined();
+  });
+
+  it('keeps every tightening everyone-policy binding on every assistant', () => {
+    for (const effect of ['deny', 'require_approval'] as const) {
+      const tighten = policy({ ...everyoneOnTheCalendar, id: `everyone-${effect}`, effect });
+      for (const role of ['parent', 'teen', 'child', 'guest'] as const) {
+        expect(automate(assistantFor(role), [tighten]), `${role} ${effect}`).toMatchObject({ effect, basis: 'policy' });
+      }
+    }
+  });
+});
