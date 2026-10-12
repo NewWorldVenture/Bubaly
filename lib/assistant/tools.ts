@@ -22,7 +22,7 @@ import { nextRemindAt } from '@/lib/reminders/details';
 import { escapeLike } from '@/lib/supabase/escape-like';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import { ensureDefaultGroceryListId, readOnOpenGroceryLists } from '@/lib/services/groceries';
-import { ensureTodoListId } from '@/lib/services/tasks';
+import { CHORES_ARE_SET_BY_A_MANAGER, ensureTodoListId, mayManageChores } from '@/lib/services/tasks';
 import { createGoal } from '@/lib/services/goals';
 import { normalizeEventTimes } from '@/lib/services/calendar';
 import { allDayBoundsAsDates } from '@/lib/assistant/all-day-dates';
@@ -187,6 +187,10 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         required: ['title'],
       },
       execute: async (a) => {
+        // The chores board's rule (`createChoreAction` is manager-only), which
+        // the trust wrapper does not stand in for: it lets a teen's low-risk
+        // writes through. An unknown role is refused, not waved through.
+        if (!mayManageChores(ctx.role)) return { ok: false, error: CHORES_ARE_SET_BY_A_MANAGER };
         const title = str(a.title);
         if (!title) return { ok: false, error: 'title is required' };
         const points = Number.isFinite(a.points) ? Math.max(0, Math.round(a.points as number)) : 10;
