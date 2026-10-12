@@ -172,15 +172,28 @@ export async function deletePolicyAction(id: string) {
 
 // ── Rentals ───────────────────────────────────────────────────────────────────
 export async function saveRentalAction(fd: FormData) {
+  const t = await getTranslations();
   const { familyId, userId, supabase, tz } = await ctx();
   const id = str(fd, 'id');
   // A `datetime-local` reading has no zone. Written raw to a timestamptz it was
   // read in the database session's zone (UTC), so a 1am New York pickup was
   // stored as 01:00Z and shown on the day before. It is the FAMILY's wall time.
+  //
+  // The converter answers null both for a blank field and for one that names
+  // no instant (30 February, 25:00), and the second was written as the first:
+  // an edit carrying a malformed time cleared the pickup it was meant to change.
+  // Blank still clears; a filled-in value that does not convert is refused
+  // before anything is written.
+  const pickupTyped = str(fd, 'pickup_at');
+  const pickupAt = datetimeLocalToInstant(pickupTyped, tz);
+  if (pickupTyped !== null && pickupAt === null) throw refusalError(t('actions.thatPickupTimeCouldNotBeRead'), 'invalid');
+  const returnTyped = str(fd, 'return_at');
+  const returnAt = datetimeLocalToInstant(returnTyped, tz);
+  if (returnTyped !== null && returnAt === null) throw refusalError(t('actions.thatReturnTimeCouldNotBeRead'), 'invalid');
   const row = {
     company: str(fd, 'company'), confirmation_number: str(fd, 'confirmation_number'), pickup_location: str(fd, 'pickup_location'),
     dropoff_location: str(fd, 'dropoff_location'),
-    pickup_at: datetimeLocalToInstant(str(fd, 'pickup_at'), tz), return_at: datetimeLocalToInstant(str(fd, 'return_at'), tz),
+    pickup_at: pickupAt, return_at: returnAt,
     vehicle_desc: str(fd, 'vehicle_desc'), daily_rate: num(fd, 'daily_rate'), total_cost: num(fd, 'total_cost'),
     coverage: str(fd, 'coverage'), status: str(fd, 'status') ?? 'upcoming', notes: str(fd, 'notes'), updated_by: userId,
   };
