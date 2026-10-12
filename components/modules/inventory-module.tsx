@@ -200,7 +200,7 @@ export function InventoryModule() {
 
       {/* Where is it? */}
       <div className="rounded-2xl border border-brand/20 bg-brand/5 p-5">
-        <label className="flex items-center gap-3 rounded-xl border border-border bg-surface/70 px-3 py-2">
+        <label className="flex items-center gap-3 rounded-xl border border-border bg-surface/70 px-3 py-2 focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg">
           <Search className="h-5 w-5 shrink-0 text-brand-text" />
           <input
             value={query} onChange={(e) => setQuery(e.target.value)} placeholder={tr('inventory.whereIsThePassportSkiHelmet')}

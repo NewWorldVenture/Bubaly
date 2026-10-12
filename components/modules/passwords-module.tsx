@@ -184,7 +184,7 @@ export function PasswordsModule() {
         <div className="relative w-full lg:max-w-xs">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('passwords.searchEntries')} aria-label={t('passwords.searchEntries')}
-            className="h-10 w-full rounded-xl border border-border bg-surface/40 pl-9 pr-3 text-sm outline-none placeholder:text-muted focus:border-brand/50" />
+            className="h-10 w-full rounded-xl border border-border bg-surface/40 pl-9 pr-3 text-sm outline-none placeholder:text-muted focus:border-brand" />
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <button onClick={() => setCatFilter(null)}

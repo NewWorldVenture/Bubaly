@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { MailCheck, Sparkles, Smartphone, Mail, Gift } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -150,9 +149,9 @@ export function SignupForm() {
       <div className="glass-card flex flex-col items-center p-8 text-center animate-fade-in">
         <h1 className="text-xl font-semibold">{t('signupForm.unconfirmedTitle')}</h1>
         <p className="mt-2 text-sm text-muted" role="status">{t('signupForm.unconfirmedBody')}</p>
-        <Link href={loginHref} className="mt-6 text-sm font-medium text-brand-text hover:underline">
+        <a href={loginHref} className="mt-6 text-sm font-medium text-brand-text hover:underline">
           {t('signup.signIn')}
-        </Link>
+        </a>
       </div>
     );
   }
@@ -165,9 +164,9 @@ export function SignupForm() {
         <p className="mt-2 text-sm text-muted">
           {t('signup.weSentAConfirmationLinkTo')}
         </p>
-        <Link href={loginHref} className="mt-6 text-sm font-medium text-brand-text hover:underline">
+        <a href={loginHref} className="mt-6 text-sm font-medium text-brand-text hover:underline">
           {t('signup.backToSignIn')}
-        </Link>
+        </a>
       </div>
     );
   }
@@ -259,7 +258,7 @@ export function SignupForm() {
 
       <p className="mt-5 text-center text-sm text-muted">
         {t('signup.existingAccountPrompt')}{' '}
-        <Link href={loginHref} className="font-medium text-brand-text hover:underline">{t('signup.signIn')}</Link>
+        <a href={loginHref} className="font-medium text-brand-text hover:underline">{t('signup.signIn')}</a>
       </p>
     </div>
   );

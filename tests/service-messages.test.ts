@@ -1,8 +1,7 @@
 // Service boundary tests complement the real-role PostgreSQL fixture. A
 // privileged executor must carry the actual actor to the atomic send RPC.
-// Owner decision (production has not taken 0475): when PostgREST answers that
-// exactly one of the 0475 objects is missing, that path does what the previous
-// production build did (82f2db1); any other error still fails visibly.
+// Missing schema preserves original audiences and reports an error; no raw
+// fallback may bypass the atomic actor and audience boundary.
 import { describe, it, expect } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
@@ -91,31 +90,24 @@ describe('ensureFamilyConversation', () => {
     expect(calls.some((c) => c.kind === 'insert' || c.kind === 'update')).toBe(false);
   });
 
-  // Changed by owner decision: this used to assert a refusal ("without a legacy
-  // retry"). Without 0475 the previous production lookup now runs instead.
-  it('without 0475 opens the oldest un-archived group chat, as before the build-out', async () => {
+  it("without 0475 refuses canonical chat creation without adopting an old group", async () => {
     const { db, calls } = makeDb((call) => call.table.startsWith('rpc:')
       ? { data: null, error: MISSING('ensure_family_conversation') }
       : call.table === 'family_conversations' ? { data: { id: 'conv-old-group' }, error: null } : successfulReply(call));
-    const res = await ensureFamilyConversation(scopeWith(db));
-    expect(res).toEqual({ ok: true, data: { id: 'conv-old-group' } });
+    expect(await ensureFamilyConversation(scopeWith(db))).toMatchObject({ ok: false, code: 'db' });
     expect(calls.filter((c) => c.table.startsWith('rpc:'))).toHaveLength(1);
-    expect(calls.find((c) => c.table === 'family_conversations')?.filters).toEqual({ family_id: 'fam-1', kind: 'group', is_archived: false });
-    expect(calls.some((c) => c.kind === 'insert')).toBe(false);
+    expect(calls.some((c) => c.table === 'family_conversations' || c.kind === 'insert')).toBe(false);
   });
 
-  it('without 0475 creates the family group with every member when there is none', async () => {
+  it("without 0475 preserves an empty group roster without a non-atomic insert", async () => {
     const { db, calls } = makeDb((call) => {
       if (call.table.startsWith('rpc:')) return { data: null, error: MISSING('ensure_family_conversation') };
       if (call.table === 'family_members') return { data: 'id' in call.filters ? MEMBERS[0] : MEMBERS, error: null };
       if (call.table === 'family_conversations') return { data: call.kind === 'insert' ? { id: 'conv-new' } : null, error: null };
       return successfulReply(call);
     });
-    expect(await ensureFamilyConversation(scopeWith(db))).toEqual({ ok: true, data: { id: 'conv-new' } });
-    expect(calls.find((c) => c.table === 'family_conversations' && c.kind === 'insert')?.payload).toEqual({
-      family_id: 'fam-1', name: 'Family', kind: 'group', avatar_emoji: '👨‍👩‍👧‍👦',
-      member_ids: ['auth-user-1'], participant_ids: ['member-1', 'member-2'], created_by: 'auth-user-1',
-    });
+    expect(await ensureFamilyConversation(scopeWith(db))).toMatchObject({ ok: false, code: 'db' });
+    expect(calls.some((c) => c.table === 'family_conversations')).toBe(false);
   });
 
   it.each([
@@ -273,21 +265,14 @@ describe('sendFamilyMessage', () => {
     expect(calls.some((c) => c.kind === 'insert')).toBe(false);
   });
 
-  // Changed by owner decision: this used to assert that a missing atomic-send
-  // RPC is never bypassed. Without 0475 the previous production direct insert
-  // now runs; a non-missing error (revocation, above) still never inserts.
-  it('without the atomic-send RPC inserts directly, as before the build-out', async () => {
+  it("without the atomic-send RPC refuses instead of raw-inserting", async () => {
     const { db, calls } = makeDb((call) => {
       if (call.table === 'rpc:send_family_message') return { data: null, error: MISSING('send_family_message') };
       if (call.table === 'family_messages' && call.kind === 'insert') return { data: MESSAGE(), error: null };
       return successfulReply(call);
     });
-    const res = await sendFamilyMessage(scopeWith(db), { content: 'hello', conversationId: 'conv-1' });
-    expect(res).toMatchObject({ ok: true, data: { id: 'msg-1' } });
-    expect(calls.find((c) => c.table === 'family_messages' && c.kind === 'insert')?.payload).toEqual({
-      conversation_id: 'conv-1', family_id: 'fam-1', sender_id: 'auth-user-1', sender_name: 'Dana',
-      content: 'hello', kind: 'text', reply_to_id: null,
-    });
+    expect(await sendFamilyMessage(scopeWith(db), { content: 'hello', conversationId: 'conv-1' })).toMatchObject({ ok: false, code: 'db' });
+    expect(calls.some((c) => c.kind === 'insert')).toBe(false);
   });
 
   it('does not insert when the send RPC fails for a reason other than being missing', async () => {
@@ -297,7 +282,7 @@ describe('sendFamilyMessage', () => {
     expect(calls.some((c) => c.kind === 'insert')).toBe(false);
   });
 
-  it('without 0475 sends end to end on the previous production path', async () => {
+  it("without 0475 the end-to-end send reports unavailable without adopting or writing history", async () => {
     const sent = MESSAGE({ conversation_id: 'conv-old-group' });
     const { db, calls } = makeDb((call) => {
       if (call.table === 'rpc:ensure_family_conversation') return { data: null, error: MISSING('ensure_family_conversation') };
@@ -307,36 +292,28 @@ describe('sendFamilyMessage', () => {
       if (call.table === 'family_messages') return { data: call.kind === 'insert' ? sent : null, error: null };
       return successfulReply(call);
     });
-    const res = await sendFamilyMessage(scopeWith(db, { requestId: 'req-legacy' }), { content: 'Dinner at 6!' });
-    expect(res).toMatchObject({ ok: true, data: { id: 'msg-1', conversation_id: 'conv-old-group' } });
-    const probe = calls.find((c) => c.table === 'family_messages' && c.kind === 'select');
-    expect(probe?.filters).toEqual({
-      family_id: 'fam-1', conversation_id: 'conv-old-group', content: 'Dinner at 6!',
-      'gte:created_at': '2026-09-05T11:50:00.000Z', deleted_at: null, sender_id: 'auth-user-1',
-    });
-    expect(calls.filter((c) => c.table === 'family_messages' && c.kind === 'insert')).toHaveLength(1);
+    expect(await sendFamilyMessage(scopeWith(db, { requestId: 'req-legacy' }), { content: 'Dinner at 6!' })).toMatchObject({ ok: false, code: 'db' });
+    expect(calls.some((c) => c.table === 'family_conversations' || c.table === 'family_messages')).toBe(false);
   });
 
-  it('without find_family_message a retried send returns the row the same words already wrote', async () => {
+  it("without find_family_message a retry refuses without reading private legacy history", async () => {
     const { db, calls } = makeDb((call) => {
       if (call.table === 'rpc:find_family_message') return { data: null, error: MISSING('find_family_message') };
       if (call.table === 'family_messages') return { data: MESSAGE({ content: 'hello' }), error: null };
       return successfulReply(call);
     });
-    const res = await sendFamilyMessage(scopeWith(db, { requestId: 'req-retry' }), { content: 'hello', conversationId: 'conv-1' });
-    expect(res).toMatchObject({ ok: true, data: { id: 'msg-1' } });
-    expect(calls.some((c) => c.table === 'rpc:send_family_message' || c.kind === 'insert')).toBe(false);
+    expect(await sendFamilyMessage(scopeWith(db, { requestId: 'req-retry' }), { content: 'hello', conversationId: 'conv-1' })).toMatchObject({ ok: false, code: 'db' });
+    expect(calls.some((c) => c.table === 'family_messages' || c.table === 'rpc:send_family_message' || c.kind === 'insert')).toBe(false);
   });
 
-  it('without find_family_message the same words return the old row even when its kind or reply differs, as before', async () => {
+  it("without find_family_message a changed retry refuses without returning mismatched legacy history", async () => {
     const { db, calls } = makeDb((call) => {
       if (call.table === 'rpc:find_family_message') return { data: null, error: MISSING('find_family_message') };
       if (call.table === 'family_messages') return { data: MESSAGE({ content: 'hello', kind: 'announcement', reply_to_id: 'msg-0' }), error: null };
       return successfulReply(call);
     });
-    const res = await sendFamilyMessage(scopeWith(db, { requestId: 'req-retry' }), { content: 'hello', conversationId: 'conv-1' });
-    expect(res).toMatchObject({ ok: true, data: { id: 'msg-1', kind: 'announcement' } });
-    expect(calls.some((c) => c.table === 'rpc:send_family_message' || c.kind === 'insert')).toBe(false);
+    expect(await sendFamilyMessage(scopeWith(db, { requestId: 'req-retry' }), { content: 'hello', conversationId: 'conv-1' })).toMatchObject({ ok: false, code: 'db' });
+    expect(calls.some((c) => c.table === 'family_messages' || c.table === 'rpc:send_family_message' || c.kind === 'insert')).toBe(false);
   });
 
   it('with find_family_message a found row of a different kind is still refused as already saved', async () => {
@@ -355,16 +332,14 @@ describe('sendFamilyMessage', () => {
     expect(calls.some((c) => c.table === 'family_messages' || c.table === 'rpc:send_family_message')).toBe(false);
   });
 
-  it('without is_family_chat a named conversation only has to exist in the family, as before the build-out', async () => {
+  it("without is_family_chat a named conversation refuses without a family-only fallback", async () => {
     let reads = 0;
     const { db, calls } = makeDb((call) => call.table !== 'family_conversations' ? successfulReply(call)
       : ++reads === 1 ? { data: null, error: { code: '42703', message: 'column family_conversations.is_family_chat does not exist' } }
         : { data: { id: 'conv-1' }, error: null });
-    const res = await sendFamilyMessage(scopeWith(db), { content: 'hello', conversationId: 'conv-1' });
-    expect(res.ok).toBe(true);
-    expect(calls.filter((c) => c.table === 'family_conversations').map((c) => c.filters)).toEqual([
-      { family_id: 'fam-1', id: 'conv-1' }, { family_id: 'fam-1', id: 'conv-1' },
-    ]);
+    expect(await sendFamilyMessage(scopeWith(db), { content: 'hello', conversationId: 'conv-1' })).toMatchObject({ ok: false, code: 'db' });
+    expect(calls.filter((c) => c.table === 'family_conversations')).toHaveLength(1);
+    expect(calls.some((c) => c.table.startsWith('rpc:') || c.kind === 'insert')).toBe(false);
   });
 
   it('a conversation read that fails for another reason is not retried on the old path', async () => {
@@ -396,7 +371,9 @@ describe('sendFamilyMessage', () => {
 
 describe('createAnnouncement', () => {
   it('sets both author columns from the scope and pins on request', async () => {
-    const { db, calls } = makeDb((call) => (call.kind === 'insert'
+    const { db, calls } = makeDb((call) => (call.table === 'family_members'
+      ? { data: MEMBERS[0], error: null }
+      : call.kind === 'insert'
       ? { data: { id: 'ann-1', family_id: 'fam-1', author_id: 'auth-user-1', author_member_id: 'member-1', title: 'Grandma visits Sunday', body: null, is_pinned: true, created_at: NOW.toISOString(), updated_at: NOW.toISOString() }, error: null }
       : { data: null, error: null }));
     const res = await createAnnouncement(scopeWith(db), { title: ' Grandma visits Sunday ', pinned: true });
@@ -411,7 +388,7 @@ describe('createAnnouncement', () => {
 
   it('does not post the same headline twice inside a run', async () => {
     const existing = { id: 'ann-1', family_id: 'fam-1', author_id: 'auth-user-1', author_member_id: 'member-1', title: 'Grandma visits Sunday', body: null, is_pinned: false, created_at: NOW.toISOString(), updated_at: NOW.toISOString() };
-    const { db, calls } = makeDb(() => ({ data: existing, error: null }));
+    const { db, calls } = makeDb((call) => ({ data: call.table === 'family_members' ? MEMBERS[0] : existing, error: null }));
     const res = await createAnnouncement(scopeWith(db, { requestId: 'req-1' }), { title: 'Grandma visits Sunday' });
     expect(res.ok && res.data.id === 'ann-1').toBe(true);
     expect(calls.some((c) => c.kind === 'insert')).toBe(false);

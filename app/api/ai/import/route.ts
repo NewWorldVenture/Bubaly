@@ -6,6 +6,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
 import { dayKeyInTz, scopeFromUserContext } from '@/lib/services/scope';
+import { familyInstant } from '@/lib/time/civil';
 import { AI_TOOLS, runAction } from '@/lib/ai/actions';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { roleOf } from '@/lib/trust/server';
@@ -42,11 +43,18 @@ type Item = { name: string; args: Record<string, unknown>; summary: string };
 // date) is the date it says. Rendered on the host's clock, a 6pm event read as
 // the next day's small hours and a date-only item slipped a day west of
 // Greenwich.
+//
+// A timed value with no offset is a reading on that clock, so it is resolved
+// the way the write resolves it (`familyInstant`, as tasks.createChore and
+// reminders.create do). `new Date()` read it on the HOST's clock instead, and
+// the confirm list and the approval card — this summary is both — showed
+// 10:00 AM for an import the write then stored at 5 PM in Los Angeles.
 function fmtWhen(value: unknown, tz: string): string {
   if (typeof value !== 'string' || !value) return '';
-  const d = new Date(value);
+  const timed = /^\s*\d{4}-\d{2}-\d{2}[Tt ]\d/.test(value);
+  const d = timed ? (familyInstant(value, tz) ?? new Date(Number.NaN)) : new Date(value);
   if (Number.isNaN(d.getTime())) return ` (${value})`;
-  const hasTime = value.includes('T') && !value.endsWith('T00:00:00.000Z');
+  const hasTime = timed && !value.endsWith('T00:00:00.000Z');
   return ` (${d.toLocaleString('en-US', {
     month: 'short', day: 'numeric',
     ...(hasTime ? { hour: 'numeric', minute: '2-digit', timeZone: tz } : { timeZone: 'UTC' }),
@@ -191,6 +199,10 @@ export async function POST(req: NextRequest) {
             domain,
             actorId: 'magic_import',
             actorRole,
+            // Who Bubaly is importing FOR, as chat and the school desk say. A
+            // row without it names no asker, merges with anyone else's identical
+            // import, and replays as the parent who approved it.
+            onBehalfOfMemberId: ctx.active.member.id,
             agent: 'Magic Import',
             title: item.summary,
             payload: { name: item.name, args: item.args },
@@ -230,6 +242,7 @@ Today is ${now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', m
 
 Use the provided tools to capture: calendar events, chores, reminders, grocery items, and planned meals. Rules:
 - Resolve relative dates ("next Friday", "tomorrow", "the 14th") to absolute ISO 8601 using today's date. Assume the current or next occurrence.
+- Times are the family's local time in ${tz}, written without an offset or "Z", e.g. 2026-10-16T17:00:00 for 5pm. A day with no time is just the date, e.g. 2026-10-16.
 - Prefer create_calendar_event for anything with a date/time; use create_reminder for to-dos with a deadline but no fixed time.
 - Extract multiple items if present. Do not invent details that aren't in the text.
 - If nothing is actionable, make no tool calls.
