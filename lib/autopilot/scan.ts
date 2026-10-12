@@ -39,7 +39,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
-import { buildSuggestions, confidenceTier, type FamilySnapshot } from '@/lib/autopilot/engine';
+import { buildSuggestions, confidenceTier, type FamilySnapshot, type SuggestionDraft } from '@/lib/autopilot/engine';
 import { computeMemberTraits, type MemberTraits, type MemberHistory } from '@/lib/autopilot/twin';
 import { isPolicySuggestionKey } from '@/lib/autopilot/policy-candidates';
 import { runPolicyScan } from '@/lib/autopilot/policy-scan';
@@ -133,6 +133,51 @@ async function getOrCreateGroceryListId(supabase: DB, familyId: string, userId: 
   return list.id;
 }
 
+/** A card this scan found under a draft's key, as the prior read selects it. */
+type PriorCard = { id: string; kind: string | null; source_kind: string | null; member_id: string | null };
+
+/**
+ * Keep an insurance card's member in step with its policy (0486).
+ *
+ * An insurance card's `member_id` is who may read it besides the managers
+ * (lib/autopilot/audience.ts, and 0486 in RLS), copied from
+ * `family_insurance_policies.member_id` when the card is written. A card is
+ * written once per key and then left alone, so a policy reassigned to another
+ * member, or a card written before the scan stored the member at all that
+ * 0486's backfill did not reach, kept naming the old one: the newly named
+ * member could not read it, and their own scan drafted it, could not see the
+ * prior row, inserted, met 23505 and carried on, on every open; the previously
+ * named member kept reading it.
+ *
+ * Only `member_id` is written, by id and family, and confirmed: the status and
+ * every other column are the household's. On the nightly scan (no viewer, the
+ * service role) whenever the policy names someone else; on a member's own scan
+ * only when that member may read the card both before and after, i.e. a
+ * manager, which is exactly what 0486's update guard lets through, so a scan
+ * never asks for a write RLS would refuse. The window that leaves: from the
+ * reassignment until the next nightly or manager scan, the newly named member
+ * still takes the 23505 path on their own scan and the previously named
+ * member still reads the card. A failed refresh is logged and the scan goes on.
+ */
+async function refreshPolicyCardMember(
+  supabase: DB, familyId: string, prior: PriorCard, draft: SuggestionDraft, viewer: AudienceViewer | null,
+): Promise<void> {
+  const memberId = draft.memberId ?? null;
+  if (suggestionAudience({ kind: draft.kind, source_kind: draft.sourceKind, member_id: memberId }) !== 'policy-readers') return;
+  const before = { kind: prior.kind, source_kind: prior.source_kind, member_id: prior.member_id ?? null };
+  if (suggestionAudience(before) !== 'policy-readers' || before.member_id === memberId) return;
+  if (viewer && !(suggestionVisibleTo(before, viewer) && suggestionVisibleTo({ ...before, member_id: memberId }, viewer))) return;
+  try {
+    const { data: refreshed, error } = await supabase.from('autopilot_suggestions')
+      .update({ member_id: memberId }).eq('id', prior.id).eq('family_id', familyId).select('id');
+    if (error || wroteNoRows(refreshed)) {
+      console.error('[autopilot] insurance card member refresh failed', error ?? { suggestionId: prior.id, error: 'no rows updated' });
+    }
+  } catch (error) {
+    console.error('[autopilot] insurance card member refresh failed', error);
+  }
+}
+
 /**
  * `tz` is the family's IANA zone — `ctx.active.family.timezone` on the
  * on-demand route, and `families.timezone` on the row the cron is already
@@ -206,8 +251,9 @@ export async function runAutopilotScan(
     // EVERY live key, paged. Resolved rows keep their key for good, so a busy
     // family passes any fixed cap; a prior key missing from a capped page was
     // re-inserted, hit UNIQUE(family_id, dedupe_key), and failed the scan on
-    // every run after its side effect had already been written.
-    readAllAsQuery((from, to) => supabase.from('autopilot_suggestions').select('id, dedupe_key, status')
+    // every run after its side effect had already been written. Its kind,
+    // source and member say who reads it (refreshPolicyCardMember, below).
+    readAllAsQuery((from, to) => supabase.from('autopilot_suggestions').select('id, dedupe_key, status, kind, source_kind, member_id')
       .eq('family_id', familyId).not('dedupe_key', 'like', 'archived:%').order('id').range(from, to), { max: 50_000 }),
   ]);
 
@@ -355,6 +401,9 @@ export async function runAutopilotScan(
   let notified = 0;
   for (const d of drafts) {
     const prior = existingByKey.get(d.dedupeKey);
+    // A prior card's member is the one thing kept in step with its source, and
+    // only on an insurance card, where it says who may read it.
+    if (prior) await refreshPolicyCardMember(supabase, familyId, prior, d, viewer);
     if (prior) continue; // respect prior state (resolved or already-open); avoid churn
     // A card this member may not read is not theirs to write. Under 0486 the
     // insert's read-back (`.select('id')`) would refuse it with 42501 and
