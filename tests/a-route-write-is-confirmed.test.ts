@@ -458,11 +458,22 @@ describe('marketing automation and platform writes (C1-S9-67)', () => {
     for (const [src, needle] of [
       [recurring, "if (error || wroteNoRows(noted)) console.error("],
       [onboardingContact, "if (error || wroteNoRows(updated)) console.error("],
-      [identity, "if (stitchError || wroteNoRows(stitched)) console.error("],
     ] as const) {
       const line = src.slice(at(src, needle)).split('\n')[0];
       expect(line).not.toMatch(/\bthrow\b|\breturn\b/);
     }
+  });
+
+  it('a visitor stitch that did not land is unknown, so no consent is carried on it (#1030)', () => {
+    // No longer log-only: the stitch now writes only over the row it read
+    // (its id and anonymous id, still unbound), and a write that matched
+    // nothing means another request bound it first. The sign-in stops as
+    // unknown before step 3 carries the browser's consent to this contact.
+    expect(identity).toContain(".eq('id', visitor.id).eq('anonymous_id', anonymousId).is('contact_id', null).select('id');");
+    const b = code(block(identity, 'if (stitchError || wroteNoRows(stitched)) {'));
+    expect(b).toContain("console.error('[identity] visitor stitch failed'");
+    expect(b).toContain("return { decision: 'unknown', contactId };");
+    expect(b).not.toMatch(/\bthrow\b/);
   });
 
   it('deliberate ones carry their reasons', () => {
