@@ -186,6 +186,23 @@ describe('rows written before the inbox was recorded still hold', () => {
     expect(db.table('marketing_suppressions').map((r) => r.email)).toEqual(['legacy+promo@example.com']);
   });
 
+  // AUD-1028-M2-LEGACY-DOT: the old signed-unsubscribe writer stored the address
+  // as typed, trailing domain dot included, and canonicalMailbox folds that dot.
+  // The scan for such rows once required a `+` in the local part, so this row
+  // was never read and its inbox kept getting mail.
+  it('a legacy row with a trailing domain dot suppresses the base address and an alias', async () => {
+    seed([{ email: 'legacy@example.com.', reason: 'unsubscribe' }]);
+    for (const spelling of ['legacy@example.com', 'legacy+new@example.com']) await contact(spelling);
+    expect(h.sent, 'each spelling is submitted on its own day, so only the opt-out can stop it').toEqual([]);
+    expect(db.table('marketing_suppressions').map((r) => r.email)).toEqual(['legacy@example.com.']);
+  });
+
+  it('that trailing-dot row does not reach a neighbouring inbox (positive control)', async () => {
+    seed([{ email: 'legacy@example.com.', reason: 'unsubscribe' }]);
+    await contact('legacyx@example.com');
+    expect(mailedTo()).toEqual(['legacyx@example.com']);
+  });
+
   it('a legacy Gmail row with dots and a tag suppresses the inbox', async () => {
     seed([{ email: 'j.doe.smith+shop@googlemail.com', reason: 'complaint' }]);
     for (const spelling of ['jdoesmith@gmail.com', 'jdoe.smith+x@gmail.com']) await contact(spelling);

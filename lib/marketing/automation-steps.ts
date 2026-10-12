@@ -58,13 +58,16 @@ async function suppressionFor(supabase: DB, email: string): Promise<'mailable' |
     if (!parts) return 'mailable';
     // Every stored spelling whose canonical inbox is `inbox` matches (and some
     // that are not; the comparison below is exact). Outside Gmail a spelling
-    // differs from its inbox only by a `+tag`; Gmail also ignores dots anywhere
-    // in the local part and answers to googlemail.com. The address's own LIKE
-    // metacharacters go through the shared escapeLike (lib/supabase/escape-like.ts).
+    // differs from its inbox by a `+tag` on the local part or a trailing dot on
+    // the domain (canonicalMailbox folds both, and older unsubscribes stored
+    // either as typed), so the scan takes the local part as a prefix, not only
+    // `local+…`. Gmail also ignores dots anywhere in the local part and answers
+    // to googlemail.com. The address's own LIKE metacharacters go through the
+    // shared escapeLike (lib/supabase/escape-like.ts).
     const spellings = supabase.from('marketing_suppressions').select('email');
     const { data: near, error: nearError } = await (parts.gmail
       ? spellings.like('email', `${[...parts.local].map((char) => escapeLike(char)).join('%')}%@g%mail.com%`)
-      : spellings.like('email', `${escapeLike(parts.local)}+%@${escapeLike(parts.domain)}%`)
+      : spellings.like('email', `${escapeLike(parts.local)}%@${escapeLike(parts.domain)}%`)
     ).limit(SPELLING_SCAN_LIMIT);
     if (nearError || !Array.isArray(near)) return 'unknown';
     if (near.some((row) => typeof row.email === 'string' && canonicalMailbox(row.email) === inbox)) return 'suppressed';
