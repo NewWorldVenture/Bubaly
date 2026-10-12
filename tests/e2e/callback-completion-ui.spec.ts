@@ -491,3 +491,40 @@ test('no-code recovery refuses to treat the existing login as recovery authority
     .map(({ name, value }) => ({ name, value }))).toEqual(state.sessionCookies);
   expect(await page.evaluate(key => sessionStorage.getItem(key), grantKey)).toBeNull();
 });
+
+
+test('a held no-code user response cannot navigate or change the existing login after completion unmount', async ({ page }) => {
+  const state = await fixture(page, { noCode: true, existing: 'B', hold: 'user', next: '/dashboard/meals?week=next' });
+  await expect.poll(() => state.userReads).toBe(1);
+  await expect(page.getByRole('status')).toBeVisible();
+  expect(await page.evaluate(() => window.__callbackUi.routes)).toEqual([]);
+  const before = (await page.context().cookies()).filter(cookie => cookie.name.startsWith(cookieKey));
+  const stored = before.filter(cookie => cookie.name === cookieKey || cookie.name.startsWith(cookieKey + '.'))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })).map(cookie => cookie.value).join('');
+  const owned = JSON.parse(Buffer.from(stored.slice('base64-'.length), 'base64url').toString());
+  expect(owned.user.id).toBe(userB);
+  expect(JSON.parse(Buffer.from(owned.access_token.split('.')[1], 'base64url').toString()).session_id).toBe(sidB);
+  const completed = page.waitForResponse(response => new URL(response.url()).origin === provider
+    && new URL(response.url()).pathname === '/auth/v1/user' && response.status() === 200);
+  await page.evaluate(() => window.__callbackUi.retire());
+  await expect(page.getByText('Other route', { exact: true })).toBeVisible();
+  await expect(page.getByRole('status')).toHaveCount(0);
+  await state.release('user');
+  const response = await completed;
+  expect(response.request().method()).toBe('GET');
+  expect(response.status()).toBe(200);
+  expect(await response.finished()).toBeNull();
+  await test.info().attach('provider200-after-unmount', { body: JSON.stringify({ method: 'GET', path: '/auth/v1/user', status: response.status() }), contentType: 'application/json' });
+  // getSession waits behind the held SDK user-read lock; this is a real SDK settlement checkpoint.
+  expect(await page.evaluate(() => window.__callbackUi.user())).toBe(userB);
+  await page.clock.runFor(36_000);
+  await expect(page.getByText('Other route', { exact: true })).toBeVisible();
+  await expect(page.getByRole('status')).toHaveCount(0);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  expect(await page.evaluate(() => window.__callbackUi.routes)).toEqual([]);
+  expect(await page.evaluate(() => window.__callbackUi.errors)).toEqual([]);
+  expect(state.calls).toEqual([]);
+  expect(state.userReads).toBe(1);
+  expect(await page.evaluate(() => window.__callbackUi.user())).toBe(userB);
+  expect((await page.context().cookies()).filter(cookie => cookie.name.startsWith(cookieKey))).toEqual(before);
+});
