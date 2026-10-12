@@ -1,5 +1,11 @@
-import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const file = dir + '/' + entry.name;
+    return entry.isDirectory() ? sourceFiles(file) : entry.isFile() ? [file] : [];
+  });
+}
+
 import { describe, expect, it } from 'vitest';
 
 /**
@@ -31,12 +37,10 @@ const CLASSIFIED: Record<string, { count: number; how: string }> = {
 };
 
 function found(): Map<string, number> {
-  const out = execSync("grep -rc \"ignoreDuplicates: true\" app lib --include='*.ts' --include='*.tsx' || true", { encoding: 'utf8' });
   const m = new Map<string, number>();
-  for (const line of out.trim().split('\n')) {
-    const i = line.lastIndexOf(':');
-    const n = Number(line.slice(i + 1));
-    if (n > 0) m.set(line.slice(0, i), n);
+  for (const file of ['app', 'lib'].flatMap(sourceFiles).filter(file => /\.tsx?$/.test(file))) {
+    const n = readFileSync(file, 'utf8').split('\n').filter(line => line.includes('ignoreDuplicates: true')).length;
+    if (n > 0) m.set(file, n);
   }
   return m;
 }

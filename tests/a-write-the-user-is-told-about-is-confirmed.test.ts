@@ -1447,8 +1447,11 @@ const profileActions = readFileSync('app/(app)/dashboard/settings/profile-action
 describe('writes that were hidden as the first statement in a block (C1-S9-61)', () => {
   it('claiming a CRM lead never overwrites an owner, and is confirmed', () => {
     const body = actionBody(profileActions, 'async function resolveContactId');
-    expect(body).toContain(".update({ owner_id: userId }).eq('id', byEmail[0].id).is('owner_id', null).select('id')");
+    // #1030 also binds the claim to the email the lookup verified, and a claim
+    // that matched nothing refuses the call instead of minting a second lead.
+    expect(body).toContain(".update({ owner_id: userId }).eq('id', byEmail[0].id).eq('email', contact.email).is('owner_id', null).select('id')");
     expect(body).toContain('if (!wroteNoRows(claimed)) return byEmail[0].id;');
+    expect(body).toContain("throw unanswered('contact identity changed before claim'");
   });
 
   it("a lead owned by SOMEONE ELSE is not returned as this user's", () => {

@@ -27,7 +27,8 @@
 // say what the held sweep WOULD do, and one pins that nothing deployable
 // calls it. Until then the warning is the whole of the answer.
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join as nativeJoin } from 'node:path';
+const join = (...parts: string[]): string => nativeJoin(...parts).replace(/\\/g, '/');
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';

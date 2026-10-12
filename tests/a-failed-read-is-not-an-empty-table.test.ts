@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join as nativeJoin } from 'node:path';
+const join = (...parts: string[]): string => nativeJoin(...parts).replace(/\\/g, '/');
 import { describe, expect, it } from 'vitest';
 
 // `settleAll` exists so one failed read cannot reject a page's whole batch. It
