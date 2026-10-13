@@ -1094,7 +1094,9 @@ function NewEventModal({ existing, onClose, onSaved }: {
       // No family_id and no created_by: the action reads both from the session,
       // so this component can no longer name the household it writes into.
       const result = existing
-        ? await updateCalendarEventAction(existing.id, fields)
+        // `existing` is the occurrence that was clicked: for a repeating event,
+        // that week's times. The action maps them back onto the series' start.
+        ? await updateCalendarEventAction(existing.id, fields, { occurrenceStartsAt: existing.starts_at })
         : await createCalendarEventAction({ ...fields, submissionId: submissionId.current });
       if (!result.ok) {
         // `already_saved`: an earlier Save of this modal landed as the event the

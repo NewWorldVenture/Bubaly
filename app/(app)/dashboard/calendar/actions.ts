@@ -201,9 +201,20 @@ export async function createCalendarEventAction(input: CreateCalendarEventInput)
   }
 }
 
+export type UpdateCalendarEventOptions = {
+  /**
+   * The `starts_at` of the occurrence the modal was opened from. A repeating
+   * event is drawn once per week with that week's own time; without this, a
+   * Save from a later week made that week the series' start and every week
+   * before it left the calendar (see `UpdateEventOptions` in the service).
+   */
+  occurrenceStartsAt?: string | null;
+};
+
 export async function updateCalendarEventAction(
   eventId: string,
   patch: CalendarEventFields,
+  options?: UpdateCalendarEventOptions,
 ): Promise<CalendarActionResult> {
   const t = await getTranslations();
   if (!eventId) return { ok: false, error: t('actions.thatEventCouldNotBe') };
@@ -222,6 +233,8 @@ export async function updateCalendarEventAction(
       ...(patch.location !== undefined ? { location: asText(patch.location) ?? null } : {}),
       ...(patch.description !== undefined ? { description: asText(patch.description) ?? null } : {}),
       ...(patch.assigneeId !== undefined ? { assigneeId: patch.assigneeId } : {}),
+    }, {
+      occurrenceStartsAt: typeof options?.occurrenceStartsAt === 'string' ? asStoredInstant(options.occurrenceStartsAt) ?? null : null,
     });
     if (!result.ok) return { ok: false, error: result.error };
 
