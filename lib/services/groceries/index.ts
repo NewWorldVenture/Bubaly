@@ -797,20 +797,31 @@ export async function pantryAdjust(
     // escaped and the gaps are wildcards, so "red  onion" is found by "Red
     // onions" too. Ordered and paged, so a short name matching many rows ("egg")
     // cannot lose the exact one past an arbitrary 20th.
+    //
+    // A page SHORTER than asked for is not the end. The server caps every
+    // response at its `db-max-rows`, silently, so a project capped below
+    // PANTRY_LOOKUP_PAGE answers a short page while more rows match; stopping
+    // there never saw an exact row past the cap and created a duplicate beside
+    // it. As `readAll` (lib/supabase/read-all.ts) does: advance by the rows
+    // RECEIVED and stop only on an empty page — never walking past
+    // PANTRY_LOOKUP_MAX, and refusing rather than creating once it is reached.
     const key = normalizeName(name);
-    for (let from = 0; ; from += PANTRY_LOOKUP_PAGE) {
-      const { data, error } = await scope.db.from('pantry_items').select('*').eq('family_id', scope.familyId).ilike('name', `%${key.split(' ').map((word) => escapeLike(word)).join('%')}%`)
-        .order('created_at', { ascending: true }).order('id').range(from, from + PANTRY_LOOKUP_PAGE - 1);
+    const pattern = `%${key.split(' ').map((word) => escapeLike(word)).join('%')}%`;
+    for (let from = 0; ; ) {
+      if (from >= PANTRY_LOOKUP_MAX) {
+        return fail('Too many pantry items look like that one. Put it away from the pantry page.', { code: SERVICE_CODES.invalidInput });
+      }
+      const to = Math.min(from + PANTRY_LOOKUP_PAGE, PANTRY_LOOKUP_MAX) - 1;
+      const { data, error } = await scope.db.from('pantry_items').select('*').eq('family_id', scope.familyId).ilike('name', pattern)
+        .order('created_at', { ascending: true }).order('id').range(from, to);
       if (error) {
         console.error('[service:groceries] pantry lookup failed', error);
         return fail(describeDbError(error, 'Could not look up the pantry.'), { code: SERVICE_CODES.db });
       }
       const rows = data ?? [];
       existing = rows.find((row) => normalizeName(row.name) === key) ?? null;
-      if (existing || rows.length < PANTRY_LOOKUP_PAGE) break;
-      if (from + PANTRY_LOOKUP_PAGE >= PANTRY_LOOKUP_MAX) {
-        return fail('Too many pantry items look like that one. Put it away from the pantry page.', { code: SERVICE_CODES.invalidInput });
-      }
+      if (existing || rows.length === 0) break;
+      from += rows.length;
     }
   }
 
