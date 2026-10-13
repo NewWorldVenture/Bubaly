@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { emailsSent, failedAttempt, recordedActionsJson, retryOf, runSteps, type Step } from '@/lib/marketing/automation-steps';
+import { emailsSent, failedAttempt, recordedActionsJson, retryOf, stepsRecorded, runSteps, type Step } from '@/lib/marketing/automation-steps';
 import { readInChunks } from '@/lib/supabase/chunked-in';
 import { getMarketingCustomersWithError, type MarketingCustomer } from '@/lib/marketing/customers';
 import { wroteNoRows } from '@/lib/supabase/errors';
@@ -119,7 +119,8 @@ export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: numb
         const receipts = recordedActionsJson(existing.metadata);
         const claim = supabase.from('marketing_automation_runs').update({ status: 'running' }).eq('id', existing.id);
         const asRead = receipts === null ? claim.is('metadata->actions', null) : claim.eq('metadata->actions', receipts);
-        const { data: claimed, error: claimError } = await asRead.eq('status', 'failed').select('id').maybeSingle();
+        const fenced = stepsRecorded(existing.metadata) ? asRead : asRead.is('metadata->steps', null);
+        const { data: claimed, error: claimError } = await fenced.eq('status', 'failed').select('id').maybeSingle();
         if (claimError) throw new Error('Could not claim the failed automation run.');
         if (!claimed) continue;
         runId = claimed.id;

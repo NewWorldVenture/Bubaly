@@ -131,6 +131,24 @@ export function recordedActionsJson(metadata: unknown): string | null {
 }
 
 /**
+ * Whether a run's metadata carries the steps an attempt ran (`retryOf`). A
+ * retry that read a run without them is claimed only while it still has none:
+ * another pass may have retried it in between, recording the same results
+ * (a carried send, the same step failing again) beside the steps IT ran, and
+ * a claim fenced on the results alone then matched, and retried from the stale
+ * read against the current steps — an edited workflow's — sending again what
+ * the other pass had already delivered. Once recorded, the steps are the
+ * snapshot every later retry runs and records again, so their presence is the
+ * whole fence.
+ */
+export function stepsRecorded(metadata: unknown): boolean {
+  const steps = metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+    ? (metadata as { steps?: unknown }).steps
+    : undefined;
+  return steps !== undefined && steps !== null;
+}
+
+/**
  * What a retry of a failed run works from: the steps its earlier attempt ran,
  * and what each of them did (`recordedActions`), matched by position.
  *

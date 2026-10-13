@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { emailsSent, failedAttempt, recordedActionsJson, retryOf, runSteps, type SendAdmission, type Step } from '@/lib/marketing/automation-steps';
+import { emailsSent, failedAttempt, recordedActionsJson, retryOf, stepsRecorded, runSteps, type SendAdmission, type Step } from '@/lib/marketing/automation-steps';
 import { EVENT_DEFAULT_COPY, type EventTrigger } from '@/lib/marketing/automation-triggers';
 import { wroteNoRows } from '@/lib/supabase/errors';
 
@@ -81,7 +81,8 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
       const receipts = recordedActionsJson(existing.metadata);
       const claim = supabase.from('marketing_automation_runs').update({ status: 'running' }).eq('id', existing.id);
       const asRead = receipts === null ? claim.is('metadata->actions', null) : claim.eq('metadata->actions', receipts);
-      const { data: claimed, error: claimError } = await asRead.eq('status', 'failed').select('id').maybeSingle();
+      const fenced = stepsRecorded(existing.metadata) ? asRead : asRead.is('metadata->steps', null);
+      const { data: claimed, error: claimError } = await fenced.eq('status', 'failed').select('id').maybeSingle();
       if (claimError || !claimed) continue;
       runId = claimed.id;
       ({ steps, previous } = retryOf(existing.metadata, steps));
