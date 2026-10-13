@@ -266,9 +266,9 @@ export async function creditCardRefund(supabase: DB, params: {
     .single();
   if (error) {
     // The select above and this insert are two statements, so two deliveries of
-    // one refund that overlap can both pass the select. Where the database has a
-    // key for it (one card_refund per stripe_ref, draft PR #925's 0484), the
-    // second insert is refused with 23505; that is the first one's refund,
+    // one refund that overlap can both pass the select. Once the database has a
+    // key for it (one card_refund per stripe_ref: owner SQL, not yet applied),
+    // the second insert is refused with 23505; that is the first one's refund,
     // already written, so answer it as the success it is rather than a failure
     // Stripe would retry — and never as a second credit.
     if ((error as { code?: string }).code === '23505') {

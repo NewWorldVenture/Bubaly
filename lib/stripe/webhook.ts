@@ -306,7 +306,8 @@ export async function handleTransactionCreated(
   // a merchant refund took the money out a second time instead of giving it
   // back — a $20 purchase refunded in full left the child $40 down, and every
   // later authorization was decided against that Spend balance. (The same
-  // change as draft PR #925, without its database keys.)
+  // change as closed draft PR #925, without its database keys, which are owner
+  // SQL: one card_refund, and one capture, per stripe_ref.)
   const amount = Math.trunc(txn.amount ?? 0);
   if (amount < 0) {
     const merchant = txn.merchant_data?.name ?? 'Card purchase';
