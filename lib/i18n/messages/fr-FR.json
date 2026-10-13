@@ -565,6 +565,7 @@
   "actions.thatDateCouldNotBe": "Cette date est introuvable.",
   "actions.thatEntryCouldNotBe": "Cette entrée est introuvable.",
   "actions.thatEventCouldNotBe": "Cet événement est introuvable.",
+  "actions.thisEventRepeatsAndThis": "Cet événement se répète et cette page n’est plus à jour. Actualisez et réessayez.",
   "actions.thatFamilyMemberWasNot": "Ce membre de la famille est introuvable.",
   "actions.thatGoalCouldNotBe": "Cet objectif est introuvable.",
   "actions.thatInvestmentIsNotAvailable": "Cet investissement n’est pas disponible.",

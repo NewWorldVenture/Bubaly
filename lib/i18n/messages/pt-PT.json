@@ -566,6 +566,7 @@
   "actions.thatDateCouldNotBe": "Não foi possível encontrar essa data.",
   "actions.thatEntryCouldNotBe": "Não foi possível encontrar essa entrada.",
   "actions.thatEventCouldNotBe": "Não foi possível encontrar esse evento.",
+  "actions.thisEventRepeatsAndThis": "Este evento repete-se e esta página está desatualizada. Atualize e tente novamente.",
   "actions.thatFamilyMemberWasNot": "Esse membro da família não foi encontrado.",
   "actions.thatGoalCouldNotBe": "Não foi possível encontrar essa meta.",
   "actions.thatInvestmentIsNotAvailable": "Esse investimento não está disponível.",

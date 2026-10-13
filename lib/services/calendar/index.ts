@@ -467,8 +467,8 @@ export type UpdateEventOptions = {
   seriesNeedsOccurrence?: boolean;
 };
 
-/** The refusal `seriesNeedsOccurrence` gives. */
-const SERIES_NEEDS_OCCURRENCE = 'That event repeats. Say which week this new time is for, and every week moves with it.';
+/** The refusal `seriesNeedsOccurrence` gives; exported so a translated surface can recognise it. */
+export const SERIES_NEEDS_OCCURRENCE = 'That event repeats. Say which week this new time is for, and every week moves with it.';
 
 type EventClockState = Pick<CalendarEvent, 'id' | 'title' | 'starts_at' | 'ends_at' | 'all_day'>;
 export async function updateEvent(

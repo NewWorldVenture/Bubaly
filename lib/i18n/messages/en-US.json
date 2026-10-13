@@ -558,6 +558,7 @@
   "actions.thatDateCouldNotBe": "That date could not be found.",
   "actions.thatEntryCouldNotBe": "That entry could not be found.",
   "actions.thatEventCouldNotBe": "That event could not be found.",
+  "actions.thisEventRepeatsAndThis": "This event repeats, and this page is out of date. Refresh and try again.",
   "actions.thatFamilyMemberWasNot": "That family member was not found.",
   "actions.thatGoalCouldNotBe": "That goal could not be found.",
   "actions.thatInvestmentIsNotAvailable": "That investment is not available.",

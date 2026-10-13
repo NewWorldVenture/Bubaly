@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { updateEvent } from '@/lib/services/calendar';
+import { SERIES_NEEDS_OCCURRENCE, updateEvent } from '@/lib/services/calendar';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { SERVICE_CODES } from '@/lib/services/types';
 import { describeActionError } from '@/lib/supabase/errors';
@@ -39,11 +39,18 @@ import { describeActionError } from '@/lib/supabase/errors';
  * edit from the Calendar page has always recorded. For a member acting through the
  * UI that is the trail row only — recordActivity deliberately writes no
  * agent_activity feed entry for actorKind 'member'.
+ *
+ * `occurrenceStartsAt` is the start of the event as the card showed it. For a
+ * repeating event that is one week, and the move is mapped onto the series
+ * from it, as the Calendar page's Edit does; written as it stood, the week's
+ * time restarted the series there. A repeating event with no week is refused,
+ * which only a tab still running the old card can send.
  */
 export async function rescheduleEventAction(
   eventId: string,
   startsAtIso: string,
   endsAtIso: string | null,
+  occurrenceStartsAt?: string | null,
 ): Promise<{ ok: boolean; error?: string }> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
@@ -54,14 +61,20 @@ export async function rescheduleEventAction(
   const result = await updateEvent(scopeFromUserContext(ctx, supabase), eventId, {
     startsAt: startsAtIso,
     endsAt: endsAtIso,
+  }, {
+    occurrenceStartsAt: typeof occurrenceStartsAt === 'string' ? occurrenceStartsAt : null,
+    seriesNeedsOccurrence: true,
   });
   if (!result.ok) {
-    // The service speaks English; this surface is translated. Only the not-found
-    // sentence is re-worded — a db or validation failure keeps the service's own
-    // description rather than being flattened into a friendlier untruth.
+    // The service speaks English; this surface is translated. The not-found and
+    // which-week sentences are re-worded — a db or validation failure keeps the
+    // service's own description rather than being flattened into a friendlier
+    // untruth.
     return {
       ok: false,
-      error: result.code === SERVICE_CODES.notFound ? t('actions.thatEventCouldNotBe') : result.error,
+      error: result.code === SERVICE_CODES.notFound ? t('actions.thatEventCouldNotBe')
+        : result.error === SERIES_NEEDS_OCCURRENCE ? t('actions.thisEventRepeatsAndThis')
+          : result.error,
     };
   }
   revalidatePath('/dashboard/conflicts');

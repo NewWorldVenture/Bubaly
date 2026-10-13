@@ -565,6 +565,7 @@
   "actions.thatDateCouldNotBe": "Dieses Datum konnte nicht gefunden werden.",
   "actions.thatEntryCouldNotBe": "Dieser Eintrag konnte nicht gefunden werden.",
   "actions.thatEventCouldNotBe": "Dieser Termin konnte nicht gefunden werden.",
+  "actions.thisEventRepeatsAndThis": "Dieser Termin wiederholt sich, und diese Seite ist nicht mehr aktuell. Bitte aktualisieren und erneut versuchen.",
   "actions.thatFamilyMemberWasNot": "Dieses Familienmitglied wurde nicht gefunden.",
   "actions.thatGoalCouldNotBe": "Dieses Ziel konnte nicht gefunden werden.",
   "actions.thatInvestmentIsNotAvailable": "Diese Anlage ist nicht verfügbar.",

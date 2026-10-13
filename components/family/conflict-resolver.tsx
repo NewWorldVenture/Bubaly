@@ -11,7 +11,7 @@ import { EmptyState } from '@/components/ui/states';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type EventView = { id: string; title: string; whenLabel: string; location: string | null; assignee: string | null };
-export type QuickFixView = { eventId: string; label: string; startsAtIso: string; endsAtIso: string; newWhenLabel: string };
+export type QuickFixView = { eventId: string; label: string; startsAtIso: string; endsAtIso: string; occurrenceStartsAt: string; newWhenLabel: string };
 export type AiEvent = { title: string; starts_at: string; ends_at: string | null; location: string | null };
 export type ConflictView = {
   key: string;
@@ -92,7 +92,7 @@ function ConflictCard({
     setError('');
     const qf = conflict.quickFix;
     start(async () => {
-      const r = await rescheduleEventAction(qf.eventId, qf.startsAtIso, qf.endsAtIso);
+      const r = await rescheduleEventAction(qf.eventId, qf.startsAtIso, qf.endsAtIso, qf.occurrenceStartsAt);
       if (r.ok) onResolved();
       else setError(r.error ?? t('conflictResolver.couldNotReschedule'));
     });

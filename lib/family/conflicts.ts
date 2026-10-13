@@ -82,6 +82,12 @@ export type QuickFix = {
   label: string;
   startsAtIso: string;
   endsAtIso: string;
+  /**
+   * The start of the event as the conflict showed it: for a repeating event,
+   * the week being moved, so the move is mapped onto the series rather than
+   * restarting it on that week (lib/services/calendar `updateEvent`).
+   */
+  occurrenceStartsAt: string;
 };
 
 /**
@@ -103,5 +109,6 @@ export function quickFixMoveAfter(conflict: Conflict): QuickFix | null {
     label: `Move “${b.title}” to start right after “${a.title}” ends`,
     startsAtIso: new Date(newStart).toISOString(),
     endsAtIso: new Date(newEnd).toISOString(),
+    occurrenceStartsAt: b.starts_at,
   };
 }

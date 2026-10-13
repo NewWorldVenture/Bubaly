@@ -565,6 +565,7 @@
   "actions.thatDateCouldNotBe": "Die datum is niet gevonden.",
   "actions.thatEntryCouldNotBe": "Die invoer is niet gevonden.",
   "actions.thatEventCouldNotBe": "Die gebeurtenis is niet gevonden.",
+  "actions.thisEventRepeatsAndThis": "Deze gebeurtenis herhaalt zich en deze pagina is verouderd. Vernieuw en probeer het opnieuw.",
   "actions.thatFamilyMemberWasNot": "Dat gezinslid is niet gevonden.",
   "actions.thatGoalCouldNotBe": "Dat doel is niet gevonden.",
   "actions.thatInvestmentIsNotAvailable": "Die belegging is niet beschikbaar.",

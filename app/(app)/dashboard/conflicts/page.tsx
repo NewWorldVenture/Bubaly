@@ -103,6 +103,7 @@ export default async function ConflictsPage() {
             label: qf.label,
             startsAtIso: qf.startsAtIso,
             endsAtIso: qf.endsAtIso,
+            occurrenceStartsAt: qf.occurrenceStartsAt,
             newWhenLabel: whenLabel(qf.startsAtIso, qf.endsAtIso, locale.code, tz),
           }
         : null,

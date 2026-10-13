@@ -565,6 +565,7 @@
   "actions.thatDateCouldNotBe": "No se ha podido encontrar esa fecha.",
   "actions.thatEntryCouldNotBe": "No se ha podido encontrar esa entrada.",
   "actions.thatEventCouldNotBe": "No se ha podido encontrar ese evento.",
+  "actions.thisEventRepeatsAndThis": "Este evento se repite y esta página no está actualizada. Actualiza y vuelve a intentarlo.",
   "actions.thatFamilyMemberWasNot": "No se ha encontrado a ese miembro de la familia.",
   "actions.thatGoalCouldNotBe": "No se ha podido encontrar ese objetivo.",
   "actions.thatInvestmentIsNotAvailable": "Esa inversión no está disponible.",
