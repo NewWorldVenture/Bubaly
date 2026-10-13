@@ -17027,5 +17027,9 @@
   "savings.overYourWeeklyBudget": "Ultrapassaste em {amount} o teu orçamento semanal de {category}.",
   "savings.overYourMonthlyBudget": "Ultrapassaste em {amount} o teu orçamento mensal de {category}.",
   "savings.overYourYearlyBudget": "Ultrapassaste em {amount} o teu orçamento anual de {category}.",
-  "budgetAnalysisCard.monthsBudgetedSpending": "{month} · a despesa orçamentada do mês, com os limites semanais e anuais como a sua parte mensal"
+  "budgetAnalysisCard.monthsBudgetedSpending": "{month} · a despesa orçamentada do mês, com os limites semanais e anuais como a sua parte mensal",
+  "mobileAssistant.periodWeekly": "Semanal",
+  "mobileAssistant.periodMonthly": "Mensal",
+  "mobileAssistant.periodYearly": "Anual",
+  "mobileAssistant.monthsBudgetedSpending": "{month} · a despesa orçamentada do mês, com os limites semanais e anuais como a sua parte mensal"
 }

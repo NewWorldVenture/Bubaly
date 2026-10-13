@@ -17027,5 +17027,9 @@
   "savings.overYourWeeklyBudget": "Je zit {amount} boven je weekbudget voor {category}.",
   "savings.overYourMonthlyBudget": "Je zit {amount} boven je maandbudget voor {category}.",
   "savings.overYourYearlyBudget": "Je zit {amount} boven je jaarbudget voor {category}.",
-  "budgetAnalysisCard.monthsBudgetedSpending": "{month} · de begrote uitgaven van de maand, met week- en jaarlimieten als hun maandaandeel"
+  "budgetAnalysisCard.monthsBudgetedSpending": "{month} · de begrote uitgaven van de maand, met week- en jaarlimieten als hun maandaandeel",
+  "mobileAssistant.periodWeekly": "Wekelijks",
+  "mobileAssistant.periodMonthly": "Maandelijks",
+  "mobileAssistant.periodYearly": "Jaarlijks",
+  "mobileAssistant.monthsBudgetedSpending": "{month} · de begrote uitgaven van de maand, met week- en jaarlimieten als hun maandaandeel"
 }

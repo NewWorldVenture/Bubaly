@@ -20,6 +20,8 @@ import { renderTranslated } from './helpers/render-translated';
 import { cardFromToolResult, type BudgetAnalysisCard } from '@/lib/ai/result-cards';
 import { BudgetAnalysisCardView } from '@/components/ai/cards/budget-analysis';
 import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
+import { cardSections, parseCards } from '@/mobile/src/lib/assistant-core';
+import { mobileTranslate } from '@/mobile/src/lib/mobile-i18n';
 
 const holder = vi.hoisted(() => ({ db: null as unknown }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => holder.db, createServiceClient: () => holder.db }));
@@ -126,6 +128,27 @@ describe('a yearly budget is judged on the whole year', () => {
     expect(html).toContain(`>${said('budgetAnalysisCard.monthsBudgetedSpending', { month: '2026-10' })}</p>`);
     // The line, with its period.
     expect(html).toContain(`>$15,000 / $14,000 · ${said('billing.yearly')}</span>`);
+  });
+
+  // M12-CARD-MOBILE: the same card on the phone, which renders every card as a
+  // section of lines (mobile/src/lib/assistant-core.ts cardSections). It read
+  // "$200 of $1,166.67" under the bare month "2026-10", over "Groceries:
+  // $15,000 / $14,000 · over", with nothing to say the line was the year's.
+  it.each(['en-US', 'de-DE'])('the phone\'s budget card says the line is yearly and the headline is the month\'s budgeted spending (%s)', async (code) => {
+    db.seed('transactions', [...groceries(1480), ...octoberGroceries(20)]);
+    const out = await executeTool(scope(), 'finances.budgetVsActual', {});
+    expect(out).toMatchObject({ status: 'ok' });
+    // As /api/ai?mode=json hands the phone its cards: JSON, parsed structurally.
+    const [card] = parseCards(JSON.parse(JSON.stringify([cardFromToolResult('finances.budgetVsActual', {}, out)])));
+    const mt = (key: string, params?: Record<string, string | number>) => mobileTranslate(code, key, params);
+    const money = (dollars: number) => new Intl.NumberFormat(code, { style: 'currency', currency: 'USD', maximumFractionDigits: Number.isInteger(dollars) ? 0 : 2 }).format(dollars);
+
+    const section = cardSections(card, mt, code);
+    // Under the title, the words that say what the headline is.
+    expect(section.subtitle).toBe(mt('mobileAssistant.monthsBudgetedSpending', { month: '2026-10' }));
+    expect(section.lines[0]).toBe(mt('mobileAssistant.amountOf', { amount: money(200), limit: money(14_000 / 12) }));
+    // The line, with its period.
+    expect(section.lines[1]).toBe(`Groceries: ${money(15_000)} / ${money(14_000)} · ${mt('mobileAssistant.periodYearly')} · ${mt('mobileAssistant.over')}`);
   });
 
   it('a budgetVsActual result without the month\'s totals is no card, not a headline added up from lines of different periods', () => {
