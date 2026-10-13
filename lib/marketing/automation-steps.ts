@@ -165,9 +165,14 @@ export function retryOf(metadata: unknown, current: Step[]): { steps: Step[]; pr
   const recorded = metadata && typeof metadata === 'object' && !Array.isArray(metadata)
     ? (metadata as { steps?: unknown }).steps
     : undefined;
-  const snapshot = Array.isArray(recorded) && recorded.every((step) => step !== null && typeof step === 'object' && !Array.isArray(step))
-    ? (recorded as Step[])
-    : null;
+  // A recorded snapshot is run as it was recorded, entries runSteps could not
+  // read included: it records each of those as a failed step, so the next
+  // attempt meets it at the same index. Falling back to the current steps for
+  // such a snapshot paired them with receipts made against other steps — a
+  // first run of [email A, null] recorded [send_email, step:failed], and with
+  // the workflow edited to [null, email A] the retry sent A again at the
+  // failed index.
+  const snapshot = Array.isArray(recorded) ? (recorded as Step[]) : null;
   return { steps: snapshot ?? current, previous: recordedActions(metadata) };
 }
 

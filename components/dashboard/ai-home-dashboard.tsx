@@ -474,7 +474,10 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
         .select('id, kind, title, detail, href, impact')
         .eq('family_id', familyId).eq('as_of_date', today).eq('status', 'active');
       const ranked = rankInsights(((activeRows ?? []) as { id: string; kind: string; title: string; detail: string | null; href: string | null; impact: number }[])
-        .filter((r) => !conflictsUnavailable || r.kind !== 'conflict')
+        // A row persisted earlier today says what its source said then: with that
+        // source unread now, an old conflict or an old grocery count is not
+        // shown as today's insight (a fresh candidate from it is already withheld).
+        .filter((r) => (!conflictsUnavailable || r.kind !== 'conflict') && (!groceryUnavailable || r.kind !== 'grocery'))
         .map((r) => ({ id: r.id, kind: r.kind as InsightKind, title: r.title, detail: r.detail ?? '', href: r.href ?? '/dashboard', impact: r.impact })));
       const top = ranked[0];
       if (top) insightRow = { id: top.id, kind: top.kind, title: top.title, detail: top.detail, href: top.href, impact: top.impact, alternatives: Math.max(0, ranked.length - 1) };

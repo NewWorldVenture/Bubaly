@@ -288,6 +288,35 @@ describe('a retry matches each receipt to the step that produced it', () => {
     expect(runs(db)[0].status).toBe('completed');
   });
 
+  // A snapshot with an entry runSteps cannot read (AUD-1037-AUTOMATION-RETRY,
+  // 03:23 successor) is still the snapshot: the retry runs it, not the current
+  // steps against its receipts.
+  it('the scheduled runner: a snapshot with an unreadable step is retried as recorded, not against the edited steps', async () => {
+    const db = withWorkflow('customer_inactive', [first, null as unknown as Step]);
+    await runAutomations(db as unknown as DB);
+    expect(subjects()).toEqual(['First note']);
+    expect((runs(db)[0].metadata as { actions: string[] }).actions).toEqual(['send_email', 'step:failed']);
+
+    editWorkflow(db, [null as unknown as Step, first]);
+    await runAutomations(db as unknown as DB);
+
+    // First, delivered at index 0, is carried; the unreadable entry fails again.
+    expect(subjects()).toEqual(['First note']);
+    expect((runs(db)[0].metadata as { actions: string[] }).actions).toEqual(['send_email', 'step:failed']);
+  });
+
+  it('the event path: a snapshot with an unreadable step is retried as recorded, not against the edited steps', async () => {
+    const db = withWorkflow('onboarding_abandoned', [first, null as unknown as Step]);
+    await fire(db);
+    expect(subjects()).toEqual(['First note']);
+
+    editWorkflow(db, [null as unknown as Step, first]);
+    await fire(db);
+
+    expect(subjects()).toEqual(['First note']);
+    expect((runs(db)[0].metadata as { actions: string[] }).actions).toEqual(['send_email', 'step:failed']);
+  });
+
   it('control: a workflow edit reaches the runs that start after it', async () => {
     const db = withWorkflow('customer_inactive', [first, second]);
     h.answers = ['ok', 'error'];

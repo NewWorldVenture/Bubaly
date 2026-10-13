@@ -208,6 +208,35 @@ describe('the AI home dashboard', () => {
     expect(mocks.brief).not.toHaveBeenCalled();
   });
 
+  // An insight persisted earlier today carries the grocery count of then
+  // (AUD-1037-GROCERY-READ-STATE, 03:30 successor). With the list unread now it
+  // is not today's insight: the hero shows the next one instead.
+  const STALE_GROCERY = 'Stock up: 12 items are waiting on the list';
+  const persistedGroceryInsight = () => db.seed('daily_insights', [{
+    id: 'ins-grocery', family_id: FAMILY, as_of_date: '2026-09-09', kind: 'grocery', title: STALE_GROCERY,
+    detail: 'From this morning', href: '/dashboard/grocery', impact: 99, status: 'active',
+  }]);
+  const hero = (page: string) => page.match(/<aside>([^<]*)<\/aside>/)?.[1];
+
+  it.each(['grocery_lists', 'grocery_items'] as const)('with the %s read failing, an earlier grocery insight is not the hero; the next insight is', async (table) => {
+    persistedGroceryInsight();
+    failing(table);
+    const page = await html(AiHomeDashboard({ ctx }));
+
+    expect(page).toContain(t('aiHomeDashboard.groceryUnavailable'));
+    expect(page).not.toContain(STALE_GROCERY);
+    // Dinners are unplanned, so the meal insight is there to take its place.
+    expect(hero(page)).toBeDefined();
+    expect(hero(page)).not.toBe(STALE_GROCERY);
+  });
+
+  it('control: with the list read, the earlier grocery insight is still the hero', async () => {
+    persistedGroceryInsight();
+    const page = await html(AiHomeDashboard({ ctx }));
+
+    expect(hero(page)).toBe(STALE_GROCERY);
+  });
+
   it('control: with the list read, an empty family is told it is caught up and gets its getting-started outcome', async () => {
     const page = await html(AiHomeDashboard({ ctx }));
 
