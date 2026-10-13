@@ -8,9 +8,11 @@ import { MAX_FLYER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bound
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 import {
-  annotateAllergens, boundedNames, buildPantryChefPrompt, normalizeAllergies, normalizePlanDate, parsePantryRecipes,
+  annotateAllergens, boundedNames, buildPantryChefPrompt, normalizeAllergies, normalizePlanDate, readPantryRecipes,
 } from '@/lib/meals/pantry-chef';
+import { applySubstitutions, parseConstraintText } from '@/lib/meals/substitutions';
 import { addItems } from '@/lib/services/groceries';
+import { foodProfile, setSlot } from '@/lib/services/meals';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { accessDeniedResponse, assertAIAccess } from '@/lib/server/ai-access';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -87,26 +89,26 @@ export async function POST(req: NextRequest) {
       // was stored on the dish and then refused by addItems every time the
       // week's plan was sent to the grocery list, for as long as it stayed.
       const ingredients = boundedNames([...(Array.isArray(plan.have) ? plan.have : []), ...(Array.isArray(plan.need) ? plan.need : [])], 50)
-        .map((name) => ({ name }));
+        .map((name) => ({ name, quantity: null, unit: null }));
+      const steps = typeof plan.steps === 'string' ? plan.steps.slice(0, 2000).trim() : '';
 
-      const { data: meal, error: mealError } = await supabase.from('meals').insert({
-        family_id: familyId, created_by: userId, name: title, meal_type: 'dinner',
-        ingredients: ingredients as never,
-        notes: typeof plan.steps === 'string' ? plan.steps.slice(0, 2000) : null,
-      }).select('id').single();
-      if (mealError || !meal?.id) {
-        console.error('[ai/pantry-chef] meal create failed', mealError);
-        return NextResponse.json({ error: t('pantryChef.couldNotSaveThatRecipe') }, { status: 500 });
-      }
-      const { error: planError } = await supabase.from('meal_plans').insert({
-        family_id: familyId, created_by: userId, meal_id: meal.id,
-        plan_date: planDate, meal_type: 'dinner',
+      // Through the meal service, like the meals page and the assistant. The two
+      // raw inserts this replaces put a SECOND dinner into a slot that already
+      // held one — no unique (family, date, type) key stops it — and the meals
+      // page then refused the whole week ("We couldn't load all meal choices")
+      // on every retry. `setSlot` replaces what the slot held, reuses an
+      // identical dish rather than cloning it, and removes a dish it created
+      // when the plan write then fails, where the old meals insert stayed
+      // behind and every retry added another copy.
+      const planned = await setSlot(scopeFromUserContext(ctx, supabase), {
+        date: planDate, mealType: 'dinner', mealName: title, ingredients,
+        ...(steps ? { notes: steps } : {}),
       });
-      if (planError) {
-        console.error('[ai/pantry-chef] meal plan insert failed', planError);
+      if (!planned.ok) {
+        console.error('[ai/pantry-chef] meal plan write failed', { code: planned.code });
         return NextResponse.json({ error: t('pantryChef.couldNotAddThatRecipe') }, { status: 500 });
       }
-      return NextResponse.json({ planned: true, planDate });
+      return NextResponse.json({ planned: true, planDate, replaced: planned.data.replaced });
     }
 
     // ── Phase 2: add the chosen recipe's missing ingredients to grocery ──────
@@ -114,17 +116,36 @@ export async function POST(req: NextRequest) {
       const names = boundedNames(body.addToGrocery, 40);
       if (names.length === 0) return NextResponse.json({ added: 0 });
 
+      // The household's allergies, fail closed — the same swap the meal plan's
+      // shopping list gets (addFromMealPlan). A recipe the model let peanut
+      // butter into, or one the family chose despite its "May contain" badge,
+      // otherwise put the peanut butter itself on the list.
+      const scope = scopeFromUserContext(ctx, supabase);
+      const profile = await foodProfile(scope);
+      if (!profile.ok) {
+        console.error('[ai/pantry-chef] allergy read failed', { code: profile.code });
+        return NextResponse.json({ error: t('pantryChef.fridgeChefIsUnavailableRight') }, { status: 503 });
+      }
+      const safe = applySubstitutions(names.map((name) => ({ name })), {
+        allergies: profile.data.household.allergies.flatMap((note) => parseConstraintText(note)),
+      });
+      const swapped = safe.substitutions.map((s) => ({ from: s.from, to: s.to }));
+      if (safe.items.length === 0) return NextResponse.json({ added: 0, skipped: 0, swapped });
+
       // Through the grocery service, like every other writer: the family's
       // default list found or created as ONE operation (0443, DATA-007), items
       // already open on it skipped instead of added twice, the aisle filled in,
       // and the service's own name bounds applied. The raw insert this replaces
       // did none of that, so a second tap doubled the list.
-      const result = await addItems(scopeFromUserContext(ctx, supabase), { items: names.map((name) => ({ name })) });
+      const result = await addItems(scope, { items: safe.items.map((item) => ({ name: item.name })) });
       if (!result.ok) {
         console.error('[ai/pantry-chef] grocery add failed', { code: result.code });
         return NextResponse.json({ error: t('pantryChef.couldNotAddThoseItems') }, { status: 500 });
       }
-      return NextResponse.json({ added: result.data.added.length, skipped: result.data.skipped.length });
+      return NextResponse.json({
+        added: result.data.added.length, skipped: result.data.skipped.length,
+        ...(swapped.length ? { swapped } : {}),
+      });
     }
 
     // ── Phase 1: photo → allergy-aware recipe suggestions ────────────────────
@@ -193,9 +214,17 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: t('pantryChef.couldNotReadThatPhoto') }, { status: 502 });
       }
       const aiJson = await readBoundedResponseJson<{ choices?: Array<{ message?: { content?: string } }> }>(aiRes, 1024 * 1024);
-      const text = aiJson.choices?.[0]?.message?.content ?? '[]';
       obs.used(model);
-      const recipes = annotateAllergens(parsePantryRecipes(text), allergies);
+      // A reply with no content, prose, a refusal or an array cut off at the
+      // token limit is not "no food in the photo". It answered 200 with no
+      // recipes, the screen said "No food spotted", and the request was
+      // recorded as completed. Only a JSON `[]` from the model is that answer.
+      const parsed = readPantryRecipes(aiJson.choices?.[0]?.message?.content ?? '');
+      if (!parsed) {
+        obs.failed(new Error('The Fridge Chef reply did not parse.'));
+        return NextResponse.json({ error: t('pantryChef.couldNotReadThatPhoto') }, { status: 502 });
+      }
+      const recipes = annotateAllergens(parsed, allergies);
 
       return NextResponse.json({ recipes, allergiesConsidered: allergies.length });
     });

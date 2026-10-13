@@ -19,8 +19,8 @@ import type { ServiceScope } from '@/lib/services/types';
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
-import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
-import { INSIGHT_FEATURE_HREFS } from '@/lib/ai/insight-features';
+import { refuseIfLocked, refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
+import { insightFeatureHrefs } from '@/lib/ai/insight-features';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import { readAll } from '@/lib/supabase/read-all';
 
@@ -90,7 +90,7 @@ export async function POST(req: Request) {
   // and insurance records (lib/auth/guest-scope.ts), and a summary of the same
   // rows answers to the same rule: the utilities page let a guest in and both
   // of its AI answers summarised every bill for them.
-  if (ctx.active.role === 'guest' && (INSIGHT_FEATURE_HREFS[kind] ?? []).some(isWithheldFromGuest)) {
+  if (ctx.active.role === 'guest' && (insightFeatureHrefs(kind) ?? []).some(isWithheldFromGuest)) {
     return NextResponse.json({ error: t('insights.thatSummaryIsForThe') }, { status: 403 });
   }
 
@@ -105,11 +105,17 @@ export async function POST(req: Request) {
   // on the surface that costs money per request. Gated per kind rather than on
   // the whole set, because `refuseUnlessEntitled` admits a caller entitled to
   // ANY href it is handed and every family is entitled to something.
-  const gatedHrefs = INSIGHT_FEATURE_HREFS[kind];
-  if (gatedHrefs) {
-    const refused = await refuseUnlessEntitled(supabase, ctx.active.familyId, gatedHrefs);
-    if (refused) return refused;
-  }
+  //
+  // An alias (`grocery` for `shopping`) answers to its kind's gate, and a kind
+  // no gated page renders still answers to the family's lock: a trial that
+  // ended unpaid or a closed account is refused every model call, which
+  // `refuseUnlessEntitled` says for the mapped kinds and nothing said for the
+  // others.
+  const gatedHrefs = insightFeatureHrefs(kind);
+  const refused = gatedHrefs
+    ? await refuseUnlessEntitled(supabase, ctx.active.familyId, gatedHrefs)
+    : await refuseIfLocked(supabase, ctx.active.familyId);
+  if (refused) return refused;
 
   const limited = await enforceAIRateLimit(supabase, `ai-insights:${ctx.user.id}`, { limit: 20 });
   if (!limited.ok) return NextResponse.json(

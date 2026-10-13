@@ -65,3 +65,20 @@ export const INSIGHT_FEATURE_HREFS: Partial<Record<InsightKind, readonly string[
   watchlist: ['/dashboard/watchlist'],
   wishlists: ['/dashboard/wishlists'],
 };
+
+/**
+ * Kinds that read the SAME rows as a mapped kind under another name, and so
+ * answer to its gate. No page renders these (which is why the derived map above
+ * cannot list them), but the endpoint accepts them: `grocery` reads the open
+ * grocery items exactly as `shopping` does, and while it was simply absent from
+ * the map it reached the model for a family whose Groceries feature an admin had
+ * switched Off — the request `shopping` was refused with a 404.
+ */
+const INSIGHT_KIND_ALIASES: Partial<Record<InsightKind, InsightKind>> = {
+  grocery: 'shopping',
+};
+
+/** The feature hrefs a kind answers to, an alias's included; undefined for a kind no gated page renders. */
+export function insightFeatureHrefs(kind: InsightKind): readonly string[] | undefined {
+  return INSIGHT_FEATURE_HREFS[kind] ?? INSIGHT_FEATURE_HREFS[INSIGHT_KIND_ALIASES[kind] ?? kind];
+}

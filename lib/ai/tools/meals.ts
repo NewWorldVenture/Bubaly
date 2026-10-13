@@ -49,6 +49,31 @@ function describeDayKey(key: string): string {
   return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric' }).format(new Date(ms));
 }
 
+type IngredientLine = z.infer<typeof ingredientInput>;
+
+/**
+ * The service's ingredients field, or nothing at all.
+ *
+ * Omitted (or null, or an empty list) means "the model named no ingredients",
+ * which is NOT the same as "this dish has none": `ensureMealByName` reuses a
+ * library dish only when every field it is handed matches, so an `[]` here
+ * failed to match the family's "Tacos" (with tortillas) and cloned it as an
+ * empty "Tacos" that then refused to build a shopping list. And a `meal_id`
+ * entry may carry no ingredients key at all — `validateEntries` refuses one
+ * that does, so the documented "existing meal id" path was always refused.
+ */
+function ingredientsField(lines: IngredientLine[] | null | undefined): { ingredients?: { name: string; quantity: string | null; unit: string | null }[] } {
+  if (!lines?.length) return {};
+  return { ingredients: lines.map((i) => ({ name: i.name, quantity: i.quantity ?? null, unit: i.unit ?? null })) };
+}
+
+/** A plan entry for the service: a saved meal by id, or a dish by name with whatever ingredients the model gave. */
+function planEntry(e: { date: string; meal_type?: (typeof MEAL_TYPE_ENUM)[number] | null; meal_id?: string | null; meal_name?: string | null; ingredients?: IngredientLine[] | null }) {
+  const mealType = e.meal_type ?? 'dinner';
+  if (e.meal_id) return { date: e.date, mealType, mealId: e.meal_id };
+  return { date: e.date, mealType, mealName: e.meal_name ?? null, ...ingredientsField(e.ingredients) };
+}
+
 const planEntryInput = z.object({
   date: z.string().describe('Calendar date, YYYY-MM-DD'),
   meal_type: z.enum(MEAL_TYPE_ENUM).nullish().describe('Defaults to dinner'),
@@ -208,13 +233,9 @@ export const mealTools: ToolDefinition[] = [
       const mealName = (input.meal_name ?? input.name ?? '').trim();
       if (!mealName && !input.meal_id) return fail('Which dish should go on the plan?', { code: SERVICE_CODES.invalidInput });
 
-      const res = await setSlot(scope, {
-        date,
-        mealType: input.meal_type ?? 'dinner',
-        mealId: input.meal_id ?? null,
-        mealName: mealName || null,
-        ingredients: (input.ingredients ?? []).map((i) => ({ name: i.name, quantity: i.quantity ?? null, unit: i.unit ?? null })),
-      });
+      const res = await setSlot(scope, planEntry({
+        date, meal_type: input.meal_type, meal_id: input.meal_id, meal_name: mealName || null, ingredients: input.ingredients,
+      }));
       if (!res.ok) return res;
       return ok({ ...toSlotOutput(res.data), replaced: res.data.replaced });
     },
@@ -273,13 +294,7 @@ export const mealTools: ToolDefinition[] = [
       return out;
     },
     execute: async (scope, input) => {
-      const res = await planWeek(scope, input.entries.map((e) => ({
-        date: e.date,
-        mealType: e.meal_type ?? 'dinner',
-        mealId: e.meal_id ?? null,
-        mealName: e.meal_name ?? null,
-        ingredients: (e.ingredients ?? []).map((i) => ({ name: i.name, quantity: i.quantity ?? null, unit: i.unit ?? null })),
-      })));
+      const res = await planWeek(scope, input.entries.map(planEntry));
       if (!res.ok) return res;
       return ok({ planned: res.data.planned.map(toSlotOutput), replaced: res.data.replaced, created_meals: res.data.createdMeals });
     },

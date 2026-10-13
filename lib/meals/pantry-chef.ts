@@ -4,6 +4,7 @@
 // suggestion that conflicts with a family allergy (defense-in-depth in case the
 // model slips). Kept side-effect-free so it unit-tests without a network/DB.
 import { isValidTimezone, localPartsAt } from '@/lib/time/zoned';
+import { allergenConflict } from '@/lib/meals/substitutions';
 
 export type PantryRecipe = {
   title: string;
@@ -79,17 +80,27 @@ function coerceStringArray(value: unknown): string[] {
 
 /** Robustly parse the model's reply (fenced or bare JSON) into recipes. */
 export function parsePantryRecipes(text: string): PantryRecipe[] {
-  if (typeof text !== 'string' || !text.trim()) return [];
+  return readPantryRecipes(text) ?? [];
+}
+
+/**
+ * The same parse, telling "the model said there is no food" (a JSON `[]`) apart
+ * from "the model said nothing this can read": null for a refusal, prose, an
+ * empty reply or an array cut off at the token limit. Only the first is "No
+ * food spotted"; the second is a photo that could not be read.
+ */
+export function readPantryRecipes(text: string): PantryRecipe[] | null {
+  if (typeof text !== 'string' || !text.trim()) return null;
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1];
   const candidate = (fenced ?? text).match(/\[[\s\S]*\]/)?.[0];
-  if (!candidate) return [];
+  if (!candidate) return null;
   let raw: unknown;
   try {
     raw = JSON.parse(candidate);
   } catch {
-    return [];
+    return null;
   }
-  if (!Array.isArray(raw)) return [];
+  if (!Array.isArray(raw)) return null;
   return raw
     .map((r): PantryRecipe | null => {
       if (!r || typeof r !== 'object') return null;
@@ -131,15 +142,19 @@ export function normalizePlanDate(value: unknown, timezone: string, now: Date = 
 }
 
 /**
- * Defense-in-depth: flag (don't silently drop) any recipe whose title/have/need
- * mentions a family allergy term, so the UI can warn or exclude it even if the
- * model ignored the prompt.
+ * Defense-in-depth: flag (don't silently drop) any recipe whose title, have,
+ * need or method runs into a family allergy, so the UI can warn or exclude it
+ * even if the model ignored the prompt.
+ *
+ * Through `allergenConflict` (lib/meals/substitutions), not a substring test:
+ * "peanuts" is not a substring of "peanut butter", "tree nuts" names no almond,
+ * "severe peanut allergy (epipen)" is a substring of nothing, and an allergen
+ * named only in the steps ("finish with cashews") was never looked at.
  */
 export function annotateAllergens(recipes: PantryRecipe[], allergies: string[]): PantryRecipe[] {
   if (allergies.length === 0) return recipes;
-  return recipes.map((recipe) => {
-    const haystack = [recipe.title, ...recipe.have, ...recipe.need].join(' ').toLowerCase();
-    const hit = allergies.find((term) => haystack.includes(term));
-    return { ...recipe, allergenConflict: hit ?? null };
-  });
+  return recipes.map((recipe) => ({
+    ...recipe,
+    allergenConflict: allergenConflict([recipe.title, ...recipe.have, ...recipe.need, recipe.steps], allergies),
+  }));
 }

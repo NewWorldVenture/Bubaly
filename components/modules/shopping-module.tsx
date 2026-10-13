@@ -685,6 +685,13 @@ function BoughtModal({ listId, items, onClose, onRefresh, onDone }: {
         onRefresh();
         return;
       }
+      // Bought and off the list, but counted in another unit in the pantry:
+      // the family is told which, rather than shown a sum of kilograms and cups.
+      if (result.unitMismatch.length > 0) {
+        toastError(t('shoppingModule.countTheseInThePantry', {
+          names: result.unitMismatch.map((m) => `${m.name} (${m.bought} → ${m.stocked})`).join(', '),
+        }));
+      }
       const stocked = t('shoppingModule.putItemsInYourPantry', { count: result.pantryUpdated.length });
       if (result.purchaseError) toastError(`${stocked} ${t('shoppingModule.thePurchaseWasNotRecorded', { reason: result.purchaseError })}`);
       else if (result.purchaseRecorded) success(`${stocked} ${t('shoppingModule.purchaseRecordedOnTheHousehold')}`);

@@ -173,13 +173,20 @@ Rules:
       return NextResponse.json({ error: t('flyer.couldNotReadThatFlyer') }, { status: 502 });
     }
     const aiJson = await readBoundedResponseJson<{ choices?: Array<{ message?: { content?: string } }> }>(aiRes, 1 * 1024 * 1024);
-    const text: string = aiJson.choices?.[0]?.message?.content ?? '[]';
-    let raw: Array<Record<string, unknown>> = [];
+    // Only a JSON array from the model is an answer. No content, prose, a
+    // refusal, or a dense flyer's array cut off at the token limit used to
+    // become `[]` here, and the scan screen said "No events found on that
+    // flyer" about a flyer nobody had managed to read.
+    const text: string = aiJson.choices?.[0]?.message?.content ?? '';
+    let raw: Array<Record<string, unknown>>;
     try {
       const match = text.match(/\[[\s\S]*\]/);
-      raw = JSON.parse(match?.[0] ?? '[]');
-    } catch {
-      raw = [];
+      const parsed: unknown = match ? JSON.parse(match[0]) : null;
+      if (!Array.isArray(parsed)) throw new Error('The flyer reply held no event list.');
+      raw = parsed;
+    } catch (error) {
+      console.error('Flyer reply unreadable:', error instanceof Error ? error.message : 'parse failed');
+      return NextResponse.json({ error: t('flyer.couldNotReadThatFlyer') }, { status: 502 });
     }
 
     const events: ProposedEvent[] = raw

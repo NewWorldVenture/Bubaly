@@ -36,9 +36,12 @@ export function DiscoverClient() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? t('discoverClient.searchFailed'));
       setResults(json.recipes ?? []);
+      // Some sources answered and some did not: what is shown is not everything.
+      if (json.partial === true) toastError(t('discoverClient.someSourcesUnavailable'));
     } catch (err) {
       toastError(describeDbError(err, t('discoverClient.searchFailed')));
-      setResults([]);
+      // No results to show, and not "No recipes found": the search did not run.
+      setResults(null);
     } finally {
       setSearching(false);
     }

@@ -399,6 +399,81 @@ function isUnsafe(name: string, rules: AllergenRule[]): boolean {
   return findAllergyHit(name, rules) !== null;
 }
 
+// ── screening food text against the household's allergies ───────────────────
+
+/**
+ * Each word lowercased with ITS OWN trailing plural dropped. `normalize` above
+ * strips only the last letter of the whole string, which is right for one
+ * grocery name and wrong for a sentence: "peanuts and rice" never mentioned
+ * "peanut" under it.
+ */
+function wordsOf(text: string): string[] {
+  return (text ?? '').toLowerCase().replace(/[^a-z0-9\s%]/g, ' ').split(/\s+/).filter(Boolean)
+    .map((word) => word.replace(/(\w)s$/, '$1'));
+}
+
+function containsRun(haystack: string[], needle: string[]): boolean {
+  if (needle.length === 0 || needle.length > haystack.length) return false;
+  for (let i = 0; i + needle.length <= haystack.length; i += 1) {
+    if (needle.every((word, j) => haystack[i + j] === word)) return true;
+  }
+  return false;
+}
+
+/** Words a note uses to say what KIND of entry it is ("peanut allergy"), not which food. */
+const NOT_THE_ALLERGEN = /\b(?:allerg\w*|intoleran\w*|sensitiv\w*|anaphyla\w*|reactions?|epipen)\b/gi;
+
+/**
+ * The phrases an exemption is judged against. "Toss with oat milk and top with
+ * cheese" makes two claims, and the "oat" that makes the first one safe for a
+ * dairy allergy says nothing about the second.
+ */
+function phrasesOf(text: string): string[] {
+  return (text ?? '').split(/[.,;:!?\n()[\]{}&+]|\band\b|\bwith\b|\bor\b|\bplus\b/i).map((part) => part.trim()).filter(Boolean);
+}
+
+/**
+ * The household allergy a piece of food text runs into — a dish name, an
+ * ingredient, a recipe's method — as the family wrote it (less "allergy",
+ * "severe" and anything in brackets), or null.
+ *
+ * A raw substring test, which is what the Fridge Chef guard was, misses the
+ * allergies families actually write: "Peanuts" is not a substring of "peanut
+ * butter", "Tree nuts" names no almond, and "Severe peanut allergy (EpiPen)" is
+ * a substring of nothing a recipe says. This reads each note through
+ * `parseConstraintText`, matches word runs with every word singularised, and
+ * switches on the same allergen table the grocery swaps use — its triggers,
+ * its ingredients and its exemptions, so "oat milk" is not dairy and "pine
+ * nuts" is a tree nut.
+ */
+export function allergenConflict(texts: string | string[], allergies: string[]): string | null {
+  const terms = (allergies ?? [])
+    .flatMap((note) => parseConstraintText(note))
+    .map((term) => term.replace(NOT_THE_ALLERGEN, ' ').replace(/\s+/g, ' ').trim() || term.trim())
+    .map((label) => ({ label, words: wordsOf(label) }))
+    .filter((term) => term.words.length > 0);
+  if (terms.length === 0) return null;
+  const phrases = (Array.isArray(texts) ? texts : [texts]).flatMap((text) => phrasesOf(text ?? ''));
+  if (phrases.length === 0) return null;
+
+  for (const term of terms) {
+    const rules = ALLERGEN_RULES.filter((rule) =>
+      rule.triggers.some((trigger) => containsRun(term.words, wordsOf(trigger))));
+    for (const phrase of phrases) {
+      const words = wordsOf(phrase);
+      const exempt = (rule: AllergenRule) => rule.exempt?.test(phrase) ?? false;
+      // The food as the family named it, for allergies the table has no rule for.
+      if (containsRun(words, term.words) && !rules.some(exempt)) return term.label;
+      for (const rule of rules) {
+        if (exempt(rule)) continue;
+        const named = [...rule.triggers, ...rule.swaps.map((swap) => swap.ingredient)];
+        if (named.some((name) => containsRun(words, wordsOf(name)))) return term.label;
+      }
+    }
+  }
+  return null;
+}
+
 function isDisliked(name: string, dislikes: string[]): string | null {
   for (const dislike of dislikes ?? []) {
     const term = dislike.trim();
