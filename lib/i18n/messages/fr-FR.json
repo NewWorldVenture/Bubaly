@@ -335,6 +335,7 @@
   "actions.couldNotUpdateThatLeftover": "Impossible de mettre à jour ce reste. Actualisez et réessayez.",
   "actions.couldNotUpdateThatMember": "Impossible de mettre à jour ce membre.",
   "actions.couldNotUpdateThatMilestone": "Impossible de mettre à jour cette étape. Actualisez et réessayez — elle n’a pas changé.",
+  "actions.milestoneAlreadyAchieved": "Cette étape est déjà atteinte, elle reste donc dans la liste « Atteint ». Actualisez pour l’y voir.",
   "actions.couldNotUpdateThatPaperwork": "Impossible de mettre à jour ce document.",
   "actions.couldNotUpdateThatPolicy": "Impossible de mettre à jour ce contrat.",
   "actions.couldNotUpdateThatReport": "Impossible de mettre à jour ce signalement.",

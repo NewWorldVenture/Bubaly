@@ -40,7 +40,11 @@ export async function startMilestoneAction(memberId: string, title: string): Pro
     return { ok: false, error: t('actions.familyMemberNotFound') };
   }
 
-  const { error } = await supabase.from('independence_milestones').upsert({
+  // A new rung is inserted; a rung already on the ladder is left to the
+  // conditional restart below. This was one upsert that set 'in_progress' over
+  // whatever the row said, so Start from a stale page (or a repeated tap) took
+  // an ACHIEVED rung, and the child's badge, back to work.
+  const { data: added, error } = await supabase.from('independence_milestones').upsert({
     family_id: ctx.active.familyId,
     member_id: memberId,
     domain: m.domain,
@@ -50,8 +54,18 @@ export async function startMilestoneAction(memberId: string, title: string): Pro
     status: 'in_progress',
     points: m.points,
     created_by: ctx.user.id,
-  }, { onConflict: 'family_id,member_id,domain,title' });
+  }, { onConflict: 'family_id,member_id,domain,title', ignoreDuplicates: true }).select('id');
   if (error) return { ok: false, error: describeActionError(error) };
+  if (wroteNoRows(added)) {
+    // Already on this child's ladder: a skipped rung, or one started elsewhere,
+    // goes back to work. An achieved one is never touched, in the same write.
+    const { data: restarted, error: restartError } = await supabase.from('independence_milestones')
+      .update({ status: 'in_progress' })
+      .eq('family_id', ctx.active.familyId).eq('member_id', memberId).eq('domain', m.domain).eq('title', m.title)
+      .neq('status', 'achieved').select('id');
+    if (restartError) return { ok: false, error: describeActionError(restartError) };
+    if (wroteNoRows(restarted)) return { ok: false, error: t('actions.milestoneAlreadyAchieved') };
+  }
 
   await logAudit(supabase, {
     familyId: ctx.active.familyId, actorId: ctx.user.id, action: 'create',

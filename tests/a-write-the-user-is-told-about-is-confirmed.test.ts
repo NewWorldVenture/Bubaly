@@ -381,7 +381,11 @@ describe('a milestone the child is congratulated for is confirmed (C1-S9-47)', (
     for (const binding of ['achieved', 'skipped']) {
       expect(independence, binding).toContain(`wroteNoRows(${binding})`);
     }
-    expect(independence.match(/\.select\('id'\)/g) ?? []).toHaveLength(2);
+    // Each transition reads back its own rows; startMilestoneAction's rows are
+    // covered in tests/a-restarted-milestone-keeps-its-achievement.test.ts.
+    for (const fn of ['achieveMilestoneAction', 'skipMilestoneAction']) {
+      expect(bodyOf(independence, `export async function ${fn}`, 'return { ok: true };'), fn).toContain(".select('id')");
+    }
   });
 
   it('each stays scoped to the acting family', () => {

@@ -335,6 +335,7 @@
   "actions.couldNotUpdateThatLeftover": "Dieser Rest konnte nicht aktualisiert werden. Aktualisieren Sie die Seite und versuchen Sie es erneut.",
   "actions.couldNotUpdateThatMember": "Dieses Mitglied konnte nicht aktualisiert werden.",
   "actions.couldNotUpdateThatMilestone": "Dieser Meilenstein konnte nicht aktualisiert werden. Aktualisieren Sie die Seite und versuchen Sie es erneut – er wurde nicht geändert.",
+  "actions.milestoneAlreadyAchieved": "Dieser Meilenstein ist bereits erreicht und bleibt in der Liste „Erreicht“. Aktualisieren Sie die Seite, um ihn dort zu sehen.",
   "actions.couldNotUpdateThatPaperwork": "Dieses Dokument konnte nicht aktualisiert werden.",
   "actions.couldNotUpdateThatPolicy": "Diese Police konnte nicht aktualisiert werden.",
   "actions.couldNotUpdateThatReport": "Diese Meldung konnte nicht aktualisiert werden.",

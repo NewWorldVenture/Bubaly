@@ -335,6 +335,7 @@
   "actions.couldNotUpdateThatLeftover": "Non è stato possibile aggiornare questo avanzo. Aggiorna e riprova.",
   "actions.couldNotUpdateThatMember": "Impossibile aggiornare quel membro.",
   "actions.couldNotUpdateThatMilestone": "Non è stato possibile aggiornare questa tappa. Aggiorna e riprova: non è cambiata.",
+  "actions.milestoneAlreadyAchieved": "Questa tappa è già stata raggiunta, quindi resta nell’elenco dei traguardi raggiunti. Aggiorna per vederla lì.",
   "actions.couldNotUpdateThatPaperwork": "Impossibile aggiornare quel documento.",
   "actions.couldNotUpdateThatPolicy": "Impossibile aggiornare quella polizza.",
   "actions.couldNotUpdateThatReport": "Impossibile aggiornare quella segnalazione.",

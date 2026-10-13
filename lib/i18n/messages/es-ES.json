@@ -335,6 +335,7 @@
   "actions.couldNotUpdateThatLeftover": "No se ha podido actualizar esa sobra. Actualiza e inténtalo de nuevo.",
   "actions.couldNotUpdateThatMember": "No se ha podido actualizar a ese miembro.",
   "actions.couldNotUpdateThatMilestone": "No se ha podido actualizar ese hito. Actualiza e inténtalo de nuevo; no ha cambiado.",
+  "actions.milestoneAlreadyAchieved": "Ese hito ya está conseguido, así que sigue en la lista de logros. Actualiza para verlo allí.",
   "actions.couldNotUpdateThatPaperwork": "No se ha podido actualizar ese papeleo.",
   "actions.couldNotUpdateThatPolicy": "No se ha podido actualizar esa póliza.",
   "actions.couldNotUpdateThatReport": "No se ha podido actualizar esa denuncia.",
