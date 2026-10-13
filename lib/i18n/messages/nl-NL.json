@@ -14344,6 +14344,7 @@
   "todosModule.showingRecentCompleted": "De {shown} meest recent afgeronde van {total} voltooide taken worden getoond.",
   "todosModule.listsAreFamilyWide": "Iedereen in het gezin kan de taken in deze categorie zien en eraan werken.",
   "library.placeCouldNotBeLoaded": "Waar je was in elke aflevering en elk boek kon niet worden geladen. Afspelen begint bij het begin, en wat je nu afspeelt wordt niet als jouw plek bewaard. Ververs en probeer het opnieuw.",
+  "library.onlyAudioOffline": "Alleen audio kan offline worden bewaard. Dit bestand speelt online af.",
   "library.showingNewestEpisodes": "De nieuwste {shown} van {total} afleveringen worden getoond.",
   "library.showingNewestBooks": "De {shown} meest recent toegevoegde van {total} boeken worden getoond.",
   "todosModule.deleteThisTask": "Deze taak verwijderen?",

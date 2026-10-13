@@ -14575,6 +14575,7 @@
   "todosModule.showingRecentCompleted": "Showing the {shown} most recently finished of {total} completed tasks.",
   "todosModule.listsAreFamilyWide": "Everyone in the family can see and work on the tasks in this category.",
   "library.placeCouldNotBeLoaded": "Your place in each episode and book could not be loaded. Playback starts from the beginning, and nothing you play now is saved as your place. Refresh to try again.",
+  "library.onlyAudioOffline": "Only audio can be kept offline. This one plays online.",
   "library.showingNewestEpisodes": "Showing the newest {shown} of {total} episodes.",
   "library.showingNewestBooks": "Showing the {shown} most recently added of {total} books.",
   "toolDomain.autopilot": "Autopilot",

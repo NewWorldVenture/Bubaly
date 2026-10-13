@@ -14,6 +14,21 @@
  */
 export const LIBRARY_CACHE = 'bubaly-library-v1';
 
+/**
+ * What the offline library keeps and serves: audio its publisher names as
+ * audio, and nothing else.
+ *
+ * The cache is the browser's, not a person's: an adult's download is there for
+ * whoever signs in next, and the worker that serves it cannot tell who is
+ * asking. /library/media refuses a child or a teen anything not named audio —
+ * a video, or an `application/octet-stream` body a player sniffs into one — so
+ * the cache holds nothing that route would refuse anyone. Kept in step with
+ * `safeResponse(..., 'library')` in `public/sw.js`, which cannot import.
+ */
+export function isOfflineAudio(contentType: string | null | undefined): boolean {
+  return /^audio\/[a-z0-9.+-]+$/.test((contentType ?? '').split(';')[0].trim().toLowerCase());
+}
+
 /** How far playback must move before another write is worth making. */
 export const SAVE_EVERY_SECONDS = 15;
 

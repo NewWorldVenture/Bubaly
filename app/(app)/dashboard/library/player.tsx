@@ -1,6 +1,6 @@
 'use client';
 import {
-  shouldPersistOnUnmount, resumeFrom, claimPlayback, releasePlayback, LIBRARY_CACHE,
+  shouldPersistOnUnmount, resumeFrom, claimPlayback, releasePlayback, isOfflineAudio, LIBRARY_CACHE,
 } from '@/lib/library/progress';
 
 import { useEffect, useRef, useState, useTransition } from 'react';
@@ -62,10 +62,10 @@ function mediaHref(itemId: string): string {
  * position, which is the number the unmount check trusts to decide there is
  * nothing left to save. Audit C1-S9-74.
  */
-function saveInBackground(input: Parameters<typeof saveProgressAction>[0], onFail?: () => void): void {
+function saveInBackground(input: Parameters<typeof saveProgressAction>[0], onFail?: () => void, onSaved?: () => void): void {
   saveProgressAction(input)
     .then((res) => {
-      if (res.ok) return;
+      if (res.ok) { onSaved?.(); return; }
       console.warn('[library] background progress save refused', res.error);
       onFail?.();
     })
@@ -86,7 +86,20 @@ export function ItemRow({ item }: { item: PlayableItem }) {
   // Whether the stored row still says "finished". A replay of a finished item
   // has to say it is not any more, or every later visit starts it at 0:00 — a
   // finished row resumes from the top (resumeFrom) and nothing else cleared it.
+  // It turns false only once a write saying so has landed.
   const finished = useRef(item.completed);
+  // How many times the element has reached its end. A reset that lands after
+  // a later `ended` must not un-finish what that end finished again.
+  const endings = useRef(0);
+  // Played while this person's place could not be read, so where the element
+  // stands is not their place. The page can learn it mid-play — a Save or a
+  // Download revalidates it, and this same row gets the real numbers — and
+  // from then on a pause or fifteen seconds of playback would write the
+  // stand-in position over the place just recovered. Nothing it reaches is
+  // written; the next Play starts from the recovered place, and saves resume
+  // from there.
+  const provisional = useRef(false);
+  const knewPlace = useRef(!item.progressUnknown);
   const shortOfTheEnd = (at: number) => !item.durationSeconds || at < item.durationSeconds - 5;
   const [playing, setPlaying] = useState(false);
   const [position, setPosition] = useState(item.positionSeconds);
@@ -102,10 +115,34 @@ export function ItemRow({ item }: { item: PlayableItem }) {
     let alive = true;
     if (!item.mediaUrl || typeof caches === 'undefined') { setCached(false); return () => { alive = false; }; }
     caches.match(mediaHref(item.id))
-      .then((hit) => { if (alive) setCached(Boolean(hit)); })
+      .then(async (hit) => {
+        // Kept before the library held only audio: a video, or bytes their
+        // publisher never named. The worker no longer serves those (see
+        // isOfflineAudio), so the row does not show them as downloaded, and
+        // their space is given back.
+        if (hit && !isOfflineAudio(hit.headers.get('content-type'))) {
+          await caches.open(LIBRARY_CACHE).then((cache) => cache.delete(mediaHref(item.id))).catch(() => false);
+          if (alive) setCached(false);
+          return;
+        }
+        if (alive) setCached(Boolean(hit));
+      })
       .catch(() => { if (alive) setCached(false); });
     return () => { alive = false; };
   }, [item.mediaUrl, item.id]);
+
+  // The place arriving after the row first rendered without it: take it up,
+  // or the refs keep the 0 that stood in for it (and a finished item's replay
+  // would never say it is not finished any more).
+  useEffect(() => {
+    if (item.progressUnknown || knewPlace.current) return;
+    knewPlace.current = true;
+    finished.current = item.completed;
+    if (!provisional.current) {
+      lastSaved.current = item.positionSeconds;
+      setPosition(item.positionSeconds);
+    }
+  }, [item.progressUnknown, item.positionSeconds, item.completed]);
 
   // Write the position on unmount as well as on the interval, so closing the
   // tab mid-episode does not lose the last stretch of listening.
@@ -119,7 +156,7 @@ export function ItemRow({ item }: { item: PlayableItem }) {
   // of each episode with nothing to say why.
   useEffect(() => () => {
     const audio = audioRef.current;
-    if (!audio || item.progressUnknown) return;
+    if (!audio || item.progressUnknown || provisional.current) return;
     if (!shouldPersistOnUnmount({
       touched: touched.current, currentTime: audio.currentTime, lastSaved: lastSaved.current,
     })) return;
@@ -136,11 +173,13 @@ export function ItemRow({ item }: { item: PlayableItem }) {
       // was last saved is where playback starts from now: a finished item
       // restarts at 0 while its stored position is still the end, and measured
       // from there the fifteen-second saves never came.
-      if (audio.currentTime < 1) {
+      if (audio.currentTime < 1 || (provisional.current && !item.progressUnknown)) {
         const from = resumeFrom(item);
         audio.currentTime = from;
         lastSaved.current = from;
+        provisional.current = false;
       }
+      if (item.progressUnknown) provisional.current = true;
       touched.current = true;
       // Stop whatever else was playing BEFORE asking this one to start, so the
       // two never overlap even for the moment the promise takes to settle.
@@ -161,6 +200,7 @@ export function ItemRow({ item }: { item: PlayableItem }) {
   function onPlay() {
     const audio = audioRef.current;
     if (audio) claimPlayback(audio);
+    if (item.progressUnknown) provisional.current = true;
     touched.current = true;
     setPlaying(true);
   }
@@ -177,24 +217,38 @@ export function ItemRow({ item }: { item: PlayableItem }) {
   // Claims the position as saved, and takes the claim back if the write does
   // not land — unless a later save has claimed a newer one meanwhile.
   function savePosition(at: number) {
-    if (item.progressUnknown) return;
+    if (item.progressUnknown || provisional.current) return;
     const previous = lastSaved.current;
     lastSaved.current = at;
     // Playing a finished item again, short of its end, un-finishes it. At the
     // end itself it stays finished: the pause the element fires there comes
     // just before `ended`, and must not race it.
+    //
+    // The row stays "finished" here until a write saying otherwise LANDS, so
+    // every save until then carries the reset too. Clearing it as the first
+    // write was sent let a second, position-only save land while the first
+    // failed: the stored row stayed finished, and the next visit restarted the
+    // replay at 0:00 with its position thrown away.
     const replay = finished.current && shortOfTheEnd(at);
-    if (replay) finished.current = false;
+    const ending = endings.current;
     saveInBackground({ itemId: item.id, positionSeconds: Math.floor(at), ...(replay ? { completed: false } : {}) }, () => {
       if (lastSaved.current === at) lastSaved.current = previous;
-      if (replay) finished.current = true;
+    }, () => {
+      if (replay && endings.current === ending) finished.current = false;
     });
+  }
+
+  function onEnded() {
+    endings.current += 1;
+    finished.current = true;
+    saveInBackground({ itemId: item.id, completed: true });
   }
 
   function onTimeUpdate() {
     const audio = audioRef.current;
     if (!audio) return;
     setPosition(audio.currentTime);
+    if (item.progressUnknown) provisional.current = true;
     touched.current = true;
     if (audio.currentTime - lastSaved.current >= SAVE_EVERY_SECONDS) savePosition(audio.currentTime);
   }
@@ -221,9 +275,24 @@ export function ItemRow({ item }: { item: PlayableItem }) {
         return;
       }
       const href = mediaHref(item.id);
+      let notAudio = false;
       try {
         const cache = await caches.open(LIBRARY_CACHE);
-        if (next) { await cache.add(href); setCached(true); success('Saved for offline.'); }
+        if (next) {
+          // Only what the publisher names as audio is kept: the worker serves
+          // nothing else from this cache, so anything else would be a download
+          // that never plays.
+          const response = await fetch(href);
+          if (!response.ok) throw new Error(`media ${response.status}`);
+          if (!isOfflineAudio(response.headers.get('content-type'))) {
+            notAudio = true;
+            void response.body?.cancel().catch(() => {});
+            throw new Error('not audio');
+          }
+          await cache.put(href, response);
+          setCached(true);
+          success('Saved for offline.');
+        }
         else { await cache.delete(href); setCached(false); success('Removed from offline.'); }
       } catch {
         setCached(false);
@@ -235,7 +304,7 @@ export function ItemRow({ item }: { item: PlayableItem }) {
         // yet" rather than asserting a download — so it is logged, not raised.
         if (next) saveInBackground({ itemId: item.id, offline: false });
         if (next) setOffline(false);
-        error(next ? 'That file could not be stored offline.' : 'That file could not be removed.');
+        error(notAudio ? t('library.onlyAudioOffline') : next ? 'That file could not be stored offline.' : 'That file could not be removed.');
       }
     });
   }
@@ -281,8 +350,7 @@ export function ItemRow({ item }: { item: PlayableItem }) {
       </div>
       {item.mediaUrl && (
         <audio ref={audioRef} src={mediaHref(item.id)} preload="none" onTimeUpdate={onTimeUpdate}
-          onPlay={onPlay} onPause={onPause}
-          onEnded={() => { finished.current = true; saveInBackground({ itemId: item.id, completed: true }); }} />
+          onPlay={onPlay} onPause={onPause} onEnded={onEnded} />
       )}
       {offline && cached === false && (
         <p className="mt-1.5 text-xs text-warning">Marked for offline, but not stored on this device yet.</p>

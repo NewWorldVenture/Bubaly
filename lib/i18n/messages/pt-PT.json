@@ -14345,6 +14345,7 @@
   "todosModule.showingRecentCompleted": "A mostrar as {shown} tarefas terminadas mais recentemente de {total} concluídas.",
   "todosModule.listsAreFamilyWide": "Todos na família podem ver e trabalhar nas tarefas desta categoria.",
   "library.placeCouldNotBeLoaded": "Não foi possível carregar onde ficou em cada episódio e livro. A reprodução começa do início e o que ouvir agora não é guardado como o seu ponto. Atualize e tente novamente.",
+  "library.onlyAudioOffline": "Só é possível guardar áudio offline. Este ficheiro reproduz-se online.",
   "library.showingNewestEpisodes": "A mostrar os {shown} episódios mais recentes de {total}.",
   "library.showingNewestBooks": "A mostrar os {shown} livros adicionados mais recentemente de {total}.",
   "todosModule.deleteThisTask": "Eliminar esta tarefa?",
