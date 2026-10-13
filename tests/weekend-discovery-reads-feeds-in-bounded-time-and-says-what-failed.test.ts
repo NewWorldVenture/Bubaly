@@ -27,6 +27,8 @@ const harness = vi.hoisted(() => ({
   peak: 0,
   fetched: [] as string[],
   feedDelayMs: 0,
+  /** Feeds whose fetch never settles. */
+  hang: new Set<string>(),
 }));
 
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => harness.db }));
@@ -49,6 +51,7 @@ vi.mock('@/lib/server/public-calendar-fetch', () => ({
     harness.inFlight += 1;
     harness.peak = Math.max(harness.peak, harness.inFlight);
     try {
+      if (harness.hang.has(url)) await new Promise(() => {});
       if (harness.feedDelayMs) await new Promise((resolve) => setTimeout(resolve, harness.feedDelayMs));
       const text = harness.feedText.get(url);
       return text === undefined ? { ok: false, error: 'unreachable', status: 422 } : { ok: true, url, text };
@@ -72,6 +75,7 @@ beforeEach(() => {
   harness.peak = 0;
   harness.fetched = [];
   harness.feedDelayMs = 0;
+  harness.hang = new Set();
   vi.stubEnv('TICKETMASTER_API_KEY', '');
   vi.stubEnv('SEATGEEK_CLIENT_ID', '');
   vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('no network in tests'); }));
@@ -296,39 +300,122 @@ describe('S18 — one search reads a bounded number of saved feeds, a few at a t
 });
 
 describe('S18 — the deadline ends the feed reads, not only their start', () => {
-  /** Eight feeds that each take 15 s: four start at once, the next four at 15 s. */
+  /** A calendar with one timed event on Friday 16 October, inside the search window. */
+  const calendarWith = (uid: string, title: string) => [
+    'BEGIN:VCALENDAR',
+    'BEGIN:VEVENT', `UID:${uid}`, `SUMMARY:${title}`, 'DTSTART:20261016T180000Z', 'DTEND:20261016T200000Z', 'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n');
+
+  /** Wednesday 14 October 2026, 11 AM Pacific. */
+  const NOW = new Date('2026-10-14T18:00:00Z');
+
+  /** Twelve feeds that each take 9 s, each with its own event: four at 0 s, four at 9 s, and four at 18 s that would answer at 27 s. */
   function slowFeeds() {
-    harness.feedDelayMs = 15_000;
-    db.seed('weekend_feeds', Array.from({ length: 8 }, (_, i) => {
-      const url = `https://feeds.example/slow-${i}.ics`;
-      harness.feedText.set(url, 'BEGIN:VCALENDAR\r\nEND:VCALENDAR');
-      return feed(`slow-${i}`, 'ics', url);
+    harness.feedDelayMs = 9_000;
+    db.seed('weekend_feeds', Array.from({ length: 12 }, (_, i) => {
+      const id = `slow-${String(i).padStart(2, '0')}`;
+      const url = `https://feeds.example/${id}.ics`;
+      harness.feedText.set(url, calendarWith(`${id}@feeds`, `Event from ${id}`));
+      return feed(id, 'ics', url);
     }));
   }
 
   it('answers at the 25 s deadline, with the feeds still reading left for the next search', async () => {
     vi.useFakeTimers();
+    vi.setSystemTime(NOW);
     slowFeeds();
     let answered = false;
     const pending = search().then((res) => { answered = true; return res; });
 
-    // Held clock: the first four answer at 15 s, the second four would at 30 s.
+    // Held clock: eight answer by 18 s; the last four would at 27 s.
     await vi.advanceTimersByTimeAsync(25_500);
 
     expect(answered).toBe(true);
     const res = await pending;
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.sources).toHaveLength(4);
+    expect(body.sources).toHaveLength(8);
+    expect(body.count).toBe(8);
     expect(body.errors).toEqual({ feedsSkipped: 'Some of your saved local feeds were left for the next search.' });
     // The late four keep their place at the front of the next search's queue.
-    const rows = db.table('weekend_feeds');
-    expect(rows.filter((row) => row.last_fetched_at === null)).toHaveLength(4);
-    expect(rows.filter((row) => row.last_status === 'ok')).toHaveLength(4);
+    const late = (rows: Record<string, unknown>[]) => rows.filter((row) => ['slow-08', 'slow-09', 'slow-10', 'slow-11'].includes(row.id as string));
+    expect(late(db.table('weekend_feeds')).map((row) => row.last_fetched_at)).toEqual([null, null, null, null]);
+    expect(db.table('weekend_events')).toHaveLength(8);
 
-    // A late answer is not merged in, nor written, after the reply.
-    await vi.advanceTimersByTimeAsync(10_000);
-    expect(db.table('weekend_feeds').filter((row) => row.last_fetched_at === null)).toHaveLength(4);
+    // Their answers arrive at 27 s, with an event each: none is merged in or written.
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(db.table('weekend_events')).toHaveLength(8);
+    expect(db.table('weekend_events').map((row) => row.title)).not.toContain('Event from slow-08');
+    expect(late(db.table('weekend_feeds')).map((row) => row.last_fetched_at)).toEqual([null, null, null, null]);
+  });
+
+  it('a status write that never settles does not hold the reply past the deadline', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    db.seed('weekend_feeds', [feed('quick', 'ics', 'https://feeds.example/quick.ics')]);
+    harness.feedText.set('https://feeds.example/quick.ics', calendarWith('quick@feeds', 'Quick event'));
+    const real = db;
+    harness.db = new Proxy(real, {
+      get(target, key, receiver) {
+        if (key !== 'from') return Reflect.get(target, key, receiver);
+        return (table: string) => {
+          const builder = target.from(table);
+          if (table !== 'weekend_feeds') return builder;
+          return new Proxy(builder, {
+            get(b, k, r) {
+              if (k === 'update') return () => ({ eq: () => new Promise(() => {}) });
+              const value = Reflect.get(b, k, r);
+              return typeof value === 'function' ? value.bind(b) : value;
+            },
+          });
+        };
+      },
+    });
+    let answered = false;
+    const pending = search().then((res) => { answered = true; return res; });
+
+    await vi.advanceTimersByTimeAsync(25_500);
+
+    expect(answered).toBe(true);
+    const body = await (await pending).json();
+    // Its events were read before the write hung: it counts as read, not skipped.
+    expect(body.sources).toEqual(['feed:Feed quick']);
+    expect(body.errors).toEqual({});
+    expect(db.table('weekend_events').map((row) => row.title)).toEqual(['Quick event']);
+  });
+
+  it('four feeds that never answer do not starve a fifth, on this search or the next', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    const stuck = ['stuck-0', 'stuck-1', 'stuck-2', 'stuck-3'];
+    db.seed('weekend_feeds', [
+      // Never fetched, so first in the queue, and never answering.
+      ...stuck.map((id) => {
+        harness.hang.add(`https://feeds.example/${id}.ics`);
+        return feed(id, 'ics', `https://feeds.example/${id}.ics`);
+      }),
+      // Read before, so behind them.
+      feed('fast', 'ics', 'https://feeds.example/fast.ics', { last_fetched_at: '2026-10-01T00:00:00Z' }),
+    ]);
+    harness.feedText.set('https://feeds.example/fast.ics', calendarWith('fast@feeds', 'Fast event'));
+
+    const first = search();
+    await vi.advanceTimersByTimeAsync(25_500);
+    const one = await (await first).json();
+
+    expect(one.sources).toEqual(['feed:Feed fast']);
+    expect(one.errors).toEqual({ feedsFailed: 'Some of your saved local feeds could not be read.' });
+    // The four are recorded as tried, so they fall behind.
+    expect(db.table('weekend_feeds').filter((row) => stuck.includes(row.id as string)).map((row) => row.last_status))
+      .toEqual(['Timed out.', 'Timed out.', 'Timed out.', 'Timed out.']);
+
+    vi.setSystemTime(new Date('2026-10-14T19:00:00Z'));
+    const second = search();
+    await vi.advanceTimersByTimeAsync(25_500);
+    const two = await (await second).json();
+
+    expect(two.sources).toEqual(['feed:Feed fast']);
   });
 
   it('control: feeds that answer inside the deadline are all read', async () => {

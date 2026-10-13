@@ -22,14 +22,22 @@ const FETCH_TIMEOUT = 9000;
  * ONCE on every search: a few hundred saved URLs on a slow host were a few
  * hundred concurrent outbound requests, each holding up to 1 MiB, from one
  * request. A search now reads the feeds fetched longest ago, a few at a time,
- * until a deadline: a feed not started, or still reading, when it passes waits
- * for the next search and is reported as skipped. The deadline bounds the
- * reads themselves; each answered feed's status write follows it. The per-family cap on saved feeds is the
+ * each for at most FEED_TIMEOUT_MS, until a deadline that bounds the whole of
+ * it — reads and their status writes alike. A feed not started, or still
+ * reading, when the deadline passes waits for the next search and is reported
+ * as skipped. The per-family cap on saved feeds is the
  * database's to enforce (a member inserts them directly).
  */
 const MAX_FEEDS_PER_SEARCH = 12;
 const FEED_CONCURRENCY = 4;
 const FEEDS_DEADLINE_MS = 25_000;
+/**
+ * The longest one feed may take before it counts as not answering. Shorter
+ * than the deadline, so a few feeds that never answer cannot hold every worker
+ * until it: they time out, are recorded as tried, and fall to the back of the
+ * next search's queue instead of starving the feeds behind them.
+ */
+const FEED_TIMEOUT_MS = 10_000;
 /** Any saved feed that did not answer: said once per search, however many failed. Each feed's own row keeps its status. */
 const FEEDS_FAILED = 'Some of your saved local feeds could not be read.';
 async function fetchWithTimeout(url: string, ms = FETCH_TIMEOUT): Promise<Response> {
@@ -168,35 +176,59 @@ export async function POST(req: NextRequest) {
       }
     };
 
-    // The deadline bounds the feed reads, not only when they may START: a feed
-    // still reading when it passes is left for the next search — counted in
-    // `feedsSkipped`, its late result never used and its row left as it was,
-    // so it keeps its place at the front of the next search's queue.
+    // A feed that does not answer in FEED_TIMEOUT_MS has not answered: it is
+    // recorded as tried like any other failure, so it moves to the back of the
+    // queue rather than holding a worker until the deadline on every search.
+    const fetchFeedInTime = async (feed: (typeof feeds)[number]): Promise<FeedRead> => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timedOut = new Promise<FeedRead>((resolve) => { timer = setTimeout(() => resolve({ events: [], status: 'Timed out.' }), FEED_TIMEOUT_MS); });
+      try {
+        return await Promise.race([fetchFeed(feed), timedOut]);
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+
+    // The deadline bounds all of it — every read and every status write — and
+    // once it passes the reply is decided: `closed` keeps a read that answers
+    // late from adding events, sources or failures to it. A feed still reading
+    // then is left for the next search (`feedsSkipped`); one whose events were
+    // used and whose status write is still running counts as read.
     const DEADLINE = Symbol('deadline');
+    let closed = false;
     let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
-    const deadlineReached = new Promise<typeof DEADLINE>((resolve) => { deadlineTimer = setTimeout(() => resolve(DEADLINE), FEEDS_DEADLINE_MS); });
+    const deadlineReached = new Promise<typeof DEADLINE>((resolve) => {
+      deadlineTimer = setTimeout(() => { closed = true; resolve(DEADLINE); }, FEEDS_DEADLINE_MS);
+    });
     const deadline = Date.now() + FEEDS_DEADLINE_MS;
+    const used = new Set<string>();
+    const processFeed = async (feed: (typeof feeds)[number]) => {
+      const read = await fetchFeedInTime(feed);
+      if (closed) return;
+      used.add(feed.id);
+      if (read.status === 'ok') {
+        lists.push(read.events);
+        sourcesUsed.push(`feed:${feed.label}`);
+      } else {
+        sourceErrors.feedsFailed = FEEDS_FAILED;
+      }
+      await recordFeedStatus(feed, read);
+    };
     let next = 0;
     // A few at a time; past the deadline, the rest are left for the next search.
     const worker = async () => {
       while (next < feeds.length) {
         const feed = feeds[next++];
-        if (Date.now() >= deadline) { feedsSkipped += 1; continue; }
+        if (closed || Date.now() >= deadline) { feedsSkipped += 1; continue; }
         sourcesTried.push(`feed:${feed.label}`);
-        const read = await Promise.race([fetchFeed(feed), deadlineReached]);
-        if (read === DEADLINE) { feedsSkipped += 1; continue; }
-        if (read.status === 'ok') {
-          lists.push(read.events);
-          sourcesUsed.push(`feed:${feed.label}`);
-        } else {
-          sourceErrors.feedsFailed = FEEDS_FAILED;
-        }
-        await recordFeedStatus(feed, read);
+        await Promise.race([processFeed(feed), deadlineReached]);
+        if (!used.has(feed.id)) feedsSkipped += 1;
       }
     };
     try {
       await Promise.all(Array.from({ length: Math.min(FEED_CONCURRENCY, feeds.length) }, worker));
     } finally {
+      closed = true;
       clearTimeout(deadlineTimer);
     }
   }
