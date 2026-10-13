@@ -96,7 +96,21 @@ function timeLabel(iso: string, tz: string, allDay = false): string {
   return `${day} at ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz })}`;
 }
 
-export async function generateFamilyNotifications(supabase: DB, familyId: string): Promise<number> {
+/**
+ * What a generation run could not check, for the caller to report.
+ *
+ * Every source read degrades on its own (a failed category is skipped for the
+ * tick, and the rest are still delivered), but skipping is not succeeding: the
+ * crons used to count only thrown errors, so a tick whose reads ALL failed
+ * answered 200 ok, and the Scan button said "You're all caught up". A caller
+ * that passes this gets the names of the reads that did not answer.
+ */
+export type NotificationGenerationReport = { failedSources: string[] };
+
+export async function generateFamilyNotifications(
+  supabase: DB, familyId: string, report?: NotificationGenerationReport,
+): Promise<number> {
+  const failed = (source: string) => { if (report && !report.failedSources.includes(source)) report.failedSources.push(source); };
   const now = new Date();
   const in24 = new Date(now.getTime() + 24 * HOUR).toISOString();
   const in48 = new Date(now.getTime() + 48 * HOUR).toISOString();
@@ -198,8 +212,16 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     'medication_schedules', 'medication_doses', 'parent_approvals',
   ] as const;
   sourceResults.forEach((r, i) => {
-    if (r.error) console.error('[notifications] generation source read failed', { familyId, table: SOURCE_TABLES[i], error: r.error });
+    if (!r.error) return;
+    console.error('[notifications] generation source read failed', { familyId, table: SOURCE_TABLES[i], error: r.error });
+    failed(SOURCE_TABLES[i]);
   });
+  // A dose reminder is built from three reads, and one that did not answer
+  // is not "none": a failed medication_doses read made every dose already
+  // given look pending, and the family was told to give it again. Any of the
+  // three failing skips medication reminders for this tick.
+  const medicationReadsFailed = (['medications', 'medication_schedules', 'medication_doses'] as const)
+    .some((table) => Boolean(sourceResults[SOURCE_TABLES.indexOf(table)].error));
   const [
     { data: members },
     { data: events },
@@ -223,11 +245,17 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   // Keep other builders' recipient policies separate; documents never broadcast.
   const documentManagers = managers.filter((m) => typeof m.user_id === 'string' && m.user_id.trim().length > 0);
 
-  // Resolve chore titles.
+  // Resolve chore titles. A read that did not answer skips the chore notices
+  // for this tick: the dedupe below is permanent, so a notice written as
+  // "Chore due: Task" because the titles were unreadable stayed that way.
   const choreIds = [...new Set((chores ?? []).map((c) => c.chore_id))];
-  const { data: choreRows } = choreIds.length
-    ? await supabase.from('chores').select('id, title').in('id', choreIds)
-    : { data: [] as { id: string; title: string }[] };
+  const { data: choreRows, error: choreTitleError } = choreIds.length
+    ? await settle(supabase.from('chores').select('id, title').in('id', choreIds))
+    : { data: [] as { id: string; title: string }[], error: null };
+  if (choreTitleError) {
+    console.error('[notifications] generation source read failed', { familyId, table: 'chores', error: choreTitleError });
+    failed('chores');
+  }
   const choreTitle = new Map((choreRows ?? []).map((c) => [c.id, c.title]));
 
   const candidates: Candidate[] = [];
@@ -252,7 +280,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     });
   }
 
-  for (const c of chores ?? []) {
+  for (const c of choreTitleError ? [] : chores ?? []) {
     candidates.push({
       type: 'chore_due', related_type: 'chore_assignments', related_id: c.id,
       user_id: userByMember.get(c.member_id) ?? null,
@@ -303,7 +331,10 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   const reminderCards = reminderCardsReader(supabase, familyId, {
     keyOf: (cardId) => suggestionReminderKey(familyId, cardId),
     sourceTagOf: suggestionSourceTag,
-    onError: (error) => console.error('[notifications] generation source read failed', { familyId, table: 'autopilot_suggestions', error }),
+    onError: (error) => {
+      console.error('[notifications] generation source read failed', { familyId, table: 'autopilot_suggestions', error });
+      failed('autopilot_suggestions');
+    },
   });
   const audienceRoster = (members ?? []).map((m) => ({ id: m.id, role: m.role }));
   const managerAccounts = documentManagers.map((m) => m.user_id as string);
@@ -373,7 +404,10 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     .eq('family_id', familyId).neq('status', 'cancelled').limit(100);
   // Degrade-but-log, the rule SOURCE_TABLES above follows: a silently broken
   // read would stop every anniversary and birthday reminder with no signal.
-  if (relDatesError) console.error('[notifications] generation source read failed', { familyId, table: 'relationship_dates', error: relDatesError });
+  if (relDatesError) {
+    console.error('[notifications] generation source read failed', { familyId, table: 'relationship_dates', error: relDatesError });
+    failed('relationship_dates');
+  }
   for (const d of upcomingRelationship((relDates ?? []).map((r): RelDate => ({
     id: r.id, kind: r.kind, title: r.title, eventDate: r.event_date,
     recursAnnually: r.recurs_annually, reminderDaysBefore: r.reminder_days_before, status: r.status,
@@ -396,10 +430,16 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   // back. Snoozed rows are read by the time they come back, active ones by
   // their due time.
   const reminderHorizon = reminderFetchHorizonIso(now);
-  const { data: famReminders } = await supabase.from('family_reminders')
+  const { data: famReminders, error: famRemindersError } = await settle(supabase.from('family_reminders')
     .select('id, title, remind_at, status, early_reminder_minutes, member_id, recurrence, snoozed_until, idempotency_key, tags')
     .eq('family_id', familyId).in('status', ['active', 'snoozed']).not('remind_at', 'is', null)
-    .or(`and(status.eq.active,remind_at.gte.${nowIso},remind_at.lte.${reminderHorizon}),and(status.eq.snoozed,snoozed_until.gte.${nowIso},snoozed_until.lte.${reminderHorizon})`);
+    .or(`and(status.eq.active,remind_at.gte.${nowIso},remind_at.lte.${reminderHorizon}),and(status.eq.snoozed,snoozed_until.gte.${nowIso},snoozed_until.lte.${reminderHorizon})`));
+  // Dropped without even a log, a broken read here stopped every family
+  // reminder with no signal at all.
+  if (famRemindersError) {
+    console.error('[notifications] generation source read failed', { familyId, table: 'family_reminders', error: famRemindersError });
+    failed('family_reminders');
+  }
   for (const n of dueFamilyReminderNotices((famReminders ?? []) as FamilyReminderRow[], now)) {
     const r = (famReminders ?? []).find((x) => x.id === n.id)!;
     const base = {
@@ -419,10 +459,14 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   // "On this day" memories → one warm family-wide ping on days that resurface
   // past photos. The related_id embeds today's date, so the permanent dedup
   // sends it at most once per day; ordinary days produce nothing.
-  const { data: datedPhotos } = await supabase.from('family_photos')
+  const { data: datedPhotos, error: datedPhotosError } = await settle(supabase.from('family_photos')
     .select('id, taken_at')
     .eq('family_id', familyId).not('taken_at', 'is', null)
-    .order('taken_at', { ascending: false }).limit(400);
+    .order('taken_at', { ascending: false }).limit(400));
+  if (datedPhotosError) {
+    console.error('[notifications] generation source read failed', { familyId, table: 'family_photos', error: datedPhotosError });
+    failed('family_photos');
+  }
   // `tz`: the family's day, not the host's — see pickOnThisDay.
   const memoryNotice = onThisDayNotice(datedPhotos ?? [], now, tz);
   if (memoryNotice) {
@@ -466,7 +510,10 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     refine: (query) => query.not('assignee_id', 'is', null),
     overlap: true,
   });
-  if (conflictRead.error) console.error('[notifications] conflict read failed', { familyId, error: conflictRead.error });
+  if (conflictRead.error) {
+    console.error('[notifications] conflict read failed', { familyId, error: conflictRead.error });
+    failed('calendar_conflicts');
+  }
   const conflictEvents = conflictRead.data ?? [];
   const seriesIds = new Set(conflictEvents.filter(isSeries).map((e) => e.id));
   const nameByMember = new Map((members ?? []).map((m) => [m.id, m.display_name]));
@@ -491,6 +538,29 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     }
   }
 
+  // ── A family-wide notice is one row PER MEMBER, as notify() writes it.
+  //
+  // It was one row with user_id NULL, and `is_read` is a single column: the
+  // first member to mark it read — a child tapping "Mark all read", or opening
+  // the AI brief that folds it — cleared it from every parent's bell and brief,
+  // for good, since the dedupe below is permanent. Every member with a login
+  // gets their own copy now (the same audience the NULL row had), and the copy
+  // is stamped emailed, as notify() stamps its own: whole-family notices were
+  // never in the email digest and fanning out must not put them there.
+  const familyAccounts = [...new Set((members ?? [])
+    .map((m) => m.user_id).filter((u): u is string => typeof u === 'string' && u.trim().length > 0))];
+  const fanOutFamilyWide = <T extends { user_id: string | null }>(rows: readonly T[]): (T & { familyWide: boolean })[] => {
+    const out: (T & { familyWide: boolean })[] = [];
+    for (const row of rows) {
+      // A household nobody has signed in to yet keeps the one shared row:
+      // there is no member whose read state it could take from anyone else.
+      if (row.user_id || familyAccounts.length === 0) out.push({ ...row, familyWide: false });
+      else for (const account of familyAccounts) out.push({ ...row, user_id: account, familyWide: true });
+    }
+    return out;
+  };
+  const generatedAt = now.toISOString();
+
   // ── Generic items: dedup permanently against notifications for the same item.
   let rows: NotificationRow[] = [];
   if (candidates.length > 0) {
@@ -512,12 +582,22 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     }, 50);
     // An incomplete dedupe answer cannot authorize another delivery. Other
     // categories retain their independent handling; these candidates retry next tick.
-    if (existingErr) console.error('[notifications] dedup read failed', { familyId, error: existingErr });
+    if (existingErr) {
+      console.error('[notifications] dedup read failed', { familyId, error: existingErr });
+      failed('notifications_dedupe');
+    }
+    // Keyed per recipient. A NULL row written before the fan-out (or by another
+    // writer) is already in every member's list, so it covers them all.
     const seen = new Set((existing ?? []).map((e) => `${e.type}:${e.related_id}:${e.user_id ?? 'all'}`));
-    rows = (existingErr ? [] : candidates)
-      .filter((c) => !seen.has(`${c.type}:${c.related_id}:${c.user_id ?? 'all'}`))
+    rows = fanOutFamilyWide(existingErr ? [] : candidates)
+      .filter((c) => {
+        const key = `${c.type}:${c.related_id}:${c.user_id ?? 'all'}`;
+        if (seen.has(key) || (c.familyWide && seen.has(`${c.type}:${c.related_id}:all`))) return false;
+        seen.add(key); // one copy per recipient even when two sources produce it
+        return true;
+      })
       .slice(0, 100)
-      .map((c) => toRow(familyId, c));
+      .map((c) => toRow(familyId, c, c.familyWide ? generatedAt : null));
   }
 
   // ── Medication doses recur daily, so they dedup against TODAY's medication_due
@@ -528,20 +608,34 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   // already taken looks pending and the family is reminded to take it again.
   const familyZone = scope?.tz && isValidTimezone(scope.tz) ? scope.tz : null;
   const medNow = familyZone ? asWallClockIn(now, familyZone) : now;
-  const medReminders = medicationDueReminders(meds ?? [], medSchedules ?? [], medDoses ?? [], userByMember, managerLites, medNow, familyZone);
+  // Not built at all when any of its three reads failed (see
+  // medicationReadsFailed): an unread dose log is not "no dose given".
+  const medReminders = medicationReadsFailed ? []
+    : medicationDueReminders(meds ?? [], medSchedules ?? [], medDoses ?? [], userByMember, managerLites, medNow, familyZone);
   if (medReminders.length > 0) {
-    const { data: existingMed, error: existingMedErr } = await supabase
+    const { data: existingMed, error: existingMedErr } = await settle(supabase
       .from('notifications')
       .select('related_id, user_id')
       .eq('family_id', familyId)
       .eq('type', 'medication_due')
-      .gte('created_at', todayStartIso);
-    // Same duplicate-spam risk as above for daily medication-due reminders.
-    if (existingMedErr) console.error('[notifications] medication dedup read failed', { familyId, error: existingMedErr });
+      .gte('created_at', todayStartIso));
+    // An unanswered dedupe read cannot authorise another delivery, as the
+    // generic dedupe above already holds: it used to be logged and then read
+    // as "nothing sent today", so every medication reminder was inserted,
+    // pushed and emailed again on each scan the read failed. Retried next tick.
+    if (existingMedErr) {
+      console.error('[notifications] medication dedup read failed', { familyId, error: existingMedErr });
+      failed('notifications_medication_dedupe');
+    }
     const seenMed = new Set((existingMed ?? []).map((e) => `${e.related_id}:${e.user_id ?? 'all'}`));
-    medRows = medReminders
-      .filter((r) => !seenMed.has(`${r.related_id}:${r.user_id ?? 'all'}`))
-      .map((r) => toRow(familyId, r));
+    medRows = fanOutFamilyWide(existingMedErr ? [] : medReminders)
+      .filter((r) => {
+        const key = `${r.related_id}:${r.user_id ?? 'all'}`;
+        if (seenMed.has(key) || (r.familyWide && seenMed.has(`${r.related_id}:all`))) return false;
+        seenMed.add(key);
+        return true;
+      })
+      .map((r) => toRow(familyId, r, r.familyWide ? generatedAt : null));
   }
 
   const allRows = [...rows, ...medRows].slice(0, 150);
@@ -583,9 +677,11 @@ type NotificationRow = {
   body: string | null;
   related_type: string;
   related_id: string;
+  /** Stamped on a family-wide notice's per-member copy: the email digest's "settled" mark (in-app and push only). */
+  sent_at?: string;
 };
 
-function toRow(familyId: string, c: Candidate): NotificationRow {
+function toRow(familyId: string, c: Candidate, emailSettledAt: string | null = null): NotificationRow {
   return {
     family_id: familyId,
     user_id: c.user_id,
@@ -594,5 +690,6 @@ function toRow(familyId: string, c: Candidate): NotificationRow {
     body: c.body,
     related_type: c.related_type,
     related_id: c.related_id,
+    ...(emailSettledAt ? { sent_at: emailSettledAt } : {}),
   };
 }

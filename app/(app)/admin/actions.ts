@@ -20,6 +20,7 @@ import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { isValidTimezone } from '@/lib/time/zoned';
 import { superAdminAssurance } from '@/lib/auth/super-admin-assurance';
 import { forgetMemberLocation } from '@/lib/location/retention';
+import { closePendingInvitesFor } from '@/lib/server/member-invites';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -242,7 +243,7 @@ export async function adminRemoveMemberAction(memberId: string): Promise<Result<
 
   const supabase = createServiceClient();
   const { data: member, error } = await supabase.from('family_members')
-    .update(REMOVED_MEMBER_PATCH).eq('id', memberId).select('id, family_id, display_name, user_id').single();
+    .update(REMOVED_MEMBER_PATCH).eq('id', memberId).select('id, family_id, display_name, user_id, email').single();
   if (error) return actionFailure(error, t('actions.couldNotRemoveThatMember'));
 
   // A removed child's PIN login is switched off too; the removal stands if that fails.
@@ -255,12 +256,16 @@ export async function adminRemoveMemberAction(memberId: string): Promise<Result<
   // no longer active is held and runs nowhere, pending the owner's decision.)
   const forgotten = await forgetMemberLocation(supabase, member.family_id, memberId);
   if (!forgotten.ok) console.error('[admin-action] removed member location was not cleared', { memberId, failures: forgotten.failures });
+  // Every pending invite to them is revoked too, or a second one they hold
+  // brings them back (accept_invite reactivates the row). Stands if it fails.
+  const invitesRevoked = await closePendingInvitesFor(supabase, member.family_id, member, 'revoked');
 
-  await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name, login_revocation: loginRevocation, location_forgotten: forgotten.ok } });
+  await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name, login_revocation: loginRevocation, location_forgotten: forgotten.ok, invites_revoked: invitesRevoked } });
   revalidatePath('/admin/users');
   const warning = loginRevocation === 'failed'
     ? t('familyModule.removedButLoginStillActive')
-    : !forgotten.ok ? t('familyModule.removedButLocationStillVisible') : null;
+    : !forgotten.ok ? t('familyModule.removedButLocationStillVisible')
+      : !invitesRevoked ? t('familyModule.removedButInviteStillOpen') : null;
   return warning ? { ok: true, data: { warning } } : { ok: true };
 }
 

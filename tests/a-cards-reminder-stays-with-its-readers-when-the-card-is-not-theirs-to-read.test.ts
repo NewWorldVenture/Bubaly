@@ -183,8 +183,10 @@ describe('a reminder that looks like a card\'s whose card was never written is t
       .filter((n) => n.related_type === 'reminders' && n.title === `Reminder: ${title}`)
       .map((n) => (n.user_id as string | null) ?? null).sort((a, b) => String(a).localeCompare(String(b)));
     expect(told('Renew Gym pass')).toEqual(['u-gran', 'u-mum']);
-    // An everyone card's reminder, and one nobody's card made, are told as before: to the family.
-    expect(told(REFILL)).toEqual([null]);
-    expect(told(BINS)).toEqual([null]);
+    // An everyone card's reminder, and one nobody's card made, are told as before: to the family —
+    // one row per member with a login, so each member's read state is their own.
+    const family = READERS.map((id) => `u-${id}`).sort();
+    expect(told(REFILL)).toEqual(family);
+    expect(told(BINS)).toEqual(family);
   });
 });

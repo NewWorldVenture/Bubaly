@@ -174,7 +174,7 @@ async function moduleListsTo(db: Memory, id: string): Promise<string[]> {
   return out.sort();
 }
 
-/** The accounts a notification tick at `at` tells about the row `id` (null: the whole family). */
+/** The accounts a notification tick at `at` tells about the row `id` (the whole family is every member's account). */
 async function toldAbout(db: Memory, id: string, at: string): Promise<(string | null)[]> {
   vi.setSystemTime(new Date(at));
   await generateFamilyNotifications(db, FAMILY);
@@ -281,7 +281,8 @@ describe("RV-R4-1: the next occurrence of an everyone card's reminder is read by
     expect(await listedTo(db, 'bins', at)).toEqual(EVERYONE);
     expect(await listedTo(db, 'kit-bag', at)).toEqual(EVERYONE);
     const tick = '2026-10-02T06:00:00.000Z';
-    expect(await toldAbout(db, 'bins', tick)).toEqual([null]);
+    // The whole family: one row per member with a login.
+    expect(await toldAbout(db, 'bins', tick)).toEqual(accounts(EVERYONE));
     expect(await toldAbout(db, 'kit-bag', tick)).toEqual([account('sam')]);
   });
 });

@@ -340,6 +340,7 @@ describe('the refresh neither puts back an older member nor strands an accepted 
     expect(told('Renew dental (accepted)')).toEqual(told('Renew dental (next year)'));
     expect(told('Renew dental (accepted)')).toContain('u-ava');
     expect(told('Renew dental (accepted)')).not.toContain('u-leo');
-    expect(told('Call the dentist')).toEqual([null]);
+    // The family: one row per member with a login.
+    expect(told('Call the dentist')).toEqual(ROSTER.map((m) => `u-${m.id}`).sort());
   });
 });
