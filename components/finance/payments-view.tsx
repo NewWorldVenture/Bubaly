@@ -20,6 +20,8 @@ type Txn = Tables<'transactions'>;
 type MonthTxn = Pick<Txn, 'id' | 'type' | 'amount' | 'member_id' | 'date'>;
 /** A real ceiling: a month past it is a failed read, never a smaller total. */
 const MONTH_TXN_MAX = 50_000;
+/** The list's length: the newest transactions, by date. */
+const LIST_LIMIT = 500;
 const FILTERS = ['all', 'income', 'expense', 'transfer'] as const;
 
 export function PaymentsView() {
@@ -66,7 +68,7 @@ export function PaymentsView() {
     fetcher: (sb) => {
       if (!seesAll && !selfId) return Promise.resolve({ data: [] as Txn[], error: null });
       const query = sb.from('transactions').select('*').eq('family_id', familyId);
-      return (seesAll ? query : query.eq('member_id', selfId!)).order('date', { ascending: false }).limit(500);
+      return (seesAll ? query : query.eq('member_id', selfId!)).order('date', { ascending: false }).limit(LIST_LIMIT);
     },
   });
 
@@ -105,8 +107,22 @@ export function PaymentsView() {
   // Either read failing is the page's error: the tiles never stand on part of the month.
   const failed = readError || monthError;
 
-  const monthTotal = (items: Txn[]) =>
+  const monthTotal = (items: Pick<Txn, 'type' | 'amount'>[]) =>
     items.reduce((s, t) => s + (t.type === 'income' ? 1 : -1) * Math.abs(Number(t.amount)), 0);
+  // A month heading's total is the month's only when the list holds the month
+  // whole. The list is the newest LIST_LIMIT by date, so once it is full its
+  // oldest month may be cut short, and summing it gave part of that month as
+  // its total (the current month's, beside tiles that said otherwise). This
+  // month, unsearched and unfiltered, is totalled from the month's own read,
+  // as the tiles are; a month the full list may have cut short shows none.
+  const listFull = (rows?.length ?? 0) >= LIST_LIMIT;
+  const currentMonth = thisMonth.from.slice(0, 7);
+  const unfiltered = !q.trim() && filter === 'all';
+  const headingTotal = (month: string, items: Txn[], index: number): number | null => {
+    if (month === currentMonth && unfiltered) return monthTotal(transactionsInScope(monthRows ?? [], role, selfId));
+    if (listFull && index === byMonth.length - 1) return null;
+    return monthTotal(items);
+  };
 
   return (
     <div className="module-page">
@@ -155,13 +171,17 @@ export function PaymentsView() {
         <EmptyState icon={History} title={tr('payments.noPayments')} description={q || filter !== 'all' ? 'No transactions match your filters.' : 'Transactions will appear here as they are added.'} />
       ) : (
         <div className="space-y-5">
-          {byMonth.map(([month, items]) => (
+          {byMonth.map(([month, items], index) => {
+            const total = headingTotal(month, items, index);
+            return (
             <section key={month}>
               <h2 className="mb-2 flex items-baseline justify-between text-sm font-bold uppercase tracking-wide text-muted">
                 <span>{fmtDate(`${month}-01`, 'MMMM yyyy')}</span>
-                <span className={cn('text-xs font-bold normal-case tabular-nums', monthTotal(items) < 0 ? 'text-muted' : 'text-emerald-400')}>
-                  {monthTotal(items) < 0 ? '-' : '+'}{usd(Math.abs(monthTotal(items)))}
-                </span>
+                {total !== null && (
+                  <span className={cn('text-xs font-bold normal-case tabular-nums', total < 0 ? 'text-muted' : 'text-emerald-400')}>
+                    {total < 0 ? '-' : '+'}{usd(Math.abs(total))}
+                  </span>
+                )}
               </h2>
               <div className="space-y-1.5">
                 {items.map((t) => {
@@ -181,7 +201,8 @@ export function PaymentsView() {
                 })}
               </div>
             </section>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

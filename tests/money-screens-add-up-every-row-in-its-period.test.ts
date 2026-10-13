@@ -351,6 +351,54 @@ describe('SUMMED-READ-SIB-PAYMENTS — the Payments tiles add up every row of th
     expect(figure(tree, 'Transactions')).toBe('600');
   });
 
+  it('a member\'s month read is narrowed to their own rows: 50,000 household rows this month leave it whole, not past its ceiling', async () => {
+    (h.app as Record<string, unknown>).role = 'teen';
+    h.app.selfMember = { ...h.app.members[2], family_id: FAMILY };
+    db.seed('transactions', Array.from({ length: 600 }, (_, i) => txn(`2026-10-${String(1 + (i % 13)).padStart(2, '0')}`, 1, 'Snacks', { member_id: 'member-3' })));
+    // Read without the member's narrowing, these push the month past MONTH_TXN_MAX.
+    db.seed('transactions', Array.from({ length: 50_000 }, (_, i) => txn('2026-10-05', 1, 'Groceries', { member_id: i % 2 ? PARENT : null })));
+
+    const tree = await show(() => createElement(PaymentsView));
+    expect(has(tree, t('paymentsView.couldNotLoadPayments'))).toBe(false);
+    expect(figure(tree, 'Out · this month')).toBe('-$600.00');
+    expect(figure(tree, 'Transactions')).toBe('600');
+  });
+
+  /** The total in a month's heading, or null when the heading shows none. */
+  function headingTotal(tree: ReactNode, month: string): string | null {
+    const heading = nodes(tree).find((n) => n.type === 'h2' && text(n).startsWith(month));
+    if (!heading) throw new Error(`no heading for ${month}`);
+    const total = nodes(heading).find((n) => String(n.props.className ?? '').includes('tabular-nums'));
+    return total ? text(total) : null;
+  }
+
+  it('this month\'s heading is the whole month, as the tiles are, not the part the newest-500 list holds', async () => {
+    db.seed('transactions', Array.from({ length: 600 }, (_, i) => txn(`2026-10-${String(1 + (i % 13)).padStart(2, '0')}`, 1, 'Groceries')));
+    db.seed('transactions', Array.from({ length: 30 }, () => txn('2026-11-01', 100, 'Housing', { status: 'scheduled' })));
+
+    const tree = await show(() => createElement(PaymentsView));
+    expect(headingTotal(tree, 'October 2026')).toBe('-$600.00');
+    expect(headingTotal(tree, 'November 2026')).toBe('-$3,000.00');
+  });
+
+  it('a past month the full list may have cut short shows no total, rather than part of one', async () => {
+    db.seed('transactions', Array.from({ length: 520 }, (_, i) => txn(`2026-09-${String(1 + (i % 28)).padStart(2, '0')}`, 1, 'Groceries')));
+    db.seed('transactions', Array.from({ length: 5 }, () => txn('2026-10-05', 10, 'Groceries')));
+
+    const tree = await show(() => createElement(PaymentsView));
+    expect(headingTotal(tree, 'October 2026')).toBe('-$50.00');
+    expect(headingTotal(tree, 'September 2026')).toBeNull();
+  });
+
+  it('control: a list that is not full totals every month it holds', async () => {
+    db.seed('transactions', Array.from({ length: 20 }, (_, i) => txn(`2026-09-${String(1 + i).padStart(2, '0')}`, 1, 'Groceries')));
+    db.seed('transactions', Array.from({ length: 5 }, () => txn('2026-10-05', 10, 'Groceries')));
+
+    const tree = await show(() => createElement(PaymentsView));
+    expect(headingTotal(tree, 'September 2026')).toBe('-$20.00');
+    expect(headingTotal(tree, 'October 2026')).toBe('-$50.00');
+  });
+
   it('a month past the read\'s ceiling is the error state, not a smaller total', async () => {
     db.seed('transactions', Array.from({ length: 50_001 }, () => txn('2026-10-05', 1, 'Groceries')));
     const tree = await show(() => createElement(PaymentsView));
