@@ -143,10 +143,11 @@ export async function projectActivityAction(input: ActivityProjectionInput): Pro
   // which are a parent's or adult's (the held 0514), as the spend simulation
   // above refuses. Anyone else's session reads only their own spending, so the
   // line read "$X of $Y used" with the household's limit beside part of it.
-  const checksCost = !!input.costCategory && costCents > 0;
-  if (checksCost && !readsHouseholdMoney(ctx.active.role)) {
-    return { ok: false, error: tr('householdMoney.keptByParents') };
-  }
+  // Anyone else still gets the rest of the projection (schedule, load,
+  // conflicts are theirs to see), with no Cost line and nothing of the
+  // household's money read.
+  const seesCost = readsHouseholdMoney(ctx.active.role);
+  const checksCost = seesCost && !!input.costCategory && costCents > 0;
   const supabase = await createServer();
   const now = new Date();
   const in180 = new Date(now.getTime() + 180 * 86_400_000).toISOString();
@@ -183,7 +184,8 @@ export async function projectActivityAction(input: ActivityProjectionInput): Pro
     memberName: input.memberName, activityName: input.activityName.trim(),
     startsAt: input.startsAt, durationMin: input.durationMin,
     sessionsPerWeek: input.sessionsPerWeek, weeks: input.weeks,
-    travelMinEach: input.travelMinEach, costCents: costCents > 0 ? costCents : undefined, costCategory: input.costCategory,
+    travelMinEach: input.travelMinEach,
+    costCents: seesCost && costCents > 0 ? costCents : undefined, costCategory: seesCost ? input.costCategory : undefined,
   };
   return { ok: true, data: projectActivity(decision, { memberEvents, budgets, vacationWindows }) };
 }

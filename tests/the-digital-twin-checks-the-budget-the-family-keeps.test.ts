@@ -41,8 +41,6 @@ vi.mock('@/lib/i18n/server', async () => {
 });
 
 const { simulateDecisionAction, projectActivityAction } = await import('@/app/(app)/dashboard/family-digital-twin/actions');
-const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
-const t = (key: string) => translate(SOURCE_MESSAGES, key);
 
 let db: InMemorySupabase;
 let seq = 0;
@@ -110,14 +108,18 @@ describe('the spend simulation checks the budget the family keeps', () => {
 });
 
 describe('the activity projection\'s Cost line', () => {
-  it('is a parent\'s or adult\'s: a child who names a budget is told whose it is, and nothing is read', async () => {
+  it('is a parent\'s or adult\'s: a child who names a budget gets the projection without it, and nothing is read', async () => {
     harness.role = 'child';
     db.seed('budgets', [budget('Kids', 300, 'monthly')]);
     db.seed('transactions', [expense('2026-10-02', 250, 'Kids')]);
 
     const result = await activity({ costDollars: 40, costCategory: 'Kids' });
-    expect(result).toEqual({ ok: false, error: t('householdMoney.keptByParents') });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.dimensions.map((d) => d.key)).toContain('schedule');
+    expect(result.data.dimensions.map((d) => d.key)).not.toContain('cost');
     expect(JSON.stringify(result)).not.toContain('$300');
+    expect(JSON.stringify(result)).not.toContain('$250');
     expect(db.log.map((entry) => entry.table)).not.toContain('budgets');
     expect(db.log.map((entry) => entry.table)).not.toContain('transactions');
   });
