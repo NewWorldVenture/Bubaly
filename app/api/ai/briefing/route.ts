@@ -118,19 +118,19 @@ export async function POST(req: NextRequest) {
       { data: members },
       todayEventsResult,
       tomorrowEventsResult,
-      { data: choresDue },
+      { data: choresDue, error: choresError },
       { data: schoolEvents },
       { data: sportsEvents },
       groceryResult,
       { data: reminders },
       { data: mealPlans },
       { data: appointments },
-      { data: bills },
-      { data: medSchedules },
-      { data: maintenance },
-      { data: warranties },
-      { data: trips },
-      { data: pantry },
+      { data: bills, error: billsError },
+      { data: medSchedules, error: medsError },
+      { data: maintenance, error: maintenanceError },
+      { data: warranties, error: warrantiesError },
+      { data: trips, error: tripsError },
+      { data: pantry, error: pantryError },
       { data: completedRuns },
       { data: agentActivity },
     ] = await settleAll([
@@ -192,6 +192,18 @@ export async function POST(req: NextRequest) {
     // above) both arrive here, before any model is asked.
     if (groceryResult.error) {
       console.error('[api/ai/briefing] grocery read failed', groceryResult.error);
+      return NextResponse.json({ error: tr('briefing.failedToGenerateBriefing') }, { status: 503 });
+    }
+    // And for the chores and the concierge digest the brief states as facts:
+    // a failed read became "CHORES DUE TODAY (0)" and a digest with nothing in
+    // it ("You're all caught up"), at 200. The cron's delivery
+    // (lib/briefing/deliver.ts) already fails closed on every digest read.
+    const householdReadError = choresError ?? billsError ?? medsError ?? maintenanceError ?? warrantiesError ?? tripsError ?? pantryError;
+    if (householdReadError) {
+      console.error('[api/ai/briefing] household read failed', {
+        chores: Boolean(choresError), bills: Boolean(billsError), medications: Boolean(medsError), maintenance: Boolean(maintenanceError),
+        warranties: Boolean(warrantiesError), trips: Boolean(tripsError), pantry: Boolean(pantryError), error: householdReadError,
+      });
       return NextResponse.json({ error: tr('briefing.failedToGenerateBriefing') }, { status: 503 });
     }
     const groceryItems = groceryResult.data;
