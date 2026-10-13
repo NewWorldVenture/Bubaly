@@ -37,9 +37,9 @@ type Candidate = {
   user_id: string | null; // null = whole family
   /**
    * When set, an earlier notice under the same key counts as sent only if it
-   * was written at or after this instant (ms). A one-off event's key is its
-   * bare id, so without this its first reminder stood in for every date it
-   * was later moved to (`eventReminderOpensAt`).
+   * was written at or after this instant (ms). A one-off calendar, school or
+   * sports event's key is its bare id, so without this its first reminder
+   * stood in for every date it was later moved to (`eventReminderOpensAt`).
    */
   freshFrom?: number;
 };
@@ -286,6 +286,9 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     const target = s.member_id ? userByMember.get(s.member_id) ?? null : null;
     candidates.push({
       type: 'school_event', related_type: 'school_events', related_id: s.id, user_id: target,
+      // Keyed by the bare id, like a one-off calendar event, and read by its
+      // instant: a school night pushed back a week is reminded at its new date.
+      freshFrom: eventReminderOpensAt({ starts_at: s.starts_at, all_day: false }, tz),
       title: `School: ${s.title}`,
       body: `${timeLabel(s.starts_at, tz)}${s.event_type ? ` · ${s.event_type}` : ''}`,
     });
@@ -295,6 +298,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     const target = s.member_id ? userByMember.get(s.member_id) ?? null : null;
     candidates.push({
       type: 'sports_event', related_type: 'sports_events', related_id: s.id, user_id: target,
+      freshFrom: eventReminderOpensAt({ starts_at: s.starts_at, all_day: false }, tz),
       title: `${s.sport ?? 'Sports'}: ${s.title}`,
       body: `${timeLabel(s.starts_at, tz)}${s.location ? ` · ${s.location}` : ''}`,
     });
