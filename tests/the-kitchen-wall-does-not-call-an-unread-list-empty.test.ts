@@ -51,7 +51,10 @@ beforeEach(() => {
   }, rpc: db.rpc.bind(db) };
   db.seed('meal_plans', [{ family_id: 'family-1', plan_date: '2026-09-12', meal_id: 'meal', meal_type: 'dinner' }]);
   db.seed('meals', [{ id: 'meal', family_id: 'family-1', name: 'Family dinner' }]);
-  db.seed('grocery_items', [{ id: 'g1', family_id: 'family-1', name: 'Milk', is_checked: false }]);
+  // `list_id` is NOT NULL (0002), and the display counts only lists the family
+  // has not archived (tests/an-archived-shopping-list-is-not-counted.test.ts).
+  db.seed('grocery_lists', [{ id: 'list-1', family_id: 'family-1', is_archived: false, archived_at: null }]);
+  db.seed('grocery_items', [{ id: 'g1', family_id: 'family-1', list_id: 'list-1', name: 'Milk', is_checked: false }]);
   db.seed('chores', [{ id: 'chore', family_id: 'family-1', title: 'Dishes' }]);
   db.seed('chore_assignments', [{ id: 'a1', family_id: 'family-1', chore_id: 'chore', member_id: 'm1', status: 'todo', due_at: '2026-09-12T12:00:00Z' }]);
   vi.spyOn(console, 'error').mockImplementation(() => {});

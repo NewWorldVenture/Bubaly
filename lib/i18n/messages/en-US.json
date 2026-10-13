@@ -2092,6 +2092,7 @@
   "aiHomeDashboard.estimatedPlanningTimeNMinThisWeek": "Estimated planning time this week: about {minutes} min.",
   "aiHomeDashboard.familyAutopilot": "Family Autopilot",
   "aiHomeDashboard.frontDesk": "Front Desk",
+  "aiHomeDashboard.groceryUnavailable": "Couldn’t load the grocery list, so it isn’t counted here.",
   "aiHomeDashboard.inbox": "Inbox",
   "aiHomeDashboard.minOfPlanningThisWeek": "min of planning this week.",
   "aiHomeDashboard.onTrack": "on track",
@@ -5182,6 +5183,7 @@
   "dashboardFood.count.favorites": "favorites",
   "dashboardFood.count.familyFoodScore": "family food score",
   "dashboardFood.count.savedPlaces": "saved places",
+  "dashboardFood.groceryListUnavailable": "Couldn’t load the grocery list.",
   "dashboardFood.plannedMeal": "Planned meal",
   "dashboardFood.today": "Today",
   "dashboardFridgeChef.fridgeChef": "Fridge Chef",
@@ -6371,6 +6373,7 @@
   "familyDashboard.tool.kitchenDisplay.desc": "Full-screen kiosk",
   "familyDashboard.suggestionsIntro": "Here are some suggestions for your family:",
   "familyDashboard.allOnTrack": "Everything looks on track. Ask the assistant anything.",
+  "familyDashboard.groceryListUnavailable": "Couldn’t load the grocery list.",
   "familyDashboard.progress.inProgress": "In Progress",
   "familyDashboard.progress.remaining": "Remaining",
   "familyDashboard.viewMembers": "View members",
@@ -16966,5 +16969,11 @@
   "householdMoney.keptByParents": "Household money is kept by your family's parents",
   "householdMoney.keptByParentsBody": "The household's accounts, balances and spending are for a parent or adult of the household. Ask one of them if you need something from them.",
   "householdMoney.onlyYourOwnSpending": "You see the spending tagged to you here. A parent or adult sees the household's accounts and all of its spending.",
-  "householdMoney.onlyWhatYouAdded": "You see the records you added here. A parent or adult sees everyone's."
+  "householdMoney.onlyWhatYouAdded": "You see the records you added here. A parent or adult sees everyone's.",
+  "accountStanding.accountClosed": "This Bubaly account is closed. Reopen it to continue.",
+  "accountStanding.trialEnded": "Your free trial has ended. Choose Family Basic or Family+ to keep using Bubaly.",
+  "accountStanding.unavailable": "Bubaly could not check your family's account right now. Try again in a moment.",
+  "gift.ideasAreNotAvailableForThisFamily": "Gift ideas aren't available for this family right now.",
+  "handoff.pickupChangedRefresh": "This pickup changed a moment ago. Refresh to see where it stands.",
+  "marketplace.onlyTheSellerFinishesAnOrder": "Only the person who sold or lent this can mark it returned or complete."
 }

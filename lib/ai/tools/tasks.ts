@@ -13,8 +13,8 @@
 import 'server-only';
 import { z } from 'zod';
 import {
-  assignChore, assignTodo, choreDueAt, completeChoreAssignment, completeTodo, createChore, createTodo,
-  listOpenChores, searchTodos,
+  assignTodo, choreDueAt, completeChoreAssignment, completeTodo, createChore, createTodo,
+  listOpenChores, requestChoreAssignment, searchTodos,
 } from '@/lib/services/tasks';
 import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
 import { scopeNow } from '@/lib/services/scope';
@@ -316,7 +316,7 @@ export const taskTools: ToolDefinition[] = [
       // On the family's clock, as `tasks.createChore` reads its due time.
       const due = await choreDueAt(scope, input.due_at);
       if (!due.ok) return due;
-      const res = await assignChore(scope, { choreId: input.chore_id, memberId: assignee.data, dueAt: due.data });
+      const res = await requestChoreAssignment(scope, { choreId: input.chore_id, memberId: assignee.data, dueAt: due.data });
       if (!res.ok) return res;
       const assignment = res.data;
       return ok({

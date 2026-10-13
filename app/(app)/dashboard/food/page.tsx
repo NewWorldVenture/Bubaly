@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils/cn';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 import { getFormat } from '@/lib/utils/format-server';
+import { readOnOpenGroceryLists } from '@/lib/services/groceries';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -29,7 +30,10 @@ async function FeatureCard({
   index, title, href, icon: Icon, tint, count, countLabel, children,
 }: {
   index: number; title: string; href: string; icon: React.ComponentType<{ className?: string }>;
-  tint: string; count: number; countLabel: string; children: React.ReactNode;
+  tint: string;
+  /** Null when the count could not be read: the footer then names the page instead of a number. */
+  count: number | null;
+  countLabel: string; children: React.ReactNode;
 }) {
   const t = await getTranslations();
   return (
@@ -49,7 +53,7 @@ async function FeatureCard({
       </div>
       <div className="min-h-[120px] flex-1 space-y-2">{children}</div>
       <Link href={href} className="mt-4 border-t border-border/60 pt-3 text-xs font-semibold text-muted transition hover:text-brand-text">
-        {count} {countLabel} <ChevronRight className="inline h-3 w-3" />
+        {count === null ? title : `${count} ${countLabel}`} <ChevronRight className="inline h-3 w-3" />
       </Link>
     </section>
   );
@@ -108,8 +112,9 @@ export default async function FoodPage() {
       .eq('family_id', familyId).eq('meal_type', 'dinner').gte('plan_date', todayIso).lte('plan_date', weekEnd).order('plan_date')),
     safe('recipes', supabase.from('family_recipes').select('id, name, rating', { count: 'exact' })
       .eq('family_id', familyId).order('created_at', { ascending: false }).limit(4)),
-    safe('grocery_items', supabase.from('grocery_items').select('id, name', { count: 'exact' })
-      .eq('family_id', familyId).eq('is_checked', false).limit(4)),
+    // Only lists the family has not archived (readOnOpenGroceryLists).
+    safe('grocery_items', readOnOpenGroceryLists(supabase, familyId, (lists) => supabase.from('grocery_items').select('id, name', { count: 'exact' })
+      .eq('family_id', familyId).in('list_id', lists).eq('is_checked', false).limit(4))),
     safe('pantry_items', supabase.from('pantry_items').select('id, name, expires_at, quantity, unit', { count: 'exact' })
       .eq('family_id', familyId).lte('expires_at', expSoon).order('expires_at', { ascending: true, nullsFirst: false }).limit(4)),
     safe('favorites', supabase.from('family_recipes').select('id, name, rating', { count: 'exact' })
@@ -119,6 +124,12 @@ export default async function FoodPage() {
     safe('dining_out', supabase.from('dining_out').select('id, name, cuisine, rating', { count: 'exact' })
       .eq('family_id', familyId).order('rating', { ascending: false, nullsFirst: false }).limit(4)),
   ]);
+
+  // `safe` answers a failed read with `data: null`, where a read that worked
+  // has an array. For the grocery card that is the difference between an
+  // empty list and one that could not be read (the items, or the open-list
+  // read in front of them), so the card says which.
+  const groceryUnavailable = grocery == null;
 
   // Resolve meal names for this week's dinners (kept robust to relation naming).
   const planRows = (dinners ?? []) as { plan_date: string; meal_id: string | null }[];
@@ -169,8 +180,9 @@ export default async function FoodPage() {
         </FeatureCard>
 
         {/* 3. Grocery List */}
-        <FeatureCard index={3} title={t('dashboardFood.groceryList')} href="/dashboard/grocery" icon={ShoppingCart} tint="bg-amber-500/15 text-amber-400" count={groceryCount ?? 0} countLabel={t('dashboardFood.count.itemsToBuy')}>
-          {(grocery ?? []).length === 0 ? <EmptyHint>{t('dashboardFood.yourListIsEmpty')}</EmptyHint>
+        <FeatureCard index={3} title={t('dashboardFood.groceryList')} href="/dashboard/grocery" icon={ShoppingCart} tint="bg-amber-500/15 text-amber-400" count={groceryUnavailable ? null : groceryCount ?? 0} countLabel={t('dashboardFood.count.itemsToBuy')}>
+          {groceryUnavailable ? <EmptyHint>{t('dashboardFood.groceryListUnavailable')}</EmptyHint>
+            : (grocery ?? []).length === 0 ? <EmptyHint>{t('dashboardFood.yourListIsEmpty')}</EmptyHint>
             : (grocery as G[]).map((g) => <ListRow key={g.id} label={g.name} dot="bg-amber-400" />)}
         </FeatureCard>
 

@@ -548,13 +548,53 @@ function choreDrift(found: ChoreCreation, wanted: ChoreContent, assigneeId: stri
  * Angeles and a date-only chore landed on the evening before.
  *
  * `createChore` applies it; `tasks.assignChore` applies it before calling
- * `assignChore`, whose other callers (`createChore`, the respawn) already hand
- * it an instant.
+ * `requestChoreAssignment`, and `assignChore`'s other callers (`createChore`,
+ * the respawn) already hand it an instant.
  */
 export async function choreDueAt(scope: ServiceScope, value: string | null | undefined): Promise<ServiceResult<string | null>> {
   if (!value?.trim()) return ok(null);
   const at = familyInstantIso(value, scope.tz);
   return at ? ok(at) : fail((await getTranslations())('chores.dueAtUnreadable'), { code: SERVICE_CODES.invalidInput });
+}
+
+/**
+ * Who may put a chore on someone's board: a parent or another adult, or the
+ * system (a routine, a cron). This is the chores board's own rule
+ * (`createChoreAction` is manager-only), held here because the assistant
+ * reaches these writes without that action. The trust gate in front of the
+ * assistant is not a stand-in for it: it lets a teen's low-risk writes through.
+ * Approved work Bubaly filed keeps the approver's role (`scopeForApprovedWork`),
+ * so a request a parent said yes to still runs.
+ *
+ * Deliberately NOT applied inside `assignChore`: a recurring chore's next
+ * assignment is written through it when a child finishes their own.
+ */
+export const CHORES_ARE_SET_BY_A_MANAGER = 'Only a parent or another adult can add or assign chores.';
+
+/**
+ * `parent` and `adult` are `MANAGER_ROLES` (lib/constants/roles.ts), spelled
+ * out because this module's dependency surface is pinned by tests that load it
+ * on its own.
+ */
+export function mayManageChores(role: string | null | undefined): boolean {
+  return role === 'system' || role === 'parent' || role === 'adult';
+}
+
+function refuseUnlessChoreManager(scope: ServiceScope): ServiceResult<never> | null {
+  return mayManageChores(scope.role) ? null : fail(CHORES_ARE_SET_BY_A_MANAGER, { code: SERVICE_CODES.denied });
+}
+
+/**
+ * Assign an existing chore to someone, as a request (the assistant's
+ * `tasks.assignChore`). The manager rule above, then `assignChore`.
+ */
+export async function requestChoreAssignment(
+  scope: ServiceScope,
+  input: { choreId: string; memberId: string; dueAt?: string | null },
+): Promise<ServiceResult<ChoreAssignment>> {
+  const refused = refuseUnlessChoreManager(scope);
+  if (refused) return refused;
+  return assignChore(scope, input);
 }
 
 /**
@@ -580,6 +620,8 @@ export async function createChore(
   input: CreateChoreInput,
   opts: KeyedCreateOptions = {},
 ): Promise<ServiceResult<ChoreCreation>> {
+  const refused = refuseUnlessChoreManager(scope);
+  if (refused) return refused;
   const title = input.title?.trim() ?? '';
   if (!title) return fail('A chore needs a title.', { code: SERVICE_CODES.invalidInput });
   // Points are a reward a child earns. A negative one would take points away
