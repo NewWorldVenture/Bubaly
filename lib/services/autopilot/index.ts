@@ -1,6 +1,5 @@
 import 'server-only';
 import type { Tables } from '@/lib/database.types';
-import { createReminder } from '@/lib/services/reminders';
 import { keyedProbe, makeKey } from '@/lib/services/idempotency';
 import { scopeNow } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
@@ -71,7 +70,7 @@ export async function resolveSuggestion(scope: ServiceScope, input: ResolveSugge
           return { ok: false, code: 'unavailable' };
         }
         savedId = receipt.data.id;
-        if (!receipt.data.tags?.includes(suggestionSourceTag(source))) return { ok: false, code: 'sourceChanged', saved: true, reminderId: savedId };
+        if (receipt.data.autopilot_origin !== true || receipt.data.autopilot_card_id !== source.id || !receipt.data.tags?.includes(suggestionSourceTag(source))) return { ok: false, code: 'sourceChanged', saved: true, reminderId: savedId };
         if (source.status === 'executed') return { ok: true, status: 'executed', reminderId: savedId };
       }
       // A legacy approval carries no receipt: never replay uncertain old work.
@@ -116,18 +115,18 @@ export async function resolveSuggestion(scope: ServiceScope, input: ResolveSugge
             return { ok: false, code: 'invalid' };
           }
         }
-        const created = await createReminder({ ...scope, idempotencyKey: key }, {
-          title, remindAt: at, notes: source.detail, memberId: reminderMember,
-          kind: 'time', priority: source.urgency >= 3 ? 'high' : 'medium', aiSuggested: true,
-          tags: [suggestionSourceTag(source)],
-        });
-        if (!created.ok) return { ok: false, code: 'unavailable' };
-        if (!created.data.id || created.data.family_id !== scope.familyId || created.data.idempotency_key !== key) {
+        // The database creates the copy and pins its immutable card origin under
+        // the current caller's identity. Display tags carry no write authority.
+        const created = await scope.db.rpc('create_card_family_reminder', {
+          p_card_id: source.id, p_expected_updated_at: input.updatedAt,
+          p_at: at, p_source_tag: suggestionSourceTag(source),
+        }).maybeSingle();
+        if (created.error || !created.data) return { ok: false, code: 'unavailable' };
+        if (!created.data.id || created.data.family_id !== scope.familyId || created.data.idempotency_key !== key
+          || created.data.autopilot_origin !== true || created.data.autopilot_card_id !== source.id) {
           return { ok: false, code: 'unavailable' };
         }
         savedId = created.data.id;
-        // The service's own duplicate/race recovery can return a row created
-        // after our first probe. It must still belong to this proposal content.
         if (!created.data.tags?.includes(suggestionSourceTag(source))) return { ok: false, code: 'sourceChanged', saved: true, reminderId: savedId };
       }
       return await stamp(scope, source, 'executed', savedId);

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { InMemorySupabase } from './helpers/in-memory-supabase';
 import type { ServiceScope } from '@/lib/services/types';
-import { resolveSuggestion, suggestionReminderKey } from '@/lib/services/autopilot';
+import { resolveSuggestion, suggestionReminderKey, suggestionSourceTag } from '@/lib/services/autopilot';
 import { resolveAutopilotSuggestionAction } from '@/app/(app)/dashboard/autopilot/actions';
 
 const mocks = vi.hoisted(() => ({ context: vi.fn(), server: vi.fn(), revalidate: vi.fn(), superAdmin: vi.fn(), plan: vi.fn() }));
@@ -65,6 +65,7 @@ beforeEach(() => {
     return query;
   });
   scope = { db: db as unknown as ServiceScope['db'], userId: USER, memberId: MEMBER, familyId: FAMILY, role: 'parent', actorKind: 'member', tz: 'UTC', now: new Date(AT) };
+  installWriterProtocol(db);
   mocks.server.mockResolvedValue(db);
   mocks.context.mockResolvedValue({ user: { id: USER }, memberships: [{ familyId: FAMILY }], active: { familyId: FAMILY, role: 'parent', member: { id: MEMBER }, family: { timezone: 'UTC' } } });
 });
@@ -136,7 +137,9 @@ describe('source-bound Autopilot reminder acceptance', () => {
     const earlier = { ...reminders()[0] }; reminders().length = 0; failure = null;
     source().payload = { title: 'Revised proposal', at: '2026-09-14T09:00:00Z' }; source().updated_at = '2026-09-09T11:00:00Z';
     beforeReminderInsert = () => { db.seed('family_reminders', [earlier]); };
-    expect(await resolveSuggestion(scope, { ...input, updatedAt: String(source().updated_at) })).toEqual({ ok: false, code: 'sourceChanged', saved: true, reminderId: earlier.id });
+    const beforeSecond = calls.length;
+    expect(await resolveSuggestion(scope, { ...input, updatedAt: String(source().updated_at) })).toEqual({ ok: false, code: 'unavailable' });
+    expect(calls.slice(beforeSecond).some(call => call.table === 'autopilot_suggestions' && call.op === 'update')).toBe(false);
     expect(reminders()).toHaveLength(1); expect(reminders()[0].title).toBe('Passport renewal'); expect(source().status).toBe('open');
   });
   it('keeps a changed source open when its payload changes after reminder creation but before resolution', async () => {
@@ -225,5 +228,123 @@ describe('Autopilot action authorization', () => {
   });
   it('does not accept caller payload, recipient, action type or operation key', async () => {
     expect(await resolveAutopilotSuggestionAction({ ...request, idempotencyKey: 'fake', payload: {}, familyId: OTHER } as typeof request)).toEqual({ ok: false, code: 'invalid' }); expect(reminders()).toHaveLength(0);
+  });
+});
+
+// Fixture-local RPC protocol only. This does not model SQL grants, locks or RLS.
+type WriterReply = Awaited<ReturnType<InMemorySupabase['rpc']>>;
+type WriterRow = Record<string, unknown>;
+const writerOverrides = new WeakMap<InMemorySupabase, WriterReply>();
+function writerReply(data: unknown, code?: string): WriterReply {
+  return { data, error: code ? { code, message: 'Synthetic writer refusal', details: null, hint: null } : null, count: null, status: code ? 400 : 200, statusText: code ? 'Refused' : 'OK' };
+}
+function writerMaybeSingle(reply: WriterReply): WriterReply {
+  if (reply.error || !Array.isArray(reply.data)) return reply;
+  if (reply.data.length > 1) return writerReply(null, 'PGRST116');
+  return { ...reply, data: reply.data[0] ?? null };
+}
+function installWriterProtocol(model: InMemorySupabase): void {
+  const originalRpc = model.rpc.bind(model);
+  async function writeHuman(args: Record<string, unknown>): Promise<WriterReply> {
+    const read = await model.from('autopilot_suggestions').select('*').eq('id', args.p_card_id).maybeSingle();
+    if (read.error || !read.data) return read;
+    const card = read.data as WriterRow;
+    if (card.updated_at !== args.p_expected_updated_at || !['open', 'executed'].includes(String(card.status))) return writerReply(null, '40001');
+    const payload = card.payload && typeof card.payload === 'object' && !Array.isArray(card.payload) ? card.payload as WriterRow : {};
+    const key = suggestionReminderKey(String(card.family_id), String(card.id));
+    const member = card.kind === 'insurance' || card.source_kind === 'family_insurance_policies' ? null : card.member_id;
+    const inserted = await model.from('family_reminders').insert({ family_id: card.family_id, created_by: (await model.auth.getUser()).data.user?.id,
+      title: typeof payload.title === 'string' ? payload.title : card.title, notes: card.detail, remind_at: new Date(String(args.p_at)).toISOString(),
+      member_id: member, assigned_to_id: null, priority: Number(card.urgency) >= 3 ? 'high' : 'medium',
+      kind: 'time', status: 'active', ai_suggested: true, tags: [args.p_source_tag], idempotency_key: key,
+      autopilot_origin: true, autopilot_card_id: card.id }).select('*').single();
+    if (inserted.error && inserted.error.code !== '23505') return inserted;
+    const winner = inserted.error ? await model.from('family_reminders').select('*').eq('family_id', card.family_id).eq('idempotency_key', key).maybeSingle() : inserted;
+    if (winner.error || !winner.data) return winner;
+    const row = winner.data as WriterRow;
+    if (row.autopilot_origin !== true || row.autopilot_card_id !== card.id || !Array.isArray(row.tags) || !row.tags.includes(args.p_source_tag)) return writerReply(null, '40001');
+    return writerReply([row]);
+  }
+  async function writeLegacy(args: Record<string, unknown>): Promise<WriterReply> {
+    const card = args.p_card as WriterRow;
+    const created = await model.from('autopilot_suggestions').insert({ ...card, status: 'open', resolved_at: null }).select('*').single();
+    if (created.error || !created.data) return created;
+    const actual = created.data as WriterRow;
+    const ownedCardId = actual.id;
+    const payload = actual.payload && typeof actual.payload === 'object' && !Array.isArray(actual.payload) ? actual.payload as WriterRow : {};
+    const reminder = await model.from('reminders').insert({ family_id: actual.family_id, title: typeof payload.title === 'string' ? payload.title : actual.title,
+      notes: actual.detail, remind_at: args.p_at, member_id: actual.kind === 'insurance' || actual.source_kind === 'family_insurance_policies' ? null : actual.member_id,
+      related_type: actual.source_kind === 'appointments' ? 'appointment' : actual.source_kind === 'calendar_events' ? 'event' : 'renewal', related_id: actual.source_id,
+      created_by: args.p_actor ?? card.created_by, is_done: false, autopilot_origin: true, autopilot_card_id: ownedCardId }).select('*').single();
+    if (reminder.error || !reminder.data) {
+      const rows = model.table('autopilot_suggestions'); const index = rows.findIndex(row => row.id === ownedCardId); if (index >= 0) rows.splice(index, 1);
+      return reminder;
+    }
+    const saved = reminder.data as WriterRow;
+    const stamped = await model.from('autopilot_suggestions').update({ status: 'auto_executed', payload: { ...payload, reminder_id: saved.id } }).eq('id', ownedCardId).eq('family_id', actual.family_id).select('id').single();
+    if (stamped.error || !stamped.data) {
+      for (const [table, id] of [['autopilot_suggestions', ownedCardId], ['reminders', saved.id]] as const) { const rows = model.table(table); const index = rows.findIndex(row => row.id === id); if (index >= 0) rows.splice(index, 1); }
+      return stamped;
+    }
+    return writerReply({ card_id: ownedCardId, reminder_id: saved.id, family_id: actual.family_id });
+  }
+  vi.spyOn(model, 'rpc').mockImplementation((name, args = {}) => {
+    const pending = (async () => {
+      const injected = writerOverrides.get(model); if (injected) return injected;
+      if (name === 'create_card_family_reminder') return writeHuman(args);
+      if (name === 'create_card_legacy_reminder' || name === 'create_card_legacy_reminder_service') return writeLegacy(args);
+      return originalRpc(name, args);
+    })();
+    return Object.assign(pending, { maybeSingle: async () => writerMaybeSingle(await pending) });
+  });
+}
+
+describe('fixture-local RPC protocol health', () => {
+  it('preserves unknown writer refusal without a fabricated success', async () => {
+    expect(await db.rpc('unknown_card_writer')).toMatchObject({ data: null, error: { code: '42883' } });
+    expect(reminders()).toHaveLength(0); expect(source().status).toBe('open');
+  });
+  it('propagates a resolved writer error without create or stamp', async () => {
+    writerOverrides.set(db, writerReply(null, '42501'));
+    expect(await resolveSuggestion(scope, input)).toEqual({ ok: false, code: 'unavailable' });
+    expect(reminders()).toHaveLength(0); expect(source().status).toBe('open');
+    expect(calls.some(call => call.op === 'insert' || call.op === 'update')).toBe(false);
+  });
+  it('refuses both zero and multi-row writer receipts without a saved claim', async () => {
+    for (const rows of [[], [{ id: 'one' }, { id: 'two' }]]) {
+      writerOverrides.set(db, writerReply(rows));
+      expect(await resolveSuggestion(scope, input)).toEqual({ ok: false, code: 'unavailable' });
+      expect(reminders()).toHaveLength(0); expect(source().status).toBe('open');
+    }
+  });
+});
+
+
+describe('current immutable receipt identity and bookkeeping', () => {
+  it('refuses nonboolean generated origin on a complete existing receipt', async () => {
+    expect(await resolveSuggestion(scope, input)).toMatchObject({ ok: true });
+    reminders()[0].autopilot_origin = 'true'; const before = structuredClone(reminders()); const count = calls.length;
+    expect(await resolveSuggestion(scope, input)).toMatchObject({ ok: false, code: 'sourceChanged', saved: true });
+    expect(reminders()).toEqual(before); expect(calls.slice(count).some(x => x.op === 'insert' || x.op === 'update')).toBe(false);
+  });
+  it('refuses a receipt naming another source card', async () => {
+    expect(await resolveSuggestion(scope, input)).toMatchObject({ ok: true });
+    reminders()[0].autopilot_card_id = '40000000-0000-4000-8000-000000000099'; const before = structuredClone(reminders()); const count = calls.length;
+    expect(await resolveSuggestion(scope, input)).toMatchObject({ ok: false, code: 'sourceChanged', saved: true });
+    expect(reminders()).toEqual(before); expect(calls.slice(count).some(x => x.op === 'insert' || x.op === 'update')).toBe(false);
+  });
+  it('historical conservative origin without card identity is not a verified completed receipt', async () => {
+    expect(await resolveSuggestion(scope, input)).toMatchObject({ ok: true });
+    reminders()[0].autopilot_card_id = null; const before = structuredClone(reminders()); const count = calls.length;
+    expect(await resolveSuggestion(scope, input)).toMatchObject({ ok: false, code: 'sourceChanged', saved: true });
+    expect(reminders()).toEqual(before); expect(calls.slice(count).some(x => x.op === 'insert' || x.op === 'update')).toBe(false);
+  });
+  it('bookkeeping reminder_id does not revise proposal identity or duplicate a verified receipt', async () => {
+    expect(await resolveSuggestion(scope, input)).toMatchObject({ ok: true });
+    const stamp = () => suggestionSourceTag(source() as unknown as Parameters<typeof suggestionSourceTag>[0]);
+    const beforeTag = stamp(); const receipt = structuredClone(reminders()[0]);
+    source().payload = { ...(source().payload as Record<string, unknown>), reminder_id: 'bookkeeping-copy-only' };
+    expect(stamp()).toBe(beforeTag); expect(await resolveSuggestion(scope, input)).toMatchObject({ ok: true, reminderId: receipt.id });
+    expect(reminders()).toEqual([receipt]); expect(receipt).toMatchObject({ autopilot_origin: true, autopilot_card_id: ID });
   });
 });

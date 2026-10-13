@@ -1,3 +1,4 @@
+import { suggestionReminderKey } from '@/lib/services/autopilot';
 // The Autopilot scan, its engine and its accept path, held to what each
 // suggestion claims: a reminder it "handled" is one the notifier will deliver,
 // a renewal reminder is near the lapse date, a card about today can be accepted
@@ -30,10 +31,12 @@ const echo = (key: string, params?: Record<string, string | number>) => `${key} 
 const FAMILY = 'f1';
 
 function scanDb() {
-  return createInMemorySupabase<DB>({
+  const db = createInMemorySupabase<DB>({
     uniques: { autopilot_suggestions: [['family_id', 'dedupe_key']] },
     rpc: { ensure_default_grocery_list: () => 'list-1' },
   });
+  installWriterProtocol(db as unknown as InMemorySupabase);
+  return db;
 }
 
 function wallDay(instant: string, tz: string): string {
@@ -188,6 +191,7 @@ describe('accepting a reminder card re-checks the row it was built from', () => 
       member_id: null, urgency: 2, updated_at: AT, expires_at: null, source_kind: 'appointments', source_id: 'appt-1',
       dedupe_key: 'appt:appt-1:2026-09-22',
     }]);
+    installWriterProtocol(db);
     scope = { db: db as unknown as ServiceScope['db'], userId: USER, memberId: MEMBER, familyId: FAMILY, role: 'parent', actorKind: 'member', tz: 'UTC', now: new Date(AT) };
   });
   const accept = () => resolveSuggestion(scope, { suggestionId: 'sug-1', updatedAt: AT, action: 'reminder' });
@@ -350,5 +354,138 @@ describe('a feed\u2019s event titles never reach every member\u2019s push', () =
     ]);
     await runAutopilotScan(db, FAMILY, 'u1', 'UTC', 'en-US', echo, new Date('2026-09-21T06:30:00Z'));
     expect(pushes.sent.map((p) => p.title)).toContain('Schedule clash: "Swim" overlaps "Piano"');
+  });
+});
+
+// Fixture-local RPC protocol only. This does not model SQL grants, locks or RLS.
+type WriterReply = Awaited<ReturnType<InMemorySupabase['rpc']>>;
+type WriterRow = Record<string, unknown>;
+const writerOverrides = new WeakMap<InMemorySupabase, WriterReply>();
+function writerReply(data: unknown, code?: string): WriterReply {
+  return { data, error: code ? { code, message: 'Synthetic writer refusal', details: null, hint: null } : null, count: null, status: code ? 400 : 200, statusText: code ? 'Refused' : 'OK' };
+}
+function writerMaybeSingle(reply: WriterReply): WriterReply {
+  if (reply.error || !Array.isArray(reply.data)) return reply;
+  if (reply.data.length > 1) return writerReply(null, 'PGRST116');
+  return { ...reply, data: reply.data[0] ?? null };
+}
+function installWriterProtocol(model: InMemorySupabase): void {
+  const originalRpc = model.rpc.bind(model);
+  async function writeHuman(args: Record<string, unknown>): Promise<WriterReply> {
+    const read = await model.from('autopilot_suggestions').select('*').eq('id', args.p_card_id).maybeSingle();
+    if (read.error || !read.data) return read;
+    const card = read.data as WriterRow;
+    if (card.updated_at !== args.p_expected_updated_at || !['open', 'executed'].includes(String(card.status))) return writerReply(null, '40001');
+    const payload = card.payload && typeof card.payload === 'object' && !Array.isArray(card.payload) ? card.payload as WriterRow : {};
+    const key = suggestionReminderKey(String(card.family_id), String(card.id));
+    const member = card.kind === 'insurance' || card.source_kind === 'family_insurance_policies' ? null : card.member_id;
+    const inserted = await model.from('family_reminders').insert({ family_id: card.family_id, created_by: (await model.auth.getUser()).data.user?.id,
+      title: typeof payload.title === 'string' ? payload.title : card.title, notes: card.detail, remind_at: new Date(String(args.p_at)).toISOString(),
+      member_id: member, assigned_to_id: null, priority: Number(card.urgency) >= 3 ? 'high' : 'medium',
+      kind: 'time', status: 'active', ai_suggested: true, tags: [args.p_source_tag], idempotency_key: key,
+      autopilot_origin: true, autopilot_card_id: card.id }).select('*').single();
+    if (inserted.error && inserted.error.code !== '23505') return inserted;
+    const winner = inserted.error ? await model.from('family_reminders').select('*').eq('family_id', card.family_id).eq('idempotency_key', key).maybeSingle() : inserted;
+    if (winner.error || !winner.data) return winner;
+    const row = winner.data as WriterRow;
+    if (row.autopilot_origin !== true || row.autopilot_card_id !== card.id || !Array.isArray(row.tags) || !row.tags.includes(args.p_source_tag)) return writerReply(null, '40001');
+    return writerReply([row]);
+  }
+  async function writeLegacy(args: Record<string, unknown>): Promise<WriterReply> {
+    const card = args.p_card as WriterRow;
+    const created = await model.from('autopilot_suggestions').insert({ ...card, status: 'open', resolved_at: null }).select('*').single();
+    if (created.error || !created.data) return created;
+    const actual = created.data as WriterRow;
+    const ownedCardId = actual.id;
+    const payload = actual.payload && typeof actual.payload === 'object' && !Array.isArray(actual.payload) ? actual.payload as WriterRow : {};
+    const reminder = await model.from('reminders').insert({ family_id: actual.family_id, title: typeof payload.title === 'string' ? payload.title : actual.title,
+      notes: actual.detail, remind_at: args.p_at, member_id: actual.kind === 'insurance' || actual.source_kind === 'family_insurance_policies' ? null : actual.member_id,
+      related_type: actual.source_kind === 'appointments' ? 'appointment' : actual.source_kind === 'calendar_events' ? 'event' : 'renewal', related_id: actual.source_id,
+      created_by: args.p_actor ?? card.created_by, is_done: false, autopilot_origin: true, autopilot_card_id: ownedCardId }).select('*').single();
+    if (reminder.error || !reminder.data) {
+      const rows = model.table('autopilot_suggestions'); const index = rows.findIndex(row => row.id === ownedCardId); if (index >= 0) rows.splice(index, 1);
+      return reminder;
+    }
+    const saved = reminder.data as WriterRow;
+    const stamped = await model.from('autopilot_suggestions').update({ status: 'auto_executed', payload: { ...payload, reminder_id: saved.id } }).eq('id', ownedCardId).eq('family_id', actual.family_id).select('id').single();
+    if (stamped.error || !stamped.data) {
+      for (const [table, id] of [['autopilot_suggestions', ownedCardId], ['reminders', saved.id]] as const) { const rows = model.table(table); const index = rows.findIndex(row => row.id === id); if (index >= 0) rows.splice(index, 1); }
+      return stamped;
+    }
+    return writerReply({ card_id: ownedCardId, reminder_id: saved.id, family_id: actual.family_id });
+  }
+  vi.spyOn(model, 'rpc').mockImplementation((name, args = {}) => {
+    const pending = (async () => {
+      const injected = writerOverrides.get(model); if (injected) return injected;
+      if (name === 'create_card_family_reminder') return writeHuman(args);
+      if (name === 'create_card_legacy_reminder' || name === 'create_card_legacy_reminder_service') return writeLegacy(args);
+      return originalRpc(name, args);
+    })();
+    return Object.assign(pending, { maybeSingle: async () => writerMaybeSingle(await pending) });
+  });
+}
+
+it('a malformed atomic writer receipt cannot report a reminder or announce it', async () => {
+  const model = scanDb(); const raw = model as unknown as InMemorySupabase;
+  raw.seed('renewals', [{ id: 'health-renewal', family_id: FAMILY, title: 'Passport', status: 'active', expires_at: '2026-09-23' }]);
+  writerOverrides.set(raw, writerReply({ card_id: 'fabricated-without-confirmed-family-or-reminder' }));
+  await expect(runAutopilotScan(model, FAMILY, 'u1', 'UTC', 'en-US', echo, new Date('2026-09-21T06:30:00Z'))).rejects.toThrow('Autopilot reminder receipt could not be verified');
+  expect(raw.table('autopilot_suggestions')).toHaveLength(0); expect(raw.table('reminders')).toHaveLength(0); expect(pushes.sent).toHaveLength(0);
+});
+
+
+function currentScanModel(userId: string | null = 'u1') {
+  const model = createInMemorySupabase<DB>({ userId: userId ?? undefined, uniques: { autopilot_suggestions: [['family_id', 'dedupe_key']] }, rpc: { ensure_default_grocery_list: () => 'list-1' } });
+  installWriterProtocol(model as unknown as InMemorySupabase);
+  model.seed('families', [{ id: FAMILY, timezone: 'UTC' }]);
+  model.seed('family_members', [{ id: 'member-parent', family_id: FAMILY, user_id: 'u1', role: 'parent', is_active: true }, { id: 'member-teen', family_id: FAMILY, user_id: 'u-teen', role: 'teen', is_active: true }, { id: 'member-winner', family_id: FAMILY, user_id: 'u-winner', role: 'teen', is_active: true }]);
+  return model;
+}
+function currentPolicyPrior(model: InMemorySupabase) {
+  model.seed('family_insurance_policies', [{ id: 'policy-current', family_id: FAMILY, policy_type: 'home', insurer: 'Synthetic Co', renewal_date: '2026-09-25', is_active: true, member_id: 'member-teen' }]);
+  const draft = insuranceSuggestions(snapshot({ insurance: [{ id: 'policy-current', label: 'home insurance (Synthetic Co)', renewalOn: '2026-09-25', memberId: 'member-teen' }] }))[0];
+  expect(draft).toBeTruthy();
+  model.seed('autopilot_suggestions', [{ id: 'prior-policy-card', family_id: FAMILY, kind: 'insurance', source_kind: 'family_insurance_policies', source_id: 'policy-current', member_id: 'member-parent', dedupe_key: draft.dedupeKey, status: 'open', resolved_by: null, title: draft.title, payload: draft.payload, confidence: draft.confidence, urgency: draft.urgency }]);
+  return model.table('autopilot_suggestions')[0];
+}
+describe('current scan atomic wrapper and recipient refresh', () => {
+  it('ordinary scan calls human-identity atomic wrapper and stores matching card and copy', async () => {
+    const model = currentScanModel(); model.seed('renewals', [{ id: 'ordinary-renewal', family_id: FAMILY, title: 'Synthetic passport', status: 'active', expires_at: '2026-09-23' }]);
+    await runAutopilotScan(model, FAMILY, 'u1', 'UTC', 'en-US', echo, new Date('2026-09-21T06:30:00Z'), { role: 'parent', memberId: 'member-parent' });
+    const calls = vi.mocked(model.rpc).mock.calls; const ordinary = calls.filter(x => x[0] === 'create_card_legacy_reminder');
+    expect(ordinary).toHaveLength(1); expect(calls.some(x => x[0] === 'create_card_legacy_reminder_service')).toBe(false);
+    expect(ordinary[0][1]).toMatchObject({ p_card: { family_id: FAMILY, source_id: 'ordinary-renewal' }, p_at: expect.any(String) });
+    const cards = model.table('autopilot_suggestions'); const copies = model.table('reminders'); expect(cards).toHaveLength(1); expect(copies).toHaveLength(1);
+    expect(copies[0]).toMatchObject({ family_id: FAMILY, autopilot_origin: true, autopilot_card_id: cards[0].id });
+    expect(cards[0].payload).toMatchObject({ reminder_id: copies[0].id }); expect(cards[0].status).toBe('auto_executed');
+  });
+  it('service scan calls restricted atomic wrapper with explicit null actor', async () => {
+    const model = currentScanModel(null); model.seed('renewals', [{ id: 'service-renewal', family_id: FAMILY, title: 'Synthetic passport', status: 'active', expires_at: '2026-09-23' }]);
+    await runAutopilotScan(model, FAMILY, null, 'UTC', 'en-US', echo, new Date('2026-09-21T06:30:00Z'), null);
+    const calls = vi.mocked(model.rpc).mock.calls; const service = calls.filter(x => x[0] === 'create_card_legacy_reminder_service');
+    expect(service).toHaveLength(1); expect(calls.some(x => x[0] === 'create_card_legacy_reminder')).toBe(false);
+    expect(service[0][1]).toMatchObject({ p_actor: null, p_card: { family_id: FAMILY, source_id: 'service-renewal' }, p_at: expect.any(String) });
+    const cards = model.table('autopilot_suggestions'); const copies = model.table('reminders'); expect(cards).toHaveLength(1); expect(copies).toHaveLength(1);
+    expect(copies[0]).toMatchObject({ family_id: FAMILY, autopilot_origin: true, autopilot_card_id: cards[0].id });
+    expect(cards[0].payload).toMatchObject({ reminder_id: copies[0].id }); expect(cards[0].status).toBe('auto_executed');
+  });
+  it('manager scan refreshes prior policy card to its actual newly assigned member', async () => {
+    const model = currentScanModel(); const prior = currentPolicyPrior(model);
+    await runAutopilotScan(model, FAMILY, 'u1', 'UTC', 'en-US', echo, new Date('2026-09-21T06:30:00Z'), { role: 'parent', memberId: 'member-parent' });
+    expect(prior).toMatchObject({ member_id: 'member-teen', status: 'open', source_id: 'policy-current' });
+    expect(model.table('autopilot_suggestions')).toHaveLength(1); expect(model.table('reminders')).toHaveLength(0);
+    expect(vi.mocked(model.rpc).mock.calls.some(x => x[0] === 'create_card_legacy_reminder')).toBe(false);
+  });
+  it('nonmanager scan cannot retarget a prior policy card it could not read', async () => {
+    const model = currentScanModel('u-teen'); const prior = currentPolicyPrior(model); const before = structuredClone(prior);
+    await runAutopilotScan(model, FAMILY, 'u-teen', 'UTC', 'en-US', echo, new Date('2026-09-21T06:30:00Z'), { role: 'teen', memberId: 'member-teen' });
+    expect(prior).toEqual(before); expect(model.table('autopilot_suggestions')).toHaveLength(1); expect(model.table('reminders')).toHaveLength(0); expect(pushes.sent).toHaveLength(0);
+  });
+  it('policy refresh loses CAS safely after another scan changes the observed member or status', async () => {
+    const model = currentScanModel(); const prior = currentPolicyPrior(model); const original = model.from.bind(model); let attempted = 0;
+    vi.spyOn(model, 'from').mockImplementation((table: string) => { const query = original(table); if (table === 'autopilot_suggestions') { const update = query.update.bind(query); query.update = patch => { if (Object.prototype.hasOwnProperty.call(patch, 'member_id')) { attempted++; prior.member_id = 'member-winner'; prior.status = 'dismissed'; } return update(patch); }; } return query; });
+    await runAutopilotScan(model, FAMILY, 'u1', 'UTC', 'en-US', echo, new Date('2026-09-21T06:30:00Z'), { role: 'parent', memberId: 'member-parent' });
+    expect(attempted).toBe(1); expect(prior).toMatchObject({ member_id: 'member-winner', status: 'dismissed', source_id: 'policy-current' });
+    expect(model.table('autopilot_suggestions')).toHaveLength(1); expect(model.table('reminders')).toHaveLength(0);
   });
 });
