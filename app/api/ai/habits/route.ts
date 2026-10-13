@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { refuseClosedOrTrialEnded } from '@/lib/server/account-standing';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { readAll } from '@/lib/supabase/read-all';
@@ -25,6 +26,9 @@ export async function POST() {
     const ctx = await requireUserContext();
     const { familyId } = ctx.active;
     const supabase = await createServer();
+    // A closed or trial-ended family is refused before any work: see lib/server/account-standing.ts.
+    const closed = await refuseClosedOrTrialEnded(supabase, familyId);
+    if (closed) return closed;
     // No key: say so before any work, rather than let the provider's throw
     // reach the catch below as a generic failure.
     if (!(await isAIConfigured())) return NextResponse.json({ error: t('ai.theAiEngineIsnT'), code: 'not_configured' }, { status: 503 });

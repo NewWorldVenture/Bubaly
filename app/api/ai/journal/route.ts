@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { refuseClosedOrTrialEnded } from '@/lib/server/account-standing';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
@@ -19,6 +20,9 @@ export async function POST() {
     const ctx = await requireUserContext();
     const memberId = ctx.active.member?.id ?? null;
     const supabase = await createServer();
+    // A closed or trial-ended family is refused before any work: see lib/server/account-standing.ts.
+    const closed = await refuseClosedOrTrialEnded(supabase, ctx.active.familyId);
+    if (closed) return closed;
     // The page in front of this is feature-gated; this endpoint was not, and it
     // calls a model. Same resolver, so the two cannot disagree.
     const refused = await refuseUnlessEntitled(supabase, ctx.active.familyId, ['/dashboard/journal']);

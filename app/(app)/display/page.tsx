@@ -28,6 +28,7 @@ import type { LocaleCode } from '@/lib/i18n/locales';
 import type { AudienceViewer } from '@/lib/autopilot/audience';
 import { reminderCardsReader, visibleReminders } from '@/lib/autopilot/reminder-cards';
 import { suggestionReminderKey, suggestionSourceTag } from '@/lib/services/autopilot';
+import { readOnOpenGroceryLists } from '@/lib/services/groceries';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -172,8 +173,9 @@ async function loadDisplay(
       .eq('family_id', familyId).in('status', ['todo', 'in_progress', 'submitted'])
       .lt('due_at', end.toISOString()).order('due_at')),
     settle(supabase.from('meal_plans').select('meal_type, meal_id').eq('family_id', familyId).eq('plan_date', todayDate)),
-    settle(supabase.from('grocery_items').select('id, name').eq('family_id', familyId).eq('is_checked', false).order('created_at').limit(8)),
-    settle(supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_checked', false)),
+    // Only lists the family has not archived (readOnOpenGroceryLists).
+    settle(readOnOpenGroceryLists(supabase, familyId, (lists) => supabase.from('grocery_items').select('id, name').eq('family_id', familyId).in('list_id', lists).eq('is_checked', false).order('created_at').limit(8))),
+    settle(readOnOpenGroceryLists(supabase, familyId, (lists) => supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', familyId).in('list_id', lists).eq('is_checked', false))),
     settle(readTileReminders()),
     settle(supabase.from('notes').select('id, title, body').eq('family_id', familyId).eq('is_pinned', true).order('updated_at', { ascending: false }).limit(6)),
     settle(supabase.from('family_recipes').select('name, category, photo_url').eq('family_id', familyId)

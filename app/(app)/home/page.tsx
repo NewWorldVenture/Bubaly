@@ -62,6 +62,7 @@ import { WidgetBoundary } from '@/components/ui/widget-boundary';
 import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { type CalendarDisplayOccurrence, readDisplayCalendarOccurrences } from '@/lib/calendar/display-occurrences';
 import { calendarConsumerKey, projectCalendarDay, projectCalendarWindow } from '@/lib/calendar/consumer-spans';
+import { readOnOpenGroceryLists } from '@/lib/services/groceries';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -250,8 +251,9 @@ export default async function HomePage() {
       .eq('family_id', familyId).eq('is_done', false).lt('due_date', todayIso),
     supabase.from('family_reminders').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null).lt('remind_at', now.toISOString()),
-    supabase.from('grocery_items').select('id', { count: 'exact', head: true })
-      .eq('family_id', familyId).eq('is_checked', false),
+    // Only lists the family has not archived (readOnOpenGroceryLists).
+    readOnOpenGroceryLists(supabase, familyId, (lists) => supabase.from('grocery_items').select('id', { count: 'exact', head: true })
+      .eq('family_id', familyId).in('list_id', lists).eq('is_checked', false)),
   ]);
 
   const memberList = (members ?? []) as Member[];

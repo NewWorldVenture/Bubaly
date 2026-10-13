@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { refuseClosedOrTrialEnded } from '@/lib/server/account-standing';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll, describeReadError } from '@/lib/supabase/settle';
@@ -31,6 +32,9 @@ export async function POST() {
     const ctx = await requireUserContext();
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
+    // A closed or trial-ended family is refused before any work: see lib/server/account-standing.ts.
+    const refused = await refuseClosedOrTrialEnded(supabase, familyId);
+    if (refused) return refused;
     // With no key the provider threw "not configured" and the catch below
     // answered a generic 500; the other AI routes say so with a 503 first.
     if (!(await isAIConfigured())) return NextResponse.json({ error: t('ai.theAiEngineIsnT'), code: 'not_configured' }, { status: 503 });

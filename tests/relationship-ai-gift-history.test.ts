@@ -5,6 +5,10 @@ import type { RelationshipGiftRecord } from '@/lib/relationship/gifts';
 const mocks = vi.hoisted(() => ({
   context: vi.fn(), server: vi.fn(), provider: vi.fn(), complete: vi.fn(), rate: vi.fn(), audit: vi.fn(),
 }));
+// The account-standing gate (a closed or trial-ended family is refused) has its
+// own test, tests/the-free-ai-helpers-refuse-a-closed-or-trial-ended-family.test.ts.
+// The family here is open, so the gate is answered rather than seeded.
+vi.mock('@/lib/server/account-standing', () => ({ refuseClosedOrTrialEnded: async () => null }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.context }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.server }));
 vi.mock('@/lib/ai/provider', async (importOriginal) => ({

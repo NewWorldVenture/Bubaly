@@ -11,6 +11,7 @@ import { computeFoodScore, type FoodScoreInput } from '@/lib/food/score';
 import { activeLeftovers, leftoverNudge, type LeftoverLike } from '@/lib/food/leftovers';
 import { KitchenDashboard, type KitchenData } from '@/components/modules/kitchen-dashboard';
 import { ErrorState } from '@/components/ui/states';
+import { readOnOpenGroceryLists } from '@/lib/services/groceries';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -43,7 +44,8 @@ export default async function KitchenPage() {
     supabase.from('pantry_items').select('name, expires_at, quantity, low_threshold, is_staple, location').eq('family_id', familyId).limit(300),
     supabase.from('leftover_inventory').select('id, name, source_meal, quantity, use_by, location, status').eq('family_id', familyId).limit(50),
     supabase.from('family_recipes').select('name, rating, estimated_cost_cents').eq('family_id', familyId).limit(300),
-    supabase.from('grocery_items').select('id, name, is_checked').eq('family_id', familyId).eq('is_checked', false).limit(200),
+    // Only lists the family has not archived (readOnOpenGroceryLists).
+    readOnOpenGroceryLists(supabase, familyId, (lists) => supabase.from('grocery_items').select('id, name, is_checked').eq('family_id', familyId).in('list_id', lists).eq('is_checked', false).limit(200)),
     supabase.from('meal_nutrition').select('subject_id, calories, protein_g, carbs_g, fat_g, fiber_g, sugar_g, sodium_mg')
       .eq('family_id', familyId).eq('subject_type', 'week').eq('subject_id', weekStart).maybeSingle(),
   ]);
