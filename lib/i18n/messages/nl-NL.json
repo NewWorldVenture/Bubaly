@@ -17026,5 +17026,6 @@
   "babysittersView.payoutsAreKeptByParents": "Wat de oppassen betaald krijgen, wordt bijgehouden door de ouders in je gezin.",
   "savings.overYourWeeklyBudget": "Je zit {amount} boven je weekbudget voor {category}.",
   "savings.overYourMonthlyBudget": "Je zit {amount} boven je maandbudget voor {category}.",
-  "savings.overYourYearlyBudget": "Je zit {amount} boven je jaarbudget voor {category}."
+  "savings.overYourYearlyBudget": "Je zit {amount} boven je jaarbudget voor {category}.",
+  "budgetAnalysisCard.monthsBudgetedSpending": "{month} · de begrote uitgaven van de maand, met week- en jaarlimieten als hun maandaandeel"
 }

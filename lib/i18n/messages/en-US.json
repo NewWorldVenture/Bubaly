@@ -17026,5 +17026,6 @@
   "babysittersView.payoutsAreKeptByParents": "What the sitters are paid is kept by your family's parents.",
   "savings.overYourWeeklyBudget": "You're {amount} over your weekly {category} budget.",
   "savings.overYourMonthlyBudget": "You're {amount} over your monthly {category} budget.",
-  "savings.overYourYearlyBudget": "You're {amount} over your yearly {category} budget."
+  "savings.overYourYearlyBudget": "You're {amount} over your yearly {category} budget.",
+  "budgetAnalysisCard.monthsBudgetedSpending": "{month} · the month's budgeted spending, weekly and yearly limits as their monthly share"
 }

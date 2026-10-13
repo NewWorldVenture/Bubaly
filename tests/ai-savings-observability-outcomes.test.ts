@@ -71,10 +71,14 @@ beforeEach(() => {
         select: () => query,
         eq: () => query,
         gte: () => query,
-        // `order` and `range` so `readAllAsQuery` can page the transactions
-        // read (C1-S9-25). `range` is the terminal: it resolves to an EMPTY
-        // page, which is what tells readAll it has reached the end.
+        // `lte`, `gt`, `order` and `limit` so `readAllByIdAsQuery` can page the
+        // transactions read on the id, both ends bounded (C1-S9-25,
+        // M11-RATCHET). `limit` is the terminal: it resolves to an EMPTY page,
+        // which is what tells the reader it has reached the end.
+        lte: () => query,
+        gt: () => query,
         order: () => query,
+        limit: () => Promise.resolve({ data: [], error: null }),
         range: () => Promise.resolve({ data: [], error: null }),
         neq: () => query,
         // The feature-tier read behind the route gate.

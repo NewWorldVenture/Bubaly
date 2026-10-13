@@ -48,7 +48,7 @@ vi.mock('@/components/i18n/locale-provider', async () => {
 });
 vi.mock('@/components/wallet/wallet-subnav', () => ({ WalletSubnav: () => null }));
 
-const { saveAllowanceRuleAction } = await import('@/app/(app)/wallet/actions');
+const { saveAllowanceRuleAction, toggleAllowanceRuleAction } = await import('@/app/(app)/wallet/actions');
 const { default: WalletAllowancePage } = await import('@/app/(app)/wallet/allowance/page');
 const { AllowanceView } = await import('@/components/wallet/allowance-view');
 const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
@@ -129,6 +129,30 @@ describe('the allowance page shows every rule a child has', () => {
     expect(html).toContain('$10 · weekly');
     expect(html).toContain('$12 · weekly');
     expect(html).toContain(t('allowanceView.oneOfSeveralAllowances'));
+  });
+
+  // M2-UX: the warning says "each one is paid. Pause the one you do not want."
+  // Once the parent has done that, one rule pays, and neither row says it.
+  it('once the extra rule is paused, it keeps its row and neither row says the child has more than one', async () => {
+    expect(await toggleAllowanceRuleAction({ id: 'rule-12', isActive: false })).toEqual({ ok: true });
+
+    const view = viewOf(await WalletAllowancePage());
+    expect(view.props.rows.map((r) => [r.ruleId, r.amountCents, r.isActive, r.duplicate])).toEqual([
+      ['rule-10', 1000, true, false],
+      ['rule-12', 1200, false, false],
+    ]);
+    const html = renderToStaticMarkup(createElement(AllowanceView, view.props as never));
+    expect(html).not.toContain(t('allowanceView.oneOfSeveralAllowances'));
+    expect(html.match(new RegExp(`aria-label="${t('uiText.pause')}"`, 'g'))).toHaveLength(1);
+    expect(html.match(new RegExp(`aria-label="${t('uiText.resume')}"`, 'g'))).toHaveLength(1);
+  });
+
+  it('two of three rules paying still say so on those two, and not on the paused one', async () => {
+    db.seed('allowance_rules', [
+      { id: 'rule-15', family_id: FAMILY, child_wallet_id: AVA_WALLET, amount_cents: 1500, cadence: 'weekly', is_active: false, next_run_on: '2026-10-18' },
+    ]);
+    const view = viewOf(await WalletAllowancePage());
+    expect(view.props.rows.map((r) => [r.ruleId, r.duplicate])).toEqual([['rule-10', true], ['rule-12', true], ['rule-15', false]]);
   });
 
   it('a child with one rule, and a child with none, still read as before', async () => {

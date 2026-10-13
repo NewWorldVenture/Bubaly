@@ -16,6 +16,10 @@ import { loadAutomaticCaptureShare } from '@/lib/metric/automatic-capture-server
 import { AutomaticCaptureCard } from '@/components/metrics/automatic-capture-card';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 import { readsHouseholdMoney } from '@/lib/finance/household-money';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
+
+/** A real ceiling on the spend window the preview sums: past it, a failed read, never a smaller band. */
+const SPEND_READ_MAX = 50_000;
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -60,8 +64,15 @@ export default async function IntelligencePage() {
     supabase.from('bedtime_routines').select('member_id, target_bedtime').eq('family_id', familyId).eq('is_active', true),
     // The household's spending is a parent's or adult's (the held 0514): anyone
     // else's preview leaves the spend band out rather than band their own.
+    // The band is a SUM of this read, so it is read whole, paged on the id as
+    // the nightly aggregation reads it: one request stopped at PostgREST's
+    // 1,000 rows, and a busy household was banded on part of its spending.
     seesSpending
-      ? supabase.from('transactions').select('amount').eq('family_id', familyId).eq('type', 'expense').gte('date', spendStartKey).lte('date', todayKey)
+      ? readAllByIdAsQuery<{ id: string; amount: number }>((after, limit) => {
+        let query = supabase.from('transactions').select('id, amount').eq('family_id', familyId).eq('type', 'expense').gte('date', spendStartKey).lte('date', todayKey);
+        if (after) query = query.gt('id', after);
+        return query.order('id').limit(limit);
+      }, { max: SPEND_READ_MAX })
       : Promise.resolve({ data: [] as { amount: number }[], error: null }),
     supabase.from('reminders').select('id', { count: 'exact', head: true }).eq('family_id', familyId).gte('remind_at', now.toISOString()).lte('remind_at', weekEndIso),
   ]);
