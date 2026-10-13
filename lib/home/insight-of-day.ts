@@ -8,7 +8,7 @@
 export type InsightKind =
   | 'departure'        // leave earlier (traffic + weather) — source is key-gated
   | 'conflict'         // a schedule clash today/tomorrow
-  | 'homework'         // assignments due tomorrow, not acknowledged
+  | 'homework'         // assignments due tomorrow, not finished
   | 'approval'         // decisions waiting on a parent
   | 'reminder_overdue' // reminders past due
   | 'renewal'          // a renewal expiring soon
@@ -95,7 +95,7 @@ export function buildInsightCandidates(s: InsightSources): Insight[] {
     out.push({
       id: 'homework', kind: 'homework',
       title: `${hw.length} assignment${hw.length === 1 ? '' : 's'} due tomorrow${who}`,
-      detail: hw.length === 1 ? `“${hw[0].title}” hasn’t been acknowledged yet.` : 'They haven’t been acknowledged yet — a quick nudge tonight.',
+      detail: hw.length === 1 ? `“${hw[0].title}” is not finished yet.` : 'They are not finished yet — a quick nudge tonight.',
       href: '/dashboard/homework',
       impact: clamp(78 + hw.length * 4),
     });

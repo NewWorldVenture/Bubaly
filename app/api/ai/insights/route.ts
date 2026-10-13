@@ -19,6 +19,7 @@ import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { INSIGHT_FEATURE_HREFS } from '@/lib/ai/insight-features';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
+import { OPEN_HOMEWORK_STATUSES } from '@/lib/homework/board';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -204,13 +205,6 @@ function required(reads: [string, { message?: string } | null | undefined][]): v
   if (failed) throw new Error(`${failed[0]} read failed: ${failed[1]?.message ?? 'unknown error'}`);
 }
 
-/**
- * Homework still to do: the Homework board's `isOpen` (lib/homework/board.ts)
- * and the school service's `listHomeworkDue`. `status <> 'done'` also kept
- * `submitted` work, so the coach planned an essay the child had handed in.
- */
-const OPEN_HOMEWORK = ['assigned', 'in_progress'];
-
 /** Who is asking. Only `purchase_advisor` needs it so far, and it needs both. */
 type Viewer = { role: string; memberId: string | null };
 
@@ -346,7 +340,7 @@ async function fetchRows(
       return { grocery_items: items.data ?? [] };
     }
     case 'homework': {
-      const hw = await eq(sb, 'homework_assignments', familyId).in('status', OPEN_HOMEWORK).order('due_at', { ascending: true, nullsFirst: false }).limit(60);
+      const hw = await eq(sb, 'homework_assignments', familyId).in('status', OPEN_HOMEWORK_STATUSES).order('due_at', { ascending: true, nullsFirst: false }).limit(60);
       required([['homework_assignments', hw.error]]);
       return { homework_assignments: hw.data ?? [] };
     }
@@ -538,7 +532,7 @@ async function fetchRows(
     }
     case 'school': {
       const [hw, grades] = await Promise.all([
-        eq(sb, 'homework_assignments', familyId).in('status', OPEN_HOMEWORK).order('due_at', { ascending: true, nullsFirst: false }).limit(20),
+        eq(sb, 'homework_assignments', familyId).in('status', OPEN_HOMEWORK_STATUSES).order('due_at', { ascending: true, nullsFirst: false }).limit(20),
         eq(sb, 'grades', familyId).order('created_at', { ascending: false }).limit(15),
       ]);
       required([['homework_assignments', hw.error], ['grades', grades.error]]);

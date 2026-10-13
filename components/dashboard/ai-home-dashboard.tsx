@@ -42,6 +42,7 @@ import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
 import { readDisplayCalendarOccurrences, type CalendarDisplayOccurrence } from '@/lib/calendar/display-occurrences';
 import { projectCalendarDay, projectCalendarWindow } from '@/lib/calendar/consumer-spans';
 import { onMembersDay } from '@/lib/calendar/members-day';
+import { OPEN_HOMEWORK_STATUSES } from '@/lib/homework/board';
 import type { DinnerIdea, DinnerEffort } from '@/lib/onboarding/dinner-ideas';
 import { HomeOutcomeCard } from '@/components/dashboard/home-outcome-card';
 import { buildInsightCandidates, rankInsights, type InsightKind, type InsightSources } from '@/lib/home/insight-of-day';
@@ -181,9 +182,10 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     supabase.from('documents').select('id, title, expires_at')
       .eq('family_id', familyId).not('expires_at', 'is', null)
       .lte('expires_at', new Date(Date.now() + 30 * 86400000).toISOString()).limit(50),
-    // T4 sources: assignments due TOMORROW that haven't been acknowledged.
+    // T4 sources: assignments due TOMORROW that are not finished — started
+    // work included, as the Homework board counts it.
     supabase.from('homework_assignments').select('title, member_id')
-      .eq('family_id', familyId).eq('status', 'assigned')
+      .eq('family_id', familyId).in('status', OPEN_HOMEWORK_STATUSES)
       .gte('due_at', todayEnd.toISOString())
       .lt('due_at', new Date(todayEnd.getTime() + 86400000).toISOString()).limit(20),
     // T4 sources: dinners planned in the next 7 days (→ how many nights are unplanned).
