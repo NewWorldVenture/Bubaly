@@ -25,7 +25,7 @@ const t = (key: string) => translate(getMessages(state.locale), key);
 
 beforeEach(() => {
   state.locale = 'en-US'; for (const mock of [state.context, state.client, state.from, state.select, state.eq, state.read, state.resolve]) mock.mockReset();
-  state.context.mockResolvedValue({ user: { id: userId }, active: { familyId, family: { name: 'North household' } } });
+  state.context.mockResolvedValue({ user: { id: userId }, active: { familyId, role: 'parent', family: { name: 'North household' } } });
   const db = { from: state.from }; state.client.mockReturnValue(db); state.from.mockReturnValue({ select: state.select });
   state.select.mockReturnValue({ eq: state.eq }); state.eq.mockReturnValue({ maybeSingle: state.read }); state.read.mockResolvedValue({ data: row });
   state.resolve.mockResolvedValue({ result: computeCompleteness(unfinished), progress: { source: 'auto_provision' } });
@@ -68,6 +68,21 @@ describe('existing-family setup page localization boundary', () => {
     const redirect = new Error('NEXT_REDIRECT'); state.context.mockRejectedValueOnce(redirect);
     await expect(CompleteSetupPage()).rejects.toBe(redirect);
     expect(state.client).not.toHaveBeenCalled(); expect(state.resolve).not.toHaveBeenCalled(); expect(state.from).not.toHaveBeenCalled();
+  });
+
+  it('says it could not check, rather than showing a score, when a completeness read did not answer (A13)', async () => {
+    const result = computeCompleteness(unfinished);
+    state.resolve.mockResolvedValue({ result, progress: null, readFailures: ['family_onboarding'] });
+    const html = renderToStaticMarkup(await CompleteSetupPage());
+    expect(html).toContain(t('dashboardSetup.couldNotCheckYourSetup'));
+    expect(html).not.toContain(`${result.score}%`);
+  });
+
+  it.each(['child', 'teen', 'caregiver', 'guest'])('shows a %s no household questionnaire to submit (A8)', async (role) => {
+    state.context.mockResolvedValue({ user: { id: userId }, active: { familyId, role, family: { name: 'North household' } } });
+    const tree = await CompleteSetupPage();
+    expect(nodes(tree).some(node => node.type === CompleteSetupForm)).toBe(false);
+    expect(renderToStaticMarkup(tree)).toContain(t('dashboardSetup.onlyAManagerCanAnswer'));
   });
 
   it('keeps an unknown future missing-piece label and destination usable', async () => {

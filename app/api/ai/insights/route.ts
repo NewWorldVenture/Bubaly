@@ -476,6 +476,9 @@ async function fetchRows(
     }
     case 'notifications': {
       const n = await eq(sb, 'notifications', familyId).lte('send_at', nowIso).order('send_at', { ascending: false }).limit(60);
+      // A failed read reached the model as "Recent notifications: none", and its
+      // "nothing needs your attention" came back at 200.
+      required([['notifications', n.error]]);
       return { notifications: n.data ?? [] };
     }
     case 'messages': {
@@ -497,6 +500,9 @@ async function fetchRows(
         sb.from('meals').select('id').eq('family_id', familyId).limit(50),
         sb.from('documents').select('id').eq('family_id', familyId).limit(50),
   ]);
+      // Five failed reads were "Activity counts: 0" and a confident "set up your
+      // calendar" to a family with a full one.
+      required([['calendar_events', ev.error], ['todo_items', todos.error], ['chores', chores.error], ['meals', meals.error], ['documents', docs.error]]);
       return {
         calendar_events: ev.data ?? [], todo_items: todos.data ?? [], chores: chores.data ?? [],
         meals: meals.data ?? [], documents: docs.data ?? [],
@@ -592,6 +598,7 @@ async function fetchRows(
     }
     case 'announcements': {
       const posts = await eq(sb, 'family_announcements', familyId).order('created_at', { ascending: false }).limit(10);
+      required([['family_announcements', posts.error]]);
       return { family_announcements: posts.data ?? [] };
     }
     case 'medical': {

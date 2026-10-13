@@ -131,7 +131,8 @@ describe('the family and settings screens removing a member', () => {
     // is not a second call a screen could leave out: every removal from either
     // screen is the action, and the action forgets right after the write.
     const src = readFileSync(file, 'utf8');
-    expect(src).toContain("import { removeFamilyMemberAction } from '@/app/(app)/family/member-actions';");
+    // The same module also carries the member edit (updateFamilyMemberAction).
+    expect(src).toMatch(/import \{[^}]*\bremoveFamilyMemberAction\b[^}]*\} from '@\/app\/\(app\)\/family\/member-actions';/);
     expect(src).toMatch(/await removeFamilyMemberAction\(/);
     expect(src).not.toContain('.update({ is_active: false })');
     const action = readFileSync('app/(app)/family/member-actions.ts', 'utf8');
@@ -142,7 +143,7 @@ describe('the family and settings screens removing a member', () => {
   it('the server action the screens call blanks the removed member\'s position and history, and nobody else\'s', async () => {
     household(true);
     const { removeFamilyMemberAction } = await import('@/app/(app)/family/member-actions');
-    expect(await removeFamilyMemberAction({ memberId: C.NANNY })).toEqual({ ok: true, loginRevocation: 'none', locationForgotten: true });
+    expect(await removeFamilyMemberAction({ memberId: C.NANNY })).toEqual({ ok: true, loginRevocation: 'none', locationForgotten: true, invitesRevoked: true });
     expect(db.table('family_members').find((row) => row.id === C.NANNY)).toMatchObject({ is_active: false });
     expect(live(C.NANNY)).toMatchObject(CLEARED);
     expect(events(C.NANNY)).toEqual([expect.objectContaining({ latitude: null, longitude: null, place_name: 'Home', event_type: 'arrived' })]);
@@ -224,7 +225,7 @@ describe('a removal whose location forget failed', () => {
     const { removeFamilyMemberAction } = await import('@/app/(app)/family/member-actions');
     // The defect: { ok: true, loginRevocation: 'none' } — nothing a screen could
     // read to say the position was not cleared.
-    expect(await removeFamilyMemberAction({ memberId: C.NANNY })).toEqual({ ok: true, loginRevocation: 'none', locationForgotten: false });
+    expect(await removeFamilyMemberAction({ memberId: C.NANNY })).toEqual({ ok: true, loginRevocation: 'none', locationForgotten: false, invitesRevoked: true });
     expect(db.table('family_members').find((row) => row.id === C.NANNY), 'the removal stands').toMatchObject({ is_active: false });
     expect(live(C.NANNY), 'the row is as the refused write left it').toMatchObject({ is_sharing: true, ...POSITION });
     expect(console.error).toHaveBeenCalled();

@@ -12,6 +12,7 @@ import { iconForType, groupByUser, digestTimeZone } from '@/lib/notifications/di
 import * as React from 'react';
 import { listAllAuthUsers } from './list-all-auth-users';
 import { childrenBlockedOn } from '@/lib/notifications/child-channels';
+import { isChildLoginEmail } from '@/lib/onboarding/child-login';
 import { readAllInChunks, readInChunks, writeInChunks } from '@/lib/supabase/chunked-in';
 
 type DB = SupabaseClient<Database>;
@@ -165,7 +166,12 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
     const meta = userMeta.get(userId);
 
     // No email on file, or the member opted out → resolve without sending.
-    if (emailOff.has(userId) || !meta?.email) {
+    // A kid login's synthetic address (child.<username>@kids.bubaly.app) is
+    // not an email on file either: nothing is ever delivered there, and the
+    // domain is not Bubaly's to receive it, so a child's chores, events and
+    // their locations were being mailed to whoever holds it. Settled the same
+    // way, so they are not retried.
+    if (emailOff.has(userId) || !meta?.email || isChildLoginEmail(meta.email)) {
       skipped += 1;
       resolvedIds.push(...ids);
       continue;

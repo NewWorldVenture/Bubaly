@@ -9,6 +9,7 @@
 // Stale Web Push subscriptions (404/410) are pruned automatically.
 import 'server-only';
 import { randomUUID } from 'node:crypto';
+import { Agent as HttpsAgent } from 'node:https';
 import webpush from 'web-push';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
@@ -36,6 +37,28 @@ type DB = SupabaseClient<Database>;
 export const PUSH_RETRY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 import { isDeliverablePushEndpoint } from '@/lib/server/push-endpoint';
+import { MAX_PUSH_DEVICES_PER_USER } from '@/lib/push/device-cap';
+
+/**
+ * The bounds on one web push, and on a dispatch run.
+ *
+ * `web-push`'s own `timeout` is https.request's SOCKET IDLE timeout, and it
+ * collects the reply with `responseText += chunk` and no limit. An endpoint is
+ * any HTTPS host a member registers (or inserts directly: push_devices_insert
+ * is `user_id = auth.uid()`), so a server that answered 201 and then trickled
+ * a byte every few seconds kept one send pending for as long as it liked —
+ * and dispatch is serial, so every family's pushes behind it waited, on every
+ * run, since its rows are never stamped and come back first on each wrap. It
+ * could also stream an unbounded body into memory. The native path has had an
+ * absolute deadline and a 64 KiB cap all along (lib/server/native-push.ts).
+ */
+export const WEB_PUSH_DEADLINE_MS = 15_000;
+const WEB_PUSH_MAX_RESPONSE_BYTES = 64 * 1024;
+/** How long one dispatch run may spend sending before it leaves the rest for the next. */
+export const PUSH_DISPATCH_BUDGET_MS = 45_000;
+
+/** Shared across one dispatch run: when it must stop, and devices already known not to answer. */
+type DispatchBudget = { endsAt: number; stalled: Set<string> };
 
 export type PushPayload = { title: string; body?: string | null; url?: string | null };
 export type PushResult = {
@@ -171,7 +194,9 @@ async function activeFamilyRecipient(supabase: DB, familyId: string, userId: str
   return true;
 }
 
-async function sendPushDevicesToUser(supabase: DB, userId: string, payload: PushPayload, receipts?: DeliveryReceipts, familyId?: string): Promise<DeliveryResult> {
+async function sendPushDevicesToUser(
+  supabase: DB, userId: string, payload: PushPayload, receipts?: DeliveryReceipts, familyId?: string, budget?: DispatchBudget,
+): Promise<DeliveryResult> {
   const result: DeliveryResult = { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 };
   async function stillPermitted(): Promise<boolean> {
     if (familyId === undefined) return true;
@@ -187,11 +212,16 @@ async function sendPushDevicesToUser(supabase: DB, userId: string, payload: Push
     }
     return false;
   }
+  // The newest MAX_PUSH_DEVICES_PER_USER only: nothing capped how many rows an
+  // account could add, and each one is a send this serial loop waits on.
   const { data: devices, error: devicesError } = await supabase
     .from('push_devices')
     .select('id, platform, provider, endpoint, p256dh, auth, token')
     .eq('user_id', userId)
-    .eq('enabled', true);
+    .eq('enabled', true)
+    .order('last_seen_at', { ascending: false })
+    .order('id', { ascending: true })
+    .limit(MAX_PUSH_DEVICES_PER_USER);
 
   if (devicesError) {
     console.error('[push] device read failed', { userId, error: devicesError });
@@ -205,6 +235,12 @@ async function sendPushDevicesToUser(supabase: DB, userId: string, payload: Push
   for (const d of devices) {
     // Already reached on an earlier, partially failed run: not a second buzz.
     if (receipts?.delivered.has(d.id)) continue;
+    // A device that already ran out its deadline in this run is not waited on
+    // again for the next notification; it is a failure, retried next run.
+    if (budget?.stalled.has(d.id)) { result.failed++; continue; }
+    // The run's time is spent: leave this device for the next one. Skipped,
+    // not failed, so the notification stays pending without being expired.
+    if (budget && Date.now() >= budget.endsAt) { result.skipped++; continue; }
     try {
       if (d.provider === 'webpush') {
         if (!vapid || !d.endpoint || !d.p256dh || !d.auth) { result.skipped++; continue; }
@@ -221,14 +257,14 @@ async function sendPushDevicesToUser(supabase: DB, userId: string, payload: Push
         // Recheck after asynchronous endpoint validation, immediately before send.
         if (!(await stillPermitted())) return result;
         try {
-          await webpush.sendNotification(
-            { endpoint: d.endpoint, keys: { p256dh: d.p256dh, auth: d.auth } },
-            body,
-            { timeout: 15_000 },
-          );
+          await sendWebPushBounded({ endpoint: d.endpoint, keys: { p256dh: d.p256dh, auth: d.auth } }, body);
           result.sent++;
           await recordDelivery(supabase, receipts, d.id);
         } catch (err: unknown) {
+          if (err instanceof WebPushAborted) {
+            budget?.stalled.add(d.id);
+            console.error('[push] web push abandoned', { deviceId: d.id, reason: err.message });
+          }
           const status = (err as { statusCode?: number }).statusCode;
           if (status === 404 || status === 410) {
             // `pruned` is returned to the caller and reported, so it has to mean
@@ -278,6 +314,59 @@ async function sendPushDevicesToUser(supabase: DB, userId: string, payload: Push
   return result;
 }
 
+class WebPushAborted extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = 'WebPushAborted';
+  }
+}
+
+/**
+ * One web push with an ABSOLUTE deadline and a bounded reply (see
+ * WEB_PUSH_DEADLINE_MS). Still sent by `web-push`, which builds the encrypted
+ * request and its VAPID header, but through an agent of our own: every socket
+ * it opens is tracked and its bytes counted, and all of them are destroyed at
+ * the deadline or past the size cap, whatever state the response is in.
+ */
+async function sendWebPushBounded(
+  subscription: { endpoint: string; keys: { p256dh: string; auth: string } },
+  body: string,
+): Promise<void> {
+  const sockets = new Set<{ destroy: () => void }>();
+  let abort: (error: Error) => void = () => {};
+  const aborted = new Promise<never>((_, reject) => { abort = reject; });
+  aborted.catch(() => {});
+  const stop = (reason: string) => {
+    abort(new WebPushAborted(reason));
+    for (const socket of sockets) socket.destroy();
+  };
+  let received = 0;
+  class BoundedAgent extends HttpsAgent {
+    override createConnection(...args: Parameters<HttpsAgent['createConnection']>): ReturnType<HttpsAgent['createConnection']> {
+      const socket = super.createConnection(...args);
+      if (socket) {
+        sockets.add(socket);
+        socket.on('data', (chunk: Buffer | string) => {
+          received += typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk.length;
+          if (received > WEB_PUSH_MAX_RESPONSE_BYTES) stop('web push reply exceeded 64 KiB');
+        });
+      }
+      return socket;
+    }
+  }
+  const agent = new BoundedAgent({ keepAlive: false });
+  const timer = setTimeout(() => stop('web push deadline exceeded'), WEB_PUSH_DEADLINE_MS);
+  try {
+    await Promise.race([
+      webpush.sendNotification(subscription, body, { timeout: WEB_PUSH_DEADLINE_MS, agent }),
+      aborted,
+    ]);
+  } finally {
+    clearTimeout(timer);
+    agent.destroy();
+  }
+}
+
 /** Recipients per consent read; one preference row each, so a chunk cannot reach the row cap. */
 const PREFERENCE_CHUNK = 100;
 
@@ -306,10 +395,12 @@ async function blockedPushRecipients(supabase: DB, userIds: string[]): Promise<S
 }
 
 /** Private fanout for a batch whose permission reads have already succeeded. */
-async function sendPermittedPushes(supabase: DB, userIds: string[], payload: PushPayload, receipts?: DeliveryReceipts, familyId?: string): Promise<DeliveryResult> {
+async function sendPermittedPushes(
+  supabase: DB, userIds: string[], payload: PushPayload, receipts?: DeliveryReceipts, familyId?: string, budget?: DispatchBudget,
+): Promise<DeliveryResult> {
   const totals: DeliveryResult = { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 };
   for (const uid of [...new Set(userIds)]) {
-    const r = await sendPushDevicesToUser(supabase, uid, payload, receipts, familyId);
+    const r = await sendPushDevicesToUser(supabase, uid, payload, receipts, familyId, budget);
     totals.sent += r.sent; totals.skipped += r.skipped; totals.failed += r.failed; totals.pruned += r.pruned;
     totals.withheld += r.withheld;
     if (r.familyReadFailed) totals.familyReadFailed = true;
@@ -382,8 +473,12 @@ function parsePushCursor(value: unknown): PushCursor | null {
  */
 export async function dispatchPendingPushes(
   supabase: DB,
-  opts: { familyId?: string; limit?: number; now?: Date } = {},
+  opts: { familyId?: string; limit?: number; now?: Date; budgetMs?: number } = {},
 ): Promise<{ notifications: number; result: PushResult }> {
+  // The whole run's sending time, so one recipient's devices cannot spend all
+  // of it (PUSH_DISPATCH_BUDGET_MS). Wall-clock, not `opts.now`, which only
+  // decides what is due.
+  const budget: DispatchBudget = { endsAt: Date.now() + (opts.budgetMs ?? PUSH_DISPATCH_BUDGET_MS), stalled: new Set() };
   const limit = opts.limit ?? 200;
   if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new Error('Push batch limit must be an integer from 1 to 200.');
   const cursorKey = `push_dispatch_cursor:v1:${opts.familyId ? `family:${opts.familyId}` : 'global'}`;
@@ -516,7 +611,7 @@ export async function dispatchPendingPushes(
       notificationId: n.id,
       delivered: receipts.byNotification.get(n.id) ?? new Set<string>(),
       store: receipts.store,
-    }, n.family_id);
+    }, n.family_id, budget);
     totals.sent += r.sent; totals.skipped += r.skipped; totals.failed += r.failed; totals.pruned += r.pruned;
     totals.withheld += addressed.length - recipients.length + r.withheld;
     // Missing credentials/invalid registration are not intentional opt-outs.
