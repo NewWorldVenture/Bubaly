@@ -129,3 +129,72 @@ describe('S12: a bought amount is never added across units', () => {
     expect(pantry()).toEqual([{ name: 'Oats', quantity: 2, unit: 'lb' }]);
   });
 });
+
+// AUD-1041-PANTRY-UNIT-CAS. The put-away is a read, a judgement and a
+// conditional write, and an editor can change the row in between. The units
+// are judged against the row each attempt writes over, and the write holds only
+// while the row keeps the quantity AND the unit it was judged against.
+describe('a put-away is judged against the row it writes, whatever an editor changed meanwhile', () => {
+  /**
+   * Change the pantry row once, as the put-away's first write is made: after
+   * its read and its judgement, before the write's conditions are checked.
+   */
+  function editBeforeTheWrite(edit: Record<string, unknown>) {
+    let done = false;
+    mocks.createServer.mockResolvedValue(new Proxy(db, {
+      get(target, property) {
+        const value = Reflect.get(target, property);
+        if (property !== 'from') return typeof value === 'function' ? value.bind(target) : value;
+        return (table: string) => {
+          const builder = target.from(table) as unknown as { update: (patch: unknown) => unknown };
+          if (table !== 'pantry_items') return builder;
+          const update = builder.update.bind(builder);
+          builder.update = (patch: unknown) => {
+            if (!done) {
+              done = true;
+              Object.assign(db.table('pantry_items').find((row) => row.id === 'p-rice')!, edit);
+            }
+            return update(patch);
+          };
+          return builder;
+        };
+      },
+    }));
+  }
+
+  it.each([
+    ['a unit-only edit', { unit: 'cup' }, { quantity: 3, unit: 'cup' }],
+    ['a quantity and unit edit', { quantity: 2, unit: 'cups' }, { quantity: 2, unit: 'cups' }],
+  ])('%s to cups leaves the bought kilogram out of the cups, and says so', async (_label, edit, after) => {
+    db.seed('pantry_items', [{ id: 'p-rice', family_id: FAMILY, name: 'Rice', quantity: 3, unit: 'kg' }]);
+    bought('Rice', '1 kg');
+    editBeforeTheWrite(edit);
+
+    const result = await recordShoppingTripAction({ listId: LIST });
+
+    expect(result).toMatchObject({ ok: true, pantryUpdated: [], unitMismatch: [{ name: 'Rice', bought: 'kg', stocked: after.unit }] });
+    expect(pantry()).toEqual([{ name: 'Rice', ...after }]);
+  });
+
+  it('a row with no unit that an editor gives one is not relabelled with the bought unit', async () => {
+    db.seed('pantry_items', [{ id: 'p-rice', family_id: FAMILY, name: 'Rice', quantity: 3, unit: null }]);
+    bought('Rice', '1 kg');
+    editBeforeTheWrite({ unit: 'cup' });
+
+    const result = await recordShoppingTripAction({ listId: LIST });
+
+    expect(result).toMatchObject({ ok: true, pantryUpdated: [], unitMismatch: [{ name: 'Rice', bought: 'kg', stocked: 'cup' }] });
+    expect(pantry()).toEqual([{ name: 'Rice', quantity: 3, unit: 'cup' }]);
+  });
+
+  it('control: a same-unit edit meanwhile is counted on top of, not over', async () => {
+    db.seed('pantry_items', [{ id: 'p-rice', family_id: FAMILY, name: 'Rice', quantity: 3, unit: 'kg' }]);
+    bought('Rice', '1 kg');
+    editBeforeTheWrite({ quantity: 5 });
+
+    const result = await recordShoppingTripAction({ listId: LIST });
+
+    expect(result).toMatchObject({ ok: true, unitMismatch: [] });
+    expect(pantry()).toEqual([{ name: 'Rice', quantity: 6, unit: 'kg' }]);
+  });
+});

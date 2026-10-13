@@ -846,17 +846,14 @@ export async function pantryAdjust(
   // the family can count it — and a delta never relabels the row's unit. A row
   // with no unit yet takes the bought one, and a unitless delta counts in the
   // row's own unit, as it always has.
+  //
+  // The units are judged against the row as it stands on EACH attempt below,
+  // not once against the first read: an editor changing "3 kg" to "2 cups"
+  // between the read and the write would otherwise have the retry add the
+  // bought kilogram to the cups.
   const incomingUnit = input.unit?.trim() || null;
-  const stockedUnit = existing.unit?.trim() || null;
-  if (isDelta && incomingUnit && stockedUnit && !sameUnit(incomingUnit, stockedUnit)) {
-    return ok({ item: existing, created: false, unitMismatch: { bought: incomingUnit, stocked: stockedUnit } });
-  }
-  const nextQuantity = input.quantity != null
-    ? input.quantity
-    : input.delta != null ? Math.max(0, Number(existing.quantity ?? 0) + input.delta) : undefined;
   const patch: Partial<{ quantity: number; unit: string | null; location: PantryLocation; expires_at: string | null }> = {};
-  if (nextQuantity !== undefined) patch.quantity = nextQuantity;
-  if (input.unit !== undefined && input.unit !== null && !(isDelta && stockedUnit)) patch.unit = input.unit.trim() || null;
+  if (input.quantity != null) patch.quantity = input.quantity;
   if (isPantryLocation(input.location)) patch.location = input.location;
   if (input.expiresAt) patch.expires_at = input.expiresAt;
 
@@ -870,14 +867,26 @@ export async function pantryAdjust(
   let current = existing;
 
   for (let attempt = 0; attempt < 4; attempt += 1) {
+    const stockedUnit = current.unit?.trim() || null;
+    if (isDelta && incomingUnit && stockedUnit && !sameUnit(incomingUnit, stockedUnit)) {
+      return ok({ item: current, created: false, unitMismatch: { bought: incomingUnit, stocked: stockedUnit } });
+    }
     if (isDelta) patch.quantity = Math.max(0, Number(current.quantity ?? 0) + (input.delta ?? 0));
+    if (input.unit !== undefined && input.unit !== null && !(isDelta && stockedUnit)) patch.unit = input.unit.trim() || null;
+    else delete patch.unit;
 
     let write = scope.db
       .from('pantry_items')
       .update(patch)
       .eq('family_id', scope.familyId)
       .eq('id', current.id);
-    if (isDelta) write = write.eq('quantity', current.quantity as number);
+    // A delta is written only while the row still holds the quantity AND the
+    // unit it was judged against: a unit-only edit ("3 kg" to "3 cups") leaves
+    // the quantity as it was, and a quantity fence alone let the kilogram in.
+    if (isDelta) {
+      write = write.eq('quantity', current.quantity as number);
+      write = current.unit == null ? write.is('unit', null) : write.eq('unit', current.unit);
+    }
 
     const { data, error } = await write.select('*').maybeSingle();
     if (error) {
