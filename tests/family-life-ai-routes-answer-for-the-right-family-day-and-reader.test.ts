@@ -42,6 +42,11 @@ vi.mock('@/lib/ai/provider', async (importOriginal) => ({
 }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
 vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: h.entitled, refuseIfLocked: h.locked }));
+// The account-standing gate (a closed or trial-ended family is refused) has its
+// own test, tests/the-free-ai-helpers-refuse-a-closed-or-trial-ended-family.test.ts.
+// The family here is open, so the gate is answered rather than seeded; these
+// cases are about the plan gate and the lock behind it.
+vi.mock('@/lib/server/account-standing', () => ({ refuseClosedOrTrialEnded: async () => null }));
 vi.mock('@/lib/server/audit', () => ({ logAudit: async () => {} }));
 vi.mock('@/lib/ai/observability', () => ({
   withAiRequest: (_s: unknown, _f: unknown, run: (o: { used: () => void; failed: (e: unknown) => void }) => unknown) => run({ used: () => {}, failed: h.failed }),
