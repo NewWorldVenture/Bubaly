@@ -16,7 +16,7 @@
 import 'server-only';
 import { z } from 'zod';
 import { addFromMealPlan } from '@/lib/services/groceries';
-import { foodProfile, getMealPlan, listRecipes, planWeek, setSlot, type PlanSlot } from '@/lib/services/meals';
+import { foodProfile, getMealPlan, listRecipes, planWeek, setSlot, type Ingredient, type PlanSlot } from '@/lib/services/meals';
 import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { defineTool, plural, type ToolDefinition } from './types';
@@ -47,6 +47,26 @@ function describeDayKey(key: string): string {
   const ms = Date.parse(`${key}T12:00:00Z`);
   if (!Number.isFinite(ms)) return key;
   return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric' }).format(new Date(ms));
+}
+
+/**
+ * The ingredient list to hand the meals service, or none at all.
+ *
+ * The service reads a list, even an empty one, as "this exact variant of the
+ * dish", and no list as "whichever dish has that name". Sending `[]` whenever
+ * the model wrote nothing refused every slot naming a saved meal by id (a meal
+ * id with a list is a contradiction) and, for a name, missed the family's own
+ * dish and planned a new, empty copy of it, which then added nothing to the
+ * shopping list. A saved meal brings its own ingredients, so a list is passed
+ * only for a dish named, and only when the model wrote one, as the planner
+ * route (`app/api/ai/meals/plan/route.ts`) already does.
+ */
+function ingredientsFromModel(
+  mealId: string | null | undefined,
+  list: z.infer<typeof ingredientInput>[] | null | undefined,
+): Ingredient[] | undefined {
+  if (mealId || !list?.length) return undefined;
+  return list.map((i) => ({ name: i.name, quantity: i.quantity ?? null, unit: i.unit ?? null }));
 }
 
 const planEntryInput = z.object({
@@ -213,7 +233,7 @@ export const mealTools: ToolDefinition[] = [
         mealType: input.meal_type ?? 'dinner',
         mealId: input.meal_id ?? null,
         mealName: mealName || null,
-        ingredients: (input.ingredients ?? []).map((i) => ({ name: i.name, quantity: i.quantity ?? null, unit: i.unit ?? null })),
+        ingredients: ingredientsFromModel(input.meal_id, input.ingredients),
       });
       if (!res.ok) return res;
       return ok({ ...toSlotOutput(res.data), replaced: res.data.replaced });
@@ -278,7 +298,7 @@ export const mealTools: ToolDefinition[] = [
         mealType: e.meal_type ?? 'dinner',
         mealId: e.meal_id ?? null,
         mealName: e.meal_name ?? null,
-        ingredients: (e.ingredients ?? []).map((i) => ({ name: i.name, quantity: i.quantity ?? null, unit: i.unit ?? null })),
+        ingredients: ingredientsFromModel(e.meal_id, e.ingredients),
       })));
       if (!res.ok) return res;
       return ok({ planned: res.data.planned.map(toSlotOutput), replaced: res.data.replaced, created_meals: res.data.createdMeals });
