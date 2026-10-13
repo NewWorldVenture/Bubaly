@@ -17027,5 +17027,9 @@
   "savings.overYourWeeklyBudget": "You're {amount} over your weekly {category} budget.",
   "savings.overYourMonthlyBudget": "You're {amount} over your monthly {category} budget.",
   "savings.overYourYearlyBudget": "You're {amount} over your yearly {category} budget.",
-  "budgetAnalysisCard.monthsBudgetedSpending": "{month} · the month's budgeted spending, weekly and yearly limits as their monthly share"
+  "budgetAnalysisCard.monthsBudgetedSpending": "{month} · the month's budgeted spending, weekly and yearly limits as their monthly share",
+  "mobileAssistant.periodWeekly": "Weekly",
+  "mobileAssistant.periodMonthly": "Monthly",
+  "mobileAssistant.periodYearly": "Yearly",
+  "mobileAssistant.monthsBudgetedSpending": "{month} · the month's budgeted spending, weekly and yearly limits as their monthly share"
 }

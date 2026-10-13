@@ -11,10 +11,12 @@ import type { BudgetRow, ExpenseRow } from '@/lib/operating-index/inputs';
 // amounts, so an echo translator is enough; what a reader actually sees is in
 // tests/a-german-family-reads-engine-money-in-their-own-format.test.ts.
 const echo = (key: string, params?: Record<string, string | number>) => `${key} ${JSON.stringify(params ?? {})}`;
-const drift = (budgets: BudgetRow[], expenses: ExpenseRow[], now: Date) => detectBudgetDrift(budgets, expenses, now, 'en-US', echo);
+const drift = (budgets: BudgetRow[], expenses: ExpenseRow[], today: string) => detectBudgetDrift(budgets, expenses, today, 'en-US', echo);
 const hardSignals = (inp: HardSignalInputs, now: Date) => buildHardSignals(inp, now, 'en-US', echo);
 
 const NOW = new Date('2026-07-07T12:00:00.000Z'); // Tuesday
+// The family's day at NOW: each budget's period is judged on it.
+const TODAY = '2026-07-07';
 const past = (h: number) => new Date(NOW.getTime() - h * 3600_000).toISOString();
 
 describe('detectIgnoredReminders', () => {
@@ -120,6 +122,7 @@ describe('buildHardSignals', () => {
       ],
       routines: [{ id: 'r1', name: 'Bedtime', weekdayMask: 0b1111111 }],
       routineCompletions: [],
+      today: TODAY,
     }, NOW);
     const kinds = new Set(sigs.map((s) => s.kind));
     expect(kinds.has('ignored_reminder')).toBe(true);
@@ -132,15 +135,17 @@ describe('buildHardSignals', () => {
 });
 
 describe('detectBudgetDrift', () => {
-  // NOW is 2026-07-07 (July). Monthly current period starts 2026-07-01; prior 2026-06-01.
-  const budget = (category: string, amount: number, period: BudgetRow['period'] = 'monthly'): BudgetRow => ({ category, amount, period });
+  // TODAY is 2026-07-07 (July). Monthly current period is 2026-07-01..31; prior 2026-06-01..30.
+  let seq = 0;
+  const budget = (category: string, amount: number, period: BudgetRow['period'] = 'monthly', created_at = '2026-01-01T00:00:00Z'): BudgetRow =>
+    ({ id: `b-${++seq}`, category, amount, period, created_at });
   const exp = (category: string, amount: number, date: string): ExpenseRow => ({ category, amount, date });
 
   it('flags a category over its monthly cap this period', () => {
     const sigs = drift(
       [budget('Groceries', 500)],
       [exp('Groceries', 400, '2026-07-03'), exp('groceries', 200, '2026-07-06')], // $600 > $500
-      NOW,
+      TODAY,
     );
     expect(sigs).toHaveLength(1);
     expect(sigs[0]).toMatchObject({ kind: 'budget_drift', subjectKey: 'budget:groceries' });
@@ -150,15 +155,15 @@ describe('detectBudgetDrift', () => {
   });
 
   it('does not flag a category within its cap', () => {
-    expect(drift([budget('Dining', 300)], [exp('Dining', 120, '2026-07-02')], NOW)).toHaveLength(0);
+    expect(drift([budget('Dining', 300)], [exp('Dining', 120, '2026-07-02')], TODAY)).toHaveLength(0);
   });
 
   it('scores higher + marks recurring when the prior period was also over', () => {
-    const oneOff = drift([budget('Gas', 100)], [exp('Gas', 120, '2026-07-04')], NOW)[0];
+    const oneOff = drift([budget('Gas', 100)], [exp('Gas', 120, '2026-07-04')], TODAY)[0];
     const recurring = drift(
       [budget('Gas', 100)],
       [exp('Gas', 120, '2026-07-04'), exp('Gas', 150, '2026-06-15')], // prior month over too
-      NOW,
+      TODAY,
     )[0];
     expect(oneOff.evidence.recurring).toBe(false);
     expect(recurring.evidence.recurring).toBe(true);
@@ -167,17 +172,40 @@ describe('detectBudgetDrift', () => {
   });
 
   it('ignores zero/negative budgets and matches categories case-insensitively', () => {
-    expect(drift([budget('X', 0)], [exp('X', 50, '2026-07-01')], NOW)).toHaveLength(0);
-    const s = drift([budget('KIDS', 50)], [exp('kids', 90, '2026-07-02')], NOW);
+    expect(drift([budget('X', 0)], [exp('X', 50, '2026-07-01')], TODAY)).toHaveLength(0);
+    const s = drift([budget('KIDS', 50)], [exp('kids', 90, '2026-07-02')], TODAY);
     expect(s).toHaveLength(1);
   });
 
   it('is included in buildHardSignals', () => {
     const sigs = hardSignals(
       { reminders: [], events: [], conflicts: [], overdue: [], chores: [], routines: [], routineCompletions: [],
-        budgets: [budget('Fun', 40)], expenses: [exp('Fun', 90, '2026-07-05')] },
+        budgets: [budget('Fun', 40)], expenses: [exp('Fun', 90, '2026-07-05')], today: TODAY },
       NOW,
     );
     expect(sigs.some((s) => s.kind === 'budget_drift')).toBe(true);
+  });
+
+  it('stops at the end of the period: next month\'s scheduled rent is not this month\'s drift', () => {
+    expect(drift([budget('Housing', 2000)], [exp('Housing', 2000, '2026-07-01'), exp('Housing', 2000, '2026-08-01')], TODAY)).toHaveLength(0);
+  });
+
+  it('judges a week Sunday to Saturday, and the week before it as the prior period', () => {
+    // Tuesday 7 July: this week is Sunday 5th to Saturday 11th; last week, 28 June to 4 July.
+    const sigs = drift(
+      [budget('Fun', 100, 'weekly')],
+      [exp('Fun', 120, '2026-07-05'), exp('Fun', 130, '2026-06-28'), exp('Fun', 500, '2026-06-27')],
+      TODAY,
+    );
+    expect(sigs).toHaveLength(1);
+    expect(sigs[0].evidence).toMatchObject({ period: 'weekly', spent: 120, priorSpent: 130, recurring: true });
+  });
+
+  it('judges one budget per category, the oldest, not a later duplicate', () => {
+    const budgets = [budget('Housing', 2500), budget('housing', 100, 'monthly', '2026-06-01T00:00:00Z')];
+    expect(drift(budgets, [exp('Housing', 2000, '2026-07-01')], TODAY)).toHaveLength(0);
+    const over = drift(budgets, [exp('Housing', 2600, '2026-07-01')], TODAY);
+    expect(over).toHaveLength(1);
+    expect(over[0].evidence).toMatchObject({ category: 'Housing', limit: 2500, spent: 2600 });
   });
 });

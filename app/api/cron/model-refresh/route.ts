@@ -81,7 +81,7 @@ export async function GET(req: NextRequest) {
         const prep = await runPrepGeneration(supabase, fam.id, null, fam.timezone || 'UTC', now);
         // R10: keep the hard-signal family intelligence current too. Non-fatal —
         // a signal-detection hiccup must not fail the twin/prep refresh.
-        try { await runSignalDetection(supabase, fam.id, SIGNAL_LOCALE, signalText, now); } catch (e) { console.error(`Signal detection failed for ${fam.id}:`, e); }
+        try { await runSignalDetection(supabase, fam.id, SIGNAL_LOCALE, signalText, now, fam.timezone || 'UTC'); } catch (e) { console.error(`Signal detection failed for ${fam.id}:`, e); }
         let ok = twin.ok && prep.ok;
         let dirtyWriteFailed = false;
         // Clear the dirty flag once a refresh succeeds.

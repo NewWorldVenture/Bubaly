@@ -32,6 +32,10 @@ import { resetHookSlots } from './helpers/hook-slots';
 //   M13-SIB Finances        the month was summed from the newest-500 list, and
 //                           every duplicate budget row's limit was in the bar:
 //                           the default view disagreed with ?view=manage.
+//   SUMMED-READ-SIB-PAYMENTS
+//          Payments         the same newest-500 list was the "this month" tiles
+//                           on /dashboard/payments, next month's scheduled rows
+//                           first in it.
 
 type Fetcher = (client: unknown) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>;
 
@@ -107,6 +111,8 @@ const { FinancesModule } = await import('@/components/modules/finances-module');
 const { WalletHub } = await import('@/components/wallet/wallet-hub');
 // /dashboard/billing?view=manage
 const { BillingModule } = await import('@/components/modules/billing-module');
+// /dashboard/payments
+const { PaymentsView } = await import('@/components/finance/payments-view');
 
 const t = (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params);
 const FAMILY = h.app.familyId;
@@ -301,6 +307,55 @@ describe('M13-SIB-FIN-CAP — the Finances view adds up every row of the month',
     const tree = await show(() => createElement(FinancesModule));
     expect(has(tree, t('financesModule.couldNotLoadFinancialData'))).toBe(true);
     expect(has(tree, t('financesModule.stat.expenses'))).toBe(false);
+  });
+});
+
+// SUMMED-READ-SIB-PAYMENTS: /dashboard/payments summed its "this month" tiles
+// from its newest-500 list, ordered by date, where next month's scheduled rows
+// come first: past 500 rows a month, In, Out, Net and the count were part of
+// the month, while Finances, reading the month whole, said otherwise.
+describe('SUMMED-READ-SIB-PAYMENTS — the Payments tiles add up every row of the month', () => {
+  /** A Payments stat tile's figure, found by the label under it. */
+  function figure(tree: ReactNode, label: string): string {
+    const cards = nodes(tree).filter((n) => n.props.className === 'stat-card' && text(n).endsWith(label));
+    if (cards.length !== 1) throw new Error(`no tile labelled ${label}`);
+    const value = nodes(cards[0]).find((n) => String(n.props.className ?? '').includes('tabular-nums'));
+    return text(value);
+  }
+
+  it('past 500 rows this month, In, Out, Net and the count are all of them, and next month\'s rent is in none', async () => {
+    // 600 October shops of $1, past the newest-500 list; an October salary
+    // older than most of them; next month's scheduled rent, first in the list.
+    db.seed('transactions', Array.from({ length: 600 }, (_, i) => txn(`2026-10-${String(1 + (i % 13)).padStart(2, '0')}`, 1, 'Groceries')));
+    db.seed('transactions', [txn('2026-10-01', 250, 'Salary', { type: 'income' })]);
+    db.seed('transactions', Array.from({ length: 30 }, () => txn('2026-11-01', 100, 'Housing', { status: 'scheduled' })));
+
+    const tree = await show(() => createElement(PaymentsView));
+    expect(figure(tree, 'Out · this month')).toBe('-$600.00');
+    expect(figure(tree, 'In · this month')).toBe('+$250.00');
+    expect(figure(tree, 'Net')).toBe('-$350.00');
+    expect(figure(tree, 'Transactions')).toBe('601');
+  });
+
+  it('a member who reads only their own spending is shown all of their own month, and none of the household\'s', async () => {
+    (h.app as Record<string, unknown>).role = 'teen';
+    h.app.selfMember = { ...h.app.members[2], family_id: FAMILY };
+    db.seed('transactions', Array.from({ length: 600 }, (_, i) => txn(`2026-10-${String(1 + (i % 13)).padStart(2, '0')}`, 1, 'Snacks', { member_id: 'member-3' })));
+    db.seed('transactions', Array.from({ length: 10 }, () => txn('2026-11-01', 20, 'Snacks', { member_id: 'member-3', status: 'scheduled' })));
+    // The household's month, tagged to nobody and to a parent: not the teen's.
+    db.seed('transactions', Array.from({ length: 200 }, (_, i) => txn('2026-10-05', 50, 'Groceries', { member_id: i % 2 ? PARENT : null })));
+
+    const tree = await show(() => createElement(PaymentsView));
+    expect(has(tree, t('householdMoney.onlyYourOwnSpending'))).toBe(true);
+    expect(figure(tree, 'Out · this month')).toBe('-$600.00');
+    expect(figure(tree, 'Transactions')).toBe('600');
+  });
+
+  it('a month past the read\'s ceiling is the error state, not a smaller total', async () => {
+    db.seed('transactions', Array.from({ length: 50_001 }, () => txn('2026-10-05', 1, 'Groceries')));
+    const tree = await show(() => createElement(PaymentsView));
+    expect(has(tree, t('paymentsView.couldNotLoadPayments'))).toBe(true);
+    expect(nodes(tree).some((n) => n.props.className === 'stat-card')).toBe(false);
   });
 });
 

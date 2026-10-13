@@ -244,7 +244,10 @@ describe('the screens say whose the household\'s money is', () => {
     // for them only past its gate (TWIN-SIB: the projection's Cost line too).
     expect(twin).toContain(".from('budgets').select('id, category, amount, period, created_at')");
     expect(at(twin, 'if (!readsHouseholdMoney(ctx.active.role)) {')).toBeLessThan(at(twin, 'await budgetHeadroom(supabase, familyId, input.category,'));
-    expect(at(twin, 'if (checksCost && !readsHouseholdMoney(ctx.active.role)) {')).toBeLessThan(at(twin, '? budgetHeadroom(supabase, familyId, input.costCategory!,'));
+    // The projection keeps its schedule, load and conflicts for anyone, and
+    // reads the Cost line's budget only for a reader of household money.
+    expect(twin).toContain('const seesCost = readsHouseholdMoney(ctx.active.role);');
+    expect(at(twin, 'const checksCost = seesCost && !!input.costCategory && costCents > 0;')).toBeLessThan(at(twin, 'checksCost\n      ? budgetHeadroom(supabase, familyId, input.costCategory!,'));
     const intel = read('app/(app)/dashboard/intelligence/page.tsx');
     expect(intel).toContain('typicalWeeklySpend: seesSpending ? typicalWeeklySpend(');
     expect(intel).toContain(': Promise.resolve({ data: [] as { amount: number }[], error: null }),');

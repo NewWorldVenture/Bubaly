@@ -12,8 +12,14 @@ import { usd as usdIn, fmtDueDate as fmtDueDateIn } from '@/lib/finance/hub';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import { readsHouseholdMoney, transactionsInScope } from '@/lib/finance/household-money';
+import { periodWindow } from '@/lib/finance/budget-periods';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 
 type Txn = Tables<'transactions'>;
+/** The columns the "this month" tiles are summed from. */
+type MonthTxn = Pick<Txn, 'id' | 'type' | 'amount' | 'member_id' | 'date'>;
+/** A real ceiling: a month past it is a failed read, never a smaller total. */
+const MONTH_TXN_MAX = 50_000;
 const FILTERS = ['all', 'income', 'expense', 'transfer'] as const;
 
 export function PaymentsView() {
@@ -32,6 +38,29 @@ export function PaymentsView() {
   const seesAll = readsHouseholdMoney(role);
   const selfId = selfMember?.id ?? null;
 
+  // The FAMILY's month (TIME-003), both ends.
+  const thisMonth = periodWindow('monthly', clock.todayKey());
+  // The TILES: every transaction dated in the family's month, read whole. They
+  // were summed from the list below, the newest 500 by date, where next month's
+  // scheduled rows come first: past 500, "Out · this month", the net and the
+  // count were part of the month, and Finances said otherwise. Bounded at both
+  // ends, narrowed to a member's own as the list is, and paged on the id, so a
+  // row written between pages is not counted twice. Past the ceiling the read
+  // fails and the page shows its error, not a smaller total.
+  const { data: monthRows, loading: monthLoading, error: monthError, stale: monthStale, refresh: refreshMonth } = useRealtimeQuery<MonthTxn>({
+    table: 'transactions', familyId, deps: [familyId, role, selfId, thisMonth.from, thisMonth.to],
+    fetcher: (sb) => {
+      if (!seesAll && !selfId) return Promise.resolve({ data: [] as MonthTxn[], error: null });
+      return readAllByIdAsQuery<MonthTxn>((after, limit) => {
+        let query = sb.from('transactions').select('id, type, amount, member_id, date')
+          .eq('family_id', familyId).gte('date', thisMonth.from).lte('date', thisMonth.to);
+        if (!seesAll) query = query.eq('member_id', selfId!);
+        if (after) query = query.gt('id', after);
+        return query.order('id').limit(limit);
+      }, { max: MONTH_TXN_MAX });
+    },
+  });
+  // The LIST: the newest transactions, as the page lists them. Nothing is summed from it.
   const { data: rows, loading, error: readError, stale, refresh } = useRealtimeQuery<Txn>({
     table: 'transactions', familyId, deps: [familyId, role, selfId],
     fetcher: (sb) => {
@@ -62,20 +91,19 @@ export function PaymentsView() {
     return [...m.entries()];
   }, [filtered]);
 
-  // This-month summary from ALL transactions (not the filtered view), so the
-  // tiles stay stable while searching.
+  // This-month summary from the whole month's read (not the filtered view), so
+  // the tiles stay stable while searching.
   const summary = useMemo(() => {
-    // The FAMILY's month (TIME-003), not Greenwich's.
-    const key = clock.todayKey().slice(0, 7);
     let income = 0, expense = 0, count = 0;
-    for (const t of txns) {
-      if (!t.date.startsWith(key)) continue;
+    for (const t of transactionsInScope(monthRows ?? [], role, selfId)) {
       count++;
       const amt = Math.abs(Number(t.amount));
       if (t.type === 'income') income += amt; else if (t.type === 'expense') expense += amt;
     }
     return { income, expense, net: income - expense, count };
-  }, [txns, clock]);
+  }, [monthRows, role, selfId]);
+  // Either read failing is the page's error: the tiles never stand on part of the month.
+  const failed = readError || monthError;
 
   const monthTotal = (items: Txn[]) =>
     items.reduce((s, t) => s + (t.type === 'income' ? 1 : -1) * Math.abs(Number(t.amount)), 0);
@@ -90,7 +118,7 @@ export function PaymentsView() {
           waits for a verified read rather than stating a figure it does not
           have. One gate, here — no second placeholder inside the tiles, which
           this gate would make unreachable anyway. */}
-      {!loading && !stale && !readError && <div className="grid-stats">
+      {!loading && !stale && !monthLoading && !monthStale && !failed && <div className="grid-stats">
         {[
           { label: 'In · this month', value: `+${usd(summary.income)}`, icon: '📥', color: 'text-emerald-400' },
           { label: 'Out · this month', value: `-${usd(summary.expense)}`, icon: '📤', color: 'text-fg' },
@@ -121,8 +149,8 @@ export function PaymentsView() {
         </div>
       </div>
 
-      {readError ? (
-        <ErrorState message={tr('paymentsView.couldNotLoadPayments')} onRetry={() => { void refresh(); }} />
+      {failed ? (
+        <ErrorState message={tr('paymentsView.couldNotLoadPayments')} onRetry={() => { void refresh(); void refreshMonth(); }} />
       ) : loading || stale ? <SkeletonList /> : filtered.length === 0 ? (
         <EmptyState icon={History} title={tr('payments.noPayments')} description={q || filter !== 'all' ? 'No transactions match your filters.' : 'Transactions will appear here as they are added.'} />
       ) : (

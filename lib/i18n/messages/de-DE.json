@@ -17027,5 +17027,9 @@
   "savings.overYourWeeklyBudget": "Du liegst {amount} über deinem wöchentlichen Budget für {category}.",
   "savings.overYourMonthlyBudget": "Du liegst {amount} über deinem monatlichen Budget für {category}.",
   "savings.overYourYearlyBudget": "Du liegst {amount} über deinem jährlichen Budget für {category}.",
-  "budgetAnalysisCard.monthsBudgetedSpending": "{month} · die budgetierten Ausgaben des Monats, Wochen- und Jahresbudgets als ihr Monatsanteil"
+  "budgetAnalysisCard.monthsBudgetedSpending": "{month} · die budgetierten Ausgaben des Monats, Wochen- und Jahresbudgets als ihr Monatsanteil",
+  "mobileAssistant.periodWeekly": "Wöchentlich",
+  "mobileAssistant.periodMonthly": "Monatlich",
+  "mobileAssistant.periodYearly": "Jährlich",
+  "mobileAssistant.monthsBudgetedSpending": "{month} · die budgetierten Ausgaben des Monats, Wochen- und Jahresbudgets als ihr Monatsanteil"
 }

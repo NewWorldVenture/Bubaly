@@ -12,11 +12,12 @@ import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
 import {
   buildHardSignals, type HardSignalInputs, type ReminderRow, type ChoreRow, type RoutineRow, type RoutineCompletion,
 } from './hard-signals';
-import type { BudgetRow, ExpenseRow } from '@/lib/operating-index/inputs';
+import { budgetWindowSpan, type BudgetRow, type ExpenseRow } from '@/lib/operating-index/inputs';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { describeActionError } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAllAsQuery, readAllByIdAsQuery } from '@/lib/supabase/read-all';
+import { dayKeyInTz } from '@/lib/services/scope';
 
 type DB = SupabaseClient<Database>;
 type Translate = (key: string, params?: Record<string, string | number>) => string;
@@ -37,14 +38,25 @@ const DAY = 86_400_000;
  * Neither writer's words are trusted by a reader: the family-signals page and
  * the reasoning report word budget drift again from `evidence` for theirs, and
  * the proactive AI context in en-US (signalWordsFor in ./hard-signals).
+ *
+ * `tz` is the family's IANA zone, required for the same reason as `locale`:
+ * budget drift judges each budget in its own period on the FAMILY's day, and
+ * every caller has the family in hand (`ctx.active.family.timezone`, the
+ * cron's `fam.timezone`). A silent 'UTC' default would answer Greenwich's day.
  */
-export async function runSignalDetection(sb: DB, familyId: string, locale: LocaleCode, t: Translate, now: Date = new Date()): Promise<SignalDetectionResult> {
+export async function runSignalDetection(sb: DB, familyId: string, locale: LocaleCode, t: Translate, now: Date, tz: string): Promise<SignalDetectionResult> {
   const since90 = new Date(now.getTime() - 90 * DAY).toISOString();
   const windowStart = new Date(now.getTime() - 21 * DAY).toISOString();
   const windowEnd = new Date(now.getTime() + 14 * DAY).toISOString();
 
-  // Budget drift needs this-year expenses so weekly/monthly/yearly windows resolve.
-  const yearStart = `${now.getUTCFullYear()}-01-01`;
+  // Budget drift: every expense dated in any budget's current period on the
+  // family's day, both ends (budgetWindowSpan), as the Operating Index reads
+  // them. It began on Greenwich's 1 January and had no end, so next month's
+  // scheduled rent was this month's drift. A prior period reaching before the
+  // span (the year before; December in early January) is counted from what is
+  // read, as it was from 1 January.
+  const today = dayKeyInTz(now, tz);
+  const budgetSpan = budgetWindowSpan(today);
 
   // ── Read sources in parallel ──
   const [reminders, events, choreRows, routines, budgetsRes, expensesRes] = await settleAll([
@@ -65,8 +77,16 @@ export async function runSignalDetection(sb: DB, familyId: string, locale: Local
       .order('id').range(from, to), { max: 2000 }),
     sb.from('routine_templates')
       .select('id, name, weekday_mask').eq('family_id', familyId).eq('is_active', true).limit(200),
-    sb.from('budgets').select('category, amount, period').eq('family_id', familyId).limit(200),
-    readAllAsQuery((from, to) => sb.from('transactions').select('category, amount, date').eq('family_id', familyId).eq('type', 'expense').gte('date', yearStart).order('id').range(from, to), { max: 5000 }),
+    // `id` and `created_at` pick the budget the family keeps per category (budgetByCategory).
+    sb.from('budgets').select('id, category, amount, period, created_at').eq('family_id', familyId).limit(200),
+    // Summed, so paged on the id: an offset page of a table written to mid-read
+    // repeats a row, and a repeated row is drift. Past the ceiling the scan fails.
+    readAllByIdAsQuery<ExpenseRow & { id: string }>((after, limit) => {
+      let query = sb.from('transactions').select('id, category, amount, date')
+        .eq('family_id', familyId).eq('type', 'expense').gte('date', budgetSpan.from).lte('date', budgetSpan.to);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: 5000 }),
   ]);
   const sourceError = [reminders, events, choreRows, routines, budgetsRes, expensesRes].find((result) => result.error)?.error;
   if (sourceError) {
@@ -109,8 +129,9 @@ export async function runSignalDetection(sb: DB, familyId: string, locale: Local
   const inputs: HardSignalInputs = {
     reminders: reminderRows, events: stressEvents, conflicts, overdue,
     chores, routines: routineRows, routineCompletions,
-    budgets: (budgetsRes.data ?? []) as BudgetRow[],
-    expenses: (expensesRes.data ?? []) as ExpenseRow[],
+    budgets: (budgetsRes.data ?? []).map((b) => ({ ...b, amount: Number(b.amount) })) as BudgetRow[],
+    expenses: expensesRes.data ?? [],
+    today,
   };
   const signals = buildHardSignals(inputs, now, locale, t);
 
