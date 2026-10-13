@@ -279,6 +279,8 @@
   "actions.couldNotRemoveThatTransaction": "Impossibile rimuovere quella transazione.",
   "actions.couldNotRemoveTheDocument": "Impossibile rimuovere il documento dall’archivio.",
   "actions.couldNotReopenThatVote": "Non è stato possibile riaprire questa votazione. Aggiorna e riprova.",
+  "actions.thatVoteIsClosed": "Questa votazione è chiusa, quindi il tuo voto non è stato conteggiato. Aggiorna per vedere il risultato.",
+  "actions.couldNotRecordYourVote": "Non è stato possibile registrare il tuo voto. Aggiorna e riprova.",
   "actions.couldNotResetThatDescription": "Impossibile reimpostare quella descrizione.",
   "actions.couldNotResolveThatComment": "Impossibile risolvere quel commento.",
   "actions.couldNotReviewYourProof": "Impossibile esaminare la tua prova. Riprova.",

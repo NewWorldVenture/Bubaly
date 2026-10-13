@@ -279,6 +279,8 @@
   "actions.couldNotRemoveThatTransaction": "Diese Transaktion konnte nicht entfernt werden.",
   "actions.couldNotRemoveTheDocument": "Das Dokument konnte nicht aus dem Speicher entfernt werden.",
   "actions.couldNotReopenThatVote": "Diese Abstimmung konnte nicht wieder geöffnet werden. Aktualisieren Sie die Seite und versuchen Sie es erneut.",
+  "actions.thatVoteIsClosed": "Diese Abstimmung ist bereits geschlossen, Ihre Stimme wurde daher nicht gezählt. Aktualisieren Sie die Seite, um das Ergebnis zu sehen.",
+  "actions.couldNotRecordYourVote": "Ihre Stimme konnte nicht gespeichert werden. Aktualisieren Sie die Seite und versuchen Sie es erneut.",
   "actions.couldNotResetThatDescription": "Diese Beschreibung konnte nicht zurückgesetzt werden.",
   "actions.couldNotResolveThatComment": "Dieser Kommentar konnte nicht erledigt werden.",
   "actions.couldNotReviewYourProof": "Ihr Nachweis konnte nicht geprüft werden. Bitte versuchen Sie es erneut.",

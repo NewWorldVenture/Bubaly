@@ -279,6 +279,8 @@
   "actions.couldNotRemoveThatTransaction": "Impossible de supprimer cette transaction.",
   "actions.couldNotRemoveTheDocument": "Impossible de supprimer le document du stockage.",
   "actions.couldNotReopenThatVote": "Impossible de rouvrir ce vote. Actualisez et réessayez.",
+  "actions.thatVoteIsClosed": "Ce vote est clos, votre choix n’a donc pas été compté. Actualisez pour voir le résultat.",
+  "actions.couldNotRecordYourVote": "Impossible d’enregistrer votre choix. Actualisez et réessayez.",
   "actions.couldNotResetThatDescription": "Impossible de réinitialiser cette description.",
   "actions.couldNotResolveThatComment": "Impossible de résoudre ce commentaire.",
   "actions.couldNotReviewYourProof": "Impossible d’examiner votre preuve. Veuillez réessayer.",
