@@ -8,6 +8,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { describeDbError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { useToast } from '@/components/ui/toast';
@@ -41,6 +42,16 @@ const STATUS_STYLES: Record<RedemptionStatus, string> = {
 
 const blankReward = { id: '', title: '', description: '', cost_points: 100 };
 
+/**
+ * The ledger is read whole, to a ceiling that is an error rather than a cut.
+ * Balances are sums, and a sum over a prefix is a wrong number presented as a
+ * right one: one unpaged select stopped at db-max-rows (1,000) in no particular
+ * order, so a family past a thousand approved chores saw balances short of what
+ * 0439's guard sums — "Not enough points" on a reward the database would
+ * allow, and Approve disabled for the parent.
+ */
+const LEDGER_MAX = 50_000;
+
 export function RewardsModule() {
   const t = useTranslations();
   const askConfirm = useConfirm();
@@ -69,11 +80,13 @@ export function RewardsModule() {
   });
   const { data: assignments, loading: assignmentsLoading, error: assignmentsError, stale: assignmentsStale, refreshAndConfirm: confirmAssignments } = useRealtimeQuery<Assignment>({
     table: 'chore_assignments', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('chore_assignments').select('*').eq('family_id', familyId).eq('status', 'approved'),
+    fetcher: (sb) => readAllAsQuery<Assignment>((from, to) => sb.from('chore_assignments').select('*')
+      .eq('family_id', familyId).eq('status', 'approved').order('id').range(from, to), { max: LEDGER_MAX }),
   });
   const { data: redemptions, loading: redemptionsLoading, error: redemptionsError, stale: redemptionsStale, refreshAndConfirm: confirmRedemptions } = useRealtimeQuery<Redemption>({
     table: 'reward_redemptions', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('reward_redemptions').select('*').eq('family_id', familyId).order('created_at', { ascending: false }),
+    fetcher: (sb) => readAllAsQuery<Redemption>((from, to) => sb.from('reward_redemptions').select('*')
+      .eq('family_id', familyId).order('created_at', { ascending: false }).order('id').range(from, to), { max: LEDGER_MAX }),
   });
 
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;

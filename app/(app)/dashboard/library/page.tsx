@@ -10,6 +10,8 @@ import { isMissingRelationError } from '@/lib/supabase/errors';
 import { fmtDate } from '@/lib/utils/format';
 import { AddBookForm, FeedControls, ItemRow, SubscribeForm, type PlayableItem } from './player';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { isManager } from '@/lib/constants/roles';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -17,7 +19,19 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 export const dynamic = 'force-dynamic';
 
-const ITEM_LIMIT = 200;
+/**
+ * Episodes and books are read SEPARATELY, each with its own count. One read of
+ * 200 items, newest `published_at` first with nulls last, was filled by any
+ * podcast with 200 episodes — and a book added by hand has no `published_at`,
+ * so every book fell off the end: "No books yet", and gone from Saved and Carry
+ * on, which were cut from the same list. The episode list is the newest few;
+ * the badge says how many there are.
+ */
+const EPISODES_SHOWN = 40;
+const BOOKS_SHOWN = 300;
+/** A person's places, read whole: past this many the read fails, not cuts. */
+const PROGRESS_MAX = 20_000;
+const ITEM_COLUMNS = 'id, feed_id, kind, title, author, media_url, page_url, duration_seconds, published_at';
 
 type FeedRow = {
   id: string; kind: string; title: string; feed_url: string; author: string | null;
@@ -28,30 +42,47 @@ type ItemRowData = {
   media_url: string | null; page_url: string | null; duration_seconds: number | null; published_at: string | null;
 };
 type ProgressRow = {
-  item_id: string; position_seconds: number; saved: boolean; offline: boolean; completed_at: string | null;
+  id: string; item_id: string; position_seconds: number; saved: boolean; offline: boolean; completed_at: string | null;
+  /** The item itself, so Saved and Carry on hold what this person saved, wherever it sorts. */
+  item: ItemRowData | null;
 };
+type ItemsRead = { data: ItemRowData[] | null; count: number | null; error: { message: string } | null };
 
 export default async function LibraryPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
+  const familyId = ctx.active.familyId;
+  // Subscribing and attaching an audio or video address put content in every
+  // child's library and behind Bubaly's own media route, so they are the
+  // adults' to do (the actions refuse anyone else).
+  const canCurate = isManager(ctx.active.role);
 
-  const [feedsResult, itemsResult, progressResult] = await settleAll([
+  const [feedsResult, episodesResult, booksResult, progressResult] = await settleAll([
     supabase.from('library_feeds')
       .select('id, kind, title, feed_url, author, last_fetched_at, last_error')
-      .eq('family_id', ctx.active.familyId).order('title'),
+      .eq('family_id', familyId).order('title'),
     supabase.from('library_items')
-      .select('id, feed_id, kind, title, author, media_url, page_url, duration_seconds, published_at')
-      .eq('family_id', ctx.active.familyId)
-      .order('published_at', { ascending: false, nullsFirst: false })
-      .limit(ITEM_LIMIT),
+      .select(ITEM_COLUMNS, { count: 'exact' })
+      .eq('family_id', familyId).eq('kind', 'episode')
+      .order('published_at', { ascending: false, nullsFirst: false }).order('id')
+      .limit(EPISODES_SHOWN) as unknown as PromiseLike<ItemsRead>,
+    supabase.from('library_items')
+      .select(ITEM_COLUMNS, { count: 'exact' })
+      .eq('family_id', familyId).eq('kind', 'book')
+      .order('created_at', { ascending: false }).order('id')
+      .limit(BOOKS_SHOWN) as unknown as PromiseLike<ItemsRead>,
     // RLS restricts this to the caller's own rows, so "where I got to" is never
     // another member's place.
-    supabase.from('library_progress')
-      .select('item_id, position_seconds, saved, offline, completed_at')
-      .eq('family_id', ctx.active.familyId).eq('user_id', ctx.user.id),
+    readAllAsQuery<ProgressRow>((from, to) => supabase.from('library_progress')
+      .select(`id, item_id, position_seconds, saved, offline, completed_at, updated_at, item:library_items(${ITEM_COLUMNS})`)
+      .eq('family_id', familyId).eq('user_id', ctx.user.id)
+      .order('updated_at', { ascending: false }).order('id')
+      .range(from, to) as unknown as PromiseLike<{ data: ProgressRow[] | null; error: { message: string } | null }>,
+    { max: PROGRESS_MAX }),
   ]);
 
-  const readError = feedsResult.error ?? itemsResult.error;
+  const readError = feedsResult.error ?? episodesResult.error ?? booksResult.error;
   if (readError) {
     // "Refresh and try again" is only true for a database that HAS these tables.
     // 0284 is applied by a person, not by the deploy, so between the two this
@@ -70,16 +101,20 @@ export default async function LibraryPage() {
     console.error('[library] read failed', readError);
     return <ErrorState message="Your library could not be read. Refresh and try again." />;
   }
-  if (progressResult.error) {
-    // Not fatal: without it the list still plays, it just starts from the top.
-    console.error('[library] progress read failed', progressResult.error);
-  }
+  // Not fatal: the list still plays. But every item would read as unstarted,
+  // and the first pause or fifteen seconds of playback would write a position
+  // over the one the person really has — so the page says so, and the rows do
+  // not save a position until a read has succeeded (`progressUnknown`).
+  const progressUnknown = Boolean(progressResult.error);
+  if (progressUnknown) console.error('[library] progress read failed', progressResult.error);
 
   const feeds = (feedsResult.data ?? []) as unknown as FeedRow[];
-  const items = (itemsResult.data ?? []) as unknown as ItemRowData[];
-  const progress = new Map(
-    ((progressResult.data ?? []) as unknown as ProgressRow[]).map((row) => [row.item_id, row]),
-  );
+  const episodes = episodesResult.data ?? [];
+  const books = booksResult.data ?? [];
+  const episodeTotal = Math.max(episodesResult.count ?? 0, episodes.length);
+  const bookTotal = Math.max(booksResult.count ?? 0, books.length);
+  const progressRows = progressResult.data ?? [];
+  const progress = new Map(progressRows.map((row) => [row.item_id, row]));
 
   const playable = (row: ItemRowData): PlayableItem => {
     const mine = progress.get(row.id);
@@ -91,16 +126,16 @@ export default async function LibraryPage() {
       saved: mine?.saved ?? false,
       offline: mine?.offline ?? false,
       completed: Boolean(mine?.completed_at),
+      progressUnknown,
     };
   };
 
-  const savedItems = items.filter((row) => progress.get(row.id)?.saved);
-  const inProgress = items.filter((row) => {
-    const mine = progress.get(row.id);
-    return mine && mine.position_seconds > 0 && !mine.completed_at;
-  });
-  const books = items.filter((row) => row.kind === 'book');
-  const episodes = items.filter((row) => row.kind === 'episode');
+  // From this person's own places, most recently touched first — not from a
+  // capped list of the family's items, where a saved book could be missing.
+  const savedItems = progressRows.filter((row) => row.saved && row.item).map((row) => row.item as ItemRowData);
+  const inProgress = progressRows
+    .filter((row) => row.item && row.position_seconds > 0 && !row.completed_at)
+    .map((row) => row.item as ItemRowData);
 
   return (
     <div className="space-y-4">
@@ -111,6 +146,13 @@ export default async function LibraryPage() {
           keeping, and store what you want for offline.
         </p>
       </div>
+
+      {progressUnknown && (
+        <p role="status" className="flex items-start gap-1.5 rounded-2xl border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          {t('library.placeCouldNotBeLoaded')}
+        </p>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-4">
@@ -131,26 +173,36 @@ export default async function LibraryPage() {
           <Card>
             <div className="mb-2 flex items-center justify-between">
               <h2 className="font-semibold">Episodes</h2>
-              <Badge tone="neutral">{episodes.length}</Badge>
+              <Badge tone="neutral">{episodeTotal}</Badge>
             </div>
             {episodes.length === 0 ? (
               <EmptyState icon={Rss} title="Nothing yet"
                 description="Subscribe to a podcast feed on the right and its episodes appear here." />
             ) : (
-              <ul className="space-y-2">{episodes.slice(0, 40).map((row) => <ItemRow key={row.id} item={playable(row)} />)}</ul>
+              <>
+                <ul className="space-y-2">{episodes.map((row) => <ItemRow key={row.id} item={playable(row)} />)}</ul>
+                {episodeTotal > episodes.length && (
+                  <p className="mt-2 text-xs text-muted">{t('library.showingNewestEpisodes', { shown: episodes.length, total: episodeTotal })}</p>
+                )}
+              </>
             )}
           </Card>
 
           <Card>
             <div className="mb-2 flex items-center justify-between">
               <h2 className="font-semibold">Books</h2>
-              <Badge tone="neutral">{books.length}</Badge>
+              <Badge tone="neutral">{bookTotal}</Badge>
             </div>
             {books.length === 0 ? (
               <EmptyState icon={BookOpen} title="No books yet"
                 description="Add one on the right — a title alone is enough, and you can attach a link or an audio file." />
             ) : (
-              <ul className="space-y-2">{books.map((row) => <ItemRow key={row.id} item={playable(row)} />)}</ul>
+              <>
+                <ul className="space-y-2">{books.map((row) => <ItemRow key={row.id} item={playable(row)} />)}</ul>
+                {bookTotal > books.length && (
+                  <p className="mt-2 text-xs text-muted">{t('library.showingNewestBooks', { shown: books.length, total: bookTotal })}</p>
+                )}
+              </>
             )}
           </Card>
 
@@ -168,7 +220,7 @@ export default async function LibraryPage() {
                           {feed.last_fetched_at ? ` · refreshed ${fmtDate(feed.last_fetched_at)}` : ' · never refreshed'}
                         </p>
                       </div>
-                      <FeedControls id={feed.id} />
+                      <FeedControls id={feed.id} canRemove={canCurate} />
                     </div>
                     {feed.last_error && (
                       <p className="mt-1.5 flex items-start gap-1.5 text-xs text-warning">
@@ -182,20 +234,22 @@ export default async function LibraryPage() {
             </Card>
           )}
 
-          {feeds.length === 0 && items.length === 0 && (
+          {feeds.length === 0 && episodeTotal === 0 && bookTotal === 0 && (
             <EmptyState icon={Library} title="Your library is empty"
               description="Subscribe to a feed or add a book to get started." />
           )}
         </div>
 
         <div className="space-y-4">
-          <Card className="h-fit">
-            <h2 className="mb-3 font-semibold">Follow a feed</h2>
-            <SubscribeForm />
-          </Card>
+          {canCurate && (
+            <Card className="h-fit">
+              <h2 className="mb-3 font-semibold">Follow a feed</h2>
+              <SubscribeForm />
+            </Card>
+          )}
           <Card className="h-fit">
             <h2 className="mb-3 font-semibold">Add a book</h2>
-            <AddBookForm />
+            <AddBookForm allowMedia={canCurate} />
           </Card>
           <Card className="space-y-2">
             <h2 className="font-semibold">How this works</h2>

@@ -56,10 +56,11 @@ export async function GET(req: NextRequest) {
   for (const feed of feeds ?? []) {
     if (Date.now() - started > BUDGET_MS) { skipped += 1; continue; }
     try {
-      // `created_by` is whoever subscribed, carried onto new rows so an episode
-      // has an author in the audit sense. The cron is not a person and must not
-      // invent one.
-      const result = await ingestFeed(supabase, feed.family_id, feed.created_by ?? '', feed.id, feed.feed_url);
+      // The cron is not a person and must not invent one: null, never `''`,
+      // which is not a uuid and failed the whole upsert (22P02) every night for
+      // a feed whose subscriber's account had been deleted (0284's ON DELETE
+      // SET NULL). See ingestFeed on why the asker is not written onto episodes.
+      const result = await ingestFeed(supabase, feed.family_id, null, feed.id, feed.feed_url);
       if ('error' in result) {
         failed += 1;
         await recordFeedError(supabase, feed.id, result.error);

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
@@ -53,14 +54,21 @@ export function ProjectsModule() {
     fetcher: (s) => s.from('home_projects').select('*').eq('family_id', familyId).order('updated_at', { ascending: false }).limit(300),
     deps: [familyId],
   });
+  // Both read whole, to a ceiling that is an error rather than a cut. Oldest
+  // first with `.limit(1000)`, a family past a thousand materials never loaded
+  // the ones just added — the save said "added" and the row never appeared, and
+  // the planned spend and budget status left it out. Cheapest first with
+  // `.limit(600)`, the dearest quotes dropped first, the accepted one among them.
   const materials = useRealtimeQuery<Material>({
     table: 'project_materials', familyId,
-    fetcher: (s) => s.from('project_materials').select('*').eq('family_id', familyId).order('created_at').limit(1000),
+    fetcher: (s) => readAllAsQuery<Material>((from, to) => s.from('project_materials').select('*')
+      .eq('family_id', familyId).order('created_at').order('id').range(from, to), { max: 20_000 }),
     deps: [familyId],
   });
   const quotes = useRealtimeQuery<Quote>({
     table: 'project_quotes', familyId,
-    fetcher: (s) => s.from('project_quotes').select('*').eq('family_id', familyId).order('amount_cents').limit(600),
+    fetcher: (s) => readAllAsQuery<Quote>((from, to) => s.from('project_quotes').select('*')
+      .eq('family_id', familyId).order('amount_cents').order('id').range(from, to), { max: 20_000 }),
     deps: [familyId],
   });
   const contractors = useRealtimeQuery<Contractor>({

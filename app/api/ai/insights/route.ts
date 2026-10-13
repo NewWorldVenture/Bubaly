@@ -9,8 +9,7 @@ import { dayKeyIn } from '@/lib/time/zoned';
 import { isWithheldFromGuest } from '@/lib/auth/guest-scope';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
 import { INSIGHTS, isInsightKind, MANAGER_ONLY_INSIGHTS, type InsightData, type InsightKind } from '@/lib/ai/insights';
-import { riskToDecision } from '@/lib/trust/engine';
-import { roleOf } from '@/lib/trust/server';
+import { insightReadRefused } from '@/lib/ai/insight-read-domains';
 import { isManager } from '@/lib/constants/roles';
 import { isExpiredFact, isSensitiveMemory } from '@/lib/services/memory';
 import { loadAISettingsFor } from '@/lib/services/ai-settings';
@@ -22,30 +21,13 @@ import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { INSIGHT_FEATURE_HREFS } from '@/lib/ai/insight-features';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
-import { readAll } from '@/lib/supabase/read-all';
+import { readAll, readAllAsQuery } from '@/lib/supabase/read-all';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 type Rows = Record<string, Record<string, unknown>[]>;
-
-/**
- * The trust domain an insight READS, for the kinds whose data the assistant's
- * own read tools keep from some roles. The route refuses a kind when the trust
- * engine's view rule would refuse a read of its domain to the caller's role —
- * the rule `school.*`, `sports.*` and `trips.*` already answer to. Without it a
- * guest was refused `school.listClasses` and `trips.getTrip` and then given a
- * model summary of the same coaches, practice locations, homework and trip
- * destinations through this route instead. Not a confidentiality boundary on
- * its own — RLS still shows these rows in the app — but one rule per role on
- * every path the assistant answers through.
- */
-const INSIGHT_READ_DOMAINS: Readonly<Partial<Record<InsightKind, string>>> = {
-  school: 'education',
-  sports: 'education',
-  trips: 'travel',
-};
 
 /**
  * Per-module "AI Assist". Fetches the family's own rows (RLS-scoped) for the
@@ -76,14 +58,12 @@ export async function POST(req: Request) {
   if (MANAGER_ONLY_INSIGHTS.has(kind) && !isManager(ctx.active.role)) {
     return NextResponse.json({ error: t('insights.thatSummaryIsForThe') }, { status: 403 });
   }
-  // A summary of school, sports or trips answers to the same view rule as the
-  // assistant's read tools for that domain (INSIGHT_READ_DOMAINS above): a
-  // guest is refused all three, a child the trips one.
-  const readDomain = INSIGHT_READ_DOMAINS[kind];
-  if (readDomain && riskToDecision({
-    risk: 'low', actor: { kind: 'member', id: ctx.active.member?.id ?? ctx.user.id, role: roleOf(ctx.active.role) },
-    domain: readDomain, capability: 'view', explicitAllow: false,
-  })) {
+  // A summary of school, sports, trips, homework or the timetable answers to
+  // the same view rule as the assistant's read tools for that domain
+  // (INSIGHT_READ_DOMAINS in lib/ai/insight-read-domains.ts, which the
+  // screens' buttons read too): a guest is refused all five, a child the trips
+  // one.
+  if (insightReadRefused(kind, ctx.active.role)) {
     return NextResponse.json({ error: t('insights.thatSummaryIsForThe') }, { status: 403 });
   }
   // A guest is sent away from the pages over the household's money, medical
@@ -161,6 +141,7 @@ export async function POST(req: Request) {
     familyName: ctx.active.family.name ?? 'Your family',
     now,
     todayKey,
+    timeZone: tz,
     members: (members ?? []).map((m) => ({ id: m.id as string, name: m.display_name as string })),
     rows,
     params,
@@ -362,7 +343,10 @@ async function fetchRows(
       return { grocery_items: items.data ?? [] };
     }
     case 'homework': {
-      const hw = await eq(sb, 'homework_assignments', familyId).neq('status', 'done').order('due_at', { ascending: true, nullsFirst: false }).limit(60);
+      // Open = still to do (lib/homework/board.ts isOpen): `.neq('done')` listed
+      // submitted work under "Open homework".
+      const hw = await eq(sb, 'homework_assignments', familyId).in('status', ['assigned', 'in_progress']).order('due_at', { ascending: true, nullsFirst: false }).limit(60);
+      required([['homework_assignments', hw.error]]);
       return { homework_assignments: hw.data ?? [] };
     }
     case 'medications': {
@@ -378,6 +362,7 @@ async function fetchRows(
     }
     case 'todos': {
       const todos = await eq(sb, 'todo_items', familyId).eq('is_done', false).order('due_date', { ascending: true, nullsFirst: false }).limit(80);
+      required([['todo_items', todos.error]]);
       return { todo_items: todos.data ?? [] };
     }
     case 'trips': {
@@ -557,6 +542,7 @@ async function fetchRows(
     }
     case 'goals': {
       const goals = await eq(sb, 'goals', familyId).eq('is_complete', false).order('created_at', { ascending: false }).limit(15);
+      required([['goals', goals.error]]);
       return { goals: goals.data ?? [] };
     }
     case 'pets': {
@@ -576,7 +562,7 @@ async function fetchRows(
     }
     case 'school': {
       const [hw, grades] = await Promise.all([
-        eq(sb, 'homework_assignments', familyId).neq('status', 'done').order('due_at', { ascending: true, nullsFirst: false }).limit(20),
+        eq(sb, 'homework_assignments', familyId).in('status', ['assigned', 'in_progress']).order('due_at', { ascending: true, nullsFirst: false }).limit(20),
         eq(sb, 'grades', familyId).order('created_at', { ascending: false }).limit(15),
       ]);
       return { homework_assignments: hw.data ?? [], grades: grades.data ?? [] };
@@ -623,11 +609,23 @@ async function fetchRows(
       return { family_insurance_policies: policies.data ?? [] };
     }
     case 'rewards': {
-      const [asg, redemptions] = await Promise.all([
-        eq(sb, 'chore_assignments', familyId).limit(40),
-        eq(sb, 'reward_redemptions', familyId).order('created_at', { ascending: false }).limit(15),
+      // The ledger, whole: every APPROVED assignment and every redemption, the
+      // set 0439's guard and the rewards page's computeBalances sum. Forty
+      // unordered rows of any status, 20 of them summed, was a sample presented
+      // as "Total points earned". Past the ceiling readAll answers an error and
+      // the route says it could not load, rather than handing over a prefix.
+      const [asg, redemptions, pending] = await settleAll([
+        readAllAsQuery<Record<string, unknown>>((from, to) => sb.from('chore_assignments')
+          .select('id, member_id, status, points_awarded').eq('family_id', familyId).eq('status', 'approved')
+          .order('id').range(from, to), { max: 50_000 }),
+        readAllAsQuery<Record<string, unknown>>((from, to) => sb.from('reward_redemptions')
+          .select('id, member_id, cost_points, status, created_at').eq('family_id', familyId)
+          .order('created_at', { ascending: false }).order('id').range(from, to), { max: 50_000 }),
+        sb.from('chore_assignments').select('id', { count: 'exact', head: true })
+          .eq('family_id', familyId).in('status', ['todo', 'in_progress', 'submitted']),
       ]);
-      return { chore_assignments: asg.data ?? [], reward_redemptions: redemptions.data ?? [] };
+      required([['chore_assignments', asg.error], ['reward_redemptions', redemptions.error], ['chore_assignments', pending.error]]);
+      return { chore_assignments: asg.data ?? [], reward_redemptions: redemptions.data ?? [], pending_chores: [{ count: pending.count ?? 0 }] };
     }
     case 'photos': {
       const [photos, albums] = await Promise.all([
@@ -678,6 +676,7 @@ async function fetchRows(
     }
     case 'timetable': {
       const classes = await eq(sb, 'school_classes', familyId).order('time_slot').limit(40);
+      required([['school_classes', classes.error]]);
       return { school_classes: classes.data ?? [] };
     }
     case 'tax': {

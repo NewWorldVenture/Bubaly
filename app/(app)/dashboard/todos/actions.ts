@@ -90,9 +90,22 @@ async function todoScope(extra?: { idempotencyKey?: string | null }) {
   return { ctx, scope: scopeFromUserContext(ctx, supabase, extra) };
 }
 
+/**
+ * A guest views the household's tasks; it does not add, rename, reassign or
+ * tick them off. Only `deleteTodoAction` used to say so (`canDeleteTodo`), so a
+ * guest could rewrite every family to-do through the other three — while the
+ * trust engine gives a guest's assistant `['view']` and refuses the same writes.
+ * The services refuse it too (lib/services/tasks), so the approval and replay
+ * paths agree; this answers before any read.
+ */
+function refusesGuest(role: string): boolean {
+  return role === 'guest';
+}
+
 export async function createTodoAction(input: CreateTodoActionInput): Promise<TodoActionResult> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
+  if (refusesGuest(ctx.active.role)) return { ok: false, error: t('actionRefusal.notAllowed') };
   const supabase = await createServer();
   const scope = scopeFromUserContext(ctx, supabase, {
     idempotencyKey: submissionKey('tasks.createTodo', ctx.active.familyId, input.submissionId),
@@ -131,6 +144,7 @@ export async function updateTodoAction(todoId: string, patch: TodoFields): Promi
   const t = await getTranslations();
   if (!todoId) return { ok: false, error: t('actions.thatTaskCouldNotBe') };
   const { scope } = await todoScope();
+  if (refusesGuest(scope.role)) return { ok: false, error: t('actionRefusal.notAllowed') };
 
   try {
     // Only the keys the caller actually sent, so a modal cannot blank a field it
@@ -164,6 +178,7 @@ export async function completeTodoAction(todoId: string, done: boolean): Promise
   const t = await getTranslations();
   if (!todoId) return { ok: false, error: t('actions.thatTaskCouldNotBe') };
   const { scope } = await todoScope();
+  if (refusesGuest(scope.role)) return { ok: false, error: t('actionRefusal.notAllowed') };
 
   try {
     const result = await completeTodo(scope, todoId, done);
