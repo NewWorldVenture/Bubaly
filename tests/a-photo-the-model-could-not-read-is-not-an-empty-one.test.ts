@@ -64,6 +64,15 @@ const UNREADABLE: [string, string | null][] = [
   ['a list cut off at the token limit', '[{"title":"Vegetable soup","have":["carrots","celery"],"need":["stock"],"steps":"Chop and simm'],
 ];
 
+// A quoted value after prose or inside a fence is a string, whatever it
+// spells: a list in its text is never the reply's own.
+const QUOTED_AFTER_PROSE: [string, string][] = [
+  ['a quoted empty list after prose', 'Result: "[]"'],
+  ['a quoted empty list fenced after prose', 'Here it is:\n```json\n"[]"\n```'],
+  ['a quoted string with escaped quotes around a list', 'Result: "they said \\"[]\\" twice"'],
+  ['a list after a quote the reply never closes', 'I read "nothing here [] at all'],
+];
+
 const SOUP = { title: 'Vegetable soup', have: ['carrots', 'celery'], need: ['stock'], steps: 'Chop and simmer.', minutes: 30 };
 
 // Each of these used to answer 200 { recipes: [] } (or, for a wrapped list,
@@ -80,6 +89,8 @@ const NOT_A_RECIPE_LIST: [string, string][] = [
   // a list is a string, not an empty one.
   ['a JSON string that looks like an empty list', JSON.stringify('[]')],
   ['a JSON string holding a list in prose', JSON.stringify('Here you go: [] nothing found')],
+  ...QUOTED_AFTER_PROSE,
+  ['a quoted list of a real recipe after prose', `Result: ${JSON.stringify(JSON.stringify([SOUP]))}`],
 ];
 
 describe('Fridge Chef', () => {
@@ -153,6 +164,15 @@ describe('Fridge Chef', () => {
     expect(await response.json()).toEqual({ recipes: [{ ...pie, allergenConflict: null }], allergiesConsidered: 0 });
   });
 
+  it('control: quoted words in prose before the list, brackets and all, do not hide it', async () => {
+    modelSays(`I can see "carrots", "celery [half a bunch]" and a "stock \\"cube\\"":\n${JSON.stringify([SOUP])}`);
+
+    const response = await photo();
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ recipes: [{ ...SOUP, allergenConflict: null }], allergiesConsidered: 0 });
+  });
+
   it('control: brackets inside the recipe text, or in prose before the list, do not hide it', async () => {
     const stew = { ...SOUP, title: 'Stew [easy]', steps: 'Brown it {in batches}, then simmer.' };
     modelSays(`I can see {carrots, celery} on the shelf.\n${JSON.stringify([stew])}`);
@@ -180,6 +200,8 @@ const NOT_AN_EVENT_LIST: [string, string][] = [
   ['an object wrapping a list of empty objects', '{"events":[{}]}'],
   ['an object wrapping a real event, a shape the prompt never asked for', JSON.stringify({ events: [BAKE_SALE] })],
   ['a JSON string that looks like an empty list', JSON.stringify('[]')],
+  ...QUOTED_AFTER_PROSE,
+  ['a quoted list of a real event after prose', `Result: ${JSON.stringify(JSON.stringify([BAKE_SALE]))}`],
 ];
 
 describe('the flyer scan', () => {
@@ -243,6 +265,15 @@ describe('the flyer scan', () => {
       expect(((await response.json()) as { events: { title: string; description: string | null }[] }).events)
         .toEqual([expect.objectContaining({ title: event.title, description: event.description })]);
     }
+  });
+
+  it('control: a quoted line of the flyer in prose before the list does not hide it', async () => {
+    modelSays(`The flyer says "Bake sale [Gym], all welcome":\n${JSON.stringify([BAKE_SALE])}`);
+
+    const response = await scan();
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ events: [BAKE_SALE_EVENT] });
   });
 
   it('control: a list mixing a valid event with invalid items keeps only the valid one', async () => {

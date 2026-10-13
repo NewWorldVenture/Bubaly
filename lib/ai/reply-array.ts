@@ -38,6 +38,18 @@ function closingBracket(body: string, open: number): number {
   return -1;
 }
 
+/**
+ * The index of the `"` that closes the string opened at `open`, or -1 when the
+ * string never closes. A backslash escapes the character after it.
+ */
+function closingQuote(body: string, open: number): number {
+  for (let i = open + 1; i < body.length; i += 1) {
+    if (body[i] === '\\') i += 1;
+    else if (body[i] === '"') return i;
+  }
+  return -1;
+}
+
 type Parsed = { ok: true; value: unknown } | { ok: false };
 
 function parseJson(text: string): Parsed {
@@ -64,13 +76,17 @@ const asAnswer = (value: unknown): unknown[] | null => (Array.isArray(value) ? v
  * 2. A reply that is one fenced block and nothing else: its inside, whole, by
  *    the same rule.
  * 3. Prose around the answer: the first bracketed span of the reply that is
- *    JSON, read string-aware, so brackets and backticks inside string values
- *    never start or end it. That span decides: an array is returned, and
- *    anything else — `{"error":[]}`, `{"recipes":[…]}` — is null, because the
- *    only shape these prompts document is a bare array and a field of an object
- *    is not one. Prose in brackets that is not JSON (`{milk, eggs}`) is skipped
- *    whole, never searched inside. A span that never closes is null: a list cut
- *    off at the token limit is not a shorter list.
+ *    JSON. The reply is read string-aware from its first character, so a
+ *    bracket inside a quoted value — `Result: "[]"`, or a fenced `"[]"` after
+ *    a line of prose — is text and never starts a span, and brackets and
+ *    backticks inside a span's own strings never end it. A quote that never
+ *    closes leaves no answer after it. That span decides: an array is
+ *    returned, and anything else — `{"error":[]}`, `{"recipes":[…]}` — is
+ *    null, because the only shape these prompts document is a bare array and a
+ *    field of an object is not one. Prose in brackets that is not JSON
+ *    (`{milk, eggs}`) is skipped whole, never searched inside. A span that
+ *    never closes is null: a list cut off at the token limit is not a shorter
+ *    list.
  *
  * What the items must look like is the caller's schema, not this function's.
  */
@@ -87,18 +103,19 @@ export function readReplyArray(text: unknown): unknown[] | null {
     if (inner.ok) return asAnswer(inner.value);
   }
 
-  let from = 0;
-  for (;;) {
-    const offset = trimmed.slice(from).search(/[[{]/);
-    if (offset < 0) return null;
-    const open = from + offset;
-    const close = closingBracket(trimmed, open);
-    if (close < 0) return null;
-    const span = parseJson(trimmed.slice(open, close + 1));
-    if (!span.ok) {
-      from = close + 1;
+  for (let i = 0; i < trimmed.length; i += 1) {
+    const ch = trimmed[i];
+    if (ch === '"') {
+      i = closingQuote(trimmed, i);
+      if (i < 0) return null;
       continue;
     }
-    return asAnswer(span.value);
+    if (ch !== '[' && ch !== '{') continue;
+    const close = closingBracket(trimmed, i);
+    if (close < 0) return null;
+    const span = parseJson(trimmed.slice(i, close + 1));
+    if (span.ok) return asAnswer(span.value);
+    i = close;
   }
+  return null;
 }
