@@ -10,11 +10,12 @@ import { scopeFromUserContext, dayKeyInTz, todayKeyFor, zonedDayBoundsMs } from 
 import { isMissingRelationError } from '@/lib/supabase/errors';
 import { logAudit } from '@/lib/server/audit';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { refuseIfLocked } from '@/lib/server/route-feature-gate';
 import { upcomingDates, formatCountdown, milestoneLabel, type RelDate } from '@/lib/relationship/dates';
 import {
   buildRelationshipDigestPrompt, parseRelationshipDigest, suggestGiftsFromWishlist,
   buildRelationshipGiftHistory, RELATIONSHIP_GIFT_HISTORY_LIMIT,
-  type WishItemLite, type RelationshipDigestContext,
+  type WishItemLite, type RelationshipDigestContext, type RelationshipGiftHistory,
 } from '@/lib/relationship/gifts';
 
 // A family can generate this many AI digests per day. Generous for normal use,
@@ -37,6 +38,10 @@ export async function POST() {
     // With no key the provider threw "not configured" and the catch below
     // answered a generic 500; the other AI routes say so with a 503 first.
     if (!(await isAIConfigured())) return NextResponse.json({ error: t('ai.theAiEngineIsnT'), code: 'not_configured' }, { status: 503 });
+    // The page is behind the layout's paywall and this endpoint was not: a
+    // family whose trial ended unpaid could still buy model calls here.
+    const locked = await refuseIfLocked(supabase, familyId);
+    if (locked) return locked;
     const limited = await enforceAIRateLimit(supabase, `ai-relationship:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
       { error: t('relationship.tooManyRelationshipHelperRequests') },
@@ -115,8 +120,12 @@ export async function POST() {
       partnerMemberId: profile?.partner_member_id ?? null,
       partnerName: profile?.partner_name ?? null,
     };
-    let giftHistory = buildRelationshipGiftHistory(null, recipient);
-    if (recipient.partnerMemberId || recipient.partnerName?.trim()) {
+    // The partner the gifts are FOR is not told what has been bought for them,
+    // nor handed their own wishes ranked with the claimed and bought ones taken
+    // out — the module hides both from them, and so does this.
+    const viewerIsRecipient = !!recipient.partnerMemberId && recipient.partnerMemberId === ctx.active.member?.id;
+    let giftHistory: RelationshipGiftHistory | undefined = viewerIsRecipient ? undefined : buildRelationshipGiftHistory(null, recipient);
+    if (!viewerIsRecipient && (recipient.partnerMemberId || recipient.partnerName?.trim())) {
       // Same cookie-bound client and active-family scope as the existing UI.
       // One extra row detects incomplete coverage without an unbounded read.
       const { data: giftRows, error: giftError } = await supabase.from('relationship_gift_ideas')
@@ -129,7 +138,7 @@ export async function POST() {
 
     // Partner's wishlist (if linked) → ranked gift candidates for grounding.
     let wishlist: { title: string; priceCents: number | null }[] = [];
-    if (profile?.partner_member_id) {
+    if (profile?.partner_member_id && !viewerIsRecipient) {
       // The wishlist IS the grounding for the gift suggestions below. A refused
       // read used to produce an empty one, and the digest went out recommending
       // gifts while silently ignoring everything the partner actually asked for

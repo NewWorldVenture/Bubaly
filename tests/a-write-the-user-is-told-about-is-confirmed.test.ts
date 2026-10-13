@@ -377,11 +377,15 @@ const contactCenter = readFileSync('app/(app)/dashboard/contact-center/actions.t
 const home = readFileSync('app/(app)/dashboard/home/actions.ts', 'utf8');
 
 describe('a milestone the child is congratulated for is confirmed (C1-S9-47)', () => {
-  it('both milestone transitions ask what they changed', () => {
-    for (const binding of ['achieved', 'skipped']) {
+  it('both milestone transitions ask what they changed, and so does the start', () => {
+    // The start is insert-only (ignoreDuplicates): an empty answer is a rung
+    // already on the ladder, told as such rather than "Added".
+    for (const binding of ['achieved', 'skipped', 'started']) {
       expect(independence, binding).toContain(`wroteNoRows(${binding})`);
     }
-    expect(independence.match(/\.select\('id'\)/g) ?? []).toHaveLength(2);
+    expect(independence.match(/\.select\('id'\)/g) ?? []).toHaveLength(3);
+    expect(independence).toContain("if (wroteNoRows(started)) return { ok: false, code: 'alreadyOnLadder', error: t('actions.milestoneAlreadyOnTheLadder') };");
+    expect(at(independence, 'if (wroteNoRows(started))')).toBeLessThan(at(independence, 'await logAudit(supabase, {'));
   });
 
   it('each stays scoped to the acting family', () => {

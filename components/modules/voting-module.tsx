@@ -137,7 +137,18 @@ export function VotingModule() {
           tags: parseTags(o.tags),
         })),
       );
-      if (oErr) return toastError(describeDbError(oErr));
+      if (oErr) {
+        // The poll row is already committed. Left in place it showed as a poll
+        // nobody could vote on, and pressing Create again (the form stays open)
+        // added a second one. Take it back before reporting, and confirm that
+        // it went.
+        const { data: rolledBack, error: rollbackError } = await supabase.from('family_polls')
+          .delete().eq('id', poll.id).eq('family_id', familyId).select('id');
+        if (rollbackError || wroteNoRows(rolledBack)) {
+          console.error('[voting] could not remove a poll whose options failed', { pollId: poll.id, error: rollbackError ?? 'no rows deleted' });
+        }
+        return toastError(describeDbError(oErr));
+      }
       success(tr('votingModule.pollCreated'));
       setForm(null);
     } finally {
@@ -147,6 +158,10 @@ export function VotingModule() {
 
   async function vote(poll: Poll, optionId: string) {
     if (!meId) return toastError(tr('votingModule.joinTheFamilyAsA'));
+    // `closed` on the button is worked out when the page rendered, and nothing
+    // re-renders it at `closes_at`: a page opened at 7:55 still took a vote at
+    // 8:05 on a poll that closed at 8:00. Asked again at the tap.
+    if (isPollClosed(poll.status, poll.closes_at, new Date())) return toastError(tr('votingModule.thisPollIsClosed'));
     const supabase = createClient();
     const pollVotes = votesByPoll.get(poll.id) ?? [];
     const mine = memberSelections(pollVotes as VoteLike[], meId);
@@ -182,11 +197,20 @@ export function VotingModule() {
     }
   }
 
-  async function setStatus(id: string, status: string) {
+  async function setStatus(poll: Poll, status: string) {
+    // A poll closed by its deadline stays closed whatever its status says, so
+    // reopening one also clears the deadline — writing status alone was a
+    // click that changed nothing.
+    const reopenPastDeadline = status === 'open' && !!poll.closes_at && isPollClosed('open', poll.closes_at, new Date());
+    const patch = reopenPastDeadline ? { status, closes_at: null } : { status };
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
-    const { data: updated, error } = await createClient().from('family_polls').update({ status }).eq('id', id).select('id');
+    const { data: updated, error } = await createClient().from('family_polls').update(patch).eq('id', poll.id).eq('family_id', familyId).select('id, status, closes_at');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(updated)) toastError(tr('errors.thatChangeWasNotSaved'));
+    else if (status === 'open' && updated?.[0] && isPollClosed(updated[0].status, updated[0].closes_at, new Date())) toastError(tr('errors.thatChangeWasNotSaved'));
+    // family_polls is not in the realtime publication: the screen re-reads, so
+    // its own Close takes effect here without a reload.
+    void refreshPolls();
   }
   async function remove(id: string) {
     if (!confirm(tr('votingModule.deleteThisPoll'))) return;
@@ -268,7 +292,7 @@ export function VotingModule() {
                 {p.description && <p className="mt-1 text-sm text-muted">{p.description}</p>}
               </div>
               <div className="flex shrink-0 items-center gap-2 text-xs">
-                <button onClick={() => setStatus(p.id, closed ? 'open' : 'closed')} className="text-muted hover:text-fg hover:underline">{closed ? 'Reopen' : 'Close'}</button>
+                <button onClick={() => setStatus(p, closed ? 'open' : 'closed')} className="text-muted hover:text-fg hover:underline">{closed ? 'Reopen' : 'Close'}</button>
                 <button onClick={() => remove(p.id)} className="text-muted hover:text-danger" aria-label={tr('voting.delete')}><Trash2 className="h-4 w-4" /></button>
               </div>
             </div>
@@ -381,7 +405,7 @@ export function VotingModule() {
                       </div>
                       <div className="mt-2 grid grid-cols-3 gap-2">
                         <Input type="number" min="0" value={opt.cost} onChange={(e) => { const o = [...form.options]; o[i] = { ...o[i], cost: e.target.value }; setForm({ ...form, options: o }); }} placeholder={tr('voting.cost')} aria-label={tr('voting.optionNCost', { n: i + 1 })} />
-                        <Input type="number" min="0" value={opt.travel} onChange={(e) => { const o = [...form.options]; o[i] = { ...o[i], travel: e.target.value }; setForm({ ...form, options: o }); }} placeholder={tr('voting.travelMin')} aria-label={tr('voting.optionNTravel', { n: i + 1 })} />
+                        <Input type="number" min="0" max="2147483647" value={opt.travel} onChange={(e) => { const o = [...form.options]; o[i] = { ...o[i], travel: e.target.value }; setForm({ ...form, options: o }); }} placeholder={tr('voting.travelMin')} aria-label={tr('voting.optionNTravel', { n: i + 1 })} />
                         <Input value={opt.tags} onChange={(e) => { const o = [...form.options]; o[i] = { ...o[i], tags: e.target.value }; setForm({ ...form, options: o }); }} placeholder="tags" aria-label={tr('voting.optionNTags', { n: i + 1 })} />
                       </div>
                     </div>

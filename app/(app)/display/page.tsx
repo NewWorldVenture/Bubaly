@@ -25,6 +25,9 @@ import type { HandledToday } from '@/components/display/handled-today-tile';
 import { DisplayShellClient } from '@/components/display/display-shell-client';
 import { addDaysToDayKey, dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import type { AudienceViewer } from '@/lib/autopilot/audience';
+import { reminderCardsReader, visibleReminders } from '@/lib/autopilot/reminder-cards';
+import { suggestionReminderKey, suggestionSourceTag } from '@/lib/services/autopilot';
 import { readOnOpenGroceryLists } from '@/lib/services/groceries';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -133,11 +136,30 @@ async function loadDisplay(
   timezone: unknown,
   untitledRun: string,
   locale: LocaleCode,
+  viewer: AudienceViewer,
 ): Promise<LoadedDisplay> {
   const calendar = familyDisplayCalendar(now, timezone);
   const { start, end } = calendar.todayWindow;
   const in14 = calendar.upcomingWindow.end;
   const todayDate = calendar.dayKey;
+
+  // A reminder an Autopilot card made goes on the wall only for the card's
+  // readers (lib/autopilot/reminder-cards.ts), as on the dashboard: an accepted
+  // insurance card's "Renew dental insurance (Smile Co)" is the managers' and
+  // the member the policy names, a renewal's is not a guest's. Read whole, as
+  // the tile always read; the cards only when a reminder could be one's.
+  const readTileReminders = async () => {
+    const read = await supabase.from('family_reminders').select('id, title, remind_at, status, snoozed_until, idempotency_key, tags')
+      .eq('family_id', familyId).in('status', ['active', 'snoozed']).not('remind_at', 'is', null)
+      .lt('remind_at', in14.toISOString()).order('remind_at');
+    if (read.error) return read;
+    const cards = reminderCardsReader(supabase, familyId, {
+      keyOf: (cardId) => suggestionReminderKey(familyId, cardId),
+      sourceTagOf: suggestionSourceTag,
+      onError: (error) => console.error('[display] autopilot reminder cards read failed', error),
+    });
+    return { data: await visibleReminders(read.data ?? [], viewer, cards), error: null };
+  };
 
   const results = await Promise.all([
     settle(supabase.from('family_members').select('*').eq('family_id', familyId).eq('is_active', true).order('created_at')),
@@ -154,9 +176,7 @@ async function loadDisplay(
     // Only lists the family has not archived (readOnOpenGroceryLists).
     settle(readOnOpenGroceryLists(supabase, familyId, (lists) => supabase.from('grocery_items').select('id, name').eq('family_id', familyId).in('list_id', lists).eq('is_checked', false).order('created_at').limit(8))),
     settle(readOnOpenGroceryLists(supabase, familyId, (lists) => supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', familyId).in('list_id', lists).eq('is_checked', false))),
-    settle(supabase.from('family_reminders').select('id, title, remind_at, status, snoozed_until')
-      .eq('family_id', familyId).in('status', ['active', 'snoozed']).not('remind_at', 'is', null)
-      .lt('remind_at', in14.toISOString()).order('remind_at')),
+    settle(readTileReminders()),
     settle(supabase.from('notes').select('id, title, body').eq('family_id', familyId).eq('is_pinned', true).order('updated_at', { ascending: false }).limit(6)),
     settle(supabase.from('family_recipes').select('name, category, photo_url').eq('family_id', familyId)
       .order('is_favorite', { ascending: false }).order('last_made_at', { ascending: false, nullsFirst: false }).limit(6)),
@@ -356,7 +376,8 @@ export default async function KitchenDisplayPage() {
   let loaded: LoadedDisplay;
   try {
     const supabase = await createServer();
-    loaded = await loadDisplay(supabase, familyId, familyName, now, ctx.active.family.timezone, t('displayHandled.untitledRun'), locale.code);
+    loaded = await loadDisplay(supabase, familyId, familyName, now, ctx.active.family.timezone, t('displayHandled.untitledRun'), locale.code,
+      { role: ctx.active.role, memberId: ctx.active.member?.id ?? null });
     // Serialization firewall: these props cross the server→client boundary
     // AFTER this function returns, so a single non-JSON value anywhere in the
     // rows (a BigInt from a numeric column, a circular ref) throws OUTSIDE any

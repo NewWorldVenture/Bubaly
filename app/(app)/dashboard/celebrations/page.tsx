@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { CelebrationsModule } from '@/components/modules/celebrations-module';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -9,6 +9,8 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function CelebrationsPage() {
-  await requireUserContext();
+  // A catalog feature: the sidebar hides or padlocks it when an admin moves its
+  // tier, so the page answers to the same gate rather than only a session.
+  await requireFeature('/dashboard/celebrations');
   return <CelebrationsModule />;
 }

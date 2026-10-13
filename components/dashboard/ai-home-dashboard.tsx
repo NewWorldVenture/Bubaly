@@ -7,6 +7,10 @@ import { settle, settleAll } from '@/lib/supabase/settle';
 import type { UserContext } from '@/lib/supabase/auth';
 import { isSuperAdmin } from '@/lib/supabase/auth';
 import { isManager } from '@/lib/constants/roles';
+import { suggestionVisibleTo } from '@/lib/autopilot/audience';
+import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
+import { readVisiblePrefix } from '@/lib/autopilot/visible-prefix';
+import { suggestionReminderKey, suggestionSourceTag } from '@/lib/services/autopilot';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { fmtTime } from '@/lib/utils/format';
@@ -98,6 +102,20 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     return 0 as Awaited<ReturnType<typeof resolveFamilyPlanLevel>>;
   });
 
+  // A reminder an Autopilot card made is listed only to the card's readers
+  // (lib/autopilot/reminder-cards.ts). "Mine or nobody's" is not that rule: a
+  // manager's accepted insurance card writes an unassigned reminder so the
+  // managers are reminded, and read by it a guest and the child the policy does
+  // not name were listed "Renew dental insurance (Smile Co)". The cards are
+  // read once, only when a listed reminder could be one; if that read fails,
+  // such a reminder is listed to the managers alone.
+  const reminderViewer = { role: ctx.active.role, memberId: myMemberId };
+  const reminderCards = reminderCardsReader(supabase, familyId, {
+    keyOf: (cardId) => suggestionReminderKey(familyId, cardId),
+    sourceTagOf: suggestionSourceTag,
+    onError: (error) => console.error('[dashboard-home] autopilot reminder cards read failed', error),
+  });
+
   const [
     { count: pendingChores },
     todayCalendarRes,
@@ -140,10 +158,15 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     supabase.from('family_members').select('id, display_name, color, role')
       .eq('family_id', familyId).eq('is_active', true).order('created_at').limit(6),
     readDisplayCalendarOccurrences(supabase, familyId, upcomingWindow, tz, { overlap: true }),
-    supabase.from('autopilot_suggestions')
-      .select('id, title, detail, kind, urgency, confidence, payload')
+    // The first twenty open cards THIS reader may see (lib/autopilot/audience.ts),
+    // the rule applied before the twenty are taken (lib/autopilot/
+    // visible-prefix.ts): taken first, twenty insurance cards a child is not
+    // shown emptied the panel with a card of theirs behind them.
+    readVisiblePrefix((from, to) => supabase.from('autopilot_suggestions')
+      .select('id, title, detail, kind, urgency, confidence, payload, source_kind, member_id')
       .eq('family_id', familyId).eq('status', 'open')
-      .order('urgency', { ascending: false }).order('confidence', { ascending: false }).limit(20),
+      .order('urgency', { ascending: false }).order('confidence', { ascending: false }).order('id').range(from, to),
+    { limit: 20, visible: (s) => suggestionVisibleTo(s, { role: ctx.active.role, memberId: myMemberId }) }),
     supabase.from('autopilot_suggestions').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).in('status', ['auto_executed', 'executed', 'approved']),
     supabase.from('family_communications').select('id', { count: 'exact', head: true })
@@ -157,16 +180,18 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       .eq('family_id', familyId).is('deleted_at', null).in('scope', ['user', 'family']),
     supabase.from('relationship_dates').select('id, kind, title, event_date, recurs_annually, reminder_days_before, status')
       .eq('family_id', familyId).neq('status', 'cancelled').limit(100),
-    supabase.from('family_reminders').select('id, title, remind_at, status, member_id, priority')
+    readVisibleReminders((from, to) => supabase.from('family_reminders').select('id, title, remind_at, status, member_id, priority, idempotency_key, tags')
       .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null)
       .or(`member_id.eq.${myMemberId},member_id.is.null`)
-      .lte('remind_at', todayEnd.toISOString()).order('remind_at', { ascending: true }).limit(100),
-    supabase.from('family_reminders').select('id, title, remind_at')
+      .lte('remind_at', todayEnd.toISOString()).order('remind_at', { ascending: true }).order('id').range(from, to),
+    { limit: 100, viewer: reminderViewer, cards: reminderCards }),
+    readVisibleReminders((from, to) => supabase.from('family_reminders').select('id, title, remind_at, idempotency_key, tags')
       .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null)
       .or(`member_id.eq.${myMemberId},member_id.is.null`)
       .gt('remind_at', todayEnd.toISOString())
       .lte('remind_at', new Date(Date.now() + 7 * 86400000).toISOString())
-      .order('remind_at').limit(10),
+      .order('remind_at').order('id').range(from, to),
+    { limit: 10, viewer: reminderViewer, cards: reminderCards }),
     // Money decisions waiting on a parent (wallet/cards/allowance) — managers only.
     manager
       ? supabase.from('parent_approvals').select('id, kind, amount_cents, created_at')
@@ -244,7 +269,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   // the tool that acted and the plan's reason. A ServiceResult, not a Postgrest
   // response, so it is awaited BESIDE the batch — settleAll substitutes the
   // { data, error } shape for a rejection, which has no `ok` to branch on.
-  const completedRes = await loadCompletedByBubaly(supabase, familyId, { now, limit: 6 }).catch((cause) => {
+  const completedRes = await loadCompletedByBubaly(supabase, familyId, { now, limit: 6, viewer: { role: ctx.active.role, memberId: ctx.active.member.id } }).catch((cause) => {
     console.error('[dashboard-home] completed-by-Bubaly read threw', cause);
     return { ok: false as const, error: String(cause) };
   });
@@ -299,7 +324,11 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   // A subscription suggestion's title carries money and was worded by whichever
   // scan inserted it — usually the cron, in en-US — so it is worded again here for
   // THIS reader from the facts in its payload (lib/autopilot/engine.ts).
-  const openSuggestions = ((autopilotOpen ?? []) as { id: string; title: string; detail: string | null; kind: string; urgency: number; confidence: number; payload: unknown }[])
+  // Only the cards this reader may see: a subscription charge is not a
+  // guest's, an insurance renewal is the managers' and its member's
+  // (lib/autopilot/audience.ts). autopilot_suggestions is family-wide under
+  // 0085, so the rule is applied where the cards are read, above.
+  const openSuggestions = ((autopilotOpen ?? []) as { id: string; title: string; detail: string | null; kind: string; urgency: number; confidence: number; payload: unknown; source_kind: string | null; member_id: string | null }[])
     .map((s) => ({ ...s, title: autopilotTitleFor(s, locale.code, t) }));
   const concierge = (activeConcierge ?? []) as { id: string; title: string; kind: string; status: string }[];
   const autopilotProbability = successProbability(openSuggestions.map((s) => ({ urgency: s.urgency as 1 | 2 | 3, confidence: s.confidence } as never)));

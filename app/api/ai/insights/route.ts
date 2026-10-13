@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { settle, describeReadError } from '@/lib/supabase/settle';
+import { settle, settleAll, describeReadError } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
+import { dayKeyIn } from '@/lib/time/zoned';
+import { isWithheldFromGuest } from '@/lib/auth/guest-scope';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
 import { INSIGHTS, isInsightKind, MANAGER_ONLY_INSIGHTS, type InsightData, type InsightKind } from '@/lib/ai/insights';
 import { riskToDecision } from '@/lib/trust/engine';
@@ -20,6 +22,7 @@ import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { INSIGHT_FEATURE_HREFS } from '@/lib/ai/insight-features';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
+import { readAll } from '@/lib/supabase/read-all';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -83,6 +86,13 @@ export async function POST(req: Request) {
   })) {
     return NextResponse.json({ error: t('insights.thatSummaryIsForThe') }, { status: 403 });
   }
+  // A guest is sent away from the pages over the household's money, medical
+  // and insurance records (lib/auth/guest-scope.ts), and a summary of the same
+  // rows answers to the same rule: the utilities page let a guest in and both
+  // of its AI answers summarised every bill for them.
+  if (ctx.active.role === 'guest' && (INSIGHT_FEATURE_HREFS[kind] ?? []).some(isWithheldFromGuest)) {
+    return NextResponse.json({ error: t('insights.thatSummaryIsForThe') }, { status: 403 });
+  }
 
   const question = typeof body.question === 'string' ? body.question.slice(0, 1000) : undefined;
   const params = { ...(body.params ?? {}), ...(question ? { question } : {}) };
@@ -108,6 +118,10 @@ export async function POST(req: Request) {
   );
   const familyId = ctx.active.familyId;
   const tz = ctx.active.family.timezone || 'America/New_York';
+  // The family's day, for the kinds that ask "what is still ahead" of a DATE
+  // column (rides, celebrations). Greenwich's day is a different one for hours
+  // of every evening west of it and every morning east of it.
+  const todayKey = dayKeyIn(new Date(), tz);
 
   // The roster read directly beside this one — `fetchRows` — fails the request
   // with a 500 when a read it checks with `required()` fails (every household
@@ -130,6 +144,7 @@ export async function POST(req: Request) {
     rows = await fetchRows(kind, supabase, familyId, params, {
       role: ctx.active.role,
       memberId: ctx.active.member.id,
+      todayKey,
     });
   } catch (err) {
     console.error('AI insights data load failed:', err);
@@ -144,6 +159,7 @@ export async function POST(req: Request) {
   const data: InsightData = {
     familyName: ctx.active.family.name ?? 'Your family',
     now,
+    todayKey,
     members: (members ?? []).map((m) => ({ id: m.id as string, name: m.display_name as string })),
     rows,
     params,
@@ -205,8 +221,12 @@ function required(reads: [string, { message?: string } | null | undefined][]): v
   if (failed) throw new Error(`${failed[0]} read failed: ${failed[1]?.message ?? 'unknown error'}`);
 }
 
-/** Who is asking. Only `purchase_advisor` needs it so far, and it needs both. */
-type Viewer = { role: string; memberId: string | null };
+/**
+ * Who is asking, and on which family day. `purchase_advisor` and `wishlists`
+ * need the member (gift state is hidden from the person a wish belongs to);
+ * `rides` needs the day.
+ */
+type Viewer = { role: string; memberId: string | null; todayKey: string };
 
 async function fetchRows(
   kind: InsightKind,
@@ -352,6 +372,7 @@ async function fetchRows(
     }
     case 'subscriptions': {
       const subs = await eq(sb, 'subscriptions_tracked', familyId).limit(80);
+      required([['subscriptions_tracked', subs.error]]);
       return { subscriptions_tracked: subs.data ?? [] };
     }
     case 'todos': {
@@ -366,8 +387,21 @@ async function fetchRows(
       return { trips: trips.data ?? [], trip_items: items.data ?? [] };
     }
     case 'wishlists': {
-      const items = await eq(sb, 'wishlist_items', familyId).eq('is_purchased', false).limit(60);
-      return { wishlist_items: items.data ?? [] };
+      // Gift state is hidden from the person a wish belongs to, as in
+      // purchase_advisor below. Reading only the unbought wishes left a
+      // person's OWN bought ones out of the prompt, so asking for "everything
+      // on my list" and comparing the answer with the list on screen told them
+      // which presents were already wrapped. Their own rows go in with the gift
+      // state stripped; only other members' bought wishes are left out.
+      const items = await eq(sb, 'wishlist_items', familyId).order('created_at', { ascending: false }).limit(200);
+      required([['wishlist_items', items.error]]);
+      const visible = (items.data ?? []).flatMap((w) => {
+        if (viewer.memberId && String(w.member_id ?? '') === viewer.memberId) {
+          return [{ ...w, is_purchased: false, claimed_by: null, claimed_at: null }];
+        }
+        return w.is_purchased ? [] : [w];
+      });
+      return { wishlist_items: visible };
     }
     // "Before you buy" — everything the household already OWNS, plus what it
     // remembers preferring. No budgets or transactions: the money check is the
@@ -523,8 +557,15 @@ async function fetchRows(
       return { goals: goals.data ?? [] };
     }
     case 'pets': {
-      const pets = await eq(sb, 'pets', familyId).eq('is_active', true).limit(10);
-      return { pets: pets.data ?? [] };
+      // The prompt asks for upcoming care and vet visits, so it is handed the
+      // care records that answer it — for the pets still in the household.
+      const [pets, care] = await Promise.all([
+        eq(sb, 'pets', familyId).eq('is_active', true).limit(10),
+        eq(sb, 'pet_care_records', familyId).order('record_date', { ascending: false }).limit(60),
+      ]);
+      required([['pets', pets.error], ['pet_care_records', care.error]]);
+      const petIds = new Set((pets.data ?? []).map((p) => String(p.id)));
+      return { pets: pets.data ?? [], pet_care_records: (care.data ?? []).filter((c) => petIds.has(String(c.pet_id))) };
     }
     case 'renewals': {
       const renewals = await eq(sb, 'renewals', familyId).order('renewal_date', { ascending: true, nullsFirst: false }).limit(20);
@@ -561,8 +602,12 @@ async function fetchRows(
       return { health_visits: records.data ?? [], appointments: appointments.data ?? [] };
     }
     case 'insurance': {
-      const policies = await eq(sb, 'insurance_policies', familyId).order('renewal_date', { ascending: true, nullsFirst: false }).limit(15);
-      return { insurance_policies: policies.data ?? [] };
+      // The Insurance Hub's own table. `insurance_policies` is the medical-card
+      // table (0009): it has no renewal_date, so ordering by it failed every
+      // call, and the failure reached the model as "No policies tracked."
+      const policies = await eq(sb, 'family_insurance_policies', familyId).eq('is_active', true).order('renewal_date', { ascending: true, nullsFirst: false }).limit(15);
+      required([['family_insurance_policies', policies.error]]);
+      return { family_insurance_policies: policies.data ?? [] };
     }
     case 'rewards': {
       const [asg, redemptions] = await Promise.all([
@@ -579,8 +624,16 @@ async function fetchRows(
       return { family_photos: photos.data ?? [], family_albums: albums.data ?? [] };
     }
     case 'celebrations': {
-      const dates = await eq(sb, 'family_dates', familyId).order('date').limit(30);
-      return { family_dates: dates.data ?? [] };
+      // `event_date`, not `date`: the column 0048 created. Ordering by a column
+      // that does not exist failed every call, and the empty result read as
+      // "none found". The module also lists the members' own birthdays, so the
+      // prompt is given those too.
+      const [dates, people] = await Promise.all([
+        eq(sb, 'family_dates', familyId).order('event_date').limit(60),
+        sb.from('family_members').select('id, display_name, birthday').eq('family_id', familyId).eq('is_active', true).not('birthday', 'is', null).limit(50),
+      ]);
+      required([['family_dates', dates.error], ['family_members', people.error]]);
+      return { family_dates: dates.data ?? [], family_members: people.data ?? [] };
     }
     case 'signups': {
       const opps = await eq(sb, 'opportunities', familyId).order('deadline', { ascending: true, nullsFirst: false }).limit(40);
@@ -595,6 +648,7 @@ async function fetchRows(
         eq(sb, 'screen_time_entries', familyId).order('entry_date', { ascending: false }).limit(20),
         eq(sb, 'screen_time_limits', familyId).limit(10),
       ]);
+      required([['screen_time_entries', entries.error], ['screen_time_limits', limits.error]]);
       return { screen_time_entries: entries.data ?? [], screen_time_limits: limits.data ?? [] };
     }
     case 'binder': {
@@ -618,19 +672,42 @@ async function fetchRows(
     }
     case 'utilities': {
       const bills = await eq(sb, 'utility_bills', familyId).order('period_month', { ascending: false }).limit(24);
+      required([['utility_bills', bills.error]]);
       return { utility_bills: bills.data ?? [] };
     }
     case 'rides': {
-      const rides = await eq(sb, 'rides', familyId).order('ride_date').order('pickup_time', { nullsFirst: false }).limit(30);
-      return { rides: rides.data ?? [] };
+      // From the family's today: oldest-first with no date bound, a family with
+      // thirty past rides was handed only past ones and told it had none ahead.
+      // And only rides still to happen ('planned' or 'confirmed', 0027's
+      // ride_status), every one of them (readAll): a cap taken before the
+      // cancelled and completed rows were dropped let thirty of those hide a
+      // planned ride, and the prompt's counts are only true if nothing is cut.
+      const rides = await readAll<Record<string, unknown>>((from, to) => sb.from('rides').select('*').eq('family_id', familyId)
+        .gte('ride_date', viewer.todayKey).in('status', ['planned', 'confirmed'])
+        .order('ride_date').order('pickup_time', { nullsFirst: false }).order('id').range(from, to));
+      required([['rides', rides.error]]);
+      return { rides: rides.rows };
     }
     case 'votes': {
-      const [polls, options, votes] = await Promise.all([
-        eq(sb, 'family_polls', familyId).order('created_at', { ascending: false }).limit(15),
-        eq(sb, 'family_poll_options', familyId).limit(60),
-        eq(sb, 'family_poll_votes', familyId).limit(60),
+      // The options and votes OF the polls listed. Read as the family's first
+      // sixty of each, in no order and for any poll, a family whose older polls
+      // held sixty votes was told its newest poll had none.
+      const polls = await eq(sb, 'family_polls', familyId).order('created_at', { ascending: false }).limit(15);
+      required([['family_polls', polls.error]]);
+      // Every row of those polls (readAll), so no cap can cut one short.
+      const pollIds = (polls.data ?? []).map((p) => p.id as string);
+      // settleAll: a read that never completes comes back as an error, which
+      // required() refuses, instead of taking the other read down with it.
+      const [options, votes] = await settleAll([
+        readAll<Record<string, unknown>>((from, to) => sb.from('family_poll_options').select('*').eq('family_id', familyId).in('poll_id', pollIds).order('id').range(from, to)),
+        readAll<Record<string, unknown>>((from, to) => sb.from('family_poll_votes').select('*').eq('family_id', familyId).in('poll_id', pollIds).order('id').range(from, to)),
       ]);
-      return { family_polls: polls.data ?? [], family_poll_options: options.data ?? [], family_poll_votes: votes.data ?? [] };
+      required([['family_poll_options', options.error], ['family_poll_votes', votes.error]]);
+      return {
+        family_polls: polls.data ?? [],
+        family_poll_options: 'rows' in options ? options.rows : [],
+        family_poll_votes: 'rows' in votes ? votes.rows : [],
+      };
     }
     default:
       return {};

@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
-import { useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { promptOfTheDay } from '@/lib/journal/prompts';
@@ -129,7 +129,7 @@ export function JournalModule() {
 
 function PromptCard({ onWrite }: { onWrite: (prompt: string) => void }) {
   const t = useTranslations();
-  const { error: toastError } = useToast();
+  const { error: toastError, toast } = useToast();
   const [prompt, setPrompt] = useState(promptOfTheDay());
   const [loading, setLoading] = useState(false);
 
@@ -137,9 +137,13 @@ function PromptCard({ onWrite }: { onWrite: (prompt: string) => void }) {
     setLoading(true);
     try {
       const res = await fetch('/api/ai/journal', { method: 'POST' });
-      const json = (await res.json()) as { prompt?: string; error?: string };
+      const json = (await res.json()) as { prompt?: string; error?: string; source?: 'ai' | 'evergreen' };
       if (!res.ok || !json.prompt) throw new Error(json.error || t('journalModule.couldNotGetAPrompt'));
       setPrompt(json.prompt);
+      // The route answers the prompt of the day when it could not personalise
+      // one (no AI, a failed read, an empty reply). Said, so the button is not
+      // a spinner that changes nothing.
+      if (json.source === 'evergreen') toast(t('journalModule.personalizingIsUnavailableRightNow'), 'info');
     } catch (err) {
       toastError(describeDbError(err, t('journalModule.couldNotGetAPrompt')));
     } finally {
@@ -170,6 +174,7 @@ function EntryModal({ entry, initialPrompt, familyId, userId, memberId, onClose,
 }) {
   const a11yId = useId();
   const t = useTranslations();
+  const clock = useFamilyClock();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [mood, setMood] = useState<Mood | null>(entry?.mood ?? null);
@@ -207,7 +212,10 @@ function EntryModal({ entry, initialPrompt, familyId, userId, memberId, onClose,
     // with an error instead of filtering it away.
     const { data, error: saveErr } = entry
       ? await supabase.from('journal_entries').update(patch).eq('id', entry.id).eq('family_id', familyId).select('id')
-      : await supabase.from('journal_entries').insert({ family_id: familyId, member_id: memberId, created_by: userId, ...patch }).select('id');
+      // Dated on the FAMILY's day. Left to the column default (`current_date`,
+      // the database session's day: UTC) an entry written at 6pm in California
+      // was filed under tomorrow, and the edit form cannot change it.
+      : await supabase.from('journal_entries').insert({ family_id: familyId, member_id: memberId, created_by: userId, entry_date: clock.todayKey(), ...patch }).select('id');
     setLoading(false);
     if (saveErr) return toastError(describeDbError(saveErr));
     if (wroteNoRows(data)) return toastError(t('errors.thatChangeWasNotSaved'));

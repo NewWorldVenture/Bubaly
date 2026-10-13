@@ -7,6 +7,7 @@ import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { wroteNoRows } from '@/lib/supabase/errors';
+import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
@@ -107,7 +108,7 @@ export function HealthModule() {
   const tr = useTranslations();
   const askConfirm = useConfirm();
   const { code: locale } = useLocale();
-  const { familyId, userId, members, role } = useApp();
+  const { familyId, userId, members, role, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const [tab, setTab] = useState<Tab>('Overview');
   const [apptOpen, setApptOpen] = useState(false);
@@ -157,9 +158,20 @@ export function HealthModule() {
     fetcher: (sb) => sb.from('appointments').select('*').eq('family_id', familyId).gte('starts_at', now).order('starts_at').limit(6),
   });
 
+  // The scan's auto-executed card leaves a `reminders` row behind — "Renew
+  // dental insurance (Smile Co)" for Ava's policy — that names its source, not
+  // the card's readers. It is listed only to them (lib/autopilot/reminder-cards.ts):
+  // the managers and the member the policy names; to the managers alone when
+  // the cards cannot be read. The reader is in `deps`, so a change re-reads.
+  const reminderViewer = { role, memberId: selfMember?.id ?? null };
   const { data: reminders, loading: remLoading, error: remError, refresh: refreshReminders } = useRealtimeQuery<Reminder>({
-    table: 'reminders', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('reminders').select('*').eq('family_id', familyId).eq('is_done', false).limit(4),
+    table: 'reminders', familyId, deps: [familyId, role, reminderViewer.memberId],
+    fetcher: (sb) => readVisibleReminders((from, to) => sb.from('reminders').select('*').eq('family_id', familyId).eq('is_done', false).order('id').range(from, to), {
+      limit: 4, viewer: reminderViewer,
+      cards: reminderCardsReader(sb, familyId, {
+        onError: (error) => console.error('[health] autopilot reminder cards read failed', error),
+      }),
+    }),
   });
 
   const { data: symptoms, loading: symptomsLoading, error: symptomsError, refresh: refreshSymptoms } = useRealtimeQuery<SymptomLog>({

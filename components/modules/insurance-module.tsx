@@ -14,6 +14,7 @@ import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
+import { mayAskInsight } from '@/lib/ai/insights';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
@@ -67,6 +68,9 @@ export function InsuranceModule() {
   // has always had. The controls follow, the way medications-module.tsx does —
   // a button that renders and then fails is worse than one never offered.
   const canEdit = isManager(role);
+  // The summary is of every policy's premium and coverage, so the route keeps
+  // it to the managers; offered to a child or teen, every tap was a 403.
+  const canAskInsight = mayAskInsight('insurance', role);
   const { success, error: toastError } = useToast();
 
   const policies = useRealtimeQuery<Policy>({
@@ -109,7 +113,7 @@ export function InsuranceModule() {
       <PageHeader
         title={tr('insurance.insuranceHub')}
         description={tr('insuranceModule.everyHouseholdPolicyInOne')}
-        action={<div className="flex items-center gap-2"><AiInsight kind="insurance" iconOnly />{canEdit && <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('insurance.addPolicy')}</Button>}</div>}
+        action={<div className="flex items-center gap-2">{canAskInsight && <AiInsight kind="insurance" iconOnly />}{canEdit && <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('insurance.addPolicy')}</Button>}</div>}
       />
       {!readsEveryonesRecords(role) && <p className="text-xs text-muted">{tr('insuranceModule.onlyPoliciesThatNameYou')}</p>}
 

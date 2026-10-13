@@ -14,6 +14,7 @@ import { listUnread } from '@/lib/services/notifications';
 import { readBriefDecisions } from '@/lib/briefing/decisions';
 import { medicationsDueOn, weekdayOf, type MedicationScheduleRow } from '@/lib/briefing/sources';
 import { viewerFor } from '@/lib/ai/context/policy';
+import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
 import { countHandledThisWeek } from '@/lib/metric/time-saved-server';
 import type { AiActivityRow, CompletedRunRow } from '@/lib/home/today';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -147,7 +148,14 @@ export async function POST(req: NextRequest) {
         if (!lists.ok) return { data: null, error: lists.error };
         return supabase.from('grocery_items').select('name, category').eq('family_id', familyId).in('list_id', lists.ids).eq('is_checked', false).limit(15);
       })(),
-      supabase.from('reminders').select('title, notes, remind_at').eq('family_id', familyId).eq('is_done', false).lte('remind_at', weekEnd).order('remind_at').limit(8),
+      // A reminder an Autopilot card made goes into this reader's brief only if
+      // the card would (lib/autopilot/reminder-cards.ts): "Renew Passport" is
+      // not a guest's, a policy's renewal is the managers' and its member's.
+      readVisibleReminders((from, to) => supabase.from('reminders').select('id, title, notes, remind_at, related_type, related_id')
+        .eq('family_id', familyId).eq('is_done', false).lte('remind_at', weekEnd).order('remind_at').order('id').range(from, to),
+      { limit: 8, viewer: { role: ctx.active.role, memberId: ctx.active.member?.id ?? null }, cards: reminderCardsReader(supabase, familyId, {
+        onError: (error) => console.error('[briefing] autopilot reminder cards read failed', error),
+      }) }),
       supabase.from('meal_plans').select('plan_date, meal_type, meals(name)').eq('family_id', familyId).gte('plan_date', today).lte('plan_date', weekEndKey).order('plan_date').limit(14),
       supabase.from('appointments').select('title, starts_at, provider, location, member_id').eq('family_id', familyId).gte('starts_at', todayStart).lte('starts_at', weekEnd).order('starts_at').limit(6),
       // ── Cross-domain concierge signals (previously invisible to the briefing) ──

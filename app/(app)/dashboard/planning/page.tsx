@@ -11,6 +11,8 @@ import { cn } from '@/lib/utils/cn';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { getFormat } from '@/lib/utils/format-server';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
+import { suggestionReminderKey, suggestionSourceTag } from '@/lib/services/autopilot';
+import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -95,6 +97,28 @@ export default async function PlanningPage() {
   // no zone at all; an instant renders in the family's.
   const { fmtTime, fmtDate } = await getFormat(tz);
 
+  // A reminder an Autopilot card made is listed only to the card's readers
+  // (lib/autopilot/reminder-cards.ts), as on the dashboard: an accepted
+  // insurance card's "Renew dental insurance (Smile Co)" is the managers' and
+  // the member the policy names, a renewal's is not a guest's. The count is the
+  // family's active reminders, as it always was; the four listed are the
+  // soonest this reader may be shown.
+  const reminderCards = reminderCardsReader(supabase, familyId, {
+    keyOf: (cardId) => suggestionReminderKey(familyId, cardId),
+    sourceTagOf: suggestionSourceTag,
+    onError: (error) => console.error('[planning] autopilot reminder cards read failed', error),
+  });
+  const readPlanningReminders = async () => {
+    let count: number | null = null;
+    const read = await readVisibleReminders(async (from, to) => {
+      const page = await supabase.from('family_reminders').select('id, title, remind_at, idempotency_key, tags', { count: 'exact' })
+        .eq('family_id', familyId).eq('status', 'active').order('remind_at', { ascending: true, nullsFirst: false }).order('id').range(from, to);
+      count ??= page.count;
+      return page;
+    }, { limit: 4, viewer: { role: ctx.active.role, memberId: ctx.active.member?.id ?? null }, cards: reminderCards });
+    return { ...read, count };
+  };
+
   const [
     { data: events, count: eventCount },
     { data: tasks, count: taskCount },
@@ -109,8 +133,7 @@ export default async function PlanningPage() {
       .eq('family_id', familyId).gte('starts_at', nowIso).order('starts_at').limit(4)),
     safe(supabase.from('todo_items').select('id, title, due_date', { count: 'exact' })
       .eq('family_id', familyId).eq('is_done', false).order('due_date', { ascending: true, nullsFirst: false }).limit(4)),
-    safe(supabase.from('family_reminders').select('id, title, remind_at', { count: 'exact' })
-      .eq('family_id', familyId).eq('status', 'active').order('remind_at', { ascending: true, nullsFirst: false }).limit(4)),
+    safe(readPlanningReminders()),
     safe(supabase.from('notes').select('id, title, body, updated_at', { count: 'exact' })
       .eq('family_id', familyId).order('updated_at', { ascending: false }).limit(4)),
     safe(supabase.from('documents').select('id, title, category, created_at', { count: 'exact' })

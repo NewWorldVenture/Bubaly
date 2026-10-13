@@ -17,6 +17,8 @@ vi.mock('@/lib/ai/provider', async (importOriginal) => ({
   isAIConfigured: async () => true,
 }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: mocks.rate }));
+// The route refuses a locked family now (F33); that refusal has its own case, so it admits here.
+vi.mock('@/lib/server/route-feature-gate', () => ({ refuseIfLocked: async () => null }));
 vi.mock('@/lib/server/audit', () => ({ logAudit: mocks.audit }));
 
 type QueryResult = { data: unknown; error: { message: string; code?: string } | null; count?: number };

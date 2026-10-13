@@ -6,6 +6,7 @@ import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
+import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { weekWindow, weekRangeLabel, choreCompletionRate, bucketByDay, dayLoad } from '@/lib/ai/weekly';
@@ -78,7 +79,14 @@ export async function POST(req: NextRequest) {
         if (!lists.ok) return { data: null, error: lists.error };
         return supabase.from('grocery_items').select('name, category').eq('family_id', familyId).in('list_id', lists.ids).eq('is_checked', false).limit(20);
       })(),
-      supabase.from('reminders').select('title, notes, remind_at').eq('family_id', familyId).eq('is_done', false).lte('remind_at', w.aheadEnd).order('remind_at').limit(12),
+      // Only the reminders this reader may be told (lib/autopilot/reminder-cards.ts):
+      // one an Autopilot card made follows the card — "Renew Passport" is not a
+      // guest's, a policy's renewal is the managers' and its member's.
+      readVisibleReminders((from, to) => supabase.from('reminders').select('id, title, notes, remind_at, related_type, related_id')
+        .eq('family_id', familyId).eq('is_done', false).lte('remind_at', w.aheadEnd).order('remind_at').order('id').range(from, to),
+      { limit: 12, viewer: { role: ctx.active.role, memberId: ctx.active.member?.id ?? null }, cards: reminderCardsReader(supabase, familyId, {
+        onError: (error) => console.error('[weekly-briefing] autopilot reminder cards read failed', error),
+      }) }),
       supabase.from('chore_assignments').select('status, due_at, member_id').eq('family_id', familyId).gte('due_at', w.recapStart).lte('due_at', w.recapEnd),
       readCalendarOccurrences(supabase, familyId, instantCalendarBounds(w.recapStart, w.recapEnd, tz), tz, { columns: ['title', 'starts_at', 'category'], limit: 40 }),
     ]);

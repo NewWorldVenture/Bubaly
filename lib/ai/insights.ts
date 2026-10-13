@@ -7,6 +7,9 @@
 
 import { adviseOnPurchase, describeAdvice, type FactRow, type HomeAssetRow, type InventoryRow, type WardrobeRow, type WishRow } from '@/lib/purchases/advisor';
 import type { LocationLike } from '@/lib/inventory/finder';
+import { daysUntilNextOn } from '@/lib/celebrations/dates';
+import { isPollClosed } from '@/lib/voting/polls';
+import { isManager } from '@/lib/constants/roles';
 
 export type InsightKind =
   | 'chores'
@@ -73,6 +76,8 @@ export type InsightData = {
   familyName: string;
   /** Human-readable local date/time, e.g. "Wednesday, June 24, 2026, 3:00 PM". */
   now: string;
+  /** The family's day, `YYYY-MM-DD`, for the kinds that count days to a DATE column. */
+  todayKey?: string;
   members: InsightMember[];
   /** Raw rows fetched server-side, keyed by table name. */
   rows: Record<string, Record<string, unknown>[]>;
@@ -134,7 +139,20 @@ const q = (data: InsightData) =>
 export const MANAGER_ONLY_INSIGHTS: ReadonlySet<InsightKind> = new Set<InsightKind>([
   'medications', 'care', 'documents', 'expenses', 'billing', 'subscriptions',
   'renewals', 'messages', 'notifications', 'settings',
+  // Every policy's premium and coverage, family-wide — while the Insurance Hub
+  // shows a child or teen only the policies that name them.
+  'insurance',
 ]);
+
+/**
+ * Whether `role` may ask for `kind` — the route's own refusal
+ * (`MANAGER_ONLY_INSIGHTS.has(kind) && !isManager(ctx.active.role)` answers
+ * 403), for the screens that offer the button. A page every role reaches
+ * offered a child the Insurance Hub's summary, and every tap was a refusal.
+ */
+export function mayAskInsight(kind: InsightKind, role: string | null | undefined): boolean {
+  return !(MANAGER_ONLY_INSIGHTS.has(kind) && !isManager(role));
+}
 
 // The §44 data-not-instruction rule is appended by the route, not here: this
 // module is imported by a CLIENT component (components/ai/ai-insight.tsx), and
@@ -660,7 +678,10 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     buildUser: (d) => {
       const pets = r(d, 'pets').slice(0, 8);
       const list = pets.map((p) => `- ${p.name || 'Pet'} (${p.species || '?'}, ${p.breed || 'mixed'})`).join('\n') || 'No pets logged.';
-      return `Family: ${d.familyName}. Now: ${d.now}.\n\nPets:\n${list}\n\nGive: (1) any upcoming vet or care tasks to schedule, (2) one wellness tip for the most recent pet, (3) one thing to track in the pet log.${q(d)}`;
+      const petName = new Map(pets.map((p) => [String(p.id), String(p.name || 'Pet')]));
+      const care = r(d, 'pet_care_records').filter((c) => petName.has(String(c.pet_id))).slice(0, 30);
+      const careList = care.map((c) => `- ${petName.get(String(c.pet_id))}: ${c.title || c.kind || 'care'} (${c.kind || 'other'}) on ${day(c.record_date)}${c.next_due ? `, next due ${day(c.next_due)}` : ''}`).join('\n') || 'No care records logged.';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nPets:\n${list}\n\nCare records:\n${careList}\n\nGive: (1) any upcoming vet or care tasks to schedule, (2) one wellness tip for the most recent pet, (3) one thing to track in the pet log.${q(d)}`;
     },
   },
 
@@ -995,8 +1016,8 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     system:
       'You are a family insurance advisor. Help families understand their coverage, identify gaps, and flag expiring policies. Always recommend consulting a licensed insurance professional for specific advice. ' + SHARED_RULES,
     buildUser: (d) => {
-      const policies = r(d, 'insurance_policies').slice(0, 10);
-      const list = policies.map((p) => `- ${p.policy_type || 'Policy'}: ${p.insurer || '?'} | $${p.premium || '?'}/yr | expires: ${String(p.renewal_date || p.expires_at || '').slice(0, 10)}`).join('\n') || 'No policies tracked.';
+      const policies = r(d, 'family_insurance_policies').slice(0, 10);
+      const list = policies.map((p) => `- ${p.policy_type || 'Policy'}: ${p.insurer || '?'} | ${p.premium_amount != null ? `${dollars(Number(p.premium_amount))} ${p.premium_frequency || 'monthly'}` : 'premium not recorded'} | renews: ${p.renewal_date ? day(p.renewal_date) : 'no date'}`).join('\n') || 'No policies tracked.';
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nInsurance policies:\n${list}\n\nGive: (1) policies expiring in 60 days, (2) coverage type that seems missing for this family size, (3) one cost-saving action.${q(d)}`;
     },
   },
@@ -1043,17 +1064,25 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     system:
       'You are a thoughtful family celebration planner. Help families prepare for upcoming birthdays, anniversaries, and special dates. Suggest meaningful, personalized celebration ideas that fit different ages and budgets. ' + SHARED_RULES,
     buildUser: (d) => {
-      const dates = r(d, 'family_dates').slice(0, 20);
-      const upcoming = dates.filter((dt) => {
-        const dStr = dt.date as string;
-        if (!dStr) return false;
-        const thisYear = new Date().getFullYear();
-        const next = new Date(`${thisYear}-${dStr.slice(5, 10)}`);
-        if (next < new Date()) next.setFullYear(thisYear + 1);
-        const diff = (next.getTime() - Date.now()) / 86400000;
-        return diff >= 0 && diff <= 60;
-      });
-      return `Family: ${d.familyName}. Now: ${d.now}. Members: ${d.members.map((m) => m.name).join(', ')}.\n\nUpcoming celebrations (next 60 days): ${upcoming.length > 0 ? JSON.stringify(upcoming.map((dt) => ({ name: dt.name, type: dt.type, date: dt.date }))) : 'none found'}. Total saved dates: ${dates.length}.\n\nGive: (1) alert for any celebration within 2 weeks, (2) two creative ideas for the soonest upcoming occasion, (3) one year-round tradition to start.${q(d)}`;
+      const dates = r(d, 'family_dates');
+      // The same list the module shows: saved dates and the members' birthdays,
+      // counted from the family's day.
+      const all = [
+        ...dates.map((dt) => ({ name: String(dt.title ?? ''), type: String(dt.kind ?? 'other'), date: String(dt.event_date ?? '') })),
+        ...r(d, 'family_members').map((m) => ({ name: `${String(m.display_name ?? '')}'s birthday`, type: 'birthday', date: String(m.birthday ?? '') })),
+      ];
+      // The route always supplies the family's day. Without one there is no day
+      // to count from (the host's UTC date is a different family's day), so the
+      // prompt says the countdown is unknown rather than "none found".
+      const today = d.todayKey;
+      const upcoming = today ? all
+        .map((c) => ({ ...c, inDays: daysUntilNextOn(c.date, today) }))
+        .filter((c): c is typeof c & { inDays: number } => c.inDays !== null && c.inDays <= 60)
+        .sort((a, b) => a.inDays - b.inDays)
+        .slice(0, 20) : null;
+      const listed = upcoming === null ? "unknown (the family's day was not supplied)"
+        : upcoming.length > 0 ? JSON.stringify(upcoming) : 'none found';
+      return `Family: ${d.familyName}. Now: ${d.now}. Members: ${d.members.map((m) => m.name).join(', ')}.\n\nUpcoming celebrations (next 60 days): ${listed}. Total saved dates: ${dates.length}.\n\nGive: (1) alert for any celebration within 2 weeks, (2) two creative ideas for the soonest upcoming occasion, (3) one year-round tradition to start.${q(d)}`;
     },
   },
 
@@ -1195,12 +1224,15 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     system:
       'You are a helpful family logistics coordinator. Help families plan rides, identify carpool opportunities, and reduce transportation stress. Be specific and actionable. ' + SHARED_RULES,
     buildUser: (d) => {
-      const rides = r(d, 'rides').slice(0, 30);
-      const upcoming = rides.filter((ride) => {
-        if (!ride.ride_date) return false;
-        return new Date(ride.ride_date as string) >= new Date();
-      });
-      const pending = rides.filter((r) => r.status === 'requested' || r.status === 'pending').length;
+      // The route reads every ride still to happen from the family's today, so
+      // these counts are complete; the filter below stays as a guard. `planned`
+      // is the unconfirmed status (0027's ride_status enum has no 'requested'
+      // or 'pending', so that count was always 0).
+      const rides = r(d, 'rides');
+      const today = d.todayKey ?? '';
+      const upcoming = rides.filter((ride) => typeof ride.ride_date === 'string' && ride.ride_date >= today
+        && ride.status !== 'cancelled' && ride.status !== 'completed');
+      const pending = upcoming.filter((ride) => ride.status === 'planned').length;
       return `Family: ${d.familyName}. Now: ${d.now}. Members: ${d.members.map((m) => m.name).join(', ')}.\n\nUpcoming rides: ${upcoming.length}. Pending/unconfirmed: ${pending}.\n\nGive: (1) any urgent unconfirmed rides to address, (2) one carpool or consolidation opportunity, (3) one tip to streamline family transportation.${q(d)}`;
     },
   },
@@ -1214,10 +1246,21 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     system:
       'You are a thoughtful family decision facilitator. Help families understand their poll results, encourage participation, and make collaborative decisions. Be encouraging and inclusive. ' + SHARED_RULES,
     buildUser: (d) => {
+      // family_polls has `question` and `status` (+ `closes_at`), never
+      // `title` or `is_closed`: read through those names, every poll counted
+      // as open and the recent ones went to the model as empty objects.
       const polls = r(d, 'family_polls').slice(0, 15);
-      const open = polls.filter((p) => !p.is_closed).length;
-      const closed = polls.filter((p) => p.is_closed).length;
-      return `Family: ${d.familyName}. Now: ${d.now}. Members: ${d.members.map((m) => m.name).join(', ')}.\n\nFamily polls: ${polls.length} total (${open} open, ${closed} decided). Recent: ${JSON.stringify(polls.slice(0, 3).map((p) => ({ title: p.title, is_closed: p.is_closed })))}.\n\nGive: (1) a nudge to vote on any open polls, (2) one tip to make family decisions more inclusive, (3) one idea for a poll topic the family would enjoy.${q(d)}`;
+      const isClosed = (p: Record<string, unknown>) => isPollClosed(String(p.status ?? 'open'), (p.closes_at as string | null) ?? null);
+      const open = polls.filter((p) => !isClosed(p)).length;
+      const closed = polls.length - open;
+      const options = r(d, 'family_poll_options');
+      const votes = r(d, 'family_poll_votes');
+      const recent = polls.slice(0, 3).map((p) => ({
+        question: p.question,
+        closed: isClosed(p),
+        options: options.filter((o) => o.poll_id === p.id).map((o) => ({ label: o.label, votes: votes.filter((v) => v.option_id === o.id).length })),
+      }));
+      return `Family: ${d.familyName}. Now: ${d.now}. Members: ${d.members.map((m) => m.name).join(', ')}.\n\nFamily polls: ${polls.length} total (${open} open, ${closed} decided). Recent: ${JSON.stringify(recent)}.\n\nGive: (1) a nudge to vote on any open polls, (2) one tip to make family decisions more inclusive, (3) one idea for a poll topic the family would enjoy.${q(d)}`;
     },
   },
 };

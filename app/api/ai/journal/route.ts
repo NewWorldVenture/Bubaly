@@ -8,6 +8,7 @@ import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider } from '@/lib/ai/provider';
 import { buildJournalPrompt, parseJournalPrompt, promptOfTheDay } from '@/lib/journal/prompts';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { describeReadError } from '@/lib/supabase/settle';
 
 // POST /api/ai/journal — returns one personalized reflection prompt for the
@@ -20,7 +21,11 @@ export async function POST() {
     const memberId = ctx.active.member?.id ?? null;
     const supabase = await createServer();
     // A closed or trial-ended family is refused before any work: see lib/server/account-standing.ts.
-    const refused = await refuseClosedOrTrialEnded(supabase, ctx.active.familyId);
+    const closed = await refuseClosedOrTrialEnded(supabase, ctx.active.familyId);
+    if (closed) return closed;
+    // The page in front of this is feature-gated; this endpoint was not, and it
+    // calls a model. Same resolver, so the two cannot disagree.
+    const refused = await refuseUnlessEntitled(supabase, ctx.active.familyId, ['/dashboard/journal']);
     if (refused) return refused;
     const limited = await enforceAIRateLimit(supabase, `ai-journal:${ctx.user.id}`, { limit: 20 });
     if (!limited.ok) return NextResponse.json(

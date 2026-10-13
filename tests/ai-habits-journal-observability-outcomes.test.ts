@@ -18,6 +18,8 @@ vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.context }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.server }));
 vi.mock('@/lib/ai/provider', () => ({ resolveProvider: mocks.provider, isAIConfigured: async () => true }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: mocks.rate }));
+// Both routes are plan-gated now (F33); that gate has its own cases, so it admits here.
+vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: async () => null }));
 vi.mock('@/lib/services/scope', () => ({
   scopeFromUserContext: (ctx: { active: { familyId: string }; user: { id: string } }, db: unknown) => ({
     db, familyId: ctx.active.familyId, userId: ctx.user.id,
