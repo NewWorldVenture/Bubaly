@@ -16,8 +16,10 @@
 import 'server-only';
 import { z } from 'zod';
 import { addFromMealPlan } from '@/lib/services/groceries';
-import { foodProfile, getMealPlan, listRecipes, planWeek, setSlot, type PlanSlot } from '@/lib/services/meals';
-import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
+import {
+  foodProfile, getMealPlan, listRecipes, normalizeDishName, planWeek, setSlot, type PlanEntryInput, type PlanSlot,
+} from '@/lib/services/meals';
+import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { defineTool, plural, type ToolDefinition } from './types';
 
@@ -67,11 +69,62 @@ function ingredientsField(lines: IngredientLine[] | null | undefined): { ingredi
   return { ingredients: lines.map((i) => ({ name: i.name, quantity: i.quantity ?? null, unit: i.unit ?? null })) };
 }
 
-/** A plan entry for the service: a saved meal by id, or a dish by name with whatever ingredients the model gave. */
-function planEntry(e: { date: string; meal_type?: (typeof MEAL_TYPE_ENUM)[number] | null; meal_id?: string | null; meal_name?: string | null; ingredients?: IngredientLine[] | null }) {
+type PlanEntryArgs = {
+  date: string;
+  meal_type?: (typeof MEAL_TYPE_ENUM)[number] | null;
+  meal_id?: string | null;
+  meal_name?: string | null;
+  ingredients?: IngredientLine[] | null;
+};
+
+/**
+ * The library name of every saved meal an entry names by id AND by name, so
+ * `planEntry` can tell "meal-1, Tacos" (one dish, said twice) from "meal-1,
+ * Curry" (two dishes). One family-scoped read for the whole batch; an id it
+ * does not find is left to the service, which says the meal could not be found.
+ */
+async function libraryNames(scope: ServiceScope, entries: PlanEntryArgs[]): Promise<ServiceResult<ReadonlyMap<string, string>>> {
+  const ids = [...new Set(entries.flatMap((e) => (e.meal_id && e.meal_name?.trim() ? [e.meal_id] : [])))];
+  if (!ids.length) return ok(new Map());
+  const { data, error } = await scope.db
+    .from('meals')
+    .select('id, name')
+    .eq('family_id', scope.familyId)
+    .in('id', ids);
+  if (error || !Array.isArray(data)) {
+    console.error('[tool:meals] meal name read failed', error);
+    return fail(describeDbError(error, 'Could not read that meal.'), { code: SERVICE_CODES.db });
+  }
+  return ok(new Map(data.map((meal) => [meal.id, meal.name])));
+}
+
+/**
+ * A plan entry for the service: a saved meal by id, or a dish by name with
+ * whatever ingredients the model gave.
+ *
+ * A name or ingredients sent WITH an id must describe that saved meal, or the
+ * call is a contradiction: "meal-1 (Tacos), named Curry" or "meal-1, with
+ * these ingredients" used to plan meal-1 and drop the rest without a word.
+ * The contradicting field now travels with the id, so the service's own
+ * "choose one meal, recipe or custom dish" refusal applies before anything is
+ * written. The id's own name (any case, any spacing) and an empty or missing
+ * ingredients list say nothing new and are not passed on — the service refuses
+ * an id with a name or an ingredients key, however harmless.
+ */
+function planEntry(e: PlanEntryArgs, names: ReadonlyMap<string, string>): PlanEntryInput {
   const mealType = e.meal_type ?? 'dinner';
-  if (e.meal_id) return { date: e.date, mealType, mealId: e.meal_id };
-  return { date: e.date, mealType, mealName: e.meal_name ?? null, ...ingredientsField(e.ingredients) };
+  if (!e.meal_id) return { date: e.date, mealType, mealName: e.meal_name ?? null, ...ingredientsField(e.ingredients) };
+  const name = e.meal_name?.trim();
+  const saved = names.get(e.meal_id);
+  const otherName = name && saved !== undefined && normalizeDishName(name) !== normalizeDishName(saved) ? { mealName: name } : {};
+  return { date: e.date, mealType, mealId: e.meal_id, ...otherName, ...ingredientsField(e.ingredients) };
+}
+
+/** Every entry, ready for the service. */
+async function planEntries(scope: ServiceScope, entries: PlanEntryArgs[]): Promise<ServiceResult<PlanEntryInput[]>> {
+  const names = await libraryNames(scope, entries);
+  if (!names.ok) return names;
+  return ok(entries.map((e) => planEntry(e, names.data)));
 }
 
 const planEntryInput = z.object({
@@ -233,9 +286,11 @@ export const mealTools: ToolDefinition[] = [
       const mealName = (input.meal_name ?? input.name ?? '').trim();
       if (!mealName && !input.meal_id) return fail('Which dish should go on the plan?', { code: SERVICE_CODES.invalidInput });
 
-      const res = await setSlot(scope, planEntry({
+      const entries = await planEntries(scope, [{
         date, meal_type: input.meal_type, meal_id: input.meal_id, meal_name: mealName || null, ingredients: input.ingredients,
-      }));
+      }]);
+      if (!entries.ok) return entries;
+      const res = await setSlot(scope, entries.data[0]);
       if (!res.ok) return res;
       return ok({ ...toSlotOutput(res.data), replaced: res.data.replaced });
     },
@@ -294,7 +349,9 @@ export const mealTools: ToolDefinition[] = [
       return out;
     },
     execute: async (scope, input) => {
-      const res = await planWeek(scope, input.entries.map(planEntry));
+      const entries = await planEntries(scope, input.entries);
+      if (!entries.ok) return entries;
+      const res = await planWeek(scope, entries.data);
       if (!res.ok) return res;
       return ok({ planned: res.data.planned.map(toSlotOutput), replaced: res.data.replaced, created_meals: res.data.createdMeals });
     },
