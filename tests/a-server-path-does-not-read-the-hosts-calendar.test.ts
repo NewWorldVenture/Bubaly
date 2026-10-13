@@ -43,6 +43,7 @@ const DECLARED: Record<string, string> = {
   'lib/vacations/dates.ts': 'daysUntil(Date) for browser callers; the trip layout passes the family day key.',
   'lib/home/maintenance.ts': 'currentSeason(Date) for browser callers; the maintenance page passes the family day key.',
   'lib/home/time-of-day.ts': 'dayPhase\'s fallback when no zone is given; every server caller passes the family zone.',
+  'lib/homework/board.ts': 'dueBucket\'s fallback when no zone is given; the Homework page passes the family zone, and the server imports only its instant-based helpers (isOverdue, the open set).',
   'lib/display/ambient.ts': 'the fallback when the display has no zone; the display page passes the family\'s.',
   'lib/capture/parse.ts': 'LOCAL_OPS, one half of an explicit LOCAL/UTC ops pair; the server bridge (parseEventInZone) chooses UTC_OPS on a zone-shifted wall clock.',
   // ── correct as it stands ──

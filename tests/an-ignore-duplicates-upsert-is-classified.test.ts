@@ -25,6 +25,7 @@ const CLASSIFIED: Record<string, { count: number; how: string }> = {
   'app/api/ai/route.ts': { count: 1, how: 'readback: re-reads the conversation with ownership' },
   'app/api/ai/chat/route.ts': { count: 1, how: 'readback: re-reads the conversation with ownership' },
   'app/(app)/dashboard/moments/page.tsx': { count: 1, how: 'best-effort log; reports nothing; error now logged' },
+  'app/(app)/dashboard/independence/actions.ts': { count: 1, how: '.select(): an empty result is a rung already on the ladder, restarted by a conditional update that never touches an achieved one' },
   'app/(app)/dashboard/playbook/playbook-actions.ts': { count: 1, how: '.select(): counts only inserted rows (fixed C1-S9-70)' },
   'app/onboarding/actions.ts': { count: 1, how: '.select() + readback of the existing token on a duplicate' },
   'lib/chores/server.ts': { count: 1, how: '.select(): returns only newly earned badges' },
