@@ -17026,5 +17026,6 @@
   "babysittersView.payoutsAreKeptByParents": "Ce que sont payés les baby-sitters est tenu par les parents de votre famille.",
   "savings.overYourWeeklyBudget": "Vous dépassez de {amount} votre budget hebdomadaire {category}.",
   "savings.overYourMonthlyBudget": "Vous dépassez de {amount} votre budget mensuel {category}.",
-  "savings.overYourYearlyBudget": "Vous dépassez de {amount} votre budget annuel {category}."
+  "savings.overYourYearlyBudget": "Vous dépassez de {amount} votre budget annuel {category}.",
+  "budgetAnalysisCard.monthsBudgetedSpending": "{month} · les dépenses budgétées du mois, les plafonds hebdomadaires et annuels comptés pour leur part mensuelle"
 }

@@ -29,6 +29,9 @@ import { resetHookSlots } from './helpers/hook-slots';
 //                           set against a calendar month of spend from a
 //                           capped read, matched case-sensitively, with every
 //                           duplicate budget row its own line.
+//   M13-SIB Finances        the month was summed from the newest-500 list, and
+//                           every duplicate budget row's limit was in the bar:
+//                           the default view disagreed with ?view=manage.
 
 type Fetcher = (client: unknown) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>;
 
@@ -249,6 +252,55 @@ describe('M12 — the Finances budget bar is this month\'s budget', () => {
     expect(has(tree, t('financesModule.spentOfBudget', { spent: '$900.00', budget: '$800.00' }))).toBe(true);
     expect(has(tree, t('financesModule.overBudget'))).toBe(true);
     expect(has(tree, t('financesModule.onTrack'))).toBe(false);
+  });
+
+  // M13-SIB-FIN-DUP: every budget row was summed, so a legacy duplicate's limit
+  // was added to the month's budget, where the manage view, Family CFO and
+  // budgetVsActual keep one budget per category, the oldest.
+  it('a legacy duplicate budget is not a second limit in the month\'s budget', async () => {
+    db.seed('budgets', [
+      budget('Groceries', 150, 'weekly'),
+      budget('Travel', 6000, 'yearly'),
+      budget('Dining', 300, 'monthly'),
+      budget('groceries', 999, 'monthly', '2026-06-01T00:00:00Z'),
+    ]);
+    db.seed('transactions', [txn('2026-10-03', 1500, 'Groceries')]);
+
+    const tree = await show(() => createElement(FinancesModule));
+    // $150 x 52/12 + $6,000 / 12 + $300 = $1,450, as the manage view's bar reads it, not $2,449.
+    expect(has(tree, t('financesModule.spentOfBudget', { spent: '$1,500.00', budget: '$1,450.00' }))).toBe(true);
+    expect(has(tree, '$2,449.00')).toBe(false);
+    expect(has(tree, t('financesModule.overBudget'))).toBe(true);
+    expect(has(tree, t('financesModule.onTrack'))).toBe(false);
+  });
+});
+
+// M13-SIB-FIN-CAP: the default /dashboard/billing view summed the month from
+// its newest-500 list, so it disagreed with ?view=manage past 500 rows.
+describe('M13-SIB-FIN-CAP — the Finances view adds up every row of the month', () => {
+  it('past 500 rows this month, "Expenses · this month" and the budget bar are all of them, as on the manage view', async () => {
+    db.seed('budgets', [budget('Groceries', 1000, 'monthly')]);
+    // 1,200 October shops of $1, past the newest-500 list and the server's
+    // 1,000-row cap, and next month's scheduled rent, first in that list.
+    db.seed('transactions', Array.from({ length: 1200 }, (_, i) => txn(`2026-10-${String(1 + (i % 13)).padStart(2, '0')}`, 1, 'Groceries')));
+    db.seed('transactions', Array.from({ length: 30 }, () => txn('2026-11-01', 100, 'Housing', { status: 'scheduled' })));
+
+    const finances = await show(() => createElement(FinancesModule));
+    expect(tile(finances, t('financesModule.stat.expenses'))).toContain('$1,200.00');
+    expect(has(finances, t('financesModule.spentOfBudget', { spent: '$1,200.00', budget: '$1,000.00' }))).toBe(true);
+    expect(has(finances, t('financesModule.overBudget'))).toBe(true);
+
+    // The manage view of the same page says the same.
+    resetHookSlots(h.hooks);
+    live.queries.clear();
+    expect(tile(await show(() => createElement(BillingModule)), t('billingModule.expenses'))).toContain('$1,200.00');
+  });
+
+  it('a month past the read\'s ceiling is the error state, not a smaller total', async () => {
+    db.seed('transactions', Array.from({ length: 50_001 }, () => txn('2026-10-05', 1, 'Groceries')));
+    const tree = await show(() => createElement(FinancesModule));
+    expect(has(tree, t('financesModule.couldNotLoadFinancialData'))).toBe(true);
+    expect(has(tree, t('financesModule.stat.expenses'))).toBe(false);
   });
 });
 

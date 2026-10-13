@@ -10,11 +10,16 @@
 // Driven through `executeTool` — how the assistant engine and a spending-review
 // run reach these tools — over an in-memory database that applies the same
 // 1,000-row cap as the real server.
+import { createElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type { ServiceScope } from '@/lib/services/types';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
+import { renderTranslated } from './helpers/render-translated';
+import { cardFromToolResult, type BudgetAnalysisCard } from '@/lib/ai/result-cards';
+import { BudgetAnalysisCardView } from '@/components/ai/cards/budget-analysis';
+import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
 
 const holder = vi.hoisted(() => ({ db: null as unknown }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => holder.db, createServiceClient: () => holder.db }));
@@ -98,6 +103,39 @@ describe('a yearly budget is judged on the whole year', () => {
     if (out.status !== 'ok') return;
     // The one-line summary names the totals as the month's, not as plain totals.
     expect(out.summary).toBe('All 1 budget on track for 2026-10; the month\'s budgeted spending is $200.00 of $1,166.67 (weekly and yearly limits as their monthly share)');
+  });
+
+  // M12-CARD: the third presentation of the same totals, the assistant's card.
+  // Its headline is the month's "$200 of $1,166.67" and its one red line the
+  // year's "$15,000 / $14,000"; neither said so, so the line read as the month
+  // and the headline as the sum of the lines.
+  it('the assistant\'s budget card says the line is yearly and the headline is the month\'s budgeted spending', async () => {
+    db.seed('transactions', [...groceries(1480), ...octoberGroceries(20)]);
+    const out = await executeTool(scope(), 'finances.budgetVsActual', {});
+    expect(out).toMatchObject({ status: 'ok' });
+    const card = cardFromToolResult('finances.budgetVsActual', {}, out) as BudgetAnalysisCard;
+    expect(card).toMatchObject({
+      kind: 'budget_analysis', period: '2026-10', totals: 'month', total_spent: 200,
+      rows: [{ label: 'Groceries', period: 'yearly', spent: 15_000, limit: 14_000, over: true }],
+    });
+
+    const html = renderTranslated(createElement(BudgetAnalysisCardView, { card }));
+    const said = (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params).replaceAll('\'', '&#x27;');
+    // The headline, and under the title the words that say what it is.
+    expect(html).toContain('>$200 of $1,166.67</span>');
+    expect(html).toContain(`>${said('budgetAnalysisCard.monthsBudgetedSpending', { month: '2026-10' })}</p>`);
+    // The line, with its period.
+    expect(html).toContain(`>$15,000 / $14,000 · ${said('billing.yearly')}</span>`);
+  });
+
+  it('a budgetVsActual result without the month\'s totals is no card, not a headline added up from lines of different periods', () => {
+    expect(cardFromToolResult('finances.budgetVsActual', {}, {
+      ok: true, summary: 'Budgets',
+      data: { month: '2026-10', budgets: [
+        { category: 'Groceries', period: 'yearly', limit: 14_000, spent: 15_000, pct: 107, over: true },
+        { category: 'Dining', period: 'weekly', limit: 100, spent: 40, pct: 40, over: false },
+      ] },
+    })).toBeNull();
   });
 
   it('finances.spendingByCategory over the year totals every expense in it', async () => {

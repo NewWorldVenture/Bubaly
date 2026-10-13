@@ -10,12 +10,14 @@ import {
   simulateDecision, projectActivity,
   type SimResult, type SimBudget, type SimEvent, type ActivityDecision, type ProjectionResult,
 } from '@/lib/twin/simulate';
-import { readAll } from '@/lib/supabase/read-all';
+import { readAllById } from '@/lib/supabase/read-all';
 import { escapeLike } from '@/lib/supabase/escape-like';
 import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
 import { readsHouseholdMoney } from '@/lib/finance/household-money';
+import { budgetByCategory, periodWindow } from '@/lib/finance/budget-periods';
+import { dayKeyInTz } from '@/lib/services/scope';
 
 // Decision Simulator server action (Digital Twin, pillar #2). Assembles the real
 // household context for the proposed decision and runs the pure simulator. All
@@ -26,18 +28,38 @@ export type SimFormInput =
   | { kind: 'commitment'; memberId: string; memberName: string; title: string; startsAt: string; durationMin: number; weeks?: number }
   | { kind: 'spend'; label: string; category: string; amountDollars: number };
 
-/** First day of the budget's current period (UTC), as a YYYY-MM-DD string. */
-function periodStart(period: string, now: Date): string {
-  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  if (period === 'weekly') {
-    const dow = (d.getUTCDay() + 6) % 7; // Monday = 0
-    d.setUTCDate(d.getUTCDate() - dow);
-  } else if (period === 'yearly') {
-    d.setUTCMonth(0, 1);
-  } else {
-    d.setUTCDate(1); // monthly (default)
-  }
-  return d.toISOString().slice(0, 10);
+type TwinClient = Awaited<ReturnType<typeof createServer>>;
+
+/**
+ * The household's budget for a category, and what has been spent against it in
+ * the budget's OWN period on the FAMILY's day: Sunday to Saturday, the month or
+ * the year, both ends (lib/finance/budget-periods periodWindow), as the Budget
+ * Planner and the finance service judge it. This used to start each period on
+ * Greenwich's day with Monday weeks, and had no end, so next month's scheduled
+ * rent was this month's spending. One budget per category, the one the finance
+ * service edits (budgetByCategory: the oldest row), matched however it is
+ * spelled; `.find` over an unordered read took whichever duplicate came first.
+ *
+ * The total drives the budget the simulation is checked against, so it is read
+ * whole and paged on the id (readAllById), and a read past the ceiling is an
+ * error, never a smaller total. `budget: null` with no error: no such budget.
+ */
+async function budgetHeadroom(supabase: TwinClient, familyId: string, category: string, dayKey: string): Promise<{ budget: SimBudget | null; error: unknown }> {
+  const { data: rows, error: budgetError } = await supabase
+    .from('budgets').select('id, category, amount, period, created_at').eq('family_id', familyId);
+  if (budgetError) return { budget: null, error: budgetError };
+  const b = budgetByCategory((rows ?? []).map((x) => ({ ...x, amount: Number(x.amount) }))).get(category.trim().toLowerCase());
+  if (!b) return { budget: null, error: null };
+  const { from, to } = periodWindow(b.period, dayKey);
+  const { rows: tx, error } = await readAllById<{ id: string; amount: number }>((after, limit) => {
+    let query = supabase.from('transactions').select('id, amount').eq('family_id', familyId)
+      .eq('type', 'expense').ilike('category', escapeLike(b.category)).gte('date', from).lte('date', to);
+    if (after) query = query.gt('id', after);
+    return query.order('id').limit(limit);
+  }, { max: 2000 });
+  if (error) return { budget: null, error };
+  const spentCents = Math.round(tx.reduce((s, t) => s + Number(t.amount ?? 0), 0) * 100);
+  return { budget: { category: b.category, limitCents: Math.round(b.amount * 100), spentCents }, error: null };
 }
 
 export async function simulateDecisionAction(input: SimFormInput): Promise<SimResult> {
@@ -79,34 +101,20 @@ export async function simulateDecisionAction(input: SimFormInput): Promise<SimRe
   if (!input.category || !(amountCents > 0)) {
     return { verdict: 'conflict', headline: 'Pick a budget and an amount to simulate.', impacts: [{ severity: 'blocker', title: 'Incomplete decision' }] };
   }
-  const { data: budgetRows } = await supabase
-    .from('budgets').select('category, amount, period').eq('family_id', familyId);
-  const b = (budgetRows ?? []).find((x) => x.category.toLowerCase() === input.category.toLowerCase());
-  let budgets: SimBudget[] = [];
-  if (b) {
-    const start = periodStart(b.period, new Date());
-    // This total drives the budget the simulation is checked against, so a
-    // capped read understates spending. `.limit(2000)` was never 2,000 —
-    // PostgREST caps a response at db-max-rows whatever the client asks for.
-    const { rows: tx, error: txError } = await readAll((from, to) => supabase
-      .from('transactions').select('amount').eq('family_id', familyId)
-      .eq('type', 'expense').ilike('category', escapeLike(b.category)).gte('date', start)
-      .order('id').range(from, to), { max: 2000 });
-    // readAll reports a read that stopped at the ceiling with more rows behind
-    // it. Discarding that here understates `spentCents`, and an understated
-    // total is a simulator that says a purchase fits inside a budget it does
-    // not — the single worst answer this feature can give.
-    if (txError) {
-      console.error('[digital-twin] spend total read failed', txError);
-      return {
-        verdict: 'conflict',
-        headline: tr('digitalTwin.couldNotReadThisCategorysSpending'),
-        impacts: [{ severity: 'blocker', title: tr('digitalTwin.spendingUnavailable') }],
-      };
-    }
-    const spentCents = Math.round((tx ?? []).reduce((s, t) => s + Number(t.amount ?? 0), 0) * 100);
-    budgets = [{ category: b.category, limitCents: Math.round(Number(b.amount) * 100), spentCents }];
+  const { budget, error: txError } = await budgetHeadroom(supabase, familyId, input.category, dayKeyInTz(new Date(), ctx.active.family.timezone || 'UTC'));
+  // A read that failed, or stopped at the ceiling with more rows behind it,
+  // understates `spentCents`, and an understated total is a simulator that says
+  // a purchase fits inside a budget it does not — the single worst answer this
+  // feature can give.
+  if (txError) {
+    console.error('[digital-twin] spend total read failed', txError);
+    return {
+      verdict: 'conflict',
+      headline: tr('digitalTwin.couldNotReadThisCategorysSpending'),
+      impacts: [{ severity: 'blocker', title: tr('digitalTwin.spendingUnavailable') }],
+    };
   }
+  const budgets: SimBudget[] = budget ? [budget] : [];
   return simulateDecision(
     { kind: 'spend', label: input.label.trim() || input.category, category: input.category, amountCents },
     { memberEvents: [], budgets, locale: locale.code },
@@ -130,45 +138,42 @@ export async function projectActivityAction(input: ActivityProjectionInput): Pro
   if (!input.activityName?.trim() || !input.startsAt || !(input.durationMin > 0)) {
     return { ok: false, error: tr('actions.fillInAnActivityTime') };
   }
+  const costCents = Math.round((input.costDollars ?? 0) * 100);
+  // The Cost line is checked against the household's budget and spending,
+  // which are a parent's or adult's (the held 0514), as the spend simulation
+  // above refuses. Anyone else's session reads only their own spending, so the
+  // line read "$X of $Y used" with the household's limit beside part of it.
+  const checksCost = !!input.costCategory && costCents > 0;
+  if (checksCost && !readsHouseholdMoney(ctx.active.role)) {
+    return { ok: false, error: tr('householdMoney.keptByParents') };
+  }
   const supabase = await createServer();
   const now = new Date();
   const in180 = new Date(now.getTime() + 180 * 86_400_000).toISOString();
+  const tz = ctx.active.family.timezone || 'UTC';
 
-  // Member's upcoming events (schedule/load), budgets (cost), vacations (conflicts).
-  const costCents = Math.round((input.costDollars ?? 0) * 100);
-  const [{ data: evRows }, { data: budgetRows }, { data: vacRows }] = await Promise.all([
+  // Member's upcoming events (schedule/load), the cost's budget, vacations (conflicts).
+  const [{ data: evRows }, { budget, error: txError }, { data: vacRows }] = await Promise.all([
     // Series included: a weekly commitment counts every week of the six months (lib/calendar/occurrences.ts).
-    settle(readCalendarOccurrences(supabase, familyId, instantCalendarBounds(now.toISOString(), in180, ctx.active.family.timezone || 'UTC'), ctx.active.family.timezone || 'UTC',
+    settle(readCalendarOccurrences(supabase, familyId, instantCalendarBounds(now.toISOString(), in180, tz), tz,
       { columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day'], assigneeId: input.memberId, limit: 500 })),
-    input.costCategory
-      ? supabase.from('budgets').select('category, amount, period').eq('family_id', familyId)
-      : Promise.resolve({ data: [] as { category: string; amount: number; period: string }[] }),
+    checksCost
+      ? budgetHeadroom(supabase, familyId, input.costCategory!, dayKeyInTz(now, tz))
+      : Promise.resolve({ budget: null, error: null }),
     settle(supabase.from('vacations').select('title, start_date, end_date')
       .eq('family_id', familyId).not('start_date', 'is', null).not('end_date', 'is', null).limit(50)),
   ]);
+  // Same total, same reason as above, same refusal to guess at it.
+  if (txError) {
+    console.error('[digital-twin] projection spend total read failed', txError);
+    return { ok: false, error: tr('digitalTwin.couldNotReadThisCategorysSpending') };
+  }
 
   const memberEvents: SimEvent[] = (evRows ?? []).map((e) => ({
     id: e.id, title: e.title, startsAt: e.starts_at, endsAt: e.ends_at, allDay: e.all_day,
   }));
 
-  let budgets: SimBudget[] = [];
-  if (input.costCategory && costCents > 0) {
-    const b = (budgetRows ?? []).find((x) => x.category.toLowerCase() === input.costCategory!.toLowerCase());
-    if (b) {
-      const start = periodStart(b.period, now);
-      // Same total, same reason as above.
-      const { rows: tx, error: txError } = await readAll((from, to) => supabase.from('transactions').select('amount')
-        .eq('family_id', familyId).eq('type', 'expense').ilike('category', escapeLike(b.category)).gte('date', start)
-        .order('id').range(from, to), { max: 2000 });
-      // Same total, same reason, same refusal to guess at it.
-      if (txError) {
-        console.error('[digital-twin] projection spend total read failed', txError);
-        return { ok: false, error: tr('digitalTwin.couldNotReadThisCategorysSpending') };
-      }
-      const spentCents = Math.round((tx ?? []).reduce((s, t) => s + Number(t.amount ?? 0), 0) * 100);
-      budgets = [{ category: b.category, limitCents: Math.round(Number(b.amount) * 100), spentCents }];
-    }
-  }
+  const budgets: SimBudget[] = budget ? [budget] : [];
 
   const vacationWindows = (vacRows ?? []).map((v) => ({
     start: `${v.start_date}T00:00:00.000Z`, end: `${v.end_date}T23:59:59.000Z`, label: v.title,

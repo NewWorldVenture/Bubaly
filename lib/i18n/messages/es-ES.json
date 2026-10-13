@@ -17026,5 +17026,6 @@
   "babysittersView.payoutsAreKeptByParents": "Lo que se paga a las niñeras lo gestionan los padres de tu familia.",
   "savings.overYourWeeklyBudget": "Te has pasado {amount} de tu presupuesto semanal de {category}.",
   "savings.overYourMonthlyBudget": "Te has pasado {amount} de tu presupuesto mensual de {category}.",
-  "savings.overYourYearlyBudget": "Te has pasado {amount} de tu presupuesto anual de {category}."
+  "savings.overYourYearlyBudget": "Te has pasado {amount} de tu presupuesto anual de {category}.",
+  "budgetAnalysisCard.monthsBudgetedSpending": "{month} · el gasto presupuestado del mes, con los límites semanales y anuales como su parte mensual"
 }

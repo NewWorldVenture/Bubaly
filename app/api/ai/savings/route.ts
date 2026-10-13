@@ -3,7 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { settleAll, describeReadError } from '@/lib/supabase/settle';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { isManager } from '@/lib/constants/roles';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -66,6 +66,9 @@ export async function POST() {
   const today = dayKeyIn(new Date(), ctx.active.family?.timezone || 'UTC');
   const thisWeek = periodWindow('weekly', today), thisYear = periodWindow('yearly', today);
   const readFrom = thisWeek.from < thisYear.from ? thisWeek.from : thisYear.from;
+  // And it ends where the latest period can: 31 December, or this week's
+  // Saturday when it falls in next year's January.
+  const readTo = thisWeek.to > thisYear.to ? thisWeek.to : thisYear.to;
   // All four errors were dropped here, and this route's own docstring above says
   // it "never fabricates numbers". It did. `txns ?? []` empties the category
   // map, so a refused `transactions` read produced no overspending, no stale
@@ -82,14 +85,22 @@ export async function POST() {
   //
   // The transactions read was additionally unbounded — PostgREST caps it at
   // db-max-rows (1,000) in silence — so a family with a busy month had its
-  // over-budget amounts UNDERSTATED and stated as fact. `readAllAsQuery` with a
+  // over-budget amounts UNDERSTATED and stated as fact. A paged read with a
   // real ceiling fixes that; exceeding the ceiling surfaces as an error here
   // rather than as a quiet prefix, because a truncated read is a failed read.
   // Audit C1-S9-25.
+  //
+  // Paged on the id, not on offsets (readAllByIdAsQuery): the read spans up to
+  // a year, many pages, and a transaction recorded between two of them shifted
+  // every offset after it, so one row was summed twice (or one skipped) and a
+  // budget read as over by a row it never held (M11-RATCHET).
   const [txnsResult, budgetsResult, billsResult, subsResult] = await settleAll([
-    readAllAsQuery<{ amount: number; category: string | null; type: string; date: string }>((from, to) =>
-      supabase.from('transactions').select('amount, category, type, date').eq('family_id', familyId)
-        .eq('type', 'expense').gte('date', readFrom).order('date').order('id').range(from, to), { max: 20_000 }),
+    readAllByIdAsQuery<{ id: string; amount: number; category: string | null; type: string; date: string }>((after, limit) => {
+      let query = supabase.from('transactions').select('id, amount, category, type, date').eq('family_id', familyId)
+        .eq('type', 'expense').gte('date', readFrom).lte('date', readTo);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: 20_000 }),
     supabase.from('budgets').select('id, category, amount, period, created_at').eq('family_id', familyId),
     supabase.from('bills').select('name, amount, status').eq('family_id', familyId).neq('status', 'paid'),
     supabase.from('subscriptions_tracked').select('name, cost_cents, cadence, status, last_used').eq('family_id', familyId),

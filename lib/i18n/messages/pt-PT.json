@@ -17026,5 +17026,6 @@
   "babysittersView.payoutsAreKeptByParents": "O que se paga às babysitters é gerido pelos pais da tua família.",
   "savings.overYourWeeklyBudget": "Ultrapassaste em {amount} o teu orçamento semanal de {category}.",
   "savings.overYourMonthlyBudget": "Ultrapassaste em {amount} o teu orçamento mensal de {category}.",
-  "savings.overYourYearlyBudget": "Ultrapassaste em {amount} o teu orçamento anual de {category}."
+  "savings.overYourYearlyBudget": "Ultrapassaste em {amount} o teu orçamento anual de {category}.",
+  "budgetAnalysisCard.monthsBudgetedSpending": "{month} · a despesa orçamentada do mês, com os limites semanais e anuais como a sua parte mensal"
 }

@@ -47,6 +47,10 @@ export default async function WalletAllowancePage() {
 
   const rows: AllowanceRow[] = (childWallets ?? []).flatMap((cw) => {
     const walletRules = rulesByWallet.get(cw.id) ?? [];
+    // "Each one is paid. Pause the one you do not want." is true of the ACTIVE
+    // rules only: once the parent paused the extra one, one rule paid and both
+    // rows still told them to pause one (M2-UX). The paused rule keeps its row.
+    const paying = walletRules.filter((r) => r.is_active).length;
     return (walletRules.length ? walletRules : [null]).map((r) => ({
       childWalletId: cw.id,
       name: nameByMember.get(cw.member_id) ?? 'Child',
@@ -55,7 +59,7 @@ export default async function WalletAllowancePage() {
       cadence: (r?.cadence ?? 'weekly') as AllowanceRow['cadence'],
       isActive: r?.is_active ?? false,
       nextRunOn: r?.next_run_on ?? null,
-      duplicate: walletRules.length > 1,
+      duplicate: (r?.is_active ?? false) && paying > 1,
     }));
   });
 

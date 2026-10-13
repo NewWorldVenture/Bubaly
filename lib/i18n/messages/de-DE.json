@@ -17026,5 +17026,6 @@
   "babysittersView.payoutsAreKeptByParents": "Was die Babysitter bekommen, wird von den Eltern deiner Familie geführt.",
   "savings.overYourWeeklyBudget": "Du liegst {amount} über deinem wöchentlichen Budget für {category}.",
   "savings.overYourMonthlyBudget": "Du liegst {amount} über deinem monatlichen Budget für {category}.",
-  "savings.overYourYearlyBudget": "Du liegst {amount} über deinem jährlichen Budget für {category}."
+  "savings.overYourYearlyBudget": "Du liegst {amount} über deinem jährlichen Budget für {category}.",
+  "budgetAnalysisCard.monthsBudgetedSpending": "{month} · die budgetierten Ausgaben des Monats, Wochen- und Jahresbudgets als ihr Monatsanteil"
 }

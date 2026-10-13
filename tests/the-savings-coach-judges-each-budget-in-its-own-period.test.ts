@@ -14,7 +14,7 @@
 // left unconfigured so the deterministic suggestions come back, and once
 // configured to read the facts the model is handed.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
+import { createInMemorySupabase, withFaults, type InMemorySupabase } from './helpers/in-memory-supabase';
 
 const FAMILY = 'family-1';
 const harness = vi.hoisted(() => ({ db: null as unknown, tz: 'UTC', complete: vi.fn() }));
@@ -129,5 +129,38 @@ describe('each budget is set against its own period', () => {
     const prompt = (harness.complete.mock.calls[0][0] as { messages: { content: string }[] }).messages[0].content;
     expect(prompt).toContain('Groceries (weekly budget) +$50');
     expect(prompt).toContain('Travel (yearly budget) +$500');
+  });
+});
+
+// M11-RATCHET — the year of spending the coach sums is read on the id.
+//
+// The read spans up to a year plus the leading week, which is many pages. It
+// was paged on offsets, so a transaction recorded between two pages (here, a
+// January pet bill entered while the coach was reading) shifted every row
+// after it by one place: the last row of the first page came back as the first
+// row of the second, and Groceries was summed one row high.
+describe('a year of spending is read once, row by row, while it is written to', () => {
+  beforeEach(() => vi.setSystemTime(new Date('2026-10-13T12:00:00Z')));
+
+  it('a row recorded between two pages does not count a grocery shop twice', async () => {
+    db.seed('budgets', [budget('Groceries', 1500, 'monthly'), budget('Travel', 100, 'monthly')]);
+    // October: 1,500 one-dollar shops, exactly the budget, and one trip over its own.
+    db.seed('transactions', Array.from({ length: 1500 }, (_, i) => expense(`2026-10-${String(1 + (i % 12)).padStart(2, '0')}`, 1, 'Groceries')));
+    db.seed('transactions', [expense('2026-10-02', 150, 'Travel')]);
+    let pages = 0;
+    harness.db = withFaults(db, (table) => {
+      // Before the second page: a January row, dated ahead of every October one.
+      if (table === 'transactions' && ++pages === 2) {
+        db.seed('transactions', [{ id: 't-00000', family_id: FAMILY, name: 'Vet', amount: 80, category: 'Pets', date: '2026-01-05', type: 'expense', status: 'posted' }]);
+      }
+      return null;
+    });
+
+    const out = await suggestions();
+    expect(pages).toBeGreaterThan(1);
+    // The read happened: Travel is over by its own $50.
+    expect(out).toContainEqual({ title: 'Trim Travel spending', detail: t('savings.overYourMonthlyBudget', { amount: '$50', category: 'Travel' }) });
+    // And Groceries is the $1,500 it is, not over by a row read twice.
+    expect(out.map((s) => s.title)).not.toContain('Trim Groceries spending');
   });
 });
