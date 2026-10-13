@@ -721,6 +721,15 @@ export async function pantryList(
   return ok({ items, expiring, low });
 }
 
+/** Rows per page when a pantry item is looked up by name, and the most it walks. */
+const PANTRY_LOOKUP_PAGE = 200;
+const PANTRY_LOOKUP_MAX = 2_000;
+
+/** "kg", "KG" and "kgs" are one unit; "kg" and "cup" are not. */
+function sameUnit(a: string | null | undefined, b: string | null | undefined): boolean {
+  return normalizeName(a ?? '') === normalizeName(b ?? '');
+}
+
 export type PantryAdjustInput = {
   itemId?: string | null;
   /** Matched by normalised name when no id is given. */
@@ -742,7 +751,9 @@ export type PantryAdjustInput = {
  * zero — "used the last of the milk" lands on 0, which is what the low-stock
  * rule keys on; a negative count would hide the item from every alert.
  */
-export async function pantryAdjust(scope: ServiceScope, input: PantryAdjustInput): Promise<ServiceResult<{ item: PantryItem; created: boolean }>> {
+export async function pantryAdjust(
+  scope: ServiceScope, input: PantryAdjustInput,
+): Promise<ServiceResult<{ item: PantryItem; created: boolean; unitMismatch?: { bought: string; stocked: string } }>> {
   const name = input.name?.trim() ?? '';
   if (!input.itemId && !name) return fail('Which pantry item?', { code: SERVICE_CODES.invalidInput });
   if (input.quantity == null && input.delta == null && !input.location && !input.expiresAt && !input.unit) {
@@ -764,13 +775,28 @@ export async function pantryAdjust(scope: ServiceScope, input: PantryAdjustInput
     if (!data) return fail('That pantry item could not be found.', { code: SERVICE_CODES.notFound });
     existing = data;
   } else {
-    const { data, error } = await scope.db.from('pantry_items').select('*').eq('family_id', scope.familyId).ilike('name', `%${escapeLike(name)}%`).limit(20);
-    if (error) {
-      console.error('[service:groceries] pantry lookup failed', error);
-      return fail(describeDbError(error, 'Could not look up the pantry.'), { code: SERVICE_CODES.db });
-    }
+    // Prefiltered on the NORMALISED stem, the same key the match below uses.
+    // `%Onions%` never fetched the family's "Onion", so putting away a plural
+    // line created a second row beside the one it should have topped up — and
+    // the original stayed "Running low" and went back on the list. Each word is
+    // escaped and the gaps are wildcards, so "red  onion" is found by "Red
+    // onions" too. Ordered and paged, so a short name matching many rows ("egg")
+    // cannot lose the exact one past an arbitrary 20th.
     const key = normalizeName(name);
-    existing = (data ?? []).find((row) => normalizeName(row.name) === key) ?? null;
+    for (let from = 0; ; from += PANTRY_LOOKUP_PAGE) {
+      const { data, error } = await scope.db.from('pantry_items').select('*').eq('family_id', scope.familyId).ilike('name', `%${key.split(' ').map((word) => escapeLike(word)).join('%')}%`)
+        .order('created_at', { ascending: true }).order('id').range(from, from + PANTRY_LOOKUP_PAGE - 1);
+      if (error) {
+        console.error('[service:groceries] pantry lookup failed', error);
+        return fail(describeDbError(error, 'Could not look up the pantry.'), { code: SERVICE_CODES.db });
+      }
+      const rows = data ?? [];
+      existing = rows.find((row) => normalizeName(row.name) === key) ?? null;
+      if (existing || rows.length < PANTRY_LOOKUP_PAGE) break;
+      if (from + PANTRY_LOOKUP_PAGE >= PANTRY_LOOKUP_MAX) {
+        return fail('Too many pantry items look like that one. Put it away from the pantry page.', { code: SERVICE_CODES.invalidInput });
+      }
+    }
   }
 
   if (!existing) {
@@ -798,12 +824,24 @@ export async function pantryAdjust(scope: ServiceScope, input: PantryAdjustInput
     return ok({ item: data, created: true });
   }
 
+  const isDelta = input.quantity == null && input.delta != null;
+  // A DELTA in one unit added to a count in another is a number nobody owns:
+  // "Rice 3 kg" plus a bought "1 cup" became "Rice 4 cup". When both sides
+  // name a unit and they differ, nothing is written — the caller is told, so
+  // the family can count it — and a delta never relabels the row's unit. A row
+  // with no unit yet takes the bought one, and a unitless delta counts in the
+  // row's own unit, as it always has.
+  const incomingUnit = input.unit?.trim() || null;
+  const stockedUnit = existing.unit?.trim() || null;
+  if (isDelta && incomingUnit && stockedUnit && !sameUnit(incomingUnit, stockedUnit)) {
+    return ok({ item: existing, created: false, unitMismatch: { bought: incomingUnit, stocked: stockedUnit } });
+  }
   const nextQuantity = input.quantity != null
     ? input.quantity
     : input.delta != null ? Math.max(0, Number(existing.quantity ?? 0) + input.delta) : undefined;
   const patch: Partial<{ quantity: number; unit: string | null; location: PantryLocation; expires_at: string | null }> = {};
   if (nextQuantity !== undefined) patch.quantity = nextQuantity;
-  if (input.unit !== undefined && input.unit !== null) patch.unit = input.unit.trim() || null;
+  if (input.unit !== undefined && input.unit !== null && !(isDelta && stockedUnit)) patch.unit = input.unit.trim() || null;
   if (isPantryLocation(input.location)) patch.location = input.location;
   if (input.expiresAt) patch.expires_at = input.expiresAt;
 
@@ -814,7 +852,6 @@ export async function pantryAdjust(scope: ServiceScope, input: PantryAdjustInput
   // again rather than overwrite their change. An absolute `quantity` is the
   // caller stating a figure, so it does not need the condition and does not get
   // one. Same distinction as `setGoalProgress` versus `contributeToSavingsGoal`.
-  const isDelta = input.quantity == null && input.delta != null;
   let current = existing;
 
   for (let attempt = 0; attempt < 4; attempt += 1) {
@@ -863,6 +900,11 @@ export async function pantryAdjust(scope: ServiceScope, input: PantryAdjustInput
  * board set and `CreateChoreInput` did not carry.
  *
  * `quantity` here is an ABSOLUTE the family typed, so it needs no compare-and-set.
+ * Which is also why an edit that did NOT touch it must not send it: the editor
+ * opens on a snapshot, and writing that snapshot's quantity back undid every
+ * +/- tap and every put-away that landed while the form was open — the lost
+ * update `pantryAdjust`'s compare-and-set exists to prevent. On an update,
+ * `quantity` and `unit` left undefined keep what the row holds now.
  */
 export type SavePantryItemInput = {
   name: string;
@@ -908,9 +950,15 @@ export async function savePantryItem(
   };
 
   if (input.itemId) {
+    const { quantity, unit, ...rest } = fields;
+    const changes = {
+      ...rest,
+      ...(input.quantity !== undefined ? { quantity } : {}),
+      ...(input.unit !== undefined ? { unit } : {}),
+    };
     const { data, error } = await scope.db
       .from('pantry_items')
-      .update(fields)
+      .update(changes)
       .eq('id', input.itemId)
       .eq('family_id', scope.familyId)
       .select('*')
@@ -1035,6 +1083,13 @@ export type ShoppingTripResult = {
    * updated nor failed here.
    */
   alreadyClaimed: string[];
+  /**
+   * Bought lines whose unit is not the one the pantry counts that item in
+   * ("1 cup" of rice against "3 kg"). Taken off the list — they were bought —
+   * with the pantry count left as it was for the family to correct, because
+   * adding the two numbers would be wrong and retrying would be wrong again.
+   */
+  unitMismatch: { name: string; bought: string; stocked: string }[];
   /** Bought lines removed from the list — one per line that reached the pantry. */
   cleared: number;
 };
@@ -1090,6 +1145,7 @@ export async function recordShoppingTrip(
   const pantryFailed: { name: string; error: string }[] = [];
   const clearFailed: { name: string; error: string }[] = [];
   const alreadyClaimed: string[] = [];
+  const unitMismatch: { name: string; bought: string; stocked: string }[] = [];
   const clearedNames: string[] = [];
   for (const item of items) {
     // CLAIM THE LINE BEFORE TOUCHING THE PANTRY (Audit C1-S9-88, closing the
@@ -1136,7 +1192,8 @@ export async function recordShoppingTrip(
       pantryFailed.push({ name: item.name, error: result.error });
       continue;
     }
-    pantryUpdated.push(item.name);
+    if (result.data.unitMismatch) unitMismatch.push({ name: item.name, ...result.data.unitMismatch });
+    else pantryUpdated.push(item.name);
 
     // Immediately, and scoped to this row: whatever happens to the rest of the
     // trip, this quantity is now in the pantry and must not be added twice.
@@ -1188,5 +1245,5 @@ export async function recordShoppingTrip(
     });
   }
 
-  return ok({ listId, pantryUpdated, pantryFailed, clearFailed, alreadyClaimed, cleared: clearedNames.length });
+  return ok({ listId, pantryUpdated, pantryFailed, clearFailed, alreadyClaimed, unitMismatch, cleared: clearedNames.length });
 }

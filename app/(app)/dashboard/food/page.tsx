@@ -130,6 +130,17 @@ export default async function FoodPage() {
   // empty list and one that could not be read (the items, or the open-list
   // read in front of them), so the card says which.
   const groceryUnavailable = grocery == null;
+  // The same for every other card. Each one rendered its healthy empty state
+  // over a read that failed — "Nothing expiring soon" and "0 expiring soon"
+  // when the pantry could not be read — so a failed read now says so, and its
+  // footer names the page instead of a count nobody read.
+  const plansUnavailable = dinners == null;
+  const recipesUnavailable = recipes == null;
+  const pantryUnavailable = pantry == null;
+  const favoritesUnavailable = favorites == null;
+  const scoreUnavailable = scores == null;
+  const diningUnavailable = dining == null;
+  const unavailable = <EmptyHint>{t('dashboardFood.cardUnavailable')}</EmptyHint>;
 
   // Resolve meal names for this week's dinners (kept robust to relation naming).
   const planRows = (dinners ?? []) as { plan_date: string; meal_id: string | null }[];
@@ -168,14 +179,14 @@ export default async function FoodPage() {
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
         {/* 1. Meal Planner */}
-        <FeatureCard index={1} title={t('dashboardFood.mealPlanner')} href="/dashboard/meals" icon={CalendarRange} tint="bg-blue-500/15 text-blue-400" count={planCount ?? 0} countLabel={t('dashboardFood.count.dinnersPlannedThisWeek')}>
-          {planRows.length === 0 ? <EmptyHint>{t('dashboardFood.noDinnersPlannedYet')}</EmptyHint>
+        <FeatureCard index={1} title={t('dashboardFood.mealPlanner')} href="/dashboard/meals" icon={CalendarRange} tint="bg-blue-500/15 text-blue-400" count={plansUnavailable ? null : planCount ?? 0} countLabel={t('dashboardFood.count.dinnersPlannedThisWeek')}>
+          {plansUnavailable ? unavailable : planRows.length === 0 ? <EmptyHint>{t('dashboardFood.noDinnersPlannedYet')}</EmptyHint>
             : planRows.slice(0, 4).map((p) => <ListRow key={p.plan_date} label={p.meal_id ? (mealName.get(p.meal_id) ?? t('dashboardFood.plannedMeal')) : t('dashboardFood.plannedMeal')} meta={p.plan_date === todayIso ? t('dashboardFood.today') : fmtDate(p.plan_date, 'MMM d')} dot="bg-blue-400" />)}
         </FeatureCard>
 
         {/* 2. Recipes */}
-        <FeatureCard index={2} title={t('dashboardFood.recipes')} href="/dashboard/recipes" icon={BookOpen} tint="bg-emerald-500/15 text-emerald-400" count={recipeCount ?? 0} countLabel={t('dashboardFood.count.recipes')}>
-          {(recipes ?? []).length === 0 ? <EmptyHint>{t('dashboardFood.noRecipesYet')}</EmptyHint>
+        <FeatureCard index={2} title={t('dashboardFood.recipes')} href="/dashboard/recipes" icon={BookOpen} tint="bg-emerald-500/15 text-emerald-400" count={recipesUnavailable ? null : recipeCount ?? 0} countLabel={t('dashboardFood.count.recipes')}>
+          {recipesUnavailable ? unavailable : (recipes ?? []).length === 0 ? <EmptyHint>{t('dashboardFood.noRecipesYet')}</EmptyHint>
             : (recipes as R[]).map((r) => <ListRow key={r.id} label={r.name} meta={r.rating ? `★ ${r.rating}` : ''} dot="bg-emerald-400" />)}
         </FeatureCard>
 
@@ -187,20 +198,20 @@ export default async function FoodPage() {
         </FeatureCard>
 
         {/* 4. Pantry Inventory */}
-        <FeatureCard index={4} title={t('dashboardFood.pantryInventory')} href="/dashboard/pantry" icon={Boxes} tint="bg-orange-500/15 text-orange-400" count={pantryCount ?? 0} countLabel={t('dashboardFood.count.expiringSoon')}>
-          {(pantry ?? []).length === 0 ? <EmptyHint>{t('dashboardFood.nothingExpiringSoon')}</EmptyHint>
+        <FeatureCard index={4} title={t('dashboardFood.pantryInventory')} href="/dashboard/pantry" icon={Boxes} tint="bg-orange-500/15 text-orange-400" count={pantryUnavailable ? null : pantryCount ?? 0} countLabel={t('dashboardFood.count.expiringSoon')}>
+          {pantryUnavailable ? unavailable : (pantry ?? []).length === 0 ? <EmptyHint>{t('dashboardFood.nothingExpiringSoon')}</EmptyHint>
             : (pantry as P[]).map((p) => <ListRow key={p.id} label={p.name} meta={p.expires_at ? fmtDate(p.expires_at, 'MMM d') : `${p.quantity}${p.unit ? ' ' + p.unit : ''}`} dot="bg-orange-400" />)}
         </FeatureCard>
 
         {/* 5. Family Favorites */}
-        <FeatureCard index={5} title={t('dashboardFood.familyFavorites')} href="/dashboard/recipes" icon={Heart} tint="bg-rose-500/15 text-rose-400" count={favoriteCount ?? 0} countLabel={t('dashboardFood.count.favorites')}>
-          {(favorites ?? []).length === 0 ? <EmptyHint>{t('dashboardFood.noFavoritesYet')}</EmptyHint>
+        <FeatureCard index={5} title={t('dashboardFood.familyFavorites')} href="/dashboard/recipes" icon={Heart} tint="bg-rose-500/15 text-rose-400" count={favoritesUnavailable ? null : favoriteCount ?? 0} countLabel={t('dashboardFood.count.favorites')}>
+          {favoritesUnavailable ? unavailable : (favorites ?? []).length === 0 ? <EmptyHint>{t('dashboardFood.noFavoritesYet')}</EmptyHint>
             : (favorites as R[]).map((r) => <ListRow key={r.id} label={r.name} meta={r.rating ? `★ ${r.rating}` : ''} dot="bg-rose-400" />)}
         </FeatureCard>
 
         {/* 6. Nutrition Tracker */}
-        <FeatureCard index={6} title={t('dashboardFood.nutritionTracker')} href="/dashboard/kitchen" icon={Activity} tint="bg-violet-500/15 text-violet-400" count={score?.overall ?? 0} countLabel={t('dashboardFood.count.familyFoodScore')}>
-          {score ? (
+        <FeatureCard index={6} title={t('dashboardFood.nutritionTracker')} href="/dashboard/kitchen" icon={Activity} tint="bg-violet-500/15 text-violet-400" count={scoreUnavailable ? null : score?.overall ?? 0} countLabel={t('dashboardFood.count.familyFoodScore')}>
+          {scoreUnavailable ? unavailable : score ? (
             <div className="flex items-center gap-3">
               <span className={cn('grid h-14 w-14 place-items-center rounded-full text-lg font-black',
                 score.overall >= 80 ? 'bg-emerald-500/15 text-emerald-400' : score.overall >= 60 ? 'bg-amber-500/15 text-amber-400' : 'bg-rose-500/15 text-rose-400')}>
@@ -215,8 +226,8 @@ export default async function FoodPage() {
         </FeatureCard>
 
         {/* 7. Dining Out */}
-        <FeatureCard index={7} title={t('dashboardFood.diningOut')} href="/dashboard/dining" icon={Utensils} tint="bg-indigo-500/15 text-indigo-400" count={diningCount ?? 0} countLabel={t('dashboardFood.count.savedPlaces')}>
-          {(dining ?? []).length === 0 ? <EmptyHint>{t('dashboardFood.noDiningSpotsSavedYet')}</EmptyHint>
+        <FeatureCard index={7} title={t('dashboardFood.diningOut')} href="/dashboard/dining" icon={Utensils} tint="bg-indigo-500/15 text-indigo-400" count={diningUnavailable ? null : diningCount ?? 0} countLabel={t('dashboardFood.count.savedPlaces')}>
+          {diningUnavailable ? unavailable : (dining ?? []).length === 0 ? <EmptyHint>{t('dashboardFood.noDiningSpotsSavedYet')}</EmptyHint>
             : (dining as D[]).map((d) => <ListRow key={d.id} label={d.name} meta={d.rating ? `★ ${d.rating}` : (d.cuisine ?? '')} dot="bg-indigo-400" />)}
         </FeatureCard>
 

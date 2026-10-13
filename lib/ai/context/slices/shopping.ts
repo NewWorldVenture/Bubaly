@@ -5,6 +5,7 @@
 import 'server-only';
 import { fenceUntrusted, sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
 import { listOpen, pantryList } from '@/lib/services/groceries';
+import { daysUntil } from '@/lib/pantry/logic';
 import { recallFactsForContext } from '../recall';
 import { ok } from '@/lib/services/types';
 import type { SliceDefinition } from '../policy';
@@ -22,13 +23,15 @@ export type ShoppingSliceData = {
   open: { id: string; name: string; quantity: string | null; category: string | null }[];
   lowPantry: { name: string; location: string | null }[];
   expiringPantry: { name: string; expiresOn: string | null }[];
+  /** Past their best-by date: for the family to check or throw out, never to "use soon". */
+  expiredPantry: { name: string; expiresOn: string | null }[];
   habits: { label: string; value: string }[];
 };
 
 export const shoppingSlice: SliceDefinition = {
   name: 'shopping',
   title: 'Shopping and pantry',
-  async load(scope) {
+  async load(scope, env) {
     const [open, pantry, facts] = await Promise.all([
       listOpen(scope, { limit: MAX_OPEN_ITEMS }),
       pantryList(scope, { expiringWithinDays: 5 }),
@@ -38,11 +41,17 @@ export const shoppingSlice: SliceDefinition = {
     if (!pantry.ok) return pantry;
     if (!facts.ok) return facts;
 
+    // `pantry.data.expiring` keeps expired rows for the screens that label them
+    // "Expired 3d ago"; told to the model as "Use soon", a carton two weeks
+    // past its date became something to cook. Split on the family's day.
+    const todayKey = env.todayKey;
+    const expired = (p: { expires_at: string | null }) => (daysUntil(p.expires_at, todayKey) ?? 0) < 0;
     const data: ShoppingSliceData = {
       listId: open.data.listId,
       open: open.data.items.map((i) => ({ id: i.id, name: i.name, quantity: i.quantity, category: i.category })),
       lowPantry: pantry.data.low.slice(0, MAX_PANTRY_FLAGS).map((p) => ({ name: p.name, location: p.location })),
-      expiringPantry: pantry.data.expiring.slice(0, MAX_PANTRY_FLAGS).map((p) => ({ name: p.name, expiresOn: p.expires_at })),
+      expiringPantry: pantry.data.expiring.filter((p) => !expired(p)).slice(0, MAX_PANTRY_FLAGS).map((p) => ({ name: p.name, expiresOn: p.expires_at })),
+      expiredPantry: pantry.data.expiring.filter(expired).slice(0, MAX_PANTRY_FLAGS).map((p) => ({ name: p.name, expiresOn: p.expires_at })),
       habits: facts.data.filter((f) => HABIT_RE.test(`${f.label} ${f.value}`)).slice(0, MAX_HABITS).map((f) => ({ label: f.label, value: f.value })),
     };
 
@@ -63,8 +72,11 @@ export const shoppingSlice: SliceDefinition = {
     if (data.expiringPantry.length) {
       lines.push(`- Use soon: ${joinNatural(data.expiringPantry.map((p) => `${fenceUntrusted('pantry', p.name)}${p.expiresOn ? ` (by ${dayKeyLabel(p.expiresOn.slice(0, 10))})` : ''}`), 10)}`);
     }
+    if (data.expiredPantry.length) {
+      lines.push(`- Past best-by, check or discard (do not plan meals around these): ${joinNatural(data.expiredPantry.map((p) => `${fenceUntrusted('pantry', p.name)}${p.expiresOn ? ` (was ${dayKeyLabel(p.expiresOn.slice(0, 10))})` : ''}`), 10)}`);
+    }
     for (const h of data.habits) lines.push(`- Habit: ${fenceUntrusted('fact', `${h.label}: ${h.value}`)}`);
 
-    return ok({ data, count: data.open.length + data.lowPantry.length + data.expiringPantry.length, lines });
+    return ok({ data, count: data.open.length + data.lowPantry.length + data.expiringPantry.length + data.expiredPantry.length, lines });
   },
 };

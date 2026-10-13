@@ -11,6 +11,13 @@ vi.mock('@/lib/server/ai-rate-limit',()=>({enforceAIRateLimit:async()=>({ok:true
 // tests/the-meal-and-recipe-model-endpoints-refuse-like-their-pages.test.ts;
 // this file is about something else, so the gate admits its fixture family.
 vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: async () => null }));
+// The household's recorded allergies, diets and dislikes (foodProfile) are
+// covered by tests/the-meal-planner-holds-to-recorded-allergies.test.ts; this
+// file is about other reads, so the household has none on file.
+vi.mock('@/lib/services/meals', async (original) => ({
+  ...(await original<typeof import('@/lib/services/meals')>()),
+  foodProfile: async () => ({ ok: true, data: { members: [], household: { allergies: [], dislikes: [], favorites: [], diet: [] } } }),
+}));
 vi.mock('@/lib/ai/observability',()=>({withAiRequest:(_scope:unknown,_feature:unknown,run:(o:{used:()=>void})=>Promise<string>)=>run({used:()=>{}})}));
 vi.mock('@/lib/calendar/source-capability',()=>({get CALENDAR_SOURCE_ARCHIVE_ENABLED(){return h.enabled;}}));
 import { parseICSSource } from '@/lib/sync/ics-source';

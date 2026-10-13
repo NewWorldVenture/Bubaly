@@ -26,7 +26,8 @@ import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { compareOccurrences } from '@/lib/calendar/day';
 import { loadAISettingsFor } from '@/lib/services/ai-settings';
 import { wroteNoRows } from '@/lib/supabase/errors';
-import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
+import { categorizeGroceryItem, ensureDefaultGroceryListId } from '@/lib/services/groceries';
+import { normalizeName } from '@/lib/groceries/normalize-name';
 import { ensureTodoListId } from '@/lib/services/tasks';
 
 type Client = SupabaseClient<Database>;
@@ -473,10 +474,36 @@ async function saveAssistantCapture(
       .filter((item) => item.name.trim().length > 0);
     if (items.length === 0) { await discardEmptyList(supabase, link, 'grocery_lists', list); return false; }
 
-    const { error } = await supabase.from('grocery_items').insert(items.map((item) => ({
-      family_id: link.family_id, list_id: listId,
-      name: boundText(item.name, 200), quantity: item.quantity, created_by: link.user_id,
-    })) as never);
+    // A spoken item already open on the list is skipped rather than written as
+    // a second line — a person repeating themselves to the speaker, or "add
+    // milk" with Milk still unbought — under the grocery service's own name
+    // rule (`normalizeName`), and each new line is filed by aisle the way the
+    // app files it (`categorizeGroceryItem`). The raw insert this replaces did
+    // neither, so the speaker undid the dedupe every other surface keeps.
+    const { data: open, error: openError } = await supabase.from('grocery_items').select('name')
+      .eq('family_id', link.family_id).eq('list_id', listId).eq('is_checked', false);
+    if (openError) {
+      console.error('[assistant] grocery list read failed', openError);
+      await discardEmptyList(supabase, link, 'grocery_lists', list);
+      return false;
+    }
+    const onList = new Set((open ?? []).map((row) => normalizeName(String(row.name ?? ''))));
+    const fresh = items.filter((item) => {
+      const key = normalizeName(item.name);
+      if (onList.has(key)) return false;
+      onList.add(key);
+      return true;
+    });
+    // Everything said is already on the list: nothing to write, and done.
+    if (fresh.length === 0) return true;
+
+    const { error } = await supabase.from('grocery_items').insert(fresh.map((item) => {
+      const name = boundText(item.name, 200);
+      return {
+        family_id: link.family_id, list_id: listId,
+        name, quantity: item.quantity, category: categorizeGroceryItem(name), created_by: link.user_id,
+      };
+    }) as never);
     if (error) {
       console.error('[assistant] grocery insert failed', error);
       await discardEmptyList(supabase, link, 'grocery_lists', list);

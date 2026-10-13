@@ -122,7 +122,16 @@ export type MealLibraryInput = {
   ingredients?: Ingredient[];
   recipeUrl?: string | null;
   imageUrl?: string | null;
+  /** The method, when the dish arrives with one (Fridge Chef's steps). */
+  notes?: string | null;
 };
+
+/** The longest method a dish carries — what Fridge Chef always stored. */
+const MAX_MEAL_NOTES = 2000;
+
+function validOptionalNotes(value: unknown): boolean {
+  return value == null || (typeof value === 'string' && value.length <= MAX_MEAL_NOTES);
+}
 
 function validIngredients(value: unknown): value is Ingredient[] {
   return Array.isArray(value) && value.length <= 100 && value.every((line) =>
@@ -143,7 +152,8 @@ function matchesMealInput(meal: Meal, input: MealLibraryInput): boolean {
     && (input.mealType == null || meal.meal_type === input.mealType)
     && (input.ingredients === undefined || JSON.stringify(parseIngredients(meal.ingredients)) === JSON.stringify(parseIngredients(ingredientsToJson(input.ingredients))))
     && (input.recipeUrl === undefined || (meal.recipe_url || null) === (input.recipeUrl?.trim() || null))
-    && (input.imageUrl === undefined || (meal.image_url || null) === (input.imageUrl?.trim() || null));
+    && (input.imageUrl === undefined || (meal.image_url || null) === (input.imageUrl?.trim() || null))
+    && (input.notes === undefined || (meal.notes?.trim() || null) === (input.notes?.trim() || null));
 }
 
 // ── Meal library ────────────────────────────────────────────────────────────
@@ -162,7 +172,7 @@ export async function ensureMealByName(
   const name = typeof input?.name === 'string' ? input.name.trim() : '';
   if (!name || name.length > 300 || (input.mealType != null && !isMealType(input.mealType))
     || (input.ingredients !== undefined && !validIngredients(input.ingredients))
-    || !validOptionalUrl(input.recipeUrl) || !validOptionalUrl(input.imageUrl)) {
+    || !validOptionalUrl(input.recipeUrl) || !validOptionalUrl(input.imageUrl) || !validOptionalNotes(input.notes)) {
     return fail('Check the meal name, ingredients and links.', { code: SERVICE_CODES.invalidInput });
   }
   const mealType = isMealType(input.mealType) ? input.mealType : 'dinner';
@@ -193,6 +203,7 @@ export async function ensureMealByName(
       ingredients: ingredientsToJson(input.ingredients),
       recipe_url: input.recipeUrl?.trim() || null,
       image_url: input.imageUrl?.trim() || null,
+      notes: input.notes?.trim() || null,
       // meals.created_by references auth.users (0002).
       created_by: scope.userId,
     })
@@ -288,6 +299,8 @@ export type PlanEntryInput = {
   ingredients?: Ingredient[];
   recipeUrl?: string | null;
   imageUrl?: string | null;
+  /** The method for a dish named here; saved meals and recipes keep their own. */
+  notes?: string | null;
 };
 
 type ResolvedEntry = { date: string; mealType: MealType; mealId: string; name: string; ingredients: Ingredient[] };
@@ -322,7 +335,7 @@ async function resolveEntries(
     }
     let source: MealLibraryInput = {
       name: entry.mealName?.trim() ?? '', mealType, ingredients: entry.ingredients,
-      recipeUrl: entry.recipeUrl, imageUrl: entry.imageUrl,
+      recipeUrl: entry.recipeUrl, imageUrl: entry.imageUrl, notes: entry.notes,
     };
     if (entry.recipeId) {
       const { data: recipe, error } = await scope.db.from('family_recipes').select('*')
@@ -357,9 +370,9 @@ function validateEntries(entries: PlanEntryInput[]): ServiceResult<PlanEntryInpu
     const sources = [entry.mealId, entry.recipeId, entry.mealName];
     if (sources.some((value) => value != null && (typeof value !== 'string' || value.length > 300))
       || sources.filter((value) => typeof value === 'string' && value.trim()).length !== 1
-      || ((entry.mealId || entry.recipeId) && (entry.ingredients !== undefined || entry.recipeUrl !== undefined || entry.imageUrl !== undefined))
+      || ((entry.mealId || entry.recipeId) && (entry.ingredients !== undefined || entry.recipeUrl !== undefined || entry.imageUrl !== undefined || entry.notes !== undefined))
       || (entry.ingredients !== undefined && !validIngredients(entry.ingredients))
-      || !validOptionalUrl(entry.recipeUrl) || !validOptionalUrl(entry.imageUrl)) {
+      || !validOptionalUrl(entry.recipeUrl) || !validOptionalUrl(entry.imageUrl) || !validOptionalNotes(entry.notes)) {
       return fail('Choose one meal, recipe or custom dish with valid ingredients.', { code: SERVICE_CODES.invalidInput });
     }
     const slot = `${entry.date}|${entry.mealType ?? 'dinner'}`;

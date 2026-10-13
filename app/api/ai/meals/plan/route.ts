@@ -10,12 +10,13 @@ import {
   buildCandidates, buildPlannerSystem, buildPlannerUser, parsePlan, refParts,
   PLAN_MEAL_TYPES, type PlannerRequest,
 } from '@/lib/meals/planner';
-import { isDayKey, planWeek, type PlanEntryInput } from '@/lib/services/meals';
+import { foodProfile, isDayKey, parseIngredients, planWeek, type PlanEntryInput } from '@/lib/services/meals';
+import { allergenConflict, parseConstraintText } from '@/lib/meals/substitutions';
 import { scoreWeekNights } from '@/lib/meals/week-context';
 import { readDisplayCalendarOccurrences } from '@/lib/calendar/display-occurrences';
 import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
 import { isValidTimezone } from '@/lib/time/zoned';
-import { expiringSoon } from '@/lib/pantry/logic';
+import { usableSoon } from '@/lib/pantry/logic';
 import { readPlannerMeals, readPlannerRecipes, readPlannerPantry } from '@/lib/meals/planner-inputs';
 import type { MealType } from '@/lib/database.types';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -98,7 +99,29 @@ export async function POST(req: Request) {
   }
   const [{ data: meals }, { data: recipes }] = candidateResults;
 
-  const candidates = buildCandidates(meals ?? [], recipes ?? []);
+  // The household's recorded allergies, diets and dislikes. The Auto-plan box
+  // starts empty, and `dietary` was the only constraint this route knew: a
+  // family with a peanut allergy on its medical profile was planned — and,
+  // with `write`, SAVED — a week with no allergy line in the prompt at all.
+  // Fail closed: an allergy list that could not be read is not "none".
+  const scope = scopeFromUserContext(ctx, supabase);
+  const profile = await foodProfile(scope);
+  if (!profile.ok) {
+    logDatabaseFailure('food profile read', { code: profile.code });
+    return databaseUnavailable(t('plan.mealPlanningDataIsTemporarily'));
+  }
+  const household = profile.data.household;
+  const allergies = household.allergies.flatMap((note) => parseConstraintText(note));
+
+  // A saved dish that runs into a recorded allergy is not offered to the model
+  // at all; what it does offer, and every new dish it invents, is checked again
+  // after it answers (below).
+  const libraryText = new Map<string, string[]>([
+    ...(meals ?? []).map((m): [string, string[]] => [`meal:${m.id}`, [m.name, ...parseIngredients(m.ingredients).map((i) => i.name)]]),
+    ...(recipes ?? []).map((r): [string, string[]] => [`recipe:${r.id}`, [r.name, ...parseIngredients(r.ingredients).map((i) => i.name), ...(r.allergy_flags ?? [])]]),
+  ]);
+  const unsafeRef = (ref: string) => allergies.length > 0 && allergenConflict(libraryText.get(ref) ?? [], allergies) !== null;
+  const candidates = buildCandidates(meals ?? [], recipes ?? []).filter((c) => !unsafeRef(c.ref));
 
   // Expiring pantry items to use up ---------------------------------------
   let expiring: string[] = [];
@@ -110,13 +133,15 @@ export async function POST(req: Request) {
     }
     // The family's day — see the chef route. A window computed from the
     // host's midnight planned meals around the wrong week's expirations.
-    expiring = expiringSoon(pantry ?? [], 7, todayKeyFor(ctx)).map((p) => p.name).slice(0, 12);
+    // Still-good items only: "use up these expiring pantry items" over food
+    // already past its date wrote dishes built on it into the week, and those
+    // items sorted first, crowding out what really is about to turn.
+    expiring = usableSoon(pantry ?? [], 7, todayKeyFor(ctx)).map((p) => p.name).slice(0, 12);
   }
 
   // Busy nights ------------------------------------------------------------
   // Complete occurrence sets, including earlier recurring masters and ongoing
   // intervals. Enabled source reads use the coherent archive without fallback.
-  const scope = scopeFromUserContext(ctx, supabase);
   if (!isValidTimezone(scope.tz)) return databaseUnavailable(t('plan.mealPlanningDataIsTemporarily'));
   const { data: weekEvents, error: weekEventsError } = await readDisplayCalendarOccurrences(
     supabase,familyId,briefingCalendarBounds(weekStart,scope.tz,0,7),scope.tz,{overlap:true},
@@ -135,9 +160,17 @@ export async function POST(req: Request) {
     return databaseUnavailable(t('plan.mealPlanningDataIsTemporarily'));
   }
 
+  // What the family typed, plus what it has recorded. The prompt fences every
+  // value (buildPlannerUser), so a recorded fact reaches the model as data.
+  const constraints = [...new Set([
+    ...household.allergies.map((a) => `allergy: ${a}`),
+    ...dietary,
+    ...household.diet,
+    ...household.dislikes.map((d) => `does not eat: ${d}`),
+  ])].slice(0, 40);
   const request: PlannerRequest = {
     weekStart, mealTypes: mealTypes.length ? mealTypes : ['dinner'],
-    candidates, dietary, expiring, busyNights: weekContext.busyNights, avoidRepeats, notes,
+    candidates, dietary: constraints, expiring, busyNights: weekContext.busyNights, avoidRepeats, notes,
   };
 
   // Ask the model ---------------------------------------------------------
@@ -161,14 +194,36 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: describeAIError(err).message }, { status: 503 });
   }
 
-  const assignments = parsePlan(text, request);
+  // Checked, not trusted: an assignment whose dish runs into a recorded
+  // allergy — a new dish by its name or the ingredients the model wrote, a
+  // saved one by its saved ingredients and flags, or a "new" dish that only
+  // reuses a library dish's name — is left out of the plan, never written.
+  // Names cover saved dishes AND recipes: a ref the screen above held back
+  // comes back from parsePlan as a "new" dish of the same name.
+  const libraryByName = new Map<string, string[]>();
+  for (const [ref, name] of [
+    ...(meals ?? []).map((m): [string, string] => [`meal:${m.id}`, m.name]),
+    ...(recipes ?? []).map((r): [string, string] => [`recipe:${r.id}`, r.name]),
+  ]) {
+    const key = name.trim().toLowerCase();
+    libraryByName.set(key, [...(libraryByName.get(key) ?? []), ref]);
+  }
+  const unsafe = (a: ReturnType<typeof parsePlan>[number]) => {
+    if (allergies.length === 0) return false;
+    if (a.ref) return unsafeRef(a.ref);
+    if (allergenConflict([a.name, ...(a.ingredients ?? []).map((i) => i.name)], allergies)) return true;
+    return !a.ingredients && (libraryByName.get(a.name.trim().toLowerCase()) ?? []).some(unsafeRef);
+  };
+  const parsed = parsePlan(text, request);
+  const assignments = parsed.filter((a) => !unsafe(a));
+  const leftOutForAllergies = parsed.length - assignments.length;
   if (assignments.length === 0) {
     return NextResponse.json({ error: t('plan.thePlannerCouldNotProduce') }, { status: 422 });
   }
 
   // `busyNights` rides along on both replies so the caller can say WHY a
   // Tuesday got a 20-minute dish, quoting the calendar rows it came from.
-  if (!write) return NextResponse.json({ assignments, busyNights: weekContext.busyNights, written: false });
+  if (!write) return NextResponse.json({ assignments, busyNights: weekContext.busyNights, written: false, leftOutForAllergies });
 
   // Use the same family-scoped write and verified receipt as the manual
   // planner. Recipe IDs are resolved server-side with their ingredients;
@@ -188,7 +243,7 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({
       assignments, busyNights: weekContext.busyNights,
-      written: true, count: saved.data.planned.length, slots: saved.data.planned,
+      written: true, count: saved.data.planned.length, slots: saved.data.planned, leftOutForAllergies,
     });
   } catch (error) {
     logDatabaseFailure('meal plan write', error);

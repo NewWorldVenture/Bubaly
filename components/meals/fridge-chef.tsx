@@ -82,6 +82,13 @@ export function FridgeChef() {
       if (!res.ok) { toastError(json.error ?? t('fridgeChef.couldNotUpdateYourGrocery')); return; }
       setAdded((prev) => new Set(prev).add(index));
       success((json.added ?? recipe.need.length) === 1 ? t('fridgeChef.addedItemToGroceryOne', { count: json.added ?? recipe.need.length }) : t('fridgeChef.addedItemsToGroceryMany', { count: json.added ?? recipe.need.length }));
+      // What the family's allergies changed on the way to the list, by name.
+      const swapped: { from: string; to: string | null }[] = Array.isArray(json.swapped) ? json.swapped : [];
+      if (swapped.length > 0) {
+        toastError(t('fridgeChef.changedForAllergies', {
+          names: swapped.map((s) => (s.to ? `${s.from} → ${s.to}` : s.from)).join(', '),
+        }));
+      }
     } catch {
       toastError(t('fridgeChef.couldNotUpdateYourGrocery'));
     } finally {
@@ -100,8 +107,12 @@ export function FridgeChef() {
       });
       const json = await res.json();
       if (!res.ok) { toastError(json.error ?? t('fridgeChef.couldNotAddThatTo')); return; }
-      setPlanned((prev) => new Set(prev).add(index));
-      success(t('fridgeChef.plannedForTonightDinner', { name: recipe.title }));
+      // Tonight has ONE dinner: planning this card replaced whatever the slot
+      // held, including a card planned a moment ago, so only this one is on it.
+      setPlanned(new Set([index]));
+      success(json.replaced
+        ? t('fridgeChef.plannedForTonightReplacing', { name: recipe.title })
+        : t('fridgeChef.plannedForTonightDinner', { name: recipe.title }));
     } catch {
       toastError(t('fridgeChef.couldNotAddThatTo'));
     } finally {
