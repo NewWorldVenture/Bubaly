@@ -134,7 +134,7 @@ async function getOrCreateGroceryListId(supabase: DB, familyId: string, userId: 
 }
 
 /** A card this scan found under a draft's key, as the prior read selects it. */
-type PriorCard = { id: string; status: string; kind: string | null; source_kind: string | null; member_id: string | null; resolved_by: string | null };
+type PriorCard = { id: string; status: Database['public']['Tables']['autopilot_suggestions']['Row']['status']; kind: string | null; source_kind: string | null; member_id: string | null; resolved_by: string | null };
 
 /**
  * Keep an insurance card's member in step with its policy (0486).
