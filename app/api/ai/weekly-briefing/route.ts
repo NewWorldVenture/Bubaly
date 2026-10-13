@@ -58,11 +58,11 @@ export async function POST(req: NextRequest) {
       { data: schoolEvents },
       { data: sportsEvents },
       { data: appointments },
-      { data: choresDueAhead },
+      { data: choresDueAhead, error: choresAheadError },
       { data: mealPlans },
       groceryResult,
       { data: reminders },
-      { data: recapChores },
+      { data: recapChores, error: recapChoresError },
       { data: recapEvents },
     ] = await settleAll([
       supabase.from('family_members').select('id, display_name, role').eq('family_id', familyId).eq('is_active', true),
@@ -96,6 +96,12 @@ export async function POST(req: NextRequest) {
     // here, before any model is asked.
     if (groceryResult.error) {
       console.error('[api/ai/weekly-briefing] grocery read failed', groceryResult.error);
+      return NextResponse.json({ error: t('weeklyBriefing.failedToGenerateWeeklyBriefing') }, { status: 503 });
+    }
+    // The same for the chores: a failed read was "0% completion of 0
+    // assignments", which the prompt then ordered the recap to repeat.
+    if (choresAheadError || recapChoresError) {
+      console.error('[api/ai/weekly-briefing] chore read failed', choresAheadError ?? recapChoresError);
       return NextResponse.json({ error: t('weeklyBriefing.failedToGenerateWeeklyBriefing') }, { status: 503 });
     }
     const groceryItems = groceryResult.data;

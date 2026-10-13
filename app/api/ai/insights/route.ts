@@ -226,6 +226,7 @@ async function fetchRows(
         eq(sb, 'chores', familyId).eq('is_active', true).limit(40),
         sb.from('chore_assignments').select('*').eq('family_id', familyId).in('status', ['todo', 'in_progress', 'submitted']).limit(60),
   ]);
+      required([['chores', chores.error], ['chore_assignments', asg.error]]);
       return { chores: chores.data ?? [], chore_assignments: asg.data ?? [] };
     }
     case 'closet': {
@@ -462,6 +463,9 @@ async function fetchRows(
         eq(sb, 'home_assets', familyId).limit(40),
         sb.from('maintenance_tasks').select('*').eq('family_id', familyId).neq('status', 'done').order('due_at', { ascending: true, nullsFirst: false }).limit(40),
   ]);
+      // A failed read reached the model as "Home assets: none" and came back a
+      // confident "no upkeep due" at 200.
+      required([['home_assets', assets.error], ['maintenance_tasks', tasks.error]]);
       return { home_assets: assets.data ?? [], maintenance_tasks: tasks.data ?? [] };
     }
     case 'notifications': {
@@ -476,6 +480,7 @@ async function fetchRows(
     }
     case 'weather': {
       const locs = await eq(sb, 'weather_locations', familyId).order('sort_order').limit(10);
+      required([['weather_locations', locs.error]]);
       return { weather_locations: locs.data ?? [] };
     }
     case 'settings': {

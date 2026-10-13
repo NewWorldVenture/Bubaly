@@ -13,9 +13,10 @@ import type { InsightKind } from '@/lib/ai/insights';
 // entitled to something. So the gate is per kind, and this is the map.
 //
 // It is DERIVED, not authored: each entry is the `requireFeature` href of the
-// page that renders `<AiInsight kind="…">`, found by walking each page's
-// imports. `tests/insight-kinds-are-gated-like-their-pages.test.ts` re-derives
-// it from the pages and fails if the two drift — so moving a button between
+// page that renders `<AiInsight kind="…">` — the page's own, and its
+// layouts' — found by walking each page's imports.
+// `tests/insight-kinds-are-gated-like-their-pages.test.ts` re-derives it from
+// the pages and fails if the two drift — so moving a button between
 // modules updates the map or breaks the build, rather than silently ungating a
 // paid insight.
 //
@@ -32,6 +33,10 @@ export const INSIGHT_FEATURE_HREFS: Partial<Record<InsightKind, readonly string[
   declutter: ['/dashboard/declutter'],
   expenses: ['/dashboard/expenses'],
   goals: ['/dashboard/goals'],
+  // Gated in its LAYOUT (app/(app)/dashboard/home/layout.tsx), which the
+  // derivation read only page.tsx files for, so it went unmapped and a Free
+  // family could ask for a Plus insight by name.
+  home: ['/dashboard/home'],
   homework: ['/dashboard/homework'],
   insurance: ['/dashboard/insurance'],
   inventory: ['/dashboard/inventory'],
