@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { runSteps, type SendAdmission, type Step } from '@/lib/marketing/automation-steps';
+import { emailsSent, failedAttempt, recordedActionsJson, retryOf, stepsRecorded, runSteps, type SendAdmission, type Step } from '@/lib/marketing/automation-steps';
 import { EVENT_DEFAULT_COPY, type EventTrigger } from '@/lib/marketing/automation-triggers';
 import { wroteNoRows } from '@/lib/supabase/errors';
 
@@ -68,22 +68,33 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
     if (reserveErr) continue; // best-effort event path; callers must not block user requests
 
     let runId = reserved?.[0]?.id ?? null;
+    // What a failed attempt already did, so its retry does not repeat a send.
+    let steps = Array.isArray(flow.steps) ? (flow.steps as unknown as Step[]) : [];
+    let previous: string[] = [];
     if (!runId) {
       const { data: existing, error: existingError } = await supabase.from('marketing_automation_runs')
-        .select('id, status').eq('workflow_id', flow.id).eq('subject_key', params.subjectKey).maybeSingle();
+        .select('id, status, metadata').eq('workflow_id', flow.id).eq('subject_key', params.subjectKey).maybeSingle();
       if (existingError || !existing || existing.status !== 'failed') continue;
-      const { data: claimed, error: claimError } = await supabase.from('marketing_automation_runs')
-        .update({ status: 'running' }).eq('id', existing.id).eq('status', 'failed').select('id').maybeSingle();
+      // Claimed only while its receipts are the ones just read: another sweep
+      // may have claimed it, delivered an email and recorded that in between
+      // (recordedActionsJson).
+      const receipts = recordedActionsJson(existing.metadata);
+      const claim = supabase.from('marketing_automation_runs').update({ status: 'running' }).eq('id', existing.id);
+      const asRead = receipts === null ? claim.is('metadata->actions', null) : claim.eq('metadata->actions', receipts);
+      const fenced = stepsRecorded(existing.metadata) ? asRead : asRead.is('metadata->steps', null);
+      const { data: claimed, error: claimError } = await fenced.eq('status', 'failed').select('id').maybeSingle();
       if (claimError || !claimed) continue;
       runId = claimed.id;
+      ({ steps, previous } = retryOf(existing.metadata, steps));
     }
-    const steps = Array.isArray(flow.steps) ? (flow.steps as unknown as Step[]) : [];
     let actions: string[];
     try {
-      actions = await runSteps(steps, { email: params.email ?? null, name: params.name ?? null }, fallback, supabase, params.admitSend);
+      actions = await runSteps(steps, { email: params.email ?? null, name: params.name ?? null }, fallback, supabase, params.admitSend, previous);
     } catch (error) {
       console.error('[marketing automation] event-driven steps failed', error);
-      actions = ['automation:failed'];
+      // Keep what the earlier attempt delivered: a bare failure here would
+      // erase it, and the retry would send it again.
+      actions = failedAttempt(steps, previous);
     }
 
     const failed = actions.some((action) => action.includes(':failed') || action.includes(':skipped') || action.includes(':unsupported'));
@@ -94,7 +105,8 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
       .from('marketing_automation_runs')
       .update({
         status: failed ? 'failed' : 'completed',
-        metadata: { trigger: params.trigger, actions, ...(params.context ?? {}) } as unknown as Database['public']['Tables']['marketing_automation_runs']['Update']['metadata'],
+        // The results and the steps that produced them come last, so no context key can stand in for them (retryOf).
+        metadata: { trigger: params.trigger, ...(params.context ?? {}), actions, steps } as unknown as Database['public']['Tables']['marketing_automation_runs']['Update']['metadata'],
       })
       .eq('id', runId)
       .select('id');
@@ -108,7 +120,7 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
     if (workflowError) throw new Error('Could not update the automation run count.');
 
     result.workflows++;
-    result.emails += actions.filter((a) => a === 'send_email').length;
+    result.emails += emailsSent(actions, previous);
     if (failed) result.failures++;
   }
 

@@ -2047,6 +2047,7 @@
   "aiHomeDashboard.estimatedPlanningTimeNMinThisWeek": "Temps de planification estimé cette semaine : environ {minutes} min.",
   "aiHomeDashboard.familyAutopilot": "Pilote automatique familial",
   "aiHomeDashboard.frontDesk": "Accueil",
+  "aiHomeDashboard.groceryUnavailable": "Impossible de charger la liste de courses, elle n’est donc pas prise en compte ici.",
   "aiHomeDashboard.inbox": "Boîte de réception",
   "aiHomeDashboard.minOfPlanningThisWeek": "min de planification cette semaine.",
   "aiHomeDashboard.onTrack": "sur la bonne voie",
@@ -4974,6 +4975,7 @@
   "dashboardFood.foodAmpNutritionFeatures": "Fonctionnalités alimentation et nutrition",
   "dashboardFood.grade": "Niveau",
   "dashboardFood.groceryList": "Liste de courses",
+  "dashboardFood.groceryListUnavailable": "Impossible de charger la liste de courses.",
   "dashboardFood.healthyChoicesHappyFamily": "Des choix sains. Une famille heureuse.",
   "dashboardFood.mealPlanner": "Planificateur de repas",
   "dashboardFood.noDiningSpotsSavedYet": "Aucun restaurant enregistré pour l'instant.",
@@ -6131,6 +6133,7 @@
   "familyDashboard.familyMembers": "Membres de la famille",
   "familyDashboard.groceryList": "Liste de courses",
   "familyDashboard.groceryListIsEmpty": "La liste de courses est vide",
+  "familyDashboard.groceryListUnavailable": "Impossible de charger la liste de courses.",
   "familyDashboard.heresWhatsHappeningWithYourFamily": "Voici ce qui se passe dans votre famille aujourd'hui.",
   "familyDashboard.inviteAFamilyMember": "Inviter un membre de la famille",
   "familyDashboard.manage": "Gérer",
@@ -16967,5 +16970,11 @@
   "householdMoney.keptByParents": "L'argent du foyer est tenu par les parents de votre famille",
   "householdMoney.keptByParentsBody": "Les comptes, les soldes et les dépenses du foyer sont réservés à un parent ou à un adulte du foyer. Demandez-leur si vous avez besoin de quelque chose.",
   "householdMoney.onlyYourOwnSpending": "Tu vois ici les dépenses qui te sont attribuées. Un parent ou un adulte voit les comptes du foyer et toutes ses dépenses.",
-  "householdMoney.onlyWhatYouAdded": "Tu vois ici les fiches que tu as ajoutées. Un parent ou un adulte voit celles de tout le monde."
+  "householdMoney.onlyWhatYouAdded": "Tu vois ici les fiches que tu as ajoutées. Un parent ou un adulte voit celles de tout le monde.",
+  "accountStanding.accountClosed": "Ce compte Bubaly est fermé. Rouvrez-le pour continuer.",
+  "accountStanding.trialEnded": "Votre essai gratuit est terminé. Choisissez Family Basic ou Family+ pour continuer à utiliser Bubaly.",
+  "accountStanding.unavailable": "Bubaly n'a pas pu vérifier le compte de votre famille pour le moment. Réessayez dans un instant.",
+  "gift.ideasAreNotAvailableForThisFamily": "Les idées de cadeaux ne sont pas disponibles pour cette famille pour le moment.",
+  "handoff.pickupChangedRefresh": "Ce retrait vient d’être modifié. Actualisez la page pour voir où il en est.",
+  "marketplace.onlyTheSellerFinishesAnOrder": "Seule la personne qui l’a vendu ou prêté peut le marquer comme rendu ou terminé."
 }

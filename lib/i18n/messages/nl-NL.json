@@ -2047,6 +2047,7 @@
   "aiHomeDashboard.estimatedPlanningTimeNMinThisWeek": "Geschatte planningstijd deze week: ongeveer {minutes} min.",
   "aiHomeDashboard.familyAutopilot": "Gezinsautopiloot",
   "aiHomeDashboard.frontDesk": "Receptie",
+  "aiHomeDashboard.groceryUnavailable": "De boodschappenlijst kon niet worden geladen en telt hier dus niet mee.",
   "aiHomeDashboard.inbox": "Postvak IN",
   "aiHomeDashboard.minOfPlanningThisWeek": "min planning bespaard deze week.",
   "aiHomeDashboard.onTrack": "op schema",
@@ -4974,6 +4975,7 @@
   "dashboardFood.foodAmpNutritionFeatures": "Functies voor eten en voeding",
   "dashboardFood.grade": "Groep",
   "dashboardFood.groceryList": "Boodschappenlijst",
+  "dashboardFood.groceryListUnavailable": "De boodschappenlijst kon niet worden geladen.",
   "dashboardFood.healthyChoicesHappyFamily": "Gezonde keuzes. Gelukkig gezin.",
   "dashboardFood.mealPlanner": "Maaltijdplanner",
   "dashboardFood.noDiningSpotsSavedYet": "Nog geen eetgelegenheden opgeslagen.",
@@ -6131,6 +6133,7 @@
   "familyDashboard.familyMembers": "Gezinsleden",
   "familyDashboard.groceryList": "Boodschappenlijst",
   "familyDashboard.groceryListIsEmpty": "De boodschappenlijst is leeg",
+  "familyDashboard.groceryListUnavailable": "De boodschappenlijst kon niet worden geladen.",
   "familyDashboard.heresWhatsHappeningWithYourFamily": "Dit gebeurt er vandaag in je gezin.",
   "familyDashboard.inviteAFamilyMember": "Een gezinslid uitnodigen",
   "familyDashboard.manage": "Beheren",
@@ -16967,5 +16970,11 @@
   "householdMoney.keptByParents": "Het huishoudgeld wordt bijgehouden door de ouders in je gezin",
   "householdMoney.keptByParentsBody": "De rekeningen, saldi en uitgaven van het huishouden zijn voor een ouder of volwassene in het huishouden. Vraag het een van hen als je er iets uit nodig hebt.",
   "householdMoney.onlyYourOwnSpending": "Je ziet hier de uitgaven die aan jou zijn toegewezen. Een ouder of volwassene ziet de rekeningen van het huishouden en al zijn uitgaven.",
-  "householdMoney.onlyWhatYouAdded": "Je ziet hier de gegevens die jij hebt toegevoegd. Een ouder of volwassene ziet die van iedereen."
+  "householdMoney.onlyWhatYouAdded": "Je ziet hier de gegevens die jij hebt toegevoegd. Een ouder of volwassene ziet die van iedereen.",
+  "accountStanding.accountClosed": "Dit Bubaly-account is gesloten. Open het opnieuw om verder te gaan.",
+  "accountStanding.trialEnded": "Je gratis proefperiode is afgelopen. Kies Family Basic of Family+ om Bubaly te blijven gebruiken.",
+  "accountStanding.unavailable": "Bubaly kon het account van je gezin nu niet controleren. Probeer het zo meteen opnieuw.",
+  "gift.ideasAreNotAvailableForThisFamily": "Cadeau-ideeën zijn op dit moment niet beschikbaar voor dit gezin.",
+  "handoff.pickupChangedRefresh": "Deze ophaling is net gewijzigd. Vernieuw de pagina om te zien hoe het ervoor staat.",
+  "marketplace.onlyTheSellerFinishesAnOrder": "Alleen degene die dit heeft verkocht of uitgeleend, kan het als teruggebracht of afgerond markeren."
 }

@@ -17,6 +17,7 @@ import { dayPhase, phaseGreeting } from '@/lib/home/time-of-day';
 import { dayKeyInTz, zonedDayBoundsMs, addDaysToDayKey, weekStartDayKey, scopeFromUserContext } from '@/lib/services/scope';
 import { readCompleteCalendarOccurrences, projectCalendarOccurrences } from '@/lib/services/calendar/search-occurrences';
 import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from '@/lib/calendar/source-capability';
+import { readOnOpenGroceryLists } from '@/lib/services/groceries';
 
 const ACCENT = ['bg-violet-500', 'bg-emerald-500', 'bg-orange-500', 'bg-rose-500', 'bg-blue-500', 'bg-teal-500'];
 const MEAL_EMOJIS: Record<string, string> = { breakfast: '🍳', lunch: '🥗', dinner: '🍽️', snack: '🍎' };
@@ -92,7 +93,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
     { count: dueTodayCount },
     { data: weekPlans },
     { data: members },
-    { data: groceryItems },
+    { data: groceryItems, error: groceryError },
     { data: dueTasks },
     { count: doneCount },
     { count: totalCount },
@@ -114,8 +115,9 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
       .lt('plan_date', weekEnd.toISOString().slice(0, 10))
       .order('plan_date'),
     supabase.from('family_members').select('*').eq('family_id', familyId).eq('is_active', true).order('created_at'),
-    supabase.from('grocery_items').select('id, name, is_checked').eq('family_id', familyId)
-      .eq('is_checked', false).order('created_at').limit(6),
+    // Only lists the family has not archived (readOnOpenGroceryLists).
+    readOnOpenGroceryLists(supabase, familyId, (lists) => supabase.from('grocery_items').select('id, name, is_checked').eq('family_id', familyId)
+      .in('list_id', lists).eq('is_checked', false).order('created_at').limit(6)),
     supabase.from('chore_assignments')
       .select('id, due_at, status, member_id, chore_id')
       .eq('family_id', familyId).in('status', ['todo', 'in_progress']).order('due_at').limit(4),
@@ -131,6 +133,12 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
       .eq('family_id', familyId).is('deleted_at', null).neq('sender_id', ctx.user.id)
       .not('read_by', 'cs', `{${ctx.user.id}}`),
   ]);
+  // A grocery read that failed (the items, or the open-list read in front of
+  // them) is not an empty list: the card says it could not load, no advice is
+  // drawn from a count nobody read, and the assistant card does not turn the
+  // missing advice into "Everything looks on track".
+  const groceryUnavailable = Boolean(groceryError);
+  if (groceryError) console.error('[family-dashboard] grocery read failed', groceryError);
   const calendarData = calendarRes && 'ok' in calendarRes && calendarRes.ok ? calendarRes.data : null;
   const calendarUnavailable = calendarData === null;
   const calendarEvents = calendarData ? projectCalendarOccurrences(calendarData.occurrences).events : [];
@@ -173,7 +181,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
   if ((openChores ?? 0) > 0) {
     suggestions.push({ icon: CheckCircle2, text: openChores === 1 ? tr('familyDashboard.openTasksOne') : tr('familyDashboard.openTasksMany', { n: openChores ?? 0 }), cta: tr('familyDashboard.viewTasks') });
   }
-  if ((weekPlans?.length ?? 0) > 0 && (groceryItems?.length ?? 0) === 0) {
+  if (!groceryUnavailable && (weekPlans?.length ?? 0) > 0 && (groceryItems?.length ?? 0) === 0) {
     suggestions.push({ icon: ShoppingCart, text: tr('familyDashboard.mealsNoGroceries'), cta: tr('familyDashboard.buildList') });
   }
   if (upcomingCalendarEvents.length > 0) {
@@ -331,8 +339,15 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
               <h2 className="font-semibold">{tr('familyDashboard.aiAssistant')}</h2>
             </div>
           </div>
+          {/* No suggestion is an all-clear only when every source behind one was
+              read: an unread calendar or grocery list says so instead, the AI
+              home's rule ("nothing needs you" from an unread source is a claim
+              nobody checked). Review RV1037-R1-GROCERY-ALLCLEAR. */}
           <p className="mb-4 text-sm text-fg/70">
-            {suggestions.length > 0 ? tr('familyDashboard.suggestionsIntro') : calendarUnavailable ? tr('homeCalendar.upcomingUnavailable') : tr('familyDashboard.allOnTrack')}
+            {suggestions.length > 0 ? tr('familyDashboard.suggestionsIntro')
+              : calendarUnavailable ? tr('homeCalendar.upcomingUnavailable')
+              : groceryUnavailable ? tr('familyDashboard.groceryListUnavailable')
+              : tr('familyDashboard.allOnTrack')}
           </p>
           {suggestions.length > 0 && (
             <div className="space-y-2.5">
@@ -435,11 +450,15 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">{tr('familyDashboard.groceryList')}</h2>
-            <span className="rounded-full bg-violet-500/20 px-2.5 py-0.5 text-xs font-bold text-brand-text">
-              {groceryItems?.length ?? 0} items
-            </span>
+            {!groceryUnavailable && (
+              <span className="rounded-full bg-violet-500/20 px-2.5 py-0.5 text-xs font-bold text-brand-text">
+                {groceryItems?.length ?? 0} items
+              </span>
+            )}
           </div>
-          {groceryItems && groceryItems.length > 0 ? (
+          {groceryUnavailable ? (
+            <p role="status" className="py-8 text-center text-sm text-muted">{tr('familyDashboard.groceryListUnavailable')}</p>
+          ) : groceryItems && groceryItems.length > 0 ? (
             <ul className="space-y-2.5">
               {groceryItems.map((item) => (
                 <li key={item.id} className="flex items-center gap-3 text-sm">

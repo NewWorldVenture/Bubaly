@@ -28,6 +28,7 @@ import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from '@/lib/calendar/source-capabilit
 import { addDaysToDayKey, dayKeyInTz, zonedDayBoundsMs, zonedTimeMs } from '@/lib/services/scope';
 import { computeStress, type StressInput, type StressResult } from './stress';
 import { completionScore, nextBestActions, type NextAction } from './operations';
+import { readOnOpenGroceryLists } from '@/lib/services/groceries';
 
 /**
  * The family-local window every query below is bounded by.
@@ -158,8 +159,9 @@ export async function gatherSignalsResult(
       .eq('family_id', familyId).eq('status', 'active'),
     supabase.from('meal_plans').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).gte('plan_date', todayKey).lte('plan_date', weekEndKey),
-    supabase.from('grocery_items').select('id', { count: 'exact', head: true })
-      .eq('family_id', familyId).eq('is_checked', false),
+    // Only lists the family has not archived (readOnOpenGroceryLists).
+    readOnOpenGroceryLists(supabase, familyId, (lists) => supabase.from('grocery_items').select('id', { count: 'exact', head: true })
+      .eq('family_id', familyId).in('list_id', lists).eq('is_checked', false)),
   ]);
 
   const readError = [weekEvents, appts, openTasks, doneTasks, totalTasks, bills, homework, sports, routines, meals, grocery]

@@ -14,6 +14,8 @@ import { wrapToolsWithTrust } from '@/lib/assistant/trust-wrapper';
 import type { Database } from '@/lib/database.types';
 import { rateLimitDb } from '@/lib/server/rate-limit-db';
 import { rateLimit } from '@/lib/server/rate-limit';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
+import { AI_ASSISTANT_FEATURE_KEY, accessDeniedResponse, assertAIAccess } from '@/lib/server/ai-access';
 import { parseAIChatRequest } from '@/lib/ai/chat-request';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
@@ -31,6 +33,14 @@ export async function POST(req: NextRequest) {
     const tz = ctx.active.family.timezone || 'America/New_York';
     const supabase = await createServer();
 
+    // The same assistant as /api/ai, so the same two gates, in the same places:
+    // the feature for the family's plan before the rate limiter, and the plan's
+    // monthly allowance (with a closed or trial-ended family refused) after it.
+    // This route asked neither, so it answered every signed-in member of every
+    // family, past the Free plan's ten turns and past a closed account.
+    const refused = await refuseUnlessEntitled(supabase, familyId, ['/dashboard/assistant']);
+    if (refused) return refused;
+
     // Agentic chat can execute family tools, so bound both request volume and
     // input size before reading family context or invoking the model.
     const key = `ai-chat:${ctx.user.id}`;
@@ -43,6 +53,9 @@ export async function POST(req: NextRequest) {
 
     const durable = await rateLimitDb(supabase, key, { limit: 20, windowMs: 60_000 });
     if (!durable.ok) return rejected(durable.retryAfter);
+
+    const access = await assertAIAccess(ctx, { db: supabase, featureKey: AI_ASSISTANT_FEATURE_KEY });
+    if (!access.ok) return accessDeniedResponse(access);
 
     const boundedBody = await readBoundedRequestJson(req, MAX_PROVIDER_JSON_BYTES);
     if (!boundedBody.ok) {

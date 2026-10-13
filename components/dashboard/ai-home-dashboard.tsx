@@ -51,6 +51,7 @@ import { getLocaleContext } from '@/lib/i18n/server';
 import { translate } from '@/lib/i18n/messages';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { dayPhase, phaseGreeting } from '@/lib/home/time-of-day';
+import { readOnOpenGroceryLists } from '@/lib/services/groceries';
 
 function todayLabel(locale: LocaleCode) {
   return new Date().toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric' });
@@ -102,7 +103,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   const [
     { count: pendingChores },
     todayCalendarRes,
-    { count: groceryCount },
+    { count: groceryCount, error: groceryError },
     { count: overdueMedsCount },
     { count: pendingApprovals },
     { count: openTodos },
@@ -127,8 +128,9 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('member_id', myMemberId).in('status', ['todo', 'in_progress']),
     readDisplayCalendarOccurrences(supabase, familyId, todayWindow, tz, { overlap: true }),
-    supabase.from('grocery_items').select('id', { count: 'exact', head: true })
-      .eq('family_id', familyId).eq('is_checked', false),
+    // Only lists the family has not archived (readOnOpenGroceryLists).
+    readOnOpenGroceryLists(supabase, familyId, (lists) => supabase.from('grocery_items').select('id', { count: 'exact', head: true })
+      .eq('family_id', familyId).in('list_id', lists).eq('is_checked', false)),
     supabase.from('medications').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('is_active', true).limit(1),
     manager
@@ -197,6 +199,11 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   for (const [label, result] of [['today calendar', todayCalendarRes], ['upcoming calendar', upcomingCalendarRes], ['assigned calendar', assignedCalendarRes]] as const) {
     if (result.error) console.error(`[dashboard-home] ${label} read failed`, result.error);
   }
+  // A grocery count that could not be read (the items, or the open-list read
+  // in front of them) is unknown, not zero: nothing below may say the family
+  // is all caught up or has no list on its strength.
+  const groceryUnavailable = !!groceryError;
+  if (groceryError) console.error('[dashboard-home] grocery read failed', groceryError);
   let todayUnavailable = !!todayCalendarRes.error;
   let upcomingUnavailable = !!upcomingCalendarRes.error;
   let conflictsUnavailable = !!assignedCalendarRes.error;
@@ -351,7 +358,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     overdueReminders,
     dueTodayReminders,
     pendingChores: pendingChores ?? 0,
-    lowGrocery: (groceryCount ?? 0) > 0,
+    lowGrocery: !groceryUnavailable && (groceryCount ?? 0) > 0,
     openTodos: openTodos ?? 0,
     now,
     // A money approval's amount and the words around it, in this reader's locale.
@@ -361,7 +368,9 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     recommendations,
   });
   const needs = topNeeds(homeNeeds, 5);
-  const needsHeader = conflictsUnavailable ? t('needsAttention.needsYourAttention') : needsHeadline(summarizeNeeds(homeNeeds));
+  // With a source unread, "nothing needs you" is a claim nobody checked.
+  const needsUnknown = conflictsUnavailable || groceryUnavailable;
+  const needsHeader = needsUnknown ? t('needsAttention.needsYourAttention') : needsHeadline(summarizeNeeds(homeNeeds));
 
   // `||`, not `??`: an empty display name is no name, and "Good afternoon, ."
   // is what `??` let through. With no name at all the greeting has none.
@@ -389,7 +398,9 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   // next best getting-started steps, and dinner ideas — instead of a bland
   // "all caught up" void. Reuses the onboarding first-brief engine so home + the
   // first-run screen tell the same story.
-  const showOutcome = !todayUnavailable && !upcomingUnavailable && !conflictsUnavailable && needs.shown.length === 0 && !hasEvents;
+  // The outcome scores the week from these counts ("Start a grocery list"), so
+  // it waits for a grocery count that was read.
+  const showOutcome = !todayUnavailable && !upcomingUnavailable && !conflictsUnavailable && !groceryUnavailable && needs.shown.length === 0 && !hasEvents;
   let homeBrief: ReturnType<typeof buildHomeBrief> | null = null;
   if (showOutcome) {
     const { data: dinnerRows } = await supabase
@@ -434,7 +445,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       documentsSoon: ((documentRows ?? []) as DocumentRow[])
         .filter((d) => d.expires_at).map((d) => ({ title: d.title, days: daysUntil(d.expires_at as string) })).filter((d) => d.days >= 0),
       unplannedDinners: Math.max(0, 7 - Math.min(7, plannedDinnerCount ?? 0)),
-      lowGrocery: groceryCount ?? 0,
+      lowGrocery: groceryUnavailable ? undefined : groceryCount ?? 0,
       autopilotTop: openSuggestions[0] ? { title: openSuggestions[0].title, confidence: openSuggestions[0].confidence } : null,
     };
     const candidates = buildInsightCandidates(sources);
@@ -466,7 +477,10 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
         .select('id, kind, title, detail, href, impact')
         .eq('family_id', familyId).eq('as_of_date', today).eq('status', 'active');
       const ranked = rankInsights(((activeRows ?? []) as { id: string; kind: string; title: string; detail: string | null; href: string | null; impact: number }[])
-        .filter((r) => !conflictsUnavailable || r.kind !== 'conflict')
+        // A row persisted earlier today says what its source said then: with that
+        // source unread now, an old conflict or an old grocery count is not
+        // shown as today's insight (a fresh candidate from it is already withheld).
+        .filter((r) => (!conflictsUnavailable || r.kind !== 'conflict') && (!groceryUnavailable || r.kind !== 'grocery'))
         .map((r) => ({ id: r.id, kind: r.kind as InsightKind, title: r.title, detail: r.detail ?? '', href: r.href ?? '/dashboard', impact: r.impact })));
       const top = ranked[0];
       if (top) insightRow = { id: top.id, kind: top.kind, title: top.title, detail: top.detail, href: top.href, impact: top.impact, alternatives: Math.max(0, ranked.length - 1) };
@@ -619,7 +633,8 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
 
       {/* §16 Needs Your Attention — one ranked queue, decisions made in place */}
       {conflictsUnavailable && calendarNotice('homeCalendar.conflictsUnavailable')}
-      {(!conflictsUnavailable || needs.shown.length > 0) && <NeedsAttention
+      {groceryUnavailable && calendarNotice('aiHomeDashboard.groceryUnavailable')}
+      {(!needsUnknown || needs.shown.length > 0) && <NeedsAttention
         items={needs.shown}
         more={needs.more}
         headline={needsHeader}
