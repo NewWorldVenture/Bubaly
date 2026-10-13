@@ -80,7 +80,7 @@ $$;
 revoke all on function reminder_origin_private.card_readable(public.autopilot_suggestions,uuid) from public,anon,authenticated,service_role;
 -- The flat family/card key has exactly the existing JavaScript JSON byte format.
 create or replace function reminder_origin_private.card_key(family uuid, card uuid) returns text language sql immutable set search_path=pg_catalog,public as $$
- select encode(public.digest('["autopilot.createReminder","'||family::text||'","'||card::text||'"]','sha256'),'hex');
+ select encode(extensions.digest('["autopilot.createReminder","'||family::text||'","'||card::text||'"]','sha256'),'hex');
 $$;
 revoke all on function reminder_origin_private.card_key(uuid,uuid) from public,anon,authenticated,service_role;
 -- Backfill exact stable-key links. Unmatched stamped copies remain manager-only.
@@ -205,7 +205,7 @@ begin
  perform 1 from public.family_members where family_id=parent.family_id and user_id=actor and is_active for share; if not found then raise exception 'Recurrence actor changed' using errcode='42501'; end if;
  select * into c from public.autopilot_suggestions where id=parent.autopilot_card_id and family_id=parent.family_id and action_type='create_reminder' for share;
  if not public.can_manage_family(parent.family_id) and(c.id is null or not reminder_origin_private.card_readable(c,actor)) then raise exception 'Recurrence unavailable' using errcode='42501'; end if;
- key:=encode(public.digest('autopilot.repeat:'||parent.id::text,'sha256'),'hex');
+ key:=encode(extensions.digest('autopilot.repeat:'||parent.id::text,'sha256'),'hex');
  next_row:=jsonb_populate_record(null::public.family_reminders,to_jsonb(parent)||(case when jsonb_typeof(to_jsonb(parent)->'subtasks')='array' then jsonb_build_object('subtasks',(select coalesce(jsonb_agg(x||jsonb_build_object('done',false)),'[]'::jsonb) from jsonb_array_elements(to_jsonb(parent)->'subtasks') x)) else '{}'::jsonb end)||jsonb_build_object('id',gen_random_uuid(),'idempotency_key',key,'created_by',actor,'created_at',now(),'updated_at',now(),'remind_at',p_at,'status','active','completed_at',null,'snoozed_until',null));
  insert into public.family_reminders select next_row.* on conflict(family_id,idempotency_key) where idempotency_key is not null do nothing;
  select * into receipt from public.family_reminders where family_id=parent.family_id and idempotency_key=key;

@@ -6,7 +6,7 @@ The release couples immutable reminder origins, guarded atomic writers and the a
 
 ## Reviewed artifacts and evidence
 
-Apply only the reviewed `supabase/migrations/0487_copied_card_reminder_origin.sql`, SHA-256 `65016bc1c2777d2dd0581c4234c2f9c71b0f45d6679ddd5668a90784838d7285`, after verifying the actual `0486` prerequisite and its current audience/classification guards. Preserve its complete `BEGIN`/`COMMIT` transaction. Check migration history and filename-prefix collisions; do not renumber this migration or admit held `0488`, `0490` or other unrelated work as part of this cutover.
+Apply only the reviewed `supabase/migrations/0487_copied_card_reminder_origin.sql`, SHA-256 `e54e693ecc6769964cd97b1383fe168c0e2ad5fc30f4729733365ec210448309`, after verifying the actual `0486` prerequisite and its current audience/classification guards. Preserve its complete `BEGIN`/`COMMIT` transaction. Check migration history and filename-prefix collisions; do not renumber this migration or admit held `0488`, `0490` or other unrelated work as part of this cutover.
 
 Local native authorization and recurrence checks passed 24 cases in each of three zones. Producer qualification passed 91 cases in each zone; the immutable-origin reader passed 12 modeled cases, with its exact current dependency overlay type check and scoped lint passing. These are bounded tests. Portable 25-case hosted admission and normal full repository CI remain pending; they do not establish production completion.
 

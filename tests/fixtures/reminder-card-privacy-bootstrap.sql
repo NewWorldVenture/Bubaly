@@ -8,6 +8,8 @@ create schema if not exists storage;
 
 -- Current raw block docs/audit/pg-bootstrap.sh SHA256 c60b5a44809e05efea1164c61d08f4fcc092391a1b1135f566944401dbf2f2dc
 create schema if not exists extensions;
+-- Match the current repository and Supabase pgcrypto namespace; no public alias.
+create extension if not exists "pgcrypto" with schema extensions;
 
 -- Current raw block docs/audit/pg-bootstrap.sh SHA256 99670396ed142501fba3eac92c905a603f7a4c7d6a7afe749f0fc4b31adf79da
 do $$ begin create role anon nologin; exception when duplicate_object then null; end $$;
