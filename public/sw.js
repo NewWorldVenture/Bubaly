@@ -135,8 +135,15 @@ self.addEventListener('fetch', (event) => {
   // Never cache Supabase auth or API calls.
   if (url.pathname.startsWith('/api') || url.pathname.startsWith('/auth')) return;
 
+  // A library item is asked of the network past the browser's HTTP cache. An
+  // older /library/media answer was kept there for an hour under the URL alone
+  // (private, max-age=3600), so it could reach the next reader on this browser
+  // without the route deciding for them. Newer answers are not kept at all
+  // (LIBRARY_MEDIA_CACHE_CONTROL); this covers the ones already there.
+  const pastHttpCache = LIBRARY_ITEM.test(url.pathname) ? { cache: 'no-store' } : undefined;
+
   if (request.mode === 'navigate') {
-    event.respondWith(fetch(request).then(async response => {
+    event.respondWith(fetch(request, pastHttpCache).then(async response => {
       if (publicShell(url, request) && safeResponse(response, request, 'shell')) await savePublic(request, response.clone());
       return response;
     }).catch(async () => (publicShell(url, request) && await cachedResponse(CACHE, request, 'shell')) || offlinePage()));
@@ -147,7 +154,7 @@ self.addEventListener('fetch', (event) => {
   // publisher bytes available without using the library as a generic fallback.
   if (!url.search && !url.hash && LIBRARY_ITEM.test(url.pathname)
     && ['', 'audio', 'video'].includes(request.destination)) {
-    event.respondWith(cachedResponse(LIBRARY_CACHE, request, 'library').then(response => response || fetch(request)));
+    event.respondWith(cachedResponse(LIBRARY_CACHE, request, 'library').then(response => response || fetch(request, pastHttpCache)));
     return;
   }
 

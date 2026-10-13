@@ -168,8 +168,19 @@ describe('2 — a place recovered while the row is open is not written over', ()
       recover: (known: Item) => { item = known; screen(); },
       timeUpdate: async (at: number) => { audio.currentTime = at; (events().props.onTimeUpdate as () => void)(); await settle(); },
       pause: async () => { audio.paused = true; (events().props.onPause as () => void)(); await settle(); },
+      end: async () => { (events().props.onEnded as () => void)(); await settle(); },
     };
   }
+
+  it('reaching the end from the stand-in writes nothing either, before or after the place arrives', async () => {
+    const row = await unknownThenKnown();
+    await row.press();
+    await row.timeUpdate(29_998);
+    await row.end();
+    row.recover({ ...BOOK, positionSeconds: 7200 });
+    await row.end();
+    expect(progress.save).not.toHaveBeenCalled();
+  });
 
   it('playback that began from the stand-in writes nothing once the place arrives — not on time, not on pause', async () => {
     const row = await unknownThenKnown();
@@ -234,6 +245,32 @@ describe('3 — a replay stays un-finished in every save until one lands', () =>
     await row.timeUpdate(16);
     await row.timeUpdate(40);
     expect(writes().at(-1)).toEqual({ itemId: BOOK.id, positionSeconds: 40, completed: false });
+  });
+
+  // What the server STORES, not what the client sent: a write is applied when
+  // it is processed. Sent together, the end's `completed: true` could be
+  // processed before the replay's `completed: false` and be overwritten by it.
+  it('a replay that ends while its reset is still in flight is stored finished', async () => {
+    const stored: Record<string, unknown> = { positionSeconds: 29_998, completed: true };
+    let landFirst!: () => void;
+    progress.save
+      .mockImplementationOnce((input: Record<string, unknown>) => new Promise((resolve) => {
+        landFirst = () => { Object.assign(stored, input); resolve({ ok: true, message: 'Saved.' }); };
+      }))
+      .mockImplementation(async (input: Record<string, unknown>) => { Object.assign(stored, input); return { ok: true, message: 'Saved.' }; });
+    const row = await playing(FINISHED);
+    await row.timeUpdate(16);
+    await row.end();
+    // The end's write waits for the reset ahead of it.
+    expect(progress.save).toHaveBeenCalledTimes(1);
+
+    landFirst();
+    await settle();
+    expect(writes()).toEqual([
+      { itemId: BOOK.id, positionSeconds: 16, completed: false },
+      { itemId: BOOK.id, completed: true },
+    ]);
+    expect(stored.completed).toBe(true);
   });
 
   it('a reset that lands after the item ended again does not un-finish it', async () => {

@@ -62,8 +62,15 @@ function mediaHref(itemId: string): string {
  * position, which is the number the unmount check trusts to decide there is
  * nothing left to save. Audit C1-S9-74.
  */
-function saveInBackground(input: Parameters<typeof saveProgressAction>[0], onFail?: () => void, onSaved?: () => void): void {
-  saveProgressAction(input)
+function saveInBackground(
+  writes: { current: Promise<void> },
+  input: Parameters<typeof saveProgressAction>[0], onFail?: () => void, onSaved?: () => void,
+): void {
+  // One row's writes go one at a time, each after the last has settled, so they
+  // are stored in the order they were made. Sent together, a replay's
+  // `completed: false` could be applied after the `completed: true` its own
+  // `ended` wrote — and the finished item read as unfinished.
+  writes.current = writes.current.then(() => saveProgressAction(input)
     .then((res) => {
       if (res.ok) { onSaved?.(); return; }
       console.warn('[library] background progress save refused', res.error);
@@ -72,7 +79,7 @@ function saveInBackground(input: Parameters<typeof saveProgressAction>[0], onFai
     .catch((err: unknown) => {
       console.warn('[library] background progress save failed', err);
       onFail?.();
-    });
+    }));
 }
 
 export function ItemRow({ item }: { item: PlayableItem }) {
@@ -100,6 +107,8 @@ export function ItemRow({ item }: { item: PlayableItem }) {
   // from there.
   const provisional = useRef(false);
   const knewPlace = useRef(!item.progressUnknown);
+  // This row's progress writes, in order (see saveInBackground).
+  const writes = useRef<Promise<void>>(Promise.resolve());
   const shortOfTheEnd = (at: number) => !item.durationSeconds || at < item.durationSeconds - 5;
   const [playing, setPlaying] = useState(false);
   const [position, setPosition] = useState(item.positionSeconds);
@@ -162,7 +171,7 @@ export function ItemRow({ item }: { item: PlayableItem }) {
     })) return;
     const end = item.durationSeconds;
     const unfinish = finished.current && (!end || audio.currentTime < end - 5);
-    saveInBackground({ itemId: item.id, positionSeconds: Math.floor(audio.currentTime), ...(unfinish ? { completed: false } : {}) });
+    saveInBackground(writes, { itemId: item.id, positionSeconds: Math.floor(audio.currentTime), ...(unfinish ? { completed: false } : {}) });
   }, [item.id, item.progressUnknown, item.durationSeconds]);
 
   function toggle() {
@@ -231,7 +240,7 @@ export function ItemRow({ item }: { item: PlayableItem }) {
     // replay at 0:00 with its position thrown away.
     const replay = finished.current && shortOfTheEnd(at);
     const ending = endings.current;
-    saveInBackground({ itemId: item.id, positionSeconds: Math.floor(at), ...(replay ? { completed: false } : {}) }, () => {
+    saveInBackground(writes, { itemId: item.id, positionSeconds: Math.floor(at), ...(replay ? { completed: false } : {}) }, () => {
       if (lastSaved.current === at) lastSaved.current = previous;
     }, () => {
       if (replay && endings.current === ending) finished.current = false;
@@ -241,7 +250,10 @@ export function ItemRow({ item }: { item: PlayableItem }) {
   function onEnded() {
     endings.current += 1;
     finished.current = true;
-    saveInBackground({ itemId: item.id, completed: true });
+    // Reaching the end from a stand-in start is not this person's place
+    // either: the page told them nothing played now is saved as their place.
+    if (item.progressUnknown || provisional.current) return;
+    saveInBackground(writes, { itemId: item.id, completed: true });
   }
 
   function onTimeUpdate() {
@@ -302,7 +314,7 @@ export function ItemRow({ item }: { item: PlayableItem }) {
         // The rollback is itself a write; if it fails the flag stays set, and the
         // next visit says "Marked for offline, but not stored on this device
         // yet" rather than asserting a download — so it is logged, not raised.
-        if (next) saveInBackground({ itemId: item.id, offline: false });
+        if (next) saveInBackground(writes, { itemId: item.id, offline: false });
         if (next) setOffline(false);
         error(notAudio ? t('library.onlyAudioOffline') : next ? 'That file could not be stored offline.' : 'That file could not be removed.');
       }

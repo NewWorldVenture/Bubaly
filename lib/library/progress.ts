@@ -29,6 +29,18 @@ export function isOfflineAudio(contentType: string | null | undefined): boolean 
   return /^audio\/[a-z0-9.+-]+$/.test((contentType ?? '').split(';')[0].trim().toLowerCase());
 }
 
+/**
+ * How /library/media answers may be kept: by nobody.
+ *
+ * It used to say `private, max-age=3600`, so the browser's own HTTP cache kept
+ * each episode for an hour — under the URL alone, for whoever signed in next.
+ * A video an adult played was handed to a child on the same browser without
+ * reaching the route that refuses it to them. Downloads are a separate store
+ * (Cache Storage, LIBRARY_CACHE), which this does not touch; `public/sw.js`
+ * also asks the network past any copy an older answer left behind.
+ */
+export const LIBRARY_MEDIA_CACHE_CONTROL = 'private, no-store';
+
 /** How far playback must move before another write is worth making. */
 export const SAVE_EVERY_SECONDS = 15;
 
