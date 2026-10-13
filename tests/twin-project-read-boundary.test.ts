@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { runTwinProjection } from '@/lib/twin/project-server';
 
-// The projector reads thirteen domain tables. Each one is a place the graph can
+// The projector reads twelve domain tables. Each one is a place the graph can
 // silently lose a whole kind of knowledge: if a rejected read were treated as
 // "this family owns nothing", the next projection would prune every asset,
 // obligation and preference node and the graph would confidently claim the
@@ -60,18 +60,18 @@ function fakeSupabase(opts: Options = {}) {
   return { client, writes, touched };
 }
 
-// The thirteen sources the graph is built from. Seven more used to be read —
-// clinicians, paperwork, warranties, accounts, bills, places and storage
-// locations — and are now kept out of a table every member reads; the case at
-// the end of this file holds them out.
+// The twelve sources the graph is built from. Eight more used to be read —
+// clinicians, paperwork, warranties, accounts, bills, places, storage locations
+// and renewals — and are now kept out of a table every member reads; the case
+// below holds them out.
 const EVERY_READ_TABLE = [
   'family_members', 'pets', 'vehicles', 'school_classes', 'teams', 'family_routines',
   'calendar_events', 'homes', 'home_assets', 'inventory_items',
-  'home_projects', 'renewals', 'family_facts',
+  'home_projects', 'family_facts',
 ];
 const WITHHELD_TABLES = [
   'health_providers', 'paperwork_items', 'home_warranties', 'financial_accounts', 'bills',
-  'family_places', 'home_locations',
+  'family_places', 'home_locations', 'renewals',
 ];
 
 describe('runTwinProjection read boundary', () => {

@@ -142,8 +142,9 @@ const PROJECTED_REF_TABLE_SET = new Set<string>(PROJECTED_REF_TABLES);
  * Tables the projector used to copy into the graph and no longer reads.
  *
  * `graph_entities` and `graph_edges` read with `is_family_member` (0129) for
- * every role, guests included, and /dashboard/graph renders every node. These
- * sources do not: the app narrows each of them by role on its own pages, and
+ * every role, guests included, and /dashboard/graph renders every node; the
+ * same nodes feed every member's assistant context. These sources do not: the
+ * app narrows each of them by role on its own pages, and the released 0481 and
  * the held 0509, 0514 and 0517 narrow them in the database —
  *
  *   health_providers     a non-manager reads only their own clinicians (0517),
@@ -156,6 +157,10 @@ const PROJECTED_REF_TABLE_SET = new Set<string>(PROJECTED_REF_TABLES);
  *   bills                withheld from a guest (0509)
  *   family_places,
  *   home_locations       withheld from a guest (0509)
+ *   renewals             withheld from a guest today (0481,
+ *                        renewals_not_a_guests_read: the ID, licence and
+ *                        insurance expiry register); the node carried the
+ *                        title, expiry, cost and category, "owed_by" a member
  *
  * The cron and the auto-refresh project with the SERVICE client, so a copy in
  * a family-readable table would outlive every one of those decisions. Until the
@@ -165,7 +170,7 @@ const PROJECTED_REF_TABLE_SET = new Set<string>(PROJECTED_REF_TABLES);
  */
 export const AUDIENCE_RESTRICTED_REF_TABLES = [
   'health_providers', 'paperwork_items', 'home_warranties', 'financial_accounts', 'bills',
-  'family_places', 'home_locations',
+  'family_places', 'home_locations', 'renewals',
 ] as const;
 
 /** True when a stored row's attributes say the projector wrote it. */

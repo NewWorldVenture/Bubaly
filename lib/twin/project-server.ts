@@ -66,8 +66,9 @@ function firstReadFailure(reads: Array<[string, { error: { message: string } | n
 export async function runTwinProjection(sb: DB, familyId: string, createdBy: string | null, now: Date = new Date()): Promise<TwinProjectionResult> {
   const eventRange = eventWindow(now);
   // Not read, and not projected: AUDIENCE_RESTRICTED_REF_TABLES (clinicians,
-  // paperwork, warranties, accounts, bills, places and storage locations). The
-  // graph is every member's to read, guests included, and these are not.
+  // paperwork, warranties, accounts, bills, places, storage locations and
+  // renewals). The graph is every member's to read, guests included, and these
+  // are not.
   const [members, pets, vehicles, classes, teams, routines] = await settleAll([
     sb.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
     sb.from('pets').select('id, name, species').eq('family_id', familyId).eq('is_active', true),
@@ -79,7 +80,7 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
 
   // M3 — the four kinds the household actually runs on. Read alongside the
   // people/pets/places core so one projection produces one coherent graph.
-  const [events, homes, homeAssets, inventory, projects, renewals, preferences] = await settleAll([
+  const [events, homes, homeAssets, inventory, projects, preferences] = await settleAll([
     // Every capped read is ordered. PostgREST gives no stable order without an
     // ORDER BY and Postgres moves updated tuples around the heap, so an
     // unordered `.limit()` returns an arbitrary — and run-to-run different —
@@ -96,8 +97,6 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
     sb.from('home_projects').select('id, title, status, room, owner_id, priority')
       .eq('family_id', familyId).in('status', ['idea', 'planning', 'quoting', 'scheduled', 'in_progress', 'on_hold'])
       .order('id', { ascending: true }).limit(ROW_LIMIT),
-    sb.from('renewals').select('id, title, member_id, expires_at, cost, category, status')
-      .eq('family_id', familyId).eq('status', 'active').order('id', { ascending: true }).limit(ROW_LIMIT),
     sb.from('family_facts').select('id, member_id, label, value, source, confidence')
       .eq('family_id', familyId).eq('category', 'preference').order('id', { ascending: true }).limit(ROW_LIMIT),
   ]);
@@ -107,8 +106,7 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
     ['teams', teams], ['family_routines', routines],
     ['calendar_events', events], ['homes', homes],
     ['home_assets', homeAssets], ['inventory_items', inventory],
-    ['home_projects', projects],
-    ['renewals', renewals], ['family_facts', preferences],
+    ['home_projects', projects], ['family_facts', preferences],
   ]);
   if (readError) return { ok: false, error: readError, entities: 0, edges: 0 };
 
@@ -145,10 +143,9 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
     })),
     bills: [],
     paperwork: [],
-    renewals: (renewals.data ?? []).map((r) => ({
-      id: r.id, title: r.title, member_id: r.member_id, expires_at: r.expires_at,
-      cost: r.cost, category: r.category, status: r.status,
-    })),
+    // Withheld from a guest by the released 0481 (renewals_not_a_guests_read),
+    // so the expiry register stays out of the graph a guest reads.
+    renewals: [],
     preferences: (preferences.data ?? []).map((f) => ({
       id: f.id, member_id: f.member_id, label: f.label, value: f.value, source: f.source, confidence: f.confidence,
     })),
@@ -200,8 +197,7 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
   for (const [table, rows] of [
     ['calendar_events', events.data],
     ['home_assets', homeAssets.data], ['inventory_items', inventory.data],
-    ['home_projects', projects.data],
-    ['renewals', renewals.data], ['family_facts', preferences.data],
+    ['home_projects', projects.data], ['family_facts', preferences.data],
   ] as Array<[string, { length: number } | null]>) {
     if (readCoveredEverything(rows)) coveredRefTables.add(table);
     else console.warn(`[twin] ${table} read hit the ${ROW_LIMIT}-row cap; its nodes are refreshed but not pruned this run`);

@@ -14,6 +14,13 @@
 // 0509/0514/0517 narrow the source tables, not the graph, and the service role
 // bypasses them anyway.
 //
+// Renewals are the released case: 0481 withholds them from a guest
+// (`renewals_not_a_guests_read`, "not the household's ID/licence/insurance
+// expiry register"), yet the projector read every active one with the service
+// client and wrote it as an obligation node (title, expiry, cost, category)
+// "owed_by" its member. A guest read Emma's passport, and when it lapses, on the
+// graph, while the renewals table itself refuses them.
+//
 // Driven through the real rebuild action (and the cron's own call), against an
 // in-memory household holding one row of each restricted kind and the nodes an
 // earlier run already wrote for them.
@@ -37,7 +44,10 @@ vi.mock('@/lib/supabase/server', () => ({ createServer: async () => h.db, create
 const { projectTwinAction } = await import('@/app/(app)/dashboard/graph/twin-actions');
 const { runTwinProjection } = await import('@/lib/twin/project-server');
 
-const RESTRICTED = ['health_providers', 'paperwork_items', 'home_warranties', 'financial_accounts', 'bills', 'family_places', 'home_locations'];
+const RESTRICTED = [
+  'health_providers', 'paperwork_items', 'home_warranties', 'financial_accounts', 'bills', 'family_places', 'home_locations',
+  'renewals',
+];
 
 /** What any member's browser reads back from /dashboard/graph (GraphModule selects `*`). */
 const graphText = (db: InMemorySupabase) => JSON.stringify([db.table('graph_entities'), db.table('graph_edges')]);
@@ -62,10 +72,14 @@ function household(): InMemorySupabase {
   db.seed('home_warranties', [{ id: 'w1', family_id: FAM, name: 'Furnace plan', status: 'active', created_by: 'parent-user' }]);
   db.seed('family_places', [{ id: 'pl1', family_id: FAM, name: 'Safe house' }]);
   db.seed('home_locations', [{ id: 'loc1', family_id: FAM, name: 'Gun safe', kind: 'closet' }]);
+  db.seed('renewals', [{
+    id: 'rn1', family_id: FAM, title: 'Emma passport', member_id: 'm-emma', expires_at: '2026-11-02',
+    cost: 165, category: 'immigration_visa', status: 'active',
+  }]);
   return db;
 }
 
-/** The nodes and the "sees" edge a projection before this fix had already written. */
+/** The nodes, the "sees" edge and the "owed_by" edge a projection before this fix had already written. */
 function seedEarlierProjection(db: InMemorySupabase) {
   const stamp = (refTable: string) => ({ provenance: { source: 'projection', observed_at: NOW.toISOString(), ref_table: refTable } });
   db.seed('graph_entities', [
@@ -77,11 +91,21 @@ function seedEarlierProjection(db: InMemorySupabase) {
     { id: 'g-w1', family_id: FAM, kind: 'item', name: 'Furnace plan', ref_table: 'home_warranties', ref_id: 'w1', attributes: stamp('home_warranties') },
     { id: 'g-pl1', family_id: FAM, kind: 'place', name: 'Safe house', ref_table: 'family_places', ref_id: 'pl1', attributes: stamp('family_places') },
     { id: 'g-loc1', family_id: FAM, kind: 'place', name: 'Gun safe', ref_table: 'home_locations', ref_id: 'loc1', attributes: stamp('home_locations') },
+    {
+      id: 'g-rn1', family_id: FAM, kind: 'other', name: 'Emma passport', ref_table: 'renewals', ref_id: 'rn1',
+      attributes: { ...stamp('renewals'), subkind: 'obligation', obligation_kind: 'renewal', due_on: '2026-11-02', amount: 165, category: 'immigration_visa' },
+    },
   ]);
-  db.seed('graph_edges', [{
-    id: 'e-sees', family_id: FAM, source_id: 'g-emma', target_id: 'g-hp1', relation: 'sees', weight: 0.6,
-    attributes: { provenance: { source: 'projection', observed_at: NOW.toISOString() } },
-  }]);
+  db.seed('graph_edges', [
+    {
+      id: 'e-sees', family_id: FAM, source_id: 'g-emma', target_id: 'g-hp1', relation: 'sees', weight: 0.6,
+      attributes: { provenance: { source: 'projection', observed_at: NOW.toISOString() } },
+    },
+    {
+      id: 'e-owed', family_id: FAM, source_id: 'g-rn1', target_id: 'g-emma', relation: 'owed_by', weight: 0.6,
+      attributes: { provenance: { source: 'projection', observed_at: NOW.toISOString() } },
+    },
+  ]);
 }
 
 /** 0129's FK cascade: an edge goes with either of its ends. */
@@ -98,7 +122,7 @@ beforeEach(() => {
 });
 
 describe('the family graph every member reads holds no audience-restricted record', () => {
-  it("a parent's rebuild projects the household but no clinician, paperwork, bill, account, warranty or place", async () => {
+  it("a parent's rebuild projects the household but no clinician, paperwork, bill, account, warranty, place or renewal", async () => {
     const res = await projectTwinAction();
     expect(res.ok, res.error).toBe(true);
 
@@ -108,10 +132,14 @@ describe('the family graph every member reads holds no audience-restricted recor
     for (const table of RESTRICTED) expect(refTables.has(table), `${table} reached the graph`).toBe(false);
 
     const text = graphText(db);
-    for (const leaked of ['Dr. Lee', 'Psychiatry', 'Custody evaluation', 'Therapy co-pay', 'Divorce settlement', 'Furnace plan', 'Safe house', 'Gun safe', 'Pay the evaluator']) {
+    for (const leaked of [
+      'Dr. Lee', 'Psychiatry', 'Custody evaluation', 'Therapy co-pay', 'Divorce settlement', 'Furnace plan', 'Safe house', 'Gun safe', 'Pay the evaluator',
+      'Emma passport', '2026-11-02', 'immigration_visa',
+    ]) {
       expect(text, `${leaked} is readable on /dashboard/graph`).not.toContain(leaked);
     }
     expect(db.table('graph_edges').some((edge) => edge.relation === 'sees')).toBe(false);
+    expect(db.table('graph_edges').some((edge) => edge.relation === 'owed_by')).toBe(false);
   });
 
   it('the service-role cron prunes the restricted nodes an earlier projection wrote, and their edges with them', async () => {
@@ -123,9 +151,13 @@ describe('the family graph every member reads holds no audience-restricted recor
 
     expect(db.table('graph_entities').filter((row) => RESTRICTED.includes(String(row.ref_table)))).toEqual([]);
     expect(db.table('graph_edges').some((edge) => edge.relation === 'sees')).toBe(false);
+    // The renewal's node goes although its row is still live, and its edge with it.
+    expect(db.table('renewals')).toHaveLength(1);
+    expect(db.table('graph_edges').some((edge) => edge.relation === 'owed_by')).toBe(false);
     // The household's own nodes are untouched.
     expect(db.table('graph_entities').some((row) => row.ref_table === 'family_members' && row.ref_id === 'm-emma')).toBe(true);
     expect(graphText(db)).not.toContain('Psychiatry');
+    expect(graphText(db)).not.toContain('Emma passport');
   });
 
   it('a node a person typed in by hand, naming one of those tables, is not the projector\'s to remove', async () => {
