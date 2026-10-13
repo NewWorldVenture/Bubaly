@@ -76,6 +76,10 @@ const NOT_A_RECIPE_LIST: [string, string][] = [
   ['the same error object, fenced and explained', 'I could not read it.\n```json\n{"error": [], "reason": "blurry"}\n```'],
   ['an object wrapping a list of empty objects', '{"recipes":[{}]}'],
   ['an object wrapping a real recipe, a shape the prompt never asked for', JSON.stringify({ recipes: [SOUP] })],
+  // A complete JSON reply decides by its own value: a string that LOOKS like
+  // a list is a string, not an empty one.
+  ['a JSON string that looks like an empty list', JSON.stringify('[]')],
+  ['a JSON string holding a list in prose', JSON.stringify('Here you go: [] nothing found')],
 ];
 
 describe('Fridge Chef', () => {
@@ -139,6 +143,16 @@ describe('Fridge Chef', () => {
     expect(h.failed).not.toHaveBeenCalled();
   });
 
+  it('control: a fence inside a recipe\'s steps does not empty the list', async () => {
+    const pie = { ...SOUP, title: 'Pie', steps: 'Mix ```[]``` well, then bake "[20 min]".' };
+    modelSays(JSON.stringify([pie]));
+
+    const response = await photo();
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ recipes: [{ ...pie, allergenConflict: null }], allergiesConsidered: 0 });
+  });
+
   it('control: brackets inside the recipe text, or in prose before the list, do not hide it', async () => {
     const stew = { ...SOUP, title: 'Stew [easy]', steps: 'Brown it {in batches}, then simmer.' };
     modelSays(`I can see {carrots, celery} on the shelf.\n${JSON.stringify([stew])}`);
@@ -165,6 +179,7 @@ const NOT_AN_EVENT_LIST: [string, string][] = [
   ['the same error object, fenced and explained', 'I could not read it.\n```json\n{"error": [], "reason": "blurry"}\n```'],
   ['an object wrapping a list of empty objects', '{"events":[{}]}'],
   ['an object wrapping a real event, a shape the prompt never asked for', JSON.stringify({ events: [BAKE_SALE] })],
+  ['a JSON string that looks like an empty list', JSON.stringify('[]')],
 ];
 
 describe('the flyer scan', () => {
@@ -211,6 +226,23 @@ describe('the flyer scan', () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ events: [BAKE_SALE_EVENT] });
+  });
+
+  // A fence or a bracket inside a string value is text: the reply's own
+  // array is read whole, whether or not prose comes before it.
+  it.each([
+    ['backticks in a description', { ...BAKE_SALE, description: 'Bring ```[]``` and a smile' }],
+    ['an escaped quote and brackets in the title', { ...BAKE_SALE, title: 'Bake sale "[2 tables]"' }],
+  ])('control: %s does not empty a valid event list, bare or after prose', async (_case, event) => {
+    for (const content of [JSON.stringify([event]), `Found one event:\n${JSON.stringify([event])}`]) {
+      modelSays(content);
+
+      const response = await scan();
+
+      expect(response.status, content).toBe(200);
+      expect(((await response.json()) as { events: { title: string; description: string | null }[] }).events)
+        .toEqual([expect.objectContaining({ title: event.title, description: event.description })]);
+    }
   });
 
   it('control: a list mixing a valid event with invalid items keeps only the valid one', async () => {

@@ -38,38 +38,67 @@ function closingBracket(body: string, open: number): number {
   return -1;
 }
 
+type Parsed = { ok: true; value: unknown } | { ok: false };
+
+function parseJson(text: string): Parsed {
+  try {
+    return { ok: true, value: JSON.parse(text) };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/** A JSON value: an array is the answer, and anything else — an object, a string, a number — is not. */
+const asAnswer = (value: unknown): unknown[] | null => (Array.isArray(value) ? value : null);
+
 /**
  * The reply's top-level JSON array, or null when the reply does not hold one.
  *
- * Reads the first fenced block when there is one, else the whole reply, and
- * takes the first bracketed span in it that is JSON. That span is the answer:
- * an array is returned as is (`[]` included — the model's "nothing there"), and
- * anything else — `{"error":[]}`, `{"recipes":[…]}` — is null, because the
- * only shape these prompts document is a bare array, and a field of an object
- * is not one. Prose in brackets that is not JSON (`{milk, eggs}`) is skipped
- * whole, never searched inside, so an array nested in it is not picked up
- * either. A span that never closes is null: a list cut off at the token limit
- * is not a shorter list.
+ * In this order, each deciding when it applies:
+ *
+ * 1. The whole reply, when it IS JSON. Its value is the answer: an array as is
+ *    (`[]` included — the model's "nothing there"), anything else null. A JSON
+ *    string `"[]"` is a string, and a fence or a bracket inside a string value
+ *    (an event described as "```[]```") is text, not structure — so nothing is
+ *    looked for inside a reply that parses.
+ * 2. A reply that is one fenced block and nothing else: its inside, whole, by
+ *    the same rule.
+ * 3. Prose around the answer: the first bracketed span of the reply that is
+ *    JSON, read string-aware, so brackets and backticks inside string values
+ *    never start or end it. That span decides: an array is returned, and
+ *    anything else — `{"error":[]}`, `{"recipes":[…]}` — is null, because the
+ *    only shape these prompts document is a bare array and a field of an object
+ *    is not one. Prose in brackets that is not JSON (`{milk, eggs}`) is skipped
+ *    whole, never searched inside. A span that never closes is null: a list cut
+ *    off at the token limit is not a shorter list.
  *
  * What the items must look like is the caller's schema, not this function's.
  */
 export function readReplyArray(text: unknown): unknown[] | null {
   if (typeof text !== 'string' || !text.trim()) return null;
-  const body = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1] ?? text;
+  const trimmed = text.trim();
+
+  const whole = parseJson(trimmed);
+  if (whole.ok) return asAnswer(whole.value);
+
+  const fenced = /^```(?:json)?[ \t]*\n?([\s\S]*?)\n?[ \t]*```$/i.exec(trimmed);
+  if (fenced) {
+    const inner = parseJson(fenced[1].trim());
+    if (inner.ok) return asAnswer(inner.value);
+  }
+
   let from = 0;
   for (;;) {
-    const offset = body.slice(from).search(/[[{]/);
+    const offset = trimmed.slice(from).search(/[[{]/);
     if (offset < 0) return null;
     const open = from + offset;
-    const close = closingBracket(body, open);
+    const close = closingBracket(trimmed, open);
     if (close < 0) return null;
-    let value: unknown;
-    try {
-      value = JSON.parse(body.slice(open, close + 1));
-    } catch {
+    const span = parseJson(trimmed.slice(open, close + 1));
+    if (!span.ok) {
       from = close + 1;
       continue;
     }
-    return Array.isArray(value) ? value : null;
+    return asAnswer(span.value);
   }
 }
