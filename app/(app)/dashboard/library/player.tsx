@@ -31,6 +31,13 @@ export type PlayableItem = {
   offline: boolean;
   /** Finished, so "play again" starts at the beginning rather than the credits. */
   completed: boolean;
+  /**
+   * This person's places could not be read, so `positionSeconds` is not their
+   * place — it is a 0 standing in for one. Nothing writes a position then: a
+   * pause, or fifteen seconds of playback, would put that 0's neighbourhood
+   * over the place they really have, with no way back.
+   */
+  progressUnknown?: boolean;
 };
 
 /**
@@ -76,6 +83,11 @@ export function ItemRow({ item }: { item: PlayableItem }) {
   // Whether this row's audio was actually played in this visit. See the unmount
   // effect below — without it, opening the page was enough to lose your place.
   const touched = useRef(false);
+  // Whether the stored row still says "finished". A replay of a finished item
+  // has to say it is not any more, or every later visit starts it at 0:00 — a
+  // finished row resumes from the top (resumeFrom) and nothing else cleared it.
+  const finished = useRef(item.completed);
+  const shortOfTheEnd = (at: number) => !item.durationSeconds || at < item.durationSeconds - 5;
   const [playing, setPlaying] = useState(false);
   const [position, setPosition] = useState(item.positionSeconds);
   const [saved, setSaved] = useState(item.saved);
@@ -107,19 +119,28 @@ export function ItemRow({ item }: { item: PlayableItem }) {
   // of each episode with nothing to say why.
   useEffect(() => () => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || item.progressUnknown) return;
     if (!shouldPersistOnUnmount({
       touched: touched.current, currentTime: audio.currentTime, lastSaved: lastSaved.current,
     })) return;
-    saveInBackground({ itemId: item.id, positionSeconds: Math.floor(audio.currentTime) });
-  }, [item.id]);
+    const end = item.durationSeconds;
+    const unfinish = finished.current && (!end || audio.currentTime < end - 5);
+    saveInBackground({ itemId: item.id, positionSeconds: Math.floor(audio.currentTime), ...(unfinish ? { completed: false } : {}) });
+  }, [item.id, item.progressUnknown, item.durationSeconds]);
 
   function toggle() {
     const audio = audioRef.current;
     if (!audio) return;
     if (audio.paused) {
-      // Resume where this person left off, not where the last person did.
-      if (audio.currentTime < 1) audio.currentTime = resumeFrom(item);
+      // Resume where this person left off, not where the last person did. What
+      // was last saved is where playback starts from now: a finished item
+      // restarts at 0 while its stored position is still the end, and measured
+      // from there the fifteen-second saves never came.
+      if (audio.currentTime < 1) {
+        const from = resumeFrom(item);
+        audio.currentTime = from;
+        lastSaved.current = from;
+      }
       touched.current = true;
       // Stop whatever else was playing BEFORE asking this one to start, so the
       // two never overlap even for the moment the promise takes to settle.
@@ -156,10 +177,17 @@ export function ItemRow({ item }: { item: PlayableItem }) {
   // Claims the position as saved, and takes the claim back if the write does
   // not land — unless a later save has claimed a newer one meanwhile.
   function savePosition(at: number) {
+    if (item.progressUnknown) return;
     const previous = lastSaved.current;
     lastSaved.current = at;
-    saveInBackground({ itemId: item.id, positionSeconds: Math.floor(at) }, () => {
+    // Playing a finished item again, short of its end, un-finishes it. At the
+    // end itself it stays finished: the pause the element fires there comes
+    // just before `ended`, and must not race it.
+    const replay = finished.current && shortOfTheEnd(at);
+    if (replay) finished.current = false;
+    saveInBackground({ itemId: item.id, positionSeconds: Math.floor(at), ...(replay ? { completed: false } : {}) }, () => {
       if (lastSaved.current === at) lastSaved.current = previous;
+      if (replay) finished.current = true;
     });
   }
 
@@ -254,7 +282,7 @@ export function ItemRow({ item }: { item: PlayableItem }) {
       {item.mediaUrl && (
         <audio ref={audioRef} src={mediaHref(item.id)} preload="none" onTimeUpdate={onTimeUpdate}
           onPlay={onPlay} onPause={onPause}
-          onEnded={() => saveInBackground({ itemId: item.id, completed: true })} />
+          onEnded={() => { finished.current = true; saveInBackground({ itemId: item.id, completed: true }); }} />
       )}
       {offline && cached === false && (
         <p className="mt-1.5 text-xs text-warning">Marked for offline, but not stored on this device yet.</p>
@@ -305,7 +333,13 @@ export function SubscribeForm() {
   );
 }
 
-export function AddBookForm() {
+/**
+ * `allowMedia`: whether this person may attach an audio file. A book's media
+ * address is streamed to every member from Bubaly's own origin, so attaching
+ * one is the adults' to do (addBookAction refuses anyone else); a title or a
+ * page link is anyone's.
+ */
+export function AddBookForm({ allowMedia = true }: { allowMedia?: boolean }) {
   const { success, error } = useToast();
   const [pending, start] = useTransition();
   return (
@@ -333,16 +367,18 @@ export function AddBookForm() {
         <span className="mb-1 block font-medium">Link <span className="text-muted">(optional)</span></span>
         <input name="pageUrl" type="url" className={inputCls} placeholder="https://…" />
       </label>
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">Audio file <span className="text-muted">(optional)</span></span>
-        <input name="mediaUrl" type="url" className={inputCls} placeholder="https://…/book.mp3" />
-      </label>
+      {allowMedia && (
+        <label className="block text-sm">
+          <span className="mb-1 block font-medium">Audio file <span className="text-muted">(optional)</span></span>
+          <input name="mediaUrl" type="url" className={inputCls} placeholder="https://…/book.mp3" />
+        </label>
+      )}
       <Button type="submit" loading={pending} className="w-full">Add to library</Button>
     </form>
   );
 }
 
-export function FeedControls({ id }: { id: string }) {
+export function FeedControls({ id, canRemove = true }: { id: string; canRemove?: boolean }) {
   const { success, error } = useToast();
   const [pending, start] = useTransition();
   const run = (work: () => Promise<{ ok: true; message: string } | { ok: false; error: string }>) =>
@@ -355,9 +391,11 @@ export function FeedControls({ id }: { id: string }) {
       <Button size="sm" variant="ghost" loading={pending} onClick={() => run(() => refreshFeedAction(id))}>
         <RefreshCw className="h-4 w-4" /> Refresh
       </Button>
-      <Button size="sm" variant="ghost" loading={pending} onClick={() => run(() => unsubscribeFeedAction(id))}>
-        <Trash2 className="h-4 w-4" /> Remove
-      </Button>
+      {canRemove && (
+        <Button size="sm" variant="ghost" loading={pending} onClick={() => run(() => unsubscribeFeedAction(id))}>
+          <Trash2 className="h-4 w-4" /> Remove
+        </Button>
+      )}
     </div>
   );
 }

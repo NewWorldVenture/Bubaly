@@ -11,6 +11,9 @@ import { daysUntilNextOn } from '@/lib/celebrations/dates';
 import { isPollClosed } from '@/lib/voting/polls';
 import { isManager } from '@/lib/constants/roles';
 import { isDeductible } from '@/lib/finance/tax';
+import { insightReadRefused } from '@/lib/ai/insight-read-domains';
+import { localPartsAt } from '@/lib/time/zoned';
+import { computeBalances, type AssignmentLike, type RedemptionLike } from '@/lib/rewards/points';
 
 export type InsightKind =
   | 'chores'
@@ -79,6 +82,12 @@ export type InsightData = {
   now: string;
   /** The family's day, `YYYY-MM-DD`, for the kinds that count days to a DATE column. */
   todayKey?: string;
+  /**
+   * The family's IANA zone, for the kinds that print a TIMESTAMP's day. The
+   * `Now:` line is already in it; a due date sliced from its ISO string is
+   * Greenwich's day, which for an evening deadline west of it is tomorrow.
+   */
+  timeZone?: string;
   members: InsightMember[];
   /** Raw rows fetched server-side, keyed by table name. */
   rows: Record<string, Record<string, unknown>[]>;
@@ -108,6 +117,24 @@ const dollars = (n: number | null | undefined) =>
   typeof n === 'number' ? `$${n.toFixed(2)}` : '—';
 
 const day = (iso: unknown) => (typeof iso === 'string' && iso ? iso.slice(0, 10) : 'no date');
+
+/**
+ * A timestamp's calendar day and time on the FAMILY's clock, `YYYY-MM-DD HH:MM`
+ * — the clock the due date was entered on (homework-module's
+ * datetimeLocalToInstant) and the one the prompt's `Now:` line is written in.
+ */
+function familyDue(iso: unknown, timeZone: string | undefined): string {
+  if (typeof iso !== 'string' || !iso) return 'no date';
+  const instant = new Date(iso);
+  if (Number.isNaN(instant.getTime())) return 'no date';
+  try {
+    const p = localPartsAt(instant, timeZone || 'UTC');
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${String(p.year).padStart(4, '0')}-${pad(p.month)}-${pad(p.day)} ${pad(p.hour)}:${pad(p.minute)}`;
+  } catch {
+    return iso.slice(0, 10);
+  }
+}
 
 function nameMap(members: InsightMember[]) {
   const m = new Map(members.map((x) => [x.id, x.name]));
@@ -146,13 +173,16 @@ export const MANAGER_ONLY_INSIGHTS: ReadonlySet<InsightKind> = new Set<InsightKi
 ]);
 
 /**
- * Whether `role` may ask for `kind` — the route's own refusal
- * (`MANAGER_ONLY_INSIGHTS.has(kind) && !isManager(ctx.active.role)` answers
- * 403), for the screens that offer the button. A page every role reaches
- * offered a child the Insurance Hub's summary, and every tap was a refusal.
+ * Whether `role` may ask for `kind` — the route's own refusals
+ * (`MANAGER_ONLY_INSIGHTS.has(kind) && !isManager(ctx.active.role)`, and the
+ * view rule over INSIGHT_READ_DOMAINS in lib/ai/insight-read-domains.ts, each
+ * answer 403), for the screens that offer the button. A page every role
+ * reaches offered a child the Insurance Hub's summary, and every tap was a
+ * refusal; the homework and timetable pages offered a guest theirs.
  */
 export function mayAskInsight(kind: InsightKind, role: string | null | undefined): boolean {
-  return !(MANAGER_ONLY_INSIGHTS.has(kind) && !isManager(role));
+  if (MANAGER_ONLY_INSIGHTS.has(kind) && !isManager(role)) return false;
+  return !insightReadRefused(kind, role);
 }
 
 // The §44 data-not-instruction rule is appended by the route, not here: this
@@ -250,7 +280,7 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     buildUser: (d) => {
       const who = nameMap(d.members);
       const hw = cap(r(d, 'homework_assignments'), 40);
-      const lines = hw.shown.map((h) => `- ${h.title}${h.subject ? ` (${h.subject})` : ''} — ${who(h.member_id)}, ${h.status}${h.due_at ? `, due ${day(h.due_at)}` : ''}`).join('\n') || 'none';
+      const lines = hw.shown.map((h) => `- ${h.title}${h.subject ? ` (${h.subject})` : ''} — ${who(h.member_id)}, ${h.status}${h.due_at ? `, due ${familyDue(h.due_at, d.timeZone)}` : ''}`).join('\n') || 'none';
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nOpen homework:\n${lines}\n\nGive: (1) what to do first and why, (2) a simple day-by-day plan for the next few days, (3) one study tip.${q(d)}`;
     },
   },
@@ -936,7 +966,7 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     buildUser: (d) => {
       const assignments = r(d, 'homework_assignments').slice(0, 15);
       const grades = r(d, 'grades').slice(0, 10);
-      const aList = assignments.map((a) => `- ${a.title || 'Assignment'} (${a.status || 'pending'}, due: ${a.due_at ? String(a.due_at).slice(0, 10) : 'no date'})`).join('\n') || 'No assignments.';
+      const aList = assignments.map((a) => `- ${a.title || 'Assignment'} (${a.status || 'pending'}, due: ${a.due_at ? familyDue(a.due_at, d.timeZone) : 'no date'})`).join('\n') || 'No assignments.';
       const gList = grades.slice(0, 6).map((g) => `- ${g.subject || 'Subject'}: ${g.grade || g.score || '?'}`).join('\n') || 'No grades.';
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nAssignments:\n${aList}\n\nRecent grades:\n${gList}\n\nGive: (1) assignments overdue or due soon, (2) subject areas needing attention, (3) one encouragement or study tip.${q(d)}`;
     },
@@ -1033,13 +1063,25 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     allowQuestion: true,
     system:
       'You are an encouraging family rewards and motivation coach. Review kids\' points, chore completion, and reward redemptions. Suggest motivating rewards and positive reinforcement strategies. ' + SHARED_RULES,
+    // The figures are the ledger's, not a sample's. This summed `points_awarded`
+    // over the first 20 of 40 unordered assignment rows of any status — 'done'
+    // included, which neither lib/rewards/points nor 0439 counts — and called
+    // it "Total points earned". The route now hands over every APPROVED
+    // assignment and every redemption (read whole), and the balances below are
+    // computeBalances' — the rewards page's leaderboard and 0439's guard.
     buildUser: (d) => {
-      const assignments = r(d, 'chore_assignments').slice(0, 20);
-      const redemptions = r(d, 'reward_redemptions').slice(0, 10);
-      const totalPoints = assignments.filter((a) => a.status === 'approved' || a.status === 'done')
-        .reduce((s, a) => s + (Number(a.points_awarded) || 0), 0);
-      const pending = assignments.filter((a) => a.status === 'todo' || a.status === 'in_progress').length;
-      return `Family: ${d.familyName}. Now: ${d.now}.\n\nTotal points earned: ${totalPoints}. Pending chores: ${pending}. Recent redemptions: ${redemptions.length}.\n\nGive: (1) one motivating observation about progress, (2) two reward ideas that would excite kids, (3) one strategy to keep engagement high.${q(d)}`;
+      const balances = computeBalances(
+        d.members.map((m) => m.id),
+        r(d, 'chore_assignments').map<AssignmentLike>((a) => ({ member_id: String(a.member_id), status: String(a.status), points_awarded: a.points_awarded == null ? null : Number(a.points_awarded) })),
+        r(d, 'reward_redemptions').map<RedemptionLike>((x) => ({ member_id: String(x.member_id), cost_points: Number(x.cost_points) || 0, status: x.status as RedemptionLike['status'] })),
+      );
+      const who = nameMap(d.members);
+      const perMember = balances
+        .filter((b) => b.earned > 0 || b.spent > 0)
+        .map((b) => `- ${who(b.memberId)}: earned ${b.earned}, spent ${b.spent}, available ${b.available}`).join('\n') || 'No points earned yet.';
+      const pending = Number(r(d, 'pending_chores')[0]?.count) || 0;
+      const recent = r(d, 'reward_redemptions').slice(0, 10).length;
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nPoints by member (approved chores earned, approved or fulfilled rewards spent):\n${perMember}\n\nChores still open (to do, in progress or awaiting approval): ${pending}. Redemptions in the last ten: ${recent}.\n\nGive: (1) one motivating observation about progress, (2) two reward ideas that would excite kids, (3) one strategy to keep engagement high.${q(d)}`;
     },
   },
 

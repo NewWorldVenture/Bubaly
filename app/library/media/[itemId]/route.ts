@@ -27,6 +27,8 @@ export const runtime = 'nodejs';
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
+const isYoung = (role: string) => role === 'child' || role === 'teen';
+
 export async function GET(req: NextRequest, { params }: { params: Promise<{ itemId: string }> }) {
   const { itemId } = await params;
   if (!itemId) return new NextResponse('Not found', { status: 404 });
@@ -66,6 +68,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ item
       range: req.headers.get('range'),
       signal: req.signal,
     });
+    // Not video for a child or a teen. The library is podcasts and audiobooks,
+    // its player is an <audio> element, and a media address is anything a
+    // member typed — so this route, served from Bubaly's own origin, would
+    // otherwise play any public video to a child straight past the filter a
+    // parent set on the device for the video's real host.
+    if (isYoung(ctx.active.role) && (upstream.headers['content-type'] ?? '').startsWith('video/')) {
+      upstream.close();
+      return new NextResponse('Unsupported', { status: 415 });
+    }
     // Node stream -> Web stream, and close the socket if the client walks away
     // mid-episode. Without this an abandoned tab holds a publisher connection
     // open until the deadline.

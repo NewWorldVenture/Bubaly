@@ -99,6 +99,18 @@ export async function ensureTodoList(scope: ServiceScope, name?: string): Promis
   return ok({ id: list.id });
 }
 
+/**
+ * A guest views the household's tasks and changes none of them ("view limited
+ * shared events only"; the trust engine gives a guest's assistant `['view']`).
+ * RLS on todo_items is plain `is_family_member` for insert and update and no
+ * guest-write trigger covers the table, so this is where it is decided — for
+ * the page's actions and for every assistant, approval and replay path alike.
+ */
+async function refuseGuestWrite(scope: ServiceScope): Promise<ServiceResult<never> | null> {
+  if (scope.role !== 'guest') return null;
+  return fail((await getTranslations())('actionRefusal.notAllowed'), { code: SERVICE_CODES.denied });
+}
+
 export type CreateTodoInput = {
   title: string;
   listId?: string | null;
@@ -175,6 +187,8 @@ export async function createTodo(
   input: CreateTodoInput,
   opts: KeyedCreateOptions = {},
 ): Promise<ServiceResult<TodoItem>> {
+  const refused = await refuseGuestWrite(scope);
+  if (refused) return refused;
   const title = input.title?.trim() ?? '';
   if (!title) return fail('A task needs a title.', { code: SERVICE_CODES.invalidInput });
   if (input.dueDate && !DAY_KEY.test(input.dueDate)) {
@@ -247,6 +261,8 @@ export async function createTodo(
 }
 
 export async function completeTodo(scope: ServiceScope, todoId: string, done = true): Promise<ServiceResult<TodoItem>> {
+  const refused = await refuseGuestWrite(scope);
+  if (refused) return refused;
   const { data, error } = await scope.db
     .from('todo_items')
     .update({ is_done: done, completed_at: done ? new Date().toISOString() : null })
@@ -280,6 +296,8 @@ export async function completeTodo(scope: ServiceScope, todoId: string, done = t
 
 /** `memberId` is a `family_members.id`; null unassigns. */
 export async function assignTodo(scope: ServiceScope, todoId: string, memberId: string | null): Promise<ServiceResult<TodoItem>> {
+  const refused = await refuseGuestWrite(scope);
+  if (refused) return refused;
   const assignee = await checkTodoAssignee(scope, memberId);
   if (!assignee.ok) return assignee;
   const { data, error } = await scope.db
@@ -320,6 +338,8 @@ export type UpdateTodoPatch = {
  * keeps, and the reason a spread of the form's state is not good enough.
  */
 export async function updateTodo(scope: ServiceScope, todoId: string, patch: UpdateTodoPatch): Promise<ServiceResult<TodoItem>> {
+  const refused = await refuseGuestWrite(scope);
+  if (refused) return refused;
   const update: Updatable<'todo_items'> = {};
 
   if (patch.title !== undefined) {

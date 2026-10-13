@@ -13,6 +13,8 @@ import { safeFeedUrl } from '@/lib/library/feed-parse';
 import { ingestFeed } from '@/lib/library/ingest';
 import { rateLimit } from '@/lib/server/rate-limit';
 import { wroteNoRows } from '@/lib/supabase/errors';
+import { isManager } from '@/lib/constants/roles';
+import { getTranslations } from '@/lib/i18n/server';
 
 const PAGE = '/dashboard/library';
 
@@ -30,8 +32,24 @@ const bookSchema = z.object({
   mediaUrl: z.string().trim().url('Enter a valid audio link').or(z.literal('')).optional(),
 });
 
+/**
+ * Who may put content in the family library. A subscription's episodes, and a
+ * book's audio address, land in EVERY member's library — a young child's
+ * included — and stream through Bubaly's own media route, from Bubaly's own
+ * origin, past whatever filter a parent set on the device for the publisher's
+ * host. So adding them is a parent's or another adult's call, the same line the
+ * rest of the household's shared catalogues draw; anyone may still keep a
+ * title or a page link, and anyone may refresh what is already subscribed.
+ */
+async function refuseUnlessCurator(role: string): Promise<LibraryResult | null> {
+  if (isManager(role)) return null;
+  return { ok: false, error: (await getTranslations())('actionRefusal.notAllowed') };
+}
+
 export async function subscribeFeedAction(formData: FormData): Promise<LibraryResult> {
   const ctx = await requireUserContext();
+  const refused = await refuseUnlessCurator(ctx.active.role);
+  if (refused) return refused;
   const parsed = feedSchema.safeParse({
     url: String(formData.get('url') ?? ''),
     kind: String(formData.get('kind') ?? 'podcast'),
@@ -117,6 +135,8 @@ export async function refreshFeedAction(feedId: string): Promise<LibraryResult> 
 
 export async function unsubscribeFeedAction(feedId: string): Promise<LibraryResult> {
   const ctx = await requireUserContext();
+  const refused = await refuseUnlessCurator(ctx.active.role);
+  if (refused) return refused;
   const supabase = await createServer();
   const { data: unsubscribed, error } = await supabase
     .from('library_feeds').delete().eq('id', feedId).eq('family_id', ctx.active.familyId).select('id');
@@ -139,6 +159,12 @@ export async function addBookAction(formData: FormData): Promise<LibraryResult> 
     mediaUrl: String(formData.get('mediaUrl') ?? ''),
   });
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Check the form.' };
+  // A title and a page link are anyone's to keep; an audio or video address is
+  // streamed to the whole family from Bubaly's origin, so it is the adults'.
+  if (parsed.data.mediaUrl) {
+    const refused = await refuseUnlessCurator(ctx.active.role);
+    if (refused) return refused;
+  }
 
   const supabase = await createServer();
   const { error } = await supabase.from('library_items').insert({

@@ -11,7 +11,7 @@ const root=process.env.BUBALY_TODO_UI_SOURCE_ROOT ?? process.cwd();
 const origin='https://todo-modal-completion-fixture.invalid';
 const {react,reactDom}=reactBrowserScripts('development');
 const sdk=fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')),'dist/umd/supabase.js'),'utf8');
-const files=['components/modules/todos-module.tsx','components/ui/modal.tsx','components/ui/input.tsx','components/ui/button.tsx','components/ui/badge.tsx','components/ui/states.tsx','components/ui/states-client.tsx','components/app/page-header.tsx','lib/a11y/use-dialog-behavior.ts','lib/supabase/errors.ts','lib/utils/submission-id.ts'];
+const files=['components/modules/todos-module.tsx','components/ui/modal.tsx','components/ui/input.tsx','components/ui/button.tsx','components/ui/badge.tsx','components/ui/states.tsx','components/ui/states-client.tsx','components/app/page-header.tsx','lib/a11y/use-dialog-behavior.ts','lib/supabase/errors.ts','lib/supabase/read-all.ts','lib/utils/submission-id.ts'];
 const definitions=Object.fromEntries(files.map(file=>['@/'+file.replace(/\.tsx?$/,''),ts.transpileModule(fs.readFileSync(file==='components/modules/todos-module.tsx' && process.env.BUBALY_TODO_MODULE_SOURCE ? process.env.BUBALY_TODO_MODULE_SOURCE:path.join(root,file),'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText]));
 const messages=JSON.parse(fs.readFileSync(path.join(root,'lib/i18n/messages/en-US.json'),'utf8'));
 declare global {interface Window {
@@ -39,9 +39,18 @@ async function fixture(page:Page,mode='healthy',strict=false) {
     if(parsed.origin!==origin)throw Error('Unexpected synthetic SDK destination');
     requests.push({url,method,body});
     const table=parsed.pathname.split('/').pop();
-    if(method==='GET'){
+    // Open tasks, finished ones and the finished count are read separately:
+    // `is_done` is applied as PostgREST applies it, `.range()` arrives as
+    // offset/limit, and the count is a HEAD request.
+    if(method==='GET'||method==='HEAD'){
       if(table==='todo_lists')return{status:200,body:[list]};
-      if(table==='todo_items')return mode==='read-error'?{status:403,body:{code:'42501',message:'Synthetic read refused'}}:{status:200,body:rows};
+      if(table==='todo_items'){
+        if(mode==='read-error')return{status:403,body:{code:'42501',message:'Synthetic read refused'}};
+        const done=parsed.searchParams.get('is_done');
+        const matching=done===null?rows:rows.filter(row=>'eq.'+String(row.is_done)===done);
+        const offset=Number(parsed.searchParams.get('offset')??0),limit=parsed.searchParams.get('limit');
+        return{status:200,body:method==='HEAD'?null:limit===null?matching.slice(offset):matching.slice(offset,offset+Number(limit))};
+      }
     }
     throw Error('Unexpected SDK operation '+method+' '+url);
   });
