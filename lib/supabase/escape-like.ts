@@ -77,3 +77,14 @@ export function escapeOrValue(value: string): string {
 export function literalCaseInsensitivePattern(value: string): string {
   return `^${value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`;
 }
+
+/**
+ * Case-insensitive "contains this text" for PostgREST imatch (~*): the value,
+ * escaped, unanchored. A search that must keep a `*` a star uses this, not
+ * ilike: PostgREST turns every `*` in a like pattern into `%`, escaped or not,
+ * so a star can only be approximated there (`_`) and then filtered — after the
+ * row limit, which loses matches. imatch has no such alias.
+ */
+export function literalContainsPattern(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}

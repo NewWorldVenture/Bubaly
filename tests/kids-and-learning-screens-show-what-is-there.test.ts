@@ -254,6 +254,19 @@ describe('AUD-1040-COMPLETED-SEARCH — a search of the Completed tab reaches ev
     expect(listed(tree, notFound)).toBe(false);
   });
 
+  // More than 201 broad matches ahead of the one literal star: a `*` sent as
+  // a wildcard matches every title, and the row limit came before the literal
+  // check, so the starred task — older than all of them — was never reached.
+  it('searching every finished task for a lone * finds the one starred title behind every newer one', async () => {
+    let tree = await search(await completedTab(), '*');
+    await typingRests();
+    tree = await show(() => createElement(TodosModule));
+    expect(listed(tree, STARRED)).toBe(true);
+    expect(listed(tree, PERCENT)).toBe(false);
+    expect(listed(tree, 'Old task 259')).toBe(false);
+    expect(has(tree, 'No completed tasks')).toBe(false);
+  });
+
   it.each([
     ['math*', STARRED, PERCENT],
     ['math%', PERCENT, STARRED],

@@ -169,12 +169,12 @@ function operatorPredicate(column: string, op: string, wanted: unknown): Predica
       return (row) => values.some((v) => looseEq(row[column], v));
     }
     case 'imatch': {
-      // Only the anchored, escaped literal subset used by CRM email lookups.
-      // Unsupported ARE syntax must fail rather than silently model a regex.
-      if (typeof wanted !== 'string' || !wanted.startsWith('^') || !wanted.endsWith('$')) {
-        throw new Error('[in-memory-supabase] unsupported imatch pattern');
-      }
-      const body = wanted.slice(1, -1);
+      // Only an escaped literal: anchored at both ends (CRM email lookups:
+      // equal) or at neither (searches: contains). Unsupported ARE syntax must
+      // fail rather than silently model a regex.
+      if (typeof wanted !== 'string') throw new Error('[in-memory-supabase] unsupported imatch pattern');
+      const anchored = wanted.startsWith('^') && wanted.endsWith('$') && !/(^|[^\\])(\\\\)*\\\$$/.test(wanted);
+      const body = anchored ? wanted.slice(1, -1) : wanted;
       const specials = '.*+?^$' + '{}()|[]' + String.fromCharCode(92);
       let literal = '';
       for (let index = 0; index < body.length; index++) {
@@ -190,7 +190,9 @@ function operatorPredicate(column: string, op: string, wanted: unknown): Predica
           literal += char;
         }
       }
-      return (row) => typeof row[column] === 'string' && (row[column] as string).toLowerCase() === literal.toLowerCase();
+      return (row) => typeof row[column] === 'string' && (anchored
+        ? (row[column] as string).toLowerCase() === literal.toLowerCase()
+        : (row[column] as string).toLowerCase().includes(literal.toLowerCase()));
     }
     case 'like':
     case 'ilike': {

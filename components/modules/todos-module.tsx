@@ -10,7 +10,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
-import { escapeLike } from '@/lib/supabase/escape-like';
+import { literalContainsPattern } from '@/lib/supabase/escape-like';
 import { completeTodoAction, createTodoAction, deleteTodoAction, updateTodoAction } from '@/app/(app)/dashboard/todos/actions';
 import { newSubmissionId, submissionSettled } from '@/lib/utils/submission-id';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -154,10 +154,11 @@ export function TodosModule() {
     table: 'todo_items', familyId, deps: [familyId, 'done-search', searchAllDone],
     fetcher: (sb) => (searchAllDone
       ? sb.from('todo_items').select('*').eq('family_id', familyId).eq('is_done', true)
-        // PostgREST turns every `*` into `%`, escaped or not, so a star is sent
-        // as `_` (any one character) and the rows compared literally below —
-        // as the list itself compares them (lib/supabase/escape-like.ts).
-        .ilike('title', `%${searchAllDone.split('*').map(escapeLike).join('_')}%`)
+        // The text exactly as typed, a `*` included: imatch on the escaped
+        // value. ilike cannot say it — PostgREST turns every `*` there into
+        // `%` — and filtering a broad match afterwards lost the older literal
+        // matches behind the row limit (lib/supabase/escape-like.ts).
+        .filter('title', 'imatch', literalContainsPattern(searchAllDone))
         .order('completed_at', { ascending: false, nullsFirst: false })
         .order('id').range(0, COMPLETED_SHOWN)
       : Promise.resolve({ data: [] as TodoItem[], error: null })),
@@ -199,12 +200,9 @@ export function TodosModule() {
   // Tab → base set, then search.
   const tabItems = useMemo(() => {
     let res: TodoItem[];
-    // Searched in the database already: every finished task, not the listed 200.
-    // The same literal match as the list's own, so a `*` is a star.
-    if (searchingAllDone) {
-      const q = completedQuery.toLowerCase();
-      return doneSearchQ.data.filter((i) => i.title.toLowerCase().includes(q)).slice(0, COMPLETED_SHOWN);
-    }
+    // Searched in the database already: every finished task, not the listed
+    // 200, matched literally as the list's own search matches them.
+    if (searchingAllDone) return doneSearchQ.data.slice(0, COMPLETED_SHOWN);
     if (tab === 'completed') res = completed;
     else if (tab === 'mine') res = active.filter((i) => i.created_by === selfId);
     else if (tab === 'assigned') res = active.filter((i) => i.assigned_to_id === selfId);
@@ -214,7 +212,7 @@ export function TodosModule() {
       res = res.filter((i) => i.title.toLowerCase().includes(q));
     }
     return res;
-  }, [tab, active, completed, selfId, search, searchingAllDone, completedQuery, doneSearchQ.data]);
+  }, [tab, active, completed, selfId, search, searchingAllDone, doneSearchQ.data]);
 
   // Group the active tabs by due date.
   const groups = useMemo(() => {
