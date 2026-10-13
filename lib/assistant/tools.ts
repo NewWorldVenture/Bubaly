@@ -17,7 +17,7 @@ import { briefingCalendarBounds, instantCalendarBounds } from '@/lib/briefing/ca
 import type { ParentApprovalRow, RenewalRow, DocumentRow, NeedsReader } from '@/lib/home/needs-sources';
 import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
 import { reminderAttention } from '@/lib/dashboard/reminder-attention';
-import { dayKeyInTz, familyInstantIso, zonedDayBoundsMs } from '@/lib/services/scope';
+import { addDaysToDayKey, dayKeyInTz, familyInstantIso, zonedDayBoundsMs } from '@/lib/services/scope';
 import { nextRemindAt } from '@/lib/reminders/details';
 import { escapeLike } from '@/lib/supabase/escape-like';
 import { wroteNoRows } from '@/lib/supabase/errors';
@@ -539,10 +539,12 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         // not the other is how a day key ends up meaning two things in one
         // function, which is the defect this replaces.
         const tz = ctx.tz || 'UTC';
-        const dayEndExclusiveMs = zonedDayBoundsMs(dayKeyInTz(now, tz), tz).end;
+        const todayKey = dayKeyInTz(now, tz);
+        const dayEndExclusiveMs = zonedDayBoundsMs(todayKey, tz).end;
         const todayEnd = new Date(dayEndExclusiveMs - 1);
         const in14 = new Date(now.getTime() + 14 * 86400000).toISOString();
-        const in30 = new Date(now.getTime() + 30 * 86400000).toISOString();
+        // `documents.expires_at` is a DATE: bounded by the family's day key.
+        const in30 = addDaysToDayKey(todayKey, 30);
         const in45 = new Date(now.getTime() + 45 * 86400000).toISOString();
         // Money decisions and chore sign-offs wait on a parent, and only a
         // parent or adult is shown them — Home, Needs-you and the dashboard all
@@ -592,6 +594,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
           lowGrocery: (grocery.count ?? 0) > 0,
           openTodos: todos.count ?? 0,
           now,
+          todayKey,
           reader: MODEL_READER,
         }));
         return { ok: true, count: needs.length, items: needs.map((n) => ({ title: n.title, urgency: n.urgency })) };

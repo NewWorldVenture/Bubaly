@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { runTwinProjection } from '@/lib/twin/project-server';
 
-// The projector reads twenty domain tables. Each one is a place the graph can
+// The projector reads thirteen domain tables. Each one is a place the graph can
 // silently lose a whole kind of knowledge: if a rejected read were treated as
 // "this family owns nothing", the next projection would prune every asset,
 // obligation and preference node and the graph would confidently claim the
@@ -40,8 +40,10 @@ type Options = { failing?: Record<string, string>; writeError?: string };
 
 function fakeSupabase(opts: Options = {}) {
   const writes: Array<{ table: string; op: string; rows: unknown }> = [];
+  const touched: string[] = [];
   const client = {
     from(table: string) {
+      touched.push(table);
       const failure = opts.failing?.[table];
       const reply: Reply = failure ? { data: null, error: { message: failure } } : { data: [], error: null };
       const chain = chainFor(reply) as Record<string, unknown>;
@@ -55,14 +57,21 @@ function fakeSupabase(opts: Options = {}) {
       return chain;
     },
   } as unknown as SupabaseClient<Database>;
-  return { client, writes };
+  return { client, writes, touched };
 }
 
+// The thirteen sources the graph is built from. Seven more used to be read —
+// clinicians, paperwork, warranties, accounts, bills, places and storage
+// locations — and are now kept out of a table every member reads; the case at
+// the end of this file holds them out.
 const EVERY_READ_TABLE = [
   'family_members', 'pets', 'vehicles', 'school_classes', 'teams', 'family_routines',
-  'family_places', 'financial_accounts', 'health_providers',
-  'calendar_events', 'homes', 'home_locations', 'home_assets', 'inventory_items',
-  'home_warranties', 'home_projects', 'bills', 'paperwork_items', 'renewals', 'family_facts',
+  'calendar_events', 'homes', 'home_assets', 'inventory_items',
+  'home_projects', 'renewals', 'family_facts',
+];
+const WITHHELD_TABLES = [
+  'health_providers', 'paperwork_items', 'home_warranties', 'financial_accounts', 'bills',
+  'family_places', 'home_locations',
 ];
 
 describe('runTwinProjection read boundary', () => {
@@ -83,6 +92,18 @@ describe('runTwinProjection read boundary', () => {
     // Observability: the failure names the table so a drifted/renamed source is
     // diagnosable rather than invisible.
     expect(err.mock.calls.map((c) => String(c[0]))).toContain(`[twin] ${table} read failed`);
+  });
+
+  it('never reads an audience-restricted source, so a refusal there cannot matter and nothing of it is projected', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const failing = Object.fromEntries(WITHHELD_TABLES.map((table) => [table, `permission denied for table ${table}`]));
+    const { client, touched } = fakeSupabase({ failing });
+
+    const res = await runTwinProjection(client, 'fam-1', null);
+
+    expect(res).toMatchObject({ ok: true, entities: 0, edges: 0 });
+    expect(touched.filter((table) => WITHHELD_TABLES.includes(table))).toEqual([]);
+    expect(err).not.toHaveBeenCalled();
   });
 
   it('does not log, and writes nothing, when every table is simply empty', async () => {

@@ -16985,5 +16985,14 @@
   "accountStanding.unavailable": "O Bubaly não conseguiu verificar a conta da sua família neste momento. Tente novamente daqui a pouco.",
   "gift.ideasAreNotAvailableForThisFamily": "As ideias de presentes não estão disponíveis para esta família neste momento.",
   "handoff.pickupChangedRefresh": "Esta recolha acabou de mudar. Atualize a página para ver em que ponto está.",
-  "marketplace.onlyTheSellerFinishesAnOrder": "Só quem o vendeu ou emprestou pode marcá-lo como devolvido ou concluído."
+  "marketplace.onlyTheSellerFinishesAnOrder": "Só quem o vendeu ou emprestou pode marcá-lo como devolvido ou concluído.",
+  "medicalRecordsModule.onlyYourOwnProfile": "Vês o teu próprio perfil de saúde. Um pai, uma mãe ou um adulto vê os de todos.",
+  "medicalRecordsModule.profileKeptForManagers": "Reservado a pais e adultos. Pergunta a um deles.",
+  "medicalRecordsModule.deletedButCardPhotosKept": "O seguro foi eliminado, mas não foi possível remover as fotos do cartão.",
+  "taxVaultModule.amountTooLarge": "Introduz um montante não superior a {max}.",
+  "taxVaultModule.taxYearOutOfRange": "Introduz um ano fiscal entre {min} e {max}.",
+  "healthVisitsModule.onlyYourOwn": "Vês as tuas próprias consultas e as que registaste. Um pai, uma mãe ou um adulto vê as de toda a casa.",
+  "healthVisitsModule.noneOfYours": "Não há consultas tuas registadas",
+  "immunizationsModule.onlyYourOwn": "Vês as tuas próprias vacinas e as que registaste. Um pai, uma mãe ou um adulto vê as de toda a casa.",
+  "immunizationsModule.noneOfYours": "Não há vacinas tuas registadas"
 }

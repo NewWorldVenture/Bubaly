@@ -23,6 +23,11 @@ import { useFamilyClock } from '@/components/i18n/use-format';
 
 type TaxDoc = Tables<'tax_documents'>;
 
+/** `tax_documents.amount_cents` is an int4 (0077): $21,474,836.47 is the largest it holds. */
+const MAX_AMOUNT_CENTS = 2_147_483_647;
+/** The earliest tax year the vault accepts; the latest is next year. */
+const MIN_TAX_YEAR = 1900;
+
 // The tax year defaults to the FAMILY's current year (TIME-003).
 const blank = (thisYear: number) => ({ name: '', tax_year: String(thisYear), category: 'receipt', amount: '', member_id: '', note: '', file: null as File | null });
 
@@ -51,27 +56,55 @@ export function TaxVaultModule() {
   async function save(e: React.FormEvent) {
     e.preventDefault();
     if (!form || !form.name.trim()) return;
+    // Checked BEFORE anything is uploaded. `amount_cents` and `tax_year` are
+    // int4 (0077): a value past either answers 22003, and the W-2 uploaded
+    // ahead of the row was left in the bucket with nothing pointing at it.
+    const taxYear = parseInt(form.tax_year, 10) || thisYear;
+    if (taxYear < MIN_TAX_YEAR || taxYear > thisYear + 1) {
+      return toastError(t('taxVaultModule.taxYearOutOfRange', { min: MIN_TAX_YEAR, max: thisYear + 1 }));
+    }
+    const amountCents = form.amount ? Math.round(parseFloat(form.amount) * 100) : null;
+    if (amountCents !== null && (!Number.isFinite(amountCents) || Math.abs(amountCents) > MAX_AMOUNT_CENTS)) {
+      return toastError(t('taxVaultModule.amountTooLarge', { max: usd(MAX_AMOUNT_CENTS) }));
+    }
     setSaving(true);
     const supabase = createClient();
     let storage_path: string | null = null;
+    // The file goes up first and the row second. Whatever stops the row — a
+    // refusal, a filtered insert, a dropped connection — leaves an object no
+    // row points at, invisible in the vault and impossible to delete from it,
+    // so it is removed here, as documents-module and lib/documents/upload do.
+    const discardUpload = async () => {
+      if (!storage_path) return;
+      const removal = await removeFamilyDocument(supabase, storage_path);
+      if (removal.error) console.error('[tax-vault] an upload no row points at could not be removed', removal.error);
+    };
     try {
       if (form.file) {
         const { path, error } = await uploadFamilyDocument(supabase, { familyId, folder: `tax/${form.tax_year}`, file: form.file });
         if (error) { setSaving(false); return toastError(error); }
         storage_path = path;
       }
-      const { error } = await supabase.from('tax_documents').insert({
-        family_id: familyId,
-        tax_year: parseInt(form.tax_year, 10) || thisYear,
-        category: form.category,
-        name: form.name.trim(),
-        storage_path,
-        amount_cents: form.amount ? Math.round(parseFloat(form.amount) * 100) : null,
-        member_id: form.member_id || null,
-        note: form.note.trim() || null,
-        created_by: userId,
-      });
-      if (error) return toastError(describeDbError(error));
+      let saved: { id: string }[] | null = null;
+      try {
+        const { data, error } = await supabase.from('tax_documents').insert({
+          family_id: familyId,
+          tax_year: taxYear,
+          category: form.category,
+          name: form.name.trim(),
+          storage_path,
+          amount_cents: amountCents,
+          member_id: form.member_id || null,
+          note: form.note.trim() || null,
+          created_by: userId,
+        }).select('id');
+        if (error) { await discardUpload(); return toastError(describeDbError(error)); }
+        saved = data;
+      } catch (cause) {
+        await discardUpload();
+        throw cause;
+      }
+      if (wroteNoRows(saved)) { await discardUpload(); return toastError(t('errors.thatChangeWasNotSaved')); }
       success(t('taxVaultModule.documentSaved'));
       setForm(null);
     } finally {

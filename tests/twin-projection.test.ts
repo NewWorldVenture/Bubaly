@@ -142,8 +142,11 @@ describe('runTwinProjection writes one graph', () => {
     const kindOf = (table: string, id: string) => nodeFor(db, table, id)?.kind;
     expect(kindOf('calendar_events', 'ev1')).toBe('event');
     expect(kindOf('home_assets', 'a1')).toBe('item');
-    expect(kindOf('home_warranties', 'w1')).toBe('item');
-    expect(kindOf('bills', 'b1')).toBe('other');
+    // A warranty is read by whoever added it and a bill is withheld from a
+    // guest (the held 0514/0509); the graph is every member's, so neither is
+    // copied into it (tests/the-family-graph-holds-no-restricted-record.test.ts).
+    expect(kindOf('home_warranties', 'w1')).toBeUndefined();
+    expect(kindOf('bills', 'b1')).toBeUndefined();
     expect(kindOf('renewals', 'r1')).toBe('other');
     expect(kindOf('family_facts', 'f1')).toBe('topic');
 
@@ -160,7 +163,7 @@ describe('runTwinProjection writes one graph', () => {
     }
   });
 
-  it('links the event to its member, the warranty to its asset and the asset to its home', async () => {
+  it('links the event to its member and the asset to its home, and states no warranty it may not hold', async () => {
     const db = household();
     await runTwinProjection(client(db), FAM, null, NOW);
 
@@ -170,7 +173,8 @@ describe('runTwinProjection writes one graph', () => {
 
     expect(hasEdge(id('calendar_events', 'ev1'), id('family_members', 'm1'), 'attended_by')).toBe(true);
     expect(hasEdge(id('home_assets', 'a1'), id('homes', 'h1'), 'located_at')).toBe(true);
-    expect(hasEdge(id('home_warranties', 'w1'), id('home_assets', 'a1'), 'covers')).toBe(true);
+    // The warranty is not in the graph, so neither is what it covers.
+    expect(db.table('graph_edges').some((e) => e.relation === 'covers')).toBe(false);
     expect(hasEdge(id('renewals', 'r1'), id('family_members', 'm1'), 'owed_by')).toBe(true);
     expect(hasEdge(id('family_facts', 'f1'), id('family_members', 'm1'), 'preference_of')).toBe(true);
   });
@@ -179,15 +183,16 @@ describe('runTwinProjection writes one graph', () => {
     const db = household();
     await runTwinProjection(client(db), FAM, null, NOW);
     const firstCount = db.table('graph_entities').length;
-    const firstId = nodeFor(db, 'bills', 'b1')?.id;
+    const firstId = nodeFor(db, 'renewals', 'r1')?.id;
+    expect(firstId).toBeTruthy();
 
     const later = new Date(NOW.getTime() + 3_600_000);
     await runTwinProjection(client(db), FAM, null, later);
 
     expect(db.table('graph_entities')).toHaveLength(firstCount);
-    expect(nodeFor(db, 'bills', 'b1')?.id).toBe(firstId);
+    expect(nodeFor(db, 'renewals', 'r1')?.id).toBe(firstId);
     // The stamp moves forward: the node says when it was last observed.
-    expect((nodeFor(db, 'bills', 'b1')?.attributes as { provenance: { observed_at: string } }).provenance.observed_at)
+    expect((nodeFor(db, 'renewals', 'r1')?.attributes as { provenance: { observed_at: string } }).provenance.observed_at)
       .toBe(later.toISOString());
   });
 
@@ -201,12 +206,13 @@ describe('runTwinProjection writes one graph', () => {
       attributes: { provenance: { source: 'manual', observed_at: NOW.toISOString() } },
     }]);
 
-    // The bill is paid and deleted; the preference is forgotten.
-    db.replace('bills', []);
+    // The renewal is done and deleted; the preference is forgotten.
+    expect(nodeFor(db, 'renewals', 'r1')).toBeTruthy();
+    db.replace('renewals', []);
     db.replace('family_facts', []);
     await runTwinProjection(client(db), FAM, null, NOW);
 
-    expect(nodeFor(db, 'bills', 'b1')).toBeUndefined();
+    expect(nodeFor(db, 'renewals', 'r1')).toBeUndefined();
     expect(nodeFor(db, 'family_facts', 'f1')).toBeUndefined();
     // The typed-in node survives — it was never the projector's to remove.
     expect(nodeFor(db, 'family_facts', 'f-typed')).toBeTruthy();
@@ -253,9 +259,10 @@ describe('runTwinProjection writes one graph', () => {
       .toBeGreaterThanOrEqual(edgesBefore);
     // The rest of the graph is judged as usual — one capped table does not
     // suspend the prune everywhere.
-    db.replace('bills', []);
+    expect(nodeFor(db, 'renewals', 'r1')).toBeTruthy();
+    db.replace('renewals', []);
     await runTwinProjection(client(db), FAM, null, NOW);
-    expect(nodeFor(db, 'bills', 'b1')).toBeUndefined();
+    expect(nodeFor(db, 'renewals', 'r1')).toBeUndefined();
   });
 
   it('takes a deterministic page when a read is capped, so runs do not churn', async () => {
@@ -296,8 +303,11 @@ describe('the reasoning context reads the projection back', () => {
       now: NOW,
     });
 
-    expect(ctx.stats.bySubkind).toMatchObject({ event: 1, asset: 1, warranty: 1, obligation: 2, preference: 1 });
-    expect(entitiesOfSubkind(ctx, 'obligation').map((e) => e.name).sort()).toEqual(['Electric', 'Passport']);
+    // The bill and the warranty are not the whole household's to read, so the
+    // context — which every member's assistant is built from — never holds them.
+    expect(ctx.stats.bySubkind).toMatchObject({ event: 1, asset: 1, obligation: 1, preference: 1 });
+    expect(ctx.stats.bySubkind.warranty).toBeUndefined();
+    expect(entitiesOfSubkind(ctx, 'obligation').map((e) => e.name).sort()).toEqual(['Passport']);
 
     const preference = entitiesOfSubkind(ctx, 'preference')[0];
     expect(entitySubkind(preference)).toBe('preference');

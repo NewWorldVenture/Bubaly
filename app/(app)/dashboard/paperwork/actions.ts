@@ -82,8 +82,9 @@ export async function addPaperworkAction(formData: FormData): Promise<PaperworkA
   // captureDocument and captureDocumentLink give.
   if (ctx.active.role === 'guest') return { ok: false, error: tr('actionRefusal.notAllowed') };
 
+  // The slip's "by 10/13" is read on the FAMILY's day, not Greenwich's.
   const row = await paperworkInsertRow({
-    familyId: ctx.active.familyId, userId: ctx.user.id, text, sender,
+    familyId: ctx.active.familyId, userId: ctx.user.id, text, sender, timeZone: ctx.active.family.timezone || 'UTC',
   });
   const { error } = await supabase.from('paperwork_items').insert(row);
   if (error) throw refusalError(describeActionError(error, tr('actions.couldNotSaveThatPaperwork')), refusalForError(error));
