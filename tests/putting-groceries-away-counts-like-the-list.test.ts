@@ -104,6 +104,22 @@ describe('S12: a bought amount is never added across units', () => {
     expect(pantry()).toEqual([{ name: 'Flour', quantity: 3, unit: 'kg' }]);
   });
 
+  it.each([
+    ['Cereal', 'box', '2 boxes', 3],
+    ['Bananas', 'bunch', '1 bunches', 2],
+    ['Juice', 'glass', '2 glasses', 3],
+    ['Bread', 'loaf', '2 loaves', 3],
+    ['Garlic', 'clove', '4 cloves', 5],
+  ])('%s: a stocked %s and a bought "%s" are one unit', async (name, unit, line, total) => {
+    db.seed('pantry_items', [{ id: `p-${name}`, family_id: FAMILY, name, quantity: 1, unit }]);
+    bought(name, line);
+
+    const result = await recordShoppingTripAction({ listId: LIST });
+
+    expect(result).toMatchObject({ ok: true, unitMismatch: [] });
+    expect(pantry()).toEqual([{ name, quantity: total, unit }]);
+  });
+
   it('a row with no unit yet takes the bought one', async () => {
     db.seed('pantry_items', [{ id: 'p-oats', family_id: FAMILY, name: 'Oats', quantity: 0, unit: null }]);
     bought('Oats', '2 lb');

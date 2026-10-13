@@ -110,6 +110,28 @@ describe('S4: recorded allergies reach the planner and hold its answer to them',
     expect(db.table('meals').map((meal) => meal.name)).not.toContain('Peanut noodles');
   });
 
+  it('says the allergies left nothing, when every dish the model chose ran into one', async () => {
+    answer([
+      { date: '2026-09-14', meal_type: 'dinner', ref: 'meal:pad-thai', name: 'Pad thai' },
+      { date: '2026-09-16', meal_type: 'dinner', ref: 'new', name: 'Peanut noodles', ingredients: [{ name: 'noodles' }] },
+    ]);
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: 'plan.everyDishRanIntoAllergy' });
+    expect(db.table('meal_plans')).toEqual([]);
+  });
+
+  it('control: a model answer with no usable dish at all is still "could not produce"', async () => {
+    answer([]);
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: 'plan.thePlannerCouldNotProduce' });
+  });
+
   it('fails closed, before the model is asked, when the allergies cannot be read', async () => {
     rpc.family_allergies = () => { throw new Error('Fixture allergy read refused'); };
 

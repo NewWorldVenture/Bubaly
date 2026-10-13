@@ -218,7 +218,10 @@ export async function POST(req: Request) {
   const assignments = parsed.filter((a) => !unsafe(a));
   const leftOutForAllergies = parsed.length - assignments.length;
   if (assignments.length === 0) {
-    return NextResponse.json({ error: t('plan.thePlannerCouldNotProduce') }, { status: 422 });
+    // Every dish screened out for a recorded allergy is not "the planner could
+    // not produce a plan": say which it was, so the family is not sent off to
+    // add meals they already have.
+    return NextResponse.json({ error: t(leftOutForAllergies > 0 ? 'plan.everyDishRanIntoAllergy' : 'plan.thePlannerCouldNotProduce') }, { status: 422 });
   }
 
   // `busyNights` rides along on both replies so the caller can say WHY a

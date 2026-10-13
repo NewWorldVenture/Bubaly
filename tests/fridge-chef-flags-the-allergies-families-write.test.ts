@@ -70,6 +70,11 @@ describe('Phase 1: the "May contain" flag', () => {
     ['Severe peanut allergy (EpiPen)', { title: 'Trail mix', have: ['peanuts'] }, 'peanut'],
     ['Shellfish', { title: 'Garlic stir-fry', need: ['shrimp'] }, 'shellfish'],
     ['cashews', { title: 'Veggie curry', have: ['rice'], steps: 'Simmer, then finish with a handful of cashews.' }, 'cashews'],
+    // An exemption speaks for the words in front of one mention, not the
+    // clause: the rice in "Simmer the rice in whole milk" is not the milk.
+    ['Dairy', { title: 'Curry', have: ['rice'], steps: 'Simmer the rice in whole milk until creamy' }, 'dairy'],
+    ['Dairy', { title: 'Fried rice', have: ['rice'], steps: 'Cook the rice in butter' }, 'dairy'],
+    ['Gluten', { title: 'Corn salad', have: ['corn'], steps: 'Serve the corn salad on toasted bread' }, 'gluten'],
   ])('a "%s" allergy flags %j', async (allergies, recipe, expected) => {
     household(allergies);
 
@@ -80,6 +85,11 @@ describe('Phase 1: the "May contain" flag', () => {
     ['Peanuts', { title: 'Oat milk pancakes', have: ['oats', 'oat milk'] }],
     ['Dairy', { title: 'Peanut-free noodles', have: ['oat milk', 'noodles'] }],
     ['Tree nuts', { title: 'Peanut noodles', need: ['peanut butter'] }],
+    ['Dairy', { title: 'Bagels', have: ['bagels'], steps: 'Spread with dairy-free cream cheese' }],
+    ['Dairy', { title: 'Overnight oats', steps: 'Soak the oats in plant based milk' }],
+    ['Dairy', { title: 'Toast', steps: 'Spread with sunflower seed butter' }],
+    ['Dairy', { title: 'Wraps', steps: 'Wrap the filling in butter lettuce' }],
+    ['Gluten', { title: 'Pancakes', steps: 'Whisk the rice flour into the batter' }],
   ])('control: a "%s" allergy does not flag %j', async (allergies, recipe) => {
     household(allergies);
 

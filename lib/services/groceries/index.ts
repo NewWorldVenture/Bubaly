@@ -726,8 +726,23 @@ const PANTRY_LOOKUP_PAGE = 200;
 const PANTRY_LOOKUP_MAX = 2_000;
 
 /** "kg", "KG" and "kgs" are one unit; "kg" and "cup" are not. */
+/**
+ * A unit's one spelling: trimmed, lower-cased, its trailing period gone and
+ * its plural folded. Not `normalizeName`, which strips a single trailing 's'
+ * as suits a grocery name: "boxes" became "boxe" and stopped matching "box",
+ * so 2 boxes put away against a stocked 1 box was refused as another unit.
+ */
+const IRREGULAR_UNITS: Record<string, string> = { loaves: 'loaf', leaves: 'leaf', halves: 'half' };
+function unitKey(unit: string | null | undefined): string {
+  const word = (unit ?? '').trim().toLowerCase().replace(/\s+/g, ' ').replace(/\.$/, '');
+  if (IRREGULAR_UNITS[word]) return IRREGULAR_UNITS[word];
+  if (/(?:ss|sh|ch|x|z)es$/.test(word)) return word.slice(0, -2);
+  if (/ss$/.test(word)) return word;
+  return word.replace(/s$/, '');
+}
+
 function sameUnit(a: string | null | undefined, b: string | null | undefined): boolean {
-  return normalizeName(a ?? '') === normalizeName(b ?? '');
+  return unitKey(a) === unitKey(b);
 }
 
 export type PantryAdjustInput = {

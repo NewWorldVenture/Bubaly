@@ -412,6 +412,39 @@ function wordsOf(text: string): string[] {
     .map((word) => word.replace(/(\w)s$/, '$1'));
 }
 
+/** The same words as `wordsOf`, index for index, as written (no plural dropped). */
+function rawWordsOf(text: string): string[] {
+  return (text ?? '').toLowerCase().replace(/[^a-z0-9\s%]/g, ' ').split(/\s+/).filter(Boolean);
+}
+
+/** Every index at which `needle` runs in `haystack`. */
+function runsAt(haystack: string[], needle: string[]): number[] {
+  const starts: number[] = [];
+  if (needle.length === 0 || needle.length > haystack.length) return starts;
+  for (let i = 0; i + needle.length <= haystack.length; i += 1) {
+    if (needle.every((word, j) => haystack[i + j] === word)) starts.push(i);
+  }
+  return starts;
+}
+
+/** Words that end the modifier in front of a food: "the rice IN butter" is butter. */
+const NOT_A_MODIFIER = new Set(['in', 'on', 'into', 'onto', 'over', 'under', 'to', 'of', 'for', 'at', 'from', 'the', 'a', 'an',
+  'then', 'until', 'some', 'your', 'its', 'their', 'this', 'that', 'add', 'stir', 'cook', 'serve', 'simmer', 'top', 'toss', 'use']);
+
+/**
+ * The words an exemption may speak for: the match itself, up to two words
+ * directly in front of it ("oat milk", "dairy free cream cheese", "sunflower
+ * seed butter") and the one word after it ("butter lettuce"). Not the whole
+ * clause: "Simmer the rice in whole milk" is milk, whatever the rice is.
+ */
+function windowAround(raw: string[], start: number, length: number): string {
+  let from = start;
+  while (from > start - 2 && from > 0 && !NOT_A_MODIFIER.has(raw[from - 1])) from -= 1;
+  const after = raw[start + length];
+  const to = after && !NOT_A_MODIFIER.has(after) ? start + length + 1 : start + length;
+  return raw.slice(from, to).join(' ');
+}
+
 function containsRun(haystack: string[], needle: string[]): boolean {
   if (needle.length === 0 || needle.length > haystack.length) return false;
   for (let i = 0; i + needle.length <= haystack.length; i += 1) {
@@ -461,13 +494,25 @@ export function allergenConflict(texts: string | string[], allergies: string[]):
       rule.triggers.some((trigger) => containsRun(term.words, wordsOf(trigger))));
     for (const phrase of phrases) {
       const words = wordsOf(phrase);
-      const exempt = (rule: AllergenRule) => rule.exempt?.test(phrase) ?? false;
-      // The food as the family named it, for allergies the table has no rule for.
-      if (containsRun(words, term.words) && !rules.some(exempt)) return term.label;
-      for (const rule of rules) {
-        if (exempt(rule)) continue;
-        const named = [...rule.triggers, ...rule.swaps.map((swap) => swap.ingredient)];
-        if (named.some((name) => containsRun(words, wordsOf(name)))) return term.label;
+      const raw = rawWordsOf(phrase);
+      // An exemption speaks for the words around ONE mention, never the clause.
+      const exemptAt = (rule: AllergenRule, start: number, length: number) =>
+        rule.exempt?.test(windowAround(raw, start, length)) ?? false;
+      // Every mention in this clause — the food as the family named it (for
+      // allergies the table has no rule for), and each rule's triggers and
+      // ingredients — longest first. A mention is cleared when the words in
+      // front of IT say so, or when it sits inside a longer mention that was
+      // ("cheese" in "dairy free cream cheese"). One left standing is a conflict.
+      const named = [
+        ...runsAt(words, term.words).map((start) => ({ start, length: term.words.length, by: rules })),
+        ...rules.flatMap((rule) => [...rule.triggers, ...rule.swaps.map((swap) => swap.ingredient)].map(wordsOf)
+          .flatMap((name) => runsAt(words, name).map((start) => ({ start, length: name.length, by: [rule] })))),
+      ].sort((a, b) => b.length - a.length);
+      const cleared: { start: number; length: number }[] = [];
+      for (const mention of named) {
+        const inside = cleared.some((c) => c.start <= mention.start && mention.start + mention.length <= c.start + c.length);
+        if (!inside && !mention.by.some((rule) => exemptAt(rule, mention.start, mention.length))) return term.label;
+        cleared.push(mention);
       }
     }
   }

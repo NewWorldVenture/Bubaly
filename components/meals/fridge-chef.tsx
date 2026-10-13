@@ -81,13 +81,20 @@ export function FridgeChef() {
       const json = await res.json();
       if (!res.ok) { toastError(json.error ?? t('fridgeChef.couldNotUpdateYourGrocery')); return; }
       setAdded((prev) => new Set(prev).add(index));
-      success((json.added ?? recipe.need.length) === 1 ? t('fridgeChef.addedItemToGroceryOne', { count: json.added ?? recipe.need.length }) : t('fridgeChef.addedItemsToGroceryMany', { count: json.added ?? recipe.need.length }));
-      // What the family's allergies changed on the way to the list, by name.
+      const count = Number.isInteger(json.added) ? json.added as number : recipe.need.length;
+      // Nothing added is not "Added 0 items".
+      if (count > 0) success(count === 1 ? t('fridgeChef.addedItemToGroceryOne', { count }) : t('fridgeChef.addedItemsToGroceryMany', { count }));
+      // What the family's allergies changed on the way to the list, by name —
+      // and, apart, what they kept off it: a bare "shrimp" under "Changed"
+      // read as though the shrimp had been added.
       const swapped: { from: string; to: string | null }[] = Array.isArray(json.swapped) ? json.swapped : [];
-      if (swapped.length > 0) {
-        toastError(t('fridgeChef.changedForAllergies', {
-          names: swapped.map((s) => (s.to ? `${s.from} → ${s.to}` : s.from)).join(', '),
-        }));
+      const changed = swapped.filter((s) => s.to);
+      const leftOff = swapped.filter((s) => !s.to);
+      if (changed.length > 0) {
+        toastError(t('fridgeChef.changedForAllergies', { names: changed.map((s) => `${s.from} → ${s.to}`).join(', ') }));
+      }
+      if (leftOff.length > 0) {
+        toastError(t('fridgeChef.leftOffForAllergies', { names: leftOff.map((s) => s.from).join(', ') }));
       }
     } catch {
       toastError(t('fridgeChef.couldNotUpdateYourGrocery'));

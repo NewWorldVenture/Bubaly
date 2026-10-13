@@ -117,7 +117,7 @@ describe('actual SDK complete meal planning inputs before ranking', () => {
   it('keeps the deliberate twelve pantry choices after global urgency sorting', async () => {
     // The most urgent item is one still good TODAY. It used to be a date in
     // 2000, which only ranked first because expired food was offered to the
-    // planner as "expiring" — tests/expired-food-is-not-offered-as-an-ingredient
+    // planner as "expiring" — tests/the-meal-planner-holds-to-recorded-allergies.test.ts (S5) and tests/the-assistant-is-not-told-to-use-food-past-its-date.test.ts
     // pins that it no longer is.
     const inThreeDays = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
     h.rows.pantry_items = Array.from({ length: 13 }, (_, index) => pantry(String(index).padStart(3, '0'), `Ordinary ${index}`, inThreeDays));
