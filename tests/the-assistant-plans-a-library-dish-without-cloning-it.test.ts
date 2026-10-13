@@ -94,6 +94,73 @@ describe('a dish named from the library is the library dish', () => {
   });
 });
 
+// AUD-1041-SLOT-RESTORE (3). A dish named alone was matched only against
+// dishes saved under the meal it was being planned for, so "plan lentil soup
+// for dinner" missed the family's Lentil soup saved as a lunch and inserted an
+// EMPTY dinner "Lentil soup" — which the shopping list then refused.
+describe('a dish named alone is the family\'s dish, whichever meal it was saved under', () => {
+  const soup = (id: string, mealType: string, createdAt: string) => ({
+    id, family_id: FAMILY, name: 'Lentil soup', meal_type: mealType, created_by: 'auth-user-1',
+    ingredients: [{ name: 'lentils', qty: '1', unit: 'cup' }], created_at: createdAt,
+  });
+
+  it.each([
+    ['meals.setSlot', { meal_name: 'lentil soup', date: '2026-09-08', meal_type: 'dinner' }],
+    ['create_meal_plan_entry', { meal_name: 'Lentil soup', plan_date: '2026-09-08' }],
+    ['meals.planWeek', { entries: [{ date: '2026-09-08', meal_type: 'dinner', meal_name: 'Lentil soup', ingredients: [] }] }],
+  ])('%s plans the lunch-saved Lentil soup for dinner rather than an empty dinner copy', async (name, input) => {
+    const { db, scope } = household();
+    db.seed('meals', [soup('soup-lunch', 'lunch', '2026-01-02T00:00:00Z')]);
+
+    const res = await run(name, scope, input);
+
+    expect(res, res.ok ? '' : res.error).toMatchObject({ ok: true });
+    expect(db.table('meals').map((meal) => meal.id)).toEqual(['meal-1', 'soup-lunch']);
+    expect(db.table('meal_plans')).toEqual([expect.objectContaining({ meal_id: 'soup-lunch', plan_date: '2026-09-08', meal_type: 'dinner' })]);
+    const list = await addFromMealPlan(scope, { from: '2026-09-08', to: '2026-09-08', usePantry: false });
+    expect(list.ok, list.ok ? '' : list.error).toBe(true);
+    expect(db.table('grocery_items').map((item) => item.name)).toEqual(['lentils']);
+  });
+
+  it('control: of several saved under that name, the one saved for the planned meal is used', async () => {
+    const { db, scope } = household();
+    db.seed('meals', [soup('soup-lunch', 'lunch', '2026-01-02T00:00:00Z'), soup('soup-dinner', 'dinner', '2026-01-03T00:00:00Z')]);
+
+    const res = await run('meals.planWeek', scope, { entries: [
+      { date: '2026-09-08', meal_type: 'dinner', meal_name: 'Lentil soup' },
+      { date: '2026-09-09', meal_type: 'lunch', meal_name: 'Lentil soup' },
+    ] });
+
+    expect(res, res.ok ? '' : res.error).toMatchObject({ ok: true, data: { created_meals: 0 } });
+    expect(db.table('meal_plans').map((row) => [row.meal_type, row.meal_id])).toEqual([['dinner', 'soup-dinner'], ['lunch', 'soup-lunch']]);
+    expect(db.table('meals')).toHaveLength(3);
+  });
+
+  it('several saved under that name, none for the planned meal: refused, nothing copied or planned', async () => {
+    const { db, scope } = household();
+    db.seed('meals', [soup('soup-lunch', 'lunch', '2026-01-02T00:00:00Z'), soup('soup-snack', 'snack', '2026-01-03T00:00:00Z')]);
+
+    const res = await run('meals.setSlot', scope, { meal_name: 'Lentil soup', date: '2026-09-08', meal_type: 'dinner' });
+
+    expect(res).toMatchObject({ ok: false, code: 'invalid_input', error: 'Choose an existing meal with that name from the library.' });
+    expect(db.table('meals').map((meal) => meal.id)).toEqual(['meal-1', 'soup-lunch', 'soup-snack']);
+    expect(db.table('meal_plans')).toEqual([]);
+  });
+
+  it('control: a name the library does not have is still added and planned', async () => {
+    const { db, scope } = household();
+    db.seed('meals', [soup('soup-lunch', 'lunch', '2026-01-02T00:00:00Z')]);
+
+    const res = await run('meals.setSlot', scope, { meal_name: 'Shakshuka', date: '2026-09-08', meal_type: 'dinner' });
+
+    expect(res, res.ok ? '' : res.error).toMatchObject({ ok: true, data: { name: 'Shakshuka' } });
+    const shakshuka = db.table('meals').find((meal) => meal.name === 'Shakshuka');
+    expect(shakshuka).toMatchObject({ meal_type: 'dinner', ingredients: [] });
+    expect(db.table('meals')).toHaveLength(3);
+    expect(db.table('meal_plans')).toEqual([expect.objectContaining({ meal_id: shakshuka?.id, meal_type: 'dinner' })]);
+  });
+});
+
 describe('a dish chosen by its id is planned', () => {
   it('meals.setSlot with meal_id', async () => {
     const { db, scope } = household();

@@ -110,6 +110,22 @@ describe('S4: recorded allergies reach the planner and hold its answer to them',
     expect(db.table('meals').map((meal) => meal.name)).not.toContain('Peanut noodles');
   });
 
+  it('a "new" dish with an empty ingredient list is screened as the saved dish of that name it will be planned as', async () => {
+    // The meal service plans the family's saved Pad thai for a dish named
+    // alone, an empty ingredient list included, rather than an empty copy.
+    answer([
+      { date: '2026-09-14', meal_type: 'dinner', ref: 'new', name: 'Pad thai', ingredients: [] },
+      { date: '2026-09-15', meal_type: 'dinner', ref: 'new', name: 'Tacos', ingredients: [] },
+    ]);
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ written: true, count: 1, leftOutForAllergies: 1 });
+    expect(db.table('meal_plans')).toEqual([expect.objectContaining({ plan_date: '2026-09-15', meal_id: 'tacos' })]);
+    expect(db.table('meals').map((meal) => meal.id)).toEqual(['pad-thai', 'tacos']);
+  });
+
   it('says the allergies left nothing, when every dish the model chose ran into one', async () => {
     answer([
       { date: '2026-09-14', meal_type: 'dinner', ref: 'meal:pad-thai', name: 'Pad thai' },
