@@ -6,8 +6,9 @@ import { createInMemorySupabase } from './helpers/in-memory-supabase';
 // read: a child asks for a reward, a parent approves a chore. An offset read
 // pages on positions, so a row written ahead of the next offset pushes the last
 // row of one page onto the next, and the sum counts it twice. readAllById pages
-// on `id > last` instead: every row that existed when the read began is read
-// exactly once, whatever is written between the pages.
+// on `id > last` instead: each row is read at most once, and a row present for
+// the whole read exactly once. It is not a snapshot (see its doc): a row deleted
+// before its page is not read, and that is not what these tests claim.
 
 type Row = { id: string; family_id: string; cost_points: number; status: string };
 const FAMILY = 'family-1';
@@ -31,10 +32,11 @@ const byKey = (db: ReturnType<typeof ledger>, onPage?: (n: number) => void) => {
 };
 
 describe('a ledger read on the key counts each row once', () => {
-  it('a row written ahead of the next page is not read twice, and none is dropped', async () => {
+  it('writes between pages bring no row back, and every row present throughout is read once', async () => {
     const db = ledger(1500);
     // Between page 1 and page 2: a new request lands below the cursor, and a
     // row page 1 already read is deleted — the two writes that shift offsets.
+    // Every row of page 2 onwards is present for the whole read.
     const { rows, error } = await readAllById<Row>(byKey(db, (n) => {
       if (n !== 2) return;
       db.seed('reward_redemptions', [{ id: 'r-0000a', family_id: FAMILY, cost_points: 500, status: 'requested' }]);

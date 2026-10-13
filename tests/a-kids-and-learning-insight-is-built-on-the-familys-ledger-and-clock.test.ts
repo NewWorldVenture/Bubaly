@@ -170,6 +170,17 @@ describe('AUD-1040-LEDGER-PAGING — the rewards coach counts each redemption on
   });
 });
 
+describe('AUD-1040-LEDGER-PAGING — a ledger refused on a later page is not summed', () => {
+  it.each(['chore_assignments', 'reward_redemptions'])('%s refused past its first page: the coach is not asked', async (table) => {
+    base.seed('chore_assignments', [{ id: 'cy-1', family_id: FAMILY, member_id: CY, status: 'approved', points_awarded: 10 }]);
+    base.seed('reward_redemptions', [{ id: 'r1', family_id: FAMILY, member_id: CY, cost_points: 5, status: 'approved', created_at: '2026-10-10T10:00:00Z' }]);
+    h.db = withFaults(base, (faulted, calls) => (faulted === table && calls.some((c) => c.method === 'gt') ? { message: 'Fixture later page refused' } : null));
+
+    expect((await ask('rewards')).status).not.toBe(200);
+    expect(h.complete).not.toHaveBeenCalled();
+  });
+});
+
 describe('S14/S15 — a guest is refused the homework and timetable summaries, like the school one', () => {
   it.each(['homework', 'timetable', 'school'])('a guest asking for the %s summary is refused before any read', async (kind) => {
     h.role = 'guest';

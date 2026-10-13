@@ -201,10 +201,13 @@ export async function readAllAsQuery<T, E = { message: string }>(
  * spends nothing, made an old approved redemption subtract again. A row
  * deleted ahead of it drops one row off the read instead.
  *
- * Paging on the key reads every row that existed when the read began exactly
- * once, whatever is written meanwhile; a row written mid-read is read once or
- * not at all. `page(after, limit)` must filter `.gt('id', after)` when `after`
- * is not null, order by `id` ascending, and `.limit(limit)`:
+ * Paging on the key reads each row AT MOST once, in id order: no write between
+ * pages can bring a row back. A row present for the whole read is read exactly
+ * once. It is not a snapshot: a row deleted before its page is not read, a row
+ * changed after its page keeps the value it was read with, and a row added
+ * mid-read is read only if its id is past the cursor. `page(after, limit)` must
+ * filter `.gt('id', after)` when `after` is not null, order by `id` ascending,
+ * and `.limit(limit)`:
  *
  *   readAllById<Row>((after, limit) => {
  *     let q = sb.from('reward_redemptions').select('id, …').eq('family_id', familyId);

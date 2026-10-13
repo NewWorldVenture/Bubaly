@@ -200,10 +200,17 @@ describe('AUD-1040-COMPLETED-SEARCH — a search of the Completed tab reaches ev
   // 260 finished: the list shows the newest 200, and the oldest one has a title
   // nothing else shares. Searching the listed 200 alone answered "No completed
   // tasks" for it, with the exact count of 260 on the tab above.
+  // Patterns read as the transport reads them: PostgREST's `*` alias, then
+  // LIKE with backslash escapes (InMemoryOptions.likeSyntax).
+  const STARRED = 'Math* worksheet';
+  const PERCENT = 'Math% worksheet';
   beforeEach(() => {
+    db = createInMemorySupabase({ maxRows: 1000, defaults: HOUSEHOLD_DEFAULTS, likeSyntax: 'postgrest' });
+    h.db = db;
     db.seed('todo_lists', [{ id: 'list-1', family_id: FAMILY, name: 'Tasks', icon: '📋', color: 'violet', is_shared: true, sort_order: 0, archived_at: null }]);
     db.seed('todo_items', Array.from({ length: 260 }, (_, i) => ({
-      id: `done-${String(i).padStart(4, '0')}`, family_id: FAMILY, list_id: 'list-1', title: i === 0 ? 'Return the library books' : `Old task ${i}`,
+      id: `done-${String(i).padStart(4, '0')}`, family_id: FAMILY, list_id: 'list-1',
+      title: i === 0 ? 'Return the library books' : i === 1 ? STARRED : i === 2 ? PERCENT : `Old task ${i}`,
       is_done: true, priority: 'medium', due_date: day(i), completed_at: hour(i), created_by: PARENT, assigned_to_id: null, tags: [],
     })));
   });
@@ -234,6 +241,27 @@ describe('AUD-1040-COMPLETED-SEARCH — a search of the Completed tab reaches ev
     expect(listed(tree, 'Return the library books')).toBe(true);
     expect(has(tree, 'No completed tasks')).toBe(false);
     expect(text(byName(tree, new RegExp(`^${t('todosModule.tab.completed')}\\d+$`)))).toBe(`${t('todosModule.tab.completed')}260`);
+  });
+
+  it.each([
+    ['math*', STARRED, PERCENT],
+    ['math%', PERCENT, STARRED],
+  ])('searching every finished task for %s finds that title literally', async (term, found, notFound) => {
+    let tree = await search(await completedTab(), term);
+    await typingRests();
+    tree = await show(() => createElement(TodosModule));
+    expect(listed(tree, found)).toBe(true);
+    expect(listed(tree, notFound)).toBe(false);
+  });
+
+  it.each([
+    ['math*', STARRED, PERCENT],
+    ['math%', PERCENT, STARRED],
+  ])('with every finished task listed, %s matches the same title', async (term, found, notFound) => {
+    db.table('todo_items').splice(3, 60);
+    const tree = await search(await completedTab(), term);
+    expect(listed(tree, found)).toBe(true);
+    expect(listed(tree, notFound)).toBe(false);
   });
 
   it('a search no finished task matches says so', async () => {
@@ -430,6 +458,21 @@ describe('AUD-1040-LEDGER-PAGING — a request landing between ledger pages spen
     // Cy: 600 earned, 100 spent once. The new request spends nothing.
     const leaderboard = nodes(tree).filter((n) => n.type === 'div' && typeof n.props.className === 'string' && n.props.className.includes('text-2xl font-bold text-amber-400')).map((n) => text(n));
     expect(leaderboard).toEqual(['500', '0', '0', '0']);
+  });
+});
+
+describe('AUD-1040-LEDGER-PAGING — a ledger refused on a later page is not a balance', () => {
+  it.each(['chore_assignments', 'reward_redemptions'])('%s refused past its first page shows no leaderboard and offers nothing to approve', async (table) => {
+    db.seed('chore_assignments', [{ id: 'b-0001', family_id: FAMILY, member_id: OTHER_KID, chore_id: 'c1', status: 'approved', points_awarded: 600 }]);
+    db.seed('rewards', [{ id: 'reward-1', family_id: FAMILY, title: 'Cinema trip', description: null, cost_points: 100, redeemed_by: null }]);
+    db.seed('reward_redemptions', [{ id: 'red-1', family_id: FAMILY, member_id: OTHER_KID, reward_id: 'reward-1', reward_title: 'Cinema trip', cost_points: 100, status: 'requested', created_at: '2026-10-12T10:00:00Z' }]);
+    // The first page arrives; the next (`id > last`) is refused.
+    h.fault = (faulted, calls) => (faulted === table && calls.includes('gt') ? { message: 'permission denied', code: '42501' } : null);
+    const tree = await show(() => createElement(RewardsModule));
+
+    const leaderboard = nodes(tree).filter((n) => n.type === 'div' && typeof n.props.className === 'string' && n.props.className.includes('text-2xl font-bold text-amber-400'));
+    expect(leaderboard).toEqual([]);
+    expect(allByName(tree, t('rewards.approve'))).toEqual([]);
   });
 });
 

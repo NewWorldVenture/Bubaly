@@ -36,7 +36,8 @@ type Table = 'rewards' | 'chore_assignments' | 'reward_redemptions' | 'family_me
 type Row = Record<string, unknown> & { id: string };
 type Fixture = {
   rows: Record<Table, Row[]>;
-  mode: Partial<Record<Table, 'fail' | 'hold'>>;
+  /** 'fail-later' refuses only a LATER page of a paged read: the first arrives, the rest do not. */
+  mode: Partial<Record<Table, 'fail' | 'hold' | 'fail-later'>>;
   reads: Table[];
   writes: Array<{ table: Table; method: string; body: Record<string, unknown> | null }>;
   holdMutations: boolean;
@@ -114,7 +115,9 @@ async function fixture(page: Page): Promise<Fixture> {
       // at once from the same rows, so a read stays one counted, holdable event
       // however many pages it takes.
       if (Number(url.searchParams.get('offset') ?? 0) > 0 || (url.searchParams.get('id') ?? '').startsWith('gt.')) {
-        await route.fulfill({ status: 200, headers, contentType: 'application/json', body: JSON.stringify(matching(table, url.searchParams)) });
+        const refused = state.mode[table] === 'fail-later';
+        await route.fulfill({ status: refused ? 403 : 200, headers, contentType: 'application/json',
+          body: JSON.stringify(refused ? { code: '42501', message: `Fixture ${table} later page unavailable`, details: null, hint: null } : matching(table, url.searchParams)) });
         return;
       }
       state.reads.push(table);
@@ -239,6 +242,21 @@ for (const table of ['rewards', 'chore_assignments', 'reward_redemptions'] as co
     await expect(page.getByRole('button', { name: 'Redeem', exact: true })).toHaveCount(0); await noWrites(state);
     await state.release(table); await ready(page);
     await expect(page.getByRole('button', { name: 'Not enough points', exact: true })).toBeDisabled();
+  });
+}
+
+// AUD-1040-LEDGER-PAGING: a ledger read whose FIRST page arrives and a later one
+// is refused is a failed read. The rows that did arrive are not summed into a
+// balance, and nothing can be redeemed against them.
+for (const table of ['chore_assignments', 'reward_redemptions'] as const) {
+  test(`${table} refused on a later page is reported, not summed from the page that arrived`, async ({ page }) => {
+    const state = await fixture(page); state.mode[table] = 'fail-later'; await mount(page);
+    await expect(page.getByText(/permission to do that/)).toBeVisible();
+    await expect(page.getByText('Points Leaderboard', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Redeem', exact: true })).toHaveCount(0); await noWrites(state);
+    delete state.mode[table];
+    await page.getByRole('button', { name: 'Try again', exact: true }).click(); await ready(page);
+    await noWrites(state);
   });
 }
 

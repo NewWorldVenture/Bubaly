@@ -154,7 +154,10 @@ export function TodosModule() {
     table: 'todo_items', familyId, deps: [familyId, 'done-search', searchAllDone],
     fetcher: (sb) => (searchAllDone
       ? sb.from('todo_items').select('*').eq('family_id', familyId).eq('is_done', true)
-        .ilike('title', `%${escapeLike(searchAllDone)}%`)
+        // PostgREST turns every `*` into `%`, escaped or not, so a star is sent
+        // as `_` (any one character) and the rows compared literally below —
+        // as the list itself compares them (lib/supabase/escape-like.ts).
+        .ilike('title', `%${searchAllDone.split('*').map(escapeLike).join('_')}%`)
         .order('completed_at', { ascending: false, nullsFirst: false })
         .order('id').range(0, COMPLETED_SHOWN)
       : Promise.resolve({ data: [] as TodoItem[], error: null })),
@@ -197,7 +200,11 @@ export function TodosModule() {
   const tabItems = useMemo(() => {
     let res: TodoItem[];
     // Searched in the database already: every finished task, not the listed 200.
-    if (searchingAllDone) return doneSearchQ.data.slice(0, COMPLETED_SHOWN);
+    // The same literal match as the list's own, so a `*` is a star.
+    if (searchingAllDone) {
+      const q = completedQuery.toLowerCase();
+      return doneSearchQ.data.filter((i) => i.title.toLowerCase().includes(q)).slice(0, COMPLETED_SHOWN);
+    }
     if (tab === 'completed') res = completed;
     else if (tab === 'mine') res = active.filter((i) => i.created_by === selfId);
     else if (tab === 'assigned') res = active.filter((i) => i.assigned_to_id === selfId);
@@ -207,7 +214,7 @@ export function TodosModule() {
       res = res.filter((i) => i.title.toLowerCase().includes(q));
     }
     return res;
-  }, [tab, active, completed, selfId, search, searchingAllDone, doneSearchQ.data]);
+  }, [tab, active, completed, selfId, search, searchingAllDone, completedQuery, doneSearchQ.data]);
 
   // Group the active tabs by due date.
   const groups = useMemo(() => {

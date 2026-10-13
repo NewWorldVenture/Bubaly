@@ -49,6 +49,16 @@ export type InMemoryOptions = {
    * existing test assumes.
    */
   maxRows?: number;
+  /**
+   * How `like`/`ilike` read their pattern. Unset keeps this fake's historical
+   * reading: `%` and `_` are wildcards and every other character, a backslash
+   * included, is literal. `'postgrest'` reads it as the real transport does:
+   * PostgREST first turns EVERY `*` into `%` (its alias, escaped or not), then
+   * PostgreSQL's LIKE applies, where `\` makes the next character literal — so
+   * `escapeLike('50%')` matches "50%", and an escaped star matches a literal
+   * percent sign, not a star (lib/supabase/escape-like.ts).
+   */
+  likeSyntax?: 'postgrest';
 };
 
 /**
@@ -107,6 +117,21 @@ function jsonContains(value: unknown, wanted: unknown): boolean {
     return Object.entries(wanted).every(([key, item]) => jsonContains((value as Row)[key], item));
   }
   return looseEq(value, wanted);
+}
+
+/** PostgREST's `*` alias, then PostgreSQL LIKE with `\` as its escape (InMemoryOptions.likeSyntax). */
+function postgrestLike(column: string, pattern: string, flags: string): Predicate {
+  const aliased = pattern.replace(/\*/g, '%');
+  let source = '';
+  for (let i = 0; i < aliased.length; i++) {
+    const char = aliased[i];
+    if (char === '\\' && i + 1 < aliased.length) source += aliased[++i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    else if (char === '%') source += '[\\s\\S]*';
+    else if (char === '_') source += '[\\s\\S]';
+    else source += char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+  const re = new RegExp(`^${source}$`, flags);
+  return (row) => typeof row[column] === 'string' && re.test(row[column] as string);
 }
 
 function operatorPredicate(column: string, op: string, wanted: unknown): Predicate {
@@ -375,7 +400,10 @@ class QueryBuilder implements PromiseLike<Reply> {
   in(column: string, values: unknown[]) { this.predicates.push(operatorPredicate(column, 'in', values)); return this; }
   is(column: string, value: unknown) { this.predicates.push(this.embedPredicate(column, 'is', value) ?? operatorPredicate(column, 'is', value)); return this; }
   like(column: string, pattern: string) { this.predicates.push(operatorPredicate(column, 'like', pattern)); return this; }
-  ilike(column: string, pattern: string) { this.predicates.push(operatorPredicate(column, 'ilike', pattern)); return this; }
+  ilike(column: string, pattern: string) {
+    this.predicates.push(this.db.likeSyntax === 'postgrest' ? postgrestLike(column, pattern, 'i') : operatorPredicate(column, 'ilike', pattern));
+    return this;
+  }
   contains(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'contains', value)); return this; }
   overlaps(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'overlaps', value)); return this; }
   not(column: string, op: string, value: unknown) {
@@ -529,6 +557,7 @@ export class InMemorySupabase {
 
   /** The server's per-response row ceiling, or undefined for no cap. */
   get maxRows(): number | undefined { return this.options.maxRows; }
+  get likeSyntax(): InMemoryOptions['likeSyntax'] { return this.options.likeSyntax; }
 
   from(table: string): QueryBuilder {
     this.log.push({ table });

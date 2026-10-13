@@ -128,6 +128,16 @@ describe('a kid is told the points they can spend', () => {
     expect(toSpend(html)).toBe('1299');
   });
 
+  it.each(['chore_assignments', 'reward_redemptions'])('%s refused past its first page is not shown as a balance', async (table) => {
+    base.seed('chore_assignments', Array.from({ length: 10 }, (_, i) => assignment(i, { member_id: KID, status: 'approved', points_awarded: 10 })));
+    base.seed('reward_redemptions', [{ id: 'red-1', family_id: FAMILY, member_id: KID, cost_points: 20, status: 'approved' }]);
+    h.db = withFaults(base, (faulted, calls) => (faulted === table && calls.some((c) => c.method === 'gt') ? { message: 'Fixture later page refused' } : null));
+    const html = await dashboard();
+
+    expect(toSpend(html)).toBe('—');
+    expect(affordable(html)).toEqual([]);
+  });
+
   it('a ledger that could not be read is not shown as a balance, and nothing reads as affordable', async () => {
     base.seed('chore_assignments', Array.from({ length: 10 }, (_, i) => assignment(i, { member_id: KID, status: 'approved', points_awarded: 10 })));
     h.db = withFaults(base, (table) => (table === 'reward_redemptions' ? { message: 'Fixture read refused' } : null));
