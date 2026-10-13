@@ -3,6 +3,8 @@
 // No Supabase / React imports so bucketing, overdue detection, and stats stay
 // deterministically unit-testable.
 
+import { dayKeyIn } from '@/lib/time/zoned';
+
 export type HomeworkStatus = 'assigned' | 'in_progress' | 'done' | 'submitted';
 
 export interface HomeworkLike {
@@ -32,22 +34,30 @@ export function isDueSoon(hw: HomeworkLike, now: Date, hours = 48): boolean {
 
 export type DueBucket = 'overdue' | 'today' | 'upcoming' | 'no_date' | 'done';
 
-/** Classifies homework into a due-bucket for board grouping. */
-export function dueBucket(hw: HomeworkLike, now: Date): DueBucket {
+/**
+ * Classifies homework into a due-bucket for board grouping.
+ *
+ * "Today" is a calendar day, so it is asked in `timeZone` — the FAMILY's zone
+ * (TIME-003), the one the due time is printed and entered in. Without a zone it
+ * falls back to the runtime's own calendar.
+ */
+export function dueBucket(hw: HomeworkLike, now: Date, timeZone?: string): DueBucket {
   if (!isOpen(hw)) return 'done';
   if (!hw.due_at) return 'no_date';
   const due = new Date(hw.due_at);
   if (due.getTime() < now.getTime()) return 'overdue';
-  const sameDay = due.getFullYear() === now.getFullYear()
-    && due.getMonth() === now.getMonth()
-    && due.getDate() === now.getDate();
+  const sameDay = timeZone
+    ? dayKeyIn(due, timeZone) === dayKeyIn(now, timeZone)
+    : due.getFullYear() === now.getFullYear()
+      && due.getMonth() === now.getMonth()
+      && due.getDate() === now.getDate();
   return sameDay ? 'today' : 'upcoming';
 }
 
 /** Groups homework into ordered buckets. Every bucket key is present. */
-export function groupByDue<T extends HomeworkLike>(items: T[], now: Date): Record<DueBucket, T[]> {
+export function groupByDue<T extends HomeworkLike>(items: T[], now: Date, timeZone?: string): Record<DueBucket, T[]> {
   const out: Record<DueBucket, T[]> = { overdue: [], today: [], upcoming: [], no_date: [], done: [] };
-  for (const hw of items) out[dueBucket(hw, now)].push(hw);
+  for (const hw of items) out[dueBucket(hw, now, timeZone)].push(hw);
   // Sort dated buckets by due date ascending.
   const byDue = (a: T, b: T) => (a.due_at ?? '').localeCompare(b.due_at ?? '');
   out.overdue.sort(byDue); out.today.sort(byDue); out.upcoming.sort(byDue);

@@ -74,7 +74,8 @@ export function HomeworkModule() {
   }, [homework, memberFilter]);
 
   const stats = useMemo(() => homeworkStats(visible as HomeworkLike[], now), [visible, now]);
-  const grouped = useMemo(() => groupByDue(visible as HomeworkLike[], now), [visible, now]);
+  // "Due today" is the FAMILY's today, like the due time printed under it.
+  const grouped = useMemo(() => groupByDue(visible as HomeworkLike[], now, clock.timeZone), [visible, now, clock.timeZone]);
   const hwById = useMemo(() => new Map((homework ?? []).map((h) => [h.id, h])), [homework]);
 
   function openNew() { setForm({ ...blank, member_id: students[0]?.id ?? '' }); setModalOpen(true); }
