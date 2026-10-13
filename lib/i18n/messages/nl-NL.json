@@ -194,6 +194,7 @@
   "actions.couldNotDeleteThatDocument": "Kan dat document niet verwijderen.",
   "actions.couldNotDeleteThatInteraction": "Kan die interactie niet verwijderen.",
   "actions.couldNotDeleteThatLeftover": "Dit restje kon niet worden verwijderd. Vernieuw en probeer het opnieuw.",
+  "actions.couldNotConfirmThatLeftoverWasSaved": "Kon niet bevestigen dat het restje is opgeslagen. Vernieuw voordat je het opnieuw toevoegt.",
   "actions.couldNotDeleteThatNote": "Kan die notitie niet verwijderen.",
   "actions.couldNotDeleteThatPolicy": "Kan die polis niet verwijderen.",
   "actions.couldNotDeleteThatRecord": "Kan dat record niet verwijderen.",

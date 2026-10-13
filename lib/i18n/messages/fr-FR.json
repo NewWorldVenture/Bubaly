@@ -194,6 +194,7 @@
   "actions.couldNotDeleteThatDocument": "Impossible de supprimer ce document.",
   "actions.couldNotDeleteThatInteraction": "Impossible de supprimer cette interaction.",
   "actions.couldNotDeleteThatLeftover": "Impossible de supprimer ce reste. Actualisez et réessayez.",
+  "actions.couldNotConfirmThatLeftoverWasSaved": "Impossible de confirmer que le reste a été enregistré. Actualisez avant de l’ajouter à nouveau.",
   "actions.couldNotDeleteThatNote": "Impossible de supprimer cette note.",
   "actions.couldNotDeleteThatPolicy": "Impossible de supprimer ce contrat.",
   "actions.couldNotDeleteThatRecord": "Impossible de supprimer cet enregistrement.",

@@ -194,6 +194,7 @@
   "actions.couldNotDeleteThatDocument": "Não foi possível eliminar esse documento.",
   "actions.couldNotDeleteThatInteraction": "Não foi possível eliminar essa interação.",
   "actions.couldNotDeleteThatLeftover": "Não foi possível eliminar essa sobra. Atualize e tente novamente.",
+  "actions.couldNotConfirmThatLeftoverWasSaved": "Não foi possível confirmar que a sobra foi guardada. Atualize antes de a adicionar novamente.",
   "actions.couldNotDeleteThatNote": "Não foi possível eliminar essa nota.",
   "actions.couldNotDeleteThatPolicy": "Não foi possível eliminar essa apólice.",
   "actions.couldNotDeleteThatRecord": "Não foi possível eliminar esse registo.",
