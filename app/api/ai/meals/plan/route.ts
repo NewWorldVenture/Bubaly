@@ -212,7 +212,10 @@ export async function POST(req: Request) {
     if (allergies.length === 0) return false;
     if (a.ref) return unsafeRef(a.ref);
     if (allergenConflict([a.name, ...(a.ingredients ?? []).map((i) => i.name)], allergies)) return true;
-    return !a.ingredients && (libraryByName.get(a.name.trim().toLowerCase()) ?? []).some(unsafeRef);
+    // An EMPTY ingredient list names the dish alone as much as an absent one:
+    // the meal service plans the family's saved dish of that name for either
+    // (whatever meal type it was saved under), so both are screened as it.
+    return !a.ingredients?.length && (libraryByName.get(a.name.trim().toLowerCase()) ?? []).some(unsafeRef);
   };
   const parsed = parsePlan(text, request);
   const assignments = parsed.filter((a) => !unsafe(a));
