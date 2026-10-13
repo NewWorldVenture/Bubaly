@@ -41,6 +41,7 @@ import { buildHomeBrief } from '@/lib/home/home-brief';
 import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
 import { readDisplayCalendarOccurrences, type CalendarDisplayOccurrence } from '@/lib/calendar/display-occurrences';
 import { projectCalendarDay, projectCalendarWindow } from '@/lib/calendar/consumer-spans';
+import { onMembersDay } from '@/lib/calendar/members-day';
 import type { DinnerIdea, DinnerEffort } from '@/lib/onboarding/dinner-ideas';
 import { HomeOutcomeCard } from '@/components/dashboard/home-outcome-card';
 import { buildInsightCandidates, rankInsights, type InsightKind, type InsightSources } from '@/lib/home/insight-of-day';
@@ -200,7 +201,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   let todayEvents: ReturnType<typeof projectCalendarDay<CalendarDisplayOccurrence>> = [];
   let upcomingEvents: ReturnType<typeof projectCalendarWindow<CalendarDisplayOccurrence>> = [];
   let conflictEventRows: ConflictEvent[] = [];
-  const visibleToMember = (event: CalendarDisplayOccurrence) => event.assignee_id === null || event.assignee_id === myMemberId;
+  const visibleToMember = onMembersDay(myMemberId);
   const ownedCalendar = (events: CalendarDisplayOccurrence[]) => {
     if (events.some(event => event.kind === 'native' && event.event.family_id !== familyId)) throw new Error('Calendar family changed');
     return events;
