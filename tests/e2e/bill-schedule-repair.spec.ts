@@ -26,6 +26,8 @@ const sources = Object.fromEntries([
   'lib/auth/redirect.ts', 'lib/constants/roles.ts', 'lib/constants/plans.ts', 'lib/constants/feature-catalog.ts',
   // The held 0514's rule: who reads the household's accounts and spending.
   'lib/finance/household-money.ts',
+  // billing-module reads the transactions its figures are summed from whole.
+  'lib/supabase/read-all.ts',
   'lib/billing/plans.ts', 'lib/billing/review-selection.ts', 'lib/wallet/ledger.ts',
   'lib/utils/calendar-date.ts', 'lib/utils/birthday.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {

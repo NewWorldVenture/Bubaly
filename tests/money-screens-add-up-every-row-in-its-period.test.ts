@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SOURCE_MESSAGES } from '@/lib/i18n/messages';
 import { translate } from '@/lib/i18n/translate';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
-import { has, nodes, render, text } from './helpers/module-harness';
+import { byName, click, has, nodes, render, text } from './helpers/module-harness';
 import { resetHookSlots } from './helpers/hook-slots';
 
 // The money screens, driven as a family opens them: the REAL component, its
@@ -24,7 +24,11 @@ import { resetHookSlots } from './helpers/hook-slots';
 //                           against a month of spending: one yearly budget read
 //                           an overspent month as on track.
 //   M15    Finances, Wallet a credit account's balance (money owed) was added
-//                           to "Total balance" as cash.
+//          and Billing      to "Total balance" as cash.
+//   M13    Billing manage   each budget's raw amount, whatever its period, was
+//                           set against a calendar month of spend from a
+//                           capped read, matched case-sensitively, with every
+//                           duplicate budget row its own line.
 
 type Fetcher = (client: unknown) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>;
 
@@ -69,11 +73,25 @@ vi.mock('@/components/ui/modal', async () => (await import('./helpers/module-har
 vi.mock('@/components/ui/input', async () => (await import('./helpers/module-harness')).ui);
 vi.mock('@/components/ui/states', async () => (await import('./helpers/module-harness')).ui);
 vi.mock('@/components/ui/avatar', async () => (await import('./helpers/module-harness')).ui);
+vi.mock('@/components/ui/badge', async () => (await import('./helpers/module-harness')).ui);
+// One value across renders, as the real hooks keep theirs: a fresh callback on
+// every render would re-run each effect keyed on it, without end.
+const billing = vi.hoisted(() => ({
+  search: new URLSearchParams(),
+  subscription: { subscription: null, status: 'ready', reload: async () => {}, isCurrentReady: () => true },
+}));
+vi.mock('next/navigation', () => ({ useSearchParams: () => billing.search }));
+vi.mock('@/lib/hooks/use-billing-subscription', () => ({ useBillingSubscription: () => billing.subscription }));
+vi.mock('@/components/billing/family-delivered-value', () => ({ FamilyDeliveredValue: () => null }));
+vi.mock('@/components/billing/family-value-comparison', () => ({ FamilyValueComparison: () => null }));
+vi.mock('@/components/billing/selected-plan-review', () => ({ SelectedPlanReview: () => null }));
 vi.mock('@/components/app/page-header', async () => (await import('./helpers/module-harness')).ui);
 vi.mock('next/link', async () => ({ default: (await import('./helpers/module-harness')).ui.Link }));
 vi.mock('@/components/ai/ai-insight', () => ({ AiInsight: () => null }));
 vi.mock('@/app/(app)/dashboard/billing/actions', () => ({
   deleteBudgetAction: vi.fn(), setBudgetAction: vi.fn(), createTransactionAction: vi.fn(),
+  createSavingsGoalAction: vi.fn(), deleteSavingsGoalAction: vi.fn(), deleteTransactionAction: vi.fn(),
+  confirmBillScheduleAction: vi.fn(),
 }));
 vi.mock('@/app/(app)/wallet/hub-actions', () => ({
   addAccountAction: vi.fn(), addCardAction: vi.fn(), addPassAction: vi.fn(), addRewardAction: vi.fn(),
@@ -84,6 +102,8 @@ const { BudgetsView } = await import('@/components/finance/budgets-view');
 const { ExpensesModule } = await import('@/components/modules/expenses-module');
 const { FinancesModule } = await import('@/components/modules/finances-module');
 const { WalletHub } = await import('@/components/wallet/wallet-hub');
+// /dashboard/billing?view=manage
+const { BillingModule } = await import('@/components/modules/billing-module');
 
 const t = (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params);
 const FAMILY = h.app.familyId;
@@ -111,6 +131,12 @@ function budgetCard(tree: ReactNode, category: string): string {
   const card = nodes(tree).find((n) => n.type === 'div' && n.key && text(n).startsWith(category));
   if (!card) throw new Error(`no budget card for ${category}`);
   return text(card);
+}
+
+/** Open one of the billing manage view's tabs, as a click on it does, and render what it shows. */
+async function billingTab(tree: ReactNode, tab: string): Promise<ReactNode> {
+  await click(byName(tree, t(`billingModule.tab.${tab}`), 'button'));
+  return render(h.hooks, createElement(BillingModule));
 }
 
 /** A stat tile's text, found by its label: the smallest block that holds the label and a value. */
@@ -244,6 +270,94 @@ describe('M15 — a credit balance is owed, not cash', () => {
     const total = tile(await show(() => createElement(WalletHub)), t('wallet.totalBalance'));
     expect(total).toContain('$500.00');
     expect(total).not.toContain('$3,500.00');
+  });
+
+  it('the billing manage view subtracts it in Total Balance, under its account list and in its report', async () => {
+    const overview = await show(() => createElement(BillingModule));
+    const total = tile(overview, t('billingModule.totalBalance'));
+    expect(total).toContain('$500.00');
+    expect(total).not.toContain('$3,500.00');
+    // The account list beside every tab: "Total" under Checking and Visa.
+    expect(nodes(overview).map(text)).toContain(`${t('billing.total')}$500.00`);
+    expect(has(overview, '$3,500.00')).toBe(false);
+
+    const report = await billingTab(overview, 'reports');
+    expect(nodes(report).map(text).filter((line) => line === `${t('billing.total')}$500.00`).length).toBeGreaterThanOrEqual(2);
+    expect(has(report, '$3,500.00')).toBe(false);
+  });
+});
+
+describe('M13 — the billing manage view judges each budget in its own period', () => {
+  /** The budget cards on the Budgets tab (each keyed by its budget's id) whose category reads as `category`, in any case. */
+  function cards(tree: ReactNode, category: string): string[] {
+    return nodes(tree)
+      .filter((n) => n.type === 'div' && String(n.key).startsWith('b-') && text(n).toLowerCase().startsWith(category.toLowerCase()))
+      .map(text);
+  }
+
+  beforeEach(() => {
+    db.seed('budgets', [
+      budget('Groceries', 150, 'weekly'),
+      budget('Travel', 6000, 'yearly'),
+      budget('Dining', 300, 'monthly'),
+      // A legacy duplicate, created later: not the budget the finance service edits.
+      budget('groceries', 999, 'monthly', '2026-06-01T00:00:00Z'),
+    ]);
+    // 1,100 older rows, read first by id: a single capped read stops before
+    // the rows below.
+    db.seed('transactions', Array.from({ length: 1100 }, (_, i) => txn(`2026-0${4 + (i % 5)}-0${1 + (i % 9)}`, 1, 'Pets')));
+    db.seed('transactions', [
+      // Groceries: two shops earlier in October, then this week's (Sunday 11th
+      // to Saturday 17th), one recorded as "groceries".
+      txn('2026-10-02', 120, 'Groceries'),
+      txn('2026-10-06', 130, 'Groceries'),
+      txn('2026-10-12', 60, 'groceries'),
+      txn('2026-10-13', 25, 'Groceries'),
+      // Travel: the year's three trips.
+      txn('2026-03-10', 2500, 'Travel'),
+      txn('2026-07-01', 3000, 'Travel'),
+      txn('2026-10-03', 800, 'Travel'),
+      // Dining: this month's, and last month's, which is not this month's.
+      txn('2026-10-08', 90, 'Dining'),
+      txn('2026-09-28', 500, 'Dining'),
+    ]);
+  });
+
+  it('a weekly budget is this week\'s spend, a yearly one the year\'s, a monthly one the month\'s', async () => {
+    const budgets = await billingTab(await show(() => createElement(BillingModule)), 'budgets');
+
+    const groceries = cards(budgets, 'Groceries');
+    // One line for the category, the canonical $150 weekly budget.
+    expect(groceries).toHaveLength(1);
+    // This week: $60 "groceries" + $25, not October's $275 "Groceries".
+    expect(groceries[0]).toContain('$85.00 / $150.00');
+    expect(groceries[0]).toContain(t('billing.amountRemaining', { amount: '$65.00' }));
+    expect(groceries[0]).not.toContain('$999.00');
+
+    // The year, from March: $6,300 of $6,000, not October's $800.
+    const [travel] = cards(budgets, 'Travel');
+    expect(travel).toContain('$6,300.00 / $6,000.00');
+    expect(travel).toContain(t('billing.overBudgetBy', { amount: '$300.00' }));
+
+    // October's $90, not September's $500.
+    const [dining] = cards(budgets, 'Dining');
+    expect(dining).toContain('$90.00 / $300.00');
+    expect(dining).toContain(t('billing.amountRemaining', { amount: '$210.00' }));
+  });
+
+  it('the overview\'s budget bar is this month\'s: each canonical budget as its monthly share', async () => {
+    const overview = await show(() => createElement(BillingModule));
+    // $150 x 52/12 + $6,000 / 12 + $300 = $1,450, the duplicate not counted;
+    // against October's $1,225 of expenses.
+    expect(has(overview, '$1,225.00 of $1,450.00')).toBe(true);
+  });
+
+  it('a year past the read\'s ceiling is the error state, not budgets judged on part of it', async () => {
+    db.seed('transactions', Array.from({ length: 50_000 }, (_, i) => txn(`2026-0${1 + (i % 9)}-15`, 1, 'Pets')));
+    const tree = await show(() => createElement(BillingModule));
+    expect(nodes(tree).some((n) => n.props.role === 'alert')).toBe(true);
+    expect(has(tree, t('billingModule.totalBalance'))).toBe(false);
+    expect(cards(tree, 'Groceries')).toEqual([]);
   });
 });
 

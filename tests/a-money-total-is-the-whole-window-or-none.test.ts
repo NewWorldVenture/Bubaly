@@ -57,14 +57,47 @@ beforeEach(() => {
   db.seed('budgets', [{ id: 'b-1', family_id: FAMILY, category: 'Groceries', amount: 14_000, period: 'yearly', created_by: null, created_at: '2026-01-01T00:00:00Z' }]);
 });
 
+/** `count` $10 grocery expenses in October, before 'now' (the 5th), four a day from the 1st. */
+function octoberGroceries(count: number): Record<string, unknown>[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `t-oct-${String(i).padStart(3, '0')}`, family_id: FAMILY, name: 'Market', merchant: 'Market', amount: 10,
+    category: 'Groceries', date: `2026-10-0${1 + Math.floor(i / 4)}`, type: 'expense', member_id: null, account_id: null,
+  }));
+}
+
 describe('a yearly budget is judged on the whole year', () => {
   it('finances.budgetVsActual counts all 1,500 expenses, so a $15,000 year is over a $14,000 budget', async () => {
-    db.seed('transactions', groceries(1500));
+    // 1,480 from January to early September, then 20 in October: the year's
+    // 1,500, past the server's 1,000-row cap.
+    db.seed('transactions', [...groceries(1480), ...octoberGroceries(20)]);
+    // October spending in a category with no budget is not budgeted spend.
+    db.seed('transactions', [{
+      id: 't-oct-dining', family_id: FAMILY, name: 'Cafe', merchant: 'Cafe', amount: 75,
+      category: 'Dining', date: '2026-10-02', type: 'expense', member_id: null, account_id: null,
+    }]);
     const out = await executeTool(scope(), 'finances.budgetVsActual', {});
     expect(out).toMatchObject({ status: 'ok' });
     if (out.status !== 'ok') return;
-    expect(out.data).toMatchObject({ total_spent: 15_000, over_count: 1 });
+    // The line is the budget's own period, the whole year.
     expect((out.data as { budgets: unknown[] }).budgets).toEqual([expect.objectContaining({ spent: 15_000, over: true, transaction_count: 1500 })]);
+    // The totals are October's: the yearly limit as its monthly share, against
+    // the $200 of budgeted (Groceries) spending dated in October.
+    const data = out.data as { month: string; total_spent: number; total_limit: number; over_count: number };
+    expect(data).toMatchObject({ month: '2026-10', total_spent: 200, over_count: 1 });
+    expect(data.total_limit).toBeCloseTo(14_000 / 12, 2);
+  });
+
+  it('the finances.budgetVsActual tool says its totals are the month\'s, with other periods as their monthly share', async () => {
+    const { getTool } = await import('@/lib/ai/tools/registry');
+    const tool = getTool('finances.budgetVsActual');
+    expect(tool?.description).toMatch(/total_limit and total_spent are the month's/i);
+    expect(tool?.description).toMatch(/weekly and yearly limits counted as their monthly share/i);
+    db.seed('transactions', octoberGroceries(20));
+    const out = await executeTool(scope(), 'finances.budgetVsActual', {});
+    expect(out).toMatchObject({ status: 'ok' });
+    if (out.status !== 'ok') return;
+    // The one-line summary names the totals as the month's, not as plain totals.
+    expect(out.summary).toBe('All 1 budget on track for 2026-10; the month\'s budgeted spending is $200.00 of $1,166.67 (weekly and yearly limits as their monthly share)');
   });
 
   it('finances.spendingByCategory over the year totals every expense in it', async () => {
