@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readReminderCards, reminderVisibleTo, visibleReminders, readVisibleReminders, type ReminderLink } from '@/lib/autopilot/reminder-cards';
+import { readReminderCards, reminderCardsReader, reminderVisibleTo, visibleReminders, readVisibleReminders, type ReminderLink } from '@/lib/autopilot/reminder-cards';
 
 type Row = Record<string, unknown>;
 type PageLog = { table: string; columns: string; from: number; to: number; filters: Record<string, unknown> };
@@ -127,5 +127,88 @@ describe('immutable reminder origin reader qualification', () => {
     const offsets: number[] = [];
     const prefix = await readVisibleReminders(async (from) => { offsets.push(from); return { data: rows.slice(from, from + 1), error: null }; }, { limit: 2, viewer: named, cards: async () => result.cards });
     expect(prefix.error).toBeNull(); expect(prefix.data).toEqual([{ id: 'named' }, { id: 'manual' }]); expect(offsets).toEqual([0, 1, 2]);
+  });
+  it('trusted manual metadata avoids unavailable unrelated cards and mint callbacks', async () => {
+    for (const unavailable of [false, true]) {
+      const adapter = database({ autopilot_suggestions: [card('unrelated')], family_reminders: [origin('manual-family', false, null)], reminders: [origin('manual-legacy', false, null)] }, 1, unavailable ? { autopilot_suggestions: { message: 'Synthetic unrelated card failure' } } : {});
+      const errors: unknown[] = [];
+      let keys = 0; let tags = 0;
+      const reader = reminderCardsReader(adapter.db, family, { onError: error => { errors.push(error); }, keyOf: () => { keys++; throw new Error('Unrelated key mint unavailable'); }, sourceTagOf: () => { tags++; throw new Error('Unrelated tag mint unavailable'); } });
+      const rows = [{ id: 'manual-family' }, { id: 'manual-legacy' }];
+      expect(await visibleReminders(rows, other, reader)).toEqual(rows);
+      expect(errors).toEqual([]); expect(keys).toBe(0); expect(tags).toBe(0);
+      expect(adapter.logs.filter(log => log.table === 'autopilot_suggestions')).toEqual([]);
+      for (const table of ['family_reminders', 'reminders']) expect(adapter.logs.some(log => log.table === table)).toBe(true);
+    }
+  });
+  it('manual first pages upgrade the reader for later generated and unknown rows without widening audience', async () => {
+    const tables = { autopilot_suggestions: [card(), { ...card('hidden-card'), member_id: other.memberId }], family_reminders: [origin('manual-first', false, null), origin('named'), origin('hidden', true, 'hidden-card'), origin('manual-last', false, null)] };
+    const adapter = database(tables, 1);
+    const errors: unknown[] = [];
+    const reader = reminderCardsReader(adapter.db, family, { onError: error => { errors.push(error); } });
+    const manual = await reader([{ id: 'manual-first' }]);
+    expect(manual?.byCardId?.size).toBe(0);
+    expect(adapter.logs.filter(log => log.table === 'autopilot_suggestions')).toEqual([]);
+    const rows = [{ id: 'manual-first' }, { id: 'named' }, { id: 'hidden' }, { id: 'unknown' }, { id: 'manual-last' }];
+    const offsets: number[] = [];
+    const result = await readVisibleReminders(async from => { offsets.push(from); return { data: rows.slice(from, from + 1), error: null }; }, { limit: 3, viewer: named, cards: reader });
+    expect(result.error).toBeNull(); expect(result.data).toEqual([rows[0], rows[1], rows[4]]); expect(offsets).toEqual([0, 1, 2, 3, 4]);
+    const full = await reader();
+    expect(full?.byCardId?.size).toBe(2);
+    expect(adapter.logs.filter(log => log.table === 'autopilot_suggestions').map(log => log.from)).toEqual([0, 1, 2]);
+    expect(await visibleReminders([{ id: 'hidden' }, { id: 'unknown' }], named, reader)).toEqual([]);
+    expect(await reader([{ id: 'named' }])).toBe(full);
+    expect(adapter.logs.filter(log => log.table === 'autopilot_suggestions').map(log => log.from)).toEqual([0, 1, 2]);
+    expect(errors).toEqual([]);
+    const legacyAdapter = database(tables, 1);
+    const legacyReader = reminderCardsReader(legacyAdapter.db, family, { onError: error => { errors.push(error); } });
+    expect((await legacyReader())?.byCardId?.size).toBe(2);
+    expect(legacyAdapter.logs.filter(log => log.table === 'autopilot_suggestions').map(log => log.from)).toEqual([0, 1, 2]);
+  });
+  it('mixed manual and generated projections retain strict card-read error propagation', async () => {
+    const rows = [{ id: 'manual' }, { id: 'generated' }];
+    const tables = { autopilot_suggestions: [card()], family_reminders: [origin('manual', false, null), origin('generated')] };
+    const failure = { message: 'Synthetic generated-card read failure' };
+    const adapter = database(tables, 1000, { autopilot_suggestions: failure });
+    const errors: unknown[] = [];
+    const reader = reminderCardsReader(adapter.db, family, { onError: error => { errors.push(error); } });
+    expect(await visibleReminders([rows[0]], named, reader)).toEqual([rows[0]]);
+    expect(adapter.logs.filter(log => log.table === 'autopilot_suggestions')).toEqual([]);
+    expect(await reader(rows)).toBeNull(); expect(errors).toEqual([failure]);
+    expect(await visibleReminders(rows, named, reader)).toEqual([]);
+    expect(errors).toEqual([failure]);
+    const mintAdapter = database(tables);
+    const mintErrors: unknown[] = [];
+    const mintFailure = new Error('Synthetic unrelated mint failure');
+    let keys = 0;
+    const mintReader = reminderCardsReader(mintAdapter.db, family, { onError: error => { mintErrors.push(error); }, keyOf: () => { keys++; throw mintFailure; }, sourceTagOf: () => 'synthetic-tag' });
+    expect(await visibleReminders([rows[0]], named, mintReader)).toEqual([rows[0]]); expect(keys).toBe(0);
+    expect(await mintReader([rows[1]])).toBeNull(); expect(mintErrors).toEqual([mintFailure]); expect(keys).toBe(1);
+    expect(await visibleReminders([rows[0]], named, mintReader)).toEqual([rows[0]]); expect(keys).toBe(1); expect(mintErrors).toEqual([mintFailure]);
+  });
+  it('manual projections still refuse failed origin metadata and missing schema', async () => {
+    for (const table of ['family_reminders', 'reminders']) for (const message of ['Synthetic origin read failure', 'column autopilot_origin does not exist']) {
+      const adapter = database({ family_reminders: [origin('manual', false, null)] }, 1000, { [table]: { message } });
+      const errors: unknown[] = [];
+      const reader = reminderCardsReader(adapter.db, family, { onError: error => { errors.push(error); } });
+      expect(await reader([{ id: 'manual' }])).toBeNull(); expect(errors).toEqual([{ message }]);
+      expect(await visibleReminders([{ id: 'manual' }], other, reader)).toEqual([]);
+      expect(adapter.logs.filter(log => log.table === 'autopilot_suggestions')).toEqual([]);
+    }
+    const malformedAdapter = database({ family_reminders: [{ id: 'manual', family_id: family, autopilot_card_id: null }] });
+    const malformedErrors: unknown[] = [];
+    const malformedReader = reminderCardsReader(malformedAdapter.db, family, { onError: error => { malformedErrors.push(error); } });
+    expect(await malformedReader([{ id: 'manual' }])).toBeNull(); expect(malformedErrors).toHaveLength(1);
+    expect(malformedAdapter.logs.filter(log => log.table === 'autopilot_suggestions')).toEqual([]);
+    for (const duplicate of [false, true]) {
+      const adapter = database({ family_reminders: duplicate ? [origin('manual', false, null)] : [], reminders: duplicate ? [origin('manual', false, null)] : [] });
+      const reader = reminderCardsReader(adapter.db, family, { onError: () => { throw new Error('Unexpected metadata error'); } });
+      expect(await visibleReminders([{ id: 'manual' }], other, reader)).toEqual([]);
+      expect(adapter.logs.some(log => log.table === 'autopilot_suggestions')).toBe(true);
+    }
+    const foreignAdapter = database({ family_reminders: [origin('manual', false, null)] });
+    const foreignReader = reminderCardsReader(foreignAdapter.db, family, { onError: () => { throw new Error('Unexpected family error'); } });
+    for (const viewer of [named, manager]) expect(await visibleReminders([{ id: 'manual', family_id: 'foreign-family' }], viewer, foreignReader)).toEqual([]);
+    expect(foreignAdapter.logs.some(log => log.table === 'autopilot_suggestions')).toBe(true);
   });
 });

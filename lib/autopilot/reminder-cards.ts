@@ -81,26 +81,8 @@ export function mayBeCardReminder(_row: ReminderLink): boolean {
   return true;
 }
 
-/**
- * Every Autopilot card of the family's that a reminder can be made from — the
- * ones whose audience is everyone too, so that a link to one of them is known
- * to be everyone's rather than unresolved. Newest card first for a source.
- * Every page, so a card is never missed for being old; null when the read
- * failed.
- */
-export async function readReminderCards(db: DB, familyId: string, opts: ReminderCardsOptions): Promise<ReminderCards | null> {
-  // The audience and the links, and what the card's tag is minted from.
-  const read = await readAll<ReminderCard & SuggestionStampSource>((from, to) => db.from('autopilot_suggestions')
-    .select('id, family_id, kind, source_kind, source_id, member_id, action_type, title, detail, urgency, payload')
-    .eq('family_id', familyId).eq('action_type', 'create_reminder')
-    .order('created_at', { ascending: false }).order('id').range(from, to));
-  if (read.error) {
-    opts.onError(read.error);
-    return null;
-  }
-  // The immutable database columns are the authority when callers select only
-  // id/title too. Ordinary reads obey RLS; service reads apply the viewer below.
-  // Deploy the origin schema first. Missing columns never enable legacy access.
+/** Immutable family origins, independent of unrelated card availability. */
+async function readReminderOrigins(db: DB, familyId: string, opts: ReminderCardsOptions): Promise<Map<string, ReminderOrigin | null> | null> {
   const origins = await Promise.all([
     readAll<ReminderOrigin>((from, to) => db.from('family_reminders')
       .select('id, family_id, autopilot_origin, autopilot_card_id')
@@ -127,6 +109,39 @@ export async function readReminderCards(db: DB, familyId: string, opts: Reminder
       byReminderOrigin.set(origin.id, byReminderOrigin.has(origin.id) ? null : origin);
     }
   }
+  return byReminderOrigin;
+}
+
+/**
+ * Every Autopilot card of the family's that a reminder can be made from — the
+ * ones whose audience is everyone too, so that a link to one of them is known
+ * to be everyone's rather than unresolved. Newest card first for a source.
+ * Every page, so a card is never missed for being old; null when the read
+ * failed.
+ */
+export async function readReminderCards(db: DB, familyId: string, opts: ReminderCardsOptions): Promise<ReminderCards | null> {
+  return readReminderCardsWithOrigins(db, familyId, opts);
+}
+
+/** Trusted maps here are supplied only by this module's database loader. */
+async function readReminderCardsWithOrigins(
+  db: DB, familyId: string, opts: ReminderCardsOptions,
+  trustedOrigins?: Map<string, ReminderOrigin | null>,
+): Promise<ReminderCards | null> {
+  // The audience and the links, and what the card's tag is minted from.
+  const read = await readAll<ReminderCard & SuggestionStampSource>((from, to) => db.from('autopilot_suggestions')
+    .select('id, family_id, kind, source_kind, source_id, member_id, action_type, title, detail, urgency, payload')
+    .eq('family_id', familyId).eq('action_type', 'create_reminder')
+    .order('created_at', { ascending: false }).order('id').range(from, to));
+  if (read.error) {
+    opts.onError(read.error);
+    return null;
+  }
+  // The immutable database columns are the authority when callers select only
+  // id/title too. Ordinary reads obey RLS; service reads apply the viewer below.
+  // Deploy the origin schema first. Missing columns never enable legacy access.
+  const byReminderOrigin = trustedOrigins ?? await readReminderOrigins(db, familyId, opts);
+  if (!byReminderOrigin) return null;
   const byCardId = new Map<string, ReminderCard>();
   for (const card of read.rows) {
     if (card.family_id === familyId) byCardId.set(card.id, card);
@@ -161,12 +176,34 @@ export async function readReminderCards(db: DB, familyId: string, opts: Reminder
   return { bySource, byReminderId, byReminderKey, bySourceTag, byReminderOrigin, byCardId, familyId };
 }
 
-/** `readReminderCards`, read once on first use and shared by every caller after. */
-export function reminderCardsReader(db: DB, familyId: string, opts: ReminderCardsOptions): () => Promise<ReminderCards | null> {
-  let read: Promise<ReminderCards | null> | null = null;
-  return () => (read ??= readReminderCards(db, familyId, opts));
-}
+/** Existing zero-argument readers remain valid; the factory may use requested rows. */
+export type ReminderCardsReader = (rows?: readonly ReminderLink[]) => Promise<ReminderCards | null>;
 
+/**
+ * Fetch immutable origins first. A request proved entirely manual needs neither
+ * cards nor stamp mints. Its shell must never stand in for a later full read.
+ */
+export function reminderCardsReader(db: DB, familyId: string, opts: ReminderCardsOptions): ReminderCardsReader {
+  let origins: Promise<Map<string, ReminderOrigin | null> | null> | null = null;
+  let fullRead: Promise<ReminderCards | null> | null = null;
+  let manual: ReminderCards | null = null;
+  return async (rows) => {
+    const metadata = await (origins ??= readReminderOrigins(db, familyId, opts));
+    if (!metadata) return null;
+    const onlyManual = rows !== undefined && rows.length > 0 && rows.every((row) => {
+      const origin = metadata.get(row.id);
+      return origin?.family_id === familyId && origin.autopilot_origin === false &&
+        origin.autopilot_card_id === null && (row.family_id == null || row.family_id === familyId);
+    });
+    if (onlyManual) {
+      return (manual ??= {
+        bySource: new Map(), byReminderId: new Map(), byReminderKey: null, bySourceTag: null,
+        byReminderOrigin: metadata, byCardId: new Map(), familyId,
+      });
+    }
+    return (fullRead ??= readReminderCardsWithOrigins(db, familyId, opts, metadata));
+  };
+}
 /**
  * Only the database origin identifies a generated reminder's card. Public
  * stamps and display payloads remain compatibility indexes, never authority.
@@ -201,10 +238,10 @@ export function reminderVisibleTo(row: ReminderLink, cards: ReminderCards | null
 
 /** Resolve every nonempty projection through trusted metadata for this viewer. */
 export async function visibleReminders<T extends ReminderLink>(
-  rows: T[], viewer: AudienceViewer, cards: () => Promise<ReminderCards | null>,
+  rows: T[], viewer: AudienceViewer, cards: ReminderCardsReader,
 ): Promise<T[]> {
   if (rows.length === 0) return rows;
-  const read = await cards();
+  const read = await cards(rows);
   return rows.filter((row) => reminderVisibleTo(row, read, viewer));
 }
 
@@ -225,7 +262,7 @@ export async function visibleReminders<T extends ReminderLink>(
  */
 export async function readVisibleReminders<T extends ReminderLink, E = unknown>(
   page: PrefixPage<T, E>,
-  opts: { limit: number; viewer: AudienceViewer; cards: () => Promise<ReminderCards | null> },
+  opts: { limit: number; viewer: AudienceViewer; cards: ReminderCardsReader },
 ): Promise<{ data: T[] | null; error: E | null }> {
   return readKeptPrefix(page, opts.limit, (rows) => visibleReminders(rows, opts.viewer, opts.cards));
 }

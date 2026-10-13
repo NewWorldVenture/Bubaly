@@ -218,8 +218,8 @@ grant execute on function public.repeat_card_family_reminder(uuid,timestamptz) t
 create or replace function public.require_trusted_reminder_origin() returns trigger language plpgsql security invoker set search_path=pg_catalog,public as $$
 declare generated boolean:=new.autopilot_origin or new.autopilot_card_id is not null; table_owner name;
 begin
- if TG_TABLE_NAME='family_reminders' then generated:=generated or exists(select 1 from unnest(new.tags) t where t~'^autopilot-source:[a-f0-9]{64}$');
- else generated:=generated or(new.related_type='renewal'and new.related_id is not null); end if;
+ if TG_TABLE_NAME='family_reminders' then generated:=generated or exists(select 1 from unnest((jsonb_populate_record(NULL::public.family_reminders,to_jsonb(NEW))).tags) t where t~'^autopilot-source:[a-f0-9]{64}$');
+ else generated:=generated or((jsonb_populate_record(NULL::public.reminders,to_jsonb(NEW))).related_type='renewal'and (jsonb_populate_record(NULL::public.reminders,to_jsonb(NEW))).related_id is not null); end if;
  if generated then
   select pg_get_userbyid(c.relowner) into table_owner from pg_catalog.pg_class c where c.oid=TG_RELID;
   if current_user is distinct from table_owner then raise exception 'Trusted reminder creation required' using errcode='42501'; end if;

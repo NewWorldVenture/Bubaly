@@ -10,7 +10,7 @@ import type { Database } from '@/lib/database.types';
 import { completeReminder, createReminder, listDue, snoozeReminder } from '@/lib/services/reminders';
 import type { ServiceScope } from '@/lib/services/types';
 
-type Call = { table: string; kind: 'select' | 'insert' | 'update' | 'delete'; filters: Record<string, unknown>; payload?: unknown; range?: [number, number] };
+type Call = { table: string; kind: 'select' | 'insert' | 'update' | 'delete'; filters: Record<string, unknown>; payload?: unknown; range?: [number, number]; columns?: string };
 type Reply = { data: unknown; error: unknown };
 
 function makeDb(respond: (call: Call) => Reply) {
@@ -31,7 +31,7 @@ function makeDb(respond: (call: Call) => Reply) {
     const chain = () => b;
     const filter = (column: string, value: unknown) => { call.filters[column] = value; return b; };
     Object.assign(b, {
-      select: chain, order: chain, limit: chain, ilike: chain, or: chain,
+      select: (columns?: string) => { call.columns = columns; return b; }, order: chain, limit: chain, ilike: chain, or: chain,
       range: (from: number, to: number) => { call.range = [from, to]; return b; },
       eq: filter, is: filter, in: filter,
       lt: (c: string, v: unknown) => filter(`lt:${c}`, v),
@@ -169,9 +169,17 @@ describe('createReminder', () => {
   });
 });
 
+/** Only the three ordinary mutation cases below model the schema's trusted origin-map reads. */
+function ordinaryOriginReply(call: Call): Reply | undefined {
+  if (call.kind !== 'select' || call.filters.family_id !== 'fam-1' || !call.range || call.columns !== 'id, family_id, autopilot_origin, autopilot_card_id') return undefined;
+  if (call.table === 'family_reminders') return { data: [{ id: 'rem-1', family_id: 'fam-1', autopilot_origin: false, autopilot_card_id: null }], error: null };
+  if (call.table === 'reminders') return { data: [], error: null };
+  return undefined;
+}
+
 describe('completeReminder', () => {
   it('rolls a recurring reminder forward instead of cancelling it', async () => {
-    const { db, calls } = makeDb((call) => (call.kind === 'update'
+    const { db, calls } = makeDb((call) => ordinaryOriginReply(call) ?? (call.kind === 'update'
       ? { data: { id: 'rem-1', status: 'active' }, error: null }
       : { data: { id: 'rem-1', recurrence: 'daily', remind_at: '2026-09-05T13:00:00.000Z' }, error: null }));
 
@@ -183,7 +191,7 @@ describe('completeReminder', () => {
   });
 
   it('completes a one-off reminder outright', async () => {
-    const { db, calls } = makeDb((call) => (call.kind === 'update'
+    const { db, calls } = makeDb((call) => ordinaryOriginReply(call) ?? (call.kind === 'update'
       ? { data: { id: 'rem-1', status: 'completed' }, error: null }
       : { data: { id: 'rem-1', recurrence: 'none', remind_at: '2026-09-05T13:00:00.000Z' }, error: null }));
 
@@ -204,16 +212,27 @@ describe('completeReminder', () => {
 
 describe('snoozeReminder', () => {
   it('pushes the reminder out from now, not from its original time', async () => {
-    const { db, calls } = makeDb(() => ({ data: { id: 'rem-1', status: 'snoozed' }, error: null }));
+    const { db, calls } = makeDb((call) => ordinaryOriginReply(call) ?? ({ data: { id: 'rem-1', status: 'snoozed' }, error: null }));
     const res = await snoozeReminder(scopeWith(db), 'rem-1', 30);
     expect(res.ok).toBe(true);
     // The row is read first, by id and family, to ask whether its actor may be
-    // shown it (lib/services/reminders/shown.ts); the snooze is the next call.
+    // shown it (lib/services/reminders/shown.ts); the snooze follows trusted origin-map reads.
     const updates = calls.filter(call => call.table === 'family_reminders' && call.kind === 'update');
     expect(updates).toHaveLength(1);
     expect(updates[0].filters).toMatchObject({ id: 'rem-1', family_id: 'fam-1' });
     expect(calls[0]).toMatchObject({ table: 'family_reminders', kind: 'select', filters: { id: 'rem-1', family_id: 'fam-1' } });
-    expect(calls[1]).toMatchObject({ table: 'family_reminders', kind: 'update', filters: { id: 'rem-1', family_id: 'fam-1' } });
+    const originReads = calls.filter(call => call.kind === 'select' && call.range && ['family_reminders', 'reminders'].includes(call.table));
+    expect(originReads).toHaveLength(3);
+    expect(originReads.filter(call => call.table === 'family_reminders').map(call => call.range)).toEqual([[0, 999], [1, 1000]]);
+    expect(originReads.filter(call => call.table === 'reminders').map(call => call.range)).toEqual([[0, 999]]);
+    for (const read of originReads) {
+      expect(read.filters).toMatchObject({ family_id: 'fam-1' });
+      expect(read.columns).toBe('id, family_id, autopilot_origin, autopilot_card_id');
+    }
+    const mutationCalls = calls.filter(call => call.table === 'family_reminders' && (call.kind === 'update' || call.filters.id === 'rem-1'));
+    expect(mutationCalls).toHaveLength(2);
+    expect(mutationCalls[0]).toMatchObject({ table: 'family_reminders', kind: 'select', filters: { id: 'rem-1', family_id: 'fam-1' } });
+    expect(mutationCalls[1]).toMatchObject({ table: 'family_reminders', kind: 'update', filters: { id: 'rem-1', family_id: 'fam-1' } });
     expect(updates[0].payload).toMatchObject({ status: 'snoozed', snoozed_until: '2026-09-05T12:30:00.000Z' });
   });
 

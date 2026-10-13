@@ -45,7 +45,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(DAY1);
   vi.spyOn(console, 'error').mockImplementation(() => {});
-  db = createInMemorySupabase<DB>();
+  db = createInMemorySupabase<DB>({ defaults: { family_reminders: { autopilot_origin: false, autopilot_card_id: null }, reminders: { autopilot_origin: false, autopilot_card_id: null } } });
   db.seed('families', [{ id: FAMILY, timezone: 'UTC' }]);
   db.seed('family_members', [
     { id: 'm-parent', family_id: FAMILY, user_id: 'u-parent', role: 'parent', is_active: true, display_name: 'Parent', birthday: null },
