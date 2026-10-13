@@ -9,6 +9,12 @@
 // Only a JSON `[]` from the model now means "nothing there"; anything else is
 // a 502 "could not read", and Fridge Chef records the request as failed.
 //
+// And the `[]` must be the reply's own value. Both took the first `[` to the
+// last `]`, so `{"error":[]}` was the model's empty list; and both filtered
+// the items to the schema afterwards, so `[{}]` — a list of nothing usable —
+// became the same `[]`. Both are now "could not read". A list with some good
+// items still keeps those, and a fenced `[]` is still "nothing there".
+//
 // Both real routes; the model's HTTP reply is the fixture.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -58,8 +64,32 @@ const UNREADABLE: [string, string | null][] = [
   ['a list cut off at the token limit', '[{"title":"Vegetable soup","have":["carrots","celery"],"need":["stock"],"steps":"Chop and simm'],
 ];
 
+const SOUP = { title: 'Vegetable soup', have: ['carrots', 'celery'], need: ['stock'], steps: 'Chop and simmer.', minutes: 30 };
+
+// Each of these used to answer 200 { recipes: [] } (or, for a wrapped list,
+// 200 with whatever the object held) — "No food spotted".
+const NOT_A_RECIPE_LIST: [string, string][] = [
+  ['a list of empty objects', '[{}]'],
+  ['a list whose items have no title', '[{"have":["eggs"],"need":["bread"]}, {"title":"   "}]'],
+  ['a list of bare strings', '["soup","salad"]'],
+  ['an error object with an empty list in it', '{"error":[]}'],
+  ['the same error object, fenced and explained', 'I could not read it.\n```json\n{"error": [], "reason": "blurry"}\n```'],
+  ['an object wrapping a list of empty objects', '{"recipes":[{}]}'],
+  ['an object wrapping a real recipe, a shape the prompt never asked for', JSON.stringify({ recipes: [SOUP] })],
+];
+
 describe('Fridge Chef', () => {
   it.each(UNREADABLE)('answers 502 and records a failure for %s', async (_case, content) => {
+    modelSays(content);
+
+    const response = await photo();
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: 'pantryChef.couldNotReadThatPhoto' });
+    expect(h.failed).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(NOT_A_RECIPE_LIST)('answers 502 and records a failure for %s', async (_case, content) => {
     modelSays(content);
 
     const response = await photo();
@@ -78,10 +108,76 @@ describe('Fridge Chef', () => {
     expect(await response.json()).toEqual({ recipes: [], allergiesConsidered: 0 });
     expect(h.failed).not.toHaveBeenCalled();
   });
+
+  it('control: a fenced empty list is still "no food spotted"', async () => {
+    modelSays('```json\n[]\n```');
+
+    const response = await photo();
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ recipes: [], allergiesConsidered: 0 });
+    expect(h.failed).not.toHaveBeenCalled();
+  });
+
+  it('control: a valid recipe is answered with it', async () => {
+    modelSays(JSON.stringify([SOUP]));
+
+    const response = await photo();
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ recipes: [{ ...SOUP, allergenConflict: null }], allergiesConsidered: 0 });
+    expect(h.failed).not.toHaveBeenCalled();
+  });
+
+  it('control: a list mixing a valid recipe with invalid items keeps only the valid one', async () => {
+    modelSays(`Here you go:\n${JSON.stringify([{}, 'salad', { have: ['eggs'] }, SOUP, null])}`);
+
+    const response = await photo();
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ recipes: [{ ...SOUP, allergenConflict: null }], allergiesConsidered: 0 });
+    expect(h.failed).not.toHaveBeenCalled();
+  });
+
+  it('control: brackets inside the recipe text, or in prose before the list, do not hide it', async () => {
+    const stew = { ...SOUP, title: 'Stew [easy]', steps: 'Brown it {in batches}, then simmer.' };
+    modelSays(`I can see {carrots, celery} on the shelf.\n${JSON.stringify([stew])}`);
+
+    const response = await photo();
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ recipes: [{ ...stew, allergenConflict: null }], allergiesConsidered: 0 });
+  });
 });
+
+const BAKE_SALE = { title: 'Bake sale', date: '2026-10-20', time: '15:30', end_time: null, location: 'Gym', description: null, category: 'school' };
+const BAKE_SALE_EVENT = {
+  title: 'Bake sale', starts_at: '2026-10-20T15:30:00.000Z', ends_at: null, all_day: false,
+  location: 'Gym', description: null, category: 'school', summary: expect.stringContaining('Bake sale'),
+};
+
+// Each of these used to answer 200 { events: [] } (or, for a wrapped list,
+// 200 with whatever the object held) — "No events found on that flyer".
+const NOT_AN_EVENT_LIST: [string, string][] = [
+  ['a list of empty objects', '[{}]'],
+  ['a list whose items have no date', '[{"title":"Bake sale"},{"title":"Field trip","date":null}]'],
+  ['an error object with an empty list in it', '{"error":[]}'],
+  ['the same error object, fenced and explained', 'I could not read it.\n```json\n{"error": [], "reason": "blurry"}\n```'],
+  ['an object wrapping a list of empty objects', '{"events":[{}]}'],
+  ['an object wrapping a real event, a shape the prompt never asked for', JSON.stringify({ events: [BAKE_SALE] })],
+];
 
 describe('the flyer scan', () => {
   it.each(UNREADABLE)('answers 502 for %s', async (_case, content) => {
+    modelSays(content);
+
+    const response = await scan();
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: 'flyer.couldNotReadThatFlyer' });
+  });
+
+  it.each(NOT_AN_EVENT_LIST)('answers 502 for %s', async (_case, content) => {
     modelSays(content);
 
     const response = await scan();
@@ -97,5 +193,32 @@ describe('the flyer scan', () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ events: [] });
+  });
+
+  it('control: a fenced empty list is still an empty list', async () => {
+    modelSays('```json\n[]\n```');
+
+    const response = await scan();
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ events: [] });
+  });
+
+  it('control: a valid event is answered with it', async () => {
+    modelSays(JSON.stringify([BAKE_SALE]));
+
+    const response = await scan();
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ events: [BAKE_SALE_EVENT] });
+  });
+
+  it('control: a list mixing a valid event with invalid items keeps only the valid one', async () => {
+    modelSays(JSON.stringify([{}, { title: 'Field trip' }, BAKE_SALE, null]));
+
+    const response = await scan();
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ events: [BAKE_SALE_EVENT] });
   });
 });

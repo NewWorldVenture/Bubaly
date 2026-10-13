@@ -9,6 +9,7 @@ import { getAIConfig } from '@/lib/ai/settings';
 import { MAX_FLYER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
+import { readReplyArray } from '@/lib/ai/reply-array';
 
 export const runtime = 'nodejs';
 
@@ -177,20 +178,24 @@ Rules:
     // refusal, or a dense flyer's array cut off at the token limit used to
     // become `[]` here, and the scan screen said "No events found on that
     // flyer" about a flyer nobody had managed to read.
+    //
+    // And only the reply's OWN array (readReplyArray, the rule Fridge Chef
+    // reads by): the `[]` inside `{"error":[]}` is not "no events", nor is an
+    // object wrapping a list the prompt never asked for. A list in which no
+    // item is an event — `[{}]` — is unreadable too, where filtering it used
+    // to leave the same `[]`; a list with some good events keeps those.
     const text: string = aiJson.choices?.[0]?.message?.content ?? '';
-    let raw: Array<Record<string, unknown>>;
-    try {
-      const match = text.match(/\[[\s\S]*\]/);
-      const parsed: unknown = match ? JSON.parse(match[0]) : null;
-      if (!Array.isArray(parsed)) throw new Error('The flyer reply held no event list.');
-      raw = parsed;
-    } catch (error) {
-      console.error('Flyer reply unreadable:', error instanceof Error ? error.message : 'parse failed');
+    const raw = readReplyArray(text);
+    if (!raw) {
+      console.error('Flyer reply unreadable: it held no top-level event list.');
       return NextResponse.json({ error: t('flyer.couldNotReadThatFlyer') }, { status: 502 });
     }
 
     const events: ProposedEvent[] = raw
-      .filter((r) => r && typeof r.title === 'string' && typeof r.date === 'string')
+      .filter((r): r is Record<string, unknown> => (
+        !!r && typeof r === 'object' && typeof (r as Record<string, unknown>).title === 'string'
+        && typeof (r as Record<string, unknown>).date === 'string'
+      ))
       .map((r) => {
         const { iso, allDay } = toIso(r.date as string, (r.time as string) ?? null, tz);
         const ends = r.end_time ? toIso(r.date as string, r.end_time as string, tz).iso : null;
@@ -207,6 +212,10 @@ Rules:
           summary: fmtSummary(r.title as string, iso, allDay, location, tz),
         };
       });
+    if (raw.length > 0 && events.length === 0) {
+      console.error('Flyer reply unreadable: none of its items was an event.');
+      return NextResponse.json({ error: t('flyer.couldNotReadThatFlyer') }, { status: 502 });
+    }
 
     return NextResponse.json({ events });
   } catch (err) {
