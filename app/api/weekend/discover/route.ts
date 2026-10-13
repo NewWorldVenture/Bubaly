@@ -22,8 +22,9 @@ const FETCH_TIMEOUT = 9000;
  * ONCE on every search: a few hundred saved URLs on a slow host were a few
  * hundred concurrent outbound requests, each holding up to 1 MiB, from one
  * request. A search now reads the feeds fetched longest ago, a few at a time,
- * and stops starting new ones at a deadline; the rest wait for the next search
- * and are reported as skipped. The per-family cap on saved feeds is the
+ * until a deadline: a feed not started, or still reading, when it passes waits
+ * for the next search and is reported as skipped. The deadline bounds the
+ * reads themselves; each answered feed's status write follows it. The per-family cap on saved feeds is the
  * database's to enforce (a member inserts them directly).
  */
 const MAX_FEEDS_PER_SEARCH = 12;
@@ -134,49 +135,70 @@ export async function POST(req: NextRequest) {
   }
   const feeds = (savedFeeds ?? []).slice(0, MAX_FEEDS_PER_SEARCH);
   let feedsSkipped = Math.max(0, (savedFeeds?.length ?? 0) - MAX_FEEDS_PER_SEARCH);
-  if (feeds && feeds.length) {
-    const deadline = Date.now() + FEEDS_DEADLINE_MS;
-    let next = 0;
-    const readFeed = async (feed: (typeof feeds)[number]) => {
-      sourcesTried.push(`feed:${feed.label}`);
-      let status = 'ok'; let count = 0;
+  if (feeds.length) {
+    // One feed's fetch and parse. Its events are the caller's to use: a read
+    // still running at the deadline is dropped, not merged in late.
+    type FeedRead = { events: NormalizedEvent[]; status: string };
+    const fetchFeed = async (feed: (typeof feeds)[number]): Promise<FeedRead> => {
       try {
         const fetched = await fetchPublicCalendarText(feed.url);
         if (!fetched.ok) {
-          status = fetched.status ? `HTTP ${fetched.status}` : 'Feed unavailable.';
-          sourceErrors.feedsFailed = FEEDS_FAILED;
           console.warn(`Weekend feed ${feed.id} failed:`, fetched.error);
+          return { events: [], status: fetched.status ? `HTTP ${fetched.status}` : 'Feed unavailable.' };
         }
-        else {
-          const text = fetched.text;
-          const parsed = feed.kind === 'rss' ? parseRSS(text, `feed:${feed.label}`) : parseICS(text, `feed:${feed.label}`, familyZone);
-          const windowed = withinWindow(parsed, windowDays);
-          count = windowed.length;
-          lists.push(windowed);
-          sourcesUsed.push(`feed:${feed.label}`);
-        }
+        const parsed = feed.kind === 'rss' ? parseRSS(fetched.text, `feed:${feed.label}`) : parseICS(fetched.text, `feed:${feed.label}`, familyZone);
+        return { events: withinWindow(parsed, windowDays), status: 'ok' };
       } catch (e) {
         console.warn(`Weekend feed ${feed.id} request failed:`, e);
-        status = 'Request failed.';
-        sourceErrors.feedsFailed = FEEDS_FAILED;
+        return { events: [], status: 'Request failed.' };
       }
-      // Bookkeeping on the feed row: its result was discarded whole, so a
-      // settings page could go on showing a stale "last fetched" forever. Zero
-      // rows is a feed deleted mid-request and stays ordinary; the ERROR is now
-      // logged. Audit C1-S9-62.
-      const { error: statusError } = await supabase.from('weekend_feeds')
-        .update({ last_fetched_at: new Date().toISOString(), last_status: status, last_count: count }).eq('id', feed.id);
-      if (statusError) console.error('[weekend/discover] feed status write failed', { feedId: feed.id, error: statusError.message });
     };
+    // Bookkeeping on the feed row: its result was discarded whole, so a
+    // settings page could go on showing a stale "last fetched" forever. Zero
+    // rows is a feed deleted mid-request and stays ordinary; an error is
+    // logged, and so is a write that THROWS — which used to end the worker
+    // that awaited it, and with it every feed still queued behind. Audit C1-S9-62.
+    const recordFeedStatus = async (feed: (typeof feeds)[number], read: FeedRead) => {
+      try {
+        const { error: statusError } = await supabase.from('weekend_feeds')
+          .update({ last_fetched_at: new Date().toISOString(), last_status: read.status, last_count: read.events.length }).eq('id', feed.id);
+        if (statusError) console.error('[weekend/discover] feed status write failed', { feedId: feed.id, error: statusError.message });
+      } catch (e) {
+        console.error('[weekend/discover] feed status write threw', { feedId: feed.id, error: e instanceof Error ? e.name : 'unknown' });
+      }
+    };
+
+    // The deadline bounds the feed reads, not only when they may START: a feed
+    // still reading when it passes is left for the next search — counted in
+    // `feedsSkipped`, its late result never used and its row left as it was,
+    // so it keeps its place at the front of the next search's queue.
+    const DEADLINE = Symbol('deadline');
+    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+    const deadlineReached = new Promise<typeof DEADLINE>((resolve) => { deadlineTimer = setTimeout(() => resolve(DEADLINE), FEEDS_DEADLINE_MS); });
+    const deadline = Date.now() + FEEDS_DEADLINE_MS;
+    let next = 0;
     // A few at a time; past the deadline, the rest are left for the next search.
     const worker = async () => {
       while (next < feeds.length) {
         const feed = feeds[next++];
-        if (Date.now() > deadline) { feedsSkipped += 1; continue; }
-        await readFeed(feed);
+        if (Date.now() >= deadline) { feedsSkipped += 1; continue; }
+        sourcesTried.push(`feed:${feed.label}`);
+        const read = await Promise.race([fetchFeed(feed), deadlineReached]);
+        if (read === DEADLINE) { feedsSkipped += 1; continue; }
+        if (read.status === 'ok') {
+          lists.push(read.events);
+          sourcesUsed.push(`feed:${feed.label}`);
+        } else {
+          sourceErrors.feedsFailed = FEEDS_FAILED;
+        }
+        await recordFeedStatus(feed, read);
       }
     };
-    await Promise.allSettled(Array.from({ length: Math.min(FEED_CONCURRENCY, feeds.length) }, worker));
+    try {
+      await Promise.all(Array.from({ length: Math.min(FEED_CONCURRENCY, feeds.length) }, worker));
+    } finally {
+      clearTimeout(deadlineTimer);
+    }
   }
   // Left for the next search is not the same as unreachable: the planner says
   // each in its own words, keyed `feedsSkipped` and `feedsFailed`.

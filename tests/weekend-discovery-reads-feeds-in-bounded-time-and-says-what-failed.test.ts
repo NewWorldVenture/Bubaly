@@ -267,3 +267,93 @@ describe('S18 — one search reads a bounded number of saved feeds, a few at a t
     expect(harness.fetched).not.toContain('https://feeds.example/01.ics');
   });
 });
+
+describe('S18 — the deadline ends the feed reads, not only their start', () => {
+  /** Eight feeds that each take 15 s: four start at once, the next four at 15 s. */
+  function slowFeeds() {
+    harness.feedDelayMs = 15_000;
+    db.seed('weekend_feeds', Array.from({ length: 8 }, (_, i) => {
+      const url = `https://feeds.example/slow-${i}.ics`;
+      harness.feedText.set(url, 'BEGIN:VCALENDAR\r\nEND:VCALENDAR');
+      return feed(`slow-${i}`, 'ics', url);
+    }));
+  }
+
+  it('answers at the 25 s deadline, with the feeds still reading left for the next search', async () => {
+    vi.useFakeTimers();
+    slowFeeds();
+    let answered = false;
+    const pending = search().then((res) => { answered = true; return res; });
+
+    // Held clock: the first four answer at 15 s, the second four would at 30 s.
+    await vi.advanceTimersByTimeAsync(25_500);
+
+    expect(answered).toBe(true);
+    const res = await pending;
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.sources).toHaveLength(4);
+    expect(body.errors).toEqual({ feedsSkipped: 'Some of your saved local feeds were left for the next search.' });
+    // The late four keep their place at the front of the next search's queue.
+    const rows = db.table('weekend_feeds');
+    expect(rows.filter((row) => row.last_fetched_at === null)).toHaveLength(4);
+    expect(rows.filter((row) => row.last_status === 'ok')).toHaveLength(4);
+
+    // A late answer is not merged in, nor written, after the reply.
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(db.table('weekend_feeds').filter((row) => row.last_fetched_at === null)).toHaveLength(4);
+  });
+
+  it('control: feeds that answer inside the deadline are all read', async () => {
+    vi.useFakeTimers();
+    harness.feedDelayMs = 5_000;
+    db.seed('weekend_feeds', Array.from({ length: 8 }, (_, i) => {
+      const url = `https://feeds.example/quick-${i}.ics`;
+      harness.feedText.set(url, 'BEGIN:VCALENDAR\r\nEND:VCALENDAR');
+      return feed(`quick-${i}`, 'ics', url);
+    }));
+    const pending = search();
+
+    await vi.advanceTimersByTimeAsync(11_000);
+
+    const body = await (await pending).json();
+    expect(body.sources).toHaveLength(8);
+    expect(body.errors).toEqual({});
+  });
+});
+
+describe('S18 — a feed status write that throws does not end the search\'s other feeds', () => {
+  it('reads all twelve feeds when every status write rejects', async () => {
+    db.seed('weekend_feeds', Array.from({ length: 12 }, (_, i) => {
+      const url = `https://feeds.example/${String(i).padStart(2, '0')}.ics`;
+      harness.feedText.set(url, 'BEGIN:VCALENDAR\r\nEND:VCALENDAR');
+      return feed(`f-${String(i).padStart(2, '0')}`, 'ics', url);
+    }));
+    // The status UPDATE rejects (a dropped connection), rather than answering { error }.
+    const real = db;
+    harness.db = new Proxy(real, {
+      get(target, key, receiver) {
+        if (key !== 'from') return Reflect.get(target, key, receiver);
+        return (table: string) => {
+          const builder = target.from(table);
+          if (table !== 'weekend_feeds') return builder;
+          return new Proxy(builder, {
+            get(b, k, r) {
+              if (k === 'update') return () => ({ eq: () => Promise.reject(new Error('connection reset')) });
+              const value = Reflect.get(b, k, r);
+              return typeof value === 'function' ? value.bind(b) : value;
+            },
+          });
+        };
+      },
+    });
+
+    const res = await search();
+
+    expect(res.status).toBe(200);
+    expect(harness.fetched).toHaveLength(12);
+    const body = await res.json();
+    expect(body.sources).toHaveLength(12);
+    expect(body.errors).toEqual({});
+  });
+});

@@ -22,7 +22,6 @@ import {
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { escapeLike } from '@/lib/supabase/escape-like';
 import { readAllInChunks } from '@/lib/supabase/chunked-in';
-import { readAllById } from '@/lib/supabase/read-all';
 import { makeKey } from '../idempotency';
 import { familyInstantIso, scopeNow } from '../scope';
 import { choreRepeats, nextChoreDueAt } from '@/lib/chores/respawn';
@@ -1319,19 +1318,21 @@ async function sweepWouldRespawn(
   }
   if (open && open.length > 0) return ok(false);
 
-  const { rows: finished, error: finishedError } = await readAllById<FinishedRow>((after, limit) => {
-    let q = scope.db
+  // Read as the sweep reads it (paged, in id order), so both pick the same row.
+  const { data: finished, error: finishedError } = await readAllInChunks<FinishedRow, { message: string }>(
+    [target.chore_id],
+    (chunk, from, to) => scope.db
       .from('chore_assignments')
       .select('id, approved_at, submitted_at, created_at')
       .eq('family_id', scope.familyId)
-      .eq('chore_id', target.chore_id)
+      .in('chore_id', chunk)
       .eq('member_id', target.member_id)
       .neq('id', target.id)
-      .in('status', [...FINISHED_STATUSES]);
-    if (after) q = q.gt('id', after);
-    return q.order('id').limit(limit);
-  });
-  if (finishedError) {
+      .in('status', [...FINISHED_STATUSES])
+      .order('id')
+      .range(from, to),
+  );
+  if (finishedError || !finished) {
     console.error('[service:tasks] finished chore read before delete failed', finishedError);
     return fail(describeDbError(finishedError, 'Could not load that chore.'), { code: SERVICE_CODES.db });
   }
