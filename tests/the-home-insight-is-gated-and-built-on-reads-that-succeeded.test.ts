@@ -21,6 +21,12 @@ vi.mock('@/lib/supabase/auth', () => ({
   isSuperAdmin: async () => false,
 }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => h.db }));
+// A kind no gated page renders (weather, chores) still answers to the family's
+// lock (`refuseIfLocked`): this family's trial has not ended and the account is open.
+vi.mock('@/lib/server/plan', async (original) => ({
+  ...(await original<typeof import('@/lib/server/plan')>()),
+  resolveFamilyEntitlement: async () => ({ effectiveLevel: 2, locked: false, closed: false, inTrial: false, trialEndsAt: null }),
+}));
 vi.mock('@/lib/ai/provider', () => ({ isAIConfigured: async () => true, resolveProvider: async () => ({ complete: h.complete }), describeAIError: () => ({ message: 'unavailable' }) }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
 vi.mock('@/lib/ai/observability', () => ({ withAiRequest: (_s: unknown, _f: unknown, run: (o: { used: () => void; failed: () => void }) => unknown) => run({ used: () => {}, failed: () => {} }) }));

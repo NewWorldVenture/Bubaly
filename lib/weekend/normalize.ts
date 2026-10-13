@@ -85,9 +85,16 @@ type TMEvent = {
 const kmToMiles = (km: number) => km * 0.621371;
 
 /**
- * Map one Ticketmaster event into our normalized shape. An event with a date
- * and no time is placed at that date's midnight in the event's own zone (or
- * the family's, `timeZone`), and runs to the next, like an all-day ICS event.
+ * Map one Ticketmaster event into our normalized shape.
+ *
+ * An event with a date and no time is an all-day event ON THAT DATE: a fair on
+ * Saturday 17 October is on Saturday for the family planning it, wherever the
+ * provider files the venue. It is placed at that date's midnight in the
+ * FAMILY's zone (`timeZone`) and runs to the next, like an all-day ICS event,
+ * so the planner files it under that day and calls it all day. The event's
+ * own zone is used only when the family's is unknown. Placing it in the
+ * event's zone put a Chicago fair at 10 PM on Friday for a family in
+ * California. A timed event keeps its own instant.
  */
 export function normalizeTicketmaster(e: TMEvent, timeZone: string | null = null): NormalizedEvent {
   const venue = e._embedded?.venues?.[0];
@@ -101,7 +108,7 @@ export function normalizeTicketmaster(e: TMEvent, timeZone: string | null = null
     : null;
   const category = cls?.genre?.name && cls.genre.name !== 'Undefined' ? cls.genre.name : (cls?.segment?.name ?? null);
   const localDate = e.dates?.start?.localDate ?? null;
-  const zone = e.dates?.timezone && isValidTimezone(e.dates.timezone) ? e.dates.timezone : timeZone;
+  const zone = timeZone && isValidTimezone(timeZone) ? timeZone : (e.dates?.timezone && isValidTimezone(e.dates.timezone) ? e.dates.timezone : null);
 
   return {
     source: 'ticketmaster',

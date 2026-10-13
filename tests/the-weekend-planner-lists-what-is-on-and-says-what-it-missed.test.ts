@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SOURCE_MESSAGES } from '@/lib/i18n/messages';
 import { translate } from '@/lib/i18n/translate';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
+import { normalizeTicketmaster } from '@/lib/weekend/normalize';
 import { byName, click, has, render } from './helpers/module-harness';
 import { resetHookSlots } from './helpers/hook-slots';
 
@@ -150,6 +151,42 @@ describe('S11 — an all-day event shows all day, on its own day', () => {
     const tree = await show();
 
     expect(has(tree, 'Pancake brunch')).toBe(false);
+  });
+});
+
+// What discovery stores for a provider in another zone, rendered where the
+// family is: the normalizer the route calls, then the planner the family sees.
+describe('S11 — a provider in another zone: a date is that date, a time is that time', () => {
+  /** A Ticketmaster event as discovery stores it for a family in California. */
+  function discovered(id: string, raw: Record<string, unknown>) {
+    const row = normalizeTicketmaster({ id, ...raw } as Parameters<typeof normalizeTicketmaster>[0], 'America/Los_Angeles');
+    return event(id, row.title, row.starts_at!, { source: 'ticketmaster', ends_at: row.ends_at });
+  }
+
+  it('a Chicago fair dated Saturday is listed under Saturday, all day', async () => {
+    // Friday 16 October 2026, 10 AM Pacific.
+    vi.setSystemTime(new Date('2026-10-16T17:00:00Z'));
+    db.seed('weekend_events', [discovered('tm-fair', { name: 'County fair', dates: { start: { localDate: '2026-10-17' }, timezone: 'America/Chicago' } })]);
+
+    const tree = await show();
+
+    expect(has(tree, 'County fair')).toBe(true);
+    expect(has(tree, 'Saturday, Oct 17')).toBe(true);
+    expect(has(tree, 'Friday, Oct 16')).toBe(false);
+    expect(has(tree, t('firstBriefDisplay.allDay'))).toBe(true);
+    expect(has(tree, '10:00 PM')).toBe(false);
+  });
+
+  it('control: a Chicago show at 6 PM is listed at 4 PM Saturday, not all day', async () => {
+    vi.setSystemTime(new Date('2026-10-16T17:00:00Z'));
+    db.seed('weekend_events', [discovered('tm-show', { name: 'Evening show', dates: { start: { localDate: '2026-10-17', localTime: '18:00:00', dateTime: '2026-10-17T23:00:00Z' }, timezone: 'America/Chicago' } })]);
+
+    const tree = await show();
+
+    expect(has(tree, 'Evening show')).toBe(true);
+    expect(has(tree, 'Saturday, Oct 17')).toBe(true);
+    expect(has(tree, '4:00 PM')).toBe(true);
+    expect(has(tree, t('firstBriefDisplay.allDay'))).toBe(false);
   });
 });
 

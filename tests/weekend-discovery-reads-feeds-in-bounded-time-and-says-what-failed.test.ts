@@ -149,16 +149,43 @@ describe('S11 — an all-day event is a date where the family is', () => {
     expect(fair.ends_at).toBe('2026-10-18T07:00:00Z');
   });
 
-  it('a Ticketmaster event with a date and no time is placed the same way, in its own zone', async () => {
+  // A date with no time is a calendar date: the fair is on Saturday the 17th
+  // for the family planning it, wherever the provider files the venue. It is
+  // stored midnight to midnight in the FAMILY's zone, which is how the planner
+  // files it under that day and calls it all day.
+  function ticketmasterSays(event: Record<string, unknown>) {
+    vi.stubEnv('TICKETMASTER_API_KEY', 'tm-key');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ _embedded: { events: [event] } }), { status: 200, headers: { 'content-type': 'application/json' } })));
+  }
+
+  it('a Ticketmaster event with a date and no time is on that date where the family is, whatever the venue\'s zone', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-17T02:00:00Z'));
-    vi.stubEnv('TICKETMASTER_API_KEY', 'tm-key');
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ _embedded: { events: [{
-      id: 'tm-fair', name: 'County fair', dates: { start: { localDate: '2026-10-17' }, timezone: 'America/Chicago' },
-    }] } }), { status: 200, headers: { 'content-type': 'application/json' } })));
+    ticketmasterSays({ id: 'tm-fair', name: 'County fair', dates: { start: { localDate: '2026-10-17' }, timezone: 'America/Chicago' } });
 
     expect((await search()).status).toBe(200);
-    expect(db.table('weekend_events')[0]).toMatchObject({ title: 'County fair', starts_at: '2026-10-17T05:00:00Z', ends_at: '2026-10-18T05:00:00Z' });
+    // Midnight to midnight, Pacific (PDT, UTC-7) — not Chicago's midnight, 10 PM Friday in California.
+    expect(db.table('weekend_events')[0]).toMatchObject({ title: 'County fair', starts_at: '2026-10-17T07:00:00Z', ends_at: '2026-10-18T07:00:00Z' });
+  });
+
+  it('with no family zone on file, the venue\'s zone places it', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-17T02:00:00Z'));
+    harness.timezone = '';
+    ticketmasterSays({ id: 'tm-fair', name: 'County fair', dates: { start: { localDate: '2026-10-17' }, timezone: 'America/Chicago' } });
+
+    expect((await search()).status).toBe(200);
+    expect(db.table('weekend_events')[0]).toMatchObject({ starts_at: '2026-10-17T05:00:00Z', ends_at: '2026-10-18T05:00:00Z' });
+  });
+
+  it('control: a timed Ticketmaster event keeps its own instant', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-17T02:00:00Z'));
+    // 6 PM in Chicago is 4 PM in California.
+    ticketmasterSays({ id: 'tm-show', name: 'Evening show', dates: { start: { localDate: '2026-10-17', localTime: '18:00:00', dateTime: '2026-10-17T23:00:00Z' }, timezone: 'America/Chicago' } });
+
+    expect((await search()).status).toBe(200);
+    expect(db.table('weekend_events')[0]).toMatchObject({ title: 'Evening show', starts_at: '2026-10-17T23:00:00Z', ends_at: null });
   });
 
   it('is still found on the morning of its own day', async () => {

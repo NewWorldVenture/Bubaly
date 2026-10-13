@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
   }
   const feeds = (savedFeeds ?? []).slice(0, MAX_FEEDS_PER_SEARCH);
   let feedsSkipped = Math.max(0, (savedFeeds?.length ?? 0) - MAX_FEEDS_PER_SEARCH);
-  if (feeds.length) {
+  if (feeds && feeds.length) {
     // One feed's fetch and parse. Its events are the caller's to use: a read
     // still running at the deadline is dropped, not merged in late.
     type FeedRead = { events: NormalizedEvent[]; status: string };
