@@ -32,6 +32,7 @@ import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import type { Format } from '@/lib/utils/format';
 import { categoryLabel } from '@/lib/finance/category-label';
+import { monthlyBudgetShare } from '@/lib/finance/budget-periods';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { todayInZone } from '@/lib/schedule/zoned';
 
@@ -130,10 +131,17 @@ export function FinancesModule() {
   // The FAMILY's month (TIME-003).
   const monthStartStr = `${clock.todayKey().slice(0, 7)}-01`;
 
-  const monthTxns = useMemo(() => txns.filter((t) => t.date >= monthStartStr), [txns, monthStartStr]);
+  // The month, both ends. Only its start was checked, so next month's rent
+  // recorded today as scheduled was in "Expenses · this month", in the net and
+  // in the budget bar.
+  const monthKey = monthStartStr.slice(0, 7);
+  const monthTxns = useMemo(() => txns.filter((t) => t.date.startsWith(monthKey)), [txns, monthKey]);
   const income = useMemo(() => monthTxns.filter((t) => t.type === 'income').reduce((s, t) => s + num(t.amount), 0), [monthTxns]);
   const expenses = useMemo(() => monthTxns.filter((t) => t.type === 'expense').reduce((s, t) => s + num(t.amount), 0), [monthTxns]);
-  const totalBalance = useMemo(() => accounts.reduce((s, a) => s + num(a.balance), 0), [accounts]);
+  // A credit account's balance is money OWED: it lowers the total, as on Family
+  // CFO. Added as positive cash, one account raised this page's total and
+  // lowered the CFO's.
+  const totalBalance = useMemo(() => accounts.reduce((s, a) => s + (a.type === 'credit' ? -num(a.balance) : num(a.balance)), 0), [accounts]);
   const savingsBalance = useMemo(() => {
     const sav = accounts.filter((a) => a.type === 'savings').reduce((s, a) => s + num(a.balance), 0);
     return sav > 0 ? sav : goals.reduce((s, g) => s + num(g.current_amount), 0);
@@ -159,7 +167,10 @@ export function FinancesModule() {
       return `${color} ${start}% ${end}%`;
     }).join(', ');
   }, [spendByCat]);
-  const budgetTotal = useMemo(() => budgets.reduce((s, b) => s + num(b.amount), 0), [budgets]);
+  // This month's budget: each limit as its monthly share. The raw sum of
+  // weekly, monthly and yearly limits set against a month of spending made one
+  // yearly budget enough to read an overspent month as "On track".
+  const budgetTotal = useMemo(() => budgets.reduce((s, b) => s + monthlyBudgetShare(num(b.amount), b.period), 0), [budgets]);
   const budgetPct = budgetTotal > 0 ? Math.round((expenses / budgetTotal) * 100) : 0;
 
   const recent = txns.slice(0, 8);

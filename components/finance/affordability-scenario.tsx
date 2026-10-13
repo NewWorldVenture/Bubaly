@@ -10,6 +10,7 @@ import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, ArrowRight, CheckCircle2, FlaskConical, Info, Loader2, XCircle } from 'lucide-react';
 import { assessAffordabilityAction } from '@/app/(app)/dashboard/family-cfo/actions';
+import { reportRefusal } from '@/lib/auth/step-up-client';
 import { money as moneyIn, pretty as prettyIn, type AffordabilityResult, type AffordabilityVerdict, type ScenarioRecurrence } from '@/lib/finance/timeline';
 import { cn } from '@/lib/utils/cn';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
@@ -61,7 +62,8 @@ export function AffordabilityScenario({ buffer }: { buffer: number }) {
       try {
         const res = await assessAffordabilityAction({ label, amountDollars, date, recurrence });
         if (res.ok) { setResult(res.result); setError(null); }
-        else { setResult(null); setError(res.error); }
+        // A step-up refusal takes the family to the code page and back here.
+        else { setResult(null); reportRefusal(res, setError); }
       } catch {
         setResult(null);
         setError(t('affordabilityScenario.couldNotCheckThatTryAgain'));

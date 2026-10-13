@@ -17002,5 +17002,13 @@
   "healthVisitsModule.onlyYourOwn": "Du siehst deine eigenen Besuche und die, die du eingetragen hast. Eltern und Erwachsene sehen die des ganzen Haushalts.",
   "healthVisitsModule.noneOfYours": "Es sind keine Besuche von dir eingetragen",
   "immunizationsModule.onlyYourOwn": "Du siehst deine eigenen Impfungen und die, die du eingetragen hast. Eltern und Erwachsene sehen die des ganzen Haushalts.",
-  "immunizationsModule.noneOfYours": "Es sind keine Impfungen von dir eingetragen"
+  "immunizationsModule.noneOfYours": "Es sind keine Impfungen von dir eingetragen",
+  "familyCfoActions.needsFamilyPlus": "„Können wir uns das leisten?“ ist eine Family+-Funktion.",
+  "familyCfoActions.needsYourCode": "Gib deinen Code für die zweistufige Anmeldung ein, bevor du prüfst, was sich die Familie leisten kann.",
+  "actions.thisChildAlreadyHasAnAllowance": "Dieses Kind hat schon ein Taschengeld. Aktualisiere die Seite und ändere dieses.",
+  "allowanceView.oneOfSeveralAllowances": "Dieses Kind hat mehr als ein Taschengeld, und jedes wird ausgezahlt. Pausiere das, das du nicht willst.",
+  "babysittersView.payoutsAreKeptByParents": "Was die Babysitter bekommen, wird von den Eltern deiner Familie geführt.",
+  "savings.overYourWeeklyBudget": "Du liegst {amount} über deinem wöchentlichen Budget für {category}.",
+  "savings.overYourMonthlyBudget": "Du liegst {amount} über deinem monatlichen Budget für {category}.",
+  "savings.overYourYearlyBudget": "Du liegst {amount} über deinem jährlichen Budget für {category}."
 }

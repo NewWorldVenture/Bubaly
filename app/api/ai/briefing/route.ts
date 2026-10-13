@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
       { data: reminders },
       { data: mealPlans },
       { data: appointments },
-      { data: bills },
+      { data: bills, error: billsError },
       { data: medSchedules },
       { data: maintenance },
       { data: warranties },
@@ -192,6 +192,14 @@ export async function POST(req: NextRequest) {
     // above) both arrive here, before any model is asked.
     if (groceryResult.error) {
       console.error('[api/ai/briefing] grocery read failed', groceryResult.error);
+      return NextResponse.json({ error: tr('briefing.failedToGenerateBriefing') }, { status: 503 });
+    }
+    // And for bills (a manager's brief; anyone else's reads none and has no
+    // error). A failed read used to become "no bills due": an overdue rent bill
+    // left out of the action items and the digest, a calm stress level, a 200.
+    // The cron-delivered brief (lib/briefing/deliver.ts) already fails closed.
+    if (billsError) {
+      console.error('[api/ai/briefing] bills read failed', billsError);
       return NextResponse.json({ error: tr('briefing.failedToGenerateBriefing') }, { status: 503 });
     }
     const groceryItems = groceryResult.data;

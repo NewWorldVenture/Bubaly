@@ -17002,5 +17002,13 @@
   "healthVisitsModule.onlyYourOwn": "Ves tus propias visitas y las que registraste. Un padre, una madre o un adulto ve las de todo el hogar.",
   "healthVisitsModule.noneOfYours": "No hay visitas tuyas registradas",
   "immunizationsModule.onlyYourOwn": "Ves tus propias vacunas y las que registraste. Un padre, una madre o un adulto ve las de todo el hogar.",
-  "immunizationsModule.noneOfYours": "No hay vacunas tuyas registradas"
+  "immunizationsModule.noneOfYours": "No hay vacunas tuyas registradas",
+  "familyCfoActions.needsFamilyPlus": "«¿Nos lo podemos permitir?» es una función de Family+.",
+  "familyCfoActions.needsYourCode": "Introduce tu código de inicio de sesión en dos pasos antes de comprobar qué se puede permitir la familia.",
+  "actions.thisChildAlreadyHasAnAllowance": "Este niño ya tiene una paga. Actualiza la página y cambia esa.",
+  "allowanceView.oneOfSeveralAllowances": "Este niño tiene más de una paga y se paga cada una. Pausa la que no quieras.",
+  "babysittersView.payoutsAreKeptByParents": "Lo que se paga a las niñeras lo gestionan los padres de tu familia.",
+  "savings.overYourWeeklyBudget": "Te has pasado {amount} de tu presupuesto semanal de {category}.",
+  "savings.overYourMonthlyBudget": "Te has pasado {amount} de tu presupuesto mensual de {category}.",
+  "savings.overYourYearlyBudget": "Te has pasado {amount} de tu presupuesto anual de {category}."
 }

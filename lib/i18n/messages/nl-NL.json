@@ -17002,5 +17002,13 @@
   "healthVisitsModule.onlyYourOwn": "Je ziet je eigen bezoeken en de bezoeken die jij hebt vastgelegd. Een ouder of volwassene ziet die van het hele huishouden.",
   "healthVisitsModule.noneOfYours": "Er zijn geen bezoeken van jou vastgelegd",
   "immunizationsModule.onlyYourOwn": "Je ziet je eigen vaccinaties en de vaccinaties die jij hebt vastgelegd. Een ouder of volwassene ziet die van het hele huishouden.",
-  "immunizationsModule.noneOfYours": "Er zijn geen vaccinaties van jou vastgelegd"
+  "immunizationsModule.noneOfYours": "Er zijn geen vaccinaties van jou vastgelegd",
+  "familyCfoActions.needsFamilyPlus": "‘Kunnen we dit betalen?’ is een Family+-functie.",
+  "familyCfoActions.needsYourCode": "Voer je code voor inloggen in twee stappen in voordat je nagaat wat het gezin kan betalen.",
+  "actions.thisChildAlreadyHasAnAllowance": "Dit kind heeft al zakgeld. Vernieuw de pagina en wijzig dat.",
+  "allowanceView.oneOfSeveralAllowances": "Dit kind heeft meer dan één zakgeld, en elk wordt uitbetaald. Pauzeer het zakgeld dat je niet wilt.",
+  "babysittersView.payoutsAreKeptByParents": "Wat de oppassen betaald krijgen, wordt bijgehouden door de ouders in je gezin.",
+  "savings.overYourWeeklyBudget": "Je zit {amount} boven je weekbudget voor {category}.",
+  "savings.overYourMonthlyBudget": "Je zit {amount} boven je maandbudget voor {category}.",
+  "savings.overYourYearlyBudget": "Je zit {amount} boven je jaarbudget voor {category}."
 }
