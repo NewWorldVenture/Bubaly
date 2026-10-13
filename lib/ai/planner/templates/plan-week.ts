@@ -47,7 +47,7 @@ export const planWeekTemplate: WorkflowTemplate = {
     {
       key: 'reschedule', stepType: 'act', toolName: 'calendar.rescheduleEvent', description: 'Move the event that clashes',
       dependsOn: ['conflicts', 'events'], input: () => ({ event_id: '', starts_at: '' }),
-      modelFills: 'event_id of the event to move and the new starts_at, from a free slot in the context', optional: true,
+      modelFills: 'event_id of the event to move and the new starts_at, from a free slot in the context; for a repeating event, also occurrence_starts_at: the starts_at of the week being moved', optional: true,
     },
     {
       key: 'key_reminder', stepType: 'act', toolName: 'reminders.create', description: 'Set the reminder the week most needs',

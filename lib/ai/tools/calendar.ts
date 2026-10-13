@@ -26,6 +26,8 @@ import { scopeNow } from '@/lib/services/scope';
 import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
 import type { EventCategory, RecurrenceFreq } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
+import { isSeries } from '@/lib/calendar/occurrences';
+import { expandEventsInZone } from '@/lib/calendar/recurrence';
 import { resolveAssigneeId } from './family';
 import { defineTool, describeWhen, plural, type ToolDefinition } from './types';
 
@@ -44,6 +46,23 @@ const eventOutput = z.object({
   /** Civil DATE for all-day events; family timezone for timed events. */
   when: z.string(),
 });
+
+/**
+ * The week of a repeating event a change is made from. `calendar.searchEvents`
+ * returns each week of a series with that week's own `starts_at` and the
+ * series' id; a new time sent without naming the week was written into the
+ * series row and restarted the series there. The service maps it onto the
+ * series' first date (lib/services/calendar `updateEvent`) and refuses a series
+ * time change that names no week.
+ */
+const occurrenceStartsAt = z.string().nullish()
+  .describe('For a repeating event: the starts_at of the week being changed, exactly as calendar.searchEvents returned it. Required to change the time of a repeating event; every week moves with it.');
+
+/** What `when` says after a change: for a series, the week that was changed, not its first week. */
+function changedWhen(event: { starts_at: string; all_day: boolean; recurrence: string }, requestedStart: string | null | undefined, occurrence: string | null | undefined, tz: string, now: Date): string {
+  const shown = isSeries(event) && occurrence && requestedStart ? normalizeCalendarWriteInstant(requestedStart, tz) ?? event.starts_at : event.starts_at;
+  return event.all_day ? `all day ${calendarEventDayKey({ ...event, starts_at: shown }, tz)}` : describeWhen(shown, tz, now);
+}
 
 const slotOutput = z.object({
   slots: z.array(z.object({ starts_at: z.string(), ends_at: z.string(), when: z.string() })),
@@ -181,6 +200,7 @@ export const calendarTools: ToolDefinition[] = [
       description: z.string().nullish(),
       assignee: z.string().nullish(),
       assignee_id: z.string().nullish(),
+      occurrence_starts_at: occurrenceStartsAt,
     }),
     output: eventOutput,
     summarize: (_input, output) => `Updated ${output.title} — now ${output.when}`,
@@ -199,13 +219,13 @@ export const calendarTools: ToolDefinition[] = [
         ...(input.location !== undefined ? { location: input.location } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
         ...(assignee.data !== null ? { assigneeId: assignee.data } : {}),
-      });
+      }, { occurrenceStartsAt: input.occurrence_starts_at ?? null, seriesNeedsOccurrence: true });
       if (!res.ok) return res;
       const event = res.data;
       return ok({
         id: event.id, title: event.title, starts_at: event.starts_at, ends_at: event.ends_at,
         all_day: event.all_day, category: event.category, location: event.location, assignee_id: event.assignee_id,
-        when: event.all_day ? `all day ${calendarEventDayKey(event, scope.tz)}` : describeWhen(event.starts_at, scope.tz, scopeNow(scope)),
+        when: changedWhen(event, input.starts_at, input.occurrence_starts_at, scope.tz, scopeNow(scope)),
       });
     },
   }),
@@ -222,25 +242,26 @@ export const calendarTools: ToolDefinition[] = [
     input: z.object({
       event_id: z.string(),
       starts_at: z.string().describe('New timed ISO 8601 start; for an all-day event use YYYY-MM-DD or UTC midnight'),
+      occurrence_starts_at: occurrenceStartsAt,
     }),
     output: eventOutput,
     summarize: (_input, output) => `Moved ${output.title} to ${output.when}`,
     consequences: (input) => [`Moves calendar event ${input.event_id}; anyone counting on the old time needs to know.`],
     resource: (output) => ({ table: 'calendar_events', id: output.id }),
     execute: async (scope, input) => {
-      const res = await rescheduleAfter(scope, input.event_id, { startsAt: input.starts_at });
+      const res = await rescheduleAfter(scope, input.event_id, { startsAt: input.starts_at, occurrenceStartsAt: input.occurrence_starts_at ?? null }, { seriesNeedsOccurrence: true });
       if (!res.ok) return res;
       const event = res.data;
       return ok({
         id: event.id, title: event.title, starts_at: event.starts_at, ends_at: event.ends_at,
         all_day: event.all_day, category: event.category, location: event.location, assignee_id: event.assignee_id,
-        when: event.all_day ? `all day ${calendarEventDayKey(event, scope.tz)}` : describeWhen(event.starts_at, scope.tz, scopeNow(scope)),
+        when: changedWhen(event, input.starts_at, input.occurrence_starts_at, scope.tz, scopeNow(scope)),
       });
     },
     verify: async (scope, input, output) => {
       const { data, error } = await scope.db
         .from('calendar_events')
-        .select('id, starts_at')
+        .select('id, starts_at, ends_at, all_day, recurrence, recurrence_until')
         .eq('id', output.id)
         .eq('family_id', scope.familyId)
         .maybeSingle();
@@ -249,7 +270,15 @@ export const calendarTools: ToolDefinition[] = [
         return fail(describeDbError(error, 'Could not confirm the new time was saved.'), { code: SERVICE_CODES.db });
       }
       let moved = false;
-      try { const expected = normalizeCalendarWriteInstant(input.starts_at, scope.tz); moved = Boolean(data) && expected !== null && parseExactInstant(data!.starts_at) === parseExactInstant(expected); } catch { /* Invalid receipts cannot verify a move. */ }
+      try {
+        const expected = normalizeCalendarWriteInstant(input.starts_at, scope.tz);
+        // A series moves by its first date, so the week that was asked for is
+        // one of its occurrences, not its stored start.
+        const starts = data && expected !== null && isSeries(data)
+          ? expandEventsInZone([data], new Date(Date.parse(expected) - 86_400_000), new Date(Date.parse(expected) + 86_400_000), data.all_day ? 'UTC' : scope.tz).map((o) => o.starts_at)
+          : data ? [data.starts_at] : [];
+        moved = expected !== null && starts.some((start) => parseExactInstant(start) === parseExactInstant(expected));
+      } catch { /* Invalid receipts cannot verify a move. */ }
       return ok({ verified: moved, detail: moved ? `${output.title} now starts at ${output.when}.` : 'The event did not move.' });
     },
   }),

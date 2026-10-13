@@ -456,13 +456,26 @@ export type UpdateEventOptions = {
    * onto the series' first date (`onSeriesClock`).
    */
   occurrenceStartsAt?: string | null;
+  /**
+   * Refuse a new time for a repeating event when no occurrence is named. The
+   * assistant reads a series a week at a time, so a start it sends is some
+   * week's start, and written into the row it restarts the series there. Which
+   * week it meant is asked, not guessed, as an ambiguous title is
+   * (`findEventByTitle`): keeping the first date and taking only the clock time
+   * would silently drop a move to another day.
+   */
+  seriesNeedsOccurrence?: boolean;
 };
+
+/** The refusal `seriesNeedsOccurrence` gives. */
+const SERIES_NEEDS_OCCURRENCE = 'That event repeats. Say which week this new time is for, and every week moves with it.';
 
 type EventClockState = Pick<CalendarEvent, 'id' | 'title' | 'starts_at' | 'ends_at' | 'all_day'>;
 export async function updateEvent(
   scope: ServiceScope, eventId: string, patch: UpdateEventPatch, opts: UpdateEventOptions = {},
 ): Promise<ServiceResult<CalendarEvent>> {
-  if (!opts.occurrenceStartsAt?.trim() || (patch.startsAt === undefined && patch.endsAt === undefined)) {
+  const occurrence = opts.occurrenceStartsAt?.trim() ? opts.occurrenceStartsAt : null;
+  if ((!occurrence && !opts.seriesNeedsOccurrence) || (patch.startsAt === undefined && patch.endsAt === undefined)) {
     return applyEventUpdate(scope, eventId, patch);
   }
   const { data, error } = await scope.db.from('calendar_events')
@@ -470,8 +483,23 @@ export async function updateEvent(
   if (error) return fail(describeDbError(error, 'Could not load that event.'), { code: SERVICE_CODES.db });
   if (!data) return fail('That event could not be found.', { code: SERVICE_CODES.notFound });
   const { recurrence, ...clock } = data;
+  const mapped = forSeriesOccurrence({ ...clock, recurrence }, patch, occurrence, scope.tz);
+  if (!mapped.ok) return mapped;
   // The row just read is the compare-and-set state, as in `rescheduleAfter`.
-  return applyEventUpdate(scope, eventId, onSeriesClock({ ...clock, recurrence }, patch, opts.occurrenceStartsAt, scope.tz), clock);
+  return applyEventUpdate(scope, eventId, mapped.data, clock);
+}
+
+/** `onSeriesClock` for a named occurrence; with none, a new time for a series that stays one is refused. */
+function forSeriesOccurrence(
+  stored: EventClockState & Pick<CalendarEvent, 'recurrence'>,
+  patch: UpdateEventPatch,
+  occurrence: string | null,
+  timezone: string,
+): ServiceResult<UpdateEventPatch> {
+  if (occurrence) return ok(onSeriesClock(stored, patch, occurrence, timezone));
+  return isSeries(stored) && isSeries({ recurrence: patch.recurrence ?? stored.recurrence })
+    ? fail(SERIES_NEEDS_OCCURRENCE, { code: SERVICE_CODES.invalidInput })
+    : ok(patch);
 }
 
 /**
@@ -994,18 +1022,23 @@ export async function busyEvenings(
  * Move an event to a new start, keeping its length. Used when resolving a
  * conflict: the family agreed to move the thing, not to reshape it, so the
  * duration is preserved rather than reset to a default.
+ *
+ * For a repeating event, `occurrenceStartsAt` names the week being moved and
+ * the move is mapped onto the series' first date, as `updateEvent` does;
+ * `seriesNeedsOccurrence` refuses a series move that names no week.
  */
 export async function rescheduleAfter(
   scope: ServiceScope,
   eventId: string,
-  input: { startsAt: string },
+  input: { startsAt: string; occurrenceStartsAt?: string | null },
+  opts: Pick<UpdateEventOptions, 'seriesNeedsOccurrence'> = {},
 ): Promise<ServiceResult<CalendarEvent>> {
   const startsAt = normalizeCalendarWriteInstant(input.startsAt, scope.tz);
   if (!startsAt) return fail('That new time could not be understood.', { code: SERVICE_CODES.invalidInput });
 
   const { data: existing, error: readError } = await scope.db
     .from('calendar_events')
-    .select('id, title, starts_at, ends_at, all_day')
+    .select('id, title, starts_at, ends_at, all_day, recurrence')
     .eq('id', eventId)
     .eq('family_id', scope.familyId)
     .maybeSingle();
@@ -1019,10 +1052,14 @@ export async function rescheduleAfter(
     return fail('Choose valid event date boundaries.', { code: SERVICE_CODES.invalidInput });
   }
   const duration = existing.ends_at === null ? null : parseExactInstant(existing.ends_at) - parseExactInstant(existing.starts_at);
-  return applyEventUpdate(scope, eventId, {
+  const patch: UpdateEventPatch = {
     startsAt: input.startsAt,
     endsAt: duration === null ? null : formatExactInstant(parseExactInstant(startsAt) + duration),
-  }, existing);
+  };
+  const occurrence = input.occurrenceStartsAt?.trim() ? input.occurrenceStartsAt : null;
+  const mapped = occurrence || opts.seriesNeedsOccurrence ? forSeriesOccurrence(existing, patch, occurrence, scope.tz) : ok(patch);
+  if (!mapped.ok) return mapped;
+  return applyEventUpdate(scope, eventId, mapped.data, existing);
 }
 
 // ─── RSVPs ──────────────────────────────────────────────────────────────────
