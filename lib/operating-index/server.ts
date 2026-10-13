@@ -14,14 +14,14 @@ import { settleAll } from '@/lib/supabase/settle';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json, TaskStatus, EventCategory } from '@/lib/database.types';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
-import { countOverspentBudgets, type BudgetRow, type ExpenseRow } from './inputs';
+import { budgetWindowSpan, countOverspentBudgets, type BudgetRow, type ExpenseRow } from './inputs';
 import {
   computeOperatingIndex, dimensionsToRecord, compositeTrend,
   type HouseholdSnapshot, type MemberLoad, type OperatingIndex,
 } from './score';
 import { summarizeChange, type SnapshotView, type ChangeSummary } from './summary';
 import { orchestrate, type OrchestratorReport, type DayEvent, type OrchestratorItem } from './orchestrator';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { addDaysToDayKey, dayKeyInTz, zonedTimeMs } from '@/lib/services/scope';
 
 type DB = SupabaseClient<Database>;
@@ -90,18 +90,15 @@ export async function buildSnapshot(supabase: DB, familyId: string, tz: string, 
   const in14date = addDaysToDayKey(todayKey, 14);
   const in30date = addDaysToDayKey(todayKey, 30);
 
-  // Financial window: fetch this-year expenses so weekly/monthly/yearly budgets
-  // can all be evaluated; bounded by the row limit.
-  //
-  // This one bound stays UTC ON PURPOSE. It is the fetch floor for the budget
-  // periods `countOverspentBudgets` evaluates, and those period starts come
-  // from `lib/operating-index/inputs.ts`, which resolves them in UTC. The floor
-  // must never be later than the window it feeds, so the two have to move
-  // together or not at all — converting this half alone would make the fetch
-  // narrower than the window on the hours when the UTC year differs from the
-  // family's, and silently undercount a yearly budget. inputs.ts is its own
-  // conversion (it has a second caller, lib/intelligence/hard-signals.ts).
-  const yearStart = `${now.getUTCFullYear()}-01-01`;
+  // Financial window: every expense dated in any budget's current period on
+  // the FAMILY's day, both ends (budgetWindowSpan: the year, and a Sunday week
+  // reaching into December or January), which is what `countOverspentBudgets`
+  // judges each budget in. The floor and the windows move together: both used
+  // to be Greenwich's, from 1 January with Monday weeks, so on the family's New
+  // Year's Eve in Los Angeles the read began in a year the family had not
+  // reached and a yearly budget was judged on nothing. The end keeps next
+  // month's scheduled rent out of this month.
+  const budgetSpan = budgetWindowSpan(todayKey);
 
   const [
     membersRes, eventsRes, remindersRes, recentChoresRes, openChoresRes,
@@ -123,8 +120,17 @@ export async function buildSnapshot(supabase: DB, familyId: string, tz: string, 
     supabase.from('meal_votes').select('id').eq('family_id', familyId).eq('status', 'open').limit(100),
     supabase.from('family_polls').select('id, status').eq('family_id', familyId).eq('status', 'open').limit(100),
     supabase.from('goals').select('id, progress, target_date').eq('family_id', familyId).eq('is_complete', false).limit(200),
-    supabase.from('budgets').select('category, amount, period').eq('family_id', familyId).limit(200),
-    readAllAsQuery((from, to) => supabase.from('transactions').select('category, amount, date').eq('family_id', familyId).eq('type', 'expense').gte('date', yearStart).order('id').range(from, to), { max: 5000 }),
+    // `id` and `created_at` pick the budget the family keeps per category (budgetByCategory).
+    supabase.from('budgets').select('id, category, amount, period, created_at').eq('family_id', familyId).limit(200),
+    // Summed, so read whole and paged on the id: an offset page of a table
+    // written to mid-read repeats a row, and a repeated row is an overspend.
+    // Past the ceiling the read fails, never a count from part of it.
+    readAllByIdAsQuery<ExpenseRow & { id: string }>((after, limit) => {
+      let query = supabase.from('transactions').select('id, category, amount, date')
+        .eq('family_id', familyId).eq('type', 'expense').gte('date', budgetSpan.from).lte('date', budgetSpan.to);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: 5000 }),
     // Only spendable accounts count as "below zero" — a credit card carrying a
     // negative (owed) balance is expected, not a preparedness problem.
     supabase.from('financial_accounts').select('id, balance').eq('family_id', familyId).lt('balance', 0).neq('type', 'credit').limit(100),
@@ -163,9 +169,9 @@ export async function buildSnapshot(supabase: DB, familyId: string, tz: string, 
   const billsDueSoon = billsRes.data?.length ?? 0;
   const billsCovered = (billsRes.data ?? []).filter((b) => b.autopay).length;
   const overspentBudgets = countOverspentBudgets(
-    (budgetsRes.data ?? []) as BudgetRow[],
-    (expensesRes.data ?? []) as ExpenseRow[],
-    now,
+    (budgetsRes.data ?? []).map((b) => ({ ...b, amount: Number(b.amount) })) as BudgetRow[],
+    expensesRes.data ?? [],
+    todayKey,
   );
   const negativeBalances = accountsRes.data?.length ?? 0;
 

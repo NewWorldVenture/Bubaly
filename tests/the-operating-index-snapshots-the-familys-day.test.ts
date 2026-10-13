@@ -90,6 +90,7 @@ async function run(tz: string, now: Date) {
     billsHorizon: calls.find((c) => c.table === 'bills')?.filters['lte:due_date'],
     docsHorizon: calls.find((c) => c.table === 'documents')?.filters['lte:expires_at'],
     expensesFloor: calls.find((c) => c.table === 'transactions')?.filters['gte:date'],
+    expensesEnd: calls.find((c) => c.table === 'transactions')?.filters['lte:date'],
     // Only the orchestrator's "tomorrow" read bounds starts_at with `.lt()`;
     // every other calendar read uses `.lte()`.
     tomorrowFrom: calls.find((c) => c.table === 'calendar_events' && 'lt:starts_at' in c.filters)?.filters['gte:starts_at'],
@@ -187,17 +188,33 @@ describe("the orchestrator's tomorrow is the family's tomorrow", () => {
   });
 });
 
-describe('the one bound that is deliberately still UTC', () => {
+describe('the expense read spans the budget periods of the family\'s day, both ends', () => {
   it('floors the expense fetch where inputs.ts starts its budget periods', async () => {
-    // `countOverspentBudgets` gets its period starts from
-    // lib/operating-index/inputs.ts, which resolves them in UTC. This floor is
-    // the fetch bound for exactly those windows, so it is UTC too: a floor
-    // LATER than the window it feeds silently undercounts a budget.
-    //
-    // If this assertion fails because inputs.ts learned about the family's
-    // zone, the fix is to convert this floor IN THE SAME CHANGE, not to relax
-    // the expectation — the two have to move together or not at all.
+    // `countOverspentBudgets` judges each budget in its own period on the
+    // family's day (lib/operating-index/inputs.ts). This floor is the fetch
+    // bound for exactly those windows, so it moved with them, in the same
+    // change (TWIN-SIB-FOI): a floor LATER than the window it feeds silently
+    // undercounts a budget.
     const california = await run(LOS_ANGELES, new Date('2026-09-21T05:30:00Z'));
     expect(california.expensesFloor).toBe('2026-01-01');
+    // And it ends with the year, so next year's scheduled rows are not this one's.
+    expect(california.expensesEnd).toBe('2026-12-31');
+  });
+
+  it('on the family\'s New Year\'s Eve the year is theirs, not Greenwich\'s', async () => {
+    // 21:30 on Thursday 31 December 2026 in Los Angeles is already 2027 at
+    // Greenwich. A Greenwich floor of 1 January 2027 read none of the family's
+    // year. Its week, Sunday 27 December to Saturday 2 January, runs on into
+    // January, so the read does too.
+    const NEW_YEARS_EVE_IN_CALIFORNIA = new Date('2027-01-01T05:30:00Z');
+    const california = await run(LOS_ANGELES, NEW_YEARS_EVE_IN_CALIFORNIA);
+    expect(california.expensesFloor).toBe('2026-01-01');
+    expect(california.expensesEnd).toBe('2027-01-02');
+
+    // The same instant is Friday 1 January 2027 in Tokyo: its year is 2027,
+    // and its week began on Sunday 27 December, so the read reaches back to it.
+    const tokyo = await run(TOKYO, NEW_YEARS_EVE_IN_CALIFORNIA);
+    expect(tokyo.expensesFloor).toBe('2026-12-27');
+    expect(tokyo.expensesEnd).toBe('2027-12-31');
   });
 });

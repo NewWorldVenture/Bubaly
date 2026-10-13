@@ -9,7 +9,8 @@
 
 import type { BudgetPeriod } from '@/lib/database.types';
 import type { LocaleCode } from '@/lib/i18n/locales';
-import { periodWindowStart, type BudgetRow, type ExpenseRow } from '@/lib/operating-index/inputs';
+import { canonicalBudgets, type BudgetRow, type ExpenseRow } from '@/lib/operating-index/inputs';
+import { periodWindow } from '@/lib/finance/budget-periods';
 import { formatCents } from '@/lib/wallet/ledger';
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
@@ -215,6 +216,13 @@ export function detectRoutineAdherence(routines: RoutineRow[], completions: Rout
 const norm = (c: string | null | undefined) => (c ?? '').trim().toLowerCase();
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/** The day before a `YYYY-MM-DD` key: date arithmetic, on no one's clock. */
+function dayBefore(dayKey: string): string {
+  const [y, m, d] = dayKey.split('-').map(Number);
+  const prev = new Date(Date.UTC(y, m - 1, d - 1));
+  return `${String(prev.getUTCFullYear()).padStart(4, '0')}-${String(prev.getUTCMonth() + 1).padStart(2, '0')}-${String(prev.getUTCDate()).padStart(2, '0')}`;
+}
+
 /**
  * A budget amount (`budgets.amount` and `transactions.amount` are DOLLARS) in the
  * reader's format. It was `$${v.toLocaleString('en-US')}` — the symbol written by
@@ -282,24 +290,32 @@ export function signalWordsFor(
  * PRIOR period was over too, i.e. the overspend is a pattern, not a one-off.
  * Complements FOI's overspent-budget count with a transparent, dismissable,
  * evidence-carrying signal the family can act on. Pure + deterministic.
+ *
+ * `today` is the FAMILY's day key. Each period is the budget's own on it, both
+ * ends (periodWindow: Sunday to Saturday, the month, the year), as FOI's count
+ * judges it: it began on Greenwich's day with Monday weeks and had no end, so
+ * next month's scheduled rent was this month's drift. One budget per category,
+ * the one the family keeps (canonicalBudgets); a legacy duplicate's smaller
+ * limit flagged a category its own budget was not over, under the same
+ * subject key as the real one.
  */
-export function detectBudgetDrift(budgets: BudgetRow[], expenses: ExpenseRow[], now: Date, locale: LocaleCode, t: Translate): FamilySignal[] {
+export function detectBudgetDrift(budgets: BudgetRow[], expenses: ExpenseRow[], today: string, locale: LocaleCode, t: Translate): FamilySignal[] {
   const out: FamilySignal[] = [];
-  for (const b of budgets) {
+  for (const b of canonicalBudgets(budgets)) {
     if (!b.amount || b.amount <= 0) continue;
     const cat = norm(b.category);
     if (!cat) continue;
 
-    const curStart = periodWindowStart(b.period, now);
-    const prevStart = periodWindowStart(b.period, new Date(Date.parse(curStart) - 86_400_000));
+    const cur = periodWindow(b.period, today);
+    const prev = periodWindow(b.period, dayBefore(cur.from));
 
     let spentNow = 0;
     let spentPrev = 0;
     for (const e of expenses) {
       if (norm(e.category) !== cat) continue;
       const amt = Number(e.amount) || 0;
-      if (e.date >= curStart) spentNow += amt;
-      else if (e.date >= prevStart) spentPrev += amt;
+      if (e.date >= cur.from && e.date <= cur.to) spentNow += amt;
+      else if (e.date >= prev.from && e.date <= prev.to) spentPrev += amt;
     }
 
     if (spentNow <= b.amount) continue; // only flag when currently over cap
@@ -334,6 +350,8 @@ export interface HardSignalInputs {
   routineCompletions: RoutineCompletion[];
   budgets?: BudgetRow[];
   expenses?: ExpenseRow[];
+  /** The FAMILY's calendar day (YYYY-MM-DD) each budget's period is judged on. */
+  today: string;
 }
 
 /**
@@ -347,6 +365,6 @@ export function buildHardSignals(inp: HardSignalInputs, now: Date, locale: Local
     ...detectStressWindows(inp.events ?? [], inp.conflicts ?? [], inp.overdue ?? [], now),
     ...detectChoreConflicts(inp.chores ?? []),
     ...detectRoutineAdherence(inp.routines ?? [], inp.routineCompletions ?? [], now),
-    ...detectBudgetDrift(inp.budgets ?? [], inp.expenses ?? [], now, locale, t),
+    ...detectBudgetDrift(inp.budgets ?? [], inp.expenses ?? [], inp.today, locale, t),
   ].sort((a, b) => b.score - a.score);
 }

@@ -17027,5 +17027,9 @@
   "savings.overYourWeeklyBudget": "Vous dépassez de {amount} votre budget hebdomadaire {category}.",
   "savings.overYourMonthlyBudget": "Vous dépassez de {amount} votre budget mensuel {category}.",
   "savings.overYourYearlyBudget": "Vous dépassez de {amount} votre budget annuel {category}.",
-  "budgetAnalysisCard.monthsBudgetedSpending": "{month} · les dépenses budgétées du mois, les plafonds hebdomadaires et annuels comptés pour leur part mensuelle"
+  "budgetAnalysisCard.monthsBudgetedSpending": "{month} · les dépenses budgétées du mois, les plafonds hebdomadaires et annuels comptés pour leur part mensuelle",
+  "mobileAssistant.periodWeekly": "Hebdomadaire",
+  "mobileAssistant.periodMonthly": "Mensuel",
+  "mobileAssistant.periodYearly": "Annuel",
+  "mobileAssistant.monthsBudgetedSpending": "{month} · les dépenses budgétées du mois, les plafonds hebdomadaires et annuels comptés pour leur part mensuelle"
 }
