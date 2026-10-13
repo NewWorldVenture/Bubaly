@@ -32,14 +32,19 @@ type FocusItem = {
 };
 
 export function FocusModule() {
-  const { familyId, userId, selfMember } = useApp();
-  return <FocusQueue key={`${familyId}:${userId}:${selfMember?.id ?? 'none'}`} />;
+  const { familyId, userId, selfMember, role } = useApp();
+  return <FocusQueue key={`${familyId}:${userId}:${selfMember?.id ?? 'none'}:${role}`} />;
 }
 
 function FocusQueue() {
   const { fmtTime } = useFormat();
   const tr = useTranslations();
-  const { familyId, userId } = useApp();
+  const { familyId, userId, role } = useApp();
+  // A guest views the household's to-dos and changes none of them: the to-do
+  // page offers it no tick-off and its actions refuse one (S16). Focus wrote
+  // `is_done` from the browser, so it leaves the family's to-dos out of a
+  // guest's queue rather than hand it a "Mark done" the list itself withholds.
+  const guest = role === 'guest';
   const { success, error: toastError } = useToast();
   const [items, setItems] = useState<FocusItem[] | null>(null);
   const [index, setIndex] = useState(0);
@@ -80,8 +85,10 @@ function FocusQueue() {
               .eq('family_id', familyId).eq('member_id', myMemberId).in('status', ['todo', 'in_progress'])
               .order('due_at', { nullsFirst: false }).limit(20)
           : Promise.resolve({ data: [] as { id: string; due_at: string | null; chores: { title: string } | null }[], error: null }),
-        supabase.from('todo_items').select('id, title, is_done')
-          .eq('family_id', familyId).eq('is_done', false).order('created_at').limit(20),
+        guest
+          ? Promise.resolve({ data: [] as { id: string; title: string; is_done: boolean }[], error: null })
+          : supabase.from('todo_items').select('id, title, is_done')
+            .eq('family_id', familyId).eq('is_done', false).order('created_at').limit(20),
       ]);
 
       if (!active.current || version !== loadVersion.current) return;
@@ -113,7 +120,7 @@ function FocusQueue() {
         setItems([]);
       }
     }
-  }, [familyId, userId, clock, fmtTime]);
+  }, [familyId, userId, guest, clock, fmtTime]);
 
   useEffect(() => {
     active.current = true;

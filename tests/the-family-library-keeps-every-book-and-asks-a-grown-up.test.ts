@@ -228,6 +228,24 @@ describe('S13 — content reaches every child\'s library only from a grown-up', 
       expect(video.close).toHaveBeenCalled();
     });
 
+    // A body the publisher names only as bytes is sniffed by the browser's
+    // player, a video included: a child or a teen gets what is named as audio.
+    it.each(['child', 'teen'])('a %s is refused an unnamed octet stream, and the upstream socket is closed', async (role) => {
+      h.role = role;
+      const bytes = upstream('application/octet-stream');
+      h.openPublicMedia.mockResolvedValue(bytes);
+
+      const response = await fetchMedia();
+      expect(response.status).toBe(415);
+      expect(bytes.close).toHaveBeenCalled();
+    });
+
+    it('a parent still streams an unnamed octet stream', async () => {
+      h.role = 'parent';
+      h.openPublicMedia.mockResolvedValue(upstream('application/octet-stream'));
+      expect((await fetchMedia()).status).toBe(200);
+    });
+
     it('a child still streams audio, and a parent still streams video', async () => {
       h.role = 'child';
       h.openPublicMedia.mockResolvedValue(upstream('audio/mpeg'));

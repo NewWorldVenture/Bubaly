@@ -72,8 +72,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ item
     // its player is an <audio> element, and a media address is anything a
     // member typed — so this route, served from Bubaly's own origin, would
     // otherwise play any public video to a child straight past the filter a
-    // parent set on the device for the video's real host.
-    if (isYoung(ctx.active.role) && (upstream.headers['content-type'] ?? '').startsWith('video/')) {
+    // parent set on the device for the video's real host. Only what the
+    // publisher names as audio: an `application/octet-stream` body is whatever
+    // bytes it is, and a browser's media player sniffs a video out of it.
+    if (isYoung(ctx.active.role) && !(upstream.headers['content-type'] ?? '').startsWith('audio/')) {
       upstream.close();
       return new NextResponse('Unsupported', { status: 415 });
     }
