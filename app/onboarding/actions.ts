@@ -62,8 +62,18 @@ export type UnsentInvite = { id: string; email: string };
  */
 const ONBOARDING_INVITE_EMAIL_CAP = 5;
 
-/** One welcome email per account in this window, however often finalize runs. */
-const WELCOME_EMAIL_WINDOW_MS = 30 * 24 * 3_600_000;
+/**
+ * The welcome email goes once per ACCOUNT, and the record of it is kept in the
+ * auth user's app_metadata, which only the service role can write (the kid
+ * login's marker lives there too). The limiter bucket used to be that record,
+ * with a 30-day window, but rate_limit_prune (0156) deletes buckets a day old
+ * and the automations cron runs it daily — so a replayed finish could send
+ * another welcome about once a day. The limiter stays for what it can do:
+ * stop two finishes racing each other from both sending before either has
+ * written the record.
+ */
+const WELCOME_EMAIL_SENT_KEY = 'welcome_email_sent_at';
+const WELCOME_EMAIL_RACE_WINDOW_MS = 24 * 3_600_000;
 
 function onboardingFailure(operation: string, error: unknown, fallback: string): { ok: false; error: string } {
   console.error(`[onboarding] ${operation} failed`, error);
@@ -402,8 +412,8 @@ export async function finalizeOnboardingAction(input: {
     goals: string[]; referralSource?: string; referralDetail?: string;
   };
   members: Array<
-    | { kind: 'local'; name: string; role: MemberRole; birthday?: string; color?: string }
-    | { kind: 'invite'; email: string; role: MemberRole }
+    | { kind: 'local'; id?: string; name: string; role: MemberRole; birthday?: string; color?: string }
+    | { kind: 'invite'; id?: string; email: string; role: MemberRole }
   >;
   appearance?: { color?: string; age?: number | null; avatarUrl?: string; pin?: string };
   calendarImport?: { source: string; events: BriefEvent[]; receipt?: string };
@@ -659,10 +669,24 @@ export async function finalizeOnboardingAction(input: {
   // calendar receipt (lib/onboarding/flow.ts), and any step can be edited. Each
   // difference was a new key for every member and invite, so every child was
   // added twice and every invitee got a second invite and a second email. The
-  // household key names only the account and the family it is setting up, so
-  // the same member at the same place in the list is the same row whatever
-  // else changed. The calendar keeps `runKey`: its rows ARE the payload.
+  // household key names only the account and the family it is setting up. The
+  // calendar keeps `runKey`: its rows ARE the payload.
+  //
+  // Within the household, a member is named by the id the draft gave it when
+  // it was added (lib/onboarding/draft.ts), not by its place in the list and
+  // everything in it. Keyed by (index, content), removing an earlier member
+  // or fixing a name or a role before the retry made every later member a
+  // new row, and every later invitee a new invite. An invite is keyed by its
+  // address too: a corrected address is someone else to invite. A payload
+  // without ids (an older wizard), or one that sends an id twice, keeps the
+  // (index, content) key.
   const householdKey = onboardingRunKey(auth.user.id, { familyId, scope: 'onboarding-household' });
+  const draftIdUses = new Map<string, number>();
+  for (const m of members) if (m.id) draftIdUses.set(m.id, (draftIdUses.get(m.id) ?? 0) + 1);
+  const DRAFT_ID_SLOT = -1;
+  const memberSlot = (index: number, m: (typeof members)[number]): [number, unknown] => (m.id && draftIdUses.get(m.id) === 1
+    ? [DRAFT_ID_SLOT, m.kind === 'invite' ? { draftId: m.id, email: m.email.trim().toLowerCase() } : { draftId: m.id }]
+    : [index, m]);
   for (const [index, m] of members.entries()) {
     if (m.kind !== 'local') continue;
     const { error: memberErr } = await admin.from('family_members').upsert({
@@ -671,7 +695,7 @@ export async function finalizeOnboardingAction(input: {
       display_name: m.name,
       color: m.color ?? null,
       birthday: m.birthday || null,
-      onboarding_key: onboardingItemKey(householdKey, 'member', index, m),
+      onboarding_key: onboardingItemKey(householdKey, 'member', ...memberSlot(index, m)),
     }, { onConflict: 'family_id,onboarding_key' });
     if (memberErr) return onboardingFailure(`member "${m.name}" creation`, memberErr, 'Could not add all household members.');
   }
@@ -692,7 +716,7 @@ export async function finalizeOnboardingAction(input: {
         email: m.email,
         role: m.role,
         invited_by: auth.user.id,
-        onboarding_key: onboardingItemKey(householdKey, 'invite', index, m),
+        onboarding_key: onboardingItemKey(householdKey, 'invite', ...memberSlot(index, m)),
       }, { onConflict: 'family_id,onboarding_key', ignoreDuplicates: true })
       .select('id, token')
       .maybeSingle();
@@ -707,7 +731,7 @@ export async function finalizeOnboardingAction(input: {
         .from('invites')
         .select('token')
         .eq('family_id', familyId)
-        .eq('onboarding_key', onboardingItemKey(householdKey, 'invite', index, m))
+        .eq('onboarding_key', onboardingItemKey(householdKey, 'invite', ...memberSlot(index, m)))
         .maybeSingle();
       if (existingInviteErr || !existingInvite) {
         return existingInviteErr
@@ -921,20 +945,31 @@ export async function finalizeOnboardingAction(input: {
   //     a value the caller types, checked for shape and nothing else — and
   //     finalize can be replayed (a client may set its own onboarding_progress
   //     back to in_progress, 0454), so every replay mailed any address Bubaly's
-  //     own sender, with a caller-chosen name in the heading. The marker that
-  //     says it was sent is the server's limiter bucket (rate_limit_hit), not
-  //     a column the client can rewrite.
+  //     own sender, with a caller-chosen name in the heading. The record that
+  //     says it was sent is in app_metadata (WELCOME_EMAIL_SENT_KEY), not in a
+  //     column the client can rewrite, nor in a limiter bucket that is pruned
+  //     after a day.
   try {
     const to = auth.user.email;
-    const once = to
-      ? await enforceRequestRateLimit(admin, `email:welcome:${auth.user.id}`, { limit: 1, windowMs: WELCOME_EMAIL_WINDOW_MS })
+    const welcomed = Boolean(auth.user.app_metadata?.[WELCOME_EMAIL_SENT_KEY]);
+    const once = to && !welcomed
+      ? await enforceRequestRateLimit(admin, `email:welcome:${auth.user.id}`, { limit: 1, windowMs: WELCOME_EMAIL_RACE_WINDOW_MS })
       : { ok: false as const };
     if (to && once.ok) {
-      await sendReactEmail({
-        to,
-        subject: 'Welcome to Bubaly 🎉',
-        react: React.createElement(WelcomeEmail, { name: profile.firstName.trim() || 'there' }),
+      // Recorded before it is sent. A welcome whose record could not be
+      // written is not sent: the record is what stops the next replay.
+      const { error: recordError } = await admin.auth.admin.updateUserById(auth.user.id, {
+        app_metadata: { [WELCOME_EMAIL_SENT_KEY]: new Date().toISOString() },
       });
+      if (recordError) {
+        console.error('[onboarding] welcome email not sent: could not record it', recordError);
+      } else {
+        await sendReactEmail({
+          to,
+          subject: 'Welcome to Bubaly 🎉',
+          react: React.createElement(WelcomeEmail, { name: profile.firstName.trim() || 'there' }),
+        });
+      }
     }
   } catch (e) {
     console.error('[onboarding] welcome email failed', e);

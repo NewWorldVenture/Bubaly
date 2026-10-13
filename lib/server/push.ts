@@ -65,24 +65,52 @@ export const PUSH_DISPATCH_BUDGET_MS = 45_000;
  * per-account cap allows ten — so three devices that never answered used the
  * 45 s, and every family's pushes after them in the batch were skipped, on
  * every run that reached them. Now a recipient's web pushes for one
- * notification go out together and share one deadline, so any number of
- * stalling devices costs one. And a recipient is waited on in full once per
- * run: after a stalled batch its later ones get this much, and a second stalled
- * batch ends its web pushes for the run (WEB_PUSH_STALLS_PER_RUN), so devices
- * that take turns to stall — one per notification — cannot spend it either.
- * A member whose old laptop never answers still gets every notification on the
- * phone: the laptop is not sent to again in the run, and a healthy push service
- * answers well inside this.
+ * notification go out together, each with its own deadline from the moment it
+ * is sent (not from the first one: the native sends and rechecks between them
+ * are not theirs to pay for), so any number of stalling devices costs one. And
+ * a recipient is waited on in full once per run: after a slow batch its later
+ * ones get this much, and a second slow batch ends its web pushes for the run
+ * (WEB_PUSH_STALLS_PER_RUN), so devices that take turns to stall — one per
+ * notification — cannot spend it either. A member whose old laptop never
+ * answers still gets every notification on the phone: the laptop is not sent to
+ * again in the run, and a healthy push service answers well inside this.
  */
 export const WEB_PUSH_DEADLINE_AFTER_STALL_MS = 3_000;
-/** Stalled batches after which a recipient's remaining web pushes this run are failed unsent. */
+/** Slow batches after which a recipient's remaining web pushes this run are failed unsent. */
 export const WEB_PUSH_STALLS_PER_RUN = 2;
 
 /**
- * Shared across one dispatch run: when it must stop, devices already known not
- * to answer, and how many times each recipient has been waited on in vain.
+ * The bound on the TIME a recipient, and a family, may keep one run waiting on
+ * web pushes: their endpoint lookups and their sends, every notification
+ * together.
+ *
+ * Counting aborted sends was not a bound on time. A device that answered just
+ * inside the deadline was never aborted, so it was waited on for 15 s on every
+ * notice of the run and everyone after it was skipped; and the count was kept
+ * per account, so a parent's household — the child logins they create can each
+ * register a device, and one whole-family notice reaches them all — was the
+ * same three stalls on three accounts. Now each send is given the least of its
+ * own deadline and what its recipient, its family and the run have left; a
+ * batch that kept the run waiting WEB_PUSH_DEADLINE_AFTER_STALL_MS or more
+ * counts toward the cut-off whether it was answered or not; and once the time
+ * is spent, the rest of that recipient's or family's web pushes wait for the
+ * next run (skipped, so they stay pending). A family may spend half the run, so
+ * the other half is always there for everyone else. Native sends (FCM, APNs)
+ * and the permission rechecks are not counted: their hosts are not the
+ * member's to choose.
  */
-type DispatchBudget = { endsAt: number; stalled: Set<string>; stalls: Map<string, number> };
+export const WEB_PUSH_RECIPIENT_ALLOWANCE_MS = WEB_PUSH_DEADLINE_MS + WEB_PUSH_DEADLINE_AFTER_STALL_MS;
+export const WEB_PUSH_FAMILY_ALLOWANCE_MS = PUSH_DISPATCH_BUDGET_MS / 2;
+
+/**
+ * Shared across one dispatch run: when it must stop, devices already known not
+ * to answer, how many slow batches each recipient has had, and how long each
+ * recipient and each family has kept the run waiting on web pushes.
+ */
+type DispatchBudget = {
+  endsAt: number; stalled: Set<string>; stalls: Map<string, number>;
+  waitedByRecipient: Map<string, number>; waitedByFamily: Map<string, number>;
+};
 
 type Settled<T> = { ok: true; value: T } | { ok: false; error: unknown };
 /** Start `run` now and capture its outcome, so it can be awaited later and never rejects unobserved. */
@@ -269,32 +297,53 @@ async function sendPushDevicesToUser(
   const vapid = ensureVapid();
   const body = JSON.stringify({ title: payload.title, body: payload.body ?? '', url: payload.url ?? '/dashboard' });
 
-  // One recipient, one deadline (WEB_PUSH_DEADLINE_AFTER_STALL_MS): every web
-  // push below is started in turn and waited on together after the loop.
+  // One recipient, many web pushes: each is started in turn without waiting
+  // for the one before, and the ones still running are waited on after the loop.
   const stalls = budget?.stalls.get(userId) ?? 0;
   const cutOff = stalls >= WEB_PUSH_STALLS_PER_RUN;
   const deadlineMs = stalls === 0 ? WEB_PUSH_DEADLINE_MS : WEB_PUSH_DEADLINE_AFTER_STALL_MS;
+  // How long this call has kept the run waiting on web pushes: their endpoint
+  // lookups, and the sends still running once the loop is done. The time spent
+  // on native sends and rechecks meanwhile is not counted (see
+  // WEB_PUSH_RECIPIENT_ALLOWANCE_MS), though the web sends run through it.
+  let waited = 0;
+  async function waitFor<T>(pending: Promise<T>): Promise<T> {
+    const from = Date.now();
+    try { return await pending; } finally { waited += Date.now() - from; }
+  }
+  /** What the next web send may take: its own deadline, cut to what its recipient, its family and the run have left. */
+  function allowance(): number {
+    if (!budget) return deadlineMs;
+    return Math.min(
+      deadlineMs,
+      WEB_PUSH_RECIPIENT_ALLOWANCE_MS - (budget.waitedByRecipient.get(userId) ?? 0) - waited,
+      familyId === undefined ? Infinity : WEB_PUSH_FAMILY_ALLOWANCE_MS - (budget.waitedByFamily.get(familyId) ?? 0) - waited,
+      budget.endsAt - Date.now(),
+    );
+  }
   type Device = (typeof devices)[number];
   const sendable = (d: Device) => d.provider === 'webpush' && !receipts?.delivered.has(d.id)
-    && !budget?.stalled.has(d.id) && !cutOff && !(budget && Date.now() >= budget.endsAt)
+    && !budget?.stalled.has(d.id) && !cutOff && allowance() > 0
     && Boolean(vapid && d.endpoint && d.p256dh && d.auth);
   // The endpoint checks too: each is a DNS lookup on a host the member chose,
   // bounded at 3 s apiece, so ten of them in turn were half a minute.
   const endpointChecks = new Map(devices.filter(sendable)
     .map((d) => [d.id, settledCall(() => isDeliverablePushEndpoint(d.endpoint ?? ''))] as const));
-  let batchEndsAt: number | undefined;
-  const inFlight: { device: Device; outcome: Promise<Settled<void>> }[] = [];
-  /** Count one finished web push: sent, pruned or failed. True when it stalled. */
-  async function settleWebPush(d: Device, sent: Settled<void>): Promise<boolean> {
+  const sends: Promise<Settled<void>>[] = [];
+  const settled: Promise<void>[] = [];
+  /** Count one finished web push — sent, pruned or failed — as soon as it finishes. */
+  async function settleWebPush(d: Device, sent: Settled<void>, givenMs: number): Promise<void> {
     if (sent.ok) {
       result.sent++;
       await recordDelivery(supabase, receipts, d.id);
-      return false;
+      return;
     }
     const err = sent.error;
-    const stalled = err instanceof WebPushAborted;
-    if (stalled) {
-      budget?.stalled.add(d.id);
+    // Cut short by what was left of an allowance, it says nothing about the
+    // device; given a real deadline and not answering inside it, it is not
+    // waited on again this run.
+    if (err instanceof WebPushAborted) {
+      if (givenMs >= WEB_PUSH_DEADLINE_AFTER_STALL_MS) budget?.stalled.add(d.id);
       console.error('[push] web push abandoned', { deviceId: d.id, reason: err.message });
     }
     const status = (err as { statusCode?: number } | null)?.statusCode;
@@ -324,7 +373,6 @@ async function sendPushDevicesToUser(
     } else {
       result.failed++;
     }
-    return stalled;
   }
 
   for (const d of devices) {
@@ -333,8 +381,8 @@ async function sendPushDevicesToUser(
     // A device that already ran out its deadline in this run is not waited on
     // again for the next notification; it is a failure, retried next run.
     if (budget?.stalled.has(d.id)) { result.failed++; continue; }
-    // A recipient already waited on in vain twice this run: its web pushes are
-    // failures, retried next run, rather than a third wait.
+    // A recipient already slow twice this run: its web pushes are failures,
+    // retried next run, rather than a third wait.
     if (d.provider === 'webpush' && cutOff) { result.failed++; continue; }
     // The run's time is spent: leave this device for the next one. Skipped,
     // not failed, so the notification stays pending without being expired.
@@ -342,13 +390,16 @@ async function sendPushDevicesToUser(
     try {
       if (d.provider === 'webpush') {
         if (!vapid || !d.endpoint || !d.p256dh || !d.auth) { result.skipped++; continue; }
+        // The recipient's or the family's time for web pushes is spent: as
+        // with the run's, this device waits for the next run.
+        if (allowance() <= 0) { result.skipped++; continue; }
         // Re-checked HERE and not only at registration: the endpoint is read
         // back out of a table, so the row outlives the check that admitted it,
         // and the DNS answer that made it safe can change underneath it. The
         // result is cached per hostname, so a family's real push host costs one
         // lookup every five minutes, not one per notification. Audit C3-S5-03.
         const endpoint = d.endpoint;
-        const check = await (endpointChecks.get(d.id) ?? settledCall(() => isDeliverablePushEndpoint(endpoint)));
+        const check = await waitFor(endpointChecks.get(d.id) ?? settledCall(() => isDeliverablePushEndpoint(endpoint)));
         if (!check.ok) throw check.error;
         if (!check.value) {
           console.error('[push] endpoint no longer resolves somewhere we will POST to', { deviceId: d.id });
@@ -357,10 +408,16 @@ async function sendPushDevicesToUser(
         }
         // Recheck after asynchronous endpoint validation, immediately before send.
         if (!(await stillPermitted())) break;
-        batchEndsAt ??= Date.now() + deadlineMs;
-        const endsAt = batchEndsAt;
+        // Its own deadline, from now: not one shared with the sends before it.
+        const givenMs = allowance();
+        if (givenMs <= 0) { result.skipped++; continue; }
         const keys = { p256dh: d.p256dh, auth: d.auth };
-        inFlight.push({ device: d, outcome: settledCall(() => sendWebPushBounded({ endpoint, keys }, body, endsAt)) });
+        const sent = settledCall(() => sendWebPushBounded({ endpoint, keys }, body, givenMs));
+        sends.push(sent);
+        // Counted and receipted as it finishes, not when the slowest one does:
+        // a worker killed while a slow send is pending has still recorded the
+        // devices that already have it, so the next run does not buzz them again.
+        settled.push(sent.then((outcome) => settleWebPush(d, outcome, givenMs)).catch(() => { result.failed++; }));
       } else if (d.provider === 'fcm' || d.provider === 'apns') {
         if (!d.token) { result.skipped++; continue; }
         if (!(await stillPermitted())) break;
@@ -380,17 +437,17 @@ async function sendPushDevicesToUser(
     }
   }
 
-  // The web pushes started above, all under the one deadline. Waited on even
-  // when a recheck withheld a later device: these were already sent.
-  let stalledNow = false;
-  for (const { device, outcome } of inFlight) {
-    try {
-      if (await settleWebPush(device, await outcome)) stalledNow = true;
-    } catch {
-      result.failed++;
-    }
+  // The web pushes still running. Waited on even when a recheck withheld a
+  // later device: these were already sent.
+  await waitFor(Promise.all(sends));
+  await Promise.all(settled);
+  if (budget) {
+    budget.waitedByRecipient.set(userId, (budget.waitedByRecipient.get(userId) ?? 0) + waited);
+    if (familyId !== undefined) budget.waitedByFamily.set(familyId, (budget.waitedByFamily.get(familyId) ?? 0) + waited);
+    // Slow is slow whether or not the device answered in the end: one that
+    // answers just inside the deadline costs the run as much as one that never does.
+    if (waited >= WEB_PUSH_DEADLINE_AFTER_STALL_MS) budget.stalls.set(userId, stalls + 1);
   }
-  if (stalledNow && budget) budget.stalls.set(userId, stalls + 1);
   return result;
 }
 
@@ -411,8 +468,8 @@ class WebPushAborted extends Error {
 async function sendWebPushBounded(
   subscription: { endpoint: string; keys: { p256dh: string; auth: string } },
   body: string,
-  /** The absolute instant this send is abandoned at, shared by its recipient's batch. */
-  endsAt: number,
+  /** How long this send may take, counted from now: its own, never shared with another send. */
+  deadlineMs: number,
 ): Promise<void> {
   const sockets = new Set<{ destroy: () => void }>();
   let abort: (error: Error) => void = () => {};
@@ -437,7 +494,7 @@ async function sendWebPushBounded(
     }
   }
   const agent = new BoundedAgent({ keepAlive: false });
-  const remaining = Math.min(WEB_PUSH_DEADLINE_MS, Math.max(0, endsAt - Date.now()));
+  const remaining = Math.min(WEB_PUSH_DEADLINE_MS, Math.max(0, deadlineMs));
   const timer = setTimeout(() => stop('web push deadline exceeded'), remaining);
   try {
     await Promise.race([
@@ -559,10 +616,12 @@ export async function dispatchPendingPushes(
   opts: { familyId?: string; limit?: number; now?: Date; budgetMs?: number } = {},
 ): Promise<{ notifications: number; result: PushResult }> {
   // The whole run's sending time (PUSH_DISPATCH_BUDGET_MS). What one recipient
-  // may spend of it is bounded separately (WEB_PUSH_DEADLINE_AFTER_STALL_MS).
+  // or one family may spend of it is bounded separately
+  // (WEB_PUSH_RECIPIENT_ALLOWANCE_MS, WEB_PUSH_FAMILY_ALLOWANCE_MS).
   // Wall-clock, not `opts.now`, which only decides what is due.
   const budget: DispatchBudget = {
     endsAt: Date.now() + (opts.budgetMs ?? PUSH_DISPATCH_BUDGET_MS), stalled: new Set(), stalls: new Map(),
+    waitedByRecipient: new Map(), waitedByFamily: new Map(),
   };
   const limit = opts.limit ?? 200;
   if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new Error('Push batch limit must be an integer from 1 to 200.');

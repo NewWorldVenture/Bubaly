@@ -6,7 +6,7 @@ import { createServer, createServiceClient } from '@/lib/supabase/server';
 import {
   REMOVED_MEMBER_PATCH, ROLE_ORDER, assignableMemberRoles, canRemoveMember, isManager, rolesForAKidLogin, type MemberRole,
 } from '@/lib/constants/roles';
-import { isChildLoginAccount, revokeRemovedChildLogin, type ChildLoginRevocation } from '@/lib/server/child-account';
+import { memberHasAKidLogin, revokeRemovedChildLogin, type ChildLoginRevocation } from '@/lib/server/child-account';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { forgetMemberLocation } from '@/lib/location/retention';
 import { closePendingInvitesFor } from '@/lib/server/member-invites';
@@ -146,15 +146,7 @@ export async function updateFamilyMemberAction(input: {
       // Never a manager behind a kid PIN (the held 0512): a child_logins row,
       // or an account that is itself a kid login. A lookup that cannot answer
       // refuses the promotion rather than allowing it.
-      const service = createServiceClient();
-      const { data: logins, error: loginError } = await service.from('child_logins')
-        .select('id').eq('member_id', target.id).eq('family_id', familyId).limit(1);
-      let kidLogin = Boolean(loginError) || (logins?.length ?? 0) > 0;
-      if (!kidLogin && target.user_id) {
-        const { data: account, error: accountError } = await service.auth.admin.getUserById(target.user_id);
-        kidLogin = Boolean(accountError) || !account?.user
-          || await isChildLoginAccount(service, { id: target.user_id, email: account.user.email, user_metadata: account.user.user_metadata });
-      }
+      const kidLogin = await memberHasAKidLogin(createServiceClient(), { id: target.id, family_id: familyId, user_id: target.user_id });
       if (kidLogin) allowed = rolesForAKidLogin(allowed, target.role);
       if (!allowed.includes(patch.role)) {
         return kidLogin
