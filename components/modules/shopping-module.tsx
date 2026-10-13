@@ -662,22 +662,39 @@ function BoughtModal({ listId, items, onClose, onRefresh, onDone }: {
         merchant: merchant.trim() || null,
       });
       if (!result.ok) { toastError(result.error); return; }
+      // Every line's outcome is said, whatever happened to the lines beside
+      // it. A trip is settled line by line, so one result can hold all four:
+      // lines counted, lines left to count by hand, lines that failed, lines
+      // put away that would not clear. AUD-1041-PUTAWAY-RESULTS.
+      if (result.pantryFailed.length > 0) {
+        toastError(t('shoppingModule.couldNotPutTheseIn', {
+          names: result.pantryFailed.map((f) => f.name).join(', '),
+        }));
+      }
+      // Put away but still ticked — the one case where a second tap WOULD
+      // double it, so the family is told rather than left to find out.
+      if (result.clearFailed.length > 0) {
+        toastError(t('shoppingModule.theseAreInYourPantry', {
+          names: result.clearFailed.map((f) => f.name).join(', '),
+        }));
+      }
+      // Bought and off the list, but counted in another unit in the pantry:
+      // the family is told which, rather than shown a sum of kilograms and cups.
+      // Said even when another line failed: the line is already un-ticked (and
+      // normally off the list), so the retry never reaches it and this is the
+      // only time it is named.
+      if (result.unitMismatch.length > 0) {
+        toastError(t('shoppingModule.countTheseInThePantry', {
+          names: result.unitMismatch.map((m) => `${m.name} (${m.bought} → ${m.stocked})`).join(', '),
+        }));
+      }
+      const stocked = t('shoppingModule.putItemsInYourPantry', { count: result.pantryUpdated.length });
       // A line is put away and taken off the list together, so what is left
       // checked is exactly what did not land: tapping again retries those and
-      // cannot add the ones that did a second time. The modal stays open.
+      // cannot add the ones that did a second time. The modal stays open, and
+      // keeps the amount: no purchase is recorded until the shop completes.
       if (result.pantryFailed.length > 0 || result.clearFailed.length > 0) {
-        if (result.pantryFailed.length > 0) {
-          toastError(t('shoppingModule.couldNotPutTheseIn', {
-            names: result.pantryFailed.map((f) => f.name).join(', '),
-          }));
-        }
-        // Put away but still ticked — the one case where a second tap WOULD
-        // double it, so the family is told rather than left to find out.
-        if (result.clearFailed.length > 0) {
-          toastError(t('shoppingModule.theseAreInYourPantry', {
-            names: result.clearFailed.map((f) => f.name).join(', '),
-          }));
-        }
+        if (result.pantryUpdated.length > 0) success(stocked);
         // What DID land is already off the list, so the list on screen — and
         // this modal's own "what you bought" — must be re-read before the
         // family taps again, or they would be ticking rows that no longer
@@ -685,14 +702,6 @@ function BoughtModal({ listId, items, onClose, onRefresh, onDone }: {
         onRefresh();
         return;
       }
-      // Bought and off the list, but counted in another unit in the pantry:
-      // the family is told which, rather than shown a sum of kilograms and cups.
-      if (result.unitMismatch.length > 0) {
-        toastError(t('shoppingModule.countTheseInThePantry', {
-          names: result.unitMismatch.map((m) => `${m.name} (${m.bought} → ${m.stocked})`).join(', '),
-        }));
-      }
-      const stocked = t('shoppingModule.putItemsInYourPantry', { count: result.pantryUpdated.length });
       if (result.purchaseError) toastError(`${stocked} ${t('shoppingModule.thePurchaseWasNotRecorded', { reason: result.purchaseError })}`);
       else if (result.purchaseRecorded) success(`${stocked} ${t('shoppingModule.purchaseRecordedOnTheHousehold')}`);
       else success(stocked);
