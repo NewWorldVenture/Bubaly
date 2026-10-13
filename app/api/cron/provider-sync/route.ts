@@ -95,10 +95,13 @@ export async function GET(req: NextRequest) {
   let reached: string | null = null;
   const moveCursorTo = async (id: string) => {
     if (id === cursorAt) return true;
-    const { error: cursorWriteError } = await admin.from('app_settings')
-      .upsert({ key: CURSOR_KEY, value: { id }, updated_at: new Date().toISOString() }, { onConflict: 'key' });
-    if (cursorWriteError) {
-      console.error('Provider-sync cursor write failed:', cursorWriteError);
+    const { data: saved, error: cursorWriteError } = await admin.from('app_settings')
+      .upsert({ key: CURSOR_KEY, value: { id }, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+      .select('key').maybeSingle();
+    // Read back, as push dispatch's cursor is: a write that names no row is
+    // unconfirmed, and the run does not go on as though the cursor moved.
+    if (cursorWriteError || saved?.key !== CURSOR_KEY) {
+      console.error('Provider-sync cursor write failed:', cursorWriteError ?? { key: CURSOR_KEY, error: 'no row written' });
       return false;
     }
     cursorAt = id;

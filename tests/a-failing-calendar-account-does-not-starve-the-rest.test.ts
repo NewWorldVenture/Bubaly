@@ -132,7 +132,25 @@ describe('the cursor', () => {
       if (table !== 'app_settings') return from(table);
       const chain: Record<string, unknown> = {
         select: () => chain, eq: () => chain, maybeSingle: async () => ({ data: null, error: null }),
-        upsert: async () => ({ data: null, error: { code: '42501', message: 'refused', details: null, hint: null } }),
+        // The cursor write reads back what it saved (.select('key').maybeSingle()).
+        upsert: () => ({ select: () => ({ maybeSingle: async () => ({ data: null, error: { code: '42501', message: 'refused', details: null, hint: null } }) }) }),
+      };
+      return chain;
+    }) as typeof db.from);
+    const res = await GET(new NextRequest('https://www.bubaly.com/api/cron/provider-sync'));
+    expect(res.status).toBe(500);
+    expect(state.ran).toEqual([]);
+  });
+
+  it('refuses to run when the cursor write names no row it saved', async () => {
+    // An upsert that answers no error and no row is unconfirmed: the run does
+    // not go on as though the cursor had moved (RV1036-02).
+    const from = db.from.bind(db);
+    vi.spyOn(db, 'from').mockImplementation(((table: string) => {
+      if (table !== 'app_settings') return from(table);
+      const chain: Record<string, unknown> = {
+        select: () => chain, eq: () => chain, maybeSingle: async () => ({ data: null, error: null }),
+        upsert: () => ({ select: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }),
       };
       return chain;
     }) as typeof db.from);

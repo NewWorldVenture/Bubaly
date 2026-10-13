@@ -183,6 +183,17 @@ describe('a child account is never provisioned a family of its own', () => {
     expect(db.rpc).toEqual([]);
   });
 
+  it('recognises a kid-domain login whose row is gone and whose metadata says nothing, on every caller\'s shared path', async () => {
+    // ensureActiveFamily is what requireUserContext, authenticateAI and
+    // /api/ai all call; the address is the child login's own.
+    seed({ childActive: false });
+    db.tables.child_logins = [];
+    const bare = { id: CHILD, email: syntheticChildEmail('emma'), user_metadata: {} };
+    expect(await ensureActiveFamily(client as never, bare)).toBe(false);
+    expect(db.rpc).toEqual([]);
+    expect(parentRowsFor(CHILD)).toEqual([]);
+  });
+
   it('recognises a child login by its child_logins row even under another address', async () => {
     // user_metadata is the user's to edit, so it is not evidence. The row is
     // written only by the server (and is manager-only under RLS).
