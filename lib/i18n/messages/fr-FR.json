@@ -4062,6 +4062,7 @@
   "choresModule.approvedChoresShowUpHere": "Les tâches validées apparaissent ici.",
   "choresModule.buildResponsibilityEarnRewardsAnd": "Développez le sens des responsabilités, gagnez des récompenses et gardez la maison en ordre.",
   "choresModule.choreRemoved": "Corvée supprimée",
+  "choresModule.choreRemovedComesBack": "Supprimée pour l'instant. D'autres enfants partagent cette corvée récurrente, elle reviendra donc pour cet enfant.",
   "choresModule.noMemberProfileToRedeem": "Aucun profil de membre pour l’échange",
   "choresModule.paidToWallet": "Versé au portefeuille !",
   "choresModule.sentBackForRedo": "Renvoyée pour être refaite",

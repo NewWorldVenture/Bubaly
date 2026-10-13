@@ -248,7 +248,9 @@ export function ChoresModule() {
     const result = await deleteChoreAssignmentAction(a.id);
     setBusy(null);
     if (!result.ok) return toastError(result.error);
-    success(tr('choresModule.choreRemoved')); void refresh();
+    // A repeating chore other children share is not stopped for this one by a
+    // delete: the push-scan sweep puts it back. Say so, not "removed".
+    success(tr(result.comesBack ? 'choresModule.choreRemovedComesBack' : 'choresModule.choreRemoved')); void refresh();
   }
 
   // Through the server action, which resolves the role from the session and

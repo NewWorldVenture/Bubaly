@@ -1192,23 +1192,38 @@ export async function rejectChoreAssignment(
 const LIVE_STATUSES = ['todo', 'in_progress', 'submitted', 'rejected'] as const;
 
 /**
- * Whether deleting this assignment is the board stopping a RECURRING chore:
- * nobody else has the chore, and this child has nothing else of it still live.
+ * What deleting this assignment does to the chore, for this child:
  *
- * Deleting the row alone did not stop it. The push-scan sweep
+ *   'retires'     a RECURRING chore that is only this child's, with nothing
+ *                 else of it still live: the chore itself is retired
+ *                 (`is_active = false`), which the sweep already skips.
+ *   'comes-back'  a recurring chore OTHER children share — it stays active for
+ *                 them — and this child has nothing else of it live but a
+ *                 finished assignment: the push-scan sweep WILL put it back on
+ *                 their board, and the board says so instead of "removed".
+ *   'stays'       anything else: a one-off or retired chore, one this child
+ *                 still has live in another row, or a shared one they never
+ *                 finished (the sweep has no predecessor to repeat).
+ *
+ * Deleting the row alone did not stop a repeating chore. The push-scan sweep
  * (`respawnMissingChoreAssignments`) finds a child with a finished assignment
  * of a repeating chore and nothing open, and asks for the successor under
  * `respawnKeyFor(finished)` — a key the deleted row held and the delete freed.
- * So the next run put the chore straight back on the board the parent had
- * just been told it was removed from. Deleting is the board's only way to
- * stop a chore for a child, and a chore the board created belongs to that one
- * child; so when nothing else of it is left, the chore itself is retired
- * (`is_active = false`), which the sweep already skips.
+ * Retiring the chore stops that only when no other child has it, and a chore
+ * shared by several children is the ordinary case, not a corner: /missions/new
+ * shows one checkbox per kid and createChoreAction writes ONE chore with an
+ * assignment per ticked child (the assistant's `tasks.assignChore` can add a
+ * child to any chore too). Stopping it for one child alone needs a tombstone
+ * the sweep respects — a task_status value such as `removed`, or a
+ * per-(chore, member) stop table read by the sweep — which is a schema change
+ * for the owner. Until it lands, 'comes-back' is said, not hidden.
  */
-async function deleteRetiresChore(
+type DeleteOutcome = 'retires' | 'comes-back' | 'stays';
+
+async function deleteOutcome(
   scope: ServiceScope,
   target: { id: string; chore_id: string; member_id: string },
-): Promise<ServiceResult<boolean>> {
+): Promise<ServiceResult<DeleteOutcome>> {
   const { data: chore, error: choreError } = await scope.db
     .from('chores')
     .select('id, recurrence, is_active')
@@ -1219,7 +1234,7 @@ async function deleteRetiresChore(
     console.error('[service:tasks] chore read before delete failed', choreError);
     return fail(describeDbError(choreError, 'Could not load that chore.'), { code: SERVICE_CODES.db });
   }
-  if (!chore || chore.is_active === false || !choreRepeats(chore.recurrence)) return ok(false);
+  if (!chore || chore.is_active === false || !choreRepeats(chore.recurrence)) return ok('stays');
 
   const { data: others, error: othersError } = await scope.db
     .from('chore_assignments')
@@ -1232,7 +1247,7 @@ async function deleteRetiresChore(
     console.error('[service:tasks] shared chore read before delete failed', othersError);
     return fail(describeDbError(othersError, 'Could not load that chore.'), { code: SERVICE_CODES.db });
   }
-  if (others && others.length > 0) return ok(false);
+  const shared = Boolean(others && others.length > 0);
 
   const { data: live, error: liveError } = await scope.db
     .from('chore_assignments')
@@ -1247,7 +1262,39 @@ async function deleteRetiresChore(
     console.error('[service:tasks] live chore read before delete failed', liveError);
     return fail(describeDbError(liveError, 'Could not load that chore.'), { code: SERVICE_CODES.db });
   }
-  return ok(!live || live.length === 0);
+  if (live && live.length > 0) return ok('stays');
+  if (!shared) return ok('retires');
+
+  // Shared, with nothing else of it live for this child. The sweep repeats it
+  // for them only from a finished assignment, and only while they are an
+  // active member of the family: the same two facts it reads.
+  const { data: finished, error: finishedError } = await scope.db
+    .from('chore_assignments')
+    .select('id')
+    .eq('family_id', scope.familyId)
+    .eq('chore_id', target.chore_id)
+    .eq('member_id', target.member_id)
+    .neq('id', target.id)
+    .in('status', [...FINISHED_STATUSES])
+    .limit(1);
+  if (finishedError) {
+    console.error('[service:tasks] finished chore read before delete failed', finishedError);
+    return fail(describeDbError(finishedError, 'Could not load that chore.'), { code: SERVICE_CODES.db });
+  }
+  if (!finished || finished.length === 0) return ok('stays');
+
+  const { data: member, error: memberError } = await scope.db
+    .from('family_members')
+    .select('id')
+    .eq('id', target.member_id)
+    .eq('family_id', scope.familyId)
+    .eq('is_active', true)
+    .maybeSingle();
+  if (memberError) {
+    console.error('[service:tasks] member read before delete failed', memberError);
+    return fail(describeDbError(memberError, 'Could not load that chore.'), { code: SERVICE_CODES.db });
+  }
+  return ok(member ? 'comes-back' : 'stays');
 }
 
 /** Turn a chore on or off, confirmed: zero rows is a write that did not land. */
@@ -1268,12 +1315,16 @@ async function setChoreActive(scope: ServiceScope, choreId: string, isActive: bo
 /**
  * Remove an assignment. The chore itself survives when it may still be
  * someone's; a recurring chore that was only this child's is retired with it,
- * so the respawn sweep does not put it back (`deleteRetiresChore`).
+ * so the respawn sweep does not put it back (`deleteOutcome`).
+ *
+ * `comesBack` is true when the respawn sweep WILL put the chore back on this
+ * child's board: a repeating chore other children share, which a delete cannot
+ * stop for one child until the schema has a tombstone the sweep reads.
  */
 export async function deleteChoreAssignment(
   scope: ServiceScope,
   assignmentId: string,
-): Promise<ServiceResult<{ id: string }>> {
+): Promise<ServiceResult<{ id: string; comesBack: boolean }>> {
   const { data: target, error: targetError } = await scope.db
     .from('chore_assignments')
     .select('id, chore_id, member_id')
@@ -1288,9 +1339,10 @@ export async function deleteChoreAssignment(
 
   // Retired BEFORE the delete, so a refused retirement leaves the board as it
   // was rather than removing a row the sweep will put back.
-  const retires = await deleteRetiresChore(scope, target);
-  if (!retires.ok) return retires;
-  if (retires.data && !(await setChoreActive(scope, target.chore_id, false))) {
+  const outcome = await deleteOutcome(scope, target);
+  if (!outcome.ok) return outcome;
+  const retires = outcome.data === 'retires';
+  if (retires && !(await setChoreActive(scope, target.chore_id, false))) {
     return fail('Could not remove that chore.', { code: SERVICE_CODES.db });
   }
 
@@ -1305,7 +1357,7 @@ export async function deleteChoreAssignment(
     .maybeSingle();
   if (error || !data) {
     // The chore was retired for a delete that did not happen: put it back.
-    if (retires.data) await setChoreActive(scope, target.chore_id, true);
+    if (retires) await setChoreActive(scope, target.chore_id, true);
   }
   if (error) {
     console.error('[service:tasks] chore assignment delete failed', error);
@@ -1321,7 +1373,7 @@ export async function deleteChoreAssignment(
     memberId: data.member_id,
     resourceId: data.id,
   });
-  return ok({ id: data.id });
+  return ok({ id: data.id, comesBack: outcome.data === 'comes-back' });
 }
 
 /** Open assignments (not yet done or approved), soonest due first. */

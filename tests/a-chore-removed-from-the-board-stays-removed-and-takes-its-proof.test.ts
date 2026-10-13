@@ -13,7 +13,11 @@ import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memo
 //       successor under `respawnKeyFor(finished)` — a key the deleted row had
 //       held and the delete freed. The board said "Chore removed"; the next
 //       cron run put it back. The board's only way to stop a chore for a child
-//       did not stop it.
+//       did not stop it. Fixed for a chore that is only this child's; one
+//       other children share (what /missions/new writes when several kids are
+//       ticked) still comes back until the schema has a tombstone the sweep
+//       reads, and the board says so — see
+//       a-shared-chore-removed-from-one-child-says-it-will-come-back.test.ts.
 //   S7  The child's proof photos went with the row in the database (00430:
 //       chore_submissions cascade on the assignment) and with nothing in
 //       Storage: the objects stayed in the private bucket, referenced by

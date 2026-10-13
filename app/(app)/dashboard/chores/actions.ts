@@ -68,6 +68,18 @@ export type ChoreStatusResult =
   | { ok: false; error: string };
 
 /**
+ * A delete reports whether the chore will be BACK on the child's board.
+ *
+ * A repeating chore other children share stays active for them, and the
+ * push-scan sweep puts it back for this child too (lib/services/tasks
+ * `deleteOutcome`). Saying "Chore removed" about it was a promise the next run
+ * broke; `comesBack` lets the board say what will happen instead.
+ */
+export type ChoreDeleteResult =
+  | { ok: true; id: string; comesBack: boolean }
+  | { ok: false; error: string };
+
+/**
  * Session + scope, resolved OUTSIDE the try: `requireUserContext` redirects a
  * signed-out caller by throwing, and catching that would answer `{ ok: false }`
  * and show them a toast instead.
@@ -173,7 +185,7 @@ export async function rejectChoreAssignmentAction(assignmentId: string): Promise
   }
 }
 
-export async function deleteChoreAssignmentAction(assignmentId: string): Promise<ChoreActionResult> {
+export async function deleteChoreAssignmentAction(assignmentId: string): Promise<ChoreDeleteResult> {
   const t = await getTranslations();
   if (!assignmentId) return { ok: false, error: t('actions.thatChoreCouldNotBe') };
   const { ctx, scope } = await choreScope();
@@ -211,7 +223,7 @@ export async function deleteChoreAssignmentAction(assignmentId: string): Promise
     }
 
     revalidatePath(PATH);
-    return { ok: true, id: result.data.id };
+    return { ok: true, id: result.data.id, comesBack: result.data.comesBack };
   } catch (err) {
     console.error('[chore-action] delete failed', err);
     return { ok: false, error: describeActionError(err, t('actions.couldNotRemoveThatChore')) };
