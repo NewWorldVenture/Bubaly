@@ -30,6 +30,7 @@ import { mintSuggestionReminderKey, mintSuggestionSourceTag } from '@/lib/autopi
 import { completeReminder, deleteReminder, snoozeReminder } from '@/lib/services/reminders';
 import { deleteReminderAction, snoozeReminderAction } from '@/app/(app)/dashboard/reminders/actions';
 import { parseVerificationSpec, runVerification } from '@/lib/ai/runs/verify';
+import { decide, scopeForApprovedWork } from '@/lib/services/approvals';
 
 const FAMILY = '00000000-0000-4000-8000-00000000e001';
 const OTHER = '00000000-0000-4000-8000-00000000e002';
@@ -418,5 +419,184 @@ describe('a run’s verification does not compare a hidden reminder against a gu
   it('the parent’s run still compares it', async () => {
     await acceptedReminder(POLICY_REMINDER, policyCard(PARENT), policyCard(PARENT));
     expect(await runVerification(asAssistantOf('parent'), guess(POLICY_REMINDER))).toMatchObject({ ok: true, data: { verified: true } });
+  });
+
+  // The sibling checks read the same one row by id (reviewer B1 on a2b89e60):
+  // `count_at_least` with `where: { id, title }` was the same title oracle
+  // `fields_match` had been, and `records_exist` said the id was a reminder's.
+  const check = (spec: Record<string, unknown>) => {
+    const parsed = parseVerificationSpec({ checks: [spec] });
+    if (!parsed.ok) throw new Error(parsed.error);
+    return parsed.data;
+  };
+  const countOf = (where: Record<string, string>) => check({ kind: 'count_at_least', table: 'family_reminders', min: 1, where });
+
+  it('count_at_least with a hidden id and its title answers as an unknown id with that title, and as a wrong guess', async () => {
+    await acceptedReminder(POLICY_REMINDER, policyCard(PARENT), policyCard(PARENT));
+    const right = await runVerification(asAssistantOf('teen'), countOf({ id: POLICY_REMINDER, title: TITLE }));
+    expect(right).toEqual(await runVerification(asAssistantOf('teen'), countOf({ id: NOWHERE, title: TITLE })));
+    expect(right).toEqual(await runVerification(asAssistantOf('teen'), countOf({ id: POLICY_REMINDER, title: 'Some other guess' })));
+    expect(right).toMatchObject({ ok: true, data: { verified: false, checks: [{ verified: false, detail: 'Found 0, expected at least 1.' }] } });
+    // The parent's run still counts it.
+    expect(await runVerification(asAssistantOf('parent'), countOf({ id: POLICY_REMINDER, title: TITLE })))
+      .toMatchObject({ ok: true, data: { verified: true, checks: [{ detail: 'Found 1.' }] } });
+  });
+
+  it('records_exist with a hidden id answers as an id the family does not hold', async () => {
+    await acceptedReminder(POLICY_REMINDER, policyCard(PARENT), policyCard(PARENT));
+    const exists = (id: string) => check({ kind: 'records_exist', table: 'family_reminders', ids: [id] });
+    const hidden = await runVerification(asAssistantOf('teen'), exists(POLICY_REMINDER));
+    expect(hidden).toEqual(await runVerification(asAssistantOf('teen'), exists(NOWHERE)));
+    expect(hidden).toMatchObject({ ok: true, data: { verified: false, checks: [{ detail: '1 of 1 records are missing.' }] } });
+    expect(await runVerification(asAssistantOf('parent'), exists(POLICY_REMINDER))).toMatchObject({ ok: true, data: { verified: true } });
+  });
+
+  it('a count counts the reminders the reader is shown, however many hidden ones sort first', async () => {
+    const OWN = '00000000-0000-4000-8000-00000000e032';
+    await acceptedReminder(POLICY_REMINDER, policyCard(PARENT), policyCard(PARENT));
+    db.seed('family_reminders', [personal(OWN)]);
+    const active = check({ kind: 'count_at_least', table: 'family_reminders', min: 1, where: { status: 'active' } });
+    expect(await runVerification(asAssistantOf('teen'), active)).toMatchObject({ ok: true, data: { verified: true, checks: [{ detail: 'Found 1.' }] } });
+    const two = check({ kind: 'count_at_least', table: 'family_reminders', min: 2, where: { status: 'active' } });
+    expect(await runVerification(asAssistantOf('teen'), two)).toMatchObject({ ok: true, data: { verified: false, checks: [{ detail: 'Found 1, expected at least 2.' }] } });
+    expect(await runVerification(asAssistantOf('parent'), two)).toMatchObject({ ok: true, data: { verified: true, checks: [{ detail: 'Found 2.' }] } });
+  });
+
+  it('a failed read of the cards fails every check as a failed re-read, and names nothing', async () => {
+    await acceptedReminder(POLICY_REMINDER, policyCard(TEEN), policyCard(TEEN));
+    const down = withFaults(db, (table) => (table === 'autopilot_suggestions' ? { message: 'synthetic outage' } : null)) as DB;
+    const spec = parseVerificationSpec({ checks: [
+      { kind: 'records_exist', table: 'family_reminders', ids: [POLICY_REMINDER] },
+      { kind: 'fields_match', table: 'family_reminders', id: POLICY_REMINDER, expect: { title: TITLE } },
+      { kind: 'count_at_least', table: 'family_reminders', min: 1, where: { id: POLICY_REMINDER, title: TITLE } },
+    ] });
+    if (!spec.ok) throw new Error(spec.error);
+    for (const actor of [asAssistantOf('teen'), asAssistantOf('parent')]) {
+      const outcome = await consoleDuring(() => runVerification({ ...actor, db: down }, spec.data));
+      expect(outcome.result).toMatchObject({ ok: true, data: { verified: false, checks: [
+        { verified: false, detail: 'Bubaly could not re-read what it wrote.' },
+        { verified: false, detail: 'Bubaly could not re-read what it wrote.' },
+        { verified: false, detail: 'Bubaly could not count what it wrote.' },
+      ] } });
+      expect(JSON.stringify(outcome.result)).not.toContain(TITLE);
+      expect(outcome.logged).not.toContain(TITLE);
+    }
+  });
+});
+
+// ─── A teen's request a parent approves is still the teen's ──────────────────
+//
+// Reviewer B2 on a2b89e60: on the 'prepare' dial a teen's by-id "complete" is
+// held for a parent on an opaque card (the tool's wording and the id). Approved,
+// it replayed through scopeForApprovedWork with the APPROVER's role for the
+// teen, so the guard was asked as a parent: the policy reminder was completed,
+// and its title stamped on the approval (read by every member) and the
+// activity trail. The replay's reader is the asker now (`scope.viewer`), for
+// the id and for the title lookup alike; the write keeps the approver's role.
+
+describe('a request held for a parent acts only on what its asker is shown', () => {
+  const ASKED = '00000000-0000-4000-8000-00000000e040';
+
+  beforeEach(() => {
+    db = createInMemorySupabase<SupabaseClient<Database>>({
+      uniques: { ai_tool_calls: [['family_id', 'idempotency_key']] },
+      defaults: {
+        ai_tool_calls: { state: 'reserved', attempt: 1, outputs: null, error: null, finished_at: null },
+        agent_activity: { id: 'activity' },
+        approval_requests: { approvals: [], run_id: null, request_id: null, plan_step_id: null, plan_step_ids: [], payload_kind: null, expires_at: null },
+      },
+    }) as DB;
+    holder.db = db;
+    db.seed('family_members', [
+      { id: TEEN, family_id: FAMILY, user_id: USER, role: 'teen', is_active: true },
+      { id: PARENT, family_id: FAMILY, user_id: PARENT_USER, role: 'parent', is_active: true },
+    ]);
+    db.seed('families', [{ id: FAMILY, timezone: 'UTC' }]);
+    // The dial that holds a teen's low-risk scheduling edit for a parent.
+    db.seed('family_ai_settings', [{ family_id: FAMILY, enabled: true, behavior: 'prepare', category_behavior: {}, risk_overrides: {}, child_channels: {}, memory_enabled: true }]);
+  });
+
+  /** The teen asks; the request is held; a parent approves the card. */
+  async function heldThenApproved(input: Record<string, unknown>) {
+    const held = await executeTool(scope(), 'reminders.complete', input);
+    expect(held.status).toBe('pending_approval');
+    const approvalId = held.status === 'pending_approval' ? held.approvalId! : '';
+    const card = db.table('approval_requests').find((row) => row.id === approvalId);
+    expect(card, 'the held request filed a card').toBeDefined();
+    expect(JSON.stringify(card)).not.toContain(TITLE);
+    const decided = await consoleDuring(() => decide(asMember('parent'), approvalId, 'approved'));
+    const stamped = db.table('approval_requests').find((row) => row.id === approvalId)!;
+    return { decided: decided.result, logged: decided.logged, executionResult: stamped.execution_result };
+  }
+
+  it('by id: the policy reminder stays as it was, and the approval and the activity trail carry no title', async () => {
+    await cardReminder(false);
+    const before = snapshot();
+    const hidden = await heldThenApproved({ reminder_id: 'insurance-reminder' });
+    expect(snapshot()).toEqual(before);
+    expect(rowOf('insurance-reminder')).toMatchObject({ status: 'active' });
+    expect(hidden.decided).toMatchObject({ ok: false });
+    for (const text of [JSON.stringify(hidden.decided), String(hidden.executionResult ?? ''), JSON.stringify(db.table('agent_activity')), elsewhere(), hidden.logged]) {
+      expect(text).not.toContain(TITLE);
+      expect(text).not.toContain(DETAIL);
+    }
+    // The same answer, word for word, as a held id the family does not hold.
+    const unknown = await heldThenApproved({ reminder_id: UNKNOWN });
+    expect(hidden.decided).toEqual(unknown.decided);
+    expect(hidden.executionResult).toBe(unknown.executionResult);
+    expect(hidden.executionResult).toBe('error: That reminder could not be found.');
+  });
+
+  it('by part of its title: matched as the teen sees, so the teen’s own match is the one completed', async () => {
+    await cardReminder(false);
+    // The policy reminder is sooner, so a lookup as the parent matched it first.
+    db.seed('family_reminders', [{ ...personal(ASKED), title: 'Synthetic private journal', remind_at: '2026-10-20T12:00:00.000Z' }]);
+    const before = rowOf('insurance-reminder');
+    const asked = await heldThenApproved({ title: 'Synthetic private' });
+    expect(rowOf('insurance-reminder')).toEqual(before);
+    expect(rowOf(ASKED)).toMatchObject({ status: 'completed' });
+    expect(asked.decided).toMatchObject({ ok: true, data: { executed: true, summary: 'Completed Synthetic private journal' } });
+    for (const text of [JSON.stringify(asked.decided), String(asked.executionResult ?? ''), JSON.stringify(db.table('agent_activity')), elsewhere()]) {
+      expect(text).not.toContain(TITLE);
+    }
+  });
+
+  it('what the teen is shown is done once approved: their own, and a policy that names them', async () => {
+    db.seed('family_reminders', [personal(ASKED)]);
+    expect(await heldThenApproved({ reminder_id: ASKED })).toMatchObject({ decided: { ok: true, data: { executed: true } } });
+    expect(rowOf(ASKED)).toMatchObject({ status: 'completed' });
+    await cardReminder(true);
+    expect(await heldThenApproved({ reminder_id: 'insurance-reminder' })).toMatchObject({ decided: { ok: true, data: { executed: true } } });
+    expect(rowOf('insurance-reminder')).toMatchObject({ status: 'completed' });
+  });
+
+  it('the replay reads as the asker and writes as the approver: a replayed due list is the teen’s', async () => {
+    await cardReminder(false);
+    db.seed('family_reminders', [{ ...personal(ASKED), title: 'Synthetic own errand' }]);
+    const replay = await scopeForApprovedWork(asMember('parent'), { requested_by_kind: 'ai', requested_by_member_id: TEEN } as unknown as Parameters<typeof scopeForApprovedWork>[1]);
+    expect(replay).toMatchObject({ role: 'parent', memberId: TEEN, actorKind: 'ai', viewer: { role: 'teen', memberId: TEEN } });
+    const listed = await executeTool(replay, 'reminders.listDue', { before: '2026-10-14T00:00:00Z' }, { skipTrust: true });
+    expect(listed).toMatchObject({ status: 'ok' });
+    expect(listed.status === 'ok' ? (listed.data as { reminders: { id: string }[] }).reminders.map((row) => row.id) : null).toEqual([ASKED]);
+    expect(JSON.stringify(listed)).not.toContain(TITLE);
+  });
+
+  it('an asker no one can name any more is shown only what every member is', async () => {
+    // The policy named the teen when they asked; they have left the family since.
+    await cardReminder(true);
+    db.seed('family_reminders', [personal(ASKED)]);
+    const held = await executeTool(scope(), 'reminders.complete', { reminder_id: 'insurance-reminder' });
+    const heldOwn = await executeTool(scope(), 'reminders.complete', { reminder_id: ASKED });
+    expect([held.status, heldOwn.status]).toEqual(['pending_approval', 'pending_approval']);
+    const teen = db.table('family_members').find((row) => row.id === TEEN)!;
+    teen.is_active = false;
+    const before = rowOf('insurance-reminder');
+    const decided = await decide(asMember('parent'), held.status === 'pending_approval' ? held.approvalId! : '', 'approved');
+    expect(decided).toMatchObject({ ok: false });
+    expect(rowOf('insurance-reminder')).toEqual(before);
+    expect(elsewhere()).not.toContain(TITLE);
+    // A reminder with no card behind it is everyone's, and is still done.
+    expect(await decide(asMember('parent'), heldOwn.status === 'pending_approval' ? heldOwn.approvalId! : '', 'approved')).toMatchObject({ ok: true });
+    expect(rowOf(ASKED)).toMatchObject({ status: 'completed' });
   });
 });
