@@ -17031,5 +17031,16 @@
   "mobileAssistant.periodWeekly": "Wöchentlich",
   "mobileAssistant.periodMonthly": "Monatlich",
   "mobileAssistant.periodYearly": "Jährlich",
-  "mobileAssistant.monthsBudgetedSpending": "{month} · die budgetierten Ausgaben des Monats, Wochen- und Jahresbudgets als ihr Monatsanteil"
+  "mobileAssistant.monthsBudgetedSpending": "{month} · die budgetierten Ausgaben des Monats, Wochen- und Jahresbudgets als ihr Monatsanteil",
+  "actions.onlyAParentOrAdultCanFileAMessage": "Nur ein Elternteil oder Erwachsener kann eine Familiennachricht ablegen.",
+  "tripMemoriesModule.onlyAParentOrAdultCanDelete": "Nur ein Elternteil oder Erwachsener kann eine Reiseerinnerung löschen.",
+  "familyTreeModule.cannotBeTheirOwnAncestor": "Niemand kann sein eigener Vorfahre sein. Wähle einen Elternteil außerhalb dieses Zweigs des Stammbaums.",
+  "inboxActions.onlyAParentOrAdultCanHandle": "Nur ein Elternteil oder Erwachsener kann eine Familiennachricht an Bubaly übergeben.",
+  "actions.thisNoteChangedSinceYouOpenedIt": "Jemand hat diese Notiz geändert, nachdem du sie geöffnet hast, daher wurde sie nicht gespeichert. Dein Text ist noch da – kopiere ihn, öffne die Notiz erneut und füge ihn wieder ein.",
+  "errors.thatTimeIsNotOnTheFamilysClock": "Dieses Datum mit dieser Uhrzeit gibt es in der Zeitzone deiner Familie nicht. Wähle eine andere.",
+  "photosModule.showingNOfTotal": "{shown} von {total} angezeigt",
+  "photosModule.loadMore": "Mehr laden",
+  "createMemory.someOfThePhotosWereNotSaved": "{saved} von {total} Fotos wurden gespeichert. {failed} konnten nicht hochgeladen werden.",
+  "createMemory.tryTheMissingPhotosAgain": "Fehlende Fotos erneut versuchen",
+  "socialFeed.couldNotLoadYourFeed": "Dein Feed konnte gerade nicht geladen werden. Versuche es gleich noch einmal."
 }

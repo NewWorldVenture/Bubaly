@@ -52,6 +52,63 @@ export type TreeNode = NodeLike & {
   generation: number;
 };
 
+/**
+ * Every person below `id` in the tree, by following parent links down. Safe on
+ * a parent chain that loops (each person is visited once), and it never
+ * includes `id` itself unless the loop leads back to it.
+ */
+export function descendantIds(nodes: Pick<NodeLike, 'id' | 'parent_node_id'>[], id: string): Set<string> {
+  const children = new Map<string, string[]>();
+  for (const n of nodes) {
+    if (!n.parent_node_id) continue;
+    const list = children.get(n.parent_node_id) ?? [];
+    list.push(n.id);
+    children.set(n.parent_node_id, list);
+  }
+  const out = new Set<string>();
+  const stack = [...(children.get(id) ?? [])];
+  while (stack.length) {
+    const next = stack.pop()!;
+    if (out.has(next)) continue;
+    out.add(next);
+    stack.push(...(children.get(next) ?? []));
+  }
+  return out;
+}
+
+/**
+ * True when making `parentId` the parent of `nodeId` would make that person
+ * their own ancestor: the proposed parent is the person, or the proposed
+ * parent's own chain of parents reaches the person. Walked up from the
+ * proposed parent, so an existing loop elsewhere cannot make this run forever.
+ */
+export function wouldBeOwnAncestor(
+  nodes: Pick<NodeLike, 'id' | 'parent_node_id'>[],
+  nodeId: string,
+  parentId: string | null | undefined,
+): boolean {
+  if (!parentId) return false;
+  const parentOf = new Map(nodes.map((n) => [n.id, n.parent_node_id]));
+  const seen = new Set<string>();
+  for (let at: string | null | undefined = parentId; at; at = parentOf.get(at)) {
+    if (at === nodeId) return true;
+    if (seen.has(at)) return false;
+    seen.add(at);
+  }
+  return false;
+}
+
+/**
+ * The tree, as roots with their children.
+ *
+ * Every person appears exactly once. A person whose parent chain loops back on
+ * itself (Grandma's parent set to her own grandchild) has no root above them,
+ * and they used to vanish from the tree and the generations view together with
+ * everything below them — the only two views that can edit or delete — while
+ * the People count still counted them. Now the first person of each such loop
+ * (in the order the rows came) is shown as a root, so the loop stays on screen
+ * and can be repaired by editing that person.
+ */
 export function buildTree(nodes: NodeLike[]): TreeNode[] {
   const byId = new Map<string, TreeNode>();
   for (const n of nodes) {
@@ -67,11 +124,31 @@ export function buildTree(nodes: NodeLike[]): TreeNode[] {
     }
   }
 
+  const placed = new Set<string>();
   function setGen(node: TreeNode, gen: number) {
+    placed.add(node.id);
     node.generation = gen;
     for (const c of node.children) setGen(c, gen + 1);
   }
   for (const r of roots) setGen(r, 0);
+
+  // Whoever is still unplaced hangs below a loop: every one of them has a
+  // parent in the map, so walking up from one must revisit a person, and that
+  // person is on the loop. Lift them to the top (out of their parent's
+  // children, which is what breaks the loop) and place their branch.
+  for (const tn of byId.values()) {
+    if (placed.has(tn.id)) continue;
+    const seen = new Set<string>();
+    let onLoop = tn;
+    while (!seen.has(onLoop.id)) {
+      seen.add(onLoop.id);
+      onLoop = byId.get(onLoop.parent_node_id as string)!;
+    }
+    const parent = byId.get(onLoop.parent_node_id as string)!;
+    parent.children = parent.children.filter((c) => c !== onLoop);
+    roots.push(onLoop);
+    setGen(onLoop, 0);
+  }
 
   return roots;
 }

@@ -17031,5 +17031,16 @@
   "mobileAssistant.periodWeekly": "Semanal",
   "mobileAssistant.periodMonthly": "Mensual",
   "mobileAssistant.periodYearly": "Anual",
-  "mobileAssistant.monthsBudgetedSpending": "{month} · el gasto presupuestado del mes, con los límites semanales y anuales como su parte mensual"
+  "mobileAssistant.monthsBudgetedSpending": "{month} · el gasto presupuestado del mes, con los límites semanales y anuales como su parte mensual",
+  "actions.onlyAParentOrAdultCanFileAMessage": "Solo un progenitor o adulto puede archivar un mensaje familiar.",
+  "tripMemoriesModule.onlyAParentOrAdultCanDelete": "Solo un progenitor o adulto puede eliminar un recuerdo de viaje.",
+  "familyTreeModule.cannotBeTheirOwnAncestor": "Nadie puede ser su propio antepasado. Elige un progenitor de fuera de su rama del árbol.",
+  "inboxActions.onlyAParentOrAdultCanHandle": "Solo un progenitor o adulto puede pasar un mensaje familiar a Bubaly.",
+  "actions.thisNoteChangedSinceYouOpenedIt": "Alguien cambió esta nota después de que la abrieras, así que no se guardó. Tu texto sigue aquí: cópialo, vuelve a abrir la nota y añádelo de nuevo.",
+  "errors.thatTimeIsNotOnTheFamilysClock": "Esa fecha y hora no existe en el horario de tu familia. Elige otra.",
+  "photosModule.showingNOfTotal": "Mostrando {shown} de {total}",
+  "photosModule.loadMore": "Cargar más",
+  "createMemory.someOfThePhotosWereNotSaved": "Se guardaron {saved} de {total} fotos. {failed} no se pudieron subir.",
+  "createMemory.tryTheMissingPhotosAgain": "Reintentar las fotos que faltan",
+  "socialFeed.couldNotLoadYourFeed": "No se pudo cargar tu feed en este momento. Inténtalo de nuevo en un momento."
 }

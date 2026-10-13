@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useRef, useState } from 'react';
 import { formatDistanceToNow, parseISO } from 'date-fns'; // instant: formatDistanceToNow measures a duration between two instants, which no zone changes
 import { de, enUS, es, fr, it, nl, pt } from 'date-fns/locale';
 import {
@@ -13,6 +13,8 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
+import { settleAll } from '@/lib/supabase/settle';
+import { escapeOrValue } from '@/lib/supabase/escape-like';
 import { FAMILY_MEDIA_MAX_LABEL, partitionBySize, familyMediaPath, removeFamilyMedia } from '@/lib/storage/family-media';
 import { useFamilyMediaUrls } from '@/lib/storage/use-family-media';
 import { FamilyMediaImg } from '@/components/media/family-media-img';
@@ -35,6 +37,30 @@ import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 
 type Album = Tables<'family_albums'>;
 type Photo = Tables<'family_photos'>;
+/** An album with the newest photo it holds, read from the database for its cover. */
+type AlbumRow = Album & { cover: string | null };
+
+/**
+ * Photos the grid holds per page. The library used to be ONE unpaged read, which
+ * PostgREST cuts at 1,000 rows without an error: past that, album counts read 0,
+ * covers went blank, the favourites badge and "All Photos" stopped at the
+ * newest 1,000 and search could not find an older photo. Now the grid pages
+ * ("Load more"), and every number on screen is counted by the database.
+ */
+const PHOTO_PAGE = 120;
+
+/**
+ * The search, applied by the DATABASE: the caption contains the words, or the
+ * photo carries them as a tag. Built for `.or()`, so its grammar characters
+ * cannot leave the pattern (escapeOrValue), and the tag is kept to what an
+ * array literal can hold. Null when there is nothing to search for.
+ */
+function searchFilter(text: string): string | null {
+  const term = escapeOrValue(text);
+  if (!term) return null;
+  const tag = text.replace(/[{}",()\\]/g, ' ').trim();
+  return tag ? `caption.ilike.%${term}%,tags.cs.{${tag}}` : `caption.ilike.%${term}%`;
+}
 
 const ALBUM_KINDS = [
   { id: 'general', labelKey: 'photosModule.kindGeneral', icon: Camera, color: '#7c5dfa' },
@@ -82,31 +108,82 @@ export function PhotosModule() {
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<'albums' | 'all' | 'favorites' | 'recents'>('albums');
+  const [shown, setShown] = useState(PHOTO_PAGE);
   const dropRef = useRef<HTMLDivElement>(null);
+  const albumId = activeAlbum?.id ?? null;
+  const filter = searchFilter(useDeferredValue(search.trim()));
 
-  const { data: albums, loading: albumsLoading, error: albumsError, refresh: refreshAlbums } = useRealtimeQuery<Album>({
+  const { data: albums, loading: albumsLoading, error: albumsError, refresh: refreshAlbums } = useRealtimeQuery<AlbumRow>({
     table: 'family_albums', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('family_albums').select('*').eq('family_id', familyId).order('created_at', { ascending: false }),
+    // The count is the album's own `photo_count` (kept by the
+    // sync_album_photo_count trigger); the cover is the newest photo the
+    // database holds for the album, asked per album — never worked out from
+    // whichever photos the grid happens to have loaded.
+    fetcher: async (sb) => {
+      const read = await sb.from('family_albums').select('*').eq('family_id', familyId).order('created_at', { ascending: false });
+      if (read.error) return { data: null, error: read.error };
+      const rows = read.data ?? [];
+      const covers = await settleAll(rows.map((a) => sb.from('family_photos').select('url')
+        .eq('family_id', familyId).eq('album_id', a.id)
+        .order('created_at', { ascending: false }).order('id', { ascending: false }).limit(1)));
+      const failed = covers.find((c) => c.error);
+      // A cover is decoration: one that could not be read shows the album's
+      // placeholder, and is logged, rather than taking the albums down.
+      if (failed) console.error('[photos] an album cover read failed', failed.error);
+      return {
+        data: rows.map((a, i) => ({ ...a, cover: (covers[i].data as { url: string | null }[] | null)?.[0]?.url ?? a.cover_url ?? null })),
+        error: null,
+      };
+    },
   });
 
   const { data: allPhotos, loading: photosLoading, error: photosError, refresh: refreshPhotos } = useRealtimeQuery<Photo>({
-    table: 'family_photos', familyId, deps: [familyId, activeAlbum?.id],
+    table: 'family_photos', familyId, deps: [familyId, albumId, tab, filter, shown],
     fetcher: (sb) => {
       let q = sb.from('family_photos').select('*').eq('family_id', familyId);
       if (tab === 'favorites') q = q.eq('is_favorite', true);
-      if (activeAlbum) q = q.eq('album_id', activeAlbum.id);
-      return q.order('created_at', { ascending: false });
+      if (albumId) q = q.eq('album_id', albumId);
+      if (filter) q = q.or(filter);
+      return q.order('created_at', { ascending: false }).order('id', { ascending: false }).range(0, shown - 1);
     },
   });
+
+  // How many photos the current view holds, and how many are favourites —
+  // counted by the database, re-asked whenever the loaded photos change. Null
+  // while unknown or unreadable, in which case no number is shown at all.
+  const [counted, setCounted] = useState<{ key: string; total: number; favorites: number } | null>(null);
+  const countKey = `${tab}|${albumId ?? ''}|${filter ?? ''}`;
+  // A total counted for another tab, album or search is not this view's.
+  const counts = counted && counted.key === countKey ? counted : null;
+  useEffect(() => {
+    let live = true;
+    const sb = createClient();
+    let total = sb.from('family_photos').select('id', { count: 'exact', head: true }).eq('family_id', familyId);
+    if (tab === 'favorites') total = total.eq('is_favorite', true);
+    if (albumId) total = total.eq('album_id', albumId);
+    if (filter) total = total.or(filter);
+    void settleAll([
+      total,
+      sb.from('family_photos').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_favorite', true),
+    ]).then(([inView, favorites]) => {
+      if (!live) return;
+      if (inView.error || favorites.error) {
+        console.error('[photos] photo count failed', inView.error ?? favorites.error);
+        setCounted(null);
+        return;
+      }
+      setCounted({ key: countKey, total: inView.count ?? 0, favorites: favorites.count ?? 0 });
+    });
+    return () => { live = false; };
+  }, [familyId, tab, albumId, filter, countKey, allPhotos]);
 
   // SEC-001: every photo, video, cover and download below is read through a URL
   // signed with this viewer's session. `url` stays the stored reference.
   const media = useFamilyMediaUrls(allPhotos.map((p) => p.url));
 
-  const photos = allPhotos.filter((p) =>
-    !search || p.caption?.toLowerCase().includes(search.toLowerCase()) ||
-    p.tags?.some((t) => t.toLowerCase().includes(search.toLowerCase()))
-  );
+  // The search is the database's now (see searchFilter), so what loaded IS the view.
+  const photos = allPhotos;
+  const morePhotos = counts ? photos.length < counts.total : photos.length >= shown;
 
   // Left/Right walk the gallery while the lightbox is open. The two chevrons
   // are the only way to move between photos and they unmount at each end, so
@@ -256,6 +333,7 @@ export function PhotosModule() {
     }
     success(tr('photosModule.photoDeleted'));
     void refreshPhotos();
+    void refreshAlbums();
     if (lightboxIdx !== null) setLightboxIdx(null);
   }
 
@@ -275,8 +353,8 @@ export function PhotosModule() {
   // ── Album stats ───────────────────────────────────────────
   const albumStats = albums.map((a) => ({
     ...a,
-    count: allPhotos.filter((p) => p.album_id === a.id).length,
-    cover: allPhotos.find((p) => p.album_id === a.id)?.url,
+    count: a.photo_count ?? 0,
+    cover: a.cover ?? undefined,
   }));
 
   if (loading) return <SkeletonList />;
@@ -293,7 +371,7 @@ export function PhotosModule() {
             <AiInsight kind="photos" iconOnly />
             <div className="flex items-center gap-1 rounded-xl border border-border bg-surface/60 px-3 py-1.5 focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg">
               <Search className="h-3.5 w-3.5 text-muted" />
-              <input value={search} inputMode="search" enterKeyHint="search" onChange={(e) => setSearch(e.target.value)}
+              <input value={search} inputMode="search" enterKeyHint="search" onChange={(e) => { setSearch(e.target.value); setShown(PHOTO_PAGE); }}
                 placeholder={tr('photos.searchPhotos')}
                 className="w-28 bg-transparent text-sm placeholder:text-muted outline-none sm:w-40" />
             </div>
@@ -313,11 +391,11 @@ export function PhotosModule() {
       {/* Tabs */}
       <div className="tab-bar">
         {([['albums', 'photos.albums'], ['all', 'photosModule.allPhotos'], ['favorites', 'photosModule.favorites'], ['recents', 'photosModule.recents']] as const).map(([key, labelKey]) => (
-          <button key={key} onClick={() => { setTab(key); setActiveAlbum(null); }}
+          <button key={key} onClick={() => { setTab(key); setActiveAlbum(null); setShown(PHOTO_PAGE); }}
             className={cn('tab-item', tab === key ? 'tab-item-active' : 'tab-item-inactive')}>
             {tr(labelKey)}
             {key === 'favorites' && <span className="ml-1 text-[10px]">
-              {allPhotos.filter((p) => p.is_favorite).length}
+              {counts?.favorites ?? ''}
             </span>}
           </button>
         ))}
@@ -335,7 +413,7 @@ export function PhotosModule() {
               {albumStats.map((album) => {
                 const kind = ALBUM_KINDS.find((k) => k.id === album.kind) ?? ALBUM_KINDS[0];
                 return (
-                  <button key={album.id} onClick={() => { setActiveAlbum(album); setTab('all'); }}
+                  <button key={album.id} onClick={() => { setActiveAlbum(album); setTab('all'); setShown(PHOTO_PAGE); }}
                     className="group text-left">
                     <div className="relative aspect-square overflow-hidden rounded-2xl border border-border/60 bg-elevated">
                       {album.cover ? (
@@ -380,13 +458,13 @@ export function PhotosModule() {
           {/* Album breadcrumb */}
           {activeAlbum && (
             <div className="mb-3 flex items-center gap-2 text-sm">
-              <button onClick={() => { setActiveAlbum(null); setTab('albums'); }}
+              <button onClick={() => { setActiveAlbum(null); setTab('albums'); setShown(PHOTO_PAGE); }}
                 className="flex items-center gap-1 text-muted hover:text-brand-text transition">
                 <ChevronLeft className="h-4 w-4" /> {tr('photos.albums')}
               </button>
               <span className="text-muted">/</span>
               <span className="font-semibold">{activeAlbum.name}</span>
-              <Badge tone="neutral" className="ml-1">{tr(photos.length === 1 ? 'photosModule.photoCount' : 'photosModule.photosCount', { count: photos.length })}</Badge>
+              {counts && <Badge tone="neutral" className="ml-1">{tr(counts.total === 1 ? 'photosModule.photoCount' : 'photosModule.photosCount', { count: counts.total })}</Badge>}
             </div>
           )}
 
@@ -486,6 +564,12 @@ export function PhotosModule() {
                   </button>
                 </div>
               ))}
+            </div>
+          )}
+          {photos.length > 0 && morePhotos && (
+            <div className="mt-4 flex flex-col items-center gap-2">
+              {counts && <p className="text-xs text-muted">{tr('photosModule.showingNOfTotal', { shown: photos.length, total: counts.total })}</p>}
+              <Button variant="outline" size="sm" onClick={() => setShown((n) => n + PHOTO_PAGE)}>{tr('photosModule.loadMore')}</Button>
             </div>
           )}
         </div>

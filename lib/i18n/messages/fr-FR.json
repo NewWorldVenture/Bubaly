@@ -17031,5 +17031,16 @@
   "mobileAssistant.periodWeekly": "Hebdomadaire",
   "mobileAssistant.periodMonthly": "Mensuel",
   "mobileAssistant.periodYearly": "Annuel",
-  "mobileAssistant.monthsBudgetedSpending": "{month} · les dépenses budgétées du mois, les plafonds hebdomadaires et annuels comptés pour leur part mensuelle"
+  "mobileAssistant.monthsBudgetedSpending": "{month} · les dépenses budgétées du mois, les plafonds hebdomadaires et annuels comptés pour leur part mensuelle",
+  "actions.onlyAParentOrAdultCanFileAMessage": "Seul un parent ou adulte peut classer un message familial.",
+  "tripMemoriesModule.onlyAParentOrAdultCanDelete": "Seul un parent ou adulte peut supprimer un souvenir de voyage.",
+  "familyTreeModule.cannotBeTheirOwnAncestor": "Une personne ne peut pas être son propre ancêtre. Choisissez un parent en dehors de sa branche de l'arbre.",
+  "inboxActions.onlyAParentOrAdultCanHandle": "Seul un parent ou adulte peut confier un message familial à Bubaly.",
+  "actions.thisNoteChangedSinceYouOpenedIt": "Quelqu'un a modifié cette note après que vous l'avez ouverte : elle n'a donc pas été enregistrée. Votre texte est toujours là — copiez-le, rouvrez la note et ajoutez-le à nouveau.",
+  "errors.thatTimeIsNotOnTheFamilysClock": "Cette date et cette heure n'existent pas dans le fuseau horaire de votre famille. Choisissez-en une autre.",
+  "photosModule.showingNOfTotal": "{shown} sur {total} affichés",
+  "photosModule.loadMore": "Charger plus",
+  "createMemory.someOfThePhotosWereNotSaved": "{saved} photos sur {total} ont été enregistrées. {failed} n'ont pas pu être importées.",
+  "createMemory.tryTheMissingPhotosAgain": "Réessayer les photos manquantes",
+  "socialFeed.couldNotLoadYourFeed": "Votre fil n'a pas pu être chargé pour le moment. Réessayez dans un instant."
 }

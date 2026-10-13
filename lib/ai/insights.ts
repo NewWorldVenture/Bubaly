@@ -599,7 +599,9 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
       'You are a personal notes assistant. Help the family summarize, categorize, and extract actionable next steps from their notes. Suggest tags, follow-ups, or connections between notes. ' + SHARED_RULES,
     buildUser: (d) => {
       const notes = r(d, 'notes').slice(0, 10);
-      const list = notes.map((n) => `- "${n.title || 'Untitled'}": ${String(n.content || '').slice(0, 120)}`).join('\n') || 'No notes yet.';
+      // `body` is the column (0002_tables.sql); `content` never existed, so
+      // every note reached the model as its title alone.
+      const list = notes.map((n) => `- "${n.title || 'Untitled'}": ${String(n.body || '').slice(0, 120)}`).join('\n') || 'No notes yet.';
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nNotes (most recent):\n${list}\n\nGive: (1) a 2-sentence summary of key themes, (2) top 2 action items hidden in these notes, (3) one suggestion to organize better.${q(d)}`;
     },
   },
@@ -1100,9 +1102,12 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     system:
       'You are a warm family memory keeper. Help families organize their photo collection, create albums, and capture meaningful moments. Suggest creative ways to preserve and share family memories. ' + SHARED_RULES,
     buildUser: (d) => {
-      const photos = r(d, 'family_photos').slice(0, 20);
-      const albums = r(d, 'family_albums').slice(0, 10);
-      return `Family: ${d.familyName}. Now: ${d.now}.\n\nPhotos: ${photos.length} total. Albums: ${albums.length}.\n\nGive: (1) a memory-keeping idea for this week, (2) one album to create from recent photos, (3) one creative way to share memories with family.${q(d)}`;
+      // The totals are COUNTED by the route; the rows are only the most recent
+      // few. "Photos: 20 total" used to be the length of a read capped at 20.
+      const totals = r(d, 'photo_totals')[0];
+      const photos = Number(totals?.photos) || 0;
+      const albums = Number(totals?.albums) || 0;
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nPhotos: ${photos} total. Albums: ${albums} total.\n\nGive: (1) a memory-keeping idea for this week, (2) one album to create from recent photos, (3) one creative way to share memories with family.${q(d)}`;
     },
   },
 
@@ -1213,9 +1218,11 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     system:
       'You are a nostalgic and creative family memory keeper. Help families document and celebrate their travel memories. Suggest ways to preserve stories, create mementos, and inspire future adventures. ' + SHARED_RULES,
     buildUser: (d) => {
-      const memories = r(d, 'trip_memories').slice(0, 20);
-      const trips = r(d, 'vacations').slice(0, 10);
-      return `Family: ${d.familyName}. Now: ${d.now}.\n\nTrip memories recorded: ${memories.length}. Vacations logged: ${trips.length}.\n\nGive: (1) one creative way to preserve a recent memory, (2) one idea for turning memories into a keepsake, (3) one suggestion for capturing better memories on the next trip.${q(d)}`;
+      // Counted totals, as for photos — not the length of a capped read.
+      const totals = r(d, 'memory_totals')[0];
+      const memories = Number(totals?.memories) || 0;
+      const trips = Number(totals?.vacations) || 0;
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nTrip memories recorded: ${memories}. Vacations logged: ${trips}.\n\nGive: (1) one creative way to preserve a recent memory, (2) one idea for turning memories into a keepsake, (3) one suggestion for capturing better memories on the next trip.${q(d)}`;
     },
   },
 
