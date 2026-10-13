@@ -80,22 +80,29 @@ type PlanEntryArgs = {
 /**
  * The library name of every saved meal an entry names by id AND by name, so
  * `planEntry` can tell "meal-1, Tacos" (one dish, said twice) from "meal-1,
- * Curry" (two dishes). One family-scoped read for the whole batch; an id it
- * does not find is left to the service, which says the meal could not be found.
+ * Curry" (two dishes). One family-scoped read for the whole batch.
+ *
+ * `complete` says whether an id the read did not return is known to name no
+ * meal of this family. It is true only when the read's own count matches the
+ * rows it returned; a server cap that stopped short, or a missing count, leaves
+ * the missing ids unchecked.
  */
-async function libraryNames(scope: ServiceScope, entries: PlanEntryArgs[]): Promise<ServiceResult<ReadonlyMap<string, string>>> {
+type LibraryNames = { names: ReadonlyMap<string, string>; complete: boolean };
+
+async function libraryNames(scope: ServiceScope, entries: PlanEntryArgs[]): Promise<ServiceResult<LibraryNames>> {
   const ids = [...new Set(entries.flatMap((e) => (e.meal_id && e.meal_name?.trim() ? [e.meal_id] : [])))];
-  if (!ids.length) return ok(new Map());
-  const { data, error } = await scope.db
+  if (!ids.length) return ok({ names: new Map(), complete: true });
+  const { data, error, count } = await scope.db
     .from('meals')
-    .select('id, name')
+    .select('id, name', { count: 'exact' })
     .eq('family_id', scope.familyId)
     .in('id', ids);
   if (error || !Array.isArray(data)) {
     console.error('[tool:meals] meal name read failed', error);
     return fail(describeDbError(error, 'Could not read that meal.'), { code: SERVICE_CODES.db });
   }
-  return ok(new Map(data.map((meal) => [meal.id, meal.name])));
+  const complete = data.length === ids.length || (typeof count === 'number' && count <= data.length);
+  return ok({ names: new Map(data.map((meal) => [meal.id, meal.name])), complete });
 }
 
 /**
@@ -111,20 +118,25 @@ async function libraryNames(scope: ServiceScope, entries: PlanEntryArgs[]): Prom
  * ingredients list say nothing new and are not passed on — the service refuses
  * an id with a name or an ingredients key, however harmless.
  */
-function planEntry(e: PlanEntryArgs, names: ReadonlyMap<string, string>): PlanEntryInput {
+function planEntry(e: PlanEntryArgs, library: LibraryNames): PlanEntryInput {
   const mealType = e.meal_type ?? 'dinner';
   if (!e.meal_id) return { date: e.date, mealType, mealName: e.meal_name ?? null, ...ingredientsField(e.ingredients) };
   const name = e.meal_name?.trim();
-  const saved = names.get(e.meal_id);
-  const otherName = name && saved !== undefined && normalizeDishName(name) !== normalizeDishName(saved) ? { mealName: name } : {};
+  const saved = library.names.get(e.meal_id);
+  // An id a complete read did not return names no meal of this family, and is
+  // left to the service, which says it could not be found. An id a capped read
+  // stopped short of was never checked: its name travels with it, so the
+  // service refuses the pair rather than planning a dish nobody confirmed.
+  const unchecked = saved === undefined && !library.complete;
+  const otherName = name && (unchecked || (saved !== undefined && normalizeDishName(name) !== normalizeDishName(saved))) ? { mealName: name } : {};
   return { date: e.date, mealType, mealId: e.meal_id, ...otherName, ...ingredientsField(e.ingredients) };
 }
 
 /** Every entry, ready for the service. */
 async function planEntries(scope: ServiceScope, entries: PlanEntryArgs[]): Promise<ServiceResult<PlanEntryInput[]>> {
-  const names = await libraryNames(scope, entries);
-  if (!names.ok) return names;
-  return ok(entries.map((e) => planEntry(e, names.data)));
+  const library = await libraryNames(scope, entries);
+  if (!library.ok) return library;
+  return ok(entries.map((e) => planEntry(e, library.data)));
 }
 
 const planEntryInput = z.object({

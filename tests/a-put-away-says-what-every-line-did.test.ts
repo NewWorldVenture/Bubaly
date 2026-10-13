@@ -171,6 +171,26 @@ describe('a put-away that partly fails still says which lines to count by hand',
   });
 });
 
+describe('a mismatched line that cannot be cleared is not called counted', () => {
+  // The rice counted nothing (cup against kg). When its OWN line cannot be
+  // taken off the list, it must not be named among the lines "in your pantry"
+  // that would be counted twice — it is the line to count by hand, and only that.
+  it('the mismatched line\'s own clear fails: only the count-by-hand warning, and the line stays', async () => {
+    serverFails((table, calls) => table === 'grocery_items'
+      && calls.some((c) => c.method === 'delete')
+      && calls.some((c) => c.method === 'eq' && c.args[1] === 'i-rice'));
+    await click(byName(screen(), t('shoppingModule.bought')));
+
+    await putAway();
+
+    expect(h.toasts.error).toEqual([RICE_WARNING]);
+    expect(h.toasts.success).toEqual([t('shoppingModule.putItemsInYourPantry', { count: 2 })]);
+    expect(pantry()).toEqual({ Rice: '3 kg', Milk: '2', Eggs: '12' });
+    // Still on the list, un-ticked by its claim: nothing for a retry to count.
+    expect(onTheList()).toEqual(['Rice']);
+  });
+});
+
 describe('controls', () => {
   it('a unit mismatch on a trip where every other line lands is said, and the modal closes', async () => {
     await click(byName(screen(), t('shoppingModule.bought')));

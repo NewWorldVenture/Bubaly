@@ -25,8 +25,8 @@ import { createInMemorySupabase, withFaults } from './helpers/in-memory-supabase
 
 const FAMILY = 'fam-1';
 
-function household() {
-  const db = createInMemorySupabase<SupabaseClient<Database>>({ defaults: {
+function household(options: { maxRows?: number } = {}) {
+  const db = createInMemorySupabase<SupabaseClient<Database>>({ ...options, defaults: {
     meals: { recipe_url: null, image_url: null, notes: null, meal_type: 'dinner' },
     meal_plans: { idempotency_key: null },
     grocery_lists: { is_archived: false, archived_at: null },
@@ -147,6 +147,28 @@ describe('a dish named alone is the family\'s dish, whichever meal it was saved 
     expect(res).toMatchObject({ ok: false, code: 'invalid_input', error: 'Choose an existing meal with that name from the library.' });
     expect(db.table('meals').map((meal) => meal.id)).toEqual(['meal-1', 'soup-lunch', 'soup-snack']);
     expect(db.table('meal_plans')).toEqual([]);
+  });
+
+  // A server cap below the dishes of that name says nothing: the lookup's own
+  // count is what shows the read stopped short.
+  it('two saved under that name behind a server cap of one: refused, not the one the cap let through', async () => {
+    const { db, scope } = household({ maxRows: 1 });
+    db.seed('meals', [soup('soup-lunch', 'lunch', '2026-01-02T00:00:00Z'), soup('soup-snack', 'snack', '2026-01-03T00:00:00Z')]);
+
+    const res = await run('meals.setSlot', scope, { meal_name: 'Lentil soup', date: '2026-09-08', meal_type: 'dinner' });
+
+    expect(res).toMatchObject({ ok: false, code: 'invalid_input', error: 'Choose an existing meal with that name from the library.' });
+    expect(db.table('meal_plans')).toEqual([]);
+  });
+
+  it('control: one saved under that name behind the same cap is still reused', async () => {
+    const { db, scope } = household({ maxRows: 1 });
+    db.seed('meals', [soup('soup-lunch', 'lunch', '2026-01-02T00:00:00Z')]);
+
+    const res = await run('meals.setSlot', scope, { meal_name: 'Lentil soup', date: '2026-09-08', meal_type: 'dinner' });
+
+    expect(res, res.ok ? '' : res.error).toMatchObject({ ok: true });
+    expect(db.table('meal_plans')).toEqual([expect.objectContaining({ meal_id: 'soup-lunch' })]);
   });
 
   it('control: a name the library does not have is still added and planned', async () => {
@@ -301,5 +323,40 @@ describe('a dish chosen by id and contradicted by name or ingredients is refused
 
     expect(res).toMatchObject({ ok: false, code: 'not_found' });
     expect(tables()).toEqual(before);
+  });
+});
+
+// A name sent with an id is checked against the id's meal; an id the read did
+// not return — a capped batch read, or no such meal — cannot be checked, and
+// its name travels to the service, which refuses the contradiction.
+describe('a name the adapter could not check against its id is not dropped', () => {
+  it('a capped batch read that misses an id: the whole plan is refused, nothing written', async () => {
+    const { db, scope } = household({ maxRows: 1 });
+    db.seed('meals', [{
+      id: 'meal-2', family_id: FAMILY, name: 'Soup', meal_type: 'dinner', created_by: 'auth-user-1',
+      ingredients: [{ name: 'stock', qty: '1', unit: 'l' }], created_at: '2026-01-02T00:00:00Z',
+    }]);
+
+    const res = await run('meals.planWeek', scope, { entries: [
+      { date: '2026-09-08', meal_type: 'dinner', meal_id: 'meal-1', meal_name: 'Tacos' },
+      { date: '2026-09-09', meal_type: 'dinner', meal_id: 'meal-2', meal_name: 'Curry' },
+    ] });
+
+    expect(res).toMatchObject({ ok: false, code: 'invalid_input' });
+    expect(db.table('meal_plans')).toEqual([]);
+  });
+
+  it('control: the same batch uncapped plans the matching name and refuses the contradicting one', async () => {
+    const { db, scope } = household();
+    db.seed('meals', [{
+      id: 'meal-2', family_id: FAMILY, name: 'Soup', meal_type: 'dinner', created_by: 'auth-user-1',
+      ingredients: [{ name: 'stock', qty: '1', unit: 'l' }], created_at: '2026-01-02T00:00:00Z',
+    }]);
+
+    const ok = await run('meals.planWeek', scope, { entries: [{ date: '2026-09-08', meal_type: 'dinner', meal_id: 'meal-2', meal_name: 'soup' }] });
+    expect(ok, ok.ok ? '' : ok.error).toMatchObject({ ok: true });
+    const refused = await run('meals.planWeek', scope, { entries: [{ date: '2026-09-09', meal_type: 'dinner', meal_id: 'meal-2', meal_name: 'Curry' }] });
+    expect(refused).toMatchObject({ ok: false, code: 'invalid_input' });
+    expect(db.table('meal_plans').map((row) => row.plan_date)).toEqual(['2026-09-08']);
   });
 });

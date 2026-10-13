@@ -201,9 +201,9 @@ export async function ensureMealByName(
   const mealType = isMealType(input.mealType) ? input.mealType : 'dinner';
 
   const term = name;
-  const { data: existing, error: lookupError } = await scope.db
+  const { data: existing, error: lookupError, count } = await scope.db
     .from('meals')
-    .select('*')
+    .select('*', { count: 'exact' })
     .eq('family_id', scope.familyId)
     .ilike('name', escapeLike(term))
     .order('created_at', { ascending: true })
@@ -213,6 +213,10 @@ export async function ensureMealByName(
     return fail(describeDbError(lookupError, 'Could not look up that meal.'), { code: SERVICE_CODES.db });
   }
   if (!Array.isArray(existing)) return fail('Could not read the meal library.', { code: SERVICE_CODES.db });
+  // Fewer rows than there are dishes of that name: the 200 asked for, or a
+  // server cap below it that says nothing. Either way a choice made from these
+  // rows may not be the family's, so it is not made.
+  const partial = existing.length === 200 || (typeof count === 'number' && count > existing.length);
   if (options.planning && namesTheDishAlone(input)) {
     const sameName = existing.filter((meal) => normalizeDishName(meal.name) === normalizeDishName(name));
     const sameType = sameName.find((meal) => meal.meal_type === mealType);
@@ -220,14 +224,14 @@ export async function ensureMealByName(
     // Two saved dishes of that name, neither of this slot's type, or a lookup
     // that may have stopped short of the rest: which one the family meant is
     // theirs to say, and an empty third copy is the one answer that is wrong.
-    if (sameName.length > 1 || existing.length === 200) {
+    if (sameName.length > 1 || partial) {
       return fail('Choose an existing meal with that name from the library.', { code: SERVICE_CODES.invalidInput });
     }
     if (sameName.length === 1) return ok({ meal: sameName[0], created: false });
   } else {
     const matching = existing.find((meal) => matchesMealInput(meal, input));
     if (matching) return ok({ meal: matching, created: false });
-    if (existing.length === 200) return fail('Choose an existing meal with that name from the library.', { code: SERVICE_CODES.invalidInput });
+    if (partial) return fail('Choose an existing meal with that name from the library.', { code: SERVICE_CODES.invalidInput });
   }
 
   const { data, error } = await scope.db

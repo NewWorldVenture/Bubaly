@@ -1249,7 +1249,13 @@ export async function recordShoppingTrip(
     }
     if (clearError) {
       console.error('[service:groceries] bought line clear failed', clearError);
-      clearFailed.push({ name: item.name, error: describeDbError(clearError, 'Put away, but still on the list.') });
+      // `clearFailed` says "this is in your pantry": true only of a line that
+      // was COUNTED. A unit-mismatched line counted nothing — it is already in
+      // `unitMismatch`, whose "count these by hand" is the whole truth about
+      // it, and it stays on the list, un-ticked by its claim.
+      if (!result.data.unitMismatch) {
+        clearFailed.push({ name: item.name, error: describeDbError(clearError, 'Put away, but still on the list.') });
+      }
       continue;
     }
     clearedNames.push(item.name);
