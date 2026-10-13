@@ -17,6 +17,8 @@ import 'server-only';
 import { z } from 'zod';
 import { describeDbError } from '@/lib/supabase/errors';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
+import { shownReminders, type ShownReminderRow } from '@/lib/services/reminders/shown';
+import { readAll } from '@/lib/supabase/read-all';
 import { BINDING_KEY } from './bindings';
 
 /**
@@ -98,8 +100,33 @@ type Filterable = PromiseLike<{ data: Record<string, unknown>[] | null; error: u
   gte(column: string, value: unknown): Filterable;
   is(column: string, value: unknown): Filterable;
   limit(count: number): Filterable;
+  order(column: string): Filterable;
+  range(from: number, to: number): Filterable;
 };
 type DynamicReader = { from(table: string): { select(columns: string): Filterable } };
+
+/**
+ * What a re-read of `family_reminders` selects beside its own columns: the
+ * links the reader's rule reads (lib/services/reminders/shown.ts).
+ */
+const REMINDER_LINKS = 'id, member_id, idempotency_key, tags';
+
+/**
+ * The rows of a re-read this run's reader may be shown. Every other table here
+ * is the whole family's to read; `family_reminders` is not, for its card-made
+ * rows are their card's readers' alone. A teen's plan that named a policy
+ * reminder's id was answered whether its title was the one guessed — by
+ * `fields_match`, and by `count_at_least` with `where: { id, title }` — and
+ * whether it existed, by `records_exist`. Each check keeps only the rows its
+ * reader is shown before it compares, finds or counts, so a hidden reminder
+ * answers as an id the family does not hold. Null when the cards could not be
+ * read: the check then fails as a read that failed, never a guess.
+ */
+async function shownRows(scope: ServiceScope, table: VerifiableTable, rows: Record<string, unknown>[]): Promise<Record<string, unknown>[] | null> {
+  if (table !== 'family_reminders') return rows;
+  const shown = await shownReminders(scope, rows as (Record<string, unknown> & ShownReminderRow)[]);
+  return shown.ok ? shown.data : null;
+}
 
 function labelFor(check: VerificationCheck): string {
   if (check.label) return check.label;
@@ -152,12 +179,14 @@ async function runCheck(scope: ServiceScope, check: VerificationCheck): Promise<
     }
     const { data, error } = await reader
       .from(check.table)
-      .select('id')
+      .select(check.table === 'family_reminders' ? REMINDER_LINKS : 'id')
       .eq('family_id', scope.familyId)
       .in('id', ids)
       .limit(ids.length);
     if (error) return { kind: check.kind, label, verified: false, detail: describeDbError(error, 'Bubaly could not re-read what it wrote.') };
-    const found = new Set((data ?? []).map((row) => String(row.id)));
+    const shown = await shownRows(scope, check.table, data ?? []);
+    if (!shown) return { kind: check.kind, label, verified: false, detail: 'Bubaly could not re-read what it wrote.' };
+    const found = new Set(shown.map((row) => String(row.id)));
     const missing = ids.filter((id) => !found.has(id));
     return missing.length
       ? { kind: check.kind, label, verified: false, detail: `${missing.length} of ${ids.length} records are missing.` }
@@ -175,7 +204,10 @@ async function runCheck(scope: ServiceScope, check: VerificationCheck): Promise<
       .eq('id', check.id)
       .limit(1);
     if (error) return { kind: check.kind, label, verified: false, detail: describeDbError(error, 'Bubaly could not re-read what it wrote.') };
-    const row = (data ?? [])[0];
+    // A hidden reminder is no record of this reader's to compare a guess against.
+    const shown = await shownRows(scope, check.table, data ?? []);
+    if (!shown) return { kind: check.kind, label, verified: false, detail: 'Bubaly could not re-read what it wrote.' };
+    const row = shown[0];
     if (!row) return { kind: check.kind, label, verified: false, detail: 'That record no longer exists.' };
     const wrong = Object.entries(check.expect).filter(([column, expected]) => !valuesMatch(row[column], expected));
     return wrong.length
@@ -183,13 +215,32 @@ async function runCheck(scope: ServiceScope, check: VerificationCheck): Promise<
       : { kind: check.kind, label, verified: true, detail: 'The saved record matches the plan.' };
   }
 
-  let query = reader.from(check.table).select('id').eq('family_id', scope.familyId);
-  for (const [column, value] of Object.entries(check.where ?? {})) {
-    query = value === null ? query.is(column, null) : query.eq(column, value);
+  const where = (query: Filterable) => {
+    for (const [column, value] of Object.entries(check.where ?? {})) {
+      query = value === null ? query.is(column, null) : query.eq(column, value);
+    }
+    return query;
+  };
+  // A reminder is counted only when this reader is shown it, so every match
+  // is read and the hidden ones dropped before the count: the first `min`
+  // matches may include rows the reader is not shown.
+  let data: Record<string, unknown>[] | null;
+  let error: unknown;
+  if (check.table === 'family_reminders') {
+    ({ rows: data, error } = await readAll<Record<string, unknown>, unknown>((from, to) => where(reader
+      .from('family_reminders')
+      .select(REMINDER_LINKS)
+      .eq('family_id', scope.familyId))
+      .order('id')
+      .range(from, to)));
+  } else {
+    ({ data, error } = await where(reader.from(check.table).select('id').eq('family_id', scope.familyId)).limit(check.min));
   }
-  const { data, error } = await query.limit(check.min);
   if (error) return { kind: check.kind, label, verified: false, detail: describeDbError(error, 'Bubaly could not count what it wrote.') };
-  const count = (data ?? []).length;
+  const shown = await shownRows(scope, check.table, data ?? []);
+  if (!shown) return { kind: check.kind, label, verified: false, detail: 'Bubaly could not count what it wrote.' };
+  // As many as the check asked for, at most, as a read of `min` rows counts.
+  const count = Math.min(shown.length, check.min);
   return count >= check.min
     ? { kind: check.kind, label, verified: true, detail: `Found ${count}.` }
     : { kind: check.kind, label, verified: false, detail: `Found ${count}, expected at least ${check.min}.` };

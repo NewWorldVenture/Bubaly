@@ -18,9 +18,11 @@
 // by neither, the row is "could be any card's", and is listed to the managers
 // alone — the reminder of a card for everyone included.
 //
-// The reminders module reads `family_reminders` in the browser, and the
-// reminders service is imported BY lib/services/autopilot, so neither can call
-// the server's mints. These mint the same stamps with Web Crypto: the same
+// The reminders module reads `family_reminders` in the browser, where
+// node:crypto is not, and the reminders service's lists mint here too: the
+// service is imported BY lib/services/autopilot (only its exact-id guard,
+// lib/services/reminders/shown.ts, imports the server's mints back, and calls
+// them once a request runs). These mint the same stamps with Web Crypto: the same
 // parts, normalised as makeKey normalises them (a string trimmed, a number
 // kept, a missing part null), JSON-encoded, hashed, hex.
 // tests/a-cards-reminder-in-the-reminder-lists-is-listed-only-to-its-readers.test.ts

@@ -21,10 +21,11 @@ import { describeDbError } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
 import { keyedProbe, sameId, sameInstant, withIdempotency, type KeyedCreateOptions } from '../idempotency';
 import { familyInstant } from '@/lib/time/civil';
-import { readVisibleReminders, reminderCardsReader, mayBeCardReminder, readReminderCards, reminderVisibleTo } from '@/lib/autopilot/reminder-cards';
+import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
 import { mintSuggestionReminderKey, mintSuggestionSourceTag } from '@/lib/autopilot/reminder-key';
 import { scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
+import { REMINDER_NOT_FOUND, requireShownReminder, shownReminders } from './shown';
 
 export type FamilyReminder = Tables<'family_reminders'>;
 
@@ -211,25 +212,23 @@ export async function createReminder(
  * it outright would silently cancel a daily medication reminder the first time
  * someone ticked it off.
  */
-/** A fresh family-scoped reminder whose card admits this service caller. */
+/**
+ * A fresh family-scoped reminder this service caller may act on: one the
+ * reader's rule shows them (./shown.ts shownReminders, the asker of an
+ * approved request included). Any other id answers what an unknown id
+ * answers, word for word; a failed read of the row or of its cards refuses.
+ */
 async function loadVisibleReminderForMutation(scope: ServiceScope, reminderId: string): Promise<ServiceResult<FamilyReminder>> {
   const { data, error } = await scope.db.from('family_reminders').select('*')
     .eq('id', reminderId).eq('family_id', scope.familyId).maybeSingle();
   if (error) {
     console.error('[service:reminders] mutation admission read failed', error);
-    return fail('Could not verify that reminder. Nothing was changed.', { code: SERVICE_CODES.db, retryable: true });
+    return fail(describeDbError(error, 'Could not load that reminder.'), { code: SERVICE_CODES.db, retryable: true });
   }
-  if (!data) return fail('That reminder could not be found.', { code: SERVICE_CODES.notFound });
-  if (!mayBeCardReminder(data)) return ok(data);
-  const cards = await readReminderCards(scope.db, scope.familyId, {
-    keyOf: cardId => mintSuggestionReminderKey(scope.familyId, cardId),
-    sourceTagOf: mintSuggestionSourceTag,
-    onError: cause => console.error('[service:reminders] mutation card admission failed', cause),
-  });
-  if (!cards) return fail('Could not verify that reminder. Nothing was changed.', { code: SERVICE_CODES.db, retryable: true });
-  if (!reminderVisibleTo(data, cards, { role: scope.role, memberId: scope.memberId })) {
-    return fail('That reminder is not available to you.', { code: SERVICE_CODES.denied });
-  }
+  if (!data) return fail(REMINDER_NOT_FOUND, { code: SERVICE_CODES.notFound });
+  const shown = await shownReminders(scope, [data]);
+  if (!shown.ok) return shown;
+  if (shown.data.length !== 1) return fail(REMINDER_NOT_FOUND, { code: SERVICE_CODES.notFound });
   return ok(data);
 }
 
@@ -272,6 +271,10 @@ export async function completeReminder(scope: ServiceScope, reminderId: string):
  * the service does not already have.
  */
 export async function deleteReminder(scope: ServiceScope, reminderId: string): Promise<ServiceResult<{ id: string; title: string }>> {
+  // Only one its actor may be shown; any other id is unknown (./shown.ts).
+  const shown = await requireShownReminder(scope, reminderId);
+  if (!shown.ok) return shown;
+
   const { data, error } = await scope.db
     .from('family_reminders')
     .delete()

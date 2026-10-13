@@ -10,6 +10,7 @@
 import 'server-only';
 import { z } from 'zod';
 import { completeReminder, createReminder, listDue, reminderInstant, snoozeReminder } from '@/lib/services/reminders';
+import { asReminderReader } from '@/lib/services/reminders/shown';
 import { scopeNow } from '@/lib/services/scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -168,7 +169,9 @@ export const reminderTools: ToolDefinition[] = [
       let id = input.reminder_id ?? null;
       if (!id) {
         if (!input.title) return fail('Say which reminder to complete.', { code: SERVICE_CODES.invalidInput });
-        const found = await findReminder(scope, input.title);
+        // Matched as the asker sees: an approved replay runs with the
+        // approver's role for them (lib/services/reminders/shown.ts).
+        const found = await findReminder(asReminderReader(scope), input.title);
         if (!found.ok) return found;
         id = found.data.id;
       }
@@ -209,7 +212,8 @@ export const reminderTools: ToolDefinition[] = [
       let id = input.reminder_id ?? null;
       if (!id) {
         if (!input.title) return fail('Say which reminder to move.', { code: SERVICE_CODES.invalidInput });
-        const found = await findReminder(scope, input.title);
+        // Matched as the asker sees, as for reminders.complete.
+        const found = await findReminder(asReminderReader(scope), input.title);
         if (!found.ok) return found;
         id = found.data.id;
       }
@@ -264,7 +268,8 @@ export const reminderTools: ToolDefinition[] = [
       const assignee = await resolveAssigneeId(scope, input);
       if (!assignee.ok) return assignee;
 
-      const res = await listDue(scope, {
+      // Listed as the asker sees them, as the title lookup matches.
+      const res = await listDue(asReminderReader(scope), {
         before: input.before ?? null,
         withinMinutes: input.within_minutes ?? undefined,
         memberId: assignee.data,

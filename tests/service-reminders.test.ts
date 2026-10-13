@@ -207,10 +207,13 @@ describe('snoozeReminder', () => {
     const { db, calls } = makeDb(() => ({ data: { id: 'rem-1', status: 'snoozed' }, error: null }));
     const res = await snoozeReminder(scopeWith(db), 'rem-1', 30);
     expect(res.ok).toBe(true);
+    // The row is read first, by id and family, to ask whether its actor may be
+    // shown it (lib/services/reminders/shown.ts); the snooze is the next call.
     const updates = calls.filter(call => call.table === 'family_reminders' && call.kind === 'update');
     expect(updates).toHaveLength(1);
     expect(updates[0].filters).toMatchObject({ id: 'rem-1', family_id: 'fam-1' });
     expect(calls[0]).toMatchObject({ table: 'family_reminders', kind: 'select', filters: { id: 'rem-1', family_id: 'fam-1' } });
+    expect(calls[1]).toMatchObject({ table: 'family_reminders', kind: 'update', filters: { id: 'rem-1', family_id: 'fam-1' } });
     expect(updates[0].payload).toMatchObject({ status: 'snoozed', snoozed_until: '2026-09-05T12:30:00.000Z' });
   });
 
