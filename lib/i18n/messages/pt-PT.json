@@ -17018,5 +17018,14 @@
   "healthVisitsModule.onlyYourOwn": "Vês as tuas próprias consultas e as que registaste. Um pai, uma mãe ou um adulto vê as de toda a casa.",
   "healthVisitsModule.noneOfYours": "Não há consultas tuas registadas",
   "immunizationsModule.onlyYourOwn": "Vês as tuas próprias vacinas e as que registaste. Um pai, uma mãe ou um adulto vê as de toda a casa.",
-  "immunizationsModule.noneOfYours": "Não há vacinas tuas registadas"
+  "immunizationsModule.noneOfYours": "Não há vacinas tuas registadas",
+  "familyCfoActions.needsFamilyPlus": "«Podemos pagar isto?» é uma funcionalidade Family+.",
+  "familyCfoActions.needsYourCode": "Introduz o teu código de início de sessão em dois passos antes de verificares o que a família pode pagar.",
+  "actions.thisChildAlreadyHasAnAllowance": "Esta criança já tem uma mesada. Atualiza a página e altera essa.",
+  "allowanceView.oneOfSeveralAllowances": "Esta criança tem mais de uma mesada, e cada uma é paga. Põe em pausa a que não queres.",
+  "babysittersView.payoutsAreKeptByParents": "O que se paga às babysitters é gerido pelos pais da tua família.",
+  "savings.overYourWeeklyBudget": "Ultrapassaste em {amount} o teu orçamento semanal de {category}.",
+  "savings.overYourMonthlyBudget": "Ultrapassaste em {amount} o teu orçamento mensal de {category}.",
+  "savings.overYourYearlyBudget": "Ultrapassaste em {amount} o teu orçamento anual de {category}.",
+  "budgetAnalysisCard.monthsBudgetedSpending": "{month} · a despesa orçamentada do mês, com os limites semanais e anuais como a sua parte mensal"
 }

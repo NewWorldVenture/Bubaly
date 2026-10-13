@@ -37,11 +37,21 @@ export default async function WalletAllowancePage() {
   if (rulesError) { console.error('[wallet-allowance] Allowance rules read failed', rulesError); dataWarnings.push('Allowance rules'); }
 
   const nameByMember = new Map((members ?? []).map((m) => [m.id, m.display_name]));
-  const ruleByWallet = new Map((rules ?? []).map((r) => [r.child_wallet_id, r]));
+  // EVERY rule a wallet has, not the last one a Map kept. The cron and Run due
+  // now pay each active due rule, so a child holding two (saved from two views
+  // of this page before the action refused a second) was paid by both while
+  // this page showed, counted and paused one. Each rule gets its own row here,
+  // so the one nobody could see can be seen and paused.
+  const rulesByWallet = new Map<string, NonNullable<typeof rules>>();
+  for (const r of rules ?? []) rulesByWallet.set(r.child_wallet_id, [...(rulesByWallet.get(r.child_wallet_id) ?? []), r]);
 
-  const rows: AllowanceRow[] = (childWallets ?? []).map((cw) => {
-    const r = ruleByWallet.get(cw.id);
-    return {
+  const rows: AllowanceRow[] = (childWallets ?? []).flatMap((cw) => {
+    const walletRules = rulesByWallet.get(cw.id) ?? [];
+    // "Each one is paid. Pause the one you do not want." is true of the ACTIVE
+    // rules only: once the parent paused the extra one, one rule paid and both
+    // rows still told them to pause one (M2-UX). The paused rule keeps its row.
+    const paying = walletRules.filter((r) => r.is_active).length;
+    return (walletRules.length ? walletRules : [null]).map((r) => ({
       childWalletId: cw.id,
       name: nameByMember.get(cw.member_id) ?? 'Child',
       ruleId: r?.id ?? null,
@@ -49,7 +59,8 @@ export default async function WalletAllowancePage() {
       cadence: (r?.cadence ?? 'weekly') as AllowanceRow['cadence'],
       isActive: r?.is_active ?? false,
       nextRunOn: r?.next_run_on ?? null,
-    };
+      duplicate: (r?.is_active ?? false) && paying > 1,
+    }));
   });
 
   const tier = walletTierForPlanLevel(await effectivePlanLevel(famPlanLevel));

@@ -17018,5 +17018,14 @@
   "healthVisitsModule.onlyYourOwn": "Vedi le tue visite e quelle che hai registrato. Un genitore o un adulto vede quelle di tutta la famiglia.",
   "healthVisitsModule.noneOfYours": "Non ci sono visite tue registrate",
   "immunizationsModule.onlyYourOwn": "Vedi le tue vaccinazioni e quelle che hai registrato. Un genitore o un adulto vede quelle di tutta la famiglia.",
-  "immunizationsModule.noneOfYours": "Non ci sono vaccinazioni tue registrate"
+  "immunizationsModule.noneOfYours": "Non ci sono vaccinazioni tue registrate",
+  "familyCfoActions.needsFamilyPlus": "«Possiamo permettercelo?» è una funzione Family+.",
+  "familyCfoActions.needsYourCode": "Inserisci il codice dell'accesso in due passaggi prima di verificare cosa può permettersi la famiglia.",
+  "actions.thisChildAlreadyHasAnAllowance": "Questo bambino ha già una paghetta. Aggiorna la pagina e modifica quella.",
+  "allowanceView.oneOfSeveralAllowances": "Questo bambino ha più di una paghetta, e ognuna viene pagata. Metti in pausa quella che non vuoi.",
+  "babysittersView.payoutsAreKeptByParents": "Quanto vengono pagate le babysitter è gestito dai genitori della tua famiglia.",
+  "savings.overYourWeeklyBudget": "Hai superato di {amount} il tuo budget settimanale per {category}.",
+  "savings.overYourMonthlyBudget": "Hai superato di {amount} il tuo budget mensile per {category}.",
+  "savings.overYourYearlyBudget": "Hai superato di {amount} il tuo budget annuale per {category}.",
+  "budgetAnalysisCard.monthsBudgetedSpending": "{month} · la spesa a budget del mese, con i limiti settimanali e annuali come quota mensile"
 }

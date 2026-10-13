@@ -6,6 +6,7 @@ import { useApp } from '@/components/app/app-context';
 import { readsHouseholdMoney, transactionsInScope } from '@/lib/finance/household-money';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { deleteBudgetAction, setBudgetAction } from '@/app/(app)/dashboard/billing/actions';
 import { reportRefusal } from '@/lib/auth/step-up-client';
 import { settleAction } from '@/lib/ui/settle-action';
@@ -17,22 +18,30 @@ import { Input, Field, Select } from '@/components/ui/input';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { usd as usdIn, budgetSpent, pct, type Period } from '@/lib/finance/hub';
+import { usd as usdIn, budgetSpent, pct, periodWindow, type Period } from '@/lib/finance/hub';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock, useFamilyCalendarToday } from '@/components/i18n/use-format';
 
 type Budget = Tables<'budgets'>;
-type Txn = Tables<'transactions'>;
+type Txn = Pick<Tables<'transactions'>, 'id' | 'type' | 'category' | 'amount' | 'date' | 'member_id'>;
+/** A real ceiling: a year of spending past it is a failed read, never a smaller total. */
+const BUDGET_TXN_MAX = 50_000;
 const CATEGORIES = ['Groceries', 'Dining', 'Transport', 'Entertainment', 'Shopping', 'Utilities', 'Health', 'Kids', 'Other'];
 
 export function BudgetsView() {
   const t = useTranslations();
   // Money and dates follow the reader; the currency stays the money's own.
   const locale = useLocale();
-  // The FAMILY's year (TIME-003). `new Date(y, 0, 1).toISOString()` was the
+  // The FAMILY's day (TIME-003). `new Date(y, 0, 1).toISOString()` was the
   // previous Dec 31 east of Greenwich, so January's first day was double-counted.
   const familyClock = useFamilyClock();
-  const yearStartYear = familyClock.todayKey().slice(0, 4);
+  const todayKey = familyClock.todayKey();
+  // Every period a budget can have, whole: this week (which can begin in
+  // December) through the end of this year. Reading from 1 January left the
+  // December days of the first week of January out of a weekly budget.
+  const week = periodWindow('weekly', todayKey), year = periodWindow('yearly', todayKey);
+  const readFrom = week.from < year.from ? week.from : year.from;
+  const readTo = week.to > year.to ? week.to : year.to;
   // budgetSpent reads its date's local calendar fields: the FAMILY's day.
   const familyToday = useFamilyCalendarToday();
   const usd = (amount: number) => usdIn(amount, locale.code);
@@ -49,12 +58,25 @@ export function BudgetsView() {
   });
   // The transactions read matters as much as the budgets one: spend-to-date is
   // computed from it, so losing it silently reports every category as untouched.
+  //
+  // And it is SUMMED, so it is read whole. One unpaged, unordered select came
+  // back as whatever 1,000 rows PostgREST chose (db-max-rows), so past 1,000
+  // transactions in a year each budget's spent figure came from an arbitrary
+  // slice, and the page said "$X left" to a family over budget. Paged on the
+  // id, not on offsets, because a row written between two pages would be
+  // counted twice (readAllById); past the ceiling the read fails, and the view
+  // shows its read error rather than a smaller total.
   const { data: txns, loading: txnsLoading, error: txnsError, stale: txnsStale, refresh: refreshTxns } = useRealtimeQuery<Txn>({
-    table: 'transactions', familyId, deps: [familyId, role, selfId],
+    table: 'transactions', familyId, deps: [familyId, role, selfId, readFrom, readTo],
     fetcher: (sb) => {
       if (!seesAll && !selfId) return Promise.resolve({ data: [] as Txn[], error: null });
-      const query = sb.from('transactions').select('*').eq('family_id', familyId);
-      return (seesAll ? query : query.eq('member_id', selfId!)).gte('date', `${yearStartYear}-01-01`);
+      return readAllByIdAsQuery<Txn>((after, limit) => {
+        let query = sb.from('transactions').select('id, type, category, amount, date, member_id')
+          .eq('family_id', familyId).gte('date', readFrom).lte('date', readTo);
+        if (!seesAll) query = query.eq('member_id', selfId!);
+        if (after) query = query.gt('id', after);
+        return query.order('id').limit(limit);
+      }, { max: BUDGET_TXN_MAX });
     },
   });
   const readError = budgetsError || txnsError;

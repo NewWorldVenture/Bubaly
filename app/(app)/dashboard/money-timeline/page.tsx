@@ -6,8 +6,10 @@ import { createServer } from '@/lib/supabase/server';
 import { loadMoneyTimeline } from '@/lib/finance/timeline-load';
 import { insightDedupeKey, type CashflowTimeline } from '@/lib/finance/timeline';
 import { MoneyTimelineModule } from '@/components/modules/money-timeline-module';
-import { ErrorState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { isManager } from '@/lib/constants/roles';
+import { readsHouseholdMoney } from '@/lib/finance/household-money';
+import { Wallet } from 'lucide-react';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import Link from 'next/link';
 import { BillScheduleConfirmationRequired } from '@/lib/finance/bill-schedule';
@@ -25,6 +27,15 @@ export const dynamic = 'force-dynamic';
  */
 export default async function MoneyTimelinePage() {
   const ctx = await requireUserContext(); refuseGuest(ctx, '/dashboard/money-timeline');
+  // The forecast starts from the household's checking and savings balances
+  // ("Liquid today") and projects its low from them. Those are a parent's or
+  // adult's (the held 0514, lib/finance/household-money.ts), which supersedes
+  // 0267's "every member reads the forecast": a child, teen or caregiver is
+  // told whose they are, as on Family CFO and billing, rather than shown them.
+  if (!readsHouseholdMoney(ctx.active.role)) {
+    const tr = await getTranslations();
+    return <EmptyState icon={Wallet} title={tr('householdMoney.keptByParents')} description={tr('householdMoney.keptByParentsBody')} />;
+  }
   await requireAal2(ctx, 'money', '/dashboard/money-timeline');
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
@@ -73,10 +84,10 @@ export default async function MoneyTimelinePage() {
   // re-deriving it (keeps the key logic in one place).
   const insights = timeline.insights.map((i) => ({ ...i, key: insightDedupeKey(i) }));
 
-  // The forecast is every member's to READ (0267's documented decision, kept by
-  // 0352). Clearing an advisory is not: one row serves the whole family, so a
-  // dismissal speaks for the parents too. RLS is the boundary; this only decides
-  // whether a reader is shown a button that would be refused.
+  // Only a parent or adult reaches this point (above). Clearing an advisory is
+  // a manager's too: one row serves the whole family, so a dismissal speaks for
+  // the parents. RLS is the boundary; this only decides whether a reader is
+  // shown a button that would be refused.
   return (
     <MoneyTimelineModule
       timeline={timeline}

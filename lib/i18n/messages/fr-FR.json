@@ -17018,5 +17018,14 @@
   "healthVisitsModule.onlyYourOwn": "Tu vois tes propres consultations et celles que tu as enregistrées. Un parent ou un adulte voit celles de tout le foyer.",
   "healthVisitsModule.noneOfYours": "Aucune consultation te concernant n’est enregistrée",
   "immunizationsModule.onlyYourOwn": "Tu vois tes propres vaccinations et celles que tu as enregistrées. Un parent ou un adulte voit celles de tout le foyer.",
-  "immunizationsModule.noneOfYours": "Aucune vaccination te concernant n’est enregistrée"
+  "immunizationsModule.noneOfYours": "Aucune vaccination te concernant n’est enregistrée",
+  "familyCfoActions.needsFamilyPlus": "« Pouvons-nous nous le permettre ? » est une fonctionnalité Family+.",
+  "familyCfoActions.needsYourCode": "Saisissez votre code de connexion en deux étapes avant de vérifier ce que la famille peut se permettre.",
+  "actions.thisChildAlreadyHasAnAllowance": "Cet enfant a déjà de l'argent de poche. Actualisez la page et modifiez celui-ci.",
+  "allowanceView.oneOfSeveralAllowances": "Cet enfant a plus d'un argent de poche, et chacun est versé. Mettez en pause celui que vous ne voulez pas.",
+  "babysittersView.payoutsAreKeptByParents": "Ce que sont payés les baby-sitters est tenu par les parents de votre famille.",
+  "savings.overYourWeeklyBudget": "Vous dépassez de {amount} votre budget hebdomadaire {category}.",
+  "savings.overYourMonthlyBudget": "Vous dépassez de {amount} votre budget mensuel {category}.",
+  "savings.overYourYearlyBudget": "Vous dépassez de {amount} votre budget annuel {category}.",
+  "budgetAnalysisCard.monthsBudgetedSpending": "{month} · les dépenses budgétées du mois, les plafonds hebdomadaires et annuels comptés pour leur part mensuelle"
 }

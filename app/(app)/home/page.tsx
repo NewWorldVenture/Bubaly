@@ -12,6 +12,8 @@ import { settle, settleAll } from '@/lib/supabase/settle';
 import { getOnboardingProgress, resolveCompleteness } from '@/lib/server/onboarding-progress';
 import { isManager } from '@/lib/constants/roles';
 import { readsHouseholdMoney } from '@/lib/finance/household-money';
+import { periodWindow } from '@/lib/finance/budget-periods';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { firstName } from '@/lib/utils/format';
@@ -69,6 +71,9 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t('navLabel.home') };
 }
 export const dynamic = 'force-dynamic';
+
+/** A real ceiling on the month the Family Finances card sums: past it, a failed read, never a smaller total. */
+const MONTH_TXN_MAX = 50_000;
 
 // ── Small shared UI ───────────────────────────────────────────────────────────
 function Card({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -197,6 +202,8 @@ export default async function HomePage() {
   // last afternoon of the previous one, and "this month" spent a few hours
   // reporting the wrong month's finances.
   const monthStart = new Date(zonedDayBoundsMs(`${todayKey.slice(0, 7)}-01`, tz).start);
+  // The family's month as day keys, both ends: what the Family Finances card sums.
+  const thisMonth = periodWindow('monthly', todayKey);
 
   const [
     { data: members, count: memberCount, error: membersError },
@@ -205,7 +212,7 @@ export default async function HomePage() {
     { data: tasks },
     { data: choreRows },
     { data: dinnerPlans },
-    { data: txns },
+    { data: txns, error: txnsError },
     { data: photos },
     { data: messages },
     { count: choresToday },
@@ -232,12 +239,21 @@ export default async function HomePage() {
       .eq('family_id', familyId).eq('meal_type', 'dinner').gte('plan_date', weekStartIso).lte('plan_date', weekEndIso),
     // The household's spending is a parent's or adult's (the held 0514): the
     // Family Finances card is theirs, and nobody else's session asks for it.
+    //
+    // The card SUMS this read, so it is the whole month: both ends (next month's
+    // scheduled rent is not this month's), paged on the id past PostgREST's
+    // 1,000-row cap (`.limit(1000)` was that cap, silently), and a month past the
+    // ceiling is an error the card shows, not a smaller total.
     readsHouseholdMoney(ctx.active.role)
-      ? supabase.from('transactions').select('type, amount, date')
-        // `date` is a DATE column: the family's first of the month as a day key.
+      ? readAllByIdAsQuery<HomeTxn & { id: string }>((after, limit) => {
+        // `date` is a DATE column: the family's month as day keys.
         // `isoDate(monthStart)` re-read the family's midnight instant in the host's
         // calendar, which east of Greenwich is the last day of the previous month.
-        .eq('family_id', familyId).gte('date', `${todayKey.slice(0, 7)}-01`).limit(1000)
+        let query = supabase.from('transactions').select('id, type, amount, date')
+          .eq('family_id', familyId).gte('date', thisMonth.from).lte('date', thisMonth.to);
+        if (after) query = query.gt('id', after);
+        return query.order('id').limit(limit);
+      }, { max: MONTH_TXN_MAX })
       : Promise.resolve({ data: [] as HomeTxn[], error: null }),
     supabase.from('family_photos').select('id, url, thumbnail_url, caption, taken_at, created_at')
       .eq('family_id', familyId).order('created_at', { ascending: false }).limit(4),
@@ -293,7 +309,11 @@ export default async function HomePage() {
     overdueReminders: overdueReminders ?? 0,
   });
 
-  const finances = summarizeMonthFinances((txns ?? []) as HomeTxn[], now);
+  if (txnsError) console.error('[home] month finances read failed', txnsError);
+  // The family's month, as the read above is: summarizeMonthFinances keeps the
+  // rows of the UTC month of the date it is given, and `now` is Greenwich's,
+  // which on a month's last evening in Los Angeles is already next month.
+  const finances = summarizeMonthFinances((txns ?? []) as HomeTxn[], new Date(`${todayKey}T12:00:00Z`));
 
   // Two id-list lookups that both depend only on the batch above and on nothing
   // from each other, so they go out together rather than one after the other.
@@ -821,14 +841,18 @@ export default async function HomePage() {
         {manager && <Card>
           <CardHead icon={DollarSign} title={tr('home.familyFinances')} href="/dashboard/billing" action="View finances" />
           <p className="text-xs text-muted">{tr('home.thisMonth')} {monthStart.toLocaleDateString(locale.code, { month: 'long', timeZone: tz })}</p>
-          <div className="mt-3 flex items-center gap-4">
-            <FinanceDonut income={finances.income} expenses={finances.expenses} remaining={finances.remaining} />
-            <div className="flex-1 space-y-2 text-sm">
-              <Row label={tr('home.totalIncome')} value={usd(finances.income)} valueClass="text-emerald-400" />
-              <Row label={tr('home.totalExpenses')} value={usd(finances.expenses)} valueClass="text-rose-400" />
-              <Row label={tr('home.remaining')} value={usd(finances.remaining)} valueClass="text-brand-text font-bold" />
+          {txnsError ? (
+            <p role="alert" className="mt-3 text-sm text-danger">{tr('financesModule.couldNotLoadFinancialData')}</p>
+          ) : (
+            <div className="mt-3 flex items-center gap-4">
+              <FinanceDonut income={finances.income} expenses={finances.expenses} remaining={finances.remaining} />
+              <div className="flex-1 space-y-2 text-sm">
+                <Row label={tr('home.totalIncome')} value={usd(finances.income)} valueClass="text-emerald-400" />
+                <Row label={tr('home.totalExpenses')} value={usd(finances.expenses)} valueClass="text-rose-400" />
+                <Row label={tr('home.remaining')} value={usd(finances.remaining)} valueClass="text-brand-text font-bold" />
+              </div>
             </div>
-          </div>
+          )}
         </Card>}
 
         {/* Recent Memories */}

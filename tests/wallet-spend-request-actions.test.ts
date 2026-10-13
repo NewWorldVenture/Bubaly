@@ -276,7 +276,7 @@ describe('requestSpendAction (ACTION-ABA436EAC1FB)', () => {
       });
     });
 
-    it.each(NON_MANAGERS)('a %s’s request, however small, is sent as held and files an approval', async (role) => {
+    it.each(NON_MANAGERS.filter((role) => role !== 'guest'))('a %s’s request, however small, is sent as held and files an approval', async (role) => {
       harness.role = role;
 
       expect(await ask({ amountCents: 100 })).toEqual({ ok: true, pendingApproval: true });
@@ -285,6 +285,17 @@ describe('requestSpendAction (ACTION-ABA436EAC1FB)', () => {
       expect((harness.evaluateTrust.mock.calls[0] as [unknown, string, { actor: unknown }])[2].actor)
         .toEqual({ kind: 'member', id: 'member-self', role });
       expect(approvals()).toHaveLength(1);
+    });
+
+    // The /wallet pages send a guest away (the held 0509), and wallet
+    // activation provisions children only; a guest holding a wallet from
+    // before is refused before anything is held or filed (M10).
+    it('a guest’s request is refused, and nothing is held or filed', async () => {
+      harness.role = 'guest';
+
+      expect(await ask({ amountCents: 100 })).toEqual({ ok: false, error: t('actions.notAuthorized') });
+      expect(debitCalls).toHaveLength(0);
+      expect(approvals()).toHaveLength(0);
     });
 
     it('a role default "no" is not a refusal: a child can still ask', async () => {
