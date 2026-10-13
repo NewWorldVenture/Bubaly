@@ -16,7 +16,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
-  buildWeekGrid, weekParity, WEEKDAYS, WEEKDAY_LABELS,
+  buildWeekGrid, classFormFields, weekParity, WEEKDAYS, WEEKDAY_LABELS,
   WEEK_PATTERN_LABELS, type WeekPattern, type ClassLike,
 } from '@/lib/school/timetable';
 import type { Tables } from '@/lib/database.types';
@@ -98,17 +98,12 @@ export function TimetableModule() {
     if (!form.subject.trim()) { toastError(t('timetableModule.subjectIsRequired')); return; }
     setSaving(true);
     const sb = createClient();
-    const fields = {
-      subject: form.subject.trim(),
-      teacher: form.teacher.trim() || null, room: form.room.trim() || null,
-      time_slot: form.time_slot.trim() || null,
-      day_of_week: form.day_of_week === '' ? null : parseInt(form.day_of_week, 10),
-      week_pattern: form.week_pattern, school_name: form.school_name.trim() || null,
-    };
+    // The student is written on edit too: the picker is live in the edit dialog.
+    const fields = classFormFields(form);
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as "Class updated". Audit C1-S9-86.
     const { data: saved, error: err } = form.id
       ? await sb.from('school_classes').update(fields).eq('id', form.id).select('id')
-      : await sb.from('school_classes').insert({ ...fields, family_id: familyId, member_id: form.member_id, created_by: userId }).select('id');
+      : await sb.from('school_classes').insert({ ...fields, family_id: familyId, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(form.id ? t('timetableModule.failedToUpdateClass') : t('timetableModule.failedToAddClass')); return; }
     if (wroteNoRows(saved)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
