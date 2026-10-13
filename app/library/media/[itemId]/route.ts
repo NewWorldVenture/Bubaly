@@ -22,10 +22,13 @@ import { rateLimit } from '@/lib/server/rate-limit';
 import { createServer } from '@/lib/supabase/server';
 import { openPublicMedia } from '@/lib/server/public-media-fetch';
 import { PublicDocumentError } from '@/lib/server/public-document-fetch';
+import { LIBRARY_MEDIA_CACHE_CONTROL } from '@/lib/library/progress';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
+
+const isYoung = (role: string) => role === 'child' || role === 'teen';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ itemId: string }> }) {
   const { itemId } = await params;
@@ -35,7 +38,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ item
   // Per USER, because this is our egress paid on their behalf: one signed-in
   // person should not be able to pull a 500 MB episode in a loop. Generous
   // enough for real playback — a player asks for a handful of byte ranges when
-  // it seeks, and the response is cacheable for an hour — and far short of what
+  // it seeks — and far short of what
   // a script does.
   const limited = rateLimit(`library-media:${ctx.user.id}`, { limit: 60, windowMs: 60_000 });
   if (!limited.ok) {
@@ -66,6 +69,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ item
       range: req.headers.get('range'),
       signal: req.signal,
     });
+    // Not video for a child or a teen. The library is podcasts and audiobooks,
+    // its player is an <audio> element, and a media address is anything a
+    // member typed — so this route, served from Bubaly's own origin, would
+    // otherwise play any public video to a child straight past the filter a
+    // parent set on the device for the video's real host. Only what the
+    // publisher names as audio: an `application/octet-stream` body is whatever
+    // bytes it is, and a browser's media player sniffs a video out of it.
+    if (isYoung(ctx.active.role) && !(upstream.headers['content-type'] ?? '').startsWith('audio/')) {
+      upstream.close();
+      return new NextResponse('Unsupported', { status: 415 });
+    }
     // Node stream -> Web stream, and close the socket if the client walks away
     // mid-episode. Without this an abandoned tab holds a publisher connection
     // open until the deadline.
@@ -75,10 +89,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ item
       status: upstream.status,
       headers: {
         ...upstream.headers,
-        // Bubaly's own cache, not a shared one: the bytes are public but the
-        // URL is behind a session, and a shared cache keyed on it would serve
-        // one family's request to the next.
-        'Cache-Control': 'private, max-age=3600',
+        // Kept by no cache at all. A shared one would serve one family's
+        // request to the next; the browser's own would serve one READER's to
+        // the next on the same browser — an adult's video to a child, past the
+        // refusal above (see LIBRARY_MEDIA_CACHE_CONTROL).
+        'Cache-Control': LIBRARY_MEDIA_CACHE_CONTROL,
         'X-Content-Type-Options': 'nosniff',
       },
     });

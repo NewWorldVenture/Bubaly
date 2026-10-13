@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { literalCaseInsensitivePattern } from '@/lib/supabase/escape-like';
+import { literalCaseInsensitivePattern, literalContainsPattern } from '@/lib/supabase/escape-like';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 
 // These ASCII vectors are the same literal inputs exercised by the native
@@ -33,7 +33,20 @@ describe('the in-memory imatch model preserves native literal email identity', (
     expect((await db.from('contacts').select('id').filter('email', 'imatch', literalCaseInsensitivePattern('missing@example.com'))).data).toEqual([]);
   });
 
-  it.each(['unanchored', '^a.*$', '^a|b$', '^[ab]$', '^a\\d$', '^a\\$'])('refuses unsupported ARE syntax %s', pattern => {
+  // Unanchored, an escaped literal is "contains" in PostgreSQL's ARE, as the
+  // completed-task search sends it (literalContainsPattern).
+  it('an unanchored escaped literal is contained, star kept distinct from percent', async () => {
+    const db = createInMemorySupabase();
+    db.seed('tasks', [
+      { id: 'star', title: 'Math* worksheet' }, { id: 'percent', title: 'Math% worksheet' },
+      { id: 'plain', title: 'Math worksheet' }, { id: 'null', title: null },
+    ]);
+    expect((await db.from('tasks').select('id').filter('title', 'imatch', literalContainsPattern('math*'))).data).toEqual([{ id: 'star' }]);
+    expect((await db.from('tasks').select('id').filter('title', 'imatch', literalContainsPattern('*'))).data).toEqual([{ id: 'star' }]);
+    expect((await db.from('tasks').select('id').filter('title', 'imatch', literalContainsPattern('WORKSHEET'))).data).toEqual([{ id: 'star' }, { id: 'percent' }, { id: 'plain' }]);
+  });
+
+  it.each(['a.*b', 'a|b', '[ab]', 'a\\d', '^a', 'a$', '^a.*$', '^a|b$', '^[ab]$', '^a\\d$', '^a\\$'])('refuses unsupported ARE syntax %s', pattern => {
     const db = createInMemorySupabase();
     expect(() => db.from('contacts').select('id').filter('email', 'imatch', pattern)).toThrow('unsupported imatch pattern');
   });
