@@ -286,7 +286,7 @@ describe('two referral emails at once stay within the daily limit', () => {
   it('a send that is gone by the time it is checked is not reported as sent', async () => {
     seedSends(FAMILY, CODE, 3);
     const seeded = new Set(db.table('referrals').map((row) => row.id));
-    const service = oneRequest(client, { mapRead: (rows, n) => (n === 2 ? rows.filter((row) => seeded.has(row.id)) : rows) });
+    const service = oneRequest(client, { mapRead: (rows, n) => (n >= 2 ? rows.filter((row) => seeded.has(row.id)) : rows) });
     expect(await invite(service, 'first@example.invalid', at(0))).toEqual({ ok: false, reason: 'write_failed' });
     expect(console.error).toHaveBeenCalledWith('[referrals/email] referral send missing after write', expect.any(Object));
   });

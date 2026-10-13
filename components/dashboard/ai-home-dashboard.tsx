@@ -101,7 +101,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   const [
     { count: pendingChores },
     todayCalendarRes,
-    { count: groceryCount },
+    { count: groceryCount, error: groceryError },
     { count: overdueMedsCount },
     { count: pendingApprovals },
     { count: openTodos },
@@ -196,6 +196,11 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   for (const [label, result] of [['today calendar', todayCalendarRes], ['upcoming calendar', upcomingCalendarRes], ['assigned calendar', assignedCalendarRes]] as const) {
     if (result.error) console.error(`[dashboard-home] ${label} read failed`, result.error);
   }
+  // A grocery count that could not be read (the items, or the open-list read
+  // in front of them) is unknown, not zero: nothing below may say the family
+  // is all caught up or has no list on its strength.
+  const groceryUnavailable = !!groceryError;
+  if (groceryError) console.error('[dashboard-home] grocery read failed', groceryError);
   let todayUnavailable = !!todayCalendarRes.error;
   let upcomingUnavailable = !!upcomingCalendarRes.error;
   let conflictsUnavailable = !!assignedCalendarRes.error;
@@ -350,7 +355,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     overdueReminders,
     dueTodayReminders,
     pendingChores: pendingChores ?? 0,
-    lowGrocery: (groceryCount ?? 0) > 0,
+    lowGrocery: !groceryUnavailable && (groceryCount ?? 0) > 0,
     openTodos: openTodos ?? 0,
     now,
     // A money approval's amount and the words around it, in this reader's locale.
@@ -360,7 +365,9 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     recommendations,
   });
   const needs = topNeeds(homeNeeds, 5);
-  const needsHeader = conflictsUnavailable ? t('needsAttention.needsYourAttention') : needsHeadline(summarizeNeeds(homeNeeds));
+  // With a source unread, "nothing needs you" is a claim nobody checked.
+  const needsUnknown = conflictsUnavailable || groceryUnavailable;
+  const needsHeader = needsUnknown ? t('needsAttention.needsYourAttention') : needsHeadline(summarizeNeeds(homeNeeds));
 
   // `||`, not `??`: an empty display name is no name, and "Good afternoon, ."
   // is what `??` let through. With no name at all the greeting has none.
@@ -388,7 +395,9 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   // next best getting-started steps, and dinner ideas — instead of a bland
   // "all caught up" void. Reuses the onboarding first-brief engine so home + the
   // first-run screen tell the same story.
-  const showOutcome = !todayUnavailable && !upcomingUnavailable && !conflictsUnavailable && needs.shown.length === 0 && !hasEvents;
+  // The outcome scores the week from these counts ("Start a grocery list"), so
+  // it waits for a grocery count that was read.
+  const showOutcome = !todayUnavailable && !upcomingUnavailable && !conflictsUnavailable && !groceryUnavailable && needs.shown.length === 0 && !hasEvents;
   let homeBrief: ReturnType<typeof buildHomeBrief> | null = null;
   if (showOutcome) {
     const { data: dinnerRows } = await supabase
@@ -433,7 +442,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       documentsSoon: ((documentRows ?? []) as DocumentRow[])
         .filter((d) => d.expires_at).map((d) => ({ title: d.title, days: daysUntil(d.expires_at as string) })).filter((d) => d.days >= 0),
       unplannedDinners: Math.max(0, 7 - Math.min(7, plannedDinnerCount ?? 0)),
-      lowGrocery: groceryCount ?? 0,
+      lowGrocery: groceryUnavailable ? undefined : groceryCount ?? 0,
       autopilotTop: openSuggestions[0] ? { title: openSuggestions[0].title, confidence: openSuggestions[0].confidence } : null,
     };
     const candidates = buildInsightCandidates(sources);
@@ -618,7 +627,8 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
 
       {/* §16 Needs Your Attention — one ranked queue, decisions made in place */}
       {conflictsUnavailable && calendarNotice('homeCalendar.conflictsUnavailable')}
-      {(!conflictsUnavailable || needs.shown.length > 0) && <NeedsAttention
+      {groceryUnavailable && calendarNotice('aiHomeDashboard.groceryUnavailable')}
+      {(!needsUnknown || needs.shown.length > 0) && <NeedsAttention
         items={needs.shown}
         more={needs.more}
         headline={needsHeader}

@@ -93,7 +93,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
     { count: dueTodayCount },
     { data: weekPlans },
     { data: members },
-    { data: groceryItems },
+    { data: groceryItems, error: groceryError },
     { data: dueTasks },
     { count: doneCount },
     { count: totalCount },
@@ -133,6 +133,11 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
       .eq('family_id', familyId).is('deleted_at', null).neq('sender_id', ctx.user.id)
       .not('read_by', 'cs', `{${ctx.user.id}}`),
   ]);
+  // A grocery read that failed (the items, or the open-list read in front of
+  // them) is not an empty list: the card says it could not load, and no advice
+  // is drawn from a count nobody read.
+  const groceryUnavailable = Boolean(groceryError);
+  if (groceryError) console.error('[family-dashboard] grocery read failed', groceryError);
   const calendarData = calendarRes && 'ok' in calendarRes && calendarRes.ok ? calendarRes.data : null;
   const calendarUnavailable = calendarData === null;
   const calendarEvents = calendarData ? projectCalendarOccurrences(calendarData.occurrences).events : [];
@@ -175,7 +180,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
   if ((openChores ?? 0) > 0) {
     suggestions.push({ icon: CheckCircle2, text: openChores === 1 ? tr('familyDashboard.openTasksOne') : tr('familyDashboard.openTasksMany', { n: openChores ?? 0 }), cta: tr('familyDashboard.viewTasks') });
   }
-  if ((weekPlans?.length ?? 0) > 0 && (groceryItems?.length ?? 0) === 0) {
+  if (!groceryUnavailable && (weekPlans?.length ?? 0) > 0 && (groceryItems?.length ?? 0) === 0) {
     suggestions.push({ icon: ShoppingCart, text: tr('familyDashboard.mealsNoGroceries'), cta: tr('familyDashboard.buildList') });
   }
   if (upcomingCalendarEvents.length > 0) {
@@ -437,11 +442,15 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">{tr('familyDashboard.groceryList')}</h2>
-            <span className="rounded-full bg-violet-500/20 px-2.5 py-0.5 text-xs font-bold text-brand-text">
-              {groceryItems?.length ?? 0} items
-            </span>
+            {!groceryUnavailable && (
+              <span className="rounded-full bg-violet-500/20 px-2.5 py-0.5 text-xs font-bold text-brand-text">
+                {groceryItems?.length ?? 0} items
+              </span>
+            )}
           </div>
-          {groceryItems && groceryItems.length > 0 ? (
+          {groceryUnavailable ? (
+            <p role="status" className="py-8 text-center text-sm text-muted">{tr('familyDashboard.groceryListUnavailable')}</p>
+          ) : groceryItems && groceryItems.length > 0 ? (
             <ul className="space-y-2.5">
               {groceryItems.map((item) => (
                 <li key={item.id} className="flex items-center gap-3 text-sm">

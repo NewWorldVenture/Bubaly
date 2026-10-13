@@ -110,6 +110,49 @@ export function recordedActions(metadata: unknown): string[] {
   return Array.isArray(actions) ? actions.map((action) => (typeof action === 'string' ? action : '')) : [];
 }
 
+/**
+ * A run's recorded results exactly as stored (`metadata.actions`), as JSON
+ * text, or null when it holds none: what a retry's claim is fenced on.
+ *
+ * The receipts are read before the run is claimed. Another pass can claim the
+ * run in between, deliver an email, fail a later step and record that
+ * delivery; a retry that then claimed the run worked from receipts without
+ * it, and sent the email again. Claimed only while `metadata.actions` is still
+ * what was read, the claim matches nothing in that case, and the run waits,
+ * failed, for a pass that reads its receipts afresh. The fence is on the
+ * results alone, not the whole metadata: they are short, and every attempt
+ * that records them records its steps (`retryOf`) in the same write.
+ */
+export function recordedActionsJson(metadata: unknown): string | null {
+  const actions = metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+    ? (metadata as { actions?: unknown }).actions
+    : undefined;
+  return actions === undefined || actions === null ? null : JSON.stringify(actions);
+}
+
+/**
+ * What a retry of a failed run works from: the steps its earlier attempt ran,
+ * and what each of them did (`recordedActions`), matched by position.
+ *
+ * Positions only line up against the steps that attempt RAN. The workflow
+ * can be edited between attempts, and a retry used to load its CURRENT
+ * steps: "email A, email B" recorded as [sent, failed] and then reordered to
+ * "email B, email A" skipped B as sent and mailed A a second time. So every
+ * attempt records the steps it ran beside their results (`metadata.steps`),
+ * and a retry runs that snapshot. An edit to the workflow reaches runs that
+ * start after it. A run recorded before attempts kept their steps has no
+ * snapshot, and is matched against the current steps as before.
+ */
+export function retryOf(metadata: unknown, current: Step[]): { steps: Step[]; previous: string[] } {
+  const recorded = metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+    ? (metadata as { steps?: unknown }).steps
+    : undefined;
+  const snapshot = Array.isArray(recorded) && recorded.every((step) => step !== null && typeof step === 'object' && !Array.isArray(step))
+    ? (recorded as Step[])
+    : null;
+  return { steps: snapshot ?? current, previous: recordedActions(metadata) };
+}
+
 /** Emails this attempt actually sent: a send carried over from `previous` was not sent again. */
 export function emailsSent(actions: readonly string[], previous: readonly string[] = []): number {
   return actions.filter((action, i) => action === 'send_email' && previous[i] !== 'send_email').length;

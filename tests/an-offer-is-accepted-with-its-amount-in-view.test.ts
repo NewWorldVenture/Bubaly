@@ -30,7 +30,16 @@ describe('an offer\'s amount, as the owner reads it', () => {
   it('is nothing for an offer without one', () => {
     expect(offerAmountLabel!(null, 'en-US')).toBe('');
     expect(offerAmountLabel!(undefined, 'en-US')).toBe('');
-    expect(offerAmountLabel!(0, 'en-US')).toBe('');
+  });
+
+  // Owner coordinator finding AUD-1037-MARKETPLACE-BOUNDARIES: a zero offer
+  // was blank, as if it named no amount. Accepting records
+  // `coalesce(offer.amount_cents, price)`, which keeps a zero, so the owner
+  // could accept an order at nothing without seeing it.
+  it('is zero, in the reader\'s notation, for an offer of zero', () => {
+    expect(offerAmountLabel!(0, 'en-US')).toBe(listings.formatCents(0, 'en-US'));
+    expect(offerAmountLabel!(0, 'de-DE')).toBe(listings.formatCents(0, 'de-DE'));
+    expect(offerAmountLabel!(0, 'en-US')).not.toBe('');
   });
 });
 
@@ -39,6 +48,14 @@ describe('where the owner accepts an offer', () => {
     const src = readFileSync('components/modules/marketplace-module.tsx', 'utf8');
     const dialog = between(src, 'dialogOffers.map((o) =>', "t('marketplace.accept')}</Button>");
     expect(dialog).toContain('offerAmountLabel(o.amount_cents, locale.code)');
+  });
+
+  it('the marketplace module\'s offers dialog leaves out only a missing amount, never a zero one', () => {
+    const src = readFileSync('components/modules/marketplace-module.tsx', 'utf8');
+    const dialog = between(src, 'dialogOffers.map((o) =>', "t('marketplace.accept')}</Button>");
+    expect(dialog).toContain('o.amount_cents != null ?');
+    // A truthiness gate hides a zero offer the owner would accept at zero.
+    expect(dialog).not.toMatch(/\{\s*o\.amount_cents\s*(\?|&&)/);
   });
 
   it('the listing page\'s inbox takes it from the same helper', () => {

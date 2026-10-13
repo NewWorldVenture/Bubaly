@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { emailsSent, failedAttempt, recordedActions, runSteps, type SendAdmission, type Step } from '@/lib/marketing/automation-steps';
+import { emailsSent, failedAttempt, recordedActionsJson, retryOf, runSteps, type SendAdmission, type Step } from '@/lib/marketing/automation-steps';
 import { EVENT_DEFAULT_COPY, type EventTrigger } from '@/lib/marketing/automation-triggers';
 import { wroteNoRows } from '@/lib/supabase/errors';
 
@@ -69,18 +69,23 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
 
     let runId = reserved?.[0]?.id ?? null;
     // What a failed attempt already did, so its retry does not repeat a send.
+    let steps = Array.isArray(flow.steps) ? (flow.steps as unknown as Step[]) : [];
     let previous: string[] = [];
     if (!runId) {
       const { data: existing, error: existingError } = await supabase.from('marketing_automation_runs')
         .select('id, status, metadata').eq('workflow_id', flow.id).eq('subject_key', params.subjectKey).maybeSingle();
       if (existingError || !existing || existing.status !== 'failed') continue;
-      const { data: claimed, error: claimError } = await supabase.from('marketing_automation_runs')
-        .update({ status: 'running' }).eq('id', existing.id).eq('status', 'failed').select('id').maybeSingle();
+      // Claimed only while its receipts are the ones just read: another sweep
+      // may have claimed it, delivered an email and recorded that in between
+      // (recordedActionsJson).
+      const receipts = recordedActionsJson(existing.metadata);
+      const claim = supabase.from('marketing_automation_runs').update({ status: 'running' }).eq('id', existing.id);
+      const asRead = receipts === null ? claim.is('metadata->actions', null) : claim.eq('metadata->actions', receipts);
+      const { data: claimed, error: claimError } = await asRead.eq('status', 'failed').select('id').maybeSingle();
       if (claimError || !claimed) continue;
       runId = claimed.id;
-      previous = recordedActions(existing.metadata);
+      ({ steps, previous } = retryOf(existing.metadata, steps));
     }
-    const steps = Array.isArray(flow.steps) ? (flow.steps as unknown as Step[]) : [];
     let actions: string[];
     try {
       actions = await runSteps(steps, { email: params.email ?? null, name: params.name ?? null }, fallback, supabase, params.admitSend, previous);
@@ -99,7 +104,8 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
       .from('marketing_automation_runs')
       .update({
         status: failed ? 'failed' : 'completed',
-        metadata: { trigger: params.trigger, actions, ...(params.context ?? {}) } as unknown as Database['public']['Tables']['marketing_automation_runs']['Update']['metadata'],
+        // The results and the steps that produced them come last, so no context key can stand in for them (retryOf).
+        metadata: { trigger: params.trigger, ...(params.context ?? {}), actions, steps } as unknown as Database['public']['Tables']['marketing_automation_runs']['Update']['metadata'],
       })
       .eq('id', runId)
       .select('id');

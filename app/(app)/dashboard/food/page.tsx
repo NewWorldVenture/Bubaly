@@ -30,7 +30,10 @@ async function FeatureCard({
   index, title, href, icon: Icon, tint, count, countLabel, children,
 }: {
   index: number; title: string; href: string; icon: React.ComponentType<{ className?: string }>;
-  tint: string; count: number; countLabel: string; children: React.ReactNode;
+  tint: string;
+  /** Null when the count could not be read: the footer then names the page instead of a number. */
+  count: number | null;
+  countLabel: string; children: React.ReactNode;
 }) {
   const t = await getTranslations();
   return (
@@ -50,7 +53,7 @@ async function FeatureCard({
       </div>
       <div className="min-h-[120px] flex-1 space-y-2">{children}</div>
       <Link href={href} className="mt-4 border-t border-border/60 pt-3 text-xs font-semibold text-muted transition hover:text-brand-text">
-        {count} {countLabel} <ChevronRight className="inline h-3 w-3" />
+        {count === null ? title : `${count} ${countLabel}`} <ChevronRight className="inline h-3 w-3" />
       </Link>
     </section>
   );
@@ -122,6 +125,12 @@ export default async function FoodPage() {
       .eq('family_id', familyId).order('rating', { ascending: false, nullsFirst: false }).limit(4)),
   ]);
 
+  // `safe` answers a failed read with `data: null`, where a read that worked
+  // has an array. For the grocery card that is the difference between an
+  // empty list and one that could not be read (the items, or the open-list
+  // read in front of them), so the card says which.
+  const groceryUnavailable = grocery == null;
+
   // Resolve meal names for this week's dinners (kept robust to relation naming).
   const planRows = (dinners ?? []) as { plan_date: string; meal_id: string | null }[];
   const mealIds = [...new Set(planRows.map((p) => p.meal_id).filter((x): x is string => !!x))];
@@ -171,8 +180,9 @@ export default async function FoodPage() {
         </FeatureCard>
 
         {/* 3. Grocery List */}
-        <FeatureCard index={3} title={t('dashboardFood.groceryList')} href="/dashboard/grocery" icon={ShoppingCart} tint="bg-amber-500/15 text-amber-400" count={groceryCount ?? 0} countLabel={t('dashboardFood.count.itemsToBuy')}>
-          {(grocery ?? []).length === 0 ? <EmptyHint>{t('dashboardFood.yourListIsEmpty')}</EmptyHint>
+        <FeatureCard index={3} title={t('dashboardFood.groceryList')} href="/dashboard/grocery" icon={ShoppingCart} tint="bg-amber-500/15 text-amber-400" count={groceryUnavailable ? null : groceryCount ?? 0} countLabel={t('dashboardFood.count.itemsToBuy')}>
+          {groceryUnavailable ? <EmptyHint>{t('dashboardFood.groceryListUnavailable')}</EmptyHint>
+            : (grocery ?? []).length === 0 ? <EmptyHint>{t('dashboardFood.yourListIsEmpty')}</EmptyHint>
             : (grocery as G[]).map((g) => <ListRow key={g.id} label={g.name} dot="bg-amber-400" />)}
         </FeatureCard>
 

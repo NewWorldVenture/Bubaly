@@ -538,6 +538,49 @@ export type EmailInviteRecord =
   | { ok: false; reason: 'throttled'; retryAfterSec: number }
   | { ok: false; reason: 'read_failed' | 'write_failed' };
 
+/** Rows asked for per page of a family's referrals. The server may answer with fewer (db-max-rows). */
+const REFERRAL_PAGE_ROWS = 1000;
+
+/**
+ * Every referral row of one family, for a decision about the family's daily
+ * email limit. One unpaged read is answered with at most db-max-rows and no
+ * error, so a family with enough old invitations had its recent sends cut
+ * from the read, and both the limit check and the admission counted a
+ * budget with sends missing.
+ *
+ * Keyset pages in `id` order (`page` adds `.gt('id', cursor)` after the
+ * first): another request's rollback deleting a row while this one pages
+ * cannot shift a later row out of view, which an offset would. A row written
+ * behind the cursor meanwhile is missed, and that is safe: its own request
+ * read after it wrote, so it counts this one. Each page asks for its `count`,
+ * taken in the same statement as its rows, so a page holding every row past
+ * the cursor ends the read without a second round trip, while one cut short
+ * by the server's cap reads on. Any failed page fails the whole read: a part
+ * of the family's sends is not a budget.
+ */
+async function readEveryReferralPage<Row extends { id: string }>(
+  page: (cursor: string | null) => PromiseLike<{ data: Row[] | null; count: number | null; error: unknown }>,
+): Promise<{ rows: Row[]; error: unknown }> {
+  const rows: Row[] = [];
+  let cursor: string | null = null;
+  for (;;) {
+    const { data, count, error } = await page(cursor);
+    if (error) return { rows: [], error };
+    if (!Array.isArray(data)) return { rows: [], error: new Error('Referral page unavailable') };
+    if (data.length === 0) return { rows, error: null };
+    let last: string | null = cursor;
+    for (const row of data) {
+      if (typeof row.id !== 'string' || (cursor !== null && row.id <= cursor)) {
+        return { rows: [], error: new Error('Referral page did not advance') };
+      }
+      if (last === null || row.id > last) last = row.id;
+    }
+    rows.push(...data);
+    if (typeof count === 'number' && data.length >= count) return { rows, error: null };
+    cursor = last;
+  }
+}
+
 /**
  * Record that the referrer is emailing `email` their code, subject to the
  * per-family daily limit. Every send is a timestamp on the invited family's
@@ -560,18 +603,19 @@ export async function recordReferralEmailInvite(service: DB, input: {
 }): Promise<EmailInviteRecord> {
   const now = input.now ?? new Date();
   const email = input.email.trim().toLowerCase();
-  const { data: rows, error } = await service
-    .from('referrals')
-    .select('id, referred_email, status, metadata')
-    .eq('referrer_family_id', input.referrerFamilyId);
+  const { rows, error } = await readEveryReferralPage((cursor) => {
+    const page = service.from('referrals').select('id, referred_email, status, metadata', { count: 'exact' })
+      .eq('referrer_family_id', input.referrerFamilyId).order('id', { ascending: true }).limit(REFERRAL_PAGE_ROWS);
+    return cursor === null ? page : page.gt('id', cursor);
+  });
   if (error) {
     console.error('[referrals/email] referral rows read failed', { familyId: input.referrerFamilyId, error });
     return { ok: false, reason: 'read_failed' };
   }
-  const decision = evaluateReferralEmailThrottle(rows ?? [], now);
+  const decision = evaluateReferralEmailThrottle(rows, now);
   if (!decision.allowed) return { ok: false, reason: 'throttled', retryAfterSec: decision.retryAfterSec };
 
-  const existing = (rows ?? []).find((r) => (r.referred_email ?? '').toLowerCase() === email);
+  const existing = rows.find((r) => (r.referred_email ?? '').toLowerCase() === email);
   if (existing) {
     const query = service.from('referrals')
       .update({ metadata: withReferralEmailSent(existing.metadata, now) as ReferralMetadata })
@@ -628,16 +672,17 @@ async function admitWrittenReferralEmail(service: DB, input: {
 }): Promise<EmailInviteRecord> {
   const own = { rowId: input.rowId, created: input.created, sentAt: input.sentAt };
   for (let attempt = 0; ; attempt++) {
-    const { data: rows, error } = await service
-      .from('referrals')
-      .select('id, metadata')
-      .eq('referrer_family_id', input.referrerFamilyId);
+    const { rows, error } = await readEveryReferralPage((cursor) => {
+      const page = service.from('referrals').select('id, metadata', { count: 'exact' })
+        .eq('referrer_family_id', input.referrerFamilyId).order('id', { ascending: true }).limit(REFERRAL_PAGE_ROWS);
+      return cursor === null ? page : page.gt('id', cursor);
+    });
     if (error) {
       console.error('[referrals/email] referral admission read failed', { familyId: input.referrerFamilyId, error });
       await rollbackReferralEmailInvite(service, own);
       return { ok: false, reason: 'read_failed' };
     }
-    const admission = decideReferralEmailAdmission(rows ?? [], { rowId: input.rowId, sentAt: input.sentAt });
+    const admission = decideReferralEmailAdmission(rows, { rowId: input.rowId, sentAt: input.sentAt });
     if (admission.verdict === 'admit') return { ok: true, rowId: input.rowId, created: input.created, remaining: admission.remaining };
     if (admission.verdict === 'missing') {
       console.error('[referrals/email] referral send missing after write', { id: input.rowId });
@@ -653,26 +698,54 @@ async function admitWrittenReferralEmail(service: DB, input: {
   }
 }
 
-/** Undo a recorded send whose email never left: drop a fresh row, or the timestamp on a reused one. */
+/**
+ * Undo a recorded send whose email never left: this request's own send, and
+ * nothing another request wrote. Uncertain cases leave the send counted.
+ *
+ * A fresh row is deleted only while it still holds exactly what its insert
+ * wrote. A repeat invitation to the same address appends its send to this
+ * row, and may already be admitted and emailed; deleting the row then took
+ * that send out of the count, and the family could be emailed past its limit.
+ * Otherwise, and on a reused row, ONE copy of this request's timestamp is
+ * removed: two sends stamped in the same millisecond each own one copy.
+ */
 export async function rollbackReferralEmailInvite(service: DB, input: { rowId: string; created: boolean; sentAt: Date }): Promise<void> {
   if (input.created) {
-    // A rollback of a row this request inserted, so zero rows deleted is a
-    // failed rollback rather than an absence: the invite stays recorded as sent
-    // and counts against the family's limit for an email that never left.
-    // Logged, not raised, like the update below. Audit C1-S9-64.
-    const { data: dropped, error } = await service.from('referrals').delete().eq('id', input.rowId).eq('status', 'pending').select('id');
-    if (error || wroteNoRows(dropped)) {
-      console.error('[referrals/email] invite rollback delete failed', { id: input.rowId, error: error ?? 'no rows deleted' });
+    // A rollback of a row this request inserted, fenced on what the insert
+    // wrote. An error leaves the invite recorded as sent, counted against the
+    // family's limit for an email that never left. Logged, not raised, like
+    // the update below. Audit C1-S9-64.
+    const { data: dropped, error } = await service.from('referrals').delete()
+      .eq('id', input.rowId).eq('status', 'pending')
+      .eq('metadata', JSON.stringify(withReferralEmailSent({}, input.sentAt)))
+      .select('id');
+    if (error) {
+      console.error('[referrals/email] invite rollback delete failed', { id: input.rowId, error });
+      return;
+    }
+    if (wroteNoRows(dropped)) {
+      // The row changed after the insert: another send landed on it (a repeat
+      // to the same address), or it left `pending`. It is not this request's
+      // alone to delete, so only this request's own timestamp comes off it.
+      console.error('[referrals/email] invite rollback found its row changed; withdrawing only its own send', { id: input.rowId });
+      await withdrawOwnReferralSend(service, input);
     }
     return;
   }
+  await withdrawOwnReferralSend(service, input);
+}
+
+/** Take ONE copy of this request's timestamp off its row, under the row's full-metadata compare-and-set. */
+async function withdrawOwnReferralSend(service: DB, input: { rowId: string; sentAt: Date }): Promise<void> {
   const { data, error } = await service.from('referrals').select('status, metadata').eq('id', input.rowId).maybeSingle();
   if (error || !data) {
     console.error('[referrals/email] invite rollback read failed', { id: input.rowId, error });
     return;
   }
-  const stamp = input.sentAt.toISOString();
-  const kept = referralEmailSendTimes(data.metadata).filter((iso) => iso !== stamp);
+  const times = referralEmailSendTimes(data.metadata);
+  const own = times.lastIndexOf(input.sentAt.toISOString());
+  if (own < 0) return;
+  const kept = [...times.slice(0, own), ...times.slice(own + 1)];
   const base = data.metadata && typeof data.metadata === 'object' && !Array.isArray(data.metadata) ? { ...(data.metadata as Record<string, unknown>) } : {};
   const query = service.from('referrals')
     .update({ metadata: { ...base, email_sent_at: kept } as ReferralMetadata })
