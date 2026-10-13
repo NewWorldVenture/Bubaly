@@ -21,13 +21,14 @@ import { dayKeyInTz, familyInstantIso, zonedDayBoundsMs } from '@/lib/services/s
 import { nextRemindAt } from '@/lib/reminders/details';
 import { escapeLike } from '@/lib/supabase/escape-like';
 import { wroteNoRows } from '@/lib/supabase/errors';
-import { addItems, ensureDefaultGroceryListId } from '@/lib/services/groceries';
+import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
 import { ensureTodoListId } from '@/lib/services/tasks';
 import { createGoal } from '@/lib/services/goals';
 import { normalizeEventTimes } from '@/lib/services/calendar';
 import { allDayBoundsAsDates } from '@/lib/assistant/all-day-dates';
 import { reminderInstant } from '@/lib/services/reminders';
 import { SERVICE_CODES } from '@/lib/services/types';
+import { addItems } from '@/lib/services/groceries';
 import { isManager, ROLE_ORDER, type MemberRole } from '@/lib/constants/roles';
 import { isSensitiveDocument } from '@/lib/documents/sensitivity';
 
