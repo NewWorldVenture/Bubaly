@@ -5,6 +5,7 @@
 // model slips). Kept side-effect-free so it unit-tests without a network/DB.
 import { isValidTimezone, localPartsAt } from '@/lib/time/zoned';
 import { allergenConflict } from '@/lib/meals/substitutions';
+import { readReplyArray } from '@/lib/ai/reply-array';
 
 export type PantryRecipe = {
   title: string;
@@ -88,20 +89,18 @@ export function parsePantryRecipes(text: string): PantryRecipe[] {
  * from "the model said nothing this can read": null for a refusal, prose, an
  * empty reply or an array cut off at the token limit. Only the first is "No
  * food spotted"; the second is a photo that could not be read.
+ *
+ * The `[]` has to be the reply's own value (readReplyArray): the empty array
+ * inside `{"error":[]}` is not the model saying "no food", and neither is an
+ * object wrapping a list (`{"recipes":[…]}`), which this prompt never asks
+ * for. A list whose every item fails the recipe shape — `[{}]`, recipes with
+ * no title — is null too: filtered to nothing, it read exactly like `[]`. A
+ * list with some good recipes keeps those.
  */
 export function readPantryRecipes(text: string): PantryRecipe[] | null {
-  if (typeof text !== 'string' || !text.trim()) return null;
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1];
-  const candidate = (fenced ?? text).match(/\[[\s\S]*\]/)?.[0];
-  if (!candidate) return null;
-  let raw: unknown;
-  try {
-    raw = JSON.parse(candidate);
-  } catch {
-    return null;
-  }
-  if (!Array.isArray(raw)) return null;
-  return raw
+  const raw = readReplyArray(text);
+  if (!raw) return null;
+  const recipes = raw
     .map((r): PantryRecipe | null => {
       if (!r || typeof r !== 'object') return null;
       const o = r as Record<string, unknown>;
@@ -120,8 +119,9 @@ export function readPantryRecipes(text: string): PantryRecipe[] | null {
         allergenConflict: null,
       };
     })
-    .filter((r): r is PantryRecipe => r !== null)
-    .slice(0, 6);
+    .filter((r): r is PantryRecipe => r !== null);
+  if (raw.length > 0 && recipes.length === 0) return null;
+  return recipes.slice(0, 6);
 }
 
 /**
