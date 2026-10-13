@@ -134,7 +134,7 @@ async function getOrCreateGroceryListId(supabase: DB, familyId: string, userId: 
 }
 
 /** A card this scan found under a draft's key, as the prior read selects it. */
-type PriorCard = { id: string; kind: string | null; source_kind: string | null; member_id: string | null; resolved_by: string | null };
+type PriorCard = { id: string; status: string; kind: string | null; source_kind: string | null; member_id: string | null; resolved_by: string | null };
 
 /**
  * Keep an insurance card's member in step with its policy (0486).
@@ -166,6 +166,22 @@ type PriorCard = { id: string; kind: string | null; source_kind: string | null; 
  * the next 30 days, so a policy reassigned after its renewal day, or after it
  * was deactivated, leaves its card naming the old member. A failed refresh is
  * logged and the scan goes on.
+ *
+ * Two scans can overlap (the nightly run and a manager's, or two managers'),
+ * each with its own read of the policy. The write lands only while the card
+ * still names the member this scan read on it, so a scan that read the policy
+ * before it was reassigned again cannot put its older member back over a newer
+ * scan's: it writes nothing, and the next scan reconciles the card with the
+ * policy as it then stands (AUD-1031-REFRESH-CONSISTENCY).
+ *
+ * An accepted card is left as it is. Accepting one (resolveSuggestion,
+ * 'executed'; 'approved' on its way there) writes a family_reminders row
+ * stamped with the card's tag, which is minted from the card's columns,
+ * member_id among them (lib/services/autopilot suggestionSourceTag), and a
+ * repeating reminder's next occurrence carries that tag alone. Rewriting the
+ * member would leave the copies naming a tag no card mints, and they would
+ * fall to the managers alone. So an accepted card, and the reminders made from
+ * it, keep the member the card was accepted under.
  */
 async function refreshPolicyCardMember(
   supabase: DB, familyId: string, prior: PriorCard, draft: SuggestionDraft, viewer: AudienceViewer | null, userId: string | null,
@@ -176,12 +192,15 @@ async function refreshPolicyCardMember(
   if (suggestionAudience(before) !== 'policy-readers' || before.member_id === memberId) return;
   if (viewer && !(suggestionVisibleTo(before, viewer) && suggestionVisibleTo({ ...before, member_id: memberId }, viewer))) return;
   if (viewer && prior.resolved_by && prior.resolved_by !== userId) return;
+  if (prior.status === 'executed' || prior.status === 'approved') return;
   try {
-    const { data: refreshed, error } = await supabase.from('autopilot_suggestions')
-      .update({ member_id: memberId }).eq('id', prior.id).eq('family_id', familyId).select('id');
-    if (error || wroteNoRows(refreshed)) {
-      console.error('[autopilot] insurance card member refresh failed', error ?? { suggestionId: prior.id, error: 'no rows updated' });
-    }
+    const write = supabase.from('autopilot_suggestions')
+      .update({ member_id: memberId }).eq('id', prior.id).eq('family_id', familyId);
+    const observed = before.member_id === null ? write.is('member_id', null) : write.eq('member_id', before.member_id);
+    // No row written is a scan that lost the card to a newer one (above): not
+    // a failure, and nothing to undo.
+    const { error } = await observed.select('id');
+    if (error) console.error('[autopilot] insurance card member refresh failed', error);
   } catch (error) {
     console.error('[autopilot] insurance card member refresh failed', error);
   }

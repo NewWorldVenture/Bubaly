@@ -176,7 +176,13 @@
 -- reads it. And only a card whose draft a scan still builds is refreshed: the
 -- insurance draft is made for an active policy renewing within 30 days, so a
 -- policy reassigned after its renewal day, or after it was deactivated,
--- leaves its card naming the old member.
+-- leaves its card naming the old member. The write lands only while the card
+-- still names the member the scan read on it, so an overlapping scan that
+-- read the policy earlier cannot put an older member back. An accepted card
+-- ('executed', or 'approved' on its way there) is not refreshed: its
+-- family_reminders rows carry a tag minted from the card's columns, member_id
+-- among them, and a repeating reminder's next occurrence carries the tag
+-- alone, so the card and its reminders keep the member it was accepted under.
 --
 -- What stays outside it:
 --

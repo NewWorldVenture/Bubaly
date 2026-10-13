@@ -111,6 +111,8 @@ describe('an insurance card follows its policy to the member it now names', () =
       { method: 'update', args: [{ member_id: 'leo' }] },
       { method: 'eq', args: ['id', 'card-pol-dental'] },
       { method: 'eq', args: ['family_id', FAMILY] },
+      // Only while the card still names the member this scan read on it.
+      { method: 'eq', args: ['member_id', 'ava'] },
       { method: 'select', args: ['id'] },
     ]);
   });
@@ -184,5 +186,118 @@ describe('an insurance card follows its policy to the member it now names', () =
     expect(card(db)).toEqual(before);
     // The rest of the scan still ran: the subscription charge is written.
     expect(db.table('autopilot_suggestions').some((s) => s.source_id === 'sub-1')).toBe(true);
+  });
+});
+
+// AUD-1031-REFRESH-CONSISTENCY. Two scans can overlap, each with its own read
+// of the policy, and an accepted card's reminders carry a tag minted from the
+// card's columns, member_id among them.
+describe('the refresh neither puts back an older member nor strands an accepted card\'s reminders', () => {
+  /** `db`, holding the first member refresh until `release` is called. */
+  function holdingFirstRefresh(db: ReturnType<typeof household>) {
+    let held = false;
+    let release!: () => void;
+    let reached!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const atWrite = new Promise<void>((resolve) => { reached = resolve; });
+    const client = new Proxy(db, {
+      get(target, property, receiver) {
+        if (property !== 'from') return Reflect.get(target, property, receiver);
+        return (table: string) => {
+          const builder = target.from(table);
+          let refresh = false;
+          const proxy: object = new Proxy(builder, {
+            get(object, key) {
+              if (key === 'then') {
+                return (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) => {
+                  if (!refresh || held) return object.then(resolve as never, reject);
+                  held = true;
+                  reached();
+                  return gate.then(() => object.then(resolve as never, reject));
+                };
+              }
+              const value = Reflect.get(object, key);
+              if (typeof value !== 'function') return value;
+              return (...args: unknown[]) => {
+                if (table === 'autopilot_suggestions' && key === 'update' && 'member_id' in (args[0] as Row)) refresh = true;
+                const result = Reflect.apply(value, object, args);
+                return result === object ? proxy : result;
+              };
+            },
+          });
+          return proxy;
+        };
+      },
+    });
+    return { client: client as typeof db, release, atWrite };
+  }
+
+  it('a scan that read the policy before it was reassigned again does not put its member back over a newer scan\'s', async () => {
+    // The card names Ava; the policy names Leo when the first scan reads it.
+    const db = household('leo', 'ava');
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const first = holdingFirstRefresh(db);
+    const older = runAutopilotScan(first.client, FAMILY, null, 'UTC', 'en-US', echo, AT);
+    await first.atWrite;
+
+    // Meanwhile the policy is reassigned to Sam and a second scan follows it.
+    await db.from('family_insurance_policies').update({ member_id: 'sam' }).eq('id', 'pol-dental').select('id');
+    await runAutopilotScan(db, FAMILY, null, 'UTC', 'en-US', echo, AT);
+    expect(card(db).member_id).toBe('sam');
+
+    first.release();
+    await older;
+    expect(card(db).member_id).toBe('sam');
+    expect(logged).not.toHaveBeenCalledWith('[autopilot] insurance card member refresh failed', expect.anything());
+
+    // The next scan reconciles the card with the policy as it then stands.
+    await db.from('family_insurance_policies').update({ member_id: 'leo' }).eq('id', 'pol-dental').select('id');
+    await runAutopilotScan(db, FAMILY, null, 'UTC', 'en-US', echo, AT);
+    expect(card(db).member_id).toBe('leo');
+  });
+
+  it('an accepted card keeps the member it was accepted under, so its reminder and the reminder\'s next occurrence answer alike', async () => {
+    const { suggestionReminderKey, suggestionSourceTag } = await import('@/lib/services/autopilot');
+    const { reminderCardsReader, visibleReminders } = await import('@/lib/autopilot/reminder-cards');
+    const { generateFamilyNotifications } = await import('@/lib/server/notifications');
+    const db = household('leo', 'ava', { status: 'executed', resolved_at: '2026-09-16T08:00:00.000Z', resolved_by: 'u-mum' });
+    const accepted = structuredClone(card(db));
+    const tag = suggestionSourceTag(accepted as never);
+    const due = { family_id: FAMILY, member_id: null, status: 'active', remind_at: '2026-09-21T09:00:00.000Z', early_reminder_minutes: 0, snoozed_until: null, priority: 'medium' };
+    db.seed('family_reminders', [
+      // The reminder accepting the card wrote, under the card's key and tag...
+      { ...due, id: 'fr-original', title: 'Renew dental (accepted)', recurrence: 'yearly', idempotency_key: suggestionReminderKey(FAMILY, accepted.id as string), tags: [tag] },
+      // ...its next occurrence, which carries the tag alone...
+      { ...due, id: 'fr-next', title: 'Renew dental (next year)', recurrence: 'yearly', idempotency_key: null, tags: [tag] },
+      // ...and one somebody typed.
+      { ...due, id: 'fr-typed', title: 'Call the dentist', recurrence: 'none', idempotency_key: null, tags: [] },
+    ]);
+
+    await runAutopilotScan(db, FAMILY, null, 'UTC', 'en-US', echo, AT);
+    expect(card(db)).toEqual(accepted);
+
+    const rows = db.table('family_reminders') as unknown as { id: string; title: string; idempotency_key: string | null; tags: string[] }[];
+    const shown = async (member: string) => (await visibleReminders(rows, viewerOf(member), reminderCardsReader(db, FAMILY, {
+      keyOf: (id) => suggestionReminderKey(FAMILY, id), sourceTagOf: suggestionSourceTag, onError: () => { throw new Error('the cards were readable'); },
+    }))).map((r) => r.id).sort();
+    expect(await shown('mum')).toEqual(['fr-next', 'fr-original', 'fr-typed']);
+    expect(await shown('ava')).toEqual(['fr-next', 'fr-original', 'fr-typed']);
+    expect(await shown('leo')).toEqual(['fr-typed']);
+    expect(await shown('sam')).toEqual(['fr-typed']);
+
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-09-21T08:30:00Z'));
+      await generateFamilyNotifications(db, FAMILY);
+    } finally {
+      vi.useRealTimers();
+    }
+    const told = (title: string) => db.table('notifications')
+      .filter((n) => n.related_type === 'family_reminders' && n.title === `Reminder: ${title}`)
+      .map((n) => (n.user_id as string | null) ?? null).sort((a, b) => String(a).localeCompare(String(b)));
+    expect(told('Renew dental (accepted)')).toEqual(told('Renew dental (next year)'));
+    expect(told('Renew dental (accepted)')).toContain('u-ava');
+    expect(told('Renew dental (accepted)')).not.toContain('u-leo');
+    expect(told('Call the dentist')).toEqual([null]);
   });
 });
