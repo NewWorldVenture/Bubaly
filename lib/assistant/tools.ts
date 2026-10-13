@@ -21,7 +21,7 @@ import { dayKeyInTz, familyInstantIso, zonedDayBoundsMs } from '@/lib/services/s
 import { nextRemindAt } from '@/lib/reminders/details';
 import { escapeLike } from '@/lib/supabase/escape-like';
 import { wroteNoRows } from '@/lib/supabase/errors';
-import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
+import { addItems, ensureDefaultGroceryListId } from '@/lib/services/groceries';
 import { ensureTodoListId } from '@/lib/services/tasks';
 import { createGoal } from '@/lib/services/goals';
 import { normalizeEventTimes } from '@/lib/services/calendar';
@@ -224,13 +224,26 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
       execute: async (a) => {
         const name = str(a.item);
         if (!name) return { ok: false, error: 'item is required' };
+        const role = knownRole(ctx.role);
+        if (!role) return { ok: false, error: 'Only a member of the household can change its grocery list.' };
         const list = await ensureGroceryList(supabase, ctx.familyId, ctx.userId);
         if (list.error) return toolFailure('open a grocery list', list.error);
         if (!list.id) return { ok: false, error: 'Could not open a grocery list' };
-        const { error } = await supabase.from('grocery_items').insert({
-          family_id: ctx.familyId, list_id: list.id, name, quantity: optStr(a.quantity), created_by: ctx.userId,
-        });
-        if (error) return toolFailure('add the grocery item', error);
+        // Through the grocery service, not a direct insert: `addItems` is where
+        // an item still unticked on the list is skipped rather than added a
+        // second time, the aisle is guessed and the add reaches the family's
+        // trail. This tool sits in front of the registry's `groceries.addItems`
+        // (mergeToolSets keeps the first of a name), so inserting here meant
+        // "add milk" put a second Milk on a list that already had one.
+        const res = await addItems(
+          { db: supabase, familyId: ctx.familyId, userId: ctx.userId, memberId: ctx.memberId, role, actorKind: 'ai', tz: ctx.tz || 'UTC' },
+          { items: [{ name, quantity: optStr(a.quantity) }], listId: list.id },
+        );
+        if (!res.ok) {
+          if (res.code === SERVICE_CODES.db) return toolFailure('add the grocery item', res.error);
+          return { ok: false, error: res.error };
+        }
+        if (res.data.added.length === 0) return { ok: true, summary: `${name} is already on the grocery list.` };
         return { ok: true, summary: `Added ${name} to the grocery list.` };
       },
     },
