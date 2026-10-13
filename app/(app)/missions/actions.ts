@@ -319,8 +319,12 @@ async function submitClaimedProof({ t, ctx, supabase, familyId, tz, assignment, 
   }
   await logChoreEvent({ familyId, assignmentId, submissionId: submission.id, action: 'ai_validate', note: verdict.status });
 
-  // Auto-approve only when the parent set a threshold and nothing needs a human.
-  const autoOk = canAutoApprove({
+  // Auto-approve only when the parent set a threshold and nothing needs a human
+  // — and only on something the reviewer SAW. With no photo (a 'none' chore,
+  // or one whose images were not shown) the child's own note was the whole of
+  // the evidence, and a note can say anything, including the verdict it wants:
+  // that approval, its points and its owed cash, were the child's to write.
+  const autoOk = proofKind !== 'none' && images.length > 0 && canAutoApprove({
     autoApproveScore: chore.auto_approve_score, score: verdict.quality_score,
     needsParentReview: verdict.needs_parent_review, safetyFlags: verdict.safety_flags,
   });
@@ -632,6 +636,12 @@ export async function createChoreAction(formData: FormData): Promise<MissionActi
   const pricing = ['points', 'points_min', 'points_max', 'cash_cents', 'cash_min_cents', 'cash_max_cents'];
   const priced = pricing.some((field) => intVal(formData, field) != null);
   if (priced && !isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentCanSetAChoreReward') };
+  // Whether a reviewer's score alone may approve a chore — and so release its
+  // reward with no parent — is a parent's setting too. A child turning it on
+  // for their own chore chose their own approval.
+  if (intVal(formData, 'auto_approve_score') != null && !isManager(ctx.active.role)) {
+    return { ok: false, error: t('actions.onlyAParentGuardianCan16') };
+  }
 
   const memberIds = formData.getAll('member_ids').map((v) => String(v)).filter(Boolean);
 

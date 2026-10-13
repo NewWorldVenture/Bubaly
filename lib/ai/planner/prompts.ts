@@ -196,6 +196,13 @@ export type PlannerUserMessageInput = {
   pageContext?: { module?: string; entityIds?: string[] } | null;
 };
 
+/**
+ * Room for a whole skeleton inside its fence: a budget a skeleton never reaches
+ * (the largest template instantiates to a few kilobytes), so the fence never
+ * cuts its JSON in half.
+ */
+const SKELETON_BUDGET = 60_000;
+
 /** The user turn: the household context, the request, prior answers, and the skeleton to fill. */
 export function buildPlannerUserMessage(input: PlannerUserMessageInput): string {
   const parts: string[] = [input.contextText, ''];
@@ -216,14 +223,21 @@ export function buildPlannerUserMessage(input: PlannerUserMessageInput): string 
     parts.push(`Request: ${input.requestText.trim()}`);
   }
   if (input.skeleton) {
+    // The skeleton and its follow-ups are built from the family's rows — a
+    // trip's title ("Two days before ${trip.title}: …"), a move's, a bill's,
+    // a pet's, a vet's — which any member can set to anything. Rendered bare,
+    // that text sat in the planner's own request outside every fence, where
+    // UNTRUSTED_CONTENT_RULE does not reach. Each block is fenced whole, so the
+    // JSON inside is unchanged and still the plan to work from, and nothing a
+    // member typed into a title is read as an instruction.
     parts.push('', 'Recommended skeleton for this workflow. Keep the keys, fill or replace the inputs from the context, drop steps that do not apply, add steps the request needs:');
-    parts.push(JSON.stringify(input.skeleton.steps, null, 0));
+    parts.push(fenceUntrustedBlock('workflow_skeleton', JSON.stringify(input.skeleton.steps, null, 0), SKELETON_BUDGET));
     if (input.skeletonHints.length) {
       parts.push('Steps you must fill before they can run:');
       parts.push(...input.skeletonHints.map((h) => `- ${h.key}: ${h.hint}`));
     }
     if (input.skeleton.followups.length) {
-      parts.push(`Suggested follow-ups: ${JSON.stringify(input.skeleton.followups)}`);
+      parts.push('Suggested follow-ups:', fenceUntrustedBlock('suggested_followups', JSON.stringify(input.skeleton.followups), SKELETON_BUDGET));
     }
   }
   return parts.join('\n');

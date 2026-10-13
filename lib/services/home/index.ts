@@ -17,6 +17,7 @@ import 'server-only';
 import type { Priority, Tables } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
 import { DEFAULT_CADENCES, TRADES, TRADE_FOR_CATEGORY } from '@/lib/home/maintenance';
+import { alreadyOnOrAfter, onlyForward } from '@/lib/home/service-dates';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
@@ -379,22 +380,32 @@ export async function createServiceRecord(scope: ServiceScope, input: CreateServ
 
       // Both follow-up writes are best-effort: the record itself is saved, and
       // a stale "last used" date is a smaller wrong than losing the visit.
+      // Both move FORWARD only (lib/home/service-dates): a visit logged after
+      // the fact is history, and writing its date over a later one made every
+      // recommended task overdue and reordered the contractor list. Zero rows
+      // is then ordinary — the later date stays — and only a missing row or a
+      // date still older is logged.
       if (input.assetId) {
         // Confirmed for the LOG, as the dashboard's own copy of this write was
         // under C1-S9-60: an asset id matching nothing is the commonest way it
         // quietly does nothing. Never raised. Audit C1-S9-65.
         const { data: assetTouched, error: assetError } = await scope.db.from('home_assets')
-          .update({ last_serviced_on: serviceDate }).eq('id', input.assetId).eq('family_id', scope.familyId).select('id');
+          .update({ last_serviced_on: serviceDate }).eq('id', input.assetId).eq('family_id', scope.familyId)
+          .or(onlyForward('last_serviced_on', serviceDate)).select('id');
         if (assetError || wroteNoRows(assetTouched)) {
-          console.error('[service:home] home_assets last_serviced_on update failed', assetError ?? { assetId: input.assetId, error: 'no rows updated' });
+          if (assetError || !(await alreadyOnOrAfter(scope.db, 'home_assets', 'last_serviced_on', scope.familyId, input.assetId, serviceDate))) {
+            console.error('[service:home] home_assets last_serviced_on update failed', assetError ?? { assetId: input.assetId, error: 'no rows updated' });
+          }
         }
       }
       if (input.contractorId) {
         const { data: contractorTouched, error: contractorError } = await scope.db.from('home_contractors')
           .update({ last_used_on: serviceDate, updated_by: scope.userId }).eq('id', input.contractorId).eq('family_id', scope.familyId)
-          .is('deleted_at', null).select('id');
+          .is('deleted_at', null).or(onlyForward('last_used_on', serviceDate)).select('id');
         if (contractorError || wroteNoRows(contractorTouched)) {
-          console.error('[service:home] home_contractors last_used_on update failed', contractorError ?? { contractorId: input.contractorId, error: 'no rows updated' });
+          if (contractorError || !(await alreadyOnOrAfter(scope.db, 'home_contractors', 'last_used_on', scope.familyId, input.contractorId, serviceDate))) {
+            console.error('[service:home] home_contractors last_used_on update failed', contractorError ?? { contractorId: input.contractorId, error: 'no rows updated' });
+          }
         }
       }
 

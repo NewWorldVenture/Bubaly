@@ -15,6 +15,20 @@ import { describeReadError } from '@/lib/supabase/settle';
 export const runtime = 'nodejs';
 
 const FETCH_TIMEOUT = 9000;
+
+/**
+ * How much of a family's own feed list one search reads. Any member may save a
+ * feed, as many as they like, and every one of them used to be fetched AT
+ * ONCE on every search: a few hundred saved URLs on a slow host were a few
+ * hundred concurrent outbound requests, each holding up to 1 MiB, from one
+ * request. A search now reads the feeds fetched longest ago, a few at a time,
+ * and stops starting new ones at a deadline; the rest wait for the next search
+ * and are reported as skipped. The per-family cap on saved feeds is the
+ * database's to enforce (a member inserts them directly).
+ */
+const MAX_FEEDS_PER_SEARCH = 12;
+const FEED_CONCURRENCY = 4;
+const FEEDS_DEADLINE_MS = 25_000;
 async function fetchWithTimeout(url: string, ms = FETCH_TIMEOUT): Promise<Response> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), ms);
@@ -50,19 +64,27 @@ export async function POST(req: NextRequest) {
   const { startISO, endISO } = discoveryWindow(windowDays);
 
   const familyId = ctx.active.familyId;
+  // An all-day event is a date where the FAMILY is: read at its midnight, not Greenwich's.
+  const familyZone = ctx.active.family?.timezone || null;
+  // A source is USED once it answered. Pushed before the fetch, a provider
+  // that failed still counted, so a search where every source failed came
+  // back 200 "No events found" — an outage reported as an empty weekend.
   const sourcesUsed: string[] = [];
+  const sourcesTried: string[] = [];
   const sourceErrors: Record<string, string> = {};
   const lists: NormalizedEvent[][] = [];
 
   // --- Ticketmaster (keyed) ---
   const tmKey = process.env.TICKETMASTER_API_KEY;
   if (tmKey) {
-    sourcesUsed.push('ticketmaster');
+    sourcesTried.push('ticketmaster');
     try {
       const p = new URLSearchParams({ apikey: tmKey, postalCode: zip.trim(), radius: String(radiusMiles), unit: 'miles', startDateTime: startISO, endDateTime: endISO, size: '100', sort: 'date,asc' });
       const res = await fetchWithTimeout(`https://app.ticketmaster.com/discovery/v2/events.json?${p}`);
-      if (res.ok) lists.push(normalizeTicketmasterResponse(await readBoundedResponseJson<unknown>(res, 2 * 1024 * 1024)));
-      else {
+      if (res.ok) {
+        lists.push(normalizeTicketmasterResponse(await readBoundedResponseJson<unknown>(res, 2 * 1024 * 1024), familyZone));
+        sourcesUsed.push('ticketmaster');
+      } else {
         sourceErrors.ticketmaster = `HTTP ${res.status}`;
         console.warn('Ticketmaster discovery failed:', res.status);
       }
@@ -75,12 +97,14 @@ export async function POST(req: NextRequest) {
   // --- SeatGeek (keyed) ---
   const sgKey = process.env.SEATGEEK_CLIENT_ID;
   if (sgKey) {
-    sourcesUsed.push('seatgeek');
+    sourcesTried.push('seatgeek');
     try {
       const p = new URLSearchParams({ client_id: sgKey, postal_code: zip.trim(), range: `${radiusMiles}mi`, 'datetime_utc.gte': startISO, 'datetime_utc.lte': endISO, per_page: '100', sort: 'datetime_utc.asc' });
       const res = await fetchWithTimeout(`https://api.seatgeek.com/2/events?${p}`);
-      if (res.ok) lists.push(normalizeSeatGeekResponse(await readBoundedResponseJson<unknown>(res, 2 * 1024 * 1024)));
-      else {
+      if (res.ok) {
+        lists.push(normalizeSeatGeekResponse(await readBoundedResponseJson<unknown>(res, 2 * 1024 * 1024)));
+        sourcesUsed.push('seatgeek');
+      } else {
         sourceErrors.seatgeek = `HTTP ${res.status}`;
         console.warn('SeatGeek discovery failed:', res.status);
       }
@@ -97,13 +121,22 @@ export async function POST(req: NextRequest) {
   // empty, the block below was skipped, and the response came back looking
   // complete while omitting the only source the family configured themselves.
   // Reported through the existing mechanism rather than a new one. C1-S9-41.
-  const { data: feeds, error: feedsError } = await supabase.from('weekend_feeds').select('*').eq('family_id', familyId).eq('is_active', true);
+  // The ones fetched longest ago first (never-fetched before all), one past
+  // the cap so a longer list is known to be longer.
+  const { data: savedFeeds, error: feedsError } = await supabase.from('weekend_feeds').select('*').eq('family_id', familyId).eq('is_active', true)
+    .order('last_fetched_at', { ascending: true, nullsFirst: true }).order('id').limit(MAX_FEEDS_PER_SEARCH + 1);
   if (feedsError) {
+    sourcesTried.push('feeds');
     console.error('[weekend/discover] feed read failed', { familyId, error: describeReadError(feedsError) });
     sourceErrors.feeds = 'Your saved local feeds could not be loaded.';
   }
+  const feeds = (savedFeeds ?? []).slice(0, MAX_FEEDS_PER_SEARCH);
+  let feedsSkipped = Math.max(0, (savedFeeds?.length ?? 0) - MAX_FEEDS_PER_SEARCH);
   if (feeds && feeds.length) {
-    await Promise.allSettled(feeds.map(async (feed) => {
+    const deadline = Date.now() + FEEDS_DEADLINE_MS;
+    let next = 0;
+    const readFeed = async (feed: (typeof feeds)[number]) => {
+      sourcesTried.push(`feed:${feed.label}`);
       let status = 'ok'; let count = 0;
       try {
         const fetched = await fetchPublicCalendarText(feed.url);
@@ -113,7 +146,7 @@ export async function POST(req: NextRequest) {
         }
         else {
           const text = fetched.text;
-          const parsed = feed.kind === 'rss' ? parseRSS(text, `feed:${feed.label}`) : parseICS(text, `feed:${feed.label}`);
+          const parsed = feed.kind === 'rss' ? parseRSS(text, `feed:${feed.label}`) : parseICS(text, `feed:${feed.label}`, familyZone);
           const windowed = withinWindow(parsed, windowDays);
           count = windowed.length;
           lists.push(windowed);
@@ -130,15 +163,32 @@ export async function POST(req: NextRequest) {
       const { error: statusError } = await supabase.from('weekend_feeds')
         .update({ last_fetched_at: new Date().toISOString(), last_status: status, last_count: count }).eq('id', feed.id);
       if (statusError) console.error('[weekend/discover] feed status write failed', { feedId: feed.id, error: statusError.message });
-    }));
+    };
+    // A few at a time; past the deadline, the rest are left for the next search.
+    const worker = async () => {
+      while (next < feeds.length) {
+        const feed = feeds[next++];
+        if (Date.now() > deadline) { feedsSkipped += 1; continue; }
+        await readFeed(feed);
+      }
+    };
+    await Promise.allSettled(Array.from({ length: Math.min(FEED_CONCURRENCY, feeds.length) }, worker));
   }
+  if (feedsSkipped > 0) sourceErrors.feedsSkipped = 'Some of your saved local feeds were left for the next search.';
 
   // No sources at all → tell the user how to enable discovery (never fake data).
-  if (sourcesUsed.length === 0) {
+  if (sourcesTried.length === 0) {
     return NextResponse.json({
       error: tr('discover.noEventSourcesAreConnected'),
       needsConfig: true,
     }, { status: 503 });
+  }
+  // Every source tried, none answered: that is an outage, not an empty weekend.
+  if (sourcesUsed.length === 0) {
+    return NextResponse.json({
+      error: tr('discover.eventSourcesUnreachable'),
+      errors: sourceErrors,
+    }, { status: 502 });
   }
 
   // Merge, keep only the window, dedupe across providers.
