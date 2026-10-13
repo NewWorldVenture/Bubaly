@@ -16985,5 +16985,14 @@
   "accountStanding.unavailable": "Bubaly kon het account van je gezin nu niet controleren. Probeer het zo meteen opnieuw.",
   "gift.ideasAreNotAvailableForThisFamily": "Cadeau-ideeën zijn op dit moment niet beschikbaar voor dit gezin.",
   "handoff.pickupChangedRefresh": "Deze ophaling is net gewijzigd. Vernieuw de pagina om te zien hoe het ervoor staat.",
-  "marketplace.onlyTheSellerFinishesAnOrder": "Alleen degene die dit heeft verkocht of uitgeleend, kan het als teruggebracht of afgerond markeren."
+  "marketplace.onlyTheSellerFinishesAnOrder": "Alleen degene die dit heeft verkocht of uitgeleend, kan het als teruggebracht of afgerond markeren.",
+  "medicalRecordsModule.onlyYourOwnProfile": "Je ziet je eigen gezondheidsprofiel. Een ouder of volwassene ziet die van iedereen.",
+  "medicalRecordsModule.profileKeptForManagers": "Alleen voor ouders en volwassenen. Vraag het een van hen.",
+  "medicalRecordsModule.deletedButCardPhotosKept": "De verzekering is verwijderd, maar de foto’s van de pas konden niet worden verwijderd.",
+  "taxVaultModule.amountTooLarge": "Voer een bedrag in van maximaal {max}.",
+  "taxVaultModule.taxYearOutOfRange": "Voer een belastingjaar in van {min} tot en met {max}.",
+  "healthVisitsModule.onlyYourOwn": "Je ziet je eigen bezoeken en de bezoeken die jij hebt vastgelegd. Een ouder of volwassene ziet die van het hele huishouden.",
+  "healthVisitsModule.noneOfYours": "Er zijn geen bezoeken van jou vastgelegd",
+  "immunizationsModule.onlyYourOwn": "Je ziet je eigen vaccinaties en de vaccinaties die jij hebt vastgelegd. Een ouder of volwassene ziet die van het hele huishouden.",
+  "immunizationsModule.noneOfYours": "Er zijn geen vaccinaties van jou vastgelegd"
 }

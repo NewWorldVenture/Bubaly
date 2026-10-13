@@ -16985,5 +16985,14 @@
   "accountStanding.unavailable": "Bubaly could not check your family's account right now. Try again in a moment.",
   "gift.ideasAreNotAvailableForThisFamily": "Gift ideas aren't available for this family right now.",
   "handoff.pickupChangedRefresh": "This pickup changed a moment ago. Refresh to see where it stands.",
-  "marketplace.onlyTheSellerFinishesAnOrder": "Only the person who sold or lent this can mark it returned or complete."
+  "marketplace.onlyTheSellerFinishesAnOrder": "Only the person who sold or lent this can mark it returned or complete.",
+  "medicalRecordsModule.onlyYourOwnProfile": "You see your own health profile. A parent or adult sees everyone's.",
+  "medicalRecordsModule.profileKeptForManagers": "Kept for parents and adults. Ask one of them.",
+  "medicalRecordsModule.deletedButCardPhotosKept": "The insurance was deleted, but its card photos could not be removed.",
+  "taxVaultModule.amountTooLarge": "Enter an amount no larger than {max}.",
+  "taxVaultModule.taxYearOutOfRange": "Enter a tax year from {min} to {max}.",
+  "healthVisitsModule.onlyYourOwn": "You see your own visits and the ones you recorded. A parent or adult sees the household's.",
+  "healthVisitsModule.noneOfYours": "No visits of yours are recorded",
+  "immunizationsModule.onlyYourOwn": "You see your own vaccinations and the ones you recorded. A parent or adult sees the household's.",
+  "immunizationsModule.noneOfYours": "No vaccinations of yours are recorded"
 }

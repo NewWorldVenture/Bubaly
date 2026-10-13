@@ -16985,5 +16985,14 @@
   "accountStanding.unavailable": "Bubaly konnte das Konto Ihrer Familie gerade nicht prüfen. Versuchen Sie es gleich noch einmal.",
   "gift.ideasAreNotAvailableForThisFamily": "Geschenkideen sind für diese Familie gerade nicht verfügbar.",
   "handoff.pickupChangedRefresh": "Diese Abholung wurde gerade geändert. Aktualisiere die Seite, um den aktuellen Stand zu sehen.",
-  "marketplace.onlyTheSellerFinishesAnOrder": "Nur die Person, die das verkauft oder verliehen hat, kann es als zurückgegeben oder abgeschlossen markieren."
+  "marketplace.onlyTheSellerFinishesAnOrder": "Nur die Person, die das verkauft oder verliehen hat, kann es als zurückgegeben oder abgeschlossen markieren.",
+  "medicalRecordsModule.onlyYourOwnProfile": "Du siehst dein eigenes Gesundheitsprofil. Eltern und Erwachsene sehen die aller.",
+  "medicalRecordsModule.profileKeptForManagers": "Nur für Eltern und Erwachsene. Frag eine von ihnen.",
+  "medicalRecordsModule.deletedButCardPhotosKept": "Die Versicherung wurde gelöscht, aber die Kartenfotos konnten nicht entfernt werden.",
+  "taxVaultModule.amountTooLarge": "Gib einen Betrag von höchstens {max} ein.",
+  "taxVaultModule.taxYearOutOfRange": "Gib ein Steuerjahr zwischen {min} und {max} ein.",
+  "healthVisitsModule.onlyYourOwn": "Du siehst deine eigenen Besuche und die, die du eingetragen hast. Eltern und Erwachsene sehen die des ganzen Haushalts.",
+  "healthVisitsModule.noneOfYours": "Es sind keine Besuche von dir eingetragen",
+  "immunizationsModule.onlyYourOwn": "Du siehst deine eigenen Impfungen und die, die du eingetragen hast. Eltern und Erwachsene sehen die des ganzen Haushalts.",
+  "immunizationsModule.noneOfYours": "Es sind keine Impfungen von dir eingetragen"
 }

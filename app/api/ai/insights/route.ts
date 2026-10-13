@@ -144,6 +144,7 @@ export async function POST(req: Request) {
     rows = await fetchRows(kind, supabase, familyId, params, {
       role: ctx.active.role,
       memberId: ctx.active.member.id,
+      userId: ctx.user.id,
       todayKey,
     });
   } catch (err) {
@@ -226,7 +227,7 @@ function required(reads: [string, { message?: string } | null | undefined][]): v
  * need the member (gift state is hidden from the person a wish belongs to);
  * `rides` needs the day.
  */
-type Viewer = { role: string; memberId: string | null; todayKey: string };
+type Viewer = { role: string; memberId: string | null; userId: string; todayKey: string };
 
 async function fetchRows(
   kind: InsightKind,
@@ -534,11 +535,13 @@ async function fetchRows(
       return { family_recipes: recipes.data ?? [], pantry_items: pantry.data ?? [] };
     }
     case 'documents': {
-      const docs = await eq(sb, 'documents', familyId).order('created_at', { ascending: false }).limit(20);
-      return { documents: docs.data ?? [] };
+      const stored = await eq(sb, 'documents', familyId).order('created_at', { ascending: false }).limit(20);
+      required([['documents', stored.error]]);
+      return { documents: stored.data ?? [] };
     }
     case 'care': {
       const logs = await eq(sb, 'care_log', familyId).order('occurred_at', { ascending: false, nullsFirst: false }).limit(20);
+      required([['care_log', logs.error]]);
       return { care_log: logs.data ?? [] };
     }
     case 'contacts': {
@@ -595,10 +598,20 @@ async function fetchRows(
       return { family_announcements: posts.data ?? [] };
     }
     case 'medical': {
-      const [records, appointments] = await Promise.all([
-        eq(sb, 'health_visits', familyId).order('visit_date', { ascending: false, nullsFirst: false }).limit(15),
+      // A visit is a parent's or adult's to read, or the member's own, or one
+      // the asker recorded (the held 0506, lib/health/record-scope.ts) — the
+      // rows the Medical and Dental pages show this asker. Released, 0481 still
+      // hands a teen or child the household's, so the summary is narrowed here
+      // rather than left to RLS, before the limit.
+      const visits = eq(sb, 'health_visits', familyId);
+      const ownOrAuthored = [viewer.memberId ? `member_id.eq.${viewer.memberId}` : null, `created_by.eq.${viewer.userId}`]
+        .filter(Boolean).join(',');
+      const [records, appointments] = await settleAll([
+        (isManager(viewer.role) ? visits : visits.or(ownOrAuthored))
+          .order('visit_date', { ascending: false, nullsFirst: false }).limit(15),
         eq(sb, 'appointments', familyId).gte('starts_at', nowIso).order('starts_at').limit(10),
       ]);
+      required([['health_visits', records.error], ['appointments', appointments.error]]);
       return { health_visits: records.data ?? [], appointments: appointments.data ?? [] };
     }
     case 'insurance': {
@@ -653,6 +666,7 @@ async function fetchRows(
     }
     case 'binder': {
       const items = await eq(sb, 'household_info', familyId).order('category').order('sort').limit(50);
+      required([['household_info', items.error]]);
       return { household_info: items.data ?? [] };
     }
     case 'memories': {
@@ -668,6 +682,7 @@ async function fetchRows(
     }
     case 'tax': {
       const docs = await eq(sb, 'tax_documents', familyId).order('tax_year', { ascending: false }).order('created_at', { ascending: false }).limit(40);
+      required([['tax_documents', docs.error]]);
       return { tax_documents: docs.data ?? [] };
     }
     case 'utilities': {

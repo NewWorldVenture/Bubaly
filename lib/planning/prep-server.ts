@@ -48,8 +48,15 @@ import { generatePrepPlans, type HorizonSignal } from './prep';
 import { nextBirthdayDayKey } from '@/lib/moments/birthdays';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 import { describeActionError } from '@/lib/supabase/errors';
+import { isSensitiveDocument } from '@/lib/documents/sensitivity';
 
 type DB = SupabaseClient<Database>;
+
+/**
+ * What a sensitive document is called on a prep plan: the plan reads "Renew:
+ * Private document". Stored, like every plan title, in the source language.
+ */
+export const PRIVATE_DOCUMENT_TITLE = 'Private document';
 
 export type PrepGenerationResult = { ok: boolean; error?: string; plans: number };
 
@@ -76,7 +83,7 @@ export async function runPrepGeneration(
   const [trips, members, docs] = await settleAll([
     sb.from('vacations').select('id, title, start_date').eq('family_id', familyId).gte('start_date', todayKey).lte('start_date', in120),
     sb.from('family_members').select('id, display_name, birthday').eq('family_id', familyId).not('birthday', 'is', null),
-    sb.from('documents').select('id, title, expires_at').eq('family_id', familyId).not('expires_at', 'is', null).gte('expires_at', todayKey).lte('expires_at', in60),
+    sb.from('documents').select('id, title, expires_at, is_secure, category').eq('family_id', familyId).not('expires_at', 'is', null).gte('expires_at', todayKey).lte('expires_at', in60),
   ]);
 
   const firstErr = [trips, members, docs].find((r) => r.error)?.error;
@@ -92,7 +99,23 @@ export async function runPrepGeneration(
     const next = m.birthday ? nextBirthdayDayKey(m.birthday, todayKey) : null;
     if (next) signals.push({ id: m.id, kind: 'birthday', title: `${m.display_name}'s Birthday`, date: next });
   }
-  for (const d of docs.data ?? []) if (d.expires_at) signals.push({ id: d.id, kind: 'doc_expiry', title: d.title ?? 'Document', date: d.expires_at });
+  // A SENSITIVE DOCUMENT'S TITLE STAYS WHERE ITS READERS ARE. The cron reads
+  // with the service client and a manager's click with a session that sees the
+  // Secure Vault, but `prep_plans` reads with is_family_member (0131) for every
+  // role, guests included, and /dashboard/prep-plans prints the title. So a
+  // Secure Vault document, or one whose category is identity, legal, medical
+  // or money (`isSensitiveDocument`, the rule documents_select applies in
+  // 0266/0312), is planned under a title that names nothing. Emitted rather
+  // than skipped: the upsert below overwrites the real title an earlier run
+  // wrote, and the rename after the `decided` read reaches the plans the family
+  // dismissed.
+  const sensitiveDocIds: string[] = [];
+  for (const d of docs.data ?? []) {
+    if (!d.expires_at) continue;
+    const sensitive = isSensitiveDocument(d);
+    if (sensitive) sensitiveDocIds.push(d.id);
+    signals.push({ id: d.id, kind: 'doc_expiry', title: sensitive ? PRIVATE_DOCUMENT_TITLE : (d.title ?? 'Document'), date: d.expires_at });
+  }
 
   const plans = generatePrepPlans(signals, todayKey);
   if (plans.length === 0) return { ok: true, plans: 0 };
@@ -128,6 +151,20 @@ export async function runPrepGeneration(
     .select('signal_kind, signal_id, status').eq('family_id', familyId).in('signal_id', signalIds);
   if (existingErr) return { ok: false, error: describeActionError(existingErr), plans: 0 };
   const decided = new Set((existing ?? []).filter((r) => r.status !== 'active').map((r) => `${r.signal_kind}:${r.signal_id}`));
+
+  // A plan the family dismissed is left out of the write below, so a real
+  // title an earlier run gave a sensitive document would stay on that row,
+  // readable by every member through PostgREST. Rename just the title; the
+  // family's decision (`status`) is not touched.
+  const privateTitle = plans.find((p) => p.kind === 'doc_expiry' && sensitiveDocIds.includes(p.signalId))?.title;
+  const decidedSensitive = (existing ?? [])
+    .filter((r) => r.status !== 'active' && r.signal_kind === 'doc_expiry' && sensitiveDocIds.includes(r.signal_id))
+    .map((r) => r.signal_id);
+  if (privateTitle && decidedSensitive.length) {
+    const { error: scrubErr } = await sb.from('prep_plans').update({ title: privateTitle })
+      .eq('family_id', familyId).eq('signal_kind', 'doc_expiry').in('signal_id', decidedSensitive).select('id');
+    if (scrubErr) return { ok: false, error: describeActionError(scrubErr), plans: 0 };
+  }
 
   const fresh = plans.filter((p) => !decided.has(`${p.kind}:${p.signalId}`));
   if (fresh.length === 0) return { ok: true, plans: 0 };

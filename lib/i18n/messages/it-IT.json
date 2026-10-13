@@ -16985,5 +16985,14 @@
   "accountStanding.unavailable": "Bubaly non è riuscito a verificare l'account della tua famiglia in questo momento. Riprova tra un attimo.",
   "gift.ideasAreNotAvailableForThisFamily": "Le idee regalo non sono disponibili per questa famiglia in questo momento.",
   "handoff.pickupChangedRefresh": "Questo ritiro è appena cambiato. Aggiorna la pagina per vedere a che punto è.",
-  "marketplace.onlyTheSellerFinishesAnOrder": "Solo chi l’ha venduto o prestato può segnarlo come restituito o completato."
+  "marketplace.onlyTheSellerFinishesAnOrder": "Solo chi l’ha venduto o prestato può segnarlo come restituito o completato.",
+  "medicalRecordsModule.onlyYourOwnProfile": "Vedi il tuo profilo sanitario. Un genitore o un adulto vede quelli di tutti.",
+  "medicalRecordsModule.profileKeptForManagers": "Riservato a genitori e adulti. Chiedi a uno di loro.",
+  "medicalRecordsModule.deletedButCardPhotosKept": "L’assicurazione è stata eliminata, ma non è stato possibile rimuovere le foto della tessera.",
+  "taxVaultModule.amountTooLarge": "Inserisci un importo non superiore a {max}.",
+  "taxVaultModule.taxYearOutOfRange": "Inserisci un anno fiscale tra il {min} e il {max}.",
+  "healthVisitsModule.onlyYourOwn": "Vedi le tue visite e quelle che hai registrato. Un genitore o un adulto vede quelle di tutta la famiglia.",
+  "healthVisitsModule.noneOfYours": "Non ci sono visite tue registrate",
+  "immunizationsModule.onlyYourOwn": "Vedi le tue vaccinazioni e quelle che hai registrato. Un genitore o un adulto vede quelle di tutta la famiglia.",
+  "immunizationsModule.noneOfYours": "Non ci sono vaccinazioni tue registrate"
 }

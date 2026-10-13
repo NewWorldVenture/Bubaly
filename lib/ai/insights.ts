@@ -10,6 +10,7 @@ import type { LocationLike } from '@/lib/inventory/finder';
 import { daysUntilNextOn } from '@/lib/celebrations/dates';
 import { isPollClosed } from '@/lib/voting/polls';
 import { isManager } from '@/lib/constants/roles';
+import { isDeductible } from '@/lib/finance/tax';
 
 export type InsightKind =
   | 'chores'
@@ -600,7 +601,9 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
       'You are a family document management assistant. Help organize, categorize, and surface important information from stored documents. Flag anything that may be expiring, needs action, or could be better organized. ' + SHARED_RULES,
     buildUser: (d) => {
       const docs = r(d, 'documents').slice(0, 15);
-      const list = docs.map((doc) => `- "${doc.name || doc.original_name || 'Untitled'}" (${doc.category || 'uncategorized'}, ${doc.created_at ? String(doc.created_at).slice(0, 10) : 'unknown date'})`).join('\n') || 'No documents stored.';
+      // `documents` names a file in `title` (0002); it has no `name` or
+      // `original_name`, so every file used to read "Untitled".
+      const list = docs.map((doc) => `- "${doc.title || 'Untitled'}" (${doc.category || 'uncategorized'}, ${doc.created_at ? String(doc.created_at).slice(0, 10) : 'unknown date'})`).join('\n') || 'No documents stored.';
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nDocuments:\n${list}\n\nGive: (1) any documents that may need attention or renewal, (2) categories that seem disorganized, (3) one thing to do to improve the document vault.${q(d)}`;
     },
   },
@@ -1194,7 +1197,9 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     buildUser: (d) => {
       const docs = r(d, 'tax_documents').slice(0, 30);
       const years = [...new Set(docs.map((doc) => doc.tax_year as number))].sort((a, b) => b - a);
-      const deductible = docs.filter((doc) => doc.is_deductible).length;
+      // `tax_documents` has no `is_deductible` column (0077), so that read was
+      // always 0; deductibility is the category's, as the vault itself counts it.
+      const deductible = docs.filter((doc) => isDeductible(String(doc.category ?? ''))).length;
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nTax documents: ${docs.length} total across ${years.length} years (${years.slice(0, 3).join(', ')}). Deductible items: ${deductible}.\n\nGive: (1) one document category that might be missing (e.g., W-2, 1099, charitable receipts), (2) one deduction opportunity based on the documents stored, (3) one tip for staying organized year-round. Always note: consult a tax professional for personalized advice.${q(d)}`;
     },
   },

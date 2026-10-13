@@ -10,6 +10,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument, DOCUMENT_MAX_BYTES, DOCUMENT_MAX_MB } from '@/lib/storage/documents';
 import { useToast } from '@/components/ui/toast';
@@ -152,7 +153,12 @@ export function DocumentsModule() {
 
   const { data, loading, error, refresh } = useRealtimeQuery<Document>({
     table: 'documents', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('documents').select('*').eq('family_id', familyId).order('created_at', { ascending: false }),
+    // Paged to the end: one select stops at db-max-rows (1,000) and says
+    // nothing, so past it the oldest files fell out of the list, the search,
+    // the folder counts and "storage used". Past the ceiling readAll answers
+    // an error, and the screen says so.
+    fetcher: (sb) => readAllAsQuery<Document>((from, to) => sb.from('documents').select('*').eq('family_id', familyId)
+      .order('created_at', { ascending: false }).order('id').range(from, to), { max: 20_000 }),
   });
 
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);

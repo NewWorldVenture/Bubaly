@@ -32,13 +32,14 @@ import {
   type WorkingRunRow, type WorkingStepRow,
 } from '@/lib/home/today';
 import { listPending } from '@/lib/services/approvals';
-import { dayKeyInTz, scopeFromUserContext, zonedDayBoundsMs } from '@/lib/services/scope';
+import { addDaysToDayKey, dayKeyInTz, scopeFromUserContext, zonedDayBoundsMs } from '@/lib/services/scope';
 import { Heart } from 'lucide-react';
 import { upcomingRelationship, formatCountdown, milestoneLabel, type RelKind } from '@/lib/relationship/dates';
 import { reminderAttention } from '@/lib/dashboard/reminder-attention';
 import { mergeUpcoming } from '@/lib/dashboard/upcoming';
 import { topNeeds, summarizeNeeds, needsHeadline } from '@/lib/home/needs-attention';
 import { type ParentApprovalRow, type RenewalRow, type DocumentRow, type AwaitingRunRow, type RecommendationRow } from '@/lib/home/needs-sources';
+import { daysBetweenDayKeys } from '@/lib/moments/birthdays';
 import { buildHomeNeeds } from '@/lib/home/needs-build';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
 import { buildHomeBrief } from '@/lib/home/home-brief';
@@ -204,9 +205,10 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     // Assigned events through the complete local date +14 → personal double-bookings.
     readDisplayCalendarOccurrences(supabase, familyId, conflictWindow, tz, { overlap: true }),
     // Stored documents expiring within ~30 days (passports, licenses, insurance…).
+    // `expires_at` is a DATE: bounded by the family's day key, not an instant.
     supabase.from('documents').select('id, title, expires_at')
       .eq('family_id', familyId).not('expires_at', 'is', null)
-      .lte('expires_at', new Date(Date.now() + 30 * 86400000).toISOString()).limit(50),
+      .lte('expires_at', addDaysToDayKey(todayKey, 30)).limit(50),
     // T4 sources: assignments due TOMORROW that haven't been acknowledged.
     supabase.from('homework_assignments').select('title, member_id')
       .eq('family_id', familyId).eq('status', 'assigned')
@@ -387,6 +389,8 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     lowGrocery: !groceryUnavailable && (groceryCount ?? 0) > 0,
     openTodos: openTodos ?? 0,
     now,
+    // A document's expiry is a DATE, counted against the family's day.
+    todayKey,
     // A money approval's amount and the words around it, in this reader's locale.
     reader: { locale: locale.code, t },
     aiApprovals: aiApprovals.map((a) => ({ id: a.id, title: a.title, runId: a.runId, priority: a.priority ?? null, requestedAt: a.requestedAt, expiresAt: a.expiresAt })),
@@ -469,7 +473,8 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       renewalsSoon: ((renewalRows ?? []) as RenewalRow[])
         .map((r) => ({ title: r.title, days: daysUntil(r.expires_at) })).filter((r) => r.days >= 0),
       documentsSoon: ((documentRows ?? []) as DocumentRow[])
-        .filter((d) => d.expires_at).map((d) => ({ title: d.title, days: daysUntil(d.expires_at as string) })).filter((d) => d.days >= 0),
+        // A DATE, counted from the family's day: the expiry day itself is 0.
+        .filter((d) => d.expires_at).map((d) => ({ title: d.title, days: daysBetweenDayKeys(todayKey, (d.expires_at as string).slice(0, 10)) ?? -1 })).filter((d) => d.days >= 0),
       unplannedDinners: Math.max(0, 7 - Math.min(7, plannedDinnerCount ?? 0)),
       lowGrocery: groceryUnavailable ? undefined : groceryCount ?? 0,
       autopilotTop: openSuggestions[0] ? { title: openSuggestions[0].title, confidence: openSuggestions[0].confidence } : null,
