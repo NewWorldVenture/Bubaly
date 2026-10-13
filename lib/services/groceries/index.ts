@@ -806,13 +806,13 @@ export async function pantryAdjust(
     // RECEIVED and stop only on an empty page — never walking past
     // PANTRY_LOOKUP_MAX, and refusing rather than creating once it is reached.
     const key = normalizeName(name);
-    const pattern = `%${key.split(' ').map((word) => escapeLike(word)).join('%')}%`;
     for (let from = 0; ; ) {
       if (from >= PANTRY_LOOKUP_MAX) {
         return fail('Too many pantry items look like that one. Put it away from the pantry page.', { code: SERVICE_CODES.invalidInput });
       }
       const to = Math.min(from + PANTRY_LOOKUP_PAGE, PANTRY_LOOKUP_MAX) - 1;
-      const { data, error } = await scope.db.from('pantry_items').select('*').eq('family_id', scope.familyId).ilike('name', pattern)
+      const { data, error } = await scope.db.from('pantry_items').select('*').eq('family_id', scope.familyId)
+        .ilike('name', `%${key.split(' ').map((word) => escapeLike(word)).join('%')}%`)
         .order('created_at', { ascending: true }).order('id').range(from, to);
       if (error) {
         console.error('[service:groceries] pantry lookup failed', error);
