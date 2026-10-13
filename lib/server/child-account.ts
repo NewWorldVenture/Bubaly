@@ -1,6 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
+import { isChildLoginEmail } from '@/lib/onboarding/child-login';
 
 /**
  * Whether this auth user is a parent-issued child login (username + PIN).
@@ -16,9 +17,14 @@ import type { Database } from '@/lib/database.types';
  */
 export async function isChildLoginAccount(
   admin: SupabaseClient<Database>,
-  user: { id: string; user_metadata?: Record<string, unknown> | null },
+  user: { id: string; email?: string | null; user_metadata?: Record<string, unknown> | null },
 ): Promise<boolean> {
   if (user.user_metadata?.child === true) return true;
+  // The synthetic kids-domain address is issued only to child logins, and is
+  // still the account's once its child_logins row is gone: every caller —
+  // requireUserContext, the AI routes' authenticateAI and /api/ai — refuses it
+  // a household of its own, not the page path alone.
+  if (isChildLoginEmail(user.email)) return true;
   const { data, error } = await admin.from('child_logins').select('id').eq('user_id', user.id).limit(1);
   if (error) {
     console.error('[child-account] child login lookup failed; treating as a child account', error);
