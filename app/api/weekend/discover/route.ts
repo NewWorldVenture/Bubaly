@@ -29,6 +29,8 @@ const FETCH_TIMEOUT = 9000;
 const MAX_FEEDS_PER_SEARCH = 12;
 const FEED_CONCURRENCY = 4;
 const FEEDS_DEADLINE_MS = 25_000;
+/** Any saved feed that did not answer: said once per search, however many failed. Each feed's own row keeps its status. */
+const FEEDS_FAILED = 'Some of your saved local feeds could not be read.';
 async function fetchWithTimeout(url: string, ms = FETCH_TIMEOUT): Promise<Response> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), ms);
@@ -142,6 +144,7 @@ export async function POST(req: NextRequest) {
         const fetched = await fetchPublicCalendarText(feed.url);
         if (!fetched.ok) {
           status = fetched.status ? `HTTP ${fetched.status}` : 'Feed unavailable.';
+          sourceErrors.feedsFailed = FEEDS_FAILED;
           console.warn(`Weekend feed ${feed.id} failed:`, fetched.error);
         }
         else {
@@ -155,6 +158,7 @@ export async function POST(req: NextRequest) {
       } catch (e) {
         console.warn(`Weekend feed ${feed.id} request failed:`, e);
         status = 'Request failed.';
+        sourceErrors.feedsFailed = FEEDS_FAILED;
       }
       // Bookkeeping on the feed row: its result was discarded whole, so a
       // settings page could go on showing a stale "last fetched" forever. Zero
@@ -174,6 +178,8 @@ export async function POST(req: NextRequest) {
     };
     await Promise.allSettled(Array.from({ length: Math.min(FEED_CONCURRENCY, feeds.length) }, worker));
   }
+  // Left for the next search is not the same as unreachable: the planner says
+  // each in its own words, keyed `feedsSkipped` and `feedsFailed`.
   if (feedsSkipped > 0) sourceErrors.feedsSkipped = 'Some of your saved local feeds were left for the next search.';
 
   // No sources at all → tell the user how to enable discovery (never fake data).

@@ -273,3 +273,59 @@ describe('the delete action reports it', () => {
     expect(await deleteChoreAssignmentAction('asg-sib-done')).toEqual({ ok: true, id: 'asg-sib-done', comesBack: false });
   });
 });
+
+// A submitted or rejected row keeps a chore on the child's board, but the
+// sweep counts only to-do and in-progress rows as open: deleting the keyed
+// to-do beside one frees the key the sweep repeats under, and the chore comes
+// back. Two rows of one chore for one child at once is what the assistant's
+// `tasks.assignChore` (which allows duplicates) and new proof on an approved
+// row produce.
+describe('a submitted or rejected row of the same chore does not stop the sweep', () => {
+  /** Bo's approved one, its keyed to-do successor, and an unkeyed extra row in `status`. */
+  const withExtra = (status: 'submitted' | 'rejected') => [
+    ...finishedAndNext(KID, 'kid', '2026-10-12T19:00:01.000Z'),
+    { id: 'asg-kid-extra', family_id: FAMILY, chore_id: 'chore-bed', member_id: KID, status, due_at: '2026-10-13T18:00:00.000Z', created_at: '2026-10-12T20:00:00.000Z' },
+  ];
+
+  beforeEach(() => {
+    db.seed('chores', [{ id: 'chore-bed', family_id: FAMILY, title: 'Make your bed', recurrence: 'daily', is_active: true }]);
+  });
+
+  it.each(['submitted', 'rejected'] as const)('shared, beside a %s row: comesBack, and the sweep does put it back', async (status) => {
+    db.seed('chore_assignments', [...withExtra(status), ...finishedAndNext(SIB, 'sib', '2026-10-12T19:00:02.000Z')]);
+
+    expect(await deleteChoreAssignmentAction('asg-kid-next')).toEqual({ ok: true, id: 'asg-kid-next', comesBack: true });
+
+    const swept = await sweep();
+    expect(swept.ok && swept.data.respawned).toBe(1);
+    expect(openOf(KID)).toHaveLength(1);
+  });
+
+  it.each(['submitted', 'rejected'] as const)('only Bo\'s, beside a %s row: comesBack, the chore stays active, and the sweep puts it back', async (status) => {
+    db.seed('chore_assignments', withExtra(status));
+
+    expect(await deleteChoreAssignmentAction('asg-kid-next')).toEqual({ ok: true, id: 'asg-kid-next', comesBack: true });
+    expect(db.table('chores')[0]).toMatchObject({ is_active: true });
+
+    const swept = await sweep();
+    expect(swept.ok && swept.data.respawned).toBe(1);
+    expect(openOf(KID)).toHaveLength(1);
+  });
+
+  it('control: the row that stays holds the respawn key, so nothing comes back and the board says removed', async () => {
+    // The approved one's successor was sent back (rejected, keyed); the to-do
+    // removed is an unkeyed extra. 0256 refuses the sweep's insert.
+    db.seed('chore_assignments', [
+      finishedAndNext(KID, 'kid', '2026-10-12T19:00:01.000Z')[0],
+      { id: 'asg-kid-sentback', family_id: FAMILY, chore_id: 'chore-bed', member_id: KID, status: 'rejected', due_at: '2026-10-13T18:00:00.000Z', idempotency_key: respawnKeyFor(FAMILY, 'asg-kid-done'), created_at: '2026-10-12T19:00:01.000Z' },
+      { id: 'asg-kid-extra', family_id: FAMILY, chore_id: 'chore-bed', member_id: KID, status: 'todo', due_at: '2026-10-13T18:00:00.000Z', created_at: '2026-10-12T20:00:00.000Z' },
+      ...finishedAndNext(SIB, 'sib', '2026-10-12T19:00:02.000Z'),
+    ]);
+
+    expect(await deleteChoreAssignmentAction('asg-kid-extra')).toEqual({ ok: true, id: 'asg-kid-extra', comesBack: false });
+
+    const swept = await sweep();
+    expect(swept.ok && swept.data.respawned).toBe(0);
+    expect(openOf(KID)).toEqual([]);
+  });
+});

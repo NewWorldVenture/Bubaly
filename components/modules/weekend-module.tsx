@@ -68,7 +68,7 @@ export function WeekendModule() {
   const fmtWhen = (e: Pick<Event, 'starts_at' | 'ends_at'>) => (allDay(e) ? t('firstBriefDisplay.allDay') : fmtTime(e.starts_at));
   const askConfirm = useConfirm();
   const { familyId, userId } = useApp();
-  const { success, error: toastError } = useToast();
+  const { success, error: toastError, toast } = useToast();
 
   const { data: events, loading: eventsLoading, error: eventsError, refresh: refreshEvents } = useRealtimeQuery<Event>({
     table: 'weekend_events', familyId, deps: [familyId],
@@ -161,9 +161,16 @@ export function WeekendModule() {
       else {
         success(data.count === 1 ? t('weekend.foundOneEventNear', { zip: data.zip }) : data.count > 0 ? t('weekend.foundEventsNear', { n: data.count, zip: data.zip }) : t('weekend.noEventsNear', { zip: data.zip, days: data.days }));
         // A source that did not answer is not a weekend with nothing on: say
-        // the list may be missing what it would have found.
-        if (data.errors && typeof data.errors === 'object' && Object.keys(data.errors).length > 0) toastError(t('weekend.someSourcesUnreachable'));
+        // the list may be missing what it would have found. Saved feeds left
+        // for the next search (over the per-search cap, or past its deadline)
+        // were not tried, so they are not called unreachable.
+        const failed = data.errors && typeof data.errors === 'object' ? Object.keys(data.errors) : [];
+        if (failed.some((source) => source !== 'feedsSkipped')) toastError(t('weekend.someSourcesUnreachable'));
+        if (failed.includes('feedsSkipped')) toast(t('weekend.someFeedsLeftForNextSearch'), 'info');
       }
+      // The events it found and each saved feed's last status, without a reload:
+      // these weekend tables are not published to realtime.
+      refresh();
     } catch { toastError(t('weekendModule.networkError')); }
     setBusy(false);
   }

@@ -22,6 +22,7 @@ import {
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { escapeLike } from '@/lib/supabase/escape-like';
 import { readAllInChunks } from '@/lib/supabase/chunked-in';
+import { readAllById } from '@/lib/supabase/read-all';
 import { makeKey } from '../idempotency';
 import { familyInstantIso, scopeNow } from '../scope';
 import { choreRepeats, nextChoreDueAt } from '@/lib/chores/respawn';
@@ -875,6 +876,20 @@ export async function respawnChoreAssignment(
 const OPEN_STATUSES = ['todo', 'in_progress'] as const;
 const FINISHED_STATUSES = ['approved', 'done'] as const;
 
+type FinishedRow = Pick<ChoreAssignment, 'id' | 'approved_at' | 'submitted_at' | 'created_at'>;
+const finishedAt = (a: FinishedRow) => Date.parse(a.approved_at ?? a.submitted_at ?? a.created_at ?? '') || 0;
+
+/**
+ * The finished assignment the sweep repeats: the latest by `finishedAt`, the
+ * first in id order on a tie. One definition, shared by the sweep and by the
+ * delete's prediction of what the sweep will do (`sweepWouldRespawn`).
+ */
+function latestFinished<T extends FinishedRow>(rows: readonly T[]): T | null {
+  let latest: T | null = null;
+  for (const row of rows) if (!latest || finishedAt(row) > finishedAt(latest)) latest = row;
+  return latest;
+}
+
 /**
  * The durable half of the respawn: every recurring chore whose child has
  * finished their latest assignment and has no open one gets its successor.
@@ -938,13 +953,12 @@ export async function respawnMissingChoreAssignments(
   }
 
   // Per (chore, child): anything open means nothing to do; otherwise the latest finished one is the predecessor.
-  const finishedAt = (a: Row) => Date.parse(a.approved_at ?? a.submitted_at ?? a.created_at ?? '') || 0;
-  const byPair = new Map<string, { open: boolean; latest: Row | null }>();
+  const byPair = new Map<string, { open: boolean; finished: Row[] }>();
   for (const a of assignments ?? []) {
     const key = `${a.chore_id}\u001F${a.member_id}`;
-    const entry = byPair.get(key) ?? { open: false, latest: null };
+    const entry = byPair.get(key) ?? { open: false, finished: [] };
     if ((OPEN_STATUSES as readonly string[]).includes(a.status)) entry.open = true;
-    else if (!entry.latest || finishedAt(a) > finishedAt(entry.latest)) entry.latest = a;
+    else entry.finished.push(a);
     byPair.set(key, entry);
   }
   const recurrenceOf = new Map(recurring.map((c) => [c.id, c.recurrence]));
@@ -952,7 +966,8 @@ export async function respawnMissingChoreAssignments(
   let respawned = 0;
   let skipped = 0;
   let failed = 0;
-  for (const { open, latest } of byPair.values()) {
+  for (const { open, finished } of byPair.values()) {
+    const latest = latestFinished(finished);
     if (open || !latest || !active.has(latest.member_id)) { skipped += 1; continue; }
     const res = await respawnChoreAssignment(scope, {
       assignment: { id: latest.id, chore_id: latest.chore_id, member_id: latest.member_id, due_at: latest.due_at },
@@ -1197,13 +1212,15 @@ const LIVE_STATUSES = ['todo', 'in_progress', 'submitted', 'rejected'] as const;
  *   'retires'     a RECURRING chore that is only this child's, with nothing
  *                 else of it still live: the chore itself is retired
  *                 (`is_active = false`), which the sweep already skips.
- *   'comes-back'  a recurring chore OTHER children share — it stays active for
- *                 them — and this child has nothing else of it live but a
- *                 finished assignment: the push-scan sweep WILL put it back on
- *                 their board, and the board says so instead of "removed".
- *   'stays'       anything else: a one-off or retired chore, one this child
- *                 still has live in another row, or a shared one they never
- *                 finished (the sweep has no predecessor to repeat).
+ *   'comes-back'  a recurring chore that stays active — other children share
+ *                 it, or this child still has another row of it — and the
+ *                 push-scan sweep WILL give this child a new one once this row
+ *                 is gone (`sweepWouldRespawn`): the board says so instead of
+ *                 "removed".
+ *   'stays'       anything else: a one-off or retired chore, or one the sweep
+ *                 will not repeat for this child (something of it still open,
+ *                 nothing finished to repeat, its next one already written, or
+ *                 a child who has left the family).
  *
  * Deleting the row alone did not stop a repeating chore. The push-scan sweep
  * (`respawnMissingChoreAssignments`) finds a child with a finished assignment
@@ -1217,6 +1234,12 @@ const LIVE_STATUSES = ['todo', 'in_progress', 'submitted', 'rejected'] as const;
  * the sweep respects — a task_status value such as `removed`, or a
  * per-(chore, member) stop table read by the sweep — which is a schema change
  * for the owner. Until it lands, 'comes-back' is said, not hidden.
+ *
+ * A submitted or rejected row keeps the chore on the board, so it keeps a
+ * chore that is only this child's from being retired; it does NOT stop the
+ * sweep, which counts only to-do and in-progress rows as open. Whether the
+ * chore comes back is therefore the sweep's own question, asked of this one
+ * (chore, child), not "is anything else of it live".
  */
 type DeleteOutcome = 'retires' | 'comes-back' | 'stays';
 
@@ -1262,26 +1285,72 @@ async function deleteOutcome(
     console.error('[service:tasks] live chore read before delete failed', liveError);
     return fail(describeDbError(liveError, 'Could not load that chore.'), { code: SERVICE_CODES.db });
   }
-  if (live && live.length > 0) return ok('stays');
-  if (!shared) return ok('retires');
+  if (!shared && !(live && live.length > 0)) return ok('retires');
 
-  // Shared, with nothing else of it live for this child. The sweep repeats it
-  // for them only from a finished assignment, and only while they are an
-  // active member of the family: the same two facts it reads.
-  const { data: finished, error: finishedError } = await scope.db
+  const respawns = await sweepWouldRespawn(scope, target);
+  if (!respawns.ok) return respawns;
+  return ok(respawns.data ? 'comes-back' : 'stays');
+}
+
+/**
+ * Whether the push-scan sweep gives this child a new assignment of the chore
+ * once `target` is gone: `respawnMissingChoreAssignments`'s own test, for one
+ * (chore, child). Nothing of it open (to do or in progress — a submitted or
+ * rejected row does not count), a finished one to repeat (the latest, as the
+ * sweep picks it), that one's respawn key not held by a row that stays, and
+ * the child still an active member of the family.
+ */
+async function sweepWouldRespawn(
+  scope: ServiceScope,
+  target: { id: string; chore_id: string; member_id: string },
+): Promise<ServiceResult<boolean>> {
+  const { data: open, error: openError } = await scope.db
     .from('chore_assignments')
     .select('id')
     .eq('family_id', scope.familyId)
     .eq('chore_id', target.chore_id)
     .eq('member_id', target.member_id)
     .neq('id', target.id)
-    .in('status', [...FINISHED_STATUSES])
+    .in('status', [...OPEN_STATUSES])
     .limit(1);
+  if (openError) {
+    console.error('[service:tasks] open chore read before delete failed', openError);
+    return fail(describeDbError(openError, 'Could not load that chore.'), { code: SERVICE_CODES.db });
+  }
+  if (open && open.length > 0) return ok(false);
+
+  const { rows: finished, error: finishedError } = await readAllById<FinishedRow>((after, limit) => {
+    let q = scope.db
+      .from('chore_assignments')
+      .select('id, approved_at, submitted_at, created_at')
+      .eq('family_id', scope.familyId)
+      .eq('chore_id', target.chore_id)
+      .eq('member_id', target.member_id)
+      .neq('id', target.id)
+      .in('status', [...FINISHED_STATUSES]);
+    if (after) q = q.gt('id', after);
+    return q.order('id').limit(limit);
+  });
   if (finishedError) {
     console.error('[service:tasks] finished chore read before delete failed', finishedError);
     return fail(describeDbError(finishedError, 'Could not load that chore.'), { code: SERVICE_CODES.db });
   }
-  if (!finished || finished.length === 0) return ok('stays');
+  const latest = latestFinished(finished);
+  if (!latest) return ok(false);
+
+  // The sweep asks for the successor under this key; a row that stays holding it means 0256 refuses that insert.
+  const { data: holder, error: holderError } = await scope.db
+    .from('chore_assignments')
+    .select('id')
+    .eq('family_id', scope.familyId)
+    .eq('idempotency_key', respawnKeyFor(scope.familyId, latest.id))
+    .neq('id', target.id)
+    .limit(1);
+  if (holderError) {
+    console.error('[service:tasks] respawn key read before delete failed', holderError);
+    return fail(describeDbError(holderError, 'Could not load that chore.'), { code: SERVICE_CODES.db });
+  }
+  if (holder && holder.length > 0) return ok(false);
 
   const { data: member, error: memberError } = await scope.db
     .from('family_members')
@@ -1294,7 +1363,7 @@ async function deleteOutcome(
     console.error('[service:tasks] member read before delete failed', memberError);
     return fail(describeDbError(memberError, 'Could not load that chore.'), { code: SERVICE_CODES.db });
   }
-  return ok(member ? 'comes-back' : 'stays');
+  return ok(Boolean(member));
 }
 
 /** Turn a chore on or off, confirmed: zero rows is a write that did not land. */
@@ -1318,8 +1387,9 @@ async function setChoreActive(scope: ServiceScope, choreId: string, isActive: bo
  * so the respawn sweep does not put it back (`deleteOutcome`).
  *
  * `comesBack` is true when the respawn sweep WILL put the chore back on this
- * child's board: a repeating chore other children share, which a delete cannot
- * stop for one child until the schema has a tombstone the sweep reads.
+ * child's board: a repeating chore that stays active (other children share it,
+ * or this child still has another row of it), which a delete cannot stop for
+ * one child until the schema has a tombstone the sweep reads.
  */
 export async function deleteChoreAssignment(
   scope: ServiceScope,

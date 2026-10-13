@@ -201,6 +201,32 @@ describe('S13 — a search where every source failed is not an empty weekend', (
     expect(body.errors).toEqual({ ticketmaster: 'HTTP 503' });
   });
 
+  it('names a saved feed that did not answer, though another feed did', async () => {
+    db.seed('weekend_feeds', [
+      feed('library', 'ics', 'https://feeds.example/library.ics'),
+      feed('gone', 'ics', 'https://feeds.example/gone.ics'),
+    ]);
+    harness.feedText.set('https://feeds.example/library.ics', 'BEGIN:VCALENDAR\r\nEND:VCALENDAR');
+
+    const res = await search();
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.sources).toEqual(['feed:Feed library']);
+    expect(body.errors).toEqual({ feedsFailed: 'Some of your saved local feeds could not be read.' });
+    expect(db.table('weekend_feeds').find((row) => row.id === 'gone')).toMatchObject({ last_status: 'HTTP 422' });
+  });
+
+  it('control: every saved feed answering names nothing', async () => {
+    db.seed('weekend_feeds', [feed('library', 'ics', 'https://feeds.example/library.ics')]);
+    harness.feedText.set('https://feeds.example/library.ics', 'BEGIN:VCALENDAR\r\nEND:VCALENDAR');
+
+    const res = await search();
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).errors).toEqual({});
+  });
+
   it('with nothing configured at all, still says how to connect a source', async () => {
     const res = await search();
     expect(res.status).toBe(503);

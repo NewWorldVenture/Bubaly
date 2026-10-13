@@ -182,4 +182,45 @@ describe('S13 — a search whose sources failed says so', () => {
     expect(h.toasts.error).toEqual([t('discover.eventSourcesUnreachable')]);
     expect(h.toasts.success).toEqual([]);
   });
+
+  it('warns when a saved feed failed, though another source answered', async () => {
+    await searchWith({ count: 1, zip: '94110', radius: 25, days: 6, sources: ['ticketmaster'], errors: { feedsFailed: 'Some of your saved local feeds could not be read.' } });
+
+    expect(h.toasts.error).toContain(t('weekend.someSourcesUnreachable'));
+  });
+
+  it('says feeds left for the next search will be read then, not that they could not be reached', async () => {
+    await searchWith({ count: 1, zip: '94110', radius: 25, days: 6, sources: ['ticketmaster'], errors: { feedsSkipped: 'Some of your saved local feeds were left for the next search.' } });
+
+    expect(h.toasts.error).toEqual([]);
+    expect(h.toasts.success).toContain(t('weekend.someFeedsLeftForNextSearch'));
+  });
+
+  it('says both when one feed failed and others were left', async () => {
+    await searchWith({ count: 1, zip: '94110', radius: 25, days: 6, sources: ['ticketmaster'], errors: { feedsFailed: 'x', feedsSkipped: 'y' } });
+
+    expect(h.toasts.error).toEqual([t('weekend.someSourcesUnreachable')]);
+    expect(h.toasts.success).toContain(t('weekend.someFeedsLeftForNextSearch'));
+  });
+});
+
+describe('S13 — what a search found shows without a reload', () => {
+  beforeEach(() => { vi.setSystemTime(new Date('2026-10-13T19:00:00Z')); });
+
+  it('lists the event the search just saved', async () => {
+    // The route writes what it found, then answers; these tables are not published to realtime.
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      db.seed('weekend_events', [event('found-1', 'Pumpkin patch', '2026-10-17T17:00:00Z')]);
+      return new Response(JSON.stringify({ count: 1, zip: '94110', radius: 25, days: 6, sources: ['feed:Library'], errors: {} }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }));
+    db.seed('weekend_searches', [{ id: 's-1', family_id: FAMILY, zip: '94110', radius_miles: 25, days: 6, result_count: 0, last_run_at: '2026-10-12T19:00:00Z', created_by: 'user-1' }]);
+    const before = await show();
+    expect(has(before, 'Pumpkin patch')).toBe(false);
+
+    await click(byName(before, new RegExp(t('weekend.findEvents'))));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(h.toasts.success).toContain(t('weekend.foundOneEventNear', { zip: '94110' }));
+    expect(has(await show(), 'Pumpkin patch')).toBe(true);
+  });
 });

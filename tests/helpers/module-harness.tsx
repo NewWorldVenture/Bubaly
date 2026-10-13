@@ -274,6 +274,7 @@ export function toastModule(h: ModuleState) {
     success: (message: string) => { h.toasts.success.push(message); },
     error: (message: string) => { h.toasts.error.push(message); },
     info: (message: string) => { h.toasts.success.push(message); },
+    toast: (message: string, tone?: 'success' | 'error' | 'info') => { (tone === 'error' ? h.toasts.error : h.toasts.success).push(message); },
   };
   return { useToast: () => api };
 }
