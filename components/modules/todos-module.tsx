@@ -10,6 +10,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { escapeLike } from '@/lib/supabase/escape-like';
 import { completeTodoAction, createTodoAction, deleteTodoAction, updateTodoAction } from '@/app/(app)/dashboard/todos/actions';
 import { newSubmissionId, submissionSettled } from '@/lib/utils/submission-id';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -54,6 +55,8 @@ const LIST_ICONS = ['📋', '🏠', '💼', '🛒', '🎯', '📚', '🏋️', '
  * separately: the tab and the summary say how many there really are.
  */
 const COMPLETED_SHOWN = 200;
+/** How long typing rests before a search of every finished task is asked. */
+const SEARCH_SETTLE_MS = 250;
 /** Open tasks are read whole; past this many the read fails rather than cuts. */
 const OPEN_MAX = 20_000;
 
@@ -132,10 +135,37 @@ export function TodosModule() {
       return { data: countError ? null : [{ total: count ?? 0 }], error: countError };
     },
   });
-  const refreshItems = () => Promise.all([openQ.refresh(), doneQ.refresh(), doneCountQ.refresh()]);
+
+  // The finished list above is the newest 200, so a search of it alone told a
+  // family with 201 finished tasks "No completed tasks" for the oldest one's
+  // exact title, with nothing to reopen it from. When more are finished than
+  // are listed, a search on the Completed tab asks the database over all of
+  // them — newest first, up to the same bound, and said so when there are more.
+  const completedTotalRead = doneCountQ.data[0]?.total ?? doneQ.data.length;
+  const doneTruncated = completedTotalRead > doneQ.data.length;
+  const [completedQuery, setCompletedQuery] = useState('');
+  useEffect(() => {
+    const q = search.trim();
+    const timer = setTimeout(() => setCompletedQuery(q), q ? SEARCH_SETTLE_MS : 0);
+    return () => clearTimeout(timer);
+  }, [search]);
+  const searchAllDone = tab === 'completed' && doneTruncated ? completedQuery : '';
+  const doneSearchQ = useRealtimeQuery<TodoItem>({
+    table: 'todo_items', familyId, deps: [familyId, 'done-search', searchAllDone],
+    fetcher: (sb) => (searchAllDone
+      ? sb.from('todo_items').select('*').eq('family_id', familyId).eq('is_done', true)
+        .ilike('title', `%${escapeLike(searchAllDone)}%`)
+        .order('completed_at', { ascending: false, nullsFirst: false })
+        .order('id').range(0, COMPLETED_SHOWN)
+      : Promise.resolve({ data: [] as TodoItem[], error: null })),
+  });
+  // Typed but not yet asked, or asked and not yet answered: neither is "no match".
+  const searchingAllDone = tab === 'completed' && doneTruncated && search.trim() !== '';
+  const doneSearchPending = searchingAllDone && (completedQuery !== search.trim() || doneSearchQ.loading);
+  const refreshItems = () => Promise.all([openQ.refresh(), doneQ.refresh(), doneCountQ.refresh(), doneSearchQ.refresh()]);
 
   const loading = listsLoading || openQ.loading || doneQ.loading || doneCountQ.loading;
-  const error = listsError || openQ.error || doneQ.error || doneCountQ.error;
+  const error = listsError || openQ.error || doneQ.error || doneCountQ.error || doneSearchQ.error;
   const refresh = () => { void refreshLists(); void refreshItems(); };
   // A guest views the household's tasks; it does not add, edit or tick them off
   // (the actions refuse it too — see app/(app)/dashboard/todos/actions.ts).
@@ -166,6 +196,8 @@ export function TodosModule() {
   // Tab → base set, then search.
   const tabItems = useMemo(() => {
     let res: TodoItem[];
+    // Searched in the database already: every finished task, not the listed 200.
+    if (searchingAllDone) return doneSearchQ.data.slice(0, COMPLETED_SHOWN);
     if (tab === 'completed') res = completed;
     else if (tab === 'mine') res = active.filter((i) => i.created_by === selfId);
     else if (tab === 'assigned') res = active.filter((i) => i.assigned_to_id === selfId);
@@ -175,7 +207,7 @@ export function TodosModule() {
       res = res.filter((i) => i.title.toLowerCase().includes(q));
     }
     return res;
-  }, [tab, active, completed, selfId, search]);
+  }, [tab, active, completed, selfId, search, searchingAllDone, doneSearchQ.data]);
 
   // Group the active tabs by due date.
   const groups = useMemo(() => {
@@ -427,7 +459,9 @@ export function TodosModule() {
 
         {/* Body */}
         <div className="mt-4">
-          {nothing ? (
+          {doneSearchPending ? (
+            <p role="status" className="py-6 text-center text-sm text-muted">{tr('todosModule.searchingCompleted')}</p>
+          ) : nothing ? (
             <EmptyState icon={CheckSquare}
               title={tab === 'completed' ? 'No completed tasks' : 'All clear!'}
               description={tab === 'completed' ? 'Finished tasks will show up here.' : 'No tasks here yet — add one to get started.'}
@@ -437,6 +471,9 @@ export function TodosModule() {
               <div className="space-y-1.5">{tabItems.map((i) => <TaskRow key={i.id} item={i} />)}</div>
               {completedTotal > completed.length && !search.trim() && (
                 <p className="mt-2 text-xs text-muted">{tr('todosModule.showingRecentCompleted', { shown: completed.length, total: completedTotal })}</p>
+              )}
+              {searchingAllDone && doneSearchQ.data.length > COMPLETED_SHOWN && (
+                <p className="mt-2 text-xs text-muted">{tr('todosModule.showingNewestMatches', { shown: COMPLETED_SHOWN })}</p>
               )}
             </>
           ) : (

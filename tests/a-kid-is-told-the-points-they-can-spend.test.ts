@@ -108,6 +108,26 @@ describe('a kid is told the points they can spend', () => {
     expect(affordable(html)).toEqual([50, 1000]);
   });
 
+  // AUD-1040-LEDGER-PAGING: the ledger is summed while it is written to. A chore
+  // approved between two pages of an offset read pushed the last row of page
+  // one onto page two, and it was counted twice.
+  it('a chore approved between two pages of the ledger does not count an old one twice', async () => {
+    base.seed('chore_assignments', Array.from({ length: 1200 }, (_, i) => assignment(i, { member_id: KID, status: 'approved', points_awarded: i === 999 ? 100 : 1 })));
+    let pages = 0;
+    h.db = withFaults(base, (table, calls) => {
+      const ledgerRead = calls.some((c) => c.method === 'select' && c.args[0] === 'id, member_id, status, points_awarded');
+      if (table === 'chore_assignments' && ledgerRead && ++pages === 2) {
+        base.seed('chore_assignments', [{ ...assignment(0, { member_id: KID, status: 'approved', points_awarded: 1 }), id: 'as-00000a' }]);
+      }
+      return null;
+    });
+    const html = await dashboard();
+
+    // 1,199 chores at 1 and one at 100, each once; the chore approved mid-read
+    // landed below the cursor and is read next time.
+    expect(toSpend(html)).toBe('1299');
+  });
+
   it('a ledger that could not be read is not shown as a balance, and nothing reads as affordable', async () => {
     base.seed('chore_assignments', Array.from({ length: 10 }, (_, i) => assignment(i, { member_id: KID, status: 'approved', points_awarded: 10 })));
     h.db = withFaults(base, (table) => (table === 'reward_redemptions' ? { message: 'Fixture read refused' } : null));

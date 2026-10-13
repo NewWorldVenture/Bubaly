@@ -14344,6 +14344,8 @@
   "todosModule.couldNotLoadTasksRefresh": "Error al cargar las tareas. Actualiza y vuelve a intentarlo.",
   "todosModule.defaultListName": "Tareas",
   "todosModule.showingRecentCompleted": "Se muestran las {shown} terminadas más recientemente de {total} tareas completadas.",
+  "todosModule.searchingCompleted": "Buscando en todas las tareas terminadas…",
+  "todosModule.showingNewestMatches": "Se muestran las {shown} coincidencias terminadas más recientes. Busca más del título para encontrar otras más antiguas.",
   "todosModule.listsAreFamilyWide": "Todos en la familia pueden ver y trabajar en las tareas de esta categoría.",
   "library.placeCouldNotBeLoaded": "No se pudo cargar por dónde vas en cada episodio y libro. La reproducción empieza desde el principio y lo que reproduzcas ahora no se guarda como tu punto. Actualiza y vuelve a intentarlo.",
   "library.onlyAudioOffline": "Solo se puede guardar audio sin conexión. Este archivo se reproduce en línea.",

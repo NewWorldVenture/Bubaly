@@ -19,7 +19,7 @@ import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { dayKeyInTz, zonedDayBoundsMs, addDaysToDayKey, weekStartDayKey, scopeFromUserContext } from '@/lib/services/scope';
 import { readCompleteCalendarOccurrences, projectCalendarOccurrences } from '@/lib/services/calendar/search-occurrences';
 import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from '@/lib/calendar/source-capability';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { computeBalances } from '@/lib/rewards/points';
 
 const ACCENT = ['bg-violet-500', 'bg-emerald-500', 'bg-orange-500', 'bg-rose-500', 'bg-blue-500', 'bg-teal-500'];
@@ -110,16 +110,22 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
     // or fulfilled redemptions). "Points to spend" used to be lifetime earned
     // over 500 rows of approved-or-'done', with redemptions never read — so a
     // child who had just spent 100 points was told they still had 100.
-    readAllAsQuery<{ id: string; member_id: string; status: string; points_awarded: number | null }>((from, to) =>
-      supabase.from('chore_assignments')
+    // Paged on the id, not on offsets (readAllById): these are summed, and an
+    // offset read repeats a row when one is written between its pages.
+    readAllByIdAsQuery<{ id: string; member_id: string; status: string; points_awarded: number | null }>((after, limit) => {
+      let q = supabase.from('chore_assignments')
         .select('id, member_id, status, points_awarded')
-        .eq('family_id', familyId).eq('member_id', myMemberId).eq('status', 'approved')
-        .order('id').range(from, to), { max: 50_000 }),
-    readAllAsQuery<{ id: string; member_id: string; status: 'requested' | 'approved' | 'fulfilled' | 'rejected'; cost_points: number }>((from, to) =>
-      supabase.from('reward_redemptions')
+        .eq('family_id', familyId).eq('member_id', myMemberId).eq('status', 'approved');
+      if (after) q = q.gt('id', after);
+      return q.order('id').limit(limit);
+    }, { max: 50_000 }),
+    readAllByIdAsQuery<{ id: string; member_id: string; status: 'requested' | 'approved' | 'fulfilled' | 'rejected'; cost_points: number }>((after, limit) => {
+      let q = supabase.from('reward_redemptions')
         .select('id, member_id, status, cost_points')
-        .eq('family_id', familyId).eq('member_id', myMemberId).in('status', ['approved', 'fulfilled'])
-        .order('id').range(from, to), { max: 50_000 }),
+        .eq('family_id', familyId).eq('member_id', myMemberId).in('status', ['approved', 'fulfilled']);
+      if (after) q = q.gt('id', after);
+      return q.order('id').limit(limit);
+    }, { max: 50_000 }),
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('member_id', myMemberId).in('status', ['todo', 'in_progress']),
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })

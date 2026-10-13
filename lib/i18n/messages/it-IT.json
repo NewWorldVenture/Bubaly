@@ -14344,6 +14344,8 @@
   "todosModule.couldNotLoadTasksRefresh": "Impossibile caricare le attività. Aggiorna e riprova.",
   "todosModule.defaultListName": "Attività",
   "todosModule.showingRecentCompleted": "Sono mostrate le {shown} attività terminate più di recente su {total} completate.",
+  "todosModule.searchingCompleted": "Ricerca in tutte le attività completate…",
+  "todosModule.showingNewestMatches": "Sono mostrati i {shown} risultati completati più di recente. Cerca più parole del titolo per trovare quelli più vecchi.",
   "todosModule.listsAreFamilyWide": "Tutti in famiglia possono vedere le attività di questa categoria e lavorarci.",
   "library.placeCouldNotBeLoaded": "Non è stato possibile caricare il punto a cui sei arrivato in ogni episodio e libro. La riproduzione parte dall’inizio e quello che ascolti ora non viene salvato come tuo punto. Aggiorna e riprova.",
   "library.onlyAudioOffline": "Offline si può salvare solo l’audio. Questo file si ascolta online.",

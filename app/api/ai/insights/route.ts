@@ -21,7 +21,7 @@ import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { INSIGHT_FEATURE_HREFS } from '@/lib/ai/insight-features';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
-import { readAll, readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAll, readAllByIdAsQuery } from '@/lib/supabase/read-all';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -615,12 +615,20 @@ async function fetchRows(
       // as "Total points earned". Past the ceiling readAll answers an error and
       // the route says it could not load, rather than handing over a prefix.
       const [asg, redemptions, pending] = await settleAll([
-        readAllAsQuery<Record<string, unknown>>((from, to) => sb.from('chore_assignments')
-          .select('id, member_id, status, points_awarded').eq('family_id', familyId).eq('status', 'approved')
-          .order('id').range(from, to), { max: 50_000 }),
-        readAllAsQuery<Record<string, unknown>>((from, to) => sb.from('reward_redemptions')
-          .select('id, member_id, cost_points, status, created_at').eq('family_id', familyId)
-          .order('created_at', { ascending: false }).order('id').range(from, to), { max: 50_000 }),
+        // Paged on the id (readAllById): an offset read repeats a row written
+        // between its pages, and these rows are summed.
+        readAllByIdAsQuery<{ id: string } & Record<string, unknown>>((after, limit) => {
+          let q = sb.from('chore_assignments')
+            .select('id, member_id, status, points_awarded').eq('family_id', familyId).eq('status', 'approved');
+          if (after) q = q.gt('id', after);
+          return q.order('id').limit(limit);
+        }, { max: 50_000 }),
+        readAllByIdAsQuery<{ id: string } & Record<string, unknown>>((after, limit) => {
+          let q = sb.from('reward_redemptions')
+            .select('id, member_id, cost_points, status, created_at').eq('family_id', familyId);
+          if (after) q = q.gt('id', after);
+          return q.order('id').limit(limit);
+        }, { max: 50_000 }),
         sb.from('chore_assignments').select('id', { count: 'exact', head: true })
           .eq('family_id', familyId).in('status', ['todo', 'in_progress', 'submitted']),
       ]);

@@ -196,6 +196,75 @@ describe('S1 — the to-do list reads every open task, however many are done', (
   });
 });
 
+describe('AUD-1040-COMPLETED-SEARCH — a search of the Completed tab reaches every finished task', () => {
+  // 260 finished: the list shows the newest 200, and the oldest one has a title
+  // nothing else shares. Searching the listed 200 alone answered "No completed
+  // tasks" for it, with the exact count of 260 on the tab above.
+  beforeEach(() => {
+    db.seed('todo_lists', [{ id: 'list-1', family_id: FAMILY, name: 'Tasks', icon: '📋', color: 'violet', is_shared: true, sort_order: 0, archived_at: null }]);
+    db.seed('todo_items', Array.from({ length: 260 }, (_, i) => ({
+      id: `done-${String(i).padStart(4, '0')}`, family_id: FAMILY, list_id: 'list-1', title: i === 0 ? 'Return the library books' : `Old task ${i}`,
+      is_done: true, priority: 'medium', due_date: day(i), completed_at: hour(i), created_by: PARENT, assigned_to_id: null, tags: [],
+    })));
+  });
+  async function completedTab(): Promise<ReactNode> {
+    const tree = await show(() => createElement(TodosModule));
+    await click(byName(tree, new RegExp(`^${t('todosModule.tab.completed')}\\d+$`)));
+    return show(() => createElement(TodosModule));
+  }
+  async function search(tree: ReactNode, value: string): Promise<ReactNode> {
+    change(nodes(tree).find((n) => n.type === 'input' && n.props.placeholder === t('todos.searchTasks'))!, value);
+    return show(() => createElement(TodosModule));
+  }
+  /** Typing rests before the database is asked (SEARCH_SETTLE_MS). */
+  const typingRests = () => new Promise((resolve) => setTimeout(resolve, 300));
+  const listed = (tree: ReactNode, title: string) => nodes(tree).some((n) => n.type === 'p' && text(n) === title);
+
+  it('finds the oldest finished task by its title, and keeps the exact count', async () => {
+    let tree = await completedTab();
+    expect(listed(tree, 'Return the library books')).toBe(false);
+
+    tree = await search(tree, 'library books');
+    // Asked, not yet answered: that is not "no match".
+    expect(has(tree, t('todosModule.searchingCompleted'))).toBe(true);
+    expect(has(tree, 'No completed tasks')).toBe(false);
+
+    await typingRests();
+    tree = await show(() => createElement(TodosModule));
+    expect(listed(tree, 'Return the library books')).toBe(true);
+    expect(has(tree, 'No completed tasks')).toBe(false);
+    expect(text(byName(tree, new RegExp(`^${t('todosModule.tab.completed')}\\d+$`)))).toBe(`${t('todosModule.tab.completed')}260`);
+  });
+
+  it('a search no finished task matches says so', async () => {
+    let tree = await search(await completedTab(), 'zebra crossing');
+    await typingRests();
+    tree = await show(() => createElement(TodosModule));
+    expect(has(tree, 'No completed tasks')).toBe(true);
+  });
+
+  it('more matches than are listed says the list is the newest of them', async () => {
+    let tree = await search(await completedTab(), 'Old task');
+    await typingRests();
+    tree = await show(() => createElement(TodosModule));
+    expect(listed(tree, 'Old task 259')).toBe(true);
+    expect(listed(tree, 'Old task 59')).toBe(false);
+    expect(has(tree, t('todosModule.showingNewestMatches', { shown: 200 }))).toBe(true);
+  });
+
+  it('with every finished task listed, a search stays on the list and asks nothing more', async () => {
+    db.table('todo_items').splice(0, 60);
+    let tree = await completedTab();
+    const asked = h.calls.length;
+    tree = await search(tree, 'Old task 25');
+    expect(has(tree, t('todosModule.searchingCompleted'))).toBe(false);
+    expect(listed(tree, 'Old task 250')).toBe(true);
+    await typingRests();
+    await show(() => createElement(TodosModule));
+    expect(h.calls.slice(asked).some((c) => c.table === 'todo_items' && c.calls.includes('ilike'))).toBe(false);
+  });
+});
+
 describe('S3/S4 — a to-do category is the family\'s, and says so', () => {
   it('offers no "Shared with family" box nothing applies, and records who made the category', async () => {
     db.seed('todo_lists', [{ id: 'list-1', family_id: FAMILY, name: 'Tasks', icon: '📋', color: 'violet', is_shared: true, sort_order: 0, archived_at: null }]);
@@ -329,6 +398,38 @@ describe('S9 — reward balances are the whole ledger\'s', () => {
     const leaderboard = nodes(tree).filter((n) => n.type === 'div' && typeof n.props.className === 'string' && n.props.className.includes('text-2xl font-bold text-amber-400')).map((n) => text(n));
     expect(leaderboard).toEqual(['600', '600', '0', '0']);
     expect(byName(tree, t('rewards.approve')).props.disabled).toBe(false);
+  });
+});
+
+describe('AUD-1040-LEDGER-PAGING — a request landing between ledger pages spends nothing twice', () => {
+  it('an approved redemption is subtracted once when a new request lands between two pages', async () => {
+    db.seed('chore_assignments', Array.from({ length: 600 }, (_, i) => ({
+      id: `b-${String(i).padStart(4, '0')}`, family_id: FAMILY, member_id: OTHER_KID, chore_id: 'c1', status: 'approved', points_awarded: 1,
+    })));
+    db.seed('rewards', [{ id: 'reward-1', family_id: FAMILY, title: 'Cinema trip', description: null, cost_points: 100, redeemed_by: null }]);
+    const redemption = (id: string, patch: Record<string, unknown>) => ({
+      id, family_id: FAMILY, member_id: KID, reward_id: 'reward-1', reward_title: 'Cinema trip', cost_points: 1, status: 'rejected', ...patch,
+    });
+    // A thousand-and-one rows, so the ledger takes two pages; the one approved
+    // redemption sits at the end of the first, in either reading order.
+    db.seed('reward_redemptions', [
+      ...Array.from({ length: 999 }, (_, i) => redemption(`r-${String(i).padStart(4, '0')}`, { created_at: '2026-10-12T10:00:00Z' })),
+      redemption('red-approved', { member_id: OTHER_KID, cost_points: 100, status: 'approved', created_at: '2026-10-01T10:00:00Z' }),
+      redemption('r-old', { created_at: '2026-09-01T10:00:00Z' }),
+    ]);
+    // Held between page one and page two: a child asks for a reward.
+    let pages = 0;
+    h.fault = (table, calls) => {
+      if (table === 'reward_redemptions' && calls.includes('select') && ++pages === 2) {
+        db.seed('reward_redemptions', [redemption('req-new', { cost_points: 500, status: 'requested', created_at: '2026-10-13T11:00:00Z' })]);
+      }
+      return null;
+    };
+    const tree = await show(() => createElement(RewardsModule));
+
+    // Cy: 600 earned, 100 spent once. The new request spends nothing.
+    const leaderboard = nodes(tree).filter((n) => n.type === 'div' && typeof n.props.className === 'string' && n.props.className.includes('text-2xl font-bold text-amber-400')).map((n) => text(n));
+    expect(leaderboard).toEqual(['500', '0', '0', '0']);
   });
 });
 

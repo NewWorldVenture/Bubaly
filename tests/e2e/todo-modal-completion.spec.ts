@@ -11,7 +11,7 @@ const root=process.env.BUBALY_TODO_UI_SOURCE_ROOT ?? process.cwd();
 const origin='https://todo-modal-completion-fixture.invalid';
 const {react,reactDom}=reactBrowserScripts('development');
 const sdk=fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')),'dist/umd/supabase.js'),'utf8');
-const files=['components/modules/todos-module.tsx','components/ui/modal.tsx','components/ui/input.tsx','components/ui/button.tsx','components/ui/badge.tsx','components/ui/states.tsx','components/ui/states-client.tsx','components/app/page-header.tsx','lib/a11y/use-dialog-behavior.ts','lib/supabase/errors.ts','lib/supabase/read-all.ts','lib/utils/submission-id.ts'];
+const files=['components/modules/todos-module.tsx','components/ui/modal.tsx','components/ui/input.tsx','components/ui/button.tsx','components/ui/badge.tsx','components/ui/states.tsx','components/ui/states-client.tsx','components/app/page-header.tsx','lib/a11y/use-dialog-behavior.ts','lib/supabase/errors.ts','lib/supabase/read-all.ts','lib/supabase/escape-like.ts','lib/utils/submission-id.ts'];
 const definitions=Object.fromEntries(files.map(file=>['@/'+file.replace(/\.tsx?$/,''),ts.transpileModule(fs.readFileSync(file==='components/modules/todos-module.tsx' && process.env.BUBALY_TODO_MODULE_SOURCE ? process.env.BUBALY_TODO_MODULE_SOURCE:path.join(root,file),'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText]));
 const messages=JSON.parse(fs.readFileSync(path.join(root,'lib/i18n/messages/en-US.json'),'utf8'));
 declare global {interface Window {

@@ -14343,6 +14343,8 @@
   "todosModule.couldNotLoadTasksRefresh": "Não foi possível carregar as tarefas. Atualize e tente novamente.",
   "todosModule.defaultListName": "Tarefas",
   "todosModule.showingRecentCompleted": "A mostrar as {shown} tarefas terminadas mais recentemente de {total} concluídas.",
+  "todosModule.searchingCompleted": "A pesquisar todas as tarefas concluídas…",
+  "todosModule.showingNewestMatches": "A mostrar os {shown} resultados concluídos mais recentes. Pesquise mais do título para encontrar os mais antigos.",
   "todosModule.listsAreFamilyWide": "Todos na família podem ver e trabalhar nas tarefas desta categoria.",
   "library.placeCouldNotBeLoaded": "Não foi possível carregar onde ficou em cada episódio e livro. A reprodução começa do início e o que ouvir agora não é guardado como o seu ponto. Atualize e tente novamente.",
   "library.onlyAudioOffline": "Só é possível guardar áudio offline. Este ficheiro reproduz-se online.",

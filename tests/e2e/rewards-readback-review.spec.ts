@@ -79,15 +79,20 @@ async function fixture(page: Page): Promise<Fixture> {
     finishWrites: async () => { state.holdMutations = false; await Promise.all(pendingWrites.splice(0).map(release => release())); },
   };
   const headers = { 'access-control-allow-origin': origin, 'access-control-allow-headers': '*', 'access-control-allow-methods': 'GET,POST,PATCH,DELETE,OPTIONS' };
-  // The ledger is read whole (readAll), so `.range(from, to)` arrives as
-  // offset/limit, as PostgREST reads it, and the window is applied here.
+  // The ledger is read whole and keyed (readAllById), so a page arrives as
+  // `id=gt.<last>&order=id.asc&limit=n`, as PostgREST reads it; a `.range()`
+  // read arrives as offset/limit. Both windows are applied here.
   const rangeOf = (rows: Row[], query: URLSearchParams) => {
+    const ordered = query.get('order') === 'id.asc' ? [...rows].sort((a, b) => (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0)) : rows;
     const offset = Number(query.get('offset') ?? 0);
     const limit = query.get('limit');
-    return limit === null ? rows.slice(offset) : rows.slice(offset, offset + Number(limit));
+    return limit === null ? ordered.slice(offset) : ordered.slice(offset, offset + Number(limit));
   };
+  const keep = (row: Row, column: string, value: string) =>
+    value.startsWith('eq.') ? String(row[column]) === value.slice(3)
+      : value.startsWith('gt.') ? String(row[column]) > value.slice(3) : true;
   const matching = (table: Table, query: URLSearchParams) =>
-    rangeOf(state.rows[table].filter(row => [...query].every(([column, value]) => !value.startsWith('eq.') || String(row[column]) === value.slice(3))), query);
+    rangeOf(state.rows[table].filter(row => [...query].every(([column, value]) => keep(row, column, value))), query);
   const read = (route: Route, table: Table) => {
     const query = new URL(route.request().url()).searchParams;
     return route.fulfill({ status: state.mode[table] === 'fail' ? 403 : 200, headers, contentType: 'application/json',
@@ -101,10 +106,11 @@ async function fixture(page: Page): Promise<Fixture> {
     const table = url.pathname.split('/').at(-1) as Table;
     if (!(table in state.rows)) throw new Error(`Unexpected fixture table: ${table}`);
     if (request.method() === 'GET') {
-      // A later page of a paged read (offset > 0) belongs to the read already
-      // counted and released: it is answered at once from the same rows, so a
-      // read stays one counted, holdable event however many pages it takes.
-      if (Number(url.searchParams.get('offset') ?? 0) > 0) {
+      // A later page of a paged read (offset > 0, or a key past the last row
+      // read) belongs to the read already counted and released: it is answered
+      // at once from the same rows, so a read stays one counted, holdable event
+      // however many pages it takes.
+      if (Number(url.searchParams.get('offset') ?? 0) > 0 || (url.searchParams.get('id') ?? '').startsWith('gt.')) {
         await route.fulfill({ status: 200, headers, contentType: 'application/json', body: JSON.stringify(matching(table, url.searchParams)) });
         return;
       }

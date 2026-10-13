@@ -14342,6 +14342,8 @@
   "todosModule.couldNotLoadTasksRefresh": "Kon de taken niet laden. Ververs en probeer het opnieuw.",
   "todosModule.defaultListName": "Taken",
   "todosModule.showingRecentCompleted": "De {shown} meest recent afgeronde van {total} voltooide taken worden getoond.",
+  "todosModule.searchingCompleted": "Alle afgeronde taken worden doorzocht…",
+  "todosModule.showingNewestMatches": "De {shown} meest recent afgeronde resultaten worden getoond. Zoek op meer van de titel om oudere te vinden.",
   "todosModule.listsAreFamilyWide": "Iedereen in het gezin kan de taken in deze categorie zien en eraan werken.",
   "library.placeCouldNotBeLoaded": "Waar je was in elke aflevering en elk boek kon niet worden geladen. Afspelen begint bij het begin, en wat je nu afspeelt wordt niet als jouw plek bewaard. Ververs en probeer het opnieuw.",
   "library.onlyAudioOffline": "Alleen audio kan offline worden bewaard. Dit bestand speelt online af.",

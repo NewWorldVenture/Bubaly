@@ -149,6 +149,27 @@ describe('S11 — the rewards coach is told the ledger, not a sample of it', () 
   });
 });
 
+describe('AUD-1040-LEDGER-PAGING — the rewards coach counts each redemption once', () => {
+  it('a request landing between two pages of redemptions does not spend an old reward twice', async () => {
+    base.seed('chore_assignments', Array.from({ length: 30 }, (_, i) => ({ id: `cy-${i}`, family_id: FAMILY, member_id: CY, status: 'approved', points_awarded: 10 })));
+    base.seed('reward_redemptions', [
+      ...Array.from({ length: 999 }, (_, i) => ({ id: `r-${String(i).padStart(4, '0')}`, family_id: FAMILY, member_id: BO, cost_points: 1, status: 'rejected', created_at: '2026-10-12T10:00:00Z' })),
+      { id: 'red-approved', family_id: FAMILY, member_id: CY, cost_points: 100, status: 'approved', created_at: '2026-10-01T10:00:00Z' },
+      { id: 'r-old', family_id: FAMILY, member_id: BO, cost_points: 1, status: 'rejected', created_at: '2026-09-01T10:00:00Z' },
+    ]);
+    let pages = 0;
+    h.db = withFaults(base, (table) => {
+      if (table === 'reward_redemptions' && ++pages === 2) {
+        base.seed('reward_redemptions', [{ id: 'req-new', family_id: FAMILY, member_id: BO, cost_points: 500, status: 'requested', created_at: '2026-10-14T15:00:00Z' }]);
+      }
+      return null;
+    });
+
+    expect((await ask('rewards')).status).toBe(200);
+    expect(prompt()).toContain('- Cy: earned 300, spent 100, available 200');
+  });
+});
+
 describe('S14/S15 — a guest is refused the homework and timetable summaries, like the school one', () => {
   it.each(['homework', 'timetable', 'school'])('a guest asking for the %s summary is refused before any read', async (kind) => {
     h.role = 'guest';
