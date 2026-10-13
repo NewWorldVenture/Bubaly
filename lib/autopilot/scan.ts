@@ -181,7 +181,8 @@ type PriorCard = { id: string; status: string; kind: string | null; source_kind:
  * repeating reminder's next occurrence carries that tag alone. Rewriting the
  * member would leave the copies naming a tag no card mints, and they would
  * fall to the managers alone. So an accepted card, and the reminders made from
- * it, keep the member the card was accepted under.
+ * it, keep the member the card was accepted under — one accepted after this
+ * scan read it included: the write also names the status the scan read.
  */
 async function refreshPolicyCardMember(
   supabase: DB, familyId: string, prior: PriorCard, draft: SuggestionDraft, viewer: AudienceViewer | null, userId: string | null,
@@ -194,11 +195,14 @@ async function refreshPolicyCardMember(
   if (viewer && prior.resolved_by && prior.resolved_by !== userId) return;
   if (prior.status === 'executed' || prior.status === 'approved') return;
   try {
+    // Only while the card is still as this scan read it: the same member (an
+    // overlapping scan's newer one is not overwritten) and the same status (a
+    // card accepted since this scan's read is an accepted card, above).
     const write = supabase.from('autopilot_suggestions')
-      .update({ member_id: memberId }).eq('id', prior.id).eq('family_id', familyId);
+      .update({ member_id: memberId }).eq('id', prior.id).eq('family_id', familyId).eq('status', prior.status);
     const observed = before.member_id === null ? write.is('member_id', null) : write.eq('member_id', before.member_id);
-    // No row written is a scan that lost the card to a newer one (above): not
-    // a failure, and nothing to undo.
+    // No row written is a scan that lost the card to a newer scan or to an
+    // acceptance (above): not a failure, and nothing to undo.
     const { error } = await observed.select('id');
     if (error) console.error('[autopilot] insurance card member refresh failed', error);
   } catch (error) {

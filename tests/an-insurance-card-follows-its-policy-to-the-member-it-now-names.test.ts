@@ -111,7 +111,8 @@ describe('an insurance card follows its policy to the member it now names', () =
       { method: 'update', args: [{ member_id: 'leo' }] },
       { method: 'eq', args: ['id', 'card-pol-dental'] },
       { method: 'eq', args: ['family_id', FAMILY] },
-      // Only while the card still names the member this scan read on it.
+      // Only while the card is as this scan read it: its status and its member.
+      { method: 'eq', args: ['status', 'open'] },
       { method: 'eq', args: ['member_id', 'ava'] },
       { method: 'select', args: ['id'] },
     ]);
@@ -254,6 +255,47 @@ describe('the refresh neither puts back an older member nor strands an accepted 
     await db.from('family_insurance_policies').update({ member_id: 'leo' }).eq('id', 'pol-dental').select('id');
     await runAutopilotScan(db, FAMILY, null, 'UTC', 'en-US', echo, AT);
     expect(card(db).member_id).toBe('leo');
+  });
+
+  it('a card accepted while a refresh is held is not rewritten when the refresh resumes', async () => {
+    const { resolveSuggestion, suggestionReminderKey, suggestionSourceTag } = await import('@/lib/services/autopilot');
+    const { reminderCardsReader, visibleReminders } = await import('@/lib/autopilot/reminder-cards');
+    // Open, naming Ava; the policy now names Leo.
+    const db = household('leo', 'ava');
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const held = holdingFirstRefresh(db);
+    const scan = runAutopilotScan(held.client, FAMILY, null, 'UTC', 'en-US', echo, AT);
+    await held.atWrite;
+
+    // Meanwhile a parent accepts the card as it stands, naming Ava.
+    const open = structuredClone(card(db));
+    const parent = {
+      db, familyId: FAMILY, userId: 'u-mum', memberId: 'mum', role: 'parent', actorKind: 'member', tz: 'UTC', now: new Date('2026-09-21T06:31:00Z'),
+    } as unknown as Parameters<typeof resolveSuggestion>[0];
+    const accepted = await resolveSuggestion(parent, { suggestionId: open.id as string, updatedAt: open.updated_at as string, action: 'reminder' });
+    expect(accepted).toMatchObject({ ok: true, status: 'executed' });
+    const executed = structuredClone(card(db));
+    expect(executed).toMatchObject({ status: 'executed', member_id: 'ava' });
+
+    held.release();
+    await scan;
+    // The refresh named the status it read ('open'): it writes nothing.
+    expect(card(db)).toEqual(executed);
+    expect(logged).not.toHaveBeenCalledWith('[autopilot] insurance card member refresh failed', expect.anything());
+
+    // The reminder the acceptance wrote, and a keyless next occurrence of it,
+    // still answer by the card as it stands: Ava's and the managers', alike.
+    const original = db.table('family_reminders').find((r) => r.idempotency_key === suggestionReminderKey(FAMILY, open.id as string)) as Row;
+    expect(original.tags).toContain(suggestionSourceTag(card(db) as never));
+    db.seed('family_reminders', [{ ...original, id: 'fr-next', idempotency_key: null, title: 'Renew dental (next year)' }]);
+    const rows = db.table('family_reminders') as unknown as { id: string; idempotency_key: string | null; tags: string[] }[];
+    for (const [member, expected] of [['mum', true], ['ava', true], ['leo', false], ['sam', false]] as const) {
+      const shown = (await visibleReminders(rows, viewerOf(member), reminderCardsReader(db, FAMILY, {
+        keyOf: (id) => suggestionReminderKey(FAMILY, id), sourceTagOf: suggestionSourceTag, onError: () => { throw new Error('the cards were readable'); },
+      }))).map((r) => r.id);
+      expect(shown.includes(original.id as string), `${member}: original`).toBe(expected);
+      expect(shown.includes('fr-next'), `${member}: next occurrence`).toBe(expected);
+    }
   });
 
   it('an accepted card keeps the member it was accepted under, so its reminder and the reminder\'s next occurrence answer alike', async () => {
