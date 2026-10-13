@@ -493,13 +493,15 @@ async function fetchRows(
       return { weather_locations: locs.data ?? [] };
     }
     case 'settings': {
-      const [ev, todos, chores, meals, docs] = await Promise.all([
+      // settleAll: one read that never completes would otherwise reject the
+      // batch, and reach the log as a bare transport error naming no read.
+      const [ev, todos, chores, meals, docs] = await settleAll([
         eq(sb, 'calendar_events', familyId).gte('starts_at', nowIso).limit(50),
         eq(sb, 'todo_items', familyId).limit(50),
         eq(sb, 'chores', familyId).limit(50),
         sb.from('meals').select('id').eq('family_id', familyId).limit(50),
         sb.from('documents').select('id').eq('family_id', familyId).limit(50),
-  ]);
+      ]);
       // Five failed reads were "Activity counts: 0" and a confident "set up your
       // calendar" to a family with a full one.
       required([['calendar_events', ev.error], ['todo_items', todos.error], ['chores', chores.error], ['meals', meals.error], ['documents', docs.error]]);

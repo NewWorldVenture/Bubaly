@@ -11,6 +11,12 @@
 // that ran out its deadline is not waited on again in the same run, the run has
 // an overall budget, and an account is sent to on at most its newest ten
 // devices (and registration switches the older ones off).
+//
+// The budget alone still let one account spend the run: three devices that
+// never answered were waited on one after another, 3 x 15 s = the whole 45 s.
+// So a recipient's web pushes (and their endpoint lookups) for one notification
+// now go out together under one deadline, and a recipient is waited on in full
+// once per run, briefly once more, and then not again until the next run.
 import { Agent as HttpsAgent } from 'node:https';
 import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -18,26 +24,27 @@ import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memo
 import { notificationId, pushDispatchDb, type PushFixtureRow } from './helpers/push-dispatch-db';
 
 const provider = vi.hoisted(() => ({
-  calls: [] as { endpoint: string; options: { timeout?: number; agent?: HttpsAgent } }[],
+  calls: [] as { endpoint: string; options: { timeout?: number; agent?: HttpsAgent }; at: number }[],
   behave: (_endpoint: string, _options: { agent?: HttpsAgent }): Promise<unknown> => Promise.resolve({ statusCode: 201 }),
 }));
 vi.mock('web-push', () => ({
   default: {
     setVapidDetails: () => {},
     sendNotification: (subscription: { endpoint: string }, _body: string, options: { timeout?: number; agent?: HttpsAgent }) => {
-      provider.calls.push({ endpoint: subscription.endpoint, options });
+      provider.calls.push({ endpoint: subscription.endpoint, options, at: Date.now() });
       return provider.behave(subscription.endpoint, options);
     },
   },
 }));
-vi.mock('@/lib/server/push-endpoint', () => ({ isDeliverablePushEndpoint: async () => true, __resetPushEndpointCache: () => {} }));
+const lookup = vi.hoisted(() => ({ behave: (_endpoint: string): Promise<boolean> => Promise.resolve(true) }));
+vi.mock('@/lib/server/push-endpoint', () => ({ isDeliverablePushEndpoint: (endpoint: string) => lookup.behave(endpoint), __resetPushEndpointCache: () => {} }));
 const sub = vi.hoisted(() => ({ db: null as unknown }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('@/lib/supabase/auth', () => ({ getUser: async () => ({ id: 'u-attacker' }) }));
 vi.mock('@/lib/server/request-rate-limit', () => ({ enforceRequestRateLimit: async () => ({ ok: true }) }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => sub.db, createServiceClient: () => sub.db }));
 
-const { dispatchPendingPushes, WEB_PUSH_DEADLINE_MS } = await import('@/lib/server/push');
+const { dispatchPendingPushes, WEB_PUSH_DEADLINE_MS, WEB_PUSH_DEADLINE_AFTER_STALL_MS } = await import('@/lib/server/push');
 const { POST: subscribe } = await import('@/app/api/push/subscribe/route');
 
 const NOW = new Date('2026-10-13T12:00:00.000Z');
@@ -53,10 +60,19 @@ const members = [
   { id: 'm-parent', user_id: 'u-parent', family_id: 'family', role: 'parent', is_active: true },
 ];
 const sentTo = () => provider.calls.map((c) => c.endpoint.split('/').pop());
+/** How far into the run (fake time) each send to `deviceId` began. */
+const sendTimes = (deviceId: string) => provider.calls.filter((c) => c.endpoint.endsWith(`/${deviceId}`)).map((c) => c.at - NOW.getTime());
+const never = () => new Promise<never>(() => {});
+/** Let a run play out under fake timers: four deadlines is more than the run's whole budget. */
+async function playOut<T>(run: Promise<T>): Promise<T> {
+  for (let i = 0; i < 4; i++) await vi.advanceTimersByTimeAsync(WEB_PUSH_DEADLINE_MS);
+  return run;
+}
 
 beforeEach(() => {
   provider.calls = [];
   provider.behave = () => Promise.resolve({ statusCode: 201 });
+  lookup.behave = () => Promise.resolve(true);
   vi.stubEnv('NEXT_PUBLIC_VAPID_PUBLIC_KEY', 'fixture-public-key');
   vi.stubEnv('VAPID_PRIVATE_KEY', 'fixture-private-key');
   vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -123,6 +139,111 @@ describe('a web push has an absolute deadline', () => {
     expect(provider.calls).toEqual([]);
     expect(result).toMatchObject({ sent: 0, skipped: 2 });
     expect(f.tables.notifications.every((n) => n.pushed_at == null)).toBe(true);
+  });
+});
+
+// The run's budget alone was not a bound on one recipient: an account's devices
+// were waited on one after another, each for the whole deadline, so three that
+// never answered spent the 45 s and every recipient after them in the batch was
+// skipped — on every run, since the failed rows stay pending for a retry.
+describe('one recipient cannot spend the run', () => {
+  it('three devices on one account that never answer cost one deadline, and the next recipient is still sent to', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    provider.behave = (endpoint) => (/\/slow\d$/.test(endpoint) ? never() : Promise.resolve({ statusCode: 201 }));
+    const f = pushDispatchDb({
+      families: [{ id: 'family', closed_at: null }],
+      notifications: [notice(1, 'u-attacker'), notice(2, 'u-parent')],
+      push_devices: [device('slow1', 'u-attacker'), device('slow2', 'u-attacker'), device('slow3', 'u-attacker'), device('parent-phone', 'u-parent')],
+      family_members: members, family_ai_settings: [], user_preferences: [],
+    });
+
+    const { result } = await playOut(dispatchPendingPushes(f.db, { now: NOW }));
+
+    expect(sentTo()).toContain('parent-phone');
+    // The three were waited on together, not one after another.
+    for (const slow of ['slow1', 'slow2', 'slow3']) expect(sendTimes(slow)).toEqual([0]);
+    expect(sendTimes('parent-phone')).toEqual([WEB_PUSH_DEADLINE_MS]);
+    expect(result).toMatchObject({ sent: 1, failed: 3, skipped: 0 });
+    expect(f.tables.notifications.filter((n) => n.pushed_at).map((n) => n.id)).toEqual([notificationId(2)]);
+  });
+
+  it('devices that take turns to stall, one per notification, cost the account one deadline and one short wait', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    // Device turnN answers every notification but its (N+1)th, which it never
+    // finishes — so no device is ever slow twice and the stalled-device memory
+    // alone would wait a full deadline per notification.
+    const callsTo = new Map<string, number>();
+    provider.behave = (endpoint) => {
+      const id = endpoint.split('/').pop() ?? '';
+      if (!id.startsWith('turn')) return Promise.resolve({ statusCode: 201 });
+      const n = (callsTo.get(id) ?? 0) + 1;
+      callsTo.set(id, n);
+      return n === Number(id.slice(4)) + 1 ? never() : Promise.resolve({ statusCode: 201 });
+    };
+    const turns = Array.from({ length: 10 }, (_, i) => device(`turn${i}`, 'u-attacker', `2026-10-${String(i + 1).padStart(2, '0')}T00:00:00.000Z`));
+    const f = pushDispatchDb({
+      families: [{ id: 'family', closed_at: null }],
+      notifications: [...Array.from({ length: 10 }, (_, i) => notice(i + 1, 'u-attacker')), notice(11, 'u-parent')],
+      push_devices: [...turns, device('parent-phone', 'u-parent')],
+      family_members: members, family_ai_settings: [], user_preferences: [],
+    });
+
+    await playOut(dispatchPendingPushes(f.db, { now: NOW }));
+
+    // One full deadline, then one short one; after a second stall the account's
+    // web pushes this run are failures, retried next run, not more waiting.
+    expect(sendTimes('parent-phone')).toEqual([WEB_PUSH_DEADLINE_MS + WEB_PUSH_DEADLINE_AFTER_STALL_MS]);
+    expect(Math.max(...[...callsTo.values()])).toBeLessThanOrEqual(2);
+    expect(f.tables.notifications.filter((n) => n.pushed_at).map((n) => n.id)).toEqual([notificationId(11)]);
+  });
+
+  it('a member\'s two old devices that never answer are one wait, and their phone still gets every notification in the run', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    provider.behave = (endpoint) => (/\/(laptop|tablet)$/.test(endpoint) ? never() : Promise.resolve({ statusCode: 201 }));
+    const f = pushDispatchDb({
+      families: [{ id: 'family', closed_at: null }],
+      notifications: [notice(1, 'u-parent'), notice(2, 'u-parent'), notice(3, 'u-parent')],
+      // The dead ones are the newest, so they come first.
+      push_devices: [
+        device('laptop', 'u-parent', '2026-10-12T00:00:00.000Z'),
+        device('tablet', 'u-parent', '2026-10-11T00:00:00.000Z'),
+        device('parent-phone', 'u-parent', '2026-10-01T00:00:00.000Z'),
+      ],
+      family_members: members, family_ai_settings: [], user_preferences: [],
+    });
+
+    const { result } = await playOut(dispatchPendingPushes(f.db, { now: NOW }));
+
+    // Not made to wait behind the dead two, and not cut off for their stall.
+    expect(sendTimes('parent-phone')).toEqual([0, WEB_PUSH_DEADLINE_MS, WEB_PUSH_DEADLINE_MS]);
+    expect(sendTimes('laptop')).toEqual([0]);
+    expect(sendTimes('tablet')).toEqual([0]);
+    expect(result).toMatchObject({ sent: 3, failed: 6 });
+    expect(f.tables.push_deliveries.filter((r) => r.device_id === 'parent-phone')).toHaveLength(3);
+  });
+
+  it('an account\'s endpoint lookups are made together, so ten slow ones cost one', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    // Each attacker host takes the lookup's whole 3 s to answer.
+    lookup.behave = (endpoint) => (/\/host\d$/.test(endpoint)
+      ? new Promise((resolve) => { setTimeout(() => resolve(true), 3_000); })
+      : Promise.resolve(true));
+    const hosts = Array.from({ length: 10 }, (_, i) => device(`host${i}`, 'u-attacker', `2026-10-${String(i + 1).padStart(2, '0')}T00:00:00.000Z`));
+    const f = pushDispatchDb({
+      families: [{ id: 'family', closed_at: null }],
+      notifications: [notice(1, 'u-attacker'), notice(2, 'u-parent')],
+      push_devices: [...hosts, device('parent-phone', 'u-parent')],
+      family_members: members, family_ai_settings: [], user_preferences: [],
+    });
+
+    const { result } = await playOut(dispatchPendingPushes(f.db, { now: NOW }));
+
+    expect(sendTimes('parent-phone')).toEqual([3_000]);
+    expect(result).toMatchObject({ sent: 11, failed: 0 });
   });
 });
 

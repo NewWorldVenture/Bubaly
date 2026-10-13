@@ -57,8 +57,45 @@ const WEB_PUSH_MAX_RESPONSE_BYTES = 64 * 1024;
 /** How long one dispatch run may spend sending before it leaves the rest for the next. */
 export const PUSH_DISPATCH_BUDGET_MS = 45_000;
 
-/** Shared across one dispatch run: when it must stop, and devices already known not to answer. */
-type DispatchBudget = { endsAt: number; stalled: Set<string> };
+/**
+ * The bound on one RECIPIENT in a run, not only on the run.
+ *
+ * The run's budget alone left one account able to spend all of it: its devices
+ * were sent to one after another, each waited on for the full deadline, and the
+ * per-account cap allows ten — so three devices that never answered used the
+ * 45 s, and every family's pushes after them in the batch were skipped, on
+ * every run that reached them. Now a recipient's web pushes for one
+ * notification go out together and share one deadline, so any number of
+ * stalling devices costs one. And a recipient is waited on in full once per
+ * run: after a stalled batch its later ones get this much, and a second stalled
+ * batch ends its web pushes for the run (WEB_PUSH_STALLS_PER_RUN), so devices
+ * that take turns to stall — one per notification — cannot spend it either.
+ * A member whose old laptop never answers still gets every notification on the
+ * phone: the laptop is not sent to again in the run, and a healthy push service
+ * answers well inside this.
+ */
+export const WEB_PUSH_DEADLINE_AFTER_STALL_MS = 3_000;
+/** Stalled batches after which a recipient's remaining web pushes this run are failed unsent. */
+export const WEB_PUSH_STALLS_PER_RUN = 2;
+
+/**
+ * Shared across one dispatch run: when it must stop, devices already known not
+ * to answer, and how many times each recipient has been waited on in vain.
+ */
+type DispatchBudget = { endsAt: number; stalled: Set<string>; stalls: Map<string, number> };
+
+type Settled<T> = { ok: true; value: T } | { ok: false; error: unknown };
+/** Start `run` now and capture its outcome, so it can be awaited later and never rejects unobserved. */
+function settledCall<T>(run: () => T | PromiseLike<T>): Promise<Settled<Awaited<T>>> {
+  try {
+    return Promise.resolve(run()).then(
+      (value) => ({ ok: true as const, value: value as Awaited<T> }),
+      (error: unknown) => ({ ok: false as const, error }),
+    );
+  } catch (error) {
+    return Promise.resolve({ ok: false as const, error });
+  }
+}
 
 export type PushPayload = { title: string; body?: string | null; url?: string | null };
 export type PushResult = {
@@ -213,7 +250,7 @@ async function sendPushDevicesToUser(
     return false;
   }
   // The newest MAX_PUSH_DEVICES_PER_USER only: nothing capped how many rows an
-  // account could add, and each one is a send this serial loop waits on.
+  // account could add, and each one is a send this loop makes.
   const { data: devices, error: devicesError } = await supabase
     .from('push_devices')
     .select('id, platform, provider, endpoint, p256dh, auth, token')
@@ -232,12 +269,73 @@ async function sendPushDevicesToUser(
   const vapid = ensureVapid();
   const body = JSON.stringify({ title: payload.title, body: payload.body ?? '', url: payload.url ?? '/dashboard' });
 
+  // One recipient, one deadline (WEB_PUSH_DEADLINE_AFTER_STALL_MS): every web
+  // push below is started in turn and waited on together after the loop.
+  const stalls = budget?.stalls.get(userId) ?? 0;
+  const cutOff = stalls >= WEB_PUSH_STALLS_PER_RUN;
+  const deadlineMs = stalls === 0 ? WEB_PUSH_DEADLINE_MS : WEB_PUSH_DEADLINE_AFTER_STALL_MS;
+  type Device = (typeof devices)[number];
+  const sendable = (d: Device) => d.provider === 'webpush' && !receipts?.delivered.has(d.id)
+    && !budget?.stalled.has(d.id) && !cutOff && !(budget && Date.now() >= budget.endsAt)
+    && Boolean(vapid && d.endpoint && d.p256dh && d.auth);
+  // The endpoint checks too: each is a DNS lookup on a host the member chose,
+  // bounded at 3 s apiece, so ten of them in turn were half a minute.
+  const endpointChecks = new Map(devices.filter(sendable)
+    .map((d) => [d.id, settledCall(() => isDeliverablePushEndpoint(d.endpoint ?? ''))] as const));
+  let batchEndsAt: number | undefined;
+  const inFlight: { device: Device; outcome: Promise<Settled<void>> }[] = [];
+  /** Count one finished web push: sent, pruned or failed. True when it stalled. */
+  async function settleWebPush(d: Device, sent: Settled<void>): Promise<boolean> {
+    if (sent.ok) {
+      result.sent++;
+      await recordDelivery(supabase, receipts, d.id);
+      return false;
+    }
+    const err = sent.error;
+    const stalled = err instanceof WebPushAborted;
+    if (stalled) {
+      budget?.stalled.add(d.id);
+      console.error('[push] web push abandoned', { deviceId: d.id, reason: err.message });
+    }
+    const status = (err as { statusCode?: number } | null)?.statusCode;
+    if (status === 404 || status === 410) {
+      // `pruned` is returned to the caller and reported, so it has to mean
+      // the row is gone. The delete's result was discarded and the counter
+      // incremented regardless, so a refused delete was reported as a
+      // pruned device while the row stayed — and a permanently dead
+      // endpoint that never gets pruned is retried on every notification
+      // from here on, spending a send each time and reporting itself
+      // cleaned up each time.
+      // Rows deliberately not checked — and this rests on an invariant
+      // worth stating: every caller passes the SERVICE ROLE (checked under
+      // C1-S9-68: the push test route, the marketing admin, both crons and
+      // notification generation). There, zero rows means the device row is
+      // already gone, which is what `pruned` promises. A caller passing a
+      // user's client would break that — `push_devices_delete` is
+      // owner-only — and the dead endpoint would be "pruned" forever.
+      // Audit C1-S9-68.
+      const { error: pruneError } = await supabase.from('push_devices').delete().eq('id', d.id);
+      if (pruneError) {
+        console.error('[push] dead device could not be pruned', { deviceId: d.id, status }, pruneError);
+        result.failed++;
+      } else {
+        result.pruned++;
+      }
+    } else {
+      result.failed++;
+    }
+    return stalled;
+  }
+
   for (const d of devices) {
     // Already reached on an earlier, partially failed run: not a second buzz.
     if (receipts?.delivered.has(d.id)) continue;
     // A device that already ran out its deadline in this run is not waited on
     // again for the next notification; it is a failure, retried next run.
     if (budget?.stalled.has(d.id)) { result.failed++; continue; }
+    // A recipient already waited on in vain twice this run: its web pushes are
+    // failures, retried next run, rather than a third wait.
+    if (d.provider === 'webpush' && cutOff) { result.failed++; continue; }
     // The run's time is spent: leave this device for the next one. Skipped,
     // not failed, so the notification stays pending without being expired.
     if (budget && Date.now() >= budget.endsAt) { result.skipped++; continue; }
@@ -249,53 +347,23 @@ async function sendPushDevicesToUser(
         // and the DNS answer that made it safe can change underneath it. The
         // result is cached per hostname, so a family's real push host costs one
         // lookup every five minutes, not one per notification. Audit C3-S5-03.
-        if (!(await isDeliverablePushEndpoint(d.endpoint))) {
+        const endpoint = d.endpoint;
+        const check = await (endpointChecks.get(d.id) ?? settledCall(() => isDeliverablePushEndpoint(endpoint)));
+        if (!check.ok) throw check.error;
+        if (!check.value) {
           console.error('[push] endpoint no longer resolves somewhere we will POST to', { deviceId: d.id });
           result.skipped++;
           continue;
         }
         // Recheck after asynchronous endpoint validation, immediately before send.
-        if (!(await stillPermitted())) return result;
-        try {
-          await sendWebPushBounded({ endpoint: d.endpoint, keys: { p256dh: d.p256dh, auth: d.auth } }, body);
-          result.sent++;
-          await recordDelivery(supabase, receipts, d.id);
-        } catch (err: unknown) {
-          if (err instanceof WebPushAborted) {
-            budget?.stalled.add(d.id);
-            console.error('[push] web push abandoned', { deviceId: d.id, reason: err.message });
-          }
-          const status = (err as { statusCode?: number }).statusCode;
-          if (status === 404 || status === 410) {
-            // `pruned` is returned to the caller and reported, so it has to mean
-            // the row is gone. The delete's result was discarded and the counter
-            // incremented regardless, so a refused delete was reported as a
-            // pruned device while the row stayed — and a permanently dead
-            // endpoint that never gets pruned is retried on every notification
-            // from here on, spending a send each time and reporting itself
-            // cleaned up each time.
-            // Rows deliberately not checked — and this rests on an invariant
-            // worth stating: every caller passes the SERVICE ROLE (checked under
-            // C1-S9-68: the push test route, the marketing admin, both crons and
-            // notification generation). There, zero rows means the device row is
-            // already gone, which is what `pruned` promises. A caller passing a
-            // user's client would break that — `push_devices_delete` is
-            // owner-only — and the dead endpoint would be "pruned" forever.
-            // Audit C1-S9-68.
-            const { error: pruneError } = await supabase.from('push_devices').delete().eq('id', d.id);
-            if (pruneError) {
-              console.error('[push] dead device could not be pruned', { deviceId: d.id, status }, pruneError);
-              result.failed++;
-            } else {
-              result.pruned++;
-            }
-          } else {
-            result.failed++;
-          }
-        }
+        if (!(await stillPermitted())) break;
+        batchEndsAt ??= Date.now() + deadlineMs;
+        const endsAt = batchEndsAt;
+        const keys = { p256dh: d.p256dh, auth: d.auth };
+        inFlight.push({ device: d, outcome: settledCall(() => sendWebPushBounded({ endpoint, keys }, body, endsAt)) });
       } else if (d.provider === 'fcm' || d.provider === 'apns') {
         if (!d.token) { result.skipped++; continue; }
-        if (!(await stillPermitted())) return result;
+        if (!(await stillPermitted())) break;
         const outcome = await sendNativePush(d.provider, d.token, payload);
         if (outcome === 'sent') { result.sent++; await recordDelivery(supabase, receipts, d.id); }
         else if (outcome === 'unconfigured') result.skipped++;
@@ -311,6 +379,18 @@ async function sendPushDevicesToUser(
       result.failed++;
     }
   }
+
+  // The web pushes started above, all under the one deadline. Waited on even
+  // when a recheck withheld a later device: these were already sent.
+  let stalledNow = false;
+  for (const { device, outcome } of inFlight) {
+    try {
+      if (await settleWebPush(device, await outcome)) stalledNow = true;
+    } catch {
+      result.failed++;
+    }
+  }
+  if (stalledNow && budget) budget.stalls.set(userId, stalls + 1);
   return result;
 }
 
@@ -331,6 +411,8 @@ class WebPushAborted extends Error {
 async function sendWebPushBounded(
   subscription: { endpoint: string; keys: { p256dh: string; auth: string } },
   body: string,
+  /** The absolute instant this send is abandoned at, shared by its recipient's batch. */
+  endsAt: number,
 ): Promise<void> {
   const sockets = new Set<{ destroy: () => void }>();
   let abort: (error: Error) => void = () => {};
@@ -355,10 +437,11 @@ async function sendWebPushBounded(
     }
   }
   const agent = new BoundedAgent({ keepAlive: false });
-  const timer = setTimeout(() => stop('web push deadline exceeded'), WEB_PUSH_DEADLINE_MS);
+  const remaining = Math.min(WEB_PUSH_DEADLINE_MS, Math.max(0, endsAt - Date.now()));
+  const timer = setTimeout(() => stop('web push deadline exceeded'), remaining);
   try {
     await Promise.race([
-      webpush.sendNotification(subscription, body, { timeout: WEB_PUSH_DEADLINE_MS, agent }),
+      webpush.sendNotification(subscription, body, { timeout: Math.max(1, remaining), agent }),
       aborted,
     ]);
   } finally {
@@ -475,10 +558,12 @@ export async function dispatchPendingPushes(
   supabase: DB,
   opts: { familyId?: string; limit?: number; now?: Date; budgetMs?: number } = {},
 ): Promise<{ notifications: number; result: PushResult }> {
-  // The whole run's sending time, so one recipient's devices cannot spend all
-  // of it (PUSH_DISPATCH_BUDGET_MS). Wall-clock, not `opts.now`, which only
-  // decides what is due.
-  const budget: DispatchBudget = { endsAt: Date.now() + (opts.budgetMs ?? PUSH_DISPATCH_BUDGET_MS), stalled: new Set() };
+  // The whole run's sending time (PUSH_DISPATCH_BUDGET_MS). What one recipient
+  // may spend of it is bounded separately (WEB_PUSH_DEADLINE_AFTER_STALL_MS).
+  // Wall-clock, not `opts.now`, which only decides what is due.
+  const budget: DispatchBudget = {
+    endsAt: Date.now() + (opts.budgetMs ?? PUSH_DISPATCH_BUDGET_MS), stalled: new Set(), stalls: new Map(),
+  };
   const limit = opts.limit ?? 200;
   if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new Error('Push batch limit must be an integer from 1 to 200.');
   const cursorKey = `push_dispatch_cursor:v1:${opts.familyId ? `family:${opts.familyId}` : 'global'}`;
