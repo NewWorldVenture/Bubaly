@@ -125,13 +125,32 @@ describe('an insurance card follows its policy to the member it now names', () =
   });
 
   it('a manager\'s own scan moves it, and a resolved card keeps its status, its resolution and every other column', async () => {
-    const db = household('leo', 'ava', { status: 'dismissed', resolved_at: '2026-09-18T19:00:00.000Z', resolved_by: 'u-mum' });
+    const db = household('leo', 'ava', { status: 'dismissed', resolved_at: '2026-09-18T19:00:00.000Z', resolved_by: 'u-gran' });
     const before = structuredClone(card(db));
 
     await runAutopilotScan(db, FAMILY, 'u-gran', 'UTC', 'en-US', echo, AT, viewerOf('gran'));
 
     expect(card(db)).toEqual({ ...before, member_id: 'leo' });
     expect(card(db).status).toBe('dismissed');
+  });
+
+  // 0327's resolver guard keeps resolved_by the resolver's: a manager's write
+  // to a card somebody else resolved is refused in RLS, so the scan does not
+  // ask for it, and the nightly scan (the service role) moves it (RV0486R2-1).
+  it('a manager\'s own scan leaves a card another member resolved for the nightly scan', async () => {
+    const db = household('leo', 'ava', { status: 'dismissed', resolved_at: '2026-09-18T19:00:00.000Z', resolved_by: 'u-mum' });
+    const before = structuredClone(card(db));
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { client, memberWrites } = recording(db);
+
+    await runAutopilotScan(client, FAMILY, 'u-gran', 'UTC', 'en-US', echo, AT, viewerOf('gran'));
+    expect(memberWrites).toEqual([]);
+    expect(card(db)).toEqual(before);
+    expect(logged).not.toHaveBeenCalledWith('[autopilot] insurance card member refresh failed', expect.anything());
+
+    await runAutopilotScan(client, FAMILY, null, 'UTC', 'en-US', echo, AT);
+    expect(memberWrites).toHaveLength(1);
+    expect(card(db)).toEqual({ ...before, member_id: 'leo' });
   });
 
   it('a teen\'s own scan does not write it, nor the scan of the member it named or of the member it now names, nor a guest\'s; it waits for one that may', async () => {

@@ -167,10 +167,16 @@
 -- policy names someone other than the card does (a legacy card this backfill
 -- did not reach included, and a policy that now names no one), on the nightly scan
 -- and on a manager's own scan, never on a scan by a member who may not read
--- both the old card and the new one. The window that leaves: from the
--- reassignment until the next nightly or manager scan, the newly named member
--- cannot read the card (their own scan still takes the 23505 path) and the
--- previously named member still reads it.
+-- both the old card and the new one. A manager's scan also leaves a card
+-- somebody else resolved alone: 0327's resolver guard keeps resolved_by the
+-- resolver's, so that write would be refused. The window that leaves: from
+-- the reassignment until the next nightly scan (or a manager's, for a card
+-- nobody else resolved), the newly named member cannot read the card (their
+-- own scan still takes the 23505 path) and the previously named member still
+-- reads it. And only a card whose draft a scan still builds is refreshed: the
+-- insurance draft is made for an active policy renewing within 30 days, so a
+-- policy reassigned after its renewal day, or after it was deactivated,
+-- leaves its card naming the old member.
 --
 -- What stays outside it:
 --

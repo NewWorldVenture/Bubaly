@@ -134,7 +134,7 @@ async function getOrCreateGroceryListId(supabase: DB, familyId: string, userId: 
 }
 
 /** A card this scan found under a draft's key, as the prior read selects it. */
-type PriorCard = { id: string; kind: string | null; source_kind: string | null; member_id: string | null };
+type PriorCard = { id: string; kind: string | null; source_kind: string | null; member_id: string | null; resolved_by: string | null };
 
 /**
  * Keep an insurance card's member in step with its policy (0486).
@@ -153,20 +153,29 @@ type PriorCard = { id: string; kind: string | null; source_kind: string | null; 
  * every other column are the household's. On the nightly scan (no viewer, the
  * service role) whenever the policy names someone else; on a member's own scan
  * only when that member may read the card both before and after, i.e. a
- * manager, which is exactly what 0486's update guard lets through, so a scan
- * never asks for a write RLS would refuse. The window that leaves: from the
- * reassignment until the next nightly or manager scan, the newly named member
- * still takes the 23505 path on their own scan and the previously named
- * member still reads the card. A failed refresh is logged and the scan goes on.
+ * manager — 0486's update guard — and the card is unresolved or resolved by
+ * that member: 0327's resolver guard keeps `resolved_by` the resolver's, so a
+ * manager's write to a card somebody else resolved is refused, and is not
+ * asked for. So a scan never asks for a write RLS would refuse.
+ *
+ * The window that leaves: from the reassignment until the next nightly scan
+ * (or a manager's, for a card nobody else resolved), the newly named member
+ * still takes the 23505 path on their own scan and the previously named member
+ * still reads the card. And only a card whose draft a scan still builds is
+ * refreshed: insurance drafts are made for active policies renewing within
+ * the next 30 days, so a policy reassigned after its renewal day, or after it
+ * was deactivated, leaves its card naming the old member. A failed refresh is
+ * logged and the scan goes on.
  */
 async function refreshPolicyCardMember(
-  supabase: DB, familyId: string, prior: PriorCard, draft: SuggestionDraft, viewer: AudienceViewer | null,
+  supabase: DB, familyId: string, prior: PriorCard, draft: SuggestionDraft, viewer: AudienceViewer | null, userId: string | null,
 ): Promise<void> {
   const memberId = draft.memberId ?? null;
   if (suggestionAudience({ kind: draft.kind, source_kind: draft.sourceKind, member_id: memberId }) !== 'policy-readers') return;
   const before = { kind: prior.kind, source_kind: prior.source_kind, member_id: prior.member_id ?? null };
   if (suggestionAudience(before) !== 'policy-readers' || before.member_id === memberId) return;
   if (viewer && !(suggestionVisibleTo(before, viewer) && suggestionVisibleTo({ ...before, member_id: memberId }, viewer))) return;
+  if (viewer && prior.resolved_by && prior.resolved_by !== userId) return;
   try {
     const { data: refreshed, error } = await supabase.from('autopilot_suggestions')
       .update({ member_id: memberId }).eq('id', prior.id).eq('family_id', familyId).select('id');
@@ -253,7 +262,7 @@ export async function runAutopilotScan(
     // re-inserted, hit UNIQUE(family_id, dedupe_key), and failed the scan on
     // every run after its side effect had already been written. Its kind,
     // source and member say who reads it (refreshPolicyCardMember, below).
-    readAllAsQuery((from, to) => supabase.from('autopilot_suggestions').select('id, dedupe_key, status, kind, source_kind, member_id')
+    readAllAsQuery((from, to) => supabase.from('autopilot_suggestions').select('id, dedupe_key, status, kind, source_kind, member_id, resolved_by')
       .eq('family_id', familyId).not('dedupe_key', 'like', 'archived:%').order('id').range(from, to), { max: 50_000 }),
   ]);
 
@@ -403,7 +412,7 @@ export async function runAutopilotScan(
     const prior = existingByKey.get(d.dedupeKey);
     // A prior card's member is the one thing kept in step with its source, and
     // only on an insurance card, where it says who may read it.
-    if (prior) await refreshPolicyCardMember(supabase, familyId, prior, d, viewer);
+    if (prior) await refreshPolicyCardMember(supabase, familyId, prior, d, viewer, userId);
     if (prior) continue; // respect prior state (resolved or already-open); avoid churn
     // A card this member may not read is not theirs to write. Under 0486 the
     // insert's read-back (`.select('id')`) would refuse it with 42501 and
