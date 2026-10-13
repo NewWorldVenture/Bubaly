@@ -3,6 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
+import { isWithheldFromGuest } from '@/lib/auth/guest-scope';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext, dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
@@ -21,6 +22,13 @@ export async function POST() {
   const tr = await getTranslations();
   try {
     const ctx = await requireUserContext();
+    // Every /wallet page sends a guest away (lib/auth/guest-scope.ts, the held
+    // 0509), and /api/ai/insights refuses a guest a summary of a withheld area.
+    // This answers with coaching built from every child's balances and goals,
+    // on the family's metered coach quota, so it answers to the same rule.
+    if (ctx.active.role === 'guest' && isWithheldFromGuest('/wallet')) {
+      return NextResponse.json({ error: tr('householdMoney.keptByParents') }, { status: 403 });
+    }
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
 

@@ -9,6 +9,8 @@ import { isManager } from '@/lib/constants/roles';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { dayKeyIn } from '@/lib/time/zoned';
+import { budgetByCategory, periodWindow } from '@/lib/finance/budget-periods';
+import type { BudgetPeriod } from '@/lib/database.types';
 import { resolveProvider } from '@/lib/ai/provider';
 import { summarizeSubscriptions, wastedMonthlyCents, isStale, monthlyCostCents, type SubLike } from '@/lib/finance/subscriptions';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -16,6 +18,13 @@ import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 export const runtime = 'nodejs';
 
 const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+
+/** "You're $X over your … budget", in the budget's own period. */
+const OVER_BUDGET_DETAIL: Record<BudgetPeriod, string> = {
+  weekly: 'savings.overYourWeeklyBudget',
+  monthly: 'savings.overYourMonthlyBudget',
+  yearly: 'savings.overYourYearlyBudget',
+};
 
 /**
  * AI savings suggestions for a family's finances. Reads recent transactions,
@@ -44,7 +53,19 @@ export async function POST() {
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 
-  const monthStart = new Date().toISOString().slice(0, 8) + '01';
+  // The FAMILY's day, not Greenwich's. `new Date().toISOString()` was the UTC
+  // month: from 17:00 on the last day of a month Los Angeles read next month's
+  // empty window ("no overspending"), and Tokyo kept counting last month until
+  // 09:00 on the 1st. And each budget is judged in its OWN period (Sunday to
+  // Saturday, the month, the year; lib/finance/hub periodWindow), both ends
+  // bounded: a month of spending set against a weekly limit reported $400 of
+  // groceries as "$250 over", a yearly limit was never over, and next month's
+  // scheduled rows counted. One read starts where the earliest period can (this
+  // week, which can begin in December, or 1 January); each budget then counts
+  // only the rows inside its own window, end included.
+  const today = dayKeyIn(new Date(), ctx.active.family?.timezone || 'UTC');
+  const thisWeek = periodWindow('weekly', today), thisYear = periodWindow('yearly', today);
+  const readFrom = thisWeek.from < thisYear.from ? thisWeek.from : thisYear.from;
   // All four errors were dropped here, and this route's own docstring above says
   // it "never fabricates numbers". It did. `txns ?? []` empties the category
   // map, so a refused `transactions` read produced no overspending, no stale
@@ -68,8 +89,8 @@ export async function POST() {
   const [txnsResult, budgetsResult, billsResult, subsResult] = await settleAll([
     readAllAsQuery<{ amount: number; category: string | null; type: string; date: string }>((from, to) =>
       supabase.from('transactions').select('amount, category, type, date').eq('family_id', familyId)
-        .eq('type', 'expense').gte('date', monthStart).order('date').order('id').range(from, to), { max: 20_000 }),
-    supabase.from('budgets').select('category, amount, period').eq('family_id', familyId),
+        .eq('type', 'expense').gte('date', readFrom).order('date').order('id').range(from, to), { max: 20_000 }),
+    supabase.from('budgets').select('id, category, amount, period, created_at').eq('family_id', familyId),
     supabase.from('bills').select('name, amount, status').eq('family_id', familyId).neq('status', 'paid'),
     supabase.from('subscriptions_tracked').select('name, cost_cents, cadence, status, last_used').eq('family_id', familyId),
   ]);
@@ -86,12 +107,22 @@ export async function POST() {
   const { data: txns } = txnsResult, { data: budgets } = budgetsResult;
   const { data: bills } = billsResult, { data: subs } = subsResult;
 
-  // Spend by category this month.
+  // One budget per category, the oldest (the one the finance service edits and
+  // reports), matched case-insensitively: a "groceries" row is Groceries spend.
+  const budgetByCat = budgetByCategory((budgets ?? []).map((b) => ({ ...b, amount: Number(b.amount) })));
+  // Spend per budgeted category, inside that budget's own period.
   const byCat = new Map<string, number>();
-  for (const t of txns ?? []) byCat.set(t.category ?? 'Other', (byCat.get(t.category ?? 'Other') ?? 0) + Number(t.amount));
-  const budgetByCat = new Map((budgets ?? []).map((b) => [b.category, Number(b.amount)]));
-  const overspent = [...byCat.entries()]
-    .map(([cat, spent]) => ({ cat, spent, budget: budgetByCat.get(cat) ?? 0, over: spent - (budgetByCat.get(cat) ?? 0) }))
+  for (const [key, b] of budgetByCat) {
+    const window = periodWindow(b.period, today);
+    let spent = 0;
+    for (const t of txns ?? []) {
+      if ((t.category ?? '').trim().toLowerCase() !== key || t.date < window.from || t.date > window.to) continue;
+      spent += Math.abs(Number(t.amount));
+    }
+    byCat.set(key, spent);
+  }
+  const overspent = [...budgetByCat.entries()]
+    .map(([key, b]) => ({ cat: b.category, period: b.period, spent: byCat.get(key) ?? 0, budget: b.amount, over: (byCat.get(key) ?? 0) - b.amount }))
     .filter((x) => x.budget > 0 && x.over > 0)
     .sort((a, b) => b.over - a.over);
 
@@ -104,14 +135,16 @@ export async function POST() {
 
   const context = [
     `Subscriptions: ${subStats.active} active, ${usd(subStats.monthlyCents)}/mo. Unused (60d+): ${staleNames.join(', ') || 'none'} → up to ${usd(wasted)}/mo recoverable.`,
-    `Over-budget categories this month: ${overspent.map((o) => `${o.cat} +$${o.over.toFixed(0)}`).join(', ') || 'none'}.`,
+    `Over-budget categories, each in its own budget period: ${overspent.map((o) => `${o.cat} (${o.period} budget) +$${o.over.toFixed(0)}`).join(', ') || 'none'}.`,
     `Unpaid bills: ${(bills ?? []).length}.`,
   ].join('\n');
 
   // Deterministic fallback suggestions (used if AI is unavailable).
   const fallback: Array<{ title: string; detail: string }> = [];
   if (staleNames.length) fallback.push({ title: `Cancel ${staleNames.length} unused subscription${staleNames.length > 1 ? 's' : ''}`, detail: `Save up to ${usd(wasted)}/mo (${usd(wasted * 12)}/yr): ${staleNames.join(', ')}.` });
-  for (const o of overspent.slice(0, 2)) fallback.push({ title: `Trim ${o.cat} spending`, detail: `You're $${o.over.toFixed(0)} over your ${o.cat} budget this month.` });
+  for (const o of overspent.slice(0, 2)) {
+    fallback.push({ title: `Trim ${o.cat} spending`, detail: tr(OVER_BUDGET_DETAIL[o.period], { amount: `$${o.over.toFixed(0)}`, category: o.cat }) });
+  }
   if (fallback.length === 0) fallback.push({ title: 'On track', detail: 'No overspending or unused subscriptions detected. Set category budgets to unlock sharper suggestions.' });
 
   try {

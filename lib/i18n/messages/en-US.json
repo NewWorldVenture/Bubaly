@@ -17018,5 +17018,13 @@
   "healthVisitsModule.onlyYourOwn": "You see your own visits and the ones you recorded. A parent or adult sees the household's.",
   "healthVisitsModule.noneOfYours": "No visits of yours are recorded",
   "immunizationsModule.onlyYourOwn": "You see your own vaccinations and the ones you recorded. A parent or adult sees the household's.",
-  "immunizationsModule.noneOfYours": "No vaccinations of yours are recorded"
+  "immunizationsModule.noneOfYours": "No vaccinations of yours are recorded",
+  "familyCfoActions.needsFamilyPlus": "Can we afford it? is a Family+ feature.",
+  "familyCfoActions.needsYourCode": "Enter your two-step code before checking what the family can afford.",
+  "actions.thisChildAlreadyHasAnAllowance": "This child already has an allowance. Refresh the page and change that one.",
+  "allowanceView.oneOfSeveralAllowances": "This child has more than one allowance, and each one is paid. Pause the one you do not want.",
+  "babysittersView.payoutsAreKeptByParents": "What the sitters are paid is kept by your family's parents.",
+  "savings.overYourWeeklyBudget": "You're {amount} over your weekly {category} budget.",
+  "savings.overYourMonthlyBudget": "You're {amount} over your monthly {category} budget.",
+  "savings.overYourYearlyBudget": "You're {amount} over your yearly {category} budget."
 }

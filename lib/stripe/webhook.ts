@@ -14,7 +14,7 @@ import type { Database } from '@/lib/database.types';
 import type Stripe from 'stripe';
 import { randomUUID } from 'node:crypto';
 import { getStripe } from '@/lib/stripe';
-import { reserveCardAuth, releaseCardHold, debitCardSpend } from '@/lib/wallet/server';
+import { reserveCardAuth, releaseCardHold, debitCardSpend, creditCardRefund } from '@/lib/wallet/server';
 
 type DB = SupabaseClient<Database>;
 const STALE_EVENT_MS = 10 * 60 * 1000;
@@ -165,6 +165,38 @@ export function precheckCardAuthorization(input: {
 }
 
 /**
+ * The approve/decline call's own budget: inside Stripe's ~2 second real-time
+ * window, with no network retries (a retry would land after the window).
+ */
+export const AUTHORIZATION_RESPONSE_OPTIONS = { timeout: 1500, maxNetworkRetries: 0 } as const;
+
+/** An authorization Stripe will not capture any further. */
+const TERMINAL_AUTHORIZATION = ['reversed', 'expired', 'closed'];
+
+/**
+ * Our approve call failed after the hold was reserved. Ask Stripe what it
+ * decided: an authorization that is over (a declined one is created closed)
+ * has nothing left to capture, so its hold is released. Still pending —
+ * approved, or not yet decided, when `approved` reads false too — or unknown
+ * because Stripe cannot be asked: the hold stays for the authorization's own
+ * events (.created, .updated, the capture) to settle. Money held, never money
+ * freed on a guess. Nothing here may replace the caller's error.
+ */
+async function releaseHoldIfStripeDeclined(
+  supabase: DB, stripe: ReturnType<typeof getStripe>, authId: string, opts: Stripe.RequestOptions,
+): Promise<void> {
+  try {
+    const current = await stripe.issuing.authorizations.retrieve(authId, {}, opts);
+    if (TERMINAL_AUTHORIZATION.includes(current.status)) {
+      await releaseCardHold(supabase, authId);
+      console.warn('[money] Stripe did not approve an authorization we had reserved for; its hold is released', { authorizationId: authId });
+    }
+  } catch (e) {
+    console.error('[money] could not settle the hold of an authorization whose response failed; it stays held', { authorizationId: authId }, e);
+  }
+}
+
+/**
  * Handle issuing_authorization.request — the real-time approve/decline. Responds
  * to Stripe via the approve/decline API within the webhook window. The balance
  * decision goes through an ATOMIC reserve (audit PAY-1): the hold it writes stops
@@ -201,12 +233,22 @@ export async function handleAuthorizationRequest(
   }
 
   // Tell Stripe. (On connected accounts, pass the stripeAccount header.)
-  const opts = stripeAccount ? { stripeAccount } : undefined;
+  //
+  // Stripe waits about two seconds for this answer and then decides by the
+  // account's timeout setting. The client's defaults (an 80s timeout, two
+  // network retries) let the call outlive that window many times over, so it is
+  // bounded to it here: an answer that cannot arrive in time is not waited for.
+  const opts: Stripe.RequestOptions = { ...(stripeAccount ? { stripeAccount } : {}), ...AUTHORIZATION_RESPONSE_OPTIONS };
   try {
     if (decision.approve) await stripe.issuing.authorizations.approve(auth.id, {}, opts);
     else await stripe.issuing.authorizations.decline(auth.id, {}, opts);
   } catch (e) {
     console.error('[money] authorization response failed', e);
+    // An approval that did not land came after its hold was reserved. If Stripe
+    // declined the purchase (its timeout setting, or the authorization is
+    // already over), nothing will ever capture that hold, and it went on
+    // reducing the child's spendable balance for good.
+    if (decision.approve) await releaseHoldIfStripeDeclined(supabase, stripe, auth.id, opts);
     throw new Error('Stripe authorization response failed');
   }
 
@@ -239,29 +281,58 @@ export async function handleAuthorizationRequest(
 }
 
 /**
- * Handle issuing_transaction.created — the capture. Posts the real debit (keyed
- * by the transaction id, idempotent) and releases the authorization hold that was
- * reserved at approval, so the two never double-count. Idempotent.
+ * Handle issuing_transaction.created — a capture or a refund. A capture posts the
+ * real debit (keyed by the transaction id, idempotent) and releases the
+ * authorization hold reserved at approval, so the two never double-count; a
+ * refund posts the credit back to Spend, keyed the same way, and leaves any hold
+ * to its capture. Idempotent.
  */
 export async function handleTransactionCreated(
   supabase: DB, txn: Stripe.Issuing.Transaction,
 ): Promise<void> {
+  // stripe-node's Issuing.Transaction.type is 'capture' | 'refund'. A type this
+  // code does not know is not guessed at: throwing answers 500, the event stays
+  // reprocessable, and Stripe retries it until a deploy knows what it is.
+  if (txn.type !== 'capture' && txn.type !== 'refund') {
+    throw new Error(`Unhandled Stripe issuing transaction type: ${String(txn.type)}`);
+  }
   const cardId = typeof txn.card === 'string' ? txn.card : txn.card?.id;
   const card = cardId ? await cardForAuthorization(supabase, cardId) : null;
   if (!card) throw new Error('Stripe card mapping not found');
   const authId = typeof txn.authorization === 'string' ? txn.authorization : txn.authorization?.id ?? null;
-  // Stripe issuing transaction amounts are negative for spends.
-  const spend = Math.abs(txn.amount ?? 0);
-  if (spend > 0) {
+  // `amount` is what the transaction does to the balance (stripe-node's
+  // Issuing.Transaction: "reflected in your balance"): negative for a capture,
+  // positive for a refund. Its absolute value used to be debited either way, so
+  // a merchant refund took the money out a second time instead of giving it
+  // back — a $20 purchase refunded in full left the child $40 down, and every
+  // later authorization was decided against that Spend balance. (The same
+  // change as draft PR #925, without its database keys.)
+  const amount = Math.trunc(txn.amount ?? 0);
+  if (amount < 0) {
     const merchant = txn.merchant_data?.name ?? 'Card purchase';
     const debit = await debitCardSpend(supabase, {
       familyId: card.family_id, childWalletId: card.child_wallet_id,
-      amountCents: spend, description: merchant, stripeRef: txn.id,
+      amountCents: -amount, description: merchant, stripeRef: txn.id,
     });
     if (!debit.ok) throw new Error(debit.error ?? 'Card spend persistence failed');
+    // The captured debit now represents the spend; drop the pending hold. Only
+    // a CAPTURE does: the sign says which way money moves, the type says what
+    // the transaction is. A refund with a negative amount (a refund reversed,
+    // which Stripe documents) is debited above but leaves the purchase's hold.
+    if (authId && txn.type === 'capture') await releaseCardHold(supabase, authId);
+  } else if (amount > 0) {
+    // A refund leaves the purchase's hold alone. Only the capture replaces it
+    // (or issuing_authorization.updated, when the authorization closes): Stripe
+    // does not promise event order, and a refund handled before its capture that
+    // also released the hold would make the held money and the refund both
+    // spendable, and the late capture would overdraw.
+    const merchant = txn.merchant_data?.name ?? 'Card refund';
+    const refund = await creditCardRefund(supabase, {
+      familyId: card.family_id, childWalletId: card.child_wallet_id,
+      amountCents: amount, description: merchant, stripeRef: txn.id, authorizationId: authId,
+    });
+    if (!refund.ok) throw new Error(refund.error ?? 'Card refund persistence failed');
   }
-  // The captured debit now represents the spend; drop the pending hold.
-  if (authId) await releaseCardHold(supabase, authId);
 }
 
 /**
@@ -343,14 +414,20 @@ export async function handleIssuingCardUpdated(supabase: DB, card: Stripe.Issuin
 }
 
 /**
- * Handle issuing_authorization.updated — release the hold when an authorization
- * will no longer be captured (reversed / expired / closed). No-op if already
- * released by the capture path (only `processing` holds are touched).
+ * Handle issuing_authorization.updated, and .created — release the hold when an
+ * authorization will no longer be captured (reversed / expired / closed). No-op
+ * if already released by the capture path (only `processing` holds are touched).
+ *
+ * `.created` is how Stripe reports an authorization it decided ITSELF because
+ * our answer did not arrive within its window: one it declined that way is
+ * created already closed, nothing captures it and no `.updated` follows, so
+ * without this its hold stayed `processing` and kept reducing the child's
+ * spendable balance indefinitely.
  */
 export async function handleAuthorizationUpdated(
   supabase: DB, auth: Stripe.Issuing.Authorization,
 ): Promise<void> {
-  if (['reversed', 'expired', 'closed'].includes(auth.status)) {
+  if (TERMINAL_AUTHORIZATION.includes(auth.status)) {
     await releaseCardHold(supabase, auth.id);
   }
 }

@@ -340,6 +340,9 @@ async function fetchRows(
     }
     case 'expenses': {
       const ex = await eq(sb, 'expense_splits', familyId).gte('spent_on', since(60).slice(0, 10)).order('spent_on', { ascending: false }).limit(120);
+      // A failed read is not "$0.00 across 0 entries" with savings advice built
+      // on it.
+      required([['expense_splits', ex.error]]);
       return { expense_splits: ex.data ?? [] };
     }
     case 'grocery':
@@ -549,6 +552,8 @@ async function fetchRows(
         eq(sb, 'subscriptions_tracked', familyId).limit(30),
         eq(sb, 'expense_splits', familyId).gte('spent_on', since(30).slice(0, 10)).order('spent_on', { ascending: false }).limit(40),
       ]);
+      // A failed read is not "No subscriptions." or "0 items" at HTTP 200.
+      required([['subscriptions_tracked', subs.error], ['expense_splits', expenses.error]]);
       return { subscriptions: subs.data ?? [], expenses: expenses.data ?? [] };
     }
     case 'goals': {

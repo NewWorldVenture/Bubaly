@@ -146,6 +146,11 @@ describe('a wallet read that fails', () => {
 
 describe('what still saves', () => {
   it("a new allowance for the active household's own child", async () => {
+    // A NEW allowance is for a child who has none: a second rule for Ben would
+    // pay him twice every period, and the action refuses it
+    // (tests/a-child-has-one-allowance-and-every-rule-is-shown.test.ts). His
+    // existing rule is the edit case below, so it is not here.
+    db.replace('allowance_rules', db.table('allowance_rules').filter((row) => row.id !== 'rule-ben'));
     expect(await allowance(BEN_WALLET)).toEqual({ ok: true });
     expect(newRules()).toEqual([expect.objectContaining({ family_id: HOUSEHOLD_B, child_wallet_id: BEN_WALLET, amount_cents: 1_000 })]);
   });

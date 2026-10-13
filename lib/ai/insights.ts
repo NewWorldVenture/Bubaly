@@ -680,8 +680,14 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
       const subs = r(d, 'subscriptions').slice(0, 15);
       const expenses = r(d, 'expenses').slice(0, 20);
       const subList = subs.map((s) => `- ${s.name}: $${s.amount || '?'}/${s.billing_period || 'mo'}`).join('\n') || 'No subscriptions.';
-      const expTotal = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-      return `Family: ${d.familyName}. Now: ${d.now}.\n\nSubscriptions:\n${subList}\n\nRecent expenses: ${expenses.length} items, total ~$${expTotal.toFixed(0)}.\n\nGive: (1) subscriptions to consider canceling, (2) top spending category to review, (3) one money-saving action for this month.${q(d)}`;
+      // expense_splits carries `total_cents`, not `amount`: summing `amount`
+      // told the model "total ~$0" on every request, and gave it no category to
+      // name as the top one.
+      const expTotalCents = expenses.reduce((sum, e) => sum + (Number(e.total_cents) || 0), 0);
+      const byCat = new Map<string, number>();
+      expenses.forEach((e) => byCat.set((e.category as string) || 'Uncategorized', (byCat.get((e.category as string) || 'Uncategorized') || 0) + (Number(e.total_cents) || 0)));
+      const catLines = [...byCat.entries()].sort((a, b) => b[1] - a[1]).map(([c, v]) => `- ${c}: ${money(v)}`).join('\n') || 'none';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nSubscriptions:\n${subList}\n\nRecent expenses: ${expenses.length} items, total ${money(expTotalCents)}.\n\nBy category:\n${catLines}\n\nGive: (1) subscriptions to consider canceling, (2) top spending category to review, (3) one money-saving action for this month.${q(d)}`;
     },
   },
 

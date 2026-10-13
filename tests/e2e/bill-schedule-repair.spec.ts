@@ -15,7 +15,7 @@ const sources = Object.fromEntries([
   'components/ui/modal.tsx', 'components/ui/input.tsx', 'components/ui/button.tsx',
   'components/ui/badge.tsx', 'components/ui/states.tsx', 'components/ui/states-client.tsx',
   'components/ui/toast.tsx', 'lib/hooks/use-media-query.ts', 'components/app/page-header.tsx', 'lib/a11y/use-dialog-behavior.ts',
-  'lib/finance/hub.ts', 'lib/finance/bills.ts', 'lib/finance/bill-schedule.ts', 'lib/finance/recurring.ts',
+  'lib/finance/hub.ts', 'lib/finance/budget-periods.ts', 'lib/finance/bills.ts', 'lib/finance/bill-schedule.ts', 'lib/finance/recurring.ts',
   'lib/finance/category-label.ts', 'lib/calendar/occurrences.ts', 'lib/calendar/recurrence.ts',
   'lib/calendar/source-capability.ts', 'lib/calendar/exact-instant.ts', 'lib/onboarding/ics-time.ts', 'lib/calendar/day.ts', 'lib/briefing/calendar-window.ts',
   'lib/time/zoned.ts', 'lib/time/local-day.ts', 'lib/time/wall-clock.ts', 'lib/i18n/locales.ts',
@@ -26,6 +26,8 @@ const sources = Object.fromEntries([
   'lib/auth/redirect.ts', 'lib/constants/roles.ts', 'lib/constants/plans.ts', 'lib/constants/feature-catalog.ts',
   // The held 0514's rule: who reads the household's accounts and spending.
   'lib/finance/household-money.ts',
+  // billing-module reads the transactions its figures are summed from whole.
+  'lib/supabase/read-all.ts',
   'lib/billing/plans.ts', 'lib/billing/review-selection.ts', 'lib/wallet/ledger.ts',
   'lib/utils/calendar-date.ts', 'lib/utils/birthday.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
