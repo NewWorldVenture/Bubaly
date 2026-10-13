@@ -134,8 +134,9 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
       .not('read_by', 'cs', `{${ctx.user.id}}`),
   ]);
   // A grocery read that failed (the items, or the open-list read in front of
-  // them) is not an empty list: the card says it could not load, and no advice
-  // is drawn from a count nobody read.
+  // them) is not an empty list: the card says it could not load, no advice is
+  // drawn from a count nobody read, and the assistant card does not turn the
+  // missing advice into "Everything looks on track".
   const groceryUnavailable = Boolean(groceryError);
   if (groceryError) console.error('[family-dashboard] grocery read failed', groceryError);
   const calendarData = calendarRes && 'ok' in calendarRes && calendarRes.ok ? calendarRes.data : null;
@@ -338,8 +339,15 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
               <h2 className="font-semibold">{tr('familyDashboard.aiAssistant')}</h2>
             </div>
           </div>
+          {/* No suggestion is an all-clear only when every source behind one was
+              read: an unread calendar or grocery list says so instead, the AI
+              home's rule ("nothing needs you" from an unread source is a claim
+              nobody checked). Review RV1037-R1-GROCERY-ALLCLEAR. */}
           <p className="mb-4 text-sm text-fg/70">
-            {suggestions.length > 0 ? tr('familyDashboard.suggestionsIntro') : calendarUnavailable ? tr('homeCalendar.upcomingUnavailable') : tr('familyDashboard.allOnTrack')}
+            {suggestions.length > 0 ? tr('familyDashboard.suggestionsIntro')
+              : calendarUnavailable ? tr('homeCalendar.upcomingUnavailable')
+              : groceryUnavailable ? tr('familyDashboard.groceryListUnavailable')
+              : tr('familyDashboard.allOnTrack')}
           </p>
           {suggestions.length > 0 && (
             <div className="space-y-2.5">

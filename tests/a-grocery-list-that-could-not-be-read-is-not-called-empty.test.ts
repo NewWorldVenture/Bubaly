@@ -8,7 +8,10 @@
 // AUD-1037-GROCERY-READ-STATE):
 //
 //   * FamilyDashboard kept only `data`: the Grocery List card said "Grocery
-//     list is empty", and with dinners planned it advised building a list;
+//     list is empty", and with dinners planned it advised building a list.
+//     Dropping that advice alone left the assistant card with nothing to say
+//     but "Everything looks on track" (review RV1037-R1-GROCERY-ALLCLEAR), so
+//     an unread list now answers there the way an unread calendar does;
 //   * AiHomeDashboard read the count as `groceryCount ?? 0`: "You're all
 //     caught up" and the getting-started card's "Start a grocery list";
 //   * the Food hub's degrade-read answered `data: null`, which the card
@@ -22,6 +25,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { UserContext } from '@/lib/supabase/auth';
 import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
 import { createInMemorySupabase, withFaults, type InMemorySupabase } from './helpers/in-memory-supabase';
+import { bodyOf } from './helpers/source-order';
 
 const FAMILY = 'ours';
 const mocks = vi.hoisted(() => ({ db: null as unknown, brief: vi.fn() }));
@@ -123,6 +127,8 @@ async function settle(node: ReactNode): Promise<ReactNode> {
   return cloneElement(element, undefined, await settle(element.props.children));
 }
 const html = async (tree: ReactNode | Promise<ReactNode>) => renderToStaticMarkup(await settle(await tree) as ReactElement);
+/** The family dashboard's assistant card: from its heading to its "Ask Anything" link. */
+const assistantCard = (page: string) => bodyOf(page, `>${t('familyDashboard.aiAssistant')}</h2>`, t('familyDashboard.askAnything'));
 
 describe('the family dashboard', () => {
   it('says the grocery list could not be loaded when the open-list read fails, and does not call it empty', async () => {
@@ -145,6 +151,32 @@ describe('the family dashboard', () => {
     expect(page).not.toContain(t('familyDashboard.groceryListIsEmpty'));
   });
 
+  it.each(['grocery_lists', 'grocery_items'] as const)(
+    'with dinners planned and the %s read failed, the assistant card says the list could not be loaded, not that everything is on track',
+    async (table) => {
+      dinnersPlanned();
+      failing(table);
+      const page = await html(FamilyDashboard({ ctx }));
+      const card = assistantCard(page);
+
+      // Nothing else in this family asks for attention, so the grocery advice
+      // was the only suggestion that could have been made — and it was not
+      // checked. That is not an all-clear.
+      expect(page).not.toContain(t('familyDashboard.allOnTrack'));
+      expect(card).toContain(t('familyDashboard.groceryListUnavailable'));
+      expect(card).not.toContain(t('familyDashboard.suggestionsIntro'));
+      expect(card).not.toContain(t('familyDashboard.mealsNoGroceries'));
+    },
+  );
+
+  it('control: with the list read and nothing to suggest, the assistant card still says everything is on track', async () => {
+    const page = await html(FamilyDashboard({ ctx }));
+    const card = assistantCard(page);
+
+    expect(card).toContain(t('familyDashboard.allOnTrack'));
+    expect(page).not.toContain(t('familyDashboard.groceryListUnavailable'));
+  });
+
   it('control: an open list that is empty is still empty, with the advice it supports', async () => {
     dinnersPlanned();
     const page = await html(FamilyDashboard({ ctx }));
@@ -152,6 +184,7 @@ describe('the family dashboard', () => {
     expect(page).toContain(t('familyDashboard.groceryListIsEmpty'));
     expect(page).toContain(t('familyDashboard.mealsNoGroceries'));
     expect(page).not.toContain(t('familyDashboard.groceryListUnavailable'));
+    expect(assistantCard(page)).toContain(t('familyDashboard.suggestionsIntro'));
   });
 
   it('control: an open list with items lists them', async () => {
