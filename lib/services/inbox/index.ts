@@ -66,6 +66,54 @@ export async function loadInboxMessage(scope: ServiceScope, messageId: string): 
 }
 
 /**
+ * Claim a message for "Handle it" BEFORE anything is filed: `ai_handled` goes
+ * from false to true in one conditional write, so of two taps that read the
+ * row unhandled — two managers at once, a reload while the first is still
+ * planning — exactly one files a run. `false` means another tap already holds
+ * (or finished) it. Managers (or `system`) only, as for every filing.
+ */
+export async function claimInboxMessageForHandling(scope: ServiceScope, messageId: string): Promise<ServiceResult<boolean>> {
+  const id = messageId?.trim();
+  if (!id) return fail('Which message?', { code: SERVICE_CODES.invalidInput });
+  if (!mayFile(scope)) {
+    return fail('Only a parent or adult can file a family message.', { code: SERVICE_CODES.denied });
+  }
+  const { data, error } = await scope.db
+    .from('family_inbox_messages')
+    .update({ ai_handled: true })
+    .eq('id', id)
+    .eq('family_id', scope.familyId)
+    .eq('ai_handled', false)
+    .select('id');
+  if (error) {
+    console.error('[service:inbox] handled claim failed', error);
+    return fail(describeDbError(error, 'Could not hand that message to Bubaly.'), { code: SERVICE_CODES.db, retryable: true });
+  }
+  return ok((data ?? []).length > 0);
+}
+
+/** Give back a claim whose filing failed, so the row says "not handled" — because it isn't. */
+export async function releaseInboxMessageClaim(scope: ServiceScope, messageId: string): Promise<ServiceResult<null>> {
+  const id = messageId?.trim();
+  if (!id) return fail('Which message?', { code: SERVICE_CODES.invalidInput });
+  if (!mayFile(scope)) {
+    return fail('Only a parent or adult can file a family message.', { code: SERVICE_CODES.denied });
+  }
+  const { data, error } = await scope.db
+    .from('family_inbox_messages')
+    .update({ ai_handled: false })
+    .eq('id', id)
+    .eq('family_id', scope.familyId)
+    .eq('ai_handled', true)
+    .select('id');
+  if (error || !data?.length) {
+    console.error('[service:inbox] handled claim release failed', error ?? { messageId: id, error: 'no rows updated' });
+    return fail(error ? describeDbError(error, 'Could not reopen that message.') : 'Could not reopen that message.', { code: SERVICE_CODES.db, retryable: true });
+  }
+  return ok(null);
+}
+
+/**
  * Mark a message handled after durable work exists: a persisted intake request
  * or an executed, approved tool. School proposals archive the source in this
  * same write; ordinary inbox filing keeps the existing read status.

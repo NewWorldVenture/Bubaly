@@ -425,19 +425,12 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
     if (drafting) return;
     setDrafting(true);
     try {
-      const contextLines = [
-        comm.contact?.name ? `From: ${comm.contact.name}` : null,
-        comm.subject ? `Subject: ${comm.subject}` : null,
-        comm.body ? `Message: ${comm.body}` : (comm.summary ? `Summary: ${comm.summary}` : null),
-        `Channel: ${tr(ch.labelKey)}`,
-      ].filter(Boolean).join('\n');
+      // The server reads the message from the family's own record and writes
+      // the prompt itself (app/api/ai/assist/route.ts): the sender's words
+      // reach the model fenced as data, never as part of the instructions.
       const res = await fetch('/api/ai/assist', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemPrompt: `You are a family's AI message agent. Draft a brief, warm, polite reply to the message below on the family's behalf. Match the tone to the channel (${tr(ch.labelKey)}). Keep it natural and ready to send — no placeholders, no "[Name]", no preamble. Just the reply text.`,
-          messages: [{ role: 'user', content: contextLines }],
-          maxTokens: 300,
-        }),
+        body: JSON.stringify({ purpose: 'inbox_reply', communicationId: comm.id }),
       });
       const data = await res.json();
       if (!res.ok) { toastError(data.error ?? tr('inboxModule.couldNotDraftAReply')); return; }

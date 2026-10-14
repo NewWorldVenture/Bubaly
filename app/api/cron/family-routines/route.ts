@@ -7,8 +7,9 @@ import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { loadAISettings } from '@/lib/services/ai-settings';
 import { nextRelativeFire, scheduleOf } from '@/lib/services/routines';
 import { firesOncePerDay, nextCronRun, sameLocalMinute } from '@/lib/services/routines/schedule';
-import { createRequest, createRun } from '@/lib/ai/runs/store';
+import { createRequest, createRun, updateRequest } from '@/lib/ai/runs/store';
 import { kickRun } from '@/lib/ai/runs/continue';
+import { DEFAULT_PLANNER_BUDGET_MS, planRoutineRequest } from '@/lib/ai/runs/intake';
 import type { ServiceScope } from '@/lib/services/types';
 import { wroteNoRows } from '@/lib/supabase/errors';
 
@@ -70,6 +71,12 @@ export const maxDuration = 120;
 // prevents is a family being told the same thing twice.
 const TICK_BUDGET_MS = 85_000;
 const MAX_ROUTINES_PER_TICK = 25;
+/**
+ * Each occurrence is planned before it is handed on (`planRoutineRequest`),
+ * which can take the planner's whole budget. A routine is only started with at
+ * least this much of the tick left; the rest stay due for the next tick.
+ */
+const MIN_PLANNING_WINDOW_MS = DEFAULT_PLANNER_BUDGET_MS + 5_000;
 
 type DB = SupabaseClient<Database>;
 
@@ -160,6 +167,7 @@ export async function GET(req: NextRequest) {
 
   for (const rule of due ?? []) {
     if (Date.now() > deadline) break;
+    if (deadline - Date.now() < MIN_PLANNING_WINDOW_MS) break;
     const dueAt = rule.next_run_at;
     if (!dueAt) continue;
 
@@ -248,26 +256,47 @@ export async function GET(req: NextRequest) {
     // reschedule does anyway, so the outcome matches and the wedge above becomes
     // recoverable rather than permanent.
     const request = await createRequest(scope, { requestText: prompt, kind: 'routine' }, { db });
-    if (!request.ok) {
-      await stampRun(db, rule.id, dueAt, { status: 'failed', detail: request.error }, 'routine_runs write failed (failed stamp)');
-      problems.push(rule.id);
-    } else {
-      const run = await createRun(scope, { requestId: request.data.id, runType: 'routine', summary: prompt, state: 'queued' }, { db });
-      await stampRun(db, rule.id, dueAt, { status: 'filed', request_id: request.data.id }, 'routine_runs write failed (filed stamp)');
+    let failure: string | null = request.ok ? null : request.error;
+    if (request.ok) {
+      // The run starts in `planning`, and the request is PLANNED here before
+      // anything is handed on: a run filed `queued` with no plan was never
+      // claimed (`claimRun` and `claim_ai_runs` take only `ready` and
+      // `scheduled_followup`) and nothing ever planned a routine request, so
+      // the routine never ran while this tick counted it filed.
+      const run = await createRun(scope, { requestId: request.data.id, runType: 'routine', summary: prompt, state: 'planning' }, { db });
       // `filed` is held to the standard this file already sets for `armed`
       // ("it may only count writes that landed, so a quiet tick reads
       // differently from a broken one"). A refused createRun leaves a request
       // with no run to execute it: nothing is kicked, nothing runs, and the
       // routine did not file any work. Counting that as filed while it is
       // absent from `problems` makes a broken tick read as a clean one.
-      // Audit C1-S6-03.
+      // Audit C1-S6-03. The same holds for an occurrence that could not be
+      // planned: it is the request, the run and this occurrence that failed.
       if (!run.ok) {
         console.error('[cron:family-routines] request created but no run to execute it', rule.id, run.error);
-        problems.push(rule.id);
+        failure = run.error;
+        const closed = await updateRequest(scope, request.data.id, { status: 'failed', error: run.error, completed_at: now.toISOString() }, { db });
+        if (!closed.ok) console.error('[cron:family-routines] could not close the request that has no run', rule.id, closed.error);
       } else {
-        kickRun(run.data.id, { budgetMs: 20_000 });
-        filed += 1;
+        const planned = await planRoutineRequest(scope, { requestId: request.data.id, runId: run.data.id, text: prompt }, {
+          db, plannerBudgetMs: Math.min(DEFAULT_PLANNER_BUDGET_MS, deadline - Date.now()),
+        });
+        if (!planned.ok) {
+          console.error('[cron:family-routines] the routine could not be planned', rule.id, planned.error);
+          failure = planned.error;
+        } else {
+          // A plan is handed to the continuation worker; a recommendation or
+          // an answer is already the routine's whole outcome.
+          if (planned.data.outcome === 'plan') kickRun(planned.data.runId, { budgetMs: 20_000 });
+          filed += 1;
+        }
       }
+    }
+    if (failure !== null) {
+      problems.push(rule.id);
+      await stampRun(db, rule.id, dueAt, { status: 'failed', detail: failure, ...(request.ok ? { request_id: request.data.id } : {}) }, 'routine_runs write failed (failed stamp)');
+    } else if (request.ok) {
+      await stampRun(db, rule.id, dueAt, { status: 'filed', request_id: request.data.id }, 'routine_runs write failed (filed stamp)');
     }
 
     // Schedule the next occurrence. A cron's is arithmetic; a relative

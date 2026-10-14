@@ -35,6 +35,16 @@ const UNSTARTED_STEP_STATES: readonly StepState[] = ['queued', 'ready', 'awaitin
 
 type Access = { run: RunRow; db: SupabaseClient<Database> };
 
+/** A worker holds this run right now: its lease has not run out. */
+function leaseIsLive(run: Pick<RunRow, 'lease_owner' | 'lease_expires_at'>, nowMs = Date.now()): boolean {
+  if (!run.lease_owner || !run.lease_expires_at) return false;
+  const expires = Date.parse(run.lease_expires_at);
+  return !Number.isFinite(expires) || expires > nowMs;
+}
+
+/** Run states in which a worker is part-way through a pass. */
+const IN_FLIGHT_RUN_STATES: readonly RunState[] = ['executing', 'verifying'];
+
 async function openRun(
   scope: ServiceScope,
   runId: string,
@@ -95,12 +105,18 @@ export async function pauseRun(scope: ServiceScope, runId: string, opts?: Contro
   }
 
   const now = new Date().toISOString();
+  // A live lease is a worker in the middle of a batch. It stays that worker's:
+  // the executor re-reads the run every pass, sees `paused` and parks, letting
+  // go of its own lease. Clearing it here let a Resume a moment later hand the
+  // run to a SECOND worker while the first was still running steps — two
+  // workers on one run, each filing its own approval card and each writing the
+  // final state over the other's. Only a lease nobody holds any more (a
+  // worker that died) is cleared.
   const updated = await updateRun(scope, runId, {
     state: 'paused',
     status: legacyStatusFor('paused'),
     paused_at: now,
-    lease_owner: null,
-    lease_expires_at: null,
+    ...(leaseIsLive(run) ? {} : { lease_owner: null, lease_expires_at: null }),
   }, { db });
   if (!updated.ok) return updated;
 
@@ -374,6 +390,15 @@ export async function editStepInput(
 
   if (run.state === 'cancelled') return fail('That run was cancelled.', { code: SERVICE_CODES.invalidInput });
   if (!run.plan_id) return fail('That run has no plan to edit.', { code: SERVICE_CODES.invalidInput });
+  // A worker part-way through a pass is still running the plan as it was: it
+  // loaded those steps before this edit, so it would run the old step with the
+  // old words and then — the edit having requeued a copy — the new one too
+  // (two writes the ledger cannot fold, their arguments differ). Or its last
+  // pass finds nothing left in the old plan and writes `completed` over the
+  // edit's `ready`, and the edited plan never runs. Edit once it has parked.
+  if (IN_FLIGHT_RUN_STATES.includes(run.state as RunState) || leaseIsLive(run)) {
+    return fail((await getTranslations())('runs.runIsWorkingNow'), { code: SERVICE_CODES.invalidInput });
+  }
   if (!run.request_id) {
     // Plan versions are unique per request (0250's `uq_ai_plans_request_version`),
     // so a run created without one has nothing to version against.
@@ -402,8 +427,15 @@ export async function editStepInput(
 
   const requeue = new Set([stepId, ...collectDependents(steps, stepId).map((s) => s.id)]);
 
+  // Every step the edit does not touch is carried exactly as it stands — its
+  // status, result, error and approval — the way `replanRun` carries finished
+  // work and pending decisions. Carrying only completed and skipped steps
+  // requeued the rest with no approval: a step waiting on a card was asked
+  // again (two cards for one step), a step a parent already approved was asked
+  // again, one a parent DECLINED was queued and asked again, and the original
+  // cards stayed pending, releasing nothing when someone approved them.
   const planSteps: PlanStepInput[] = steps.map((step) => {
-    const carried = !requeue.has(step.id) && (step.status === 'completed' || step.status === 'skipped');
+    const carried = !requeue.has(step.id);
     return {
       key: step.id,
       stepType: step.step_type,
@@ -419,8 +451,12 @@ export async function editStepInput(
       resultJson: carried ? step.result_json : null,
       // A carried-over approval keeps its decision; a requeued one asks again.
       approvalId: carried ? step.approval_id : null,
+      error: carried ? step.error : null,
     };
   });
+  // The cards the requeued steps were waiting on ask about words that no
+  // longer exist; each requeued step asks again with the new ones.
+  const superseded = steps.filter((s) => requeue.has(s.id) && s.approval_id).map((s) => s.approval_id as string);
 
   const saved = await savePlan(scope, run.request_id, {
     objective: null,
@@ -430,16 +466,45 @@ export async function editStepInput(
   }, { db });
   if (!saved.ok) return saved;
 
-  const repointed = await updateRun(scope, runId, {
-    plan_id: saved.data.planId,
-    state: 'ready',
-    status: legacyStatusFor('ready'),
-    run_after: new Date().toISOString(),
-    completed_at: null,
-    error: null,
-    current_step_id: null,
-  }, { db });
-  if (!repointed.ok) return repointed;
+  // Compare-and-set on what was read above: the same state, the same plan and
+  // the same lease holder. A worker that claimed the run in between changed
+  // all three, and the edit must not be pointed at a run it is executing.
+  let repoint = db
+    .from('family_automation_runs')
+    .update({
+      plan_id: saved.data.planId,
+      state: 'ready',
+      status: legacyStatusFor('ready'),
+      run_after: new Date().toISOString(),
+      completed_at: null,
+      error: null,
+      current_step_id: null,
+    })
+    .eq('id', runId)
+    .eq('family_id', scope.familyId)
+    .eq('state', run.state)
+    .eq('plan_id', run.plan_id);
+  repoint = run.lease_owner ? repoint.eq('lease_owner', run.lease_owner) : repoint.is('lease_owner', null);
+  const { data: repointed, error: repointError } = await repoint.select('id');
+  if (repointError) {
+    console.error('[ai/runs] failed to point the run at the edited plan', repointError);
+    return fail(describeDbError(repointError, 'Bubaly could not update that run.'), { code: SERVICE_CODES.db, retryable: true });
+  }
+  if (wroteNoRows(repointed)) return fail((await getTranslations())('runs.runIsWorkingNow'), { code: SERVICE_CODES.invalidInput });
+
+  if (superseded.length) {
+    const { error: closeError } = await db
+      .from('approval_requests')
+      .update({ status: 'cancelled', decided_at: new Date().toISOString(), decided_by: scope.userId })
+      .eq('family_id', scope.familyId)
+      .eq('run_id', runId)
+      .in('id', superseded)
+      .eq('status', 'pending')
+      .select('id');
+    // The edit stands either way; an old card left open releases nothing (its
+    // step is no longer in the run's plan), but it must be visible in the logs.
+    if (closeError) console.error('[ai/runs] failed to withdraw the approvals an edit superseded', closeError);
+  }
 
   await appendEvent(scope, runId, {
     eventType: 'planned',

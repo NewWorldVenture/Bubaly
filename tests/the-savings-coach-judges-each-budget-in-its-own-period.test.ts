@@ -36,7 +36,7 @@ vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => (
 vi.mock('@/lib/ai/observability', () => ({
   withAiRequest: async (_scope: unknown, _meta: unknown, run: (obs: unknown) => unknown) => run({ used() {}, failed() {} }),
 }));
-vi.mock('@/lib/ai/provider', () => ({ resolveProvider: async () => ({ complete: harness.complete }) }));
+vi.mock('@/lib/ai/provider', () => ({ resolveProvider: async () => ({ complete: harness.complete }), isAIConfigured: async () => true }));
 
 const { POST } = await import('@/app/api/ai/savings/route');
 const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');

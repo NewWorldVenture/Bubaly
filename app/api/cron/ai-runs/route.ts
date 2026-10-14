@@ -7,6 +7,8 @@ import { runGraph } from '@/lib/ai/runs/executor';
 import { claimRuns, releaseRun } from '@/lib/ai/runs/store';
 import { legacyStatusFor } from '@/lib/ai/runs/states';
 import { wroteNoRows } from '@/lib/supabase/errors';
+import { familyHasFeature, getFeatureTiersByHref } from '@/lib/server/feature-entitlement';
+import type { FeatureTier } from '@/lib/constants/feature-catalog';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -34,6 +36,14 @@ const WAVE_SIZE = 4;
 const LEASE_SECONDS = 180;
 /** How far out a closed family's claimed run is put back: it is looked at again daily, not every wave. */
 const CLOSED_FAMILY_DEFER_MS = 24 * 60 * 60_000;
+/**
+ * The feature a run is the work of: Ask Bubaly ('ai-requests'), the entry
+ * every run is filed through (`submitRequest` behind `assertAIAccess`) and the
+ * one the run controls re-check before they restart one.
+ */
+const AI_RUNS_FEATURE_HREF = '/dashboard/concierge/runs';
+/** How far out a run of a family without Ask Bubaly is put back — the same daily look as a closed family's. */
+const UNENTITLED_FAMILY_DEFER_MS = CLOSED_FAMILY_DEFER_MS;
 
 export async function GET(req: NextRequest) {
   const t = await getTranslations();
@@ -49,6 +59,9 @@ export async function GET(req: NextRequest) {
   let returned = 0;
   let claimFailures = 0;
   let deferredClosed = 0;
+  let deferredUnentitled = 0;
+  // The admin tier map, read once per tick and only when there is a run to judge.
+  let tiers: Record<string, FeatureTier> | null = null;
 
   // Return a claimed run to the queue, due at `runAfter`. `returned` counted a
   // run whether or not the write failed — and the `state = 'executing'` guard
@@ -100,9 +113,34 @@ export async function GET(req: NextRequest) {
       }
       const closedFamilies = new Set((closedRows ?? []).map((f) => f.id));
 
+      // And runs of a family that no longer has Ask Bubaly — a trial that
+      // ended unpaid, a plan below its tier, or the feature switched Off — are
+      // not executed either. A run filed while the family was entitled used to
+      // keep writing to its household and calling the planner after the
+      // lapse, which is exactly what the answer, resume and re-run controls
+      // refuse to start. Put back like a closed family's, so a family that
+      // subscribes again picks up where it left off.
+      const entitled = new Map<string, boolean>();
+      try {
+        tiers ??= await getFeatureTiersByHref(db, { onUnavailable: 'throw' });
+        for (const familyId of claimedFamilies) {
+          if (!closedFamilies.has(familyId)) entitled.set(familyId, await familyHasFeature(db, familyId, AI_RUNS_FEATURE_HREF, tiers));
+        }
+      } catch (entitlementError) {
+        // Who may run is unknown, so nothing in this wave runs.
+        console.error('[cron/ai-runs] could not read whether the claimed runs\' families have Ask Bubaly', entitlementError);
+        for (const run of claim.data) if (await requeue(run, new Date())) returned += 1;
+        claimFailures += 1;
+        break;
+      }
+
       for (const run of claim.data) {
         if (closedFamilies.has(run.familyId)) {
           if (await requeue(run, new Date(Date.now() + CLOSED_FAMILY_DEFER_MS))) deferredClosed += 1;
+          continue;
+        }
+        if (entitled.get(run.familyId) !== true) {
+          if (await requeue(run, new Date(Date.now() + UNENTITLED_FAMILY_DEFER_MS))) deferredUnentitled += 1;
           continue;
         }
         const remaining = deadline - Date.now();
@@ -137,6 +175,7 @@ export async function GET(req: NextRequest) {
       executed: results.length,
       returnedToQueue: returned,
       deferredClosed,
+      deferredUnentitled,
       elapsedMs: Date.now() - startedAt,
       results,
     }, { status: claimFailures === 0 ? 200 : 502 });

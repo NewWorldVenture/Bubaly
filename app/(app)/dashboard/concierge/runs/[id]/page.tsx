@@ -128,6 +128,13 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
       merged[key] = value;
     }
 
+    // An edit restarts execution, so it needs Ask Bubaly NOW, not when the
+    // page was rendered: a trial that ended, a downgrade or the feature
+    // switched Off since then must not be bypassed by a page left open. The
+    // same rule the resume and re-run controls apply (KICKING_CONTROLS).
+    const access = await assertAIAccess(actor, { db });
+    if (!access.ok) return { ok: false, error: access.error, code: access.code };
+
     const result = await editStepInput(scopeFromUserContext(actor, db), runId, stepId, merged);
     if (!result.ok) return { ok: false, error: result.error, code: result.code };
     kickRun(runId);

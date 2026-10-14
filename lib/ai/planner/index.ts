@@ -33,7 +33,7 @@ import type { AiStepType, Database, Json } from '@/lib/database.types';
 import { buildContext, type ContextBundle, type IntentKey } from '@/lib/ai/context/builder';
 import type { AIMessage, AIProvider } from '@/lib/ai/provider';
 import { resolveProviderForTask } from '@/lib/ai/routing';
-import { appendEvent, createRun, ledgerClient, savePlan, updateRequest, updateRequestWhereStatus, updateRun, type PlanStepInput, type RequestRow, type RunRow, type StepRow } from '@/lib/ai/runs/store';
+import { appendEvent, createRun, ledgerClient, planningAttemptMark, savePlan, updateRequest, updateRequestForAttempt, updateRun, type PlanStepInput, type RequestRow, type RunRow, type StepRow } from '@/lib/ai/runs/store';
 import { legacyStatusFor, TERMINAL_STEP_STATES } from '@/lib/ai/runs/states';
 import { structured } from '@/lib/ai/structured';
 import { listTools } from '@/lib/ai/tools/registry';
@@ -246,21 +246,33 @@ export async function planRequest(
   const ledger = ledgerClient(scope, opts.db ? { db: opts.db } : undefined);
   const { requestId, intent } = input;
 
-  const marked = await updateRequest(scope, requestId, { status: 'planning', interpreted_intent: intent, started_at: now.toISOString() }, { db: ledger });
+  // This attempt's own mark (`planningAttemptMark`). Every outcome below is
+  // written through `settle`, which keeps it only while the request is still
+  // `planning` under this mark: the intake gives up on a slow planner at its
+  // deadline, and a person may answer again (a newer attempt, a newer mark)
+  // while this one is still thinking. Whatever a given-up attempt produced —
+  // a plan, a recommendation, a question, an answer — is not kept.
+  const attempt = planningAttemptMark();
+  const marked = await updateRequest(scope, requestId, { status: 'planning', interpreted_intent: intent, started_at: attempt }, { db: ledger });
   if (!marked.ok) {
-    // Bookkeeping, not the plan: the request row is what the family watches,
-    // so a failure here is loud but does not stop the planning itself.
+    // Without its mark nothing this attempt produced could be kept, so it
+    // does not spend a model call producing it.
     console.error('[planner] could not mark the request as planning', { requestId, error: marked.error });
+    return fail('Bubaly could not start planning that request. Try again in a moment.', { code: SERVICE_CODES.db, retryable: true });
   }
+  const settle = (patch: Database['public']['Tables']['ai_requests']['Update']) =>
+    updateRequestForAttempt(scope, requestId, attempt, patch, { db: ledger });
+  const abandoned = () => fail('That request was abandoned before planning finished.', { code: SERVICE_CODES.invalidInput });
 
   if (intent === 'purchase_advice') {
     const answer = await answerPurchaseRequest(scope, input);
-    const completed = await updateRequest(scope, requestId, {
+    const completed = await settle({
       status: answer.ok ? 'completed' : 'failed',
       completed_at: now.toISOString(),
       error: answer.ok ? null : answer.error,
-    }, { db: ledger });
+    });
     if (!completed.ok) return completed;
+    if (!completed.data) return abandoned();
     return answer;
   }
 
@@ -330,26 +342,28 @@ export async function planRequest(
 
   const asked = await askForPlan(provider, system, user, inputs, { db: ledger, familyId: scope.familyId }, requestId);
   if (!asked.ok) {
-    await updateRequest(scope, requestId, { status: 'failed', error: asked.error, completed_at: now.toISOString() }, { db: ledger });
+    await settle({ status: 'failed', error: asked.error, completed_at: now.toISOString() });
     return asked;
   }
   const { plan, validation } = asked.data;
 
   // ── Clarification (§36): persisted on the request, run not created ─────
   if (validation === null && plan.clarification) {
-    return recordClarification(scope, ledger, requestId, plan.clarification.question, plan.clarification.reason, now);
+    return recordClarification(scope, ledger, requestId, attempt, plan.clarification.question, plan.clarification.reason, now);
   }
   // ── Pure answer: nothing to execute ────────────────────────────────────
   if (validation === null) {
     const text = (plan.answer ?? '').trim();
-    await updateRequest(scope, requestId, { status: 'completed', completed_at: now.toISOString(), error: null }, { db: ledger });
+    const answered = await settle({ status: 'completed', completed_at: now.toISOString(), error: null });
+    if (!answered.ok) return answered;
+    if (!answered.data) return abandoned();
     return ok({ kind: 'answer', text });
   }
   if (plan.clarification) {
     // The model both planned and asked. The question wins: it said a missing
     // fact would change the outcome, and running the guess would be worse
     // than one short question.
-    return recordClarification(scope, ledger, requestId, plan.clarification.question, plan.clarification.reason, now);
+    return recordClarification(scope, ledger, requestId, attempt, plan.clarification.question, plan.clarification.reason, now);
   }
 
   // ── Recommend only (§11 level 1): a recommendation row, no run ─────────
@@ -357,11 +371,11 @@ export async function planRequest(
   const hasActs = validation.ok && validation.steps.some((s) => s.stepType === 'act');
   if (!validation.ok || (recommendOnly.length > 0 && !hasActs)) {
     if (!validation.ok && validation.code !== 'empty') {
-      await updateRequest(scope, requestId, { status: 'failed', error: validation.error, completed_at: now.toISOString() }, { db: ledger });
+      await settle({ status: 'failed', error: validation.error, completed_at: now.toISOString() });
       return fail(validation.error, { code: SERVICE_CODES.invalidInput });
     }
     return recordRecommendation(scope, ledger, {
-      requestId, intent, template, plan, recommendOnly, provider, now,
+      requestId, attempt, intent, template, plan, recommendOnly, provider, now,
       issues: validation.ok ? validation.issues : validation.issues,
       behavior: validation.ok ? validation.behavior : 'recommend',
     });
@@ -379,7 +393,7 @@ export async function planRequest(
     steps: toStoreSteps(plannedSteps),
   }, { db: ledger });
   if (!saved.ok) {
-    await updateRequest(scope, requestId, { status: 'failed', error: saved.error, completed_at: now.toISOString() }, { db: ledger });
+    await settle({ status: 'failed', error: saved.error, completed_at: now.toISOString() });
     return saved;
   }
 
@@ -393,7 +407,7 @@ export async function planRequest(
     idempotencyKey: input.runIdempotencyKey ?? null,
   }, { db: ledger });
   if (!run.ok) {
-    await updateRequest(scope, requestId, { status: 'failed', error: run.error, completed_at: now.toISOString() }, { db: ledger });
+    await settle({ status: 'failed', error: run.error, completed_at: now.toISOString() });
     return run;
   }
 
@@ -426,7 +440,10 @@ export async function planRequest(
   // request is no longer `planning` and the plan we just saved must never
   // run — otherwise the retry and this late plan would both execute (twice
   // the dinners, twice the reminders). Cancel the run so no claim can take it.
-  const claimed = await updateRequestWhereStatus(scope, requestId, 'planning', { status: 'ready', error: null }, { db: ledger });
+  // On THIS attempt's mark, not on the status alone: an answer that timed out
+  // and was answered again is `planning` again — the retry's — and a status
+  // check let this late plan run in the retry's place.
+  const claimed = await settle({ status: 'ready', error: null });
   if (!claimed.ok || !claimed.data) {
     await updateRun(scope, run.data.id, { state: 'cancelled', status: legacyStatusFor('cancelled'), completed_at: now.toISOString() }, { db: ledger });
     await appendEvent(scope, run.data.id, {
@@ -462,6 +479,7 @@ async function recordClarification(
   scope: ServiceScope,
   ledger: SupabaseClient<Database>,
   requestId: string,
+  attempt: string,
   question: string,
   reason: string,
   now: Date,
@@ -478,17 +496,22 @@ async function recordClarification(
   }
   const existing = Array.isArray(row?.clarifications) ? (row.clarifications as unknown as ClarificationEntry[]) : [];
   const entry: ClarificationEntry = { question: question.trim(), reason: reason.trim() || null, asked_at: now.toISOString(), answer: null, answered_at: null };
-  const updated = await updateRequest(scope, requestId, {
+  // Only for an attempt still in charge of the request: a question from one
+  // the intake gave up on would park a request the person was told had failed.
+  const updated = await updateRequestForAttempt(scope, requestId, attempt, {
     status: 'awaiting_context',
     clarifications: [...existing, entry] as unknown as Json,
     error: null,
   }, { db: ledger });
   if (!updated.ok) return updated;
+  if (!updated.data) return fail('That request was abandoned before planning finished.', { code: SERVICE_CODES.invalidInput });
   return ok({ kind: 'clarification', question: entry.question, requestId });
 }
 
 type RecommendationInput = {
   requestId: string;
+  /** The planning attempt's mark (`planningAttemptMark`). */
+  attempt: string;
   intent: IntentKey;
   template: WorkflowTemplate | null;
   plan: Plan;
@@ -514,6 +537,18 @@ async function recordRecommendation(
   const actions = (input.recommendOnly.length ? input.recommendOnly : []).map((s) => s.description);
   const proposed = input.plan.steps.filter((s) => s.step_type === 'act').map((s) => s.description);
   const lines = actions.length ? actions : proposed;
+
+  // The request is closed BEFORE the card is filed, and only by an attempt
+  // still in charge of it. Filed first and closed after, a planner that
+  // outlived the intake's deadline filed its card and flipped a request the
+  // person had been told failed to `completed` — and their retry, a new
+  // request, filed the same card again.
+  const closed = await updateRequestForAttempt(scope, input.requestId, input.attempt, {
+    status: 'completed', completed_at: input.now.toISOString(), error: null,
+  }, { db: ledger });
+  if (!closed.ok) return closed;
+  if (!closed.data) return fail('That request was abandoned before planning finished.', { code: SERVICE_CODES.invalidInput });
+
   const body = [
     input.plan.reasoning_summary.trim(),
     lines.length ? `What Bubaly would do:\n${lines.map((l) => `• ${l}`).join('\n')}` : '',
@@ -550,7 +585,6 @@ async function recordRecommendation(
     return fail(describeDbError(error, 'Bubaly worked out what to suggest but could not save it.'), { code: SERVICE_CODES.db, retryable: true });
   }
 
-  await updateRequest(scope, input.requestId, { status: 'completed', completed_at: input.now.toISOString(), error: null }, { db: ledger });
   return ok({ kind: 'recommendation', recommendationId: data.id, summary: input.plan.reasoning_summary.trim() || input.plan.objective });
 }
 

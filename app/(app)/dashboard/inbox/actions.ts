@@ -14,9 +14,15 @@
 // make — an event, a task, a notification — waits for a parent or adult to
 // approve it, whoever pressed the button (lib/ai/runs/executor.ts runStep).
 //
-// THE HANDLED CLAIM: `ai_handled` is written only after `submitRequest`
-// returns, i.e. only once an `ai_requests` row exists. If the intake fails, the
-// row keeps saying "not handled", because it isn't.
+// THE HANDLED CLAIM: `ai_handled` is CLAIMED (false → true, one conditional
+// write) before `submitRequest`, and given back if the intake fails, so the
+// row ends up saying "handled" only once an `ai_requests` row exists. Read
+// first and written after, two taps that both read "not handled" — two
+// managers at once, a reload while the first was still planning — each filed
+// a run. And only a parent or adult may hand a message over at all: the
+// filing write below is theirs alone, and a teen's tap used to file the
+// request, the plan, the run and its approval cards before that write refused
+// it — a new run on every reload, for a row that could never say handled.
 //
 // WHAT THIS CANNOT PERSIST: `family_inbox_messages` has no `request_id` column,
 // so the created run id is returned to the caller for THIS response only — the
@@ -32,7 +38,10 @@ import { isAIConfigured } from '@/lib/ai/provider';
 import { assertAIAccess } from '@/lib/server/ai-access';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { scopeFromUserContext } from '@/lib/services/scope';
-import { archiveInboxMessage, loadInboxMessage, markInboxMessageHandled } from '@/lib/services/inbox';
+import {
+  archiveInboxMessage, claimInboxMessageForHandling, loadInboxMessage, markInboxMessageHandled, releaseInboxMessageClaim,
+} from '@/lib/services/inbox';
+import { isManager } from '@/lib/constants/roles';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 
@@ -82,6 +91,9 @@ export async function handleInboxMessageAction(
   if (message.data.ai_handled) {
     return { ok: true, runPath: null, handled: true };
   }
+  if (!isManager(ctx.active.role)) {
+    return { ok: false, error: t('inboxActions.onlyAParentOrAdultCanHandle'), code: 'denied' };
+  }
 
   const text = await inboxRequestText(message.data);
   if (!text) return { ok: false, error: t('inboxActions.thereIsNothingInThat'), code: 'empty_message' };
@@ -94,16 +106,25 @@ export async function handleInboxMessageAction(
     return { ok: false, error: t('inboxActions.bubalyIsNotConnectedTo'), code: 'not_configured' };
   }
 
+  // The writes need the service role: 0214 gives members SELECT and no more.
+  const ledger = { ...scope, db: createServiceClient() };
+  const claimed = await claimInboxMessageForHandling(ledger, messageId);
+  if (!claimed.ok) return { ok: false, error: claimed.error, code: claimed.code };
+  // Another tap holds it, or already handed it over: nothing more to file.
+  if (!claimed.data) return { ok: true, runPath: null, handled: true };
+
   const filed = await submitRequest(
     scope,
     { text, context: { module: 'inbox' }, clientRequestId: clientRequestId ?? null, origin: 'inbox' },
     { startedAtMs: startedAt },
   );
-  if (!filed.ok) return { ok: false, error: filed.error, code: filed.code };
+  if (!filed.ok) {
+    await releaseInboxMessageClaim(ledger, messageId);
+    return { ok: false, error: filed.error, code: filed.code };
+  }
 
-  // Only now — a request row exists — may the inbox say "handled". The write
-  // needs the service role: 0214 gives members SELECT and no more.
-  const handled = await markInboxMessageHandled({ ...scope, db: createServiceClient() }, messageId);
+  // A request row exists: the inbox may say "handled", and the row is read.
+  const handled = await markInboxMessageHandled(ledger, messageId);
   if (!handled.ok) return { ok: false, error: handled.error, code: handled.code };
 
   revalidatePath('/dashboard/inbox');

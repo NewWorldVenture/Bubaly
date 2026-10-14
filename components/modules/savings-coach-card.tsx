@@ -6,7 +6,9 @@ import { Button } from '@/components/ui/button';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Suggestion = { title: string; detail: string };
-type SavingsAnswer = { summary: string; suggestions: Suggestion[]; error: string | null };
+/** Where the suggestions came from (/api/ai/savings `source`): the AI, or the family's own numbers because it could not answer. */
+type SavingsSource = 'ai' | 'fallback' | 'unavailable';
+type SavingsAnswer = { summary: string; suggestions: Suggestion[]; error: string | null; source?: SavingsSource };
 
 /**
  * What the card may show for one answer from /api/ai/savings. A refusal (a
@@ -18,12 +20,14 @@ type SavingsAnswer = { summary: string; suggestions: Suggestion[]; error: string
  * that carries none.
  */
 export function readSavingsAnswer(ok: boolean, body: unknown, fallback: string): SavingsAnswer {
-  const d = (body && typeof body === 'object' ? body : {}) as { summary?: unknown; suggestions?: unknown; error?: unknown };
+  const d = (body && typeof body === 'object' ? body : {}) as { summary?: unknown; suggestions?: unknown; error?: unknown; source?: unknown };
   if (!ok) return { summary: '', suggestions: [], error: typeof d.error === 'string' && d.error ? d.error : fallback };
   return {
     summary: typeof d.summary === 'string' ? d.summary : '',
     suggestions: Array.isArray(d.suggestions) ? (d.suggestions as Suggestion[]) : [],
     error: null,
+    // Where the suggestions came from, when the answer says (the route always does).
+    ...(d.source === 'ai' || d.source === 'fallback' || d.source === 'unavailable' ? { source: d.source } : {}),
   };
 }
 
@@ -58,6 +62,9 @@ export function SavingsCoachCard() {
         <div className="mt-3 space-y-2 text-sm">
           {state.error && <p role="alert" className="text-danger">{state.error}</p>}
           {state.summary && <p className="text-fg/90">{state.summary}</p>}
+          {state.source && state.source !== 'ai' && state.suggestions.length > 0 && (
+            <p className="text-xs text-muted">{t('savingsCoach.fromYourNumbersNotTheAi')}</p>
+          )}
           <ul className="space-y-2">
             {state.suggestions.map((s, i) => (
               <li key={i} className="flex items-start gap-2">

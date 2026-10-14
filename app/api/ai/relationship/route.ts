@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { refuseClosedOrTrialEnded } from '@/lib/server/account-standing';
 import { getTranslations } from '@/lib/i18n/server';
-import { createServer } from '@/lib/supabase/server';
+import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { settleAll, describeReadError } from '@/lib/supabase/settle';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
@@ -56,7 +56,13 @@ export async function POST() {
     // tomorrow. Same defect and same fix as the kitchen display
     // (app/(app)/display/page.tsx:122).
     const startOfDay = new Date(zonedDayBoundsMs(dayKeyInTz(new Date(), ctx.active.family.timezone || 'UTC'), ctx.active.family.timezone || 'UTC').start);
-    const { count: usedToday, error: meterError } = await supabase
+    // Counted with the service client, scoped to this family and this action.
+    // The meter's rows are `audit_logs`, which RLS lets only a manager read
+    // (0118's `audit_select`): through a teen's, a child's, a caregiver's or a
+    // guest's own client the count came back 0 with no error, so the family's
+    // daily cap never applied to them — while every call they made still
+    // wrote a row the parents' count kept climbing on.
+    const { count: usedToday, error: meterError } = await createServiceClient()
       .from('audit_logs').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('action', AI_AUDIT_ACTION)
       .gte('created_at', startOfDay.toISOString());
