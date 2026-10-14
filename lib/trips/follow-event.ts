@@ -8,13 +8,16 @@
 // stayed on Saturday morning — pushed by the notifications run, and written
 // back at the old time by every Refresh.
 //
-// So whoever moves an event calls this with the start it had and the start it
-// has now. Each plan for the event moves by the same amount (a series moved an
-// hour moves each week's plan an hour), its leave-by is recomputed from the
-// numbers it already holds, and its head-out event moves with it. A refused
-// reminder move leaves that plan as it was, so the plan and its reminder never
-// disagree, and Refresh — which now reads the event's own start
-// (app/(app)/dashboard/trip-intel/actions.ts) — is the way back.
+// So the calendar service calls this for every move it writes, with the start
+// the event had and the start it has now (applyEventUpdate in
+// lib/services/calendar, behind the calendar editor, a conflict quick fix, the
+// assistant's calendar tools and the week planner). Each plan for the event
+// moves by the same amount (a series moved an hour moves each week's plan an
+// hour), its leave-by is recomputed from the numbers it already holds, and its
+// head-out event moves with it. A refused reminder move leaves that plan as it
+// was, so the plan and its reminder never disagree, and Refresh — which reads
+// the event's own start (app/(app)/dashboard/trip-intel/actions.ts) — is the
+// way back, as it is for a row written around the service (an import).
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';

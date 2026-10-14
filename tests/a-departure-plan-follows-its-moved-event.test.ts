@@ -8,8 +8,11 @@
 // said "arrive by Saturday 10:00", and Refresh recomputed from the stale copy
 // and wrote the head-out back onto Saturday.
 //
-// Driven through the real calendar edit action, the real conflict quick fix and
-// the real Trip Intel refresh against an in-memory database.
+// Driven through the real calendar edit action, the real conflict quick fix,
+// the assistant's real calendar tools (which the week planner runs too) and the
+// real Trip Intel refresh against an in-memory database. The calendar service
+// is where every one of them writes the move, so that is where the plan
+// follows it: once per move, whoever made it.
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
 
@@ -26,6 +29,8 @@ vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 const { updateCalendarEventAction } = await import('@/app/(app)/dashboard/calendar/actions');
 const { rescheduleEventAction } = await import('@/app/(app)/dashboard/conflicts/actions');
 const { refreshDeparturePlanAction } = await import('@/app/(app)/dashboard/trip-intel/actions');
+const { calendarTools } = await import('@/lib/ai/tools/calendar');
+const { planWeekTemplate } = await import('@/lib/ai/planner/templates/plan-week');
 
 const GAME = '50000000-0000-4000-8000-000000000001';
 const HEAD_OUT = '50000000-0000-4000-8000-000000000002';
@@ -89,6 +94,62 @@ describe('moving an event moves the departure planned for it', () => {
   it('a title edit leaves the plan where it was', async () => {
     const res = await updateCalendarEventAction(GAME, { title: 'Soccer final' });
     expect(res).toMatchObject({ ok: true });
+    expect(ms(plan().event_start)).toBe(ms(SATURDAY));
+    expect(ms(headOut().starts_at)).toBe(ms(SATURDAY_LEAVE));
+  });
+});
+
+describe('the assistant and the week planner moving it', () => {
+  // N7: the assistant's tools wrote the move through the calendar service and
+  // nothing followed it, so the head-out reminder stayed on Saturday morning and
+  // the notifications run pushed it there.
+  const assistant = () => ({
+    db: db as never, familyId: 'fam-1', userId: 'user-1', memberId: 'mom', role: 'parent' as const,
+    actorKind: 'ai' as const, tz: 'America/New_York',
+  });
+  const tool = (name: string) => {
+    const found = calendarTools.find((t) => t.name === name);
+    if (!found) throw new Error(`no tool ${name}`);
+    return found;
+  };
+
+  it('calendar.rescheduleEvent moves the plan and its head-out reminder', async () => {
+    const res = await tool('calendar.rescheduleEvent').execute(assistant(), { event_id: GAME, starts_at: SUNDAY });
+    expect(res).toMatchObject({ ok: true });
+    expect(ms(plan().event_start)).toBe(ms(SUNDAY));
+    expect(ms(plan().leave_by)).toBe(ms(SUNDAY_LEAVE));
+    expect(ms(headOut().starts_at)).toBe(ms(SUNDAY_LEAVE));
+    expect(ms(headOut().ends_at)).toBe(ms(SUNDAY_LEAVE) + 5 * 60_000);
+  });
+
+  it('calendar.updateEvent with a new start does the same', async () => {
+    const res = await tool('calendar.updateEvent').execute(assistant(), { event_id: GAME, starts_at: SUNDAY, ends_at: '2026-10-18T19:30:00.000Z' });
+    expect(res).toMatchObject({ ok: true });
+    expect(ms(plan().event_start)).toBe(ms(SUNDAY));
+    expect(ms(plan().leave_by)).toBe(ms(SUNDAY_LEAVE));
+    expect(ms(headOut().starts_at)).toBe(ms(SUNDAY_LEAVE));
+  });
+
+  it('calendar.updateEvent changing only the title leaves the plan where it was', async () => {
+    const res = await tool('calendar.updateEvent').execute(assistant(), { event_id: GAME, title: 'Soccer final' });
+    expect(res).toMatchObject({ ok: true });
+    expect(ms(plan().event_start)).toBe(ms(SATURDAY));
+    expect(ms(headOut().starts_at)).toBe(ms(SATURDAY_LEAVE));
+  });
+
+  it("the week planner's reschedule step is that tool, so a planner run's move is followed too", async () => {
+    const step = planWeekTemplate.steps.find((s) => s.key === 'reschedule');
+    expect(step?.toolName).toBe('calendar.rescheduleEvent');
+    const res = await tool(step!.toolName!).execute({ ...assistant(), role: 'system' as const, actorKind: 'system' as const, userId: null, memberId: null }, { event_id: GAME, starts_at: SUNDAY });
+    expect(res).toMatchObject({ ok: true });
+    expect(ms(plan().event_start)).toBe(ms(SUNDAY));
+    expect(ms(headOut().starts_at)).toBe(ms(SUNDAY_LEAVE));
+  });
+
+  it('a move the calendar refused moves no plan', async () => {
+    // Another family's id: the service finds nothing to move.
+    const res = await tool('calendar.rescheduleEvent').execute({ ...assistant(), familyId: 'fam-2' }, { event_id: GAME, starts_at: SUNDAY });
+    expect(res).toMatchObject({ ok: false });
     expect(ms(plan().event_start)).toBe(ms(SATURDAY));
     expect(ms(headOut().starts_at)).toBe(ms(SATURDAY_LEAVE));
   });

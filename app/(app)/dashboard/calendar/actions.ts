@@ -42,7 +42,6 @@ import { SERVICE_CODES } from '@/lib/services/types';
 import { compareExactInstants } from '@/lib/calendar/exact-instant';
 import { isSeries } from '@/lib/calendar/occurrences';
 import { expandEventsInZone } from '@/lib/calendar/recurrence';
-import { followMovedEvent } from '@/lib/trips/follow-event';
 import { isSubmissionId } from '@/lib/utils/submission-id';
 import { describeActionError } from '@/lib/supabase/errors';
 import { loadScheduleIntelligence } from '@/lib/schedule/intelligence-server';
@@ -239,9 +238,6 @@ export async function updateCalendarEventAction(
         return { ok: false, error: t('actions.thatEventChangedSinceThisPage') };
       }
     }
-    // The start before this write, so a Smart Departure planned for the event
-    // can follow it (lib/trips/follow-event.ts).
-    const before = current ?? (patch.startsAt !== undefined ? await readOpenedEvent(scope, eventId) : null);
     // `undefined` means "leave it alone" all the way down: the service builds its
     // update from the keys actually present, so a modal that shows four fields
     // cannot blank the assignee it never rendered.
@@ -261,11 +257,8 @@ export async function updateCalendarEventAction(
       if (current && result.code === SERVICE_CODES.notFound) return { ok: false, error: t('actions.thatEventChangedSinceThisPage') };
       return { ok: false, error: result.error };
     }
-    if (before) {
-      await followMovedEvent(scope.db, {
-        familyId: scope.familyId, eventId, previousStartsAt: before.starts_at, startsAt: result.data.starts_at, tz: scope.tz,
-      });
-    }
+    // A Smart Departure planned for the event has followed a move: the service
+    // does that for every writer (lib/trips/follow-event.ts).
 
     revalidatePath(PATH);
     return { ok: true, id: result.data.id };

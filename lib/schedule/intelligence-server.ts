@@ -18,7 +18,7 @@ import { describeDbError } from '@/lib/supabase/errors';
 import { departurePlanDriveTime, firstDriveTime, type DriveTimeFetcher } from '@/lib/trips/drive-time';
 import { dayKeyInZone } from '@/lib/schedule/zoned';
 import { settleAll } from '@/lib/supabase/settle';
-import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { isSeries, readCalendarOccurrences, type CalendarOccurrence } from '@/lib/calendar/occurrences';
 import { compareExactInstants } from '@/lib/calendar/exact-instant';
 import {
   buildScheduleIntelligence,
@@ -28,6 +28,14 @@ import {
 
 const DAY = 86_400_000;
 const DEFAULT_DURATION_MIN = 60;
+/** One-off events read when the caller names no cap, earliest start first. */
+const DEFAULT_ONE_OFF_LIMIT = 200;
+/**
+ * More timed occurrences than a family's window could hold. Series are read
+ * whole, so this is the ceiling on what the model is built from: past it the
+ * read fails, rather than handing the model a prefix of the window.
+ */
+export const SCHEDULE_OCCURRENCE_MAX = 2000;
 
 export type LoadScheduleOptions = {
   familyId: string;
@@ -38,7 +46,14 @@ export type LoadScheduleOptions = {
   fromMs?: number;
   toMs?: number;
   horizonDays?: number;
-  /** Cap on events read, newest-first is NOT the order — earliest start first. */
+  /**
+   * Cap on ONE-OFF events read, earliest start first (default 200). A
+   * recurring series is read whole and never counts against it: a daily
+   * practice is 30 occurrences in a month, and when it did count, two of them
+   * filled Moments' 24 slots in under two weeks and cut a planned one-off,
+   * with its departure, out of the model. When the cap does cut, the model
+   * ends at the first one-off it did not read (see below).
+   */
   eventLimit?: number;
   /** Tried before the persisted departure plans. */
   driveTime?: DriveTimeFetcher | null;
@@ -71,13 +86,21 @@ export async function loadScheduleIntelligence(db: Db, opts: LoadScheduleOptions
   // practice is stored ONCE, at its first week, so a read by stored
   // `starts_at` never saw any later week of it, and "No conflicts found" was
   // computed without it. Timed rows only; all-day rows carry no time to reason
-  // about. A failed or over-limit read is an error, never a shorter list.
+  // about. The caller's cap applies to the one-offs alone, and one more than it
+  // is asked for, so a cut is known rather than assumed. Series occurrences are
+  // never cut: a window holding more than SCHEDULE_OCCURRENCE_MAX of them is a
+  // failed read.
+  const oneOffLimit = opts.eventLimit ?? DEFAULT_ONE_OFF_LIMIT;
+  if (!Number.isSafeInteger(oneOffLimit) || oneOffLimit < 1) {
+    console.error('[schedule] calendar events read failed', { reason: 'invalid one-off cap', eventLimit: opts.eventLimit });
+    return { ok: false, error: describeDbError(null), retryable: true };
+  }
   const eventsPromise = readCalendarOccurrences(db, familyId,
     { timedFrom: fromIso, timedTo: toIso, allDayFromDay: fromIso.slice(0, 10), allDayToDay: fromIso.slice(0, 10) },
     opts.tz, {
       columns: ['id', 'title', 'category', 'location', 'starts_at', 'ends_at', 'all_day', 'assignee_id', 'description'] as const,
       refine: (query) => query.eq('all_day', false),
-      limit: opts.eventLimit ?? 200,
+      singlesLimit: oneOffLimit + 1,
     });
   const restPromise = settleAll([
     db.from('family_members')
@@ -116,8 +139,23 @@ export async function loadScheduleIntelligence(db: Db, opts: LoadScheduleOptions
     }
   }
 
+  type ReadEvent = CalendarOccurrence<'id' | 'title' | 'category' | 'location' | 'starts_at' | 'ends_at' | 'all_day' | 'assignee_id' | 'description'>;
+  const read = (eventsRes.data ?? []) as ReadEvent[];
+  if (read.length > SCHEDULE_OCCURRENCE_MAX) {
+    console.error('[schedule] calendar events read failed', { reason: `more than ${SCHEDULE_OCCURRENCE_MAX} occurrences in the window`, count: read.length });
+    return { ok: false, error: describeDbError(null), retryable: true };
+  }
+  // The one-offs past the cap were not read, so the model ends where they
+  // begin: a series week from the first unread one-off's start on could clash
+  // with it, and would be answered for as clear. Rows are in start order.
+  const oneOffs = read.filter((e) => !isSeries(e));
+  const horizon = oneOffs.length > oneOffLimit ? oneOffs[oneOffLimit].starts_at : null;
+  const inRead = horizon === null ? read : read.filter((e) => {
+    try { return compareExactInstants(e.starts_at, horizon) < 0; } catch { return false; }
+  });
+
   const focus = opts.occurrence;
-  const events = ((eventsRes.data ?? []) as ScheduleEventRow[]).filter((e) => {
+  const events = (inRead as ScheduleEventRow[]).filter((e) => {
     if (!focus || e.id !== focus.eventId) return true;
     try { return compareExactInstants(e.starts_at, focus.startsAt) === 0; } catch { return false; }
   });

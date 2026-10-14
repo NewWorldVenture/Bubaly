@@ -36,6 +36,7 @@ import { dayKeyInTz, dayKeysBetween, scopeNow, zonedDayBoundsMs, zonedTimeMs } f
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { escapeLike } from '@/lib/supabase/escape-like';
 import { getTranslations } from '@/lib/i18n/server';
+import { followMovedEvent } from '@/lib/trips/follow-event';
 
 export type CalendarEvent = Tables<'calendar_events'>;
 
@@ -542,6 +543,24 @@ async function applyEventUpdate(scope: ServiceScope, eventId: string, patch: Upd
   // No row means the id belongs to another family (or is gone). Reporting
   // "not found" rather than "denied" avoids confirming that the id exists.
   if (!data) return fail('That event could not be found.', { code: SERVICE_CODES.notFound });
+
+  // A Smart Departure planned for this event follows it (lib/trips/follow-event.ts).
+  // Done HERE because this is where every move is written: the calendar
+  // editor, a conflict quick fix, the assistant's calendar tools and the week
+  // planner that runs them. Each move is followed once, whoever made it.
+  // `clockState` is what the write compared-and-set against, so its start is
+  // the one the event had. The move is saved either way; a plan that could not
+  // follow is logged, and Refresh re-plans it from the event's current start.
+  if (update.starts_at !== undefined && clockState) {
+    try {
+      await followMovedEvent(scope.db, {
+        familyId: scope.familyId, eventId, previousStartsAt: clockState.starts_at, startsAt: data.starts_at,
+        tz: zoneOf(scope), now: scope.now,
+      });
+    } catch (cause) {
+      console.error('[service:calendar] departure plans could not follow a moved event', { eventId, cause });
+    }
+  }
 
   await recordActivitySafely(scope, {
     agent: 'calendar',
