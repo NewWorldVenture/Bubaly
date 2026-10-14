@@ -39,7 +39,7 @@ import type { ServiceScope } from '@/lib/services/types';
 import type { OnboardingOwner } from '@/lib/onboarding/owner';
 import { verifyOnboardingOwner } from '@/lib/onboarding/verify-owner';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
-import { isChildLoginAccount } from '@/lib/server/child-account';
+import { isChildLoginAccount, memberHasAKidLogin } from '@/lib/server/child-account';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { isManager } from '@/lib/constants/roles';
 import { mergeNotificationPrefs } from '@/lib/preferences/notification-prefs';
@@ -687,15 +687,60 @@ export async function finalizeOnboardingAction(input: {
   const memberSlot = (index: number, m: (typeof members)[number]): [number, unknown] => (m.id && draftIdUses.get(m.id) === 1
     ? [DRAFT_ID_SLOT, m.kind === 'invite' ? { draftId: m.id, email: m.email.trim().toLowerCase() } : { draftId: m.id }]
     : [index, m]);
-  for (const [index, m] of members.entries()) {
-    if (m.kind !== 'local') continue;
+  const localMembers = [...members.entries()].flatMap(([index, m]) => (m.kind === 'local'
+    ? [{ m, onboarding_key: onboardingItemKey(householdKey, 'member', ...memberSlot(index, m)) }]
+    : []));
+
+  // A row this step wrote may since have been given a kid login:
+  // createChildLoginAction links it (user_id) to the child's PIN account. The
+  // key names that row whatever the payload now says about it, and finalize
+  // can be replayed (0454), so a replay that reused a member's draft id — or
+  // an id-less one that still said what the row was before — with 'adult'
+  // made the kid login a manager: the role every member editor refuses for
+  // one (memberHasAKidLogin, the held 0512). So the rows the keys already
+  // name are read first, a manager role for one with a login is refused
+  // before any member is written, and a manager role is written onto an
+  // existing row only while that row is still unlinked. Anything else (a
+  // name, a colour, a role that is not a manager's) is reconciled as before.
+  type KeyedMember = { id: string; family_id: string; user_id: string | null; role: string; display_name: string };
+  const keyedMembers = new Map<string, KeyedMember>();
+  if (localMembers.length > 0) {
+    const { data: keyedRows, error: keyedErr } = await admin.from('family_members')
+      .select('id, family_id, user_id, role, display_name, onboarding_key')
+      .eq('family_id', familyId).in('onboarding_key', localMembers.map((l) => l.onboarding_key));
+    if (keyedErr) return onboardingFailure('household members read', keyedErr, t('actions.couldNotFinishSettingUp2'));
+    for (const row of keyedRows ?? []) if (row.onboarding_key) keyedMembers.set(row.onboarding_key, row);
+  }
+  for (const { m, onboarding_key } of localMembers) {
+    const row = keyedMembers.get(onboarding_key);
+    if (!row || !isManager(m.role)) continue;
+    // A row with a login is never given a manager role here. For one without,
+    // as the editors ask it: a role it already has is not a promotion.
+    if (row.user_id !== null || (m.role !== row.role && await memberHasAKidLogin(admin, row))) {
+      return { ok: false, error: t('familyModule.aKidLoginCannotBeAManager', { name: row.display_name }) };
+    }
+  }
+  for (const { m, onboarding_key } of localMembers) {
+    const fields = { role: m.role, display_name: m.name, color: m.color ?? null, birthday: m.birthday || null };
+    const row = keyedMembers.get(onboarding_key);
+    if (row && isManager(m.role)) {
+      // Compare-and-set on the link the check above saw. A kid login links
+      // the row before it writes its child_logins mapping, so a row linked
+      // since that check matches nothing here.
+      const { data: written, error: writeErr } = await admin.from('family_members').update(fields)
+        .eq('id', row.id).eq('family_id', familyId).is('user_id', null)
+        .select('id');
+      if (writeErr) return onboardingFailure(`member "${m.name}" update`, writeErr, t('actions.couldNotFinishSettingUp2'));
+      if (wroteNoRows(written)) {
+        console.error('[onboarding] member changed while it was being written', { memberId: row.id });
+        return { ok: false, error: t('actions.couldNotFinishSettingUp2') };
+      }
+      continue;
+    }
     const { error: memberErr } = await admin.from('family_members').upsert({
       family_id: familyId,
-      role: m.role,
-      display_name: m.name,
-      color: m.color ?? null,
-      birthday: m.birthday || null,
-      onboarding_key: onboardingItemKey(householdKey, 'member', ...memberSlot(index, m)),
+      ...fields,
+      onboarding_key,
     }, { onConflict: 'family_id,onboarding_key' });
     if (memberErr) return onboardingFailure(`member "${m.name}" creation`, memberErr, 'Could not add all household members.');
   }

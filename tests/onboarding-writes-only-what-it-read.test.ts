@@ -305,6 +305,75 @@ describe('a retried finish does not add the household twice (A11)', () => {
   });
 });
 
+// A11-index/A7 — the key names the row whatever the payload now says about it,
+// and a row onboarding wrote may since have been given a kid login
+// (createChildLoginAction links that row to the child's PIN account). Finish
+// can be replayed (a client may set its own progress back to in_progress,
+// 0454), and a replay that reused the member's key with 'adult' rewrote the kid
+// login's row as a manager: the role every member editor refuses for a kid
+// login (memberHasAKidLogin, the held 0512).
+describe('a replayed finish does not make a kid login a manager (A11-index/A7)', () => {
+  const KID = '30000000-0000-4000-8000-000000000001';
+  const ben = makeLocalMember({ name: 'Ben', role: 'teen' }, []);
+  const draft = emptyDraft({ name: 'Ada', familyName: 'The Adas', timezone: 'UTC', members: [ben] });
+  const bens = () => db.table('family_members').filter((m) => m.display_name === 'Ben');
+  const finish = async (body: ReturnType<typeof buildFinalizePayload>) => {
+    expect(await finalizeOnboardingAction(body)).toMatchObject({ ok: true });
+    expect(bens()).toHaveLength(1);
+    return bens()[0];
+  };
+  /** As createChildLoginAction does it: the member row is linked to the kid's account, then the mapping is written. */
+  const giveAKidLogin = (row: Record<string, unknown>) => {
+    row.user_id = KID;
+    db.seed('child_logins', [{ family_id: OWN, member_id: row.id, user_id: KID, username: 'ben' }]);
+  };
+  const replay = (body: ReturnType<typeof buildFinalizePayload>) => {
+    db.table('onboarding_progress')[0].status = 'in_progress';
+    return finalizeOnboardingAction(body);
+  };
+
+  it('a replay that reuses the kid login\'s draft id with a manager role is refused, and the row stays the kid\'s', async () => {
+    const row = await finish(buildFinalizePayload(draft));
+    giveAKidLogin(row);
+    const cara = makeLocalMember({ name: 'Cara', role: 'child' }, [ben]);
+    const result = await replay(buildFinalizePayload({ ...draft, members: [{ ...ben, role: 'adult' }, cara] }));
+    expect(result).toEqual({ ok: false, error: 'familyModule.aKidLoginCannotBeAManager' });
+    expect(bens()).toEqual([expect.objectContaining({ id: row.id, role: 'teen', user_id: KID })]);
+    expect(db.table('family_members').filter((m) => m.role === 'adult')).toEqual([]);
+    // Refused before any member was written.
+    expect(db.table('family_members').filter((m) => m.display_name === 'Cara')).toEqual([]);
+  });
+
+  it('so is an id-less replay that still says what the row was before it became a kid login', async () => {
+    // An older wizard sends no ids, so the key is the member's place and
+    // content: Ben was added as an adult, then made a teen with a kid login.
+    const asAdded = payload({ members: [{ kind: 'local', name: 'Ben', role: 'adult' }] });
+    const row = await finish(asAdded);
+    row.role = 'teen';
+    giveAKidLogin(row);
+    expect(await replay(asAdded)).toEqual({ ok: false, error: 'familyModule.aKidLoginCannotBeAManager' });
+    expect(bens()).toEqual([expect.objectContaining({ id: row.id, role: 'teen', user_id: KID })]);
+  });
+
+  it('a kid login linked between the read and the write is not made a manager either', async () => {
+    const row = await finish(buildFinalizePayload(draft));
+    let raced = false;
+    // The read of what the keys name answers before the link lands.
+    mock.db = racing(db, 'family_members', 'onboarding_key', () => { raced = true; row.user_id = KID; });
+    const result = await replay(buildFinalizePayload({ ...draft, members: [{ ...ben, role: 'adult' }] }));
+    expect(raced).toBe(true);
+    expect(result).toEqual({ ok: false, error: 'actions.couldNotFinishSettingUp2' });
+    expect(bens()).toEqual([expect.objectContaining({ id: row.id, role: 'teen', user_id: KID })]);
+  });
+
+  it('a member without a kid login may still be made an adult on a retry (control)', async () => {
+    const row = await finish(buildFinalizePayload(draft));
+    expect(await replay(buildFinalizePayload({ ...draft, members: [{ ...ben, role: 'adult' }] }))).toMatchObject({ ok: true });
+    expect(bens()).toEqual([expect.objectContaining({ id: row.id, role: 'adult' })]);
+    expect(bens()[0].user_id ?? null).toBeNull();
+  });
+});
+
 describe('the welcome email (A17)', () => {
   const welcomes = () => mock.sendReactEmail.mock.calls.filter(([args]) => /Welcome/.test(args.subject));
 
