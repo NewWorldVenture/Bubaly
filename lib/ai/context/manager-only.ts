@@ -4,8 +4,10 @@
 // mention budgets, bills or documents. Those areas are manager-only (§4,
 // `SLICE_ACCESS`), so for anyone else an item that touches them is dropped —
 // the same rule the money and documents slices enforce by not loading. The
-// proactive AI slice applies it to what it hands the model, and the reasoning
-// report (lib/reasoning/engine-server.ts) to what it shows a person.
+// proactive AI slice applies it to what it hands the model. The reasoning
+// report (lib/reasoning/engine-server.ts) applies the words only to the items
+// an Autopilot card or an approval worded: the rest are worded from the
+// calendar and the family's names, and "Bill" is a name as often as a bill.
 //
 // The rule is ENGLISH: whatever it is asked about must be worded in en-US
 // first (see MODEL_LOCALE in ./slices/proactive.ts).

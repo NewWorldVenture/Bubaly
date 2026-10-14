@@ -375,3 +375,57 @@ describe('N6 — the reasoning page leaves the household\'s money counts to the 
     expect(await itemsFor('child')).not.toContain('2 accounts are below zero');
   });
 });
+
+// N6-R1 — and only them. The money rule was a list of words run over every
+// item, and the orchestrator's items are worded from the family's calendar and
+// its members' names: a member called Bill, "Bill's recital" overlapping swim
+// practice, an "Insurance agent visit" with no location. A child lost every one
+// of them. What is the household's money is now decided by where an item comes
+// from: the operating index's money and paperwork moves by what they are, a
+// money page by its link, and the words only for the items whose text an
+// Autopilot card or an approval wrote.
+describe('N6-R1 — a family\'s calendar and its people are not its money', () => {
+  const CLASH = '“Bill\'s recital” overlaps “Swim practice”';
+  const NO_LOCATION = '“Insurance agent visit” — no location';
+  const BILLS_WEEK = 'Bill is carrying the most this week';
+  const EXPIRING = '1 document expiring soon';
+  const event = (id: string, title: string, assignee: string, startsAt: string, endsAt: string, category: string, location: string | null) => ({
+    id, family_id: FAMILY, title, starts_at: startsAt, ends_at: endsAt, all_day: false, assignee_id: assignee, location, category,
+  });
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-14T12:00:00Z'));
+    db.seed('family_members', [
+      { id: 'm-bill', family_id: FAMILY, display_name: 'Bill', role: 'child', is_active: true },
+      { id: 'm-parent', family_id: FAMILY, display_name: 'Mum', role: 'parent', is_active: true },
+    ]);
+    // Tomorrow Bill's recital overlaps his swim practice; on Friday Mum sees the
+    // insurance agent somewhere nobody has written down.
+    db.seed('calendar_events', [
+      event('ev-recital', 'Bill\'s recital', 'm-bill', '2026-10-15T17:00:00Z', '2026-10-15T18:00:00Z', 'school', 'School hall'),
+      event('ev-swim', 'Swim practice', 'm-bill', '2026-10-15T17:30:00Z', '2026-10-15T18:30:00Z', 'sports', 'Pool'),
+      event('ev-agent', 'Insurance agent visit', 'm-parent', '2026-10-16T10:00:00Z', '2026-10-16T11:00:00Z', 'appointment', null),
+    ]);
+    // And three open chores: Bill is carrying the most this week.
+    db.seed('chore_assignments', ['c1', 'c2', 'c3'].map((id) => ({
+      id, family_id: FAMILY, member_id: 'm-bill', status: 'todo', due_at: '2026-10-18T12:00:00Z', created_at: '2026-10-13T12:00:00Z',
+    })));
+    // The household's paperwork is the parents' (the documents slice, §4).
+    db.seed('documents', [{ id: 'doc-passport', family_id: FAMILY, title: 'Passport', category: 'passport', expires_at: '2026-10-30' }]);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it.each(['parent', 'adult'])('a %s reads all of it', async (role) => {
+    h.role = role;
+    const html = paint(await ReasoningPage());
+    for (const item of [CLASH, NO_LOCATION, BILLS_WEEK, EXPIRING]) expect(html).toContain(item);
+  });
+
+  it.each(['child', 'teen', 'caregiver', 'guest'])('a %s reads the clash, the missing place and who is stretched, and not the paperwork', async (role) => {
+    h.role = role;
+    const html = paint(await ReasoningPage());
+    for (const item of [CLASH, NO_LOCATION, BILLS_WEEK]) expect(html).toContain(item);
+    expect(html).not.toContain(EXPIRING);
+  });
+});

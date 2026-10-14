@@ -9,8 +9,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { signalWordsFor } from '@/lib/intelligence/hard-signals';
-import { managerOnlyItem } from '@/lib/ai/context/manager-only';
+import { managerOnlyText } from '@/lib/ai/context/manager-only';
+import { isHouseholdMoneyRoute } from '@/lib/finance/household-money';
 import { loadOperatingIndex, type SnapshotReach } from '@/lib/operating-index/server';
+import type { OrchestratorItem } from '@/lib/operating-index/orchestrator';
+import type { OperatingSuggestion } from '@/lib/operating-index/score';
 import { loadFamilyContext } from '@/lib/reasoning/context';
 import { reasoningInsights } from '@/lib/reasoning/insights';
 import {
@@ -34,21 +37,57 @@ const SIGNAL_HREF = '/dashboard/family-signals';
  *
  * The same goes for the operating index's next moves and the orchestrator's
  * items: "2 accounts are below zero" (the wallet) and "1 upcoming bill not
- * covered" (bills) are counts of the household's money. For anyone else an
- * item that links to a money page or touches a manager-only area
- * (managerOnlyItem, the rule the proactive AI slice applies) is left out the
- * same way.
+ * covered" (bills) are counts of the household's money. For anyone else they
+ * are left out the same way, decided by where each item comes from and never
+ * by the words of one the family's calendar or its people wrote — "“Bill's
+ * recital” overlaps “Swim practice”", "Bill is carrying the most this week"
+ * and "“Insurance agent visit” — no location" are a child's to read too:
+ *
+ *   - an operating index move by what it IS (managersMove): its financial
+ *     dimension, or the household's paperwork (renew-docs; documents are a
+ *     manager-only area, `SLICE_ACCESS`);
+ *   - any item that links to one of the household's money pages
+ *     (isHouseholdMoneyRoute);
+ *   - and, by the manager-only words (managerOnlyText), only an item whose
+ *     words an Autopilot card or an approval request wrote (WORDED_BY_ITS_SOURCE),
+ *     which can be about anything, money included.
  */
 export type ReasoningViewer = { readsHouseholdMoney: boolean };
 
 /** Every reader. The proactive AI slice composes this and filters per viewer itself. */
 const EVERY_SIGNAL: ReasoningViewer = { readsHouseholdMoney: true };
 
+/** An operating index move, with what it is beside how it reads. */
+type IndexMove = ReasoningNextAction & Pick<OperatingSuggestion, 'id' | 'dimension'>;
+
+/** The operating index moves about the household's paperwork, beside its financial dimension. */
+const MANAGERS_PAPERWORK_MOVES: ReadonlySet<string> = new Set(['renew-docs']);
+
+/** True for a move that is the household's money or paperwork, by what it is. */
+function managersMove(move: IndexMove): boolean {
+  return move.dimension === 'financial' || MANAGERS_PAPERWORK_MOVES.has(move.id) || isHouseholdMoneyRoute(move.href);
+}
+
+/**
+ * The orchestrator's sources whose item text is another writer's free text:
+ * an Autopilot card's action label or title, and an approval request's title
+ * (lib/operating-index/server.ts). Every other item it builds is worded from
+ * the calendar, a member's name or a count.
+ */
+const WORDED_BY_ITS_SOURCE: readonly string[] = ['/dashboard/autopilot', '/dashboard/trust'];
+
+/** True for an orchestrator item that is the household's money, by where it comes from. */
+function managersItem(item: OrchestratorItem): boolean {
+  if (isHouseholdMoneyRoute(item.href)) return true;
+  const path = item.href?.split(/[?#]/)[0];
+  return !!path && WORDED_BY_ITS_SOURCE.includes(path) && managerOnlyText(item.label);
+}
+
 type ReasoningInputs = {
   orchestrator: ReasoningEngineInput['orchestrator'];
   insights: NonNullable<ReasoningEngineInput['insights']>;
   signals: ReasoningSignal[];
-  nextActions: ReasoningNextAction[];
+  nextActions: IndexMove[];
   readErrors: ReasoningReadSource[];
 };
 
@@ -56,10 +95,10 @@ type ReasoningInputs = {
 function composeReport(inputs: ReasoningInputs, viewer: ReasoningViewer, now: Date): ReasoningReport {
   const everything = viewer.readsHouseholdMoney;
   const signals = everything ? inputs.signals : inputs.signals.filter((s) => s.kind !== 'budget_drift');
-  const nextActions = everything ? inputs.nextActions : inputs.nextActions.filter((a) => !managerOnlyItem(a.title, a.detail, a.href));
+  const nextActions = everything ? inputs.nextActions : inputs.nextActions.filter((a) => !managersMove(a));
   const orchestrator = everything || !inputs.orchestrator ? inputs.orchestrator : {
     ...inputs.orchestrator,
-    answers: inputs.orchestrator.answers.map((a) => ({ ...a, items: a.items.filter((i) => !managerOnlyItem(i.label, null, i.href)) })),
+    answers: inputs.orchestrator.answers.map((a) => ({ ...a, items: a.items.filter((i) => !managersItem(i)) })),
   };
   const report = answerFamilyQuestions({ orchestrator, insights: inputs.insights, signals, nextActions }, now);
   return {
@@ -107,8 +146,8 @@ async function readReasoningInputs(
     return null;
   });
   const orchestrator = foi?.orchestrator ?? null;
-  const nextActions: ReasoningNextAction[] = (foi?.index.suggestions ?? []).map((s) => ({
-    title: s.title, detail: s.detail, href: s.href, priority: IMPACT_PRIORITY[s.impact] ?? 40,
+  const nextActions: IndexMove[] = (foi?.index.suggestions ?? []).map((s) => ({
+    id: s.id, dimension: s.dimension, title: s.title, detail: s.detail, href: s.href, priority: IMPACT_PRIORITY[s.impact] ?? 40,
   }));
 
   // Graph reasoning insights (R2) — hubs / ripple / coverage.
