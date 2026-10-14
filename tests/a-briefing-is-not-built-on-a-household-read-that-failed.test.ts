@@ -86,7 +86,7 @@ function failing(table: string, mode: 'returns an error' | 'rejects') {
       return (name: string) => {
         if (name !== table) return target.from(name);
         const chain: Record<string, unknown> = {};
-        for (const method of ['select', 'eq', 'neq', 'is', 'in', 'not', 'gte', 'lte', 'order', 'limit', 'range']) chain[method] = () => chain;
+        for (const method of ['select', 'eq', 'neq', 'is', 'in', 'not', 'or', 'gt', 'gte', 'lt', 'lte', 'order', 'limit', 'range', 'abortSignal']) chain[method] = () => chain;
         chain.then = (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => (mode === 'rejects'
           ? Promise.reject(new TypeError(`fetch failed: ${RAW}`))
           : Promise.resolve({ data: null, error: { code: '57014', message: RAW, details: null, hint: null } })).then(resolve, reject);
@@ -103,7 +103,10 @@ const routes = {
 
 const cases = [
   ...(['chore_assignments', 'bills', 'medication_schedules', 'maintenance_tasks', 'home_warranties', 'vacations', 'pantry_items'] as const).map((table) => ['daily', table] as const),
-  ['weekly', 'chore_assignments'] as const,
+  // N5: the weekly brief bound only `data` from these, so a failed read was
+  // briefed as an empty week ("nothing scheduled", "- none") at 200.
+  ...(['chore_assignments', 'calendar_events', 'school_events', 'sports_events', 'appointments', 'meal_plans', 'reminders', 'family_members'] as const)
+    .map((table) => ['weekly', table] as const),
 ].flatMap(([route, table]) => (['returns an error', 'rejects'] as const).map((mode) => [route, table, mode] as const));
 
 describe('a briefing is unavailable, not empty, when a household read fails', () => {
@@ -124,6 +127,8 @@ describe('a briefing is unavailable, not empty, when a household read fails', ()
 
   it.each(['daily', 'weekly'] as const)('the %s briefing still answers when every read succeeds', async (route) => {
     const { post, url, body } = routes[route];
+    // The weekly brief needs a reply that is a briefing (N14): an empty object is not one.
+    if (route === 'weekly') mocks.complete.mockResolvedValue({ text: JSON.stringify({ headline: 'A steady week.', dayByDay: [] }), toolCalls: [] });
 
     const res = await post(new NextRequest(url, { method: 'POST', body: JSON.stringify(body) }));
 

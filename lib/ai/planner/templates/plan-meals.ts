@@ -31,7 +31,7 @@ export const planMealsTemplate: WorkflowTemplate = {
       dependsOn: ['food_profile', 'busy_evenings', 'pantry', 'budget', 'favourites'],
       input: () => ({ entries: [] }),
       modelFills: 'entries: one {date, meal_type:"dinner", meal_name, ingredients:[{name, quantity}]} per day of the week',
-      verify: () => ({ checks: [{ kind: 'count_at_least', table: 'meal_plans', min: 5, label: 'At least five dinners are saved' }] }),
+      verify: (ctx) => ({ checks: [{ kind: 'count_at_least', table: 'meal_plans', min: 5, between: { column: 'plan_date', from: ctx.weekStartKey, to: ctx.weekEndKey }, label: 'At least five dinners are saved' }] }),
     },
     {
       key: 'grocery_list', stepType: 'act', toolName: 'groceries.addFromMealPlan', description: 'Add what the meals need to the shopping list',
@@ -50,9 +50,9 @@ export const planMealsTemplate: WorkflowTemplate = {
       // says re-read both rather than trusting that the writes were accepted.
       key: 'check_meals', stepType: 'verify', description: 'Check the dinners and the list really exist',
       dependsOn: ['plan_dinners', 'grocery_list'],
-      input: () => ({
+      input: (ctx) => ({
         checks: [
-          { kind: 'count_at_least', table: 'meal_plans', min: 5, label: 'Dinners are on the plan' },
+          { kind: 'count_at_least', table: 'meal_plans', min: 5, between: { column: 'plan_date', from: ctx.weekStartKey, to: ctx.weekEndKey }, label: 'Dinners are on the plan' },
           { kind: 'count_at_least', table: 'grocery_items', min: 1, label: 'The shopping list has what they need' },
         ],
       }),

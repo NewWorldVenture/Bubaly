@@ -18,8 +18,10 @@ import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock } from '@/components/i18n/use-format';
 import { DocumentCapture } from '@/components/capture/document-capture';
 import { documentLinkCandidates } from '@/lib/capture/document-link';
+import { stageAssistantHandoff } from '@/lib/ai/prefill';
 
 type CaptureMode = 'type' | 'voice' | 'photo' | 'document';
+type RoutedCapture = { destination: string; url: string; question?: string };
 
 // Routed destinations that we can create directly (the rest just navigate).
 const URL_TO_KIND: Record<string, CaptureKind> = {
@@ -29,7 +31,7 @@ const URL_TO_KIND: Record<string, CaptureKind> = {
   '/dashboard/chores': 'task',
 };
 
-function routeCapture(text: string): { destination: string; url: string } {
+function routeCapture(text: string): RoutedCapture {
   const lower = text.toLowerCase();
   if (/buy|shop|grocery|groceries|store|milk|eggs|bread|chicken|produce/.test(lower))
     return { destination: 'Grocery List', url: '/dashboard/grocery' };
@@ -47,7 +49,9 @@ function routeCapture(text: string): { destination: string; url: string } {
     return { destination: 'Notes', url: '/dashboard/notes' };
   if (/task|todo|remind|chore|clean|fix|repair|do|finish/.test(lower))
     return { destination: 'Tasks & Chores', url: '/dashboard/chores' };
-  return { destination: 'AI Assistant', url: `/dashboard/assistant?q=${encodeURIComponent(text)}` };
+  // Handed over in-app when the person goes there (`goToDestination`), so the
+  // assistant sends it; a `?q=` link would only fill its draft box.
+  return { destination: 'AI Assistant', url: '/dashboard/assistant', question: text };
 }
 
 export function CaptureShell({ initialShortcuts = null, initialText = '' }: {
@@ -68,7 +72,7 @@ export function CaptureShell({ initialShortcuts = null, initialText = '' }: {
   const [mode, setMode] = useState<CaptureMode>('type');
   const [text, setText] = useState(initialText);
   const [routing, setRouting] = useState(false);
-  const [routed, setRouted] = useState<{ destination: string; url: string } | null>(null);
+  const [routed, setRouted] = useState<RoutedCapture | null>(null);
   const [created, setCreated] = useState<(CaptureSaveResult & { destination: string }) | null>(null);
   const [undoing, setUndoing] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -181,6 +185,9 @@ export function CaptureShell({ initialShortcuts = null, initialText = '' }: {
   function goToDestination() {
     if (!isCurrent() || lifetime.current.pending) return;
     if (created) router.push(created.href);
+    // A question for the assistant goes through the one-time hand-off, never
+    // the URL, so a link cannot send it on the member's behalf (N6).
+    else if (routed?.question) router.push(stageAssistantHandoff(routed.question));
     else if (routed) router.push(routed.url);
   }
 

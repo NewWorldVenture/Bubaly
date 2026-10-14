@@ -34,7 +34,7 @@ vi.mock('@/lib/supabase/auth', () => ({
     active: { familyId: FAMILY, role: h.role, member: { id: h.member, display_name: 'Sam Rivers' }, family: { timezone: h.tz, name: 'Family A' } },
   }),
 }));
-vi.mock('@/lib/supabase/server', () => ({ createServer: async () => h.db }));
+vi.mock('@/lib/supabase/server', () => ({ createServer: async () => h.db, createServiceClient: () => h.db }));
 vi.mock('@/lib/ai/provider', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/ai/provider')>()),
   isAIConfigured: async () => true,
@@ -48,6 +48,13 @@ vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: h.enti
 // cases are about the plan gate and the lock behind it.
 vi.mock('@/lib/server/account-standing', () => ({ refuseClosedOrTrialEnded: async () => null }));
 vi.mock('@/lib/server/audit', () => ({ logAudit: async () => {} }));
+// The Free allowance (N18) has its own cases in
+// tests/the-free-plans-ai-allowance-holds-on-every-helper.test.ts; it admits here.
+vi.mock('@/lib/server/ai-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/ai-access')>()),
+  assertAIAccess: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
+  assertAIAllowance: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
+}));
 vi.mock('@/lib/ai/observability', () => ({
   withAiRequest: (_s: unknown, _f: unknown, run: (o: { used: () => void; failed: (e: unknown) => void }) => unknown) => run({ used: () => {}, failed: h.failed }),
 }));

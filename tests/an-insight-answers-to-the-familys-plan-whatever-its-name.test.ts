@@ -32,7 +32,9 @@ vi.mock('@/lib/server/plan', async (original) => ({
   ...(await original<typeof import('@/lib/server/plan')>()),
   resolveFamilyEntitlement: async () => h.entitlement,
 }));
-vi.mock('@/lib/server/feature-tiers', () => ({ getFeatureTiersByHref: async () => h.tiers }));
+// By href for the route's own gate; by key (none overridden) for the AI
+// allowance gate (`assertAIAccess`), which every kind now also answers to.
+vi.mock('@/lib/server/feature-tiers', () => ({ getFeatureTiersByHref: async () => h.tiers, getResolvedFeatureTiers: async () => ({}) }));
 vi.mock('@/lib/ai/provider', () => ({
   isAIConfigured: async () => true,
   resolveProvider: async () => ({ complete: h.complete }),

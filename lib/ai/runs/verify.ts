@@ -19,6 +19,7 @@ import { describeDbError } from '@/lib/supabase/errors';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { shownReminders, type ShownReminderRow } from '@/lib/services/reminders/shown';
 import { readAll } from '@/lib/supabase/read-all';
+import { findConflicts } from '@/lib/services/calendar';
 import { BINDING_KEY } from './bindings';
 
 /**
@@ -61,7 +62,13 @@ const idOrBinding = z.union([
 export const verificationCheckSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('records_exist'), table: tableSchema, ids: z.array(idOrBinding).min(1).max(100), label: z.string().max(120).optional() }),
   z.object({ kind: z.literal('fields_match'), table: tableSchema, id: idOrBinding, expect: z.record(scalar), label: z.string().max(120).optional() }),
-  z.object({ kind: z.literal('count_at_least'), table: tableSchema, min: z.number().int().min(1).max(500), where: z.record(scalar).optional(), label: z.string().max(120).optional() }),
+  z.object({
+    kind: z.literal('count_at_least'), table: tableSchema, min: z.number().int().min(1).max(500), where: z.record(scalar).optional(),
+    // An inclusive range on one column — the week a plan is for — so rows from
+    // another week cannot satisfy the count (`meal_plans.plan_date`).
+    between: z.object({ column: z.string().regex(/^[a-z_][a-z0-9_]*$/), from: z.string().min(1), to: z.string().min(1) }).strict().optional(),
+    label: z.string().max(120).optional(),
+  }),
   z.object({ kind: z.literal('no_calendar_conflicts'), start: z.string().min(4), end: z.string().min(4), label: z.string().max(120).optional() }),
 ]);
 
@@ -98,6 +105,7 @@ type Filterable = PromiseLike<{ data: Record<string, unknown>[] | null; error: u
   in(column: string, values: readonly unknown[]): Filterable;
   lt(column: string, value: unknown): Filterable;
   gte(column: string, value: unknown): Filterable;
+  lte(column: string, value: unknown): Filterable;
   is(column: string, value: unknown): Filterable;
   limit(count: number): Filterable;
   order(column: string): Filterable;
@@ -157,19 +165,22 @@ async function runCheck(scope: ServiceScope, check: VerificationCheck): Promise<
   const label = labelFor(check);
 
   if (check.kind === 'no_calendar_conflicts') {
-    // Overlap test against the window the workflow just filled: an event that
-    // starts before the window ends and ends after it starts.
-    const { data, error } = await reader
-      .from('calendar_events')
-      .select('id, title, starts_at, ends_at')
-      .eq('family_id', scope.familyId)
-      .lt('starts_at', check.end)
-      .gte('ends_at', check.start)
-      .limit(50);
-    if (error) return { kind: check.kind, label, verified: false, detail: describeDbError(error, 'Bubaly could not check for conflicts.') };
-    const events = data ?? [];
-    if (events.length <= 1) return { kind: check.kind, label, verified: true, detail: 'Nothing overlaps in that window.' };
-    return { kind: check.kind, label, verified: false, detail: `${events.length} events overlap between ${check.start} and ${check.end}.` };
+    // Real overlaps, as the calendar itself finds them (`findConflicts`, the
+    // service behind the `calendar.findConflicts` step the same plans run):
+    // every occurrence in the window — a weekly series expanded, an event with
+    // no end given its usual hour — and a clash only where one person's two
+    // timed events actually overlap. This used to COUNT the window's events
+    // and call any two a clash, so every ordinary week failed "Plan our week"
+    // and held back its summary, while a real clash with a weekly practice
+    // (stored once, as its series) passed.
+    const found = await findConflicts(scope, { from: check.start, to: check.end });
+    if (!found.ok) return { kind: check.kind, label, verified: false, detail: found.error };
+    const clashes = found.data.conflicts.length;
+    if (clashes === 0) return { kind: check.kind, label, verified: true, detail: 'Nothing overlaps in that window.' };
+    return {
+      kind: check.kind, label, verified: false,
+      detail: `${clashes} double-booking${clashes === 1 ? '' : 's'} between ${check.start} and ${check.end}.`,
+    };
   }
 
   if (check.kind === 'records_exist') {
@@ -219,6 +230,7 @@ async function runCheck(scope: ServiceScope, check: VerificationCheck): Promise<
     for (const [column, value] of Object.entries(check.where ?? {})) {
       query = value === null ? query.is(column, null) : query.eq(column, value);
     }
+    if (check.between) query = query.gte(check.between.column, check.between.from).lte(check.between.column, check.between.to);
     return query;
   };
   // A reminder is counted only when this reader is shown it, so every match
