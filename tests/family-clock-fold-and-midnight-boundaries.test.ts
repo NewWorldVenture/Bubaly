@@ -159,7 +159,7 @@ describe('the genuine reminder completion callers keep that first fold', () => {
   it.each(['engine', 'chat'] as const)('%s schedules the first Berlin 02:30', async (caller) => {
     db = createInMemorySupabase({
       uniques: { ai_tool_calls: [['family_id', 'idempotency_key']] },
-      defaults: { ai_tool_calls: { state: 'reserved', attempt: 1, outputs: null, error: null, finished_at: null } },
+      defaults: { ai_tool_calls: { state: 'reserved', attempt: 1, outputs: null, error: null, finished_at: null }, family_reminders: { autopilot_origin: false, autopilot_card_id: null }, reminders: { autopilot_origin: false, autopilot_card_id: null } },
     });
     h.db = db;
     household('Europe/Berlin');

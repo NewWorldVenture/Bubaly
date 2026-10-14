@@ -159,7 +159,7 @@ export function RemindersModule() {
         sourceTagOf: mintSuggestionSourceTag,
         onError: (cause) => console.error('[reminders] autopilot reminder cards read failed', cause),
       });
-      return { data: await visibleReminders(read.data ?? [], reminderViewer, cards), error: null };
+      return { data: await visibleReminders(read.data ?? [], reminderViewer, cards, { preserveTrustedManualOnCardError: true }), error: null };
     },
   });
 

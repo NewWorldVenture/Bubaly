@@ -211,4 +211,51 @@ describe('immutable reminder origin reader qualification', () => {
     for (const viewer of [named, manager]) expect(await visibleReminders([{ id: 'manual', family_id: 'foreign-family' }], viewer, foreignReader)).toEqual([]);
     expect(foreignAdapter.logs.some(log => log.table === 'autopilot_suggestions')).toBe(true);
   });
+  it('display opt-in preserves the healthy mixed audience and cached card read', async () => {
+    const rows = [{ id: 'manual' }, { id: 'generated' }];
+    const adapter = database({ autopilot_suggestions: [card()], family_reminders: [origin('manual', false, null), origin('generated')] });
+    const errors: unknown[] = [];
+    const reader = reminderCardsReader(adapter.db, family, { onError: error => { errors.push(error); } });
+    expect(await visibleReminders(rows, named, reader, { preserveTrustedManualOnCardError: true })).toEqual(rows);
+    expect(await visibleReminders(rows, other, reader, { preserveTrustedManualOnCardError: true })).toEqual([rows[0]]);
+    expect(adapter.logs.filter(log => log.table === 'autopilot_suggestions').map(log => log.from)).toEqual([0, 1]);
+    expect(errors).toEqual([]);
+  });
+  it('display opt-in retains trusted manual rows during card failure and refuses generated rows', async () => {
+    const rows = [{ id: 'manual' }, { id: 'generated' }];
+    const failure = { message: 'Synthetic display card failure' };
+    const adapter = database({ family_reminders: [origin('manual', false, null), origin('generated')] }, 1000, { autopilot_suggestions: failure });
+    const errors: unknown[] = [];
+    const reader = reminderCardsReader(adapter.db, family, { onError: error => { errors.push(error); } });
+    expect(await reader(rows)).toBeNull();
+    expect(await visibleReminders(rows, named, reader, { preserveTrustedManualOnCardError: true })).toEqual([rows[0]]);
+    const result = await readVisibleReminders(async from => ({ data: from === 0 ? rows : [], error: null }), { limit: 2, viewer: named, cards: reader, preserveTrustedManualOnCardError: true });
+    expect(result).toEqual({ data: [rows[0]], error: null });
+    expect(await visibleReminders(rows, manager, reader, { preserveTrustedManualOnCardError: true })).toEqual(rows);
+    expect(adapter.logs.filter(log => log.table === 'autopilot_suggestions').map(log => log.from)).toEqual([0]);
+    expect(errors).toEqual([failure]);
+  });
+  it('display opt-in refuses failed or malformed immutable metadata without reading cards', async () => {
+    for (const unavailable of ['read', 'schema', 'malformed']) {
+      const failure = { message: unavailable === 'schema' ? 'column autopilot_origin does not exist' : 'Synthetic display origin failure' };
+      const tables = { family_reminders: unavailable === 'malformed' ? [{ id: 'manual', family_id: family, autopilot_card_id: null }] : [origin('manual', false, null), origin('generated')] };
+      const adapter = database(tables, 1000, unavailable === 'malformed' ? {} : { family_reminders: failure });
+      const errors: unknown[] = [];
+      const reader = reminderCardsReader(adapter.db, family, { onError: error => { errors.push(error); } });
+      expect(await visibleReminders([{ id: 'manual' }, { id: 'generated' }], named, reader, { preserveTrustedManualOnCardError: true })).toEqual([]);
+      expect(errors).toHaveLength(1);
+      expect(adapter.logs.filter(log => log.table === 'autopilot_suggestions')).toEqual([]);
+    }
+  });
+  it('display opt-in refuses collision foreign and unknown rows while preserving only trusted manual rows', async () => {
+    const rows = [{ id: 'manual' }, { id: 'collision' }, { id: 'manual', family_id: 'foreign-family' }, { id: 'unknown' }, { id: 'generated' }];
+    const failure = { message: 'Synthetic display card failure' };
+    const adapter = database({ family_reminders: [origin('manual', false, null), origin('collision', false, null), origin('generated')], reminders: [origin('collision', false, null)] }, 1000, { autopilot_suggestions: failure });
+    const errors: unknown[] = [];
+    const reader = reminderCardsReader(adapter.db, family, { onError: error => { errors.push(error); } });
+    expect(await visibleReminders(rows, named, reader, { preserveTrustedManualOnCardError: true })).toEqual([rows[0]]);
+    expect(await visibleReminders(rows, named, reader)).toEqual([]);
+    expect(adapter.logs.filter(log => log.table === 'autopilot_suggestions').map(log => log.from)).toEqual([0]);
+    expect(errors).toEqual([failure]);
+  });
 });

@@ -239,9 +239,20 @@ export function reminderVisibleTo(row: ReminderLink, cards: ReminderCards | null
 /** Resolve every nonempty projection through trusted metadata for this viewer. */
 export async function visibleReminders<T extends ReminderLink>(
   rows: T[], viewer: AudienceViewer, cards: ReminderCardsReader,
+  opts: { preserveTrustedManualOnCardError?: boolean } = {},
 ): Promise<T[]> {
   if (rows.length === 0) return rows;
   const read = await cards(rows);
+  if (!read && opts.preserveTrustedManualOnCardError && !isManager(viewer.role)) {
+    // The same factory caches origins and its full read; singleton requests do
+    // not retry cards. Only an immutable, family-valid manual origin recovers.
+    const resolved = await Promise.all(rows.map((row) => cards([row])));
+    return rows.filter((row, index) => {
+      const trusted = resolved[index];
+      return trusted !== null && reminderCardOf(trusted, row) === undefined &&
+        reminderVisibleTo(row, trusted, viewer);
+    });
+  }
   return rows.filter((row) => reminderVisibleTo(row, read, viewer));
 }
 
@@ -262,7 +273,7 @@ export async function visibleReminders<T extends ReminderLink>(
  */
 export async function readVisibleReminders<T extends ReminderLink, E = unknown>(
   page: PrefixPage<T, E>,
-  opts: { limit: number; viewer: AudienceViewer; cards: ReminderCardsReader },
+  opts: { limit: number; viewer: AudienceViewer; cards: ReminderCardsReader; preserveTrustedManualOnCardError?: boolean },
 ): Promise<{ data: T[] | null; error: E | null }> {
-  return readKeptPrefix(page, opts.limit, (rows) => visibleReminders(rows, opts.viewer, opts.cards));
+  return readKeptPrefix(page, opts.limit, (rows) => visibleReminders(rows, opts.viewer, opts.cards, opts));
 }
