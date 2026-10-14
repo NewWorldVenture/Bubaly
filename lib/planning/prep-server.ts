@@ -45,7 +45,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
 import { generatePrepPlans, type HorizonSignal, type PrepPlan, type SignalKind } from './prep';
-import { nextBirthdayDayKey } from '@/lib/moments/birthdays';
+import { daysBetweenDayKeys, nextBirthdayDayKey } from '@/lib/moments/birthdays';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 import { describeActionError } from '@/lib/supabase/errors';
 import { isSensitiveDocument } from '@/lib/documents/sensitivity';
@@ -104,6 +104,7 @@ export async function runPrepGeneration(
   if (retireErr) return { ok: false, error: describeActionError(retireErr), plans: 0 };
 
   const signals: HorizonSignal[] = [];
+  const birthdayOf = new Map<string, string>();
   for (const t of trips.data ?? []) if (t.start_date) signals.push({ id: t.id, kind: 'trip', title: t.title ?? 'Trip', date: t.start_date });
   for (const m of members.data ?? []) {
     // Day key in, day key out. `family_members.birthday` is a DATE column, the
@@ -112,6 +113,7 @@ export async function runPrepGeneration(
     // an instant that would have to be re-expressed as a day afterwards.
     const next = m.birthday ? nextBirthdayDayKey(m.birthday, todayKey) : null;
     if (next) signals.push({ id: m.id, kind: 'birthday', title: `${m.display_name}'s Birthday`, date: next });
+    if (next && m.birthday) birthdayOf.set(m.id, m.birthday);
   }
   // A SENSITIVE DOCUMENT'S TITLE STAYS WHERE ITS READERS ARE. The cron reads
   // with the service client and a manager's click with a session that sees the
@@ -175,6 +177,30 @@ export async function runPrepGeneration(
   // the `moved` ladder below for a plan still active, the date-only update
   // after the `decided` read for one dismissed or done. Treated as new, a
   // date edit re-opened a dismissed plan and cleared every ticked step.
+  //
+  // For a birthday, "passed" is asked of the CORRECTED birthday too, not only
+  // of the stored date (`occurrencePassed`). Mia's plan for 1 November, her
+  // birthday corrected on 14 October to the 10th: the stored date is still to
+  // come, but the birthday it stood for went four days ago, and this run's
+  // date is next year's. Read off the stored date alone, that was "the same
+  // occurrence moved", and the 2026 dismissal and ticked steps were carried
+  // onto 2027 — the defect above, back. So a birthday plan is also a new
+  // occurrence when the corrected birthday's previous occurrence (a year
+  // before this run's) is the one nearer the stored date, and is before today.
+  // A document's expiry does not come round on its own, so for one the stored
+  // date passing is the rule.
+  const occurrencePassed = (p: PrepPlan, stored: string): boolean => {
+    if (stored < todayKey) return true;
+    const birthday = p.kind === 'birthday' ? birthdayOf.get(p.signalId) : undefined;
+    if (!birthday) return false;
+    const yearBefore = String(Number.parseInt(p.targetDate.slice(0, 4), 10) - 1).padStart(4, '0');
+    const previous = nextBirthdayDayKey(birthday, `${yearBefore}-01-01`);
+    if (!previous || previous >= todayKey) return false;
+    const sincePrevious = daysBetweenDayKeys(previous, stored);
+    const untilNext = daysBetweenDayKeys(stored, p.targetDate);
+    if (sincePrevious === null || untilNext === null) return false;
+    return Math.abs(sincePrevious) < Math.abs(untilNext);
+  };
   const signalIds = [...new Set(plans.map((p) => p.signalId))];
   const { data: existing, error: existingErr } = await sb.from('prep_plans')
     .select('id, signal_kind, signal_id, status, target_date').eq('family_id', familyId).in('signal_id', signalIds);
@@ -184,7 +210,7 @@ export async function runPrepGeneration(
   const nextOccurrence = new Set(plans
     .filter((p) => {
       const row = existingByKey.get(keyOf(p));
-      return RECURRING_KINDS.has(p.kind) && !!row && row.target_date !== p.targetDate && row.target_date < todayKey;
+      return RECURRING_KINDS.has(p.kind) && !!row && row.target_date !== p.targetDate && occurrencePassed(p, row.target_date);
     })
     .map(keyOf));
   const decided = new Set((existing ?? [])

@@ -180,6 +180,73 @@ describe('N8-R1: a date corrected before it comes is the same occurrence', () =>
   });
 });
 
+// N8-R1-R1 — "only a date that has passed" read the STORED date. A birthday
+// corrected to a day this year that has already gone (the 1st of November was
+// really the 10th of October, and it is now the 14th) has its next occurrence
+// NEXT year, while the stored date is still to come: so the plan was read as
+// the same occurrence, and 2026's dismissal and ticked steps were carried onto
+// 2027 — N8's own defect, back. What decides it is whether the CORRECTED
+// birthday's occurrence this plan was for has passed.
+describe('N8-R1-R1: a birthday corrected to a day that has already gone is next year\'s occurrence', () => {
+  const correctBirthday = (day: string) => { db.table('family_members')[0].birthday = day; };
+  /** The birthday ladder for 10 October 2027: 21, 14, 7 and 1 days before. */
+  const LADDER_2027_10_10 = ['2027-09-19', '2027-09-26', '2027-10-03', '2027-10-09'];
+
+  it('a dismissed plan reopens for next year, active, with a fresh ladder', async () => {
+    const sb = household();
+    await runPrepGeneration(sb, 'f1', 'parent-1', TZ, OCTOBER);
+    const id = plan('m-mia').id;
+    expect(plan('m-mia')).toMatchObject({ target_date: '2026-11-01', status: 'active' });
+    plan('m-mia').status = 'dismissed';
+
+    // On the 14th: her birthday was the 10th, four days ago.
+    correctBirthday('2015-10-10');
+    expect((await runPrepGeneration(sb, 'f1', null, TZ, OCTOBER)).ok).toBe(true);
+    expect(plan('m-mia')).toMatchObject({ id, target_date: '2027-10-10', status: 'active' });
+    const ladder = steps(id);
+    expect(ladder).toHaveLength(4);
+    expect(ladder.filter((s) => s.is_done !== false)).toEqual([]);
+    expect(ladder.map((s) => String(s.due_date)).sort()).toEqual(LADDER_2027_10_10);
+  });
+
+  it('an active plan with every step ticked starts its ladder again for next year', async () => {
+    const sb = household();
+    await runPrepGeneration(sb, 'f1', 'parent-1', TZ, OCTOBER);
+    const id = plan('m-mia').id;
+    for (const step of steps(id)) step.is_done = true;
+
+    correctBirthday('2015-10-10');
+    expect((await runPrepGeneration(sb, 'f1', null, TZ, OCTOBER)).ok).toBe(true);
+    expect(plan('m-mia')).toMatchObject({ id, target_date: '2027-10-10', status: 'active' });
+    const ladder = steps(id);
+    expect(ladder).toHaveLength(4);
+    expect(ladder.filter((s) => s.is_done !== false)).toEqual([]);
+    expect(ladder.map((s) => String(s.due_date)).sort()).toEqual(LADDER_2027_10_10);
+
+    // Opened once: a tick on next year's ladder survives the next run.
+    steps(id)[0].is_done = true;
+    await runPrepGeneration(sb, 'f1', null, TZ, new Date('2026-10-15T12:00:00Z'));
+    expect(plan('m-mia')).toMatchObject({ id, target_date: '2027-10-10', status: 'active' });
+    expect(steps(id).filter((s) => s.is_done === true)).toHaveLength(1);
+  });
+
+  it('a correction to an earlier day that has not gone yet, today included, is still the same occurrence', async () => {
+    const sb = household();
+    await runPrepGeneration(sb, 'f1', 'parent-1', TZ, OCTOBER);
+    plan('m-mia').status = 'dismissed';
+
+    // The 20th is still to come.
+    correctBirthday('2015-10-20');
+    await runPrepGeneration(sb, 'f1', null, TZ, OCTOBER);
+    expect(plan('m-mia')).toMatchObject({ target_date: '2026-10-20', status: 'dismissed' });
+
+    // And today is today's birthday, not last year's.
+    correctBirthday('2015-10-14');
+    await runPrepGeneration(sb, 'f1', null, TZ, OCTOBER);
+    expect(plan('m-mia')).toMatchObject({ target_date: '2026-10-14', status: 'dismissed' });
+  });
+});
+
 describe('N10: a plan nobody can see is not a blocker', () => {
   it('a plan whose day has passed is retired by the next generation', async () => {
     const sb = household();
