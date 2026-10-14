@@ -230,4 +230,29 @@ describe('the family graph holds no preference the sensitive-memory rule keeps t
     // The fact itself is untouched: the parents still read it on Family Memory.
     expect(db.table('family_facts')).toHaveLength(3);
   });
+
+  it('prunes a sensitive preference it read even when the preference read hit its cap, and keeps the node of one it did not read', async () => {
+    // ROW_LIMIT (500) preferences come back, the sensitive one among them, and
+    // one more sits past the cap. A capped table is withheld from the prune,
+    // so the earlier run's "Emma allergies" node stayed for everyone to read.
+    db.seed('family_facts', [
+      preference('f-allergy', 'Emma allergies', 'Peanuts, tree nuts'),
+      ...Array.from({ length: 499 }, (_, i) => preference(`f-p${String(i).padStart(4, '0')}`, `Favourite ${i}`, 'Tacos')),
+      preference('f-zz-past-the-cap', 'Favourite colour', 'Green'),
+    ]);
+    const projected = { provenance: { source: 'projection', observed_at: NOW.toISOString(), ref_table: 'family_facts' }, subkind: 'preference' };
+    db.seed('graph_entities', [
+      { id: 'g-allergy', family_id: FAM, kind: 'topic', name: 'Emma allergies', ref_table: 'family_facts', ref_id: 'f-allergy', attributes: { ...projected, value: 'Peanuts, tree nuts' } },
+      { id: 'g-colour', family_id: FAM, kind: 'topic', name: 'Favourite colour', ref_table: 'family_facts', ref_id: 'f-zz-past-the-cap', attributes: { ...projected, value: 'Green' } },
+    ]);
+
+    const res = await runTwinProjection(db as unknown as SupabaseClient<Database>, FAM, null, NOW);
+    expect(res.ok, res.error).toBe(true);
+
+    expect(factNodes()).not.toContain('f-allergy');
+    expect(graphText(db)).not.toContain('Peanuts');
+    // Unseen this run, so unknown, not stale: kept.
+    expect(factNodes()).toContain('f-zz-past-the-cap');
+    expect(factNodes()).toHaveLength(500);
+  });
 });
