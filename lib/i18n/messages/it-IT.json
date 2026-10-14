@@ -17061,6 +17061,7 @@
   "errors.thatTimeIsNotOnTheFamilysClock": "Quella data e ora non esiste nel fuso orario della tua famiglia. Scegline un'altra.",
   "photosModule.showingNOfTotal": "{shown} di {total} visualizzati",
   "photosModule.loadMore": "Carica altri",
+  "photosModule.searching": "Ricerca in corso…",
   "createMemory.someOfThePhotosWereNotSaved": "Sono state salvate {saved} foto su {total}. Non è stato possibile caricarne {failed}.",
   "createMemory.tryTheMissingPhotosAgain": "Riprova con le foto mancanti",
   "socialFeed.couldNotLoadYourFeed": "Al momento non è stato possibile caricare il tuo feed. Riprova tra poco."

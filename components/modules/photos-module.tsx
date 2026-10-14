@@ -81,12 +81,20 @@ function distinctById<T extends { id: string }>(rows: T[]): T[] {
  * photo carries them as a tag. Built for `.or()`, so its grammar characters
  * cannot leave the pattern (escapeOrValue), and the tag is kept to what an
  * array literal can hold. Null when there is nothing to search for.
+ *
+ * A tag is matched whole, as typed AND lower-cased: tags are stored lower-case
+ * (the only writer, scripts/seed-core-platform.mjs), so "Outdoor" finds a photo
+ * tagged "outdoor" as the browser's filter once did. Each element is quoted,
+ * so a tag that reads NULL is the word, not a null element. Matching part of a
+ * tag, or a tag stored in capitals, needs the database's help (a lower-cased
+ * tags column or a search function), which is a migration.
  */
 function searchFilter(text: string): string | null {
   const term = escapeOrValue(text);
   if (!term) return null;
   const tag = text.replace(/[{}",()\\]/g, ' ').trim();
-  return tag ? `caption.ilike.%${term}%,tags.cs.{${tag}}` : `caption.ilike.%${term}%`;
+  const tags = [...new Set([tag, tag.toLowerCase()])].filter(Boolean).map((t) => `tags.cs.{"${t}"}`);
+  return [`caption.ilike.%${term}%`, ...tags].join(',');
 }
 
 const ALBUM_KINDS = [
@@ -172,30 +180,39 @@ export function PhotosModule() {
     },
   });
 
+  // Every read of the grid, so "Load more" can tell whether the grid it is
+  // about to extend is still the one the database holds. `running` counts reads
+  // in flight; `generation` moves whenever one starts or ends. Counted in the
+  // fetcher, not around this module's own re-reads: the hook re-reads on its
+  // own too (a realtime event, coming back online), and an append supersedes a
+  // read in flight — another member's upload or caption edit was dropped, and
+  // a shifted grid kept its old rows while "Load more" went away.
+  const photoReads = useRef({ running: 0, generation: 0 });
+
   // How many pages are loaded is NOT in deps: a new key is a new read, and the
   // first render of a new key is a loading one, so "Load more" used to blank
   // the page to a skeleton. Load more appends instead (below).
-  const { data: allPhotos, loading: photosLoading, error: photosError, refresh: refreshPhotos, setData: setPhotos } = useRealtimeQuery<Photo>({
+  const { data: allPhotos, loading: photosLoading, error: photosError, refresh: reloadPhotos, setData: setPhotos } = useRealtimeQuery<Photo>({
     table: 'family_photos', familyId, deps: [familyId, albumId, tab, filter],
     fetcher: async (sb) => {
-      const want = loaded.current.view === viewKey ? loaded.current.rows : PHOTO_PAGE;
-      const pages = await settleAll(Array.from({ length: Math.max(1, Math.ceil(want / PHOTO_PAGE)) },
-        (_, i) => photoRange(sb, photoView, i * PHOTO_PAGE, (i + 1) * PHOTO_PAGE - 1)));
-      const failed = pages.find((page) => page.error);
-      if (failed) return { data: null, error: failed.error };
-      return { data: distinctById(pages.flatMap((page) => (page.data ?? []) as Photo[])), error: null };
+      const reads = photoReads.current;
+      reads.running += 1; reads.generation += 1;
+      try {
+        const want = loaded.current.view === viewKey ? loaded.current.rows : PHOTO_PAGE;
+        const pages = await settleAll(Array.from({ length: Math.max(1, Math.ceil(want / PHOTO_PAGE)) },
+          (_, i) => photoRange(sb, photoView, i * PHOTO_PAGE, (i + 1) * PHOTO_PAGE - 1)));
+        const failed = pages.find((page) => page.error);
+        if (failed) return { data: null, error: failed.error };
+        return { data: distinctById(pages.flatMap((page) => (page.data ?? []) as Photo[])), error: null };
+      } finally {
+        reads.running -= 1; reads.generation += 1;
+      }
     },
   });
-
-  // Re-reads this module asks for, so "Load more" can tell whether the grid it
-  // is about to extend is still the one the database holds. `running` counts
-  // reads in flight; `generation` moves whenever one starts or ends.
-  const photoReads = useRef({ running: 0, generation: 0 });
-  const reloadPhotos = () => {
-    const reads = photoReads.current;
-    reads.running += 1; reads.generation += 1;
-    return Promise.resolve(refreshPhotos()).finally(() => { reads.running -= 1; reads.generation += 1; });
-  };
+  // The rows the hook holds now: "Load more" extends exactly these, or reads
+  // the grid again — never an updater that may find another list and give up.
+  const heldPhotos = useRef(allPhotos);
+  heldPhotos.current = allPhotos;
 
   // How many photos the current view holds, and how many are favourites —
   // counted by the database, re-asked whenever the loaded photos change. Null
@@ -253,8 +270,9 @@ export function PhotosModule() {
    * The next page, appended. It is read from the last photo shown, one row of
    * overlap, and that row is the proof the grid has not moved since it was
    * read: a photo added or removed above it shifts every offset. When it has
-   * moved — or one of this module's own re-reads ran meanwhile, which the
-   * append would otherwise overwrite — the grid is read again, a page longer.
+   * moved — or any read of the grid ran meanwhile, which the append would
+   * otherwise overwrite — the grid is read again, a page longer. Either way
+   * the extent grows with what is shown, so the button stays while photos do.
    */
   async function loadMore() {
     const last = photos.at(-1);
@@ -275,8 +293,9 @@ export function PhotosModule() {
     // What was ASKED for: a grid shorter than this has reached the end, which
     // is how the button knows to go when the count could not be read.
     loaded.current = { view, rows: from + PHOTO_PAGE };
-    if (rows[0]?.id === last.id && reads.generation === before) {
-      setPhotos((current) => (current.at(-1)?.id === last.id ? distinctById([...current, ...rows.slice(1)]) : current));
+    const current = heldPhotos.current;
+    if (rows[0]?.id === last.id && reads.generation === before && current.at(-1)?.id === last.id) {
+      setPhotos(distinctById([...current, ...rows.slice(1)]));
       return;
     }
     void reloadPhotos();
@@ -553,6 +572,23 @@ export function PhotosModule() {
 
       {/* Photos grid (all / favorites / recents / album detail) */}
       {(tab !== 'albums' || activeAlbum) && (
+        <>
+        {/* While a search loads, the grid it replaces stays on screen at full
+            strength — faded, its captions read below 4.5:1 (tests/informative-
+            text-is-not-faded.test.ts) — and inert, which takes it out of reach
+            of the mouse, the keyboard and a screen reader alike.
+            pointer-events-none stopped only the mouse: Enter on a focused tile
+            opened the viewer at an index the new results then gave to another
+            photo. The busy state is said in words, from a live region that is
+            always there and sits outside the aria-busy wrapper, which would
+            hold back its announcement until the read was over. */}
+        <div role="status">
+          {photosLoading && photos.length > 0 && !photosError && (
+            <p className="mb-3 flex items-center gap-2 text-xs text-muted">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> {tr('photosModule.searching')}
+            </p>
+          )}
+        </div>
         <div aria-busy={photosLoading || loadingMore || undefined}>
           {/* Album breadcrumb */}
           {activeAlbum && (
@@ -577,10 +613,12 @@ export function PhotosModule() {
               action={<Button onClick={() => setUploadOpen(true)}><Upload className="h-4 w-4" /> {tr('photos.uploadPhotos')}</Button>} />
           ) : view === 'grid' ? (
             /* Grid */
-            <div className={cn('columns-2 gap-3 sm:columns-3 lg:columns-4 xl:columns-5', photosLoading && 'pointer-events-none opacity-60')}>
+            <div className="columns-2 gap-3 sm:columns-3 lg:columns-4 xl:columns-5" inert={photosLoading}>
               {photos.map((photo, idx) => {
                 const isVideo = photo.media_type === 'video';
                 return (
+                // The nested button below is the keyboard's way in (tests/every-click-can-be-made-with-a-keyboard.test.ts).
+                // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
                 <div key={photo.id} className="group relative mb-3 break-inside-avoid overflow-hidden rounded-xl border border-border/40"
                   onClick={() => setLightboxIdx(idx)}>
                   {/* The tile's onClick stays for the mouse — the hover overlay sits
@@ -639,8 +677,10 @@ export function PhotosModule() {
             </div>
           ) : (
             /* List */
-            <div className={cn('overflow-hidden rounded-2xl border border-border', photosLoading && 'pointer-events-none opacity-60')}>
+            <div className="overflow-hidden rounded-2xl border border-border" inert={photosLoading}>
               {photos.map((photo, idx) => (
+                // The nested button below is the keyboard's way in, as in the grid.
+                // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
                 <div key={photo.id} onClick={() => setLightboxIdx(idx)}
                   className="group flex cursor-pointer items-center gap-4 border-b border-border/50 px-4 py-3 hover:bg-elevated/30 transition last:border-0">
                   {/* Same split as the grid tile; here the row already shows the
@@ -676,6 +716,7 @@ export function PhotosModule() {
             </div>
           )}
         </div>
+        </>
       )}
 
       {/* ── Lightbox ──────────────────────────────────────────── */}

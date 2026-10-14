@@ -71,7 +71,7 @@ function from(table: string) {
   return query;
 }
 
-const ctx = (role: 'parent' | 'child') => ({
+const ctx = (role: 'parent' | 'child' | 'guest') => ({
   user: { id: 'user-1', email: 'parent@example.com' },
   memberships: [],
   active: { familyId: 'fam-1', role, member: { id: 'member-1', role, display_name: 'Sam' }, family: { id: 'fam-1', name: 'Rivera', timezone: 'UTC' } },
@@ -209,6 +209,22 @@ describe('/dashboard/needs-you', () => {
     expect(html).toContain('Reply to Dr. Patel');
     expect(html).not.toContain('Archive');
     expect(html).not.toContain('Dismiss');
+    expect(html).not.toContain('Could not load what needs you');
+  });
+
+  // N1 sibling: the household inbox is not a guest's (ROLE-SCOPE-001). The
+  // Contact Center sends a guest away, but this page read the same messages
+  // under RLS, which answers a guest until the reserved 0509 is applied, and
+  // listed "Reply to <sender> — <subject>" for each.
+  it('gives a guest no household inbox message, and does not ask for one', async () => {
+    mocks.requireUserContext.mockResolvedValue(ctx('guest'));
+    const html = await render();
+    expect(queries.map((q) => q.table)).not.toContain('family_inbox_messages');
+    expect(html).not.toContain('Reply to');
+    expect(html).not.toContain('Dr. Patel');
+    expect(html).not.toContain('Playdate Saturday?');
+    // The rest of the queue is still theirs, and nothing failed.
+    expect(html).toContain('Book the plumber for Tuesday');
     expect(html).not.toContain('Could not load what needs you');
   });
 });

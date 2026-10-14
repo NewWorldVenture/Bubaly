@@ -215,36 +215,47 @@ export function realtimeQueryModule(h: ModuleState) {
  * the component's own fetcher answered for its current `deps`, as the real hook
  * does on mount and on every change of its key: the first render of a key
  * starts the read and reports `loading`, and a later render shows the result
- * (`settle()` between them). `refresh` re-reads the same key.
+ * (`settle()` between them). `refresh` re-reads the same key, and so does
+ * `h.realtime[table]()`, which is the hook re-reading on its own.
+ *
+ * Like the real hook, only the LATEST request for a key lands: a read that a
+ * later read, or a `setData`, started after is dropped when it answers
+ * (lib/hooks/use-realtime-query.ts, `scope.request` and isCurrent()).
  */
 export function fetchedQueryModule(h: ModuleState) {
-  const inFlight = new Map<string, Promise<boolean>>();
+  const inFlight = new Map<string, Promise<'ok' | 'error' | 'superseded'>>();
+  const requests = new Map<string, number>();
+  const begin = (key: string) => { const request = (requests.get(key) ?? 0) + 1; requests.set(key, request); return request; };
   // The real hook's `data` is state: the same array until a read replaces it.
   // A fresh `[]` per render would re-run every effect keyed on it, forever.
   const empty: HarnessRow[] = [];
   return {
     useRealtimeQuery: ({ table, fetcher, deps = [] }: { table: string; fetcher: Fetcher; deps?: unknown[] }) => {
       const key = `${table}:${JSON.stringify(deps)}`;
-      const reread = async () => {
+      const reread = () => {
         h.refreshes.push(table);
-        let reply: Awaited<ReturnType<Fetcher>>;
-        try {
-          reply = await fetcher(clientFor(h));
-        } catch (cause) {
-          reply = { data: null, error: { message: cause instanceof Error ? cause.message : String(cause) } };
-        }
-        if (reply.error) { h.readErrors[key] = reply.error.message; delete h.rows[key]; return false; }
-        delete h.readErrors[key];
-        h.rows[key] = clone(reply.data ?? []);
-        return true;
-      };
-      const read = () => {
-        const running = inFlight.get(key) ?? reread().finally(() => inFlight.delete(key));
+        const request = begin(key);
+        const running = (async () => {
+          let reply: Awaited<ReturnType<Fetcher>>;
+          try {
+            reply = await fetcher(clientFor(h));
+          } catch (cause) {
+            reply = { data: null, error: { message: cause instanceof Error ? cause.message : String(cause) } };
+          }
+          if (requests.get(key) !== request) return 'superseded' as const;
+          if (reply.error) { h.readErrors[key] = reply.error.message; delete h.rows[key]; return 'error' as const; }
+          delete h.readErrors[key];
+          h.rows[key] = clone(reply.data ?? []);
+          return 'ok' as const;
+        })();
+        // The newest read of a key is the one a first render waits on.
         inFlight.set(key, running);
+        void running.finally(() => { if (inFlight.get(key) === running) inFlight.delete(key); });
         return running;
       };
       const known = key in h.rows || key in h.readErrors;
-      if (!known) void read();
+      if (!known && !inFlight.has(key)) void reread();
+      h.realtime[table] = reread;
       return {
         data: h.rows[key] ?? empty,
         loading: !known,
@@ -252,8 +263,12 @@ export function fetchedQueryModule(h: ModuleState) {
         stale: false,
         updatedAt: 0,
         refresh: async () => { await reread(); },
-        refreshAndConfirm: async () => ((await reread()) ? { ok: true as const } : { ok: false as const, reason: 'error' as const }),
+        refreshAndConfirm: async () => {
+          const outcome = await reread();
+          return outcome === 'ok' ? { ok: true as const } : { ok: false as const, reason: outcome };
+        },
         setData: (update: HarnessRow[] | ((rows: HarnessRow[]) => HarnessRow[])) => {
+          begin(key);
           h.rows[key] = typeof update === 'function' ? update(h.rows[key] ?? []) : update;
         },
       };

@@ -13,6 +13,7 @@ import {
 } from './project';
 import { readAll } from '@/lib/supabase/read-all';
 import { describeActionError } from '@/lib/supabase/errors';
+import { isSensitiveMemory } from '@/lib/memory/facts';
 
 type DB = SupabaseClient<Database>;
 
@@ -97,7 +98,7 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
     sb.from('home_projects').select('id, title, status, room, owner_id, priority')
       .eq('family_id', familyId).in('status', ['idea', 'planning', 'quoting', 'scheduled', 'in_progress', 'on_hold'])
       .order('id', { ascending: true }).limit(ROW_LIMIT),
-    sb.from('family_facts').select('id, member_id, label, value, source, confidence')
+    sb.from('family_facts').select('id, member_id, label, value, notes, source, confidence')
       .eq('family_id', familyId).eq('category', 'preference').order('id', { ascending: true }).limit(ROW_LIMIT),
   ]);
 
@@ -146,9 +147,16 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
     // Withheld from a guest by the released 0481 (renewals_not_a_guests_read),
     // so the expiry register stays out of the graph a guest reads.
     renewals: [],
-    preferences: (preferences.data ?? []).map((f) => ({
-      id: f.id, member_id: f.member_id, label: f.label, value: f.value, source: f.source, confidence: f.confidence,
-    })),
+    // Only the preferences every member may read. A fact the sensitive-memory
+    // rule matches ("Emma allergies: peanuts", a therapist, a medication) is a
+    // parent's or adult's: Family Memory and Life & Milestones hide it from
+    // everyone else (factsVisibleTo), and the graph is everyone's. The table
+    // stays projector-owned, so the prune removes a node an earlier run wrote.
+    preferences: (preferences.data ?? [])
+      .filter((f) => !isSensitiveMemory({ category: 'preference', key: f.label, content: f.value, notes: f.notes }))
+      .map((f) => ({
+        id: f.id, member_id: f.member_id, label: f.label, value: f.value, source: f.source, confidence: f.confidence,
+      })),
   };
 
   const projection = projectTwin(snap, { now });

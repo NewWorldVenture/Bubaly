@@ -70,9 +70,14 @@ export default async function NeedsYouPage() {
       : Promise.resolve({ count: 0, error: null }),
     settle(supabase.from('family_reminders').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null).lt('remind_at', now.toISOString())),
-    settle(supabase.from('family_inbox_messages').select('id, direction, from_addr, subject, ai_summary, body, ai_intent, status, occurred_at')
-      .eq('family_id', familyId).eq('status', 'new').eq('direction', 'inbound').in('ai_intent', [...REPLY_INTENTS])
-      .order('occurred_at', { ascending: false }).limit(50)),
+    // The household inbox is not a guest's (ROLE-SCOPE-001): the Contact
+    // Center sends a guest away, and the reserved 0509 refuses them the rows.
+    // Until it is applied RLS still answers, so a guest is not asked for it.
+    ctx.active.role === 'guest'
+      ? Promise.resolve({ data: [] as InboxMessageRow[], error: null })
+      : settle(supabase.from('family_inbox_messages').select('id, direction, from_addr, subject, ai_summary, body, ai_intent, status, occurred_at')
+          .eq('family_id', familyId).eq('status', 'new').eq('direction', 'inbound').in('ai_intent', [...REPLY_INTENTS])
+          .order('occurred_at', { ascending: false }).limit(50)),
     // Paperwork is a parent's or adult's, and whoever filed an item keeps it
     // (the held 0514): anyone else's list is what they filed, before the limit.
     settle((readsHouseholdMoney(ctx.active.role)

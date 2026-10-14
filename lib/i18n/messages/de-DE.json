@@ -17061,6 +17061,7 @@
   "errors.thatTimeIsNotOnTheFamilysClock": "Dieses Datum mit dieser Uhrzeit gibt es in der Zeitzone deiner Familie nicht. Wähle eine andere.",
   "photosModule.showingNOfTotal": "{shown} von {total} angezeigt",
   "photosModule.loadMore": "Mehr laden",
+  "photosModule.searching": "Suche läuft…",
   "createMemory.someOfThePhotosWereNotSaved": "{saved} von {total} Fotos wurden gespeichert. {failed} konnten nicht hochgeladen werden.",
   "createMemory.tryTheMissingPhotosAgain": "Fehlende Fotos erneut versuchen",
   "socialFeed.couldNotLoadYourFeed": "Dein Feed konnte gerade nicht geladen werden. Versuche es gleich noch einmal."

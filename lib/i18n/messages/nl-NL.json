@@ -17061,6 +17061,7 @@
   "errors.thatTimeIsNotOnTheFamilysClock": "Die datum en tijd bestaan niet in de tijdzone van je gezin. Kies een andere.",
   "photosModule.showingNOfTotal": "{shown} van {total} weergegeven",
   "photosModule.loadMore": "Meer laden",
+  "photosModule.searching": "Zoeken…",
   "createMemory.someOfThePhotosWereNotSaved": "{saved} van {total} foto’s zijn opgeslagen. {failed} konden niet worden geüpload.",
   "createMemory.tryTheMissingPhotosAgain": "Ontbrekende foto’s opnieuw proberen",
   "socialFeed.couldNotLoadYourFeed": "Je feed kon nu niet worden geladen. Probeer het zo opnieuw."

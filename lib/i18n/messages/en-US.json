@@ -17061,6 +17061,7 @@
   "errors.thatTimeIsNotOnTheFamilysClock": "That date and time doesn't exist on your family's clock. Choose another.",
   "photosModule.showingNOfTotal": "Showing {shown} of {total}",
   "photosModule.loadMore": "Load more",
+  "photosModule.searching": "Searching…",
   "createMemory.someOfThePhotosWereNotSaved": "{saved} of {total} photos were saved. {failed} could not be uploaded.",
   "createMemory.tryTheMissingPhotosAgain": "Try the missing photos again",
   "socialFeed.couldNotLoadYourFeed": "Your feed could not be loaded right now. Try again in a moment."

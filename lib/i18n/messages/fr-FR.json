@@ -17061,6 +17061,7 @@
   "errors.thatTimeIsNotOnTheFamilysClock": "Cette date et cette heure n'existent pas dans le fuseau horaire de votre famille. Choisissez-en une autre.",
   "photosModule.showingNOfTotal": "{shown} sur {total} affichés",
   "photosModule.loadMore": "Charger plus",
+  "photosModule.searching": "Recherche en cours…",
   "createMemory.someOfThePhotosWereNotSaved": "{saved} photos sur {total} ont été enregistrées. {failed} n'ont pas pu être importées.",
   "createMemory.tryTheMissingPhotosAgain": "Réessayer les photos manquantes",
   "socialFeed.couldNotLoadYourFeed": "Votre fil n'a pas pu être chargé pour le moment. Réessayez dans un instant."

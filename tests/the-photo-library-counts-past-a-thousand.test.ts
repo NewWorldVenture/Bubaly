@@ -238,3 +238,151 @@ describe('All Photos reaches the end of the library, and the page stays while it
     expect(nodes(tree).filter((n) => n.type === 'button' && n.props['aria-label'] === t('photosModule.removeFavorite'))).toHaveLength(1);
   });
 });
+
+// Round 2 of review.
+//
+// R2-faded-photo-grid-ratchet — while a search loaded, the grid it replaced was
+// drawn at 60% (`pointer-events-none opacity-60`), which put its captions below
+// 4.5:1 (tests/informative-text-is-not-faded.test.ts went red) and stopped only
+// the mouse: each tile's open button could still be reached with Tab and
+// pressed with Enter, opening the viewer at an index the new results then
+// gave to another photo.
+//
+// R2-load-more-concurrent-reread — the hook re-reads on its own (a realtime
+// event, coming back online), and "Load more" could not see those reads: its
+// append superseded one in flight, so another member's caption edit never
+// reached the grid; and when one landed first and shifted the list, the append
+// gave up silently while the extent still grew, so with the count unreadable
+// the button went away with photos left to show.
+//
+// N5-tag-search-case — the tag match became an exact, case-sensitive element
+// match, so "Grandpa" no longer found a photo tagged "grandpa".
+
+/** Page reads of family_photos whose answers are held back, like a slow network: the database answers when asked, the reply arrives on release. */
+const gate = { hold: 0, held: [] as (() => void)[] };
+function slowPages<T extends object>(target: T): T {
+  return new Proxy(target, {
+    get(object, property, receiver) {
+      if (property !== 'from') return Reflect.get(object, property, receiver);
+      return (table: string) => {
+        const builder = (object as unknown as { from: (name: string) => object }).from(table);
+        const calls: string[] = [];
+        const proxy: object = new Proxy(builder, {
+          get(inner, key) {
+            if (key === 'then') {
+              return (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) => {
+                const answer = (inner as PromiseLike<unknown>).then((value) => value);
+                if (table !== 'family_photos' || !calls.includes('range') || gate.hold === 0) return answer.then(resolve, reject);
+                gate.hold -= 1;
+                return new Promise<void>((go) => gate.held.push(go)).then(() => answer).then(resolve, reject);
+              };
+            }
+            const value = Reflect.get(inner, key);
+            if (typeof value !== 'function') return value;
+            return (...args: unknown[]) => {
+              calls.push(String(key));
+              const result = Reflect.apply(value, inner, args);
+              return result === inner ? proxy : result;
+            };
+          },
+        });
+        return proxy;
+      };
+    },
+  });
+}
+const release = async () => { for (const go of gate.held.splice(0)) go(); await settle(); };
+/** A tile's own way into the viewer: the nested button over its media, in the grid and in the list. */
+const openers = (tree: ReactNode) => nodes(tree).filter((n) => n.type === 'button' && String(n.props.className ?? '').includes('focus-ring'));
+const favourites = (tree: ReactNode) => nodes(tree).filter((n) => n.type === 'button' && n.props['aria-label'] === t('photosModule.addFavorite'));
+
+describe('round 2: the grid while it reloads, and Load more beside the hook’s own re-reads', () => {
+  beforeEach(() => { gate.hold = 0; gate.held = []; h.db = slowPages(h.db as object); });
+
+  it.each(['grid', 'list'])('while a search loads, the %s it replaces is at full strength, out of reach, and says it is searching', async (shape) => {
+    await click(tab(await screen(), 'photosModule.allPhotos'));
+    if (shape === 'list') await click(byName(await screen(), t('photosModule.showList'), 'button'));
+    change(searchBox(await screen()) as Node, 'L');
+
+    // The very next render: the read for "L" has started, not finished.
+    const typing = render(h.hooks, createElement(PhotosModule));
+    expect(gridPhotos(typing)).toBe(120);
+    const inert = nodes(typing).filter((n) => n.props.inert === true);
+    expect(inert, 'one inert container holds the old results').toHaveLength(1);
+    // Every control on the old results is inside it: each way into the viewer, each favourite.
+    expect(openers(typing)).toHaveLength(120);
+    expect(openers(inert[0])).toHaveLength(120);
+    expect(favourites(inert[0])).toHaveLength(favourites(typing).length);
+    // Drawn at full strength: nothing between the page and a caption fades it.
+    expect(String(inert[0].props.className)).not.toMatch(/opacity-|pointer-events-none/);
+    // Busy, in words a person reads and a screen reader is told.
+    expect(text(nodes(typing).find((n) => n.props.role === 'status'))).toContain(t('photosModule.searching'));
+    expect(nodes(typing).some((n) => n.props['aria-busy'] === true)).toBe(true);
+
+    // The results land: the grid is live again and nothing says it is searching.
+    const found = await screen();
+    expect(gridPhotos(found)).toBeGreaterThan(0);
+    expect(nodes(found).some((n) => n.props.inert === true)).toBe(false);
+    expect(text(nodes(found).find((n) => n.props.role === 'status'))).toBe('');
+  });
+
+  it('a caption another member edits while Load more runs still reaches the grid', async () => {
+    await click(tab(await screen(), 'photosModule.allPhotos'));
+    const tree = await screen();
+    const target = gridIds(tree)[5];
+    // Dad edits a caption; the realtime event starts the hook's own re-read, still on its way…
+    (db.table('family_photos').find((row) => row.id === target) as Record<string, unknown>).caption = 'Edited by Dad';
+    gate.hold = 1;
+    const realtime = h.realtime.family_photos();
+    await settle();
+    expect(gate.held).toHaveLength(1);
+
+    // …when Ada presses Load more.
+    await click(loadMore(tree) as Node);
+    await release();
+    await realtime;
+
+    const after = await screen();
+    expect(gridPhotos(after)).toBe(240);
+    expect(has(after, 'Edited by Dad'), 'the edit is on the grid').toBe(true);
+    expect(new Set(gridIds(after)).size).toBe(240);
+  });
+
+  it('without a count, a re-read that shifts the grid before the next page lands reads it again a page longer, and Load more stays', async () => {
+    h.fault = (table, calls) => (table === 'family_photos' && !calls.includes('range') && !calls.includes('limit') ? { message: 'count refused' } : null);
+    await click(tab(await screen(), 'photosModule.allPhotos'));
+    const tree = await screen();
+    expect(gridPhotos(tree)).toBe(120);
+
+    // Load more is pressed and its page read; the answer is on its way…
+    gate.hold = 1;
+    await click(loadMore(tree) as Node);
+    expect(gate.held).toHaveLength(1);
+    // …while someone uploads, and the realtime re-read lands first: every row moves down one.
+    db.seed('family_photos', [photo('newest', '2026-10-13T12:00:00Z')]);
+    await h.realtime.family_photos();
+    await release();
+
+    const after = await screen();
+    const ids = gridIds(after);
+    expect(ids[0]).toBe('newest');
+    expect(ids).toHaveLength(240);
+    expect(new Set(ids).size).toBe(240);
+    expect(loadMore(after), 'photos remain, so the button does').toBeDefined();
+
+    // And it still reaches the end.
+    const { tree: end } = await loadEverything(after);
+    expect(gridIds(end)).toHaveLength(1101);
+    expect(loadMore(end)).toBeUndefined();
+  });
+});
+
+describe('round 2: a tag search does not depend on the case it is typed in', () => {
+  it.each(['Grandpa', 'GRANDPA'])('a tag search matches the stored lower-case tag when typed as %s', async (term) => {
+    await click(tab(await screen(), 'photosModule.allPhotos'));
+    change(searchBox(await screen()) as Node, term);
+    const tree = await screen();
+
+    expect(gridIds(tree)).toEqual(['old-0008']);
+  });
+});

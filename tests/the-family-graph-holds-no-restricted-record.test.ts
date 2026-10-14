@@ -171,3 +171,63 @@ describe('the family graph every member reads holds no audience-restricted recor
     expect(db.table('graph_entities').some((row) => row.id === 'g-manual')).toBe(true);
   });
 });
+
+// N7 sibling — a preference the sensitive-memory rule matches.
+//
+// The projector read every `family_facts` preference with the service client
+// and wrote each as a topic node: its label as the name, its value in the
+// attributes, "preference_of" a member. Family Memory and Life & Milestones
+// hide such a fact from a child, teen, caregiver or guest (factsVisibleTo, the
+// rule in lib/memory/facts.ts), but the graph is every member's to read, so
+// "Emma allergies: Peanuts, tree nuts" reached all of them there.
+describe('the family graph holds no preference the sensitive-memory rule keeps to the parents', () => {
+  const preference = (id: string, label: string, value: string, notes: string | null = null) => ({
+    id, family_id: FAM, member_id: 'm-emma', category: 'preference', label, value, notes, source: 'manual', confidence: null,
+  });
+  const preferences = () => {
+    db.seed('family_facts', [
+      preference('f-allergy', 'Emma allergies', 'Peanuts, tree nuts'),
+      preference('f-bedtime', 'Bedtime routine', 'Lights out at 8', 'After her therapist visit on Thursdays'),
+      preference('f-dinner', 'Favourite dinner', 'Tacos'),
+    ]);
+  };
+  const factNodes = () => db.table('graph_entities').filter((row) => row.ref_table === 'family_facts').map((row) => row.ref_id);
+
+  it("a parent's rebuild projects the harmless preference and neither sensitive one", async () => {
+    preferences();
+    const res = await projectTwinAction();
+    expect(res.ok, res.error).toBe(true);
+
+    expect(factNodes()).toEqual(['f-dinner']);
+    const text = graphText(db);
+    for (const leaked of ['Emma allergies', 'Peanuts', 'Bedtime routine', 'therapist']) {
+      expect(text, `${leaked} is readable on /dashboard/graph`).not.toContain(leaked);
+    }
+    expect(text).toContain('Favourite dinner');
+  });
+
+  it('the service-role cron prunes the sensitive preference an earlier projection wrote, and its edge', async () => {
+    preferences();
+    db.seed('graph_entities', [
+      { id: 'g-emma', family_id: FAM, kind: 'person', name: 'Emma', ref_table: 'family_members', ref_id: 'm-emma', attributes: { provenance: { source: 'projection', observed_at: NOW.toISOString(), ref_table: 'family_members' } } },
+      {
+        id: 'g-allergy', family_id: FAM, kind: 'topic', name: 'Emma allergies', ref_table: 'family_facts', ref_id: 'f-allergy',
+        attributes: { provenance: { source: 'projection', observed_at: NOW.toISOString(), ref_table: 'family_facts' }, subkind: 'preference', value: 'Peanuts, tree nuts' },
+      },
+    ]);
+    db.seed('graph_edges', [{
+      id: 'e-pref', family_id: FAM, source_id: 'g-allergy', target_id: 'g-emma', relation: 'preference_of', weight: 0.5,
+      attributes: { provenance: { source: 'projection', observed_at: NOW.toISOString() } },
+    }]);
+
+    const res = await runTwinProjection(db as unknown as SupabaseClient<Database>, FAM, null, NOW);
+    expect(res.ok, res.error).toBe(true);
+    cascade(db);
+
+    expect(factNodes()).toEqual(['f-dinner']);
+    expect(db.table('graph_edges').some((edge) => edge.source_id === 'g-allergy')).toBe(false);
+    expect(graphText(db)).not.toContain('Peanuts');
+    // The fact itself is untouched: the parents still read it on Family Memory.
+    expect(db.table('family_facts')).toHaveLength(3);
+  });
+});
