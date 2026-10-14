@@ -86,8 +86,8 @@
 -- no row (compared by ctid).
 --
 -- NEGATIVE CONTROLS, in this transaction, after the re-apply, each drop adding
--- to the last: with 0486's pin ALONE dropped (both policies in place) Ava's,
--- Sam's and the guest's moves into their other family land, that family's
+-- to the last: with BOTH 0486's audience and 0487's copied-origin pins dropped
+-- (both policies in place) Ava's, Sam's and the guest's moves into their other family land; that family's
 -- reader reads the card and this family's no longer does, and the teen turns
 -- the subscription charge into an 'other' card the guest reads; with the
 -- update guard dropped as well the teen's column-free write names him on Ava's
@@ -163,7 +163,7 @@ end $f$;
 -- What a card says about who reads it, and whether it is resolved.
 create function pg_temp.ap_card_state(card uuid) returns text
 language sql as $f$
-  select format('%s|%s|%s|%s|%s', s.member_id, s.kind, s.source_kind, s.status, s.family_id)
+  select format('%s|%s|%s|%s|%s|%s', s.member_id, s.kind, s.source_kind, s.status, s.family_id, s.source_id)
     from public.autopilot_suggestions s where s.id = card
 $f$;
 
@@ -203,6 +203,7 @@ begin
       for i in 1 .. 5 loop
         if now_is[i] is distinct from was[i] then changed := changed || cols[i]; end if;
       end loop;
+      if now_is[6] is distinct from was[6] then changed := changed || 'source_id'; end if;
     end if;
     perform pg_temp.ap_claims(reader, 'authenticated');
     execute 'set local role authenticated';
@@ -362,21 +363,31 @@ begin
     ('00000000-0000-4000-8000-0000004860c3', fam, null, 'document', 'Passport expires in 9 days', 'Renew before the trip',
      '{"title":"Renew Passport"}', 'renewals', gen_random_uuid(), 'probe486-ren', 'open', 'create_reminder'),
     ('00000000-0000-4000-8000-0000004860c4', fam, mN, 'insurance', 'dental insurance (Smile Co) renews in 5 days', 'Review coverage',
-     '{"title":"Renew dental insurance (Smile Co)"}', 'family_insurance_policies', gen_random_uuid(), 'probe486-ins-ava', 'open', 'create_reminder'),
+     '{"title":"Renew dental insurance (Smile Co)"}', 'family_insurance_policies', '00000000-0000-4000-8000-0000004860d5', 'probe486-ins-ava', 'open', 'create_reminder'),
     ('00000000-0000-4000-8000-0000004860c5', fam, null, 'insurance', 'home insurance (Acme) renews in 6 days', 'Review coverage',
-     '{"title":"Renew home insurance (Acme)"}', 'family_insurance_policies', gen_random_uuid(), 'probe486-ins-home', 'open', 'create_reminder'),
+     '{"title":"Renew home insurance (Acme)"}', 'family_insurance_policies', '00000000-0000-4000-8000-0000004860d6', 'probe486-ins-home', 'open', 'create_reminder'),
     ('00000000-0000-4000-8000-0000004860c6', fam, mN, 'finance', 'Premium due: Smile Co $42.00', 'Dental premium',
-     '{"amountCents":4200}', 'family_insurance_policies', gen_random_uuid(), 'probe486-ins-both', 'open', 'none'),
+     '{"amountCents":4200}', 'family_insurance_policies', '00000000-0000-4000-8000-0000004860d7', 'probe486-ins-both', 'open', 'none'),
     ('00000000-0000-4000-8000-0000004860c7', fam, null, 'insurance', 'Check the life cover (Shield)', 'Annual review',
      '{"title":"Review life cover (Shield)"}', null, null, 'probe486-ins-kind', 'open', 'none'),
     ('00000000-0000-4000-8000-0000004860c8', fam, mG, 'insurance', 'travel insurance (Roam) renews in 4 days', 'Review coverage',
-     '{"title":"Renew travel insurance (Roam)"}', 'family_insurance_policies', gen_random_uuid(), 'probe486-ins-gran', 'open', 'create_reminder'),
+     '{"title":"Renew travel insurance (Roam)"}', 'family_insurance_policies', '00000000-0000-4000-8000-0000004860d8', 'probe486-ins-gran', 'open', 'create_reminder'),
     ('00000000-0000-4000-8000-0000004860c9', fam, null, 'groceries', 'Still need: milk', 'On the list for 5 days',
      '{"items":["milk"]}', 'grocery_items', gen_random_uuid(), 'probe486-ord', 'open', 'none'),
     ('00000000-0000-4000-8000-0000004860ca', fam, mU, 'appointment', 'Orthodontist tomorrow 4pm', 'Leave by 3:30',
      '{"title":"Orthodontist"}', 'appointments', gen_random_uuid(), 'probe486-ord-mem', 'open', 'create_reminder'),
     ('00000000-0000-4000-8000-0000004860cb', fam, mN, 'medication', 'Prescription refill due in 2 days', 'Open Medications to see which one.',
      '{"title":"Refill a prescription"}', 'medications', gen_random_uuid(), 'probe486-med', 'open', 'create_reminder');
+  -- Owner-only fixture: real policy rows at these copied source UUIDs.
+  -- The API INSERT/refresh controls below must validate a genuine same-family source.
+  insert into public.family_insurance_policies
+    (id, family_id, policy_type, insurer, member_id, renewal_date, is_active)
+  select s.source_id, fam, x.policy_type::public.insurance_policy_type, x.insurer, s.member_id, current_date + 5, true
+  from public.autopilot_suggestions s
+  join (values (c_ava, 'dental', 'Smile Co'), (c_home, 'home', 'Acme'),
+               (c_both, 'dental', 'Smile Co premium'), (c_gran, 'travel', 'Roam'))
+       as x(card_id, policy_type, insurer) on x.card_id=s.id;
+
   -- The neighbours' own card: their parent reads THIS, so "reads nothing of
   -- ours" is not a reader who reads nothing at all.
   insert into public.autopilot_suggestions (id, family_id, kind, title, dedupe_key, status)
@@ -463,20 +474,20 @@ begin
     pg_temp.ap_as(uU, 'authenticated', format(F, uU, '00000000-0000-4000-8000-0000004860c4'), false), '0');
 
   -- ── 3. the on-demand scan's write: `insert … select('id')` ───────────────
-  F := 'insert into public.autopilot_suggestions (family_id, member_id, kind, title, source_kind, dedupe_key, status, created_by) '
-    || 'values (%L, %L, %L, %L, %L, %L, ''open'', %L) returning id';
+  F := 'insert into public.autopilot_suggestions (family_id, member_id, kind, title, source_kind, source_id, dedupe_key, status, created_by) '
+    || 'values (%L, %L, %L, %L, %L, %L, %L, ''open'', %L) returning id';
   perform pg_temp.ap_expect('a member''s scan writes a card they may read', 'the named child writes her own insurance card',
-    pg_temp.ap_as(uN, 'authenticated', format(F, fam, mN, 'insurance', 'dental insurance (Smile Co) renews in 4 days', 'family_insurance_policies', 'probe486-scan-ava', uN), false), '1');
+    pg_temp.ap_as(uN, 'authenticated', format(F, fam, mN, 'insurance', 'dental insurance (Smile Co) renews in 4 days', 'family_insurance_policies', (select source_id from public.autopilot_suggestions where id=c_ava), 'probe486-scan-ava', uN), false), '1');
   perform pg_temp.ap_expect('a member''s scan writes a card they may read', 'the teen writes an ordinary card',
-    pg_temp.ap_as(uU, 'authenticated', format(F, fam, null, 'groceries', 'Still need: eggs', 'grocery_items', 'probe486-scan-ord', uU), false), '1');
+    pg_temp.ap_as(uU, 'authenticated', format(F, fam, null, 'groceries', 'Still need: eggs', 'grocery_items', null, 'probe486-scan-ord', uU), false), '1');
   perform pg_temp.ap_expect('a member''s scan writes a card they may read', 'the parent writes the household''s insurance card',
-    pg_temp.ap_as(uP, 'authenticated', format(F, fam, null, 'insurance', 'home insurance (Acme) renews in 5 days', 'family_insurance_policies', 'probe486-scan-home', uP), false), '1');
+    pg_temp.ap_as(uP, 'authenticated', format(F, fam, null, 'insurance', 'home insurance (Acme) renews in 5 days', 'family_insurance_policies', (select source_id from public.autopilot_suggestions where id=c_home), 'probe486-scan-home', uP), false), '1');
   perform pg_temp.ap_expect('DENIED: a member''s scan cannot write a card they may not read back',
     'the unnamed teen writes Ava''s insurance card and reads it back (lib/autopilot/scan.ts skips this draft)',
-    pg_temp.ap_as(uU, 'authenticated', format(F, fam, mN, 'insurance', 'dental insurance (Smile Co) renews in 4 days', 'family_insurance_policies', 'probe486-scan-sam', uU), false), 'refused');
+    pg_temp.ap_as(uU, 'authenticated', format(F, fam, mN, 'insurance', 'dental insurance (Smile Co) renews in 4 days', 'family_insurance_policies', (select source_id from public.autopilot_suggestions where id=c_ava), 'probe486-scan-sam', uU), false), 'refused');
   perform pg_temp.ap_expect('DENIED: a member''s scan cannot write a card they may not read back',
     'the guest writes a subscription charge and reads it back',
-    pg_temp.ap_as(uG, 'authenticated', format(F, fam, null, 'finance', '$9.99 charge: Hulu tomorrow', 'subscriptions_tracked', 'probe486-scan-gran', uG), false), 'refused');
+    pg_temp.ap_as(uG, 'authenticated', format(F, fam, null, 'finance', '$9.99 charge: Hulu tomorrow', 'subscriptions_tracked', null, 'probe486-scan-gran', uG), false), 'refused');
 
 
   -- ── 4. an UPDATE that names no column (RV486-2) ──────────────────────────
@@ -550,14 +561,35 @@ begin
   perform pg_temp.ap_expect_re(v_grp, 'Mum (a manager here, an adult in the co-parent''s) moves Ava''s card there: refused too (the pin is not a role rule)',
     pg_temp.ap_write_read(uP, 'authenticated', format(F, famB, c_ava), c_ava, uB), '^refused; kept; reads 0$');
 
+  -- Copied source UUID is immutable for both its named reader and a manager.
+  -- The state comparator includes source_id; original five-column loop is retained.
+  v_grp := 'DENIED: copied source UUID remains immutable';
+  perform pg_temp.ap_expect_re(v_grp, 'the named child cannot replace her copied source with another same-family policy',
+    pg_temp.ap_write_read(uN, 'authenticated', format(
+      'update public.autopilot_suggestions set source_id = %L where id = %L returning id',
+      (select source_id from public.autopilot_suggestions where id=c_home), c_ava), c_ava, uN), '^refused; kept; reads 1$');
+  perform pg_temp.ap_expect_re(v_grp, 'a manager cannot remove the copied source UUID',
+    pg_temp.ap_write_read(uP, 'authenticated', format(
+      'update public.autopilot_suggestions set source_id = null where id = %L returning id', c_ava), c_ava, uN), '^refused; kept; reads 1$');
+
+  -- Owner fixture stages a real policy change; the card refresh remains the manager's RLS write.
+  update public.family_insurance_policies set member_id=mL
+    where id=(select source_id from public.autopilot_suggestions where id=c_ava) and family_id=fam;
   v_grp := 'a manager says whose policy a card is';
   F := 'update public.autopilot_suggestions set member_id = %L where id = %L and family_id = %L returning id';
   perform pg_temp.ap_expect_re(v_grp, 'the parent reassigns Ava''s insurance card to Leo (the scan''s refresh on a manager''s client): Leo reads it',
     pg_temp.ap_write_read(uP, 'authenticated', format(F, mL, c_ava, fam), c_ava, uL), '^1 written; changed:member_id; reads 1$');
   perform pg_temp.ap_expect_re(v_grp, 'the parent reassigns Ava''s insurance card to Leo: Ava no longer reads it',
     pg_temp.ap_write_read(uP, 'authenticated', format(F, mL, c_ava, fam), c_ava, uN), '^1 written; changed:member_id; reads 0$');
+  update public.family_insurance_policies set member_id=mN
+    where id=(select source_id from public.autopilot_suggestions where id=c_ava) and family_id=fam;
+  update public.family_insurance_policies set member_id=mN
+    where id=(select source_id from public.autopilot_suggestions where id=c_home) and family_id=fam;
   perform pg_temp.ap_expect_re(v_grp, 'the parent names Ava on the household''s policy card: Ava reads it',
     pg_temp.ap_write_read(uP, 'authenticated', format(F, mN, c_home, fam), c_home, uN), '^1 written; changed:member_id; reads 1$');
+
+  update public.family_insurance_policies set member_id=null
+    where id=(select source_id from public.autopilot_suggestions where id=c_home) and family_id=fam;
 
   v_grp := 'a reader resolves the card they read';
   F := 'update public.autopilot_suggestions set status = ''dismissed'', resolved_at = now(), resolved_by = %L '
@@ -673,20 +705,22 @@ begin
 
   -- ── 8. NEGATIVE CONTROLS: without each guard its defect is back ─────────
   v_grp := 'negative control: the probe sees the defect';
-  -- The pin ALONE (both policies still in place): the family moves and the
-  -- reader's widening are the pin's to hold, not the policies'.
+  -- Historical defect controls in this disposable ROLLBACK transaction only:
+  -- both copied-origin and classification pins must be absent to reproduce
+  -- these old defects. Restrictive policies remain until explicitly tested below.
   drop trigger if exists autopilot_suggestions_keep_their_audience on public.autopilot_suggestions;
-  perform pg_temp.ap_expect_re(v_grp, 'with only the pin dropped Ava moves her insurance card to her co-parent''s household, and the co-parent reads it',
+  drop trigger if exists keep_copied_card_origin on public.autopilot_suggestions;
+  perform pg_temp.ap_expect_re(v_grp, 'with both origin and audience pins dropped Ava moves her insurance card to her co-parent''s household, and the co-parent reads it',
     pg_temp.ap_write_read((fx->>'uN')::uuid, 'authenticated',
       format('update public.autopilot_suggestions set family_id = %L where id = %L returning id', fx->>'famB', fx->>'c_ava'),
       (fx->>'c_ava')::uuid, (fx->>'uB')::uuid),
     '^1 written; changed:family_id; reads 1$');
-  perform pg_temp.ap_expect_re(v_grp, 'with only the pin dropped Ava''s move takes the card out of this family: Gran (the adult, of this family only) no longer reads it',
+  perform pg_temp.ap_expect_re(v_grp, 'with both origin and audience pins dropped Ava''s move takes the card out of this family: Gran (the adult, of this family only) no longer reads it',
     pg_temp.ap_write_read((fx->>'uN')::uuid, 'authenticated',
       format('update public.autopilot_suggestions set family_id = %L where id = %L returning id', fx->>'famB', fx->>'c_ava'),
       (fx->>'c_ava')::uuid, (fx->>'uA')::uuid),
     '^1 written; changed:family_id; reads 0$');
-  perform pg_temp.ap_expect_re(v_grp, 'with only the pin dropped Sam''s filtered PATCH moves the subscription charge, and the co-parent reads it',
+  perform pg_temp.ap_expect_re(v_grp, 'with both origin and audience pins dropped Sam''s filtered PATCH moves the subscription charge, and the co-parent reads it',
     pg_temp.ap_write_read((fx->>'uU')::uuid, 'authenticated',
       format('with pgrst_source as (update public.autopilot_suggestions set family_id = pgrst_body.family_id '
         || 'from (select %L::json as json_data) pgrst_payload, '
@@ -696,22 +730,22 @@ begin
         json_build_object('family_id', fx->>'famB')::text, fx->>'c_fin', fx->>'fam'),
       (fx->>'c_fin')::uuid, (fx->>'uB')::uuid),
     '^1 written; changed:family_id; reads 1$');
-  perform pg_temp.ap_expect_re(v_grp, 'with only the pin dropped the guest moves an ordinary card into her own household, and Grandpa reads it',
+  perform pg_temp.ap_expect_re(v_grp, 'with both origin and audience pins dropped the guest moves an ordinary card into her own household, and Grandpa reads it',
     pg_temp.ap_write_read((fx->>'uG')::uuid, 'authenticated',
       format('update public.autopilot_suggestions set family_id = %L where id = %L returning id', fx->>'famX', fx->>'c_ord'),
       (fx->>'c_ord')::uuid, (fx->>'uY')::uuid),
     '^1 written; changed:family_id; reads 1$');
-  perform pg_temp.ap_expect_re(v_grp, 'with only the pin dropped the teen turns the subscription charge into an ''other'' card, and the guest reads it',
+  perform pg_temp.ap_expect_re(v_grp, 'with both origin and audience pins dropped the teen turns the subscription charge into an ''other'' card, and the guest reads it',
     pg_temp.ap_write_read((fx->>'uU')::uuid, 'authenticated',
       format('update public.autopilot_suggestions set kind = ''other'', source_kind = null where id = %L', fx->>'c_fin'),
       (fx->>'c_fin')::uuid, (fx->>'uG')::uuid),
     '^1 written; changed:kind,source_kind; reads 1$');
   drop policy if exists autopilot_suggestions_audience_update_guard on public.autopilot_suggestions;
-  perform pg_temp.ap_expect_re(v_grp, 'with the update guard dropped as well the unnamed teen''s column-free write names him on Ava''s insurance card, and he reads it',
+  perform pg_temp.ap_expect_re(v_grp, 'with both pins and the update guard dropped the unnamed teen''s column-free write names him on Ava''s insurance card, and he reads it',
     pg_temp.ap_write_read((fx->>'uU')::uuid, 'authenticated',
       format('update public.autopilot_suggestions set member_id = %L', fx->>'mU'), (fx->>'c_ava')::uuid, (fx->>'uU')::uuid),
     '^[0-9]+ written; changed:member_id; reads 1$');
-  perform pg_temp.ap_expect_re(v_grp, 'with the update guard dropped as well Ava''s column-free write moves her card to her brother, and he reads it',
+  perform pg_temp.ap_expect_re(v_grp, 'with both pins and the update guard dropped Ava''s column-free write moves her card to her brother, and he reads it',
     pg_temp.ap_write_read((fx->>'uN')::uuid, 'authenticated',
       format('update public.autopilot_suggestions set member_id = %L', fx->>'mL'), (fx->>'c_ava')::uuid, (fx->>'uL')::uuid),
     '^[0-9]+ written; changed:member_id; reads 1$');

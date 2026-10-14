@@ -34,7 +34,7 @@ function persist(label: string, value: unknown): void {
   writeFileSync(`${dir}/${label}.json`, JSON.stringify(value, null, 2) + '\n', { flag: 'wx' });
 }
 function personal(id: string, familyId = FAMILY): Record<string, unknown> {
-  return { id, family_id: familyId, title: 'Synthetic personal reminder', remind_at: '2026-10-13T12:00:00.000Z', recurrence: 'none', status: 'active', priority: 'medium', member_id: TEEN, tags: [], related_type: null, related_id: null, idempotency_key: null };
+  return { id, family_id: familyId, title: 'Synthetic personal reminder', remind_at: '2026-10-13T12:00:00.000Z', recurrence: 'none', status: 'active', priority: 'medium', member_id: TEEN, tags: [], related_type: null, related_id: null, idempotency_key: null, autopilot_origin: false, autopilot_card_id: null };
 }
 async function cardReminder(named: boolean): Promise<void> {
   const card = { id: '00000000-0000-4000-8000-00000000e010', family_id: FAMILY, kind: 'insurance', source_kind: 'family_insurance_policies', source_id: '00000000-0000-4000-8000-00000000e011', member_id: named ? TEEN : PARENT, action_type: 'create_reminder', title: 'Synthetic private policy reminder', detail: 'Synthetic private policy detail', urgency: 60, payload: { title: 'Synthetic private policy reminder' } };
@@ -43,7 +43,7 @@ async function cardReminder(named: boolean): Promise<void> {
   expect(idempotency_key).toMatch(/^[a-f0-9]{64}$/);
   expect(stamp).toMatch(/^autopilot-source:[a-f0-9]{64}$/);
   db.seed('autopilot_suggestions', [card]);
-  db.seed('family_reminders', [{ ...personal('insurance-reminder'), title: card.title, member_id: null, idempotency_key, tags: [stamp] }]);
+  db.seed('family_reminders', [{ ...personal('insurance-reminder'), title: card.title, member_id: null, idempotency_key, tags: [stamp], autopilot_origin: true, autopilot_card_id: card.id }]);
 }
 async function eligible(): Promise<string[]> {
   const result = await readVisibleReminders<Record<string, unknown> & { id: string; related_type: string | null; related_id: string | null; tags: string[]; idempotency_key: string | null }>(

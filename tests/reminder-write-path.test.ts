@@ -38,7 +38,9 @@ beforeEach(() => {
         recurrence: 'none', priority: 'medium', status: 'active',
         member_id: null, assigned_to_id: null, ai_suggested: false,
         tags: [], idempotency_key: null, completed_at: null, snoozed_until: null,
+        autopilot_origin: false, autopilot_card_id: null,
       },
+      reminders: { autopilot_origin: false, autopilot_card_id: null },
     },
     uniques: { family_reminders: [['family_id', 'idempotency_key']] },
   });

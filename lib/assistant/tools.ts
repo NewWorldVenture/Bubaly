@@ -136,15 +136,24 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
   // on the title alone, Kit's "renew" completed the managers' "Renew dental
   // insurance (Smile Co)" in place of his own "Renew library books" and read
   // its title back to him. A hidden reminder is no match.
-  const visibleReminderLookup = () => ({
-    limit: 1,
-    viewer: { role: ctx.role, memberId: ctx.memberId },
-    cards: reminderCardsReader(supabase, ctx.familyId, {
-      keyOf: (cardId) => mintSuggestionReminderKey(ctx.familyId, cardId),
-      sourceTagOf: mintSuggestionSourceTag,
-      onError: (cause) => console.error('[assistant] autopilot reminder cards read failed', cause),
-    }),
-  });
+  const visibleReminderLookup = () => {
+    // Missing records permit manager fallback; an unavailable metadata read
+    // must fail this lookup before either tool writes or reports no match.
+    let error: unknown = null;
+    return {
+      limit: 1,
+      viewer: { role: ctx.role, memberId: ctx.memberId },
+      get error() { return error; },
+      cards: reminderCardsReader(supabase, ctx.familyId, {
+        keyOf: (cardId) => mintSuggestionReminderKey(ctx.familyId, cardId),
+        sourceTagOf: mintSuggestionSourceTag,
+        onError: (cause) => {
+          error = cause;
+          console.error('[assistant] autopilot reminder cards read failed', cause);
+        },
+      }),
+    };
+  };
 
   return [
     {
@@ -347,11 +356,12 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         const q = str(a.title);
         if (!q) return { ok: false, error: 'title is required' };
         // The soonest match this reader may be shown (visibleReminderLookup).
+        const visibility = visibleReminderLookup();
         const { data: rows, error: lookupError } = await readVisibleReminders((from, to) => supabase.from('family_reminders')
-          .select('id, title, notes, kind, priority, recurrence, remind_at, member_id, location_name, idempotency_key, tags')
+          .select('id, family_id, title, notes, kind, priority, recurrence, remind_at, member_id, location_name, idempotency_key, tags, autopilot_origin, autopilot_card_id')
           .eq('family_id', ctx.familyId).eq('status', 'active').ilike('title', `%${escapeLike(q)}%`)
-          .order('remind_at', { ascending: true, nullsFirst: false }).order('id').range(from, to), visibleReminderLookup());
-        if (lookupError) return toolFailure('find the reminder', lookupError);
+          .order('remind_at', { ascending: true, nullsFirst: false }).order('id').range(from, to), visibility);
+        if (lookupError || visibility.error) return toolFailure('find the reminder', lookupError ?? visibility.error);
         const r = rows?.[0];
         if (!r) return { ok: false, error: `No active reminder matching “${q}”.` };
         // The assistant SPEAKS the answer — "Completed …" — and a completion that
@@ -364,20 +374,29 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
           .update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', r.id).eq('status', 'active').select('id');
         if (error) return toolFailure('complete the reminder', error);
         if (wroteNoRows(completed)) return toolFailure('complete the reminder', 'no rows updated');
-        // Recurring → schedule the next occurrence (core columns only, so it's
-        // safe regardless of the 0100 detail-columns migration state). The tags
-        // are core (0014), and carry an accepted Autopilot card's stamp: the
-        // next occurrence has no key, so its tag is what keeps it its card's
-        // readers' (lib/autopilot/reminder-cards.ts). Dropped, a repeating
-        // "Renew dental insurance (Smile Co)" came back linked to no card, and
-        // was Kit's to list and to move though the policy does not name him.
+        // Generated occurrences keep their immutable origin through the trusted
+        // recurrence writer. Public tags alone cannot establish that origin,
+        // and the database refuses a direct insert of a generated copy.
         const next = r.remind_at && r.recurrence !== 'none' ? nextRemindAt(r.remind_at, r.recurrence, familyTz) : null;
         if (next) {
-          const { error: nextError } = await supabase.from('family_reminders').insert({
-            family_id: ctx.familyId, created_by: ctx.userId, title: r.title, notes: r.notes,
-            kind: r.kind, priority: r.priority, recurrence: r.recurrence, location_name: r.location_name,
-            member_id: r.member_id, remind_at: next, status: 'active', tags: r.tags ?? [],
-          });
+          let nextError: unknown = null;
+          if (r.autopilot_origin) {
+            const { data: receipt, error: repeatError } = await supabase.rpc('repeat_card_family_reminder', {
+              p_parent_id: r.id, p_at: next,
+            }).maybeSingle();
+            nextError = repeatError;
+            if (!nextError && (!receipt || receipt.family_id !== ctx.familyId ||
+              receipt.autopilot_origin !== true || receipt.autopilot_card_id !== r.autopilot_card_id)) {
+              nextError = 'Recurrence receipt could not be verified';
+            }
+          } else {
+            const result = await supabase.from('family_reminders').insert({
+              family_id: ctx.familyId, created_by: ctx.userId, title: r.title, notes: r.notes,
+              kind: r.kind, priority: r.priority, recurrence: r.recurrence, location_name: r.location_name,
+              member_id: r.member_id, remind_at: next, status: 'active', tags: r.tags ?? [],
+            });
+            nextError = result.error;
+          }
           if (nextError) {
             // Restoring the reminder this call just completed; zero rows is a
             // failed restore. Logged. Audit C1-S9-69.
@@ -409,10 +428,11 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         const remind_at = reminderInstant(requested, familyTz);
         if (!remind_at) return { ok: false, error: MODEL_READER.t('reminders.timeUnreadable') };
         // The soonest match this reader may be shown (visibleReminderLookup).
+        const visibility = visibleReminderLookup();
         const { data: rows, error: lookupError } = await readVisibleReminders((from, to) => supabase.from('family_reminders')
           .select('id, title, idempotency_key, tags').eq('family_id', ctx.familyId).eq('status', 'active').ilike('title', `%${escapeLike(q)}%`)
-          .order('remind_at', { ascending: true, nullsFirst: false }).order('id').range(from, to), visibleReminderLookup());
-        if (lookupError) return toolFailure('find the reminder', lookupError);
+          .order('remind_at', { ascending: true, nullsFirst: false }).order('id').range(from, to), visibility);
+        if (lookupError || visibility.error) return toolFailure('find the reminder', lookupError ?? visibility.error);
         const r = rows?.[0];
         if (!r) return { ok: false, error: `No active reminder matching “${q}”.` };
         // "Moved … to a new time" is spoken back; zero rows is the same failure.

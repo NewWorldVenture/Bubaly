@@ -55,19 +55,22 @@ async function household(): Promise<Memory> {
   db.seed('families', [{ id: FAMILY, timezone: 'UTC', name: 'Family' }]);
   db.seed('family_members', ROSTER.map((m) => ({ ...m, family_id: FAMILY, user_id: `u-${m.id}`, display_name: m.id, is_active: true, birthday: null })));
   db.seed('family_insurance_policies', [{ id: 'pol-ava', family_id: FAMILY, policy_type: 'dental', insurer: 'Smile Co', renewal_date: '2026-10-01', member_id: 'ava', is_active: true }]);
+  db.setRpcAuth(null, 'service_role');
   vi.setSystemTime(new Date('2026-09-21T06:30:00Z'));
   await runAutopilotScan(db, FAMILY, null, 'UTC', 'en-US', echo, new Date('2026-09-21T06:30:00Z'));
   const card = db.table('autopilot_suggestions').find((s) => s.source_id === 'pol-ava')!;
   vi.setSystemTime(new Date('2026-09-21T08:00:00Z'));
   const scope = { db, familyId: FAMILY, userId: 'u-mum', memberId: 'mum', role: 'parent', actorKind: 'member', tz: 'UTC', now: new Date('2026-09-21T08:00:00Z') } as ServiceScope;
+  db.setRpcAuth('u-mum');
   expect(await resolveSuggestion(scope, { suggestionId: card.id as string, updatedAt: card.updated_at as string, action: 'reminder' }))
     .toMatchObject({ ok: true, status: 'executed' });
   db.seed('family_reminders', [{
     id: 'library', family_id: FAMILY, title: LIBRARY, remind_at: '2026-10-05T16:00:00.000Z', status: 'active', member_id: 'kit',
     tags: [], idempotency_key: null, kind: 'time', priority: 'medium', recurrence: 'none', snoozed_until: null, notes: null, location_name: null,
+    autopilot_origin: false, autopilot_card_id: null,
   }]);
   const policy = db.table('family_reminders').find((r) => r.title === POLICY)!;
-  expect(policy).toMatchObject({ member_id: null, status: 'active' });
+  expect(policy).toMatchObject({ member_id: null, status: 'active', autopilot_origin: true, autopilot_card_id: card.id });
   expect(Date.parse(String(policy.remind_at))).toBeLessThan(Date.parse('2026-10-05T16:00:00.000Z'));
   vi.setSystemTime(new Date(NOW));
   return db;

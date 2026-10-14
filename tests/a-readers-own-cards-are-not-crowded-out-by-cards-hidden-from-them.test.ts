@@ -281,7 +281,7 @@ describe('a row written between two pages is listed once', () => {
   });
 
   it('the reminder prefix', async () => {
-    const { readVisibleReminders } = await import('@/lib/autopilot/reminder-cards');
+    const { readVisibleReminders, reminderCardsReader } = await import('@/lib/autopilot/reminder-cards');
     // r-1 links to a card nobody can find: the managers' alone, hidden from Kit.
     const rows = [
       { id: 'r-1', related_type: 'renewal', related_id: 'ren-gone' },
@@ -289,8 +289,17 @@ describe('a row written between two pages is listed once', () => {
       { id: 'r-3', related_type: null, related_id: null },
       { id: 'r-4', related_type: null, related_id: null },
     ];
+    // The page deliberately projects no origin fields. Its manual rows are
+    // known only through the reader's separate immutable database lookup;
+    // r-1 is a generated reminder whose original card is unavailable.
+    const db = household();
+    db.seed('family_reminders', [
+      { id: 'r-1', family_id: FAMILY, autopilot_origin: true, autopilot_card_id: null },
+      ...['r-0', 'r-2', 'r-3', 'r-4'].map((id) => ({ id, family_id: FAMILY, autopilot_origin: false, autopilot_card_id: null })),
+    ]);
     const read = await readVisibleReminders(shiftingPages(rows, { id: 'r-0', related_type: null, related_id: null }, 2), {
-      limit: 3, viewer: { role: 'child', memberId: 'kit' }, cards: async () => null,
+      limit: 3, viewer: { role: 'child', memberId: 'kit' },
+      cards: reminderCardsReader(db, FAMILY, { onError: (error) => { throw error; } }),
     });
     expect(read.error).toBeNull();
     const ids = read.data!.map((row) => row.id);

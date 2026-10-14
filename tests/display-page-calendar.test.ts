@@ -9,8 +9,8 @@ import { completeReminder, createReminder, snoozeReminder } from '@/lib/services
 import { nowAndNext } from '@/lib/display/ambient';
 import Page from '@/app/(app)/display/page';
 
-const state = vi.hoisted(() => ({ db: null as unknown, timezone: 'UTC' as unknown, failServer: false }));
-vi.mock('@/lib/supabase/auth', () => ({ requireFeature: async () => ({ user: { id: 'user-1' }, active: { familyId: 'family-1', family: { name: 'Fixture family', timezone: state.timezone } } }) }));
+const state = vi.hoisted(() => ({ db: null as unknown, timezone: 'UTC' as unknown, failServer: false, viewer: { role: 'child', memberId: 'member-1' } }));
+vi.mock('@/lib/supabase/auth', () => ({ requireFeature: async () => ({ user: { id: 'user-1' }, active: { familyId: 'family-1', role: state.viewer.role, member: { id: state.viewer.memberId }, family: { name: 'Fixture family', timezone: state.timezone } } }) }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => { if (state.failServer) throw new Error('Fixture offline'); return state.db; } }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key, getLocaleContext: async () => ({ locale: { code: 'en-US' }, source: 'default' }) }));
 vi.mock('next/navigation', () => ({ unstable_rethrow: () => {} }));
@@ -35,7 +35,7 @@ function fixture() {
     // Each calendar window is now two reads issued together — the one-offs and
     // the series (lib/calendar/occurrences.ts) — so a window owns two
     // consecutive calendar_events calls, in the page's order of windows.
-    const kind = table === 'calendar_events' ? ['events', 'events', 'upcoming', 'upcoming', 'monthEvents', 'monthEvents'][calendarIndex++ % 6]
+    let kind = table === 'calendar_events' ? ['events', 'events', 'upcoming', 'upcoming', 'monthEvents', 'monthEvents'][calendarIndex++ % 6]
       : table === 'family_reminders' ? 'reminders' : table;
     const target = db.from(table);
     const proxy: typeof target = new Proxy(target, { get(object, property) {
@@ -47,6 +47,8 @@ function fixture() {
       const value = Reflect.get(object, property);
       if (typeof value !== 'function') return value;
       return (...args: unknown[]) => {
+        if ((table === 'family_reminders' || table === 'reminders') && property === 'select'
+          && args[0] === 'id, family_id, autopilot_origin, autopilot_card_id') kind = `${table}:origins`;
         calls.push({ table, method: String(property), args });
         const result = Reflect.apply(value, object, args);
         return result === object ? proxy : result;
@@ -78,6 +80,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-09-12T02:00:00Z'));
   state.timezone = 'UTC'; state.failServer = false;
+  state.viewer = { role: 'child', memberId: 'member-1' };
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
@@ -173,7 +176,7 @@ describe('actual kitchen page family-calendar loading', () => {
     expect(empty.loadStatus).toEqual(ALL_LOADED);
     expect(empty.events).toEqual([]); expect(empty.reminders).toEqual([]);
     f.db.seed('calendar_events', [event('today', '2026-09-12T03:00:00Z', '2026-09-12T04:00:00Z'), event('tomorrow', '2026-09-13T03:00:00Z', '2026-09-13T04:00:00Z')]);
-    f.db.seed('family_reminders', [{ id: 'reminder', family_id: 'family-1', title: 'Reminder', remind_at: iso('2026-09-12T05:00:00Z'), status: 'active' }]);
+    f.db.seed('family_reminders', [{ id: 'reminder', family_id: 'family-1', title: 'Reminder', remind_at: iso('2026-09-12T05:00:00Z'), status: 'active', autopilot_origin: false, autopilot_card_id: null }]);
     const recovered = await f.read();
     expect(recovered.loadStatus).toEqual(empty.loadStatus);
     expect(recovered.events).toHaveLength(1); expect(recovered.upcoming).toHaveLength(1); expect(recovered.reminders).toHaveLength(1);
@@ -188,10 +191,65 @@ describe('actual kitchen page family-calendar loading', () => {
     expect(await f.read()).toMatchObject({ timezone: 'UTC', dayKey: '2026-09-12', loadStatus: { events: 'error', upcoming: 'error', monthEvents: 'error', reminders: 'error' } });
   });
 
-  it('reads actual canonical reminder creation, effective snooze and completion without consulting legacy rows', async () => {
+  it.each([
+    ['family_reminders:origins', 'failed'], ['reminders:origins', 'failed'], ['autopilot_suggestions', 'failed'],
+    ['family_reminders:origins', 'thrown'], ['reminders:origins', 'thrown'], ['autopilot_suggestions', 'thrown'],
+  ] as const)('marks a %s %s lookup unavailable and recovers the same readers without legacy content', async (dependency, failure) => {
+    const f = fixture();
+    f.db.seed('autopilot_suggestions', [{
+      id: 'insurance-card', family_id: 'family-1', kind: 'insurance', source_kind: 'family_insurance_policies',
+      source_id: 'policy-1', member_id: 'member-1', action_type: 'create_reminder', title: 'Private policy',
+    }]);
+    f.db.seed('family_reminders', [
+      { id: 'manual', family_id: 'family-1', title: 'Bins out', status: 'active', remind_at: iso('2026-09-12T03:00:00Z'), autopilot_origin: false, autopilot_card_id: null },
+      { id: 'policy', family_id: 'family-1', title: 'Renew private policy', status: 'active', remind_at: iso('2026-09-12T04:00:00Z'), autopilot_origin: true, autopilot_card_id: 'insurance-card' },
+      { id: 'foreign', family_id: 'family-other', title: 'Another family', status: 'active', remind_at: iso('2026-09-12T03:00:00Z'), autopilot_origin: false, autopilot_card_id: null },
+    ]);
+    f.db.seed('reminders', [{ id: 'legacy', family_id: 'family-1', title: 'Legacy content must not appear', remind_at: iso('2026-09-12T02:00:00Z'), is_done: false, autopilot_origin: false, autopilot_card_id: null }]);
+    for (const [role, memberId, ids] of [
+      ['parent', 'manager', ['manual', 'policy']],
+      ['child', 'member-1', ['manual', 'policy']],
+      ['child', 'other-child', ['manual']],
+      ['guest', 'guest', ['manual']],
+    ] as const) {
+      state.viewer = { role, memberId };
+      const healthy = await f.read();
+      expect(healthy.loadStatus, role).toEqual(ALL_LOADED);
+      expect(healthy.reminders.map(row => row.id), role).toEqual(ids);
+
+      f[failure].add(dependency);
+      const unavailable = await f.read();
+      expect(unavailable.loadStatus, role).toEqual({ ...ALL_LOADED, reminders: 'error' });
+      expect(unavailable.reminders, role).toEqual([]);
+      f[failure].clear();
+
+      const recovered = await f.read();
+      expect(recovered.loadStatus, role).toEqual(ALL_LOADED);
+      expect(recovered.reminders, role).toEqual(healthy.reminders);
+    }
+    expect(console.error).toHaveBeenCalledWith('[display] autopilot reminder cards read failed', expect.anything());
+  });
+
+  it('keeps successful empty and trusted manual tiles healthy without unused card lookups', async () => {
+    const f = fixture();
+    for (const dependency of ['family_reminders:origins', 'reminders:origins', 'autopilot_suggestions']) f.failed.add(dependency);
+    const empty = await f.read();
+    expect(empty.loadStatus).toEqual(ALL_LOADED);
+    expect(empty.reminders).toEqual([]);
+    expect(f.calls.some(call => call.table === 'reminders' || call.table === 'autopilot_suggestions')).toBe(false);
+
+    f.failed.delete('family_reminders:origins'); f.failed.delete('reminders:origins');
+    f.db.seed('family_reminders', [{ id: 'manual', family_id: 'family-1', title: 'Bins out', status: 'active', remind_at: iso('2026-09-12T03:00:00Z'), autopilot_origin: false, autopilot_card_id: null }]);
+    const manual = await f.read();
+    expect(manual.loadStatus).toEqual(ALL_LOADED);
+    expect(manual.reminders.map(row => row.id)).toEqual(['manual']);
+    expect(f.calls.some(call => call.table === 'autopilot_suggestions')).toBe(false);
+  });
+
+  it('reads actual canonical reminder creation, effective snooze and completion; legacy reads supply only trusted origins', async () => {
     const f = fixture();
     const scope: ServiceScope = { db: f.db, familyId: 'family-1', userId: 'user-1', memberId: 'member-1', role: 'parent', actorKind: 'member', tz: 'UTC', now: new Date(), requestId: 'fixture-request' };
-    f.db.seed('reminders', [{ id: 'legacy', family_id: 'family-1', title: 'Legacy', remind_at: iso('2026-09-12T02:00:00Z'), is_done: false }]);
+    f.db.seed('reminders', [{ id: 'legacy', family_id: 'family-1', title: 'Legacy', remind_at: iso('2026-09-12T02:00:00Z'), is_done: false, autopilot_origin: false, autopilot_card_id: null }]);
     const created = await createReminder(scope, { title: 'Canonical reminder', remindAt: '2026-09-12T02:10:00Z' });
     expect(created.ok).toBe(true); if (!created.ok) throw new Error(created.error);
     expect((await f.read()).reminders).toEqual([{ id: created.data.id, title: 'Canonical reminder', remind_at: iso('2026-09-12T02:10:00Z') }]);
@@ -199,7 +257,18 @@ describe('actual kitchen page family-calendar loading', () => {
     expect((await f.read()).reminders[0].remind_at).toBe(iso('2026-09-12T02:30:00Z'));
     expect((await completeReminder(scope, created.data.id)).ok).toBe(true);
     expect((await f.read()).reminders).toEqual([]);
-    expect(f.calls.some(call => call.table === 'reminders')).toBe(false);
+    // The origin schema adds authorization reads of both reminder tables.
+    // No legacy title/due-date content may become a source for this tile.
+    const legacyReads = f.calls.filter(call => call.table === 'reminders');
+    expect(legacyReads.length).toBeGreaterThan(0);
+    for (let start = 0; start < legacyReads.length; start += 4) {
+      expect(legacyReads.slice(start, start + 4)).toEqual([
+        { table: 'reminders', method: 'select', args: ['id, family_id, autopilot_origin, autopilot_card_id'] },
+        { table: 'reminders', method: 'eq', args: ['family_id', 'family-1'] },
+        { table: 'reminders', method: 'order', args: ['id'] },
+        { table: 'reminders', method: 'range', args: [expect.any(Number), expect.any(Number)] },
+      ]);
+    }
   });
 
   it('excludes completed/dismissed/null-date and beyond-horizon snoozed reminders and sorts by effective due time', async () => {
@@ -211,7 +280,7 @@ describe('actual kitchen page family-calendar loading', () => {
       ...['completed', 'dismissed'].map(status => ({ id: status, family_id: 'family-1', title: status, status, remind_at: iso('2026-09-12T01:00:00Z') })),
       { id: 'null', family_id: 'family-1', title: 'No date', status: 'active', remind_at: null },
       { id: 'other', family_id: 'family-other', title: 'Other', status: 'active', remind_at: iso('2026-09-12T01:00:00Z') },
-    ]);
+    ].map(row => ({ ...row, autopilot_origin: false, autopilot_card_id: null })));
     expect((await f.read()).reminders.map(item => item.id)).toEqual(['active', 'snoozed']);
   });
 });
