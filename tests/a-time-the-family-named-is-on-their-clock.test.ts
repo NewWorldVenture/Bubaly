@@ -89,7 +89,8 @@ beforeEach(() => {
     defaults: {
       approval_requests: { status: 'pending', approvals: [], edited_payload: null, plan_step_ids: [], run_id: null, request_id: null, plan_step_id: null, payload_kind: null, expires_at: null },
       ai_tool_calls: { state: 'reserved', attempt: 1, outputs: null, error: null, finished_at: null },
-      family_reminders: { status: 'active', snoozed_until: null, member_id: null, idempotency_key: null, priority: 'medium', recurrence: 'none', kind: 'time' },
+      family_reminders: { status: 'active', snoozed_until: null, member_id: null, idempotency_key: null, priority: 'medium', recurrence: 'none', kind: 'time', autopilot_origin: false, autopilot_card_id: null },
+      reminders: { autopilot_origin: false, autopilot_card_id: null },
       chores: { description: null, points: 10, priority: 'medium', recurrence: 'none', due_at: null, requires_approval: true, icon: null, is_active: true },
       chore_assignments: { status: 'todo', due_at: null, idempotency_key: null },
       maintenance_tasks: { status: 'open', due_at: null, asset_id: null, assignee_id: null, priority: 'medium' },
