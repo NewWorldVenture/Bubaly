@@ -24,12 +24,15 @@ import { suggestionVisibleTo } from '@/lib/autopilot/audience';
 import { readVisiblePrefix } from '@/lib/autopilot/visible-prefix';
 import { dayKeyInZone, zonedTimeMs } from '@/lib/schedule/zoned';
 import type { SliceDefinition } from '../policy';
-// The reasoning report and the suggestion queues are household-wide and can
-// mention budgets, bills or documents. Those areas are manager-only (§4,
-// `SLICE_ACCESS`), so for anyone else an item that touches them is dropped
-// here — the same rule the money and documents slices enforce by not loading,
-// and the one the reasoning page applies for its reader (MANAGER_ONLY_RE).
-import { managerOnlyItem, managerOnlyText } from '../manager-only';
+// The suggestion queues are household-wide and can mention budgets, bills or
+// documents. Those areas are manager-only (§4, `SLICE_ACCESS`), so for anyone
+// else an item whose words touch them is dropped here — the same rule the
+// money and documents slices enforce by not loading. The reasoning report is
+// composed for this reader instead, by where each item comes from
+// (lib/operating-index/audience.ts), as the reasoning page is: the words are
+// run only over the items an Autopilot card or an approval request worded.
+import { managerOnlyText } from '../manager-only';
+import { wordedByItsSource } from '@/lib/operating-index/audience';
 
 const MAX_ITEMS_PER_ANSWER = 3;
 const MAX_SUGGESTIONS = 8;
@@ -148,10 +151,13 @@ export const proactiveSlice: SliceDefinition = {
 
     const [signals, report, liveSignals, autopilot, recommendations, terms, pets, projects, plans] = await Promise.all([
       loadSignals(scope.familyId, env.tz, env.now),
-      // Composed for every reader and filtered below; the household's daily
-      // operating index is kept only from a manager's or the system's client
-      // (SnapshotReach), never from one RLS may give less of the household.
-      loadReasoningReport(scope.db, scope.familyId, env.tz, MODEL_LOCALE, modelText, canManage ? 'household' : 'member', env.now),
+      // Composed for this reader (ReasoningViewer): for anyone who does not
+      // read the household's money, its drift, its money and paperwork moves
+      // and its money items are left out by where each comes from, as on the
+      // reasoning page. The household's daily operating index is kept only
+      // from a manager's or the system's client (SnapshotReach), never from
+      // one RLS may give less of the household.
+      loadReasoningReport(scope.db, scope.familyId, env.tz, MODEL_LOCALE, modelText, canManage ? 'household' : 'member', env.now, { readsHouseholdMoney: canManage }),
       settle(scope.db.from('family_signals').select('kind, title, detail, score, evidence').eq('family_id', scope.familyId).eq('status', 'active').order('score', { ascending: false }).limit(MAX_SIGNALS)),
       // The first eight open cards this reader may be handed, the rules applied
       // BEFORE the eight are taken (lib/autopilot/visible-prefix.ts): the card's
@@ -210,10 +216,12 @@ export const proactiveSlice: SliceDefinition = {
         answers: report.answers.map((a) => ({
           id: a.id, question: a.question, status: a.status,
           headline: keep(a.headline) ? a.headline : 'Some items are only shown to the adults who manage the family.',
-          // A linked item is also the managers' when it links to a money page
-          // ("2 accounts are below zero" → the wallet), whatever its words.
+          // The report is already this reader's. The words are run again only
+          // over an item an Autopilot card or an approval request worded: the
+          // rest are worded from the calendar and the family's names, and
+          // "“Bill's recital” overlaps “Swim practice”" is a child's to read.
           items: a.items
-            .filter((i) => withhold(managerOnlyItem(i.title, i.detail, i.href)))
+            .filter((i) => withhold(wordedByItsSource(i.href) && managerOnlyText(i.title, i.detail)))
             .slice(0, MAX_ITEMS_PER_ANSWER)
             .map((i) => ({ title: i.title, detail: i.detail ?? null })),
         })),

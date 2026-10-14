@@ -69,9 +69,12 @@ export default async function FamilyOperatingIndexPage() {
   const tz = ctx.active.family.timezone || 'UTC';
   // Computed and shown to everyone; the day's snapshot is kept only from a
   // parent's or an adult's visit (SnapshotReach), whose view is the household's.
+  // Anyone else is shown their own reading: without the household's money and
+  // paperwork, and with no trend or recap against the household's day.
+  const reach = readsHouseholdMoney(ctx.active.role) ? 'household' : 'member';
   let indexResult;
   try {
-    indexResult = await loadOperatingIndex(supabase, ctx.active.familyId, tz, readsHouseholdMoney(ctx.active.role) ? 'household' : 'member');
+    indexResult = await loadOperatingIndex(supabase, ctx.active.familyId, tz, reach);
   } catch (error) {
     console.error('[dashboard/family-operating-index] operating index read failed', error);
     return <ErrorState message={t('familyOperatingIndex.couldNotLoadYourFamily')} />;
@@ -130,9 +133,13 @@ export default async function FamilyOperatingIndexPage() {
               <span className={cn('rounded-full px-2.5 py-0.5 text-xs font-semibold', band.chip)}>{band.label}</span>
             </div>
             <p className="text-sm text-fg">{band.blurb}</p>
-            <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-muted sm:justify-start">
-              <TrendIcon className="h-3.5 w-3.5" /> {trendText}
-            </p>
+            {/* The trend is the household's day against its last one; a
+                narrower reading has none of its own to compare with. */}
+            {reach === 'household' && (
+              <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-muted sm:justify-start">
+                <TrendIcon className="h-3.5 w-3.5" /> {trendText}
+              </p>
+            )}
             {index.overloaded && (
               <p className="mt-1 text-xs text-muted">
                 <span className="font-medium text-fg">{index.overloaded.name}</span> {t('dashboardFamilyOperatingIndex.isCarryingTheMostThisWeek')}
@@ -267,7 +274,7 @@ export default async function FamilyOperatingIndexPage() {
                 <div className="mb-1.5 h-1.5 w-full overflow-hidden rounded-full bg-border/50" {...progressBarA11y(d.score, `${DIMENSION_LABELS[d.id]}: ${d.score} of 100`)}>
                   <div className={cn('h-full rounded-full transition-all', barColor(d.score))} style={{ width: `${d.score}%` }} />
                 </div>
-                <p className="text-xs text-muted">{d.summary}</p>
+                <p className="text-xs text-muted">{d.withheld ? t('familyOperatingIndex.moneyIsForTheAdultsWhoManageIt') : d.summary}</p>
               </div>
             );
           })}

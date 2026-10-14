@@ -6258,6 +6258,7 @@
   "familyOperatingIndex.computedLiveFromYourFamily": "Calculé en direct à partir de l’agenda, des tâches, des factures, des documents, des validations et des objectifs de votre famille. Enregistré une fois par jour pour suivre la tendance.",
   "familyOperatingIndex.couldNotLoadYourFamily": "Impossible de charger l’indice opérationnel de votre famille depuis Supabase. Actualisez et réessayez.",
   "familyOperatingIndex.firstReading": "Première mesure — revenez demain pour voir la tendance.",
+  "familyOperatingIndex.moneyIsForTheAdultsWhoManageIt": "Les factures, les budgets et les soldes sont réservés aux adultes qui gèrent l’argent de la famille.",
   "familyOperatingIndex.noChange": "Aucun changement depuis votre dernière mesure.",
   "familyOperatingIndex.trendVsLast": "{trend} par rapport à votre dernière mesure ({prior}).",
   "familyOperations.allClearNothingNeedsAttention": "Tout est en ordre — rien ne demande votre attention.",

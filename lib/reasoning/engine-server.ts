@@ -9,10 +9,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { signalWordsFor } from '@/lib/intelligence/hard-signals';
-import { managerOnlyText } from '@/lib/ai/context/manager-only';
-import { isHouseholdMoneyRoute } from '@/lib/finance/household-money';
+import { managersItem, managersMove } from '@/lib/operating-index/audience';
 import { loadOperatingIndex, type SnapshotReach } from '@/lib/operating-index/server';
-import type { OrchestratorItem } from '@/lib/operating-index/orchestrator';
 import type { OperatingSuggestion } from '@/lib/operating-index/score';
 import { loadFamilyContext } from '@/lib/reasoning/context';
 import { reasoningInsights } from '@/lib/reasoning/insights';
@@ -41,47 +39,18 @@ const SIGNAL_HREF = '/dashboard/family-signals';
  * are left out the same way, decided by where each item comes from and never
  * by the words of one the family's calendar or its people wrote — "“Bill's
  * recital” overlaps “Swim practice”", "Bill is carrying the most this week"
- * and "“Insurance agent visit” — no location" are a child's to read too:
- *
- *   - an operating index move by what it IS (managersMove): its financial
- *     dimension, or the household's paperwork (renew-docs; documents are a
- *     manager-only area, `SLICE_ACCESS`);
- *   - any item that links to one of the household's money pages
- *     (isHouseholdMoneyRoute);
- *   - and, by the manager-only words (managerOnlyText), only an item whose
- *     words an Autopilot card or an approval request wrote (WORDED_BY_ITS_SOURCE),
- *     which can be about anything, money included.
+ * and "“Insurance agent visit” — no location" are a child's to read too. The
+ * rule is lib/operating-index/audience.ts (managersMove, managersItem), the one
+ * the Operating Index page, the briefing, the Command Center and the calm inbox
+ * apply for the same reader.
  */
 export type ReasoningViewer = { readsHouseholdMoney: boolean };
 
-/** Every reader. The proactive AI slice composes this and filters per viewer itself. */
+/** Every reader: a service-role caller's, or one a caller narrows itself. */
 const EVERY_SIGNAL: ReasoningViewer = { readsHouseholdMoney: true };
 
 /** An operating index move, with what it is beside how it reads. */
 type IndexMove = ReasoningNextAction & Pick<OperatingSuggestion, 'id' | 'dimension'>;
-
-/** The operating index moves about the household's paperwork, beside its financial dimension. */
-const MANAGERS_PAPERWORK_MOVES: ReadonlySet<string> = new Set(['renew-docs']);
-
-/** True for a move that is the household's money or paperwork, by what it is. */
-function managersMove(move: IndexMove): boolean {
-  return move.dimension === 'financial' || MANAGERS_PAPERWORK_MOVES.has(move.id) || isHouseholdMoneyRoute(move.href);
-}
-
-/**
- * The orchestrator's sources whose item text is another writer's free text:
- * an Autopilot card's action label or title, and an approval request's title
- * (lib/operating-index/server.ts). Every other item it builds is worded from
- * the calendar, a member's name or a count.
- */
-const WORDED_BY_ITS_SOURCE: readonly string[] = ['/dashboard/autopilot', '/dashboard/trust'];
-
-/** True for an orchestrator item that is the household's money, by where it comes from. */
-function managersItem(item: OrchestratorItem): boolean {
-  if (isHouseholdMoneyRoute(item.href)) return true;
-  const path = item.href?.split(/[?#]/)[0];
-  return !!path && WORDED_BY_ITS_SOURCE.includes(path) && managerOnlyText(item.label);
-}
 
 type ReasoningInputs = {
   orchestrator: ReasoningEngineInput['orchestrator'];
@@ -126,7 +95,8 @@ function composeReport(inputs: ReasoningInputs, viewer: ReasoningViewer, now: Da
  * `reach` is whose client `sb` is (SnapshotReach), and required: composing the
  * report loads the operating index, which keeps the household's day only from
  * a client that reads the household. The proactive slice passes 'household'
- * for a manager or the system, 'member' for anyone else.
+ * for a manager or the system, 'member' for anyone else, and `viewer` to
+ * match, so the report it is handed is already its reader's.
  */
 export async function loadReasoningReport(
   sb: DB, familyId: string, tz: string, locale: LocaleCode, t: Translate, reach: SnapshotReach, now: Date = new Date(), viewer: ReasoningViewer = EVERY_SIGNAL,

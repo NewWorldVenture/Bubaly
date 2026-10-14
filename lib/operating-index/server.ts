@@ -21,6 +21,7 @@ import {
 } from './score';
 import { summarizeChange, type SnapshotView, type ChangeSummary } from './summary';
 import { orchestrate, type OrchestratorReport, type DayEvent, type OrchestratorItem } from './orchestrator';
+import { indexForMember, managersItem } from './audience';
 import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { addDaysToDayKey, dayKeyInTz, zonedTimeMs } from '@/lib/services/scope';
 
@@ -232,11 +233,11 @@ export async function buildSnapshot(supabase: DB, familyId: string, tz: string, 
 export interface OperatingIndexResult {
   index: OperatingIndex;
   asOf: string;
-  /** Composite from the most recent PRIOR day's snapshot, if any. */
+  /** Composite from the most recent PRIOR day's snapshot, if any; never for a 'member' load (SnapshotReach). */
   priorComposite: number | null;
-  /** current − prior, or null when there's no prior snapshot. */
+  /** current − prior, or null when there's no prior snapshot (and for a 'member' load). */
   trend: number | null;
-  /** Evening "what changed since yesterday" recap (pillar #5). */
+  /** Evening "what changed since yesterday" recap (pillar #5); `isFirst` for a 'member' load. */
   change: ChangeSummary;
   /** The five orchestrator answers (pillar #1). */
   orchestrator: OrchestratorReport;
@@ -249,7 +250,7 @@ export interface OperatingIndexResult {
  * member + open-vote count (passed in) so nothing is recomputed.
  */
 async function buildOrchestratorReport(
-  supabase: DB, familyId: string, index: OperatingIndex, openVotes: number, tz: string, now: Date,
+  supabase: DB, familyId: string, index: OperatingIndex, openVotes: number, tz: string, reach: SnapshotReach, now: Date,
 ): Promise<OrchestratorReport> {
   // Tomorrow on the FAMILY's wall clock. This was `setUTCHours(0, 0, 0, 0)`
   // plus a day — Greenwich's tomorrow — so in Los Angeles the question "what's
@@ -289,15 +290,21 @@ async function buildOrchestratorReport(
     id: e.id, title: e.title, startsAt: e.starts_at, endsAt: e.ends_at, allDay: e.all_day,
     assigneeId: e.assignee_id, location: e.location, needsLocation: NEEDS_LOCATION.has(e.category),
   }));
-  const autoCompletable: OrchestratorItem[] = (autoRes.data ?? []).map((s) => ({
+  // For a reader who does not read the household's money ('member'), an item
+  // that is the household's money by where it comes from is left out before
+  // the questions are answered (lib/operating-index/audience.ts), so no
+  // headline counts it: an Autopilot card to "Pay the water bill" is not a
+  // child's to read.
+  const forReader = (items: OrchestratorItem[]): OrchestratorItem[] => (reach === 'household' ? items : items.filter((i) => !managersItem(i)));
+  const autoCompletable: OrchestratorItem[] = forReader((autoRes.data ?? []).map((s) => ({
     label: s.action_label || s.title, href: '/dashboard/autopilot',
-  }));
-  const pendingApprovals: OrchestratorItem[] = (approvalsRes.data ?? []).map((a) => ({
+  })));
+  const pendingApprovals: OrchestratorItem[] = forReader((approvalsRes.data ?? []).map((a) => ({
     label: a.title, href: '/dashboard/trust',
-  }));
-  const missingInfo: OrchestratorItem[] = (missingRes.data ?? []).map((e) => ({
+  })));
+  const missingInfo: OrchestratorItem[] = forReader((missingRes.data ?? []).map((e) => ({
     label: `“${e.title}” — no location`, href: '/dashboard/calendar',
-  }));
+  })));
 
   return orchestrate({
     tomorrowEvents, autoCompletable, overloaded: index.overloaded, pendingApprovals, openVotes, missingInfo,
@@ -328,6 +335,17 @@ function suggestionPairs(raw: unknown): { id: string; title: string }[] {
  * for its reader and writes nothing: the family's one row per day is the
  * household's, and a child's visit used to overwrite the parents' reading of
  * the day, and with it the next day's trend and the evening recap.
+ *
+ * Nor is a 'member' load diffed against that row. The row is a parent's
+ * reading: diffed against a narrower one, whatever the narrower view does not
+ * find read as "Cleared" (a child on the 0514 client was told "Cleared: 1
+ * account is below zero", the parents' money, which nothing had cleared), and
+ * the household's composite read as the child's trend. A 'member' load has no
+ * prior reading of its own, so it reports no trend and no recap. And what it
+ * returns is its reader's (lib/operating-index/audience.ts): without the
+ * household's money and paperwork moves, the financial dimension's summary or
+ * the orchestrator's money items, which the reasoning page keeps from the same
+ * reader.
  */
 export type SnapshotReach = 'household' | 'member';
 
@@ -339,25 +357,32 @@ export type SnapshotReach = 'household' | 'member';
  */
 export async function loadOperatingIndex(supabase: DB, familyId: string, tz: string, reach: SnapshotReach, now: Date = new Date()): Promise<OperatingIndexResult> {
   const snapshot = await buildSnapshot(supabase, familyId, tz, now);
-  const index = computeOperatingIndex(snapshot, now);
+  const household = computeOperatingIndex(snapshot, now);
+  // What this load's reader is shown: the household's index, or theirs (SnapshotReach).
+  const index = reach === 'household' ? household : indexForMember(household);
   // One key, used three ways: the anchor for the prior read, the upsert key,
   // and the `asOf` this returns. They have to be the same string, which is why
   // it is computed once here rather than at each site.
   const today = asOfDate(now, tz);
 
   // Prior snapshot (most recent day before today) for the trend + evening recap.
-  const { data: recent, error: recentError } = await supabase
-    .from('family_operating_index')
-    .select('as_of_date, composite, dimensions, suggestions')
-    .eq('family_id', familyId)
-    .lt('as_of_date', today)
-    .order('as_of_date', { ascending: false })
-    .limit(1);
-  if (recentError) {
-    console.error('[operating-index] prior snapshot read failed', recentError);
-    throw recentError;
+  // It is the household's, so only a load that reads the household diffs
+  // against it (SnapshotReach); a 'member' load has no prior of its own.
+  let priorRow: { composite: number; dimensions: Json; suggestions: Json } | null = null;
+  if (reach === 'household') {
+    const { data: recent, error: recentError } = await supabase
+      .from('family_operating_index')
+      .select('as_of_date, composite, dimensions, suggestions')
+      .eq('family_id', familyId)
+      .lt('as_of_date', today)
+      .order('as_of_date', { ascending: false })
+      .limit(1);
+    if (recentError) {
+      console.error('[operating-index] prior snapshot read failed', recentError);
+      throw recentError;
+    }
+    priorRow = recent && recent.length ? recent[0] : null;
   }
-  const priorRow = recent && recent.length ? recent[0] : null;
   const priorComposite = priorRow ? priorRow.composite : null;
 
   const currentView: SnapshotView = {
@@ -373,7 +398,7 @@ export async function loadOperatingIndex(supabase: DB, familyId: string, tz: str
   const change = summarizeChange(currentView, priorView);
 
   // The five orchestrator questions (pillar #1), reusing the snapshot's signals.
-  const orchestrator = await buildOrchestratorReport(supabase, familyId, index, snapshot.openVotes, tz, now);
+  const orchestrator = await buildOrchestratorReport(supabase, familyId, household, snapshot.openVotes, tz, reach, now);
 
   // Idempotent upsert of today's snapshot — one row per family per FAMILY day.
   // The key moving is the point: an evening visit west of Greenwich used to
@@ -386,10 +411,10 @@ export async function loadOperatingIndex(supabase: DB, familyId: string, tz: str
       const { error: familyOperatingIndexWriteError } = await supabase.from('family_operating_index').upsert({
         family_id: familyId,
         as_of_date: today,
-        composite: index.composite,
-        band: index.band,
-        dimensions: dimensionsToRecord(index.dimensions) as unknown as Json,
-        suggestions: index.suggestions as unknown as Json,
+        composite: household.composite,
+        band: household.band,
+        dimensions: dimensionsToRecord(household.dimensions) as unknown as Json,
+        suggestions: household.suggestions as unknown as Json,
       }, { onConflict: 'family_id,as_of_date' });
       if (familyOperatingIndexWriteError) console.error('[operating-index] family_operating_index upsert failed', familyOperatingIndexWriteError);
     } catch {

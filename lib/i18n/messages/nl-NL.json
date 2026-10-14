@@ -6258,6 +6258,7 @@
   "familyOperatingIndex.computedLiveFromYourFamily": "Live berekend uit de agenda, klussen, rekeningen, documenten, goedkeuringen en doelen van je gezin. Eens per dag opgeslagen zodat je de trend ziet.",
   "familyOperatingIndex.couldNotLoadYourFamily": "Kon de operating index van je gezin uit Supabase niet laden. Ververs en probeer het opnieuw.",
   "familyOperatingIndex.firstReading": "Eerste meting — kom morgen terug om de trend te zien.",
+  "familyOperatingIndex.moneyIsForTheAdultsWhoManageIt": "Rekeningen, budgetten en saldi zijn voor de volwassenen die het geld van het gezin beheren.",
   "familyOperatingIndex.noChange": "Geen verandering sinds je vorige meting.",
   "familyOperatingIndex.trendVsLast": "{trend} ten opzichte van je vorige meting ({prior}).",
   "familyOperations.allClearNothingNeedsAttention": "Alles in orde — er is niets dat aandacht nodig heeft.",

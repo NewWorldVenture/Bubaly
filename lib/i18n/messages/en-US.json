@@ -6432,6 +6432,7 @@
   "familyOperatingIndex.computedLiveFromYourFamily": "Computed live from your family’s calendar, chores, bills, documents, approvals and goals. Saved once a day so you can watch the trend.",
   "familyOperatingIndex.couldNotLoadYourFamily": "Could not load your family operating index from Supabase. Refresh and try again.",
   "familyOperatingIndex.firstReading": "First reading — check back tomorrow to see the trend.",
+  "familyOperatingIndex.moneyIsForTheAdultsWhoManageIt": "Bills, budgets and balances are for the adults who manage the family’s money.",
   "familyOperatingIndex.noChange": "No change since your last reading.",
   "familyOperatingIndex.trendVsLast": "{trend} vs. your last reading ({prior}).",
   "familyOperations.allClearNothingNeedsAttention": "All clear — nothing needs attention.",

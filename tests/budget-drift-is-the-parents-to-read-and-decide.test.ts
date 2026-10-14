@@ -43,6 +43,7 @@ import type { SliceEnv } from '@/lib/ai/context/policy';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
 import { localeOrDefault } from '@/lib/i18n/locales';
 import { readsHouseholdMoney } from '@/lib/finance/household-money';
+import { managerOnlyText } from '@/lib/ai/context/manager-only';
 
 type DB = SupabaseClient<Database>;
 const FAMILY = 'fam-sig';
@@ -427,5 +428,70 @@ describe('N6-R1 — a family\'s calendar and its people are not its money', () =
     const html = paint(await ReasoningPage());
     for (const item of [CLASH, NO_LOCATION, BILLS_WEEK]) expect(html).toContain(item);
     expect(html).not.toContain(EXPIRING);
+  });
+
+  // N6-R1-SLICE — the assistant's context composed the report for every
+  // reader and then ran the money words over every item, so a child's
+  // assistant lost the same three. It is now composed for its reader, as the
+  // page is, and the words run only over what an Autopilot card or an approval
+  // worded.
+  it('the assistant\'s context built for a child carries them too, and still not the money or the paperwork', async () => {
+    db.seed('financial_accounts', [
+      { id: 'acct-checking', family_id: FAMILY, type: 'checking', balance: -300 },
+      { id: 'acct-savings', family_id: FAMILY, type: 'savings', balance: -50 },
+    ]);
+    const itemsFor = async (role: string) => {
+      h.role = role;
+      const canManage = readsHouseholdMoney(role);
+      const built = await proactiveSlice.load(
+        { db, familyId: FAMILY } as unknown as ServiceScope,
+        { tz: 'UTC', now: new Date('2026-10-14T12:00:00Z'), viewer: { canManage, role, memberId: `m-${role}` }, members: [], pageContext: null } as unknown as SliceEnv,
+      );
+      if (!built.ok) throw new Error('the proactive slice did not build');
+      const data = built.data.data as { report: { answers: { items: { title: string }[] }[] } };
+      return data.report.answers.flatMap((a) => a.items.map((i) => i.title));
+    };
+
+    // A parent's next moves are the accounts, the conflict and the load (three
+    // to an answer); a child's are the conflict, the load and nothing behind
+    // them, where the paperwork would otherwise be.
+    const parent = await itemsFor('parent');
+    for (const item of [CLASH, NO_LOCATION, BILLS_WEEK, '2 accounts are below zero']) expect(parent).toContain(item);
+
+    const child = await itemsFor('child');
+    for (const item of [CLASH, NO_LOCATION, BILLS_WEEK]) expect(child).toContain(item);
+    for (const item of [EXPIRING, '2 accounts are below zero']) expect(child).not.toContain(item);
+  });
+
+  // N6-RE — the words an Autopilot card or an approval is read by matched only
+  // the singular: "accounts", "documents" or "passports" passed. A card worded
+  // in the plural is the managers' as the singular is; the family's calendar,
+  // which the words no longer read, is still a child's.
+  it('an Autopilot card worded in the plural is the managers\', and the clash is still a child\'s', async () => {
+    const TOP_UP = 'Top up both savings accounts';
+    db.seed('autopilot_suggestions', [{ id: 'card-top-up', family_id: FAMILY, status: 'open', confidence: 95, urgency: 3, title: 'Two balances are low', action_label: TOP_UP }]);
+
+    h.role = 'parent';
+    expect(paint(await ReasoningPage())).toContain(TOP_UP);
+    for (const role of ['child', 'guest']) {
+      h.role = role;
+      const html = paint(await ReasoningPage());
+      expect(html).not.toContain(TOP_UP);
+      expect(html).toContain(CLASH);
+      expect(paint(await FamilyOperatingIndexPage())).not.toContain(TOP_UP);
+    }
+  });
+});
+
+describe('N6-RE — the manager-only words, singular and plural', () => {
+  it.each([
+    '2 documents expiring soon', '3 accounts are below zero', 'Renew both passports', 'Review the family finances',
+    'Financial check-in', 'Two budgets are over their cap', 'File the taxes', 'Cancel 2 subscriptions', 'Pay the bill', 'Pay the bills',
+  ])('"%s" is the managers\'', (text) => {
+    expect(managerOnlyText(text)).toBe(true);
+  });
+
+  it.each(['Swim practice', 'Taxi to the airport', '3 events need an owner'])('"%s" is not', (text) => {
+    expect(managerOnlyText(text)).toBe(false);
   });
 });

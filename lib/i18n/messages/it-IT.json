@@ -6258,6 +6258,7 @@
   "familyOperatingIndex.computedLiveFromYourFamily": "Calcolato in tempo reale su calendario, faccende, bollette, documenti, approvazioni e obiettivi della tua famiglia. Salvato una volta al giorno per seguire l’andamento.",
   "familyOperatingIndex.couldNotLoadYourFamily": "Impossibile caricare l’Operating Index della tua famiglia da Supabase. Aggiorna e riprova.",
   "familyOperatingIndex.firstReading": "Prima rilevazione: torna domani per vedere l’andamento.",
+  "familyOperatingIndex.moneyIsForTheAdultsWhoManageIt": "Bollette, budget e saldi sono per gli adulti che gestiscono il denaro della famiglia.",
   "familyOperatingIndex.noChange": "Nessuna variazione dall’ultima rilevazione.",
   "familyOperatingIndex.trendVsLast": "{trend} rispetto alla tua ultima rilevazione ({prior}).",
   "familyOperations.allClearNothingNeedsAttention": "Tutto a posto: niente richiede attenzione.",
