@@ -231,6 +231,58 @@ export async function updateRequestWhereStatus(
   return ok((data ?? []).length > 0);
 }
 
+/**
+ * A fresh planning-attempt mark for `ai_requests.started_at`.
+ *
+ * `planning` is a status a request returns to: an answer that timed out is
+ * parked at `awaiting_context` and answering again moves it back to
+ * `planning`. A planner that outlived its deadline therefore found the request
+ * `planning` again — the retry's — and its compare-and-set on the status
+ * alone succeeded: its late plan was kept and run while nobody watched, and
+ * the retry's own plan was thrown away (ABA). Each attempt writes its own
+ * mark here and keeps its result only while the mark is still there
+ * (`updateRequestForAttempt`), so a later attempt — or anything that moves the
+ * request on — retires every earlier one.
+ *
+ * It is an instant (the column is `timestamptz`, and it still says when
+ * planning started), made unique to the microsecond by a per-process counter:
+ * a frozen test clock, or two attempts in one millisecond, still get
+ * different marks.
+ */
+let attemptSequence = 0;
+export function planningAttemptMark(at: Date = new Date()): string {
+  attemptSequence = (attemptSequence + 1) % 1000;
+  return at.toISOString().replace(/Z$/, `${String(attemptSequence).padStart(3, '0')}Z`);
+}
+
+/**
+ * Compare-and-set for one planning attempt: patches the request only while it
+ * is still `planning` under `attemptMark` (`planningAttemptMark`). `false`
+ * means the attempt was given up on — the intake's deadline, a cancellation,
+ * a newer attempt — and whatever it produced must not be kept.
+ */
+export async function updateRequestForAttempt(
+  scope: ServiceScope,
+  requestId: string,
+  attemptMark: string,
+  patch: Database['public']['Tables']['ai_requests']['Update'],
+  opts?: StoreOpts,
+): Promise<ServiceResult<boolean>> {
+  const { data, error } = await ledgerClient(scope, opts)
+    .from('ai_requests')
+    .update(patch)
+    .eq('id', requestId)
+    .eq('family_id', scope.familyId)
+    .eq('status', 'planning')
+    .eq('started_at', attemptMark)
+    .select('id');
+  if (error) {
+    console.error('[ai/runs] failed to update the request for its planning attempt', error);
+    return fail(describeDbError(error, 'Could not update the request.'), { code: SERVICE_CODES.db });
+  }
+  return ok((data ?? []).length > 0);
+}
+
 export type PlanStepInput = {
   /** Planner-local identifier; `dependsOn` refers to these, never to uuids. */
   key: string;

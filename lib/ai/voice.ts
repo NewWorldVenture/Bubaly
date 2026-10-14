@@ -105,11 +105,28 @@ export function prepareSpeechText(text: string, maxChars = 1200): string {
   return t;
 }
 
+/**
+ * The longest recording a spoken request needs. The web recorder stops itself
+ * here (lib/hooks/use-voice.ts), and the server's byte cap is sized from it.
+ */
+export const VOICE_RECORDING_MAX_MS = 60_000;
+
+/**
+ * The most audio /api/ai/voice/transcribe accepts. Transcription bills by the
+ * minute of audio, and 25 MB of low-bitrate speech is hours of it, from any
+ * member, ten times a minute. 2 MB is about two minutes at the 128 kbps a phone
+ * records AAC at, and far more at the 32–48 kbps Opus a browser records — room
+ * for a long spoken request, not for an audiobook.
+ */
+export const VOICE_COMMAND_MAX_BYTES = 2 * 1024 * 1024;
+
 /** Server-side: validate an uploaded audio blob is a plausible recording. */
 export function isValidAudioUpload(size: number, type: string, maxBytes = 25 * 1024 * 1024): { ok: true } | { ok: false; error: string } {
   if (!size) return { ok: false, error: 'Empty audio' };
-  if (size > maxBytes) return { ok: false, error: 'Recording too large (max 25 MB)' };
-  if (type && !/^audio\//i.test(type) && !/octet-stream/i.test(type)) {
+  if (size > maxBytes) return { ok: false, error: `Recording too large (max ${Math.round(maxBytes / (1024 * 1024))} MB)` };
+  // A recording names its type: both the browser recorder and the phone's do.
+  // An upload that names none is not one of theirs.
+  if (!type || (!/^audio\//i.test(type) && !/octet-stream/i.test(type))) {
     return { ok: false, error: 'Not an audio file' };
   }
   return { ok: true };

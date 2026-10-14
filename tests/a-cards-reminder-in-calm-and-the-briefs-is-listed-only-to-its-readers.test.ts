@@ -64,8 +64,11 @@ vi.mock('@/lib/ai/provider', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/ai/provider')>()),
   isAIConfigured: async () => true,
   resolveProvider: async () => ({
-    complete: async (request: { messages: { content: string }[] }) => {
+    complete: async (request: { system?: string; messages: { content: string }[] }) => {
       h.prompts.push(request.messages.map((m) => m.content).join('\n'));
+      // The weekly brief answers only with a reply that is a briefing (N14);
+      // what this file reads is the prompt, so its reply is a minimal one.
+      if (request.system?.includes('WEEKLY family briefing')) return { text: '{"headline":"A steady week."}', model: 'fixture' };
       return { text: 'not a brief', model: 'fixture' };
     },
   }),

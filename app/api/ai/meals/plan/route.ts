@@ -21,6 +21,7 @@ import { readPlannerMeals, readPlannerRecipes, readPlannerPantry } from '@/lib/m
 import type { MealType } from '@/lib/database.types';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
+import { AI_ASSISTANT_FEATURE_KEY, accessDeniedResponse, assertAIAccess } from '@/lib/server/ai-access';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
@@ -86,6 +87,12 @@ export async function POST(req: Request) {
     { error: t('plan.tooManyMealPlanRequests') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
+  // A model call, so the Free plan's monthly AI allowance applies here as it
+  // does at /api/ai and on the Habits, Journal and Notes helpers: these rows
+  // count toward the limit the assistant refuses on, so a Free family past its
+  // ten kept getting week plans while being refused there.
+  const access = await assertAIAccess(ctx, { db: supabase, featureKey: AI_ASSISTANT_FEATURE_KEY });
+  if (!access.ok) return accessDeniedResponse(access);
 
   // Candidate dishes ------------------------------------------------------
   const candidateResults = await settleAll([

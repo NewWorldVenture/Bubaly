@@ -10,7 +10,9 @@ const mocks = vi.hoisted(() => ({
 // The family here is open, so the gate is answered rather than seeded.
 vi.mock('@/lib/server/account-standing', () => ({ refuseClosedOrTrialEnded: async () => null }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.context }));
-vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.server }));
+// The daily meter is counted with the service client (RLS hides audit_logs
+// from a non-manager), so both clients answer from the same results here.
+vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.server, createServiceClient: () => ({ from: (table: string) => new MockQuery(table) }) }));
 vi.mock('@/lib/ai/provider', async (importOriginal) => ({
   describeAIError: (await importOriginal<typeof import('@/lib/ai/provider')>()).describeAIError,
   resolveProvider: mocks.provider,

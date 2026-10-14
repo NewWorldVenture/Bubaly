@@ -5,7 +5,7 @@ import {
   type VoiceMode, type TtsVoice,
   DEFAULT_VOICE_MODE, DEFAULT_TTS_VOICE,
   normalizeVoiceMode, normalizeTtsVoice,
-  pickRecordingMimeType, filenameForMime, shouldSpeak,
+  pickRecordingMimeType, filenameForMime, shouldSpeak, VOICE_RECORDING_MAX_MS,
 } from '@/lib/ai/voice';
 
 const MODE_KEY = 'ai-voice-mode';
@@ -54,6 +54,9 @@ export function useVoice(opts: { onError?: (msg: string, info?: VoiceErrorInfo) 
   const speechRequestRef = useRef<AbortController | null>(null);
   const speechUrlRef = useRef<string | null>(null);
   const resolveRef = useRef<((text: string | null) => void) | null>(null);
+  // The recording stops itself at VOICE_RECORDING_MAX_MS: a spoken request,
+  // not an open microphone (the server refuses more than that much audio).
+  const limitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setSupported(voiceInputSupported());
@@ -74,6 +77,7 @@ export function useVoice(opts: { onError?: (msg: string, info?: VoiceErrorInfo) 
   }, []);
 
   const cleanupStream = useCallback(() => {
+    if (limitRef.current) { clearTimeout(limitRef.current); limitRef.current = null; }
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     recorderRef.current = null;
@@ -120,6 +124,7 @@ export function useVoice(opts: { onError?: (msg: string, info?: VoiceErrorInfo) 
 
       const promise = new Promise<string | null>((resolve) => { resolveRef.current = resolve; });
       recorder.start();
+      limitRef.current = setTimeout(() => { if (recorder.state !== 'inactive') recorder.stop(); }, VOICE_RECORDING_MAX_MS);
       setStatus('recording');
       return promise;
     } catch (e) {

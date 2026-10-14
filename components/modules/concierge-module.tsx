@@ -65,7 +65,7 @@ export function ConciergeModule() {
   const { fmtDate: fmt } = useFormat();
   const fmtDate = (d: string | null) => (d ? fmt(d, 'MMM d, yyyy') : null);
   const fmtCents = (cents: number | null) => centsIn(locale.code, cents);
-  const { familyId, userId, family } = useApp();
+  const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
   const [activeKind, setActiveKind] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -104,10 +104,10 @@ export function ConciergeModule() {
       const res = await fetch('/api/ai/assist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        // The concierge's prompt and budget are the server's (app/api/ai/assist/route.ts).
         body: JSON.stringify({
+          purpose: 'concierge',
           messages: nextMessages.map(m => ({ role: m.role, content: m.content })),
-          systemPrompt: `You are a luxury family concierge AI for the ${family?.name ?? 'family'} household. You help families plan memorable experiences, make reservations, coordinate schedules, and arrange special moments. Be warm, enthusiastic, and practical. Ask one clarifying question at a time when you need a key detail (budget, dates, party size). When you have enough information, suggest specific options with helpful tips, and offer to save the plan. Keep responses concise and actionable.`,
-          maxTokens: 700,
         }),
       });
       const data = await res.json();

@@ -19,6 +19,7 @@ import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/unt
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { refuseIfLocked, refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
+import { AI_ASSISTANT_FEATURE_KEY, accessDeniedResponse, assertAIAccess } from '@/lib/server/ai-access';
 import { insightFeatureHrefs } from '@/lib/ai/insight-features';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import { readAll, readAllByIdAsQuery } from '@/lib/supabase/read-all';
@@ -102,6 +103,14 @@ export async function POST(req: Request) {
     { error: t('insights.tooManyAiInsightRequests') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
+  // Every kind is a model call, so the Free plan's monthly AI allowance
+  // applies here as it does at /api/ai and on the Habits, Journal and Notes
+  // helpers: these rows count toward the limit the assistant refuses on, so a
+  // Free family past its ten kept getting a summary from every free module's
+  // AI Assist while being refused there. A paid plan's allowance is unlimited,
+  // so this asks nothing more of it.
+  const access = await assertAIAccess(ctx, { db: supabase, featureKey: AI_ASSISTANT_FEATURE_KEY });
+  if (!access.ok) return accessDeniedResponse(access);
   const familyId = ctx.active.familyId;
   const tz = ctx.active.family.timezone || 'America/New_York';
   // The family's day, for the kinds that ask "what is still ahead" of a DATE
