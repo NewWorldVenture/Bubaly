@@ -12,7 +12,8 @@ import type { BudgetRow, ExpenseRow } from '@/lib/operating-index/inputs';
 // tests/a-german-family-reads-engine-money-in-their-own-format.test.ts.
 const echo = (key: string, params?: Record<string, string | number>) => `${key} ${JSON.stringify(params ?? {})}`;
 const drift = (budgets: BudgetRow[], expenses: ExpenseRow[], today: string) => detectBudgetDrift(budgets, expenses, today, 'en-US', echo);
-const hardSignals = (inp: HardSignalInputs, now: Date) => buildHardSignals(inp, now, 'en-US', echo);
+// The detectors' zone is the family's; these cases are written on Greenwich's clock.
+const hardSignals = (inp: Omit<HardSignalInputs, 'tz'>, now: Date) => buildHardSignals({ ...inp, tz: 'UTC' }, now, 'en-US', echo);
 
 const NOW = new Date('2026-07-07T12:00:00.000Z'); // Tuesday
 // The family's day at NOW: each budget's period is judged on it.
@@ -54,14 +55,14 @@ describe('detectStressWindows', () => {
   it('finds the highest-pressure day/part bucket (clashes weigh most)', () => {
     // Tuesday 18:00 = weekday evening.
     const evening = (n: number) => Array.from({ length: n }, () => ({ at: '2026-07-07T18:30:00.000Z' }));
-    const sigs = detectStressWindows(evening(6), [{ at: '2026-07-07T18:30:00.000Z' }], [{ at: '2026-07-07T18:00:00.000Z' }], NOW);
+    const sigs = detectStressWindows(evening(6), [{ at: '2026-07-07T18:30:00.000Z' }], [{ at: '2026-07-07T18:00:00.000Z' }], NOW, 'UTC');
     expect(sigs).toHaveLength(1);
     expect(sigs[0].kind).toBe('stress_window');
     expect(sigs[0].title).toMatch(/weekday evenings/i);
     expect(sigs[0].evidence.conflicts).toBe(1);
   });
   it('returns nothing when there is not enough pressure', () => {
-    expect(detectStressWindows([{ at: '2026-07-07T09:00:00.000Z' }], [], [], NOW)).toEqual([]);
+    expect(detectStressWindows([{ at: '2026-07-07T09:00:00.000Z' }], [], [], NOW, 'UTC')).toEqual([]);
   });
 });
 
@@ -148,7 +149,8 @@ describe('detectBudgetDrift', () => {
       TODAY,
     );
     expect(sigs).toHaveLength(1);
-    expect(sigs[0]).toMatchObject({ kind: 'budget_drift', subjectKey: 'budget:groceries' });
+    // Keyed on the period too (N9): a decision on July's drift is not one on August's.
+    expect(sigs[0]).toMatchObject({ kind: 'budget_drift', subjectKey: 'budget:groceries:2026-07-01' });
     expect(sigs[0].evidence).toMatchObject({ limit: 500, spent: 600, overBy: 100, recurring: false });
     expect(sigs[0].detail).toContain('hardSignals.budgetDrift.monthly');
     expect(sigs[0].detail).toContain('$600');

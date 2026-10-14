@@ -11,6 +11,7 @@ import { safeFeedUrl } from '@/lib/library/feed-parse';
 // export async functions and every export it has is callable from the browser,
 // so anything the nightly cron also needs cannot live in this file.
 import { ingestFeed } from '@/lib/library/ingest';
+import { addedByAnAdult, readCurators } from '@/lib/library/curator';
 import { rateLimit } from '@/lib/server/rate-limit';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
@@ -115,9 +116,20 @@ export async function refreshFeedAction(feedId: string): Promise<LibraryResult> 
   }
   const supabase = await createServer();
   const { data: feed, error } = await supabase
-    .from('library_feeds').select('id, feed_url')
+    .from('library_feeds').select('id, feed_url, created_by')
     .eq('id', feedId).eq('family_id', ctx.active.familyId).maybeSingle();
   if (error || !feed) return { ok: false, error: 'That subscription could not be found.' };
+  // Anyone may refresh what the family's adults subscribed to; a feed row that
+  // no current parent or adult added (one written over PostgREST) is not
+  // fetched on anyone's behalf (lib/library/curator.ts).
+  const curated = await readCurators(supabase, [ctx.active.familyId], [feed.created_by]);
+  if (!curated.ok) {
+    console.error('[library] curator read failed', curated.error);
+    return { ok: false, error: (await getTranslations())('library.feedCouldNotBeChecked') };
+  }
+  if (!addedByAnAdult(curated, ctx.active.familyId, feed.created_by)) {
+    return { ok: false, error: (await getTranslations())('library.feedNotAddedByAnAdult') };
+  }
 
   const result = await ingestFeed(supabase, ctx.active.familyId, ctx.user.id, feed.id, feed.feed_url);
   revalidatePath(PAGE);

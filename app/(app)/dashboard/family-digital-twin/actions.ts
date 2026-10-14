@@ -78,8 +78,19 @@ export async function simulateDecisionAction(input: SimFormInput): Promise<SimRe
     const in120 = new Date(now.getTime() + 120 * 86_400_000).toISOString();
     // Series included: a weekly commitment is in the member's load every week (lib/calendar/occurrences.ts).
     const twinTimezone = ctx.active.family.timezone || 'UTC';
-    const { data } = await readCalendarOccurrences(supabase, familyId, instantCalendarBounds(now.toISOString(), in120, twinTimezone), twinTimezone,
-      { columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day'], assigneeId: input.memberId, limit: 500 });
+    const { data, error: scheduleError } = await settle(readCalendarOccurrences(supabase, familyId, instantCalendarBounds(now.toISOString(), in120, twinTimezone), twinTimezone,
+      { columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day'], assigneeId: input.memberId, limit: 500 }));
+    // A schedule that could not be read is not an empty one. Simulated against
+    // nothing, every commitment "fits cleanly" with "no conflicts" — the same
+    // guess the spend branch below refuses to make about a budget.
+    if (scheduleError) {
+      console.error('[digital-twin] schedule read failed', scheduleError);
+      return {
+        verdict: 'conflict',
+        headline: tr('digitalTwin.couldNotReadTheSchedule'),
+        impacts: [{ severity: 'blocker', title: tr('digitalTwin.scheduleUnavailable') }],
+      };
+    }
     const memberEvents: SimEvent[] = (data ?? []).map((e) => ({
       id: e.id, title: e.title, startsAt: e.starts_at, endsAt: e.ends_at, allDay: e.all_day,
     }));
@@ -154,7 +165,7 @@ export async function projectActivityAction(input: ActivityProjectionInput): Pro
   const tz = ctx.active.family.timezone || 'UTC';
 
   // Member's upcoming events (schedule/load), the cost's budget, vacations (conflicts).
-  const [{ data: evRows }, { budget, error: txError }, { data: vacRows }] = await Promise.all([
+  const [{ data: evRows, error: evError }, { budget, error: txError }, { data: vacRows, error: vacError }] = await Promise.all([
     // Series included: a weekly commitment counts every week of the six months (lib/calendar/occurrences.ts).
     settle(readCalendarOccurrences(supabase, familyId, instantCalendarBounds(now.toISOString(), in180, tz), tz,
       { columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day'], assigneeId: input.memberId, limit: 500 })),
@@ -168,6 +179,12 @@ export async function projectActivityAction(input: ActivityProjectionInput): Pro
   if (txError) {
     console.error('[digital-twin] projection spend total read failed', txError);
     return { ok: false, error: tr('digitalTwin.couldNotReadThisCategorysSpending') };
+  }
+  // And the schedule and the trips: projected against none, the activity has
+  // no clashes and a lighter week than the member really has.
+  if (evError || vacError) {
+    console.error('[digital-twin] projection schedule read failed', evError ?? vacError);
+    return { ok: false, error: tr('digitalTwin.couldNotReadTheSchedule') };
   }
 
   const memberEvents: SimEvent[] = (evRows ?? []).map((e) => ({
