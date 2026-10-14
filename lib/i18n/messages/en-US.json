@@ -8087,7 +8087,6 @@
   "inbox.whatWasItAbout": "What was it about?",
   "inbox.whatWasSaidOrWritten": "What was said or written…",
   "inboxActions.bubalyIsNotConnectedTo": "Bubaly is not connected to an AI engine yet.",
-  "inboxActions.onlyAParentOrAdultCanHandle": "Only a parent or adult can hand a message to Bubaly.",
   "inboxActions.thatMessageCouldNotBe": "That message could not be found.",
   "inboxActions.thereIsNothingInThat": "There is nothing in that message to hand over.",
   "inboxActions.tooManyRequestsRightNow": "Too many requests right now. Try again in a minute.",

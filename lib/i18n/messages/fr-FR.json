@@ -7906,7 +7906,6 @@
   "inbox.whatWasItAbout": "De quoi s'agissait-il ?",
   "inbox.whatWasSaidOrWritten": "Ce qui a été dit ou écrit…",
   "inboxActions.bubalyIsNotConnectedTo": "Bubaly n'est pas encore relié à un moteur d'IA.",
-  "inboxActions.onlyAParentOrAdultCanHandle": "Seul un parent ou un adulte peut confier un message à Bubaly.",
   "inboxActions.thatMessageCouldNotBe": "Ce message est introuvable.",
   "inboxActions.thereIsNothingInThat": "Ce message ne contient rien à transmettre.",
   "inboxActions.tooManyRequestsRightNow": "Trop de demandes pour l'instant. Réessayez dans une minute.",
