@@ -17095,5 +17095,11 @@
   "referralActions.onlyAParentOrAdult": "Seul un parent ou un adulte peut faire cela avec le parrainage de la famille.",
   "feedback.tooManyIdeasAtOnce": "Cela fait beaucoup d’idées d’un coup. Patientez une minute, puis réessayez.",
   "feedback.dailyIdeaLimitReached": "Vous avez atteint la limite du jour de {limit} idées. Réessayez demain.",
-  "familyHealth.moreInMedical": "+{count} de plus dans Médical"
+  "familyHealth.moreInMedical": "+{count} de plus dans Médical",
+  "displayGrid.membersUnavailable": "Les membres de la famille sont indisponibles.",
+  "displayGrid.birthdaysUnavailable": "Les anniversaires sont indisponibles.",
+  "displayGrid.notesUnavailable": "Les notes sont indisponibles.",
+  "feedback.couldNotLoadTheBoard": "Le tableau d’idées n’a pas pu être chargé pour le moment. Réessayez dans un instant.",
+  "feedbackFeedbackBoard.yourVotesCouldNotBeRead": "Vos votes n’ont pas pu être lus pour le moment, le vote est donc en pause. Actualisez pour réessayer.",
+  "actions.tripRecommendationsInvalid": "Ces recommandations de voyage n’ont pas pu être enregistrées : elles n’ont pas la forme attendue ou sont trop volumineuses."
 }

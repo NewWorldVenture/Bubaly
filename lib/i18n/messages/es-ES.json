@@ -17095,5 +17095,11 @@
   "referralActions.onlyAParentOrAdult": "Solo un padre, una madre o un adulto puede hacer esto con la recomendación de la familia.",
   "feedback.tooManyIdeasAtOnce": "Son muchas ideas a la vez. Espera un minuto y vuelve a intentarlo.",
   "feedback.dailyIdeaLimitReached": "Has alcanzado el límite de hoy de {limit} ideas. Vuelve a intentarlo mañana.",
-  "familyHealth.moreInMedical": "+{count} más en Médico"
+  "familyHealth.moreInMedical": "+{count} más en Médico",
+  "displayGrid.membersUnavailable": "Los miembros de la familia no están disponibles.",
+  "displayGrid.birthdaysUnavailable": "Los cumpleaños no están disponibles.",
+  "displayGrid.notesUnavailable": "Las notas no están disponibles.",
+  "feedback.couldNotLoadTheBoard": "El tablón de ideas no se ha podido cargar ahora mismo. Inténtalo de nuevo en un momento.",
+  "feedbackFeedbackBoard.yourVotesCouldNotBeRead": "Tus votos no se han podido leer ahora mismo, así que la votación está en pausa. Actualiza para volver a intentarlo.",
+  "actions.tripRecommendationsInvalid": "Esas recomendaciones de viaje no se han podido guardar: no tienen la forma esperada o son demasiado grandes."
 }

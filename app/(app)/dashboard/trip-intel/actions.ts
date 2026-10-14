@@ -13,7 +13,7 @@ import { createServer } from '@/lib/supabase/server';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { departureFromEstimate } from '@/lib/trips/drive-time';
 import { isSeries } from '@/lib/calendar/occurrences';
-import type { TripRecommendations } from '@/lib/trips/research';
+import { MAX_TRIP_RECOMMENDATIONS_BYTES, normalizeTripRecommendations, type TripRecommendations } from '@/lib/trips/research';
 
 type Result<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -39,6 +39,15 @@ export async function saveTripPlanAction(input: {
   const title = input.title.trim();
   const destination = input.destination.trim();
   if (!title || !destination) return { ok: false, error: t('actions.aTitleAndDestinationAre') };
+  // The recommendations arrive from the client as it parsed the model's
+  // answer, and the column is jsonb with no check: held to the parser's shape
+  // and caps, and to a size, before anything is stored. A row the reader
+  // cannot dereference would otherwise take the whole family's Trip Intel
+  // page down on expand.
+  const recommendations = normalizeTripRecommendations(input.recommendations);
+  if (!recommendations || new TextEncoder().encode(JSON.stringify(recommendations)).byteLength > MAX_TRIP_RECOMMENDATIONS_BYTES) {
+    return { ok: false, error: t('actions.tripRecommendationsInvalid') };
+  }
 
   const { data, error } = await supabase
     .from('trip_plans')
@@ -54,7 +63,7 @@ export async function saveTripPlanAction(input: {
       end_date: input.endDate ?? null,
       members: input.members ?? [],
       interests: input.interests ?? null,
-      recommendations: input.recommendations as never,
+      recommendations: recommendations as never,
       weather_summary: input.weatherSummary ?? null,
     })
     .select('id')

@@ -5,6 +5,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { ErrorState } from '@/components/ui/states';
+import { emptyTripRecommendations, normalizeTripRecommendations } from '@/lib/trips/research';
 import { TripIntelModule, type UpcomingEvent, type SavedTripPlan, type SavedDeparturePlan } from '@/components/modules/trip-intel-module';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -86,7 +87,9 @@ export default async function TripIntelPage() {
     startDate: t.start_date, endDate: t.end_date,
     members: Array.isArray(t.members) ? (t.members as string[]) : [],
     interests: t.interests, weatherSummary: t.weather_summary,
-    recommendations: t.recommendations as unknown as SavedTripPlan['recommendations'],
+    // Stored jsonb is held to the shape the card renders (the column's own
+    // default is `{}`); a row without a usable set renders as an empty one.
+    recommendations: normalizeTripRecommendations(t.recommendations) ?? emptyTripRecommendations(),
     status: t.status,
   }));
 

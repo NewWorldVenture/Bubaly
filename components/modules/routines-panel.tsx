@@ -356,10 +356,25 @@ function RoutineEditor({ familyId, userId, members, template, initialItems, onCl
       if (previous.length) {
         const { data: removed, error: delErr } = await sb.from('routine_template_items').delete()
           .in('id', previous).eq('family_id', familyId).select('id');
-        // Fewer old steps than were read means another save replaced them in
-        // between: keeping both would list every step twice. This save's steps
-        // are taken back and the family is told, so the other save stands.
-        if (delErr || (removed?.length ?? 0) !== previous.length) {
+        // A refused delete takes this save's steps back. Fewer old steps than
+        // were read means another save was in flight and replaced some of them
+        // in between: whether ITS steps still stand decides what happens to
+        // ours. Two saves can interleave so that each read the other's new
+        // steps as "old" and deleted them: then the routine holds only this
+        // save's steps, and taking them back too would leave it with none (the
+        // N19 interleaving). So the template is read again: when another save's
+        // steps survive beside ours, ours are taken back and the family is told,
+        // so that save stands; when nothing else remains, this save stands.
+        let withdraw = Boolean(delErr);
+        if (!delErr && (removed?.length ?? 0) !== previous.length) {
+          const ours = new Set((inserted ?? []).map((row) => row.id));
+          const reread = await sb.from('routine_template_items').select('id').eq('template_id', templateId).eq('family_id', familyId);
+          // Unknown is not "duplicate": with the table unread, taking our steps
+          // back could empty the routine, so they stay and the error is shown.
+          if (reread.error) throw reread.error;
+          withdraw = (reread.data ?? []).some((row) => !ours.has(row.id));
+        }
+        if (withdraw) {
           const { data: undone } = await sb.from('routine_template_items').delete()
             .in('id', (inserted ?? []).map((row) => row.id)).eq('family_id', familyId).select('id');
           if ((undone?.length ?? 0) !== steps.length) console.error('[routines] replacement steps could not be withdrawn', { templateId });

@@ -339,15 +339,20 @@ function ResearchModal({ event, memberOptions, onClose, canSave }: {
 
 function RecsView({ recs }: { recs: TripRecommendations }) {
   const tr = useTranslations();
+  // A stored set may predate the save-time check (or be the column's `{}`
+  // default): a missing list is an empty one, never a crash on expand.
+  const restaurants = Array.isArray(recs?.restaurants) ? recs.restaurants : [];
+  const activities = Array.isArray(recs?.activities) ? recs.activities : [];
+  const tips = Array.isArray(recs?.tips) ? recs.tips : [];
   return (
     <div className="space-y-4">
-      {recs.restaurants.length > 0 && (
+      {restaurants.length > 0 && (
         <div>
           <h4 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-muted">
             <UtensilsCrossed className="h-3.5 w-3.5" /> Eat
           </h4>
           <div className="space-y-1.5">
-            {recs.restaurants.map((r, i) => (
+            {restaurants.map((r, i) => (
               <div key={i} className="rounded-xl border border-border bg-surface/40 p-3">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-semibold">{r.name}</p>
@@ -359,13 +364,13 @@ function RecsView({ recs }: { recs: TripRecommendations }) {
           </div>
         </div>
       )}
-      {recs.activities.length > 0 && (
+      {activities.length > 0 && (
         <div>
           <h4 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-muted">
             <Compass className="h-3.5 w-3.5" /> Do
           </h4>
           <div className="space-y-1.5">
-            {recs.activities.map((a, i) => (
+            {activities.map((a, i) => (
               <div key={i} className="rounded-xl border border-border bg-surface/40 p-3">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-semibold">{a.name}</p>
@@ -377,13 +382,13 @@ function RecsView({ recs }: { recs: TripRecommendations }) {
           </div>
         </div>
       )}
-      {recs.tips.length > 0 && (
+      {tips.length > 0 && (
         <div>
           <h4 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-muted">
             <Lightbulb className="h-3.5 w-3.5" /> {tr('tripIntel.tips')}
           </h4>
           <ul className="space-y-1">
-            {recs.tips.map((t, i) => (
+            {tips.map((t, i) => (
               <li key={i} className="flex gap-2 text-xs text-muted"><span className="text-brand-text">•</span> {t}</li>
             ))}
           </ul>

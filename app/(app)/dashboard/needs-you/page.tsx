@@ -31,8 +31,9 @@ import {
   type AwaitingRunRow, type FactSuggestionRow, type InboxMessageRow, type PaperworkRow, type ParentApprovalRow, type RecommendationRow,
 } from '@/lib/home/needs-sources';
 import { listPending } from '@/lib/services/approvals';
-import { listMemories, PENDING_SUGGESTION_LIMIT } from '@/lib/services/memory';
+import { listMemories, PENDING_SUGGESTION_LIMIT, SENSITIVE_MEMORY_CATEGORIES } from '@/lib/services/memory';
 import { scopeFromUserContext } from '@/lib/services/scope';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { settle } from '@/lib/supabase/settle';
 import { readsHouseholdMoney } from '@/lib/finance/household-money';
 
@@ -52,9 +53,15 @@ export default async function NeedsYouPage() {
   const now = new Date();
   const manager = isManager(ctx.active.role);
 
+  // What a manager may confirm and a child may not: the memory service hides
+  // the sensitive categories from anyone else (filterVisibleMemories), so the
+  // count of what its cap left out is taken over the same rows, or a child's
+  // headline counted medical inferences it was never shown.
+  const suggestionCount = supabase.from('family_playbook_suggestions').select('id', { count: 'exact', head: true })
+    .eq('family_id', familyId).eq('status', 'suggested');
   const [
     aiApprovalsRes, memoriesRes, awaitingRunsRes, recsRes, moneyApprovalsRes, choreSignoffRes, overdueRemindersRes, inboxRes, paperworkRes,
-    approvalCountRes, suggestionCountRes,
+    approvalCountRes, suggestionCountRes, gatedRunsRes,
   ] = await Promise.all([
     listPending(scope),
     // The memory service applies the same visibility rule the knowledge page
@@ -91,21 +98,30 @@ export default async function NeedsYouPage() {
     // The two service-read sources, counted the way the services read them.
     settle(supabase.from('approval_requests').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('status', 'pending')),
-    settle(supabase.from('family_playbook_suggestions').select('id', { count: 'exact', head: true })
-      .eq('family_id', familyId).eq('status', 'suggested')),
+    settle(manager ? suggestionCount : suggestionCount.not('category', 'in', `(${SENSITIVE_MEMORY_CATEGORIES.join(',')})`)),
+    // An approval that gates a run and the run parked on it are ONE decision
+    // (buildHomeNeeds). The approvals list is read to its cap of 50, so the
+    // runs it gates are read whole here, or the 51st approval's run showed up
+    // beside it as its own item. Paged by id, never summed; settled like the
+    // rest, so a transport failure is this read's error, not the page's.
+    settle(readAllAsQuery<{ run_id: string | null }>((from, to) => supabase.from('approval_requests').select('run_id')
+      .eq('family_id', familyId).eq('status', 'pending').not('run_id', 'is', null).order('id').range(from, to), { max: 5000 })),
   ]);
 
+  // Labels for the server log only, written as tokens: the i18n scanner reads a
+  // two-word string as copy, and these are not shown to anyone.
   const failures: { label: string; error: unknown }[] = [];
-  if (!aiApprovalsRes.ok) failures.push({ label: 'pending AI approvals', error: aiApprovalsRes.error });
-  if (!memoriesRes.ok) failures.push({ label: 'memory suggestions', error: memoriesRes.error });
+  if (!aiApprovalsRes.ok) failures.push({ label: 'ai-approvals', error: aiApprovalsRes.error });
+  if (!memoriesRes.ok) failures.push({ label: 'memory-suggestions', error: memoriesRes.error });
+  if (gatedRunsRes.error) failures.push({ label: 'gated-runs', error: gatedRunsRes.error });
   for (const [label, res] of [
-    ['awaiting runs', awaitingRunsRes], ['recommendations', recsRes], ['money approvals', moneyApprovalsRes],
-    ['chore sign-offs', choreSignoffRes], ['overdue reminders', overdueRemindersRes], ['inbox messages', inboxRes], ['paperwork', paperworkRes],
-    ['approval count', approvalCountRes], ['memory suggestion count', suggestionCountRes],
+    ['awaiting-runs', awaitingRunsRes], ['recommendations', recsRes], ['money-approvals', moneyApprovalsRes],
+    ['chore-sign-offs', choreSignoffRes], ['overdue-reminders', overdueRemindersRes], ['inbox-messages', inboxRes], ['paperwork', paperworkRes],
+    ['approval-count', approvalCountRes], ['suggestion-count', suggestionCountRes],
   ] as const) {
     if (res.error) failures.push({ label, error: res.error });
     // A cap that cannot say what it left out cannot be presented as the list.
-    else if (typeof res.count !== 'number') failures.push({ label, error: 'no count' });
+    else if (typeof res.count !== 'number') failures.push({ label, error: 'no-count' });
   }
   if (failures.length) {
     for (const f of failures) console.error(`[needs-you] ${f.label} read failed`, f.error);
@@ -124,6 +140,7 @@ export default async function NeedsYouPage() {
     ? memoriesRes.data.pending.map((s) => ({ id: s.id, label: s.label, value: s.value, expires_at: s.expires_at, created_at: s.created_at }))
     : [];
 
+  const gatedRunIds = new Set((gatedRunsRes.data ?? []).map((r) => r.run_id).filter((id): id is string => typeof id === 'string'));
   const all = buildHomeNeeds({
     approvals: moneyApprovals,
     renewals: [], documents: [], conflicts: [],
@@ -137,7 +154,7 @@ export default async function NeedsYouPage() {
     // it, in this reader's locale.
     reader: { locale: locale.code, t },
     aiApprovals: aiApprovals.map((a) => ({ id: a.id, title: a.title, runId: a.runId, priority: a.priority ?? null, requestedAt: a.requestedAt, expiresAt: a.expiresAt })),
-    awaitingRuns: (awaitingRunsRes.data ?? []) as AwaitingRunRow[],
+    awaitingRuns: ((awaitingRunsRes.data ?? []) as AwaitingRunRow[]).filter((r) => !(r.state === 'awaiting_approval' && gatedRunIds.has(r.id))),
     recommendations,
     factSuggestions,
     inboxMessages: (inboxRes.data ?? []) as InboxMessageRow[],

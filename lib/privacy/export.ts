@@ -20,7 +20,7 @@ import { listDocuments } from '@/lib/services/documents';
 import { getMembers, getPreferences } from '@/lib/services/family';
 import { listTransactions } from '@/lib/services/finances';
 import { listOpen as listOpenGroceries } from '@/lib/services/groceries';
-import { listMemories } from '@/lib/services/memory';
+import { listMemories, PENDING_SUGGESTION_LIMIT } from '@/lib/services/memory';
 import { listAllRoutines } from '@/lib/services/routines';
 import { listClassRoster, listEventsBetween } from '@/lib/services/school';
 import { normalizeCalendarWindowInstant } from '@/lib/briefing/calendar-window';
@@ -92,8 +92,10 @@ export type ExportSection = {
   /** The service's ceiling, when it has one; `count === limit` means "maybe more". */
   limit: number | null;
   /**
-   * True when the section is a window on the data: `count` reached `limit`, or
-   * the family has rows outside `window`.
+   * True when the section is a window on the data: `count` reached `limit`,
+   * the family has rows outside `window`, or the family holds as many rows as
+   * the service's cap (counted before any role filter, so a non-manager's
+   * shorter list cannot pass for the whole).
    */
   truncated: boolean;
   /**
@@ -128,7 +130,7 @@ function dayKey(scope: ServiceScope, offsetDays: number): string {
   return dayKeyInTz(new Date(now.getTime() + offsetDays * 86_400_000), scope.tz);
 }
 
-type SectionRead = ServiceResult<{ data: unknown; count: number; window?: { from: string; to: string }; beyondWindow?: boolean }>;
+type SectionRead = ServiceResult<{ data: unknown; count: number; window?: { from: string; to: string }; beyondWindow?: boolean; capped?: boolean }>;
 
 /** The instants a school or sports read between two family dates spans: the first day's midnight to the last day's last millisecond. */
 function familyDayWindow(scope: ServiceScope, window: { from: string; to: string }): { from: string; to: string } {
@@ -151,6 +153,25 @@ async function rowsBeyondWindow(scope: ServiceScope, table: 'calendar_events' | 
     return fail(describeDbError(error, 'Could not check for older or later rows.'), { code: SERVICE_CODES.db });
   }
   return { ok: true, data: count > 0 };
+}
+
+/**
+ * Whether the family holds at least `cap` rows of what `count` counts — the
+ * service's own ceiling, so the read may have left rows out. Counted BEFORE the
+ * role filter: `listMemories` and `listDocuments` read to their cap and then
+ * drop the sensitive rows for a non-manager, so a count taken after the filter
+ * could sit under the cap while the table did not, and the file said it was
+ * complete. `listMemories` also reads pending suggestions to their own cap,
+ * which the facts count never saw. A count that cannot be read fails the
+ * section, as `rowsBeyondWindow` does.
+ */
+async function rowsAtCap(scope: ServiceScope, what: string, cap: number, count: () => PromiseLike<{ count: number | null; error: unknown }>): Promise<ServiceResult<boolean>> {
+  const { count: rows, error } = await count();
+  if (error || typeof rows !== 'number') {
+    console.error(`[privacy] export ${what} count failed`, { familyId: scope.familyId, error });
+    return fail(describeDbError(error, 'Could not count the family’s rows.'), { code: SERVICE_CODES.db });
+  }
+  return { ok: true, data: rows >= cap };
 }
 
 /**
@@ -184,11 +205,22 @@ async function readSection(scope: ServiceScope, key: ExportSectionKey): Promise<
     }
     case 'memories': {
       const r = await listMemories(scope);
-      return r.ok ? { ok: true, data: { data: r.data, count: r.data.facts.length } } : r;
+      if (!r.ok) return r;
+      const [facts, pending] = await Promise.all([
+        rowsAtCap(scope, 'family_facts', 500, () => scope.db.from('family_facts').select('id', { count: 'exact', head: true }).eq('family_id', scope.familyId)),
+        rowsAtCap(scope, 'family_playbook_suggestions', PENDING_SUGGESTION_LIMIT, () => scope.db.from('family_playbook_suggestions').select('id', { count: 'exact', head: true })
+          .eq('family_id', scope.familyId).eq('status', 'suggested')),
+      ]);
+      if (!facts.ok) return facts;
+      if (!pending.ok) return pending;
+      return { ok: true, data: { data: r.data, count: r.data.facts.length, capped: facts.data || pending.data } };
     }
     case 'documents': {
       const r = await listDocuments(scope, { limit: 500 });
-      return r.ok ? { ok: true, data: { data: r.data, count: r.data.length } } : r;
+      if (!r.ok) return r;
+      const cap = await rowsAtCap(scope, 'documents', 500, () => scope.db.from('documents').select('id', { count: 'exact', head: true }).eq('family_id', scope.familyId));
+      if (!cap.ok) return cap;
+      return { ok: true, data: { data: r.data, count: r.data.length, capped: cap.data } };
     }
     case 'trips': {
       const r = await listTrips(scope, { includeFinished: true, limit: 200 });
@@ -263,7 +295,7 @@ export async function buildFamilyExport(scope: ServiceScope): Promise<ExportBuil
       key,
       count: read.data.count,
       limit,
-      truncated: (limit !== null && read.data.count >= limit) || read.data.beyondWindow === true,
+      truncated: (limit !== null && read.data.count >= limit) || read.data.beyondWindow === true || read.data.capped === true,
       ...(read.data.window ? { window: read.data.window } : {}),
       data: read.data.data,
     });

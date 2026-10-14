@@ -5,6 +5,7 @@ import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { LEGEND_STATUSES, STATUS_META, KIND_ORDER, KIND_META, statusTally, kindTally, type IdeaRow } from '@/lib/feedback/board';
 import { cn } from '@/lib/utils/cn';
+import { ErrorState } from '@/components/ui/states';
 import { FeedbackBoard } from './feedback-board';
 import { getTranslations } from '@/lib/i18n/server';
 
@@ -40,6 +41,21 @@ export default async function FeedbackPage() {
     settle(supabase.from('feedback_votes').select('idea_id').eq('user_id', ctx.user.id).limit(1000)),
   ]);
 
+  // A failed read is not an empty board. Unread ideas rendered "No ideas match
+  // these filters" with every tally at 0; unread votes drew every upvote pill
+  // unpressed, so a tap on an idea the member HAD voted for removed that vote
+  // while the pill lit up as a new one.
+  if (ideasRes.error) {
+    console.error('[feedback] ideas read failed', ideasRes.error);
+    return (
+      <div className="module-page space-y-4">
+        <ErrorState message={t('feedback.couldNotLoadTheBoard')} />
+        <a href="/feedback" className="inline-flex rounded-lg border border-border px-4 py-2 text-sm font-semibold transition hover:bg-elevated">{t('root.tryAgain')}</a>
+      </div>
+    );
+  }
+  const votesUnavailable = Boolean(votesRes.error);
+  if (votesUnavailable) console.error('[feedback] votes read failed', votesRes.error);
   // `image_url` is filled in as null rather than left absent: the select above
   // deliberately omits it, and a cast that claims a field the rows do not
   // carry is the quiet kind of lie that only shows up later.
@@ -90,7 +106,7 @@ export default async function FeedbackPage() {
       {/* Board + rail */}
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0">
-          <FeedbackBoard initialIdeas={ideas} votedIds={votedIds} userId={ctx.user.id} isSuperAdmin={admin} />
+          <FeedbackBoard initialIdeas={ideas} votedIds={votedIds} votesUnavailable={votesUnavailable} userId={ctx.user.id} isSuperAdmin={admin} />
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">

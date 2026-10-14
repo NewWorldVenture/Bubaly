@@ -40,11 +40,36 @@ const FEEDS_DEADLINE_MS = 25_000;
 const FEED_TIMEOUT_MS = 10_000;
 /** Any saved feed that did not answer: said once per search, however many failed. Each feed's own row keeps its status. */
 const FEEDS_FAILED = 'Some of your saved local feeds could not be read.';
-async function fetchWithTimeout(url: string, ms = FETCH_TIMEOUT): Promise<Response> {
+/** The most of a keyed provider's reply that is read. */
+const PROVIDER_BODY_BYTES = 2 * 1024 * 1024;
+
+/**
+ * A keyed provider's JSON reply, headers AND body, within ONE deadline.
+ *
+ * The timer used to be cleared the moment `fetch` resolved — when the headers
+ * arrived — and the body was then read with a byte cap but no clock, so a
+ * provider that trickled its body held the request with no bound but the
+ * platform's. The timer now runs until the body is parsed: it aborts the
+ * fetch, which ends the real stream, and the read is raced against it as
+ * well, so a body that never ends is a failed source like any other.
+ */
+async function fetchJsonWithTimeout<T>(url: string, maxBytes: number, ms = FETCH_TIMEOUT): Promise<{ ok: true; body: T } | { ok: false; status: number }> {
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), ms);
-  try { return await fetch(url, { headers: { accept: '*/*', 'user-agent': 'BubalyWeekendPlanner/1.0' }, signal: ctrl.signal }); }
-  finally { clearTimeout(t); }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => { ctrl.abort(); reject(new Error(`provider did not answer within ${ms}ms`)); }, ms);
+  });
+  // Settled only by the timer, which `finally` clears; this keeps a late
+  // rejection from ever surfacing as unhandled.
+  timedOut.catch(() => {});
+  try {
+    const res = await Promise.race([fetch(url, { headers: { accept: '*/*', 'user-agent': 'BubalyWeekendPlanner/1.0' }, signal: ctrl.signal }), timedOut]);
+    if (!res.ok) return { ok: false, status: res.status };
+    const body = await Promise.race([readBoundedResponseJson<T>(res, maxBytes), timedOut]);
+    return { ok: true, body };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // Aggregate local events near a ZIP for the next N days from MANY sources:
@@ -91,9 +116,9 @@ export async function POST(req: NextRequest) {
     sourcesTried.push('ticketmaster');
     try {
       const p = new URLSearchParams({ apikey: tmKey, postalCode: zip.trim(), radius: String(radiusMiles), unit: 'miles', startDateTime: startISO, endDateTime: endISO, size: '100', sort: 'date,asc' });
-      const res = await fetchWithTimeout(`https://app.ticketmaster.com/discovery/v2/events.json?${p}`);
+      const res = await fetchJsonWithTimeout<unknown>(`https://app.ticketmaster.com/discovery/v2/events.json?${p}`, PROVIDER_BODY_BYTES);
       if (res.ok) {
-        lists.push(normalizeTicketmasterResponse(await readBoundedResponseJson<unknown>(res, 2 * 1024 * 1024), familyZone));
+        lists.push(normalizeTicketmasterResponse(res.body, familyZone));
         sourcesUsed.push('ticketmaster');
       } else {
         sourceErrors.ticketmaster = `HTTP ${res.status}`;
@@ -111,9 +136,9 @@ export async function POST(req: NextRequest) {
     sourcesTried.push('seatgeek');
     try {
       const p = new URLSearchParams({ client_id: sgKey, postal_code: zip.trim(), range: `${radiusMiles}mi`, 'datetime_utc.gte': startISO, 'datetime_utc.lte': endISO, per_page: '100', sort: 'datetime_utc.asc' });
-      const res = await fetchWithTimeout(`https://api.seatgeek.com/2/events?${p}`);
+      const res = await fetchJsonWithTimeout<unknown>(`https://api.seatgeek.com/2/events?${p}`, PROVIDER_BODY_BYTES);
       if (res.ok) {
-        lists.push(normalizeSeatGeekResponse(await readBoundedResponseJson<unknown>(res, 2 * 1024 * 1024)));
+        lists.push(normalizeSeatGeekResponse(res.body));
         sourcesUsed.push('seatgeek');
       } else {
         sourceErrors.seatgeek = `HTTP ${res.status}`;

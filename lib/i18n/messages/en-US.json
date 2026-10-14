@@ -17095,5 +17095,11 @@
   "referralActions.onlyAParentOrAdult": "Only a parent or adult can do this with the family’s referral.",
   "feedback.tooManyIdeasAtOnce": "That is a lot of ideas at once. Wait a minute, then try again.",
   "feedback.dailyIdeaLimitReached": "You have reached today’s limit of {limit} ideas. Try again tomorrow.",
-  "familyHealth.moreInMedical": "+{count} more in Medical"
+  "familyHealth.moreInMedical": "+{count} more in Medical",
+  "displayGrid.membersUnavailable": "Family members are unavailable.",
+  "displayGrid.birthdaysUnavailable": "Birthdays are unavailable.",
+  "displayGrid.notesUnavailable": "Notes are unavailable.",
+  "feedback.couldNotLoadTheBoard": "The idea board could not be loaded right now. Try again in a moment.",
+  "feedbackFeedbackBoard.yourVotesCouldNotBeRead": "Your votes could not be read just now, so voting is paused. Refresh to try again.",
+  "actions.tripRecommendationsInvalid": "Those trip recommendations could not be saved: they are not in the expected shape, or they are too large."
 }

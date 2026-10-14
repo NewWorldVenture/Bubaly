@@ -17095,5 +17095,11 @@
   "referralActions.onlyAParentOrAdult": "Solo un genitore o un adulto può farlo con il codice invito della famiglia.",
   "feedback.tooManyIdeasAtOnce": "Sono tante idee tutte insieme. Aspetta un minuto e riprova.",
   "feedback.dailyIdeaLimitReached": "Hai raggiunto il limite di oggi di {limit} idee. Riprova domani.",
-  "familyHealth.moreInMedical": "+{count} altri in Salute"
+  "familyHealth.moreInMedical": "+{count} altri in Salute",
+  "displayGrid.membersUnavailable": "I membri della famiglia non sono disponibili.",
+  "displayGrid.birthdaysUnavailable": "I compleanni non sono disponibili.",
+  "displayGrid.notesUnavailable": "Le note non sono disponibili.",
+  "feedback.couldNotLoadTheBoard": "La bacheca delle idee non può essere caricata in questo momento. Riprova tra poco.",
+  "feedbackFeedbackBoard.yourVotesCouldNotBeRead": "I tuoi voti non possono essere letti in questo momento, quindi la votazione è in pausa. Aggiorna per riprovare.",
+  "actions.tripRecommendationsInvalid": "Questi consigli di viaggio non possono essere salvati: non hanno la forma prevista o sono troppo grandi."
 }

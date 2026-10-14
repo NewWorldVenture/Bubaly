@@ -107,6 +107,80 @@ describe('saving a routine replaces its steps without ever leaving it empty (N19
     expect(h.toasts.error).toEqual([]);
     expect(steps()).toEqual(['Pack lunch']);
   });
+
+  // Two saves, A and B, interleaved so that B read the step ids AFTER A had
+  // inserted its new step and BEFORE A deleted the old one: B's "old" set is
+  // {item-1, A's step}. A's delete then lands first. B's delete removes only
+  // A's step, comes up short, and B took its own steps back — leaving the
+  // routine with none, while B's toast said the other save's version stood.
+  it('two interleaved saves never leave the routine with no steps: the save that stands is kept', async () => {
+    let aInserted = false;
+    let aDeleted = false;
+    h.fault = (table, calls) => {
+      if (table !== 'routine_template_items') return null;
+      if (!aInserted && calls.includes('select') && !calls.includes('insert') && !calls.includes('delete')) {
+        // A's new step landed after B opened the editor and just before B read the step ids.
+        aInserted = true;
+        db.seed('routine_template_items', [{ id: 'item-a', template_id: 'tpl-1', family_id: FAMILY, title: 'Lunch', category: 'general', start_minutes: 720, duration_minutes: 30, assignee_id: null, sort_order: 0 }]);
+      } else if (!aDeleted && calls.includes('delete')) {
+        // A's delete of the original step lands just before B's.
+        aDeleted = true;
+        db.replace('routine_template_items', db.table('routine_template_items').filter((r) => r.id !== 'item-1'));
+      }
+      return null;
+    };
+    await openEditorAndRename('Pack lunch');
+    expect(steps()).toEqual(['Pack lunch']);
+    expect(h.toasts.error).toEqual([]);
+  });
+
+  it('when the short delete leaves another save\'s steps standing, ours are the ones taken back', async () => {
+    let raced = false;
+    h.fault = (table, calls) => {
+      if (!raced && table === 'routine_template_items' && calls.includes('delete')) {
+        raced = true;
+        // The other save replaced the step AND its own steps are still there.
+        db.replace('routine_template_items', db.table('routine_template_items').filter((r) => r.id !== 'item-1'));
+        db.seed('routine_template_items', [{ id: 'item-other', template_id: 'tpl-1', family_id: FAMILY, title: 'Other step', category: 'general', start_minutes: 400, duration_minutes: 20, assignee_id: null, sort_order: 0 }]);
+      }
+      return null;
+    };
+    await openEditorAndRename('Pack lunch');
+    expect(steps()).toEqual(['Other step']);
+    expect(h.toasts.error).toEqual([t('routinesPanel.routineChangedWhileSaving')]);
+  });
+});
+
+describe('a create whose steps did not land is finished by the retry (N19)', () => {
+  async function createRoutine(name: string, stepTitle: string, firstAttempt: boolean) {
+    let tree = render(h.hooks, panel());
+    if (firstAttempt) {
+      await click(byName(tree, 'New'));
+      tree = render(h.hooks, panel());
+      change(nodes(tree).find((n) => n.type === 'input' && n.props.placeholder === t('routines.schoolMorning'))!, name);
+      tree = render(h.hooks, panel());
+      change(nodes(tree).find((n) => n.type === 'input' && n.props.placeholder === t('routines.eGBreakfast'))!, stepTitle);
+      tree = render(h.hooks, panel());
+    }
+    await click(byName(tree, 'Create routine'));
+    await settle();
+  }
+  const templates = () => db.table('routine_templates').filter((r) => r.name === 'Evening wind-down');
+
+  it('one routine, with its steps, not an empty one beside a full one', async () => {
+    h.fault = (table, calls) => (table === 'routine_template_items' && calls.includes('insert')
+      ? { message: 'new row for relation "routine_template_items" violates check constraint', code: '23514' } : null);
+    await createRoutine('Evening wind-down', 'Brush teeth', true);
+    expect(h.toasts.error).toHaveLength(1);
+    expect(templates()).toHaveLength(1);
+    expect(db.table('routine_template_items').filter((r) => r.template_id === templates()[0].id)).toEqual([]);
+
+    h.fault = null;
+    await createRoutine('Evening wind-down', 'Brush teeth', false);
+    expect(h.toasts.error).toHaveLength(1);
+    expect(templates()).toHaveLength(1);
+    expect(db.table('routine_template_items').filter((r) => r.template_id === templates()[0].id).map((r) => r.title)).toEqual(['Brush teeth']);
+  });
 });
 
 describe('applying an edited routine again is not answered with the old week (N17)', () => {

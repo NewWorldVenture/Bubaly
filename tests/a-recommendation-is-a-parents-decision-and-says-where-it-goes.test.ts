@@ -132,4 +132,46 @@ describe('Needs Your Decision counts what its caps left out (N13)', () => {
     expect(html).toContain('3 things need you.');
     expect(html).not.toContain('more item');
   });
+
+  // The approvals list is read to a cap of 50, and the runs it gates were
+  // deduplicated against THAT list: the run the 51st approval gated showed up
+  // as its own "waiting for your OK" item beside the approval that decides it.
+  it('a run gated by an approval past the cap of 50 is still one decision, not two', async () => {
+    const approval = (n: number) => ({
+      id: `ap-${n}`, family_id: FAMILY, domain: 'calendar', capability: 'calendar.create', requested_by_kind: 'ai', requested_by_member_id: null,
+      agent: 'planner', title: `Approval ${n}`, summary: null, payload: { name: 'calendar.createEvent', args: {} }, amount_cents: null, confidence: null,
+      policy_id: null, reasoning: null, approval_model: 'single', required_approvals: 1, approvals: [], status: 'pending', priority: 'normal',
+      expires_at: null, run_id: n === 51 ? 'run-gated' : null, plan_step_id: null, plan_step_ids: [], consequences: [], evidence: null,
+      edited_payload: null, payload_kind: null,
+      // Newest first in the list, so the 51st is the one the cap leaves out.
+      created_at: `2026-10-01T${String(23 - Math.floor(n / 60)).padStart(2, '0')}:${String(59 - (n % 60)).padStart(2, '0')}:00.000Z`,
+    });
+    db.seed('approval_requests', Array.from({ length: 51 }, (_, i) => approval(i + 1)));
+    db.seed('family_automation_runs', [{ id: 'run-gated', family_id: FAMILY, summary: 'Prepare the beach trip', state: 'awaiting_approval', updated_at: '2026-10-01T12:00:00.000Z', created_at: '2026-10-01T12:00:00.000Z' }]);
+    const html = renderTranslated(await NeedsYouPage());
+    expect(html).not.toContain('Prepare the beach trip — waiting for your OK');
+    expect(html).toContain('51 things need you.');
+  });
+
+  // The memory service hides the sensitive categories from a child
+  // (filterVisibleMemories); the count of what its cap left out did not, so a
+  // child's headline counted medical inferences it was never shown.
+  it("a child's headline does not count the sensitive suggestions it is not shown", async () => {
+    const suggestion = (id: string, category: string, confidence: number) => ({
+      id, family_id: FAMILY, member_id: null, category, label: `Suggestion ${id}`, value: 'noted', notes: null, evidence: null,
+      confidence, status: 'suggested', expires_at: null, source: 'ai_inferred', created_at: '2026-10-01T00:00:00.000Z', updated_at: '2026-10-01T00:00:00.000Z',
+    });
+    db.seed('family_playbook_suggestions', [
+      ...Array.from({ length: 200 }, (_, i) => suggestion(`sug-${i + 1}`, 'preference', 0.9)),
+      ...Array.from({ length: 5 }, (_, i) => suggestion(`med-${i + 1}`, 'medical', 0.1)),
+    ]);
+    h.role = 'child';
+    const child = renderTranslated(await NeedsYouPage());
+    expect(child).toContain('200 things need you.');
+    expect(child).not.toContain('more item');
+    h.role = 'parent';
+    const parent = renderTranslated(await NeedsYouPage());
+    expect(parent).toContain('205 things need you.');
+    expect(parent).toContain(t('needsAttention.moreItemsNeedYou', { n: 5 }));
+  });
 });
