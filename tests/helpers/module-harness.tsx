@@ -207,6 +207,60 @@ export function realtimeQueryModule(h: ModuleState) {
   };
 }
 
+/**
+ * `useRealtimeQuery` for a test about WHAT a read returns — a capped, paged or
+ * filtered read. `realtimeQueryModule` seeds the screen with the whole table,
+ * which is right for writes and wrong here: a query the server cuts at 1,000
+ * rows, or one that pages, would look complete. This one shows exactly what
+ * the component's own fetcher answered for its current `deps`, as the real hook
+ * does on mount and on every change of its key: the first render of a key
+ * starts the read and reports `loading`, and a later render shows the result
+ * (`settle()` between them). `refresh` re-reads the same key.
+ */
+export function fetchedQueryModule(h: ModuleState) {
+  const inFlight = new Map<string, Promise<boolean>>();
+  // The real hook's `data` is state: the same array until a read replaces it.
+  // A fresh `[]` per render would re-run every effect keyed on it, forever.
+  const empty: HarnessRow[] = [];
+  return {
+    useRealtimeQuery: ({ table, fetcher, deps = [] }: { table: string; fetcher: Fetcher; deps?: unknown[] }) => {
+      const key = `${table}:${JSON.stringify(deps)}`;
+      const reread = async () => {
+        h.refreshes.push(table);
+        let reply: Awaited<ReturnType<Fetcher>>;
+        try {
+          reply = await fetcher(clientFor(h));
+        } catch (cause) {
+          reply = { data: null, error: { message: cause instanceof Error ? cause.message : String(cause) } };
+        }
+        if (reply.error) { h.readErrors[key] = reply.error.message; delete h.rows[key]; return false; }
+        delete h.readErrors[key];
+        h.rows[key] = clone(reply.data ?? []);
+        return true;
+      };
+      const read = () => {
+        const running = inFlight.get(key) ?? reread().finally(() => inFlight.delete(key));
+        inFlight.set(key, running);
+        return running;
+      };
+      const known = key in h.rows || key in h.readErrors;
+      if (!known) void read();
+      return {
+        data: h.rows[key] ?? empty,
+        loading: !known,
+        error: h.readErrors[key] ?? null,
+        stale: false,
+        updatedAt: 0,
+        refresh: async () => { await reread(); },
+        refreshAndConfirm: async () => ((await reread()) ? { ok: true as const } : { ok: false as const, reason: 'error' as const }),
+        setData: (update: HarnessRow[] | ((rows: HarnessRow[]) => HarnessRow[])) => {
+          h.rows[key] = typeof update === 'function' ? update(h.rows[key] ?? []) : update;
+        },
+      };
+    },
+  };
+}
+
 /** A builder that records its calls and lets `h.fault` answer for the database. */
 function recorded(h: ModuleState, table: string, target: object): object {
   const calls: string[] = [];
@@ -246,6 +300,10 @@ function bucket(h: ModuleState, name: string) {
       const gone = paths.filter((path) => !h.storage.refused.has(path) && objects.delete(path));
       return { data: gone.map((path) => ({ name: path })), error: null };
     },
+    // A private bucket's read: a URL for an object the bucket holds, an error otherwise.
+    createSignedUrl: async (path: string) => (objects.has(path)
+      ? { data: { signedUrl: `https://signed.invalid/${name}/${path}` }, error: null }
+      : { data: null, error: { message: 'Object not found' } }),
     list: async (folder: string, options?: { search?: string }) => {
       const inFolder = [...objects].filter((path) => path.startsWith(`${folder}/`)).map((path) => path.slice(folder.length + 1));
       return { data: inFolder.filter((n) => !options?.search || n.startsWith(options.search)).map((n) => ({ name: n })), error: null };

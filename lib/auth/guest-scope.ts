@@ -42,9 +42,14 @@ export const GUEST_WITHHELD_PREFIXES = [
   '/dashboard/behavior',
   '/dashboard/insurance',
   '/dashboard/auto/insurance',
-  // Guardian and the household inbox
+  // Guardian and the household inbox. The inbox is read on three pages, not
+  // one: the Contact Center lists every message (email, SMS, voicemail
+  // transcript) and the AI Front Desk lists the calls. Withholding only
+  // /dashboard/inbox left the same rows one route over.
   '/guardian',
   '/dashboard/inbox',
+  '/dashboard/contact-center',
+  '/dashboard/front-desk',
 ] as const;
 
 /** True when `path` is one of the withheld pages or below one. */

@@ -274,7 +274,13 @@ function parseOr(expression: string, mode: 'or' | 'and' = 'or'): Predicate {
     const column = body.slice(0, first);
     const op = body.slice(first + 1, second);
     const raw = body.slice(second + 1);
-    const wanted = op === 'in' ? raw : parseFilterValue(raw);
+    // An array operator's value is a PostgreSQL array literal (`tags.cs.{beach}`),
+    // which PostgREST hands to the database as an array; read it as one, or
+    // `cs` would compare the whole `{beach}` string against each element.
+    const arrayLiteral = (op === 'cs' || op === 'ov') && /^\{.*\}$/.test(raw);
+    const wanted = op === 'in' ? raw
+      : arrayLiteral ? raw.slice(1, -1).split(',').map((v) => v.trim().replace(/^"|"$/g, '')).filter((v) => v !== '')
+        : parseFilterValue(raw);
     const predicate = operatorPredicate(column, op, wanted);
     return negated ? (row: Row) => !predicate(row) : predicate;
   });

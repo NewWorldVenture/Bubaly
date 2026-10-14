@@ -38,7 +38,9 @@ import 'server-only';
 import { createHash } from 'node:crypto';
 import type { Tables } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
-import { FACT_CATEGORY_LABELS, filterFacts, type FactCategory } from '@/lib/memory/facts';
+import {
+  FACT_CATEGORY_LABELS, factsVisibleTo, filterFacts, isSensitiveMemory, SENSITIVE_MEMORY_CATEGORIES, type FactCategory,
+} from '@/lib/memory/facts';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { readAllPages } from '@/lib/supabase/read-all-pages';
 import { recordActivitySafely } from '../activity';
@@ -61,32 +63,13 @@ const AI_SIGNATURE_PREFIX = 'ai_memory:';
 /** The two `family_facts.source` values that mean "Bubaly, not a person". */
 export const AI_FACT_SOURCES: MemorySource[] = ['ai_conversation', 'ai_inferred'];
 
-/**
- * Categories the assistant must never write on its own. Medical facts belong
- * in the health profile where a person enters them deliberately; account
- * facts are credentials by another name. Both are readable through the
- * modules that own them, never inferred from a chat.
- */
-export const SENSITIVE_MEMORY_CATEGORIES: FactCategory[] = ['medical', 'account'];
-
-// Stems carry `\w*` and nouns their plural: the closing `\b` used to sit
-// straight after `diagnos`, `therap` and `pregnan`, so none of them ever
-// matched a real word ("diagnosis", "therapist", "pregnant"), and "passwords"
-// or "medications" slipped past as non-sensitive.
-const SENSITIVE_TERMS = /\b(ssn|social security|passport (?:no|numbers?)|passwords?|passcodes?|pin|bank\w*|routing|account numbers?|card numbers?|credit cards?|iban|allerg(?:y|ies|ic)|diagnos\w*|prescriptions?|medications?|therap\w*|hiv|pregnan\w*|salary|salaries)\b/i;
-
-/**
- * True when a memory should not be written by the assistant: the category is
- * sensitive, or the words are, whatever category was chosen. Exported so the
- * tool and the service refuse on the same rule.
- */
-export function isSensitiveMemory(input: {
-  category?: string | null; key: string; content: string;
-  notes?: string | null; evidence?: string | null;
-}): boolean {
-  if (input.category && (SENSITIVE_MEMORY_CATEGORIES as string[]).includes(input.category)) return true;
-  return SENSITIVE_TERMS.test(`${input.key} ${input.content} ${input.notes ?? ''} ${input.evidence ?? ''}`);
-}
+// The sensitive-memory rule — SENSITIVE_MEMORY_CATEGORIES, the term list and
+// `isSensitiveMemory` — lives in lib/memory/facts.ts, because the Family Memory
+// page reads facts in the BROWSER and has to apply the same rule before it
+// renders (and this module is server-only). Re-exported so every server
+// caller keeps one import, and the tool and the service still refuse on the
+// same rule.
+export { isSensitiveMemory, SENSITIVE_MEMORY_CATEGORIES };
 
 function isCategory(value: unknown): value is FactCategory {
   return typeof value === 'string' && Object.prototype.hasOwnProperty.call(FACT_CATEGORY_LABELS, value);
@@ -469,8 +452,7 @@ export type RecallInput = { query?: string | null; category?: FactCategory | str
 
 /** Shared visibility rule for recall and review; expiry is handled separately. */
 function filterVisibleMemories<T extends Pick<FamilyFact, 'category' | 'label' | 'value'> & { notes?: string | null; evidence?: string | null }>(scope: ServiceScope, rows: T[]): T[] {
-  const canSeeSensitive = scope.role === 'system' || isManager(scope.role);
-  return rows.filter((f) => canSeeSensitive || !isSensitiveMemory({ category: f.category, key: f.label, content: f.value, notes: f.notes, evidence: f.evidence }));
+  return factsVisibleTo(scope.role, rows);
 }
 
 /**

@@ -17052,5 +17052,16 @@
   "enablePushButton.couldNotTurnOff": "Les notifications push n’ont pas pu être désactivées sur cet appareil. Veuillez réessayer.",
   "test.couldNotCheckPushSettings": "Vos réglages de notifications push n’ont pas pu être vérifiés, aucun test n’a donc été envoyé. Veuillez réessayer.",
   "inviteForm.aKidLoginCannotBeInvited": "Un accès enfant ne peut pas être invité. Ajoutez plutôt l’enfant depuis Connexions enfants.",
-  "notificationsModule.someUpdatesCouldNotBeChecked": "Certaines mises à jour n’ont pas pu être vérifiées. Relancez la recherche dans un instant."
+  "notificationsModule.someUpdatesCouldNotBeChecked": "Certaines mises à jour n’ont pas pu être vérifiées. Relancez la recherche dans un instant.",
+  "actions.onlyAParentOrAdultCanFileAMessage": "Seul un parent ou adulte peut classer un message familial.",
+  "tripMemoriesModule.onlyAParentOrAdultCanDelete": "Seul un parent ou adulte peut supprimer un souvenir de voyage.",
+  "familyTreeModule.cannotBeTheirOwnAncestor": "Une personne ne peut pas être son propre ancêtre. Choisissez un parent en dehors de sa branche de l'arbre.",
+  "inboxActions.onlyAParentOrAdultCanHandle": "Seul un parent ou adulte peut confier un message familial à Bubaly.",
+  "actions.thisNoteChangedSinceYouOpenedIt": "Quelqu'un a modifié cette note après que vous l'avez ouverte : elle n'a donc pas été enregistrée. Votre texte est toujours là — copiez-le, rouvrez la note et ajoutez-le à nouveau.",
+  "errors.thatTimeIsNotOnTheFamilysClock": "Cette date et cette heure n'existent pas dans le fuseau horaire de votre famille. Choisissez-en une autre.",
+  "photosModule.showingNOfTotal": "{shown} sur {total} affichés",
+  "photosModule.loadMore": "Charger plus",
+  "createMemory.someOfThePhotosWereNotSaved": "{saved} photos sur {total} ont été enregistrées. {failed} n'ont pas pu être importées.",
+  "createMemory.tryTheMissingPhotosAgain": "Réessayer les photos manquantes",
+  "socialFeed.couldNotLoadYourFeed": "Votre fil n'a pas pu être chargé pour le moment. Réessayez dans un instant."
 }

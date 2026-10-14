@@ -17052,5 +17052,16 @@
   "enablePushButton.couldNotTurnOff": "Push could not be turned off for this device. Please try again.",
   "test.couldNotCheckPushSettings": "Your push settings could not be checked just now, so no test was sent. Please try again.",
   "inviteForm.aKidLoginCannotBeInvited": "A kid login can’t be invited. Add the child from Kid Logins instead.",
-  "notificationsModule.someUpdatesCouldNotBeChecked": "Some updates could not be checked just now. Please scan again in a moment."
+  "notificationsModule.someUpdatesCouldNotBeChecked": "Some updates could not be checked just now. Please scan again in a moment.",
+  "actions.onlyAParentOrAdultCanFileAMessage": "Only a parent or adult can file a family message.",
+  "tripMemoriesModule.onlyAParentOrAdultCanDelete": "Only a parent or adult can delete a trip memory.",
+  "familyTreeModule.cannotBeTheirOwnAncestor": "A person can't be their own ancestor. Choose a parent from outside their branch of the tree.",
+  "inboxActions.onlyAParentOrAdultCanHandle": "Only a parent or adult can hand a family message to Bubaly.",
+  "actions.thisNoteChangedSinceYouOpenedIt": "Someone changed this note after you opened it, so it wasn't saved. Your text is still here — copy it, reopen the note and add it again.",
+  "errors.thatTimeIsNotOnTheFamilysClock": "That date and time doesn't exist on your family's clock. Choose another.",
+  "photosModule.showingNOfTotal": "Showing {shown} of {total}",
+  "photosModule.loadMore": "Load more",
+  "createMemory.someOfThePhotosWereNotSaved": "{saved} of {total} photos were saved. {failed} could not be uploaded.",
+  "createMemory.tryTheMissingPhotosAgain": "Try the missing photos again",
+  "socialFeed.couldNotLoadYourFeed": "Your feed could not be loaded right now. Try again in a moment."
 }
