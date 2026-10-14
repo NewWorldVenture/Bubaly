@@ -47,7 +47,14 @@ vi.mock('@/components/ui/modal', async () => {
 // happened from one the database refused. A double that answers only the old
 // shape exercises a client the code no longer uses.
 vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({ from: () => ({
-  insert: h.insert,
+  select: () => {
+    const read = { eq: () => read, maybeSingle: async () => ({ data: null, error: null }) };
+    return read;
+  },
+  insert: (payload: unknown) => {
+    const reply = h.insert(payload);
+    return { select: () => ({ single: () => Promise.resolve(reply) }) };
+  },
   update: (payload: unknown) => { h.update(payload); return { eq: (...a: unknown[]) => chainEq(a) }; },
   delete: () => { h.remove(); return { eq: (...a: unknown[]) => chainEq(a) }; },
 }) }) }));
@@ -69,6 +76,8 @@ function chainEq(args: unknown[]): Promise<unknown> & { select: () => Promise<un
   });
 }
 vi.mock('@/lib/storage/documents', () => ({
+  buildFamilyPath: (familyId: string, folder: string) => `${familyId}/${folder}/result.pdf`,
+  isReservedDocumentPath: () => true,
   uploadFamilyDocument: h.store, getDocumentSignedUrl: h.signed, removeFamilyDocument: h.discard,
   DOCUMENT_MAX_BYTES: 25 * 1024 * 1024, DOCUMENT_MAX_MB: 25,
 }));
@@ -156,7 +165,7 @@ beforeEach(() => {
   h.locale = 'en-US'; h.role = 'parent'; h.familyId = 'family-1'; h.slots = []; h.cursor = 0; h.tree = null; h.form = null; h.readError = null; h.docs = [doc()];
   vi.clearAllMocks();
   h.store.mockResolvedValue({ path: 'family-1/path/result.pdf', error: null });
-  h.discard.mockResolvedValue({ error: null }); h.insert.mockResolvedValue({ error: null }); h.eq.mockReturnValue({ data: [{ id: 'file-1' }], error: null });
+  h.discard.mockResolvedValue({ error: null }); h.insert.mockImplementation((data: unknown) => ({ data, error: null })); h.eq.mockReturnValue({ data: [{ id: 'file-1' }], error: null });
   h.signed.mockResolvedValue({ url: 'https://example.com/signed-document', error: null }); h.confirm.mockReturnValue(true);
   h.feature.mockResolvedValue({ active: { familyId: 'family-1' } }); h.assurance.mockResolvedValue(undefined);
   vi.stubGlobal('window', { confirm: h.confirm });
@@ -205,8 +214,10 @@ describe.each(LOCALES)('Files hub in %s', (locale) => {
       expect(html).toContain(escaped(t('filesHubModule.uploadTitle', { view: t(VIEW_META[view].titleKey) })));
       expect(html).toContain('Original file.pdf');
       await submit();
-      expect(h.store).toHaveBeenLastCalledWith(expect.anything(), { familyId: 'family-1', folder: view, file });
-      expect(h.insert).toHaveBeenLastCalledWith(expect.objectContaining({ family_id: 'family-1', created_by: 'user-1', category: null, title: 'My original title', storage_path: 'family-1/path/result.pdf', is_secure: view === 'vault' }));
+      const reservation = h.insert.mock.calls.at(-1)?.[0];
+      expect(h.store).toHaveBeenLastCalledWith(expect.anything(), { familyId: 'family-1', folder: view, file, reservedPath: reservation.storage_path });
+      expect(reservation).toMatchObject({ family_id: 'family-1', created_by: 'user-1', category: null, title: 'My original title', is_secure: view === 'vault' });
+      expect(reservation.storage_path).toContain(`family-1/${view}/${reservation.id}/`);
       expect(h.success).toHaveBeenLastCalledWith(t('filesHubModule.fileUploaded'));
     }
     h.slots = []; await prepareUpload('shared', ' My custom category '); await submit();
@@ -245,7 +256,7 @@ describe.each(LOCALES)('Files hub in %s', (locale) => {
     expect(h.eq).toHaveBeenLastCalledWith('family_id', 'family-1');
   });
 
-  it('renders translated empty/search/read/pending states and preserves upload cleanup on insert failure', async () => {
+  it('renders translated empty/search/read/pending states and sends no bytes on insert failure', async () => {
     h.docs = []; let html = render();
     expect(html).toContain(escaped(t('filesHubModule.emptyView', { view: t('filesHubModule.cloudTitle') })));
     h.slots[0] = 'Missing'; html = render();
@@ -254,9 +265,10 @@ describe.each(LOCALES)('Files hub in %s', (locale) => {
     expect(html).toContain(escaped(t('filesHubModule.loadFailed'))); expect(html).not.toContain('Raw backend details');
     h.readError = null; h.slots = []; await prepareUpload('cloud');
     h.slots[7] = true; html = render(); expect(html).toContain(escaped(t('filesHubModule.uploading'))); h.slots[7] = false;
-    h.insert.mockResolvedValue({ error: { message: 'Insert rejected' } }); await submit();
+    h.insert.mockResolvedValue({ error: { code: '42501', message: 'Insert rejected' } }); await submit();
     expect(h.error).toHaveBeenLastCalledWith(t('avatarPicker.uploadFailed'));
-    expect(h.discard).toHaveBeenCalledWith(expect.anything(), 'family-1/path/result.pdf');
+    expect(h.store).not.toHaveBeenCalled();
+    expect(h.discard).not.toHaveBeenCalled();
     expect(h.success).not.toHaveBeenCalled();
   });
 

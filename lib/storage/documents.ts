@@ -21,17 +21,30 @@ export function buildFamilyPath(familyId: string, folder: string, fileName: stri
   return `${familyId}/${folder}/${Date.now()}-${sanitizeFileName(fileName)}`;
 }
 
+/** A preallocated path must survive URL transport as the exact row-protected object name. */
+export function isReservedDocumentPath(familyId: string, folder: string, path: string): boolean {
+  return path.startsWith(`${familyId}/${folder}/`) &&
+    !/[\\?#%\u0000-\u001f\u007f]/.test(path) &&
+    path.split('/').every(segment => !!segment && segment !== '.' && segment !== '..');
+}
+
 export async function uploadFamilyDocument(
   supabase: SupabaseBrowser,
-  { familyId, folder, file }: { familyId: string; folder: string; file: File },
+  { familyId, folder, file, reservedPath }: { familyId: string; folder: string; file: File; reservedPath?: string },
 ): Promise<{ path: string | null; error: string | null }> {
   if (file.size > MAX_BYTES) {
     return { path: null, error: 'File is too large (25 MB limit).' };
   }
-  const path = buildFamilyPath(familyId, folder, file.name);
+  // FilesHub reserves its protective documents row before bytes move. A retry
+  // may replace only that same reservation's bytes, after rechecking the row.
+  // All other callers retain their existing new-object-only upload behavior.
+  if (reservedPath !== undefined && !isReservedDocumentPath(familyId, folder, reservedPath)) {
+    return { path: null, error: 'The upload destination is invalid.' };
+  }
+  const path = reservedPath ?? buildFamilyPath(familyId, folder, file.name);
   const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
     contentType: file.type || 'application/octet-stream',
-    upsert: false,
+    upsert: reservedPath !== undefined,
   });
   if (error) return { path: null, error: describeActionError(error) };
   return { path, error: null };
