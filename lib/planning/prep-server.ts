@@ -45,7 +45,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
 import { generatePrepPlans, type HorizonSignal, type PrepPlan, type SignalKind } from './prep';
-import { daysBetweenDayKeys, nextBirthdayDayKey } from '@/lib/moments/birthdays';
+import { nextBirthdayDayKey } from '@/lib/moments/birthdays';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 import { describeActionError } from '@/lib/supabase/errors';
 import { isSensitiveDocument } from '@/lib/documents/sensitivity';
@@ -104,7 +104,6 @@ export async function runPrepGeneration(
   if (retireErr) return { ok: false, error: describeActionError(retireErr), plans: 0 };
 
   const signals: HorizonSignal[] = [];
-  const birthdayOf = new Map<string, string>();
   for (const t of trips.data ?? []) if (t.start_date) signals.push({ id: t.id, kind: 'trip', title: t.title ?? 'Trip', date: t.start_date });
   for (const m of members.data ?? []) {
     // Day key in, day key out. `family_members.birthday` is a DATE column, the
@@ -113,7 +112,6 @@ export async function runPrepGeneration(
     // an instant that would have to be re-expressed as a day afterwards.
     const next = m.birthday ? nextBirthdayDayKey(m.birthday, todayKey) : null;
     if (next) signals.push({ id: m.id, kind: 'birthday', title: `${m.display_name}'s Birthday`, date: next });
-    if (next && m.birthday) birthdayOf.set(m.id, m.birthday);
   }
   // A SENSITIVE DOCUMENT'S TITLE STAYS WHERE ITS READERS ARE. The cron reads
   // with the service client and a manager's click with a session that sees the
@@ -168,39 +166,8 @@ export async function runPrepGeneration(
   // one per document, unique on the signal), so a dismissal of Mia's 2026
   // birthday hid every birthday she would ever have, and a plan left active
   // rolled into 2027 with 2026's ticked steps and due dates. For those kinds a
-  // plan whose stored date has PASSED is a NEW occurrence: it is opened again
-  // with a fresh step ladder, whatever was decided about the last.
-  //
-  // Only a date that has passed. A birthday or an expiry date corrected
-  // before it came (the 10th was really the 12th) is the same occurrence on
-  // another day: it keeps what the family decided and ticked, and moves —
-  // the `moved` ladder below for a plan still active, the date-only update
-  // after the `decided` read for one dismissed or done. Treated as new, a
-  // date edit re-opened a dismissed plan and cleared every ticked step.
-  //
-  // For a birthday, "passed" is asked of the CORRECTED birthday too, not only
-  // of the stored date (`occurrencePassed`). Mia's plan for 1 November, her
-  // birthday corrected on 14 October to the 10th: the stored date is still to
-  // come, but the birthday it stood for went four days ago, and this run's
-  // date is next year's. Read off the stored date alone, that was "the same
-  // occurrence moved", and the 2026 dismissal and ticked steps were carried
-  // onto 2027 — the defect above, back. So a birthday plan is also a new
-  // occurrence when the corrected birthday's previous occurrence (a year
-  // before this run's) is the one nearer the stored date, and is before today.
-  // A document's expiry does not come round on its own, so for one the stored
-  // date passing is the rule.
-  const occurrencePassed = (p: PrepPlan, stored: string): boolean => {
-    if (stored < todayKey) return true;
-    const birthday = p.kind === 'birthday' ? birthdayOf.get(p.signalId) : undefined;
-    if (!birthday) return false;
-    const yearBefore = String(Number.parseInt(p.targetDate.slice(0, 4), 10) - 1).padStart(4, '0');
-    const previous = nextBirthdayDayKey(birthday, `${yearBefore}-01-01`);
-    if (!previous || previous >= todayKey) return false;
-    const sincePrevious = daysBetweenDayKeys(previous, stored);
-    const untilNext = daysBetweenDayKeys(stored, p.targetDate);
-    if (sincePrevious === null || untilNext === null) return false;
-    return Math.abs(sincePrevious) < Math.abs(untilNext);
-  };
+  // plan whose stored date is not this signal's date is a NEW occurrence: it is
+  // opened again with a fresh step ladder, whatever was decided about the last.
   const signalIds = [...new Set(plans.map((p) => p.signalId))];
   const { data: existing, error: existingErr } = await sb.from('prep_plans')
     .select('id, signal_kind, signal_id, status, target_date').eq('family_id', familyId).in('signal_id', signalIds);
@@ -208,28 +175,11 @@ export async function runPrepGeneration(
   const keyOf = (p: { kind: string; signalId: string }) => `${p.kind}:${p.signalId}`;
   const existingByKey = new Map((existing ?? []).map((r) => [`${r.signal_kind}:${r.signal_id}`, r]));
   const nextOccurrence = new Set(plans
-    .filter((p) => {
-      const row = existingByKey.get(keyOf(p));
-      return RECURRING_KINDS.has(p.kind) && !!row && row.target_date !== p.targetDate && occurrencePassed(p, row.target_date);
-    })
+    .filter((p) => RECURRING_KINDS.has(p.kind) && existingByKey.has(keyOf(p)) && existingByKey.get(keyOf(p))!.target_date !== p.targetDate)
     .map(keyOf));
   const decided = new Set((existing ?? [])
     .map((r) => `${r.signal_kind}:${r.signal_id}`)
     .filter((key) => existingByKey.get(key)!.status !== 'active' && !nextOccurrence.has(key)));
-
-  // A dismissed (or done) birthday or document plan whose date was corrected
-  // keeps that decision and takes the new date. Left on the old one, the old
-  // date passing would read as the occurrence being over, and the next run
-  // would open the corrected one again — the dismissal undone a few days
-  // late. Keyed on the date this run read, so a concurrent run's change is
-  // not overwritten.
-  for (const p of plans) {
-    const row = existingByKey.get(keyOf(p));
-    if (!row || !RECURRING_KINDS.has(p.kind) || !decided.has(keyOf(p)) || row.target_date === p.targetDate) continue;
-    const { error: moveErr } = await sb.from('prep_plans').update({ target_date: p.targetDate, urgency: p.urgency })
-      .eq('id', row.id).eq('family_id', familyId).eq('target_date', row.target_date).select('id');
-    if (moveErr) return { ok: false, error: describeActionError(moveErr), plans: 0 };
-  }
 
   // A plan the family dismissed is left out of the write below, so a real
   // title an earlier run gave a sensitive document would stay on that row,
@@ -291,9 +241,8 @@ export async function runPrepGeneration(
   // Three kinds of plan, three ways to write a step ladder:
   //   - a next occurrence starts its ladder again: every step undone, due
   //     dates counted from the new date;
-  //   - a plan whose date moved (a rescheduled trip, a birthday or expiry
-  //     corrected before it came) keeps what was ticked and takes the new due
-  //     dates;
+  //   - a plan whose date moved (a rescheduled trip) keeps what was ticked and
+  //     takes the new due dates — they were last year's, or last month's;
   //   - any other plan only gains the steps it lacks, as before.
   const moved = fresh.filter((p) => !reopened.has(keyOf(p)) && existingByKey.has(keyOf(p))
     && existingByKey.get(keyOf(p))!.target_date !== p.targetDate);

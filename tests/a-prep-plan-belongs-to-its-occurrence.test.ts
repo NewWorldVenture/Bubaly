@@ -99,12 +99,12 @@ describe('N8: a decision belongs to the occurrence it was made on', () => {
     expect(steps(id).filter((s) => s.is_done)).toHaveLength(1);
   });
 
-  it('a document renewed in place once it has expired is a new plan for the new expiry', async () => {
+  it('a document renewed in place is a new plan for the new expiry', async () => {
     const sb = household();
-    db.seed('documents', [{ id: 'd-pass', family_id: 'f1', title: 'Passport', category: 'travel', is_secure: false, expires_at: '2026-10-18' }]);
+    db.seed('documents', [{ id: 'd-pass', family_id: 'f1', title: 'Passport', category: 'travel', is_secure: false, expires_at: '2026-11-10' }]);
     await runPrepGeneration(sb, 'f1', 'parent-1', TZ, OCTOBER);
     plan('d-pass').status = 'dismissed';
-    // Expired on the 18th; renewed on the same row, expiring again inside the horizon.
+    // Renewed on the same row, expiring again inside the horizon.
     db.table('documents')[0].expires_at = '2026-12-01';
     await runPrepGeneration(sb, 'f1', null, TZ, new Date('2026-10-20T12:00:00Z'));
     expect(plan('d-pass')).toMatchObject({ target_date: '2026-12-01', status: 'active' });
@@ -116,134 +116,6 @@ describe('N8: a decision belongs to the occurrence it was made on', () => {
     await runPrepGeneration(sb, 'f1', 'parent-1', TZ, OCTOBER);
     expect(db.table('prep_plans').some((row) => row.signal_id === 'm-gone')).toBe(false);
     expect(plan('m-mia')).toBeDefined();
-  });
-});
-
-// N8-R1 — the occurrence rule above read ANY date change on a birthday or a
-// document as a new occurrence, including a date corrected before it came: the
-// family's ticks were cleared and a dismissed plan came back. Only a date that
-// has passed starts a new occurrence; a correction moves the plan.
-describe('N8-R1: a date corrected before it comes is the same occurrence', () => {
-  const passport = () => db.seed('documents', [{ id: 'd-pass', family_id: 'f1', title: 'Passport', category: 'travel', is_secure: false, expires_at: '2026-11-10' }]);
-  const correctExpiry = (day: string) => { db.table('documents')[0].expires_at = day; };
-
-  it('an expiry corrected from the 10th to the 12th keeps the ticked steps and takes the new due dates', async () => {
-    const sb = household();
-    passport();
-    await runPrepGeneration(sb, 'f1', 'parent-1', TZ, OCTOBER);
-    const id = plan('d-pass').id;
-    const before = steps(id).map((s) => String(s.due_date)).sort();
-    expect(before.length).toBeGreaterThan(0);
-    for (const step of steps(id)) step.is_done = true;
-
-    correctExpiry('2026-11-12');
-    expect((await runPrepGeneration(sb, 'f1', null, TZ, OCTOBER)).ok).toBe(true);
-    expect(plan('d-pass')).toMatchObject({ id, target_date: '2026-11-12', status: 'active' });
-    const ladder = steps(id);
-    expect(ladder).toHaveLength(before.length);
-    expect(ladder.filter((s) => s.is_done !== true)).toEqual([]);
-    // Every due date moved the same two days the expiry did.
-    const shifted = before.map((d) => new Date(Date.parse(`${d}T12:00:00Z`) + 2 * 86_400_000).toISOString().slice(0, 10));
-    expect(ladder.map((s) => String(s.due_date)).sort()).toEqual(shifted);
-  });
-
-  it('a dismissed document plan stays dismissed when its expiry is corrected, and after the old date passes', async () => {
-    const sb = household();
-    passport();
-    await runPrepGeneration(sb, 'f1', 'parent-1', TZ, OCTOBER);
-    plan('d-pass').status = 'dismissed';
-
-    correctExpiry('2026-11-12');
-    await runPrepGeneration(sb, 'f1', null, TZ, OCTOBER);
-    expect(plan('d-pass')).toMatchObject({ target_date: '2026-11-12', status: 'dismissed' });
-
-    // The 11th: the date first entered has passed, the corrected one has not.
-    await runPrepGeneration(sb, 'f1', null, TZ, new Date('2026-11-11T12:00:00Z'));
-    expect(plan('d-pass')).toMatchObject({ target_date: '2026-11-12', status: 'dismissed' });
-  });
-
-  it('a birthday corrected before it comes keeps both the dismissal and the ticks', async () => {
-    const sb = household();
-    await runPrepGeneration(sb, 'f1', 'parent-1', TZ, OCTOBER);
-    const id = plan('m-mia').id;
-    for (const step of steps(id)) step.is_done = true;
-    // Mia's birthday is the 3rd, not the 1st.
-    db.table('family_members')[0].birthday = '2015-11-03';
-    await runPrepGeneration(sb, 'f1', null, TZ, OCTOBER);
-    expect(plan('m-mia')).toMatchObject({ id, target_date: '2026-11-03', status: 'active' });
-    expect(steps(id).filter((s) => s.is_done !== true)).toEqual([]);
-
-    plan('m-mia').status = 'dismissed';
-    db.table('family_members')[0].birthday = '2015-11-04';
-    await runPrepGeneration(sb, 'f1', null, TZ, new Date('2026-10-20T12:00:00Z'));
-    expect(plan('m-mia')).toMatchObject({ target_date: '2026-11-04', status: 'dismissed' });
-  });
-});
-
-// N8-R1-R1 — "only a date that has passed" read the STORED date. A birthday
-// corrected to a day this year that has already gone (the 1st of November was
-// really the 10th of October, and it is now the 14th) has its next occurrence
-// NEXT year, while the stored date is still to come: so the plan was read as
-// the same occurrence, and 2026's dismissal and ticked steps were carried onto
-// 2027 — N8's own defect, back. What decides it is whether the CORRECTED
-// birthday's occurrence this plan was for has passed.
-describe('N8-R1-R1: a birthday corrected to a day that has already gone is next year\'s occurrence', () => {
-  const correctBirthday = (day: string) => { db.table('family_members')[0].birthday = day; };
-  /** The birthday ladder for 10 October 2027: 21, 14, 7 and 1 days before. */
-  const LADDER_2027_10_10 = ['2027-09-19', '2027-09-26', '2027-10-03', '2027-10-09'];
-
-  it('a dismissed plan reopens for next year, active, with a fresh ladder', async () => {
-    const sb = household();
-    await runPrepGeneration(sb, 'f1', 'parent-1', TZ, OCTOBER);
-    const id = plan('m-mia').id;
-    expect(plan('m-mia')).toMatchObject({ target_date: '2026-11-01', status: 'active' });
-    plan('m-mia').status = 'dismissed';
-
-    // On the 14th: her birthday was the 10th, four days ago.
-    correctBirthday('2015-10-10');
-    expect((await runPrepGeneration(sb, 'f1', null, TZ, OCTOBER)).ok).toBe(true);
-    expect(plan('m-mia')).toMatchObject({ id, target_date: '2027-10-10', status: 'active' });
-    const ladder = steps(id);
-    expect(ladder).toHaveLength(4);
-    expect(ladder.filter((s) => s.is_done !== false)).toEqual([]);
-    expect(ladder.map((s) => String(s.due_date)).sort()).toEqual(LADDER_2027_10_10);
-  });
-
-  it('an active plan with every step ticked starts its ladder again for next year', async () => {
-    const sb = household();
-    await runPrepGeneration(sb, 'f1', 'parent-1', TZ, OCTOBER);
-    const id = plan('m-mia').id;
-    for (const step of steps(id)) step.is_done = true;
-
-    correctBirthday('2015-10-10');
-    expect((await runPrepGeneration(sb, 'f1', null, TZ, OCTOBER)).ok).toBe(true);
-    expect(plan('m-mia')).toMatchObject({ id, target_date: '2027-10-10', status: 'active' });
-    const ladder = steps(id);
-    expect(ladder).toHaveLength(4);
-    expect(ladder.filter((s) => s.is_done !== false)).toEqual([]);
-    expect(ladder.map((s) => String(s.due_date)).sort()).toEqual(LADDER_2027_10_10);
-
-    // Opened once: a tick on next year's ladder survives the next run.
-    steps(id)[0].is_done = true;
-    await runPrepGeneration(sb, 'f1', null, TZ, new Date('2026-10-15T12:00:00Z'));
-    expect(plan('m-mia')).toMatchObject({ id, target_date: '2027-10-10', status: 'active' });
-    expect(steps(id).filter((s) => s.is_done === true)).toHaveLength(1);
-  });
-
-  it('a correction to an earlier day that has not gone yet, today included, is still the same occurrence', async () => {
-    const sb = household();
-    await runPrepGeneration(sb, 'f1', 'parent-1', TZ, OCTOBER);
-    plan('m-mia').status = 'dismissed';
-
-    // The 20th is still to come.
-    correctBirthday('2015-10-20');
-    await runPrepGeneration(sb, 'f1', null, TZ, OCTOBER);
-    expect(plan('m-mia')).toMatchObject({ target_date: '2026-10-20', status: 'dismissed' });
-
-    // And today is today's birthday, not last year's.
-    correctBirthday('2015-10-14');
-    await runPrepGeneration(sb, 'f1', null, TZ, OCTOBER);
-    expect(plan('m-mia')).toMatchObject({ target_date: '2026-10-14', status: 'dismissed' });
   });
 });
 

@@ -132,6 +132,7 @@ export default async function CommandCenterPage() {
   const notAllChecked = eventsResult.error ? t('conflicts.couldNotCheckForClashes')
     : eventsCapped ? t('commandCenter.onlyTheFirstEventsWereChecked', { count: MAX_EVENTS }) : null;
   const timed = (events ?? []).filter((e) => !e.all_day);
+  const occurrence = (e: { id: string; starts_at: string }) => `${e.id}@${e.starts_at}`;
   const conflicts: { a: typeof timed[number]; b: typeof timed[number] }[] = [];
   for (let i = 0; i < timed.length; i++) {
     const aStart = new Date(timed[i].starts_at).getTime();
@@ -255,9 +256,12 @@ export default async function CommandCenterPage() {
           <ul className="divide-y divide-border/50">
             {(events ?? []).slice(0, 12).map((e) => {
               const who = e.assignee_id ? memberById.get(e.assignee_id) : undefined;
-              const inConflict = conflicts.some((c) => c.a.id === e.id || c.b.id === e.id);
+              // An expanded series gives every occurrence the series row's id,
+              // so a row is named by its id and its start: only the occurrence
+              // that clashes is badged, and the keys stay unique.
+              const inConflict = conflicts.some((c) => occurrence(c.a) === occurrence(e) || occurrence(c.b) === occurrence(e));
               return (
-                <li key={e.id} className="flex items-center gap-3 py-2.5">
+                <li key={occurrence(e)} className="flex items-center gap-3 py-2.5">
                   <span className="w-32 shrink-0 text-xs text-muted">{fmtDate(e.starts_at)} · {e.all_day ? 'All day' : fmtTime(e.starts_at)}</span>
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">{e.title}</span>
                   {inConflict && <span className="shrink-0 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-400">{t('commandCenter.conflict')}</span>}

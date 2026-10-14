@@ -52,6 +52,15 @@ function textOf(node: ReactNode): string {
 }
 const page = async () => textOf(await CommandCenter());
 
+/** The week list's rows: each <li> with its React key and its own text. */
+function rows(node: ReactNode, out: { key: string | null; text: string }[] = []) {
+  if (Array.isArray(node)) { node.forEach((child) => rows(child, out)); return out; }
+  if (!isValidElement<{ children?: ReactNode }>(node)) return out;
+  if (node.type === 'li') out.push({ key: node.key, text: textOf(node.props.children) });
+  else rows(node.props.children, out);
+  return out;
+}
+
 const event = (row: Record<string, unknown>) => ({
   family_id: FAMILY, description: null, location: null, category: 'general', all_day: false,
   recurrence: 'none', recurrence_until: null, assignee_id: 'member', ends_at: null, ...row,
@@ -103,6 +112,22 @@ describe('the Command Center checks every occurrence in the week', () => {
     expect(text).toContain(t('conflicts.couldNotCheckForClashes'));
     expect(text).not.toContain(ALL_CLEAR);
     expect(text).not.toContain(t('dashboardCommandCenter.noConflictsOrGapsDetectedThis'));
+  });
+
+  it('badges only the occurrence of a daily series that clashes, and keys each occurrence apart', async () => {
+    db.seed('calendar_events', [
+      // Daily 08:00–08:30 in New York since 1 September.
+      event({ id: 'school-run', title: 'School run', starts_at: '2026-09-01T12:00:00.000Z', ends_at: '2026-09-01T12:30:00.000Z', recurrence: 'daily' }),
+      // Thursday 08:15–08:45.
+      event({ id: 'call', title: 'Call', starts_at: '2026-10-15T12:15:00.000Z', ends_at: '2026-10-15T12:45:00.000Z' }),
+    ]);
+    const week = rows(await CommandCenter());
+    const schoolRuns = week.filter((row) => row.text.includes('School run'));
+    expect(schoolRuns.length).toBeGreaterThan(1);
+    expect(new Set(week.map((row) => row.key)).size).toBe(week.length);
+    const badged = week.filter((row) => row.text.includes(t('commandCenter.conflict')));
+    // The Thursday school run and the call it overlaps; no other day's run.
+    expect(badged.map((row) => row.key)).toEqual(['school-run@2026-10-15T12:00:00.000Z', 'call@2026-10-15T12:15:00.000Z']);
   });
 
   it('a quiet week read whole still gets the all-clear', async () => {
