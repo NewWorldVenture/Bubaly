@@ -8,6 +8,8 @@ BEFORE integration or new source edits, root creates an isolated review worktree
 
 Source inspection identifies a distinct completion outcome: the parent UPDATE may commit before creation/repetition of its next occurrence fails or returns an unconfirmed receipt. The UI must report partial/uncertain success truthfully and refresh committed state; do not blindly restore the parent or retry a possibly committed child. First causal component tests must reproduce current feedback before the minimal fix. Existing action/authorization/recurrence contracts remain intact. New composition requires its own frozen inputs, focused verification and fresh hosted CI; prior branch results do not qualify it.
 
+The application merge preserves all incoming audit IDs in the existing reconciled register; its original full ledger is also retained by immutable parent367243334 and the outside-repo raw receipt. Keep the current union register and pre-edit claims when resolving its narrative/count conflict; do not replace current rows with historical counts.
+
 The metadata-only production review now includes exact dependency, hold, executor, source-composition and acceptance/recovery artifacts outside the repository. Standalone0487 remains blocked by directly absent prerequisites; no held allocation, production DDL/configuration, data, deployment or financial operation is authorized. The wider audit remains open. PRODUCTION READY: NO.
 
 ## Remaining fixture repairs pass; final hosted qualification required — 2026-10-14T12:40:21.218Z
