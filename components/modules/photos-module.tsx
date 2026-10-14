@@ -32,6 +32,7 @@ import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 import { galleryStep } from '@/lib/ui/gallery';
 import { openOnKey } from '@/lib/ui/a11y';
 import type { Tables } from '@/lib/database.types';
+import type { SupabaseBrowser } from '@/lib/supabase/types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 
@@ -46,8 +47,34 @@ type AlbumRow = Album & { cover: string | null };
  * covers went blank, the favourites badge and "All Photos" stopped at the
  * newest 1,000 and search could not find an older photo. Now the grid pages
  * ("Load more"), and every number on screen is counted by the database.
+ *
+ * EVERY request is one page. "Load more" once re-read the whole prefix as a
+ * single `.range(0, shown - 1)`, and that request is the one the cap cuts: from
+ * the ninth press on it came back with the same 1,000 rows, the page said
+ * "Showing 1000 of 1100" and the button did nothing, so photo 1,001 could not
+ * be reached at all. A press now reads the NEXT page and appends it; a re-read
+ * (after a favourite, a caption, an upload) reads what is loaded a page per
+ * request, side by side.
  */
 const PHOTO_PAGE = 120;
+
+/** What the grid is showing: a tab, an album, a search. */
+type PhotoView = { familyId: string; tab: string; albumId: string | null; filter: string | null };
+
+/** Rows `from`..`to` of a view, newest first and `id` last, so a page boundary cannot move inside a tie. */
+function photoRange(sb: SupabaseBrowser, view: PhotoView, from: number, to: number) {
+  let q = sb.from('family_photos').select('*').eq('family_id', view.familyId);
+  if (view.tab === 'favorites') q = q.eq('is_favorite', true);
+  if (view.albumId) q = q.eq('album_id', view.albumId);
+  if (view.filter) q = q.or(view.filter);
+  return q.order('created_at', { ascending: false }).order('id', { ascending: false }).range(from, to);
+}
+
+/** Rows in order, each once: two pages read moments apart can share a row when a photo lands between them. */
+function distinctById<T extends { id: string }>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  return rows.filter((row) => (seen.has(row.id) ? false : (seen.add(row.id), true)));
+}
 
 /**
  * The search, applied by the DATABASE: the caption contains the words, or the
@@ -108,10 +135,18 @@ export function PhotosModule() {
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<'albums' | 'all' | 'favorites' | 'recents'>('albums');
-  const [shown, setShown] = useState(PHOTO_PAGE);
+  const [loadingMore, setLoadingMore] = useState(false);
   const dropRef = useRef<HTMLDivElement>(null);
   const albumId = activeAlbum?.id ?? null;
   const filter = searchFilter(useDeferredValue(search.trim()));
+  const photoView: PhotoView = { familyId, tab, albumId, filter };
+  // One key per view: the count's and the extent's. A new tab, album or search
+  // starts again at one page.
+  const viewKey = `${tab}|${albumId ?? ''}|${filter ?? ''}`;
+  // How many photos this view has loaded. A re-read keeps all of them — a
+  // favourite marked on photo 300 must not shrink the grid back to its first
+  // page and close the lightbox — and "Load more" raises it.
+  const loaded = useRef<{ view: string; rows: number }>({ view: viewKey, rows: PHOTO_PAGE });
 
   const { data: albums, loading: albumsLoading, error: albumsError, refresh: refreshAlbums } = useRealtimeQuery<AlbumRow>({
     table: 'family_albums', familyId, deps: [familyId],
@@ -137,22 +172,36 @@ export function PhotosModule() {
     },
   });
 
-  const { data: allPhotos, loading: photosLoading, error: photosError, refresh: refreshPhotos } = useRealtimeQuery<Photo>({
-    table: 'family_photos', familyId, deps: [familyId, albumId, tab, filter, shown],
-    fetcher: (sb) => {
-      let q = sb.from('family_photos').select('*').eq('family_id', familyId);
-      if (tab === 'favorites') q = q.eq('is_favorite', true);
-      if (albumId) q = q.eq('album_id', albumId);
-      if (filter) q = q.or(filter);
-      return q.order('created_at', { ascending: false }).order('id', { ascending: false }).range(0, shown - 1);
+  // How many pages are loaded is NOT in deps: a new key is a new read, and the
+  // first render of a new key is a loading one, so "Load more" used to blank
+  // the page to a skeleton. Load more appends instead (below).
+  const { data: allPhotos, loading: photosLoading, error: photosError, refresh: refreshPhotos, setData: setPhotos } = useRealtimeQuery<Photo>({
+    table: 'family_photos', familyId, deps: [familyId, albumId, tab, filter],
+    fetcher: async (sb) => {
+      const want = loaded.current.view === viewKey ? loaded.current.rows : PHOTO_PAGE;
+      const pages = await settleAll(Array.from({ length: Math.max(1, Math.ceil(want / PHOTO_PAGE)) },
+        (_, i) => photoRange(sb, photoView, i * PHOTO_PAGE, (i + 1) * PHOTO_PAGE - 1)));
+      const failed = pages.find((page) => page.error);
+      if (failed) return { data: null, error: failed.error };
+      return { data: distinctById(pages.flatMap((page) => (page.data ?? []) as Photo[])), error: null };
     },
   });
+
+  // Re-reads this module asks for, so "Load more" can tell whether the grid it
+  // is about to extend is still the one the database holds. `running` counts
+  // reads in flight; `generation` moves whenever one starts or ends.
+  const photoReads = useRef({ running: 0, generation: 0 });
+  const reloadPhotos = () => {
+    const reads = photoReads.current;
+    reads.running += 1; reads.generation += 1;
+    return Promise.resolve(refreshPhotos()).finally(() => { reads.running -= 1; reads.generation += 1; });
+  };
 
   // How many photos the current view holds, and how many are favourites —
   // counted by the database, re-asked whenever the loaded photos change. Null
   // while unknown or unreadable, in which case no number is shown at all.
   const [counted, setCounted] = useState<{ key: string; total: number; favorites: number } | null>(null);
-  const countKey = `${tab}|${albumId ?? ''}|${filter ?? ''}`;
+  const countKey = viewKey;
   // A total counted for another tab, album or search is not this view's.
   const counts = counted && counted.key === countKey ? counted : null;
   useEffect(() => {
@@ -177,13 +226,61 @@ export function PhotosModule() {
     return () => { live = false; };
   }, [familyId, tab, albumId, filter, countKey, allPhotos]);
 
+  // The grid this page last showed, and for which tab or album. The full-page
+  // skeleton is for the FIRST load only. A search is a new read (the database
+  // applies it), and the first render of a new read is a loading one, so each
+  // keystroke used to swap the whole page — the search box with it — for a
+  // skeleton: the box unmounted and lost focus mid-word. Now the header stays,
+  // and while a new search loads the grid keeps what it showed.
+  const [lastGrid, setLastGrid] = useState<{ place: string; rows: Photo[] } | null>(null);
+  const place = `${tab}|${albumId ?? ''}`;
+  useEffect(() => {
+    if (!photosLoading && !photosError) setLastGrid({ place, rows: allPhotos });
+  }, [photosLoading, photosError, allPhotos, place]);
+  const firstLoad = lastGrid === null;
+
+  // The search is the database's now (see searchFilter), so what loaded IS the
+  // view — or, while a search of this same tab or album loads, what it was.
+  const photos = !photosLoading ? allPhotos : lastGrid?.place === place ? lastGrid.rows : [];
+  const extent = loaded.current.view === viewKey ? loaded.current.rows : PHOTO_PAGE;
+  const morePhotos = !photosLoading && (counts ? photos.length < counts.total : photos.length >= extent);
+
   // SEC-001: every photo, video, cover and download below is read through a URL
   // signed with this viewer's session. `url` stays the stored reference.
-  const media = useFamilyMediaUrls(allPhotos.map((p) => p.url));
+  const media = useFamilyMediaUrls(photos.map((p) => p.url));
 
-  // The search is the database's now (see searchFilter), so what loaded IS the view.
-  const photos = allPhotos;
-  const morePhotos = counts ? photos.length < counts.total : photos.length >= shown;
+  /**
+   * The next page, appended. It is read from the last photo shown, one row of
+   * overlap, and that row is the proof the grid has not moved since it was
+   * read: a photo added or removed above it shifts every offset. When it has
+   * moved — or one of this module's own re-reads ran meanwhile, which the
+   * append would otherwise overwrite — the grid is read again, a page longer.
+   */
+  async function loadMore() {
+    const last = photos.at(-1);
+    if (!last || loadingMore || photosLoading) return;
+    const from = photos.length;
+    const view = viewKey;
+    const reads = photoReads.current;
+    const before = reads.running === 0 ? reads.generation : -1;
+    setLoadingMore(true);
+    const [page] = await settleAll([photoRange(createClient(), photoView, from - 1, from + PHOTO_PAGE - 1)]);
+    setLoadingMore(false);
+    if (page.error) {
+      console.error('[photos] the next page could not be read', page.error);
+      toastError(tr('photosModule.couldNotLoadFamilyPhotos'));
+      return;
+    }
+    const rows = (page.data ?? []) as Photo[];
+    // What was ASKED for: a grid shorter than this has reached the end, which
+    // is how the button knows to go when the count could not be read.
+    loaded.current = { view, rows: from + PHOTO_PAGE };
+    if (rows[0]?.id === last.id && reads.generation === before) {
+      setPhotos((current) => (current.at(-1)?.id === last.id ? distinctById([...current, ...rows.slice(1)]) : current));
+      return;
+    }
+    void reloadPhotos();
+  }
 
   // Left/Right walk the gallery while the lightbox is open. The two chevrons
   // are the only way to move between photos and they unmount at each end, so
@@ -246,7 +343,7 @@ export function PhotosModule() {
     setUploadProgress(null);
     if (uploaded > 0) {
       success(tr(uploaded === 1 ? 'photosModule.uploadedFile' : 'photosModule.uploadedFiles', { count: uploaded }));
-      void refreshPhotos();
+      void reloadPhotos();
       void refreshAlbums();
     }
     setUploadOpen(false);
@@ -299,7 +396,7 @@ export function PhotosModule() {
     const { data: favorited, error } = await supabase.from('family_photos').update({ is_favorite: !photo.is_favorite }).eq('id', photo.id).select('id');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(favorited)) toastError(tr('errors.thatChangeWasNotSaved'));
-    void refreshPhotos();
+    void reloadPhotos();
   }
 
   async function deletePhoto(photo: Photo) {
@@ -314,7 +411,7 @@ export function PhotosModule() {
     // Zero rows now stops before storage is touched. Audit C1-S9-82.
     const { data: removedRow, error } = await supabase.from('family_photos').delete().eq('id', photo.id).select('id');
     if (error) { toastError(describeDbError(error)); return; }
-    if (wroteNoRows(removedRow)) { toastError(tr('errors.thatChangeWasNotSaved')); void refreshPhotos(); return; }
+    if (wroteNoRows(removedRow)) { toastError(tr('errors.thatChangeWasNotSaved')); void reloadPhotos(); return; }
     // This module deletes the ROW first, deliberately — the comment above says
     // why. What it did not do was read the storage result: a file that survives
     // after its row is gone is referenced by nothing, and "Photo deleted" was
@@ -327,12 +424,12 @@ export function PhotosModule() {
     if (removal.error) {
       console.error('[photos] storage object survived its deleted row', { path: photo.storage_path }, removal.error);
       toastError(tr('photosModule.theFileCouldNotBe'));
-      void refreshPhotos();
+      void reloadPhotos();
       if (lightboxIdx !== null) setLightboxIdx(null);
       return;
     }
     success(tr('photosModule.photoDeleted'));
-    void refreshPhotos();
+    void reloadPhotos();
     void refreshAlbums();
     if (lightboxIdx !== null) setLightboxIdx(null);
   }
@@ -342,13 +439,15 @@ export function PhotosModule() {
     const { data: captioned, error } = await supabase.from('family_photos').update({ caption }).eq('id', photo.id).select('id');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(captioned)) toastError(tr('errors.thatChangeWasNotSaved'));
-    void refreshPhotos();
+    void reloadPhotos();
     setEditPhoto(null);
   }
 
-  const loading = albumsLoading || photosLoading;
-  const error = albumsError || photosError;
-  const refresh = () => { void refreshAlbums(); void refreshPhotos(); };
+  // Before anything has loaded there is no page to keep; after, a photos read
+  // that is loading or failed shows in the grid, under a header that stays.
+  const loading = albumsLoading || (photosLoading && firstLoad);
+  const error = albumsError || (firstLoad ? photosError : null);
+  const refresh = () => { void refreshAlbums(); void reloadPhotos(); };
 
   // ── Album stats ───────────────────────────────────────────
   const albumStats = albums.map((a) => ({
@@ -371,7 +470,7 @@ export function PhotosModule() {
             <AiInsight kind="photos" iconOnly />
             <div className="flex items-center gap-1 rounded-xl border border-border bg-surface/60 px-3 py-1.5 focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 focus-within:ring-offset-bg">
               <Search className="h-3.5 w-3.5 text-muted" />
-              <input value={search} inputMode="search" enterKeyHint="search" onChange={(e) => { setSearch(e.target.value); setShown(PHOTO_PAGE); }}
+              <input value={search} inputMode="search" enterKeyHint="search" onChange={(e) => setSearch(e.target.value)}
                 placeholder={tr('photos.searchPhotos')}
                 className="w-28 bg-transparent text-sm placeholder:text-muted outline-none sm:w-40" />
             </div>
@@ -391,7 +490,7 @@ export function PhotosModule() {
       {/* Tabs */}
       <div className="tab-bar">
         {([['albums', 'photos.albums'], ['all', 'photosModule.allPhotos'], ['favorites', 'photosModule.favorites'], ['recents', 'photosModule.recents']] as const).map(([key, labelKey]) => (
-          <button key={key} onClick={() => { setTab(key); setActiveAlbum(null); setShown(PHOTO_PAGE); }}
+          <button key={key} onClick={() => { setTab(key); setActiveAlbum(null); }}
             className={cn('tab-item', tab === key ? 'tab-item-active' : 'tab-item-inactive')}>
             {tr(labelKey)}
             {key === 'favorites' && <span className="ml-1 text-[10px]">
@@ -413,7 +512,7 @@ export function PhotosModule() {
               {albumStats.map((album) => {
                 const kind = ALBUM_KINDS.find((k) => k.id === album.kind) ?? ALBUM_KINDS[0];
                 return (
-                  <button key={album.id} onClick={() => { setActiveAlbum(album); setTab('all'); setShown(PHOTO_PAGE); }}
+                  <button key={album.id} onClick={() => { setActiveAlbum(album); setTab('all'); }}
                     className="group text-left">
                     <div className="relative aspect-square overflow-hidden rounded-2xl border border-border/60 bg-elevated">
                       {album.cover ? (
@@ -454,11 +553,11 @@ export function PhotosModule() {
 
       {/* Photos grid (all / favorites / recents / album detail) */}
       {(tab !== 'albums' || activeAlbum) && (
-        <div>
+        <div aria-busy={photosLoading || loadingMore || undefined}>
           {/* Album breadcrumb */}
           {activeAlbum && (
             <div className="mb-3 flex items-center gap-2 text-sm">
-              <button onClick={() => { setActiveAlbum(null); setTab('albums'); setShown(PHOTO_PAGE); }}
+              <button onClick={() => { setActiveAlbum(null); setTab('albums'); }}
                 className="flex items-center gap-1 text-muted hover:text-brand-text transition">
                 <ChevronLeft className="h-4 w-4" /> {tr('photos.albums')}
               </button>
@@ -468,13 +567,17 @@ export function PhotosModule() {
             </div>
           )}
 
-          {photos.length === 0 ? (
+          {photosError ? (
+            <ErrorState message={tr('photosModule.couldNotLoadFamilyPhotos')} onRetry={() => { void reloadPhotos(); }} />
+          ) : photos.length === 0 && photosLoading ? (
+            <SkeletonList />
+          ) : photos.length === 0 ? (
             <EmptyState icon={Camera} title={tr('photos.noPhotosYet')}
               description={tr(activeAlbum ? 'photosModule.emptyAlbum' : 'photosModule.emptyPhotos')}
               action={<Button onClick={() => setUploadOpen(true)}><Upload className="h-4 w-4" /> {tr('photos.uploadPhotos')}</Button>} />
           ) : view === 'grid' ? (
             /* Grid */
-            <div className="columns-2 gap-3 sm:columns-3 lg:columns-4 xl:columns-5">
+            <div className={cn('columns-2 gap-3 sm:columns-3 lg:columns-4 xl:columns-5', photosLoading && 'pointer-events-none opacity-60')}>
               {photos.map((photo, idx) => {
                 const isVideo = photo.media_type === 'video';
                 return (
@@ -536,7 +639,7 @@ export function PhotosModule() {
             </div>
           ) : (
             /* List */
-            <div className="overflow-hidden rounded-2xl border border-border">
+            <div className={cn('overflow-hidden rounded-2xl border border-border', photosLoading && 'pointer-events-none opacity-60')}>
               {photos.map((photo, idx) => (
                 <div key={photo.id} onClick={() => setLightboxIdx(idx)}
                   className="group flex cursor-pointer items-center gap-4 border-b border-border/50 px-4 py-3 hover:bg-elevated/30 transition last:border-0">
@@ -566,10 +669,10 @@ export function PhotosModule() {
               ))}
             </div>
           )}
-          {photos.length > 0 && morePhotos && (
+          {!photosError && photos.length > 0 && morePhotos && (
             <div className="mt-4 flex flex-col items-center gap-2">
               {counts && <p className="text-xs text-muted">{tr('photosModule.showingNOfTotal', { shown: photos.length, total: counts.total })}</p>}
-              <Button variant="outline" size="sm" onClick={() => setShown((n) => n + PHOTO_PAGE)}>{tr('photosModule.loadMore')}</Button>
+              <Button variant="outline" size="sm" loading={loadingMore} onClick={() => { void loadMore(); }}>{tr('photosModule.loadMore')}</Button>
             </div>
           )}
         </div>
