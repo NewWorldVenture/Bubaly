@@ -20,9 +20,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
 import { buildFinalizePayload, emptyDraft } from '@/lib/onboarding/flow';
+import { makeInviteMember, makeLocalMember, removeMember } from '@/lib/onboarding/draft';
 
 const mock = vi.hoisted(() => ({
-  db: null as unknown, sendReactEmail: vi.fn(), saveUserProfile: vi.fn(), rateAllowed: true, epoch: 0,
+  db: null as unknown, sendReactEmail: vi.fn(), saveUserProfile: vi.fn(), rateAllowed: true, epoch: 0, accountWriteFails: false,
   ctxRole: 'parent', ctxFamily: '20000000-0000-4000-8000-000000000001', limiterHits: new Map<string, number>(),
 }));
 vi.mock('@/lib/server/rate-limit', async (original) => {
@@ -126,10 +127,24 @@ function build(options: { claims?: boolean } = {}) {
       },
     },
   });
-  Object.assign(db.auth, { getUser: async () => ({ data: { user: { id: USER, email: 'ada@example.test', user_metadata: {} } }, error: null }) });
+  // The account as GoTrue holds it: getUser reads it, and the service role's
+  // updateUserById merges app_metadata keys into it, as GoTrue does.
+  account = { id: USER, email: 'ada@example.test', user_metadata: {}, app_metadata: { provider: 'email' } };
+  Object.assign(db.auth, {
+    getUser: async () => ({ data: { user: structuredClone(account) }, error: null }),
+    admin: {
+      updateUserById: async (id: string, attributes: { app_metadata?: Record<string, unknown> }) => {
+        if (id !== USER) return { data: { user: null }, error: { message: 'User not found' } };
+        if (mock.accountWriteFails) return { data: { user: null }, error: { message: 'fixture auth admin unavailable' } };
+        account.app_metadata = { ...account.app_metadata, ...attributes.app_metadata };
+        return { data: { user: structuredClone(account) }, error: null };
+      },
+    },
+  });
   db.seed('families', [{ id: OWN, created_by: USER, name: 'Ada family', timezone: 'UTC' }]);
   mock.db = db;
 }
+let account: { id: string; email: string; user_metadata: Record<string, unknown>; app_metadata: Record<string, unknown> };
 
 const payload = (extra: Partial<ReturnType<typeof buildFinalizePayload>> = {}) => ({
   ...buildFinalizePayload(emptyDraft({ name: 'Ada', familyName: 'The Adas', timezone: 'UTC' })), ...extra,
@@ -142,6 +157,7 @@ beforeEach(() => {
   mock.sendReactEmail.mockReset().mockResolvedValue({ ok: true });
   mock.saveUserProfile.mockReset().mockResolvedValue({ ok: true });
   mock.rateAllowed = true;
+  mock.accountWriteFails = false;
   mock.epoch++;
   mock.limiterHits = new Map();
   mock.ctxRole = 'parent';
@@ -242,12 +258,119 @@ describe('a retried finish does not add the household twice (A11)', () => {
     expect(mock.sendReactEmail.mock.calls.filter(([args]) => args.to === 'grandpa@example.test')).toHaveLength(1);
   });
 
+  // A11-index — the key was (index, content): taking out an earlier member, or
+  // fixing a name or a role, before the retry gave every later member and
+  // invite a new key, so they were added again beside the old rows.
+  it('a retry after removing an earlier member and fixing a later one reconciles the rows by the draft\'s own ids', async () => {
+    const ava = makeLocalMember({ name: 'Ava', role: 'child' }, []);
+    const ben = makeLocalMember({ name: 'Ben', role: 'child' }, [ava]);
+    const grandpa = makeInviteMember({ email: 'grandpa@example.test', role: 'guest' });
+    const draft = emptyDraft({ name: 'Ada', familyName: 'The Adas', timezone: 'UTC', members: [ava, ben, grandpa] });
+    mock.db = refusing(db, (table, calls) => table === 'calendar_events' && calls.includes('upsert'));
+    const first = await finalizeOnboardingAction({ ...buildFinalizePayload(draft), calendarImport: { source: 'demo', events } });
+    expect(first.ok).toBe(false);
+    expect(db.table('family_members').filter((m) => m.display_name === 'Ben')).toHaveLength(1);
+    expect(db.table('invites')).toHaveLength(1);
+
+    // Back on the members step: Ava was a mistake, and Ben is Benjamin, a teen.
+    const members = removeMember(draft.members, ava.id).map((m) => (m.id === ben.id ? { ...m, name: 'Benjamin', role: 'teen' as const } : m));
+    mock.db = db;
+    const second = await finalizeOnboardingAction(buildFinalizePayload({ ...draft, members }));
+    expect(second.ok).toBe(true);
+    const bens = db.table('family_members').filter((m) => m.display_name === 'Ben' || m.display_name === 'Benjamin');
+    expect(bens).toHaveLength(1);
+    expect(bens[0]).toMatchObject({ display_name: 'Benjamin', role: 'teen' });
+    expect(db.table('invites')).toHaveLength(1);
+    expect(mock.sendReactEmail.mock.calls.filter(([args]) => args.to === 'grandpa@example.test')).toHaveLength(1);
+  });
+
+  it('a corrected invite address is still invited on the retry (control)', async () => {
+    const typo = makeInviteMember({ email: 'grandpa@exmaple.test', role: 'guest' });
+    const draft = emptyDraft({ name: 'Ada', familyName: 'The Adas', timezone: 'UTC', members: [typo] });
+    mock.db = refusing(db, (table, calls) => table === 'calendar_events' && calls.includes('upsert'));
+    await finalizeOnboardingAction({ ...buildFinalizePayload(draft), calendarImport: { source: 'demo', events } });
+    mock.db = db;
+    const second = await finalizeOnboardingAction(buildFinalizePayload({ ...draft, members: [{ ...typo, email: 'grandpa@example.test' }] }));
+    expect(second.ok).toBe(true);
+    expect(db.table('invites').map((i) => i.email).sort()).toEqual(['grandpa@example.test', 'grandpa@exmaple.test']);
+    expect(mock.sendReactEmail.mock.calls.filter(([args]) => args.to === 'grandpa@example.test')).toHaveLength(1);
+  });
+
   it('a different member is still a new row (control)', async () => {
     await finalizeOnboardingAction(payload({ members: [household[0]] }));
     db.table('onboarding_progress')[0].status = 'in_progress';
     await finalizeOnboardingAction(payload({ members: [household[0], { kind: 'local', name: 'Ben', role: 'child' }] }));
     expect(db.table('family_members').filter((m) => m.display_name === 'Ava')).toHaveLength(1);
     expect(db.table('family_members').filter((m) => m.display_name === 'Ben')).toHaveLength(1);
+  });
+});
+
+// A11-index/A7 — the key names the row whatever the payload now says about it,
+// and a row onboarding wrote may since have been given a kid login
+// (createChildLoginAction links that row to the child's PIN account). Finish
+// can be replayed (a client may set its own progress back to in_progress,
+// 0454), and a replay that reused the member's key with 'adult' rewrote the kid
+// login's row as a manager: the role every member editor refuses for a kid
+// login (memberHasAKidLogin, the held 0512).
+describe('a replayed finish does not make a kid login a manager (A11-index/A7)', () => {
+  const KID = '30000000-0000-4000-8000-000000000001';
+  const ben = makeLocalMember({ name: 'Ben', role: 'teen' }, []);
+  const draft = emptyDraft({ name: 'Ada', familyName: 'The Adas', timezone: 'UTC', members: [ben] });
+  const bens = () => db.table('family_members').filter((m) => m.display_name === 'Ben');
+  const finish = async (body: ReturnType<typeof buildFinalizePayload>) => {
+    expect(await finalizeOnboardingAction(body)).toMatchObject({ ok: true });
+    expect(bens()).toHaveLength(1);
+    return bens()[0];
+  };
+  /** As createChildLoginAction does it: the member row is linked to the kid's account, then the mapping is written. */
+  const giveAKidLogin = (row: Record<string, unknown>) => {
+    row.user_id = KID;
+    db.seed('child_logins', [{ family_id: OWN, member_id: row.id, user_id: KID, username: 'ben' }]);
+  };
+  const replay = (body: ReturnType<typeof buildFinalizePayload>) => {
+    db.table('onboarding_progress')[0].status = 'in_progress';
+    return finalizeOnboardingAction(body);
+  };
+
+  it('a replay that reuses the kid login\'s draft id with a manager role is refused, and the row stays the kid\'s', async () => {
+    const row = await finish(buildFinalizePayload(draft));
+    giveAKidLogin(row);
+    const cara = makeLocalMember({ name: 'Cara', role: 'child' }, [ben]);
+    const result = await replay(buildFinalizePayload({ ...draft, members: [{ ...ben, role: 'adult' }, cara] }));
+    expect(result).toEqual({ ok: false, error: 'familyModule.aKidLoginCannotBeAManager' });
+    expect(bens()).toEqual([expect.objectContaining({ id: row.id, role: 'teen', user_id: KID })]);
+    expect(db.table('family_members').filter((m) => m.role === 'adult')).toEqual([]);
+    // Refused before any member was written.
+    expect(db.table('family_members').filter((m) => m.display_name === 'Cara')).toEqual([]);
+  });
+
+  it('so is an id-less replay that still says what the row was before it became a kid login', async () => {
+    // An older wizard sends no ids, so the key is the member's place and
+    // content: Ben was added as an adult, then made a teen with a kid login.
+    const asAdded = payload({ members: [{ kind: 'local', name: 'Ben', role: 'adult' }] });
+    const row = await finish(asAdded);
+    row.role = 'teen';
+    giveAKidLogin(row);
+    expect(await replay(asAdded)).toEqual({ ok: false, error: 'familyModule.aKidLoginCannotBeAManager' });
+    expect(bens()).toEqual([expect.objectContaining({ id: row.id, role: 'teen', user_id: KID })]);
+  });
+
+  it('a kid login linked between the read and the write is not made a manager either', async () => {
+    const row = await finish(buildFinalizePayload(draft));
+    let raced = false;
+    // The read of what the keys name answers before the link lands.
+    mock.db = racing(db, 'family_members', 'onboarding_key', () => { raced = true; row.user_id = KID; });
+    const result = await replay(buildFinalizePayload({ ...draft, members: [{ ...ben, role: 'adult' }] }));
+    expect(raced).toBe(true);
+    expect(result).toEqual({ ok: false, error: 'actions.couldNotFinishSettingUp2' });
+    expect(bens()).toEqual([expect.objectContaining({ id: row.id, role: 'teen', user_id: KID })]);
+  });
+
+  it('a member without a kid login may still be made an adult on a retry (control)', async () => {
+    const row = await finish(buildFinalizePayload(draft));
+    expect(await replay(buildFinalizePayload({ ...draft, members: [{ ...ben, role: 'adult' }] }))).toMatchObject({ ok: true });
+    expect(bens()).toEqual([expect.objectContaining({ id: row.id, role: 'adult' })]);
+    expect(bens()[0].user_id ?? null).toBeNull();
   });
 });
 
@@ -269,6 +392,29 @@ describe('the welcome email (A17)', () => {
     await finalizeOnboardingAction(payload());
     expect(welcomes()).toHaveLength(1);
     expect([...mock.limiterHits.keys()].filter((k) => k.includes('email:welcome:'))).toHaveLength(1);
+  });
+
+  // A17-limit — the limiter bucket was the only record, and rate_limit_prune
+  // (0156, run daily) deletes buckets a day old: the next day's replay found
+  // no bucket, the limiter said yes, and a second welcome went out.
+  it('is sent once per account even after the limiter has forgotten it, because the account records it', async () => {
+    await finalizeOnboardingAction(payload());
+    expect(welcomes()).toHaveLength(1);
+    expect(account.app_metadata).toMatchObject({ provider: 'email', welcome_email_sent_at: expect.any(String) });
+
+    // A day later: the bucket is pruned, so the limiter allows again.
+    db.table('onboarding_progress')[0].status = 'in_progress';
+    mock.rateAllowed = true;
+    const replay = await finalizeOnboardingAction(payload());
+    expect(replay.ok).toBe(true);
+    expect(welcomes()).toHaveLength(1);
+  });
+
+  it('is not sent when its record cannot be written, and the finish still succeeds', async () => {
+    mock.accountWriteFails = true;
+    const result = await finalizeOnboardingAction(payload());
+    expect(result.ok).toBe(true);
+    expect(welcomes()).toHaveLength(0);
   });
 });
 
