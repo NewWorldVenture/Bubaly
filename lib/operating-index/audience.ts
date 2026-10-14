@@ -62,7 +62,9 @@ export function managersItem(item: Pick<OrchestratorItem, 'label' | 'href'>): bo
  * The index as a reader who does not read the household's money is shown it:
  * without the household's money and paperwork moves, and with the financial
  * dimension's summary ("0/1 upcoming bills covered · 1 account below zero")
- * left out (`withheld`). Its scores are as computed.
+ * left out (`withheld`). Its scores are as computed, so the composite is the
+ * household's; the Operating Index page shows a withheld dimension's copy and
+ * neither its score nor its bar, which encode the counts the summary hides.
  */
 export function indexForMember(index: OperatingIndex): OperatingIndex {
   return {

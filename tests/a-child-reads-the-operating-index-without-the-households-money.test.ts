@@ -102,8 +102,15 @@ const HELD_BACK = 'Bills, budgets and balances are for the adults who manage the
 const CLASH = '“Bill\'s recital” overlaps “Swim practice”';
 const NO_LOCATION = '“Insurance agent visit” — no location';
 const BILLS_WEEK = 'Bill is carrying the most this week';
+// FOI-FIN-SCORE — the financial dimension's score is covered-ratio − 12 per
+// overspent budget − 25 per account below zero (lib/operating-index/score.ts):
+// shown beside the withheld summary, it encoded the counts the summary hides.
+// The label is the progress bar's name on the page; its number here is what the
+// seeded day scores (0/1 bills covered, 1 account below zero).
+const FINANCIAL_SCORE = /Financial preparedness: \d+ of 100/;
+const PARENTS_FINANCIAL_SCORE = 'Financial preparedness: 0 of 100';
 
-const event = (id: string, title: string, assignee: string, startsAt: string, endsAt: string, category: string, location: string | null) => ({
+const event =(id: string, title: string, assignee: string, startsAt: string, endsAt: string, category: string, location: string | null) => ({
   id, family_id: FAMILY, title, starts_at: startsAt, ends_at: endsAt, all_day: false, assignee_id: assignee, location, category,
 });
 
@@ -154,6 +161,7 @@ describe('the Operating Index page, on today\'s database', () => {
     h.role = role;
     const html = paint(await FamilyOperatingIndexPage());
     for (const item of [BELOW_ZERO, UNCOVERED, EXPIRING, PAY, ...FINANCIAL_SUMMARY, CLASH, NO_LOCATION, BILLS_WEEK]) expect(html).toContain(item);
+    expect(html).toContain(PARENTS_FINANCIAL_SCORE);
     expect(html).not.toContain(HELD_BACK);
     expect(index()).toHaveLength(1);
     expect((index()[0].suggestions as { id: string }[]).map((s) => s.id)).toEqual(expect.arrayContaining(['fix-negative-balances', 'cover-bills', 'renew-docs']));
@@ -167,6 +175,11 @@ describe('the Operating Index page, on today\'s database', () => {
     // Nor a count of the card it is not shown.
     expect(html).not.toContain('Autopilot can take off your plate');
     expect(html).toContain(HELD_BACK);
+    // Nor the financial score beside the withheld summary, which encodes the
+    // counts it hides; the other six dimensions and the composite are theirs.
+    expect(html).not.toMatch(FINANCIAL_SCORE);
+    expect(html).toContain('Financial preparedness');
+    expect(html).toMatch(/Planning confidence: \d+ of 100/);
     expect(index()).toEqual([]);
   });
 });

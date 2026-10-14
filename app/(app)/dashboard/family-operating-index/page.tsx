@@ -264,16 +264,23 @@ export default async function FamilyOperatingIndexPage() {
         <div className="grid gap-2.5 sm:grid-cols-2">
           {index.dimensions.map((d) => {
             const Icon = DIM_ICON[d.id];
+            // FOI-FIN-SCORE: a withheld dimension's score is the covered-bills
+            // ratio less 12 a budget over cap and 25 an account below zero
+            // (lib/operating-index/score.ts) — the counts its summary holds
+            // back, in one number. Its card keeps the copy; the number and the
+            // bar are left out. The composite above is as computed.
             return (
               <div key={d.id} className="rounded-xl border border-border bg-surface/60 p-3.5">
                 <div className="mb-1 flex items-center gap-2">
                   <Icon className="h-4 w-4 text-muted" />
                   <span className="flex-1 text-sm font-medium">{DIMENSION_LABELS[d.id]}</span>
-                  <span className="text-sm font-semibold tabular-nums">{d.score}</span>
+                  {!d.withheld && <span className="text-sm font-semibold tabular-nums">{d.score}</span>}
                 </div>
-                <div className="mb-1.5 h-1.5 w-full overflow-hidden rounded-full bg-border/50" {...progressBarA11y(d.score, `${DIMENSION_LABELS[d.id]}: ${d.score} of 100`)}>
-                  <div className={cn('h-full rounded-full transition-all', barColor(d.score))} style={{ width: `${d.score}%` }} />
-                </div>
+                {!d.withheld && (
+                  <div className="mb-1.5 h-1.5 w-full overflow-hidden rounded-full bg-border/50" {...progressBarA11y(d.score, `${DIMENSION_LABELS[d.id]}: ${d.score} of 100`)}>
+                    <div className={cn('h-full rounded-full transition-all', barColor(d.score))} style={{ width: `${d.score}%` }} />
+                  </div>
+                )}
                 <p className="text-xs text-muted">{d.withheld ? t('familyOperatingIndex.moneyIsForTheAdultsWhoManageIt') : d.summary}</p>
               </div>
             );
