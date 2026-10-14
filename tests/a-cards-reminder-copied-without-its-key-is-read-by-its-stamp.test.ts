@@ -410,7 +410,7 @@ describe("RV-R4-2: the assistant's complete_reminder keeps a card's trusted orig
     expect(next.tags).toEqual(reminder.tags);
   });
 
-  it.each(['refused', 'missing receipt', 'foreign receipt', 'changed origin'] as const)('restores the active parent after a %s recurrence result and creates no child', async mode => {
+  it.each(['refused', 'missing receipt', 'foreign receipt', 'changed origin'] as const)('retains the completed parent after a %s recurrence result and creates no child', async mode => {
     const { db, reminder } = await policyHousehold();
     const repeat = vi.fn(async () => mode === 'refused'
       ? { data: null, error: { code: '42501', message: 'Synthetic recurrence refusal' } }
@@ -426,10 +426,15 @@ describe("RV-R4-2: the assistant's complete_reminder keeps a card's trusted orig
       },
     }) as Memory;
     const before = db.table('family_reminders').map(row => row.id);
-    expect(await legacyTool(client, 'mum', 'complete_reminder', { title: 'dental' })).toMatchObject({ ok: false });
+    expect(await legacyTool(client, 'mum', 'complete_reminder', { title: 'dental' })).toEqual({
+      ok: false, error: 'Reminder completed, but we could not confirm the next occurrence. Check your reminders before completing this again or adding another.',
+    });
     expect(repeat).toHaveBeenCalledOnce();
     expect(db.table('family_reminders').map(row => row.id)).toEqual(before);
-    expect(db.table('family_reminders').find(row => row.id === reminder.id)).toMatchObject({ status: 'active', completed_at: null });
+    expect(db.table('family_reminders').find(row => row.id === reminder.id)).toMatchObject({
+      status: 'completed', completed_at: new Date(NOW).toISOString(),
+      autopilot_origin: true, autopilot_card_id: reminder.autopilot_card_id,
+    });
   });
 
   it('a manager can repeat a historical generated reminder without granting a public stamp its old audience', async () => {

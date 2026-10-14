@@ -379,31 +379,29 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         // and the database refuses a direct insert of a generated copy.
         const next = r.remind_at && r.recurrence !== 'none' ? nextRemindAt(r.remind_at, r.recurrence, familyTz) : null;
         if (next) {
-          let nextError: unknown = null;
-          if (r.autopilot_origin) {
-            const { data: receipt, error: repeatError } = await supabase.rpc('repeat_card_family_reminder', {
-              p_parent_id: r.id, p_at: next,
-            }).maybeSingle();
-            nextError = repeatError;
-            if (!nextError && (!receipt || receipt.family_id !== ctx.familyId ||
-              receipt.autopilot_origin !== true || receipt.autopilot_card_id !== r.autopilot_card_id)) {
-              nextError = 'Recurrence receipt could not be verified';
+          try {
+            if (r.autopilot_origin) {
+              const { data: receipt, error: repeatError } = await supabase.rpc('repeat_card_family_reminder', {
+                p_parent_id: r.id, p_at: next,
+              }).maybeSingle();
+              if (repeatError) throw repeatError;
+              if (!receipt || typeof receipt.id !== 'string' || !receipt.id.trim() || receipt.family_id !== ctx.familyId ||
+                receipt.autopilot_origin !== true || receipt.autopilot_card_id !== r.autopilot_card_id) {
+                throw new Error('Recurrence receipt could not be verified');
+              }
+            } else {
+              const result = await supabase.from('family_reminders').insert({
+                family_id: ctx.familyId, created_by: ctx.userId, title: r.title, notes: r.notes,
+                kind: r.kind, priority: r.priority, recurrence: r.recurrence, location_name: r.location_name,
+                member_id: r.member_id, remind_at: next, status: 'active', tags: r.tags ?? [],
+              });
+              if (result.error) throw result.error;
             }
-          } else {
-            const result = await supabase.from('family_reminders').insert({
-              family_id: ctx.familyId, created_by: ctx.userId, title: r.title, notes: r.notes,
-              kind: r.kind, priority: r.priority, recurrence: r.recurrence, location_name: r.location_name,
-              member_id: r.member_id, remind_at: next, status: 'active', tags: r.tags ?? [],
-            });
-            nextError = result.error;
-          }
-          if (nextError) {
-            // Restoring the reminder this call just completed; zero rows is a
-            // failed restore. Logged. Audit C1-S9-69.
-            const { data: restored, error: rollbackError } = await supabase.from('family_reminders')
-              .update({ status: 'active', completed_at: null }).eq('id', r.id).select('id');
-            if (rollbackError || wroteNoRows(restored)) console.error('[assistant] reminder rollback failed:', rollbackError ?? 'no rows updated');
-            return toolFailure('schedule the next reminder', nextError);
+          } catch (nextError) {
+            // Completion already committed. A failed reply cannot prove the next
+            // occurrence was not saved; restoring or retrying could duplicate it.
+            console.error('[assistant] schedule the next reminder failed:', nextError);
+            return { ok: false, error: 'Reminder completed, but we could not confirm the next occurrence. Check your reminders before completing this again or adding another.' };
           }
         }
         return { ok: true, summary: `Completed “${r.title}”${next ? ' — next one scheduled' : ''}.` };
