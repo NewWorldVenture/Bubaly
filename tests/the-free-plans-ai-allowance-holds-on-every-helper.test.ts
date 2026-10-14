@@ -80,6 +80,32 @@ function audio(bytes: number) {
   return new NextRequest('http://localhost/api/ai/voice/transcribe', { method: 'POST', body: form });
 }
 
+/**
+ * The same multipart upload, streamed the way a socket delivers it. A FormData
+ * body is pumped by undici's own generator, which keeps enqueueing after the
+ * route cancels an over-budget read; on Node 24 that surfaces as an unhandled
+ * "ReadableStream is already closed" rejection after the test. This stream
+ * stops when it is cancelled, so the route's streamed size check is what the
+ * oversized case exercises.
+ */
+async function streamedAudio(bytes: number) {
+  const form = new FormData();
+  form.append('audio', new Blob([new Uint8Array(bytes)], { type: 'audio/webm' }), 'speech.webm');
+  const encoded = new Response(form);
+  const contentType = encoded.headers.get('content-type') ?? 'multipart/form-data';
+  const payload = new Uint8Array(await encoded.arrayBuffer());
+  let offset = 0;
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (offset >= payload.byteLength) { controller.close(); return; }
+      controller.enqueue(payload.subarray(offset, offset + 64 * 1024));
+      offset += 64 * 1024;
+    },
+  });
+  const init = { method: 'POST', headers: { 'content-type': contentType }, body, duplex: 'half' };
+  return new NextRequest(new Request('http://localhost/api/ai/voice/transcribe', init as RequestInit));
+}
+
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(NOW);
@@ -169,7 +195,7 @@ describe('N17: voice', () => {
   });
 
   it('refuses more audio than a spoken request, before it reaches the provider', async () => {
-    const res = await transcribe(audio(3 * 1024 * 1024));
+    const res = await transcribe(await streamedAudio(3 * 1024 * 1024));
 
     expect(res.status).toBe(413);
     expect(h.upstream).not.toHaveBeenCalled();
