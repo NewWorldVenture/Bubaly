@@ -4,14 +4,18 @@ import { useState, useTransition } from 'react';
 import {
   CalendarClock, Sparkles, Wand2, Check, X, Loader2, MapPin, User, ArrowRight,
 } from 'lucide-react';
-import { rescheduleEventAction } from '@/app/(app)/dashboard/conflicts/actions';
+import { rescheduleEventAction, type RenderedEventTimes } from '@/app/(app)/dashboard/conflicts/actions';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/states';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type EventView = { id: string; title: string; whenLabel: string; location: string | null; assignee: string | null };
-export type QuickFixView = { eventId: string; label: string; startsAtIso: string; endsAtIso: string; newWhenLabel: string };
+export type QuickFixView = {
+  eventId: string; label: string; startsAtIso: string; endsAtIso: string; newWhenLabel: string;
+  /** The event's times when the fix was computed; the move is refused if they changed. */
+  rendered: RenderedEventTimes;
+};
 export type AiEvent = { title: string; starts_at: string; ends_at: string | null; location: string | null };
 export type ConflictView = {
   key: string;
@@ -35,13 +39,27 @@ function EventLine({ e }: { e: EventView }) {
   );
 }
 
-export function ConflictResolver({ conflicts }: { conflicts: ConflictView[] }) {
+/**
+ * `partial`: the page could not check every event in the fortnight (its read
+ * was capped), so finding no overlap among the ones it did check is not the
+ * all-clear.
+ */
+export function ConflictResolver({ conflicts, partial = false }: { conflicts: ConflictView[]; partial?: boolean }) {
   const t = useTranslations();
   const [resolved, setResolved] = useState<Set<string>>(new Set());
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
   const visible = conflicts.filter((c) => !resolved.has(c.key) && !dismissed.has(c.key));
 
+  if (conflicts.length === 0 && partial) {
+    return (
+      <EmptyState
+        icon={CalendarClock}
+        title={t('conflictResolver.noConflictsAmongTheEventsChecked')}
+        description={t('conflictResolver.notEveryEventWasChecked')}
+      />
+    );
+  }
   if (conflicts.length === 0) {
     return (
       <EmptyState
@@ -92,7 +110,7 @@ function ConflictCard({
     setError('');
     const qf = conflict.quickFix;
     start(async () => {
-      const r = await rescheduleEventAction(qf.eventId, qf.startsAtIso, qf.endsAtIso);
+      const r = await rescheduleEventAction(qf.eventId, qf.startsAtIso, qf.endsAtIso, qf.rendered);
       if (r.ok) onResolved();
       else setError(r.error ?? t('conflictResolver.couldNotReschedule'));
     });

@@ -14,6 +14,8 @@ import { dayKeyLabel, when } from '../render';
 const MAX_TODOS = 40;
 const MAX_CHORES = 60;
 const MAX_SUGGESTIONS = 3;
+/** What `listOpenChores` reads as open. */
+const OPEN_CHORE_STATUSES = ['todo', 'in_progress', 'submitted'] as const;
 
 export type TasksSliceData = {
   todos: { id: string; title: string; dueDate: string | null; assignee: string | null; priority: string }[];
@@ -30,12 +32,30 @@ export const tasksSlice: SliceDefinition = {
   name: 'tasks',
   title: 'Tasks and chores',
   async load(scope, env) {
-    const [todos, assignments] = await Promise.all([
+    // The rows are the soonest few; the TOTALS are counted. The headline said
+    // "40 open to-dos" of a family with 150, and the load split and rebalance
+    // ideas below were computed from that due-date-ordered prefix, so they
+    // could disagree with the Workload page they claim to match.
+    const [todos, assignments, todoTotal, choreTotal] = await Promise.all([
       searchTodos(scope, { done: false, limit: MAX_TODOS }),
       listOpenChores(scope, { limit: MAX_CHORES }),
+      scope.db.from('todo_items').select('id', { count: 'exact', head: true })
+        .eq('family_id', scope.familyId).eq('is_done', false),
+      scope.db.from('chore_assignments').select('id', { count: 'exact', head: true })
+        .eq('family_id', scope.familyId).in('status', OPEN_CHORE_STATUSES),
     ]);
     if (!todos.ok) return todos;
     if (!assignments.ok) return assignments;
+    for (const total of [todoTotal, choreTotal]) {
+      if (total.error || typeof total.count !== 'number') {
+        console.error('[ai-context:tasks] open-task count failed', total.error);
+        return fail(describeDbError(total.error, 'Could not count the open tasks.'), { code: SERVICE_CODES.db });
+      }
+    }
+    const openTodos = Math.max(todoTotal.count ?? 0, todos.data.length);
+    const openChores = Math.max(choreTotal.count ?? 0, assignments.data.length);
+    // A split of part of the load is not the family's split.
+    const partial = openTodos > todos.data.length || openChores > assignments.data.length;
 
     // Assignments carry only the chore id; the titles come from `chores`, read
     // once for the ids on the board rather than per assignment.
@@ -82,7 +102,10 @@ export const tasksSlice: SliceDefinition = {
     };
 
     const lines: string[] = [];
-    lines.push(`- ${data.todos.length} open to-do${data.todos.length === 1 ? '' : 's'}, ${data.chores.length} open chore${data.chores.length === 1 ? '' : 's'}`);
+    const counted = (shown: number, total: number, noun: string) => (total > shown
+      ? `showing ${shown} of ${total} open ${noun}s`
+      : `${total} open ${noun}${total === 1 ? '' : 's'}`);
+    lines.push(`- ${counted(data.todos.length, openTodos, 'to-do')}, ${counted(data.chores.length, openChores, 'chore')}`);
     const overdue = data.todos.filter((t) => t.dueDate && t.dueDate < env.todayKey);
     for (const t of data.todos) {
       const bits = [`- To-do: ${fenceUntrusted('todo', t.title)}`];
@@ -98,7 +121,7 @@ export const tasksSlice: SliceDefinition = {
       if (c.status === 'submitted') bits.push('(awaiting approval)');
       lines.push(bits.join(' '));
     }
-    if (data.workload.loads.length > 1) {
+    if (data.workload.loads.length > 1 && !partial) {
       const shares = data.workload.loads.filter((l) => l.sharePct > 0).map((l) => `${l.name} ${l.sharePct}%${l.overloaded ? ' (overloaded)' : ''}`);
       if (shares.length) lines.push(`- Load split (fairness ${data.workload.fairness}/100): ${shares.join(', ')}`);
       for (const s of data.workload.suggestions) {

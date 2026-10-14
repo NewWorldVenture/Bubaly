@@ -446,8 +446,13 @@ export async function deleteEvents(scope: ServiceScope, eventIds: string[]): Pro
 export type UpdateEventPatch = Partial<Omit<CreateEventInput, 'title'>> & { title?: string };
 
 type EventClockState = Pick<CalendarEvent, 'id' | 'title' | 'starts_at' | 'ends_at' | 'all_day'>;
-export async function updateEvent(scope: ServiceScope, eventId: string, patch: UpdateEventPatch): Promise<ServiceResult<CalendarEvent>> {
-  return applyEventUpdate(scope, eventId, patch);
+/**
+ * `expected` is the clock the caller already holds for the row (the conflicts
+ * page's quick fix, computed from a render): the time change is written only
+ * if the row still has it, rather than against whatever it reads now.
+ */
+export async function updateEvent(scope: ServiceScope, eventId: string, patch: UpdateEventPatch, expected?: EventClockState): Promise<ServiceResult<CalendarEvent>> {
+  return applyEventUpdate(scope, eventId, patch, expected);
 }
 async function applyEventUpdate(scope: ServiceScope, eventId: string, patch: UpdateEventPatch, captured?: EventClockState): Promise<ServiceResult<CalendarEvent>> {
   const update: Updatable<'calendar_events'> = {};
