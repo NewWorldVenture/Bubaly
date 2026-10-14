@@ -101,6 +101,15 @@ export const WEB_PUSH_STALLS_PER_RUN = 2;
  */
 export const WEB_PUSH_RECIPIENT_ALLOWANCE_MS = WEB_PUSH_DEADLINE_MS + WEB_PUSH_DEADLINE_AFTER_STALL_MS;
 export const WEB_PUSH_FAMILY_ALLOWANCE_MS = PUSH_DISPATCH_BUDGET_MS / 2;
+/**
+ * The least a web send is started with. A send given the last few hundred
+ * milliseconds of an allowance cut a healthy device off mid-flight: counted
+ * failed (so the notice could expire) and, if its push service had already
+ * taken it, never receipted, so the next run buzzed the device again. Below
+ * this the device is skipped and waits for the next run, as it does once the
+ * allowance is spent.
+ */
+export const WEB_PUSH_MIN_SEND_MS = 1_000;
 
 /**
  * Shared across one dispatch run: when it must stop, devices already known not
@@ -323,7 +332,7 @@ async function sendPushDevicesToUser(
   }
   type Device = (typeof devices)[number];
   const sendable = (d: Device) => d.provider === 'webpush' && !receipts?.delivered.has(d.id)
-    && !budget?.stalled.has(d.id) && !cutOff && allowance() > 0
+    && !budget?.stalled.has(d.id) && !cutOff && allowance() >= WEB_PUSH_MIN_SEND_MS
     && Boolean(vapid && d.endpoint && d.p256dh && d.auth);
   // The endpoint checks too: each is a DNS lookup on a host the member chose,
   // bounded at 3 s apiece, so ten of them in turn were half a minute.
@@ -392,7 +401,7 @@ async function sendPushDevicesToUser(
         if (!vapid || !d.endpoint || !d.p256dh || !d.auth) { result.skipped++; continue; }
         // The recipient's or the family's time for web pushes is spent: as
         // with the run's, this device waits for the next run.
-        if (allowance() <= 0) { result.skipped++; continue; }
+        if (allowance() < WEB_PUSH_MIN_SEND_MS) { result.skipped++; continue; }
         // Re-checked HERE and not only at registration: the endpoint is read
         // back out of a table, so the row outlives the check that admitted it,
         // and the DNS answer that made it safe can change underneath it. The
@@ -410,7 +419,7 @@ async function sendPushDevicesToUser(
         if (!(await stillPermitted())) break;
         // Its own deadline, from now: not one shared with the sends before it.
         const givenMs = allowance();
-        if (givenMs <= 0) { result.skipped++; continue; }
+        if (givenMs < WEB_PUSH_MIN_SEND_MS) { result.skipped++; continue; }
         const keys = { p256dh: d.p256dh, auth: d.auth };
         const sent = settledCall(() => sendWebPushBounded({ endpoint, keys }, body, givenMs));
         sends.push(sent);

@@ -23,7 +23,7 @@ vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string)
 vi.mock('@/lib/server/audit', () => ({ logAudit: async () => {} }));
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 
-const { adminUpdateMemberAction } = await import('@/app/(app)/admin/actions');
+const { adminUpdateMemberAction, adminCreateFamilyAction } = await import('@/app/(app)/admin/actions');
 
 let db: InMemorySupabase;
 const row = (id: string) => db.table('family_members').find((m) => m.id === id)!;
@@ -39,7 +39,10 @@ beforeEach(() => {
     { id: 'u-nan', email: 'nan@example.test', user_metadata: {} },
   ]);
   Object.assign(db.auth, {
-    admin: { getUserById: async (id: string) => ({ data: { user: db.table('auth_users').find((u) => u.id === id) ?? null }, error: null }) },
+    admin: {
+      getUserById: async (id: string) => ({ data: { user: db.table('auth_users').find((u) => u.id === id) ?? null }, error: null }),
+      listUsers: async ({ page = 1 }: { page?: number } = {}) => ({ data: { users: page === 1 ? db.table('auth_users') : [] }, error: null }),
+    },
   });
   db.seed('family_members', [
     { id: 'ella', family_id: FAMILY, user_id: 'u-ella', role: 'child', is_active: true, display_name: 'Ella' },
@@ -86,5 +89,29 @@ describe('the admin console\'s member edit', () => {
     expect(await adminUpdateMemberAction('nan', { displayName: 'Nana', role: 'caregiver' })).toEqual({ ok: true });
     expect(row('nan')).toMatchObject({ display_name: 'Nana', role: 'caregiver' });
     expect(ledger()).toEqual([]);
+  });
+});
+
+// The sibling: adminCreateFamilyAction seats the owner it looks up as the new
+// family's parent, and asked nothing, so a typed kid-login address gave that
+// PIN account a parent seat of its own.
+describe('the admin console\'s create family', () => {
+  it('does not make a kid login the owner of a new family', async () => {
+    expect(await adminCreateFamilyAction({ name: 'The Leos', timezone: 'UTC', ownerEmail: 'child.leo@kids.bubaly.app' }))
+      .toEqual({ ok: false, error: 'familyModule.aKidLoginCannotBeAManager' });
+    expect(db.table('families')).toEqual([]);
+    expect(db.table('family_members').filter((m) => m.user_id === 'u-leo')).toEqual([expect.objectContaining({ family_id: FAMILY, role: 'teen' })]);
+  });
+
+  it('refuses when it cannot tell whether the owner is a kid login', async () => {
+    state.db = withFaults(db, (table) => (table === 'child_logins' ? { message: 'fixture read refused' } : null));
+    expect(await adminCreateFamilyAction({ name: 'The Nans', timezone: 'UTC', ownerEmail: 'nan@example.test' })).toMatchObject({ ok: false });
+    expect(db.table('families')).toEqual([]);
+  });
+
+  it('creates a family for an ordinary account (control)', async () => {
+    expect(await adminCreateFamilyAction({ name: 'The Nans', timezone: 'UTC', ownerEmail: 'nan@example.test' })).toMatchObject({ ok: true });
+    expect(db.table('families')).toHaveLength(1);
+    expect(db.table('family_members').filter((m) => m.user_id === 'u-nan' && m.role === 'parent')).toHaveLength(1);
   });
 });

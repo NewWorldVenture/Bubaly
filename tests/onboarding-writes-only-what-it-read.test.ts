@@ -112,6 +112,8 @@ function build(options: { claims?: boolean } = {}) {
     userId: USER,
     uniques: { family_members: [['family_id', 'user_id'], ['family_id', 'onboarding_key']], user_preferences: [['user_id']], onboarding_progress: [['user_id']],
       invites: [['family_id', 'onboarding_key']], calendar_events: [['family_id', 'onboarding_key']], onboarding_imports: [['family_id', 'onboarding_key']] },
+    // 0002: an invite is written pending.
+    defaults: { invites: { status: 'pending' } },
     rpc: {
       onboarding_claim_family: (_args, mem) => {
         // 0454: the claim records the wizard as in progress for this family.
@@ -294,6 +296,31 @@ describe('a retried finish does not add the household twice (A11)', () => {
     expect(second.ok).toBe(true);
     expect(db.table('invites').map((i) => i.email).sort()).toEqual(['grandpa@example.test', 'grandpa@exmaple.test']);
     expect(mock.sendReactEmail.mock.calls.filter(([args]) => args.to === 'grandpa@example.test')).toHaveLength(1);
+  });
+
+  // A11-invite-role — keyed by its draft id, the retry named the first run's
+  // invite, and ignoreDuplicates kept its old role.
+  it('a retry that fixed an invitee\'s role gives the pending invite that role, without inviting them twice', async () => {
+    const grandpa = makeInviteMember({ email: 'grandpa@example.test', role: 'guest' });
+    const draft = emptyDraft({ name: 'Ada', familyName: 'The Adas', timezone: 'UTC', members: [grandpa] });
+    mock.db = refusing(db, (table, calls) => table === 'calendar_events' && calls.includes('upsert'));
+    expect((await finalizeOnboardingAction({ ...buildFinalizePayload(draft), calendarImport: { source: 'demo', events } })).ok).toBe(false);
+    mock.db = db;
+    const second = await finalizeOnboardingAction(buildFinalizePayload({ ...draft, members: [{ ...grandpa, role: 'adult' as const }] }));
+    expect(second.ok).toBe(true);
+    expect(db.table('invites')).toEqual([expect.objectContaining({ email: 'grandpa@example.test', role: 'adult', status: 'pending' })]);
+    expect(mock.sendReactEmail.mock.calls.filter(([args]) => args.to === 'grandpa@example.test')).toHaveLength(1);
+  });
+
+  it('an invite already accepted keeps the role it was accepted with (control)', async () => {
+    const grandpa = makeInviteMember({ email: 'grandpa@example.test', role: 'guest' });
+    const draft = emptyDraft({ name: 'Ada', familyName: 'The Adas', timezone: 'UTC', members: [grandpa] });
+    mock.db = refusing(db, (table, calls) => table === 'calendar_events' && calls.includes('upsert'));
+    await finalizeOnboardingAction({ ...buildFinalizePayload(draft), calendarImport: { source: 'demo', events } });
+    db.table('invites')[0].status = 'accepted';
+    mock.db = db;
+    expect((await finalizeOnboardingAction(buildFinalizePayload({ ...draft, members: [{ ...grandpa, role: 'adult' as const }] }))).ok).toBe(true);
+    expect(db.table('invites')).toEqual([expect.objectContaining({ role: 'guest', status: 'accepted' })]);
   });
 
   it('a different member is still a new row (control)', async () => {

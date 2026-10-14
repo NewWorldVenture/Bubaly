@@ -50,7 +50,7 @@ vi.mock('@/lib/server/native-push', () => ({
 }));
 
 const {
-  dispatchPendingPushes, PUSH_DISPATCH_BUDGET_MS, WEB_PUSH_DEADLINE_MS, WEB_PUSH_DEADLINE_AFTER_STALL_MS, WEB_PUSH_FAMILY_ALLOWANCE_MS,
+  dispatchPendingPushes, PUSH_DISPATCH_BUDGET_MS, WEB_PUSH_DEADLINE_MS, WEB_PUSH_DEADLINE_AFTER_STALL_MS, WEB_PUSH_FAMILY_ALLOWANCE_MS, WEB_PUSH_MIN_SEND_MS,
 } = await import('@/lib/server/push');
 
 const NOW = new Date('2026-10-13T12:00:00.000Z');
@@ -158,6 +158,43 @@ describe('one account cannot spend the run', () => {
     expect(sendTimes('neighbour-phone')).toEqual([2 * 3_000]);
     expect(stamped(f)).toEqual([notificationId(17)]);
     expect(endedAt).toBe(2 * 3_000);
+  });
+});
+
+describe('a send is not started with a sliver of time (A5-sliver)', () => {
+  it('a healthy device reached with less than a second of the run left waits for the next run, skipped and not failed', async () => {
+    // The attacker's device answers at 4.8 s of a 5 s run. The neighbour's
+    // phone was then sent with 200 ms, cut off, and counted failed.
+    provider.behave = (endpoint) => (endpoint.endsWith('/slow') ? after(4_800, { statusCode: 201 }) : after(500, { statusCode: 201 }));
+    const f = pushDispatchDb({
+      families,
+      notifications: [notice(1, HOSTILE, 'u-attacker'), notice(2, NEIGHBOURS, 'u-neighbour')],
+      push_devices: [web('slow', 'u-attacker'), web('neighbour-phone', 'u-neighbour')],
+      family_members: [member('m-attacker', HOSTILE, 'u-attacker'), neighbour], family_ai_settings: [], user_preferences: [],
+    });
+
+    const { result } = await playOut(dispatchPendingPushes(f.db, { now: NOW, budgetMs: 5_000 }));
+
+    expect(5_000 - 4_800).toBeLessThan(WEB_PUSH_MIN_SEND_MS);
+    expect(sendTimes('neighbour-phone')).toEqual([]);
+    expect(result).toMatchObject({ sent: 1, failed: 0, skipped: 1 });
+    // Pending, not expired: the neighbours' notice is sent by the next run.
+    expect(stamped(f)).toEqual([notificationId(1)]);
+  });
+
+  it('a device reached with a second or more left is still sent to (control)', async () => {
+    provider.behave = (endpoint) => (endpoint.endsWith('/slow') ? after(3_500, { statusCode: 201 }) : after(500, { statusCode: 201 }));
+    const f = pushDispatchDb({
+      families,
+      notifications: [notice(1, HOSTILE, 'u-attacker'), notice(2, NEIGHBOURS, 'u-neighbour')],
+      push_devices: [web('slow', 'u-attacker'), web('neighbour-phone', 'u-neighbour')],
+      family_members: [member('m-attacker', HOSTILE, 'u-attacker'), neighbour], family_ai_settings: [], user_preferences: [],
+    });
+
+    const { result } = await playOut(dispatchPendingPushes(f.db, { now: NOW, budgetMs: 5_000 }));
+
+    expect(sendTimes('neighbour-phone')).toEqual([3_500]);
+    expect(result).toMatchObject({ sent: 2, failed: 0, skipped: 0 });
   });
 });
 

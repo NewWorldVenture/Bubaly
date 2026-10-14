@@ -13,7 +13,7 @@ import { emailSchema } from '@/lib/validation';
 import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { stripeFromKey } from '@/lib/stripe';
 import { REMOVED_MEMBER_PATCH, isManager, type MemberRole } from '@/lib/constants/roles';
-import { REMOVED_CHILD_BAN_MARKER, memberHasAKidLogin, revokeRemovedChildLogin } from '@/lib/server/child-account';
+import { REMOVED_CHILD_BAN_MARKER, isChildLoginAccount, memberHasAKidLogin, revokeRemovedChildLogin } from '@/lib/server/child-account';
 import type { PlanId } from '@/lib/constants/plans';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
@@ -175,6 +175,14 @@ export async function adminCreateFamilyAction(input: {
   // permanently, so it is refused here rather than written.
   const timezone = (input.timezone || 'UTC').trim();
   if (!isValidTimezone(timezone)) return { ok: false, error: t('actions.unknownTimeZone') };
+
+  // The owner is seated as the family's parent, so a kid login (a 4-digit PIN
+  // its parent knows) is never one, as the household and admin editors refuse
+  // it a manager role (the held 0512). Fails closed: an unanswerable lookup
+  // counts as a kid login.
+  if (await isChildLoginAccount(supabase, { id: authOwner.id, email: authOwner.email, user_metadata: authOwner.user_metadata })) {
+    return { ok: false, error: t('familyModule.aKidLoginCannotBeAManager', { name: owner.full_name?.trim() || owner.email || wantedEmail }) };
+  }
 
   const { data: family, error } = await supabase.from('families').insert({
     name, timezone, created_by: owner.id,

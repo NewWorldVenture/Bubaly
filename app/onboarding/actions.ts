@@ -774,7 +774,7 @@ export async function finalizeOnboardingAction(input: {
     if (!token) {
       const { data: existingInvite, error: existingInviteErr } = await admin
         .from('invites')
-        .select('token')
+        .select('id, token, role, status')
         .eq('family_id', familyId)
         .eq('onboarding_key', onboardingItemKey(householdKey, 'invite', ...memberSlot(index, m)))
         .maybeSingle();
@@ -784,6 +784,18 @@ export async function finalizeOnboardingAction(input: {
           : { ok: false, error: t('actions.couldNotCreateAllHousehold') };
       }
       token = existingInvite.token;
+      // Keyed by its draft id, a retry that fixed the invitee's role names the
+      // invite the first run wrote, and ignoreDuplicates left it as it was: a
+      // guest when the owner had made grandpa an adult. A still-pending invite
+      // takes the corrected role (compare-and-set on what was read); one already
+      // accepted, revoked or expired is left alone.
+      if (existingInvite.status === 'pending' && existingInvite.role !== m.role) {
+        const { error: roleErr } = await admin.from('invites')
+          .update({ role: m.role })
+          .eq('id', existingInvite.id).eq('family_id', familyId).eq('status', 'pending').eq('role', existingInvite.role)
+          .select('id');
+        if (roleErr) return onboardingFailure(`invite for ${m.email} role`, roleErr, t('actions.couldNotCreateAllHousehold'));
+      }
     }
     if (!invite) continue;
     // Bounded per call, per user and per family (the same family bucket
