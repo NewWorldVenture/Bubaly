@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
@@ -44,6 +44,8 @@ const ROSTER = [
   { id: 'sam', role: 'teen' }, { id: 'ava', role: 'child' }, { id: 'neighbour', role: 'guest' },
 ];
 
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-21T06:30:00Z')); });
+afterEach(() => { vi.useRealTimers(); });
 afterEach(() => { sent.notices = []; });
 
 describe('who reads a medication', () => {
@@ -71,6 +73,7 @@ describe('a refill names the drug only to its readers', () => {
 
   it('the scan tells the readers, by name, and writes no drug name where the family reads', async () => {
     const db = createInMemorySupabase<DB>({
+      rpcRole: 'service_role',
       uniques: { autopilot_suggestions: [['family_id', 'dedupe_key']] },
       rpc: { ensure_default_grocery_list: () => 'list-1' },
     });

@@ -21,7 +21,7 @@ vi.mock('@/lib/supabase/server', () => ({
   createServiceClient: () => entitledServiceClient(),
 }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: mocks.enforceAIRateLimit }));
-vi.mock('@/lib/ai/provider', () => ({ resolveProvider: mocks.resolveProvider }));
+vi.mock('@/lib/ai/provider', () => ({ resolveProvider: mocks.resolveProvider, isAIConfigured: async () => true }));
 vi.mock('@/lib/services/scope', () => ({ scopeFromUserContext: () => ({}) }));
 vi.mock('@/lib/ai/observability', () => ({
   withAiRequest: (
@@ -38,13 +38,15 @@ vi.mock('@/lib/finance/subscriptions', () => ({
 }));
 
 import { POST } from '@/app/api/ai/savings/route';
+import { getMessages, translate } from '@/lib/i18n/messages';
 
 const fallback = [{
   title: 'On track',
   detail: 'No overspending or unused subscriptions detected. Set category budgets to unlock sharper suggestions.',
 }];
 const defaultSummary = 'Here are the biggest opportunities to save.';
-const unavailableSummary = 'AI is not configured \u2014 here are data-driven suggestions from your finances.';
+// The AI was asked and could not answer (N15): said so, in the reader's words, and marked as not the AI's.
+const unavailable = { summary: translate(getMessages('en-US'), 'savings.theAiCouldNotAnswerHereAre'), suggestions: fallback, wastedMonthlyCents: 0, source: 'unavailable' };
 const validSuggestion = { title: 'Example title', detail: 'Example detail.' };
 
 function reply(summary: unknown, suggestions: unknown) {
@@ -108,7 +110,8 @@ describe('savings endpoint response integrity', () => {
     const response = await POST();
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ summary: 'Example summary.', suggestions: fallback, wastedMonthlyCents: 0 });
+    // The summary is the model's; the list is the family's own numbers, and says so (N15).
+    expect(await response.json()).toEqual({ summary: 'Example summary.', suggestions: fallback, wastedMonthlyCents: 0, source: 'ai', suggestionsSource: 'fallback' });
     expect(mocks.complete).toHaveBeenCalledOnce();
   });
 
@@ -119,7 +122,7 @@ describe('savings endpoint response integrity', () => {
     const response = await POST();
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ summary: 'Example summary.', suggestions: valid.slice(0, 4), wastedMonthlyCents: 0 });
+    expect(await response.json()).toEqual({ summary: 'Example summary.', suggestions: valid.slice(0, 4), wastedMonthlyCents: 0, source: 'ai' });
   });
 
   it.each(['', ' \n\t '])('uses the existing default for a blank summary (%j)', async (summary) => {
@@ -128,7 +131,7 @@ describe('savings endpoint response integrity', () => {
     const response = await POST();
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ summary: defaultSummary, suggestions: [validSuggestion], wastedMonthlyCents: 0 });
+    expect(await response.json()).toEqual({ summary: defaultSummary, suggestions: [validSuggestion], wastedMonthlyCents: 0, source: 'ai' });
   });
 
   it('preserves valid fenced JSON and the response envelope', async () => {
@@ -138,34 +141,34 @@ describe('savings endpoint response integrity', () => {
     const response = await POST();
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ ...parsed, wastedMonthlyCents: 0 });
+    expect(await response.json()).toEqual({ ...parsed, wastedMonthlyCents: 0, source: 'ai' });
     expect(mocks.complete).toHaveBeenCalledWith(expect.objectContaining({ tools: [], maxTokens: 600 }));
   });
 
-  it('preserves the fallback for an empty completion', async () => {
+  it('answers an empty completion with the data-driven list, marked as not the AI’s', async () => {
     mocks.complete.mockResolvedValue({ text: '', model: 'mock-model' });
 
     const response = await POST();
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ summary: defaultSummary, suggestions: fallback, wastedMonthlyCents: 0 });
+    expect(await response.json()).toEqual(unavailable);
   });
 
-  it('preserves the existing unavailable fallback for malformed JSON', async () => {
+  it('answers malformed JSON with the data-driven list, marked as not the AI’s', async () => {
     mocks.complete.mockResolvedValue({ text: '{bad}', model: 'mock-model' });
 
     const response = await POST();
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ summary: unavailableSummary, suggestions: fallback, wastedMonthlyCents: 0 });
+    expect(await response.json()).toEqual(unavailable);
   });
 
-  it('preserves the existing unavailable fallback for a rejected provider call', async () => {
+  it('answers a rejected provider call with the data-driven list, marked as not the AI’s', async () => {
     mocks.complete.mockRejectedValue(new Error('Mock provider failure'));
 
     const response = await POST();
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ summary: unavailableSummary, suggestions: fallback, wastedMonthlyCents: 0 });
+    expect(await response.json()).toEqual(unavailable);
   });
 });

@@ -19,6 +19,7 @@ import type { Database, Json } from '@/lib/database.types';
 import { settleAll } from '@/lib/supabase/settle';
 import { paperworkSummary, paperworkSummaryFacts, type PaperworkReader } from '@/lib/paperwork/triage';
 import { narrowedToAdder, type MoneyReader } from '@/lib/finance/household-money';
+import { isManager } from '@/lib/constants/roles';
 import {
   countNeedsYou, unifyInbox,
   type CommunicationRow, type InboxMessageRow, type PaperworkRow, type UnifiedInboxItem,
@@ -115,6 +116,8 @@ export async function loadInboxQueue(
     ),
     communications: commsResult.error ? [] : ((commsResult.data ?? []) as CommunicationRow[]),
     now: opts.now,
+    // "Handle it" is a parent's or adult's (handleInboxMessageAction refuses anyone else).
+    canFile: isManager(viewer.role),
   });
 
   return { items, needsYou: countNeedsYou(items), unavailable, allFailed };

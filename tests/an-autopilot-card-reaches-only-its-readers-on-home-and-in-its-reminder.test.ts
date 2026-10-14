@@ -46,6 +46,7 @@ const accounts = (...ids: string[]) => ids.map(account).sort();
 
 function household(): Memory {
   const db = createInMemorySupabase<DB>({
+    rpcRole: 'service_role',
     uniques: { autopilot_suggestions: [['family_id', 'dedupe_key']], family_reminders: [['family_id', 'idempotency_key']] },
     // The column defaults the scan's reminder insert relies on (0002).
     defaults: { reminders: { is_done: false, notes: null, recurrence: 'none' } },
@@ -184,11 +185,12 @@ describe("the scan's own reminder is told to the card's readers", () => {
     const db = household();
     vi.setSystemTime(new Date('2026-10-01T06:00:00Z'));
     db.seed('reminders', [
-      { id: 'rem-family', family_id: FAMILY, title: 'Put the bins out', remind_at: '2026-10-01T18:00:00Z', member_id: null, is_done: false, related_type: null, related_id: null },
-      { id: 'rem-sam', family_id: FAMILY, title: 'Pack the kit bag', remind_at: '2026-10-01T18:00:00Z', member_id: 'sam', is_done: false, related_type: null, related_id: null },
+      { id: 'rem-family', family_id: FAMILY, title: 'Put the bins out', remind_at: '2026-10-01T18:00:00Z', member_id: null, is_done: false, related_type: null, related_id: null, autopilot_origin: false, autopilot_card_id: null },
+      { id: 'rem-sam', family_id: FAMILY, title: 'Pack the kit bag', remind_at: '2026-10-01T18:00:00Z', member_id: 'sam', is_done: false, related_type: null, related_id: null, autopilot_origin: false, autopilot_card_id: null },
     ]);
     const sent = await remindersSentAt(db, () => db.table('notifications'), '2026-10-01T06:00:00Z');
-    expect(sent.get('Reminder: Put the bins out')).toEqual([null]);
+    // The family: one row per member with a login, so each reads it for themselves.
+    expect(sent.get('Reminder: Put the bins out')).toEqual(accounts(...ROSTER.map((m) => m.id)));
     expect(sent.get('Reminder: Pack the kit bag')).toEqual([account('sam')]);
   });
 
@@ -204,9 +206,12 @@ describe("the scan's own reminder is told to the card's readers", () => {
 });
 
 describe("a manager's \"Add reminder\" on a card is told to the card's readers", () => {
-  const asManager = (db: Memory): ServiceScope => ({
-    db, familyId: FAMILY, userId: account('mum'), memberId: 'mum', role: 'parent', actorKind: 'member', tz: 'UTC', now: new Date('2026-09-21T08:00:00Z'),
-  } as ServiceScope);
+  const asManager = (db: Memory): ServiceScope => {
+    db.setRpcAuth(account('mum'));
+    return {
+      db, familyId: FAMILY, userId: account('mum'), memberId: 'mum', role: 'parent', actorKind: 'member', tz: 'UTC', now: new Date('2026-09-21T08:00:00Z'),
+    } as ServiceScope;
+  };
 
   it('the manager who added it, the other manager and the child the policy names are reminded; a guest and another child are not', async () => {
     const db = household();

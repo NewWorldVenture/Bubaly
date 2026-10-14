@@ -7,7 +7,7 @@ import type { ServiceScope } from '@/lib/services/types';
 import type { DisplayData } from '@/components/display/display-grid';
 import { getMessages, translate } from '@/lib/i18n/messages';
 import { pluralize } from '@/lib/i18n/translate';
-import { createInMemorySupabase, withFaults, type InMemorySupabase } from './helpers/in-memory-supabase';
+import { createInMemorySupabase, withFaults } from './helpers/in-memory-supabase';
 
 // FL-R3-B. A manager's "Add reminder" on an Autopilot card writes a
 // `family_reminders` row stamped with the card's key: unassigned for an
@@ -121,7 +121,7 @@ vi.mock('@/lib/services/notifications', async (importOriginal) => ({
 }));
 
 const { runAutopilotScan } = await import('@/lib/autopilot/scan');
-const { resolveSuggestion, suggestionReminderKey, suggestionSourceTag } = await import('@/lib/services/autopilot');
+const { resolveSuggestion, suggestionReminderKey } = await import('@/lib/services/autopilot');
 const { mintSuggestionReminderKey } = await import('@/lib/autopilot/reminder-key');
 const { default: HomePage } = await import('@/app/(app)/home/page');
 const { default: DisplayPage } = await import('@/app/(app)/display/page');
@@ -152,58 +152,12 @@ const sorted = (titles: string[]) => [...titles].sort();
  * one for the family's passport (twenty-four days out); the bins are a
  * reminder somebody wrote. Read on the 12th, when all three are due.
  */
-// Fixture-local human-acceptance RPC contract; SQL grants/locks/RLS are proved separately.
-type AcceptanceReply = Awaited<ReturnType<InMemorySupabase['rpc']>>;
-type AcceptanceRow = Record<string, unknown>;
-function acceptanceReply(data: unknown, code?: string): AcceptanceReply {
-  return { data, error: code ? { code, message: 'Synthetic acceptance refused', details: null, hint: null } : null, count: null, status: code ? 400 : 200, statusText: code ? 'Refused' : 'OK' };
-}
-function installAcceptanceRpc(db: InMemorySupabase): void {
-  const originalRpc = db.rpc.bind(db);
-  const accepts = async (args: Record<string, unknown>): Promise<AcceptanceReply> => {
-    const read = await db.from('autopilot_suggestions').select('*').eq('id', args.p_card_id).eq('family_id', FAMILY).maybeSingle();
-    if (read.error || !read.data) return read.error ? read : acceptanceReply(null, '42501');
-    const card = read.data as AcceptanceRow;
-    const actor = (await db.auth.getUser()).data.user?.id;
-    const member = db.table('family_members').find(m => m.family_id === FAMILY && m.user_id === actor && m.is_active === true);
-    if (!actor || !member || !['parent', 'adult'].includes(String(member.role)) || card.family_id !== FAMILY || card.action_type !== 'create_reminder' || card.kind === 'policy') return acceptanceReply(null, '42501');
-    if (card.member_id != null && !db.table('family_members').some(m => m.id === card.member_id && m.family_id === FAMILY && m.is_active === true)) return acceptanceReply(null, '40001');
-    if (card.source_kind === 'family_insurance_policies' && !db.table('family_insurance_policies').some(p => p.id === card.source_id && p.family_id === FAMILY && p.member_id === card.member_id)) return acceptanceReply(null, '40001');
-    if (typeof args.p_source_tag !== 'string' || !/^autopilot-source:[a-f0-9]{64}$/.test(args.p_source_tag) || args.p_source_tag !== suggestionSourceTag(card as never)) return acceptanceReply(null, '22023');
-    const key = suggestionReminderKey(String(card.family_id), String(card.id));
-    const existing = await db.from('family_reminders').select('*').eq('family_id', FAMILY).eq('idempotency_key', key).maybeSingle();
-    if (existing.error) return existing;
-    if (existing.data) {
-      const row = existing.data as AcceptanceRow;
-      return row.autopilot_origin === true && row.autopilot_card_id === card.id && Array.isArray(row.tags) && row.tags.includes(args.p_source_tag) && ['open', 'executed'].includes(String(card.status)) ? acceptanceReply([row]) : acceptanceReply(null, '40001');
-    }
-    if (card.status !== 'open' || card.updated_at !== args.p_expected_updated_at || typeof args.p_at !== 'string' || !Number.isFinite(Date.parse(args.p_at)) || Date.parse(args.p_at) <= Date.now() || (card.expires_at != null && Date.parse(String(card.expires_at)) <= Date.now())) return acceptanceReply(null, '40001');
-    const payload = card.payload && typeof card.payload === 'object' && !Array.isArray(card.payload) ? card.payload as AcceptanceRow : {};
-    const inserted = await db.from('family_reminders').insert({ family_id: FAMILY, created_by: actor, title: typeof payload.title === 'string' ? payload.title : card.title, notes: card.detail, remind_at: args.p_at, member_id: card.kind === 'insurance' || card.source_kind === 'family_insurance_policies' ? null : card.member_id, assigned_to_id: null, status: 'active', kind: 'time', priority: Number(card.urgency) >= 3 ? 'high' : 'medium', ai_suggested: true, tags: [args.p_source_tag], idempotency_key: key, autopilot_origin: true, autopilot_card_id: card.id }).select('*').single();
-    if (inserted.error && inserted.error.code !== '23505') return inserted;
-    const winner = await db.from('family_reminders').select('*').eq('family_id', FAMILY).eq('idempotency_key', key).maybeSingle();
-    if (winner.error || !winner.data) return winner;
-    const row = winner.data as AcceptanceRow;
-    return row.family_id === FAMILY && row.autopilot_origin === true && row.autopilot_card_id === card.id && Array.isArray(row.tags) && row.tags.includes(args.p_source_tag) ? acceptanceReply([row]) : acceptanceReply(null, '40001');
-  };
-  vi.spyOn(db, 'rpc').mockImplementation((name, args = {}) => {
-    const pending = name === 'create_card_family_reminder' ? accepts(args) : originalRpc(name, args);
-    return Object.assign(pending, { maybeSingle: async () => {
-      const reply = await pending;
-      if (reply.error || !Array.isArray(reply.data)) return reply;
-      return reply.data.length > 1 ? acceptanceReply(null, 'PGRST116') : { ...reply, data: reply.data[0] ?? null };
-    } });
-  });
-}
-
 async function household(): Promise<Memory> {
   const db = createInMemorySupabase<DB>({
-    userId: 'u-mum',
     uniques: { autopilot_suggestions: [['family_id', 'dedupe_key']], family_reminders: [['family_id', 'idempotency_key']] },
-    defaults: { reminders: { is_done: false, notes: null, recurrence: 'none', autopilot_origin: false, autopilot_card_id: null }, family_reminders: { autopilot_origin: false, autopilot_card_id: null } },
+    defaults: { reminders: { is_done: false, notes: null, recurrence: 'none' } },
     rpc: { ensure_default_grocery_list: () => 'list-1' },
   });
-  installAcceptanceRpc(db);
   db.seed('families', [{ id: FAMILY, timezone: 'UTC', name: 'Family' }]);
   db.seed('family_members', ROSTER.map((m, i) => ({
     ...m, family_id: FAMILY, user_id: `u-${m.id}`, display_name: m.id, is_active: true, birthday: null, created_at: `2026-01-0${i + 1}T00:00:00Z`,
@@ -211,20 +165,24 @@ async function household(): Promise<Memory> {
   db.seed('family_insurance_policies', [{ id: 'pol-ava', family_id: FAMILY, policy_type: 'dental', insurer: 'Smile Co', renewal_date: '2026-10-01', member_id: 'ava', is_active: true }]);
   db.seed('renewals', [{ id: 'ren-1', family_id: FAMILY, title: 'Passport', expires_at: '2026-10-15', status: 'active' }]);
   vi.setSystemTime(new Date('2026-09-21T06:30:00Z'));
+  db.setRpcAuth(null, 'service_role');
   await runAutopilotScan(db, FAMILY, null, 'UTC', 'en-US', echo, new Date('2026-09-21T06:30:00Z'));
   vi.setSystemTime(new Date('2026-09-21T08:00:00Z'));
+  db.setRpcAuth('u-mum');
   const scope = { db, familyId: FAMILY, userId: 'u-mum', memberId: 'mum', role: 'parent', actorKind: 'member', tz: 'UTC', now: new Date('2026-09-21T08:00:00Z') } as ServiceScope;
   for (const source of ['pol-ava', 'ren-1']) {
     const card = db.table('autopilot_suggestions').find((s) => s.source_id === source)!;
     expect(card, source).toMatchObject({ status: 'open' });
     expect(await resolveSuggestion(scope, { suggestionId: card.id as string, updatedAt: card.updated_at as string, action: 'reminder' }), source)
       .toMatchObject({ ok: true, status: 'executed' });
+    expect(db.table('family_reminders').find(row => row.autopilot_card_id === card.id))
+      .toMatchObject({ family_id: FAMILY, autopilot_origin: true, autopilot_card_id: card.id });
   }
   // Unassigned, so the managers are reminded; each stamped with its card's key.
   expect(db.table('family_reminders').map((r) => [r.title, r.member_id]).sort()).toEqual([[POLICY, null], [PASSPORT, null]].sort());
   for (const r of db.table('family_reminders')) expect(Date.parse(String(r.remind_at))).toBeLessThan(Date.parse(NOW));
   db.seed('family_reminders', [{
-    id: 'bins', family_id: FAMILY, title: BINS, remind_at: '2026-10-12T08:00:00.000Z', status: 'active', member_id: null,
+    id: 'bins', family_id: FAMILY, autopilot_origin: false, autopilot_card_id: null, title: BINS, remind_at: '2026-10-12T08:00:00.000Z', status: 'active', member_id: null,
     tags: [], idempotency_key: null, kind: 'time', priority: 'medium', recurrence: 'none', snoozed_until: null, subtasks: [],
   }]);
   vi.setSystemTime(new Date(NOW));

@@ -34,6 +34,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { LIFE_EVENT_TEMPLATES } from '@/lib/life-events/templates';
 import { launchDateFor, type LifeEventSuggestion } from '@/lib/life-events/detect';
+import { factsVisibleTo } from '@/lib/memory/facts';
 import { launchLifeEventAction, setLifeEventStatusAction } from '@/app/(app)/dashboard/life-event-actions';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -75,7 +76,7 @@ export function LifeEventsModule({
   const fmt = useFormat();
   const fmtDate = fmtDateIn(fmt);
   const fmtFullDate = fmtFullDateIn(fmt);
-  const { familyId, userId } = useApp();
+  const { familyId, userId, role } = useApp();
   const { success, error: toastError } = useToast();
 
   const { data: facts, loading: factsLoading, error: factsError, refresh: refreshFacts } = useRealtimeQuery<Fact>({
@@ -101,9 +102,15 @@ export function LifeEventsModule({
   const [suggestedDate, setSuggestedDate] = useState<string | null>(null);
   const [launching, setLaunching] = useState(false);
 
+  // The facts this reader may see come first, the category filter second. RLS
+  // (0264) hides only the medical and account categories; the sensitive TERMS
+  // (a password, an allergy, a bank detail) are code only, and 'important',
+  // the Add form's default, is one of the categories listed here — so a child
+  // or guest was shown a parent's "Wi-Fi password" on this page while Family
+  // Memory, recall, search and insights withheld it. One rule for all of them.
   const learned = useMemo(
-    () => (facts ?? []).filter((f) => (LEARNED_CATEGORIES as readonly string[]).includes(f.category)),
-    [facts],
+    () => factsVisibleTo(role, facts ?? []).filter((f) => (LEARNED_CATEGORIES as readonly string[]).includes(f.category)),
+    [role, facts],
   );
   const itemsByPlan = useMemo(() => {
     const m = new Map<string, Item[]>();

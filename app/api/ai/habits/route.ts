@@ -12,6 +12,7 @@ import { doneDates } from '@/lib/habits/presets';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { accessDeniedResponse, assertAIAllowance } from '@/lib/server/ai-access';
 import { buildCoachPrompt, parseCoachResponse, type HabitStat } from '@/lib/habits/ai';
 import {
   currentStreak, longestStreak, completionRate, isDoneToday, addDays, type HabitLike,
@@ -41,6 +42,14 @@ export async function POST() {
       { error: t('habits.tooManyHabitCoachRequests') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
+    // A model call, so the Free plan's monthly AI allowance applies here as it
+    // does at /api/ai: only the routes that asked `assertAIAccess` enforced it,
+    // so a Free family past its ten requests kept getting these — while their
+    // rows still counted toward the limit the assistant then refused them on.
+    // The allowance alone: whether the coach is available is the Habits
+    // page's gate above, not the assistant's tier or its Off switch.
+    const access = await assertAIAllowance(ctx, { db: supabase });
+    if (!access.ok) return accessDeniedResponse(access);
     // The FAMILY's day, the one the module writes `habit_logs.log_date` in.
     // Greenwich's day told a Los Angeles evening that today's check-ins had not
     // happened, and a Tokyo morning that yesterday's were today's.

@@ -97,6 +97,24 @@ describe('createChildLoginAction', () => {
     expect(state.deleted).toEqual(['child-user-1']);
   });
 
+  it('does not link a member made a manager after the role check', async () => {
+    db.seed('family_members', [{ id: 'm', family_id: FAMILY, display_name: 'Ben', user_id: null, role: 'teen', is_active: true }]);
+    // Someone makes Ben an adult between the role read and the link.
+    const admin = db.auth as unknown as { admin: { createUser: () => Promise<unknown> } };
+    const real = admin.admin.createUser;
+    admin.admin.createUser = async () => {
+      const out = await real();
+      db.table('family_members')[0].role = 'adult';
+      return out;
+    };
+    const result = await createChildLoginAction({ memberId: 'm', username: 'benben', pin: '1234' });
+    expect(result).toEqual({ ok: false, error: 'childLoginActions.aParentOrAdultSignsIn' });
+    // No PIN account on a manager row, and the orphan auth user is removed.
+    expect(db.table('family_members')[0]).toMatchObject({ role: 'adult', user_id: null });
+    expect(db.table('child_logins')).toEqual([]);
+    expect(state.deleted).toEqual(['child-user-1']);
+  });
+
   it("a failed save's rollback unlinks only its own login", async () => {
     db.seed('family_members', [{ id: 'm', family_id: FAMILY, display_name: 'Emma', user_id: null, role: 'child', is_active: true }]);
     // B's link succeeds, then A's link lands and A's child_logins row takes

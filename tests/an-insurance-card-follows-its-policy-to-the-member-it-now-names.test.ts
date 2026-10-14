@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createInMemorySupabase, withFaults, type FaultCall, type Row } from './helpers/in-memory-supabase';
@@ -35,7 +35,8 @@ const ROSTER = [
 ];
 const viewerOf = (id: string) => ({ role: ROSTER.find((m) => m.id === id)?.role, memberId: id });
 
-afterEach(() => { vi.restoreAllMocks(); });
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AT); });
+afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 
 /** The card the scan wrote for a policy renewing 2026-10-11, as it stands. */
 function insuranceCard(policyId: string, memberId: string | null, extra: Row = {}): Row {
@@ -53,6 +54,7 @@ function insuranceCard(policyId: string, memberId: string | null, extra: Row = {
 
 function household(policyMember: string | null, cardMember: string | null, cardExtra: Row = {}) {
   const db = createInMemorySupabase<DB>({
+    rpcRole: 'service_role',
     uniques: { autopilot_suggestions: [['family_id', 'dedupe_key']] },
     rpc: { ensure_default_grocery_list: () => 'list-1' },
   });
@@ -272,6 +274,7 @@ describe('the refresh neither puts back an older member nor strands an accepted 
     const parent = {
       db, familyId: FAMILY, userId: 'u-mum', memberId: 'mum', role: 'parent', actorKind: 'member', tz: 'UTC', now: new Date('2026-09-21T06:31:00Z'),
     } as unknown as Parameters<typeof resolveSuggestion>[0];
+    db.setRpcAuth('u-mum');
     const accepted = await resolveSuggestion(parent, { suggestionId: open.id as string, updatedAt: open.updated_at as string, action: 'reminder' });
     expect(accepted).toMatchObject({ ok: true, status: 'executed' });
     const executed = structuredClone(card(db));
@@ -308,11 +311,11 @@ describe('the refresh neither puts back an older member nor strands an accepted 
     const due = { family_id: FAMILY, member_id: null, status: 'active', remind_at: '2026-09-21T09:00:00.000Z', early_reminder_minutes: 0, snoozed_until: null, priority: 'medium' };
     db.seed('family_reminders', [
       // The reminder accepting the card wrote, under the card's key and tag...
-      { ...due, id: 'fr-original', title: 'Renew dental (accepted)', recurrence: 'yearly', idempotency_key: suggestionReminderKey(FAMILY, accepted.id as string), tags: [tag] },
-      // ...its next occurrence, which carries the tag alone...
-      { ...due, id: 'fr-next', title: 'Renew dental (next year)', recurrence: 'yearly', idempotency_key: null, tags: [tag] },
+      { ...due, id: 'fr-original', title: 'Renew dental (accepted)', recurrence: 'yearly', idempotency_key: suggestionReminderKey(FAMILY, accepted.id as string), tags: [tag], autopilot_origin: true, autopilot_card_id: accepted.id },
+      // ...its next occurrence, which retains the committed origin and informational tag...
+      { ...due, id: 'fr-next', title: 'Renew dental (next year)', recurrence: 'yearly', idempotency_key: null, tags: [tag], autopilot_origin: true, autopilot_card_id: accepted.id },
       // ...and one somebody typed.
-      { ...due, id: 'fr-typed', title: 'Call the dentist', recurrence: 'none', idempotency_key: null, tags: [] },
+      { ...due, id: 'fr-typed', title: 'Call the dentist', recurrence: 'none', idempotency_key: null, tags: [], autopilot_origin: false, autopilot_card_id: null },
     ]);
 
     await runAutopilotScan(db, FAMILY, null, 'UTC', 'en-US', echo, AT);
@@ -340,6 +343,7 @@ describe('the refresh neither puts back an older member nor strands an accepted 
     expect(told('Renew dental (accepted)')).toEqual(told('Renew dental (next year)'));
     expect(told('Renew dental (accepted)')).toContain('u-ava');
     expect(told('Renew dental (accepted)')).not.toContain('u-leo');
-    expect(told('Call the dentist')).toEqual([null]);
+    // The family: one row per member with a login.
+    expect(told('Call the dentist')).toEqual(ROSTER.map((m) => `u-${m.id}`).sort());
   });
 });

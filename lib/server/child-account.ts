@@ -33,6 +33,30 @@ export async function isChildLoginAccount(
   return (data?.length ?? 0) > 0;
 }
 
+/**
+ * Whether this family member signs in with a kid PIN: a child_logins row for
+ * the member, or a linked account that is itself a kid login. Such a member is
+ * never made a parent or an adult (the held 0512): a 4-digit PIN must not
+ * guard a manager's account. Every role editor asks this, the household's
+ * (updateFamilyMemberAction) and the admin console's.
+ *
+ * Fails CLOSED, like isChildLoginAccount: a lookup that cannot be answered
+ * counts as a kid login, so an outage refuses a promotion rather than allowing
+ * one.
+ */
+export async function memberHasAKidLogin(
+  admin: SupabaseClient<Database>,
+  member: { id: string; family_id: string; user_id: string | null },
+): Promise<boolean> {
+  const { data: logins, error: loginError } = await admin.from('child_logins')
+    .select('id').eq('member_id', member.id).eq('family_id', member.family_id).limit(1);
+  if (loginError || (logins?.length ?? 0) > 0) return true;
+  if (!member.user_id) return false;
+  const { data: account, error: accountError } = await admin.auth.admin.getUserById(member.user_id);
+  if (accountError || !account?.user) return true;
+  return isChildLoginAccount(admin, { id: member.user_id, email: account.user.email, user_metadata: account.user.user_metadata });
+}
+
 /** What removing a member did to their child login, if they had one. */
 export type ChildLoginRevocation = 'none' | 'revoked' | 'failed';
 

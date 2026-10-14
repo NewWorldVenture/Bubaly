@@ -119,7 +119,10 @@ beforeEach(() => {
   vi.setSystemTime(new Date('2026-10-03T12:00:00.000Z'));
   vi.stubEnv('CRON_SECRET', CRON_SECRET);
   db = createInMemorySupabase({ rpc: { claim_ai_runs: (args, client) => claimAiRuns(args, client) } });
-  db.seed('families', [{ id: FAMILY, name: 'Fixture', timezone: 'UTC' }]);
+  // A paid family: the tick runs only a family still entitled to agent runs
+  // (N8, tests/a-lapsed-familys-run-does-not-keep-running.test.ts).
+  db.seed('families', [{ id: FAMILY, name: 'Fixture', timezone: 'UTC', trial_ends_at: null, closed_at: null }]);
+  db.seed('subscriptions', [{ id: 'sub-fixture', family_id: FAMILY, plan: 'basic', status: 'active', current_period_end: '2099-01-01T00:00:00Z' }]);
   errors = [];
   seam.service.mockImplementation(() => db);
   seam.runGraph.mockReset();

@@ -29,13 +29,15 @@ import { classifyIntent, isIntentKey, type IntentKey } from '@/lib/ai/context/in
 import { planRequest, type PlanOutcome } from '@/lib/ai/planner';
 import { runPagePath, type AIRequestContext, type AIRequestResponse } from '@/lib/ai/chat-request';
 import { describeDbError } from '@/lib/supabase/errors';
+import { getTranslations } from '@/lib/i18n/server';
 import { makeKey } from '@/lib/services/idempotency';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { cancelRun, pauseRun, rerunStep, resumeRun } from './controls';
 import { kickRun } from './continue';
 import { legacyStatusFor } from './states';
 import {
-  appendEvent, createRequest, createRun, ledgerClient, loadRun, loadRunActor, updateRequest, updateRun, updateRunWhereState, type RequestRow,
+  appendEvent, createRequest, createRun, ledgerClient, loadRun, loadRunActor, planningAttemptMark, updateRequest, updateRequestWhereStatus,
+  updateRun, updateRunWhereState, type RequestRow,
 } from './store';
 
 type DB = SupabaseClient<Database>;
@@ -365,6 +367,98 @@ async function parkForClarification(
   return ok(null);
 }
 
+// ─── Routines ───────────────────────────────────────────────────────────────
+
+export type RoutinePlanResult = { runId: string; outcome: 'plan' | 'answer' | 'recommendation' };
+
+/**
+ * Plan a routine's request and attach the plan to the run the routine cron
+ * filed for it — the same classify → context → plan steps a typed request
+ * goes through, so the planner, the family's settings and the trust gate all
+ * apply exactly as they would to "every Sunday, plan our meals" typed by hand.
+ *
+ * The cron used to file the request and a run in `queued` with no plan and
+ * hand the run to the continuation worker. Nothing plans a `routine` request
+ * (`planRequest` was reached only from the two intake paths above), and
+ * `claimRun` and `claim_ai_runs` only take `ready` and `scheduled_followup`
+ * runs, so the run was never claimed: the routine never ran, its request sat
+ * `queued` in the monthly meter and its run under "In progress" for ever, and
+ * the tick counted the occurrence as filed.
+ *
+ * `runId` is the cron's run, created in `planning`; the plan is attached to it
+ * the way an answer's re-plan is attached to the run the person is on
+ * (`adoptPlannedRun`). Anything short of a plan that reached `ready` — or a
+ * recommendation or answer the planner closed the request with — is a
+ * failure, and the request and the run are closed `failed` with the reason:
+ * a question in particular, because a routine has nobody to answer it.
+ */
+export async function planRoutineRequest(
+  scope: ServiceScope,
+  args: { requestId: string; runId: string; text: string },
+  opts: IntakeOptions = {},
+): Promise<ServiceResult<RoutinePlanResult>> {
+  const { requestId, runId } = args;
+  const db = ledgerClient(scope, { db: opts.db });
+  const requestScope: ServiceScope = { ...scope, requestId, runId };
+
+  const failed = async (error: string, code?: string, retryable?: boolean): Promise<ServiceResult<never>> => {
+    await markRequestFailed(requestScope, db, requestId, error);
+    const closed = await updateRunWhereState(requestScope, runId, 'planning', {
+      state: 'failed', status: legacyStatusFor('failed'), error, completed_at: new Date().toISOString(),
+    }, { db });
+    if (!closed.ok) console.error('[ai/intake] could not close the routine run', closed.error);
+    return fail(error, { code: code ?? INTAKE_CODES.planner, retryable });
+  };
+
+  const planning = await updateRequest(requestScope, requestId, { status: 'planning', started_at: planningAttemptMark() }, { db });
+  if (!planning.ok) return failed(planning.error, planning.code, planning.retryable);
+
+  const classified = await classifyIntent(requestScope, args.text, { meter: { db, familyId: scope.familyId }, now: opts.now });
+  const intent: IntentKey = classified.intent;
+  const intentSaved = await updateRequest(requestScope, requestId, {
+    interpreted_intent: intent,
+    intent_confidence: Math.max(0, Math.min(1, Number(classified.confidence.toFixed(3)))),
+  }, { db });
+  if (!intentSaved.ok) console.error('[ai/intake] could not persist the routine\'s interpreted intent', intentSaved.error);
+
+  const context = await buildContext(requestScope, { intent, requestId });
+  if (!context.ok) return failed(context.error, INTAKE_CODES.context, context.retryable);
+
+  const planned = settlePlanner(await withDeadline(
+    planRequest(requestScope, {
+      requestId, requestText: args.text, intent, context: context.data, conversationId: null, answers: null, entities: classified.entities,
+    }),
+    opts.plannerBudgetMs ?? DEFAULT_PLANNER_BUDGET_MS,
+  ));
+  if (!planned.ok) return failed(planned.code === INTAKE_CODES.timeout ? INTAKE_CODES.timeout : planned.error, planned.code, planned.retryable);
+
+  const outcome = planned.data;
+  switch (outcome.kind) {
+    case 'plan': {
+      const adopted = await adoptPlannedRun(requestScope, db, { placeholderRunId: runId, plannerRunId: outcome.runId, planId: outcome.planId, summary: outcome.summary });
+      if (!adopted.ok) return failed(adopted.error, adopted.code, adopted.retryable);
+      if (!adopted.data.live) return failed((await getTranslations())('aiRuns.stoppedWhilePlanning'));
+      return ok({ runId: adopted.data.runId, outcome: 'plan' });
+    }
+    case 'recommendation':
+    case 'answer': {
+      // The planner closed the request itself; the run has nothing to execute.
+      const summary = outcome.kind === 'answer' ? outcome.text : outcome.summary;
+      const closed = await updateRunWhereState(requestScope, runId, 'planning', {
+        state: 'completed', status: legacyStatusFor('completed'), summary: summary || null, completed_at: new Date().toISOString(),
+      }, { db });
+      if (!closed.ok) return failed(closed.error, closed.code, closed.retryable);
+      await appendEvent(requestScope, runId, { eventType: 'run_completed', message: summary, requestId }, { db });
+      return ok({ runId, outcome: outcome.kind });
+    }
+    case 'clarification':
+      return failed((await getTranslations())('familyRoutines.neededMoreDetail', { question: outcome.question }), SERVICE_CODES.invalidInput);
+    default:
+      console.error('[ai/intake] unknown planner outcome for a routine', outcome);
+      return failed('Bubaly could not finish planning that request.');
+  }
+}
+
 // ─── Answering ──────────────────────────────────────────────────────────────
 
 /**
@@ -438,7 +532,12 @@ export async function answerClarification(
   if (open) { open.answer = reply; open.answered_at = nowIso; }
   else clarifications.push({ question: run.summary ?? '', reason: null, asked_at: nowIso, answer: reply, answered_at: nowIso });
 
-  const recorded = await updateRequest(requestScope, requestId, { clarifications: clarifications as unknown as Json, status: 'planning' }, { db });
+  // A fresh attempt mark with the move back to `planning`: an earlier answer's
+  // planner that is still thinking holds the old mark, and from this write on
+  // nothing it produces can be kept in this attempt's place (N3).
+  const recorded = await updateRequest(requestScope, requestId, {
+    clarifications: clarifications as unknown as Json, status: 'planning', started_at: planningAttemptMark(),
+  }, { db });
   if (!recorded.ok) {
     await parkAgain(requestScope, db, runId, requestId, run.summary ?? '');
     return recorded;
@@ -482,8 +581,11 @@ export async function answerClarification(
       return ok({ requestId, runId: liveRunId, planId: outcome.planId, outcome: 'plan', summary: outcome.summary, redirect: runPagePath(liveRunId) });
     }
     case 'clarification': {
-      const reparked = await updateRun(requestScope, runId, { state: 'awaiting_context', status: legacyStatusFor('awaiting_context'), summary: outcome.question }, { db });
+      // Only the run this answer claimed: one cancelled while the model was
+      // thinking stays cancelled.
+      const reparked = await updateRunWhereState(requestScope, runId, 'planning', { state: 'awaiting_context', status: legacyStatusFor('awaiting_context'), summary: outcome.question }, { db });
       if (!reparked.ok) return reparked;
+      if (!reparked.data) return fail((await getTranslations())('aiRuns.stoppedWhilePlanning'), { code: SERVICE_CODES.invalidInput });
       const parked = await parkForClarification(requestScope, db, { requestId, runId, question: outcome.question });
       if (!parked.ok) return parked;
       if (conversationId) await recordConversationTurn(requestScope, db, conversationId, requestId, { role: 'assistant', content: outcome.question, card: runStatusCard(outcome, runId) });
@@ -492,8 +594,9 @@ export async function answerClarification(
     case 'recommendation':
     case 'answer': {
       const summary = outcome.kind === 'answer' ? outcome.text : outcome.summary;
-      const closed = await updateRun(requestScope, runId, { state: 'completed', status: legacyStatusFor('completed'), summary, completed_at: nowIso }, { db });
+      const closed = await updateRunWhereState(requestScope, runId, 'planning', { state: 'completed', status: legacyStatusFor('completed'), summary, completed_at: nowIso }, { db });
       if (!closed.ok) return closed;
+      if (!closed.data) return fail((await getTranslations())('aiRuns.stoppedWhilePlanning'), { code: SERVICE_CODES.invalidInput });
       const done = await updateRequest(requestScope, requestId, { status: 'completed', completed_at: nowIso }, { db });
       if (!done.ok) console.error('[ai/intake] could not close the answered request', done.error);
       await appendEvent(requestScope, runId, { eventType: 'run_completed', message: summary, requestId }, { db });
@@ -507,11 +610,17 @@ export async function answerClarification(
   }
 }
 
-/** Put the run back in `awaiting_context` after a failed re-plan so the page still offers the answer box. */
+/**
+ * Put the run back in `awaiting_context` after a failed re-plan so the page
+ * still offers the answer box. Both writes are compare-and-sets from
+ * `planning`, the state this answer claimed: a run cancelled while the model
+ * was thinking — and its request, which the cancel closed — stay cancelled.
+ */
 async function parkAgain(scope: ServiceScope, db: DB, runId: string, requestId: string, question: string): Promise<void> {
-  const run = await updateRun(scope, runId, { state: 'awaiting_context', status: legacyStatusFor('awaiting_context'), summary: question || null }, { db });
+  const run = await updateRunWhereState(scope, runId, 'planning', { state: 'awaiting_context', status: legacyStatusFor('awaiting_context'), summary: question || null }, { db });
   if (!run.ok) console.error('[ai/intake] could not re-park the run', run.error);
-  const request = await updateRequest(scope, requestId, { status: 'awaiting_context' }, { db });
+  else if (!run.data) return;
+  const request = await updateRequestWhereStatus(scope, requestId, 'planning', { status: 'awaiting_context' }, { db });
   if (!request.ok) console.error('[ai/intake] could not re-park the request', request.error);
 }
 
@@ -616,7 +725,9 @@ export async function applyRunControl(
       if (!stepId) return fail('Choose the step to run again.', { code: SERVICE_CODES.invalidInput });
       const result = await rerunStep(scope, runId, stepId, { db });
       if (!result.ok) return result;
-      if (result.data.rerun) kick(runId, { budgetMs });
+      // Only a run the re-run left `ready`: a paused run stays paused until
+      // Resume, and a kick would claim a run the executor only stops again.
+      if (result.data.rerun && result.data.runState === 'ready') kick(runId, { budgetMs });
       return ok({ action, state: result.data.state, detail: result.data.detail });
     }
   }

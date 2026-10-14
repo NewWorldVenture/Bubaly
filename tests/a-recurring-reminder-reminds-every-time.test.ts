@@ -62,7 +62,7 @@ describe('a recurring family reminder reminds every time', () => {
     expect(await generate()).toBe(2);
     expect(reminderNotices()).toEqual([
       { key: 'fr:rem-daily:2026-10-05T20:00:00.000Z', body: 'Due today at 8:00 PM', user_id: 'u-parent' },
-      { key: 'fr:rem-once', body: 'Due today at 6:00 PM', user_id: null },
+      { key: 'fr:rem-once', body: 'Due today at 6:00 PM', user_id: 'u-parent' }, // the family's one login
     ]);
     // The same tick again writes nothing: the dedupe still holds within an occurrence.
     expect(await generate()).toBe(0);
@@ -94,7 +94,7 @@ describe('a recurring family reminder reminds every time', () => {
       .toMatchObject({ status: 'snoozed', snoozed_until: '2026-10-05T10:00:00.000Z' });
 
     expect(await generate(), 'the snooze is a new notice').toBe(1);
-    expect(reminderNotices().at(-1)).toEqual({ key: 'fr:rem-once:snoozed:2026-10-05T10:00:00.000Z', body: 'Due today at 10:00 AM', user_id: null });
+    expect(reminderNotices().at(-1)).toEqual({ key: 'fr:rem-once:snoozed:2026-10-05T10:00:00.000Z', body: 'Due today at 10:00 AM', user_id: 'u-parent' });
     expect(await generate()).toBe(0);
   });
 

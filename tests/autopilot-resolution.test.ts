@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InMemorySupabase } from './helpers/in-memory-supabase';
 import type { ServiceScope } from '@/lib/services/types';
 import { resolveSuggestion, suggestionReminderKey, suggestionSourceTag } from '@/lib/services/autopilot';
@@ -30,14 +30,16 @@ function source() { return db.table('autopilot_suggestions')[0]; }
 function reminders() { return db.table('family_reminders'); }
 
 beforeEach(() => {
-  vi.restoreAllMocks(); mocks.context.mockReset(); mocks.server.mockReset(); mocks.revalidate.mockReset();
+  vi.restoreAllMocks(); vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AT);
+  mocks.context.mockReset(); mocks.server.mockReset(); mocks.revalidate.mockReset();
   mocks.superAdmin.mockResolvedValue(false); mocks.plan.mockResolvedValue(2);
   vi.spyOn(console, 'error').mockImplementation(() => {});
   failure = null; calls = []; beforeReminderInsert = null; beforeStamp = null;
-  db = new InMemorySupabase({ userId: USER, uniques: { family_reminders: [['family_id', 'idempotency_key']] } });
+  db = new InMemorySupabase({ userId: USER, uniques: { family_reminders: [['family_id', 'idempotency_key']] },
+    defaults: { family_reminders: { assigned_to_id: null, kind: 'time' } } });
   db.seed('autopilot_suggestions', [{
     id: ID, family_id: FAMILY, kind: 'document', action_type: 'create_reminder', status: 'open',
-    title: 'Renew passport', detail: 'Bring the existing documents', payload: { title: 'Passport renewal', at: '2026-09-12T09:00:00Z', memberId: OTHER, family_id: OTHER },
+    title: 'Renew passport', detail: 'Bring the existing documents', payload: { title: 'Passport renewal', at: '2026-09-12T09:00:00.000Z', memberId: OTHER, family_id: OTHER },
     member_id: MEMBER, urgency: 3, updated_at: AT, expires_at: null,
   }]);
   db.seed('family_members', [{ id: MEMBER, family_id: FAMILY, user_id: USER, role: 'parent', is_active: true }]);
@@ -46,9 +48,6 @@ beforeEach(() => {
   vi.spyOn(db, 'from').mockImplementation((table: string) => {
     const query = original(table);
     let op: 'select' | 'insert' | 'update' = 'select';
-    const insert = query.insert.bind(query); query.insert = (rows) => {
-      op = 'insert'; if (table === 'family_reminders') { const before = beforeReminderInsert; beforeReminderInsert = null; before?.(); } return insert(rows);
-    };
     const update = query.update.bind(query); query.update = (patch) => {
       op = 'update'; if (table === 'autopilot_suggestions') { const before = beforeStamp; beforeStamp = null; before?.(); } return update(patch);
     };
@@ -69,6 +68,7 @@ beforeEach(() => {
   mocks.server.mockResolvedValue(db);
   mocks.context.mockResolvedValue({ user: { id: USER }, memberships: [{ familyId: FAMILY }], active: { familyId: FAMILY, role: 'parent', member: { id: MEMBER }, family: { timezone: 'UTC' } } });
 });
+afterEach(() => vi.useRealTimers());
 
 describe('source-bound Autopilot reminder acceptance', () => {
   it('persists legal canonical columns from the source, then records execution', async () => {
@@ -231,71 +231,40 @@ describe('Autopilot action authorization', () => {
   });
 });
 
-// Fixture-local RPC protocol only. This does not model SQL grants, locks or RLS.
+// Faults and competing receipts enter at the trusted RPC boundary. The shared
+// writer models the committed origin; these service interleavings do not prove
+// PostgreSQL locking, grants or RLS (the native workflow covers those).
 type WriterReply = Awaited<ReturnType<InMemorySupabase['rpc']>>;
-type WriterRow = Record<string, unknown>;
 const writerOverrides = new WeakMap<InMemorySupabase, WriterReply>();
 function writerReply(data: unknown, code?: string): WriterReply {
   return { data, error: code ? { code, message: 'Synthetic writer refusal', details: null, hint: null } : null, count: null, status: code ? 400 : 200, statusText: code ? 'Refused' : 'OK' };
 }
-function writerMaybeSingle(reply: WriterReply): WriterReply {
+function writerSingle(reply: WriterReply, optional: boolean): WriterReply {
   if (reply.error || !Array.isArray(reply.data)) return reply;
-  if (reply.data.length > 1) return writerReply(null, 'PGRST116');
+  if (reply.data.length > 1 || !optional && reply.data.length === 0) return writerReply(null, 'PGRST116');
   return { ...reply, data: reply.data[0] ?? null };
 }
 function installWriterProtocol(model: InMemorySupabase): void {
   const originalRpc = model.rpc.bind(model);
-  async function writeHuman(args: Record<string, unknown>): Promise<WriterReply> {
-    const read = await model.from('autopilot_suggestions').select('*').eq('id', args.p_card_id).maybeSingle();
-    if (read.error || !read.data) return read;
-    const card = read.data as WriterRow;
-    if (card.updated_at !== args.p_expected_updated_at || !['open', 'executed'].includes(String(card.status))) return writerReply(null, '40001');
-    const payload = card.payload && typeof card.payload === 'object' && !Array.isArray(card.payload) ? card.payload as WriterRow : {};
-    const key = suggestionReminderKey(String(card.family_id), String(card.id));
-    const member = card.kind === 'insurance' || card.source_kind === 'family_insurance_policies' ? null : card.member_id;
-    const inserted = await model.from('family_reminders').insert({ family_id: card.family_id, created_by: (await model.auth.getUser()).data.user?.id,
-      title: typeof payload.title === 'string' ? payload.title : card.title, notes: card.detail, remind_at: new Date(String(args.p_at)).toISOString(),
-      member_id: member, assigned_to_id: null, priority: Number(card.urgency) >= 3 ? 'high' : 'medium',
-      kind: 'time', status: 'active', ai_suggested: true, tags: [args.p_source_tag], idempotency_key: key,
-      autopilot_origin: true, autopilot_card_id: card.id }).select('*').single();
-    if (inserted.error && inserted.error.code !== '23505') return inserted;
-    const winner = inserted.error ? await model.from('family_reminders').select('*').eq('family_id', card.family_id).eq('idempotency_key', key).maybeSingle() : inserted;
-    if (winner.error || !winner.data) return winner;
-    const row = winner.data as WriterRow;
-    if (row.autopilot_origin !== true || row.autopilot_card_id !== card.id || !Array.isArray(row.tags) || !row.tags.includes(args.p_source_tag)) return writerReply(null, '40001');
-    return writerReply([row]);
-  }
-  async function writeLegacy(args: Record<string, unknown>): Promise<WriterReply> {
-    const card = args.p_card as WriterRow;
-    const created = await model.from('autopilot_suggestions').insert({ ...card, status: 'open', resolved_at: null }).select('*').single();
-    if (created.error || !created.data) return created;
-    const actual = created.data as WriterRow;
-    const ownedCardId = actual.id;
-    const payload = actual.payload && typeof actual.payload === 'object' && !Array.isArray(actual.payload) ? actual.payload as WriterRow : {};
-    const reminder = await model.from('reminders').insert({ family_id: actual.family_id, title: typeof payload.title === 'string' ? payload.title : actual.title,
-      notes: actual.detail, remind_at: args.p_at, member_id: actual.kind === 'insurance' || actual.source_kind === 'family_insurance_policies' ? null : actual.member_id,
-      related_type: actual.source_kind === 'appointments' ? 'appointment' : actual.source_kind === 'calendar_events' ? 'event' : 'renewal', related_id: actual.source_id,
-      created_by: args.p_actor ?? card.created_by, is_done: false, autopilot_origin: true, autopilot_card_id: ownedCardId }).select('*').single();
-    if (reminder.error || !reminder.data) {
-      const rows = model.table('autopilot_suggestions'); const index = rows.findIndex(row => row.id === ownedCardId); if (index >= 0) rows.splice(index, 1);
-      return reminder;
-    }
-    const saved = reminder.data as WriterRow;
-    const stamped = await model.from('autopilot_suggestions').update({ status: 'auto_executed', payload: { ...payload, reminder_id: saved.id } }).eq('id', ownedCardId).eq('family_id', actual.family_id).select('id').single();
-    if (stamped.error || !stamped.data) {
-      for (const [table, id] of [['autopilot_suggestions', ownedCardId], ['reminders', saved.id]] as const) { const rows = model.table(table); const index = rows.findIndex(row => row.id === id); if (index >= 0) rows.splice(index, 1); }
-      return stamped;
-    }
-    return writerReply({ card_id: ownedCardId, reminder_id: saved.id, family_id: actual.family_id });
-  }
   vi.spyOn(model, 'rpc').mockImplementation((name, args = {}) => {
+    if (name !== 'create_card_family_reminder') return originalRpc(name, args);
     const pending = (async () => {
-      const injected = writerOverrides.get(model); if (injected) return injected;
-      if (name === 'create_card_family_reminder') return writeHuman(args);
-      if (name === 'create_card_legacy_reminder' || name === 'create_card_legacy_reminder_service') return writeLegacy(args);
+      const injected = writerOverrides.get(model);
+      if (injected) return injected;
+      // The service already checked for an existing receipt. A competing
+      // transaction may commit its receipt before this atomic writer begins.
+      const before = beforeReminderInsert; beforeReminderInsert = null; before?.();
+      calls.push({ table: 'family_reminders', op: 'insert' });
+      if (failure?.table === 'family_reminders' && failure.op === 'insert') {
+        if (failure.thrown) throw new Error('transport failed');
+        return writerReply(null, failure.empty ? undefined : 'XX000');
+      }
       return originalRpc(name, args);
     })();
-    return Object.assign(pending, { maybeSingle: async () => writerMaybeSingle(await pending) });
+    return Object.assign(pending, {
+      maybeSingle: async () => writerSingle(await pending, true),
+      single: async () => writerSingle(await pending, false),
+    });
   });
 }
 

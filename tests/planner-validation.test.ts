@@ -19,6 +19,7 @@ import { encodeStepInput, type Plan, type PlanStep } from '@/lib/ai/planner/sche
 import { autonomyBehaviorFor, catalogueNames, dominantBehavior, dryRunGate, maxRisk, resolveFollowupAt, validatePlan, type ValidationInputs } from '@/lib/ai/planner/validate';
 import { getTool, listTools } from '@/lib/ai/tools/registry';
 import { loadScripts, ScriptedProvider } from '@/lib/ai/provider-stub';
+import { at } from './helpers/source-order';
 
 const ledgerHolder = vi.hoisted(() => ({ client: null as SupabaseClient<Database> | null }));
 vi.mock('@/lib/supabase/server', () => ({
@@ -543,8 +544,15 @@ describe('planRequest with the scripted provider', () => {
     expect(rows.map((r) => r.step_type)).toContain('verify');
     expect(rows.map((r) => r.step_type)).toContain('followup');
 
+    // The run is created where nothing can claim it, and opened — `ready`, from
+    // `planning` only — after the request settled on this attempt (N3).
     const runInsert = ledger.calls.find((c) => c.table === 'family_automation_runs' && c.kind === 'insert')!;
-    expect(runInsert.payload).toMatchObject({ family_id: 'fam-1', request_id: 'req-1', plan_id: 'ai_plans-1', state: 'ready', run_type: 'concierge' });
+    expect(runInsert.payload).toMatchObject({ family_id: 'fam-1', request_id: 'req-1', plan_id: 'ai_plans-1', state: 'planning', run_type: 'concierge' });
+    const runOpened = ledger.calls.find((c) => c.table === 'family_automation_runs' && c.kind === 'update')!;
+    expect(runOpened.payload).toMatchObject({ state: 'ready' });
+    expect(runOpened.filters).toMatchObject({ 'eq:id': 'family_automation_runs-2', 'eq:state': 'planning', 'eq:family_id': 'fam-1' });
+    const settledReady = ledger.calls.find((c) => c.table === 'ai_requests' && c.kind === 'update' && (c.payload as Row).status === 'ready')!;
+    expect(at(ledger.calls, runOpened)).toBeGreaterThan(at(ledger.calls, settledReady));
     expect(ledger.calls.find((c) => c.table === 'ai_run_events' && c.kind === 'insert')!.payload).toMatchObject({ event_type: 'planned', family_id: 'fam-1' });
 
     const requestUpdates = ledger.calls.filter((c) => c.table === 'ai_requests' && c.kind === 'update').map((c) => (c.payload as Row).status).filter(Boolean);

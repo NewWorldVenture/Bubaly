@@ -23,6 +23,21 @@ vi.mock('@/components/app/app-context', async () => (await import('./helpers/mod
 vi.mock('@/components/ui/toast', async () => (await import('./helpers/module-harness')).toastModule(h));
 vi.mock('@/components/i18n/locale-provider', async () => (await import('./helpers/module-harness')).localeProviderModule(h));
 vi.mock('@/components/ui/states', async () => (await import('./helpers/module-harness')).ui);
+// Focus ticks a to-do off through the To-dos page's own action
+// (completeTodoAction), on the server: the session is the same member's and the
+// server client reads and writes the same in-memory database.
+vi.mock('@/lib/supabase/auth', () => ({
+  requireUserContext: async () => ({
+    user: { id: h.app.userId },
+    active: {
+      familyId: h.app.familyId, role: (h.app as Record<string, unknown>).role, member: h.app.selfMember,
+      family: { name: 'Fixture family', timezone: 'UTC' },
+    },
+  }),
+}));
+vi.mock('@/lib/supabase/server', () => ({ createServer: async () => h.db }));
+vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
+vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 
 const { FocusModule } = await import('@/components/modules/focus-module');
 

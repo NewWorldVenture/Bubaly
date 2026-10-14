@@ -5,7 +5,13 @@
 // the week has gaps, a grocery list from them, prep tasks and reminders for
 // what the calendar demands, a reschedule only when a real clash exists, and
 // one summary to the family. A mid-week follow-up closes the loop (§70).
-import { calendarSearchTime, localTime, shiftDay, type WorkflowTemplate } from './index';
+import { calendarSearchTime, localTime, shiftDay, type TemplateContext, type WorkflowTemplate } from './index';
+
+/**
+ * The week a dinner count is for. Unscoped, last week's dinners satisfied it,
+ * so a run that saved none still read "Dinners are on the plan".
+ */
+const planWeekDates = (ctx: TemplateContext) => ({ column: 'plan_date', from: ctx.weekStartKey, to: ctx.weekEndKey });
 
 export const planWeekTemplate: WorkflowTemplate = {
   intent: 'plan_week',
@@ -36,7 +42,7 @@ export const planWeekTemplate: WorkflowTemplate = {
       key: 'plan_dinners', stepType: 'act', toolName: 'meals.planWeek', description: 'Fill the empty dinner slots',
       dependsOn: ['meal_plan', 'events', 'practices'], input: () => ({ entries: [] }), optional: true,
       modelFills: 'entries: one {date, meal_type:"dinner", meal_name, ingredients:[{name}]} per empty dinner slot',
-      verify: () => ({ checks: [{ kind: 'count_at_least', table: 'meal_plans', min: 1, label: 'The dinners are saved' }] }),
+      verify: (ctx) => ({ checks: [{ kind: 'count_at_least', table: 'meal_plans', min: 1, between: planWeekDates(ctx), label: 'The dinners are saved' }] }),
     },
     { key: 'grocery_list', stepType: 'act', toolName: 'groceries.addFromMealPlan', description: 'Add what the dinners need to the shopping list', dependsOn: ['plan_dinners'], input: (ctx) => ({ week_start: ctx.weekStartKey }), optional: true },
     {
@@ -62,7 +68,7 @@ export const planWeekTemplate: WorkflowTemplate = {
       dependsOn: ['plan_dinners', 'prep_task', 'reschedule'],
       input: (ctx) => ({
         checks: [
-          { kind: 'count_at_least', table: 'meal_plans', min: 3, label: 'Dinners are on the plan' },
+          { kind: 'count_at_least', table: 'meal_plans', min: 3, between: planWeekDates(ctx), label: 'Dinners are on the plan' },
           { kind: 'no_calendar_conflicts', start: localTime(ctx.weekStartKey, 0), end: localTime(ctx.weekEndKey, 23, 59), label: 'Nothing overlaps this week' },
         ],
       }),

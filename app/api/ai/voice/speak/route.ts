@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { refuseClosedOrTrialEnded } from '@/lib/server/account-standing';
 import { assertAIRequestFamily, getAIRequestTranslations } from '@/lib/server/ai-request-context';
-import { authenticateAI } from '@/lib/server/ai-access';
+import { AI_ASSISTANT_FEATURE_KEY, accessDeniedResponse, assertAIAccess, authenticateAI } from '@/lib/server/ai-access';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { getOpenAIKey } from '@/lib/ai/settings';
 import { prepareSpeechText, normalizeTtsVoice } from '@/lib/ai/voice';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -35,6 +37,10 @@ export async function POST(req: NextRequest) {
       { error: t('speak.tooManyVoiceRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
+    // A paid model call: the plan, the assistant's switch and the Free plan's
+    // allowance apply, and the call is recorded where that allowance counts it.
+    const access = await assertAIAccess(ctx, { db: supabase, featureKey: AI_ASSISTANT_FEATURE_KEY });
+    if (!access.ok) return accessDeniedResponse(access);
     const apiKey = await getOpenAIKey(supabase);
     if (!apiKey) {
       return NextResponse.json(
@@ -50,16 +56,25 @@ export async function POST(req: NextRequest) {
     if (!speech) return NextResponse.json({ error: t('speak.nothingToSay') }, { status: 400 });
 
     const model = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';
-    const res = await fetchWithDeadline('https://api.openai.com/v1/audio/speech', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model,
-        input: speech,
-        voice: normalizeTtsVoice(voice ?? process.env.OPENAI_TTS_VOICE),
-        response_format: 'mp3',
-      }),
-    }, 60_000);
+    const res = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'voice.speak', text: 'Speak an answer aloud' },
+      async (obs) => {
+        const answer = await fetchWithDeadline('https://api.openai.com/v1/audio/speech', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({
+            model,
+            input: speech,
+            voice: normalizeTtsVoice(voice ?? process.env.OPENAI_TTS_VOICE),
+            response_format: 'mp3',
+          }),
+        }, 60_000);
+        obs.used(model);
+        if (!answer.ok || !answer.body) obs.failed(new Error(`The speech provider answered ${answer.status}.`));
+        return answer;
+      },
+    );
 
     if (!res.ok || !res.body) {
       const bounded = await readBoundedResponseText(res, 64 * 1024);

@@ -16,10 +16,10 @@ import { useToast } from '@/components/ui/toast';
 import { SkeletonList } from '@/components/ui/states';
 import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import { describeDbError } from '@/lib/supabase/errors';
-import {
-  completeFocusTodo, createFocusTimer, focusTimerReducer, runFocusAction, submitFocusChore,
-} from '@/lib/focus/session';
+import { createFocusTimer, focusTimerReducer, runFocusAction } from '@/lib/focus/session';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { setChoreStatusAction } from '@/app/(app)/dashboard/chores/actions';
+import { completeTodoAction } from '@/app/(app)/dashboard/todos/actions';
 
 type FocusItem = {
   id: string;
@@ -28,8 +28,28 @@ type FocusItem = {
   subtitle: string | null;
   /** Completion and submission are distinct persisted outcomes. */
   complete?: () => Promise<void>;
-  submit?: () => Promise<void>;
+  /** Answers the status the chore settled on. */
+  submit?: () => Promise<string>;
 };
+
+/**
+ * Finishing a chore or a to-do here is the same write as on its own page, not a
+ * second one beside it. Focus wrote `chore_assignments.status = 'submitted'`
+ * from the browser, so a chore set to need no approval sat waiting for one and
+ * its next recurrence was never created; and it wrote `todo_items.is_done`
+ * alone, with no `completed_at` and no activity, so the task fell out of the
+ * Completed list. The Chores and To-dos pages' own actions decide both.
+ */
+async function finishChore(assignmentId: string): Promise<string> {
+  const result = await setChoreStatusAction(assignmentId, 'submitted');
+  if (!result.ok) throw new Error(result.error);
+  return result.status;
+}
+
+async function finishTodo(todoId: string): Promise<void> {
+  const result = await completeTodoAction(todoId, true);
+  if (!result.ok) throw new Error(result.error);
+}
 
 export function FocusModule() {
   const { familyId, userId, selfMember, role } = useApp();
@@ -51,6 +71,7 @@ function FocusQueue() {
   const [doneCount, setDoneCount] = useState(0);
   const [loadError, setLoadError] = useState(false);
   const [submittedCount, setSubmittedCount] = useState(0);
+  const [finishedCount, setFinishedCount] = useState(0);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const active = useRef(false);
@@ -63,6 +84,7 @@ function FocusQueue() {
     setIndex(0);
     setDoneCount(0);
     setSubmittedCount(0);
+    setFinishedCount(0);
     try {
       const supabase = createClient();
       // The FAMILY's today, as the two instants that bound it (TIME-003).
@@ -104,13 +126,13 @@ function FocusQueue() {
       for (const c of (chores ?? []) as { id: string; due_at: string | null; chores: { title: string } | null }[]) {
         list.push({
           id: `c-${c.id}`, kind: 'chore', title: c.chores?.title ?? 'Chore', subtitle: c.due_at ? 'Due today' : 'Open task',
-          submit: () => submitFocusChore(supabase, familyId, myMemberId, c.id),
+          submit: () => finishChore(c.id),
         });
       }
       for (const t of todos ?? []) {
         list.push({
           id: `t-${t.id}`, kind: 'todo', title: t.title, subtitle: 'To-do',
-          complete: () => completeFocusTodo(supabase, familyId, t.id),
+          complete: () => finishTodo(t.id),
         });
       }
       setItems(list);
@@ -147,6 +169,9 @@ function FocusQueue() {
         } else if (outcome === 'submitted') {
           setSubmittedCount((n) => n + 1);
           success(tr('focusModule.choreSubmittedForApproval'));
+        } else if (outcome === 'finished') {
+          setFinishedCount((n) => n + 1);
+          success(tr('focusModule.choreDoneNoApprovalNeeded'));
         }
         setIndex((i) => i + 1);
       });
@@ -187,6 +212,7 @@ function FocusQueue() {
             <p className="mt-1 text-sm text-muted">
               {total === 0 ? tr('focusModule.nothingToday') : tr('focusModule.reviewSummary', { total, done: doneCount, submitted: submittedCount })}
             </p>
+            {total > 0 && finishedCount > 0 && <p className="mt-1 text-sm text-muted">{tr('focusModule.choresFinishedSummary', { count: finishedCount })}</p>}
           </div>
           <button onClick={() => load()} className="flex items-center gap-2 rounded-xl border border-border px-4 py-2 text-sm font-medium text-muted hover:bg-elevated hover:text-fg transition">
             <RotateCcw className="h-4 w-4" /> {tr('focus.refresh')}

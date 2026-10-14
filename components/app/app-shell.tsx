@@ -34,9 +34,10 @@ import { CommandBar } from './command-bar';
 import { RoleDensity } from './role-density';
 import { setActiveFamilyAction } from '@/app/(app)/actions';
 import { navLabel } from '@/lib/i18n/nav-label';
+import { stageAssistantHandoff } from '@/lib/ai/prefill';
 
-/** Desktop top-bar search. Submitting hands the query to the AI Assistant via
- *  its existing `?q=` deep-link (the assistant auto-sends and strips the param),
+/** Desktop top-bar search. Submitting hands the query to the AI Assistant as an
+ *  in-app hand-off (lib/ai/prefill.ts), which the assistant sends on arrival,
  *  so "Ask anything…" is a real entry point, not decoration. */
 function HeaderSearch() {
   const t = useTranslations();
@@ -48,7 +49,7 @@ function HeaderSearch() {
     const query = q.trim();
     if (!query) return;
     setQ('');
-    router.push(`/dashboard/assistant?q=${encodeURIComponent(query)}`);
+    router.push(stageAssistantHandoff(query));
   }
 
   return (

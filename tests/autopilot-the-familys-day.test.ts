@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { defaultReminderIso, runAutopilotScan, scanWindow } from '@/lib/autopilot/scan';
@@ -117,6 +117,7 @@ function daysBetween(from: string, to: string): number {
 }
 
 const HOUR = 3_600_000;
+afterEach(() => vi.useRealTimers());
 
 describe('the Autopilot scan window is the family’s, not Greenwich’s', () => {
   it.each(CASES)('$tz at $now — today is $familyToday', (c) => {
@@ -182,9 +183,14 @@ describe('a horizon crosses a 23- or 25-hour day without slipping', () => {
 
 describe('the scan answers the family’s day end to end', () => {
   it.each(CASES)('$tz at $now', async (c) => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(c.now));
     const db = createInMemorySupabase<SupabaseClient<Database>>({
       uniques: { autopilot_suggestions: [['family_id', 'dedupe_key']] },
+      rpcRole: 'service_role',
     });
+    db.seed('families', [{ id: 'f1', timezone: c.tz }]);
+    db.seed('family_members', [{ id: 'm1', family_id: 'f1', user_id: 'u1', role: 'parent', is_active: true }]);
     db.seed('renewals', [
       // `renewals.expires_at` is a DATE column (0033_renewals.sql:20): it holds
       // the day on the family's wall and is compared as it arrives.

@@ -91,6 +91,7 @@ async function scannedHousehold(): Promise<Memory> {
   db.seed('family_members', ROSTER.map((m) => member(m.id)));
   db.seed('family_insurance_policies', [{ id: 'pol-ava', family_id: FAMILY, policy_type: 'dental', insurer: 'Smile Co', renewal_date: '2026-10-01', member_id: 'ava', is_active: true }]);
   vi.setSystemTime(new Date('2026-09-28T06:30:00Z'));
+  db.setRpcAuth(null, 'service_role');
   await runAutopilotScan(db, FAMILY, null, 'UTC', 'en-US', echo, new Date('2026-09-28T06:30:00Z'));
   expect(db.table('autopilot_suggestions').find((s) => s.source_id === 'pol-ava')).toMatchObject({ status: 'auto_executed', kind: 'insurance', member_id: 'ava' });
   expect(db.table('reminders')).toEqual([expect.objectContaining({ title: POLICY, member_id: null, related_type: 'renewal', related_id: 'pol-ava', is_done: false })]);
@@ -144,7 +145,7 @@ describe("the Health page's reminders card lists the scan's insurance reminder o
   it('a reminder somebody wrote is listed to everyone as before, four at most', async () => {
     const db = await scannedHousehold();
     db.seed('reminders', ['Book the eye test', 'Refill the inhaler', 'Flu jab', 'Dentist forms', 'Vitamins'].map((title, i) => ({
-      id: `rem-${i}`, family_id: FAMILY, title, remind_at: `2026-10-0${i + 2}T09:00:00Z`, member_id: null, is_done: false, related_type: null, related_id: null, notes: null, recurrence: 'none',
+      id: `rem-${i}`, family_id: FAMILY, title, remind_at: `2026-10-0${i + 2}T09:00:00Z`, member_id: null, is_done: false, related_type: null, related_id: null, notes: null, recurrence: 'none', autopilot_origin: false, autopilot_card_id: null,
     })));
     for (const reader of ['kit', 'neighbour']) {
       const seen = await healthReminders(reader, db);
@@ -158,7 +159,7 @@ describe("the Health page's reminders card lists the scan's insurance reminder o
   it("Kit is still listed four of the reminders that are Kit's when the card's reminder is among the first four read", async () => {
     const db = await scannedHousehold();
     db.seed('reminders', ['Book the eye test', 'Refill the inhaler', 'Flu jab', 'Dentist forms'].map((title, i) => ({
-      id: `rem-${i}`, family_id: FAMILY, title, remind_at: `2026-10-0${i + 2}T09:00:00Z`, member_id: null, is_done: false, related_type: null, related_id: null, notes: null, recurrence: 'none',
+      id: `rem-${i}`, family_id: FAMILY, title, remind_at: `2026-10-0${i + 2}T09:00:00Z`, member_id: null, is_done: false, related_type: null, related_id: null, notes: null, recurrence: 'none', autopilot_origin: false, autopilot_card_id: null,
     })));
     const kit = await healthReminders('kit', db);
     expect(kit.titles).toEqual(['Book the eye test', 'Dentist forms', 'Flu jab', 'Refill the inhaler']);

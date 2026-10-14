@@ -11,7 +11,7 @@ import { scopeFromUserContext } from '@/lib/services/scope';
 import { dayKeyIn } from '@/lib/time/zoned';
 import { budgetByCategory, periodWindow } from '@/lib/finance/budget-periods';
 import type { BudgetPeriod } from '@/lib/database.types';
-import { resolveProvider } from '@/lib/ai/provider';
+import { isAIConfigured, resolveProvider } from '@/lib/ai/provider';
 import { summarizeSubscriptions, wastedMonthlyCents, isStale, monthlyCostCents, type SubLike } from '@/lib/finance/subscriptions';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
@@ -31,7 +31,15 @@ const OVER_BUDGET_DETAIL: Record<BudgetPeriod, string> = {
  * budgets, upcoming bills and tracked subscriptions (family-scoped via the
  * cookie client + RLS), summarises them deterministically, then asks the AI for
  * concrete, prioritised savings ideas. Degrades to a data-driven fallback when
- * AI is unconfigured — never fabricates numbers.
+ * the AI cannot answer — never fabricates numbers.
+ *
+ * `source` says which of three things happened, as /api/ai/chef does, because
+ * the family is told different things for each: 'ai' is the model's analysis;
+ * 'fallback' is "no AI provider is set up"; 'unavailable' is "the provider was
+ * asked and gave no usable answer". Every provider failure and every
+ * unusable reply used to be answered "AI is not configured" to a family whose
+ * AI was configured — or, for a reply with nothing in it, shown as the AI's own
+ * analysis while the turn was logged as failed.
  */
 export async function POST() {
   const tr = await getTranslations();
@@ -158,6 +166,11 @@ export async function POST() {
   }
   if (fallback.length === 0) fallback.push({ title: 'On track', detail: 'No overspending or unused subscriptions detected. Set category budgets to unlock sharper suggestions.' });
 
+  if (!(await isAIConfigured())) {
+    return NextResponse.json({ summary: tr('savings.aiIsNotSetUpHereAre'), suggestions: fallback, wastedMonthlyCents: wasted, source: 'fallback' });
+  }
+  const unavailable = () => NextResponse.json({ summary: tr('savings.theAiCouldNotAnswerHereAre'), suggestions: fallback, wastedMonthlyCents: wasted, source: 'unavailable' });
+
   try {
     const result = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
@@ -171,8 +184,16 @@ export async function POST() {
           maxTokens: 600,
         });
         obs.used(completion.model ?? 'unknown', completion.usage);
-        const m = completion.text.match(/\{[\s\S]*\}/);
-        const parsed = m ? JSON.parse(m[0]) : {};
+        // A reply that is not text, or whose JSON does not parse, is an
+        // unusable answer — recorded as one here, not thrown past the record.
+        const m = typeof completion.text === 'string' ? completion.text.match(/\{[\s\S]*\}/) : null;
+        let parsed: { summary?: unknown; suggestions?: unknown } = {};
+        try {
+          const decoded: unknown = m ? JSON.parse(m[0]) : {};
+          if (decoded && typeof decoded === 'object' && !Array.isArray(decoded)) parsed = decoded as typeof parsed;
+        } catch {
+          parsed = {};
+        }
         const suggestions = Array.isArray(parsed.suggestions)
           ? parsed.suggestions.filter((s: unknown) =>
             s !== null && typeof s === 'object'
@@ -183,16 +204,25 @@ export async function POST() {
         const hasSummary = typeof parsed.summary === 'string' && parsed.summary.trim().length > 0;
         if (!hasSummary && suggestions.length === 0) {
           obs.failed(new Error('The savings response contained no usable summary or suggestions.'));
+          return null;
         }
         return {
           summary: hasSummary ? parsed.summary : 'Here are the biggest opportunities to save.',
           suggestions: suggestions.length ? suggestions : fallback,
           wastedMonthlyCents: wasted,
+          source: 'ai' as const,
+          // A reply with a summary and no usable suggestions keeps the summary
+          // (the model's) and shows the list computed from the family's own
+          // numbers — which `source: 'ai'` alone presented as the AI's. Said
+          // here so the card can label the list for what it is.
+          ...(suggestions.length ? {} : { suggestionsSource: 'fallback' as const }),
         };
       },
     );
-    return NextResponse.json(result);
-  } catch {
-    return NextResponse.json({ summary: 'AI is not configured — here are data-driven suggestions from your finances.', suggestions: fallback, wastedMonthlyCents: wasted });
+    return result ? NextResponse.json(result) : unavailable();
+  } catch (error) {
+    // Quota, rate limit, key, timeout: the AI was asked and could not answer.
+    console.error('[ai/savings] provider request failed', describeReadError(error));
+    return unavailable();
   }
 }

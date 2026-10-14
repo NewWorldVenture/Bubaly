@@ -147,7 +147,7 @@ export function SchoolModule() {
   const tr = useTranslations();
   // One time-ago, and it follows the reader (lib/utils/format.ts fmtTimeAgo).
   const { fmtTimeAgo } = useFormat();
-  const { familyId, userId, members, family } = useApp();
+  const { familyId, userId, members, family, role } = useApp();
   const { toast, success, error: toastError } = useToast();
   const [tab, setTab] = useState<Tab>('overview');
   const [scheduleIdx, setScheduleIdx] = useState(0);
@@ -203,9 +203,14 @@ export function SchoolModule() {
   const pendingProposal = useRef<DeskProposal | null>(null);
   const [proposalState, setProposalState] = useState<DeskProposal | null>(null);
   const proposing = proposalState?.scope === deskScope ? proposalState.messageId : null;
+  // The desk lists the household inbox — subject, body and sender — and that
+  // is not a guest's (ROLE-SCOPE-001; /dashboard/inbox and the Contact Center
+  // send a guest away). Until the reserved 0509 refuses them the rows, the
+  // browser does not ask: no read, and no desk.
+  const readsInbox = role !== 'guest';
 
   const loadDesk = useCallback(async () => {
-    if (!deskScope.active || currentDeskScope.current !== deskScope) return;
+    if (!readsInbox || !deskScope.active || currentDeskScope.current !== deskScope) return;
     const request = ++deskScope.request;
     deskScope.controller?.abort();
     const controller = deskScope.controller = new AbortController();
@@ -246,7 +251,7 @@ export function SchoolModule() {
       console.error('[school-desk] front desk read failed', cause);
       setDeskState(previous => isCurrent() ? { scope: deskScope, snapshot: null, loading: false, error: true } : previous);
     }
-  }, [deskScope, familyId]);
+  }, [deskScope, familyId, readsInbox]);
 
   useEffect(() => {
     deskScope.active = true;
@@ -510,7 +515,7 @@ export function SchoolModule() {
         </div>
 
         {/* School & Sports desk — inbox messages this module can act on */}
-        {tab === 'overview' && (
+        {tab === 'overview' && readsInbox && (
           <div className="rounded-2xl border border-border bg-surface/40">
             <div className="flex items-center justify-between p-5">
               <div>
