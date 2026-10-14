@@ -434,8 +434,13 @@ describe('N6-R1 — a family\'s calendar and its people are not its money', () =
   // reader and then ran the money words over every item, so a child's
   // assistant lost the same three. It is now composed for its reader, as the
   // page is, and the words run only over what an Autopilot card or an approval
-  // worded.
-  it('the assistant\'s context built for a child carries them too, and still not the money or the paperwork', async () => {
+  // worded. The slice's `viewer` argument to loadReasoningReport is what keeps
+  // the budget drift (sig-drift, seeded above for everyone; a signal, not an
+  // index move, and linking to /dashboard/family-signals, which the words no
+  // longer read) out of a child's report: without it, every other line here
+  // still held and a child's context carried "Over budget on Groceries" with
+  // its dollar amounts.
+  it('the assistant\'s context built for a child carries them too, and still not the money, the drift or the paperwork', async () => {
     db.seed('financial_accounts', [
       { id: 'acct-checking', family_id: FAMILY, type: 'checking', balance: -300 },
       { id: 'acct-savings', family_id: FAMILY, type: 'savings', balance: -50 },
@@ -456,11 +461,11 @@ describe('N6-R1 — a family\'s calendar and its people are not its money', () =
     // to an answer); a child's are the conflict, the load and nothing behind
     // them, where the paperwork would otherwise be.
     const parent = await itemsFor('parent');
-    for (const item of [CLASH, NO_LOCATION, BILLS_WEEK, '2 accounts are below zero']) expect(parent).toContain(item);
+    for (const item of [CLASH, NO_LOCATION, BILLS_WEEK, '2 accounts are below zero', DRIFT]) expect(parent).toContain(item);
 
     const child = await itemsFor('child');
     for (const item of [CLASH, NO_LOCATION, BILLS_WEEK]) expect(child).toContain(item);
-    for (const item of [EXPIRING, '2 accounts are below zero']) expect(child).not.toContain(item);
+    for (const item of [EXPIRING, '2 accounts are below zero', DRIFT]) expect(child).not.toContain(item);
   });
 
   // N6-RE — the words an Autopilot card or an approval is read by matched only
