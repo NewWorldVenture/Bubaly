@@ -16,6 +16,8 @@ import { ChangeRecap } from '@/components/operating-index/change-recap';
 import { OutcomesStrip } from '@/components/outcomes/outcomes-strip';
 import { countFromResult, countMatchingResult } from '@/lib/outcomes/discovery';
 import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 
 import { getTranslations } from '@/lib/i18n/server';
 
@@ -26,6 +28,8 @@ export async function generateMetadata(): Promise<Metadata> {
 export const dynamic = 'force-dynamic';
 
 const HOUR = 3600_000;
+/** The soonest occurrences the week's conflict check reads, as /dashboard/conflicts does. */
+const MAX_EVENTS = 500;
 
 type Issue = { icon: typeof AlertTriangle; text: string; href: string; severity: 'high' | 'medium' };
 
@@ -56,10 +60,19 @@ export default async function CommandCenterPage() {
   const weekEnd = new Date(zonedDayBoundsMs(weekDays[7], tz).start);
   const in30 = new Date(now.getTime() + 30 * 86_400_000);
 
+  // Series-aware, and overlapping the week, as /dashboard/conflicts reads
+  // (N3). Raw rows by `starts_at` missed every occurrence of a series created
+  // before this week — a one-off booked over a weekly practice was never a
+  // clash — and stopped at the 1,000-row cap without a word. A window that
+  // cannot be built rejects, which settleAll turns into a failed read the
+  // banner names.
+  const readWeek = async () => readCalendarOccurrences(
+    supabase, familyId, instantCalendarBounds(now.toISOString(), new Date(weekEnd.getTime() - 1).toISOString(), tz), tz,
+    { columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day', 'location', 'assignee_id'], overlap: true, limit: MAX_EVENTS },
+  );
   const [membersResult, eventsResult, openChoresResult, mealPlansResult, expiringDocsResult] = await settleAll([
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId).eq('is_active', true),
-    supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, location, assignee_id', { count: 'exact' })
-      .eq('family_id', familyId).gte('starts_at', now.toISOString()).lte('starts_at', weekEnd.toISOString()).order('starts_at'),
+    readWeek(),
     supabase.from('chore_assignments').select('id, due_at, status, member_id', { count: 'exact' })
       .eq('family_id', familyId).in('status', ['todo', 'in_progress']),
     supabase.from('meal_plans').select('plan_date, meal_type', { count: 'exact' }).eq('family_id', familyId)
@@ -112,6 +125,12 @@ export default async function CommandCenterPage() {
   }
 
   // ── Schedule conflict detection (overlapping timed events) ──
+  // `count` is every occurrence in the week: past MAX_EVENTS not every event
+  // was checked, so no clash found is not an all-clear, and the page says so.
+  // Nor is a calendar it could not read at all.
+  const eventsCapped = !eventsResult.error && (eventsResult.count ?? 0) > (events ?? []).length;
+  const notAllChecked = eventsResult.error ? t('conflicts.couldNotCheckForClashes')
+    : eventsCapped ? t('commandCenter.onlyTheFirstEventsWereChecked', { count: MAX_EVENTS }) : null;
   const timed = (events ?? []).filter((e) => !e.all_day);
   const conflicts: { a: typeof timed[number]; b: typeof timed[number] }[] = [];
   for (let i = 0; i < timed.length; i++) {
@@ -195,7 +214,7 @@ export default async function CommandCenterPage() {
             </div>
             <div>
               <p className={cn('text-lg font-bold', scoreTone.text)}>{scoreLabel}</p>
-              <p className="mt-1 text-sm text-muted">{issues.length === 0 ? 'Everything looks handled for the week.' : `${issues.length} ${issues.length === 1 ? 'item needs' : 'items need'} your attention.`}</p>
+              <p className="mt-1 text-sm text-muted">{issues.length === 0 ? (notAllChecked ?? 'Everything looks handled for the week.') : `${issues.length} ${issues.length === 1 ? 'item needs' : 'items need'} your attention.`}</p>
             </div>
           </div>
         </div>
@@ -203,12 +222,13 @@ export default async function CommandCenterPage() {
         {/* Needs attention */}
         <div className="rounded-2xl border border-border bg-surface/40 p-6 lg:col-span-2">
           <h2 className="mb-4 flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4 text-amber-400" /> {t('dashboardCommandCenter.needsAttention')}</h2>
-          {issues.length === 0 ? (
+          {notAllChecked && <p role="status" className="mb-3 text-sm text-muted">{notAllChecked}</p>}
+          {issues.length === 0 ? (notAllChecked ? null : (
             <div className="flex flex-col items-center py-8 text-center">
               <CheckCircle2 className="h-10 w-10 text-emerald-400/70" />
               <p className="mt-2 text-sm text-muted">{t('dashboardCommandCenter.noConflictsOrGapsDetectedThis')}</p>
             </div>
-          ) : (
+          )) : (
             <ul className="space-y-2">
               {issues.slice(0, 8).map((it, i) => (
                 <li key={i}>

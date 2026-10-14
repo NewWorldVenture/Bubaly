@@ -4185,6 +4185,7 @@
   "commandBar.itemsAdded": "{count} elementi aggiunti",
   "commandCenter.conflict": "Conflitto",
   "commandCenter.couldNotLoadYourFamily": "Impossibile caricare il centro di comando della tua famiglia da Supabase. Aggiorna e riprova.",
+  "commandCenter.onlyTheFirstEventsWereChecked": "Sono stati controllati solo i primi {count} eventi di questa settimana, quindi una sovrapposizione potrebbe non essere mostrata.",
   "commandCenter.scheduleConflict": "Conflitto di orario: «{a}» si sovrappone a «{b}» ({time})",
   "commandCenter.unassigned": "Non assegnato",
   "commandCenter.unassignedEventsMany": "{n} eventi imminenti non hanno nessuno assegnato",

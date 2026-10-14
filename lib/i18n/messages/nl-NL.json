@@ -4185,6 +4185,7 @@
   "commandBar.itemsAdded": "{count} items toegevoegd",
   "commandCenter.conflict": "Conflict",
   "commandCenter.couldNotLoadYourFamily": "Kon het commandocentrum van je gezin uit Supabase niet laden. Ververs en probeer het opnieuw.",
+  "commandCenter.onlyTheFirstEventsWereChecked": "Alleen de eerste {count} gebeurtenissen van deze week zijn gecontroleerd, dus een overlap wordt mogelijk niet getoond.",
   "commandCenter.scheduleConflict": "Planningsconflict: ‘{a}’ overlapt met ‘{b}’ ({time})",
   "commandCenter.unassigned": "Niet toegewezen",
   "commandCenter.unassignedEventsMany": "{n} aankomende evenementen hebben niemand toegewezen",

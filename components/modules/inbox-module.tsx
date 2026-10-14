@@ -11,6 +11,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { settle } from '@/lib/supabase/settle';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { createReminderAction } from '@/app/(app)/dashboard/reminders/actions';
 import { newSubmissionId } from '@/lib/utils/submission-id';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
@@ -64,6 +65,9 @@ type FilterTab = 'all' | 'unread' | 'call' | 'sms' | 'school' | 'sports' | 'emai
 const fmtTimeWith = (format: Format) => (iso: string) =>
   format.fmtTimeAgo(iso, { absoluteAfterDays: 2 });
 
+/** More contacts than a household keeps, as the Contacts page reads; past it the read fails, never a silent prefix. */
+const CONTACTS_MAX = 20_000;
+
 export function InboxModule() {
   const fmtTime = fmtTimeWith(useFormat());
   const tr = useTranslations();
@@ -95,9 +99,15 @@ export function InboxModule() {
     },
   });
 
+  // Read whole, a page at a time, as the Contacts page does (N14). One
+  // unpaged select stopped at PostgREST's 1,000 rows without a word: the
+  // sidebar counted the prefix as the total, and the Log message and AI Import
+  // pickers could not link a message to any contact after the 1,000th.
   const { data: contacts, loading: contactsLoading, error: contactsError, refresh: refreshContacts } = useRealtimeQuery<Contact>({
     table: 'family_contacts', familyId, deps: [familyId],
-    fetcher: async (supabase) => supabase.from('family_contacts').select('*').eq('family_id', familyId).order('name'),
+    fetcher: (supabase) => readAllAsQuery<Contact>((from, to) =>
+      supabase.from('family_contacts').select('*').eq('family_id', familyId)
+        .order('name').order('id').range(from, to), { max: CONTACTS_MAX }),
   });
 
   const filtered = useMemo(() => {

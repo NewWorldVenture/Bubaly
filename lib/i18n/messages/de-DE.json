@@ -4185,6 +4185,7 @@
   "commandBar.itemsAdded": "{count} Einträge hinzugefügt",
   "commandCenter.conflict": "Konflikt",
   "commandCenter.couldNotLoadYourFamily": "Fehler beim Laden: Ihre Familienzentrale aus Supabase. Bitte aktualisieren und erneut versuchen.",
+  "commandCenter.onlyTheFirstEventsWereChecked": "Nur die ersten {count} Termine dieser Woche wurden geprüft, daher wird eine Überschneidung möglicherweise nicht angezeigt.",
   "commandCenter.scheduleConflict": "Terminkonflikt: „{a}“ überschneidet sich mit „{b}“ ({time})",
   "commandCenter.unassigned": "Nicht zugewiesen",
   "commandCenter.unassignedEventsMany": "{n} anstehende Termine haben niemanden zugewiesen",

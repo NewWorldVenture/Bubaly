@@ -272,9 +272,17 @@ async function fetchRows(
       // The page shows a child only that, and this coach listed every member
       // by name with their nights, mood and energy. Narrowed before the limit,
       // as the 'medical' case does, rather than left to RLS.
-      const mine = <Q extends { or: (filter: string) => Q }>(query: Q): Q => (isManager(viewer.role)
-        ? query
-        : query.or([viewer.memberId ? `member_id.eq.${viewer.memberId}` : null, `created_by.eq.${viewer.userId}`].filter(Boolean).join(',')));
+      //
+      // A COACH SUMMARY IS BUILT FROM A WHOLE RECORD. The entries a
+      // non-manager logged for someone else are part of that member's record,
+      // which the page shows them without a summary (an 'authored' scope): a
+      // caregiver's coach built from the nights they logged for a ward read as
+      // the ward's whole record. So a non-manager is coached on their own
+      // record only — not on what they logged for others — and with no member
+      // record of their own on nothing.
+      const ownRecord = isManager(viewer.role) ? null : viewer.memberId;
+      if (!isManager(viewer.role) && !ownRecord) return { sleep_logs: [], bedtime_routines: [], sleep_checkins: [] };
+      const mine = <Q extends { eq: (column: 'member_id', value: string) => Q }>(query: Q): Q => (ownRecord ? query.eq('member_id', ownRecord) : query);
       const [logs, routines, checkins] = await Promise.all([
         mine(eq(sb, 'sleep_logs', familyId)).gte('sleep_date', since(21).slice(0, 10)).order('sleep_date', { ascending: false }).limit(120),
         mine(eq(sb, 'bedtime_routines', familyId)).eq('is_active', true).limit(30),

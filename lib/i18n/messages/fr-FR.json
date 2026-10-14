@@ -4185,6 +4185,7 @@
   "commandBar.itemsAdded": "{count} éléments ajoutés",
   "commandCenter.conflict": "Conflit",
   "commandCenter.couldNotLoadYourFamily": "Impossible de charger le centre de commande de votre famille depuis Supabase. Actualisez et réessayez.",
+  "commandCenter.onlyTheFirstEventsWereChecked": "Seuls les {count} premiers événements de la semaine ont été vérifiés : un chevauchement peut ne pas apparaître.",
   "commandCenter.scheduleConflict": "Conflit d’horaire : « {a} » chevauche « {b} » ({time})",
   "commandCenter.unassigned": "Non attribué",
   "commandCenter.unassignedEventsMany": "{n} événements à venir n’ont personne d’assigné",

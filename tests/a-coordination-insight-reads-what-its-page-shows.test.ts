@@ -22,12 +22,12 @@ const FAMILY = 'family-one';
 const ME = 'member-me';
 const SIB = 'member-sib';
 
-const h = vi.hoisted(() => ({ db: null as unknown, complete: vi.fn(), role: 'parent' as string }));
+const h = vi.hoisted(() => ({ db: null as unknown, complete: vi.fn(), role: 'parent' as string, memberId: 'member-me' as string | null }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('@/lib/supabase/auth', () => ({
   requireUserContext: async () => ({
     user: { id: 'user-me' },
-    active: { familyId: FAMILY, role: h.role, member: { id: ME }, family: { timezone: 'America/Los_Angeles', name: 'Fixture' } },
+    active: { familyId: FAMILY, role: h.role, member: { id: h.memberId }, family: { timezone: 'America/Los_Angeles', name: 'Fixture' } },
   }),
 }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => h.db }));
@@ -48,6 +48,7 @@ beforeEach(() => {
   base = createInMemorySupabase<SupabaseClient<Database>>();
   failing = null;
   h.role = 'parent';
+  h.memberId = ME;
   h.db = withFaults(base, (table) => (table === failing ? { message: 'Fixture read refused' } : null));
   h.complete.mockReset().mockResolvedValue({ text: 'A grounded suggestion.' });
   vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -121,14 +122,51 @@ describe('N4: the sleep coach summarises the record its page shows the asker', (
     expect(prompt()).toContain('Ben: energy 1/5, mood 1/5');
   });
 
-  it('a non-manager still sees a night someone else logged FOR them, and one they logged for someone else', async () => {
+  // N4-R1: the Sleep page shows a non-manager the nights they logged for
+  // someone else, but no summary of them (lib/health/record-scope.ts, the
+  // 'authored' scope): a summary built from part of a record reads as the
+  // member's whole record. The coach is a summary, so it is built from the
+  // asker's own record only.
+  it('a non-manager is coached on a night someone else logged FOR them, and not on one they logged for someone else', async () => {
     h.role = 'teen';
     base.seed('sleep_logs', [
       { id: 's3', family_id: FAMILY, member_id: SIB, sleep_date: '2026-10-12', bedtime: '2026-10-12T04:00:00Z', wake_time: '2026-10-12T12:00:00Z', duration_min: 480, quality: 3, awakenings: 0, created_by: 'user-me' },
+      { id: 's4', family_id: FAMILY, member_id: ME, sleep_date: '2026-10-11', bedtime: '2026-10-11T05:00:00Z', wake_time: '2026-10-11T12:30:00Z', duration_min: 450, quality: 3, awakenings: 0, created_by: 'user-parent' },
     ]);
     expect((await ask('sleep')).status).toBe(200);
-    expect(prompt()).toContain('Ben: 8h 0m');
-    expect(prompt()).not.toContain('Ben: 7h 30m');
+    expect(prompt()).toContain('Ada: 7h 30m');
+    expect(prompt()).not.toContain('Ben:');
+  });
+
+  it('a caregiver\'s coach is not built from the nights, check-ins and routine they logged for a ward', async () => {
+    h.role = 'caregiver';
+    base.seed('sleep_logs', [
+      { id: 'w1', family_id: FAMILY, member_id: SIB, sleep_date: '2026-10-12', bedtime: '2026-10-12T03:00:00Z', wake_time: '2026-10-12T09:00:00Z', duration_min: 360, quality: 1, awakenings: 4, created_by: 'user-me' },
+    ]);
+    base.seed('sleep_checkins', [
+      { id: 'wc1', family_id: FAMILY, member_id: SIB, checkin_date: '2026-10-12', energy: 2, mood: 2, caffeine_after_2pm: false, screens_in_bed: true, exercised: false, created_by: 'user-me' },
+    ]);
+    base.seed('bedtime_routines', [
+      { id: 'wr1', family_id: FAMILY, member_id: SIB, target_bedtime: '19:30', target_wake: '06:30', wind_down_min: 20, steps: ['story'], is_active: true, created_by: 'user-me' },
+    ]);
+    expect((await ask('sleep')).status).toBe(200);
+    const text = prompt();
+    expect(text).toContain('Ada: 8h 0m');
+    expect(text).not.toContain('Ben:');
+    expect(text).not.toContain('6h 0m');
+    expect(text).not.toContain('energy 2/5');
+    expect(text).not.toContain('story');
+  });
+
+  it('a non-manager with no member record of their own is coached on nothing', async () => {
+    h.role = 'guest';
+    h.memberId = null;
+    base.seed('sleep_logs', [
+      { id: 'g1', family_id: FAMILY, member_id: SIB, sleep_date: '2026-10-12', bedtime: '2026-10-12T03:00:00Z', wake_time: '2026-10-12T09:00:00Z', duration_min: 360, quality: 1, awakenings: 4, created_by: 'user-me' },
+    ]);
+    expect((await ask('sleep')).status).toBe(200);
+    expect(prompt()).toContain('No nights logged yet.');
+    expect(prompt()).not.toContain('Ben:');
   });
 });
 

@@ -4380,6 +4380,7 @@
   "commandBar.itemsAdded": "{count} items added",
   "commandCenter.conflict": "Conflict",
   "commandCenter.couldNotLoadYourFamily": "Could not load your family command center from Supabase. Refresh and try again.",
+  "commandCenter.onlyTheFirstEventsWereChecked": "Only the first {count} events this week were checked, so a clash may not be shown.",
   "commandCenter.scheduleConflict": "Schedule conflict: “{a}” overlaps “{b}” ({time})",
   "commandCenter.unassigned": "Unassigned",
   "commandCenter.unassignedEventsMany": "{n} upcoming events have no one assigned",

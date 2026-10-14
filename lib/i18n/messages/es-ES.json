@@ -4185,6 +4185,7 @@
   "commandBar.itemsAdded": "{count} elementos añadidos",
   "commandCenter.conflict": "Conflicto",
   "commandCenter.couldNotLoadYourFamily": "Error al cargar el centro de mando de tu familia de Supabase. Actualiza y vuelve a intentarlo.",
+  "commandCenter.onlyTheFirstEventsWereChecked": "Solo se han comprobado los primeros {count} eventos de esta semana, así que puede que no se muestre un solapamiento.",
   "commandCenter.scheduleConflict": "Conflicto de horario: «{a}» se solapa con «{b}» ({time})",
   "commandCenter.unassigned": "Sin asignar",
   "commandCenter.unassignedEventsMany": "{n} eventos próximos no tienen a nadie asignado",

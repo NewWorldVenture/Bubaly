@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { MoonStar, Plus, Sparkles, Sunrise, BedDouble, Activity, ListChecks, Pencil, Trash2, Check, TrendingUp, TrendingDown, Minus, ClipboardCheck } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { recordScope, rowsInScope } from '@/lib/health/record-scope';
+import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
@@ -44,10 +45,21 @@ export function SleepModule() {
   const { familyId, userId, members, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
 
+  // The held 0506 (lib/health/record-scope.ts): a parent or adult reads every
+  // member's nights; anyone else their own record and the entries they
+  // logged. Narrowed in the query, before the limit, as the Family Map's
+  // history is (N6): the whole family's nights reached a child's browser and
+  // were only filtered for display, and everyone else's could crowd their own
+  // out of the newest 600.
+  const readsEveryRecord = isManager(role);
+  const selfId = selfMember?.id ?? null;
+  const ownOrAuthored = <Q extends { or: (filter: string) => Q }>(query: Q): Q => (readsEveryRecord
+    ? query
+    : query.or([selfId ? `member_id.eq.${selfId}` : null, `created_by.eq.${userId}`].filter(Boolean).join(',')));
   const logs = useRealtimeQuery<Log>({
     table: 'sleep_logs', familyId,
-    fetcher: (s) => s.from('sleep_logs').select('*').eq('family_id', familyId).order('sleep_date', { ascending: false }).limit(600),
-    deps: [familyId],
+    fetcher: (s) => ownOrAuthored(s.from('sleep_logs').select('*').eq('family_id', familyId)).order('sleep_date', { ascending: false }).limit(600),
+    deps: [familyId, readsEveryRecord, selfId, userId],
   });
   const routines = useRealtimeQuery<Routine>({
     table: 'bedtime_routines', familyId,
@@ -56,8 +68,8 @@ export function SleepModule() {
   });
   const checkins = useRealtimeQuery<Checkin>({
     table: 'sleep_checkins', familyId,
-    fetcher: (s) => s.from('sleep_checkins').select('*').eq('family_id', familyId).order('checkin_date', { ascending: false }).limit(400),
-    deps: [familyId],
+    fetcher: (s) => ownOrAuthored(s.from('sleep_checkins').select('*').eq('family_id', familyId)).order('checkin_date', { ascending: false }).limit(400),
+    deps: [familyId, readsEveryRecord, selfId, userId],
   });
 
   const [memberId, setMemberId] = useState('');
