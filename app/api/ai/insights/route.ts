@@ -526,7 +526,10 @@ async function fetchRows(
       return { family_reminders: r.data ?? [] };
     }
     case 'notes': {
+      // Checked like every other kind (see required()): a refused read used to
+      // reach the model as "No notes yet." and come back at HTTP 200.
       const n = await eq(sb, 'notes', familyId).order('updated_at', { ascending: false }).limit(15);
+      required([['notes', n.error]]);
       return { notes: n.data ?? [] };
     }
     case 'recipes': {
@@ -661,11 +664,20 @@ async function fetchRows(
       return { chore_assignments: asg.data ?? [], reward_redemptions: redemptions.data ?? [], pending_chores: [{ count: pending.count ?? 0 }] };
     }
     case 'photos': {
-      const [photos, albums] = await Promise.all([
-        eq(sb, 'family_photos', familyId).order('created_at', { ascending: false }).limit(20),
-        eq(sb, 'family_albums', familyId).order('created_at', { ascending: false }).limit(10),
+      // The rows are the most recent few; the TOTALS are counted, not taken
+      // from the length of a capped read — "Photos: 20 total" was said of a
+      // family with thousands. Every read is checked (required()).
+      const [photos, albums, photoTotal, albumTotal] = await settleAll([
+        eq(sb, 'family_photos', familyId).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(20),
+        eq(sb, 'family_albums', familyId).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(10),
+        sb.from('family_photos').select('id', { count: 'exact', head: true }).eq('family_id', familyId),
+        sb.from('family_albums').select('id', { count: 'exact', head: true }).eq('family_id', familyId),
       ]);
-      return { family_photos: photos.data ?? [], family_albums: albums.data ?? [] };
+      required([['family_photos', photos.error], ['family_albums', albums.error], ['family_photos', photoTotal.error], ['family_albums', albumTotal.error]]);
+      return {
+        family_photos: photos.data ?? [], family_albums: albums.data ?? [],
+        photo_totals: [{ photos: photoTotal.count ?? 0, albums: albumTotal.count ?? 0 }],
+      };
     }
     case 'celebrations': {
       // `event_date`, not `date`: the column 0048 created. Ordering by a column
@@ -701,11 +713,19 @@ async function fetchRows(
       return { household_info: items.data ?? [] };
     }
     case 'memories': {
-      const [memories, trips] = await Promise.all([
-        eq(sb, 'trip_memories', familyId).order('memory_date', { ascending: false }).limit(20),
-        eq(sb, 'vacations', familyId).order('created_at', { ascending: false }).limit(10),
+      // As for photos: checked reads, and counted totals rather than the
+      // length of a capped read labelled as one.
+      const [memories, trips, memoryTotal, tripTotal] = await settleAll([
+        eq(sb, 'trip_memories', familyId).order('memory_date', { ascending: false }).order('id', { ascending: false }).limit(20),
+        eq(sb, 'vacations', familyId).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(10),
+        sb.from('trip_memories').select('id', { count: 'exact', head: true }).eq('family_id', familyId),
+        sb.from('vacations').select('id', { count: 'exact', head: true }).eq('family_id', familyId),
       ]);
-      return { trip_memories: memories.data ?? [], vacations: trips.data ?? [] };
+      required([['trip_memories', memories.error], ['vacations', trips.error], ['trip_memories', memoryTotal.error], ['vacations', tripTotal.error]]);
+      return {
+        trip_memories: memories.data ?? [], vacations: trips.data ?? [],
+        memory_totals: [{ memories: memoryTotal.count ?? 0, vacations: tripTotal.count ?? 0 }],
+      };
     }
     case 'timetable': {
       const classes = await eq(sb, 'school_classes', familyId).order('time_slot').limit(40);

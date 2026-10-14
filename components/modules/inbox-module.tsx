@@ -25,7 +25,8 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
-import { useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { datetimeLocalToInstant } from '@/lib/time/datetime-local';
 import type { Format } from '@/lib/utils/format';
 
 type Comm = Tables<'family_communications'> & { contact?: Tables<'family_contacts'> | null };
@@ -650,6 +651,7 @@ function AddCommModal({ familyId, userId, contacts, onClose, onSaved }: {
   onClose: () => void; onSaved: () => void;
 }) {
   const tr = useTranslations();
+  const clock = useFamilyClock();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -664,9 +666,15 @@ function AddCommModal({ familyId, userId, contacts, onClose, onSaved }: {
     const category = String(form.get('category') ?? 'general');
     const priority = String(form.get('priority') ?? 'normal');
     const contact_id = String(form.get('contact_id') ?? '') || null;
-    const received_at = String(form.get('received_at') ?? '') || new Date().toISOString();
+    // The field is a wall reading on the FAMILY's clock. Written raw into the
+    // timestamptz column, Postgres read it in the session zone (UTC), so a Los
+    // Angeles parent logging a 2:30 PM call stored 7:30 AM (TIME-003). Blank is
+    // "now"; a reading that is not a real time on that clock is refused.
+    const typed = String(form.get('received_at') ?? '').trim();
+    const received_at = typed ? datetimeLocalToInstant(typed, clock.timeZone) : new Date().toISOString();
 
     if (!subject && !body) return toastError(tr('inboxModule.addASubjectOrMessage'));
+    if (!received_at) return toastError(tr('errors.thatTimeIsNotOnTheFamilysClock'));
 
     setLoading(true);
     const supabase = createClient();

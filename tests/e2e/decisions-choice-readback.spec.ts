@@ -37,7 +37,10 @@ async function fixture(page:Page,initialMode='healthy'){
   if(method==='GET'&&['family_decisions','decision_options'].includes(table!)){
    expect(parsed.searchParams.get('family_id')).toBe('eq.'+family);
    if((mode==='read-error'||(mode==='readback-error'&&requests.some(r=>r.method==='PATCH')))&&table==='family_decisions')return{status:400,body:{code:'SYNTHETIC',message:'Synthetic decisions unavailable'}};
-   return{status:200,body:structuredClone(table==='family_decisions'?rows:options)};
+   // The options are read in id pages (readAllByIdAsQuery): honour the page's
+   // `id=gt.` cursor and `limit`, as PostgREST does, so the read can end.
+   if(table==='decision_options'){const after=parsed.searchParams.get('id')?.replace(/^gt\./,'');const limit=Number(parsed.searchParams.get('limit')??options.length);return{status:200,body:structuredClone(options.filter(o=>!after||o.id>after).sort((a,b)=>a.id<b.id?-1:a.id>b.id?1:0).slice(0,limit))};}
+   return{status:200,body:structuredClone(rows)};
   }
   if(method==='PATCH'&&table==='family_decisions'){
    expect(parsed.searchParams.get('id')).toBe('eq.'+decisionId);expect(parsed.searchParams.get('select')).toBe('id');expect(body).toEqual({decided_option_id:optionId,status:'decided'});

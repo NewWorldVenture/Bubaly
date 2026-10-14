@@ -17052,5 +17052,17 @@
   "enablePushButton.couldNotTurnOff": "Impossibile disattivare le notifiche push su questo dispositivo. Riprova.",
   "test.couldNotCheckPushSettings": "Non è stato possibile verificare le impostazioni push, quindi non è stato inviato alcun test. Riprova.",
   "inviteForm.aKidLoginCannotBeInvited": "Non è possibile invitare un accesso per bambini. Aggiungi il bambino da Accessi bambini.",
-  "notificationsModule.someUpdatesCouldNotBeChecked": "Non è stato possibile controllare alcuni aggiornamenti. Ripeti la scansione tra poco."
+  "notificationsModule.someUpdatesCouldNotBeChecked": "Non è stato possibile controllare alcuni aggiornamenti. Ripeti la scansione tra poco.",
+  "actions.onlyAParentOrAdultCanFileAMessage": "Solo un genitore o un adulto può archiviare un messaggio di famiglia.",
+  "tripMemoriesModule.onlyAParentOrAdultCanDelete": "Solo un genitore o un adulto può eliminare un ricordo di viaggio.",
+  "familyTreeModule.cannotBeTheirOwnAncestor": "Nessuno può essere antenato di sé stesso. Scegli un genitore al di fuori del suo ramo dell'albero.",
+  "inboxActions.onlyAParentOrAdultCanHandle": "Solo un genitore o un adulto può affidare un messaggio di famiglia a Bubaly.",
+  "actions.thisNoteChangedSinceYouOpenedIt": "Qualcuno ha modificato questa nota dopo che l'hai aperta, quindi non è stata salvata. Il tuo testo è ancora qui: copialo, riapri la nota e aggiungilo di nuovo.",
+  "errors.thatTimeIsNotOnTheFamilysClock": "Quella data e ora non esiste nel fuso orario della tua famiglia. Scegline un'altra.",
+  "photosModule.showingNOfTotal": "{shown} di {total} visualizzati",
+  "photosModule.loadMore": "Carica altri",
+  "photosModule.searching": "Ricerca in corso…",
+  "createMemory.someOfThePhotosWereNotSaved": "Sono state salvate {saved} foto su {total}. Non è stato possibile caricarne {failed}.",
+  "createMemory.tryTheMissingPhotosAgain": "Riprova con le foto mancanti",
+  "socialFeed.couldNotLoadYourFeed": "Al momento non è stato possibile caricare il tuo feed. Riprova tra poco."
 }

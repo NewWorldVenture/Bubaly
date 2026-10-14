@@ -17052,5 +17052,17 @@
   "enablePushButton.couldNotTurnOff": "No se han podido desactivar las notificaciones push en este dispositivo. Inténtalo de nuevo.",
   "test.couldNotCheckPushSettings": "No se ha podido comprobar tu configuración de notificaciones push, así que no se ha enviado ninguna prueba. Inténtalo de nuevo.",
   "inviteForm.aKidLoginCannotBeInvited": "No se puede invitar a un acceso infantil. Añade al niño desde Accesos de niños.",
-  "notificationsModule.someUpdatesCouldNotBeChecked": "No se han podido comprobar algunas novedades. Vuelve a buscar en un momento."
+  "notificationsModule.someUpdatesCouldNotBeChecked": "No se han podido comprobar algunas novedades. Vuelve a buscar en un momento.",
+  "actions.onlyAParentOrAdultCanFileAMessage": "Solo un progenitor o adulto puede archivar un mensaje familiar.",
+  "tripMemoriesModule.onlyAParentOrAdultCanDelete": "Solo un progenitor o adulto puede eliminar un recuerdo de viaje.",
+  "familyTreeModule.cannotBeTheirOwnAncestor": "Nadie puede ser su propio antepasado. Elige un progenitor de fuera de su rama del árbol.",
+  "inboxActions.onlyAParentOrAdultCanHandle": "Solo un progenitor o adulto puede pasar un mensaje familiar a Bubaly.",
+  "actions.thisNoteChangedSinceYouOpenedIt": "Alguien cambió esta nota después de que la abrieras, así que no se guardó. Tu texto sigue aquí: cópialo, vuelve a abrir la nota y añádelo de nuevo.",
+  "errors.thatTimeIsNotOnTheFamilysClock": "Esa fecha y hora no existe en el horario de tu familia. Elige otra.",
+  "photosModule.showingNOfTotal": "Mostrando {shown} de {total}",
+  "photosModule.loadMore": "Cargar más",
+  "photosModule.searching": "Buscando…",
+  "createMemory.someOfThePhotosWereNotSaved": "Se guardaron {saved} de {total} fotos. {failed} no se pudieron subir.",
+  "createMemory.tryTheMissingPhotosAgain": "Reintentar las fotos que faltan",
+  "socialFeed.couldNotLoadYourFeed": "No se pudo cargar tu feed en este momento. Inténtalo de nuevo en un momento."
 }

@@ -17052,5 +17052,17 @@
   "enablePushButton.couldNotTurnOff": "Pushmeldingen konden voor dit apparaat niet worden uitgeschakeld. Probeer het opnieuw.",
   "test.couldNotCheckPushSettings": "Je pushinstellingen konden nu niet worden gecontroleerd, dus er is geen test verstuurd. Probeer het opnieuw.",
   "inviteForm.aKidLoginCannotBeInvited": "Een kinderlogin kan niet worden uitgenodigd. Voeg het kind toe via Kinderlogins.",
-  "notificationsModule.someUpdatesCouldNotBeChecked": "Sommige updates konden nu niet worden gecontroleerd. Zoek zo meteen opnieuw."
+  "notificationsModule.someUpdatesCouldNotBeChecked": "Sommige updates konden nu niet worden gecontroleerd. Zoek zo meteen opnieuw.",
+  "actions.onlyAParentOrAdultCanFileAMessage": "Alleen een ouder of volwassene kan een gezinsbericht afhandelen.",
+  "tripMemoriesModule.onlyAParentOrAdultCanDelete": "Alleen een ouder of volwassene kan een reisherinnering verwijderen.",
+  "familyTreeModule.cannotBeTheirOwnAncestor": "Niemand kan zijn eigen voorouder zijn. Kies een ouder buiten deze tak van de stamboom.",
+  "inboxActions.onlyAParentOrAdultCanHandle": "Alleen een ouder of volwassene kan een gezinsbericht aan Bubaly overdragen.",
+  "actions.thisNoteChangedSinceYouOpenedIt": "Iemand heeft deze notitie gewijzigd nadat je hem opende, dus hij is niet opgeslagen. Je tekst staat er nog — kopieer hem, open de notitie opnieuw en voeg hem weer toe.",
+  "errors.thatTimeIsNotOnTheFamilysClock": "Die datum en tijd bestaan niet in de tijdzone van je gezin. Kies een andere.",
+  "photosModule.showingNOfTotal": "{shown} van {total} weergegeven",
+  "photosModule.loadMore": "Meer laden",
+  "photosModule.searching": "Zoeken…",
+  "createMemory.someOfThePhotosWereNotSaved": "{saved} van {total} foto’s zijn opgeslagen. {failed} konden niet worden geüpload.",
+  "createMemory.tryTheMissingPhotosAgain": "Ontbrekende foto’s opnieuw proberen",
+  "socialFeed.couldNotLoadYourFeed": "Je feed kon nu niet worden geladen. Probeer het zo opnieuw."
 }

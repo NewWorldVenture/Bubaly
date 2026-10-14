@@ -13,6 +13,7 @@ import {
 } from './project';
 import { readAll } from '@/lib/supabase/read-all';
 import { describeActionError } from '@/lib/supabase/errors';
+import { isSensitiveMemory } from '@/lib/memory/facts';
 
 type DB = SupabaseClient<Database>;
 
@@ -97,7 +98,7 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
     sb.from('home_projects').select('id, title, status, room, owner_id, priority')
       .eq('family_id', familyId).in('status', ['idea', 'planning', 'quoting', 'scheduled', 'in_progress', 'on_hold'])
       .order('id', { ascending: true }).limit(ROW_LIMIT),
-    sb.from('family_facts').select('id, member_id, label, value, source, confidence')
+    sb.from('family_facts').select('id, member_id, label, value, notes, source, confidence')
       .eq('family_id', familyId).eq('category', 'preference').order('id', { ascending: true }).limit(ROW_LIMIT),
   ]);
 
@@ -110,6 +111,10 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
   ]);
   if (readError) return { ok: false, error: readError, entities: 0, edges: 0 };
 
+  // The preferences this run read and withheld as sensitive (see below).
+  const withheldPreferences = new Set((preferences.data ?? [])
+    .filter((f) => isSensitiveMemory({ category: 'preference', key: f.label, content: f.value, notes: f.notes }))
+    .map((f) => f.id));
   const snap: TwinSnapshot = {
     members: (members.data ?? []).map((m) => ({ id: m.id, name: m.display_name })),
     pets: (pets.data ?? []).map((p) => ({ id: p.id, name: p.name, species: p.species })),
@@ -146,9 +151,16 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
     // Withheld from a guest by the released 0481 (renewals_not_a_guests_read),
     // so the expiry register stays out of the graph a guest reads.
     renewals: [],
-    preferences: (preferences.data ?? []).map((f) => ({
-      id: f.id, member_id: f.member_id, label: f.label, value: f.value, source: f.source, confidence: f.confidence,
-    })),
+    // Only the preferences every member may read. A fact the sensitive-memory
+    // rule matches ("Emma allergies: peanuts", a therapist, a medication) is a
+    // parent's or adult's: Family Memory and Life & Milestones hide it from
+    // everyone else (factsVisibleTo), and the graph is everyone's. The table
+    // stays projector-owned, so the prune removes a node an earlier run wrote.
+    preferences: (preferences.data ?? [])
+      .filter((f) => !withheldPreferences.has(f.id))
+      .map((f) => ({
+        id: f.id, member_id: f.member_id, label: f.label, value: f.value, source: f.source, confidence: f.confidence,
+      })),
   };
 
   const projection = projectTwin(snap, { now });
@@ -204,6 +216,16 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
   }
 
   const stale = stalePrunableEntityIds(idRows ?? [], projection, coveredRefTables);
+  // A preference this run read and withheld as sensitive is known not to be
+  // live, so its node goes even when the preference read hit the cap and the
+  // rest of family_facts is withheld from the prune: otherwise a household
+  // with ROW_LIMIT preferences kept, for every member to read, the node an
+  // earlier run wrote for "Emma allergies: peanuts".
+  const staleIds = new Set(stale);
+  for (const row of idRows ?? []) {
+    if (row.ref_table === 'family_facts' && row.ref_id && withheldPreferences.has(row.ref_id) &&
+      isProjectedRow(row.attributes) && !staleIds.has(row.id)) stale.push(row.id);
+  }
   if (stale.length) {
     // Rows deliberately not checked: these ids were read just above, so fewer
     // matching means some were already deleted — the prune's goal either way.

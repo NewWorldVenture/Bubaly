@@ -30,7 +30,6 @@ const TRACKED = new Set([
   'app/(app)/dashboard/app-store/page.tsx',
   'app/(app)/dashboard/auto/licenses/page.tsx',
   'app/(app)/dashboard/auto/vehicles/page.tsx',
-  'app/(app)/dashboard/social-feed/page.tsx',
   'app/(app)/dashboard/social/content-studio/page.tsx',
   'app/(app)/feedback/page.tsx',
 ]);
