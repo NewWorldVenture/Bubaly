@@ -136,7 +136,6 @@ const SCOPED_ANOTHER_WAY: Record<string, string> = {
   'app/(app)/marketplace/actions.ts': 'Every memberId here is ctx.active.member.id, the caller’s own id in the family they are acting in, so it cannot name a member of a different household.',
   'app/(app)/marketplace/creators/[id]/page.tsx': 'selfId is the signed-in member’s own id from the session context; the query asks whether the caller follows this creator.',
   'app/(app)/marketplace/item/[id]/page.tsx': 'selfId is the signed-in member’s own id from the session context; the query asks whether the caller saved this item.',
-  'app/(app)/dashboard/locator/actions.ts': 'member.id is read from the caller’s own resolved membership row rather than from the request body.',
 };
 
 describe('a query filtered by member id also names its family', () => {

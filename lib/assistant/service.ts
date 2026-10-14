@@ -267,9 +267,12 @@ async function readShoppingList(supabase: Client, familyId: string): Promise<Spo
   const ids = await liveListIds(supabase, familyId, 'grocery_lists');
   if (ids.length === 0) return { names: [], total: 0 };
 
-  const { data, error } = await supabase
+  // The count carries the rest: the rows are the first MAX_LIST_READ, and
+  // `count` is every unchecked item, so "and 30 more" is said of a list of 70
+  // rather than "40 things" of it.
+  const { data, error, count } = await supabase
     .from('grocery_items')
-    .select('name, quantity')
+    .select('name, quantity', { count: 'exact' })
     .eq('family_id', familyId)
     .in('list_id', ids)
     .eq('is_checked', false)
@@ -280,16 +283,21 @@ async function readShoppingList(supabase: Client, familyId: string): Promise<Spo
   // The quantity belongs in the sentence: "two pints of milk" is the useful
   // answer and "milk" is the one that sends somebody back to the shop.
   const names = rows.map((row) => (row.quantity ? `${row.quantity} ${row.name}` : row.name));
-  return { names, total: names.length };
+  return { names, total: listTotal(count, names.length) };
+}
+
+/** Every matching row, counted; never fewer than were read, and the rows when no count came back. */
+function listTotal(count: number | null, read: number): number {
+  return typeof count === 'number' && Number.isSafeInteger(count) && count >= read ? count : read;
 }
 
 /** The open to-do items, oldest first, so the oldest is the one that gets said. */
 async function readTaskList(supabase: Client, familyId: string): Promise<SpokenList> {
   const lists = await liveListIds(supabase, familyId, 'todo_lists');
   if (lists.length === 0) return { names: [], total: 0 };
-  const { data, error } = await supabase
+  const { data, error, count } = await supabase
     .from('todo_items')
-    .select('title')
+    .select('title', { count: 'exact' })
     .eq('family_id', familyId)
     .in('list_id', lists)
     .eq('is_done', false)
@@ -297,7 +305,7 @@ async function readTaskList(supabase: Client, familyId: string): Promise<SpokenL
     .limit(MAX_LIST_READ);
   if (error) throw error;
   const names = ((data ?? []) as unknown as { title: string }[]).map((row) => row.title);
-  return { names, total: names.length };
+  return { names, total: listTotal(count, names.length) };
 }
 
 /** Record what the speaker did. Never throws: an audit gap must not eat a reply. */

@@ -14,6 +14,7 @@ import { isDeductible } from '@/lib/finance/tax';
 import { insightReadRefused } from '@/lib/ai/insight-read-domains';
 import { localPartsAt } from '@/lib/time/zoned';
 import { computeBalances, type AssignmentLike, type RedemptionLike } from '@/lib/rewards/points';
+import { daysToDeadline, isOpen as isOpenOpportunity, type OpportunityLike } from '@/lib/opportunities/deadlines';
 
 export type InsightKind =
   | 'chores'
@@ -665,8 +666,13 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
       'You are a family contacts and relationship assistant. Help organize contacts, identify who to follow up with, and suggest ways to strengthen important relationships. ' + SHARED_RULES,
     buildUser: (d) => {
       const contacts = r(d, 'family_contacts').slice(0, 20);
-      const list = contacts.slice(0, 12).map((c) => `- ${c.name || 'Unknown'} (${c.category || 'general'})`).join('\n') || 'No contacts saved.';
-      return `Family: ${d.familyName}. Now: ${d.now}.\n\nContacts (${contacts.length} total):\n${list}\n\nGive: (1) categories that could be better organized, (2) 1-2 contact types the family should add, (3) one relationship to nurture this week.${q(d)}`;
+      // The family's total is COUNTED by the route (`contact_totals`); the
+      // length of the capped read is only what was listed.
+      const counted = Number(r(d, 'contact_totals')[0]?.contacts);
+      const total = Number.isSafeInteger(counted) && counted >= contacts.length ? counted : contacts.length;
+      const shown = contacts.slice(0, 12);
+      const list = shown.map((c) => `- ${c.name || 'Unknown'} (${c.category || 'general'})`).join('\n') || 'No contacts saved.';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nContacts (${total} total${total > shown.length ? `, ${shown.length} listed` : ''}):\n${list}\n\nGive: (1) categories that could be better organized, (2) 1-2 contact types the family should add, (3) one relationship to nurture this week.${q(d)}`;
     },
   },
 
@@ -1151,14 +1157,23 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     system:
       'You are a helpful family activity coordinator. Help families track registration deadlines, evaluate activity options, and balance kids\' schedules. Prioritize upcoming deadlines and suggest how to avoid over-scheduling. ' + SHARED_RULES,
     buildUser: (d) => {
-      const opps = r(d, 'opportunities').slice(0, 30);
-      const open = opps.filter((o) => o.status !== 'closed' && o.status !== 'passed');
-      const urgent = open.filter((o) => {
-        if (!o.deadline) return false;
-        const diff = (new Date(o.deadline as string).getTime() - Date.now()) / 86400000;
-        return diff >= 0 && diff <= 14;
-      });
-      return `Family: ${d.familyName}. Now: ${d.now}.\n\nOpen opportunities: ${open.length}. Deadlines within 14 days: ${urgent.length}${urgent.length > 0 ? ': ' + JSON.stringify(urgent.map((o) => ({ name: o.name, deadline: o.deadline, type: o.type }))) : ''}.\n\nGive: (1) urgent deadline alerts if any, (2) advice on prioritizing which activities to sign up for, (3) one tip for managing a balanced activity schedule.${q(d)}`;
+      // Open is the tracker's own rule (isOpen: interested or waitlisted), and a
+      // deadline is a DATE compared as a day key against the family's day — not
+      // a "closed" status that does not exist, and not an instant against the
+      // host's clock. The route reads open sign-ups from today on, soonest
+      // first, and counts them (`opportunity_totals`).
+      const opps = r(d, 'opportunities').filter((o) => isOpenOpportunity(o as unknown as OpportunityLike));
+      const counted = Number(r(d, 'opportunity_totals')[0]?.open);
+      const openCount = Number.isSafeInteger(counted) && counted >= opps.length ? counted : opps.length;
+      const today = d.todayKey;
+      const urgent = today ? opps.filter((o) => {
+        const days = daysToDeadline(o as unknown as OpportunityLike, today);
+        return days !== null && days >= 0 && days <= 14;
+      }) : [];
+      const deadlines = today
+        ? `${urgent.length}${urgent.length > 0 ? ': ' + JSON.stringify(urgent.map((o) => ({ name: o.title, deadline: o.deadline, type: o.category ?? null }))) : ''}`
+        : "unknown (the family's day was not supplied)";
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nOpen opportunities: ${openCount}. Deadlines within 14 days: ${deadlines}.\n\nGive: (1) urgent deadline alerts if any, (2) advice on prioritizing which activities to sign up for, (3) one tip for managing a balanced activity schedule.${q(d)}`;
     },
   },
 

@@ -11,6 +11,7 @@ import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provi
 import { INSIGHTS, isInsightKind, MANAGER_ONLY_INSIGHTS, type InsightData, type InsightKind } from '@/lib/ai/insights';
 import { insightReadRefused } from '@/lib/ai/insight-read-domains';
 import { isManager } from '@/lib/constants/roles';
+import { readsEveryNote } from '@/lib/care/note-scope';
 import { isExpiredFact, isSensitiveMemory } from '@/lib/services/memory';
 import { loadAISettingsFor } from '@/lib/services/ai-settings';
 import { readOnOpenGroceryLists } from '@/lib/services/groceries';
@@ -201,6 +202,9 @@ export async function POST(req: Request) {
 
 const eq = (sb: SupabaseClient, table: string, familyId: string) => sb.from(table).select('*').eq('family_id', familyId);
 
+/** The statuses a sign-up is still open in (`isOpen`, lib/opportunities/deadlines.ts). */
+const OPEN_OPPORTUNITY_STATUSES = ['interested', 'waitlisted'];
+
 /**
  * Fail closed on a read the prompt would otherwise describe as an empty, healthy
  * state. The route catches this and answers "could not load data" — a refused
@@ -273,10 +277,27 @@ async function fetchRows(
       return { home_locations: locations.data ?? [], inventory_items: items.data ?? [], inventory_moves: moves.data ?? [] };
     }
     case 'sleep': {
+      // Whose nights a summary is built from is the Sleep page's rule (the
+      // held 0506, lib/health/record-scope.ts): a parent or adult reads every
+      // member's; anyone else their own record and the entries they logged.
+      // The page shows a child only that, and this coach listed every member
+      // by name with their nights, mood and energy. Narrowed before the limit,
+      // as the 'medical' case does, rather than left to RLS.
+      //
+      // A COACH SUMMARY IS BUILT FROM A WHOLE RECORD. The entries a
+      // non-manager logged for someone else are part of that member's record,
+      // which the page shows them without a summary (an 'authored' scope): a
+      // caregiver's coach built from the nights they logged for a ward read as
+      // the ward's whole record. So a non-manager is coached on their own
+      // record only — not on what they logged for others — and with no member
+      // record of their own on nothing.
+      const ownRecord = isManager(viewer.role) ? null : viewer.memberId;
+      if (!isManager(viewer.role) && !ownRecord) return { sleep_logs: [], bedtime_routines: [], sleep_checkins: [] };
+      const mine = <Q extends { eq: (column: 'member_id', value: string) => Q }>(query: Q): Q => (ownRecord ? query.eq('member_id', ownRecord) : query);
       const [logs, routines, checkins] = await Promise.all([
-        eq(sb, 'sleep_logs', familyId).gte('sleep_date', since(21).slice(0, 10)).order('sleep_date', { ascending: false }).limit(120),
-        eq(sb, 'bedtime_routines', familyId).eq('is_active', true).limit(30),
-        eq(sb, 'sleep_checkins', familyId).gte('checkin_date', since(21).slice(0, 10)).order('checkin_date', { ascending: false }).limit(80),
+        mine(eq(sb, 'sleep_logs', familyId)).gte('sleep_date', since(21).slice(0, 10)).order('sleep_date', { ascending: false }).limit(120),
+        mine(eq(sb, 'bedtime_routines', familyId)).eq('is_active', true).limit(30),
+        mine(eq(sb, 'sleep_checkins', familyId)).gte('checkin_date', since(21).slice(0, 10)).order('checkin_date', { ascending: false }).limit(80),
       ]);
       required([['sleep_logs', logs.error], ['bedtime_routines', routines.error], ['sleep_checkins', checkins.error]]);
       return { sleep_logs: logs.data ?? [], bedtime_routines: routines.data ?? [], sleep_checkins: checkins.data ?? [] };
@@ -566,8 +587,16 @@ async function fetchRows(
       return { care_log: logs.data ?? [] };
     }
     case 'contacts': {
-      const contacts = await eq(sb, 'family_contacts', familyId).order('name').limit(30);
-      return { family_contacts: contacts.data ?? [] };
+      // A failed read is not "No contacts saved." at HTTP 200, and the total is
+      // counted rather than taken from the length of a capped read: a family
+      // with hundreds of contacts was described as having twenty.
+      const [contacts, total] = await settleAll([
+        eq(sb, 'family_contacts', familyId).order('name').order('id').limit(30),
+        sb.from('family_contacts').select('id', { count: 'exact', head: true }).eq('family_id', familyId),
+      ]);
+      required([['family_contacts', contacts.error], ['family_contacts', total.error]]);
+      if (typeof total.count !== 'number') throw new Error('family_contacts count was not returned');
+      return { family_contacts: contacts.data ?? [], contact_totals: [{ contacts: total.count }] };
     }
     case 'billing': {
       const [subs, expenses] = await Promise.all([
@@ -703,11 +732,35 @@ async function fetchRows(
       return { family_dates: dates.data ?? [], family_members: people.data ?? [] };
     }
     case 'signups': {
-      const opps = await eq(sb, 'opportunities', familyId).order('deadline', { ascending: true, nullsFirst: false }).limit(40);
-      return { opportunities: opps.data ?? [] };
+      // What the advisor reasons about: sign-ups still open (the tracker's own
+      // isOpen, lib/opportunities/deadlines.ts) whose deadline is today or
+      // later, soonest first, and how many there are. It read the 40 OLDEST
+      // rows of any status, so once a family had thirty past sign-ups the
+      // read was all history and "Deadlines within 14 days: 0" was said over
+      // one closing this week. A failed read is not "0 open" at HTTP 200.
+      const [opps, open] = await settleAll([
+        eq(sb, 'opportunities', familyId).in('status', OPEN_OPPORTUNITY_STATUSES)
+          .or(`deadline.is.null,deadline.gte.${viewer.todayKey}`)
+          .order('deadline', { ascending: true, nullsFirst: false }).order('id').limit(40),
+        sb.from('opportunities').select('id', { count: 'exact', head: true }).eq('family_id', familyId)
+          .in('status', OPEN_OPPORTUNITY_STATUSES).or(`deadline.is.null,deadline.gte.${viewer.todayKey}`),
+      ]);
+      required([['opportunities', opps.error], ['opportunities', open.error]]);
+      if (typeof open.count !== 'number') throw new Error('opportunities count was not returned');
+      return { opportunities: opps.data ?? [], opportunity_totals: [{ open: open.count }] };
     }
     case 'behavior': {
-      const logs = await eq(sb, 'behavior_logs', familyId).order('occurred_at', { ascending: false }).limit(30);
+      // The Behavior page's rule (the held 0510, lib/care/note-scope.ts): a
+      // parent, an adult or a caregiver reads every note; anyone else the
+      // notes they wrote. The page narrows a teen's or child's read to those
+      // and hides this button from them, and a direct POST still summarised
+      // every note in the family, siblings' included. Narrowed before the
+      // limit, as the page does, rather than left to RLS. A failed read is
+      // not "0 positive, 0 challenging" at HTTP 200.
+      const notes = eq(sb, 'behavior_logs', familyId);
+      const logs = await (readsEveryNote(viewer.role) ? notes : notes.eq('logged_by', viewer.userId))
+        .order('occurred_at', { ascending: false }).limit(30);
+      required([['behavior_logs', logs.error]]);
       return { behavior_logs: logs.data ?? [] };
     }
     case 'screen_time': {
