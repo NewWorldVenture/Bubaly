@@ -8,7 +8,7 @@ import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider } from '@/lib/ai/provider';
 import { buildJournalPrompt, parseJournalPrompt, promptOfTheDay } from '@/lib/journal/prompts';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
-import { AI_ASSISTANT_FEATURE_KEY, accessDeniedResponse, assertAIAccess } from '@/lib/server/ai-access';
+import { accessDeniedResponse, assertAIAllowance } from '@/lib/server/ai-access';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { describeReadError } from '@/lib/supabase/settle';
 
@@ -37,7 +37,9 @@ export async function POST() {
     // does at /api/ai: only the routes that asked `assertAIAccess` enforced it,
     // so a Free family past its ten requests kept getting these — while their
     // rows still counted toward the limit the assistant then refused them on.
-    const access = await assertAIAccess(ctx, { db: supabase, featureKey: AI_ASSISTANT_FEATURE_KEY });
+    // The allowance alone: whether the prompt is available is the Journal
+    // page's gate above, not the assistant's tier or its Off switch.
+    const access = await assertAIAllowance(ctx, { db: supabase });
     if (!access.ok) return accessDeniedResponse(access);
 
     // These five entries are the only thing that makes the prompt personal. A

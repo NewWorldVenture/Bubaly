@@ -12,6 +12,7 @@ import { isAIConfigured, resolveProvider, describeAIError } from '@/lib/ai/provi
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { assertAIAllowance } from '@/lib/server/ai-access';
 import {
   buildContactTimeline, contactHealth,
   type LoggedInteraction, type CommunicationLike,
@@ -136,6 +137,11 @@ export async function draftReconnectMessageAction(
   // "too many requests" instead of the failure that actually happened.
   const limited = await enforceAIRateLimit(supabase, `ai-requests:${ctx.user.id}`, AI_RATE_LIMIT);
   if (!limited.ok) return { ok: false, error: t('inboxActions.tooManyRequestsRightNow') };
+  // The draft files an `ai_requests` row below, so the Free plan's monthly AI
+  // allowance applies here as on every other helper (and a trial that ended
+  // unpaid, or a closed account, gets none).
+  const access = await assertAIAllowance(ctx, { db: supabase });
+  if (!access.ok) return { ok: false, error: access.error };
 
   const timeline = buildContactTimeline({
     t,

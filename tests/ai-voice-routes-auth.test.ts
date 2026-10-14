@@ -42,6 +42,7 @@ vi.mock('@/lib/server/feature-tiers', () => ({
 vi.mock('@/lib/server/ai-access', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/ai-access')>()),
   assertAIAccess: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
+  assertAIAllowance: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
 }));
 vi.mock('@/lib/ai/observability', () => ({
   withAiRequest: (_s: unknown, _f: unknown, run: (o: { requestId: string; used: () => void; failed: () => void }) => unknown) =>

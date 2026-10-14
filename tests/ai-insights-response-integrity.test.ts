@@ -22,6 +22,7 @@ vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: mocks.enforce
 vi.mock('@/lib/server/ai-access', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/ai-access')>()),
   assertAIAccess: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
+  assertAIAllowance: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
 }));
 vi.mock('@/lib/ai/provider', () => ({
   isAIConfigured: mocks.isAIConfigured,

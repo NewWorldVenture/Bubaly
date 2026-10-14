@@ -35,6 +35,7 @@ vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => (
 vi.mock('@/lib/server/ai-access', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/ai-access')>()),
   assertAIAccess: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
+  assertAIAllowance: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
 }));
 // The per-kind plan gate is covered by tests/insight-kinds-are-gated-like-their-pages.test.ts.
 vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: async () => null }));

@@ -29,6 +29,21 @@
 // dead-lettered — Pause, fix a step, Resume, the ordinary way to correct
 // Bubaly, lost the run. Now a paused run stays paused through an edit.
 //
+// N11, re-run on a paused run — "Try again" on a failed step of a paused run
+// did the same through another control: `rerunStep` set the run `ready` with
+// `paused_at` still on it, the control kicked it, the executor stopped at once
+// with the run `executing`, Resume answered "not paused", and the recovery
+// pass re-claimed it every tick until it was dead-lettered. Now the re-run
+// requeues the step and leaves the run paused, the control kicks only a run
+// left `ready`, and a re-run is refused while a worker holds the run.
+//
+// N10, the lease handoff edges — one failed heartbeat ended the slice as if
+// the lease had been lost, and a Resume that landed while the worker was
+// parking on a pause found the lease still held, so its kick claimed nothing
+// and the run sat `ready` until the next ai-runs tick. Now a heartbeat error
+// is asked once more, and the worker that parked looks once more for a run
+// resumed under it.
+//
 // Driven through the real controls, the real executor port, `executeTool`, its
 // ledger and the tasks service, over the in-memory database.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -43,6 +58,8 @@ vi.mock('@/lib/supabase/server', () => ({ createServiceClient: () => hoisted.db,
 const { createExecutorPort, runGraphWith } = await import('@/lib/ai/runs/executor');
 const { editStepInput, pauseRun, resumeRun } = await import('@/lib/ai/runs/controls');
 const { claimRun } = await import('@/lib/ai/runs/store');
+const { applyRunControl } = await import('@/lib/ai/runs/intake');
+const { continueRun } = await import('@/lib/ai/runs/continue');
 
 const FAMILY = '00000000-0000-4000-8000-0000000f1e01';
 const PARENT = { member: '00000000-0000-4000-8000-0000000f1e11', user: '00000000-0000-4000-8000-0000000f1e21' };
@@ -322,5 +339,142 @@ describe('N11: an edit to a paused run', () => {
 
     expect(edited).toMatchObject({ ok: true, data: { state: 'ready' } });
     expect(run().state).toBe('ready');
+  });
+});
+
+describe('N11: "Try again" on a paused run', () => {
+  const PAUSED_AT = '2026-01-01T00:00:00.000Z';
+  const kicks: string[] = [];
+  const kick = (id: string) => { kicks.push(id); };
+  beforeEach(() => { kicks.length = 0; });
+
+  it('requeues the failed step and what it blocked, keeps the run paused, and Resume then runs them', async () => {
+    // Pause was pressed while a slice ran, and a step in that batch failed.
+    db.seed('ai_plan_steps', [
+      todo('step-1', PLAN, 'Pack the soccer kit', { status: 'failed', error: 'Timed out' }),
+      todo('step-2', PLAN, 'Buy snacks', { status: 'blocked', dependency_ids: ['step-1'], error: 'A step this one depends on did not finish.' }),
+    ]);
+    // The worker parked on the pause and let go of the lease.
+    seedRun({ state: 'paused', status: 'paused', paused_at: PAUSED_AT, lease_owner: null, lease_expires_at: null });
+    Object.assign(db.table('ai_requests')[0], { status: 'blocked' });
+
+    const rerun = await applyRunControl(parent(), RUN, 'rerun', { stepId: 'step-1' }, { db: client(), kick });
+
+    expect(rerun).toMatchObject({ ok: true, data: { action: 'rerun', state: 'queued' } });
+    // Still paused, so nothing is kicked and nothing can claim it.
+    expect(kicks).toEqual([]);
+    expect(run()).toMatchObject({ state: 'paused', paused_at: PAUSED_AT, lease_owner: null });
+    expect(db.table('ai_requests')[0].status).toBe('blocked');
+    expect(db.table('ai_plan_steps').map((s) => s.status)).toEqual(['queued', 'queued']);
+    expect(await claimRun(client(), RUN)).toMatchObject({ ok: true, data: { claimed: false } });
+
+    expect(await resumeRun(parent(), RUN, { db: client() })).toMatchObject({ ok: true, data: { state: 'ready' } });
+    expect(await claimRun(client(), RUN)).toMatchObject({ ok: true, data: { claimed: true } });
+    const result = await runGraphWith(createExecutorPort(client()), RUN, { budgetMs: 60_000 });
+
+    expect(result.status).toBe('completed');
+    // The re-run step ran, and the one it had blocked after it.
+    expect(titles()).toEqual(['Buy snacks', 'Pack the soccer kit']);
+    expect(run()).toMatchObject({ state: 'completed', paused_at: null, lease_owner: null });
+  });
+
+  it('refuses while a worker holds the run, and changes nothing', async () => {
+    db.seed('ai_plan_steps', [todo('step-1', PLAN, 'Pack the soccer kit', { status: 'failed', error: 'Timed out' }), todo('step-2', PLAN, 'Buy snacks')]);
+    seedRun();
+
+    const rerun = await applyRunControl(parent(), RUN, 'rerun', { stepId: 'step-1' }, { db: client(), kick });
+
+    expect(rerun).toMatchObject({ ok: false, code: 'invalid_input' });
+    expect(kicks).toEqual([]);
+    expect(run()).toMatchObject({ state: 'executing', lease_owner: 'worker-1', lease_expires_at: LIVE_LEASE });
+    expect(db.table('ai_plan_steps').find((s) => s.id === 'step-1')).toMatchObject({ status: 'failed', error: 'Timed out' });
+  });
+
+  it('control: on a run that is not paused it queues the run and kicks it', async () => {
+    db.seed('ai_plan_steps', [todo('step-1', PLAN, 'Pack the soccer kit', { status: 'failed', error: 'Timed out' })]);
+    seedRun({ state: 'failed', status: 'failed', lease_owner: null, lease_expires_at: null });
+
+    const rerun = await applyRunControl(parent(), RUN, 'rerun', { stepId: 'step-1' }, { db: client(), kick });
+
+    expect(rerun).toMatchObject({ ok: true, data: { action: 'rerun', state: 'queued' } });
+    expect(kicks).toEqual([RUN]);
+    expect(run()).toMatchObject({ state: 'ready', lease_owner: null });
+  });
+});
+
+describe('N10: the lease handoff edges', () => {
+  /** The client, with the first heartbeat answering a dropped connection. */
+  function droppingFirstHeartbeat(): { client: SupabaseClient<Database>; dropped: () => number } {
+    let dropped = 0;
+    const wrapped = new Proxy(db, {
+      get(target, prop, receiver) {
+        if (prop !== 'from') return Reflect.get(target, prop, receiver);
+        return (table: string) => {
+          const builder = target.from(table);
+          if (table !== 'family_automation_runs') return builder;
+          const update = builder.update.bind(builder);
+          return Object.assign(builder, {
+            update: (patch: Row) => {
+              const updating = update(patch);
+              if (dropped > 0 || Object.keys(patch).join() !== 'lease_expires_at') return updating;
+              dropped += 1;
+              return Object.assign(updating, {
+                maybeSingle: async () => ({
+                  data: null, count: null, status: 503, statusText: 'Service Unavailable',
+                  error: { code: '08006', message: 'connection reset', details: null, hint: null },
+                }),
+              });
+            },
+          });
+        };
+      },
+    });
+    return { client: wrapped as unknown as SupabaseClient<Database>, dropped: () => dropped };
+  }
+
+  it('one heartbeat that errors does not end the slice as a lost lease', async () => {
+    db.seed('ai_plan_steps', [todo('step-1', PLAN, 'Pack the soccer kit'), todo('step-2', PLAN, 'Buy snacks', { dependency_ids: ['step-1'] })]);
+    seedRun();
+    const flaky = droppingFirstHeartbeat();
+
+    const result = await runGraphWith(createExecutorPort(flaky.client), RUN, { budgetMs: 60_000 });
+
+    expect(flaky.dropped()).toBe(1);
+    expect(result.status).toBe('completed');
+    expect(titles()).toEqual(['Buy snacks', 'Pack the soccer kit']);
+    expect(run()).toMatchObject({ state: 'completed', lease_owner: null });
+  });
+
+  it('a Resume that lands while the worker parks on a pause is picked up, not left for the next tick', async () => {
+    // The family has Ask Bubaly: `continueRun` executes only such a family's run.
+    db.seed('subscriptions', [{ id: 'sub-riveras', family_id: FAMILY, plan: 'basic', status: 'active', current_period_end: '2099-01-01T00:00:00Z' }]);
+    db.seed('ai_plan_steps', [todo('step-1', PLAN, 'Pack the soccer kit')]);
+    seedRun({ state: 'ready', status: 'approved', attempt: 0, lease_owner: null, lease_expires_at: null });
+    let resumeKick: ReturnType<typeof claimRun> | null = null;
+    const events = db.table('ai_run_events');
+    const push = events.push.bind(events);
+    events.push = (...rows: Row[]) => {
+      for (const row of rows) {
+        // The slice has started: a parent presses Pause. `pauseRun` keeps the
+        // worker's live lease, so this is its whole write.
+        if (row.event_type === 'run_started') Object.assign(run(), { state: 'paused', status: 'paused', paused_at: new Date().toISOString() });
+        // The worker has seen the pause and is about to let its lease go when
+        // Resume lands, and Resume's kick tries to lease the run.
+        if (row.event_type === 'paused' && !resumeKick) {
+          Object.assign(run(), { state: 'ready', status: 'approved', paused_at: null, run_after: new Date().toISOString(), error: null });
+          resumeKick = claimRun(client(), RUN);
+        }
+      }
+      return push(...rows);
+    };
+
+    const result = await continueRun(RUN, { budgetMs: 60_000, db: client() });
+
+    // Resume's own kick found the lease still held, and claimed nothing.
+    expect(await resumeKick).toMatchObject({ ok: true, data: { claimed: false } });
+    // The worker that parked picked the resumed run up.
+    expect(result).toMatchObject({ claimed: true, status: 'completed' });
+    expect(titles()).toEqual(['Pack the soccer kit']);
+    expect(run()).toMatchObject({ state: 'completed', lease_owner: null });
   });
 });

@@ -33,7 +33,7 @@ import type { AiStepType, Database, Json } from '@/lib/database.types';
 import { buildContext, type ContextBundle, type IntentKey } from '@/lib/ai/context/builder';
 import type { AIMessage, AIProvider } from '@/lib/ai/provider';
 import { resolveProviderForTask } from '@/lib/ai/routing';
-import { appendEvent, createRun, ledgerClient, planningAttemptMark, savePlan, updateRequest, updateRequestForAttempt, updateRun, type PlanStepInput, type RequestRow, type RunRow, type StepRow } from '@/lib/ai/runs/store';
+import { appendEvent, createRun, ledgerClient, planningAttemptMark, savePlan, updateRequest, updateRequestForAttempt, updateRequestWhereStatus, updateRun, updateRunWhereState, type PlanStepInput, type RequestRow, type RunRow, type StepRow } from '@/lib/ai/runs/store';
 import { legacyStatusFor, TERMINAL_STEP_STATES } from '@/lib/ai/runs/states';
 import { structured } from '@/lib/ai/structured';
 import { listTools } from '@/lib/ai/tools/registry';
@@ -397,12 +397,18 @@ export async function planRequest(
     return saved;
   }
 
+  // Created in `planning`, which nothing claims (`claimRun` and
+  // `claim_ai_runs` take only `ready` and `scheduled_followup`), and opened to
+  // the queue only once this attempt's fence below holds. Created `ready`, a
+  // cron claim landing between this insert and the fence leased a run the
+  // abandoned planner then marked `cancelled` without `cancel_requested_at` —
+  // the one field a worker re-reads between batches — so the worker ran it.
   const run = await createRun(scope, {
     requestId,
     planId: saved.data.planId,
     runType: 'concierge',
     summary: validation.objective,
-    state: 'ready',
+    state: 'planning',
     runAfter: now.toISOString(),
     idempotencyKey: input.runIdempotencyKey ?? null,
   }, { db: ledger });
@@ -452,6 +458,20 @@ export async function planRequest(
       message: 'Planning finished after the request had been abandoned, so nothing will run.',
     }, { db: ledger });
     return fail('That request was abandoned before planning finished.', { code: SERVICE_CODES.invalidInput });
+  }
+
+  // The plan is this attempt's to keep: open the run to the queue. From
+  // `planning` only — a run the idempotency key re-found is already in its
+  // own state, and is left in it.
+  const opened = await updateRunWhereState(scope, run.data.id, 'planning', {
+    state: 'ready', status: legacyStatusFor('ready'), run_after: now.toISOString(),
+  }, { db: ledger });
+  if (!opened.ok) {
+    // A run left in `planning` is never claimed: say so now rather than leave
+    // a `ready` request with nothing ever running it.
+    await updateRun(scope, run.data.id, { state: 'cancelled', status: legacyStatusFor('cancelled'), completed_at: now.toISOString() }, { db: ledger });
+    await updateRequestWhereStatus(scope, requestId, 'ready', { status: 'failed', error: opened.error, completed_at: now.toISOString() }, { db: ledger });
+    return opened;
   }
 
   return ok({

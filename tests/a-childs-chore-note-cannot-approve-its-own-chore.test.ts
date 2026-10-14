@@ -97,6 +97,10 @@ beforeEach(() => {
     proof_required: 'none', auto_approve_score: 85, reward_mode: 'fixed_points', points: 50, difficulty: 'easy', safety_level: 'none', recurrence: 'none',
   }]);
   db.seed('chore_assignments', [{ id: 'asg-1', family_id: FAMILY, chore_id: 'chore-1', member_id: KID, status: 'todo', approved_at: null, points_awarded: null }]);
+  // The reviewer is asked only when the family has AI requests to spend (the
+  // Free plan's monthly allowance, lib/server/ai-access): this one is on Family Basic.
+  db.seed('families', [{ id: FAMILY, trial_ends_at: null, closed_at: null }]);
+  db.seed('subscriptions', [{ id: 'sub-1', family_id: FAMILY, plan: 'basic', status: 'active', current_period_end: '2099-01-01T00:00:00Z' }]);
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.spyOn(console, 'warn').mockImplementation(() => {});
 });

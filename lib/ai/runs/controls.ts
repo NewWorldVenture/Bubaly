@@ -24,7 +24,7 @@ import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { canTransitionRun, EDITABLE_STEP_STATES, isTerminalRunState, legacyStatusFor, type RunState, type StepState } from './states';
 import {
-  appendEvent, ledgerClient, loadPlanSteps, loadRun, savePlan, updateRequest, updateRun, updateStep,
+  appendEvent, ledgerClient, loadPlanSteps, loadRun, savePlan, updateRequest, updateRun, updateRunWhereState, updateStep,
   type PlanStepInput, type RunRow, type StepRow, type StoreOpts,
 } from './store';
 
@@ -228,7 +228,18 @@ export async function cancelRun(scope: ServiceScope, runId: string, opts?: Contr
   return ok({ state: 'cancelled', cancelledSteps, cancelledApprovals });
 }
 
-export type RerunResult = { rerun: boolean; state: StepState; detail: string };
+export type RerunResult = {
+  rerun: boolean;
+  /** The step's state after the control. */
+  state: StepState;
+  /**
+   * The run's state after the control: `ready` when the re-run is queued to
+   * execute, `paused` when the run was paused and stays so until someone
+   * resumes it. Only a `ready` run is to be kicked.
+   */
+  runState: RunState;
+  detail: string;
+};
 
 /**
  * Try one step again - the "allow safe retry" half of §29.
@@ -258,6 +269,13 @@ export async function rerunStep(
   if (!steps.ok) return steps;
   const step = steps.data.find((s) => s.id === stepId);
   if (!step) return fail('That step is not part of this run.', { code: SERVICE_CODES.notFound });
+  // A worker part-way through a pass owns the run's steps and its state: the
+  // re-run below would requeue a step under it and then write `ready` over the
+  // `executing` it holds. The same refusal `editStepInput` makes; a paused run
+  // keeps its worker's live lease until that worker parks.
+  if (IN_FLIGHT_RUN_STATES.includes(run.state as RunState) || leaseIsLive(run)) {
+    return fail((await getTranslations())('runs.runIsWorkingNowRetry'), { code: SERVICE_CODES.invalidInput });
+  }
 
   const { data: calls, error: callError } = await db
     .from('ai_tool_calls')
@@ -286,7 +304,7 @@ export async function rerunStep(
       await appendEvent(scope, runId, { eventType: 'step_completed', stepId, message: detail }, { db });
     }
     await audit(scope, db, 'ai_run.rerun_step', runId, { step_id: stepId, executed: false });
-    return ok({ rerun: false, state: 'completed', detail });
+    return ok({ rerun: false, state: 'completed', runState: run.state as RunState, detail });
   }
 
   const failedCall = (calls ?? []).find((c) => c.state === 'failed');
@@ -326,14 +344,27 @@ export async function rerunStep(
     }
   }
 
-  const resumed = await updateRun(scope, runId, {
-    state: 'ready',
-    status: legacyStatusFor('ready'),
-    run_after: new Date().toISOString(),
-    completed_at: null,
-    error: null,
-  }, { db });
-  if (!resumed.ok) return resumed;
+  // A paused run stays paused: a re-run changes which steps will run, not
+  // whether the family wants Bubaly working. Setting `ready` here left
+  // `paused_at` on a `ready` run, exactly as the paused edit did: the kick
+  // claimed it, the executor saw `paused_at` and stopped at once with the run
+  // still `executing`, Resume refused ("not paused"), and the recovery pass
+  // re-claimed it every tick until it was dead-lettered. Resume is what clears
+  // the pause and runs the step.
+  const stayPaused = run.state === 'paused';
+  if (!stayPaused) {
+    // Compare-and-set on the state read above: a run a worker claimed since
+    // (`ready` → `executing`) is that worker's to move.
+    const resumed = await updateRunWhereState(scope, runId, run.state as RunState, {
+      state: 'ready',
+      status: legacyStatusFor('ready'),
+      run_after: new Date().toISOString(),
+      completed_at: null,
+      error: null,
+    }, { db });
+    if (!resumed.ok) return resumed;
+    if (!resumed.data) return fail((await getTranslations())('runs.runIsWorkingNowRetry'), { code: SERVICE_CODES.invalidInput });
+  }
 
   await appendEvent(scope, runId, {
     eventType: 'step_retried',
@@ -341,10 +372,14 @@ export async function rerunStep(
     message: `A member of the family asked Bubaly to try "${step.description || step.tool_name || step.step_type}" again.`,
     payload: { dependents_requeued: dependents.length },
   }, { db });
-  if (run.request_id) await updateRequest(scope, run.request_id, { status: 'ready', error: null, completed_at: null }, { db });
+  // A paused run's request reads as pauseRun left it, `blocked`, until Resume.
+  if (run.request_id) await updateRequest(scope, run.request_id, { status: stayPaused ? 'blocked' : 'ready', error: null, completed_at: null }, { db });
   await audit(scope, db, 'ai_run.rerun_step', runId, { step_id: stepId, executed: true });
 
-  return ok({ rerun: true, state: 'queued', detail: 'Bubaly will try that step again on the next pass.' });
+  if (stayPaused) {
+    return ok({ rerun: true, state: 'queued', runState: 'paused', detail: (await getTranslations())('runs.retryWaitsForResume') });
+  }
+  return ok({ rerun: true, state: 'queued', runState: 'ready', detail: 'Bubaly will try that step again on the next pass.' });
 }
 
 /** Every step downstream of `stepId`, transitively. */

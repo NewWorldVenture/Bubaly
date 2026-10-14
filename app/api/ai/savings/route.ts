@@ -211,6 +211,11 @@ export async function POST() {
           suggestions: suggestions.length ? suggestions : fallback,
           wastedMonthlyCents: wasted,
           source: 'ai' as const,
+          // A reply with a summary and no usable suggestions keeps the summary
+          // (the model's) and shows the list computed from the family's own
+          // numbers — which `source: 'ai'` alone presented as the AI's. Said
+          // here so the card can label the list for what it is.
+          ...(suggestions.length ? {} : { suggestionsSource: 'fallback' as const }),
         };
       },
     );

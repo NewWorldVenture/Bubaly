@@ -14,6 +14,13 @@
 // (their retry is a new request, so the card was filed twice); a late question
 // or answer set the request's status unconditionally.
 //
+// N3, the window — the planner created its run `ready` BEFORE the fence that
+// decides whether the attempt's plan is kept. A cron claim in that gap leased
+// a run the abandoned planner then marked `cancelled` without the
+// `cancel_requested_at` a worker re-reads between batches, so the worker ran
+// the plan anyway. The run is now created `planning`, which nothing claims,
+// and opened only once the fence holds.
+//
 // Each planning attempt now writes its own mark on the request and keeps an
 // outcome only while that mark is still there. Driven through the real intake
 // and the real planner (validator, store, trust dry run) over the in-memory
@@ -78,6 +85,7 @@ vi.mock('@/lib/ai/routing', async (importOriginal) => ({
 }));
 
 const { answerClarification, submitRequest } = await import('@/lib/ai/runs/intake');
+const { claimRun } = await import('@/lib/ai/runs/store');
 
 const PLAN = readFileSync('tests/ai-eval/scripts/organize_weekend.json', 'utf8');
 const planReply = (title: string) => {
@@ -239,5 +247,55 @@ describe('N9: a late outcome that is not a plan', () => {
     expect(result).toMatchObject({ ok: true, data: { outcome: 'recommendation' } });
     expect(db.table('family_ai_recommendations')).toHaveLength(1);
     expect(requestRow(db.table('ai_requests')[0].id as string)).toMatchObject({ status: 'completed' });
+  });
+});
+
+describe('N3: a late planner’s run, before its fence', () => {
+  /** What `claim_ai_runs` does to a due run (0263's candidate predicate), atomically, the moment it runs. */
+  function cronClaims(runId: string): boolean {
+    const run = db.table('family_automation_runs').find((r) => r.id === runId);
+    const now = Date.now();
+    const leased = !!run?.lease_expires_at && Date.parse(String(run.lease_expires_at)) >= now;
+    if (!run || !['ready', 'scheduled_followup'].includes(String(run.state)) || run.cancel_requested_at || leased
+      || Date.parse(String(run.run_after)) > now) return false;
+    Object.assign(run, { state: 'executing', attempt: Number(run.attempt) + 1, lease_owner: 'cron-worker', lease_expires_at: new Date(now + 180_000).toISOString() });
+    return true;
+  }
+  /** The cron ticks at the moment the planner has filed its run and before its fence: when the `planned` event lands. */
+  function cronTicksBeforeTheFence(): boolean[] {
+    const claimed: boolean[] = [];
+    const events = db.table('ai_run_events');
+    const push = events.push.bind(events);
+    events.push = (...rows: Row[]) => {
+      for (const row of rows) if (row.event_type === 'planned') claimed.push(cronClaims(String(row.run_id)));
+      return push(...rows);
+    };
+    return claimed;
+  }
+
+  it('the abandoned planner’s run is not claimable between its creation and the fence', async () => {
+    const claimed = cronTicksBeforeTheFence();
+    h.reply = planReply('Pack the picnic');
+    const result = await submitRequest(scope(), { text: 'Organize our weekend' }, { db: client(), kick: () => {}, plannerBudgetMs: 30 });
+    expect(result).toMatchObject({ ok: false, code: 'planner_timeout' });
+
+    (await heldCall(0)).release();
+    expect(await h.planners[0]).toMatchObject({ ok: false });
+
+    // The tick found nothing it could take, and the run is closed with no worker on it.
+    expect(claimed).toEqual([false]);
+    expect(db.table('family_automation_runs')).toHaveLength(1);
+    expect(db.table('family_automation_runs')[0]).toMatchObject({ state: 'cancelled', lease_owner: null });
+  });
+
+  it('control: a planner inside its budget hands over a run the queue can take', async () => {
+    h.reply = planReply('Pack the picnic');
+    const pending = submitRequest(scope(), { text: 'Organize our weekend' }, { db: client(), kick: () => {}, plannerBudgetMs: 10_000 });
+    (await heldCall(0)).release();
+
+    expect(await pending).toMatchObject({ ok: true, data: { outcome: 'plan' } });
+    const run = db.table('family_automation_runs')[0];
+    expect(run).toMatchObject({ state: 'ready', lease_owner: null });
+    expect(await claimRun(client(), String(run.id))).toMatchObject({ ok: true, data: { claimed: true } });
   });
 });

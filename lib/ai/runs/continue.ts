@@ -73,10 +73,11 @@ async function handBack(db: SupabaseClient<Database>, run: RunRow, leaseOwner: s
  */
 export async function continueRun(
   runId: string,
-  opts?: { budgetMs?: number; db?: SupabaseClient<Database> },
+  opts?: { budgetMs?: number; db?: SupabaseClient<Database>; afterPause?: boolean },
 ): Promise<ContinueResult> {
   const db = opts?.db ?? createServiceClient();
   const budgetMs = Math.max(1_000, opts?.budgetMs ?? 45_000);
+  const startedAt = Date.now();
 
   const claim = await claimRun(db, runId, leaseSecondsFor(budgetMs));
   if (!claim.ok) {
@@ -92,6 +93,7 @@ export async function continueRun(
 
   const leaseOwner = claim.data.leaseOwner;
   const claimed = claim.data.run;
+  let result: RunGraphResult;
   try {
     // Every kick comes through here — the request route, the run controls, an
     // approval decision, the settled-run sweep, the routine cron — and only
@@ -111,8 +113,7 @@ export async function continueRun(
     }
     // The planner's re-planning port rides along so a `replan` step plans the
     // rest of the run (as a new plan version) instead of blocking.
-    const result = await runGraph(runId, { budgetMs, db, replan: replanPortFor(db) });
-    return { ...result, claimed: true };
+    result = await runGraph(runId, { budgetMs, db, replan: replanPortFor(db) });
   } finally {
     // The executor clears the lease itself when it parks or finishes; this is
     // the path for a throw, so a crashed slice does not hold the run hostage
@@ -122,6 +123,17 @@ export async function continueRun(
     // which that pass never looks at.)
     if (leaseOwner) await releaseRun(db, runId, leaseOwner);
   }
+
+  // A Resume that lands while this slice is parking on a pause finds the
+  // lease still held, so its kick claims nothing — and once the executor has
+  // let the lease go, the run is `ready` with nobody running it until the next
+  // ai-runs tick. Look once more now that the lease is free: `claimRun` takes
+  // the run only if it is `ready` and unleased, which a run still paused is not.
+  if (result.status === 'paused' && !opts?.afterPause) {
+    const resumed = await continueRun(runId, { budgetMs: budgetMs - (Date.now() - startedAt), db, afterPause: true });
+    if (resumed.claimed) return resumed;
+  }
+  return { ...result, claimed: true };
 }
 
 /**

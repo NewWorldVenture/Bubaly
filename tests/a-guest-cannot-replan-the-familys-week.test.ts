@@ -26,6 +26,7 @@ vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: mocks.limit }
 vi.mock('@/lib/server/ai-access', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/ai-access')>()),
   assertAIAccess: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
+  assertAIAllowance: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
 }));
 vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: mocks.gate }));
 vi.mock('@/lib/ai/observability', () => ({

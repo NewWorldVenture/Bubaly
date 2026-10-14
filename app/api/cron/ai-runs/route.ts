@@ -4,7 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { replanPortFor } from '@/lib/ai/planner/replan-port';
 import { runGraph } from '@/lib/ai/runs/executor';
-import { claimRuns, releaseRun } from '@/lib/ai/runs/store';
+import { claimRuns, releaseRun, type ClaimedRun } from '@/lib/ai/runs/store';
 import { legacyStatusFor } from '@/lib/ai/runs/states';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import { familyHasFeature, getFeatureTiersByHref } from '@/lib/server/feature-entitlement';
@@ -67,8 +67,16 @@ export async function GET(req: NextRequest) {
   // exists precisely because the run may have moved on (an approval, a
   // cancel), so zero rows is ordinary. A run counts as returned only when it
   // actually was. Audit C1-S9-63.
-  const requeue = async (run: { id: string; familyId: string }, runAfter: Date): Promise<boolean> => {
-    const { data: requeued, error } = await db
+  //
+  // `claim_ai_runs` counted an attempt for a slice that never ran, so the
+  // counter goes back with the run, as `continueRun`'s hand-back does. Left
+  // spent, a family that lapsed for a few days (deferred once a day) came back
+  // to a run at its `max_attempts`: `claimRun` refused every interactive kick
+  // once it paid again — the approval, Resume, Edit, Try again — and the first
+  // slice that threw was dead-lettered. Fenced on this tick's own lease, so a
+  // run another worker or a control moved in the meantime keeps its count.
+  const requeue = async (run: ClaimedRun, runAfter: Date): Promise<boolean> => {
+    const returning = db
       .from('family_automation_runs')
       .update({
         state: 'ready',
@@ -76,9 +84,11 @@ export async function GET(req: NextRequest) {
         lease_owner: null,
         lease_expires_at: null,
         run_after: runAfter.toISOString(),
+        attempt: Math.max(0, run.attempt - 1),
       })
       .eq('id', run.id)
-      .eq('family_id', run.familyId)
+      .eq('family_id', run.familyId);
+    const { data: requeued, error } = await (run.leaseOwner ? returning.eq('lease_owner', run.leaseOwner) : returning.is('lease_owner', null))
       .eq('state', 'executing')
       .select('id');
     if (error) console.error('[cron/ai-runs] failed to return a run to the queue', error);

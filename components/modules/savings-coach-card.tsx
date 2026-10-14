@@ -8,7 +8,14 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 type Suggestion = { title: string; detail: string };
 /** Where the suggestions came from (/api/ai/savings `source`): the AI, or the family's own numbers because it could not answer. */
 type SavingsSource = 'ai' | 'fallback' | 'unavailable';
-type SavingsAnswer = { summary: string; suggestions: Suggestion[]; error: string | null; source?: SavingsSource };
+type SavingsAnswer = {
+  summary: string;
+  suggestions: Suggestion[];
+  error: string | null;
+  source?: SavingsSource;
+  /** Where the LIST came from when that differs from the summary: an AI summary over the family's own numbers. */
+  suggestionsSource?: 'fallback';
+};
 
 /**
  * What the card may show for one answer from /api/ai/savings. A refusal (a
@@ -20,7 +27,7 @@ type SavingsAnswer = { summary: string; suggestions: Suggestion[]; error: string
  * that carries none.
  */
 export function readSavingsAnswer(ok: boolean, body: unknown, fallback: string): SavingsAnswer {
-  const d = (body && typeof body === 'object' ? body : {}) as { summary?: unknown; suggestions?: unknown; error?: unknown; source?: unknown };
+  const d = (body && typeof body === 'object' ? body : {}) as { summary?: unknown; suggestions?: unknown; error?: unknown; source?: unknown; suggestionsSource?: unknown };
   if (!ok) return { summary: '', suggestions: [], error: typeof d.error === 'string' && d.error ? d.error : fallback };
   return {
     summary: typeof d.summary === 'string' ? d.summary : '',
@@ -28,8 +35,14 @@ export function readSavingsAnswer(ok: boolean, body: unknown, fallback: string):
     error: null,
     // Where the suggestions came from, when the answer says (the route always does).
     ...(d.source === 'ai' || d.source === 'fallback' || d.source === 'unavailable' ? { source: d.source } : {}),
+    // An AI summary whose list is the family's own numbers says so separately.
+    ...(d.suggestionsSource === 'fallback' ? { suggestionsSource: 'fallback' as const } : {}),
   };
 }
+
+/** The list is the family's own numbers, not the AI's: the whole answer fell back, or only its list did. */
+const listIsFromTheirNumbers = (answer: SavingsAnswer) =>
+  (!!answer.source && answer.source !== 'ai') || answer.suggestionsSource === 'fallback';
 
 /**
  * AI Savings Suggestions card — calls /api/ai/savings (which analyses
@@ -62,7 +75,7 @@ export function SavingsCoachCard() {
         <div className="mt-3 space-y-2 text-sm">
           {state.error && <p role="alert" className="text-danger">{state.error}</p>}
           {state.summary && <p className="text-fg/90">{state.summary}</p>}
-          {state.source && state.source !== 'ai' && state.suggestions.length > 0 && (
+          {listIsFromTheirNumbers(state) && state.suggestions.length > 0 && (
             <p className="text-xs text-muted">{t('savingsCoach.fromYourNumbersNotTheAi')}</p>
           )}
           <ul className="space-y-2">

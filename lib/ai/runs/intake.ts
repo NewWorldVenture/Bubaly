@@ -725,7 +725,9 @@ export async function applyRunControl(
       if (!stepId) return fail('Choose the step to run again.', { code: SERVICE_CODES.invalidInput });
       const result = await rerunStep(scope, runId, stepId, { db });
       if (!result.ok) return result;
-      if (result.data.rerun) kick(runId, { budgetMs });
+      // Only a run the re-run left `ready`: a paused run stays paused until
+      // Resume, and a kick would claim a run the executor only stops again.
+      if (result.data.rerun && result.data.runState === 'ready') kick(runId, { budgetMs });
       return ok({ action, state: result.data.state, detail: result.data.detail });
     }
   }

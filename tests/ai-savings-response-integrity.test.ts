@@ -110,7 +110,8 @@ describe('savings endpoint response integrity', () => {
     const response = await POST();
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ summary: 'Example summary.', suggestions: fallback, wastedMonthlyCents: 0, source: 'ai' });
+    // The summary is the model's; the list is the family's own numbers, and says so (N15).
+    expect(await response.json()).toEqual({ summary: 'Example summary.', suggestions: fallback, wastedMonthlyCents: 0, source: 'ai', suggestionsSource: 'fallback' });
     expect(mocks.complete).toHaveBeenCalledOnce();
   });
 

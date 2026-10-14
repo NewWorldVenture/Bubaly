@@ -169,7 +169,8 @@ describe('savings observed outcomes', () => {
     mocks.complete.mockResolvedValue({ text: JSON.stringify({ summary, suggestions: [] }), model: 'mock-model' });
 
     const response = await POST();
-    const expected = { summary, suggestions: fallback, wastedMonthlyCents: 0, source: 'ai' };
+    // The summary is the model's; the list is the family's own numbers, and says so (N15).
+    const expected = { summary, suggestions: fallback, wastedMonthlyCents: 0, source: 'ai', suggestionsSource: 'fallback' };
 
     expect(await response.json()).toEqual(expected);
     expect(mocks.failed).not.toHaveBeenCalled();
