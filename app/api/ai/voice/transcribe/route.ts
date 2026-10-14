@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { refuseClosedOrTrialEnded } from '@/lib/server/account-standing';
 import { assertAIRequestFamily, getAIRequestTranslations } from '@/lib/server/ai-request-context';
-import { AI_ASSISTANT_FEATURE_KEY, accessDeniedResponse, assertAIAccess, authenticateAI } from '@/lib/server/ai-access';
+import { accessDeniedResponse, assertAIAllowance, authenticateAI } from '@/lib/server/ai-access';
 import { getOpenAIKey } from '@/lib/ai/settings';
 import { cleanTranscript, isValidAudioUpload, VOICE_COMMAND_MAX_BYTES } from '@/lib/ai/voice';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -41,12 +41,14 @@ export async function POST(req: NextRequest) {
       { error: t('transcribe.tooManyVoiceRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
-    // A paid model call like any other: the family's plan, the assistant's
-    // switch and the Free plan's monthly allowance apply, and the call is
-    // recorded below where that allowance counts it. It had none of these, so
-    // any member of any family, Free included, could transcribe without limit
-    // and none of it showed in the family's usage.
-    const access = await assertAIAccess(ctx, { db: supabase, featureKey: AI_ASSISTANT_FEATURE_KEY });
+    // A paid model call like any other: the Free plan's monthly allowance
+    // applies, and the call is recorded below where that allowance counts it.
+    // It had none of this, so any member of any family, Free included, could
+    // transcribe without limit and none of it showed in the family's usage.
+    // The allowance alone, not the assistant's tier or its Off switch: voice is
+    // how a member types into the concierge's Ask bar and the command bar too,
+    // and switching the assistant Off must not take the microphone off those.
+    const access = await assertAIAllowance(ctx, { db: supabase });
     if (!access.ok) return accessDeniedResponse(access);
     const apiKey = await getOpenAIKey(supabase);
     if (!apiKey) {

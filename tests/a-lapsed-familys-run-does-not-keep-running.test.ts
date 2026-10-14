@@ -47,6 +47,7 @@ vi.mock('@/lib/server/ai-access', async (importOriginal) => ({
 }));
 
 const { GET: tick } = await import('@/app/api/cron/ai-runs/route');
+const { claimRun } = await import('@/lib/ai/runs/store');
 // Loaded once, outside any case: the page's module graph is large.
 const { default: RunDetailPage } = await import('@/app/(app)/dashboard/concierge/runs/[id]/page');
 
@@ -118,6 +119,31 @@ describe('the ai-runs cron', () => {
 
     expect(h.executed).toEqual([]);
     expect(body).toMatchObject({ executed: 0, deferredUnentitled: 3 });
+  });
+
+  // N8, attempts: `claim_ai_runs` counts an attempt on every claim, and the
+  // daily put-back spent it, so a family that lapsed for a few days came back
+  // to a run at its `max_attempts` — refused by `claimRun` on every
+  // interactive kick (the approval, Resume, Edit, Try again) once it paid.
+  it.each([
+    ['whose trial ended unpaid', 'run-lapsed', LAPSED, () => {}],
+    ['that closed its account', 'run-free', FREE, () => { Object.assign(db.table('families').find((f) => f.id === FREE) as Row, { closed_at: null }); }],
+  ] as const)('puts back a run of a family %s day after day without spending its attempts', async (_label, runId, familyId, reopen) => {
+    if (familyId === FREE) Object.assign(db.table('families').find((f) => f.id === FREE) as Row, { closed_at: new Date(NOW - 86_400_000).toISOString() });
+    const DAY = 24 * 60 * 60_000;
+
+    for (let day = 0; day < 6; day += 1) {
+      vi.setSystemTime(NOW + day * (DAY + 60_000));
+      expect((await tick(request())).status).toBe(200);
+      expect(row(runId)).toMatchObject({ state: 'ready', lease_owner: null, attempt: 1 });
+    }
+
+    // The family pays again (and reopens), and the next kick picks the run up.
+    reopen();
+    db.seed('subscriptions', [{ id: `sub-${familyId}`, family_id: familyId, plan: 'basic', status: 'active', current_period_end: '2099-01-01T00:00:00Z' }]);
+    vi.setSystemTime(NOW + 6 * (DAY + 60_000));
+    expect(await claimRun(db as unknown as SupabaseClient<Database>, runId)).toMatchObject({ ok: true, data: { claimed: true } });
+    expect(row(runId)).toMatchObject({ state: 'executing', attempt: 2 });
   });
 
   it('runs nothing in a wave whose families’ plans cannot be read, and says so', async () => {

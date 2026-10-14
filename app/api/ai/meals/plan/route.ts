@@ -21,7 +21,7 @@ import { readPlannerMeals, readPlannerRecipes, readPlannerPantry } from '@/lib/m
 import type { MealType } from '@/lib/database.types';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
-import { AI_ASSISTANT_FEATURE_KEY, accessDeniedResponse, assertAIAccess } from '@/lib/server/ai-access';
+import { accessDeniedResponse, assertAIAllowance } from '@/lib/server/ai-access';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
@@ -90,8 +90,10 @@ export async function POST(req: Request) {
   // A model call, so the Free plan's monthly AI allowance applies here as it
   // does at /api/ai and on the Habits, Journal and Notes helpers: these rows
   // count toward the limit the assistant refuses on, so a Free family past its
-  // ten kept getting week plans while being refused there.
-  const access = await assertAIAccess(ctx, { db: supabase, featureKey: AI_ASSISTANT_FEATURE_KEY });
+  // ten kept getting week plans while being refused there. The allowance
+  // alone: whether the planner is available is the Meals gate above, not the
+  // assistant's tier or its Off switch.
+  const access = await assertAIAllowance(ctx, { db: supabase });
   if (!access.ok) return accessDeniedResponse(access);
 
   // Candidate dishes ------------------------------------------------------
