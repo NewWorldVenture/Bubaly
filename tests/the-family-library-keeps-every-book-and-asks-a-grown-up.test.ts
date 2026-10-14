@@ -212,7 +212,10 @@ describe('S13 — content reaches every child\'s library only from a grown-up', 
       status: 200 as const, headers: { 'content-type': contentType }, body: Readable.from([Buffer.from('bytes')]), close: vi.fn(),
     });
     async function fetchMedia() {
-      base.seed('library_items', [{ id: 'film-1', family_id: FAMILY, kind: 'book', guid: 'manual:film', title: 'A film', media_url: 'https://videos.example.com/film.mp4' }]);
+      // Added by a parent: a book that names no writer is not played at all
+      // (tests/library-content-is-fetched-only-from-an-adults-row.test.ts).
+      base.seed('family_members', [{ id: 'member-parent', family_id: FAMILY, user_id: 'user-parent', role: 'parent', is_active: true }]);
+      base.seed('library_items', [{ id: 'film-1', family_id: FAMILY, feed_id: null, kind: 'book', guid: 'manual:film', title: 'A film', media_url: 'https://videos.example.com/film.mp4', created_by: 'user-parent' }]);
       const { GET } = await import('@/app/library/media/[itemId]/route');
       const { NextRequest } = await import('next/server');
       return GET(new NextRequest('https://bubaly.test/library/media/film-1'), { params: Promise.resolve({ itemId: 'film-1' }) });

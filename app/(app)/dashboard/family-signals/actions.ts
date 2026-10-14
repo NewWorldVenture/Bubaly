@@ -9,6 +9,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { runSignalDetection } from '@/lib/intelligence/hard-signals-server';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
+import { readsHouseholdMoney } from '@/lib/finance/household-money';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -19,7 +20,11 @@ export async function refreshSignalsAction(): Promise<Result<{ signals: number }
   // The stored sentence is worded for the person who pressed Refresh.
   const { locale } = await getLocaleContext();
   const t = await getTranslations();
-  const res = await runSignalDetection(supabase, ctx.active.familyId, locale.code, t, new Date(), ctx.active.family.timezone || 'UTC');
+  // Anyone may Refresh, on their own client. Only a parent's or an adult's scan
+  // reads the household (SignalReach): anyone else's leaves budget drift alone
+  // and retires nothing it might simply not be able to see.
+  const reach = readsHouseholdMoney(ctx.active.role) ? 'household' : 'member';
+  const res = await runSignalDetection(supabase, ctx.active.familyId, locale.code, t, new Date(), ctx.active.family.timezone || 'UTC', reach);
   if (!res.ok) return { ok: false, error: res.error ?? 'Could not refresh signals' };
   revalidatePath('/dashboard/family-signals');
   return { ok: true, data: { signals: res.signals } };
@@ -33,9 +38,15 @@ export async function setSignalStatusAction(id: string, status: 'active' | 'ackn
   const supabase = await createServer();
   // Dismissing a signal that stays `active` brings it straight back on the next
   // refresh, and the family reads that as the app ignoring them. Audit C1-S9-60.
-  const { data: set, error } = await supabase.from('family_signals')
-    .update({ status })
-    .eq('id', id).eq('family_id', ctx.active.familyId).select('id');
+  //
+  // A budget-drift signal is the household's money, and a decision on it is
+  // kept for the whole family (detection never reopens one), so it is a parent's
+  // or an adult's to make: anyone else's write matches no budget-drift row. In
+  // the statement, not after a read, so there is nothing to race.
+  const { data: set, error } = await (readsHouseholdMoney(ctx.active.role)
+    ? supabase.from('family_signals').update({ status }).eq('id', id).eq('family_id', ctx.active.familyId)
+    : supabase.from('family_signals').update({ status }).eq('id', id).eq('family_id', ctx.active.familyId).neq('kind', 'budget_drift')
+  ).select('id');
   if (error) return { ok: false, error: describeActionError(error, t('actions.couldNotUpdateThatSignal')) };
   if (wroteNoRows(set)) return { ok: false, error: t('actions.couldNotUpdateThatSignal') };
   revalidatePath('/dashboard/family-signals');

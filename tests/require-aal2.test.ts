@@ -115,6 +115,7 @@ describe('the pages that hold money, documents and trust call the guard', () => 
     ['app/(app)/dashboard/bills/page.tsx', 'money', '/dashboard/bills'],
     ['app/(app)/dashboard/payments/page.tsx', 'money', '/dashboard/payments'],
     ['app/(app)/dashboard/autopay/page.tsx', 'money', '/dashboard/autopay'],
+    ['app/(app)/dashboard/due/page.tsx', 'money', '/dashboard/due'],
     ['app/(app)/dashboard/savings/page.tsx', 'money', '/dashboard/savings'],
     ['app/(app)/dashboard/subscriptions/page.tsx', 'money', '/dashboard/subscriptions'],
     ['app/(app)/dashboard/money-timeline/page.tsx', 'money', '/dashboard/money-timeline'],

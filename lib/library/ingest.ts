@@ -75,9 +75,17 @@ export async function ingestFeed(
     console.error('[library] feed metadata update failed', { feedId, error: describeError ?? 'no rows updated' });
   }
 
+  // One row per guid, the first the feed lists. The upsert below is ONE
+  // statement keyed on (family_id, feed_key, guid), and Postgres refuses the
+  // whole statement (21000, "cannot affect row a second time") when two of its
+  // rows share a key — a re-posted episode, two entries on one enclosure, two
+  // guids equal after the 400-character cut. The feed then failed on every
+  // refresh and every nightly run, and never gained another episode.
+  const seen = new Set<string>();
   const rows = parsed.items
     // An entry with nothing to play and nowhere to go is not worth a row.
     .filter((item) => item.mediaUrl || item.pageUrl)
+    .filter((item) => !seen.has(item.guid) && Boolean(seen.add(item.guid)))
     .map((item) => ({
       family_id: familyId, feed_id: feedId,
       kind: 'episode' as const,

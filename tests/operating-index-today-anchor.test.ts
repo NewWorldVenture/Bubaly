@@ -65,7 +65,7 @@ const TZ = 'America/Los_Angeles';
 describe('the operating index anchors its recap to today', () => {
   it('reads the prior snapshot from strictly BEFORE today, not just the newest rows', async () => {
     const { db, calls } = makeDb();
-    await loadOperatingIndex(db, 'fam-1', TZ, NOW);
+    await loadOperatingIndex(db, 'fam-1', TZ, 'household', NOW);
 
     const snapshotReads = calls.filter((c) => c.table === 'family_operating_index' && c.kind === 'select');
     expect(snapshotReads.length, 'the prior-snapshot read disappeared').toBeGreaterThan(0);
@@ -82,7 +82,7 @@ describe('the operating index anchors its recap to today', () => {
     // The upsert is why a morning visit fixes the staleness for every other
     // surface rather than only for the page that triggered it.
     const { db, calls } = makeDb();
-    await loadOperatingIndex(db, 'fam-1', TZ, NOW);
+    await loadOperatingIndex(db, 'fam-1', TZ, 'household', NOW);
     expect(calls.some((c) => c.table === 'family_operating_index' && c.kind === 'upsert')).toBe(true);
   });
 

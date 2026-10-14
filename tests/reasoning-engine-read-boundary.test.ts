@@ -45,7 +45,7 @@ describe('loadReasoningReport family_signals read boundary', () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     const supabase = fakeSupabase({ data: null, error: { message: 'permission denied for table family_signals' } });
 
-    const report = await loadReasoningReport(supabase, 'fam-1', TZ, LOCALE, t, new Date('2026-07-16T12:00:00Z'));
+    const report = await loadReasoningReport(supabase, 'fam-1', TZ, LOCALE, t, 'household', new Date('2026-07-16T12:00:00Z'));
 
     expect(report.answers).toHaveLength(6);
     expect(report.allClear).toBe(false);
@@ -60,7 +60,7 @@ describe('loadReasoningReport family_signals read boundary', () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     const supabase = fakeSupabase({ data: [], error: null });
 
-    const report = await loadReasoningReport(supabase, 'fam-1', TZ, LOCALE, t, new Date('2026-07-16T12:00:00Z'));
+    const report = await loadReasoningReport(supabase, 'fam-1', TZ, LOCALE, t, 'household', new Date('2026-07-16T12:00:00Z'));
 
     const logged = err.mock.calls.map((c) => String(c[0]));
     expect(logged).not.toContain('[reasoning-engine] family_signals read failed');

@@ -72,13 +72,13 @@ describe('signal history survives reconciliation', () => {
       defaults: { family_signals: { status: 'active' } },
     });
     db.seed('routine_templates', [{ id: 'routine-1', family_id: 'f1', name: 'Bedtime', weekday_mask: 127, is_active: true }]);
-    expect((await runSignalDetection(db, 'f1', 'en-US', echo, NOW, 'UTC')).ok).toBe(true);
+    expect((await runSignalDetection(db, 'f1', 'en-US', echo, NOW, 'UTC', 'household')).ok).toBe(true);
     const signal = db.table('family_signals')[0];
     expect(signal.status).toBe('active');
     signal.status = status;
     signal.updated_at = '2026-09-08T10:00:00.000Z';
     const before = { ...signal };
-    expect((await runSignalDetection(db, 'f1', 'en-US', echo, new Date('2026-09-10T12:00:00.000Z'), 'UTC')).ok).toBe(true);
+    expect((await runSignalDetection(db, 'f1', 'en-US', echo, new Date('2026-09-10T12:00:00.000Z'), 'UTC', 'household')).ok).toBe(true);
     expect(db.table('family_signals')).toEqual([before]);
   });
 });

@@ -24,6 +24,8 @@ export const GUEST_WITHHELD_PREFIXES = [
   '/dashboard/billing',
   '/dashboard/bills',
   '/dashboard/budgets',
+  // Due Reminders lists every unpaid bill, as /dashboard/bills does.
+  '/dashboard/due',
   '/dashboard/expenses',
   '/dashboard/family-cfo',
   '/dashboard/money-timeline',
