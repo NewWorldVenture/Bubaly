@@ -85,7 +85,9 @@ async function fixture(page: Page) {
       '@/lib/notifications/actions':{notificationAction:()=>({href:'#',isFallback:true})},
       '@/app/(app)/actions':{setDefaultDashboardAction:noop,updateMyProfileAction:noop},
       // The Family tab's removal button; nothing here reaches it, so it refuses.
-      '@/app/(app)/family/member-actions':{removeFamilyMemberAction:async()=>{throw Error('Unexpected member removal')}},
+      '@/app/(app)/family/member-actions':{removeFamilyMemberAction:async()=>{throw Error('Unexpected member removal')},updateFamilyMemberAction:async()=>{throw Error('Unexpected member edit')}},
+      // The notification bin's dismissal; nothing here reaches it, so it refuses.
+      '@/app/(app)/dashboard/notifications/actions':{dismissNotificationAction:async()=>{throw Error('Unexpected notification dismissal')}},
       '@/app/(app)/dashboard/approvals-actions':{decideApproval:noop},
       '@/app/(app)/dashboard/chores/actions':{setChoreStatusAction:noop},
       '@/app/(app)/settings/notification-actions':{

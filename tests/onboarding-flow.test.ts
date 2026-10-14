@@ -102,7 +102,9 @@ describe('buildFinalizePayload', () => {
     expect(p.details.childAges).toEqual([8, 11]);
     expect(p.details.goals).toEqual(['chores', 'calendar']);
     expect(p.members).toHaveLength(2);
-    expect(p.members[1]).toEqual({ kind: 'invite', email: 'sam@example.com', role: 'adult' });
+    // The draft's own ids go along: they are what a retried finish keys each row by.
+    expect(p.members[0]).toEqual({ kind: 'local', id: 'm1', name: 'Leo', role: 'child', birthday: undefined, color: '#f4996e' });
+    expect(p.members[1]).toEqual({ kind: 'invite', id: 'm2', email: 'sam@example.com', role: 'adult' });
     expect(p.appearance).toEqual({ color: '#7c6dff', age: 34, avatarUrl: 'data:image/png;base64,xxx', pin: '1357' });
   });
 

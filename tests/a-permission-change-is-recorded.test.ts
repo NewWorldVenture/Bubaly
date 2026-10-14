@@ -230,15 +230,21 @@ describe('the five reserved rule-change decisions', () => {
     }
   });
 
-  it('are written, except role_changed — which has nowhere to be written from', () => {
+  it('are written — role_changed by the server action both roster editors now use', () => {
     const actions = readFileSync('app/(app)/dashboard/trust/actions.ts', 'utf8');
     for (const d of ['policy_changed', 'grant_changed', 'delegation_changed', 'emergency_ended']) {
       expect(actions, `nothing writes ${d}`).toContain(`'${d}'`);
     }
-    // Roles are edited by a direct browser write with no server action, and the
-    // ledger is service-role-only. If this ever becomes false, someone has
-    // added the server path and role_changed should be written there.
-    const familyModule = readFileSync('components/modules/family-module.tsx', 'utf8');
-    expect(familyModule).toMatch(/from\('family_members'\)\s*\.\s*update\(payload\)/);
+    // Roles were edited by a direct browser write with no server action, so
+    // role_changed had nowhere to be written from. The edit is a server action
+    // now (updateFamilyMemberAction), which writes it; neither editor writes
+    // family_members.update from the browser any more.
+    const memberActions = readFileSync('app/(app)/family/member-actions.ts', 'utf8');
+    expect(memberActions).toContain("decision: 'role_changed'");
+    for (const file of ['components/modules/family-module.tsx', 'components/modules/settings-module.tsx']) {
+      const src = readFileSync(file, 'utf8');
+      expect(src, file).toContain('updateFamilyMemberAction(');
+      expect(src, file).not.toMatch(/from\('family_members'\)\s*\.\s*update\(/);
+    }
   });
 });

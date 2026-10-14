@@ -11,6 +11,7 @@ import { buildConciergeDigest, digestToPromptLines, type ConciergeSnapshot } fro
 import { formatConciergeDigest } from '@/lib/concierge/digest-display';
 import { buildBrief, type BriefNotice } from '@/lib/briefing/build';
 import { listUnread } from '@/lib/services/notifications';
+import { isManager } from '@/lib/constants/roles';
 import { readBriefDecisions } from '@/lib/briefing/decisions';
 import { medicationsDueOn, weekdayOf, type MedicationScheduleRow } from '@/lib/briefing/sources';
 import { viewerFor } from '@/lib/ai/context/policy';
@@ -542,11 +543,17 @@ ${UNTRUSTED_CONTENT_RULE}
     // response shows — marking the whole unread queue read here would silently
     // swallow notices the family never saw.
     if (brief.alsoToday.length > 0) {
+      // Only the reader's own rows, unless they manage the family. A legacy
+      // family-wide row (user_id NULL) has ONE is_read for everyone, so a
+      // child or guest opening the brief marked it read for every parent too;
+      // the generator writes one row per member now, and what is left of the
+      // shared ones is a manager's to clear.
+      const own = isManager(ctx.active.role) ? `user_id.eq.${ctx.user.id},user_id.is.null` : `user_id.eq.${ctx.user.id}`;
       // Rows deliberately not checked — reason below. Audit C1-S9-62.
       const { error: markError } = await supabase
         .from('notifications')
         .update({ is_read: true })
-        .eq('family_id', familyId)
+        .eq('family_id', familyId).or(own)
         .in('id', brief.alsoToday.map(item => item.id));
       // A brief that showed the notices is still a correct brief; failing to
       // mark them read only means they appear again tomorrow. Deliberately NOT

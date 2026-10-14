@@ -9,18 +9,22 @@ The [review receipt](review.json) contains the exact catalog SELECT and response
 SHA-256 hashes for all 461 runnable and 27 held migration files, current CI
 references, and a regenerated offline review. The older package's observations
 remain dated evidence; they are not silently presented as current measurements.
+A subsequent GitHub-only supplement records PR1047's merge and main advancing
+to `ebcef477a74f446e0cf806254817e8c7559a999c`. The draft includes that main;
+its fresh combined-head checks must qualify that composition. The production
+catalog observation remains the one timed below.
 
 ## Current release boundaries
 
 | Boundary | Evidence | Required before release |
 | --- | --- | --- |
-| Application base | Main `06ac6e3b54cbd8da33bfa7ab10f0a860078cc5c9`; all 13 jobs in [CI 38471227255](https://github.com/NewWorldVenture/Bubaly/actions/runs/38471227255) passed. | Fresh checks on the final composed release commit; source fixes in this audit do not need new DDL. |
+| Application base | Initial snapshot `06ac6e3b54cbd8da33bfa7ab10f0a860078cc5c9` had all 13 [CI jobs](https://github.com/NewWorldVenture/Bubaly/actions/runs/38471227255) pass. PR1047 then merged, advancing main to `ebcef477a74f446e0cf806254817e8c7559a999c`; this draft incorporates it. | Fresh checks on the combined draft head; old-base PR1048 run38496559270 does not qualify the new composition. Source fixes in this audit do not need new DDL. |
 | Production history | Catalog SELECT at `2026-10-14T01:22:25.235551Z`: PostgreSQL 17.6, 192 ledger entries, lexical maximum `0176`. | Reconcile exact history and actual schema effects. Never infer all later effects are absent, stamp history, or replay the backlog from this count. |
 | Legacy forward release | Both unchanged gates refuse: source is outside the pinned release; retained live baseline differs. | Construct a separately reviewed manifest from a fresh complete baseline and dependency closure. Do not weaken either gate. |
 | Bill anchors | `bills.due_day` is absent in the fresh observation; 0488 remains held. | Review dependencies and existing-row behavior, rehearse the exact schema and app combination, then authorize an explicit release. |
 | Copied reminders | Fresh catalog shows only the original permissive card policy; selected origin columns and the 0486 audience-pinning function are absent. | Reconcile live policies, approve a coordinated schema/application cutover, and qualify PR1046's atomic origin writers and readers. App checks alone do not close database privacy. |
 | PR1046 | Head `420958ea0028b8e0981fe3d09a5846b1806e3c92`: dedicated privacy/E2E pass; 96 unit failures in 17 files in each zone. | Update obsolete fixture contracts without weakening privacy assertions; investigate remaining differences; require all normal checks on the corrected head. |
-| PR1047 | Head `fecd36a73c216df1952fa1ac97014c02a22b3e80`: unit/E2E pending at capture. | Require completed exact-head gates; preserve held 0512 and review its database dependency separately. |
+| PR1047 | Head `fecd36a73c216df1952fa1ac97014c02a22b3e80` merged at `2026-10-14T01:38:07Z`; all 15 GitHub workflow checks passed. Initial pending capture is preserved in the receipt. | Require fresh checks on the composed draft; preserve held 0512 and review its database dependency separately. |
 | Cron | [Run 38490140416](https://github.com/NewWorldVenture/Bubaly/actions/runs/38490140416/job/115613132673) failed because Actions `CRON_SECRET` was unavailable, before calling any route. | Separately authorized matching application/Actions configuration and a controlled delivery check. This does not establish the current application's secret value or authorize dispatch. |
 
 The selected held worker/feed/quota/sync RPCs are also absent in the fresh

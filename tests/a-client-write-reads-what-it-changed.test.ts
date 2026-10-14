@@ -263,8 +263,14 @@ describe('access, defaults and undo say only what landed (C1-S9-83)', () => {
   });
 
   it('settings, connections, chores, decisions: the zero-row check precedes the claim', () => {
+    // The member edit moved into updateFamilyMemberAction, which reads back the
+    // rows it wrote; the screen claims success only on its `ok`.
     const settings = readFileSync('components/modules/settings-module.tsx', 'utf8');
-    expect(at(settings, 'if (wroteNoRows(edited))')).toBeLessThan(at(settings, "success(t('settingsModule.memberUpdated'))"));
+    expect(at(settings, 'if (!res.ok) return toastError(res.error);')).toBeLessThan(at(settings, "success(t('settingsModule.memberUpdated'))"));
+    const memberActions = readFileSync('app/(app)/family/member-actions.ts', 'utf8');
+    const edit = bodyOf(memberActions, 'export async function updateFamilyMemberAction(', '\n}\n');
+    expect(at(edit, ".eq('is_active', true).eq('updated_at', target.updated_at)\n    .select('id');")).toBeLessThan(at(edit, 'if (wroteNoRows(rows))'));
+    expect(at(edit, 'if (wroteNoRows(rows))')).toBeLessThan(edit.lastIndexOf('return { ok: true };'));
     const connections = readFileSync('components/modules/connections-module.tsx', 'utf8');
     expect(connections).toContain(".delete().eq('family_id', familyId).eq('provider', p.id).select('id')");
     expect(at(connections, 'if (wroteNoRows(removed))')).toBeLessThan(at(connections, "success(t('connections.nameDisconnected'"));

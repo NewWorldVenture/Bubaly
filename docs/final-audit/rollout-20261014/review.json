@@ -3876,5 +3876,896 @@
       "atomic_writer_functions": []
     },
     "qualification": "Exact PR1046 schema names verified at captured head. Earlier selected-columns query included autopilot_source_card_id instead of actual autopilot_card_id; that earlier receipt is preserved and cannot establish absence of the actual card-id column."
+  },
+  "compositionFreshness": {
+    "qualification": "GitHub-only supplement after PR1047 merged. Original sourceBase and production observations above remain dated evidence. The draft integrates ebcef477; full acceptance requires new composed-head CI. No production operation.",
+    "sourceSha256": "485b9cceeb847e61d7c5f6224cfe2ed1e2c086c24541f4a3da270a56c337c48e",
+    "receipt": {
+      "schema_version": 1,
+      "observed_started_at_utc": "2026-10-14T01:54:13.997508Z",
+      "observed_completed_at_utc": "2026-10-14T01:54:16.338940Z",
+      "repository": "NewWorldVenture/Bubaly",
+      "purpose": "Read-only GitHub freshness and static migration/allocation comparison for locally prepared PR1048 plus merged PR1047 composition. No production API/database/deployment calls and no application or migration changes performed.",
+      "pr1047": {
+        "number": 1047,
+        "url": "https://github.com/NewWorldVenture/Bubaly/pull/1047",
+        "state": "closed",
+        "draft": false,
+        "merged": true,
+        "merged_at": "2026-10-14T01:38:07Z",
+        "head_sha": "fecd36a73c216df1952fa1ac97014c02a22b3e80",
+        "head_ref": "claude/roadmap-implementation-ld8bon",
+        "base_sha": "06ac6e3b54cbd8da33bfa7ab10f0a860078cc5c9",
+        "base_ref": "main",
+        "merge_commit_sha": "ebcef477a74f446e0cf806254817e8c7559a999c",
+        "checks": {
+          "observed_at_utc": "2026-10-14T01:54:15.448860Z",
+          "head_sha": "fecd36a73c216df1952fa1ac97014c02a22b3e80",
+          "check_runs_total": 17,
+          "check_runs": [
+            {
+              "id": 115634007778,
+              "name": "E2E (public · a11y · authenticated · mobile device matrix)",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "fecd36a73c216df1952fa1ac97014c02a22b3e80",
+              "started_at": "2026-10-14T01:37:14Z",
+              "completed_at": "2026-10-14T01:37:24Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38494633980/job/115634007778"
+            },
+            {
+              "id": 115631077845,
+              "name": "Typecheck · Lint · Test · Build",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "fecd36a73c216df1952fa1ac97014c02a22b3e80",
+              "started_at": "2026-10-14T01:27:00Z",
+              "completed_at": "2026-10-14T01:27:18Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38494633980/job/115631077845"
+            },
+            {
+              "id": 115627497471,
+              "name": "E2E shard (2/4)",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "fecd36a73c216df1952fa1ac97014c02a22b3e80",
+              "started_at": "2026-10-14T01:14:38Z",
+              "completed_at": "2026-10-14T01:29:41Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38494633980/job/115627497471"
+            },
+            {
+              "id": 115627497466,
+              "name": "Unit tests (America/Los_Angeles)",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "fecd36a73c216df1952fa1ac97014c02a22b3e80",
+              "started_at": "2026-10-14T01:14:38Z",
+              "completed_at": "2026-10-14T01:23:25Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38494633980/job/115627497466"
+            },
+            {
+              "id": 115627497450,
+              "name": "E2E shard (4/4)",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "fecd36a73c216df1952fa1ac97014c02a22b3e80",
+              "started_at": "2026-10-14T01:14:37Z",
+              "completed_at": "2026-10-14T01:37:12Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38494633980/job/115627497450"
+            },
+            {
+              "id": 115627497444,
+              "name": "E2E shard (3/4)",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "fecd36a73c216df1952fa1ac97014c02a22b3e80",
+              "started_at": "2026-10-14T01:14:38Z",
+              "completed_at": "2026-10-14T01:31:12Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38494633980/job/115627497444"
+            },
+            {
+              "id": 115627497427,
+              "name": "Unit tests (UTC)",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "fecd36a73c216df1952fa1ac97014c02a22b3e80",
+              "started_at": "2026-10-14T01:14:38Z",
+              "completed_at": "2026-10-14T01:26:57Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38494633980/job/115627497427"
+            },
+            {
+              "id": 115627497426,
+              "name": "Unit tests (Asia/Tokyo)",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "fecd36a73c216df1952fa1ac97014c02a22b3e80",
+              "started_at": "2026-10-14T01:14:37Z",
+              "completed_at": "2026-10-14T01:23:36Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38494633980/job/115627497426"
+            },
+            {
+              "id": 115627497420,
+              "name": "Build · Generated route typecheck",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "fecd36a73c216df1952fa1ac97014c02a22b3e80",
+              "started_at": "2026-10-14T01:14:37Z",
+              "completed_at": "2026-10-14T01:18:47Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38494633980/job/115627497420"
+            },
+            {
+              "id": 115627497370,
+              "name": "PostgreSQL messaging roles and concurrent writes",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "fecd36a73c216df1952fa1ac97014c02a22b3e80",
+              "started_at": "2026-10-14T01:14:37Z",
+              "completed_at": "2026-10-14T01:16:22Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38494633983/job/115627497370"
+            },
+            {
+              "id": 115627497353,
+              "name": "E2E shard (1/4)",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "fecd36a73c216df1952fa1ac97014c02a22b3e80",
+              "started_at": "2026-10-14T01:14:37Z",
+              "completed_at": "2026-10-14T01:29:31Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38494633980/job/115627497353"
+            },
+            {
+              "id": 115627497307,
+              "name": "Audits · Lint · i18n",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "fecd36a73c216df1952fa1ac97014c02a22b3e80",
+              "started_at": "2026-10-14T01:14:37Z",
+              "completed_at": "2026-10-14T01:15:37Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38494633980/job/115627497307"
+            },
+            {
+              "id": 115627497283,
+              "name": "Database (migration replay · RLS boundary probes)",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "fecd36a73c216df1952fa1ac97014c02a22b3e80",
+              "started_at": "2026-10-14T01:14:37Z",
+              "completed_at": "2026-10-14T01:17:08Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38494633980/job/115627497283"
+            },
+            {
+              "id": 115627497147,
+              "name": "Mobile (Expo) · Typecheck · Config",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "fecd36a73c216df1952fa1ac97014c02a22b3e80",
+              "started_at": "2026-10-14T01:14:38Z",
+              "completed_at": "2026-10-14T01:15:10Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38494633980/job/115627497147"
+            },
+            {
+              "id": 115627497029,
+              "name": "Messaging privacy, concurrency and browser lifecycle",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "fecd36a73c216df1952fa1ac97014c02a22b3e80",
+              "started_at": "2026-10-14T01:14:37Z",
+              "completed_at": "2026-10-14T01:17:14Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38494634031/job/115627497029"
+            },
+            {
+              "id": 115627491160,
+              "name": "Vercel Preview Comments",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "fecd36a73c216df1952fa1ac97014c02a22b3e80",
+              "started_at": "2026-10-14T01:14:33Z",
+              "completed_at": "2026-10-14T01:14:33Z",
+              "details_url": "https://vercel.com/github"
+            },
+            {
+              "id": 115627476172,
+              "name": "Supabase Preview",
+              "status": "completed",
+              "conclusion": "skipped",
+              "head_sha": "fecd36a73c216df1952fa1ac97014c02a22b3e80",
+              "started_at": "2026-10-14T01:14:30Z",
+              "completed_at": "2026-10-14T01:14:30Z",
+              "details_url": "https://supabase.com/dashboard/project/ltcxlbipiihclxwioyqj/branches"
+            }
+          ],
+          "combined_commit_status": "success",
+          "commit_statuses": [
+            {
+              "id": 56284825253,
+              "context": "Vercel",
+              "state": "success",
+              "updated_at": "2026-10-14T01:14:33Z",
+              "target_url": "https://vercel.com/newworldventure/bubaly/WmJjzCQ2MRNFb2fCVv2jnDC2QvoW"
+            }
+          ]
+        }
+      },
+      "main": {
+        "ref": "refs/heads/main",
+        "sha": "ebcef477a74f446e0cf806254817e8c7559a999c",
+        "expected_1047_merge_sha": "ebcef477a74f446e0cf806254817e8c7559a999c",
+        "matches_1047_merge": true,
+        "sha_rechecked_at_completion": "ebcef477a74f446e0cf806254817e8c7559a999c",
+        "stable_during_observation": true,
+        "checks": {
+          "observed_at_utc": "2026-10-14T01:54:15.537911Z",
+          "head_sha": "ebcef477a74f446e0cf806254817e8c7559a999c",
+          "check_runs_total": 15,
+          "check_runs": [
+            {
+              "id": 115637738120,
+              "name": "Typecheck · Lint · Test · Build",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "ebcef477a74f446e0cf806254817e8c7559a999c",
+              "started_at": "2026-10-14T01:50:48Z",
+              "completed_at": "2026-10-14T01:51:02Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38496789186/job/115637738120"
+            },
+            {
+              "id": 115635044437,
+              "name": "Supabase Preview",
+              "status": "completed",
+              "conclusion": "failure",
+              "head_sha": "ebcef477a74f446e0cf806254817e8c7559a999c",
+              "started_at": "2026-10-14T01:38:39Z",
+              "completed_at": "2026-10-14T01:40:58Z",
+              "details_url": "https://supabase.com/dashboard/project/ltcxlbipiihclxwioyqj"
+            },
+            {
+              "id": 115634277666,
+              "name": "Messaging privacy, concurrency and browser lifecycle",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "ebcef477a74f446e0cf806254817e8c7559a999c",
+              "started_at": "2026-10-14T01:38:42Z",
+              "completed_at": "2026-10-14T01:41:34Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38496789220/job/115634277666"
+            },
+            {
+              "id": 115634277558,
+              "name": "PostgreSQL messaging roles and concurrent writes",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "ebcef477a74f446e0cf806254817e8c7559a999c",
+              "started_at": "2026-10-14T01:38:13Z",
+              "completed_at": "2026-10-14T01:40:03Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38496789358/job/115634277558"
+            },
+            {
+              "id": 115634276687,
+              "name": "E2E shard (3/4)",
+              "status": "in_progress",
+              "conclusion": null,
+              "head_sha": "ebcef477a74f446e0cf806254817e8c7559a999c",
+              "started_at": "2026-10-14T01:38:14Z",
+              "completed_at": null,
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38496789186/job/115634276687"
+            },
+            {
+              "id": 115634276641,
+              "name": "E2E shard (4/4)",
+              "status": "in_progress",
+              "conclusion": null,
+              "head_sha": "ebcef477a74f446e0cf806254817e8c7559a999c",
+              "started_at": "2026-10-14T01:38:13Z",
+              "completed_at": null,
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38496789186/job/115634276641"
+            },
+            {
+              "id": 115634276622,
+              "name": "E2E shard (1/4)",
+              "status": "in_progress",
+              "conclusion": null,
+              "head_sha": "ebcef477a74f446e0cf806254817e8c7559a999c",
+              "started_at": "2026-10-14T01:38:14Z",
+              "completed_at": null,
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38496789186/job/115634276622"
+            },
+            {
+              "id": 115634276599,
+              "name": "Audits · Lint · i18n",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "ebcef477a74f446e0cf806254817e8c7559a999c",
+              "started_at": "2026-10-14T01:38:13Z",
+              "completed_at": "2026-10-14T01:39:10Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38496789186/job/115634276599"
+            },
+            {
+              "id": 115634276528,
+              "name": "Build · Generated route typecheck",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "ebcef477a74f446e0cf806254817e8c7559a999c",
+              "started_at": "2026-10-14T01:38:13Z",
+              "completed_at": "2026-10-14T01:41:40Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38496789186/job/115634276528"
+            },
+            {
+              "id": 115634276519,
+              "name": "Unit tests (UTC)",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "ebcef477a74f446e0cf806254817e8c7559a999c",
+              "started_at": "2026-10-14T01:38:13Z",
+              "completed_at": "2026-10-14T01:50:30Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38496789186/job/115634276519"
+            },
+            {
+              "id": 115634276471,
+              "name": "E2E shard (2/4)",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "ebcef477a74f446e0cf806254817e8c7559a999c",
+              "started_at": "2026-10-14T01:38:13Z",
+              "completed_at": "2026-10-14T01:53:08Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38496789186/job/115634276471"
+            },
+            {
+              "id": 115634276460,
+              "name": "Unit tests (America/Los_Angeles)",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "ebcef477a74f446e0cf806254817e8c7559a999c",
+              "started_at": "2026-10-14T01:38:13Z",
+              "completed_at": "2026-10-14T01:48:10Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38496789186/job/115634276460"
+            },
+            {
+              "id": 115634276446,
+              "name": "Unit tests (Asia/Tokyo)",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "ebcef477a74f446e0cf806254817e8c7559a999c",
+              "started_at": "2026-10-14T01:38:13Z",
+              "completed_at": "2026-10-14T01:50:45Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38496789186/job/115634276446"
+            },
+            {
+              "id": 115634276432,
+              "name": "Mobile (Expo) · Typecheck · Config",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "ebcef477a74f446e0cf806254817e8c7559a999c",
+              "started_at": "2026-10-14T01:38:13Z",
+              "completed_at": "2026-10-14T01:38:39Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38496789186/job/115634276432"
+            },
+            {
+              "id": 115634276327,
+              "name": "Database (migration replay · RLS boundary probes)",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "ebcef477a74f446e0cf806254817e8c7559a999c",
+              "started_at": "2026-10-14T01:38:13Z",
+              "completed_at": "2026-10-14T01:40:05Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38496789186/job/115634276327"
+            }
+          ],
+          "combined_commit_status": "success",
+          "commit_statuses": [
+            {
+              "id": 56286058556,
+              "context": "Vercel",
+              "state": "success",
+              "updated_at": "2026-10-14T01:41:22Z",
+              "target_url": "https://vercel.com/newworldventure/bubaly/BVLApashycPj2s9d2DdS8unczfHq"
+            }
+          ]
+        }
+      },
+      "pr1046": {
+        "number": 1046,
+        "url": "https://github.com/NewWorldVenture/Bubaly/pull/1046",
+        "state": "open",
+        "draft": true,
+        "merged": false,
+        "merged_at": null,
+        "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+        "head_ref": "codex/current-reminder-origin-privacy-20261013",
+        "base_sha": "06ac6e3b54cbd8da33bfa7ab10f0a860078cc5c9",
+        "base_ref": "main",
+        "merge_commit_sha": "15bdac4a5b204bdab0cc2904200d4f22a1b95868",
+        "checks": {
+          "observed_at_utc": "2026-10-14T01:54:15.947884Z",
+          "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+          "check_runs_total": 41,
+          "check_runs": [
+            {
+              "id": 115625923231,
+              "name": "E2E (public · a11y · authenticated · mobile device matrix)",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T01:09:12Z",
+              "completed_at": "2026-10-14T01:09:26Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362977/job/115625923231"
+            },
+            {
+              "id": 115624253243,
+              "name": "Typecheck · Lint · Test · Build",
+              "status": "completed",
+              "conclusion": "failure",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T01:03:26Z",
+              "completed_at": "2026-10-14T01:03:41Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362977/job/115624253243"
+            },
+            {
+              "id": 115620328582,
+              "name": "E2E shard (1/4)",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:51:00Z",
+              "completed_at": "2026-10-14T01:09:08Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362977/job/115620328582"
+            },
+            {
+              "id": 115620328558,
+              "name": "Unit tests (America/Los_Angeles)",
+              "status": "completed",
+              "conclusion": "failure",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:51:05Z",
+              "completed_at": "2026-10-14T01:03:23Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362977/job/115620328558"
+            },
+            {
+              "id": 115620328521,
+              "name": "Build · Generated route typecheck",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:51:04Z",
+              "completed_at": "2026-10-14T00:56:16Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362977/job/115620328521"
+            },
+            {
+              "id": 115620328482,
+              "name": "E2E shard (3/4)",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:50:57Z",
+              "completed_at": "2026-10-14T01:06:06Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362977/job/115620328482"
+            },
+            {
+              "id": 115620328465,
+              "name": "Database (migration replay · RLS boundary probes)",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:50:59Z",
+              "completed_at": "2026-10-14T00:53:10Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362977/job/115620328465"
+            },
+            {
+              "id": 115620328440,
+              "name": "Mobile (Expo) · Typecheck · Config",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:50:59Z",
+              "completed_at": "2026-10-14T00:51:35Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362977/job/115620328440"
+            },
+            {
+              "id": 115620328436,
+              "name": "E2E shard (2/4)",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:50:57Z",
+              "completed_at": "2026-10-14T01:04:39Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362977/job/115620328436"
+            },
+            {
+              "id": 115620328432,
+              "name": "kid-household",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:49:58Z",
+              "completed_at": "2026-10-14T00:50:53Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362975/job/115620328432"
+            },
+            {
+              "id": 115620328401,
+              "name": "Unit tests (UTC)",
+              "status": "completed",
+              "conclusion": "failure",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:49:58Z",
+              "completed_at": "2026-10-14T01:02:19Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362977/job/115620328401"
+            },
+            {
+              "id": 115620328370,
+              "name": "Unit tests (Asia/Tokyo)",
+              "status": "completed",
+              "conclusion": "failure",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:49:58Z",
+              "completed_at": "2026-10-14T01:01:43Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362977/job/115620328370"
+            },
+            {
+              "id": 115620328367,
+              "name": "E2E shard (4/4)",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:50:55Z",
+              "completed_at": "2026-10-14T01:08:30Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362977/job/115620328367"
+            },
+            {
+              "id": 115620328202,
+              "name": "Audits · Lint · i18n",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:49:58Z",
+              "completed_at": "2026-10-14T00:50:41Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362977/job/115620328202"
+            },
+            {
+              "id": 115620328179,
+              "name": "kid-login-manager",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:50:57Z",
+              "completed_at": "2026-10-14T00:52:07Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492363083/job/115620328179"
+            },
+            {
+              "id": 115620328156,
+              "name": "PostgreSQL messaging roles and concurrent writes",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:50:51Z",
+              "completed_at": "2026-10-14T00:52:15Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362959/job/115620328156"
+            },
+            {
+              "id": 115620328142,
+              "name": "invite-rejoin-role",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:49:58Z",
+              "completed_at": "2026-10-14T00:50:41Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492363077/job/115620328142"
+            },
+            {
+              "id": 115620328110,
+              "name": "household-money",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:49:58Z",
+              "completed_at": "2026-10-14T00:50:54Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492363032/job/115620328110"
+            },
+            {
+              "id": 115620328046,
+              "name": "location-history",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:50:45Z",
+              "completed_at": "2026-10-14T00:52:04Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362988/job/115620328046"
+            },
+            {
+              "id": 115620328043,
+              "name": "privacy-runtime",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:50:52Z",
+              "completed_at": "2026-10-14T00:53:35Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492363048/job/115620328043"
+            },
+            {
+              "id": 115620328029,
+              "name": "tax-documents",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:49:58Z",
+              "completed_at": "2026-10-14T00:50:55Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492363044/job/115620328029"
+            },
+            {
+              "id": 115620327976,
+              "name": "stored-file-rows",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:49:58Z",
+              "completed_at": "2026-10-14T00:50:49Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492363025/job/115620327976"
+            },
+            {
+              "id": 115620327940,
+              "name": "social-raise",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:49:58Z",
+              "completed_at": "2026-10-14T00:50:49Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492363012/job/115620327940"
+            },
+            {
+              "id": 115620327935,
+              "name": "guest-scope",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:49:58Z",
+              "completed_at": "2026-10-14T00:50:57Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492363049/job/115620327935"
+            },
+            {
+              "id": 115620327929,
+              "name": "finance-operation-sql",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:50:52Z",
+              "completed_at": "2026-10-14T00:51:09Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362958/job/115620327929"
+            },
+            {
+              "id": 115620327923,
+              "name": "kid-login-mapping",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:49:58Z",
+              "completed_at": "2026-10-14T00:50:50Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492363021/job/115620327923"
+            },
+            {
+              "id": 115620327912,
+              "name": "reward-snapshot",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:49:58Z",
+              "completed_at": "2026-10-14T00:50:54Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362996/job/115620327912"
+            },
+            {
+              "id": 115620327899,
+              "name": "member-notes",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:50:54Z",
+              "completed_at": "2026-10-14T00:51:48Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362998/job/115620327899"
+            },
+            {
+              "id": 115620327837,
+              "name": "chore-cascade",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:49:58Z",
+              "completed_at": "2026-10-14T00:50:58Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362965/job/115620327837"
+            },
+            {
+              "id": 115620327815,
+              "name": "marketplace-records",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:50:52Z",
+              "completed_at": "2026-10-14T00:51:50Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362994/job/115620327815"
+            },
+            {
+              "id": 115620327794,
+              "name": "personal-records",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:49:58Z",
+              "completed_at": "2026-10-14T00:50:52Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492363028/job/115620327794"
+            },
+            {
+              "id": 115620327786,
+              "name": "one-member-one-vote",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:49:58Z",
+              "completed_at": "2026-10-14T00:51:01Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362980/job/115620327786"
+            },
+            {
+              "id": 115620327767,
+              "name": "trip-item-family",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:49:58Z",
+              "completed_at": "2026-10-14T00:50:48Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362986/job/115620327767"
+            },
+            {
+              "id": 115620327721,
+              "name": "family-reference-wave-two",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:50:44Z",
+              "completed_at": "2026-10-14T00:51:46Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362967/job/115620327721"
+            },
+            {
+              "id": 115620327708,
+              "name": "health-records",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:50:55Z",
+              "completed_at": "2026-10-14T00:51:47Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492363004/job/115620327708"
+            },
+            {
+              "id": 115620327701,
+              "name": "Messaging privacy, concurrency and browser lifecycle",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:49:57Z",
+              "completed_at": "2026-10-14T00:52:52Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492363079/job/115620327701"
+            },
+            {
+              "id": 115620327626,
+              "name": "guest-household",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:49:58Z",
+              "completed_at": "2026-10-14T00:51:02Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362983/job/115620327626"
+            },
+            {
+              "id": 115620327623,
+              "name": "kid-progress-award",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:49:57Z",
+              "completed_at": "2026-10-14T00:50:51Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362962/job/115620327623"
+            },
+            {
+              "id": 115620327530,
+              "name": "medication-reads",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:49:58Z",
+              "completed_at": "2026-10-14T00:50:57Z",
+              "details_url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38492362974/job/115620327530"
+            },
+            {
+              "id": 115620314671,
+              "name": "Vercel Preview Comments",
+              "status": "completed",
+              "conclusion": "success",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:49:52Z",
+              "completed_at": "2026-10-14T00:49:52Z",
+              "details_url": "https://vercel.com/github"
+            },
+            {
+              "id": 115620298674,
+              "name": "Supabase Preview",
+              "status": "completed",
+              "conclusion": "skipped",
+              "head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+              "started_at": "2026-10-14T00:49:49Z",
+              "completed_at": "2026-10-14T00:49:49Z",
+              "details_url": "https://supabase.com/dashboard/project/ltcxlbipiihclxwioyqj/branches"
+            }
+          ],
+          "combined_commit_status": "success",
+          "commit_statuses": [
+            {
+              "id": 56283611873,
+              "context": "Vercel",
+              "state": "success",
+              "updated_at": "2026-10-14T00:49:51Z",
+              "target_url": "https://vercel.com/newworldventure/bubaly/8KR8wVBEAV3zrMrbuE3wHjPyW5Wn"
+            }
+          ]
+        },
+        "expected_unchanged_head_sha": "420958ea0028b8e0981fe3d09a5846b1806e3c92",
+        "head_unchanged": true
+      },
+      "pr1048_old_ci_qualification": {
+        "run_id": 38496559270,
+        "url": "https://github.com/NewWorldVenture/Bubaly/actions/runs/38496559270",
+        "event": "pull_request",
+        "created_at": "2026-10-14T01:35:33Z",
+        "head_sha": "4780ed74efc307c48fd65131fb6a532925d166a7",
+        "pull_request_bases": [
+          {
+            "number": 1048,
+            "base_sha": "06ac6e3b54cbd8da33bfa7ab10f0a860078cc5c9",
+            "head_sha": "4780ed74efc307c48fd65131fb6a532925d166a7"
+          }
+        ],
+        "qualification": "Existing PR1048 run38496559270 was triggered on base06ac6e3b54cbd8da33bfa7ab10f0a860078cc5c9. Those results do not certify the newly prepared combination with main ebcef477a74f446e0cf806254817e8c7559a999c. No new composed hosted acceptance is claimed here."
+      },
+      "static_migration_allocation_comparison": {
+        "from_sha": "06ac6e3b54cbd8da33bfa7ab10f0a860078cc5c9",
+        "to_sha": "ebcef477a74f446e0cf806254817e8c7559a999c",
+        "pr1047_changed_paths_count": 90,
+        "checked_objects": [
+          {
+            "path": "supabase/migrations",
+            "base_git_object": "b2da562e62e23f8f7fe8bffee213a1ae9cdfb2d0",
+            "merged_git_object": "b2da562e62e23f8f7fe8bffee213a1ae9cdfb2d0",
+            "byte_tree_unchanged": true
+          },
+          {
+            "path": "supabase/reserved",
+            "base_git_object": "2cb7a432597160400318bb4de66792b77ce4731d",
+            "merged_git_object": "2cb7a432597160400318bb4de66792b77ce4731d",
+            "byte_tree_unchanged": true
+          },
+          {
+            "path": "supabase/production-forward-release.json",
+            "base_git_object": "021840c2e32918948c21167972c2b21eb366f4eb",
+            "merged_git_object": "021840c2e32918948c21167972c2b21eb366f4eb",
+            "byte_tree_unchanged": true
+          },
+          {
+            "path": "supabase/config.toml",
+            "base_git_object": "1d2a29306ca97cde15745fd33820554e6f00bf9e",
+            "merged_git_object": "1d2a29306ca97cde15745fd33820554e6f00bf9e",
+            "byte_tree_unchanged": true
+          },
+          {
+            "path": "docs/PENDING_PROD_MIGRATIONS.md",
+            "base_git_object": "ceba403fb18a929fff556a9400020406b2ae3ed0",
+            "merged_git_object": "ceba403fb18a929fff556a9400020406b2ae3ed0",
+            "byte_tree_unchanged": true
+          },
+          {
+            "path": ".github/workflows",
+            "base_git_object": "c0ec8b83676723a5d1bff4ffa239c1c410d5dc38",
+            "merged_git_object": "c0ec8b83676723a5d1bff4ffa239c1c410d5dc38",
+            "byte_tree_unchanged": true
+          }
+        ],
+        "changed_paths_in_checked_scopes": [],
+        "runnable_sql_count": 461,
+        "reserved_sql_count": 27,
+        "result": "unchanged",
+        "qualification": "Exact committed blob/tree identity proves no migration/reserved filenames or bytes, committed production forward manifest, configuration, pending-migration document or workflow changed in PR1047. This is source evidence, not live database history or rollout authorization."
+      }
+    }
   }
 }
