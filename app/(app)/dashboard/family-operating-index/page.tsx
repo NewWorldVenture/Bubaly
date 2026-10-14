@@ -9,6 +9,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { loadOperatingIndex } from '@/lib/operating-index/server';
+import { readsHouseholdMoney } from '@/lib/finance/household-money';
 import { ChangeRecap } from '@/components/operating-index/change-recap';
 import { DIMENSION_LABELS, type Band, type DimensionId } from '@/lib/operating-index/score';
 import { cn } from '@/lib/utils/cn';
@@ -66,9 +67,11 @@ export default async function FamilyOperatingIndexPage() {
   // The family's zone. The index is snapshotted under the family's day and
   // bounds bills/documents/goals (all DATE columns) with it.
   const tz = ctx.active.family.timezone || 'UTC';
+  // Computed and shown to everyone; the day's snapshot is kept only from a
+  // parent's or an adult's visit (SnapshotReach), whose view is the household's.
   let indexResult;
   try {
-    indexResult = await loadOperatingIndex(supabase, ctx.active.familyId, tz);
+    indexResult = await loadOperatingIndex(supabase, ctx.active.familyId, tz, readsHouseholdMoney(ctx.active.role) ? 'household' : 'member');
   } catch (error) {
     console.error('[dashboard/family-operating-index] operating index read failed', error);
     return <ErrorState message={t('familyOperatingIndex.couldNotLoadYourFamily')} />;

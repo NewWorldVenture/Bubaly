@@ -20,7 +20,7 @@ import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
+import { createInMemorySupabase, withFaults, type InMemorySupabase } from './helpers/in-memory-supabase';
 
 const h = vi.hoisted(() => ({ db: null as unknown, filed: [] as string[] }));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: () => h.db, createServer: async () => h.db }));
@@ -89,6 +89,26 @@ describe('N8 — a relative routine fires for the anchor as it is now', () => {
     expect(rule().next_run_at).toBeNull();
   });
 
+  it('a failed anchor read loses nothing: the rule stays on its occurrence, and the next tick files it', async () => {
+    // The re-check used to read a failed read as "the trip is gone": it moved
+    // the rule to null, and the next tick armed it from its own `now`, after
+    // the 9am this trip was due at, so the occurrence was never filed.
+    let failing = true;
+    h.db = withFaults(db, (table) => (failing && table === 'vacations' ? { code: '57014', message: 'canceling statement due to statement timeout' } : null));
+
+    const first = await at('2026-10-18T13:05:00Z');
+    expect(first.status, 'a tick that could not read an anchor answered as if clean').toBe(502);
+    expect(h.filed).toEqual([]);
+    expect(db.table('routine_runs')).toEqual([]);
+    expect(rule().next_run_at).toBe('2026-10-18T13:00:00.000Z');
+
+    failing = false;
+    const second = await at('2026-10-18T13:10:00Z');
+    expect(second.status).toBe(200);
+    expect(h.filed).toEqual(['Make sure we are ready for the trip']);
+    expect(db.table('routine_runs').map((r) => r.due_at)).toEqual(['2026-10-18T13:00:00.000Z']);
+  });
+
   it('fires ONCE for a trip that moved later: at the new time, not at both', async () => {
     db.table('vacations')[0].start_date = '2026-10-25';
     db.table('vacations')[0].end_date = '2026-10-29';
@@ -100,6 +120,72 @@ describe('N8 — a relative routine fires for the anchor as it is now', () => {
     await at('2026-10-23T13:05:00Z');
     expect(h.filed).toEqual(['Make sure we are ready for the trip']);
     expect(db.table('routine_runs').map((r) => r.due_at)).toEqual(['2026-10-23T13:00:00.000Z']);
+  });
+});
+
+describe('N8 — a busy calendar does not crowd out the event a routine counts back from', () => {
+  // "The day before every event, at 9am", due 9am New York on Monday 19
+  // October for a 3pm event on Tuesday the 20th. The anchor read takes twenty
+  // rows, ascending from its lower bound, and that bound began days before any
+  // row that could still fire: twenty-three events on the Monday itself filled
+  // it, the Tuesday event was never read, and the re-check moved the routine
+  // off a real occurrence.
+  const EVENT_RULE = {
+    id: RULE, family_id: FAMILY, name: 'Event prep', action_config: { prompt: 'Get us ready for tomorrow' },
+    schedule_kind: 'relative', schedule_expr: null, anchor_key: 'event', offset_days: -1, at_hour: 9,
+    said: 'the day before every event', is_enabled: true, next_run_at: '2026-10-19T13:00:00.000Z',
+  };
+  const monday = (i: number, iso: string) => ({ id: `busy-${i}`, family_id: FAMILY, title: `Busy ${i}`, starts_at: iso, all_day: false });
+
+  beforeEach(() => {
+    db.replace('family_automation_rules', [EVENT_RULE]);
+    db.seed('calendar_events', [
+      // Twenty from 10am to 7:30pm on the Monday, and three that evening after
+      // 8pm, which in Greenwich is already Tuesday.
+      ...Array.from({ length: 20 }, (_, i) => monday(i, new Date(Date.parse('2026-10-19T14:00:00Z') + i * 30 * 60_000).toISOString())),
+      monday(20, '2026-10-20T00:30:00.000Z'), monday(21, '2026-10-20T01:30:00.000Z'), monday(22, '2026-10-20T03:30:00.000Z'),
+      { id: 'the-event', family_id: FAMILY, title: 'Parents evening', starts_at: '2026-10-20T19:00:00.000Z', all_day: false },
+    ]);
+  });
+
+  it('fires for Tuesday\'s event on Monday at 9am', async () => {
+    const res = await at('2026-10-19T13:05:00Z');
+    expect(res.status).toBe(200);
+    expect(h.filed).toEqual(['Get us ready for tomorrow']);
+    expect(db.table('routine_runs').map((r) => r.due_at)).toEqual(['2026-10-19T13:00:00.000Z']);
+  });
+
+  it('and an all-day event on the Tuesday still counts', async () => {
+    db.replace('calendar_events', [
+      ...db.table('calendar_events').filter((e) => e.id !== 'the-event'),
+      { id: 'the-event', family_id: FAMILY, title: 'Picture day', starts_at: '2026-10-20T00:00:00Z', all_day: true },
+    ]);
+    const fire = await nextRelativeFire(db as unknown as DB, FAMILY, {
+      kind: 'relative', anchor: anchorByKey('event')!, offsetDays: -1, atHour: 9, said: 'the day before every event',
+    }, new Date('2026-10-19T12:59:59.999Z'), 'America/New_York');
+    expect(fire?.toISOString()).toBe('2026-10-19T13:00:00.000Z');
+  });
+
+  it('armed on Sunday after 9am, it skips Monday\'s events, whose 9am has passed, for Tuesday\'s', async () => {
+    const fire = await nextRelativeFire(db as unknown as DB, FAMILY, {
+      kind: 'relative', anchor: anchorByKey('event')!, offsetDays: -1, atHour: 9, said: 'the day before every event',
+    }, new Date('2026-10-18T14:00:00Z'), 'America/New_York');
+    expect(fire?.toISOString()).toBe('2026-10-19T13:00:00.000Z');
+  });
+
+  it('nor do Monday evening\'s events, which are Tuesday in Greenwich', async () => {
+    // An all-day row is read from Greenwich midnight of its own date, which in
+    // New York is 8pm the evening before; a timed row only from New York's
+    // midnight. Twenty events between 8pm and midnight on the Monday are read
+    // by neither.
+    db.replace('calendar_events', [
+      ...Array.from({ length: 20 }, (_, i) => monday(i, new Date(Date.parse('2026-10-20T00:00:00Z') + i * 12 * 60_000).toISOString())),
+      { id: 'the-event', family_id: FAMILY, title: 'Parents evening', starts_at: '2026-10-20T19:00:00.000Z', all_day: false },
+    ]);
+    const fire = await nextRelativeFire(db as unknown as DB, FAMILY, {
+      kind: 'relative', anchor: anchorByKey('event')!, offsetDays: -1, atHour: 9, said: 'the day before every event',
+    }, new Date('2026-10-19T12:59:59.999Z'), 'America/New_York');
+    expect(fire?.toISOString()).toBe('2026-10-19T13:00:00.000Z');
   });
 });
 

@@ -16,12 +16,30 @@
 // reads no budgets or transactions) is applied, a child's or a guest's Refresh
 // found no drift and deleted the parents'. Their Refresh now reads no money,
 // writes no drift and retires nothing (SignalReach).
+//
+// N9-S1 — the same failure on a different write. The household's daily
+// Operating Index (family_operating_index) and reasoning snapshot
+// (reasoning_snapshots) are one row per family per day, upserted by whichever
+// member's own client opened the Operating Index, the briefing, the Command
+// Center or the reasoning page, or built the assistant's context. Under the
+// 0514 stand-in a child's visit read none of the household's spending and no
+// account below zero, and rewrote the parents' day as calm. Every visit still
+// computes and shows its reader's index; only a parent's, an adult's or the
+// system's keeps the day (SnapshotReach).
+//
+// N6 (missed sibling) — the reasoning page also answered "what's the next best
+// move?" with the operating index's money counts ("1 account is below zero",
+// "1 upcoming bill not covered") and "what can Bubaly handle?" with a card to
+// pay a bill, for every reader. They are left out for anyone who does not read
+// the household's money, as the drift is.
 import { createElement } from 'react';
 import type React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
+import type { ServiceScope } from '@/lib/services/types';
+import type { SliceEnv } from '@/lib/ai/context/policy';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
 import { localeOrDefault } from '@/lib/i18n/locales';
 import { readsHouseholdMoney } from '@/lib/finance/household-money';
@@ -31,9 +49,10 @@ const FAMILY = 'fam-sig';
 const h = vi.hoisted(() => ({ db: null as unknown, role: 'parent' }));
 
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => h.db }));
-vi.mock('@/lib/supabase/auth', () => ({
-  requireUserContext: async () => ({ user: { id: `user-${h.role}` }, active: { familyId: 'fam-sig', role: h.role, member: { id: `m-${h.role}` }, family: { timezone: 'UTC' } } }),
-}));
+vi.mock('@/lib/supabase/auth', () => {
+  const ctx = async () => ({ user: { id: `user-${h.role}` }, active: { familyId: 'fam-sig', role: h.role, member: { id: `m-${h.role}` }, family: { timezone: 'UTC', created_at: '2026-01-01T00:00:00Z' } } });
+  return { requireUserContext: ctx, requireFeature: ctx };
+});
 vi.mock('@/lib/i18n/server', async () => {
   const { getMessages, translate } = await import('@/lib/i18n/messages');
   const { localeOrDefault: toLocale } = await import('@/lib/i18n/locales');
@@ -50,11 +69,35 @@ vi.mock('@/components/metrics/signal-precision-card', () => ({ SignalPrecisionCa
 
 const { default: FamilySignalsPage } = await import('@/app/(app)/dashboard/family-signals/page');
 const { default: ReasoningPage } = await import('@/app/(app)/dashboard/reasoning/page');
+const { default: FamilyOperatingIndexPage } = await import('@/app/(app)/dashboard/family-operating-index/page');
+const { default: BriefingPage } = await import('@/app/(app)/dashboard/briefing/page');
+const { default: CommandCenterPage } = await import('@/app/(app)/dashboard/command-center/page');
+const { proactiveSlice } = await import('@/lib/ai/context/slices/proactive');
 const { refreshSignalsAction, setSignalStatusAction } = await import('@/app/(app)/dashboard/family-signals/actions');
 const { LocaleProvider } = await import('@/components/i18n/locale-provider');
 const { getMessages } = await import('@/lib/i18n/messages');
 
 let db: InMemorySupabase;
+
+/**
+ * The client as the held 0514 gives it to a member who does not read the
+ * household's money: only the transactions tagged to them, and no account (0509
+ * gives a guest no money at all, which reads the same here).
+ */
+const narrowedTo = (memberId: string): DB => new Proxy(db, {
+  get(target, property, receiver) {
+    if (property !== 'from') return Reflect.get(target, property, receiver);
+    return (table: string) => {
+      const builder = target.from(table) as unknown as { select: (...args: unknown[]) => { eq: (column: string, value: unknown) => unknown } };
+      if (table !== 'transactions' && table !== 'financial_accounts') return builder;
+      const select = builder.select.bind(builder);
+      builder.select = table === 'transactions'
+        ? (...args) => select(...args).eq('member_id', memberId) as ReturnType<typeof select>
+        : (...args) => select(...args).eq('id', 'no account reaches a non-manager under 0514') as ReturnType<typeof select>;
+      return builder;
+    };
+  },
+}) as unknown as DB;
 
 function paint(tree: unknown): string {
   return renderToStaticMarkup(createElement(
@@ -145,23 +188,6 @@ describe('/dashboard/reasoning', () => {
 });
 
 describe('N9 — a Refresh by someone who does not read the household\'s money leaves its drift alone', () => {
-  /**
-   * The client as the held 0514 gives it to a member who does not read the
-   * household's money: only the transactions tagged to them (0509 gives a guest
-   * none at all, which reads the same here).
-   */
-  const narrowedTo = (memberId: string): DB => new Proxy(db, {
-    get(target, property, receiver) {
-      if (property !== 'from') return Reflect.get(target, property, receiver);
-      return (table: string) => {
-        const builder = target.from(table) as unknown as { select: (...args: unknown[]) => { eq: (column: string, value: unknown) => unknown } };
-        if (table !== 'transactions') return builder;
-        const select = builder.select.bind(builder);
-        builder.select = (...args) => select(...args).eq('member_id', memberId) as ReturnType<typeof select>;
-        return builder;
-      };
-    },
-  }) as unknown as DB;
   const drift = () => db.table('family_signals').find((s) => s.kind === 'budget_drift');
   const spend = (id: string, amount: number, memberId: string | null) => ({
     id, family_id: FAMILY, type: 'expense', category: 'Groceries', amount, date: '2026-10-05', member_id: memberId,
@@ -208,5 +234,144 @@ describe('N9 — a Refresh by someone who does not read the household\'s money l
     await pressRefreshAs('parent');
     expect(db.table('family_signals').map((s) => s.id)).toEqual(['sig-drift']);
     expect(drift()).toMatchObject({ status: 'active', evidence: { spent: 2768.5, limit: 2000 } });
+  });
+});
+
+describe('N9-S1 — a narrower visit is shown its own index and keeps the household\'s day as it was', () => {
+  const NOW = new Date('2026-10-14T12:00:00Z');
+  const index = () => db.table('family_operating_index');
+  const reports = () => db.table('reasoning_snapshots');
+  /** A visit by `role` on the client 0514 gives them. */
+  const visitAs = async (role: string, page: () => Promise<unknown>) => {
+    h.role = role;
+    h.db = readsHouseholdMoney(role) ? db : narrowedTo(`m-${role}`);
+    return page();
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    db.seed('family_members', [
+      { id: 'm-parent', family_id: FAMILY, display_name: 'Mum', role: 'parent', is_active: true },
+      { id: 'm-child', family_id: FAMILY, display_name: 'Ava', role: 'child', is_active: true },
+    ]);
+    // $2,768.50 of household groceries on a $2,000 cap, and the checking
+    // account $300 below zero: the parents' day is not a calm one.
+    db.seed('budgets', [{ id: 'b-groceries', family_id: FAMILY, category: 'Groceries', amount: 2000, period: 'monthly', created_at: '2026-01-01T00:00:00Z' }]);
+    db.seed('transactions', [{ id: 'tx-household', family_id: FAMILY, type: 'expense', category: 'Groceries', amount: 2768.5, date: '2026-10-05', member_id: null }]);
+    db.seed('financial_accounts', [{ id: 'acct-checking', family_id: FAMILY, type: 'checking', balance: -300 }]);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it.each(['parent', 'adult'])('a %s\'s visit keeps the day, as before: the overspend and the account below zero', async (role) => {
+    await visitAs(role, () => FamilyOperatingIndexPage());
+    expect(index()).toHaveLength(1);
+    expect(index()[0]).toMatchObject({ family_id: FAMILY, as_of_date: '2026-10-14' });
+    expect((index()[0].dimensions as Record<string, number>).financial).toBeLessThan(100);
+  });
+
+  it.each(['child', 'teen', 'caregiver', 'guest'])('a %s opening the Operating Index is shown their reading, and the parents\' row stays', async (role) => {
+    await visitAs('parent', () => FamilyOperatingIndexPage());
+    const household = structuredClone(index());
+
+    const html = paint(await visitAs(role, () => FamilyOperatingIndexPage()));
+
+    expect(html).toContain('Family Operating Index');
+    expect(index()).toEqual(household);
+  });
+
+  it.each([
+    ['the briefing', () => BriefingPage()],
+    ['the Command Center', () => CommandCenterPage()],
+  ])('nor does a child opening %s, which an adult\'s visit still keeps', async (_name, page) => {
+    await visitAs('parent', () => FamilyOperatingIndexPage());
+    const household = structuredClone(index());
+    await visitAs('child', page);
+    expect(index()).toEqual(household);
+
+    db.replace('family_operating_index', []);
+    await visitAs('adult', page);
+    expect(index()).toHaveLength(1);
+    expect((index()[0].dimensions as Record<string, number>).financial).toBeLessThan(100);
+  });
+
+  it('a child opening the reasoning page leaves both of the day\'s snapshots as they were', async () => {
+    await visitAs('parent', () => ReasoningPage());
+    const household = { index: structuredClone(index()), report: structuredClone(reports()) };
+    expect(household.index).toHaveLength(1);
+    expect(household.report).toHaveLength(1);
+
+    const html = paint(await visitAs('child', () => ReasoningPage()));
+
+    expect(html).toContain(FRICTION);
+    expect(index()).toEqual(household.index);
+    expect(reports()).toEqual(household.report);
+  });
+
+  it('nor does the assistant\'s context built for a child; built for a parent it still keeps the day', async () => {
+    const build = (role: string) => {
+      const canManage = readsHouseholdMoney(role);
+      h.role = role;
+      h.db = canManage ? db : narrowedTo(`m-${role}`);
+      return proactiveSlice.load(
+        { db: h.db, familyId: FAMILY } as unknown as ServiceScope,
+        { tz: 'UTC', now: NOW, viewer: { canManage, role, memberId: `m-${role}` }, members: [], pageContext: null } as unknown as SliceEnv,
+      );
+    };
+
+    expect((await build('child')).ok).toBe(true);
+    expect(index()).toEqual([]);
+
+    expect((await build('parent')).ok).toBe(true);
+    expect(index()).toHaveLength(1);
+    expect((index()[0].dimensions as Record<string, number>).financial).toBeLessThan(100);
+  });
+});
+
+describe('N6 — the reasoning page leaves the household\'s money counts to the parents', () => {
+  const BELOW_ZERO = '1 account is below zero';
+  const UNCOVERED = '1 upcoming bill not covered';
+  const PAY = 'Pay the water bill';
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-14T12:00:00Z'));
+    // Read on today's database, before 0514: every member's client reads these.
+    db.seed('financial_accounts', [{ id: 'acct-checking', family_id: FAMILY, type: 'checking', balance: -300 }]);
+    db.seed('bills', [{ id: 'bill-water', family_id: FAMILY, title: 'Water', status: 'unpaid', autopay: false, due_date: '2026-10-20', amount: 80 }]);
+    db.seed('autopilot_suggestions', [{ id: 'card-water', family_id: FAMILY, status: 'open', confidence: 95, urgency: 3, title: 'Water bill due Tuesday', action_label: PAY }]);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it.each(['parent', 'adult'])('a %s reads them among the next moves and what Bubaly can handle', async (role) => {
+    h.role = role;
+    const html = paint(await ReasoningPage());
+    for (const money of [BELOW_ZERO, UNCOVERED, PAY]) expect(html).toContain(money);
+  });
+
+  it.each(['child', 'teen', 'caregiver', 'guest'])('a %s reads the family\'s other answers, and none of them', async (role) => {
+    h.role = role;
+    const html = paint(await ReasoningPage());
+    expect(html).toContain(FRICTION);
+    for (const money of [BELOW_ZERO, UNCOVERED, PAY]) expect(html).not.toContain(money);
+  });
+
+  it('nor does the assistant\'s context built for a child, where "2 accounts" named no word the old rule knew', async () => {
+    db.seed('financial_accounts', [{ id: 'acct-savings', family_id: FAMILY, type: 'savings', balance: -50 }]);
+    const itemsFor = async (role: string) => {
+      h.role = role;
+      const canManage = readsHouseholdMoney(role);
+      const built = await proactiveSlice.load(
+        { db, familyId: FAMILY } as unknown as ServiceScope,
+        { tz: 'UTC', now: new Date('2026-10-14T12:00:00Z'), viewer: { canManage, role, memberId: `m-${role}` }, members: [], pageContext: null } as unknown as SliceEnv,
+      );
+      if (!built.ok) throw new Error('the proactive slice did not build');
+      const data = built.data.data as { report: { answers: { items: { title: string }[] }[] } };
+      return data.report.answers.flatMap((a) => a.items.map((i) => i.title));
+    };
+
+    expect(await itemsFor('parent')).toContain('2 accounts are below zero');
+    expect(await itemsFor('child')).not.toContain('2 accounts are below zero');
   });
 });

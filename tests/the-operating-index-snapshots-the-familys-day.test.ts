@@ -80,7 +80,7 @@ function makeDb() {
 /** Run the loader for one family zone and hand back what it asked the database. */
 async function run(tz: string, now: Date) {
   const { db, calls } = makeDb();
-  const result = await loadOperatingIndex(db, 'fam-1', tz, now);
+  const result = await loadOperatingIndex(db, 'fam-1', tz, 'household', now);
   const snapshotRow = calls.find((c) => c.table === 'family_operating_index' && c.kind === 'upsert');
   const anchor = calls.find((c) => c.table === 'family_operating_index' && c.kind === 'select');
   return {

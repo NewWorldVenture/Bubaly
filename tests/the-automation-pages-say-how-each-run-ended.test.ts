@@ -54,7 +54,7 @@ vi.mock('@/lib/family/signals', () => ({
 
 const { default: AutonomousPage } = await import('@/app/(app)/dashboard/autonomous-family-management/page');
 const { default: FamilyAutomationPage } = await import('@/app/(app)/dashboard/family-automation/page');
-const { setRecommendationStatus } = await import('@/lib/family/actions');
+const { resolveAutomationRun, setRecommendationStatus } = await import('@/lib/family/actions');
 const { LocaleProvider } = await import('@/components/i18n/locale-provider');
 const { getMessages } = await import('@/lib/i18n/messages');
 
@@ -120,6 +120,41 @@ describe.each([
     const html = await open(page);
     expect(row(html, 'Renewed the passport')).toMatchObject({ outcome: 'failed', text: expect.stringContaining('Failed') });
     expect(row(html, 'Drafting the school email')).toBeNull();
+  });
+});
+
+// N4 (re-fix) — the list reads legacy `status` only beside the default
+// `state = 'queued'`. Two kinds of stopped run sat at `state =
+// 'awaiting_approval'` instead, and both pages used to list them: a run the
+// older concierge writer closed with `status = 'executed'` and never moved, and
+// a run Skip cleared after its approval had closed, which wrote only `status =
+// 'skipped'`. They were in neither list, as if they had never run.
+describe.each([
+  ['/dashboard/autonomous-family-management', () => AutonomousPage()],
+  ['/dashboard/family-automation', () => FamilyAutomationPage()],
+])('%s lists a run stopped at its approval', (_path, page) => {
+  beforeEach(() => {
+    db.replace('family_automation_runs', [
+      run('r-old-concierge', 'Booked the swim lessons', 'awaiting_approval', 'executed', 1),
+      run('r-waiting', 'Order the school photos', 'awaiting_approval', 'pending', 2),
+    ]);
+  });
+
+  it('a concierge run closed by the older writer, as done', async () => {
+    const html = await open(page);
+    expect(row(html, 'Booked the swim lessons')).toMatchObject({ outcome: 'completed', text: expect.stringContaining('Done') });
+    // Still waiting on a person: not listed as a run that has stopped.
+    expect(row(html, 'Order the school photos')?.outcome ?? null).toBeNull();
+  });
+
+  it('a run Skip cleared after its approval closed, as cancelled — in its state as well as its status', async () => {
+    db.seed('approval_requests', [{ id: 'ap-1', family_id: FAMILY, run_id: 'r-waiting', status: 'rejected', title: 'Order the school photos' }]);
+
+    expect(await resolveAutomationRun('r-waiting', 'skipped')).toEqual({ ok: true, id: 'r-waiting' });
+
+    expect(db.table('family_automation_runs').find((r) => r.id === 'r-waiting')).toMatchObject({ status: 'skipped', state: 'cancelled' });
+    const html = await open(page);
+    expect(row(html, 'Order the school photos')).toMatchObject({ outcome: 'cancelled', text: expect.stringContaining('Cancelled') });
   });
 });
 

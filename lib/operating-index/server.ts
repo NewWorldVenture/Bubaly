@@ -313,11 +313,31 @@ function suggestionPairs(raw: unknown): { id: string; title: string }[] {
 }
 
 /**
- * Compute today's index and persist it idempotently (one row per family per
- * day, upserted on re-render). Returns the index plus the prior snapshot's
- * composite for the trend arrow. Persistence failures never block the read.
+ * Whose day a load may keep, said by each caller:
+ *   - 'household': a parent's or an adult's own client (readsHouseholdMoney),
+ *     or a service-role caller;
+ *   - 'member': anyone else's own client.
+ *
+ * The snapshot reads the household's budgets, its summed spending, its
+ * accounts below zero, its bills, approvals and messages through the caller's
+ * RLS, and RLS may give a member less of them: the held 0514 gives a
+ * non-manager only the transactions tagged to them and no accounts, the held
+ * 0509 gives a guest no money at all, and 0475 and 0486 already narrow the
+ * conversations and the Autopilot cards per viewer. What a narrower view does
+ * not find has not stopped. So a 'member' load computes and returns the index
+ * for its reader and writes nothing: the family's one row per day is the
+ * household's, and a child's visit used to overwrite the parents' reading of
+ * the day, and with it the next day's trend and the evening recap.
  */
-export async function loadOperatingIndex(supabase: DB, familyId: string, tz: string, now: Date = new Date()): Promise<OperatingIndexResult> {
+export type SnapshotReach = 'household' | 'member';
+
+/**
+ * Compute today's index and, for a load that reads the household (`reach`),
+ * persist it idempotently (one row per family per day, upserted on
+ * re-render). Returns the index plus the prior snapshot's composite for the
+ * trend arrow. Persistence failures never block the read.
+ */
+export async function loadOperatingIndex(supabase: DB, familyId: string, tz: string, reach: SnapshotReach, now: Date = new Date()): Promise<OperatingIndexResult> {
   const snapshot = await buildSnapshot(supabase, familyId, tz, now);
   const index = computeOperatingIndex(snapshot, now);
   // One key, used three ways: the anchor for the prior read, the upsert key,
@@ -359,19 +379,22 @@ export async function loadOperatingIndex(supabase: DB, familyId: string, tz: str
   // The key moving is the point: an evening visit west of Greenwich used to
   // write tomorrow's row and then be overwritten by the morning's, so a family
   // in Los Angeles could never accumulate two consecutive days to trend.
-  try {
-    // Its result used to be discarded outright — not even the error bound. Best-effort, so logged rather than raised. Audit C1-S9-76.
-    const { error: familyOperatingIndexWriteError } = await supabase.from('family_operating_index').upsert({
-      family_id: familyId,
-      as_of_date: today,
-      composite: index.composite,
-      band: index.band,
-      dimensions: dimensionsToRecord(index.dimensions) as unknown as Json,
-      suggestions: index.suggestions as unknown as Json,
-    }, { onConflict: 'family_id,as_of_date' });
-    if (familyOperatingIndexWriteError) console.error('[operating-index] family_operating_index upsert failed', familyOperatingIndexWriteError);
-  } catch {
-    // Persisting is best-effort; the live index still renders.
+  // Written only by a load that reads the household (SnapshotReach).
+  if (reach === 'household') {
+    try {
+      // Its result used to be discarded outright — not even the error bound. Best-effort, so logged rather than raised. Audit C1-S9-76.
+      const { error: familyOperatingIndexWriteError } = await supabase.from('family_operating_index').upsert({
+        family_id: familyId,
+        as_of_date: today,
+        composite: index.composite,
+        band: index.band,
+        dimensions: dimensionsToRecord(index.dimensions) as unknown as Json,
+        suggestions: index.suggestions as unknown as Json,
+      }, { onConflict: 'family_id,as_of_date' });
+      if (familyOperatingIndexWriteError) console.error('[operating-index] family_operating_index upsert failed', familyOperatingIndexWriteError);
+    } catch {
+      // Persisting is best-effort; the live index still renders.
+    }
   }
 
   return { index, asOf: today, priorComposite, trend: compositeTrend(index.composite, priorComposite), change, orchestrator };

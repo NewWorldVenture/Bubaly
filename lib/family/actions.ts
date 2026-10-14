@@ -378,6 +378,10 @@ export async function resolveAutomationRun(
     .from('family_automation_runs')
     .update({
       status: decision === 'approved' ? 'approved' : 'skipped',
+      // A Skip ends the run in its state too, as dismissConciergeRun ends a
+      // declined one: left at 'awaiting_approval' beside 'skipped', the run was
+      // neither waiting nor stopped to the pages that list runs by state.
+      ...(decision === 'skipped' ? { state: 'cancelled' as const } : {}),
       approved_by: ctx.user.id,
       approved_at: new Date().toISOString(),
     })

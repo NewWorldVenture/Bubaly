@@ -24,22 +24,16 @@ import { suggestionVisibleTo } from '@/lib/autopilot/audience';
 import { readVisiblePrefix } from '@/lib/autopilot/visible-prefix';
 import { dayKeyInZone, zonedTimeMs } from '@/lib/schedule/zoned';
 import type { SliceDefinition } from '../policy';
+// The reasoning report and the suggestion queues are household-wide and can
+// mention budgets, bills or documents. Those areas are manager-only (§4,
+// `SLICE_ACCESS`), so for anyone else an item that touches them is dropped
+// here — the same rule the money and documents slices enforce by not loading,
+// and the one the reasoning page applies for its reader (MANAGER_ONLY_RE).
+import { managerOnlyItem, managerOnlyText } from '../manager-only';
 
 const MAX_ITEMS_PER_ANSWER = 3;
 const MAX_SUGGESTIONS = 8;
 const MAX_SIGNALS = 8;
-
-/**
- * The reasoning report and the suggestion queues are household-wide and can
- * mention budgets, bills or documents. Those areas are manager-only (§4,
- * `SLICE_ACCESS`), so for anyone else an item that touches them is dropped
- * here — the same rule the money and documents slices enforce by not loading.
- */
-const MANAGER_ONLY_RE = /\b(budget|bill|bills|spend|spending|money|financ|transaction|account|salary|income|document|passport|insurance|tax|vault|subscription)\b/i;
-
-function managerOnlyText(...parts: (string | null | undefined)[]): boolean {
-  return MANAGER_ONLY_RE.test(parts.filter(Boolean).join(' '));
-}
 
 /**
  * The words this slice reads a hard signal in: en-US, explicitly. Its reader is
@@ -145,15 +139,19 @@ export const proactiveSlice: SliceDefinition = {
 
     const canManage = env.viewer.canManage;
     let withheld = 0;
-    const keep = (...parts: (string | null | undefined)[]): boolean => {
-      if (canManage || !managerOnlyText(...parts)) return true;
+    const withhold = (managersOnly: boolean): boolean => {
+      if (canManage || !managersOnly) return true;
       withheld += 1;
       return false;
     };
+    const keep = (...parts: (string | null | undefined)[]): boolean => withhold(managerOnlyText(...parts));
 
     const [signals, report, liveSignals, autopilot, recommendations, terms, pets, projects, plans] = await Promise.all([
       loadSignals(scope.familyId, env.tz, env.now),
-      loadReasoningReport(scope.db, scope.familyId, env.tz, MODEL_LOCALE, modelText, env.now),
+      // Composed for every reader and filtered below; the household's daily
+      // operating index is kept only from a manager's or the system's client
+      // (SnapshotReach), never from one RLS may give less of the household.
+      loadReasoningReport(scope.db, scope.familyId, env.tz, MODEL_LOCALE, modelText, canManage ? 'household' : 'member', env.now),
       settle(scope.db.from('family_signals').select('kind, title, detail, score, evidence').eq('family_id', scope.familyId).eq('status', 'active').order('score', { ascending: false }).limit(MAX_SIGNALS)),
       // The first eight open cards this reader may be handed, the rules applied
       // BEFORE the eight are taken (lib/autopilot/visible-prefix.ts): the card's
@@ -212,8 +210,10 @@ export const proactiveSlice: SliceDefinition = {
         answers: report.answers.map((a) => ({
           id: a.id, question: a.question, status: a.status,
           headline: keep(a.headline) ? a.headline : 'Some items are only shown to the adults who manage the family.',
+          // A linked item is also the managers' when it links to a money page
+          // ("2 accounts are below zero" → the wallet), whatever its words.
           items: a.items
-            .filter((i) => keep(i.title, i.detail, i.href))
+            .filter((i) => withhold(managerOnlyItem(i.title, i.detail, i.href)))
             .slice(0, MAX_ITEMS_PER_ANSWER)
             .map((i) => ({ title: i.title, detail: i.detail ?? null })),
         })),

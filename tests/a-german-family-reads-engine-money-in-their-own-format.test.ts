@@ -302,7 +302,7 @@ describe('Family Intelligence words budget drift for its reader', () => {
     const db = signalsDb();
     await detectAs(db, 'en-US');
     const { locale, t } = readerFor('de-DE');
-    const report = await loadReasoningReport(db as unknown as DB, 'f1', 'UTC', locale, t, NOW);
+    const report = await loadReasoningReport(db as unknown as DB, 'f1', 'UTC', locale, t, 'household', NOW);
     const drift = report.answers.flatMap((a) => a.items).find((i) => (i.detail ?? '').includes('2.768'));
     expect(drift, 'the budget-drift item is not in the report in German').toBeDefined();
     expectGerman(String(drift!.detail));

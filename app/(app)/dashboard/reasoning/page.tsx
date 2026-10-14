@@ -44,7 +44,8 @@ export default async function ReasoningPage() {
   // words it again for whoever is reading this page.
   const { locale } = await getLocaleContext();
   // And what they may read: a budget-drift signal is the household's spend
-  // against a budget, which is a parent's or an adult's.
+  // against a budget, which is a parent's or an adult's. Only their visit keeps
+  // the day's snapshots, too (SnapshotReach).
   const report = await loadAndSnapshotReasoning(supabase, ctx.active.familyId, ctx.user.id, tz, locale.code, t, new Date(),
     { readsHouseholdMoney: readsHouseholdMoney(ctx.active.role) });
 

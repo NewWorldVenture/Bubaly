@@ -118,7 +118,14 @@ vi.mock('@/lib/ai/runs/continue', () => ({ kickRun: mocks.kickRun }));
 vi.mock('@/lib/ai/runs/entitlement', () => ({ agentRunEntitlementChecker: () => async () => 'entitled' }));
 vi.mock('@/lib/services/routines', async () => {
   const actual = await vi.importActual<typeof import('@/lib/services/routines')>('@/lib/services/routines');
-  return { ...actual, nextRelativeFire: mocks.nextRelativeFire };
+  // The due re-check reads the anchor through readRelativeFire, which tells a
+  // failed read from no anchor (tests/a-relative-routine-fires-once-for-the-anchor-it-names.test.ts);
+  // here both answer what the anchor says.
+  return {
+    ...actual,
+    nextRelativeFire: mocks.nextRelativeFire,
+    readRelativeFire: async (...args: unknown[]) => ({ ok: true, at: await mocks.nextRelativeFire(...args) }),
+  };
 });
 
 const { GET } = await import('@/app/api/cron/family-routines/route');

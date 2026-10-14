@@ -75,11 +75,11 @@ export async function runSignalDetection(
   const household = reach === 'household';
   const since90 = new Date(now.getTime() - 90 * DAY).toISOString();
   // Two windows over the same calendar read. Stress windows look at three weeks
-  // back and two ahead. Routine adherence expects four weeks of a routine
-  // (detectRoutineAdherence, weeks = 4), so it needs four weeks of events: read
-  // from 21 days back, every routine kept on every scheduled day scored 75% at
-  // most, and one kept 79% of the time was flagged as sticking 59%.
-  const windowStart = new Date(now.getTime() - 21 * DAY).toISOString();
+  // back (taken from the rows read, `stressRows` below) and two ahead. Routine
+  // adherence expects four weeks of a routine (detectRoutineAdherence,
+  // weeks = 4), so it needs four weeks of events: read from 21 days back,
+  // every routine kept on every scheduled day scored 75% at most, and one kept
+  // 79% of the time was flagged as sticking 59%.
   const adherenceStart = new Date(now.getTime() - ADHERENCE_WEEKS * 7 * DAY).toISOString();
   const windowEnd = new Date(now.getTime() + 14 * DAY).toISOString();
 

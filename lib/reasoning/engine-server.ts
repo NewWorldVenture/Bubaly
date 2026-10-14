@@ -9,7 +9,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { signalWordsFor } from '@/lib/intelligence/hard-signals';
-import { loadOperatingIndex } from '@/lib/operating-index/server';
+import { managerOnlyItem } from '@/lib/ai/context/manager-only';
+import { loadOperatingIndex, type SnapshotReach } from '@/lib/operating-index/server';
 import { loadFamilyContext } from '@/lib/reasoning/context';
 import { reasoningInsights } from '@/lib/reasoning/insights';
 import {
@@ -30,6 +31,13 @@ const SIGNAL_HREF = '/dashboard/family-signals';
  * 0514). The family-signals page and this report showed it to a child, a guest
  * and everyone else; for them it is left out before the six questions are
  * answered, so no answer, count or headline is built from it.
+ *
+ * The same goes for the operating index's next moves and the orchestrator's
+ * items: "2 accounts are below zero" (the wallet) and "1 upcoming bill not
+ * covered" (bills) are counts of the household's money. For anyone else an
+ * item that links to a money page or touches a manager-only area
+ * (managerOnlyItem, the rule the proactive AI slice applies) is left out the
+ * same way.
  */
 export type ReasoningViewer = { readsHouseholdMoney: boolean };
 
@@ -46,8 +54,14 @@ type ReasoningInputs = {
 
 /** The report from what was read, for `viewer`. */
 function composeReport(inputs: ReasoningInputs, viewer: ReasoningViewer, now: Date): ReasoningReport {
-  const signals = viewer.readsHouseholdMoney ? inputs.signals : inputs.signals.filter((s) => s.kind !== 'budget_drift');
-  const report = answerFamilyQuestions({ orchestrator: inputs.orchestrator, insights: inputs.insights, signals, nextActions: inputs.nextActions }, now);
+  const everything = viewer.readsHouseholdMoney;
+  const signals = everything ? inputs.signals : inputs.signals.filter((s) => s.kind !== 'budget_drift');
+  const nextActions = everything ? inputs.nextActions : inputs.nextActions.filter((a) => !managerOnlyItem(a.title, a.detail, a.href));
+  const orchestrator = everything || !inputs.orchestrator ? inputs.orchestrator : {
+    ...inputs.orchestrator,
+    answers: inputs.orchestrator.answers.map((a) => ({ ...a, items: a.items.filter((i) => !managerOnlyItem(i.label, null, i.href)) })),
+  };
+  const report = answerFamilyQuestions({ orchestrator, insights: inputs.insights, signals, nextActions }, now);
   return {
     ...report,
     allClear: report.allClear && inputs.readErrors.length === 0,
@@ -69,20 +83,25 @@ function composeReport(inputs: ReasoningInputs, viewer: ReasoningViewer, now: Da
  * carries money, so each signal is worded again here from its `evidence`
  * (signalWordsFor). The reasoning page passes its reader; the proactive AI
  * context slice, whose reader is the model, passes en-US explicitly.
+ *
+ * `reach` is whose client `sb` is (SnapshotReach), and required: composing the
+ * report loads the operating index, which keeps the household's day only from
+ * a client that reads the household. The proactive slice passes 'household'
+ * for a manager or the system, 'member' for anyone else.
  */
 export async function loadReasoningReport(
-  sb: DB, familyId: string, tz: string, locale: LocaleCode, t: Translate, now: Date = new Date(), viewer: ReasoningViewer = EVERY_SIGNAL,
+  sb: DB, familyId: string, tz: string, locale: LocaleCode, t: Translate, reach: SnapshotReach, now: Date = new Date(), viewer: ReasoningViewer = EVERY_SIGNAL,
 ): Promise<ReasoningReport> {
-  return composeReport(await readReasoningInputs(sb, familyId, tz, locale, t, now), viewer, now);
+  return composeReport(await readReasoningInputs(sb, familyId, tz, locale, t, reach, now), viewer, now);
 }
 
 async function readReasoningInputs(
-  sb: DB, familyId: string, tz: string, locale: LocaleCode, t: Translate, now: Date,
+  sb: DB, familyId: string, tz: string, locale: LocaleCode, t: Translate, reach: SnapshotReach, now: Date,
 ): Promise<ReasoningInputs> {
   const readErrors: ReasoningReadSource[] = [];
 
   // FOI (orchestrator + ranked suggestions) — the richest single source.
-  const foi = await loadOperatingIndex(sb, familyId, tz, now).catch((err) => {
+  const foi = await loadOperatingIndex(sb, familyId, tz, reach, now).catch((err) => {
     console.error('[reasoning-engine] operating_index read failed', { familyId, err });
     readErrors.push('operating_index');
     return null;
@@ -127,13 +146,19 @@ async function readReasoningInputs(
 /**
  * Load the report and persist today's snapshot (idempotent per family/day).
  *
- * The snapshot is the HOUSEHOLD's report whoever opened the page, so the day's
- * trend does not depend on who looked first; the report returned is `viewer`'s.
+ * The snapshot is the HOUSEHOLD's report, so it is written only from a client
+ * that reads the household: a parent's or an adult's (`viewer`), or a
+ * service-role caller (the default). Anyone else's client may be given less of
+ * the household by RLS (SnapshotReach), and the report it composes is theirs to
+ * read, not the day the parents trend: it is returned, and neither it nor the
+ * operating index under it is written.
  */
 export async function loadAndSnapshotReasoning(
   sb: DB, familyId: string, userId: string | null, tz: string, locale: LocaleCode, t: Translate, now: Date = new Date(), viewer: ReasoningViewer = EVERY_SIGNAL,
 ): Promise<ReasoningReport> {
-  const inputs = await readReasoningInputs(sb, familyId, tz, locale, t, now);
+  const reach: SnapshotReach = viewer.readsHouseholdMoney ? 'household' : 'member';
+  const inputs = await readReasoningInputs(sb, familyId, tz, locale, t, reach, now);
+  if (reach === 'member') return composeReport(inputs, viewer, now);
   const report = composeReport(inputs, EVERY_SIGNAL, now);
   try {
     // Best-effort persistence — the report is returned regardless — but a
@@ -156,5 +181,5 @@ export async function loadAndSnapshotReasoning(
     }, { onConflict: 'family_id,as_of_date' });
     if (error) console.error('[reasoning-engine] reasoning_snapshots upsert failed', { familyId, error });
   } catch (err) { console.error('[reasoning-engine] reasoning_snapshots upsert threw', { familyId, err }); }
-  return viewer.readsHouseholdMoney ? report : composeReport(inputs, viewer, now);
+  return report;
 }
