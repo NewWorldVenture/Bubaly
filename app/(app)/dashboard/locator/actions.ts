@@ -66,10 +66,25 @@ export async function updateMyLocation(input: {
   const current = placeForPoint(placeLikes, point);
 
   const { data: prev, error: prevError } = await supabase
-    .from('member_locations').select('place_id').eq('member_id', member.id).maybeSingle();
+    .from('member_locations').select('place_id, is_sharing, latitude, longitude')
+    .eq('member_id', member.id).eq('family_id', familyId).maybeSingle();
   if (prevError) return { ok: false, error: describeActionError(prevError) };
+  // A transition is a move between two REAL positions. A live row that was not
+  // sharing, or carries no position, says nothing about where the member was:
+  // Stop Sharing clears place_id (CLEARED_POSITION), so turning sharing back on
+  // at Home was classified null -> Home and logged an "arrived" — with an
+  // urgent push to the managers — for someone who never moved. The first fix
+  // after sharing resumes is a baseline: its place is written, nothing is
+  // announced. (A member with no live row at all is still announced on their
+  // first share, as before.)
+  const baseline = prev != null && (prev.is_sharing !== true || prev.latitude == null || prev.longitude == null);
   // A previous place that is no longer armed is not one the member can "leave".
-  const prevPlaceId = armed.some((p) => p.id === prev?.place_id) ? prev!.place_id : null;
+  // And a place cleared off the row while its geofence was off (or created
+  // around the member since) is found again from the previous position: when
+  // a parent re-arms Home with the member inside it, they did not "arrive".
+  const prevPlaceId = !prev || baseline ? null
+    : armed.some((p) => p.id === prev.place_id) ? prev.place_id
+      : placeForPoint(placeLikes, { latitude: prev.latitude!, longitude: prev.longitude! })?.id ?? null;
 
   const nowIso = new Date().toISOString();
   const { error: upErr } = await supabase.from('member_locations').upsert({
@@ -80,7 +95,7 @@ export async function updateMyLocation(input: {
   }, { onConflict: 'member_id' });
   if (upErr) return { ok: false, error: describeActionError(upErr) };
 
-  const transition = classifyTransition(prevPlaceId, current?.id ?? null);
+  const transition = baseline ? 'none' : classifyTransition(prevPlaceId, current?.id ?? null);
   if (transition !== 'none') {
     const oldName = armed.find((p) => p.id === prevPlaceId)?.name ?? null;
     const events: { event_type: 'arrived' | 'left'; place_id: string | null; place_name: string | null }[] = [];

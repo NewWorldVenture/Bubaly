@@ -12,6 +12,8 @@ import { isAIConfigured, resolveProvider, describeAIError } from '@/lib/ai/provi
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { fenceUntrusted, fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
+import { isWithheldFromGuest } from '@/lib/auth/guest-scope';
 import {
   buildContactTimeline, contactHealth,
   type LoggedInteraction, type CommunicationLike,
@@ -117,13 +119,20 @@ export async function draftReconnectMessageAction(
     rawInts = interactions.data;
 
     historySource = 'communications';
-    const { data, error } = await supabase
-      .from('family_communications')
-      .select('id, channel, direction, subject, summary, received_at')
-      .eq('contact_id', contactId).eq('family_id', familyId)
-      .order('received_at', { ascending: false }).limit(8);
-    if (error || !Array.isArray(data)) return historyFailure('communications');
-    comms = data as CommunicationLike[];
+    // The household inbox's rows, which a guest is not shown (the page beside
+    // this leaves them off a guest's timeline); a guest's draft is grounded in
+    // the logged interactions only.
+    if (ctx.active.role === 'guest' && isWithheldFromGuest('/dashboard/inbox')) {
+      comms = [];
+    } else {
+      const { data, error } = await supabase
+        .from('family_communications')
+        .select('id, channel, direction, subject, summary, received_at')
+        .eq('contact_id', contactId).eq('family_id', familyId)
+        .order('received_at', { ascending: false }).limit(8);
+      if (error || !Array.isArray(data)) return historyFailure('communications');
+      comms = data as CommunicationLike[];
+    }
   } catch { return historyFailure(historySource); }
 
   // Reaches a paid provider, so it carries the same budget as every API route
@@ -149,9 +158,16 @@ export async function draftReconnectMessageAction(
   });
   const health = contactHealth(timeline, contact.name, t);
 
-  const historyLines = timeline.slice(0, 8)
+  // Every line below is text someone else wrote or imported — a pasted school
+  // email's first line, its summary, a vCard's name — and it shapes a message
+  // sent in the parent's own voice. It is fenced as data — the history as one
+  // block, line by line, the way /api/ai/insights fences its household rows,
+  // and the contact's name and relationship each on their own — and the system
+  // prompt carries the rule that says so (lib/ai/safety/untrusted.ts).
+  const history = timeline.slice(0, 8)
     .map((e) => `- ${e.date}: ${e.title}${e.detail ? ` (${e.detail})` : ''}`)
-    .join('\n') || '- (no logged history yet)';
+    .join('\n');
+  const historyLines = history ? fenceUntrustedBlock('contact_history', history, 4000) : '- (no logged history yet)';
 
   const toneWord = tone === 'brief' ? 'short and low-key' : tone === 'playful' ? 'light and playful' : 'warm and genuine';
   const { locale } = await getLocaleContext();
@@ -162,9 +178,9 @@ export async function draftReconnectMessageAction(
     'don’t give, use one brief bracketed placeholder like [day that works]. Write it from the family to ' +
     'the contact, first person. Keep it under 60 words, natural (like a real text), no subject line, no ' +
     'sign-off block — just the message. Return ONLY the message text. ' +
-    `Write the message in the selected locale: ${locale.code}.`;
+    `Write the message in the selected locale: ${locale.code}.\n\n${UNTRUSTED_CONTENT_RULE}`;
   const user =
-    `Contact: ${contact.name}${contact.relationship ? ` (${contact.relationship})` : ''}\n` +
+    `Contact: ${fenceUntrusted('contact', contact.name)}${contact.relationship ? ` (${fenceUntrusted('contact', contact.relationship)})` : ''}\n` +
     `Time since last contact: ${health.daysSince == null ? 'no logged history' : `${health.daysSince} days`}\n` +
     `Desired tone: ${toneWord}\n\n` +
     `Recent history (most recent first):\n${historyLines}\n\n` +
