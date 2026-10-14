@@ -17084,5 +17084,16 @@
   "photosModule.searching": "Searching…",
   "createMemory.someOfThePhotosWereNotSaved": "{saved} of {total} photos were saved. {failed} could not be uploaded.",
   "createMemory.tryTheMissingPhotosAgain": "Try the missing photos again",
-  "socialFeed.couldNotLoadYourFeed": "Your feed could not be loaded right now. Try again in a moment."
+  "socialFeed.couldNotLoadYourFeed": "Your feed could not be loaded right now. Try again in a moment.",
+  "calendarModule.editingWholeSeries": "This event repeats. Changes here apply to every occurrence.",
+  "eventDetailModal.rsvpAppliesToEverySeriesOccurrence": "This event repeats. An RSVP here counts for every occurrence.",
+  "tripIntel.couldNotLoadTripIntelligence": "Trip Intelligence could not load your events right now. Try again in a moment.",
+  "tripIntel.savedDeparturesUnavailable": "Your saved departures could not be loaded, so active leave-by plans are not shown here. Refresh before planning another one.",
+  "tripIntel.savedTripResearchUnavailable": "Your saved trip research could not be loaded right now. Refresh to try again.",
+  "calendar.routineAlreadyAppliedAsItWas": "This routine is already on this week as it was before your changes. Undo it or remove those events, then apply it again.",
+  "routinesPanel.routineChangedWhileSaving": "Someone else saved this routine at the same time. Close it and open it again to see their version.",
+  "referralActions.onlyAParentOrAdult": "Only a parent or adult can do this with the family’s referral.",
+  "feedback.tooManyIdeasAtOnce": "That is a lot of ideas at once. Wait a minute, then try again.",
+  "feedback.dailyIdeaLimitReached": "You have reached today’s limit of {limit} ideas. Try again tomorrow.",
+  "familyHealth.moreInMedical": "+{count} more in Medical"
 }

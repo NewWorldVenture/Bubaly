@@ -62,8 +62,15 @@ function from(table: string) {
     select: (_selection: string, options?: Query['options']) => { record.options = options; return query; },
     order: () => query,
     limit: () => query,
-    then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) =>
-      Promise.resolve(replies[table] ?? { data: [], count: 0, error: null }).then(resolve, reject),
+    // PostgREST answers `count=exact` with the number of matching rows; a
+    // configured reply that names no count has exactly the rows it lists.
+    then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => {
+      const reply = replies[table] ?? { data: [], count: 0, error: null };
+      const counted = record.options?.count === 'exact' && reply.count === undefined && !reply.error
+        ? { ...reply, count: Array.isArray(reply.data) ? reply.data.length : 0 }
+        : reply;
+      return Promise.resolve(counted).then(resolve, reject);
+    },
   });
   for (const method of ['eq', 'neq', 'in', 'is', 'not', 'lt', 'lte', 'gt', 'gte']) {
     query[method] = (key: string, value: unknown) => { record.filters.push({ method, key, value }); return query; };

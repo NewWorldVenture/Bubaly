@@ -61,11 +61,17 @@ const FEATURE_BY_TABLE: Record<string, string> = {
 };
 
 // Sensitive surfaces only managers (parent/adult) may modify.
+//
+// `family_ai_recommendations` is here because a pending recommendation is a
+// decision Needs You reserves for a parent: the planner's "recommend, don't
+// act" card. Open to every member, a child or guest could dismiss, rewrite or
+// delete it out of the parents' queue, or plant one whose link leaves the app.
 const MANAGER_ONLY = new Set([
   'family_automation_rules',
   'family_emergency_contacts',
   'family_emergency_plans',
   'family_digital_twin_profiles',
+  'family_ai_recommendations',
 ]);
 
 /** `note` is a sentence the person should see even though nothing failed (one vote of several). */
@@ -215,6 +221,10 @@ export async function setRecommendationStatus(
   status: 'accepted' | 'dismissed' | 'done',
 ): Promise<ActionResult> {
   const ctx = await requireUserContext();
+  // The buttons are drawn for parents and adults only, and a button is not a
+  // permission (app/(app)/dashboard/needs-you/actions.ts, decider()): the
+  // recommendation ids reach every viewer, so the role is checked here.
+  if (!isManager(ctx.active.role)) return { ok: false, error: (await getTranslations())('needsYouActions.onlyAParentOrAdultCan') };
   const supabase = await createServer();
   const { data: recommended, error } = await supabase
     .from('family_ai_recommendations')

@@ -17084,5 +17084,16 @@
   "photosModule.searching": "Recherche en cours…",
   "createMemory.someOfThePhotosWereNotSaved": "{saved} photos sur {total} ont été enregistrées. {failed} n'ont pas pu être importées.",
   "createMemory.tryTheMissingPhotosAgain": "Réessayer les photos manquantes",
-  "socialFeed.couldNotLoadYourFeed": "Votre fil n'a pas pu être chargé pour le moment. Réessayez dans un instant."
+  "socialFeed.couldNotLoadYourFeed": "Votre fil n'a pas pu être chargé pour le moment. Réessayez dans un instant.",
+  "calendarModule.editingWholeSeries": "Cet événement se répète. Les modifications s’appliquent à chaque occurrence.",
+  "eventDetailModal.rsvpAppliesToEverySeriesOccurrence": "Cet événement se répète. Une réponse ici vaut pour chaque occurrence.",
+  "tripIntel.couldNotLoadTripIntelligence": "L’assistant de trajets n’a pas pu charger vos événements. Réessayez dans un instant.",
+  "tripIntel.savedDeparturesUnavailable": "Vos départs enregistrés n’ont pas pu être chargés : les plans actifs n’apparaissent pas ici. Actualisez avant d’en prévoir un autre.",
+  "tripIntel.savedTripResearchUnavailable": "Vos recherches de voyage enregistrées n’ont pas pu être chargées. Actualisez pour réessayer.",
+  "calendar.routineAlreadyAppliedAsItWas": "Cette routine est déjà sur cette semaine telle qu’elle était avant vos modifications. Annulez-la ou retirez ces événements, puis appliquez-la à nouveau.",
+  "routinesPanel.routineChangedWhileSaving": "Quelqu’un d’autre a enregistré cette routine en même temps. Fermez-la et rouvrez-la pour voir sa version.",
+  "referralActions.onlyAParentOrAdult": "Seul un parent ou un adulte peut faire cela avec le parrainage de la famille.",
+  "feedback.tooManyIdeasAtOnce": "Cela fait beaucoup d’idées d’un coup. Patientez une minute, puis réessayez.",
+  "feedback.dailyIdeaLimitReached": "Vous avez atteint la limite du jour de {limit} idées. Réessayez demain.",
+  "familyHealth.moreInMedical": "+{count} de plus dans Médical"
 }

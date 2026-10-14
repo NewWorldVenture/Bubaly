@@ -562,12 +562,15 @@ function readTraitBlob(metadata: unknown): { reliabilityScore: number | null; ch
   };
 }
 
+/** The most pending suggestions `listMemories` reads; a caller that counts them says how many more there are. */
+export const PENDING_SUGGESTION_LIMIT = 200;
+
 /** Everything, for the review screen: confirmed facts plus what is waiting for a yes. */
 export async function listMemories(scope: ServiceScope, input: ListMemoriesInput = {}): Promise<ServiceResult<Memories>> {
   let facts = scope.db.from('family_facts').select('*').eq('family_id', scope.familyId)
     .order('is_pinned', { ascending: false }).order('updated_at', { ascending: false }).limit(500);
   let pending = scope.db.from('family_playbook_suggestions').select('*').eq('family_id', scope.familyId)
-    .eq('status', 'suggested').order('confidence', { ascending: false }).limit(200);
+    .eq('status', 'suggested').order('confidence', { ascending: false }).limit(PENDING_SUGGESTION_LIMIT);
   if (input.memberId) {
     facts = facts.eq('member_id', input.memberId);
     pending = pending.eq('member_id', input.memberId);

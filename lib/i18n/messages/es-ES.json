@@ -17084,5 +17084,16 @@
   "photosModule.searching": "Buscando…",
   "createMemory.someOfThePhotosWereNotSaved": "Se guardaron {saved} de {total} fotos. {failed} no se pudieron subir.",
   "createMemory.tryTheMissingPhotosAgain": "Reintentar las fotos que faltan",
-  "socialFeed.couldNotLoadYourFeed": "No se pudo cargar tu feed en este momento. Inténtalo de nuevo en un momento."
+  "socialFeed.couldNotLoadYourFeed": "No se pudo cargar tu feed en este momento. Inténtalo de nuevo en un momento.",
+  "calendarModule.editingWholeSeries": "Este evento se repite. Los cambios aquí se aplican a todas las repeticiones.",
+  "eventDetailModal.rsvpAppliesToEverySeriesOccurrence": "Este evento se repite. Una respuesta aquí vale para todas las repeticiones.",
+  "tripIntel.couldNotLoadTripIntelligence": "Inteligencia de viajes no pudo cargar tus eventos ahora. Inténtalo de nuevo en un momento.",
+  "tripIntel.savedDeparturesUnavailable": "No se pudieron cargar tus salidas guardadas, así que aquí no aparecen los planes activos. Actualiza antes de planear otra.",
+  "tripIntel.savedTripResearchUnavailable": "No se pudo cargar tu investigación de viajes guardada. Actualiza para intentarlo de nuevo.",
+  "calendar.routineAlreadyAppliedAsItWas": "Esta rutina ya está en esta semana tal como era antes de tus cambios. Deshazla o quita esos eventos y vuelve a aplicarla.",
+  "routinesPanel.routineChangedWhileSaving": "Otra persona guardó esta rutina al mismo tiempo. Ciérrala y vuelve a abrirla para ver su versión.",
+  "referralActions.onlyAParentOrAdult": "Solo un padre, una madre o un adulto puede hacer esto con la recomendación de la familia.",
+  "feedback.tooManyIdeasAtOnce": "Son muchas ideas a la vez. Espera un minuto y vuelve a intentarlo.",
+  "feedback.dailyIdeaLimitReached": "Has alcanzado el límite de hoy de {limit} ideas. Vuelve a intentarlo mañana.",
+  "familyHealth.moreInMedical": "+{count} más en Médico"
 }

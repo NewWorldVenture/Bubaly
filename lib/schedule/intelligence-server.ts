@@ -18,6 +18,8 @@ import { describeDbError } from '@/lib/supabase/errors';
 import { departurePlanDriveTime, firstDriveTime, type DriveTimeFetcher } from '@/lib/trips/drive-time';
 import { dayKeyInZone } from '@/lib/schedule/zoned';
 import { settleAll } from '@/lib/supabase/settle';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { compareExactInstants } from '@/lib/calendar/exact-instant';
 import {
   buildScheduleIntelligence,
   type CareCoverageWindow, type ScheduleEventRow, type ScheduleIntelligence, type ScheduleMealRow,
@@ -40,6 +42,13 @@ export type LoadScheduleOptions = {
   eventLimit?: number;
   /** Tried before the persisted departure plans. */
   driveTime?: DriveTimeFetcher | null;
+  /**
+   * The one occurrence of a series the caller is asking about (the event
+   * detail's Schedule check). Every OTHER occurrence of that series is left
+   * out of the model, which keys its findings by event id: a daily practice's
+   * yesterday and tomorrow would otherwise lend this one their clashes.
+   */
+  occurrence?: { eventId: string; startsAt: string };
 };
 
 export type LoadScheduleResult =
@@ -58,12 +67,19 @@ export async function loadScheduleIntelligence(db: Db, opts: LoadScheduleOptions
   const toDay = dayKeyInZone(toMs + DAY, opts.tz) ?? toIso.slice(0, 10);
   const familyId = opts.familyId;
 
-  const [eventsRes, membersRes, ridesRes, vehiclesRes, mealsRes, sittersRes, plansRes] = await settleAll([
-    db.from('calendar_events')
-      .select('id, title, category, location, starts_at, ends_at, all_day, assignee_id, description')
-      .eq('family_id', familyId).eq('all_day', false)
-      .gte('starts_at', fromIso).lt('starts_at', toIso)
-      .order('starts_at', { ascending: true }).limit(opts.eventLimit ?? 200),
+  // Events through the shared occurrence reader, series expanded: a weekly
+  // practice is stored ONCE, at its first week, so a read by stored
+  // `starts_at` never saw any later week of it, and "No conflicts found" was
+  // computed without it. Timed rows only; all-day rows carry no time to reason
+  // about. A failed or over-limit read is an error, never a shorter list.
+  const eventsPromise = readCalendarOccurrences(db, familyId,
+    { timedFrom: fromIso, timedTo: toIso, allDayFromDay: fromIso.slice(0, 10), allDayToDay: fromIso.slice(0, 10) },
+    opts.tz, {
+      columns: ['id', 'title', 'category', 'location', 'starts_at', 'ends_at', 'all_day', 'assignee_id', 'description'] as const,
+      refine: (query) => query.eq('all_day', false),
+      limit: opts.eventLimit ?? 200,
+    });
+  const restPromise = settleAll([
     db.from('family_members')
       .select('id, display_name, role, is_active')
       .eq('family_id', familyId).eq('is_active', true).limit(50),
@@ -87,6 +103,8 @@ export async function loadScheduleIntelligence(db: Db, opts: LoadScheduleOptions
       .eq('family_id', familyId).not('event_id', 'is', null)
       .order('updated_at', { ascending: false }).limit(200),
   ]);
+  const eventsRes = await eventsPromise;
+  const [membersRes, ridesRes, vehiclesRes, mealsRes, sittersRes, plansRes] = await restPromise;
 
   for (const [label, res] of [
     ['calendar events', eventsRes], ['family members', membersRes], ['rides', ridesRes], ['vehicles', vehiclesRes],
@@ -98,7 +116,11 @@ export async function loadScheduleIntelligence(db: Db, opts: LoadScheduleOptions
     }
   }
 
-  const events = (eventsRes.data ?? []) as ScheduleEventRow[];
+  const focus = opts.occurrence;
+  const events = ((eventsRes.data ?? []) as ScheduleEventRow[]).filter((e) => {
+    if (!focus || e.id !== focus.eventId) return true;
+    try { return compareExactInstants(e.starts_at, focus.startsAt) === 0; } catch { return false; }
+  });
   const members = (membersRes.data ?? []) as ScheduleMemberRow[];
   const rides = (ridesRes.data ?? []) as ScheduleRideRow[];
   const vehicles = (vehiclesRes.data ?? []) as ScheduleVehicleRow[];

@@ -10,6 +10,7 @@ import { SERVICE_CODES } from '@/lib/services/types';
 import { describeActionError } from '@/lib/supabase/errors';
 import { compareExactInstants } from '@/lib/calendar/exact-instant';
 import { isSeries } from '@/lib/calendar/occurrences';
+import { followMovedEvent } from '@/lib/trips/follow-event';
 
 /** The times the quick fix was computed from, as the page rendered them. */
 export type RenderedEventTimes = { startsAt: string; endsAt: string | null; allDay: boolean };
@@ -97,6 +98,11 @@ export async function rescheduleEventAction(
       error: result.code === SERVICE_CODES.notFound ? t('actions.thatEventCouldNotBe') : result.error,
     };
   }
+  // A Smart Departure planned for this event moves with it.
+  await followMovedEvent(supabase, {
+    familyId: ctx.active.familyId, eventId, previousStartsAt: current.starts_at, startsAt: result.data.starts_at,
+    tz: ctx.active.family.timezone || 'UTC',
+  });
   revalidatePath('/dashboard/conflicts');
   revalidatePath('/dashboard/command-center');
   revalidatePath('/dashboard/calendar');

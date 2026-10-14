@@ -17084,5 +17084,16 @@
   "photosModule.searching": "Ricerca in corso…",
   "createMemory.someOfThePhotosWereNotSaved": "Sono state salvate {saved} foto su {total}. Non è stato possibile caricarne {failed}.",
   "createMemory.tryTheMissingPhotosAgain": "Riprova con le foto mancanti",
-  "socialFeed.couldNotLoadYourFeed": "Al momento non è stato possibile caricare il tuo feed. Riprova tra poco."
+  "socialFeed.couldNotLoadYourFeed": "Al momento non è stato possibile caricare il tuo feed. Riprova tra poco.",
+  "calendarModule.editingWholeSeries": "Questo evento si ripete. Le modifiche qui valgono per ogni ricorrenza.",
+  "eventDetailModal.rsvpAppliesToEverySeriesOccurrence": "Questo evento si ripete. Una risposta qui vale per ogni ricorrenza.",
+  "tripIntel.couldNotLoadTripIntelligence": "Trip Intelligence non è riuscita a caricare i tuoi eventi. Riprova tra un momento.",
+  "tripIntel.savedDeparturesUnavailable": "Non è stato possibile caricare le partenze salvate, quindi i piani attivi non sono mostrati. Aggiorna prima di pianificarne un’altra.",
+  "tripIntel.savedTripResearchUnavailable": "Non è stato possibile caricare le ricerche di viaggio salvate. Aggiorna per riprovare.",
+  "calendar.routineAlreadyAppliedAsItWas": "Questa routine è già in questa settimana com’era prima delle tue modifiche. Annullala o rimuovi quegli eventi, poi applicala di nuovo.",
+  "routinesPanel.routineChangedWhileSaving": "Qualcun altro ha salvato questa routine nello stesso momento. Chiudila e riaprila per vedere la sua versione.",
+  "referralActions.onlyAParentOrAdult": "Solo un genitore o un adulto può farlo con il codice invito della famiglia.",
+  "feedback.tooManyIdeasAtOnce": "Sono tante idee tutte insieme. Aspetta un minuto e riprova.",
+  "feedback.dailyIdeaLimitReached": "Hai raggiunto il limite di oggi di {limit} idee. Riprova domani.",
+  "familyHealth.moreInMedical": "+{count} altri in Salute"
 }

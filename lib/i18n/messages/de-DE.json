@@ -17084,5 +17084,16 @@
   "photosModule.searching": "Suche läuft…",
   "createMemory.someOfThePhotosWereNotSaved": "{saved} von {total} Fotos wurden gespeichert. {failed} konnten nicht hochgeladen werden.",
   "createMemory.tryTheMissingPhotosAgain": "Fehlende Fotos erneut versuchen",
-  "socialFeed.couldNotLoadYourFeed": "Dein Feed konnte gerade nicht geladen werden. Versuche es gleich noch einmal."
+  "socialFeed.couldNotLoadYourFeed": "Dein Feed konnte gerade nicht geladen werden. Versuche es gleich noch einmal.",
+  "calendarModule.editingWholeSeries": "Dieser Termin wiederholt sich. Änderungen hier gelten für jedes Vorkommen.",
+  "eventDetailModal.rsvpAppliesToEverySeriesOccurrence": "Dieser Termin wiederholt sich. Eine Zusage hier gilt für jedes Vorkommen.",
+  "tripIntel.couldNotLoadTripIntelligence": "Die Reiseplanung konnte deine Termine gerade nicht laden. Versuche es gleich noch einmal.",
+  "tripIntel.savedDeparturesUnavailable": "Deine gespeicherten Abfahrten konnten nicht geladen werden, daher fehlen aktive Abfahrtspläne hier. Lade neu, bevor du eine weitere planst.",
+  "tripIntel.savedTripResearchUnavailable": "Deine gespeicherte Reiserecherche konnte gerade nicht geladen werden. Lade neu, um es noch einmal zu versuchen.",
+  "calendar.routineAlreadyAppliedAsItWas": "Diese Routine steht schon in dieser Woche, so wie sie vor deinen Änderungen war. Mache das rückgängig oder entferne die Termine und wende sie dann erneut an.",
+  "routinesPanel.routineChangedWhileSaving": "Jemand anderes hat diese Routine gleichzeitig gespeichert. Schließe sie und öffne sie erneut, um deren Version zu sehen.",
+  "referralActions.onlyAParentOrAdult": "Nur ein Elternteil oder Erwachsener kann das mit der Empfehlung der Familie tun.",
+  "feedback.tooManyIdeasAtOnce": "Das sind viele Ideen auf einmal. Warte eine Minute und versuche es dann erneut.",
+  "feedback.dailyIdeaLimitReached": "Du hast das heutige Limit von {limit} Ideen erreicht. Versuche es morgen wieder.",
+  "familyHealth.moreInMedical": "+{count} weitere unter Medizin"
 }

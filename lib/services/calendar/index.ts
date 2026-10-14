@@ -445,11 +445,13 @@ export async function deleteEvents(scope: ServiceScope, eventIds: string[]): Pro
 
 export type UpdateEventPatch = Partial<Omit<CreateEventInput, 'title'>> & { title?: string };
 
-type EventClockState = Pick<CalendarEvent, 'id' | 'title' | 'starts_at' | 'ends_at' | 'all_day'>;
+type EventClockState = Pick<CalendarEvent, 'id' | 'title' | 'starts_at' | 'ends_at' | 'all_day'> & { updated_at?: string };
 /**
  * `expected` is the clock the caller already holds for the row (the conflicts
  * page's quick fix, computed from a render): the time change is written only
- * if the row still has it, rather than against whatever it reads now.
+ * if the row still has it, rather than against whatever it reads now. With an
+ * `updated_at` the row's version must match too, so a change to its text
+ * fields (the calendar editor sends them all) is not written over either.
  */
 export async function updateEvent(scope: ServiceScope, eventId: string, patch: UpdateEventPatch, expected?: EventClockState): Promise<ServiceResult<CalendarEvent>> {
   return applyEventUpdate(scope, eventId, patch, expected);
@@ -529,6 +531,7 @@ async function applyEventUpdate(scope: ServiceScope, eventId: string, patch: Upd
   if (clockState) {
     mutation = mutation.eq('starts_at', clockState.starts_at).eq('all_day', clockState.all_day);
     mutation = clockState.ends_at === null ? mutation.is('ends_at', null) : mutation.eq('ends_at', clockState.ends_at);
+    if (clockState.updated_at) mutation = mutation.eq('updated_at', clockState.updated_at);
   }
   const { data, error } = await mutation.select('*').maybeSingle();
 

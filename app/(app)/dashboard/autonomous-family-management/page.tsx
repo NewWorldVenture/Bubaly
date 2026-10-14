@@ -116,7 +116,7 @@ export default async function AutonomousManagementPage() {
                     <p className="text-sm font-medium">{r.title}</p>
                     {r.body && <p className="text-xs text-muted">{r.body}</p>}
                   </div>
-                  <RecommendationActions id={r.id} />
+                  {manager && <RecommendationActions id={r.id} />}
                 </li>
               ))}
               {actions.map((a) => (
