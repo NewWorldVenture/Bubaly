@@ -5,7 +5,7 @@ import type { Database } from '@/lib/database.types';
 import { createServiceClient } from '@/lib/supabase/server';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { loadAISettings } from '@/lib/services/ai-settings';
-import { nextRelativeFire, scheduleOf } from '@/lib/services/routines';
+import { nextRelativeFire, readRelativeFire, scheduleOf } from '@/lib/services/routines';
 import { firesOncePerDay, nextCronRun, sameLocalMinute } from '@/lib/services/routines/schedule';
 import { createRequest, createRun, updateRequest } from '@/lib/ai/runs/store';
 import { kickRun } from '@/lib/ai/runs/continue';
@@ -177,6 +177,43 @@ export async function GET(req: NextRequest) {
     if (!dueAt) continue;
 
     const tz = zoneFor(zones, rule.family_id);
+
+    // A relative routine's `next_run_at` was computed from its anchor rows
+    // when it was armed, and nothing re-arms it when a row changes. So the
+    // anchor is asked again whether this instant is still an occurrence: a
+    // cancelled trip filed a request on its old date, and a trip moved later
+    // fired at the old time and then again at the new one (two different
+    // due_at, so the reservation did not stop it). Not an occurrence any more:
+    // the rule moves to what is, and nothing is filed.
+    //
+    // A read that FAILED is not an anchor that went: moving the rule then would
+    // arm it from a later tick's `now`, after this due_at, and one transient
+    // error would lose a real occurrence. So the rule and the occurrence are
+    // left exactly as they are, nothing is reserved, and the next tick asks
+    // again.
+    const anchored = scheduleOf(rule);
+    if (anchored?.kind === 'relative') {
+      const fire = await readRelativeFire(db, rule.family_id, anchored, new Date(Date.parse(dueAt) - 1), tz);
+      if (!fire.ok) {
+        console.error('[cron:family-routines] could not read the anchor of a due routine; it stays due', rule.id);
+        problems.push(rule.id);
+        continue;
+      }
+      const current = fire.at;
+      if (!current || current.getTime() !== Date.parse(dueAt)) {
+        const { data: moved, error: moveError } = await db.from('family_automation_rules')
+          .update({ next_run_at: current ? current.toISOString() : null })
+          .eq('id', rule.id).eq('family_id', rule.family_id).eq('next_run_at', dueAt).select('id');
+        if (moveError) {
+          console.error('[cron:family-routines] could not move a routine off an occurrence its anchor no longer has', rule.id, moveError);
+          problems.push(rule.id);
+        } else if (wroteNoRows(moved)) {
+          console.error('[cron:family-routines] routine changed before it could be moved off a stale occurrence', rule.id);
+        }
+        skipped += 1;
+        continue;
+      }
+    }
 
     // Reserve the occurrence first. A duplicate key means another worker has
     // it — not an error, just somebody else's turn.

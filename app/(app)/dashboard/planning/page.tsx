@@ -21,23 +21,34 @@ export async function generateMetadata(): Promise<Metadata> {
 export const dynamic = 'force-dynamic';
 
 // Per-query fail-safe: a single domain erroring (e.g. a table not yet migrated on
-// this database, or a slow/failed count) degrades that one card to empty instead
-// of taking down the whole hub via the error boundary.
-async function safe<T>(q: PromiseLike<{ data: T[] | null; count?: number | null }>): Promise<{ data: T[] | null; count: number | null }> {
+// this database, or a slow/failed count) degrades that one card instead of
+// taking down the whole hub via the error boundary. It degrades to "could not
+// load", never to empty: PostgREST answers a failure as { data: null, error }
+// without throwing, and keeping only `data` showed "No upcoming events" and a
+// count of 0 for a read that never happened, with nothing logged.
+async function safe<T>(card: string, q: PromiseLike<{ data: T[] | null; count?: number | null; error?: unknown }>): Promise<{ data: T[] | null; count: number | null; failed: boolean }> {
   try {
     const r = await q;
-    return { data: r.data ?? null, count: r.count ?? null };
-  } catch {
-    return { data: null, count: null };
+    if (r.error) {
+      console.error(`[planning] ${card} read failed`, r.error);
+      return { data: null, count: null, failed: true };
+    }
+    return { data: r.data ?? null, count: r.count ?? null, failed: false };
+  } catch (error) {
+    console.error(`[planning] ${card} read failed`, error);
+    return { data: null, count: null, failed: true };
   }
 }
 
 // One feature card in the hub grid.
 async function FeatureCard({
-  index, title, href, icon: Icon, tint, count, countLabel, children,
+  index, title, href, icon: Icon, tint, count, countLabel, failed = false, children,
 }: {
   index: number; title: string; href: string; icon: React.ComponentType<{ className?: string }>;
-  tint: string; count: number; countLabel: string; children: React.ReactNode;
+  tint: string; count: number; countLabel: string;
+  /** Its read failed: say so, and claim no count, rather than render the empty hint. */
+  failed?: boolean;
+  children: React.ReactNode;
 }) {
   const tr = await getTranslations();
   return (
@@ -55,9 +66,11 @@ async function FeatureCard({
         <Link href={href} className="flex shrink-0 items-center gap-0.5 rounded-lg px-2 py-1 text-xs font-semibold text-brand-text transition hover:bg-brand/10" aria-label={tr('itemAction.open', { name: title })}>{tr('planning.open')}{' '}<ChevronRight className="h-3.5 w-3.5" />
         </Link>
       </div>
-      <div className="min-h-[120px] flex-1 space-y-2">{children}</div>
+      <div className="min-h-[120px] flex-1 space-y-2">
+        {failed ? <p role="alert" className="py-4 text-center text-xs text-danger">{tr('dashboardPlanning.couldNotLoadThisCard')}</p> : children}
+      </div>
       <Link href={href} className="mt-4 border-t border-border/60 pt-3 text-xs font-semibold text-muted transition hover:text-brand-text">
-        {count} {countLabel} <ChevronRight className="inline h-3 w-3" />
+        {failed ? '—' : count} {countLabel} <ChevronRight className="inline h-3 w-3" />
       </Link>
     </section>
   );
@@ -120,29 +133,29 @@ export default async function PlanningPage() {
   };
 
   const [
-    { data: events, count: eventCount },
-    { data: tasks, count: taskCount },
-    { data: reminders, count: reminderCount },
-    { data: notes, count: noteCount },
-    { data: docs, count: docCount },
-    { data: contacts, count: contactCount },
-    { data: milestones, count: milestoneCount },
-    { data: photos, count: photoCount },
+    { data: events, count: eventCount, failed: eventsFailed },
+    { data: tasks, count: taskCount, failed: tasksFailed },
+    { data: reminders, count: reminderCount, failed: remindersFailed },
+    { data: notes, count: noteCount, failed: notesFailed },
+    { data: docs, count: docCount, failed: docsFailed },
+    { data: contacts, count: contactCount, failed: contactsFailed },
+    { data: milestones, count: milestoneCount, failed: milestonesFailed },
+    { data: photos, count: photoCount, failed: photosFailed },
   ] = await Promise.all([
-    safe(supabase.from('calendar_events').select('id, title, starts_at, all_day', { count: 'exact' })
+    safe('calendar', supabase.from('calendar_events').select('id, title, starts_at, all_day', { count: 'exact' })
       .eq('family_id', familyId).gte('starts_at', nowIso).order('starts_at').limit(4)),
-    safe(supabase.from('todo_items').select('id, title, due_date', { count: 'exact' })
+    safe('tasks', supabase.from('todo_items').select('id, title, due_date', { count: 'exact' })
       .eq('family_id', familyId).eq('is_done', false).order('due_date', { ascending: true, nullsFirst: false }).limit(4)),
-    safe(readPlanningReminders()),
-    safe(supabase.from('notes').select('id, title, body, updated_at', { count: 'exact' })
+    safe('reminders', readPlanningReminders()),
+    safe('notes', supabase.from('notes').select('id, title, body, updated_at', { count: 'exact' })
       .eq('family_id', familyId).order('updated_at', { ascending: false }).limit(4)),
-    safe(supabase.from('documents').select('id, title, category, created_at', { count: 'exact' })
+    safe('documents', supabase.from('documents').select('id, title, category, created_at', { count: 'exact' })
       .eq('family_id', familyId).order('created_at', { ascending: false }).limit(4)),
-    safe(supabase.from('family_contacts').select('id, name, relationship', { count: 'exact' })
+    safe('contacts', supabase.from('family_contacts').select('id, name, relationship', { count: 'exact' })
       .eq('family_id', familyId).order('name').limit(5)),
-    safe(supabase.from('family_milestones').select('id, title, milestone_date', { count: 'exact' })
+    safe('milestones', supabase.from('family_milestones').select('id, title, milestone_date', { count: 'exact' })
       .eq('family_id', familyId).gte('milestone_date', todayIso).order('milestone_date').limit(4)),
-    safe(supabase.from('family_photos').select('id, url, thumbnail_url', { count: 'exact' })
+    safe('family wall', supabase.from('family_photos').select('id, url, thumbnail_url', { count: 'exact' })
       .eq('family_id', familyId).order('created_at', { ascending: false }).limit(4)),
   ]);
 
@@ -183,49 +196,49 @@ export default async function PlanningPage() {
       {/* 8-card grid */}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
         {/* 1. Calendar */}
-        <FeatureCard index={1} title={tr('dashboardPlanning.calendar')} href="/dashboard/calendar" icon={CalendarIcon} tint="bg-blue-500/15 text-blue-400" count={eventCount ?? 0} countLabel="upcoming events">
+        <FeatureCard index={1} title={tr('dashboardPlanning.calendar')} href="/dashboard/calendar" icon={CalendarIcon} tint="bg-blue-500/15 text-blue-400" count={eventCount ?? 0} countLabel="upcoming events" failed={eventsFailed}>
           {(events ?? []).length === 0 ? <EmptyHint>{tr('dashboardPlanning.noUpcomingEvents')}</EmptyHint>
             : (events as Ev[]).map((e) => <ListRow key={e.id} label={e.title} meta={e.all_day ? fmtDate(e.starts_at, 'MMM d') : fmtTime(e.starts_at)} dot="bg-blue-400" />)}
         </FeatureCard>
 
         {/* 2. Tasks */}
-        <FeatureCard index={2} title={tr('dashboardPlanning.tasks')} href="/dashboard/todos" icon={CheckSquare} tint="bg-emerald-500/15 text-emerald-400" count={taskCount ?? 0} countLabel="open tasks">
+        <FeatureCard index={2} title={tr('dashboardPlanning.tasks')} href="/dashboard/todos" icon={CheckSquare} tint="bg-emerald-500/15 text-emerald-400" count={taskCount ?? 0} countLabel="open tasks" failed={tasksFailed}>
           {(tasks ?? []).length === 0 ? <EmptyHint>{tr('dashboardPlanning.noOpenTasks')}</EmptyHint>
             : (tasks as Td[]).map((t) => <ListRow key={t.id} label={t.title} meta={t.due_date === todayIso ? 'Today' : fmtDate(t.due_date, 'MMM d')} dot="bg-emerald-400" />)}
         </FeatureCard>
 
         {/* 3. Reminders */}
-        <FeatureCard index={3} title={tr('dashboardPlanning.reminders')} href="/dashboard/reminders" icon={BellRing} tint="bg-amber-500/15 text-amber-400" count={reminderCount ?? 0} countLabel="active reminders">
+        <FeatureCard index={3} title={tr('dashboardPlanning.reminders')} href="/dashboard/reminders" icon={BellRing} tint="bg-amber-500/15 text-amber-400" count={reminderCount ?? 0} countLabel="active reminders" failed={remindersFailed}>
           {(reminders ?? []).length === 0 ? <EmptyHint>{tr('dashboardPlanning.noActiveReminders')}</EmptyHint>
             : (reminders as Rm[]).map((r) => <ListRow key={r.id} label={r.title} meta={r.remind_at ? fmtDate(r.remind_at, 'MMM d') : ''} dot="bg-amber-400" />)}
         </FeatureCard>
 
         {/* 4. Notes */}
-        <FeatureCard index={4} title={tr('dashboardPlanning.notes')} href="/dashboard/notes" icon={StickyNote} tint="bg-violet-500/15 text-violet-400" count={noteCount ?? 0} countLabel="notes">
+        <FeatureCard index={4} title={tr('dashboardPlanning.notes')} href="/dashboard/notes" icon={StickyNote} tint="bg-violet-500/15 text-violet-400" count={noteCount ?? 0} countLabel="notes" failed={notesFailed}>
           {(notes ?? []).length === 0 ? <EmptyHint>{tr('dashboardPlanning.noNotesYet')}</EmptyHint>
             : (notes as Nt[]).map((n) => <ListRow key={n.id} label={(n.title ?? n.body ?? 'Untitled').slice(0, 60)} meta={fmtDate(n.updated_at, 'MMM d')} dot="bg-violet-400" />)}
         </FeatureCard>
 
         {/* 5. Documents */}
-        <FeatureCard index={5} title={tr('dashboardPlanning.documents')} href="/dashboard/documents" icon={FolderLock} tint="bg-sky-500/15 text-sky-400" count={docCount ?? 0} countLabel="documents">
+        <FeatureCard index={5} title={tr('dashboardPlanning.documents')} href="/dashboard/documents" icon={FolderLock} tint="bg-sky-500/15 text-sky-400" count={docCount ?? 0} countLabel="documents" failed={docsFailed}>
           {(docs ?? []).length === 0 ? <EmptyHint>{tr('dashboardPlanning.noDocumentsYet')}</EmptyHint>
             : (docs as Dc[]).map((d) => <ListRow key={d.id} label={d.title} meta={d.category ?? ''} dot="bg-sky-400" />)}
         </FeatureCard>
 
         {/* 6. Contacts */}
-        <FeatureCard index={6} title={tr('dashboardPlanning.contacts')} href="/dashboard/contacts" icon={ContactIcon} tint="bg-rose-500/15 text-rose-400" count={contactCount ?? 0} countLabel="contacts">
+        <FeatureCard index={6} title={tr('dashboardPlanning.contacts')} href="/dashboard/contacts" icon={ContactIcon} tint="bg-rose-500/15 text-rose-400" count={contactCount ?? 0} countLabel="contacts" failed={contactsFailed}>
           {(contacts ?? []).length === 0 ? <EmptyHint>{tr('dashboardPlanning.noContactsYet')}</EmptyHint>
             : (contacts as Ct[]).map((c) => <ListRow key={c.id} label={c.name} meta={c.relationship ?? ''} dot="bg-rose-400" />)}
         </FeatureCard>
 
         {/* 7. Milestones */}
-        <FeatureCard index={7} title={tr('dashboardPlanning.milestones')} href="/dashboard/celebrations" icon={Award} tint="bg-fuchsia-500/15 text-fuchsia-400" count={milestoneCount ?? 0} countLabel="upcoming milestones">
+        <FeatureCard index={7} title={tr('dashboardPlanning.milestones')} href="/dashboard/celebrations" icon={Award} tint="bg-fuchsia-500/15 text-fuchsia-400" count={milestoneCount ?? 0} countLabel="upcoming milestones" failed={milestonesFailed}>
           {(milestones ?? []).length === 0 ? <EmptyHint>{tr('dashboardPlanning.noUpcomingMilestones')}</EmptyHint>
             : (milestones as Ms[]).map((m) => <ListRow key={m.id} label={m.title} meta={fmtDate(m.milestone_date, 'MMM d')} dot="bg-fuchsia-400" />)}
         </FeatureCard>
 
         {/* 8. Family Wall */}
-        <FeatureCard index={8} title={tr('dashboardPlanning.familyWall')} href="/dashboard/social-feed" icon={Newspaper} tint="bg-indigo-500/15 text-indigo-400" count={photoCount ?? 0} countLabel="shared moments">
+        <FeatureCard index={8} title={tr('dashboardPlanning.familyWall')} href="/dashboard/social-feed" icon={Newspaper} tint="bg-indigo-500/15 text-indigo-400" count={photoCount ?? 0} countLabel="shared moments" failed={photosFailed}>
           {(photos ?? []).length === 0 ? <EmptyHint>{tr('dashboardPlanning.noPostsYet')}</EmptyHint>
             : (
               <div className="grid grid-cols-4 gap-1.5">

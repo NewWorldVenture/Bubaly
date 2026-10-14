@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { requireAal2 } from '@/lib/auth/require-aal2';
-import { settleAll } from '@/lib/supabase/settle';
+import { settle, settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
@@ -37,6 +37,19 @@ export default async function TrustPage() {
     console.error('[trust] activity read threw', cause);
     return { ok: false as const, error: String(cause) };
   });
+  // The trust ledger stays OUT of the fail-closed set below — a log view must
+  // not blank the console — but a failed read is not "No activity yet": the
+  // Audit tab says it could not be read, and the failure is logged. A missing
+  // table (an unapplied migration) is still read as empty.
+  const auditRead = { failed: false };
+  const readAudit = async () => {
+    const read = await settle(supabase.from('trust_audit_logs').select('id, actor_kind, actor_id, domain, capability, decision, reason, policy_id, confidence, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(40));
+    if (read.error && !isMissingTableError(read.error)) {
+      console.error('[dashboard/trust] trust audit log read failed', read.error);
+      auditRead.failed = true;
+    }
+    return read;
+  };
   const [
     membersRes,
     policiesRes,
@@ -51,8 +64,13 @@ export default async function TrustPage() {
     supabase.from('permission_grants').select('id, member_id, domain, capability, effect').eq('family_id', familyId),
     supabase.from('trust_delegations').select('*').eq('family_id', familyId).is('revoked_at', null).gt('expires_at', nowIso).order('expires_at'),
     supabase.from('approval_requests').select('*').eq('family_id', familyId).order('created_at', { ascending: false }).limit(50),
-    supabase.from('emergency_sessions').select('*').eq('family_id', familyId).is('ended_at', null),
-    supabase.from('trust_audit_logs').select('id, actor_kind, actor_id, domain, capability, decision, reason, policy_id, confidence, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(40),
+    // Open AND unexpired, newest first: the engine stops applying a session at
+    // its expiry (lib/trust/server.ts), so one past it is not "active" here
+    // either — it held the activation form hidden and asked a parent to end a
+    // session that had already stopped. Every open one is shown, not the first.
+    supabase.from('emergency_sessions').select('*').eq('family_id', familyId).is('ended_at', null).gt('expires_at', nowIso)
+      .order('activated_at', { ascending: false }).order('id'),
+    readAudit(),
   ]);
 
   // Trust is a security-state surface: the policies, grants, delegations,
@@ -102,6 +120,7 @@ export default async function TrustPage() {
     approvals: (approvals ?? []) as unknown as TrustData['approvals'],
     emergencies: (emergencies ?? []) as unknown as TrustData['emergencies'],
     audit: (audit ?? []) as unknown as TrustData['audit'],
+    auditError: auditRead.failed ? t('trust.couldNotLoadTheAuditLog') : null,
     activity: activityRes.ok ? activityRes.data : null,
     activityError: activityRes.ok ? null : t('trustActivity.couldNotLoadActivity'),
     basedOn,

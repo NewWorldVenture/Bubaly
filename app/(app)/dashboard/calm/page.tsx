@@ -12,6 +12,8 @@ import { autopilotTitleFor } from '@/lib/autopilot/engine';
 import { suggestionVisibleTo } from '@/lib/autopilot/audience';
 import { readVisiblePrefix } from '@/lib/autopilot/visible-prefix';
 import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
+import { readsHouseholdMoney } from '@/lib/finance/household-money';
+import { managersMove } from '@/lib/operating-index/audience';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -19,7 +21,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 export const dynamic = 'force-dynamic';
 
-type FoiSuggestion = { id?: string; title?: string; detail?: string; href?: string; impact?: number };
+type FoiSuggestion = { id?: string; dimension?: string; title?: string; detail?: string; href?: string; impact?: number };
 
 type ReadResult<T> = { data: T[]; error: unknown | null };
 
@@ -131,7 +133,11 @@ export default async function CalmPage() {
     // (usually the cron, in en-US); worded again here for this reader.
     items.push({ id: `autopilot:${s.id}`, source: 'autopilot', title: autopilotTitleFor(s, locale.code, t), detail: s.detail, href: '/dashboard/autopilot', severity });
   }
-  const foiSuggestions = ((foiRows[0]?.suggestions as FoiSuggestion[] | undefined) ?? []);
+  // The latest row is the household's day, a parent's or an adult's reading.
+  // Its money and paperwork moves ("1 account is below zero") are theirs
+  // (lib/operating-index/audience.ts), as on the Operating Index page.
+  const foiSuggestions = ((foiRows[0]?.suggestions as FoiSuggestion[] | undefined) ?? [])
+    .filter((g) => readsHouseholdMoney(ctx.active.role) || !managersMove(g));
   for (const g of foiSuggestions) {
     const impact = g.impact ?? 5;
     const severity: ItemSeverity = impact >= 8 ? 'action' : impact >= 5 ? 'attention' : 'info';

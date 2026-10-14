@@ -12,6 +12,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { getFormat } from '@/lib/utils/format-server';
 import { cn } from '@/lib/utils/cn';
 import { loadOperatingIndex } from '@/lib/operating-index/server';
+import { readsHouseholdMoney } from '@/lib/finance/household-money';
 import { ChangeRecap } from '@/components/operating-index/change-recap';
 import { OutcomesStrip } from '@/components/outcomes/outcomes-strip';
 import { countFromResult, countMatchingResult } from '@/lib/outcomes/discovery';
@@ -113,9 +114,10 @@ export default async function CommandCenterPage() {
 
   // Evening "what changed" recap — the same FOI diff shown on the Operating
   // Index, brought into the Command Center (pillar #5). Degrades to null-safe.
+  // Today's row is kept only from a parent's or an adult's visit (SnapshotReach).
   let change;
   try {
-    ({ change } = await loadOperatingIndex(supabase, familyId, tz, now));
+    ({ change } = await loadOperatingIndex(supabase, familyId, tz, readsHouseholdMoney(ctx.active.role) ? 'household' : 'member', now));
   } catch (error) {
     // The recap is ONE section of this page. ChangeRecap requires a real
     // ChangeSummary, so rather than inventing an empty one that would render as

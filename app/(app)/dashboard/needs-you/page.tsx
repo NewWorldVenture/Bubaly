@@ -142,7 +142,9 @@ export default async function NeedsYouPage() {
         headline={needsHeadline(summarizeNeeds(all))}
         approvals={Object.fromEntries(aiApprovals.map((a) => [a.id, a]))}
         moneyApprovalKinds={Object.fromEntries(moneyApprovals.map((a) => [a.id, a.kind]))}
-        recommendationBodies={Object.fromEntries(recommendations.map((r) => [r.id, r.body]))}
+        // A recommendation's body is the planner's reasoning, which can touch
+        // money or documents: the managers' to read, as they decide it.
+        recommendationBodies={manager ? Object.fromEntries(recommendations.map((r) => [r.id, r.body])) : {}}
         canDecide={manager}
       />
     </div>

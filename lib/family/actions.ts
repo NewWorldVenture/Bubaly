@@ -215,6 +215,13 @@ export async function setRecommendationStatus(
   status: 'accepted' | 'dismissed' | 'done',
 ): Promise<ActionResult> {
   const ctx = await requireUserContext();
+  // A pending recommendation waits on the parents (needs-you, home and the
+  // briefing read status = 'pending'), so resolving it is theirs: a child or a
+  // guest dismissing it took it off every parent's queue unseen. The briefing
+  // and Needs attention already draw these buttons for a manager only.
+  if (!isManager(ctx.active.role)) {
+    return { ok: false, error: (await getTranslations())('actionRefusal.notAllowed') };
+  }
   const supabase = await createServer();
   const { data: recommended, error } = await supabase
     .from('family_ai_recommendations')
@@ -371,6 +378,10 @@ export async function resolveAutomationRun(
     .from('family_automation_runs')
     .update({
       status: decision === 'approved' ? 'approved' : 'skipped',
+      // A Skip ends the run in its state too, as dismissConciergeRun ends a
+      // declined one: left at 'awaiting_approval' beside 'skipped', the run was
+      // neither waiting nor stopped to the pages that list runs by state.
+      ...(decision === 'skipped' ? { state: 'cancelled' as const } : {}),
       approved_by: ctx.user.id,
       approved_at: new Date().toISOString(),
     })

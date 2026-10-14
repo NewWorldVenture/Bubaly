@@ -46,7 +46,7 @@ async function overspent(now: Date, tz = 'UTC', client: unknown = db): Promise<n
 
 /** The budget-drift signals the real scan stores, by category. */
 async function drift(now: Date, tz = 'UTC', client: unknown = db): Promise<Record<string, unknown>[]> {
-  const result = await runSignalDetection(client as DB, FAMILY, 'en-US', echo, now, tz);
+  const result = await runSignalDetection(client as DB, FAMILY, 'en-US', echo, now, tz, 'household');
   expect(result).toMatchObject({ ok: true });
   return db.table('family_signals').filter((row) => row.kind === 'budget_drift').map((row) => row.evidence as Record<string, unknown>);
 }
@@ -180,7 +180,7 @@ describe('the year of expenses is read once, row by row, while it is written to'
   it('a year past the read\'s ceiling is a failed read, not a count from part of it', async () => {
     db.seed('transactions', Array.from({ length: 5000 }, () => expense('2026-03-01', 1, 'Pets')));
     await expect(buildSnapshot(db as unknown as DB, FAMILY, 'UTC', OCTOBER_13)).rejects.toBeTruthy();
-    const result = await runSignalDetection(db as unknown as DB, FAMILY, 'en-US', echo, OCTOBER_13, 'UTC');
+    const result = await runSignalDetection(db as unknown as DB, FAMILY, 'en-US', echo, OCTOBER_13, 'UTC', 'household');
     expect(result.ok).toBe(false);
     expect(db.table('family_signals')).toEqual([]);
   });

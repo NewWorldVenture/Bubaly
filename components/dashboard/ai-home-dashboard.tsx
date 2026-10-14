@@ -456,6 +456,16 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   // the family's live signals, rank by impact, and surface exactly ONE above the
   // fold. Candidates are persisted to daily_insights so a dismissal sticks and the
   // next-best insight takes its place. All best-effort — never blocks the render.
+  //
+  // The rows are the HOUSEHOLD's (one per family, day and kind, 0141; any
+  // member reads and writes them), and the candidates are built from THIS
+  // reader's reads: a parent's hold a passport 0266 keeps from a child, an
+  // insurance card that is the managers' and every member's clashes; a child's
+  // only their own. Shown the top active row whoever wrote it, a child was
+  // handed "Mum's passport expires in 6 days", and a child's visit rewrote the
+  // household's clash for the day as theirs. Now only a parent's or an adult's
+  // visit keeps the household's rows, and is shown them; anyone else's starts
+  // a kind nobody has written today, marked as theirs, and is shown their own.
   let insightRow: { id: string; kind: string; title: string; detail: string; href: string; impact: number; alternatives: number } | null = null;
   try {
     const dayIso = new Date(todayStart.getTime() + 86400000).toISOString().slice(0, 10);
@@ -493,26 +503,46 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       const blocked = new Set(((existingIns ?? []) as { kind: string; status: string }[]).filter((r) => r.status !== 'active').map((r) => r.kind));
       const toUpsert = existingError ? [] : candidates.filter((c) => !blocked.has(c.kind));
       if (toUpsert.length > 0) {
-        const { error: insightError } = await settle(supabase.from('daily_insights').upsert(
-          toUpsert.map((c) => ({
-            family_id: familyId, as_of_date: today, kind: c.kind,
-            title: c.title, detail: c.detail, href: c.href, impact: c.impact,
-            status: 'active', created_by: ctx.user.id,
-          })),
-          { onConflict: 'family_id,as_of_date,kind' },
-        ));
+        const rows = toUpsert.map((c) => ({
+          family_id: familyId, as_of_date: today, kind: c.kind,
+          title: c.title, detail: c.detail, href: c.href, impact: c.impact,
+          status: 'active', created_by: ctx.user.id,
+          // Whose reading the row is: none (null) for the household's.
+          member_id: manager ? null : myMemberId,
+        }));
+        // A parent's or an adult's reading is the household's and keeps the
+        // day's row; anyone else's starts a kind nobody has written today and
+        // leaves a row that is there as it is. Neither reports what it wrote:
+        // the re-read below finds the rows there are.
+        const { error: insightError } = await settle(manager
+          ? supabase.from('daily_insights').upsert(rows, { onConflict: 'family_id,as_of_date,kind' })
+          : supabase.from('daily_insights').upsert(rows, { onConflict: 'family_id,as_of_date,kind', ignoreDuplicates: true }));
         if (insightError) console.error('[home] daily_insights upsert failed', { message: insightError.message });
       }
       // Re-read active rows so the DB id (needed to dismiss) + persisted dismissals win.
       const { data: activeRows } = await supabase.from('daily_insights')
-        .select('id, kind, title, detail, href, impact')
+        .select('id, kind, title, detail, href, impact, member_id')
         .eq('family_id', familyId).eq('as_of_date', today).eq('status', 'active');
-      const ranked = rankInsights(((activeRows ?? []) as { id: string; kind: string; title: string; detail: string | null; href: string | null; impact: number }[])
-        // A row persisted earlier today says what its source said then: with that
-        // source unread now, an old conflict or an old grocery count is not
-        // shown as today's insight (a fresh candidate from it is already withheld).
-        .filter((r) => (!conflictsUnavailable || r.kind !== 'conflict') && (!groceryUnavailable || r.kind !== 'grocery'))
-        .map((r) => ({ id: r.id, kind: r.kind as InsightKind, title: r.title, detail: r.detail ?? '', href: r.href ?? '/dashboard', impact: r.impact })));
+      const active = (activeRows ?? []) as { id: string; kind: string; title: string; detail: string | null; href: string | null; impact: number; member_id: string | null }[];
+      const shown = manager
+        // A parent or an adult is shown the household's insight of the day as
+        // its rows keep it — never a row another member's narrower reading
+        // started (member_id), which no household reading has rewritten.
+        ? active
+          .filter((r) => !r.member_id)
+          // A row persisted earlier today says what its source said then: with that
+          // source unread now, an old conflict or an old grocery count is not
+          // shown as today's insight (a fresh candidate from it is already withheld).
+          .filter((r) => (!conflictsUnavailable || r.kind !== 'conflict') && (!groceryUnavailable || r.kind !== 'grocery'))
+          .map((r) => ({ id: r.id, kind: r.kind as InsightKind, title: r.title, detail: r.detail ?? '', href: r.href ?? '/dashboard', impact: r.impact }))
+        // Anyone else is shown their own reading, never a row's words, under
+        // the day's active row of the same kind: its id is what a dismissal
+        // marks, and a kind with no active row was dismissed today.
+        : candidates.flatMap((c) => {
+          const row = active.find((r) => r.kind === c.kind);
+          return row ? [{ ...c, id: row.id }] : [];
+        });
+      const ranked = rankInsights(shown);
       const top = ranked[0];
       if (top) insightRow = { id: top.id, kind: top.kind, title: top.title, detail: top.detail, href: top.href, impact: top.impact, alternatives: Math.max(0, ranked.length - 1) };
     }
@@ -671,7 +701,9 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
         headline={needsHeader}
         approvals={Object.fromEntries(aiApprovals.map((a) => [a.id, a]))}
         moneyApprovalKinds={Object.fromEntries(((approvalRows ?? []) as ParentApprovalRow[]).map((a) => [a.id, a.kind]))}
-        recommendationBodies={Object.fromEntries(recommendations.map((r) => [r.id, r.body]))}
+        // A recommendation's body is the planner's reasoning, which can touch
+        // money or documents: the managers' to read, as they decide it.
+        recommendationBodies={manager ? Object.fromEntries(recommendations.map((r) => [r.id, r.body])) : {}}
         canDecide={manager}
       />}
 

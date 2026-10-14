@@ -127,8 +127,11 @@ vi.mock('@/components/metrics/signal-precision-card', () => ({ SignalPrecisionCa
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => undefined, push: () => undefined }) }));
 vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({}) }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => h.db }));
+// The reader is a PARENT: budget drift is the household's money, which the
+// Family Intelligence page and the reasoning report show a parent or an adult
+// only (tests/budget-drift-is-the-parents-to-read-and-decide.test.ts).
 vi.mock('@/lib/supabase/auth', () => ({
-  requireUserContext: async () => ({ user: { id: 'u1' }, active: { familyId: 'f1', family: { timezone: 'UTC' } } }),
+  requireUserContext: async () => ({ user: { id: 'u1' }, active: { familyId: 'f1', role: 'parent', family: { timezone: 'UTC' } } }),
 }));
 // A server page asks the request for its reader; here the reader is whoever the
 // case says it is, off the real catalogue.
@@ -266,7 +269,7 @@ const signalsDb = () => {
 };
 const detectAs = async (db: InMemorySupabase, code: LocaleCode) => {
   const { locale, t } = readerFor(code);
-  expect((await runSignalDetection(db as unknown as DB, 'f1', locale, t, NOW, 'UTC')).ok).toBe(true);
+  expect((await runSignalDetection(db as unknown as DB, 'f1', locale, t, NOW, 'UTC', 'household')).ok).toBe(true);
   return db.table('family_signals').find((row) => row.kind === 'budget_drift')!;
 };
 const SPENT_EN = `Spent ${usd(276850, 'en-US')} of your ${usd(200000, 'en-US')} monthly Groceries budget this period.`;
@@ -299,7 +302,7 @@ describe('Family Intelligence words budget drift for its reader', () => {
     const db = signalsDb();
     await detectAs(db, 'en-US');
     const { locale, t } = readerFor('de-DE');
-    const report = await loadReasoningReport(db as unknown as DB, 'f1', 'UTC', locale, t, NOW);
+    const report = await loadReasoningReport(db as unknown as DB, 'f1', 'UTC', locale, t, 'household', NOW);
     const drift = report.answers.flatMap((a) => a.items).find((i) => (i.detail ?? '').includes('2.768'));
     expect(drift, 'the budget-drift item is not in the report in German').toBeDefined();
     expectGerman(String(drift!.detail));
