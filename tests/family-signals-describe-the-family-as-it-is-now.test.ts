@@ -27,7 +27,7 @@ let db: InMemorySupabase;
 let seq = 0;
 
 const scan = async (now: Date, tz = 'UTC') => {
-  const result = await runSignalDetection(db as unknown as DB, FAMILY, 'en-US', echo, now, tz);
+  const result = await runSignalDetection(db as unknown as DB, FAMILY, 'en-US', echo, now, tz, 'household');
   expect(result.ok).toBe(true);
 };
 const active = (kind?: string) => db.table('family_signals')

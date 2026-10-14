@@ -9,14 +9,22 @@
 //
 // The real pages are rendered inside the real LocaleProvider, and the real
 // action is called, against the in-memory database.
+//
+// N9 (re-fix) — a scan deletes the active signals it no longer emits, and
+// refreshSignalsAction runs it on the presser's own client. Once the held 0514
+// (a non-manager reads only the transactions tagged to them) or 0509 (a guest
+// reads no budgets or transactions) is applied, a child's or a guest's Refresh
+// found no drift and deleted the parents'. Their Refresh now reads no money,
+// writes no drift and retires nothing (SignalReach).
 import { createElement } from 'react';
 import type React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
 import { localeOrDefault } from '@/lib/i18n/locales';
+import { readsHouseholdMoney } from '@/lib/finance/household-money';
 
 type DB = SupabaseClient<Database>;
 const FAMILY = 'fam-sig';
@@ -42,7 +50,7 @@ vi.mock('@/components/metrics/signal-precision-card', () => ({ SignalPrecisionCa
 
 const { default: FamilySignalsPage } = await import('@/app/(app)/dashboard/family-signals/page');
 const { default: ReasoningPage } = await import('@/app/(app)/dashboard/reasoning/page');
-const { setSignalStatusAction } = await import('@/app/(app)/dashboard/family-signals/actions');
+const { refreshSignalsAction, setSignalStatusAction } = await import('@/app/(app)/dashboard/family-signals/actions');
 const { LocaleProvider } = await import('@/components/i18n/locale-provider');
 const { getMessages } = await import('@/lib/i18n/messages');
 
@@ -133,5 +141,72 @@ describe('/dashboard/reasoning', () => {
     expect(html).toContain(FRICTION);
     expect(db.table('reasoning_snapshots')).toHaveLength(1);
     expect(db.table('reasoning_snapshots')[0].attention_count).toBe(household);
+  });
+});
+
+describe('N9 — a Refresh by someone who does not read the household\'s money leaves its drift alone', () => {
+  /**
+   * The client as the held 0514 gives it to a member who does not read the
+   * household's money: only the transactions tagged to them (0509 gives a guest
+   * none at all, which reads the same here).
+   */
+  const narrowedTo = (memberId: string): DB => new Proxy(db, {
+    get(target, property, receiver) {
+      if (property !== 'from') return Reflect.get(target, property, receiver);
+      return (table: string) => {
+        const builder = target.from(table) as unknown as { select: (...args: unknown[]) => { eq: (column: string, value: unknown) => unknown } };
+        if (table !== 'transactions') return builder;
+        const select = builder.select.bind(builder);
+        builder.select = (...args) => select(...args).eq('member_id', memberId) as ReturnType<typeof select>;
+        return builder;
+      };
+    },
+  }) as unknown as DB;
+  const drift = () => db.table('family_signals').find((s) => s.kind === 'budget_drift');
+  const spend = (id: string, amount: number, memberId: string | null) => ({
+    id, family_id: FAMILY, type: 'expense', category: 'Groceries', amount, date: '2026-10-05', member_id: memberId,
+  });
+  const pressRefreshAs = async (role: string) => {
+    h.role = role;
+    h.db = readsHouseholdMoney(role) ? db : narrowedTo(`m-${role}`);
+    expect(await refreshSignalsAction()).toMatchObject({ ok: true });
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-14T12:00:00Z'));
+    db.seed('budgets', [{ id: 'b-groceries', family_id: FAMILY, category: 'Groceries', amount: 2000, period: 'monthly', created_at: '2026-01-01T00:00:00Z' }]);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it.each(['child', 'teen', 'guest'])('a %s\'s Refresh, which sees none of the spending, keeps the parents\' active drift', async (role) => {
+    db.seed('transactions', [spend('tx-household', 2768.5, null)]);
+    const before = structuredClone(drift());
+
+    await pressRefreshAs(role);
+
+    expect(drift()).toEqual(before);
+    expect(drift()!.status).toBe('active');
+  });
+
+  it('a child whose own tagged spending alone is over the cap does not rewrite the household\'s figure', async () => {
+    db.seed('transactions', [spend('tx-household', 668.5, null), spend('tx-child', 2100, 'm-child')]);
+
+    await pressRefreshAs('child');
+
+    expect(drift()).toMatchObject({ id: 'sig-drift', status: 'active', evidence: { spent: 2768.5, limit: 2000 } });
+    expect(drift()!.detail).toContain('$2,768.50');
+  });
+
+  it('a child\'s Refresh retires nothing; a parent\'s still retires what has stopped and keeps what has not', async () => {
+    db.seed('transactions', [spend('tx-household', 2768.5, null)]);
+
+    // No chore rows at all: the friction has stopped, or a narrower view cannot see them.
+    await pressRefreshAs('child');
+    expect(db.table('family_signals').map((s) => s.id).sort()).toEqual(['sig-chore', 'sig-drift']);
+
+    await pressRefreshAs('parent');
+    expect(db.table('family_signals').map((s) => s.id)).toEqual(['sig-drift']);
+    expect(drift()).toMatchObject({ status: 'active', evidence: { spent: 2768.5, limit: 2000 } });
   });
 });

@@ -7,10 +7,12 @@
 // it to every member from Bubaly's own origin.
 //
 // Each of the three now asks who added the row (lib/library/curator.ts). Driven
-// for real against the in-memory database. A row with NO writer recorded is
-// still played and refreshed: 0284 nulls created_by when the subscriber's
-// account is deleted, and that feed keeps its episodes (S20 in
-// tests/the-family-library-keeps-every-book-and-asks-a-grown-up.test.ts). The
+// for real against the in-memory database. A FEED with no subscriber recorded
+// is still refreshed and its episodes played: 0284 nulls created_by when the
+// subscriber's account is deleted, and that feed keeps its episodes (S20 in
+// tests/the-family-library-keeps-every-book-and-asks-a-grown-up.test.ts). A
+// BOOK with no writer recorded is not played: created_by has no default, so a
+// PostgREST insert that leaves it out was the easiest way past the check. The
 // durable rule is a database trigger, which is the owner's migration.
 import { readFileSync } from 'node:fs';
 import { Readable } from 'node:stream';
@@ -90,6 +92,23 @@ describe('the media route streams only what an adult put in the library', () => 
     as(`user-${role}`, role);
     expect((await play('book-parent')).status).toBe(200);
     expect((await play('ep-parent')).status).toBe(200);
+  });
+
+  it.each(['parent', 'child'])('a %s is not served a book that names no writer at all', async (role) => {
+    // library_items.created_by has no default (0284): a child's PostgREST insert
+    // that leaves it out names nobody, and nobody answers for its address.
+    db.seed('library_items', [{ id: 'book-nobody', family_id: FAMILY, feed_id: null, kind: 'book', guid: 'manual:c', title: 'Planted', media_url: 'https://planted.test/b.mp3', created_by: null }]);
+    as(`user-${role}`, role);
+    expect((await play('book-nobody')).status).toBe(403);
+    expect(h.openPublicMedia).not.toHaveBeenCalled();
+  });
+
+  it('an episode of a feed whose subscriber has gone still plays (S20)', async () => {
+    db.seed('library_feeds', [{ id: 'feed-orphan', family_id: FAMILY, kind: 'podcast', title: 'Orphan show', feed_url: 'https://orphan.test/feed', created_by: null, last_fetched_at: null, last_error: null }]);
+    db.seed('library_items', [{ id: 'ep-orphan', family_id: FAMILY, feed_id: 'feed-orphan', kind: 'episode', guid: 'o1', title: 'Episode', media_url: 'https://cdn.test/orphan.mp3', created_by: null }]);
+    as('user-child', 'child');
+    expect((await play('ep-orphan')).status).toBe(200);
+    expect(h.openPublicMedia).toHaveBeenCalledWith('https://cdn.test/orphan.mp3', expect.anything());
   });
 
   it('a row naming a member who has since become a guest is not served', async () => {

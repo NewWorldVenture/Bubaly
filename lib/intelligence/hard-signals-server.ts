@@ -24,9 +24,29 @@ type Translate = (key: string, params?: Record<string, string | number>) => stri
 
 export type SignalDetectionResult = { ok: boolean; error?: string; signals: number };
 
+/**
+ * How much of the household the scan's client reads, said by each caller:
+ *   - 'household': the model-refresh cron's service client, or a parent's or an
+ *     adult's own client (readsHouseholdMoney);
+ *   - 'member': anyone else's own client. RLS may give it less than the
+ *     household (the held 0514: a non-manager reads only the transactions
+ *     tagged to them; the held 0509: a guest reads no budgets or
+ *     transactions), so a pattern it does not find is no evidence that the
+ *     pattern stopped.
+ *
+ * A 'member' scan reads no money and writes no budget drift (the parents' to
+ * read and decide, N6), and retires nothing: deleting the active signals a
+ * narrower view did not emit is how a child's Refresh would take the
+ * household's drift off the parents' board.
+ */
+export type SignalReach = 'household' | 'member';
+
 const DAY = 86_400_000;
 /** The weeks routine adherence is judged over: detectRoutineAdherence's own default. */
 const ADHERENCE_WEEKS = 4;
+
+/** A read a scan does not make: answered as an empty one, in the shape the batch expects. */
+const noRows = <T>(): Promise<{ data: T[]; error: null }> => Promise.resolve({ data: [], error: null });
 
 /**
  * Recompute the family's hard signals from live data and upsert them.
@@ -45,8 +65,14 @@ const ADHERENCE_WEEKS = 4;
  * budget drift judges each budget in its own period on the FAMILY's day, and
  * every caller has the family in hand (`ctx.active.family.timezone`, the
  * cron's `fam.timezone`). A silent 'UTC' default would answer Greenwich's day.
+ *
+ * `reach` is required too (SignalReach): the cron passes 'household', the
+ * Refresh action 'household' only for a parent or an adult.
  */
-export async function runSignalDetection(sb: DB, familyId: string, locale: LocaleCode, t: Translate, now: Date, tz: string): Promise<SignalDetectionResult> {
+export async function runSignalDetection(
+  sb: DB, familyId: string, locale: LocaleCode, t: Translate, now: Date, tz: string, reach: SignalReach,
+): Promise<SignalDetectionResult> {
+  const household = reach === 'household';
   const since90 = new Date(now.getTime() - 90 * DAY).toISOString();
   // Two windows over the same calendar read. Stress windows look at three weeks
   // back and two ahead. Routine adherence expects four weeks of a routine
@@ -85,16 +111,21 @@ export async function runSignalDetection(sb: DB, familyId: string, locale: Local
       .order('id').range(from, to), { max: 2000 }),
     sb.from('routine_templates')
       .select('id, name, weekday_mask').eq('family_id', familyId).eq('is_active', true).limit(200),
+    // The money only for a scan that reads the household's (SignalReach).
     // `id` and `created_at` pick the budget the family keeps per category (budgetByCategory).
-    sb.from('budgets').select('id, category, amount, period, created_at').eq('family_id', familyId).limit(200),
+    household
+      ? sb.from('budgets').select('id, category, amount, period, created_at').eq('family_id', familyId).limit(200)
+      : noRows<{ id: string; category: string; amount: number; period: string; created_at: string }>(),
     // Summed, so paged on the id: an offset page of a table written to mid-read
     // repeats a row, and a repeated row is drift. Past the ceiling the scan fails.
-    readAllByIdAsQuery<ExpenseRow & { id: string }>((after, limit) => {
-      let query = sb.from('transactions').select('id, category, amount, date')
-        .eq('family_id', familyId).eq('type', 'expense').gte('date', budgetSpan.from).lte('date', budgetSpan.to);
-      if (after) query = query.gt('id', after);
-      return query.order('id').limit(limit);
-    }, { max: 5000 }),
+    household
+      ? readAllByIdAsQuery<ExpenseRow & { id: string }>((after, limit) => {
+        let query = sb.from('transactions').select('id, category, amount, date')
+          .eq('family_id', familyId).eq('type', 'expense').gte('date', budgetSpan.from).lte('date', budgetSpan.to);
+        if (after) query = query.gt('id', after);
+        return query.order('id').limit(limit);
+      }, { max: 5000 })
+      : noRows<ExpenseRow & { id: string }>(),
   ]);
   const sourceError = [reminders, events, choreRows, routines, budgetsRes, expensesRes].find((result) => result.error)?.error;
   if (sourceError) {
@@ -143,7 +174,9 @@ export async function runSignalDetection(sb: DB, familyId: string, locale: Local
     today,
     tz,
   };
-  const signals = buildHardSignals(inputs, now, locale, t);
+  // With no money read there is no drift to find; and none is written over the
+  // household's on a narrower view, whatever the engine is handed.
+  const signals = buildHardSignals(inputs, now, locale, t).filter((s) => household || s.kind !== 'budget_drift');
 
   // Preserve both decisions and their updated_at timestamp for X6. A scan is
   // not a new family decision; only the explicit Restore action reopens one.
@@ -180,9 +213,11 @@ export async function runSignalDetection(sb: DB, familyId: string, locale: Local
   // back under the cap, and a crunch time that moved left two contradicting
   // cards — both feeding the reasoning report's "attention" and the AI's
   // context. 0142's status check has no 'resolved', so the stale row is deleted;
-  // only while still 'active', so a decision made since the read is kept.
+  // only while still 'active', so a decision made since the read is kept. And
+  // only by a scan that reads the household (SignalReach): 0142's delete policy
+  // is any member's, and what a narrower view did not find has not stopped.
   const emitted = new Set(signals.map((s) => `${s.kind}:${s.subjectKey}`));
-  const stale = (existing ?? [])
+  const stale = !household ? [] : (existing ?? [])
     .filter((r) => r.status === 'active' && !emitted.has(`${r.kind}:${r.subject_key}`))
     .map((r) => r.id);
   if (stale.length > 0) {

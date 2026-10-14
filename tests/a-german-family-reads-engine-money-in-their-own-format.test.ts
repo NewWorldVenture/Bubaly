@@ -269,7 +269,7 @@ const signalsDb = () => {
 };
 const detectAs = async (db: InMemorySupabase, code: LocaleCode) => {
   const { locale, t } = readerFor(code);
-  expect((await runSignalDetection(db as unknown as DB, 'f1', locale, t, NOW, 'UTC')).ok).toBe(true);
+  expect((await runSignalDetection(db as unknown as DB, 'f1', locale, t, NOW, 'UTC', 'household')).ok).toBe(true);
   return db.table('family_signals').find((row) => row.kind === 'budget_drift')!;
 };
 const SPENT_EN = `Spent ${usd(276850, 'en-US')} of your ${usd(200000, 'en-US')} monthly Groceries budget this period.`;

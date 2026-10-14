@@ -13,8 +13,12 @@
 // Refresh and the nightly cron honoured whatever row they found.
 //
 // So the places that FETCH ask here too. This reads `created_by` and is only as
-// strong as that column, which RLS does not pin to the writer; the durable rule
-// is a database trigger on feed_url and media_url (an owner migration).
+// strong as that column, which RLS does not pin to the writer: a member can
+// still name a parent in it, leave a feed's empty, file an episode under an
+// adult's feed, or change the media_url of an adult's book in place, and every
+// one of those is fetched. The durable rule is a database trigger on
+// library_items (media_url, feed_id, created_by) and library_feeds (feed_url,
+// created_by), an owner migration.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { MANAGER_ROLES } from '@/lib/constants/roles';
@@ -32,7 +36,9 @@ export const curatorKey = (familyId: string, userId: string | null | undefined):
  * through, deliberately: 0284 sets it null when the subscriber's account is
  * deleted, and a feed whose subscriber has gone keeps gaining its episodes
  * (tests/the-family-library-keeps-every-book-and-asks-a-grown-up.test.ts, S20).
- * A row naming a member who is not an adult is not fetched.
+ * A book typed in by hand has no such reason, and the media route refuses one
+ * that names nobody before it asks here. A row naming a member who is not an
+ * adult is not fetched.
  */
 export function addedByAnAdult(read: { curators: Set<string> }, familyId: string, addedBy: string | null | undefined): boolean {
   return !addedBy || read.curators.has(curatorKey(familyId, addedBy));

@@ -20,7 +20,11 @@ export async function refreshSignalsAction(): Promise<Result<{ signals: number }
   // The stored sentence is worded for the person who pressed Refresh.
   const { locale } = await getLocaleContext();
   const t = await getTranslations();
-  const res = await runSignalDetection(supabase, ctx.active.familyId, locale.code, t, new Date(), ctx.active.family.timezone || 'UTC');
+  // Anyone may Refresh, on their own client. Only a parent's or an adult's scan
+  // reads the household (SignalReach): anyone else's leaves budget drift alone
+  // and retires nothing it might simply not be able to see.
+  const reach = readsHouseholdMoney(ctx.active.role) ? 'household' : 'member';
+  const res = await runSignalDetection(supabase, ctx.active.familyId, locale.code, t, new Date(), ctx.active.family.timezone || 'UTC', reach);
   if (!res.ok) return { ok: false, error: res.error ?? 'Could not refresh signals' };
   revalidatePath('/dashboard/family-signals');
   return { ok: true, data: { signals: res.signals } };

@@ -73,6 +73,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ item
   // the only way in, so the fetch asks as well.
   const feed = Array.isArray(item.feed) ? item.feed[0] ?? null : item.feed;
   const addedBy = item.feed_id ? feed?.created_by ?? null : item.created_by;
+  // An empty writer is let through for a FEED's episode: 0284 nulls a feed's
+  // created_by when its subscriber's account is deleted, and that feed keeps
+  // its episodes (S20). A book typed in by hand has no such reason to name
+  // nobody. addBookAction always records its adder, and created_by has no
+  // default, so a PostgREST insert that just leaves the column out played any
+  // address to every member. A book whose adder's account has since gone goes
+  // quiet with it; a parent can add it again.
+  if (!item.feed_id && !addedBy) return new NextResponse('Forbidden', { status: 403 });
   const curated = await readCurators(supabase, [ctx.active.familyId], [addedBy]);
   if (!curated.ok) {
     console.error('[library-media] curator read failed', curated.error);
