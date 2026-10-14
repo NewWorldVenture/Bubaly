@@ -259,11 +259,26 @@ describe('listDue', () => {
 
   it('withholds a snoozed reminder until its snooze has elapsed', async () => {
     const rows = [
-      { id: 'a', status: 'active', remind_at: '2026-09-05T11:00:00.000Z', snoozed_until: null },
-      { id: 'b', status: 'snoozed', remind_at: '2026-09-05T11:00:00.000Z', snoozed_until: '2026-09-05T18:00:00.000Z' },
-      { id: 'c', status: 'snoozed', remind_at: '2026-09-05T09:00:00.000Z', snoozed_until: '2026-09-05T11:30:00.000Z' },
+      { id: 'a', family_id: 'fam-1', autopilot_origin: false, autopilot_card_id: null, status: 'active', remind_at: '2026-09-05T11:00:00.000Z', snoozed_until: null },
+      { id: 'b', family_id: 'fam-1', autopilot_origin: false, autopilot_card_id: null, status: 'snoozed', remind_at: '2026-09-05T11:00:00.000Z', snoozed_until: '2026-09-05T18:00:00.000Z' },
+      { id: 'c', family_id: 'fam-1', autopilot_origin: false, autopilot_card_id: null, status: 'snoozed', remind_at: '2026-09-05T09:00:00.000Z', snoozed_until: '2026-09-05T11:30:00.000Z' },
     ];
-    const { db } = makeDb(() => ({ data: rows, error: null }));
+    const { db } = makeDb((call) => {
+      expect(call).toMatchObject({ kind: 'select', filters: { family_id: 'fam-1' } });
+      if (call.columns === 'id, family_id, autopilot_origin, autopilot_card_id') {
+        expect(call.filters).toEqual({ family_id: 'fam-1' });
+        if (call.table === 'reminders') {
+          expect(call.range).toEqual([0, 999]);
+          return { data: [], error: null };
+        }
+        expect(call.table).toBe('family_reminders');
+        expect([[0, 999], [3, 1002]]).toContainEqual(call.range);
+        return { data: rows, error: null };
+      }
+      expect(call).toMatchObject({ table: 'family_reminders', columns: '*' });
+      expect([[0, 99], [3, 202]]).toContainEqual(call.range);
+      return { data: rows, error: null };
+    });
     const res = await listDue(scopeWith(db));
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.data.map((r) => r.id)).toEqual(['a', 'c']);

@@ -9,6 +9,7 @@ const FAMILY = 'synthetic-notification-family';
 const NOW = '2026-10-13T12:00:00.000Z';
 const DUE = '2026-10-13T13:00:00.000Z';
 const TITLE = 'Synthetic private reminder';
+const FAMILY_RECIPIENTS = ['user-parent', 'user-adult', 'user-named', 'user-other', 'user-guest'];
 let db: ReturnType<typeof createInMemorySupabase<DB>>;
 
 beforeEach(() => {
@@ -58,6 +59,10 @@ async function expectRecipients(table: 'reminders' | 'family_reminders', users: 
   const id = 'synthetic-' + table;
   const key = table === 'family_reminders' ? 'fr:' + id : id;
   expect(notices()).toEqual(users.map(user_id => ({ related_type: table, related_id: key, user_id, title: 'Reminder: ' + TITLE })).sort(byRecipient));
+  // A later tick must not duplicate either the targeted or household copies.
+  const saved = structuredClone(db.table('notifications'));
+  expect(await generateFamilyNotifications(client, FAMILY)).toBe(0);
+  expect(db.table('notifications')).toEqual(saved);
   expect(fetch).not.toHaveBeenCalled();
 }
 
@@ -66,17 +71,21 @@ describe('manual reminder notification recipients use immutable origins', () => 
     seedReminder('reminders', 'member-named');
     await expectRecipients('reminders', ['user-named']);
   });
-  it('a manual legacy family reminder retains its family recipient', async () => {
+  it('a manual legacy family reminder reaches each family account once', async () => {
     seedReminder('reminders', null);
-    await expectRecipients('reminders', [null]);
+    await expectRecipients('reminders', FAMILY_RECIPIENTS);
+    expect(db.table('notifications').some(row => row.user_id === null)).toBe(false);
+    expect(db.table('notifications').map(row => row.sent_at)).toEqual(FAMILY_RECIPIENTS.map(() => NOW));
   });
   it('a manual family-table member reminder reaches its original nonmanager member', async () => {
     seedReminder('family_reminders', 'member-named');
     await expectRecipients('family_reminders', ['user-named']);
   });
-  it('a manual family-table family reminder retains its family recipient', async () => {
+  it('a manual family-table family reminder reaches each family account once', async () => {
     seedReminder('family_reminders', null);
-    await expectRecipients('family_reminders', [null]);
+    await expectRecipients('family_reminders', FAMILY_RECIPIENTS);
+    expect(db.table('notifications').some(row => row.user_id === null)).toBe(false);
+    expect(db.table('notifications').map(row => row.sent_at)).toEqual(FAMILY_RECIPIENTS.map(() => NOW));
   });
   it('a generated legacy insurance reminder with no copied member reaches only its live card audience', async () => {
     seedInsuranceCard();

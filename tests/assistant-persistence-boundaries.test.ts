@@ -108,7 +108,7 @@ describe('assistant persistence boundaries', () => {
     const { db, calls } = fakeDb((table, operation, count) => {
       if (table === 'family_reminders' && operation === 'select') {
         return {
-          data: [{ id: 'reminder-1', title: 'Water plants', recurrence: 'monthly', remind_at: '2026-07-01T09:00:00.000Z', kind: 'recurring', priority: 'medium', notes: null, member_id: null, location_name: null }],
+          data: [{ id: 'reminder-1', family_id: 'family-1', autopilot_origin: false, autopilot_card_id: null, title: 'Water plants', recurrence: 'monthly', remind_at: '2026-07-01T09:00:00.000Z', kind: 'recurring', priority: 'medium', notes: null, member_id: null, location_name: null }],
           error: null,
         };
       }
@@ -123,6 +123,7 @@ describe('assistant persistence boundaries', () => {
     const result = await tool(db, 'complete_reminder').execute({ title: 'plants' }) as { ok: boolean; error?: string };
 
     expect(result).toEqual({ ok: false, error: 'Could not schedule the next reminder.' });
+    expect(calls.filter((call) => call.table === 'family_reminders' && call.operation === 'insert')).toHaveLength(1);
     expect(calls.filter((call) => call.table === 'family_reminders' && call.operation === 'update')).toHaveLength(2);
     expect(calls.at(-1)?.payload).toMatchObject({ status: 'active', completed_at: null });
   });
