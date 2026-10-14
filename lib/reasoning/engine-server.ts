@@ -14,7 +14,7 @@ import { loadFamilyContext } from '@/lib/reasoning/context';
 import { reasoningInsights } from '@/lib/reasoning/insights';
 import {
   answerFamilyQuestions, reasoningSummary,
-  type ReasoningReport, type ReasoningSignal, type ReasoningNextAction, type ReasoningReadSource,
+  type ReasoningEngineInput, type ReasoningReport, type ReasoningSignal, type ReasoningNextAction, type ReasoningReadSource,
 } from '@/lib/reasoning/engine';
 
 type DB = SupabaseClient<Database>;
@@ -22,6 +22,38 @@ type Translate = (key: string, params?: Record<string, string | number>) => stri
 
 const IMPACT_PRIORITY: Record<string, number> = { high: 90, medium: 60, low: 35 };
 const SIGNAL_HREF = '/dashboard/family-signals';
+
+/**
+ * Who a report is FOR, beyond their language. A budget-drift signal carries the
+ * household's spend and cap for a budget, and household money is a parent's or
+ * an adult's (lib/finance/household-money.ts readsHouseholdMoney, the held
+ * 0514). The family-signals page and this report showed it to a child, a guest
+ * and everyone else; for them it is left out before the six questions are
+ * answered, so no answer, count or headline is built from it.
+ */
+export type ReasoningViewer = { readsHouseholdMoney: boolean };
+
+/** Every reader. The proactive AI slice composes this and filters per viewer itself. */
+const EVERY_SIGNAL: ReasoningViewer = { readsHouseholdMoney: true };
+
+type ReasoningInputs = {
+  orchestrator: ReasoningEngineInput['orchestrator'];
+  insights: NonNullable<ReasoningEngineInput['insights']>;
+  signals: ReasoningSignal[];
+  nextActions: ReasoningNextAction[];
+  readErrors: ReasoningReadSource[];
+};
+
+/** The report from what was read, for `viewer`. */
+function composeReport(inputs: ReasoningInputs, viewer: ReasoningViewer, now: Date): ReasoningReport {
+  const signals = viewer.readsHouseholdMoney ? inputs.signals : inputs.signals.filter((s) => s.kind !== 'budget_drift');
+  const report = answerFamilyQuestions({ orchestrator: inputs.orchestrator, insights: inputs.insights, signals, nextActions: inputs.nextActions }, now);
+  return {
+    ...report,
+    allClear: report.allClear && inputs.readErrors.length === 0,
+    readErrors: inputs.readErrors,
+  };
+}
 
 /**
  * Assemble the six-question reasoning report from the family's live data.
@@ -39,8 +71,14 @@ const SIGNAL_HREF = '/dashboard/family-signals';
  * context slice, whose reader is the model, passes en-US explicitly.
  */
 export async function loadReasoningReport(
-  sb: DB, familyId: string, tz: string, locale: LocaleCode, t: Translate, now: Date = new Date(),
+  sb: DB, familyId: string, tz: string, locale: LocaleCode, t: Translate, now: Date = new Date(), viewer: ReasoningViewer = EVERY_SIGNAL,
 ): Promise<ReasoningReport> {
+  return composeReport(await readReasoningInputs(sb, familyId, tz, locale, t, now), viewer, now);
+}
+
+async function readReasoningInputs(
+  sb: DB, familyId: string, tz: string, locale: LocaleCode, t: Translate, now: Date,
+): Promise<ReasoningInputs> {
   const readErrors: ReasoningReadSource[] = [];
 
   // FOI (orchestrator + ranked suggestions) — the richest single source.
@@ -83,19 +121,20 @@ export async function loadReasoningReport(
     signals = [];
   }
 
-  const report = answerFamilyQuestions({ orchestrator, insights, signals, nextActions }, now);
-  return {
-    ...report,
-    allClear: report.allClear && readErrors.length === 0,
-    readErrors,
-  };
+  return { orchestrator, insights, signals, nextActions, readErrors };
 }
 
-/** Load the report and persist today's snapshot (idempotent per family/day). */
+/**
+ * Load the report and persist today's snapshot (idempotent per family/day).
+ *
+ * The snapshot is the HOUSEHOLD's report whoever opened the page, so the day's
+ * trend does not depend on who looked first; the report returned is `viewer`'s.
+ */
 export async function loadAndSnapshotReasoning(
-  sb: DB, familyId: string, userId: string | null, tz: string, locale: LocaleCode, t: Translate, now: Date = new Date(),
+  sb: DB, familyId: string, userId: string | null, tz: string, locale: LocaleCode, t: Translate, now: Date = new Date(), viewer: ReasoningViewer = EVERY_SIGNAL,
 ): Promise<ReasoningReport> {
-  const report = await loadReasoningReport(sb, familyId, tz, locale, t, now);
+  const inputs = await readReasoningInputs(sb, familyId, tz, locale, t, now);
+  const report = composeReport(inputs, EVERY_SIGNAL, now);
   try {
     // Best-effort persistence — the report is returned regardless — but a
     // PostgREST write failure returns { error } without throwing, so we must
@@ -117,5 +156,5 @@ export async function loadAndSnapshotReasoning(
     }, { onConflict: 'family_id,as_of_date' });
     if (error) console.error('[reasoning-engine] reasoning_snapshots upsert failed', { familyId, error });
   } catch (err) { console.error('[reasoning-engine] reasoning_snapshots upsert threw', { familyId, err }); }
-  return report;
+  return viewer.readsHouseholdMoney ? report : composeReport(inputs, viewer, now);
 }

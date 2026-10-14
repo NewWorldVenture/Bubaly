@@ -127,8 +127,11 @@ vi.mock('@/components/metrics/signal-precision-card', () => ({ SignalPrecisionCa
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => undefined, push: () => undefined }) }));
 vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({}) }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => h.db }));
+// The reader is a PARENT: budget drift is the household's money, which the
+// Family Intelligence page and the reasoning report show a parent or an adult
+// only (tests/budget-drift-is-the-parents-to-read-and-decide.test.ts).
 vi.mock('@/lib/supabase/auth', () => ({
-  requireUserContext: async () => ({ user: { id: 'u1' }, active: { familyId: 'f1', family: { timezone: 'UTC' } } }),
+  requireUserContext: async () => ({ user: { id: 'u1' }, active: { familyId: 'f1', role: 'parent', family: { timezone: 'UTC' } } }),
 }));
 // A server page asks the request for its reader; here the reader is whoever the
 // case says it is, off the real catalogue.

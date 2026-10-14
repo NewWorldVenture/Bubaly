@@ -8,6 +8,7 @@ import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { ErrorState } from '@/components/ui/states';
 import { loadAndSnapshotReasoning } from '@/lib/reasoning/engine-server';
+import { readsHouseholdMoney } from '@/lib/finance/household-money';
 import type { ReasoningQuestionId } from '@/lib/reasoning/engine';
 import { cn } from '@/lib/utils/cn';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
@@ -42,7 +43,10 @@ export default async function ReasoningPage() {
   // whatever locale its writer had (the nightly cron's is en-US), so the report
   // words it again for whoever is reading this page.
   const { locale } = await getLocaleContext();
-  const report = await loadAndSnapshotReasoning(supabase, ctx.active.familyId, ctx.user.id, tz, locale.code, t);
+  // And what they may read: a budget-drift signal is the household's spend
+  // against a budget, which is a parent's or an adult's.
+  const report = await loadAndSnapshotReasoning(supabase, ctx.active.familyId, ctx.user.id, tz, locale.code, t, new Date(),
+    { readsHouseholdMoney: readsHouseholdMoney(ctx.active.role) });
 
   const attention = report.answers.filter((a) => a.status === 'attention').length;
   const hasReadErrors = report.readErrors.length > 0;

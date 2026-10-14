@@ -23,6 +23,7 @@ import { createServer } from '@/lib/supabase/server';
 import { openPublicMedia } from '@/lib/server/public-media-fetch';
 import { PublicDocumentError } from '@/lib/server/public-document-fetch';
 import { LIBRARY_MEDIA_CACHE_CONTROL } from '@/lib/library/progress';
+import { addedByAnAdult, readCurators } from '@/lib/library/curator';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -52,7 +53,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ item
   // person may read this item, and asking it is the whole authorization story.
   const { data, error } = await supabase
     .from('library_items')
-    .select('media_url')
+    .select('media_url, feed_id, created_by, feed:library_feeds(created_by)')
     .eq('id', itemId)
     .eq('family_id', ctx.active.familyId)
     .maybeSingle();
@@ -61,8 +62,25 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ item
     console.error('[library-media] item read failed', error);
     return new NextResponse('Unavailable', { status: 503 });
   }
-  const mediaUrl = (data as { media_url: string | null } | null)?.media_url;
-  if (!mediaUrl) return new NextResponse('Not found', { status: 404 });
+  const item = data as { media_url: string | null; feed_id: string | null; created_by: string | null; feed: { created_by: string | null } | { created_by: string | null }[] | null } | null;
+  const mediaUrl = item?.media_url;
+  if (!item || !mediaUrl) return new NextResponse('Not found', { status: 404 });
+
+  // Streamed from Bubaly's origin to every member, so only what one of the
+  // family's adults put here (lib/library/curator.ts): a book's audio address
+  // by whoever added the book, an episode by whoever subscribed to its feed.
+  // RLS lets any member write these rows over PostgREST; the actions are not
+  // the only way in, so the fetch asks as well.
+  const feed = Array.isArray(item.feed) ? item.feed[0] ?? null : item.feed;
+  const addedBy = item.feed_id ? feed?.created_by ?? null : item.created_by;
+  const curated = await readCurators(supabase, [ctx.active.familyId], [addedBy]);
+  if (!curated.ok) {
+    console.error('[library-media] curator read failed', curated.error);
+    return new NextResponse('Unavailable', { status: 503 });
+  }
+  if (!addedByAnAdult(curated, ctx.active.familyId, addedBy)) {
+    return new NextResponse('Forbidden', { status: 403 });
+  }
 
   try {
     const upstream = await openPublicMedia(mediaUrl, {
