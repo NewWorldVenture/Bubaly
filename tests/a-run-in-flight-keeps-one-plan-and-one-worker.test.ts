@@ -22,6 +22,13 @@
 // cards stayed pending. Now everything outside the edit is carried as it
 // stands, and the edited step's old card is withdrawn.
 //
+// N11, paused — Editing a step of a paused run set it `ready` and left
+// `paused_at` on it. The kick claimed it, the executor saw `paused_at` and
+// stopped at once with the run still `executing`, Resume answered "not
+// paused", and the recovery pass re-claimed it every tick until it was
+// dead-lettered — Pause, fix a step, Resume, the ordinary way to correct
+// Bubaly, lost the run. Now a paused run stays paused through an edit.
+//
 // Driven through the real controls, the real executor port, `executeTool`, its
 // ledger and the tasks service, over the in-memory database.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -274,5 +281,46 @@ describe('N11: an edit carries every step it does not change', () => {
     expect(db.table('approval_requests').find((a) => a.id === 'appr-held')).toMatchObject({ status: 'cancelled', decided_by: PARENT.user });
     expect(byTitle('Call the coach')).toMatchObject({ status: 'queued', input_json: { title: 'Text the coach' }, approval_id: null });
     expect(db.table('approval_requests').find((a) => a.id === 'appr-yes')?.status).toBe('approved');
+  });
+});
+
+describe('N11: an edit to a paused run', () => {
+  it('keeps the run paused, and Resume then runs the edited step', async () => {
+    db.seed('ai_plan_steps', [
+      todo('step-1', PLAN, 'Pack the soccer kit', { status: 'completed', result_json: { summary: 'done' } }),
+      todo('step-2', PLAN, 'Buy snacks', { dependency_ids: ['step-1'] }),
+    ]);
+    // Paused, and its worker parked and let go of the lease.
+    seedRun({ state: 'paused', status: 'paused', paused_at: '2026-01-01T00:00:00.000Z', lease_owner: null, lease_expires_at: null });
+
+    const edited = await editStepInput(parent(), RUN, 'step-2', { title: 'Buy oranges' }, { db: client() });
+
+    expect(edited).toMatchObject({ ok: true, data: { requeuedSteps: 1, state: 'paused' } });
+    expect(run()).toMatchObject({ state: 'paused', paused_at: '2026-01-01T00:00:00.000Z', lease_owner: null });
+    expect(run().plan_id).not.toBe(PLAN);
+    // Nothing takes a paused run: a kick now claims nothing.
+    expect(await claimRun(client(), RUN)).toMatchObject({ ok: true, data: { claimed: false } });
+    expect(run().state).toBe('paused');
+
+    expect(await resumeRun(parent(), RUN, { db: client() })).toMatchObject({ ok: true, data: { state: 'ready' } });
+    expect(run()).toMatchObject({ state: 'ready', paused_at: null });
+    expect(await claimRun(client(), RUN)).toMatchObject({ ok: true, data: { claimed: true } });
+
+    const result = await runGraphWith(createExecutorPort(client()), RUN, { budgetMs: 60_000 });
+
+    expect(result.status).toBe('completed');
+    // The edited words ran, once; the finished step was not repeated.
+    expect(titles()).toEqual(['Buy oranges']);
+    expect(run()).toMatchObject({ state: 'completed', lease_owner: null });
+  });
+
+  it('control: an edit to a run that is not paused queues it to run', async () => {
+    db.seed('ai_plan_steps', [todo('step-1', PLAN, 'Pack the soccer kit', { status: 'failed', error: 'Timed out' })]);
+    seedRun({ state: 'blocked', lease_owner: null, lease_expires_at: null });
+
+    const edited = await editStepInput(parent(), RUN, 'step-1', { title: 'Pack the shin guards' }, { db: client() });
+
+    expect(edited).toMatchObject({ ok: true, data: { state: 'ready' } });
+    expect(run().state).toBe('ready');
   });
 });

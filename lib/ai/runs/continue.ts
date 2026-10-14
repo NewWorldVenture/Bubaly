@@ -21,13 +21,45 @@ import type { Database } from '@/lib/database.types';
 import { replanPortFor } from '@/lib/ai/planner/replan-port';
 import { createServiceClient } from '@/lib/supabase/server';
 import { runGraph, type RunGraphResult } from './executor';
-import { claimRun, releaseRun } from './store';
+import { claimRun, releaseRun, type RunRow } from './store';
+import { legacyStatusFor } from './states';
+import { agentRunEntitlementChecker, UNENTITLED_RUN_DEFER_MS } from './entitlement';
 
 export type ContinueResult = RunGraphResult & { claimed: boolean };
 
 /** Lease length: the slice plus enough slack that a slow finish never looks abandoned. Clamped to what `claim_ai_runs` accepts. */
 function leaseSecondsFor(budgetMs: number): number {
   return Math.max(30, Math.min(900, Math.ceil(budgetMs / 1000) + 60));
+}
+
+/**
+ * Hand a claimed run back to the queue without running it, due at `runAfter`.
+ *
+ * The same return the ai-runs cron makes for a family that lost Ask Bubaly —
+ * `ready`, lease cleared — fenced on this worker's own lease, so a run another
+ * worker or a control moved in the meantime is left as it is. The claim
+ * counted an attempt; a slice that never ran is not one, so the counter goes
+ * back, or a family that lapsed for a week would find its run dead-lettered
+ * (or unclaimable here) the day it subscribed again.
+ */
+async function handBack(db: SupabaseClient<Database>, run: RunRow, leaseOwner: string, runAfter: Date): Promise<void> {
+  const { data, error } = await db
+    .from('family_automation_runs')
+    .update({
+      state: 'ready',
+      status: legacyStatusFor('ready'),
+      lease_owner: null,
+      lease_expires_at: null,
+      run_after: runAfter.toISOString(),
+      attempt: Math.max(0, run.attempt - 1),
+    })
+    .eq('id', run.id)
+    .eq('family_id', run.family_id)
+    .eq('lease_owner', leaseOwner)
+    .eq('state', 'executing')
+    .select('id');
+  if (error) console.error('[ai/runs] could not hand an unexecuted run back to the queue; its lease will run out', error);
+  else if (!data?.length) console.warn('[ai/runs] the run moved on before it could be handed back', { runId: run.id });
 }
 
 /**
@@ -59,7 +91,24 @@ export async function continueRun(
   }
 
   const leaseOwner = claim.data.leaseOwner;
+  const claimed = claim.data.run;
   try {
+    // Every kick comes through here — the request route, the run controls, an
+    // approval decision, the settled-run sweep, the routine cron — and only
+    // the ai-runs cron used to ask whether the family still has Ask Bubaly. A
+    // lapsed or Free family's run kept writing to its household and calling
+    // the planner through every other door. Not entitled: back to the queue a
+    // day out, as the cron does. Unknown (an unreadable plan or tier map):
+    // back now, unexecuted, for the next look to decide.
+    const entitlement = claimed ? await agentRunEntitlementChecker(db)(claimed.family_id) : 'unknown';
+    if (entitlement !== 'entitled') {
+      const runAfter = entitlement === 'unentitled' ? new Date(Date.now() + UNENTITLED_RUN_DEFER_MS) : new Date();
+      if (claimed && leaseOwner) await handBack(db, claimed, leaseOwner, runAfter);
+      return {
+        status: entitlement === 'unentitled' ? 'deferred_unentitled' : 'entitlement_unavailable',
+        completed: 0, failed: 0, pending: 0, awaitingApproval: 0, claimed: false,
+      };
+    }
     // The planner's re-planning port rides along so a `replan` step plans the
     // rest of the run (as a new plan version) instead of blocking.
     const result = await runGraph(runId, { budgetMs, db, replan: replanPortFor(db) });

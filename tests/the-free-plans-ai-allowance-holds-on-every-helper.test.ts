@@ -6,6 +6,10 @@
 // kept getting them — while their rows still counted toward the limit the
 // assistant refused them on.
 //
+// N18, its siblings: the meal planner, the nutrition estimate and every free
+// module's AI Assist (`/api/ai/insights`) were the same — a model call and a
+// counted `ai_requests` row behind a per-minute limit and nothing else.
+//
 // N17: voice transcription had no allowance check, no usage record and no
 // duration cap: 25 MB of audio a request, ten a minute, from any member of any
 // family, Free included, none of it in the family's usage. Speech was the same.
@@ -55,6 +59,12 @@ const journal = (await import('@/app/api/ai/journal/route')).POST;
 const notes = (await import('@/app/api/ai/notes/route')).POST;
 const transcribe = (await import('@/app/api/ai/voice/transcribe/route')).POST;
 const speak = (await import('@/app/api/ai/voice/speak/route')).POST;
+const mealPlan = (await import('@/app/api/ai/meals/plan/route')).POST;
+const nutrition = (await import('@/app/api/ai/meals/nutrition/route')).POST;
+const insights = (await import('@/app/api/ai/insights/route')).POST;
+
+const RECIPE = '00000000-0000-4000-8000-0000000f1831';
+const post = (path: string, body: unknown) => new NextRequest(`http://localhost${path}`, { method: 'POST', body: JSON.stringify(body) });
 
 const NOW = new Date('2026-10-14T15:00:00Z');
 let db: InMemorySupabase;
@@ -86,6 +96,8 @@ beforeEach(() => {
   db.seed('family_members', [{ id: MEMBER, family_id: FAMILY, user_id: USER, role: 'parent', is_active: true, display_name: 'Dana' }]);
   // Something for the coach to coach.
   db.seed('habits', [{ id: 'habit-1', family_id: FAMILY, title: 'Read for 20 minutes', cadence: 'daily', target_per_period: 1, weekdays: null, is_active: true }]);
+  // And a recipe to estimate.
+  db.seed('family_recipes', [{ id: RECIPE, family_id: FAMILY, name: 'Lentil soup', servings: 4, category: 'dinner', allergy_flags: [], ingredients: [{ name: 'lentils', quantity: '1', unit: 'cup' }] }]);
 });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
@@ -101,6 +113,10 @@ const helpers = [
   ['the Habits coach', () => habits()],
   ['the Journal prompt', () => journal()],
   ['Notes AI', () => notes(new NextRequest('http://localhost/api/ai/notes', { method: 'POST', body: JSON.stringify({ content: 'Call the plumber about the leak.' }) }))],
+  ['the meal planner', () => mealPlan(post('/api/ai/meals/plan', { weekStart: '2026-10-12' }))],
+  ['the nutrition estimate', () => nutrition(post('/api/ai/meals/nutrition', { subjectType: 'recipe', subjectId: RECIPE }))],
+  ['the Watchlist’s AI Assist', () => insights(post('/api/ai/insights', { kind: 'watchlist' }))],
+  ['the Declutter AI Assist', () => insights(post('/api/ai/insights', { kind: 'declutter' }))],
 ] as const;
 
 describe('N18: a Free family past its ten requests', () => {
@@ -119,6 +135,17 @@ describe('N18: a Free family past its ten requests', () => {
 
     expect(res.status).not.toBe(429);
     expect(h.complete).toHaveBeenCalledTimes(1);
+  });
+
+  it('is still served a nutrition estimate already on file, which calls no model', async () => {
+    allowanceSpent();
+    db.seed('meal_nutrition', [{ id: 'nutrition-1', family_id: FAMILY, subject_type: 'recipe', subject_id: RECIPE, calories: 320, summary: 'Hearty.' }]);
+
+    const res = await nutrition(post('/api/ai/meals/nutrition', { subjectType: 'recipe', subjectId: RECIPE }));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ cached: true, nutrition: { calories: 320 } });
+    expect(h.complete).not.toHaveBeenCalled();
   });
 });
 

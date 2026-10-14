@@ -14,14 +14,21 @@
 // and planner, the real `kickRun` → `continueRun` → `claimRun` → executor →
 // tools → tasks service, over the in-memory database. Only the model is a
 // stand-in, and `after()` (which needs a live request) runs its callback here.
+//
+// N8 — and a routine is Ask Bubaly's work. Planning every occurrence made the
+// routine cron one more door to it, and it asked only whether the family had
+// switched Bubaly off: a Free family, or one whose trial ended unpaid, had its
+// routine classified and planned (two billed model calls) and then run. The
+// cron now skips such an occurrence before planning — stamped `skipped`, the
+// routine moved on to its next one, as a paused Bubaly's is.
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type { AIProvider } from '@/lib/ai/provider';
-import { createInMemorySupabase, type InMemorySupabase, type Row } from './helpers/in-memory-supabase';
+import { createInMemorySupabase, withFaults, type InMemorySupabase, type Row } from './helpers/in-memory-supabase';
 
-const h = vi.hoisted(() => ({ db: null as unknown, after: [] as Promise<unknown>[], reply: '' as string }));
+const h = vi.hoisted(() => ({ db: null as unknown, after: [] as Promise<unknown>[], reply: '' as string, modelCalls: 0 }));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: () => h.db, createServer: async () => h.db }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string, params?: Record<string, unknown>) => `${key}${params ? JSON.stringify(params) : ''}` }));
 vi.mock('@/lib/server/cron-auth', () => ({ hasCronAuthorization: () => true }));
@@ -35,9 +42,12 @@ const provider: AIProvider = {
   runTools: async () => { throw new Error('not used'); },
   // eslint-disable-next-line require-yield
   runToolsStream: async function* () { throw new Error('not used'); },
-  structuredCompletion: async ({ schemaName }) => schemaName === 'request_intent'
-    ? { text: JSON.stringify({ intent: 'organize_weekend', confidence: 0.9, entities: [] }), refusal: null, usage: null }
-    : { text: h.reply, refusal: null, usage: null },
+  structuredCompletion: async ({ schemaName }) => {
+    h.modelCalls += 1;
+    return schemaName === 'request_intent'
+      ? { text: JSON.stringify({ intent: 'organize_weekend', confidence: 0.9, entities: [] }), refusal: null, usage: null }
+      : { text: h.reply, refusal: null, usage: null };
+  },
 };
 vi.mock('@/lib/ai/routing', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/ai/routing')>()),
@@ -78,9 +88,12 @@ beforeEach(() => {
   h.db = db;
   h.after = [];
   h.reply = planReply;
+  h.modelCalls = 0;
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.spyOn(console, 'warn').mockImplementation(() => {});
   db.seed('families', [{ id: FAMILY, name: 'The Riveras', timezone: 'America/New_York', closed_at: null, trial_ends_at: null }]);
+  // Family Basic: the plan Ask Bubaly, and so a routine, is part of.
+  db.seed('subscriptions', [{ id: 'sub-riveras', family_id: FAMILY, plan: 'basic', status: 'active', current_period_end: '2099-01-01T00:00:00Z' }]);
   db.seed('family_ai_settings', [{ family_id: FAMILY, enabled: true, behavior: 'execute' }]);
   db.seed('family_automation_rules', [{
     id: RULE, family_id: FAMILY, name: 'Weekend prep', action_config: { prompt: 'Organize our weekend' }, schedule_kind: 'cron',
@@ -130,5 +143,51 @@ describe('a due routine', () => {
     expect(runs().filter((r) => !['failed', 'cancelled', 'completed'].includes(String(r.state)))).toEqual([]);
     // The rule still moves on to its next occurrence.
     expect(db.table('family_automation_rules')[0].next_run_at).not.toBe('2026-09-05T13:00:00.000Z');
+  });
+});
+
+describe('a due routine of a family without Ask Bubaly', () => {
+  const lapses = [
+    ['on Free', () => { db.replace('subscriptions', []); }],
+    ['whose trial ended unpaid', () => {
+      db.replace('subscriptions', []);
+      Object.assign(db.table('families')[0], { trial_ends_at: new Date(NOW.getTime() - 86_400_000).toISOString() });
+    }],
+    ['whose Ask Bubaly an admin switched Off', () => { db.seed('app_settings', [{ key: 'feature_tiers', value: { 'ai-requests': 'off' } }]); }],
+  ] as const;
+
+  it.each(lapses)('%s is neither planned nor run: the occurrence is skipped and the routine moves on', async (_label, lapse) => {
+    lapse();
+
+    const res = await tick(request());
+    const body = await res.json();
+    await Promise.all(h.after);
+
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({ filed: 0, skipped: 1, problems: 0 });
+    // No classify call and no planner call were billed for it.
+    expect(h.modelCalls).toBe(0);
+    expect(requests()).toEqual([]);
+    expect(runs()).toEqual([]);
+    expect(db.table('todo_items')).toEqual([]);
+    expect(occurrence()).toMatchObject({ status: 'skipped' });
+    expect(String(occurrence().detail)).toContain('Ask Bubaly');
+    // The next Saturday at 9 in New York: kept, not lost, for a family that subscribes again.
+    expect(db.table('family_automation_rules')[0].next_run_at).toBe('2026-09-12T13:00:00.000Z');
+  });
+
+  it('whose plan cannot be read is not planned either, and the tick says so', async () => {
+    h.db = withFaults(db, (table) => (table === 'subscriptions' ? { message: 'canceling statement due to statement timeout' } : null));
+
+    const res = await tick(request());
+    const body = await res.json();
+    await Promise.all(h.after);
+
+    expect(res.status).toBe(502);
+    expect(body).toMatchObject({ filed: 0, skipped: 1, problems: 1 });
+    expect(h.modelCalls).toBe(0);
+    expect(requests()).toEqual([]);
+    expect(occurrence()).toMatchObject({ status: 'skipped' });
+    expect(db.table('family_automation_rules')[0].next_run_at).toBe('2026-09-12T13:00:00.000Z');
   });
 });

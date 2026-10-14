@@ -10,6 +10,7 @@ import { weekDates } from '@/lib/meals/planner';
 import type { NutritionSubject } from '@/lib/database.types';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
+import { AI_ASSISTANT_FEATURE_KEY, accessDeniedResponse, assertAIAccess } from '@/lib/server/ai-access';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import { describeReadError } from '@/lib/supabase/settle';
 
@@ -82,6 +83,13 @@ export async function POST(req: Request) {
     }
     if (cached) return NextResponse.json({ nutrition: cached, cached: true });
   }
+
+  // A model call from here on, so the Free plan's monthly AI allowance applies
+  // as it does at /api/ai and on the Habits, Journal and Notes helpers: these
+  // rows count toward the limit the assistant refuses on. A cached estimate
+  // (above) costs nothing and is still served.
+  const access = await assertAIAccess(ctx, { db: supabase, featureKey: AI_ASSISTANT_FEATURE_KEY });
+  if (!access.ok) return accessDeniedResponse(access);
 
   // Build the prompt for the subject --------------------------------------
   let userMsg = '';

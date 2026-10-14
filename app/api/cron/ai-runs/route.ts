@@ -8,6 +8,7 @@ import { claimRuns, releaseRun } from '@/lib/ai/runs/store';
 import { legacyStatusFor } from '@/lib/ai/runs/states';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import { familyHasFeature, getFeatureTiersByHref } from '@/lib/server/feature-entitlement';
+import { AI_RUNS_FEATURE_HREF, UNENTITLED_RUN_DEFER_MS } from '@/lib/ai/runs/entitlement';
 import type { FeatureTier } from '@/lib/constants/feature-catalog';
 
 export const runtime = 'nodejs';
@@ -37,13 +38,11 @@ const LEASE_SECONDS = 180;
 /** How far out a closed family's claimed run is put back: it is looked at again daily, not every wave. */
 const CLOSED_FAMILY_DEFER_MS = 24 * 60 * 60_000;
 /**
- * The feature a run is the work of: Ask Bubaly ('ai-requests'), the entry
- * every run is filed through (`submitRequest` behind `assertAIAccess`) and the
- * one the run controls re-check before they restart one.
+ * How far out a run of a family without Ask Bubaly is put back — the same
+ * daily look as a closed family's, and the same as `continueRun` gives a run
+ * kicked from anywhere else (lib/ai/runs/entitlement.ts).
  */
-const AI_RUNS_FEATURE_HREF = '/dashboard/concierge/runs';
-/** How far out a run of a family without Ask Bubaly is put back — the same daily look as a closed family's. */
-const UNENTITLED_FAMILY_DEFER_MS = CLOSED_FAMILY_DEFER_MS;
+const UNENTITLED_FAMILY_DEFER_MS = UNENTITLED_RUN_DEFER_MS;
 
 export async function GET(req: NextRequest) {
   const t = await getTranslations();

@@ -53,6 +53,9 @@ vi.mock('@/lib/ai/runs/store', async (importOriginal) => ({
   createRun: cron.createRun,
 }));
 vi.mock('@/lib/ai/runs/continue', () => ({ kickRun: cron.kickRun }));
+// Whether a family still has Ask Bubaly (N8) has its own cases in
+// tests/a-routine-is-planned-before-it-is-filed.test.ts; every family here has it.
+vi.mock('@/lib/ai/runs/entitlement', () => ({ agentRunEntitlementChecker: () => async () => 'entitled' }));
 // The cron plans an occurrence before it hands it on; planning is not what
 // this file is about, so the plan is answered.
 vi.mock('@/lib/ai/runs/intake', async (importOriginal) => ({

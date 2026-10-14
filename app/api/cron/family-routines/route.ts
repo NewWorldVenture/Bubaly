@@ -10,6 +10,7 @@ import { firesOncePerDay, nextCronRun, sameLocalMinute } from '@/lib/services/ro
 import { createRequest, createRun, updateRequest } from '@/lib/ai/runs/store';
 import { kickRun } from '@/lib/ai/runs/continue';
 import { DEFAULT_PLANNER_BUDGET_MS, planRoutineRequest } from '@/lib/ai/runs/intake';
+import { agentRunEntitlementChecker } from '@/lib/ai/runs/entitlement';
 import type { ServiceScope } from '@/lib/services/types';
 import { wroteNoRows } from '@/lib/supabase/errors';
 
@@ -165,6 +166,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: t('familyRoutines.couldNotReadRoutines') }, { status: 500 });
   }
 
+  // Whether each family still has Ask Bubaly, the feature a routine's run is
+  // the work of — read once per family per tick.
+  const mayRunAgents = agentRunEntitlementChecker(db);
+
   for (const rule of due ?? []) {
     if (Date.now() > deadline) break;
     if (deadline - Date.now() < MIN_PLANNING_WINDOW_MS) break;
@@ -206,17 +211,30 @@ export async function GET(req: NextRequest) {
     // tick reports it as a problem rather than a quiet skip.
     const read = await loadAISettings(scope);
     const schedule = scheduleOf(rule);
-    const held = !read.ok || !read.data.enabled;
+    // And the family's plan. A routine is Ask Bubaly's work on a schedule, and
+    // a family whose trial ended unpaid, whose plan is below Family Basic or
+    // whose Ask Bubaly an admin switched Off does not get it — not planned
+    // (a classify call and a planner call, billed per occurrence) and not run.
+    // Asked only of a family whose switch is on: a paused Bubaly is already
+    // held, and a plan read it does not need is a read that can fail.
+    // Unreadable is held like an unreadable switch: this occurrence, never the
+    // routine, and the tick says so.
+    const entitlement = read.ok && read.data.enabled && schedule ? await mayRunAgents(rule.family_id) : null;
+    const held = !read.ok || !read.data.enabled || (entitlement !== null && entitlement !== 'entitled');
     if (held || !schedule) {
       await stampRun(db, rule.id, dueAt, {
         status: 'skipped',
         detail: !held
           ? 'The routine no longer has a readable schedule.'
-          : read.ok
-            ? 'Bubaly is switched off for this family.'
-            : "Bubaly could not read this family's settings, so this occurrence was not filed.",
+          : !read.ok
+            ? "Bubaly could not read this family's settings, so this occurrence was not filed."
+            : !read.data.enabled
+              ? 'Bubaly is switched off for this family.'
+              : entitlement === 'unentitled'
+                ? "This family's plan does not include Ask Bubaly, so this occurrence was not filed."
+                : "Bubaly could not confirm this family's plan, so this occurrence was not filed.",
       }, 'routine_runs write failed (skipped stamp)');
-      if (!read.ok) problems.push(rule.id);
+      if (!read.ok || entitlement === 'unknown') problems.push(rule.id);
       // A pause is not a deletion. Advancing to the next occurrence lets the
       // routine simply resume when the family switches Bubaly back on; nulling
       // it (what this used to do) silently lost every routine a family owned

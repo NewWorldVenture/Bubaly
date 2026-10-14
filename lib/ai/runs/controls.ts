@@ -366,7 +366,13 @@ function collectDependents(steps: readonly StepRow[], stepId: string): StepRow[]
   return [...found.values()];
 }
 
-export type EditStepResult = { planId: string; version: number; requeuedSteps: number };
+export type EditStepResult = {
+  planId: string;
+  version: number;
+  requeuedSteps: number;
+  /** `paused` when the run was paused and stays so: nothing is to be kicked until someone resumes it. */
+  state: 'ready' | 'paused';
+};
 
 /**
  * Change what a step will do, as a new plan version.
@@ -466,6 +472,15 @@ export async function editStepInput(
   }, { db });
   if (!saved.ok) return saved;
 
+  // A paused run stays paused: an edit changes what a step will do, not
+  // whether the family wants Bubaly working. Setting `ready` here left
+  // `paused_at` on a `ready` run: the kick claimed it, the executor saw
+  // `paused_at` and stopped at once with the run still `executing`, Resume
+  // refused ("not paused"), and the recovery pass re-claimed it every tick
+  // until it was dead-lettered. Resume is what clears the pause and queues
+  // the edited plan.
+  const stayPaused = run.state === 'paused';
+
   // Compare-and-set on what was read above: the same state, the same plan and
   // the same lease holder. A worker that claimed the run in between changed
   // all three, and the edit must not be pointed at a run it is executing.
@@ -473,8 +488,7 @@ export async function editStepInput(
     .from('family_automation_runs')
     .update({
       plan_id: saved.data.planId,
-      state: 'ready',
-      status: legacyStatusFor('ready'),
+      ...(stayPaused ? {} : { state: 'ready' as const, status: legacyStatusFor('ready') }),
       run_after: new Date().toISOString(),
       completed_at: null,
       error: null,
@@ -511,8 +525,9 @@ export async function editStepInput(
     message: `A family manager edited "${target.description || target.tool_name || target.step_type}", so Bubaly re-planned from that step onward.`,
     payload: { plan_id: saved.data.planId, version: saved.data.version, requeued: requeue.size },
   }, { db });
-  if (run.request_id) await updateRequest(scope, run.request_id, { status: 'ready', error: null, completed_at: null }, { db });
+  // A paused run's request reads as pauseRun left it, `blocked`, until Resume.
+  if (run.request_id) await updateRequest(scope, run.request_id, { status: stayPaused ? 'blocked' : 'ready', error: null, completed_at: null }, { db });
   await audit(scope, db, 'ai_run.edit_step', runId, { step_id: stepId, plan_id: saved.data.planId, version: saved.data.version });
 
-  return ok({ planId: saved.data.planId, version: saved.data.version, requeuedSteps: requeue.size });
+  return ok({ planId: saved.data.planId, version: saved.data.version, requeuedSteps: requeue.size, state: stayPaused ? 'paused' : 'ready' });
 }

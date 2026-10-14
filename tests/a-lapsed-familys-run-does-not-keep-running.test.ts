@@ -194,4 +194,20 @@ describe('the run page’s Edit action', () => {
     expect(h.kicked).toEqual([RUN]);
     expect(row(RUN).plan_id).not.toBe(PLAN);
   });
+
+  // N11, paused: the edit keeps a paused run paused, so there is nothing to
+  // kick — Resume starts it. A kick here took a run the executor would only
+  // stop again, and left it `executing` where Resume could not reach it.
+  it('keeps a paused run paused and kicks nothing', async () => {
+    Object.assign(row(RUN), { state: 'paused', status: 'paused', paused_at: new Date(NOW - 60_000).toISOString(), lease_owner: null, lease_expires_at: null });
+    const edit = await renderedEditAction();
+
+    const result = await edit('step-1', { title: 'Pack the shin guards' });
+
+    expect(result).toMatchObject({ ok: true });
+    expect(h.kicked).toEqual([]);
+    expect(row(RUN)).toMatchObject({ state: 'paused' });
+    expect(row(RUN).paused_at).toBeTruthy();
+    expect(row(RUN).plan_id).not.toBe(PLAN);
+  });
 });
