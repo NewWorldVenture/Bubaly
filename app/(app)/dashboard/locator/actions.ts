@@ -9,6 +9,7 @@ import { placeForPoint, classifyTransition, type PlaceLike } from '@/lib/locatio
 import { notify } from '@/lib/services/notifications';
 import { systemScopeForFamily } from '@/lib/services/scope';
 import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
+import { readsEveryonesHistory } from '@/lib/location/history-scope';
 
 export type LocationResult = { ok: boolean; error?: string; place?: string | null };
 
@@ -100,10 +101,15 @@ export async function updateMyLocation(input: {
       if (evErr) console.error('[locator] location_events insert failed', { familyId, memberId: member.id, error: evErr });
     }
 
-    // Place alerts → notify the rest of the family.
-    const { data: members } = await supabase
-      .from('family_members').select('id, user_id').eq('family_id', familyId).eq('is_active', true);
-    const recipients = (members ?? []).filter((m) => m.id !== member.id && m.user_id);
+    // Place alerts → the members who read everyone's location history: the
+    // managers and caregivers (lib/location/history-scope.ts, the owner's
+    // rule the locator page applies). It went to every member with a login,
+    // so a guest — whom 0481 refuses other members' positions and the family's
+    // places — or a child was pushed "Mom left Home" with the place's name.
+    const { data: members, error: membersError } = await supabase
+      .from('family_members').select('id, user_id, role').eq('family_id', familyId).eq('is_active', true);
+    if (membersError) console.error('[locator] place-alert recipient read failed', { familyId, error: membersError });
+    const recipients = (members ?? []).filter((m) => m.id !== member.id && m.user_id && readsEveryonesHistory(m.role));
     if (recipients.length) {
       const verb = transition === 'left' ? 'left' : 'arrived at';
       const placeName = transition === 'left' ? (oldName ?? 'a place') : current!.name;

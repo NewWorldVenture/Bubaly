@@ -185,7 +185,7 @@ async function listedTo(title: string): Promise<string[]> {
   return out.sort();
 }
 
-/** A notification tick at `at`; every reminder notice sent so far, by title, to the accounts (null: the whole family). */
+/** A notification tick at `at`; every reminder notice sent so far, by title, to the accounts (the whole family is every member account). */
 async function noticesAfterTick(db: Memory, at: string) {
   vi.setSystemTime(new Date(at));
   await generateFamilyNotifications(db, FAMILY);
@@ -227,7 +227,7 @@ describe("the scan's reminder, between its commit and its card's", () => {
     const during = await noticesAfterTick(db, READ_AT);
     expect(during.get(POLICY)).toEqual(accounts(...MANAGERS));
     // The healthy controls are addressed as they always were.
-    expect(during.get(BINS)).toEqual([null]);
+    expect(during.get(BINS)).toEqual(accounts(...EVERYONE)); // the family: one row per member
     expect(during.get(KIT_BAG)).toEqual([account('sam')]);
 
     scan.release();
@@ -472,7 +472,7 @@ describe("the scan's reminder, beside an older card for the same source naming a
     expect(await calmReminders('kit')).toEqual([BINS, KIT_BAG].sort());
     const during = await noticesAfterTick(db, READ_AT);
     expect(during.get(POLICY)).toEqual(accounts(...MANAGERS));
-    expect(during.get(BINS)).toEqual([null]);
+    expect(during.get(BINS)).toEqual(accounts(...EVERYONE)); // the family: one row per member
     expect(during.get(KIT_BAG)).toEqual([account('sam')]);
 
     scan.release();
@@ -485,7 +485,7 @@ describe("the scan's reminder, beside an older card for the same source naming a
     expect(await listedTo(POLICY)).toEqual(['gran', 'kit', 'mum']);
     const after = await noticesAfterTick(db, READ_AT);
     expect(after.get(POLICY)).toEqual(accounts('gran', 'kit', 'mum'));
-    expect(after.get(BINS)).toEqual([null]);
+    expect(after.get(BINS)).toEqual(accounts(...EVERYONE)); // the family: one row per member
     expect(after.get(KIT_BAG)).toEqual([account('sam')]);
   });
 

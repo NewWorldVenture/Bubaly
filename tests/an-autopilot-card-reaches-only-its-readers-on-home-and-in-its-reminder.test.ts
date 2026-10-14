@@ -188,7 +188,8 @@ describe("the scan's own reminder is told to the card's readers", () => {
       { id: 'rem-sam', family_id: FAMILY, title: 'Pack the kit bag', remind_at: '2026-10-01T18:00:00Z', member_id: 'sam', is_done: false, related_type: null, related_id: null },
     ]);
     const sent = await remindersSentAt(db, () => db.table('notifications'), '2026-10-01T06:00:00Z');
-    expect(sent.get('Reminder: Put the bins out')).toEqual([null]);
+    // The family: one row per member with a login, so each reads it for themselves.
+    expect(sent.get('Reminder: Put the bins out')).toEqual(accounts(...ROSTER.map((m) => m.id)));
     expect(sent.get('Reminder: Pack the kit bag')).toEqual([account('sam')]);
   });
 

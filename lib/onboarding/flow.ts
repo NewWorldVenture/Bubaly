@@ -200,9 +200,10 @@ export interface FinalizePayload {
     region?: string; postalCode?: string; country?: string;
     goals: string[]; referralSource?: string; referralDetail?: string;
   };
+  /** `id` is the draft's id for the member, the same across edits and reloads: what a retried finish keys its row by. */
   members: Array<
-    | { kind: 'local'; name: string; role: MemberRole; birthday?: string; color?: string }
-    | { kind: 'invite'; email: string; role: MemberRole }
+    | { kind: 'local'; id?: string; name: string; role: MemberRole; birthday?: string; color?: string }
+    | { kind: 'invite'; id?: string; email: string; role: MemberRole }
   >;
   appearance: { color?: string; age?: number | null; avatarUrl?: string; pin?: string };
   /** Calendar imported in the value step — persisted to calendar_events at finalize. */
@@ -238,8 +239,8 @@ export function buildFinalizePayload(draft: OnboardingDraft): FinalizePayload {
     },
     members: draft.members.map((m) =>
       m.kind === 'invite'
-        ? { kind: 'invite' as const, email: m.email, role: m.role }
-        : { kind: 'local' as const, name: m.name, role: m.role, birthday: m.birthday, color: m.color }),
+        ? { kind: 'invite' as const, id: m.id, email: m.email, role: m.role }
+        : { kind: 'local' as const, id: m.id, name: m.name, role: m.role, birthday: m.birthday, color: m.color }),
     appearance: {
       color: draft.color || undefined,
       age: normalizeAge(draft.age),

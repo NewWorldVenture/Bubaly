@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { getUser } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
-import { sendPushToUser, pushConfigured } from '@/lib/server/push';
+import { PushPreparationError, sendPushToUser, pushConfigured } from '@/lib/server/push';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 export const runtime = 'nodejs';
@@ -35,11 +35,22 @@ export async function POST() {
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
   }
-  const result = await sendPushToUser(supabase, user.id, {
-    title: 'Bubaly test 🔔',
-    body: 'If you can read this, push notifications are working on this device.',
-    url: '/dashboard/notifications',
-  });
+  // A consent read that could not be made sends nothing (sendPushToUsers
+  // throws before any provider is contacted). Escaping, it was an unhandled
+  // 500 that the button reported as "Network error sending test."; it is the
+  // server's own temporary failure, and is answered as one.
+  let result: Awaited<ReturnType<typeof sendPushToUser>>;
+  try {
+    result = await sendPushToUser(supabase, user.id, {
+      title: 'Bubaly test 🔔',
+      body: 'If you can read this, push notifications are working on this device.',
+      url: '/dashboard/notifications',
+    });
+  } catch (error) {
+    if (!(error instanceof PushPreparationError)) throw error;
+    console.error('[push/test] push preparation failed', { userId: user.id });
+    return NextResponse.json({ ok: false, error: t('test.couldNotCheckPushSettings') }, { status: 503 });
+  }
 
   const ok = result.sent > 0 && result.failed === 0 && result.skipped === 0;
   return NextResponse.json(

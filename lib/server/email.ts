@@ -4,6 +4,7 @@
 // No-ops gracefully (logs) when RESEND_API_KEY is unset, so local/dev flows
 // never break — production just adds the key.
 import { FROM_EMAIL, emailEnabled } from '@/lib/email';
+import { isChildLoginEmail } from '@/lib/onboarding/child-login';
 import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 
@@ -138,6 +139,13 @@ export async function sendEmail({ to, subject, html, replyTo, from, idempotencyK
   // Before anything else, so a malformed key is a visible bug in every
   // environment, and never becomes a provider 400 or a silently changed header.
   if (idempotencyKey !== undefined) assertIdempotencyKey(idempotencyKey);
+  // Never to a kid login's synthetic address (lib/onboarding/child-login.ts):
+  // nothing is ever delivered there, and the domain is not Bubaly's. Refused
+  // before the provider is asked; sendReactEmail refuses it the same way.
+  if (isChildLoginEmail(to)) {
+    console.error('[email refused — a kid login address is never mailed]', { subject });
+    return { ok: false, reason: 'rejected' };
+  }
   if (!emailEnabled()) {
     console.info(`[email skipped — no RESEND_API_KEY] to=${to} subject="${subject}"`);
     return { ok: true, skipped: true };
