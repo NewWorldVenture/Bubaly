@@ -22,6 +22,12 @@ vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: mocks.rate })
 // The route refuses a locked family now (F33); that refusal has its own case, so it admits here.
 vi.mock('@/lib/server/route-feature-gate', () => ({ refuseIfLocked: async () => null }));
 vi.mock('@/lib/server/audit', () => ({ logAudit: mocks.audit }));
+// The Free allowance (N18) has its own cases in
+// tests/the-free-plans-ai-allowance-holds-on-every-helper.test.ts; it admits here.
+vi.mock('@/lib/server/ai-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/ai-access')>()),
+  assertAIAllowance: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
+}));
 
 type QueryResult = { data: unknown; error: { message: string; code?: string } | null; count?: number };
 const queries: { table: string; operations: unknown[][] }[] = [];

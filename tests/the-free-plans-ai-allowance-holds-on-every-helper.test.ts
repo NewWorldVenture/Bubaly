@@ -29,6 +29,15 @@
 // month's count, nothing else — and answer to their own pages' gates for
 // whether they are available.
 //
+// N18, its siblings 3: the Relationship Helper and the AI review of a child's
+// chore proof were the same again, and a Free family reaches both. The helper
+// answered to its own twenty a day and nothing else; the chore review ran on
+// every submission, a 'none'-proof chore's included, so each chore a child sent
+// in used one of the family's ten while the review itself was never refused.
+// The helper is now refused like the others. A child's submission is not
+// refused: past the allowance the proof goes to a parent, as any review the
+// model cannot give does, and no model is asked.
+//
 // Each asks before the provider is called, and the voice routes record their
 // call where the allowance counts it and take a spoken request's worth of
 // audio. Driven through the real routes and actions, the real access gate and
@@ -41,11 +50,19 @@ const FAMILY = '00000000-0000-4000-8000-0000000f1801';
 const USER = '00000000-0000-4000-8000-0000000f1811';
 const MEMBER = '00000000-0000-4000-8000-0000000f1821';
 
-const h = vi.hoisted(() => ({ db: null as unknown, complete: vi.fn(), upstream: vi.fn() }));
+const h = vi.hoisted(() => ({ db: null as unknown, complete: vi.fn(), upstream: vi.fn(), caller: null as unknown }));
 const ctx = {
   user: { id: USER, email: 'parent@example.test' },
   memberships: [],
   active: { familyId: FAMILY, role: 'parent', member: { id: MEMBER, display_name: 'Dana' }, family: { id: FAMILY, name: 'The Riveras', timezone: 'UTC' } },
+};
+const KID_USER = '00000000-0000-4000-8000-0000000f1812';
+const KID = '00000000-0000-4000-8000-0000000f1822';
+/** The child the chore is assigned to, signed in on /kids/submit. */
+const kid = {
+  user: { id: KID_USER, email: null },
+  memberships: [],
+  active: { familyId: FAMILY, role: 'child', member: { id: KID, display_name: 'Sam' }, family: { id: FAMILY, name: 'The Riveras', timezone: 'UTC' } },
 };
 vi.mock('@/lib/i18n/server', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/i18n/server')>()),
@@ -56,7 +73,7 @@ vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 vi.mock('@/lib/auth/require-aal2', () => ({ aal2Verdict: async () => ({ action: 'allow' }) }));
 vi.mock('@/lib/supabase/auth', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/supabase/auth')>()),
-  requireUserContext: async () => ctx,
+  requireUserContext: async () => h.caller ?? ctx,
   isSuperAdmin: async () => false,
 }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => h.db, createServiceClient: () => h.db }));
@@ -64,6 +81,8 @@ vi.mock('@/lib/ai/provider', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/ai/provider')>()),
   isAIConfigured: async () => true,
   resolveProvider: async () => ({ complete: h.complete }),
+  // The chore reviewer's provider (lib/chores/ai.ts).
+  getProvider: () => ({ model: 'gpt-test', complete: h.complete }),
 }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
 // The voice routes' authenticator (cookie or bearer) has its own tests; the
@@ -88,10 +107,14 @@ const recipeTransform = (await import('@/app/api/recipes/transform/route')).POST
 const { draftReconnectMessageAction } = await import('@/app/(app)/dashboard/contacts/[id]/actions');
 const { draftPaperworkReplyAction } = await import('@/app/(app)/dashboard/paperwork/actions');
 const { askMarketAssistantAction } = await import('@/app/(app)/marketplace/assistant-actions');
+const relationship = (await import('@/app/api/ai/relationship/route')).POST;
+const { submitProofAction } = await import('@/app/(app)/missions/actions');
 
 const RECIPE = '00000000-0000-4000-8000-0000000f1831';
 const CONTACT = '00000000-0000-4000-8000-0000000f1841';
 const PAPER = '00000000-0000-4000-8000-0000000f1851';
+const CHORE = '00000000-0000-4000-8000-0000000f1861';
+const ASSIGNMENT = '00000000-0000-4000-8000-0000000f1871';
 const post = (path: string, body: unknown) => new NextRequest(`http://localhost${path}`, { method: 'POST', body: JSON.stringify(body) });
 
 const NOW = new Date('2026-10-14T15:00:00Z');
@@ -113,6 +136,7 @@ beforeEach(() => {
   vi.setSystemTime(NOW);
   db = createInMemorySupabase({ rpc: { count_family_ai_requests_month: monthlyCount } });
   h.db = db;
+  h.caller = null;
   h.complete.mockReset();
   h.complete.mockResolvedValue({ text: '{"summary":"x","actionItems":[],"tags":[],"encouragement":"x","nudges":[]}' });
   h.upstream.mockReset();
@@ -136,7 +160,7 @@ beforeEach(() => {
     raw_text: 'Please sign and return the field trip permission slip by Friday.', due_on: null, amount: null, sender: 'school@example.test', actions: [], meta: {},
   }]);
 });
-afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 
 /** The family has used this month's ten. */
 function allowanceSpent() {
@@ -234,6 +258,7 @@ describe('N18: a Free family past its ten requests', () => {
     ['the Habits coach', () => habits(), refusedUnreadable],
     ['the recipe suggester', () => recipeSuggest(post('/api/recipes/suggest', { constraint: 'something warm' })), refusedUnreadable],
     ['the paperwork reply draft', () => draftPaperworkReplyAction(PAPER), async (result: unknown) => { expect(result).toMatchObject({ ok: false, error: expect.stringContaining('could not check this month') }); }],
+    ['the Relationship Helper', () => relationship(), refusedUnreadable],
   ] as const)('refuses %s when this month’s count cannot be read, before any model call', async (_label, call, refused) => {
     // A count that errors is not an empty month: the allowance fails closed.
     const unreadable = createInMemorySupabase({ rpc: { count_family_ai_requests_month: () => { throw new Error('canceling statement due to statement timeout'); } } });
@@ -255,6 +280,93 @@ describe('N18: a Free family past its ten requests', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ cached: true, nutrition: { calories: 320 } });
     expect(h.complete).not.toHaveBeenCalled();
+  });
+});
+
+describe('N18, its siblings 3: the Relationship Helper', () => {
+  const DIGEST = JSON.stringify({ headline: 'Plan something small this week.', prompts: ['Ask how the new job is going.'], giftIdeas: [] });
+  beforeEach(() => { h.complete.mockResolvedValue({ text: DIGEST }); });
+  const digestsLogged = () => db.table('audit_logs').filter((r) => r.action === 'relationship_ai_digest');
+
+  it('refuses a Free family past its ten before any model call, under its own daily cap', async () => {
+    allowanceSpent();
+
+    await refusedRoute(await relationship());
+
+    expect(h.complete).not.toHaveBeenCalled();
+    expect(db.table('ai_requests')).toHaveLength(10);
+    expect(digestsLogged()).toHaveLength(0);
+  });
+
+  it('control: still writes the digest inside the allowance', async () => {
+    const res = await relationship();
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ digest: { headline: 'Plan something small this week.' } });
+    expect(h.complete).toHaveBeenCalledTimes(1);
+    expect(db.table('ai_requests')).toMatchObject([{ feature: 'relationship.digest' }]);
+  });
+});
+
+describe('N18, its siblings 3: the AI review of a child’s chore proof', () => {
+  /** A chore with no photo to send, assigned to the child, who submits it. */
+  function seedChore(into: InMemorySupabase) {
+    into.seed('family_members', [{ id: KID, family_id: FAMILY, user_id: KID_USER, role: 'child', is_active: true, display_name: 'Sam' }]);
+    into.seed('chores', [{
+      id: CHORE, family_id: FAMILY, title: 'Feed the cat', instructions: 'One scoop in the blue bowl.', proof_required: 'none',
+      auto_approve_score: null, reward_mode: 'fixed_points', points: 10, difficulty: 'easy', safety_level: 'none', recurrence: 'none',
+    }]);
+    into.seed('chore_assignments', [{ id: ASSIGNMENT, family_id: FAMILY, chore_id: CHORE, member_id: KID, status: 'todo', approved_at: null, points_awarded: null }]);
+  }
+  function submitChore() {
+    h.caller = kid;
+    const form = new FormData();
+    form.set('assignment_id', ASSIGNMENT);
+    form.set('note', 'Fed the cat, one scoop.');
+    return submitProofAction(form);
+  }
+  /** The child's chore was taken, and went to a parent with the review marked as not given. */
+  const wentToAParent = (from: InMemorySupabase) => {
+    expect(from.table('chore_submissions')).toMatchObject([{ assignment_id: ASSIGNMENT, member_id: KID, status: 'parent_review' }]);
+    expect(from.table('chore_ai_validations')).toMatchObject([{ is_fallback: true, needs_parent_review: true, status: 'parent_review_required', model: null }]);
+    expect(from.table('chore_assignments')).toMatchObject([{ id: ASSIGNMENT, status: 'submitted', approved_at: null }]);
+  };
+
+  beforeEach(() => {
+    vi.stubEnv('OPENAI_API_KEY', 'sk-test');
+    seedChore(db);
+  });
+
+  it('takes the child’s chore past the family’s ten, sends it to a parent, and asks no model', async () => {
+    allowanceSpent();
+
+    expect(await submitChore()).toEqual({ ok: true });
+
+    expect(h.complete).not.toHaveBeenCalled();
+    expect(db.table('ai_requests')).toHaveLength(10);
+    wentToAParent(db);
+  });
+
+  it('takes the child’s chore when this month’s count cannot be read, sends it to a parent, and asks no model', async () => {
+    const unreadable = createInMemorySupabase({ rpc: { count_family_ai_requests_month: () => { throw new Error('canceling statement due to statement timeout'); } } });
+    unreadable.seed('families', db.table('families'));
+    unreadable.seed('family_members', db.table('family_members').filter((r) => r.id === MEMBER));
+    seedChore(unreadable);
+    h.db = unreadable;
+
+    expect(await submitChore()).toEqual({ ok: true });
+
+    expect(h.complete).not.toHaveBeenCalled();
+    expect(unreadable.table('ai_requests')).toHaveLength(0);
+    wentToAParent(unreadable);
+  });
+
+  it('control: inside the allowance the reviewer reads the chore, and its call is counted', async () => {
+    expect(await submitChore()).toEqual({ ok: true });
+
+    expect(h.complete).toHaveBeenCalledTimes(1);
+    expect(db.table('ai_requests')).toMatchObject([{ feature: 'chores.validate', family_id: FAMILY, requested_by: KID_USER }]);
+    expect(db.table('chore_ai_validations')).toMatchObject([{ is_fallback: false, model: 'gpt-test' }]);
   });
 });
 
