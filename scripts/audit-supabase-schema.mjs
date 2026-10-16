@@ -82,7 +82,10 @@ export async function auditSupabaseSchema({
       const signal = AbortSignal.timeout(timeoutMs);
       try {
         const response = await fetchImpl(endpoint, {
-          headers: { apikey: key, Authorization: `Bearer ${key}` },
+          // Opaque API keys authenticate through apikey; they are not JWTs.
+          headers: key.startsWith('sb_secret_') || key.startsWith('sb_publishable_')
+            ? { apikey: key }
+            : { apikey: key, Authorization: `Bearer ${key}` },
           signal,
           // Never forward an API key to a redirected destination.
           redirect: 'error',
