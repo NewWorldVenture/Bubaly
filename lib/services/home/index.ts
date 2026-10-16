@@ -306,6 +306,24 @@ export type CreateServiceRecordInput = {
   nextDueOn?: string | null;
 };
 
+// The asset FK identifies a row globally; the caller must also be able to
+// select that saved asset in this family before a new linked write is attempted.
+async function checkLinkedAsset(scope: ServiceScope, assetId: string): Promise<ServiceResult<null>> {
+  try {
+    const { data, error } = await scope.db.from('home_assets').select('id')
+      .eq('id', assetId).eq('family_id', scope.familyId).maybeSingle();
+    if (error) {
+      console.error('[service:home] asset check failed', error);
+      return fail(describeDbError(error, 'Could not check that asset.'), { code: SERVICE_CODES.db });
+    }
+    if (!data) return fail('That asset could not be found.', { code: SERVICE_CODES.notFound });
+    return ok(null);
+  } catch (error) {
+    console.error('[service:home] asset check failed', error);
+    return fail('Could not check that asset.', { code: SERVICE_CODES.db });
+  }
+}
+
 /**
  * Log a service visit. Mirrors the module's own action, including the
  * best-effort refresh of the asset's `last_serviced_on` that the life/forecast
@@ -343,6 +361,12 @@ export async function createServiceRecord(scope: ServiceScope, input: CreateServ
       },
     },
     async () => {
+      // Only new writes need admission; an already saved idempotent result is
+      // still returned if its asset has subsequently disappeared.
+      if (input.assetId) {
+        const asset = await checkLinkedAsset(scope, input.assetId);
+        if (!asset.ok) return asset;
+      }
       // The contractor must be one the family still has. The foreign key only
       // proves the id exists somewhere: a deleted contractor would get a new
       // visit on its hidden row, and another family's id would be stored here.
@@ -467,6 +491,10 @@ export async function createMaintenanceTask(scope: ServiceScope, input: CreateMa
       },
     },
     async () => {
+      if (input.assetId) {
+        const asset = await checkLinkedAsset(scope, input.assetId);
+        if (!asset.ok) return asset;
+      }
       const { data, error } = await scope.db
         .from('maintenance_tasks')
         .insert({
