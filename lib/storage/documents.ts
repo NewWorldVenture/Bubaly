@@ -21,11 +21,38 @@ export function buildFamilyPath(familyId: string, folder: string, fileName: stri
   return `${familyId}/${folder}/${Date.now()}-${sanitizeFileName(fileName)}`;
 }
 
-/** A preallocated path must survive URL transport as the exact row-protected object name. */
-export function isReservedDocumentPath(familyId: string, folder: string, path: string): boolean {
-  return path.startsWith(`${familyId}/${folder}/`) &&
+function hasSafeDocumentSegments(path: unknown): path is string {
+  return typeof path === 'string' &&
     !/[\\?#%\u0000-\u001f\u007f]/.test(path) &&
     path.split('/').every(segment => !!segment && segment !== '.' && segment !== '..');
+}
+
+/** PostgreSQL accepts braces and optional hyphens after each four hex digits. */
+function documentFamilyIdentity(value: string): string | null {
+  return /^(?:\{[0-9a-f]{4}(?:-?[0-9a-f]{4}){7}\}|[0-9a-f]{4}(?:-?[0-9a-f]{4}){7})$/i.test(value)
+    ? value.replace(/[{}-]/g, '').toLowerCase()
+    : null;
+}
+
+/**
+ * Bind a stored object name to the family whose document row was authorized.
+ * Background reads may hold a service client, so Storage RLS is not this check.
+ * UUID aliases compare by identity, but the caller must sign the ORIGINAL path:
+ * changing its spelling would request a different object. A terminal space is
+ * refused because URL parsing strips it (and can then normalize a dot segment).
+ */
+export function isFamilyDocumentPath(familyId: string, path: unknown): path is string {
+  if (!hasSafeDocumentSegments(path) || path.endsWith(' ')) return false;
+  const segments = path.split('/');
+  if (segments.length < 2) return false;
+  if (segments[0] === familyId) return true;
+  const expected = documentFamilyIdentity(familyId);
+  return expected !== null && documentFamilyIdentity(segments[0]) === expected;
+}
+
+/** A preallocated upload keeps its exact family/folder prefix, without alias normalization. */
+export function isReservedDocumentPath(familyId: string, folder: string, path: string): boolean {
+  return path.startsWith(`${familyId}/${folder}/`) && hasSafeDocumentSegments(path);
 }
 
 export async function uploadFamilyDocument(
