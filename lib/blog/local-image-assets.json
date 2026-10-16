@@ -1,0 +1,24 @@
+{
+  "assets": [
+    {
+      "originalHeroUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/51/Harvested_carrot.jpg/1920px-Harvested_carrot.jpg",
+      "localPath": "/blog/harvested-carrot.jpg",
+      "title": "Harvested carrot",
+      "creator": "Hajia Hijjah",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Harvested_carrot.jpg",
+      "originalImageUrl": "https://upload.wikimedia.org/wikipedia/commons/5/51/Harvested_carrot.jpg",
+      "license": "CC BY-SA 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "attribution": "Harvested carrot \u2014 Hajia Hijjah (CC BY-SA 4.0)",
+      "sourceUploadedAt": "2025-04-19T21:02:51Z",
+      "retrievedAt": "2026-10-16T17:32:21.461374Z",
+      "mediaType": "image/jpeg",
+      "bytes": 2329664,
+      "width": 2992,
+      "height": 2992,
+      "originalSha1": "361bf32508462dcd81a3f1bf96dae00ebb9c18dd",
+      "sha256": "8aa9da8e302421be001d8a01a44fb020ea3bb6bef903188cab20b40a36b91c23",
+      "processing": "Original JPEG bytes stored unchanged. Existing Next image optimization may resize or re-encode the displayed image; existing object-cover styling may crop its display. Image and adaptations remain CC BY-SA 4.0."
+    }
+  ]
+}
