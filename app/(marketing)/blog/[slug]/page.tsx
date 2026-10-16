@@ -16,6 +16,7 @@ import { BlogCover } from '@/components/blog/blog-cover';
 import { SubscribeForm } from '@/components/blog/subscribe-form';
 import { fmtDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
+import { safeWebLink } from '@/lib/utils/safe-link';
 import { ReadingProgress } from './reading-progress';
 import { ShareButtons } from './share-buttons';
 import { TableOfContents } from './table-of-contents';
@@ -199,10 +200,10 @@ export default async function BlogPostPage({ params }: Params) {
                 {(post.heroImageAttribution || post.heroImageCredit) && (
                   <figcaption className="mt-2 text-right text-[11px] text-white/60">
                     Photo: {post.heroImageAttribution ? <>
-                      <a href={post.heroImageAttribution.sourceUrl} className="underline">
+                      <a href={safeWebLink(post.heroImageAttribution.sourceUrl) ?? undefined} className="underline">
                         {post.heroImageAttribution.title} — {post.heroImageAttribution.creator}
                       </a>{' ('}
-                      <a href={post.heroImageAttribution.licenseUrl} className="underline">{post.heroImageAttribution.license}</a>{')'}
+                      <a href={safeWebLink(post.heroImageAttribution.licenseUrl) ?? undefined} className="underline">{post.heroImageAttribution.license}</a>{')'}
                       {post.heroImageCredit?.trim() && post.heroImageCredit !== post.heroImageAttribution.attribution
                         ? <> · {post.heroImageCredit}</> : null}
                     </> : post.heroImageCredit}

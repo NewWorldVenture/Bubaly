@@ -207,6 +207,8 @@ const progressSchema = z.object({
   completed: z.boolean().optional(),
 });
 
+const PROGRESS_SAVE_FAILED = 'Could not save your place.';
+
 function sameLibraryReference(received: unknown, requested: string): boolean {
   if (typeof received !== 'string' || !received.trim()) return false;
   if (received === requested) return true;
@@ -242,7 +244,7 @@ export async function saveProgressAction(input: z.input<typeof progressSchema>):
   } catch {
     admitted = false;
   }
-  if (!admitted) return { ok: false, error: 'Could not save your place.' };
+  if (!admitted) return { ok: false, error: PROGRESS_SAVE_FAILED };
   const patch: Record<string, unknown> = {
     family_id: ctx.active.familyId, item_id: parsed.data.itemId, user_id: ctx.user.id,
     updated_at: new Date().toISOString(),
@@ -255,7 +257,7 @@ export async function saveProgressAction(input: z.input<typeof progressSchema>):
   const { error } = await supabase.from('library_progress').upsert(patch as never, { onConflict: 'item_id,user_id' });
   if (error) {
     console.error('[library] progress save failed', error);
-    return { ok: false, error: 'Could not save your place.' };
+    return { ok: false, error: PROGRESS_SAVE_FAILED };
   }
   revalidatePath(PAGE);
   return { ok: true, message: 'Saved.' };
