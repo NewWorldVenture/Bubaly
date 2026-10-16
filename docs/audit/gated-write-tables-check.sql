@@ -59,6 +59,8 @@ declare
   -- them too (its KNOWN_UNFIXED records the call sites that measurement
   -- revealed).
   recorded text[] := array[
+    -- 0487: copied legacy reminders follow their live source-card audience.
+    'reminders',
     -- 0478 (goals) and 0479 (family_reminders, todo_items), 2026-10-10
     'family_reminders', 'goals', 'todo_items',
     -- rls sweep 2026-10-10 (0481)

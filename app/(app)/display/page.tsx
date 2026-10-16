@@ -156,7 +156,12 @@ async function loadDisplay(
     const cards = reminderCardsReader(supabase, familyId, {
       keyOf: (cardId) => suggestionReminderKey(familyId, cardId),
       sourceTagOf: suggestionSourceTag,
-      onError: (error) => console.error('[display] autopilot reminder cards read failed', error),
+      onError: (error) => {
+        console.error('[display] autopilot reminder cards read failed', error);
+        // Origins and cards are required reads too. Let settle mark this tile
+        // unavailable instead of presenting a filtered outage as an empty list.
+        throw error;
+      },
     });
     return { data: await visibleReminders(read.data ?? [], viewer, cards), error: null };
   };

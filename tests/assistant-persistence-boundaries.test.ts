@@ -104,27 +104,29 @@ describe('assistant persistence boundaries', () => {
     expect(calls).toContainEqual({ table: 'chores', operation: 'delete', payload: undefined });
   });
 
-  it('rolls a recurring reminder back to active when the next occurrence fails', async () => {
+  it('reports the committed reminder as partial when the next occurrence fails without restoring it', async () => {
     const { db, calls } = fakeDb((table, operation, count) => {
       if (table === 'family_reminders' && operation === 'select') {
         return {
-          data: [{ id: 'reminder-1', title: 'Water plants', recurrence: 'monthly', remind_at: '2026-07-01T09:00:00.000Z', kind: 'recurring', priority: 'medium', notes: null, member_id: null, location_name: null }],
+          data: [{ id: 'reminder-1', family_id: 'family-1', autopilot_origin: false, autopilot_card_id: null, title: 'Water plants', recurrence: 'monthly', remind_at: '2026-07-01T09:00:00.000Z', kind: 'recurring', priority: 'medium', notes: null, member_id: null, location_name: null }],
           error: null,
         };
       }
       if (table === 'family_reminders' && operation === 'insert') return { error: new Error('next reminder failed') };
-      // Both updates now ask `.select()` (C1-S9-69); a matched update answers
-      // with its row, so the complete and the restore each return one.
+      // The completion asks `.select()` (C1-S9-69) and confirms its matched row.
+      // A successor error cannot undo that durable completion.
       if (table === 'family_reminders' && operation === 'update' && count === 1) return { data: [{ id: 'reminder-1' }], error: null };
-      if (table === 'family_reminders' && operation === 'update' && count === 2) return { data: [{ id: 'reminder-1' }], error: null };
       return { data: [], error: null };
     });
 
     const result = await tool(db, 'complete_reminder').execute({ title: 'plants' }) as { ok: boolean; error?: string };
 
-    expect(result).toEqual({ ok: false, error: 'Could not schedule the next reminder.' });
-    expect(calls.filter((call) => call.table === 'family_reminders' && call.operation === 'update')).toHaveLength(2);
-    expect(calls.at(-1)?.payload).toMatchObject({ status: 'active', completed_at: null });
+    expect(result).toEqual({ ok: false, error: 'Reminder completed, but we could not confirm the next occurrence. Check your reminders before completing this again or adding another.' });
+    expect(calls.filter((call) => call.table === 'family_reminders' && call.operation === 'insert')).toHaveLength(1);
+    expect(calls.filter((call) => call.table === 'family_reminders' && call.operation === 'update')).toEqual([
+      { table: 'family_reminders', operation: 'update', payload: { status: 'completed', completed_at: expect.any(String) } },
+    ]);
+    expect(calls.some(call => call.operation === 'delete' || call.operation === 'upsert')).toBe(false);
   });
 
   it('fails closed when a pending-decision source cannot be read', async () => {

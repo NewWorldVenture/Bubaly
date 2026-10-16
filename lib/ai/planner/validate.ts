@@ -52,7 +52,7 @@ import { bindingSources } from '@/lib/ai/runs/bindings';
 import { behaviorForDomain, type AISettings } from '@/lib/ai/family-settings';
 import type { ToolDefinition } from '@/lib/ai/tools/types';
 import type { AiStepType } from '@/lib/database.types';
-import { zonedTimeMs } from '@/lib/services/scope';
+import { familyInstant } from '@/lib/time/civil';
 import {
   evaluateAction, readSkipsTrustGate, riskToDecision, riskTierStance,
   type AutonomyBehavior, type Capability, type Decision, type Delegation, type Grant, type Policy, type TrustRole,
@@ -316,15 +316,14 @@ export function resolveFollowupAt(after: string, now: Date, tz: string): string 
     const n = Number(relative[1]);
     const unit = relative[2].toLowerCase();
     const ms = unit.startsWith('m') ? n * 60_000 : unit.startsWith('h') ? n * 3_600_000 : unit.startsWith('d') ? n * 86_400_000 : n * 7 * 86_400_000;
-    return new Date(now.getTime() + ms).toISOString();
+    const at = new Date(now.getTime() + ms);
+    return Number.isFinite(at.getTime()) ? at.toISOString() : null;
   }
-  const naive = /^(\d{4}-\d{2}-\d{2})(?:T(\d{2}):(\d{2})(?::\d{2})?)?$/.exec(text);
-  if (naive) {
-    const ms = zonedTimeMs(naive[1], naive[2] ? Number(naive[2]) : 9, naive[3] ? Number(naive[3]) : 0, tz);
-    return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
-  }
-  const absolute = Date.parse(text);
-  return Number.isFinite(absolute) ? new Date(absolute).toISOString() : null;
+  // Date-only check-ins keep their morning default. The shared civil parser
+  // preserves seconds/fractions and rejects impossible clocks; Date.parse
+  // would silently read a fractional zone-less time on the server's clock.
+  const at = familyInstant(/^\d{4}-\d{2}-\d{2}$/.test(text) ? `${text}T09:00:00` : text, tz);
+  return at ? at.toISOString() : null;
 }
 
 // ── The pipeline ────────────────────────────────────────────────────────────
@@ -647,7 +646,8 @@ function buildDraft(raw: PlanStep, key: string, inputs: ValidationInputs, issues
     case 'followup': {
       const raw2 = parsedInput.value;
       const at = typeof raw2.runAfter === 'string' ? resolveFollowupAt(raw2.runAfter, inputs.now, inputs.tz) : null;
-      const minutes = typeof raw2.delayMinutes === 'number' && Number.isFinite(raw2.delayMinutes) ? Math.max(1, Math.round(raw2.delayMinutes)) : null;
+      const roundedMinutes = typeof raw2.delayMinutes === 'number' && Number.isFinite(raw2.delayMinutes) ? Math.max(1, Math.round(raw2.delayMinutes)) : null;
+      const minutes = roundedMinutes !== null && Number.isFinite(new Date(inputs.now.getTime() + roundedMinutes * 60_000).getTime()) ? roundedMinutes : null;
       if (!at && minutes === null) {
         issues.push({ code: 'invalid_followup', step: key, message: `Step "${key}" is a followup with no time; give it {runAfter: ISO} or {delayMinutes: n}.` });
         return null;

@@ -526,7 +526,9 @@ describe('Supabase migration filename safety', () => {
     // Preserve main's owner allocation map above that: bill anchor 0488 and
     // feed claim 0490 remain held in supabase/reserved. Approval, AI privacy
     // and atomic sync candidates are held at 0492-0494.
-    expect(audit.nextVersion).toBe('0487');
+    // 0487 binds copied reminder access to immutable live-card origins.
+    // The next sequence is 0488, already reserved for the held bill anchor.
+    expect(audit.nextVersion).toBe('0488');
   });
 
   // A hole below the high-water mark is not a free number: `supabase db push`

@@ -1,0 +1,79 @@
+name: Copied card and reminder real privacy runtime
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - '.github/workflows/reminder-card-privacy-runtime.yml'
+      - 'scripts/run-reminder-card-privacy-runtime.mjs'
+      - 'tests/runtime/**'
+      - 'tests/fixtures/reminder-card-privacy-bootstrap.sql'
+      - 'supabase/migrations/0487_copied_card_reminder_origin.sql'
+      - 'supabase/migrations/**'
+      - 'docs/audit/pg-bootstrap.sh'
+      - 'lib/autopilot/**'
+      - 'lib/reminders/**'
+      - 'lib/services/autopilot/**'
+      - 'lib/services/reminders/**'
+      - 'components/modules/reminders-module.tsx'
+      - 'lib/database.types.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.nvmrc'
+      - 'vitest.config.ts'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/reminder-card-privacy-runtime.yml'
+      - 'scripts/run-reminder-card-privacy-runtime.mjs'
+      - 'tests/runtime/**'
+      - 'tests/fixtures/reminder-card-privacy-bootstrap.sql'
+      - 'supabase/migrations/0487_copied_card_reminder_origin.sql'
+      - 'supabase/migrations/**'
+      - 'docs/audit/pg-bootstrap.sh'
+      - 'lib/autopilot/**'
+      - 'lib/reminders/**'
+      - 'lib/services/autopilot/**'
+      - 'lib/services/reminders/**'
+      - 'components/modules/reminders-module.tsx'
+      - 'lib/database.types.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.nvmrc'
+      - 'vitest.config.ts'
+permissions:
+  contents: read
+concurrency:
+  group: reminder-card-privacy-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  privacy-runtime:
+    if: >-
+      github.repository == 'NewWorldVenture/Bubaly' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact owned source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Use declared Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.21.0'
+      - name: Install exact development dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(tr -d '\r\n' < .nvmrc)" == 24.21.0 && "$(node --version)" == v24.21.0 ]]
+          npm ci
+      - name: Require exactly 25 cases per zone against disposable real services
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/run-reminder-card-privacy-runtime.mjs --privacy-sql supabase/migrations/0487_copied_card_reminder_origin.sql
+      # In normal finally cleanup, the driver removes only labelled owned resources
+      # and verifies absence. Forced cancellation can prevent cleanup. Never upload private config/JWTs, request headers, SQL rows or logs.

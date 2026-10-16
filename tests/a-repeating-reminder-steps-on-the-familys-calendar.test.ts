@@ -61,7 +61,8 @@ beforeEach(() => {
     uniques: { ai_tool_calls: [['family_id', 'idempotency_key']], chore_assignments: [['family_id', 'idempotency_key']] },
     defaults: {
       ai_tool_calls: { state: 'reserved', attempt: 1, outputs: null, error: null, finished_at: null },
-      family_reminders: { status: 'active', snoozed_until: null, member_id: null, priority: 'medium', kind: 'recurring', notes: null, location_name: null },
+      family_reminders: { status: 'active', snoozed_until: null, member_id: null, priority: 'medium', kind: 'recurring', notes: null, location_name: null, autopilot_origin: false, autopilot_card_id: null },
+      reminders: { autopilot_origin: false, autopilot_card_id: null },
       chores: { description: null, points: 10, priority: 'medium', due_at: null, icon: null, is_active: true },
       chore_assignments: { status: 'todo', due_at: null, idempotency_key: null, submitted_at: null, approved_at: null },
     },

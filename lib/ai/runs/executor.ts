@@ -1490,9 +1490,11 @@ async function runFollowupStep(port: ExecutorPort, run: RunSnapshot, step: StepS
     ? Math.max(1, Math.round(raw.delayMinutes))
     : null;
   const at = Number.isFinite(explicit) ? explicit : port.now() + (minutes ?? 60) * 60_000;
+  const date = new Date(at);
+  if (!Number.isFinite(date.getTime())) return failStep(port, run, step, 'That follow-up has a time Bubaly cannot use.', false);
   if (at <= port.now()) return failStep(port, run, step, 'That follow-up is scheduled for a time that has already passed.', false);
 
-  const runAfter = new Date(at).toISOString();
+  const runAfter = date.toISOString();
   await port.updateStep(run, step.id, {
     status: 'completed',
     completed_at: new Date(port.now()).toISOString(),

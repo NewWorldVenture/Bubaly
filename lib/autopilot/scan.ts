@@ -47,7 +47,7 @@ import { archiveStaleSuggestions } from '@/lib/autopilot/history';
 import { draftHasLapsed, reminderIsoFor } from '@/lib/autopilot/reminder-time';
 import { notify, type NotifyRecipients } from '@/lib/services/notifications';
 import { activeRoster, medicationReaderIds, type RosterMember } from '@/lib/autopilot/medication-readers';
-import { audienceMemberIds, reminderMemberFor, suggestionAudience, suggestionVisibleTo, type AudienceViewer } from '@/lib/autopilot/audience';
+import { audienceMemberIds, suggestionAudience, suggestionVisibleTo, type AudienceViewer } from '@/lib/autopilot/audience';
 import { sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
 import { addDaysToDayKey, dayKeyInTz, systemScopeForFamily, zonedTimeMs } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
@@ -448,6 +448,7 @@ export async function runAutopilotScan(
     const isAuto = confidenceTier(d.confidence) === 'auto';
     let status: 'open' | 'auto_executed' = 'open';
     let createdReminderId: string | null = null;
+    let atomicCard: { id: string } | null = null;
     let createdGroceryIds: string[] = [];
 
     if (isAuto && d.actionType === 'create_reminder') {
@@ -465,34 +466,32 @@ export async function runAutopilotScan(
       // (reminderIsoFor), and the draft was already dropped above.
       const at = reminderIsoFor(d.sourceKind, (d.payload.at as string | undefined) ?? defaultReminderIso(todayKey, tz), now, tz, d.expiresAt);
       if (!at) continue;
-      const relatedType = d.sourceKind === 'appointments' ? 'appointment'
-        : d.sourceKind === 'calendar_events' ? 'event' : 'renewal';
-      // The member the reminder is FOR, which is not always the card's member:
-      // an insurance card names whose policy it is, not who renews it, and its
-      // reminder is told to the card's readers by the notifications generator
-      // (lib/autopilot/audience.ts reminderMemberFor).
-      //
-      // Written BEFORE its card, and kept so: the card's status says whether
-      // the reminder exists ('auto_executed' or 'open'), and a card saved
-      // first would claim a reminder that may never be written. So there is
-      // a moment — and, when the card fails to save and the clean-up below
-      // fails too, no end to it — in which this reminder links to a source no
-      // card names yet. Every reader treats such a link as the managers'
-      // alone (lib/autopilot/reminder-cards.ts), so it reaches no reader the
-      // card would refuse before the card is there to say who may.
-      const { data: reminder, error: remErr } = await supabase.from('reminders').insert({
-        family_id: familyId,
-        title: (d.payload.title as string) ?? d.title,
-        remind_at: at,
-        member_id: reminderMemberFor({ kind: d.kind, source_kind: d.sourceKind, member_id: d.memberId }),
-        related_type: relatedType,
-        related_id: d.sourceId,
-        created_by: userId,
-      }).select('id').single();
-      if (!remErr && reminder?.id) {
-        createdReminderId = reminder.id;
-        status = 'auto_executed'; autoExecuted++;
+      // The card and copy become visible together, or neither is saved.
+      const card = {
+        family_id: familyId, member_id: d.memberId, kind: d.kind,
+        title: d.title, detail: d.detail, confidence: d.confidence, urgency: d.urgency,
+        action_type: d.actionType, action_label: d.actionLabel,
+        // Normalize the engine's unknown-valued payload to the actual JSON sent to PostgreSQL.
+        payload: JSON.parse(JSON.stringify(d.payload)),
+        source_kind: d.sourceKind, source_id: d.sourceId, dedupe_key: d.dedupeKey,
+        expires_at: d.expiresAt,
+      };
+      const result = viewer
+        ? await supabase.rpc('create_card_legacy_reminder', { p_card: card, p_at: at })
+        : await supabase.rpc('create_card_legacy_reminder_service', { p_card: card, p_at: at, p_actor: userId });
+      if (result.error) {
+        if (result.error.code === '23505') continue;
+        throw new Error('Autopilot could not save the reminder suggestion');
       }
+      const receipt = result.data;
+      if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt)
+        || receipt.family_id !== familyId || typeof receipt.card_id !== 'string'
+        || typeof receipt.reminder_id !== 'string') {
+        throw new Error('Autopilot reminder receipt could not be verified');
+      }
+      atomicCard = { id: receipt.card_id };
+      createdReminderId = receipt.reminder_id;
+      status = 'auto_executed'; autoExecuted++;
     }
 
     // Moment prep: add snacks/supplies to the family's active shopping list —
@@ -513,7 +512,9 @@ export async function runAutopilotScan(
       }
     }
 
-    const { data: inserted, error: suggestionError } = await supabase.from('autopilot_suggestions').insert({
+    const { data: inserted, error: suggestionError } = atomicCard
+      ? { data: atomicCard, error: null }
+      : await supabase.from('autopilot_suggestions').insert({
       family_id: familyId,
       member_id: d.memberId,
       kind: d.kind,

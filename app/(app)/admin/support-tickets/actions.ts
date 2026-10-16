@@ -3,8 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
-import { superAdminAssurance } from '@/lib/auth/super-admin-assurance';
+import { superAdminGate, type SuperAdminGate } from '@/lib/auth/super-admin-gate';
 import { describeActionError } from '@/lib/supabase/errors';
 import { emailSchema } from '@/lib/validation';
 import type { Database } from '@/lib/database.types';
@@ -13,7 +12,8 @@ import { dayKeyIn } from '@/lib/time/zoned';
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 type AdminClient = ReturnType<typeof createServiceClient>;
-type GuardResult = { supabase: AdminClient } | { ok: false; error: string };
+type AuthUser = Extract<SuperAdminGate, { status: 'allowed' }>['user'];
+type GuardResult = { supabase: AdminClient; user: AuthUser } | { ok: false; error: string };
 type TicketUpdate = Database['public']['Tables']['support_tickets']['Update'];
 
 const CATEGORIES = new Set(['technical', 'billing', 'account', 'family', 'general', 'feature_request']);
@@ -26,14 +26,18 @@ function actionFailure(operation: string, message: string, error: unknown): Acti
 
 async function guard(): Promise<GuardResult> {
   const t = await getTranslations();
-  if (!(await isSuperAdmin())) return { ok: false, error: t('actions.notAuthorized') };
-  if (!(await superAdminAssurance()).ok) return { ok: false, error: t('actions.adminConsoleNeedsYourCode') };
-  return { supabase: createServiceClient() };
+  const gate = await superAdminGate();
+  if (gate.status !== 'allowed') {
+    const error = gate.status === 'unavailable' ? t('ai.accountContextIsTemporarilyUnavailable')
+      : gate.status === 'step_up' ? t('actions.adminConsoleNeedsYourCode') : t('actions.notAuthorized');
+    return { ok: false, error };
+  }
+  return { supabase: createServiceClient(), user: gate.user };
 }
 
 async function updateTicket(
   ticketId: string,
-  patch: TicketUpdate,
+  patch: TicketUpdate | ((user: AuthUser) => TicketUpdate),
   operation: string,
   message: string,
 ): Promise<ActionResult> {
@@ -43,7 +47,7 @@ async function updateTicket(
   if (!ticketId.trim()) return { ok: false, error: t('actions.aTicketIsRequired') };
   const { data, error } = await guarded.supabase
     .from('support_tickets')
-    .update(patch)
+    .update(typeof patch === 'function' ? patch(guarded.user) : patch)
     .eq('id', ticketId)
     .select('id')
     .maybeSingle();
@@ -74,12 +78,10 @@ export async function closeTicketAction(ticketId: string): Promise<ActionResult>
  */
 export async function assignTicketToMeAction(ticketId: string): Promise<ActionResult> {
   const t = await getTranslations();
-  const user = await getUser();
-  if (!user) return { ok: false, error: t('actions.notAuthorized') };
-  const name = (typeof user.user_metadata?.full_name === 'string' && user.user_metadata.full_name.trim()) || user.email || null;
-  return updateTicket(ticketId, {
-    assigned_agent_id: user.id, assigned_agent_name: name,
-  }, 'assign that ticket', t('supportTickets.couldNotAssignThatTicket'));
+  return updateTicket(ticketId, (user) => ({
+    assigned_agent_id: user.id,
+    assigned_agent_name: (typeof user.user_metadata?.full_name === 'string' && user.user_metadata.full_name.trim()) || user.email || null,
+  }), 'assign that ticket', t('supportTickets.couldNotAssignThatTicket'));
 }
 
 export async function reopenTicketAction(ticketId: string): Promise<ActionResult> {

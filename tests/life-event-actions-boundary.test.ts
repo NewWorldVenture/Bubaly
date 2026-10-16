@@ -97,7 +97,7 @@ beforeEach(() => {
   // as — and a fake with no default would read that as `undefined` and fail
   // an assertion the real column would pass. Same precedent as the routing
   // test's defaults for family_inbox_messages.
-  db = createInMemorySupabase({ defaults: { moves: { status: 'planning' } } });
+  db = createInMemorySupabase({ defaults: { moves: { status: 'planning' }, family_reminders: { autopilot_origin: false, autopilot_card_id: null }, reminders: { autopilot_origin: false, autopilot_card_id: null } } });
   // createTodo now verifies the server-derived assignee belongs to this
   // family before inserting. Model scope().memberId so these launch tests can
   // reach their intended success/rollback paths instead of failing the guard.

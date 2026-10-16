@@ -359,6 +359,7 @@ export async function listDue(
   // (lib/autopilot/reminder-key.ts): the server's own mints live in
   // lib/services/autopilot, which imports this module.
   let malformed = false;
+  let authorizationUnread = false;
   const { data, error } = await readVisibleReminders(async (from, to) => {
     let query = scope.db
       .from('family_reminders')
@@ -384,7 +385,10 @@ export async function listDue(
     cards: reminderCardsReader(scope.db, scope.familyId, {
       keyOf: (cardId) => mintSuggestionReminderKey(scope.familyId, cardId),
       sourceTagOf: mintSuggestionSourceTag,
-      onError: (cause) => console.error('[service:reminders] autopilot reminder cards read failed', cause),
+      onError: (cause) => {
+        authorizationUnread = true;
+        console.error('[service:reminders] autopilot reminder cards read failed', cause);
+      },
     }),
   });
   if (error) {
@@ -393,6 +397,11 @@ export async function listDue(
   }
   if (malformed) {
     return fail('Could not load your reminders.', { code: SERVICE_CODES.db });
+  }
+  // A readable absence keeps the reader's normal unresolved-origin fallback.
+  // An unavailable authorization read proves neither visibility nor emptiness.
+  if (authorizationUnread) {
+    return fail('Could not load your reminders.', { code: SERVICE_CODES.db, retryable: true });
   }
 
   const due = (data ?? []).filter((row) => {

@@ -29,6 +29,7 @@ import { settle } from '@/lib/supabase/settle';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { remapBindings } from './bindings';
+import { decodeRunHistoryCursor } from './history-cursor';
 import {
   findDependencyCycle, legacyStatusFor, type RunState, type StepState,
 } from './states';
@@ -877,7 +878,7 @@ export type ListRunsOptions = {
   statuses?: readonly string[] | null;
   /** The mirror of `statuses`: legacy `status` values to leave out. */
   excludeStatuses?: readonly string[] | null;
-  /** Paging cursor: rows created strictly before this ISO instant. */
+  /** Exact timestamp/ID cursor; legacy ISO-only bookmarks remain strict-before. */
   before?: string | null;
   limit?: number;
 };
@@ -900,6 +901,10 @@ export async function listRuns(
 ): Promise<ServiceResult<RunRow[]>> {
   const db = opts?.db ?? scope.db;
   const limit = Math.max(1, Math.min(options.limit ?? 50, LIST_RUNS_MAX));
+  const cursor = options.before ? decodeRunHistoryCursor(options.before) : null;
+  if (options.before && !cursor) {
+    return fail('The run-history page cursor is invalid.', { code: SERVICE_CODES.invalidInput });
+  }
   try {
     let query = db.from('family_automation_runs').select('*').eq('family_id', scope.familyId);
     if (options.states && options.states.length) query = query.in('state', [...options.states]);
@@ -907,8 +912,12 @@ export async function listRuns(
     if (options.excludeStatuses && options.excludeStatuses.length) {
       query = query.not('status', 'in', `(${options.excludeStatuses.join(',')})`);
     }
-    if (options.before) query = query.lt('created_at', options.before);
-    const { data, error } = await query.order('created_at', { ascending: false }).limit(limit);
+    if (cursor && cursor.id !== null) {
+      query = query.or(`created_at.lt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.gt.${cursor.id})`);
+    } else if (cursor) {
+      query = query.lt('created_at', cursor.createdAt);
+    }
+    const { data, error } = await query.order('created_at', { ascending: false }).order('id', { ascending: true }).limit(limit);
     if (error) {
       console.error('[ai/runs] failed to list the runs', error);
       return fail(describeDbError(error, 'Bubaly could not read your run history.'), { code: SERVICE_CODES.db, retryable: true });

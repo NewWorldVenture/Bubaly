@@ -16,9 +16,11 @@ import { createInMemorySupabase } from './helpers/in-memory-supabase';
 // Each household below is read through the real reader
 // (reminderCardsReader + visibleReminders) over a database that answers
 // `autopilot_suggestions` with the rows each schema gives that reader: the base
-// schema (0085, every card to every member) and 0486 (the card's audience, the
+// card SELECT policy (0085, every card to every member) and 0486 (the card's audience, the
 // rows docs/audit/an-autopilot-card-is-read-by-its-audience-check.sql pins).
-// The answer is the same under both.
+// Both fixtures include the required immutable origin schema. This does not
+// claim a metadata-free old database is supported: keys and tags cannot prove
+// either a generated card's ownership or a manual reminder's origin.
 
 vi.mock('@/lib/services/activity', () => ({ recordActivitySafely: vi.fn() }));
 
@@ -88,6 +90,19 @@ const CASES = (['base', '0486'] as const).flatMap((schema) => READERS.map((reade
 function seen(schema: 'base' | '0486', reader: Reader) {
   const db = createInMemorySupabase<DB>({});
   db.seed('autopilot_suggestions', CARDS.filter((c) => SCHEMAS[schema][reader].includes(c.id)));
+  // Model the committed origin columns, independently of the projections
+  // passed to visibleReminders below. Only these known synthetic rows receive
+  // authority; arbitrary stamped or missing rows remain unresolved.
+  db.seed('reminders', [
+    ...CARDS.map((card) => ({ id: `r-${card.id}`, family_id: FAMILY, autopilot_origin: true, autopilot_card_id: card.id })),
+    { id: 'r-bins', family_id: FAMILY, autopilot_origin: false, autopilot_card_id: null },
+    { id: 'r-cake', family_id: FAMILY, autopilot_origin: false, autopilot_card_id: null },
+  ]);
+  db.seed('family_reminders', [
+    ...CARDS.map((card) => ({ id: `fr-${card.id}`, family_id: FAMILY, autopilot_origin: true, autopilot_card_id: card.id })),
+    { id: 'fr-bins', family_id: FAMILY, autopilot_origin: false, autopilot_card_id: null },
+    { id: 'fr-notes', family_id: FAMILY, autopilot_origin: false, autopilot_card_id: null },
+  ]);
   return db as unknown as DB;
 }
 
@@ -111,7 +126,7 @@ const ACCEPTED_REMINDERS = [
 
 const sorted = (titles: string[]) => [...titles].sort();
 const onError = () => { throw new Error('the cards were readable'); };
-/** How an accepted card's key and tag are minted (lib/autopilot/reminder-cards.ts takes both or neither). */
+/** Compatibility mints remain paired; immutable database origins decide the audience. */
 const MINTS = { keyOf: (id: string) => suggestionReminderKey(FAMILY, id), sourceTagOf: suggestionSourceTag };
 
 beforeEach(() => {
@@ -173,9 +188,9 @@ describe('a reminder that looks like a card\'s whose card was never written is t
     db.seed('family_members', ROSTER.map((m) => ({ ...m, family_id: FAMILY, user_id: `u-${m.id}`, display_name: m.id, is_active: true, birthday: null })));
     db.seed('autopilot_suggestions', CARDS);
     db.seed('reminders', [
-      { id: 'r-orphan', family_id: FAMILY, title: 'Renew Gym pass', remind_at: '2026-10-01T18:00:00Z', member_id: null, is_done: false, related_type: 'renewal', related_id: 'ren-gone' },
-      { id: 'r-c-refill', family_id: FAMILY, title: REFILL, remind_at: '2026-10-01T18:00:00Z', member_id: null, is_done: false, related_type: 'renewal', related_id: 'med-1' },
-      { id: 'r-bins', family_id: FAMILY, title: BINS, remind_at: '2026-10-01T18:00:00Z', member_id: null, is_done: false, related_type: null, related_id: null },
+      { id: 'r-orphan', family_id: FAMILY, title: 'Renew Gym pass', remind_at: '2026-10-01T18:00:00Z', member_id: null, is_done: false, related_type: 'renewal', related_id: 'ren-gone', autopilot_origin: true, autopilot_card_id: null },
+      { id: 'r-c-refill', family_id: FAMILY, title: REFILL, remind_at: '2026-10-01T18:00:00Z', member_id: null, is_done: false, related_type: 'renewal', related_id: 'med-1', autopilot_origin: true, autopilot_card_id: 'c-refill' },
+      { id: 'r-bins', family_id: FAMILY, title: BINS, remind_at: '2026-10-01T18:00:00Z', member_id: null, is_done: false, related_type: null, related_id: null, autopilot_origin: false, autopilot_card_id: null },
     ]);
     vi.setSystemTime(new Date('2026-10-01T06:00:00Z'));
     await generateFamilyNotifications(db as unknown as DB, FAMILY);

@@ -6,21 +6,11 @@ import type { ServiceScope } from '@/lib/services/types';
 import { getMessages, translate } from '@/lib/i18n/messages';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 
-// AUD-1031-REMINDER-ORDER. The scan writes an auto-executed card's reminder
-// BEFORE the card (lib/autopilot/scan.ts), and the readers found a reminder's
-// audience by looking its card up among the cards narrower than everyone. A
-// link that found nothing read as "everyone's", so in the moment between the
-// two writes — and for good, when the card failed to save and the clean-up of
-// the reminder failed or removed nothing — "Renew dental insurance (Smile Co)"
-// was listed to a guest and to a child the policy does not name, and the
-// notifier told it to the whole family.
-//
-// Now a linked reminder goes past the managers only when its card is found
-// (lib/autopilot/reminder-cards.ts). Driven through the real scan, held or
-// failed at its card's insert, the real Calm page (a reader of the scan's
-// `reminders`), the real reminders.listDue (a reader of an accepted card's
-// `family_reminders`) and the real notifications generator, over the
-// in-memory database.
+// AUD-1031-REMINDER-ORDER, revised for immutable origins and atomic writers.
+// New scan cards and their reminders publish together. Historical orphan copies
+// remain manager-only; matching public tags, payload IDs or related sources do
+// not establish origin. Exercise scan publication/refusal, Calm, listDue and
+// notification readers over the shared in-memory RPC model (not live SQL RLS).
 
 type DB = SupabaseClient<Database>;
 type Memory = ReturnType<typeof createInMemorySupabase<DB>>;
@@ -107,64 +97,35 @@ function household(): Memory {
 type Reply = { data: unknown; error: { code: string; message: string } | null };
 type Steer = { wait: Promise<void> } | { reply: Reply } | null;
 
-/**
- * The same database, with chosen statements steered as they execute: `steer`
- * sees the table and the builder methods called on it, and answers with a
- * promise the statement waits on before the database answers it, a reply that
- * stands in for the database's, or null.
- */
-function steered(db: Memory, steer: (table: string, methods: string[]) => Steer): DB {
+/** Intercept a complete RPC request, never one half of an atomic DB write. */
+function steered(db: Memory, steer: (name: string) => Steer): DB {
   return new Proxy(db, {
     get(target, property, receiver) {
-      if (property !== 'from') return Reflect.get(target, property, receiver);
-      return (table: string) => {
-        const builder = target.from(table) as unknown as Record<PropertyKey, unknown>;
-        const methods: string[] = [];
-        const run = async (execute: () => PromiseLike<unknown>) => {
-          const plan = steer(table, methods);
-          if (plan && 'reply' in plan) return { count: null, status: plan.reply.error ? 400 : 201, statusText: '', ...plan.reply };
-          if (plan) await plan.wait;
-          return execute();
-        };
-        const proxy: object = new Proxy(builder, {
-          get(object, key) {
-            const value = Reflect.get(object, key);
-            if (typeof value !== 'function') return value;
-            const method = value as (...args: unknown[]) => unknown;
-            if (key === 'then') {
-              return (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) =>
-                run(() => new Promise((ok, ko) => { method.call(object, ok, ko); })).then(resolve, reject);
-            }
-            if (key === 'single' || key === 'maybeSingle') {
-              return (...args: unknown[]) => { methods.push(String(key)); return run(() => method.apply(object, args) as PromiseLike<unknown>); };
-            }
-            return (...args: unknown[]) => {
-              methods.push(String(key));
-              const result = method.apply(object, args);
-              return result === object ? proxy : result;
-            };
-          },
-        });
-        return proxy;
+      if (property !== 'rpc') return Reflect.get(target, property, receiver);
+      return async (name: string, args: Record<string, unknown>) => {
+        const plan = steer(name);
+        if (plan && 'reply' in plan) return { count: null, status: plan.reply.error ? 400 : 201, statusText: '', ...plan.reply };
+        if (plan) await plan.wait;
+        return target.rpc(name as never, args as never);
       };
     },
   }) as unknown as DB;
 }
 
-/** The scan, held at its card's insert: the reminder is committed, and the card is not yet saved. */
+/** Hold before the atomic publication: neither the new card nor its copy exists. */
 function holdingTheCard(db: Memory) {
   let release!: () => void;
   let reached!: () => void;
   const released = new Promise<void>((resolve) => { release = resolve; });
   const held = new Promise<void>((resolve) => { reached = resolve; });
-  const client = steered(db, (table, methods) => {
-    if (table !== 'autopilot_suggestions' || !methods.includes('insert')) return null;
+  db.setRpcAuth(null, 'service_role');
+  const client = steered(db, name => {
+    if (name !== 'create_card_legacy_reminder_service') return null;
     reached();
     return { wait: released };
   });
   vi.setSystemTime(new Date(SCAN_AT));
   const scanning = runAutopilotScan(client, FAMILY, null, 'UTC', 'en-US', echo, new Date(SCAN_AT));
-  // A scan that ends without reaching the card's insert fails the case rather than hanging it.
   const reachedTheCard = Promise.race([held, scanning.then(() => { throw new Error('the scan saved no card'); })]);
   return { held: reachedTheCard, release, scanning };
 }
@@ -205,27 +166,27 @@ beforeEach(() => {
 });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
-describe("the scan's reminder, between its commit and its card's", () => {
-  it("an insurance renewal's reminder is the managers' alone until its card is saved; then Ava's too, never Kit's or the guest's", async () => {
+describe("the scan's reminder and card publish atomically", () => {
+  it("an insurance renewal's reminder is invisible before its atomic publication; then Ava's too, never Kit's or the guest's", async () => {
     const db = household();
     db.seed('family_insurance_policies', [AVAS_DENTAL]);
     const scan = holdingTheCard(db);
     await scan.held;
-    // The interval the finding names: the reminder is committed, its card is not.
-    expect(db.table('reminders')).toEqual([expect.objectContaining({ title: POLICY, member_id: null, related_type: 'renewal', related_id: 'pol-ava' })]);
+    // The database has not published either half of the new occurrence.
+    expect(db.table('reminders')).toEqual([]);
     expect(db.table('autopilot_suggestions')).toEqual([]);
 
     // A reminder somebody wrote, and one assigned to Sam, in the same interval.
     db.seed('reminders', [
-      { id: 'rem-bins', family_id: FAMILY, title: BINS, remind_at: '2026-09-28T18:00:00Z', member_id: null, is_done: false, related_type: null, related_id: null },
-      { id: 'rem-sam', family_id: FAMILY, title: KIT_BAG, remind_at: '2026-09-28T18:00:00Z', member_id: 'sam', is_done: false, related_type: null, related_id: null },
+      { id: 'rem-bins', family_id: FAMILY, autopilot_origin: false, autopilot_card_id: null, title: BINS, remind_at: '2026-09-28T18:00:00Z', member_id: null, is_done: false, related_type: null, related_id: null },
+      { id: 'rem-sam', family_id: FAMILY, autopilot_origin: false, autopilot_card_id: null, title: KIT_BAG, remind_at: '2026-09-28T18:00:00Z', member_id: 'sam', is_done: false, related_type: null, related_id: null },
     ]);
     vi.setSystemTime(new Date(READ_AT));
-    expect(await listedTo(POLICY)).toEqual(MANAGERS.sort());
+    expect(await listedTo(POLICY)).toEqual([]);
     expect(await calmReminders('kit')).toEqual([BINS, KIT_BAG].sort());
     expect(await calmReminders('neighbour')).toEqual([BINS, KIT_BAG].sort());
     const during = await noticesAfterTick(db, READ_AT);
-    expect(during.get(POLICY)).toEqual(accounts(...MANAGERS));
+    expect(during.get(POLICY)).toBeUndefined();
     // The healthy controls are addressed as they always were.
     expect(during.get(BINS)).toEqual(accounts(...EVERYONE)); // the family: one row per member
     expect(during.get(KIT_BAG)).toEqual([account('sam')]);
@@ -240,18 +201,18 @@ describe("the scan's reminder, between its commit and its card's", () => {
     expect(after.get(POLICY)).not.toContain(null);
   });
 
-  it("a renewal's reminder is told to no one but the managers until its card is saved; then to everyone but the guest", async () => {
+  it("a renewal's reminder is told to no one before its atomic publication; then to everyone but the guest", async () => {
     const db = household();
     db.seed('renewals', [PASSPORT_ROW]);
     const scan = holdingTheCard(db);
     await scan.held;
-    expect(db.table('reminders')).toEqual([expect.objectContaining({ title: PASSPORT, member_id: null, related_type: 'renewal', related_id: 'ren-1' })]);
+    expect(db.table('reminders')).toEqual([]);
 
     vi.setSystemTime(new Date(READ_AT));
-    expect(await listedTo(PASSPORT)).toEqual(MANAGERS.sort());
+    expect(await listedTo(PASSPORT)).toEqual([]);
     const during = await noticesAfterTick(db, READ_AT);
     // Never the family-wide notice its unassigned row would otherwise be.
-    expect(during.get(PASSPORT)).toEqual(accounts(...MANAGERS));
+    expect(during.get(PASSPORT)).toBeUndefined();
 
     scan.release();
     await scan.scanning;
@@ -261,16 +222,16 @@ describe("the scan's reminder, between its commit and its card's", () => {
     expect(after.get(PASSPORT)).toEqual(accounts(...EVERYONE.filter((id) => id !== 'neighbour')));
   });
 
-  it("a refill's reminder, a card for everyone, waits for its card too, and is then everyone's and its member's to be told", async () => {
+  it("a refill's reminder, a card for everyone, waits for atomic publication, and is then everyone's and its member's to be told", async () => {
     const db = household();
     db.seed('medications', [KITS_MEDICINE]);
     const scan = holdingTheCard(db);
     await scan.held;
-    expect(db.table('reminders')).toEqual([expect.objectContaining({ title: REFILL, member_id: 'kit', related_type: 'renewal', related_id: 'med-kit' })]);
+    expect(db.table('reminders')).toEqual([]);
 
     vi.setSystemTime(new Date(READ_AT));
-    expect(await listedTo(REFILL)).toEqual(MANAGERS.sort());
-    expect((await noticesAfterTick(db, READ_AT)).get(REFILL)).toEqual(accounts(...MANAGERS));
+    expect(await listedTo(REFILL)).toEqual([]);
+    expect((await noticesAfterTick(db, READ_AT)).get(REFILL)).toBeUndefined();
 
     scan.release();
     await scan.scanning;
@@ -278,29 +239,26 @@ describe("the scan's reminder, between its commit and its card's", () => {
     // included, and told to the member it is for, as any reminder of theirs.
     vi.setSystemTime(new Date(READ_AT));
     expect(await listedTo(REFILL)).toEqual([...EVERYONE].sort());
-    expect((await noticesAfterTick(db, READ_AT)).get(REFILL)).toEqual(accounts('gran', 'kit', 'mum'));
+    expect((await noticesAfterTick(db, READ_AT)).get(REFILL)).toEqual(accounts('kit'));
   });
 });
 
-describe("the scan's reminder whose card never saves", () => {
-  it.each([
-    ['the clean-up fails', { data: null, error: { code: 'XX000', message: 'Fixture delete refused' } }],
-    ['the clean-up removes nothing', { data: [], error: null }],
-  ] as const)("is the managers' alone when %s", async (_case, cleanup) => {
+describe("a refused atomic scan does not publish either half or broaden historical orphans", () => {
+  it.each([null, 'deleted-card'])("keeps an existing orphan with card ID %s manager-only", async cardId => {
     const db = household();
     db.seed('family_insurance_policies', [AVAS_DENTAL]);
-    const client = steered(db, (table, methods) => {
-      if (table === 'autopilot_suggestions' && methods.includes('insert')) return { reply: { data: null, error: { code: 'XX000', message: 'Fixture insert refused' } } };
-      if (table === 'reminders' && methods.includes('delete')) return { reply: cleanup };
-      return null;
-    });
+    db.seed('reminders', [{ id: 'historical-orphan', family_id: FAMILY, title: POLICY, member_id: null,
+      remind_at: '2026-09-28T09:00:00Z', is_done: false, related_type: 'renewal', related_id: 'pol-ava',
+      autopilot_origin: true, autopilot_card_id: cardId }]);
+    const before = structuredClone(db.table('reminders'));
+    db.setRpcAuth(null, 'service_role');
+    const client = steered(db, name => name === 'create_card_legacy_reminder_service'
+      ? { reply: { data: null, error: { code: 'XX000', message: 'Fixture atomic transaction refused' } } } : null);
     vi.setSystemTime(new Date(SCAN_AT));
-    await expect(runAutopilotScan(client, FAMILY, null, 'UTC', 'en-US', echo, new Date(SCAN_AT))).rejects.toThrow('Autopilot could not save the suggestion');
-    expect(console.error).toHaveBeenCalledWith('[autopilot] side-effect cleanup failed', expect.anything());
-    // Left behind for good: a reminder linked to a policy no card names.
-    expect(db.table('reminders')).toEqual([expect.objectContaining({ title: POLICY, member_id: null, related_type: 'renewal', related_id: 'pol-ava' })]);
+    await expect(runAutopilotScan(client, FAMILY, null, 'UTC', 'en-US', echo, new Date(SCAN_AT)))
+      .rejects.toThrow('Autopilot could not save the reminder suggestion');
+    expect(db.table('reminders')).toEqual(before);
     expect(db.table('autopilot_suggestions')).toEqual([]);
-
     vi.setSystemTime(new Date(READ_AT));
     expect(await listedTo(POLICY)).toEqual(MANAGERS.sort());
     expect((await noticesAfterTick(db, READ_AT)).get(POLICY)).toEqual(accounts(...MANAGERS));
@@ -316,10 +274,12 @@ describe("an accepted card's reminder whose link resolves to no card", () => {
   /** Mum accepts the scan's open card for `source`; the reminder it wrote. */
   async function accepted(db: Memory, source: string) {
     vi.setSystemTime(new Date('2026-09-21T06:30:00Z'));
+    db.setRpcAuth(null, 'service_role');
     await runAutopilotScan(db, FAMILY, null, 'UTC', 'en-US', echo, new Date('2026-09-21T06:30:00Z'));
     const card = db.table('autopilot_suggestions').find((s) => s.source_id === source)!;
     expect(card).toMatchObject({ status: 'open', action_type: 'create_reminder' });
     vi.setSystemTime(new Date('2026-09-21T08:00:00Z'));
+    db.setRpcAuth(account('mum'));
     expect(await resolveSuggestion(asManager(db), { suggestionId: card.id as string, updatedAt: card.updated_at as string, action: 'reminder' }))
       .toMatchObject({ ok: true, status: 'executed' });
     const reminder = db.table('family_reminders').find((r) => r.idempotency_key && (r.tags as string[]).length > 0)!;
@@ -345,23 +305,22 @@ describe("an accepted card's reminder whose link resolves to no card", () => {
     const { card } = await accepted(db, 'pol-ava');
     vi.setSystemTime(new Date(DUE_AT));
     expect(await dueTo(db, POLICY)).toEqual(['ava', 'gran', 'mum']);
-    // A legacy link: the card is gone, and nothing else on the row says whose it is.
+    // The immutable origin cannot resolve a card that has been deleted.
     db.replace('autopilot_suggestions', db.table('autopilot_suggestions').filter((s) => s.id !== card.id));
     expect(await dueTo(db, POLICY)).toEqual(MANAGERS.sort());
     const notices = await noticesAfterTick(db, '2026-10-01T06:00:00Z');
     expect(notices.get(POLICY)).toEqual(accounts(...MANAGERS));
   });
 
-  // RV-R4-1: the module's next occurrence carries the card's tag and no key,
-  // and the tag finds the card (tests/a-cards-reminder-copied-without-its-key-
-  // is-read-by-its-stamp.test.ts). A tag no card mints is still unresolved.
-  it("a copy that carries the card's tag and no key (the module's next occurrence) is its card's readers'; a tag no card mints is the managers' alone", async () => {
+  // Historical fixtures distinguish a receipt-backed copy from a public stamp
+  // alone; only the former carries the immutable card identifier.
+  it("a stored copy with a trusted origin is its card's readers'; a stamp-only historical copy is manager-only", async () => {
     const db = household();
     db.seed('renewals', [{ ...PASSPORT_ROW, expires_at: '2026-10-04' }]);
     const { reminder } = await accepted(db, 'ren-1');
     db.seed('family_reminders', [
       { ...reminder, id: 'next-occurrence', title: 'Renew Passport (next)', idempotency_key: null },
-      { ...reminder, id: 'unminted', title: 'Renew Passport (unminted)', idempotency_key: null, tags: [`autopilot-source:${'b'.repeat(64)}`] },
+      { ...reminder, id: 'unminted', autopilot_origin: true, autopilot_card_id: null, title: 'Renew Passport (unminted)', idempotency_key: null, tags: [`autopilot-source:${'b'.repeat(64)}`] },
     ]);
     vi.setSystemTime(new Date(DUE_AT));
     expect(await dueTo(db, PASSPORT)).toEqual(EVERYONE.filter((id) => id !== 'neighbour').sort());
@@ -374,7 +333,7 @@ describe("an accepted card's reminder whose link resolves to no card", () => {
     db.seed('medications', [{ ...KITS_MEDICINE, refill_on: '2026-09-26', refill_reminder_days: 7 }]);
     await accepted(db, 'med-kit');
     db.seed('family_reminders', [{
-      id: 'notes', family_id: FAMILY, title: 'Read the Autopilot notes', remind_at: '2026-10-01T09:00:00.000Z', status: 'active', member_id: null,
+      id: 'notes', family_id: FAMILY, autopilot_origin: false, autopilot_card_id: null, title: 'Read the Autopilot notes', remind_at: '2026-10-01T09:00:00.000Z', status: 'active', member_id: null,
       idempotency_key: 'reminders.create:read the autopilot notes', tags: ['autopilot-source:notes'], kind: 'time', priority: 'medium', recurrence: 'none', snoozed_until: null,
     }]);
     vi.setSystemTime(new Date(DUE_AT));
@@ -383,16 +342,9 @@ describe("an accepted card's reminder whose link resolves to no card", () => {
   });
 });
 
-// AUD-1031-REMINDER-ORDER, R5. The scan's reminder was classified by the
-// NEWEST card for its source, and a source has a card per occurrence. The
-// family's dental policy named Ava last year and names Kit now; last year's
-// card, naming Ava, is retained. Between this year's reminder's commit and its
-// card's — and for good when that card failed to save and the clean-up failed
-// or removed nothing — last year's card answered for this year's reminder:
-// "Renew dental insurance (Smile Co)" was listed to Ava and told to her, the
-// member it is no longer for. The scan now records the reminder's id on its
-// card (payload.reminder_id), and the reminder is found by that alone; an
-// older card for the source is no answer (lib/autopilot/reminder-cards.ts).
+// R5: an older occurrence's card never lends its audience to a new copy.
+// Atomic publication has no new reminder during the hold; historical orphans
+// remain unresolved even beside old cards with matching source/payload stamps.
 const OLD_AT = '2025-09-28T09:00:00.000Z';
 /** The family's dental policy, which now names Kit. */
 const FAMILY_DENTAL = { ...AVAS_DENTAL, id: 'pol-family', member_id: 'kit' };
@@ -415,7 +367,7 @@ function olderCard(source: string, extra: Record<string, unknown>, recorded: boo
 
 /** The earlier occurrence's own reminder, long done. */
 function olderReminder(source: string, title: string) {
-  return { id: `old-rem-${source}`, family_id: FAMILY, title, remind_at: OLD_AT, member_id: null, is_done: true, related_type: 'renewal', related_id: source };
+  return { id: `old-rem-${source}`, family_id: FAMILY, autopilot_origin: true, autopilot_card_id: null, title, remind_at: OLD_AT, member_id: null, is_done: true, related_type: 'renewal', related_id: source };
 }
 
 const KINDS = {
@@ -424,7 +376,7 @@ const KINDS = {
   renewal: { kind: 'document', source_kind: 'renewals', member_id: null, title: PASSPORT },
 } as const;
 
-type ScanReminder = { id: string; related_type: string | null; related_id: string | null };
+type ScanReminder = { id: string; family_id?: string; related_type: string | null; related_id: string | null };
 
 /** Who the real reader (reminderCardsReader + visibleReminders) shows `row` to. */
 async function shownTo(db: Memory, row: ScanReminder): Promise<string[]> {
@@ -447,36 +399,35 @@ describe("the scan's reminder, beside an older card for the same source naming a
   it.each([
     ['saved with its reminder (as cards are now)', true],
     ['saved before cards recorded their reminder', false],
-  ] as const)("last year's card %s: this year's reminder is the managers' alone until its own card is saved; then Kit's, never Ava's", async (_case, recorded) => {
+  ] as const)("last year's card %s: this year's reminder is absent until its own atomic publication; then Kit's, never Ava's", async (_case, recorded) => {
     const db = household();
     db.seed('family_insurance_policies', [FAMILY_DENTAL]);
     db.seed('autopilot_suggestions', [olderCard('pol-family', KINDS.insurance, recorded)]);
     db.seed('reminders', [olderReminder('pol-family', POLICY)]);
     const scan = holdingTheCard(db);
     await scan.held;
-    const fresh = freshReminder(db, 'pol-family');
-    expect(fresh).toMatchObject({ title: POLICY, member_id: null, related_type: 'renewal', related_id: 'pol-family', is_done: false });
+    expect(db.table('reminders').map(row => row.id)).toEqual(['old-rem-pol-family']);
     // Only last year's card is saved: the new occurrence's is held.
     expect(db.table('autopilot_suggestions').map((c) => c.member_id)).toEqual(['ava']);
 
     // A reminder somebody wrote, and one assigned to Sam, in the same interval.
     db.seed('reminders', [
-      { id: 'rem-bins', family_id: FAMILY, title: BINS, remind_at: '2026-09-28T18:00:00Z', member_id: null, is_done: false, related_type: null, related_id: null },
-      { id: 'rem-sam', family_id: FAMILY, title: KIT_BAG, remind_at: '2026-09-28T18:00:00Z', member_id: 'sam', is_done: false, related_type: null, related_id: null },
+      { id: 'rem-bins', family_id: FAMILY, autopilot_origin: false, autopilot_card_id: null, title: BINS, remind_at: '2026-09-28T18:00:00Z', member_id: null, is_done: false, related_type: null, related_id: null },
+      { id: 'rem-sam', family_id: FAMILY, autopilot_origin: false, autopilot_card_id: null, title: KIT_BAG, remind_at: '2026-09-28T18:00:00Z', member_id: 'sam', is_done: false, related_type: null, related_id: null },
     ]);
     vi.setSystemTime(new Date(READ_AT));
     // Neither Ava, whom last year's card names, nor Kit, whom this year's will.
-    expect(await shownTo(db, fresh)).toEqual(MANAGERS.sort());
-    expect(await listedTo(POLICY)).toEqual(MANAGERS.sort());
+    expect(await listedTo(POLICY)).toEqual([]);
     expect(await calmReminders('ava')).toEqual([BINS, KIT_BAG].sort());
     expect(await calmReminders('kit')).toEqual([BINS, KIT_BAG].sort());
     const during = await noticesAfterTick(db, READ_AT);
-    expect(during.get(POLICY)).toEqual(accounts(...MANAGERS));
+    expect(during.get(POLICY)).toBeUndefined();
     expect(during.get(BINS)).toEqual(accounts(...EVERYONE)); // the family: one row per member
     expect(during.get(KIT_BAG)).toEqual([account('sam')]);
 
     scan.release();
     await scan.scanning;
+    const fresh = freshReminder(db, 'pol-family');
     const card = db.table('autopilot_suggestions').find((c) => c.dedupe_key === 'insurance:pol-family:2026-09-28');
     // The card records the reminder written for it, beside what it proposed.
     expect(card).toMatchObject({ member_id: 'kit', status: 'auto_executed', payload: { title: POLICY, reminder_id: fresh.id } });
@@ -492,9 +443,9 @@ describe("the scan's reminder, beside an older card for the same source naming a
   // The broad cards keep their readers once their own card is saved: a
   // refill's (everyone) and a renewal's (everyone but a guest).
   it.each([
-    ['a refill', 'refill', 'med-kit', REFILL, [...EVERYONE].sort(), accounts('gran', 'kit', 'mum')],
+    ['a refill', 'refill', 'med-kit', REFILL, [...EVERYONE].sort(), accounts('kit')],
     ['a renewal', 'renewal', 'ren-1', PASSPORT, EVERYONE.filter((id) => id !== 'neighbour').sort(), accounts(...EVERYONE.filter((id) => id !== 'neighbour'))],
-  ] as const)("%s: the managers' alone until its own card is saved, beside last occurrence's card; then its readers'", async (_case, kind, source, title, readers, told) => {
+  ] as const)("%s: absent until its own atomic publication, beside last occurrence's card; then its readers'", async (_case, kind, source, title, readers, told) => {
     const db = household();
     if (kind === 'refill') db.seed('medications', [KITS_MEDICINE]);
     else db.seed('renewals', [PASSPORT_ROW]);
@@ -502,14 +453,14 @@ describe("the scan's reminder, beside an older card for the same source naming a
     db.seed('reminders', [olderReminder(source, title)]);
     const scan = holdingTheCard(db);
     await scan.held;
-    const fresh = freshReminder(db, source);
+    expect(db.table('reminders').map(row => row.id)).toEqual([`old-rem-${source}`]);
     vi.setSystemTime(new Date(READ_AT));
-    expect(await shownTo(db, fresh)).toEqual(MANAGERS.sort());
-    expect(await listedTo(title)).toEqual(MANAGERS.sort());
-    expect((await noticesAfterTick(db, READ_AT)).get(title)).toEqual(accounts(...MANAGERS));
+    expect(await listedTo(title)).toEqual([]);
+    expect((await noticesAfterTick(db, READ_AT)).get(title)).toBeUndefined();
 
     scan.release();
     await scan.scanning;
+    const fresh = freshReminder(db, source);
     vi.setSystemTime(new Date(READ_AT));
     expect(await shownTo(db, fresh)).toEqual(readers);
     expect(await listedTo(title)).toEqual(readers);
@@ -517,47 +468,37 @@ describe("the scan's reminder, beside an older card for the same source naming a
   });
 });
 
-describe("the scan's reminder whose card never saves, beside an older card for the same source naming another member", () => {
-  const refused = { data: null, error: { code: 'XX000', message: 'Fixture delete refused' } };
-  const nothing = { data: [], error: null };
+describe("a refused atomic scan beside an older card does not adopt its audience", () => {
   it.each([
-    ['the clean-up fails', 'saved with its reminder', refused, true],
-    ['the clean-up fails', 'saved before cards recorded their reminder', refused, false],
-    ['the clean-up removes nothing', 'saved with its reminder', nothing, true],
-    ['the clean-up removes nothing', 'saved before cards recorded their reminder', nothing, false],
-  ] as const)("is the managers' alone when %s, beside last year's card %s", async (_case, _older, cleanup, recorded) => {
+    ['missing card ID', null, true], ['missing card ID', null, false],
+    ['deleted card ID', 'deleted-card', true], ['deleted card ID', 'deleted-card', false],
+  ] as const)("an orphan with %s (%s) stays manager-only beside an older recorded=%s card", async (_case, cardId, recorded) => {
     const db = household();
     db.seed('family_insurance_policies', [FAMILY_DENTAL]);
     db.seed('autopilot_suggestions', [olderCard('pol-family', KINDS.insurance, recorded)]);
-    db.seed('reminders', [olderReminder('pol-family', POLICY)]);
-    const client = steered(db, (table, methods) => {
-      if (table === 'autopilot_suggestions' && methods.includes('insert')) return { reply: { data: null, error: { code: 'XX000', message: 'Fixture insert refused' } } };
-      if (table === 'reminders' && methods.includes('delete')) return { reply: cleanup };
-      return null;
-    });
+    db.seed('reminders', [olderReminder('pol-family', POLICY), {
+      id: 'historical-orphan', family_id: FAMILY, title: POLICY, member_id: null, is_done: false,
+      remind_at: '2026-09-28T09:00:00Z', related_type: 'renewal', related_id: 'pol-family',
+      autopilot_origin: true, autopilot_card_id: cardId,
+    }]);
+    const before = structuredClone(db.table('reminders'));
+    db.setRpcAuth(null, 'service_role');
+    const client = steered(db, name => name === 'create_card_legacy_reminder_service'
+      ? { reply: { data: null, error: { code: 'XX000', message: 'Fixture atomic transaction refused' } } } : null);
     vi.setSystemTime(new Date(SCAN_AT));
-    await expect(runAutopilotScan(client, FAMILY, null, 'UTC', 'en-US', echo, new Date(SCAN_AT))).rejects.toThrow('Autopilot could not save the suggestion');
-    expect(console.error).toHaveBeenCalledWith('[autopilot] side-effect cleanup failed', expect.anything());
-    // Left behind for good, beside last year's card naming Ava.
-    const fresh = freshReminder(db, 'pol-family');
-    expect(fresh).toMatchObject({ title: POLICY, member_id: null, is_done: false });
-    expect(db.table('autopilot_suggestions').map((c) => c.id)).toEqual(['old-pol-family']);
-
+    await expect(runAutopilotScan(client, FAMILY, null, 'UTC', 'en-US', echo, new Date(SCAN_AT)))
+      .rejects.toThrow('Autopilot could not save the reminder suggestion');
+    expect(db.table('reminders')).toEqual(before);
+    expect(db.table('autopilot_suggestions').map(c => c.id)).toEqual(['old-pol-family']);
     vi.setSystemTime(new Date(READ_AT));
-    expect(await shownTo(db, fresh)).toEqual(MANAGERS.sort());
+    expect(await shownTo(db, freshReminder(db, 'pol-family'))).toEqual(MANAGERS.sort());
     expect(await listedTo(POLICY)).toEqual(MANAGERS.sort());
     expect((await noticesAfterTick(db, READ_AT)).get(POLICY)).toEqual(accounts(...MANAGERS));
   });
 });
 
-// THE CONSERVATIVE LEGACY RULE (lib/autopilot/reminder-cards.ts, step 4). A
-// reminder the scan wrote before its cards recorded their reminder carries
-// nothing that says which of its source's occurrences it is. Where the
-// answer cannot depend on that — every card for the source is of one
-// audience, and that audience does not turn on the member a card names — the
-// newest card answers, as before. An insurance renewal's audience is its
-// policy's member, so such a reminder is the managers' alone; and so is any
-// reminder of a source whose cards now record theirs, or whose cards differ.
+// Migration backfill marks historical generated rows unresolved. Public source
+// IDs, recorded payload IDs and unanimous old-card audiences cannot confer trust.
 const LEGACY_AT = '2026-09-28T09:00:00.000Z';
 function legacyCard(id: string, source: string, extra: Record<string, unknown>, createdAt = '2026-09-27T06:30:00Z') {
   return {
@@ -566,11 +507,11 @@ function legacyCard(id: string, source: string, extra: Record<string, unknown>, 
   };
 }
 function legacyReminder(id: string, source: string, title: string, member: string | null) {
-  return { id, family_id: FAMILY, title, remind_at: LEGACY_AT, member_id: member, is_done: false, related_type: 'renewal', related_id: source };
+  return { id, family_id: FAMILY, autopilot_origin: true, autopilot_card_id: null, title, remind_at: LEGACY_AT, member_id: member, is_done: false, related_type: 'renewal', related_id: source };
 }
 
 describe('a scan reminder written before cards recorded their reminder', () => {
-  it("a refill's is everyone's and its member's to be told, a renewal's everyone's but a guest's, as before; an insurance renewal's is the managers' alone", async () => {
+  it("every unresolved legacy source remains manager-only, even when all historical cards had a broad audience", async () => {
     const db = household();
     db.seed('autopilot_suggestions', [
       legacyCard('c-refill', 'med-kit', KINDS.refill),
@@ -585,12 +526,12 @@ describe('a scan reminder written before cards recorded their reminder', () => {
       legacyReminder('r-dental', 'pol-ava', POLICY, null),
     ]);
     vi.setSystemTime(new Date(READ_AT));
-    expect(await listedTo(REFILL)).toEqual([...EVERYONE].sort());
-    expect(await listedTo(PASSPORT)).toEqual(EVERYONE.filter((id) => id !== 'neighbour').sort());
+    expect(await listedTo(REFILL)).toEqual(MANAGERS.sort());
+    expect(await listedTo(PASSPORT)).toEqual(MANAGERS.sort());
     expect(await listedTo(POLICY)).toEqual(MANAGERS.sort());
     const notices = await noticesAfterTick(db, READ_AT);
-    expect(notices.get(REFILL)).toEqual([account('kit')]);
-    expect(notices.get(PASSPORT)).toEqual(accounts(...EVERYONE.filter((id) => id !== 'neighbour')));
+    expect(notices.get(REFILL)).toEqual(accounts(...MANAGERS));
+    expect(notices.get(PASSPORT)).toEqual(accounts(...MANAGERS));
     expect(notices.get(POLICY)).toEqual(accounts(...MANAGERS));
   });
 
@@ -613,7 +554,7 @@ describe('a scan reminder written before cards recorded their reminder', () => {
   });
 });
 
-describe("a card that records a scan reminder answers for it only as that reminder's one card", () => {
+describe('public reminder IDs in card payloads cannot resolve a missing trusted origin', () => {
   const card = (id: string, source: string, member: string, reminderId: string | null) => ({
     id, family_id: FAMILY, kind: 'insurance', source_kind: 'family_insurance_policies', source_id: source, member_id: member,
     action_type: 'create_reminder', status: 'auto_executed', title: `${id} renews today`, detail: null, urgency: 3, confidence: 95,
@@ -633,8 +574,36 @@ describe("a card that records a scan reminder answers for it only as that remind
   });
 });
 
+describe('unresolved and foreign origins never borrow a public card audience', () => {
+  it('refuses a foreign-family projection even to managers', async () => {
+    const db = household();
+    db.seed('reminders', [{ ...legacyReminder('r-foreign', 'foreign-policy', POLICY, null), family_id: 'f2' }]);
+    expect(await shownTo(db, { id: 'r-foreign', family_id: 'f2', related_type: 'renewal', related_id: 'foreign-policy' })).toEqual([]);
+  });
+
+  it('does not resolve a generated row through a card in another family', async () => {
+    const db = household();
+    db.seed('autopilot_suggestions', [{ ...legacyCard('foreign-card', 'med-kit', KINDS.refill), family_id: 'f2' }]);
+    const row = { ...legacyReminder('r-foreign-card', 'med-kit', REFILL, 'kit'), autopilot_card_id: 'foreign-card' };
+    db.seed('reminders', [row]);
+    vi.setSystemTime(new Date(READ_AT));
+    expect(await shownTo(db, row)).toEqual(MANAGERS.sort());
+    expect(await listedTo(REFILL)).toEqual(MANAGERS.sort());
+    expect((await noticesAfterTick(db, READ_AT)).get(REFILL)).toEqual(accounts(...MANAGERS));
+  });
+
+  it('an ID collision across reminder tables cannot choose the broader audience', async () => {
+    const db = household();
+    db.seed('autopilot_suggestions', [legacyCard('broad-card', 'med-kit', KINDS.refill)]);
+    const row = { ...legacyReminder('collision', 'med-kit', REFILL, 'kit'), autopilot_card_id: 'broad-card' };
+    db.seed('reminders', [row]);
+    db.seed('family_reminders', [{ id: 'collision', family_id: FAMILY, autopilot_origin: true, autopilot_card_id: null }]);
+    expect(await shownTo(db, row)).toEqual(MANAGERS.sort());
+  });
+});
+
 describe("the scan's record of its reminder is not part of the card's tag", () => {
-  // An accepted card's family_reminders row is found by a tag minted from the
+  // The informational tag on an accepted card's family_reminders is minted from the
   // card's content (lib/services/autopilot suggestionSourceTag). The reminder
   // id the scan now saves on an auto-executed card is bookkeeping, not content:
   // the tag is the one the card's proposal always minted, on the server and in

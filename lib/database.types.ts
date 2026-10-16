@@ -1121,7 +1121,7 @@ export interface Database {
         Partial<{ member_id: string | null; kind: string; title: string; detail: string | null; confidence: number; urgency: number; status: 'open' | 'approved' | 'executed' | 'auto_executed' | 'dismissed' | 'snoozed'; action_type: string | null; action_label: string | null; payload: Json; source_kind: string | null; source_id: string | null; dedupe_key: string; expires_at: string | null; resolved_at: string | null; resolved_by: string | null }>
       >;
       reminders: T<
-        { id: string; family_id: string; title: string; notes: string | null; remind_at: string; recurrence: RecurrenceFreq; is_done: boolean; member_id: string | null; related_type: string | null; related_id: string | null; created_by: string | null } & Stamps,
+        { autopilot_origin: boolean; autopilot_card_id: string | null; id: string; family_id: string; title: string; notes: string | null; remind_at: string; recurrence: RecurrenceFreq; is_done: boolean; member_id: string | null; related_type: string | null; related_id: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; title: string; notes?: string | null; remind_at: string; recurrence?: RecurrenceFreq; is_done?: boolean; member_id?: string | null; related_type?: string | null; related_id?: string | null; created_by?: string | null },
         Partial<{ title: string; notes: string | null; remind_at: string; recurrence: RecurrenceFreq; is_done: boolean }>
       >;
@@ -1488,7 +1488,7 @@ export interface Database {
         Partial<{ contact_id: string | null; subject: string | null; body: string | null; summary: string | null; action_items: unknown[]; category: string; status: string; priority: string; received_at: string; updated_at: string }>
       >;
       family_reminders: T<
-        { id: string; family_id: string; created_by: string | null; assigned_to_id: string | null; member_id: string | null; title: string; notes: string | null; kind: string; remind_at: string | null; location_name: string | null; recurrence: string; recurrence_time: string | null; recurrence_days: number[] | null; priority: string; status: string; completed_at: string | null; snoozed_until: string | null; ai_suggested: boolean; tags: string[]; url: string | null; flagged: boolean; early_reminder_minutes: number | null; image_url: string | null; subtasks: Json; list_id: string | null; idempotency_key: string | null; created_at: string; updated_at: string },
+        { autopilot_origin: boolean; autopilot_card_id: string | null; id: string; family_id: string; created_by: string | null; assigned_to_id: string | null; member_id: string | null; title: string; notes: string | null; kind: string; remind_at: string | null; location_name: string | null; recurrence: string; recurrence_time: string | null; recurrence_days: number[] | null; priority: string; status: string; completed_at: string | null; snoozed_until: string | null; ai_suggested: boolean; tags: string[]; url: string | null; flagged: boolean; early_reminder_minutes: number | null; image_url: string | null; subtasks: Json; list_id: string | null; idempotency_key: string | null; created_at: string; updated_at: string },
         { id?: string; family_id: string; created_by?: string | null; assigned_to_id?: string | null; member_id?: string | null; title: string; notes?: string | null; kind?: string; remind_at?: string | null; location_name?: string | null; recurrence?: string; priority?: string; status?: string; ai_suggested?: boolean; tags?: string[]; url?: string | null; flagged?: boolean; early_reminder_minutes?: number | null; image_url?: string | null; subtasks?: Json; idempotency_key?: string | null; list_id?: string | null },
         Partial<{ title: string; notes: string | null; kind: string; remind_at: string | null; location_name: string | null; recurrence: string; priority: string; status: string; completed_at: string | null; snoozed_until: string | null; assigned_to_id: string | null; member_id: string | null; tags: string[]; url: string | null; flagged: boolean; early_reminder_minutes: number | null; image_url: string | null; subtasks: Json; list_id: string | null; updated_at: string }>
       >;
@@ -2773,6 +2773,23 @@ export interface Database {
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
     Functions: {
+      /** Schema-first copied-card origin migration is required before this cutover. */
+      create_card_family_reminder: {
+        Args: { p_card_id: string; p_expected_updated_at: string; p_at: string; p_source_tag: string };
+        Returns: Database['public']['Tables']['family_reminders']['Row'][];
+      };
+      repeat_card_family_reminder: {
+        Args: { p_parent_id: string; p_at: string };
+        Returns: Database['public']['Tables']['family_reminders']['Row'][];
+      };
+      create_card_legacy_reminder: {
+        Args: { p_card: Json; p_at: string };
+        Returns: Json;
+      };
+      create_card_legacy_reminder_service: {
+        Args: { p_card: Json; p_at: string; p_actor?: string | null };
+        Returns: Json;
+      };
       /** HELD 0490; declaration does not enable source archive reads. */
       calendar_read_occurrence_inputs: {
         Args: { p_family_id: string };

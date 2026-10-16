@@ -176,6 +176,7 @@ describe('what a parent\'s visit wrote is not what a child is shown', () => {
     db.seed('family_reminders', [{
       id: 'rem-piano', family_id: FAMILY, title: 'Practice piano', remind_at: '2026-10-14T08:00:00Z', status: 'active',
       member_id: 'm-child', priority: 'normal', idempotency_key: null, tags: [],
+      autopilot_origin: false, autopilot_card_id: null,
     }]);
     const child = await visitAs('child');
     expect(child.hero).toMatchObject({ kind: 'reminder_overdue', title: '1 reminder slipped past due' });

@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, ArrowRight, Calendar, ChevronRight, Clock, Mail, User } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { getPost, getRelatedPosts, getAdjacentPosts, extractHeadings, type BlogCategory } from '@/lib/blog/posts';
+import { getPost, getRelatedPosts, getAdjacentPosts, extractHeadings, type BlogCategory, type BlogPost } from '@/lib/blog/posts';
 import { articleHashtags } from '@/lib/blog/engagement';
 import { BlogPostStructuredData, FaqStructuredData } from '@/components/marketing/structured-data';
 import { localizeAeoQuestions, readAeoQuestionsForCategoryCached, readAeoQuestionsForPathCached } from '@/lib/marketing/aeo';
@@ -78,6 +78,13 @@ const ACCENT_BG: Record<BlogCategory, string> = {
 };
 
 
+// Next Image consumes the local path; crawlers need the canonical absolute URL.
+function metadataImageUrl(post: BlogPost): string | undefined {
+  return post.heroImageAttribution && post.heroImageUrl
+    ? new URL(post.heroImageUrl, SITE_URL).href
+    : post.heroImageUrl;
+}
+
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const tr = await getTranslations();
   const { slug } = await params;
@@ -105,14 +112,14 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
       section: post.category,
       tags: keywords,
       ...(post.heroImageUrl
-        ? { images: [{ url: post.heroImageUrl, alt: post.heroImageAlt ?? post.title }] }
+        ? { images: [{ url: metadataImageUrl(post)!, alt: post.heroImageAlt ?? post.title }] }
         : {}),
     },
     twitter: {
       card: post.heroImageUrl ? 'summary_large_image' : 'summary',
       title: post.title,
       description: post.excerpt,
-      ...(post.heroImageUrl ? { images: [post.heroImageUrl] } : {}),
+      ...(post.heroImageUrl ? { images: [metadataImageUrl(post)!] } : {}),
     },
   });
 }
@@ -151,7 +158,7 @@ export default async function BlogPostPage({ params }: Params) {
         category={post.category}
         date={post.date}
         updatedAt={post.updatedAt}
-        heroImageUrl={post.heroImageUrl}
+        heroImageUrl={metadataImageUrl(post)}
         keywords={articleHashtags(post.tags, 10).map((h) => h.replace(/^#/, ''))}
         wordCount={wordCount}
       />
@@ -189,9 +196,16 @@ export default async function BlogPostPage({ params }: Params) {
                     {post.category}
                   </div>
                 </div>
-                {post.heroImageCredit && (
+                {(post.heroImageAttribution || post.heroImageCredit) && (
                   <figcaption className="mt-2 text-right text-[11px] text-white/60">
-                    Photo: {post.heroImageCredit}
+                    Photo: {post.heroImageAttribution ? <>
+                      <a href={post.heroImageAttribution.sourceUrl} className="underline">
+                        {post.heroImageAttribution.title} — {post.heroImageAttribution.creator}
+                      </a>{' ('}
+                      <a href={post.heroImageAttribution.licenseUrl} className="underline">{post.heroImageAttribution.license}</a>{')'}
+                      {post.heroImageCredit?.trim() && post.heroImageCredit !== post.heroImageAttribution.attribution
+                        ? <> · {post.heroImageCredit}</> : null}
+                    </> : post.heroImageCredit}
                   </figcaption>
                 )}
               </figure>
