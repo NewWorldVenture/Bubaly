@@ -99,7 +99,7 @@ beforeEach(() => {
   // The admin console's actions ask the signed-in session for its assurance
   // level before acting (a password-only session of an admin with an
   // authenticator is refused): this one has entered its code.
-  Object.assign(db.auth, { mfa: { getAuthenticatorAssuranceLevel: async () => ({ data: { currentLevel: 'aal2', nextLevel: 'aal2' }, error: null }) } });
+  Object.assign(db.auth, { getSession: async () => ({ data: { session: { access_token: 'synthetic-assurance-token' } }, error: null }), mfa: { getAuthenticatorAssuranceLevel: async () => ({ data: { currentLevel: 'aal2', nextLevel: 'aal2' }, error: null }) } });
   seam.db.mockImplementation(() => db);
   seam.role = 'parent';
   seam.audits.length = 0;

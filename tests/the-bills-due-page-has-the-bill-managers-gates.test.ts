@@ -30,7 +30,7 @@ vi.mock('@/lib/supabase/auth', () => ({
   }),
 }));
 vi.mock('@/lib/supabase/server', () => ({
-  createServer: async () => ({ auth: { mfa: { getAuthenticatorAssuranceLevel: mocks.getAal } } }),
+  createServer: async () => ({ auth: { getSession: async () => ({ data: { session: { access_token: 'synthetic-assurance-token' } }, error: null }), mfa: { getAuthenticatorAssuranceLevel: mocks.getAal } } }),
 }));
 // The list itself reads through the browser client; what is under test is
 // whether the page hands it to this session at all.
