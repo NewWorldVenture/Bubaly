@@ -161,3 +161,81 @@ describe('schema audit command and deployment wiring', () => {
     expect(workflow).toContain("'scripts/audit-supabase-schema.mjs'");
   });
 });
+
+// These are request-shape controls with synthetic responses, not evidence that
+// a production credential or gateway accepts either key format.
+describe('schema audit API-key header compatibility', () => {
+  it.each(['sb_secret_synthetic_schema_key', 'sb_publishable_synthetic_schema_key'])(
+    'sends opaque key %s only in apikey', async (opaqueKey) => {
+      const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => new Response('[]'));
+      const results = await auditSupabaseSchema({
+        url, key: opaqueKey, fetchImpl, checks: [['workload_snapshots', '0174.sql']],
+      });
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      expect(fetchImpl.mock.calls[0][1]?.headers).toEqual({ apikey: opaqueKey });
+      expect(results).toEqual([{ table: 'workload_snapshots', migration: '0174.sql', status: 200, ok: true }]);
+    },
+  );
+
+  it.each([
+    'eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.synthetic-signature',
+    'generic-synthetic-key',
+    'SB_SECRET_uppercase_is_not_the_opaque_prefix',
+    'prefix-sb_publishable_is_not_the_opaque_prefix',
+  ])('preserves dual headers for legacy or unrecognized key %s', async (legacyKey) => {
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => new Response('[]'));
+    const results = await auditSupabaseSchema({
+      url, key: legacyKey, fetchImpl, checks: [['workload_snapshots', '0174.sql']],
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl.mock.calls[0][1]?.headers).toEqual({ apikey: legacyKey, Authorization: `Bearer ${legacyKey}` });
+    expect(results[0]).toMatchObject({ status: 200, ok: true });
+  });
+
+  it.each([
+    'sb_secret_synthetic_refused_key',
+    'sb_publishable_synthetic_refused_key',
+    'eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.synthetic-refused-signature',
+  ])('keeps all 52 unauthorized checks failing without a credential retry for %s', async (selectedKey) => {
+    const publicFallback = 'sb_publishable_unused_public_fallback';
+    const workflowFallback = 'unused-workflow-public-fallback';
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', url);
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', selectedKey);
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', publicFallback);
+    vi.stubEnv('SUPABASE_ANON_KEY', workflowFallback);
+    const logged = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const privateBody = `private diagnostic: ${selectedKey} ${publicFallback} ${workflowFallback}`;
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => new Response(privateBody, { status: 401 }));
+    vi.stubGlobal('fetch', fetchImpl);
+
+    expect(SCHEMA_CHECKS).toHaveLength(52);
+    expect(await runSchemaAuditCli()).toBe(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(52);
+    const expectedHeaders = selectedKey.startsWith('sb_')
+      ? { apikey: selectedKey }
+      : { apikey: selectedKey, Authorization: `Bearer ${selectedKey}` };
+    const expectedRequests = SCHEMA_CHECKS.map(([table, , columns = '*']) => {
+      const endpoint = new URL(`/rest/v1/${table.split('.')[0]}`, url);
+      endpoint.searchParams.set('select', columns);
+      endpoint.searchParams.set('limit', '0');
+      return endpoint.href;
+    });
+    expect(fetchImpl.mock.calls.map(([resource]) => String(resource)).sort()).toEqual(expectedRequests.sort());
+    for (const [, options] of fetchImpl.mock.calls) {
+      expect(options?.headers).toEqual(expectedHeaders);
+      expect(options?.redirect).toBe('error');
+      expect(options?.method ?? 'GET').toBe('GET');
+    }
+    expect(logged).not.toHaveBeenCalled();
+    expect(errors).toHaveBeenCalledTimes(53);
+    for (const [table] of SCHEMA_CHECKS) {
+      expect(errors).toHaveBeenCalledWith(`ERROR   ${table} (HTTP 401)`);
+    }
+    expect(errors).toHaveBeenLastCalledWith('\nSchema audit failed: 52 of 52 required schema checks unavailable.');
+    const output = JSON.stringify([...logged.mock.calls, ...errors.mock.calls]);
+    for (const privateValue of [privateBody, selectedKey, publicFallback, workflowFallback]) {
+      expect(output).not.toContain(privateValue);
+    }
+  });
+});
