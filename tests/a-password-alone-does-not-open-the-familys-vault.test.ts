@@ -158,7 +158,7 @@ beforeEach(() => {
     },
   });
   db.seed('paperwork_items', [structuredClone(SLIP)]);
-  Object.assign(db, { auth: { mfa: { getAuthenticatorAssuranceLevel: h.getAal } } });
+  Object.assign(db, { auth: { getSession: async () => ({ data: { session: { access_token: 'synthetic-assurance-token' } }, error: null }), mfa: { getAuthenticatorAssuranceLevel: h.getAal } } });
   h.db = db;
 });
 
