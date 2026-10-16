@@ -453,6 +453,9 @@ jobs:
 
       - name: Start isolated Supabase
         run: supabase start
+        env:
+          # Override the repository migration hold only for this owned local stack.
+          SUPABASE_DB_MIGRATIONS_ENABLED: 'true'
 
       - name: Capture immutable owned bill stack identities
         run: node scripts/ci-recurring-bill-anchor-fixture.mjs
