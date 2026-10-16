@@ -47,11 +47,11 @@ export function decodeEntities(text: string): string {
     const key = name.toLowerCase();
     if (key.startsWith('#x')) {
       const code = Number.parseInt(key.slice(2), 16);
-      return Number.isFinite(code) && code > 0 ? String.fromCodePoint(code) : match;
+      return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : match;
     }
     if (key.startsWith('#')) {
       const code = Number.parseInt(key.slice(1), 10);
-      return Number.isFinite(code) && code > 0 ? String.fromCodePoint(code) : match;
+      return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : match;
     }
     return ENTITIES[key] ?? match;
   });
