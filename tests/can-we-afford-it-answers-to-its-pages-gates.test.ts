@@ -44,7 +44,7 @@ vi.mock('@/lib/supabase/server', async () => {
   const { entitledServiceClient: client } = await import('./helpers/entitled-service-client');
   return {
     createServer: async () => ({
-      auth: { mfa: { getAuthenticatorAssuranceLevel: async () => mocks.aal } },
+      auth: { getSession: async () => ({ data: { session: { access_token: 'synthetic-assurance-token' } }, error: null }), mfa: { getAuthenticatorAssuranceLevel: async () => mocks.aal } },
       // The feature-tier settings read: no override, the catalog's own tier.
       from: client(mocks.plan).from,
     }),

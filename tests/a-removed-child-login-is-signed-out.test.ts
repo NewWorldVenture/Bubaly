@@ -65,6 +65,7 @@ beforeEach(() => {
     // The admin console's actions ask the signed-in session for its assurance
     // level before acting (a password-only session of an admin with an
     // authenticator is refused): this one has entered its code.
+    getSession: async () => ({ data: { session: { access_token: 'synthetic-assurance-token' } }, error: null }),
     mfa: { getAuthenticatorAssuranceLevel: async () => ({ data: { currentLevel: 'aal2', nextLevel: 'aal2' }, error: null }) },
     admin: {
     getUserById: async (id: string) => ({ data: { user: { id, email: emailOf(id), user_metadata: state.metadata, ...authUser(id) } }, error: null }),
