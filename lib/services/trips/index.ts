@@ -238,8 +238,24 @@ export async function findOrCreateVacation(scope: ServiceScope, input: FindOrCre
   if (typedZone && !timezone) return fail('That time zone is not one Bubaly knows. Use a name like Asia/Tokyo.', { code: SERVICE_CODES.invalidInput });
 
   const needles = [destination, input.title?.trim() || null].filter((s): s is string => Boolean(s));
-  const live = await listTrips(scope);
-  if (!live.ok) return live;
+  // The display list is intentionally capped; a prefix cannot prove there is
+  // no matching trip before a write. Exact counts also expose a lower server
+  // page cap. A detected count change or incomplete collection refuses.
+  const candidates = () => scope.db.from('vacations')
+    .select('*', { count: 'exact' })
+    .eq('family_id', scope.familyId)
+    .in('status', LIVE_STATUSES)
+    .order('start_date', { ascending: true, nullsFirst: false })
+    .order('id', { ascending: true });
+  const live = await readCountedRows<VacationRow>(
+    () => candidates().limit(1000),
+    (from, to) => candidates().range(from, to),
+    2000, 'live trips',
+  );
+  if (live.error || !live.data) {
+    console.error('[service:trips] complete trip lookup failed', live.error);
+    return fail('Could not check all your trips. Please try again.', { code: SERVICE_CODES.db });
+  }
   const match = live.data.find((trip) => {
     const hay = `${trip.title} ${trip.destination ?? ''}`.toLowerCase();
     const named = needles.some((n) => hay.includes(n.toLowerCase()));
@@ -1081,21 +1097,33 @@ export async function createPetCareTasks(
   if (prep.data.tasks.length === 0) return ok({ created: [], pets: 0 });
 
   const created: PetCareTaskResult[] = [];
+  // A receipt may be a replay, and a later lost response may have committed.
+  // Report only confirmed progress, without implying a rollback or absence.
+  const partial = () => fail(
+    `Confirmed care tasks for ${created.length} of ${prep.data.tasks.length} pets, but could not confirm the rest. Check your to-dos before adding more.`,
+    { code: SERVICE_CODES.db, retryable: false },
+  );
   for (const task of prep.data.tasks) {
     // `scope.idempotencyKey` wins outright in `scopeKey`, so one key for the
     // whole call would collapse four pets into a single task.
     const petScope: ServiceScope = scope.idempotencyKey
       ? { ...scope, idempotencyKey: `${scope.idempotencyKey}:pet:${task.petId}` }
       : scope;
-    const todo = await createTodo(petScope, {
-      title: task.title,
-      notes: task.notes,
-      dueDate: task.dueDate,
-      priority: 'high',
-      ...(input.assigneeId === undefined ? {} : { assigneeId: input.assigneeId }),
-      tags: ['trip', 'pets'],
-    });
-    if (!todo.ok) return todo;
+    let todo: Awaited<ReturnType<typeof createTodo>>;
+    try {
+      todo = await createTodo(petScope, {
+        title: task.title,
+        notes: task.notes,
+        dueDate: task.dueDate,
+        priority: 'high',
+        ...(input.assigneeId === undefined ? {} : { assigneeId: input.assigneeId }),
+        tags: ['trip', 'pets'],
+      });
+    } catch (error) {
+      if (created.length === 0) throw error;
+      return partial();
+    }
+    if (!todo.ok) return created.length === 0 ? todo : partial();
     created.push({ petId: task.petId, petName: task.petName, todoId: todo.data.id, title: task.title });
   }
   return ok({ created, pets: prep.data.tasks.length });

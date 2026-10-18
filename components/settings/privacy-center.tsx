@@ -40,6 +40,7 @@ type AuditRow = {
 };
 
 type Loaded<T> = { status: 'loading' } | { status: 'error' } | { status: 'ok'; data: T };
+type AuditHistory = Loaded<{ recent: AuditRow[]; exports: AuditRow[] }>;
 
 function RetryNotice({ message, onRetry }: { message: string; onRetry: () => void }) {
   const t = useTranslations();
@@ -56,16 +57,21 @@ function RetryNotice({ message, onRetry }: { message: string; onRetry: () => voi
 export function PrivacyCenter() {
   const { fmtDateTime } = useFormat();
   const t = useTranslations();
-  const { role, members, userEmail } = useApp();
+  const { role, members, userEmail, familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
   const manager = isManager(role);
 
   const nameOf = (actorId: string | null) => members.find((m) => m.id === actorId)?.display_name ?? t('privacyCenter.unknownActor');
 
   // ── access log (last 50) + recent exports, from the same ledger ────────────
-  const [audit, setAudit] = useState<Loaded<{ recent: AuditRow[]; exports: AuditRow[] }>>({ status: 'loading' });
+  const [auditState, setAuditState] = useState<{ familyId: string; userId: string; read: AuditHistory }>({ familyId, userId, read: { status: 'loading' } });
+  // A person can manage more than one family. History belongs to the selected
+  // family and caller, including the render before its new effect starts.
+  const audit: AuditHistory = auditState.familyId === familyId && auditState.userId === userId
+    ? auditState.read : { status: 'loading' };
   const [auditKey, setAuditKey] = useState(0);
   useEffect(() => {
+    const setAudit = (read: AuditHistory) => setAuditState({ familyId, userId, read });
     if (!manager) { setAudit({ status: 'ok', data: { recent: [], exports: [] } }); return; }
     let active = true;
     setAudit({ status: 'loading' });
@@ -75,8 +81,8 @@ export function PrivacyCenter() {
       // Two reads on purpose: a busy ledger can push the last export past the
       // 50-row window, and "No exports yet" would then be a false statement.
       const [recentRes, exportsRes] = await settleAll([
-        supabase.from('trust_audit_logs').select(columns).order('created_at', { ascending: false }).limit(50),
-        supabase.from('trust_audit_logs').select(columns).eq('domain', 'privacy').eq('capability', 'export').order('created_at', { ascending: false }).limit(10),
+        supabase.from('trust_audit_logs').select(columns).eq('family_id', familyId).order('created_at', { ascending: false }).limit(50),
+        supabase.from('trust_audit_logs').select(columns).eq('family_id', familyId).eq('domain', 'privacy').eq('capability', 'export').order('created_at', { ascending: false }).limit(10),
       ]);
       if (!active) return;
       if (recentRes.error || exportsRes.error) {
@@ -87,7 +93,7 @@ export function PrivacyCenter() {
       setAudit({ status: 'ok', data: { recent: (recentRes.data ?? []) as AuditRow[], exports: (exportsRes.data ?? []) as AuditRow[] } });
     })();
     return () => { active = false; };
-  }, [manager, auditKey]);
+  }, [manager, familyId, userId, auditKey]);
 
   // ── this device's session ──────────────────────────────────────────────────
   const [session, setSession] = useState<Loaded<{ lastSignInAt: string | null; assurance: Assurance }>>({ status: 'loading' });

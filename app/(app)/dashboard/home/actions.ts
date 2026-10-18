@@ -43,6 +43,26 @@ function revalidateAsset(assetId: string | null) {
   revalidatePath(`/dashboard/home/assets/${assetId}`);
 }
 
+/** A form's asset selection must still be readable in the active family. */
+async function requireLinkedAsset(
+  supabase: Awaited<ReturnType<typeof createServer>>,
+  familyId: string,
+  assetId: string,
+  readFailure: string,
+  notFound: string,
+) {
+  let asset: { id: string } | null;
+  try {
+    const { data, error } = await supabase.from('home_assets').select('id')
+      .eq('id', assetId).eq('family_id', familyId).maybeSingle();
+    if (error) throw error;
+    asset = data;
+  } catch (error) {
+    throw refusalError(describeActionError(error, readFailure), refusalForError(error));
+  }
+  if (!asset) throw refusalError(notFound, 'invalid');
+}
+
 // ── Warranties ──────────────────────────────────────────────────────────────
 export async function saveWarrantyAction(fd: FormData) {
   const tr = await getTranslations();
@@ -66,6 +86,7 @@ export async function saveWarrantyAction(fd: FormData) {
     notes: str(fd, 'notes'),
     updated_by: userId,
   };
+  if (row.asset_id) await requireLinkedAsset(supabase, familyId, row.asset_id, tr('actions.couldNotSaveThatWarranty'), tr('actions.assetNotFound'));
   // Only the UPDATE branch needs confirming: an insert either inserts or
   // errors, so it cannot match zero rows. Same split as `saveRow` in
   // `dashboard/auto/actions.ts`. Audit C1-S9-47. A deleted row (`deleted_at`)
@@ -136,6 +157,7 @@ export async function saveServiceRecordAction(fd: FormData) {
   const { familyId, userId, supabase, todayKey } = await ctx();
   const assetId = str(fd, 'asset_id');
   const typedDate = str(fd, 'service_date');
+  if (assetId) await requireLinkedAsset(supabase, familyId, assetId, tr('actions.couldNotSaveThatService'), tr('actions.assetNotFound'));
   const { data: saved, error } = await supabase.from('home_service_records').insert({
     family_id: familyId,
     asset_id: assetId,
