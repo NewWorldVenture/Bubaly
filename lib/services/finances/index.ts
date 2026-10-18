@@ -628,7 +628,7 @@ export async function budgetVsActual(
       spent: toDollars(cents),
       remaining: toDollars(limitCents - cents),
       pct: limitCents > 0 ? Math.round((cents / limitCents) * 100) : (cents > 0 ? 999 : 0),
-      over: limitCents > 0 && cents > limitCents,
+      over: cents > limitCents,
       window,
       transactionCount: count,
     };

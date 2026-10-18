@@ -171,3 +171,184 @@ describe('loadAssetDetail happy path', () => {
     expect(err).not.toHaveBeenCalled();
   });
 });
+
+// These controls use actual row filtering. The scripted replies above remain
+// useful for transport/error cases, but cannot establish a family boundary.
+type BoundaryRow = Record<string, unknown>;
+type BoundaryPredicate = { op: 'eq' | 'is' | 'in'; column: string; value: unknown };
+type BoundaryQuery = {
+  table: string;
+  selection: string | null;
+  predicates: BoundaryPredicate[];
+  orders: { column: string; options: unknown }[];
+  limit: number | null;
+  terminals: string[];
+};
+const boundaryClients: { violations: string[] }[] = [];
+
+function filteringClient(rows: Record<string, BoundaryRow[]>) {
+  const calls: BoundaryQuery[] = [];
+  const violations: string[] = [];
+  boundaryClients.push({ violations });
+  const db = {
+    from(table: string) {
+      const query: BoundaryQuery = { table, selection: null, predicates: [], orders: [], limit: null, terminals: [] };
+      calls.push(query);
+      if (!Object.hasOwn(rows, table)) violations.push(`Unexpected table: ${table}`);
+      const read = (terminal: 'await' | 'maybeSingle'): Reply => {
+        query.terminals.push(terminal);
+        if (query.terminals.length !== 1) violations.push(`Repeated read: ${table}`);
+        const selected = (rows[table] ?? []).filter((row) => query.predicates.every(({ op, column, value }) => {
+          if (!Object.hasOwn(row, column)) return false;
+          return op === 'in' ? Array.isArray(value) && value.includes(row[column]) : row[column] === value;
+        }));
+        const data = query.limit === null ? selected : selected.slice(0, query.limit);
+        if (terminal === 'maybeSingle') {
+          if (data.length > 1) return { data: null, error: { message: 'Multiple rows in modeled maybeSingle' } };
+          return { data: data[0] ?? null, error: null };
+        }
+        return { data, error: null };
+      };
+      const chain = {
+        select(selection: string) { query.selection = selection; return chain; },
+        eq(column: string, value: unknown) { query.predicates.push({ op: 'eq', column, value }); return chain; },
+        is(column: string, value: unknown) { query.predicates.push({ op: 'is', column, value }); return chain; },
+        in(column: string, value: unknown) {
+          if (!Array.isArray(value)) violations.push(`Invalid in predicate: ${table}.${column}`);
+          query.predicates.push({ op: 'in', column, value });
+          return chain;
+        },
+        // Ordering is recorded, not emulated; these finite controls stay below
+        // the history cap and do not claim PostgreSQL sort/null semantics.
+        order(column: string, options?: unknown) { query.orders.push({ column, options }); return chain; },
+        limit(value: number) {
+          if (!Number.isInteger(value) || value < 0) violations.push(`Invalid limit: ${table}`);
+          query.limit = value;
+          return chain;
+        },
+        maybeSingle() { return Promise.resolve(read('maybeSingle')); },
+        then(onF: (value: Reply) => unknown, onR?: (error: unknown) => unknown) {
+          return Promise.resolve(read('await')).then(onF, onR);
+        },
+      };
+      return chain;
+    },
+  } as unknown as SupabaseClient<Database>;
+  return { db, calls };
+}
+
+function boundaryRows(): Record<string, BoundaryRow[]> {
+  const panels: Record<string, BoundaryRow> = {
+    home_warranties: {
+      id: 'own-warranty', family_id: 'fam-1', asset_id: 'asset-1', deleted_at: null,
+      name: 'Heater cover', provider: null, warranty_type: null, expires_on: '2029-01-01', claim_phone: null,
+    },
+    documents: {
+      id: 'own-manual', family_id: 'fam-1', asset_id: 'asset-1', title: 'Manual', category: 'manual',
+      storage_path: 'fam-1/manual.pdf', size_bytes: 10, expires_at: null, created_at: '2026-01-01T00:00:00Z',
+    },
+    home_service_records: {
+      id: 'own-service', family_id: 'fam-1', asset_id: 'asset-1', deleted_at: null,
+      title: 'Annual service', service_date: '2026-01-01', provider: null, cost: null, description: null, next_due_on: null,
+    },
+    maintenance_tasks: {
+      id: 'own-task', family_id: 'fam-1', asset_id: 'asset-1', title: 'Inspect heater',
+      status: 'todo', priority: 'medium', due_at: '2026-07-01T00:00:00Z',
+    },
+    home_projects: {
+      id: 'own-project', family_id: 'fam-1', title: 'Insulate basement', room: 'Basement',
+      status: 'planning', priority: 'medium', target_start: null, target_end: null, updated_at: '2026-01-01T00:00:00Z',
+    },
+  };
+  const rows: Record<string, BoundaryRow[]> = {
+    home_assets: [ASSET_ROW, { ...ASSET_ROW, id: 'not-mine', family_id: 'fam-2' }],
+  };
+  for (const [table, own] of Object.entries(panels)) {
+    rows[table] = [{ ...own, id: `foreign-${table}`, family_id: 'fam-2' }, own];
+    if (table !== 'home_projects') rows[table].push({ ...own, id: `other-asset-${table}`, asset_id: 'asset-2' });
+  }
+  rows.home_warranties.push({ ...panels.home_warranties, id: 'deleted-warranty', deleted_at: '2026-01-01T00:00:00Z' });
+  rows.home_service_records.push({ ...panels.home_service_records, id: 'deleted-service', deleted_at: '2026-01-01T00:00:00Z' });
+  rows.maintenance_tasks.push({ ...panels.maintenance_tasks, id: 'closed-task', status: 'done' });
+  rows.home_projects.push(
+    { ...panels.home_projects, id: 'other-room-project', room: 'Kitchen' },
+    { ...panels.home_projects, id: 'completed-project', status: 'completed' },
+  );
+  return rows;
+}
+
+function expectAssetQuery(calls: BoundaryQuery[], assetId: string) {
+  expect(calls[0]).toEqual({
+    table: 'home_assets', selection: '*',
+    predicates: [{ op: 'eq', column: 'id', value: assetId }, { op: 'eq', column: 'family_id', value: 'fam-1' }],
+    orders: [], limit: null, terminals: ['maybeSingle'],
+  });
+}
+
+describe('loadAssetDetail with adversarial family and asset rows', () => {
+  afterEach(() => {
+    // settle/settleAll catch query rejections, so adapter violations must be
+    // asserted here, outside every product error-handling boundary.
+    const violations = boundaryClients.splice(0).flatMap((entry) => entry.violations);
+    try {
+      expect(violations).toEqual([]);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('refuses an existing foreign-family asset without querying panels', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { db, calls } = filteringClient(boundaryRows());
+    const result = await loadAssetDetail(db, { familyId: 'fam-1', assetId: 'not-mine', today: '2026-06-01' });
+    expect(result).toEqual({ status: 'not_found' });
+    expect(calls).toHaveLength(1);
+    expectAssetQuery(calls, 'not-mine');
+    expect(err).not.toHaveBeenCalled();
+  });
+
+  it('reports a genuinely missing asset without querying panels', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { db, calls } = filteringClient(boundaryRows());
+    const result = await loadAssetDetail(db, { familyId: 'fam-1', assetId: 'absent', today: '2026-06-01' });
+    expect(result).toEqual({ status: 'not_found' });
+    expect(calls).toHaveLength(1);
+    expectAssetQuery(calls, 'absent');
+    expect(err).not.toHaveBeenCalled();
+  });
+
+  it('assembles only the requested family asset and its scoped panels', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { db, calls } = filteringClient(boundaryRows());
+    const result = await loadAssetDetail(db, { familyId: 'fam-1', assetId: 'asset-1', today: '2026-06-01' });
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    expect(result.detail.asset).toMatchObject({ id: 'asset-1', family_id: 'fam-1' });
+    expect(result.detail.coverages.map((row) => row.id)).toEqual(['own-warranty']);
+    expect(result.detail.manuals.map((row) => row.id)).toEqual(['own-manual']);
+    expect(result.detail.serviceHistory.map((row) => row.id)).toEqual(['own-service']);
+    expect(result.detail.openMaintenance.map((row) => row.id)).toEqual(['own-task']);
+    expect(result.detail.relatedProjects.map((row) => row.id)).toEqual(['own-project']);
+    expect(calls.map((call) => call.table)).toEqual([
+      'home_assets', 'home_warranties', 'documents', 'home_service_records', 'maintenance_tasks', 'home_projects',
+    ]);
+    expectAssetQuery(calls, 'asset-1');
+    for (const call of calls.slice(1)) {
+      expect(call.selection).toBe('*');
+      expect(call.terminals).toEqual(['await']);
+      expect(call.predicates).toContainEqual({ op: 'eq', column: 'family_id', value: 'fam-1' });
+      if (call.table !== 'home_projects') {
+        expect(call.predicates).toContainEqual({ op: 'eq', column: 'asset_id', value: 'asset-1' });
+      } else {
+        expect(call.predicates.some((predicate) => predicate.column === 'asset_id')).toBe(false);
+      }
+    }
+    expect(calls[1].predicates).toContainEqual({ op: 'is', column: 'deleted_at', value: null });
+    expect(calls[3].predicates).toContainEqual({ op: 'is', column: 'deleted_at', value: null });
+    expect(calls[4].predicates).toContainEqual({ op: 'in', column: 'status', value: ['todo', 'in_progress'] });
+    expect(calls[5].predicates).toContainEqual({
+      op: 'in', column: 'status', value: ['idea', 'planning', 'quoting', 'scheduled', 'in_progress', 'on_hold'],
+    });
+    expect(err).not.toHaveBeenCalled();
+  });
+});
