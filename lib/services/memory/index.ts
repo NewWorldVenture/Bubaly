@@ -46,6 +46,7 @@ import { readAllPages } from '@/lib/supabase/read-all-pages';
 import { recordActivitySafely } from '../activity';
 import { getTranslations } from '@/lib/i18n/server';
 import { loadAISettings } from '../ai-settings';
+import { getMember } from '../family';
 import { scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { escapeLike } from '@/lib/supabase/escape-like';
@@ -992,6 +993,16 @@ async function factForWrite(scope: ServiceScope, factId: string): Promise<Servic
   return ok(data);
 }
 
+function sameMemberReference(received: unknown, requested: string): boolean {
+  if (typeof received !== 'string' || !received) return false;
+  if (received === requested) return true;
+  // PostgreSQL returns canonical UUIDs but accepts braces, uppercase and
+  // optional hyphens after four hex digits. Normalize only this comparison.
+  const uuid = /^(?:\{[0-9a-f]{4}(?:-?[0-9a-f]{4}){7}\}|[0-9a-f]{4}(?:-?[0-9a-f]{4}){7})$/i;
+  return uuid.test(received) && uuid.test(requested)
+    && received.replace(/[{}-]/g, '').toLowerCase() === requested.replace(/[{}-]/g, '').toLowerCase();
+}
+
 export async function updateFact(
   scope: ServiceScope,
   factId: string,
@@ -1042,6 +1053,26 @@ export async function updateFact(
   const nextNotes = patch.notes !== undefined ? patch.notes : existing.data.notes;
   if (!canManage(scope) && isSensitiveMemory({ category: nextCategory, key: nextLabel, content: nextValue, notes: nextNotes })) {
     return fail('Only a parent or adult can file a memory as medical or account information.', { code: SERVICE_CODES.denied });
+  }
+
+  // Editing rights do not establish which household the referenced member is
+  // in. Validate every explicit reference, even an unchanged one; omission
+  // keeps the saved association, while null/empty still means the whole family.
+  // getMember deliberately permits inactive members for historical memories.
+  if (patch.member_id) {
+    try {
+      const member = await getMember(scope, patch.member_id);
+      if (!member.ok) {
+        if (member.code === SERVICE_CODES.notFound) return member;
+        return fail('Could not confirm that family member.', { code: SERVICE_CODES.db });
+      }
+      if (!member.data || !sameMemberReference(member.data.id, patch.member_id)) {
+        return fail('Could not confirm that family member.', { code: SERVICE_CODES.db });
+      }
+    } catch (error) {
+      console.error('[service:memory] member reference lookup failed', error);
+      return fail('Could not confirm that family member.', { code: SERVICE_CODES.db });
+    }
   }
 
   // The family filter here is belt-and-braces and NO TEST DISTINGUISHES IT:
