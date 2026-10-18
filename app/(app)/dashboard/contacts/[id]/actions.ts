@@ -20,6 +20,16 @@ import {
   type LoggedInteraction, type CommunicationLike,
 } from '@/lib/contacts/timeline';
 
+function sameContactReference(received: unknown, requested: string): boolean {
+  if (typeof received !== 'string' || !received.trim()) return false;
+  if (received === requested) return true;
+  // PostgreSQL accepts these UUID spellings but returns canonical text.
+  // Compare identities without rewriting the submitted query or payload.
+  const uuid = /^(?:\{[0-9a-f]{4}(?:-?[0-9a-f]{4}){7}\}|[0-9a-f]{4}(?:-?[0-9a-f]{4}){7})$/i;
+  return uuid.test(received) && uuid.test(requested)
+    && received.replace(/[{}-]/g, '').toLowerCase() === requested.replace(/[{}-]/g, '').toLowerCase();
+}
+
 /** Log a visit / call / gift / favor / note against a contact. */
 export async function logInteractionAction(formData: FormData): Promise<void> {
   const t = await getTranslations();
@@ -36,6 +46,19 @@ export async function logInteractionAction(formData: FormData): Promise<void> {
   // being dated tomorrow.
   const occurredOn = String(formData.get('occurred_on') ?? '') || todayKeyFor(ctx);
   const supabase = await createServer();
+  // The page's earlier lookup does not admit a submitted form reference.
+  // 0170's FK checks the contact id alone, not its household.
+  let admitted = false;
+  try {
+    const { data, error } = await supabase.from('family_contacts')
+      .select('id, family_id').eq('id', contactId).eq('family_id', ctx.active.familyId).maybeSingle();
+    admitted = !error && data !== null && typeof data === 'object' && !Array.isArray(data)
+      && sameContactReference(data.id, contactId)
+      && sameContactReference(data.family_id, ctx.active.familyId);
+  } catch {
+    admitted = false;
+  }
+  if (!admitted) throw refusalError(t('actions.couldNotLogThatInteraction'), 'notSaved');
   const { error } = await supabase.from('contact_interactions').insert({
     family_id: ctx.active.familyId,
     contact_id: contactId,
