@@ -21,27 +21,51 @@ type State =
   | { phase: 'error'; message: string };
 
 export function JoinInvite() {
-  const t = useTranslations();
-  const router = useRouter();
   const params = useSearchParams();
   const token = params.get('token') ?? '';
+  // Search parameters can change without leaving /join. A confirmation and
+  // every pending callback belong to this visit, including A → B → A.
+  return <JoinInviteAttempt key={token} token={token} />;
+}
+
+function JoinInviteAttempt({ token }: { token: string }) {
+  const t = useTranslations();
+  const router = useRouter();
   const [state, setState] = useState<State>({ phase: 'loading' });
-  // Look the invite up exactly once per mount — guards the React strict-mode
-  // double effect and any re-render race from clobbering a later state.
-  const fired = useRef(false);
+  const generation = useRef(0);
+  const confirmation = useRef<number | null>(null);
+  const redirectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const translator = useRef(t);
   // Accept exactly once per click, however fast it is pressed.
   const accepting = useRef(false);
 
+  // A locale/catalogue refresh changes copy, not the invitation the user
+  // approved. Keep its latest committed translator without retiring the visit.
+  useEffect(() => { translator.current = t; }, [t]);
+
   useEffect(() => {
-    if (fired.current) return;
-    fired.current = true;
+    const t = (key: string) => translator.current(key);
+    const visit = ++generation.current;
+    const current = () => generation.current === visit;
+    confirmation.current = null;
+    accepting.current = false;
+    setState({ phase: 'loading' });
+    const retire = () => {
+      generation.current++;
+      confirmation.current = null;
+      if (redirectTimer.current !== null) {
+        clearTimeout(redirectTimer.current);
+        redirectTimer.current = null;
+      }
+    };
     if (!token) {
       setState({ phase: 'error', message: t('joinInvite.missingToken') });
-      return;
+      return retire;
     }
     const supabase = createClient();
     (async () => {
       const { data: auth } = await supabase.auth.getUser();
+      if (!current()) return;
       if (!auth.user) {
         setState({ phase: 'needs-auth', token });
         return;
@@ -59,6 +83,7 @@ export function JoinInvite() {
       // enrolled them in the inviting family without a click. It shows who is
       // inviting them, and as what, and waits for "Accept invitation".
       const preview = await previewInviteAction(token).catch(() => null);
+      if (!current()) return;
       if (!preview) { setState({ phase: 'error', message: t('joinInvite.couldNotJoinTryAgain') }); return; }
       if (!preview.ok) {
         if (preview.reason === 'signed_out') { setState({ phase: 'needs-auth', token }); return; }
@@ -68,16 +93,28 @@ export function JoinInvite() {
           : t('joinInvite.inviteIsInvalidOrExpired') });
         return;
       }
+      confirmation.current = visit;
       setState({ phase: 'confirm', familyName: preview.familyName, roleLabel: preview.roleLabel });
-    })();
-  }, [token, t]);
+    })().catch(() => {
+      if (current()) setState({ phase: 'error', message: t('joinInvite.couldNotJoinTryAgain') });
+    });
+    return retire;
+  }, [token]);
 
   async function accept() {
-    if (accepting.current) return;
+    if (accepting.current || state.phase !== 'confirm' || confirmation.current !== generation.current) return;
+    const visit = generation.current;
+    const current = () => generation.current === visit;
     accepting.current = true;
+    confirmation.current = null;
     setState({ phase: 'accepting' });
     const supabase = createClient();
-    const { data, error } = await supabase.rpc('accept_invite', { p_token: token });
+    const result = await Promise.resolve(supabase.rpc('accept_invite', { p_token: token })).catch(() => null);
+    // An already issued, explicitly approved RPC may finish after navigation.
+    // Its result cannot confirm, settle or redirect a later invitation visit.
+    if (!current()) return;
+    const { data, error } = result ?? { data: null, error: { code: 'unavailable', message: '' } };
+    const t = translator.current;
     if (error || !data) {
       accepting.current = false;
       // accept_invite raises two things a person can act on (P0001); they are
@@ -95,13 +132,17 @@ export function JoinInvite() {
     // was accepted: left pending, it would let them back in after a removal.
     // Best-effort; the join stands either way.
     await settleOtherInvitesAction().catch(() => null);
+    if (!current()) return;
     setState({ phase: 'done' });
     // M28: a guest — the role an extended-family invite uses — belongs on the
     // simplified Grandparent Portal rather than the full concierge Home. The
     // role is read on the server from the membership the RPC just created, so
     // the browser cannot choose its own landing.
     const landing = await resolveLandingPathAction().catch(() => '/home');
-    setTimeout(() => {
+    if (!current()) return;
+    redirectTimer.current = setTimeout(() => {
+      redirectTimer.current = null;
+      if (!current()) return;
       router.push(landing);
       router.refresh();
     }, 1400);
