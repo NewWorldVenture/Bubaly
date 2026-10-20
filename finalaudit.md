@@ -1,5 +1,13 @@
 # Final Production Audit
 
+## First held-source qualification complete; mobile ownership fix separately published — 2026-10-20T13:19:11.187Z
+
+- Last Updated: 2026-10-20T13:19:11.187Z
+
+First source-head2eb75805 hosted qualification is now terminal: all28 first-attempt workflows and13 normal jobs PASS, receipt a693ad5a. Units36,563PASS plus2expectedFAIL/123skip in EACH UTC/LosAngeles/Tokyo; primary browsers2,724PASS/8skip/0flaky, all4 owned cleanups; DB462migrations/189probes/459legacy reapplications.22SQL workflows pass175 declared steps. Actual native reminder privacy25cases times3zones gives75PASS and3cleanups; cutover23PASS plus11static refusals, ownedcleanup/source-stability; all33 reported input pins independently match canonical2eb blobs. Messaging120unit+94browser and finance gates pass. Expected failure-only artifact-upload skip and first finalizer refusal remain recorded. These are exact2eb results, not fresh6c documentation-head CI: current API reports no Actions runs for6c, only Vercel preview success and Supabase preview skip. The eight finite closures already recorded remain1,983/15,331(12.93%); no new closure credit or whole-app completion inference. All27 reserved migrations plus0487 remain pinned and held for actual schema/identity, old-version drain, reconciliation and controlled live acceptance. No production SQL/configuration/credential operation.
+
+Main f38cb807 (merged1068, tree081e2fd5) is independently verified default production: deployment7200544612/public build readback, freshhealth env/database/Auth/serviceRole pass; seven feature settings still missing. GitHub production schema52HTTP401 still needs owner secret pairing; setup steps delivered, no update assumed. Separate mobile PR1069 head2cce4a817 is now published with its first CI39429198109 and mobile39429198135 active. Same native27 cases original9PASS18FAIL to candidate27PASS, independentpeer f807dee5, related61PASS/fullroot+mobiletypes/lint and21ledger/pathchecks qualify local scope; hosted gate remains pending. Those mobile changes, bearer fix and SMS diagnostics are NOT yet composed into this held branch, so source adoption and fresh final-union qualification remain required. PRODUCTION READY: NO.
+
 ## Current production and audit checkpoint — 2026-10-20T12:41:37.797Z
 
 - Last Updated: 2026-10-20T12:41:37.797Z
