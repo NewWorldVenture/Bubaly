@@ -35,7 +35,10 @@ async function probe(
   try {
     const res = await fetch(`${url.replace(/\/$/, '')}${path}`, {
       method: 'GET',
-      headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
+      // Opaque API keys authenticate through apikey; they are not JWTs.
+      headers: anonKey.startsWith('sb_secret_') || anonKey.startsWith('sb_publishable_')
+        ? { apikey: anonKey }
+        : { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
       signal: controller.signal,
       cache: 'no-store',
     });
