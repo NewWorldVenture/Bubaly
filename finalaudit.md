@@ -1,5 +1,11 @@
 # Final Production Audit
 
+## Qualified invitation composition retained; newly merged port proof allocated for adoption — 2026-10-20T15:05:41.474Z
+
+- Last Updated: 2026-10-20T15:05:41.474Z
+
+Root 2026-10-20T15:05:41.474Z: Private main343+held d9d7 source exactunion accepted independentf803cf20/root6a3c34ab: all6643nonledgerleaves/modes,15336uniqueIDs, everyhistoricalparentproseline/rowevidence and28SQLpins/635sensitiveleaves/runbook/holds preserved. Fresh combined fullnonincrementalroottypes5.9.3 exit0/emptylogs;53wholechanged/relatedfixtures1253PASS0skip/fail and actualReactcontrolledinvite18PASS0skip/flake/retry, frozen352861ed. Initialrunnercount52 refusedbeforetestlaunch; inspectednewgraphinputjustifies53 andfirstrefusalretained. No combinedhostedacceptance borrowed. PR1071 nowordinarymerged15:03:55Z into MAINa15839eb2cbeec57266c8dda5bac9fc16ad9d7d6, testedhead7650/fullfirstaggregate87ef640f: all4workflows/all13normalSUCCESS with explicit2745browserPASS+1configuredretryflake+8skip; first30sviewporttimeout retained b059d4a2, unchangedall6623existingfiles/modes peer3e4f9102, causeunknown. Actualnative55static/4childoutcomes/10kernelcases/ownedcleanup/hostinvariance accepted579b3d8d andpeer03129fef. This proves mechanism only, historicalstartupowner/cause unproved. BEFORE source adoption allocate private normal merge of this newmain into currentheldd9d7: exactly two new nonledgerfiles scripts/ci-supabase-port-rehearsal.mjs and .github/workflows/supabase-port-rehearsal.yml; preserve all81heldchanges, everyparentID/history, all28SQLpins/nativeprivacycutover/runbook/holds. No qualifiedimplementationbody edits. Require independent source/ledger/holdunion plus affectedguards/fulltypes and firstfinalheadhostedgates. Production deployment/default a158 and actualmain firstCI remain separatelypending; no releaseclaim frommergealone. Separate newstartupdiagnostics branch7becce1c has preclaimedfivepaths/one newfixtureID only; its source is NOT adopted here and its editor cannotmodifythisledger. Recovery1072 firstnative/fullCI remain separate. Owner52HTTP401 prerequisites unconfirmed; no retries or production SQL/configuration change. No newclosurecredit. PRODUCTION READY: NO.
+
 ## Held privacy source composed with released invitation fix; combined gates pending — 2026-10-20T14:58:58.155Z
 
 - Last Updated: 2026-10-20T14:58:58.155Z
