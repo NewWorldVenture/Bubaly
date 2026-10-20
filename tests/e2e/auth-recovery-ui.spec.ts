@@ -45,10 +45,11 @@ type Fixture = {
   recover: Array<Record<string, unknown> & { redirect: string | null }>;
   userReads: string[];
   tokenRequests: Array<Record<string, unknown>>;
-  held: Partial<Record<Action | 'user' | 'recover', boolean>>;
+  held: Partial<Record<Action | 'user' | 'recover' | 'token', boolean>>;
   fail: Partial<Record<Action, boolean>>;
   save: 'updated' | 'failed' | 'uncertain' | 'lost'; recoverMode: 'ok' | 'rejected' | 'lost';
-  release: (kind: Action | 'user' | 'recover') => Promise<void>;
+  grantExpiresAt: number | null;
+  release: (kind: Action | 'user' | 'recover' | 'token') => Promise<void>;
   reload: () => Promise<void>;
 };
 type Probe = { mount: () => void; retire: () => void; capture: () => void; fire: (times?: number) => void; settle: () => Promise<void>;
@@ -65,12 +66,15 @@ function session(account: Account, rotation = 'original', expiresIn = 3600) {
   return { access_token: token, refresh_token: `synthetic-refresh-${account}-${rotation}`, token_type: 'bearer', expires_in: expiresIn, expires_at: now + expiresIn, user: user(account) };
 }
 const implicit = () => new URLSearchParams({ type: 'recovery', access_token: session('A').access_token, refresh_token: 'synthetic-refresh-input' }).toString();
-async function fixture(page: Page, options: { hash?: string; query?: string; existing?: Account; existingExpiresIn?: number; stored?: string; request?: boolean; login?: boolean; locale?: string; strict?: boolean; hold?: Fixture['held']; holdInitiation?: InitiationBarrier; mount?: boolean } = {}): Promise<Fixture> {
+async function fixture(page: Page, options: { hash?: string; query?: string; existing?: Account; existingExpiresIn?: number; stored?: string; request?: boolean; login?: boolean; locale?: string; strict?: boolean; hold?: Fixture['held']; holdInitiation?: InitiationBarrier; mount?: boolean; grantExpiresInMs?: number } = {}): Promise<Fixture> {
+  if (options.grantExpiresInMs !== undefined && (!Number.isSafeInteger(options.grantExpiresInMs)
+    || options.grantExpiresInMs < 1000 || options.grantExpiresInMs > 15 * 60_000)) throw new Error('Invalid synthetic recovery grant lifetime');
   const pending = new Map<string, Array<() => Promise<void>>>();
   const state: Fixture = { calls: [], recover: [], userReads: [], tokenRequests: [], held: { ...options.hold }, fail: {}, save: 'updated', recoverMode: 'ok',
+    grantExpiresAt: null,
     reload: async () => {},
     release: async kind => { delete state.held[kind]; await Promise.all((pending.get(kind) ?? []).splice(0).map(finish => finish())); } };
-  const schedule = async (kind: Action | 'user' | 'recover', finish: () => Promise<void>) => {
+  const schedule = async (kind: Action | 'user' | 'recover' | 'token', finish: () => Promise<void>) => {
     if (state.held[kind]) { const queue = pending.get(kind) ?? []; queue.push(finish); pending.set(kind, queue); } else await finish();
   };
   const headers = { 'access-control-allow-origin': origin, 'access-control-allow-headers': '*', 'access-control-allow-methods': 'GET,POST,OPTIONS' };
@@ -82,7 +86,13 @@ async function fixture(page: Page, options: { hash?: string; query?: string; exi
       if (!['prepare', 'consume', 'inspect', 'save'].includes(action)) throw new Error(`Unexpected action ${action}`);
       state.calls.push({ action, body });
       await schedule(action, async () => {
-        const identity = { userId: userA, sessionId: sidA, email: 'a@example.invalid', expiresAt: Date.now() + 15 * 60_000 };
+        // Only the new near-expiry schedules shorten the already-controlled
+        // signed-grant action receipt. They do not claim native server admission
+        // or a real password mutation; the actual component and SDK still run.
+        const expiresAt = options.grantExpiresInMs === undefined ? Date.now() + 15 * 60_000
+          : await page.evaluate(() => Date.now()) + options.grantExpiresInMs;
+        const identity = { userId: userA, sessionId: sidA, email: 'a@example.invalid', expiresAt };
+        if (action !== 'save') state.grantExpiresAt = expiresAt;
         const result = state.fail[action] ? { ok: false, errorKey: 'authRecovery.invalidLink' }
           : action === 'save' ? { outcome: state.save, ...(state.save === 'failed' ? { errorKey: 'authRecovery.weakPassword' } : {}) }
             : { ok: true, identity, ...(action === 'inspect' ? {} : { grant }), ...(action === 'prepare' ? { session: session('A', 'prepared') } : {}) };
@@ -94,7 +104,7 @@ async function fixture(page: Page, options: { hash?: string; query?: string; exi
     if (url.pathname === '/auth/v1/token') {
       const body = req.postDataJSON(); state.tokenRequests.push(body);
       const account: Account = body.email === 'b@example.invalid' || body.refresh_token?.includes('-B-') ? 'B' : 'A';
-      await route.fulfill({ contentType: 'application/json', headers, body: JSON.stringify(session(account, body.refresh_token ? 'rotated' : 'signin', options.existingExpiresIn)) }); return;
+      await schedule('token', () => route.fulfill({ contentType: 'application/json', headers, body: JSON.stringify(session(account, body.refresh_token ? 'rotated' : 'signin', options.existingExpiresIn)) })); return;
     }
     if (url.pathname === '/auth/v1/user') {
       const token = req.headers().authorization?.slice(7) ?? '', payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
@@ -527,4 +537,142 @@ test('invalid email stays local and a definitive request rejection preserves a d
 
 test('ordinary login exposes the self-service recovery entry', async ({ page }) => {
   await fixture(page, { login: true }); await expect(page.getByRole('link', { name: 'Forgot your password?' })).toHaveAttribute('href', '/login?reset=1');
+});
+
+async function crossGrantExpiry(page: Page, state: Fixture) {
+  expect(state.grantExpiresAt).not.toBeNull();
+  const remaining = state.grantExpiresAt! - await page.evaluate(() => Date.now());
+  expect(remaining).toBeGreaterThan(0);
+  await page.clock.fastForward(remaining + 1);
+}
+
+for (const outcome of ['updated', 'uncertain'] as const) test(`an admitted ${outcome} password-save receipt survives grant expiry`, async ({ page }) => {
+  const state = await fixture(page, { hash: implicit(), grantExpiresInMs: 10_000, hold: { save: true } });
+  state.save = outcome;
+  try {
+    await password(page); await submit(page);
+    await expect.poll(() => saves(state).length).toBe(1);
+    await crossGrantExpiry(page, state);
+    // Expiration can stop a new submission; it cannot establish the outcome of
+    // the request already sent. Do not assert that a controlled action is a PUT.
+    expect.soft(await page.getByRole('alert').allTextContents()).not.toContain('This recovery link has expired. Request a new link.');
+    await state.release('save'); await page.evaluate(() => window.__recoveryUi.settle());
+    if (outcome === 'updated') await expect(page.getByRole('heading', { name: 'Password updated', exact: true })).toBeVisible();
+    else await expect(page.getByRole('alert')).toContainText("We couldn't confirm the change");
+    expect(saves(state)).toHaveLength(1);
+    expect(await page.evaluate(() => window.__recoveryUi.user())).toBe(userA);
+    expect(await page.evaluate(() => window.__recoveryUi.storage())).toEqual({});
+    await page.evaluate(() => window.__recoveryUi.fire()); await page.evaluate(() => window.__recoveryUi.settle());
+    expect(saves(state)).toHaveLength(1);
+  } finally { await state.release('save'); }
+});
+
+test('expiry before submission refuses a captured recovery handler without a save', async ({ page }) => {
+  const state = await fixture(page, { hash: implicit(), grantExpiresInMs: 10_000 });
+  await password(page); await page.evaluate(() => window.__recoveryUi.capture());
+  await crossGrantExpiry(page, state);
+  await expect(page.getByRole('alert')).toHaveText('This recovery link has expired. Request a new link.');
+  await page.evaluate(() => window.__recoveryUi.fire()); await page.evaluate(() => window.__recoveryUi.settle());
+  expect(saves(state)).toHaveLength(0);
+  await expect(page.getByRole('button', { name: 'Save new password' })).toHaveCount(0);
+  expect(await page.evaluate(() => window.__recoveryUi.user())).toBe(userA);
+});
+
+test('a rejected save acknowledged after grant expiry cannot enable another submission', async ({ page }) => {
+  const state = await fixture(page, { hash: implicit(), grantExpiresInMs: 10_000, hold: { save: true } });
+  state.save = 'failed';
+  try {
+    await password(page); await submit(page); await expect.poll(() => saves(state).length).toBe(1);
+    await crossGrantExpiry(page, state);
+    await state.release('save'); await page.evaluate(() => window.__recoveryUi.settle());
+    await expect(page.getByRole('alert')).toHaveText('This recovery link has expired. Request a new link.');
+    await expect(page.getByRole('button', { name: 'Save new password' })).toHaveCount(0);
+    await page.evaluate(() => window.__recoveryUi.fire()); await page.evaluate(() => window.__recoveryUi.settle());
+    expect(saves(state)).toHaveLength(1);
+    expect(await page.evaluate(() => window.__recoveryUi.user())).toBe(userA);
+  } finally { await state.release('save'); }
+});
+
+test('same-session rotation preserves an admitted save acknowledgement across grant expiry', async ({ page }) => {
+  const state = await fixture(page, { hash: implicit(), grantExpiresInMs: 10_000, hold: { save: true } });
+  try {
+    await password(page); await submit(page); await expect.poll(() => saves(state).length).toBe(1);
+    await page.evaluate(() => window.__recoveryUi.rotate());
+    expect(state.tokenRequests.at(-1)).toHaveProperty('refresh_token', 'synthetic-refresh-A-prepared');
+    await crossGrantExpiry(page, state);
+    await state.release('save'); await page.evaluate(() => window.__recoveryUi.settle());
+    await expect(page.getByRole('heading', { name: 'Password updated', exact: true })).toBeVisible();
+    expect(saves(state)).toHaveLength(1);
+    expect(await page.evaluate(() => window.__recoveryUi.user())).toBe(userA);
+  } finally { await state.release('save'); }
+});
+
+test('a newer account and grant survive an older save released after its grant expiry', async ({ page }) => {
+  const state = await fixture(page, { hash: implicit(), grantExpiresInMs: 10_000, hold: { save: true } });
+  try {
+    await password(page); await submit(page); await expect.poll(() => saves(state).length).toBe(1);
+    await page.evaluate(() => window.__recoveryUi.signIn('B'));
+    await page.evaluate(value => window.__recoveryUi.seedGrant(value), otherGrant);
+    await crossGrantExpiry(page, state);
+    await state.release('save'); await page.evaluate(() => window.__recoveryUi.settle());
+    await expect(page.getByRole('heading', { name: 'Password updated', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Save new password' })).toHaveCount(0);
+    expect(await page.evaluate(() => window.__recoveryUi.user())).toBe(userB);
+    expect(await page.evaluate(() => window.__recoveryUi.storage())).toEqual({ [storageKey]: otherGrant });
+    expect(saves(state)).toHaveLength(1);
+  } finally { await state.release('save'); }
+});
+
+test('unmount during an admitted save preserves a newer grant beyond the old expiry', async ({ page }) => {
+  const state = await fixture(page, { hash: implicit(), grantExpiresInMs: 10_000, hold: { save: true } });
+  try {
+    await password(page); await submit(page); await expect.poll(() => saves(state).length).toBe(1);
+    await page.evaluate(() => window.__recoveryUi.retire());
+    await page.evaluate(value => window.__recoveryUi.seedGrant(value), otherGrant);
+    await crossGrantExpiry(page, state);
+    await state.release('save'); await page.evaluate(() => window.__recoveryUi.settle());
+    await expect(page.getByText('Other route', { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Password updated', exact: true })).toHaveCount(0);
+    expect(await page.evaluate(() => window.__recoveryUi.storage())).toEqual({ [storageKey]: otherGrant });
+    expect(await page.evaluate(() => window.__recoveryUi.user())).toBe(userA);
+    expect(saves(state)).toHaveLength(1);
+  } finally { await state.release('save'); }
+});
+
+test('lost save acknowledgement stays uncertain when grant expiry precedes the deadline', async ({ page }) => {
+  const state = await fixture(page, { hash: implicit(), grantExpiresInMs: 10_000, hold: { save: true } });
+  try {
+    await password(page); await submit(page); await expect.poll(() => saves(state).length).toBe(1);
+    await page.clock.fastForward(35_001);
+    await expect(page.getByRole('alert')).toContainText("We couldn't confirm the change");
+    await state.release('save'); await page.evaluate(() => window.__recoveryUi.settle());
+    await expect(page.getByRole('alert')).toContainText("We couldn't confirm the change");
+    await expect(page.getByRole('heading', { name: 'Password updated', exact: true })).toHaveCount(0);
+    await page.evaluate(() => window.__recoveryUi.fire()); await page.evaluate(() => window.__recoveryUi.settle());
+    expect(saves(state)).toHaveLength(1);
+    expect(await page.evaluate(() => window.__recoveryUi.user())).toBe(userA);
+  } finally { await state.release('save'); }
+});
+
+test('grant expiry during actual SDK getSession refresh refuses a new save dispatch', async ({ page }) => {
+  // A is initially outside the installed SDK's 90-second refresh margin. The
+  // real getSession called by submit subsequently enters that margin and waits
+  // on its intercepted token request; no SDK method is replaced.
+  const state = await fixture(page, { existing: 'A', existingExpiresIn: 100, stored: grant, grantExpiresInMs: 30_000 });
+  await password(page);
+  const before = state.tokenRequests.length;
+  state.held.token = true;
+  try {
+    await page.clock.fastForward(11_000);
+    await submit(page);
+    await expect.poll(() => state.tokenRequests.length).toBe(before + 1);
+    expect(state.tokenRequests.at(-1)).toHaveProperty('refresh_token', 'synthetic-refresh-A-signin');
+    expect(saves(state)).toHaveLength(0);
+    await crossGrantExpiry(page, state);
+    await state.release('token'); await page.evaluate(() => window.__recoveryUi.settle());
+    await expect(page.getByRole('alert')).toHaveText('This recovery link has expired. Request a new link.');
+    await expect(page.getByRole('button', { name: 'Save new password' })).toHaveCount(0);
+    expect(saves(state)).toHaveLength(0);
+    expect(await page.evaluate(() => window.__recoveryUi.user())).toBe(userA);
+  } finally { await state.release('token'); }
 });
