@@ -70,6 +70,7 @@ const SELF_MAINTAINING = [
   'family-messages-state.spec.ts',
   'format-hydration.spec.ts', 'framework-hydration-replay.spec.ts',
   'inbox-message-ownership.spec.ts',
+  'join-invite-ownership.spec.ts',
   'kid-login-boundaries.spec.ts',
   'kid-login-readiness.spec.ts', 'language-picker-keyboard.spec.ts', 'login-readiness.spec.ts', 'logout-refresh-storage.spec.ts',
   'messages-family-switch-sdk.spec.ts',
