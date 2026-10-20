@@ -38,6 +38,7 @@ on:
       - 'docs/audit/social-permission-matrix-check.sql'
       - 'docs/audit/social-restriction-delete-check.sql'
       - 'docs/audit/pg-bootstrap.sh'
+      - 'supabase/SEED_ALL.sql'
       - 'supabase/migrations/**'
   push:
     branches: [main]
@@ -54,6 +55,7 @@ on:
       - 'docs/audit/social-permission-matrix-check.sql'
       - 'docs/audit/social-restriction-delete-check.sql'
       - 'docs/audit/pg-bootstrap.sh'
+      - 'supabase/SEED_ALL.sql'
       - 'supabase/migrations/**'
 
 permissions:

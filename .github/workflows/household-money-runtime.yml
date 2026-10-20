@@ -51,6 +51,7 @@ on:
       - 'docs/audit/wallet-side-table-write-check.sql'
       - 'docs/audit/wallet-write-rls-check.sql'
       - 'docs/audit/pg-bootstrap.sh'
+      - 'supabase/SEED_ALL.sql'
       - 'supabase/migrations/**'
   push:
     branches: [main]
@@ -73,6 +74,7 @@ on:
       - 'docs/audit/wallet-side-table-write-check.sql'
       - 'docs/audit/wallet-write-rls-check.sql'
       - 'docs/audit/pg-bootstrap.sh'
+      - 'supabase/SEED_ALL.sql'
       - 'supabase/migrations/**'
 
 permissions:

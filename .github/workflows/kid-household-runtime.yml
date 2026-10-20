@@ -36,6 +36,7 @@ on:
       - 'docs/audit/family-delete-cascade-check.sql'
       - 'docs/audit/child-login-mapping-is-managers-only-check.sql'
       - 'docs/audit/pg-bootstrap.sh'
+      - 'supabase/SEED_ALL.sql'
       - 'supabase/migrations/**'
   push:
     branches: [main]
@@ -51,6 +52,7 @@ on:
       - 'docs/audit/family-delete-cascade-check.sql'
       - 'docs/audit/child-login-mapping-is-managers-only-check.sql'
       - 'docs/audit/pg-bootstrap.sh'
+      - 'supabase/SEED_ALL.sql'
       - 'supabase/migrations/**'
 
 permissions:
