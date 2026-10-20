@@ -1,0 +1,67 @@
+name: Synthetic reminder cutover hold and drain rehearsal
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - '.github/workflows/reminder-cutover-rehearsal.yml'
+      - 'scripts/run-reminder-cutover-rehearsal.mjs'
+      - 'tests/fixtures/reminder-cutover-*.sql'
+      - 'tests/runtime/reminder-cutover.native.mjs'
+      - 'supabase/migrations/0256_idempotency_keys.sql'
+      - 'supabase/migrations/0272_rsvp_is_first_person.sql'
+      - 'supabase/migrations/0327_autopilot_suggestions_are_not_erasable.sql'
+      - 'supabase/migrations/0486_an_autopilot_card_is_read_by_its_audience.sql'
+      - 'supabase/migrations/0487_copied_card_reminder_origin.sql'
+      - 'supabase/reserved/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/reminder-cutover-rehearsal.yml'
+      - 'scripts/run-reminder-cutover-rehearsal.mjs'
+      - 'tests/fixtures/reminder-cutover-*.sql'
+      - 'tests/runtime/reminder-cutover.native.mjs'
+      - 'supabase/migrations/0256_idempotency_keys.sql'
+      - 'supabase/migrations/0272_rsvp_is_first_person.sql'
+      - 'supabase/migrations/0327_autopilot_suggestions_are_not_erasable.sql'
+      - 'supabase/migrations/0486_an_autopilot_card_is_read_by_its_audience.sql'
+      - 'supabase/migrations/0487_copied_card_reminder_origin.sql'
+      - 'supabase/reserved/**'
+permissions:
+  contents: read
+concurrency:
+  group: reminder-cutover-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+jobs:
+  cutover:
+    if: >-
+      github.repository == 'NewWorldVenture/Bubaly' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the exact owned candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Use the declared Node runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.21.0'
+      - name: Validate pins and connection refusals
+        run: node scripts/run-reminder-cutover-rehearsal.mjs --self-check
+      - name: Execute real disposable PostgreSQL and PostgREST rehearsal
+        run: node scripts/run-reminder-cutover-rehearsal.mjs
+      # Normal finally cleanup verifies owned resource absence. Forced job
+      # termination may prevent cleanup; ephemeral runner destruction is separate.
+      # No deployment/environment secrets, Supabase login, remote URL, or DDL target.
+      - name: Retain only the sanitized terminal summary
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: synthetic-reminder-cutover-summary
+          path: cutover-runtime-results/*/summary.json
+          if-no-files-found: error
+          retention-days: 14
