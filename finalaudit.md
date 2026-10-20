@@ -1,5 +1,13 @@
 # Final Production Audit
 
+## Mobile ownership merged and deployed; invitation consent fix enters first real HTTP CI — 2026-10-20T13:48:39.033Z
+
+- Last Updated: 2026-10-20T13:48:39.033Z
+
+PR1069 merged13:42:03Z as main5b353b9c0d06eecab7cc714f951ca3738e6df6ba after exact2cce first13jobs/all4workflows SUCCESS (503885f3):36,387unitPASS eachzone,2,724browserPASS8skip0flake,all4ownedcleanup,24RPC4bill,DB461/189/458,mobile27+13 anddedicated49. ActualProduction7201371604 succeeded13:44:59Z; publicdefaultbuild matches5b353 HTTP200 and freshhealth env/db/Auth/serviceRole pass, same7feature settings missing, receipt efa069e5. This web deployment does not verify native binary/OTA distribution. Newmain firstCI39432679480 preserves pre-test shard2job118661493548 failure: registry throttling message thenTCP54322bind EADDRINUSE. Empty-stack attestation and ownedcleanupPASS; portowner/causeUNKNOWN, no productcause inferred. Primarybrowser/RPC/bill skipped for thatfailedjob; otherfirstjobs remain separately observed, no restart/cancel. Receipt57e46979. Read-only cause/diagnostic investigation is allocated separately; do not declare ephemeral-port or registry causality without proof.
+
+New draftPR1070 heade8a1e8d743fbc69a23fb6399dd8423e0fcf468a6 normally includes main5b and the invitation repair: actualcomponent displayedFamilyA/submittedtokenB on unchangedsource. Same18 controlledChromium/React cases original6PASS12FAIL to final18PASS,14 unchanged related tests, source/fixture peers and scopedlint; firsttranslator17/1regression retained and fixed. FullrootTSCexit0 has explicit concurrentHTTPinput limitation; finalactualhostedtypesrequired. Four loopback realNext/Auth/PostgREST/RPC/membership cases statically qualified, NOT yet run. FirstCI39433417752/messaging39433417991/SQL39433417933 active, no reruns. One new finite mobile27 artifact closes on the composed invitation branch only (1,065/15,220 there); those newer source/IDs and closure are not yet adopted here. This heldsource ledger remains1,983/15,331(12.93%), not product completion. Its first2eb28workflows remain qualified; all27reservedSQL+0487, actualschema/identity/versiondrain/reconciliation/liveacceptance holds remain. GitHub production52HTTP401 still needs owner matching key/project update; no update assumed. PRODUCTION READY: NO.
+
 ## Native mobile gate passes; dependency exposure claims remain bounded — 2026-10-20T13:27:57.595Z
 
 - Last Updated: 2026-10-20T13:27:57.595Z
