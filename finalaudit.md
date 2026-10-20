@@ -1,5 +1,11 @@
 # Final Production Audit
 
+## Actual invitation HTTP controls qualify; corrected head begins fresh hosted gates — 2026-10-20T14:10:54.978Z
+
+- Last Updated: 2026-10-20T14:10:54.978Z
+
+Invitation1070 originale8 firstallthreeworkflows are now terminal, frozencc870ff2: normalFAIL solelytwo staticgraph assertions in EACHthreezones plusaggregate, messaging/participantSQLSUCCESS. Allfourbrowser shards actual2,746PASS8existingSKIP0FAIL/flake/retry,24RPC4bill4ownedcleanup, fullgeneratedtypes/build/audits/mobile/DB461/189/458SUCCESS. Independent8bf56a24 binds exactlyfour direct actualNext/Auth/PostgREST invitation assertions-and-owned-cleanup markers; controlled18 hosted inclusion is explicitly inferred from canonicalsource/unfilteredcommands/unchangedothers/2724+22total, not fabricated namedlogmarkers. Reviewedone-literal registration repair and all retained evidence are now published in correctedheadb81b99204ba8747e3169df149404bd27f9bdc8e9 AFTER originalterminal. Newhead normal39436603057/messaging39436602950/SQL39436603030 live; no acceptance borrowed, rerun/cancel or newclosurecredit. Port1071 originalnative39436072492 remainsEACCES/artifacts0/c87e3a6c; exactdeniedsyscallUNKNOWN, readlinkPID1 hypothesis corroborated by namespacepermissiondocs but not firstlog. Onefilecontroller correction preclaimed beforeedit: stagedsanitized primaryreceipt, actualnonrootPID1read outcome, fixedboundedprivilegedanchorread, unchangednonrootcontroller/rootchildguards/10kernelcases. Its originalfullCI39436072662 remainsobserved and willnotbesupersededwhilelive. Static/native/historicalcause claims stay separate. Currentactualdefault5b remainsverified; mainfirstsetupfailure44fed9cf preserved. Ownerproductionsecret update not reported,52HTTP401 remains. This heldsource has not adopted newer source/IDs/mobileartifactclosure;15,331rows/1,983finiteclosures12.93% and all27reservedSQL+0487/schema/identity/versiondrain/reconciliation/liveacceptance holds unchanged. PRODUCTION READY: NO.
+
 ## First failures preserved; invitation guard repair and native diagnosis proceed — 2026-10-20T14:07:30.575Z
 
 - Last Updated: 2026-10-20T14:07:30.575Z
