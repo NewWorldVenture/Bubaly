@@ -207,6 +207,16 @@ export async function deleteRentalAction(id: string) {
 }
 
 // ── Service log ───────────────────────────────────────────────────────────────
+function sameVehicleReference(received: unknown, requested: string): boolean {
+  if (typeof received !== 'string' || !received.trim()) return false;
+  if (received === requested) return true;
+  // PostgreSQL returns canonical UUID text for these accepted input spellings.
+  // Compare identities without rewriting the submitted query or payload.
+  const uuid = /^(?:\{[0-9a-f]{4}(?:-?[0-9a-f]{4}){7}\}|[0-9a-f]{4}(?:-?[0-9a-f]{4}){7})$/i;
+  return uuid.test(received) && uuid.test(requested)
+    && received.replace(/[{}-]/g, '').toLowerCase() === requested.replace(/[{}-]/g, '').toLowerCase();
+}
+
 export async function saveAutoServiceAction(fd: FormData) {
   const t = await getTranslations();
   const { familyId, userId, supabase, todayKey } = await ctx();
@@ -215,6 +225,18 @@ export async function saveAutoServiceAction(fd: FormData) {
   // An odometer reading is never negative; -5 was stored and then copied onto
   // the vehicle.
   if (mileage != null && mileage < 0) throw refusalError(t('actions.aMileageCannotBeNegative'), 'invalid');
+  // The child row's family and single-ID FK do not establish the vehicle's family.
+  // Admit an explicit parent before saving, including records with no odometer reading.
+  if (vehicleId !== null) {
+    let admitted = false;
+    try {
+      const { data: vehicle, error: vehicleError } = await supabase.from('vehicles')
+        .select('id, family_id').eq('id', vehicleId).eq('family_id', familyId).maybeSingle();
+      admitted = !vehicleError && !!vehicle && typeof vehicle === 'object' && !Array.isArray(vehicle)
+        && sameVehicleReference(vehicle.id, vehicleId) && sameVehicleReference(vehicle.family_id, familyId);
+    } catch { /* An uncertain parent lookup cannot authorize a write. */ }
+    if (!admitted) throw refusalError(t('actions.couldNotSaveThatService'), 'notSaved');
+  }
   const { error } = await supabase.from('auto_service_records').insert({
     family_id: familyId, vehicle_id: vehicleId, title: str(fd, 'title') ?? 'Service',
     service_date: str(fd, 'service_date') ?? todayKey,
