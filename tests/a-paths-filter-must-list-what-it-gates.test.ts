@@ -279,6 +279,7 @@ describe('path dependencies follow the package actually executed', () => {
     expect([...scriptsRunBy(source)].sort()).toEqual([
       'mobile/scripts/auth-storage-errors.test.mjs',
       'mobile/scripts/braces-depth-guard.test.mjs',
+      'mobile/scripts/device-signout-ownership.test.mjs',
       'mobile/scripts/patch-auth-storage-errors.mjs',
     ]);
     // The patcher and regression test both read this support file; it is not
