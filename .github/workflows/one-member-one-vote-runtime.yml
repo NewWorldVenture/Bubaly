@@ -33,6 +33,7 @@ on:
       - 'docs/audit/meal-ballot-is-per-option-check.sql'
       - 'docs/audit/cross-family-reference-check.sql'
       - 'docs/audit/pg-bootstrap.sh'
+      - 'supabase/SEED_ALL.sql'
       - 'supabase/migrations/**'
   push:
     branches: [main]
@@ -45,6 +46,7 @@ on:
       - 'docs/audit/meal-ballot-is-per-option-check.sql'
       - 'docs/audit/cross-family-reference-check.sql'
       - 'docs/audit/pg-bootstrap.sh'
+      - 'supabase/SEED_ALL.sql'
       - 'supabase/migrations/**'
 
 permissions:

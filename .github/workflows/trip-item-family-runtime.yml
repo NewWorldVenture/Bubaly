@@ -35,6 +35,7 @@ on:
       - 'docs/audit/gated-write-tables-check.sql'
       - 'docs/audit/ui-only-manager-gate-check.sql'
       - 'docs/audit/pg-bootstrap.sh'
+      - 'supabase/SEED_ALL.sql'
       - 'supabase/migrations/**'
   push:
     branches: [main]
@@ -46,6 +47,7 @@ on:
       - 'docs/audit/gated-write-tables-check.sql'
       - 'docs/audit/ui-only-manager-gate-check.sql'
       - 'docs/audit/pg-bootstrap.sh'
+      - 'supabase/SEED_ALL.sql'
       - 'supabase/migrations/**'
 
 permissions:

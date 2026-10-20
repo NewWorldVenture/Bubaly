@@ -36,6 +36,7 @@ on:
       - 'docs/audit/marketplace-ownership-update-check.sql'
       - 'docs/audit/marketplace-review-authorship-check.sql'
       - 'docs/audit/pg-bootstrap.sh'
+      - 'supabase/SEED_ALL.sql'
       - 'supabase/migrations/**'
   push:
     branches: [main]
@@ -50,6 +51,7 @@ on:
       - 'docs/audit/marketplace-ownership-update-check.sql'
       - 'docs/audit/marketplace-review-authorship-check.sql'
       - 'docs/audit/pg-bootstrap.sh'
+      - 'supabase/SEED_ALL.sql'
       - 'supabase/migrations/**'
 
 permissions:

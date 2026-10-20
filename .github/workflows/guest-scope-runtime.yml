@@ -36,6 +36,7 @@ on:
       - 'docs/audit/rls-sweep-check.sql'
       - 'docs/audit/rls-isolation-check.sql'
       - 'docs/audit/pg-bootstrap.sh'
+      - 'supabase/SEED_ALL.sql'
       - 'supabase/migrations/**'
   push:
     branches: [main]
@@ -49,6 +50,7 @@ on:
       - 'docs/audit/rls-sweep-check.sql'
       - 'docs/audit/rls-isolation-check.sql'
       - 'docs/audit/pg-bootstrap.sh'
+      - 'supabase/SEED_ALL.sql'
       - 'supabase/migrations/**'
 
 permissions:
