@@ -1,5 +1,11 @@
 # Final Production Audit
 
+## First failures preserved; invitation guard repair and native diagnosis proceed — 2026-10-20T14:07:30.575Z
+
+- Last Updated: 2026-10-20T14:07:30.575Z
+
+ActualdefaultProduction main5b remains separately verified efa069e5. Its first normalCI39432679480 is now terminalFAIL, receipt44fed9cf:11of13jobsSUCCESS, shard2setupfailed BEFORETESTS and aggregatefailed; only executed shards1/3/4 earn2,041browserPASS8skip0flake/fail,18RPC3bill,3successful cleanups plusfailedshard2ownedcleanup. Threezones36,387PASS each+2expectedFAIL+123skip,DB461/189/458,other3workflowsSUCCESS. No shard2test credit or rerun. Seven featureconfiguration gaps remain. First invitation1070 head e8 CI39433417752 allthreezones fail the same two staticgraph classifications: new real recursive collector omitted from explicitlist. RawfirstLA/Tokyo receipt272c1948 preserved. Root preclaimed and privately committed25189e175 the ONE sorted literal registration; exact inverse restores all originalguard bytes/oracles, complete59PASS each UTC/LA/Tokyo+lint0, frozen71896252/independenta1a97a9d. No new closure; first1070 shard1 remains observed before successor push, other3browsersSUCCESS, finalactualHTTP4 acceptance pending. New draft1071 head0e2a8e0d isolatedkernelmechanism has source/staticpeer42e4bd4f/bd8f671f plus79relatedguards, but actualfirstLinux39436072492 FAILS EACCES before runtime summary; uploadalsofails/artifacts0, receiptc87e3a6c. No native mechanism or historicalcause credit; read-onlydiagnosis ongoing, no blindrerun or source weakening. GitHub production52HTTP401 awaits owner matchingsecret/project update; exactsetupsteps delivered, no update assumed. These newer source/IDs/onefinite mobileartifactPASS are not yet adopted into this heldsource. Its15331rows/1983finiteclosures12.93% remain unchanged. First source2eb full28workflow qualification remains dated; all27reservedSQL+0487, schema/identity/oldversiondrain/reconciliation/controlledliveacceptance prerequisites remain. This documentation checkpoint does not earn fresh Actions sourceacceptance. PRODUCTION READY: NO.
+
 ## Mobile ownership merged and deployed; invitation consent fix enters first real HTTP CI — 2026-10-20T13:48:39.033Z
 
 - Last Updated: 2026-10-20T13:48:39.033Z
