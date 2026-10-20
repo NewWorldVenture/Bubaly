@@ -667,10 +667,10 @@ export function DocumentsModule() {
               <datalist id="folder-options">{folders.map((f) => <option key={f.name} value={f.name} />)}</datalist>
             </>
           )}</Field>
-          <Field label={tr('documents.visibility')}>{(id) => (
+          <Field label={tr('family.member')}>{(id) => (
             <Select id={id} value={form.member_id} onChange={(e) => setForm((f) => ({ ...f, member_id: e.target.value }))}>
-              <option value="">{tr('documents.sharedWithFamily')}</option>
-              {members.map((m) => <option key={m.id} value={m.id}>{tr('documents.private')} {m.display_name}</option>)}
+              <option value="">{tr('family.family')}</option>
+              {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </Select>
           )}</Field>
           <Field label={tr('documents.expiresOptional')} hint={tr('documentsModule.forPassportsInsuranceRegistrationsBubaly')}>{(id) => <Input id={id} type="date" value={form.expires_at} onChange={(e) => setForm((f) => ({ ...f, expires_at: e.target.value }))} />}</Field>

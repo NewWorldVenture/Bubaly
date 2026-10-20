@@ -228,7 +228,11 @@ describe('schema audit API-key header compatibility', () => {
       expect(options?.method ?? 'GET').toBe('GET');
     }
     expect(logged).not.toHaveBeenCalled();
-    expect(errors).toHaveBeenCalledTimes(53);
+    expect(errors).toHaveBeenCalledTimes(54);
+    const format = selectedKey.startsWith('sb_secret_') ? 'opaque-secret'
+      : selectedKey.startsWith('sb_publishable_') ? 'opaque-publishable' : 'jwt-shaped';
+    expect(errors).toHaveBeenNthCalledWith(1,
+      `Schema audit credential selection: source=SUPABASE_SERVICE_ROLE_KEY, format=${format} (format is not validity or privilege proof).`);
     for (const [table] of SCHEMA_CHECKS) {
       expect(errors).toHaveBeenCalledWith(`ERROR   ${table} (HTTP 401)`);
     }
@@ -237,5 +241,217 @@ describe('schema audit API-key header compatibility', () => {
     for (const privateValue of [privateBody, selectedKey, publicFallback, workflowFallback]) {
       expect(output).not.toContain(privateValue);
     }
+  });
+});
+
+describe('schema audit redacted failure diagnostics', () => {
+  const privateText = 'PRIVATE: sb_secret_never_log_this user@example.invalid';
+  const jsonFailure = (status: number, value: unknown) => new Response(JSON.stringify(value), {
+    status, headers: { 'content-type': 'application/json; charset=utf-8' },
+  });
+  const check = [['workload_snapshots', '0174.sql']];
+
+  it.each([
+    [401, 'PGRST301', 'jwt-rejection-reported'],
+    [401, 'PGRST302', 'authentication-required-reported'],
+    [401, 'PGRST303', 'jwt-claims-rejection-reported'],
+    [401, '42501', 'insufficient-privilege-reported'],
+    [403, '42501', 'insufficient-privilege-reported'],
+    [500, 'PGRST300', 'jwt-verifier-unavailable-reported'],
+  ])('records only the fixed category for HTTP %i and %s', async (status, code, diagnosis) => {
+    const results = await auditSupabaseSchema({
+      url, key, checks: check, fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(jsonFailure(Number(status), {
+        code, message: privateText, hint: privateText, details: { secret: privateText },
+      })),
+    });
+    expect(results).toEqual([{ table: 'workload_snapshots', migration: '0174.sql', status, ok: false, diagnosis }]);
+    expect(JSON.stringify(results)).not.toContain(privateText);
+    expect(JSON.stringify(results)).not.toContain(String(code));
+  });
+
+  it('recognizes only the exact code-less API-key rejection literal', async () => {
+    const results = await auditSupabaseSchema({
+      url, key, checks: check, fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(jsonFailure(401, {
+        message: 'Invalid API key', hint: privateText,
+      })),
+    });
+    expect(results[0]).toMatchObject({ status: 401, ok: false, diagnosis: 'api-key-rejection-reported' });
+    expect(JSON.stringify(results)).not.toContain(privateText);
+  });
+
+  it.each([
+    [403, { message: 'Invalid API key' }],
+    [401, { code: 'unknown-private-code', message: 'Invalid API key' }],
+    [401, { code: null, message: 'Invalid API key' }],
+    [401, { code: ['PGRST301'] }],
+    [401, { code: 'constructor' }],
+    [401, { code: 'pgrst301' }],
+    [403, { code: 'PGRST301' }],
+    [401, { code: 'PGRST300' }],
+    [500, { code: '42501' }],
+    [401, { message: 'Invalid API key with private details' }],
+    [401, { hint: 'PGRST301', details: 'Invalid API key' }],
+    [401, [{ code: 'PGRST301' }]],
+    [401, null],
+    [401, 'PGRST301'],
+  ])('does not infer a category from contradictory or unknown payload %#', async (status, payload) => {
+    const results = await auditSupabaseSchema({
+      url, key, checks: check,
+      fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(jsonFailure(status, payload)),
+    });
+    expect(results).toEqual([{ table: 'workload_snapshots', migration: '0174.sql', status, ok: false }]);
+  });
+
+  it.each(['text/plain', 'text/html'])('ignores a JSON-looking body served as %s', async (contentType) => {
+    const response = new Response('{"code":"PGRST301"}', { status: 401, headers: { 'content-type': contentType } });
+    const reader = vi.spyOn(response.body!, 'getReader');
+    const results = await auditSupabaseSchema({ url, key, checks: check, fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(response) });
+    expect(reader).not.toHaveBeenCalled();
+    expect(results[0]).toEqual({ table: 'workload_snapshots', migration: '0174.sql', status: 401, ok: false });
+  });
+
+  it('retains observed HTTP status when body cancellation rejects', async () => {
+    const response = new Response(privateText, { status: 401 });
+    const cancel = vi.spyOn(response.body!, 'cancel').mockRejectedValueOnce(new Error(privateText));
+    const results = await auditSupabaseSchema({ url, key, checks: check, fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(response) });
+    expect(results).toEqual([{ table: 'workload_snapshots', migration: '0174.sql', status: 401, ok: false }]);
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains observed HTTP status when reading diagnostic bytes fails', async () => {
+    const response = new Response(new ReadableStream({ start(controller) { controller.error(new Error(privateText)); } }), {
+      status: 403, headers: { 'content-type': 'application/json' },
+    });
+    const results = await auditSupabaseSchema({ url, key, checks: check, fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(response) });
+    expect(results).toEqual([{ table: 'workload_snapshots', migration: '0174.sql', status: 403, ok: false }]);
+  });
+
+  it.each(['{"code":"PGRST301"', 'not-json-private-diagnostic'])('ignores malformed JSON without losing the HTTP status: %#', async (body) => {
+    const response = new Response(body, { status: 401, headers: { 'content-type': 'application/json' } });
+    const results = await auditSupabaseSchema({ url, key, checks: check, fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(response) });
+    expect(results).toEqual([{ table: 'workload_snapshots', migration: '0174.sql', status: 401, ok: false }]);
+  });
+
+  it('ignores invalid UTF-8 instead of classifying replacement text', async () => {
+    const prefix = new TextEncoder().encode('{"code":"PGRST301","details":"');
+    const suffix = new TextEncoder().encode('"}');
+    const body = new Uint8Array(prefix.length + 2 + suffix.length);
+    body.set(prefix); body.set([0xc3, 0x28], prefix.length); body.set(suffix, prefix.length + 2);
+    const response = new Response(body, {
+      status: 401, headers: { 'content-type': 'application/json' },
+    });
+    const results = await auditSupabaseSchema({ url, key, checks: check, fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(response) });
+    expect(results).toEqual([{ table: 'workload_snapshots', migration: '0174.sql', status: 401, ok: false }]);
+  });
+
+  it('retains observed HTTP status when diagnostic header inspection throws', async () => {
+    const response = jsonFailure(401, { code: 'PGRST301' });
+    vi.spyOn(response.headers, 'get').mockImplementation(() => { throw new Error(privateText); });
+    const results = await auditSupabaseSchema({ url, key, checks: check, fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(response) });
+    expect(results).toEqual([{ table: 'workload_snapshots', migration: '0174.sql', status: 401, ok: false }]);
+  });
+
+  it('never reads a successful JSON body and preserves success if cleanup rejects', async () => {
+    const response = jsonFailure(200, { code: 'PGRST301', message: privateText });
+    const reader = vi.spyOn(response.body!, 'getReader');
+    const json = vi.spyOn(response, 'json');
+    const text = vi.spyOn(response, 'text');
+    const arrayBuffer = vi.spyOn(response, 'arrayBuffer');
+    const blob = vi.spyOn(response, 'blob');
+    const cancel = vi.spyOn(response.body!, 'cancel').mockRejectedValueOnce(new Error(privateText));
+    const results = await auditSupabaseSchema({ url, key, checks: check, fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(response) });
+    expect(reader).not.toHaveBeenCalled();
+    for (const method of [json, text, arrayBuffer, blob]) expect(method).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(results).toEqual([{ table: 'workload_snapshots', migration: '0174.sql', status: 200, ok: true }]);
+  });
+
+  it('bounds diagnostic bytes, including multibyte text, and cancels the stream', async () => {
+    const cancelled = vi.fn();
+    const oversized = new TextEncoder().encode(JSON.stringify({ code: 'PGRST301', details: '😀'.repeat(1100) }));
+    expect(oversized.byteLength).toBeGreaterThan(4096);
+    const response = new Response(new ReadableStream({
+      start(controller) { controller.enqueue(oversized); }, cancel: cancelled,
+    }), { status: 401, headers: { 'content-type': 'application/json' } });
+    const results = await auditSupabaseSchema({ url, key, checks: check, fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(response) });
+    expect(results[0]).not.toHaveProperty('diagnosis');
+    expect(results[0]).toMatchObject({ status: 401, ok: false });
+    expect(cancelled).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts exactly 4096 bytes across chunks without emitting private padding', async () => {
+    const base = JSON.stringify({ code: 'PGRST301', details: '' });
+    const body = new TextEncoder().encode(JSON.stringify({ code: 'PGRST301', details: 'x'.repeat(4096 - base.length) }));
+    expect(body.byteLength).toBe(4096);
+    const response = new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(body.slice(0, 9)); controller.enqueue(body.slice(9)); controller.close();
+      },
+    }), { status: 401, headers: { 'content-type': 'application/json' } });
+    const results = await auditSupabaseSchema({ url, key, checks: check, fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(response) });
+    expect(results[0]).toMatchObject({ status: 401, diagnosis: 'jwt-rejection-reported' });
+    expect(JSON.stringify(results)).not.toContain('xxxxx');
+  });
+
+  it('rejects a valid error payload exactly one byte over the accepted-body limit', async () => {
+    const base = JSON.stringify({ code: 'PGRST301', details: '' });
+    const body = JSON.stringify({ code: 'PGRST301', details: 'x'.repeat(4097 - base.length) });
+    expect(new TextEncoder().encode(body).byteLength).toBe(4097);
+    const results = await auditSupabaseSchema({ url, key, checks: check, fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(body, { status: 401, headers: { 'content-type': 'application/json' } }),
+    ) });
+    expect(results).toEqual([{ table: 'workload_snapshots', migration: '0174.sql', status: 401, ok: false }]);
+  });
+
+  it('bounds empty chunks without waiting for a starved timeout', async () => {
+    const cancelled = vi.fn();
+    const pulled = vi.fn((controller: ReadableStreamDefaultController<Uint8Array>) => controller.enqueue(new Uint8Array()));
+    const response = new Response(new ReadableStream({ pull: pulled, cancel: cancelled }), {
+      status: 401, headers: { 'content-type': 'application/json' },
+    });
+    const results = await auditSupabaseSchema({ url, key, checks: check, fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(response) });
+    expect(results[0]).toEqual({ table: 'workload_snapshots', migration: '0174.sql', status: 401, ok: false });
+    expect(pulled.mock.calls.length).toBeLessThanOrEqual(129);
+    expect(cancelled).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the original deadline for a stalled body even when cancellation never settles', async () => {
+    const cancelled = vi.fn(() => new Promise<void>(() => {}));
+    const response = new Response(new ReadableStream({ cancel: cancelled }), {
+      status: 401, headers: { 'content-type': 'application/json' },
+    });
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(response);
+    const results = await auditSupabaseSchema({ url, key, checks: check, fetchImpl, timeoutMs: 15 });
+    expect(fetchImpl.mock.calls[0][1]?.signal?.aborted).toBe(true);
+    expect(results).toEqual([{ table: 'workload_snapshots', migration: '0174.sql', status: 401, ok: false }]);
+    expect(cancelled).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['SUPABASE_SERVICE_ROLE_KEY', 'sb_secret_synthetic_refused', 'opaque-secret'],
+    ['SUPABASE_SERVICE_ROLE_KEY', 'sb_publishable_synthetic_refused', 'opaque-publishable'],
+    ['NEXT_PUBLIC_SUPABASE_ANON_KEY', 'not-base64.not-decoded.not-verified', 'jwt-shaped'],
+    ['SUPABASE_ANON_KEY', 'unknown-synthetic-refused', 'unrecognized'],
+  ])('reports fixed selection metadata for %s without exposing or replacing its value', async (source, selectedKey, format) => {
+    for (const name of ['SUPABASE_SERVICE_ROLE_KEY', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_ANON_KEY']) vi.stubEnv(name, '');
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', url);
+    vi.stubEnv(source, selectedKey);
+    if (source === 'SUPABASE_SERVICE_ROLE_KEY') vi.stubEnv('SUPABASE_ANON_KEY', 'never-retry-this-fallback');
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => jsonFailure(401, {
+      code: 'PGRST301', message: selectedKey, hint: privateText,
+    }));
+    vi.stubGlobal('fetch', fetchImpl);
+    expect(await runSchemaAuditCli()).toBe(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(52);
+    for (const [, options] of fetchImpl.mock.calls) expect(options?.headers).toHaveProperty('apikey', selectedKey);
+    expect(errors).toHaveBeenNthCalledWith(1,
+      `Schema audit credential selection: source=${source}, format=${format} (format is not validity or privilege proof).`);
+    for (const [table] of SCHEMA_CHECKS) expect(errors).toHaveBeenCalledWith(`ERROR   ${table} (HTTP 401) [jwt-rejection-reported]`);
+    expect(errors).toHaveBeenLastCalledWith('\nSchema audit failed: 52 of 52 required schema checks unavailable.');
+    const output = JSON.stringify([...errors.mock.calls, ...logs.mock.calls]);
+    for (const hidden of [selectedKey, privateText, 'never-retry-this-fallback', 'PGRST301']) expect(output).not.toContain(hidden);
+    expect(logs).not.toHaveBeenCalled();
   });
 });

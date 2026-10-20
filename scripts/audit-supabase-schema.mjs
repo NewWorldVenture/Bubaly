@@ -58,6 +58,86 @@ export const SCHEMA_CHECKS = [
   ['family_automation_rules.runtime_columns', '0259_routine_schedules.sql', 'schedule_kind,schedule_expr,anchor_key,offset_days,at_hour,next_run_at,said,source_request_id'],
 ];
 
+// Only fixed diagnostic categories leave this parser. Provider messages, hints,
+// details, arbitrary codes and credential values must never reach audit output.
+const ERROR_BODY_LIMIT = 4096;
+const REPORTED_ERRORS = new Map([
+  ['401:PGRST301', 'jwt-rejection-reported'],
+  ['401:PGRST302', 'authentication-required-reported'],
+  ['401:PGRST303', 'jwt-claims-rejection-reported'],
+  ['401:42501', 'insufficient-privilege-reported'],
+  ['403:42501', 'insufficient-privilege-reported'],
+  ['500:PGRST300', 'jwt-verifier-unavailable-reported'],
+]);
+
+function cancelBody(body) {
+  // Cleanup must neither erase a received HTTP status nor hold up the audit.
+  try { Promise.resolve(body?.cancel()).catch(() => {}); } catch { /* best effort */ }
+}
+
+async function reportedFailure(response, signal) {
+  let reader;
+  let onAbort;
+  try {
+    const contentType = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
+    if (![401, 403, 500].includes(response.status) || contentType !== 'application/json' || !response.body) {
+      return undefined;
+    }
+    reader = response.body.getReader();
+    const aborted = Symbol('aborted');
+    const deadline = new Promise((resolve) => {
+      onAbort = () => resolve(aborted);
+      if (signal.aborted) onAbort();
+      else signal.addEventListener('abort', onAbort, { once: true });
+    });
+    const chunks = [];
+    let length = 0;
+    let reads = 0;
+    while (true) {
+      // Also bound empty/tiny chunks, which could otherwise starve the timer.
+      if (++reads > 128) return undefined;
+      const chunk = await Promise.race([reader.read(), deadline]);
+      if (chunk === aborted) return undefined;
+      if (chunk.done) break;
+      length += chunk.value.byteLength;
+      if (length > ERROR_BODY_LIMIT) return undefined;
+      chunks.push(chunk.value);
+    }
+    const bytes = new Uint8Array(length);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    const error = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+    if (!error || typeof error !== 'object' || Array.isArray(error)) return undefined;
+    if (Object.hasOwn(error, 'code')) {
+      return typeof error.code === 'string'
+        ? REPORTED_ERRORS.get(`${response.status}:${error.code}`)
+        : undefined;
+    }
+    // This records an exact provider-reported literal, not proof of the key's
+    // validity, source, privilege, or the cause of a different response.
+    if (response.status === 401 && error.message === 'Invalid API key') {
+      return 'api-key-rejection-reported';
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  } finally {
+    if (onAbort) signal.removeEventListener('abort', onAbort);
+    if (reader) cancelBody(reader);
+    else cancelBody(response.body);
+  }
+}
+
+function keyFormat(key) {
+  if (key.startsWith('sb_secret_')) return 'opaque-secret';
+  if (key.startsWith('sb_publishable_')) return 'opaque-publishable';
+  const segments = key.split('.');
+  return segments.length === 3 && segments.every(Boolean) ? 'jwt-shaped' : 'unrecognized';
+}
+
 export async function auditSupabaseSchema({
   url,
   key,
@@ -90,8 +170,13 @@ export async function auditSupabaseSchema({
           // Never forward an API key to a redirected destination.
           redirect: 'error',
         });
-        await response.body?.cancel();
-        results[index] = { table, migration, status: response.status, ok: response.ok };
+        let diagnosis;
+        if (response.ok) cancelBody(response.body);
+        else diagnosis = await reportedFailure(response, signal);
+        results[index] = {
+          table, migration, status: response.status, ok: response.ok,
+          ...(diagnosis ? { diagnosis } : {}),
+        };
       } catch {
         // Exception messages and response bodies can contain private data.
         results[index] = {
@@ -109,9 +194,12 @@ export async function runSchemaAuditCli() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   // Server credentials cover private infrastructure tables. The public-key
   // fallbacks also support read-only diagnostics before those are configured.
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-    || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    || process.env.SUPABASE_ANON_KEY;
+  const selected = [
+    ['SUPABASE_SERVICE_ROLE_KEY', process.env.SUPABASE_SERVICE_ROLE_KEY],
+    ['NEXT_PUBLIC_SUPABASE_ANON_KEY', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY],
+    ['SUPABASE_ANON_KEY', process.env.SUPABASE_ANON_KEY],
+  ].find(([, value]) => Boolean(value));
+  const key = selected?.[1];
   if (!url || !key) {
     console.error('NEXT_PUBLIC_SUPABASE_URL and a Supabase API key are required.');
     return 1;
@@ -123,16 +211,19 @@ export async function runSchemaAuditCli() {
     console.error('Schema audit configuration is invalid. Check the Supabase API URL.');
     return 1;
   }
+  const failures = results.filter((result) => !result.ok);
+  if (failures.length) {
+    console.error(`Schema audit credential selection: source=${selected[0]}, format=${keyFormat(key)} (format is not validity or privilege proof).`);
+  }
   for (const result of results) {
     if (result.ok) {
       console.log(`OK      ${result.table}`);
     } else if (result.status === 404 || (result.table.includes('.') && result.status === 400)) {
       console.error(`MISSING ${result.table} (${result.migration})`);
     } else {
-      console.error(`ERROR   ${result.table} (HTTP ${result.status || 'network'})${result.error ? `: ${result.error}` : ''}`);
+      console.error(`ERROR   ${result.table} (HTTP ${result.status || 'network'})${result.error ? `: ${result.error}` : ''}${result.diagnosis ? ` [${result.diagnosis}]` : ''}`);
     }
   }
-  const failures = results.filter((result) => !result.ok);
   if (failures.length) {
     console.error(`\nSchema audit failed: ${failures.length} of ${results.length} required schema checks unavailable.`);
     return 1;
