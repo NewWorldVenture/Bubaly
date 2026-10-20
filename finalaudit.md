@@ -1,5 +1,11 @@
 # Final Production Audit
 
+## Main releases adopted with local combined qualification; exact-head hosted gates required — 2026-10-20T14:25:16.293Z
+
+- Last Updated: 2026-10-20T14:25:16.293Z
+
+Root 2026-10-20T14:25:16.293Z: Private main5b+held source1ae50db6 exactimmutableunion accepted ca327d21/root3d2278bc: all6641nonledgerleaves/modes,81held+10main sourcechanges, all28SQL/rawpins/runbook/holds preserved. Local whole52changed/relatedrootfixtures1194PASS0skip/fail and fullnonincrementalroottypes exit0/emptylog; sourcefrozen. Separate exact1ae ownedG checkout cleaninstalled575mobilepackages with postinstallverify/patch2runtimeentries; actualSDK2.115 native27+storage13+braces9=49PASS0skip/cancel/fail, fullmobiletypes0/emptylog. No SDKmethodsreplaced/externalrequests/physicaldeviceclaim. First linked-dependency guardrefusal and npm-distribution-notfound retained as setup failures; no tests credited there. Automaticreview denied removal of temporaryjunction; preserveit and use separateownedcheckout. Fresh currentcompletehostedbuild/threezones/allbrowser/22SQL/nativeprivacy/cutover workflows required; predecessor2ebqualification nottransferred. Publish combinedheldcandidate for firstexacthead qualification only, notproduction/schema rollout; all27reserved+0487/ownerkey/schema/identity/versiondrain/reconciliation/liveacceptance holds unchanged. Register15334/1982closures12.93%; expandedpathguard deliberatelyIP preservesbothparents, no newclosurecredit. PRODUCTION READY: NO.
+
 ## Released fixes privately composed with held privacy source; qualification pending — 2026-10-20T14:15:42.725Z
 
 - Last Updated: 2026-10-20T14:15:42.725Z
