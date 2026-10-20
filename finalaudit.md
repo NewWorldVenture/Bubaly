@@ -1,5 +1,11 @@
 # Final Production Audit
 
+## Qualified main releases allocated for private adoption into held privacy source — 2026-10-20T14:14:28.495Z
+
+- Last Updated: 2026-10-20T14:14:28.495Z
+
+Root 2026-10-20T14:14:28.495Z: BEFORE source composition allocate private normal merge of exact qualified/deployed MAIN5b353b9c0d06eecab7cc714f951ca3738e6df6ba into current held770ff0f7. Independent readonlymapab943594 compares commonbase38225bd9: ten incoming nonledger paths disjoint from81heldpaths; c81-to770 is auditonly. Incoming: .github/workflows/mobile-braces-depth-guard.yml, lib/supabase/bearer.ts, mobile/package.json, mobile/scripts/device-signout-ownership.test.mjs, mobile/src/lib/chunked-storage.ts, mobile/src/lib/sign-out.ts, mobile/src/lib/supabase.ts, tests/a-paths-filter-must-list-what-it-gates.test.ts, tests/bearer-auth-outage.test.ts, tests/e2e/contact-center-sms-text.spec.ts. Adopt exact source/modes, no edits to qualified bodies; union all permanent IDs including new SUPPORT-480BA7BF3391/SUPPORT-09A2C3E5CF34/SUPPORT-8175B44B37F8 and retain117held-only IDs. Base-aware row adoption preserves both histories; sole independently changed commonrow SUPPORT-10A1387B70DC must retain held FIXED+PASS historicalscope and main current IN PROGRESS calibration/evidence, with current status IN PROGRESS pending combinedqualification. All27reservedSQL+0487/productionhold/runbook/nativeprivacycutover artifacts must remain exact. Preserve firstmain44fed9 partialfailure and actualdefault efa069e5 separately. This is PRIVATE composition, not publication/rollout or passingcombinedsource. Fresh composition source/ledger/holdpeer, appropriate unit/mobile/browser/types/build and final exacthead hosted qualification required. New1070/1071 source is not adopted before its own qualification. No production/schema/config/credentials/money action or newclosurecredit. PRODUCTION READY: NO.
+
 ## Actual invitation HTTP controls qualify; corrected head begins fresh hosted gates — 2026-10-20T14:10:54.978Z
 
 - Last Updated: 2026-10-20T14:10:54.978Z
