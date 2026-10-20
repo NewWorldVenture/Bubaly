@@ -27,6 +27,13 @@ function requireThat(condition, code) {
 const errorCode = error => /^[A-Z0-9_]+$/.test(error?.code ?? '') ? error.code : 'REHEARSAL_ASSERTION_FAILED';
 const checkPins = expected => requireThat(JSON.stringify(pins()) === JSON.stringify(expected), 'SOURCE_CHANGED');
 
+export function parseInitNamespaceRead(result) {
+  requireThat(!result.error && result.signal === null && result.status === 0, 'INIT_NAMESPACE_COMMAND_FAILED');
+  requireThat(result.stderr === '' && typeof result.stdout === 'string' &&
+    /^net:\[\d+\]\n?$/.test(result.stdout), 'INIT_NAMESPACE_OUTPUT_INVALID');
+  return result.stdout.trim();
+}
+
 export function validateController(env, platform, uid) {
   requireThat(platform === 'linux', 'REFUSE_NON_LINUX');
   requireThat(Number.isInteger(uid) && uid > 0, 'REFUSE_ROOT_CONTROLLER');
@@ -293,6 +300,13 @@ function selfCheck() {
   }
   assert.deepEqual([...parseReserved(addReserved('60000,60002-60003\n', 54322))], [54322, 60000, 60002, 60003]); count++;
   for (const invalid of ['0', '65536', '2-1', '1;2', 'one']) { assert.throws(() => parseReserved(invalid)); count++; }
+  const initRead = { status: 0, signal: null, error: undefined, stdout: 'net:[10]\n', stderr: '' };
+  assert.equal(parseInitNamespaceRead(initRead), 'net:[10]'); count++;
+  for (const change of [{ status: 1 }, { signal: 'SIGTERM' }, { error: { code: 'EACCES' } },
+    { stderr: 'denied' }, { stdout: '' }, { stdout: 'net:[10]\nnet:[20]\n' },
+    { stdout: 'pid:[10]\n' }, { stdout: ' net:[10]\n' }]) {
+    assert.throws(() => parseInitNamespaceRead({ ...initRead, ...change })); count++;
+  }
   console.log(JSON.stringify({ status: 'PASS', scope: 'static invocation/namespace/refusal/parser controls; no native Linux execution', cases: count, sourcePins }));
 }
 
@@ -306,20 +320,65 @@ async function controller() {
   } else requireThat(event.after === expected, 'REFUSE_PUSH_HEAD');
   const git = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', timeout: 5000, cwd: root });
   requireThat(git.status === 0 && git.stdout.trim() === expected, 'REFUSE_CHECKOUT_HEAD');
-  requireThat(namespace('self') === namespace(1), 'REFUSE_NON_HOST_CONTROLLER');
-  requireThat(realpathSync(script) === script && realpathSync(workflow) === workflow, 'REFUSE_SOURCE_SYMLINK');
-  const sourcePins = pins(), hostBefore = kernel(), hostNamespace = namespace('self');
-  const controllerIdentity = processInfo(process.pid);
   const output = join(realpathSync(process.env.RUNNER_TEMP), `bubaly-port-rehearsal-${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}`);
   requireThat(!existsSync(output), 'REFUSE_EXISTING_OUTPUT');
   mkdirSync(output);
-  const summary = { at: new Date().toISOString(), head: expected, sourcePins, hostNamespace, hostBefore,
+  const summaryPath = join(output, 'summary.json');
+  const summary = { at: new Date().toISOString(), head: expected, sourcePins: null, hostNamespace: null, hostBefore: null,
+    stage: 'valid-run-before-probes', failureStage: null, hostAnchorVerified: false, hostSysctlsByteEqual: null,
     children: [], primaryError: null, cleanupErrors: [], status: 'FAIL',
     limits: ['Mechanism proof under a deliberately constrained private namespace range.',
       'Does not identify the historical CI socket owner, actual range, registry causality or Docker daemon behavior.',
       'No Supabase, Docker, provider, production, host sysctl or existing CI startup change.'] };
+  // Establish a valid-run failure artifact BEFORE permission-sensitive probes.
+  // Stage labels and errno codes identify failures without exposing raw paths/env.
+  writeFileSync(summaryPath, JSON.stringify(summary, null, 2) + '\n', { flag: 'wx' });
+  const stage = name => {
+    summary.stage = name;
+    writeFileSync(summaryPath, JSON.stringify(summary, null, 2) + '\n');
+  };
+  let sourcePins, hostBefore, hostNamespace;
   try {
+    stage('source-pins-and-realpaths');
+    sourcePins = pins();
+    summary.sourcePins = sourcePins;
+    requireThat(realpathSync(script) === script && realpathSync(workflow) === workflow, 'REFUSE_SOURCE_SYMLINK');
+    stage('controller-kernel-settings');
+    hostBefore = kernel();
+    summary.hostBefore = hostBefore;
+    stage('controller-network-namespace');
+    hostNamespace = namespace('self');
+    summary.hostNamespace = hostNamespace;
+    stage('unprivileged-init-namespace-read');
+    try {
+      summary.initNamespaceUnprivileged = { outcome: 'read', namespace: namespace(1) };
+    } catch (error) {
+      summary.initNamespaceUnprivileged = { outcome: 'error', code: errorCode(error) };
+      // Access is subject to Linux ptrace checks. Record the actual result, then
+      // use ONE fixed read-only privileged probe; other errors still fail closed.
+      if (!['EACCES', 'EPERM'].includes(error.code)) throw error;
+    }
+    stage('privileged-init-namespace-read');
+    const initRead = spawnSync('/usr/bin/sudo', ['-n', '--', '/usr/bin/readlink', '--', '/proc/1/ns/net'], {
+      encoding: 'utf8', timeout: 5000, maxBuffer: 4096,
+      env: { PATH: '/usr/sbin:/usr/bin:/sbin:/bin', LANG: 'C' },
+    });
+    summary.initNamespacePrivileged = { exit: initRead.status, signal: initRead.signal,
+      error: initRead.error ? errorCode(initRead.error) : null,
+      stdoutBytes: Buffer.byteLength(initRead.stdout ?? ''), stderrBytes: Buffer.byteLength(initRead.stderr ?? ''),
+      stdoutSha256: createHash('sha256').update(initRead.stdout ?? '').digest('hex'),
+      stderrSha256: createHash('sha256').update(initRead.stderr ?? '').digest('hex') };
+    const initNamespace = parseInitNamespaceRead(initRead);
+    summary.initNamespacePrivileged.namespace = initNamespace;
+    requireThat(hostNamespace === initNamespace, 'REFUSE_NON_HOST_CONTROLLER');
+    if (summary.initNamespaceUnprivileged.outcome === 'read') {
+      requireThat(summary.initNamespaceUnprivileged.namespace === initNamespace, 'INIT_NAMESPACE_READ_MISMATCH');
+    }
+    summary.hostAnchorVerified = true;
+    stage('controller-process-identity');
+    const controllerIdentity = processInfo(process.pid);
     for (const operation of ['host-refusal', 'source-refusal', 'injected-failure', 'proof']) {
+      stage(`child-${operation}`);
       const manifest = { operation, nonce: randomUUID(), sourcePins: operation === 'source-refusal' ? { ...sourcePins, script: '0'.repeat(64) } : sourcePins,
         hostNamespace, controllerPid: process.pid, controllerUid: process.getuid(),
         controllerStart: controllerIdentity.start, executable: process.execPath, script, workflow };
@@ -370,19 +429,39 @@ async function controller() {
     }
   } catch (error) {
     summary.primaryError = errorCode(error);
+    summary.failureStage = summary.stage;
   } finally {
-    try {
-      summary.hostAfter = kernel();
-      assert.deepEqual(summary.hostAfter, hostBefore);
-      requireThat(namespace('self') === hostNamespace, 'HOST_NAMESPACE_CHANGED');
-      checkPins(sourcePins);
-      summary.hostSysctlsByteEqual = true;
-    } catch (error) { summary.cleanupErrors.push(errorCode(error)); }
+    if (hostBefore) {
+      try {
+        summary.hostAfter = kernel();
+        assert.deepEqual(summary.hostAfter, hostBefore);
+        summary.controllerSysctlsByteEqual = true;
+        if (summary.hostAnchorVerified) summary.hostSysctlsByteEqual = true;
+      } catch (error) { summary.cleanupErrors.push(errorCode(error)); }
+    }
+    if (hostNamespace) {
+      try { requireThat(namespace('self') === hostNamespace, 'HOST_NAMESPACE_CHANGED'); }
+      catch (error) { summary.cleanupErrors.push(errorCode(error)); }
+    }
+    if (sourcePins) {
+      try { checkPins(sourcePins); }
+      catch (error) { summary.cleanupErrors.push(errorCode(error)); }
+    }
     summary.status = summary.primaryError || summary.cleanupErrors.length ? 'FAIL' : 'PASS';
-    writeFileSync(join(output, 'summary.json'), JSON.stringify(summary, null, 2) + '\n', { flag: 'wx' });
+    summary.stage = 'finished';
+    try { writeFileSync(summaryPath, JSON.stringify(summary, null, 2) + '\n'); }
+    catch (error) {
+      summary.cleanupErrors.push(errorCode(error));
+      summary.status = 'FAIL';
+      // The earlier staged artifact remains a failure. Preserve the original
+      // exception in the terminal summary even if the final artifact write fails.
+      console.error(JSON.stringify({ primaryError: summary.primaryError,
+        artifactError: errorCode(error), failureStage: summary.failureStage }));
+    }
   }
   console.log(JSON.stringify({ status: summary.status, children: summary.children.length,
-    hostSysctlsByteEqual: summary.hostSysctlsByteEqual === true, sourcePins, primaryError: summary.primaryError }));
+    hostSysctlsByteEqual: summary.hostSysctlsByteEqual === true, sourcePins,
+    primaryError: summary.primaryError, failureStage: summary.failureStage }));
   if (summary.status !== 'PASS') process.exitCode = 1;
 }
 
