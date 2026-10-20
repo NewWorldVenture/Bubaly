@@ -1,13 +1,23 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { globSync } from 'node:fs';
-import { join } from 'node:path';
+import { createRequire } from 'node:module';
+import { join, posix } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const ROOT = join(__dirname, '..');
 const WORKFLOWS = join(ROOT, '.github/workflows');
-const scripts = (JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as {
-  scripts: Record<string, string>;
-}).scripts;
+type Defaults = { run?: { 'working-directory'?: string } };
+type Step = { run?: string; 'working-directory'?: string };
+type Workflow = {
+  on?: Record<string, { paths?: string[] } | null>;
+  defaults?: Defaults;
+  jobs?: Record<string, { defaults?: Defaults; steps?: Step[] }>;
+};
+type ScriptLoader = (directory: string) => Record<string, string>;
+const { load } = createRequire(import.meta.url)('js-yaml') as { load(source: string): Workflow };
+const readScripts: ScriptLoader = (directory) => (JSON.parse(
+  readFileSync(join(ROOT, directory, 'package.json'), 'utf8'),
+) as { scripts?: Record<string, string> }).scripts ?? {};
 
 /**
  * A `paths:` filter decides when a push re-runs the workflow, so anything the
@@ -39,28 +49,83 @@ function workflowsWithPathFilters(): { file: string; source: string; paths: stri
   const out: { file: string; source: string; paths: string[] }[] = [];
   for (const file of readdirSync(WORKFLOWS).filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'))) {
     const source = readFileSync(join(WORKFLOWS, file), 'utf8');
-    const head = source.split(/\npermissions:|\njobs:/)[0];
-    if (!/^\s+paths:/m.test(head)) continue;
-    // Quoted AND unquoted: travel-confirmation-runtime.yml writes its paths bare
-    // (`- supabase/migrations/0070_vacations.sql`), and a quoted-only matcher
-    // skipped that whole workflow — the first version of this file did exactly
-    // that, and its own non-vacuity rule is what caught it.
-    const entries = [...head.matchAll(/^\s+- (?:'([^']+)'|"([^"]+)"|([^'"\s#][^\n]*?))\s*$/gm)]
-      .map((m) => (m[1] ?? m[2] ?? m[3]).trim())
-      .filter(Boolean);
-    out.push({ file, source, paths: entries });
+    // Parse real event paths, not comments or unrelated YAML lists. Check each
+    // event separately: a push path cannot make up for a missing PR path.
+    for (const event of Object.values(load(source).on ?? {})) {
+      if (event?.paths) out.push({ file, source, paths: event.paths });
+    }
   }
   return out;
 }
 
-/** Every `scripts/*.mjs` a workflow runs, directly or through an npm script. */
-function scriptsRunBy(source: string): Set<string> {
-  const files = new Set<string>([...source.matchAll(/node (scripts\/[\w.-]+)/g)].map((m) => m[1]));
-  for (const [, name] of source.matchAll(/npm run ([a-z0-9:_-]+)/g)) {
-    for (const m of (scripts[name] ?? '').matchAll(/(scripts\/[\w.-]+\.mjs)/g)) files.add(m[1]);
+function repositoryPath(directory: string, file = '.'): string {
+  const value = posix.normalize(posix.join(directory, file));
+  if (value.startsWith('/') || value === '..' || value.startsWith('../') || /[$\\]/.test(value)) {
+    throw new Error(`Expected a literal repository path, got ${value}`);
+  }
+  return value;
+}
+
+/**
+ * Current workflows use literal Node script commands, npm run and npm ci.
+ * Follow the effective GitHub working directory, nested npm scripts and npm
+ * lifecycles. This is a command/dependency guard, not a general shell parser or
+ * a transitive import analyser; support inputs such as patch JSON remain
+ * explicit workflow paths.
+ */
+function scriptsRunBy(source: string, scriptsAt: ScriptLoader = readScripts): Set<string> {
+  const workflow = load(source);
+  const files = new Set<string>();
+  const visiting = new Set<string>();
+
+  function script(directory: string, name: string, required: boolean, hooks = true) {
+    const scripts = scriptsAt(directory);
+    if (!(name in scripts)) {
+      if (required) throw new Error(`Missing npm script ${directory}:${name}`);
+      return;
+    }
+    const key = `${directory}:${name}`;
+    if (visiting.has(key)) throw new Error(`Cyclic npm script ${key}`);
+    visiting.add(key);
+    if (hooks) script(directory, `pre${name}`, false, false);
+    commands(scripts[name], directory);
+    if (hooks) script(directory, `post${name}`, false, false);
+    visiting.delete(key);
+  }
+
+  function commands(source: string, directory: string) {
+    // Only executable command starts count; YAML/shell comments must not
+    // provide a false dependency. The supported commands are literal.
+    for (const command of source.split(/\n|&&|\|\||;/).map((part) => part.trim())) {
+      if (command.startsWith('#')) continue;
+      const node = command.match(/^node\s+(?:(?:--test|--[\w-]+=[^\s]+)\s+)*((?:\.{1,2}\/)?(?:[\w.-]+\/)*scripts\/[\w.-]+\.mjs)(?:\s|$)/);
+      if (node) files.add(repositoryPath(directory, node[1]));
+      const npm = command.match(/^npm run ([a-z0-9:_-]+)(?:\s|$)/);
+      if (npm) script(directory, npm[1], true);
+      if (/^npm ci(?:\s|$)/.test(command) && !/(?:^|\s)--ignore-scripts(?:\s|$)/.test(command)) {
+        for (const name of ['preinstall', 'install', 'postinstall', 'prepublish', 'preprepare', 'prepare', 'postprepare']) {
+          script(directory, name, false, false);
+        }
+      }
+    }
+  }
+
+  for (const job of Object.values(workflow.jobs ?? {})) {
+    for (const step of job.steps ?? []) {
+      if (!step.run) continue;
+      const directory = repositoryPath(
+        step['working-directory'] ?? job.defaults?.run?.['working-directory']
+        ?? workflow.defaults?.run?.['working-directory'] ?? '.',
+      );
+      commands(step.run, directory);
+    }
   }
   return files;
 }
+
+const workflowFor = (run: string, directory?: string) => JSON.stringify({
+  jobs: { check: { steps: [{ run, ...(directory ? { 'working-directory': directory } : {}) }] } },
+});
 
 describe('a paths filter lists what the workflow depends on', () => {
   it('finds the filtered workflows at all (guards the guard)', () => {
@@ -72,9 +137,9 @@ describe('a paths filter lists what the workflow depends on', () => {
 
   it('resolves npm scripts to their files (calibrates the resolver)', () => {
     // Checked against a real entry, so the rule cannot pass by resolving nothing.
-    const resolved = scriptsRunBy('run: npm run db:audit:queries');
+    const resolved = scriptsRunBy(workflowFor('npm run db:audit:queries'));
     expect(resolved.has('scripts/audit-supabase-queries.mjs')).toBe(true);
-    expect(scriptsRunBy('run: npm run typecheck').size).toBe(0);
+    expect(scriptsRunBy(workflowFor('npm run typecheck')).size).toBe(0);
   });
 
   it('every script a filtered workflow runs is in its paths', () => {
@@ -97,7 +162,8 @@ describe('a paths filter lists what the workflow depends on', () => {
     // that no longer exists.
     for (const { file, source, paths } of workflowsWithPathFilters()) {
       const run = scriptsRunBy(source);
-      for (const p of paths.filter((x) => x.startsWith('scripts/'))) {
+      // JSON/other support inputs need not themselves be executable scripts.
+      for (const p of paths.filter((x) => /(^|\/)scripts\/.*\.mjs$/.test(x))) {
         expect(run.has(p), `${file} lists ${p} but no longer runs it`).toBe(true);
       }
     }
@@ -149,5 +215,76 @@ describe('a paths filter lists what the workflow depends on', () => {
     const source = readFileSync(join(WORKFLOWS, 'supabase-production-migrations.yml'), 'utf8');
     expect(source).toContain('supabase db push --yes');
     expect(source).toContain("supabase/migrations/**");
+  });
+});
+
+describe('path dependencies follow the package actually executed', () => {
+  const packages: Record<string, Record<string, string>> = {
+    '.': { check: 'node scripts/root.mjs' },
+    mobile: {
+      postinstall: 'node scripts/patch.mjs',
+      precheck: 'npm run patch:check && npm run storage:test',
+      check: 'node --test scripts/mobile.test.mjs',
+      postcheck: 'node scripts/after.mjs',
+      'patch:check': 'node scripts/patch.mjs --check',
+      'storage:test': 'node --test scripts/storage.test.mjs',
+    },
+    tools: { check: 'node scripts/tools.mjs' },
+  };
+  const scriptsAt: ScriptLoader = (directory) => packages[directory] ?? {};
+
+  it.each([
+    ['workflow', { defaults: { run: { 'working-directory': 'mobile' } }, jobs: { check: { steps: [{ run: 'npm run check' }] } } }, 'mobile/scripts/mobile.test.mjs'],
+    ['job overrides workflow', { defaults: { run: { 'working-directory': 'tools' } }, jobs: { check: { defaults: { run: { 'working-directory': 'mobile' } }, steps: [{ run: 'npm run check' }] } } }, 'mobile/scripts/mobile.test.mjs'],
+    ['step overrides job', { defaults: { run: { 'working-directory': 'mobile' } }, jobs: { check: { defaults: { run: { 'working-directory': 'mobile' } }, steps: [{ run: 'npm run check', 'working-directory': 'tools' }] } } }, 'tools/scripts/tools.mjs'],
+  ])('resolves %s working-directory without borrowing root scripts', (_name, workflow, expected) => {
+    const resolved = scriptsRunBy(JSON.stringify(workflow), scriptsAt);
+    expect(resolved.has(expected as string)).toBe(true);
+    expect(resolved.has('scripts/root.mjs')).toBe(false);
+  });
+
+  it('follows npm pre/post hooks and nested scripts in that same package', () => {
+    expect([...scriptsRunBy(workflowFor('npm run check', 'mobile'), scriptsAt)].sort()).toEqual([
+      'mobile/scripts/after.mjs', 'mobile/scripts/mobile.test.mjs',
+      'mobile/scripts/patch.mjs', 'mobile/scripts/storage.test.mjs',
+    ]);
+  });
+
+  it('includes npm ci postinstall, but honours an explicit ignore-scripts', () => {
+    expect([...scriptsRunBy(workflowFor('npm ci', 'mobile'), scriptsAt)]).toEqual(['mobile/scripts/patch.mjs']);
+    expect([...scriptsRunBy(workflowFor('npm ci --ignore-scripts', 'mobile'), scriptsAt)]).toEqual([]);
+  });
+
+  it('fails instead of silently accepting a missing package script', () => {
+    expect(() => scriptsRunBy(workflowFor('npm run absent', 'mobile'), scriptsAt)).toThrow('Missing npm script mobile:absent');
+  });
+
+  it('rejects recursive npm scripts instead of overflowing or omitting them', () => {
+    expect(() => scriptsRunBy(workflowFor('npm run loop'), () => ({ loop: 'npm run loop' }))).toThrow('Cyclic npm script .:loop');
+  });
+
+  it('ignores comments and uses the cwd for direct node --test commands', () => {
+    expect([...scriptsRunBy(workflowFor('# node scripts/comment.mjs\nnode --test scripts/direct.test.mjs', 'mobile'))])
+      .toEqual(['mobile/scripts/direct.test.mjs']);
+  });
+
+  it('rejects a dynamic or escaping working directory rather than checking the wrong package', () => {
+    for (const directory of ['${{ matrix.directory }}', '../outside']) {
+      expect(() => scriptsRunBy(workflowFor('npm run check', directory), scriptsAt)).toThrow('Expected a literal repository path');
+    }
+  });
+
+  it('discovers the real mobile install and typecheck dependencies independently of its paths list', () => {
+    const source = readFileSync(join(WORKFLOWS, 'mobile-braces-depth-guard.yml'), 'utf8');
+    expect([...scriptsRunBy(source)].sort()).toEqual([
+      'mobile/scripts/auth-storage-errors.test.mjs',
+      'mobile/scripts/braces-depth-guard.test.mjs',
+      'mobile/scripts/patch-auth-storage-errors.mjs',
+    ]);
+    // The patcher and regression test both read this support file; it is not
+    // an executable npm script, but changes to it must also trigger the gate.
+    for (const event of Object.values(load(source).on ?? {})) {
+      if (event?.paths) expect(event.paths).toContain('mobile/scripts/auth-storage-errors.patch.json');
+    }
   });
 });

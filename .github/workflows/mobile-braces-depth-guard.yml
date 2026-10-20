@@ -8,6 +8,9 @@ on:
       - mobile/vendor/braces/**
       - mobile/vendor/braces-3.0.3-depth-guard.tgz
       - mobile/scripts/braces-depth-guard.test.mjs
+      - mobile/scripts/patch-auth-storage-errors.mjs
+      - mobile/scripts/auth-storage-errors.test.mjs
+      - mobile/scripts/auth-storage-errors.patch.json
       - .github/workflows/mobile-braces-depth-guard.yml
   push:
     branches: [main]
@@ -17,6 +20,9 @@ on:
       - mobile/vendor/braces/**
       - mobile/vendor/braces-3.0.3-depth-guard.tgz
       - mobile/scripts/braces-depth-guard.test.mjs
+      - mobile/scripts/patch-auth-storage-errors.mjs
+      - mobile/scripts/auth-storage-errors.test.mjs
+      - mobile/scripts/auth-storage-errors.patch.json
       - .github/workflows/mobile-braces-depth-guard.yml
 
 permissions:

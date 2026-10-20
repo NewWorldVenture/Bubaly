@@ -29,6 +29,7 @@ on:
       - 'supabase/reserved/0498_a_guest_cannot_feed_the_calendar_or_rewrite_a_grocery_list.sql'
       - 'docs/audit/reserved/a-guest-cannot-feed-the-calendar-or-rewrite-a-grocery-list-check.sql'
       - 'docs/audit/pg-bootstrap.sh'
+      - 'supabase/SEED_ALL.sql'
       - 'supabase/migrations/**'
   push:
     branches: [main]
@@ -37,6 +38,7 @@ on:
       - 'supabase/reserved/0498_a_guest_cannot_feed_the_calendar_or_rewrite_a_grocery_list.sql'
       - 'docs/audit/reserved/a-guest-cannot-feed-the-calendar-or-rewrite-a-grocery-list-check.sql'
       - 'docs/audit/pg-bootstrap.sh'
+      - 'supabase/SEED_ALL.sql'
       - 'supabase/migrations/**'
 
 permissions:
