@@ -518,7 +518,10 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
             catch { connected = false; } // cancel can precede the async start settling
           };
           let content = '';
-          let responseError: string | undefined;
+          // Saved with the turn as `responseError` (the message) and
+          // `responseErrorCode` (describeAIError's code), so the phone can show
+          // its own copy for the code instead of the admin-facing message.
+          let responseError: { message: string; code: string } | undefined;
           const actions: ExecutedAssistantAction[] = [];
           const cards: ResultCard[] = [];
           const runIds: string[] = [];
@@ -581,8 +584,9 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
               // spent and the answer is half an answer: `partially_completed`.
               obs.used(provider.model, undefined);
               obs.failed(streamErr, { partial: true });
-              responseError = describeAIError(streamErr).message;
-              send({ type: 'error', error: responseError });
+              const described = describeAIError(streamErr);
+              responseError = { message: described.message, code: described.code };
+              send({ type: 'error', error: described.message });
             }
           }
 

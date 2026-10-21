@@ -24,9 +24,11 @@ signed-in user) and one visual language (`design/tokens.json`):
 | --- | --- |
 | Shared design tokens (web ⇄ mobile) | `design/tokens.json`, `design/tokens.ts`, `mobile/src/theme/*` (`tests/design-tokens.test.ts` keeps `app/globals.css` in sync) |
 | Routes (expo-router) | `mobile/app/_layout.tsx` (protected routes), `mobile/app/(auth)/sign-in.tsx`, `mobile/app/(tabs)/{index,calendar,chores,grocery,assistant}.tsx`, `mobile/app/settings.tsx` |
-| Supabase auth + data | `mobile/src/lib/supabase.ts` (session in Keychain/Keystore via `chunked-storage.ts`), `family.ts`, `queries.ts` |
+| Supabase auth + data | `mobile/src/lib/supabase.ts` (session in Keychain/Keystore via `chunked-storage.ts`), `family.ts` (the server's active-family rule, mirrored), `queries.ts` (every write confirmed with `.select()`, every read under a deadline) |
 | Assistant (`/api/ai`, JSON transport) | `mobile/src/lib/api.ts`, `assistant-core.ts` → `app/api/ai/route.ts` (`lib/supabase/bearer.ts` authenticates the token) |
-| Unit tests (pure modules, run from the repo root) | `tests/mobile-core.test.ts` |
+| Calendar (`/api/calendar/occurrences`, bearer) | `mobile/src/lib/calendar-core.ts`, `queries.ts` → the route refuses a closed or trial-ended family (`refuseIfLocked`) |
+| Unit tests (pure modules, run from the repo root) | `tests/mobile-core.test.ts`, `tests/mobile-family-pick-parity.test.ts`, `tests/mobile-transport-deadlines.test.ts`, `tests/mobile-session-restore-reason.test.ts`, `tests/mobile-voice-recordings-are-discarded.test.ts` |
+| Screen tests (the real tabs against an in-memory database, run from the repo root) | `tests/mobile-chores-screen.test.ts`, `tests/mobile-grocery-screen.test.ts`, `tests/mobile-tabs-say-when-the-family-is-unknown.test.ts`, `tests/mobile-pull-to-refresh-rereads-the-family.test.ts` |
 | CI | `.github/workflows/ci.yml` → job `mobile` (`npm ci`, `tsc --noEmit`, `expo config`) |
 
 ```bash
@@ -41,8 +43,17 @@ npm run typecheck
   session is stored in secure storage (chunked to stay under the 2 KB Keychain
   guidance). Sign-up, password reset and family setup deep-link to the web app.
 - **Data**: every query runs under the user's JWT, so RLS is identical to the
-  web. Chores are *submitted* from the app; approval and payouts remain
-  manager/server decisions (migration 0223), exactly as on the web.
+  web. "Done" on a chore follows the web service's rule (`lib/services/tasks`
+  `completeChoreAssignment`): a chore that needs no approval settles to `done`,
+  one that needs it waits as `submitted`, only your own chore (or anyone's as a
+  parent/adult), only while it is still open — and the write is confirmed, so a
+  row RLS filtered is reported as refused, not as "Waiting for approval".
+  Approval and payouts remain manager/server decisions (migration 0223).
+- **Paywall**: the server routes the phone calls (`/api/ai`, voice,
+  `/api/calendar/occurrences`) refuse a closed or trial-ended family. The
+  Chores and Grocery tabs read PostgREST directly under RLS, which has no notion
+  of account standing, so those two surfaces are not yet paywalled on the phone
+  (an owner decision between bearer routes and a client-side verdict).
 - **Assistant**: `POST /api/ai?mode=json` with `Authorization: Bearer <jwt>`.
   The web keeps using the SSE transport of the same route.
 - **Theme**: dark by default, light toggle, or match the device — persisted in

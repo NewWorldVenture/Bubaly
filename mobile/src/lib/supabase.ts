@@ -7,7 +7,9 @@ import type { Db } from './db';
 import { config } from './config';
 import { createChunkedStore } from './chunked-storage';
 import { createSessionRefreshFetch } from '../../../shared/auth/refresh-fetch';
-import { createDeviceSignOut, sessionStorageKey } from './sign-out';
+import { recordingFiles } from './recording-files';
+import { sweepRecordings } from './recordings';
+import { createDeviceSignOut, sessionStorageKey, signOutAndSweep } from './sign-out';
 
 export type Supabase = Db;
 const supabaseUrl = config.supabaseUrl || 'https://placeholder.supabase.co';
@@ -37,7 +39,10 @@ export const supabase: Supabase = createClient<Database>(
   },
 );
 
-export const signOutThisDevice = createDeviceSignOut({
+// Signing out of the device also sweeps the recordings expo-audio left in the
+// cache (recordings.ts): a spoken request must not outlive the account that
+// spoke it on a shared phone.
+export const signOutThisDevice = signOutAndSweep(createDeviceSignOut({
   signOut: () => supabase.auth.signOut({ scope: 'local' }),
   subscribe: listener => {
     const { data } = supabase.auth.onAuthStateChange(event => listener(event));
@@ -46,7 +51,7 @@ export const signOutThisDevice = createDeviceSignOut({
   removeSession: stillCurrent => secureSessionStore.removeItemIf(storageKey, stillCurrent),
   writeRevision: () => secureSessionStore.writeRevision(storageKey),
   blockWrites: () => secureSessionStore.blockWrites(storageKey),
-});
+}), () => sweepRecordings(recordingFiles));
 
 // Refresh tokens only while the app is in the foreground.
 AppState.addEventListener('change', (state) => {
