@@ -13948,6 +13948,7 @@
   "studio.whatToGenerate": "Wat genereren",
   "studio.writeYourPostUseHashtagsAnd": "Schrijf je bericht… gebruik #hashtags en @vermeldingen waar dat wordt ondersteund.",
   "submit.formidIsRequired": "formId is vereist",
+  "submit.thatFormIdIsNotValid": "Die formulier-ID is niet geldig.",
   "submit.thisFormHasNoFields": "Dit formulier heeft geen velden.",
   "submit.thisFormIsNoLonger": "Dit formulier is niet meer beschikbaar.",
   "submit.thisFormIsTemporarilyUnavailable": "Dit formulier is tijdelijk niet beschikbaar. Probeer het zo meteen opnieuw.",

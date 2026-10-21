@@ -52,7 +52,7 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
   'app/(auth)/actions.ts::childSignInAction': 'a sign-in: there is no session yet, by definition',
   'app/(auth)/signup/actions.ts::rememberReferralCodeAction': 'writes a referral cookie before any account exists',
   'app/gift/actions.ts::submitGiftPledgeAction': 'public gift flow behind an unguessable link, rate-limited, caps pending pledges',
-  'app/reviews/new/actions.ts::submitReviewAction': 'public review submission behind an unguessable token',
+  'app/reviews/new/actions.ts::submitReviewAction': 'public review submission; a stranger\'s review is always pending, and only a signed-in member can clear the auto-approve threshold',
   'app/s/[slug]/actions.ts::submitResponseAction': 'public survey response behind an unguessable slug',
   'lib/i18n/actions.ts::setLocale': 'sets the locale cookie; touches no family data',
   // Added by the parallel session's auth work. All five run BEFORE a session

@@ -27,6 +27,11 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => EN_US[key] ?? key }));
 vi.mock('@/components/wallet/public-gift-form', () => ({ PublicGiftForm: () => 'GIFT-FORM' }));
+// The page is limited per address before its read (audit N3); the limiter's
+// durable half is not what these cases are about, and the chain fake above has
+// no RPC for it. tests/a-pay-id-walk-meets-a-limit.test.ts drives the limit.
+vi.mock('next/headers', () => ({ headers: async () => new Headers({ 'x-forwarded-for': '203.0.113.9' }) }));
+vi.mock('@/lib/server/rate-limit-db', () => ({ rateLimitDb: async () => ({ ok: true, retryAfter: 0 }) }));
 
 const { default: PublicGiftPage } = await import('@/app/gift/[token]/page');
 const render = async () => renderTranslated(await PublicGiftPage({ params: Promise.resolve({ token: 'tok' }) }));
