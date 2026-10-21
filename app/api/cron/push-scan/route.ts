@@ -7,8 +7,22 @@ import { respawnMissingChoreAssignments } from '@/lib/services/tasks';
 import { systemScopeForFamily } from '@/lib/services/scope';
 import { dispatchPendingPushes } from '@/lib/server/push';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
+import { sweepFamilies } from '@/lib/server/cron-family-sweep';
+import { claimGenerationLease } from '@/lib/server/notification-generation-lease';
 
 export const runtime = 'nodejs';
+// Inside the dispatcher's 120 s abort (scripts/cron-dispatch.mjs), which is
+// what calls this route every two hours; chosen rather than inherited.
+export const maxDuration = 120;
+// Generation and the chore respawn stop STARTING families once this much is
+// spent, so push dispatch (PUSH_DISPATCH_BUDGET_MS, 45 s) always runs for the
+// rows already queued: the imminent-moment nudges this cron exists for were
+// delivered to nobody when the loop above them ran the function into its limit.
+const GENERATION_BUDGET_MS = 60_000;
+// One family's reads outliving this are that family's failure, not the run's.
+const FAMILY_TIMEOUT_MS = 15_000;
+const FAMILY_CONCURRENCY = 4;
+const HOUR_MS = 3_600_000;
 
 // Frequent push scan (every ~2h via Vercel Cron). Regenerates each family's
 // "who needs to know" notifications and delivers any un-pushed ones as device
@@ -49,29 +63,62 @@ export async function GET(req: NextRequest) {
   // so it creates nothing twice. lib/services/tasks `respawnMissingChoreAssignments`.
   let respawned = 0;
   let respawnFailures = 0;
-  for (const f of families ?? []) {
+  // Families another generator holds right now (the daily notifications run on
+  // its mirrored minute, a member's Scan button): skipped, not failed — that
+  // generator is writing the same rows (lib/server/notification-generation-lease.ts).
+  let generationHeld = 0;
+  const startedAt = Date.now();
+  // Rotated, bounded and budgeted (lib/server/cron-family-sweep.ts), for the
+  // same reason as the notifications cron: a serial `order('id')` loop with no
+  // budget served the same prefix every tick and never reached push dispatch.
+  const swept = await sweepFamilies(families ?? [], {
+    // Every two hours: that is the run's index, so consecutive runs start apart.
+    budgetMs: GENERATION_BUDGET_MS, itemTimeoutMs: FAMILY_TIMEOUT_MS, concurrency: FAMILY_CONCURRENCY, startedAt, runIndex: Math.floor(startedAt / (2 * HOUR_MS)),
+  }, async (f, counted) => {
     try {
-      // Failed source reads count as a failed family, not a quiet one.
-      const report: NotificationGenerationReport = { failedSources: [] };
-      created += await generateFamilyNotifications(supabase, f.id, report);
-      if (report.failedSources.length) {
-        generationFailures += 1;
-        console.error(`Notification generation incomplete for family ${f.id}:`, report.failedSources);
+      const lease = await claimGenerationLease(supabase, f.id);
+      if (lease.state === 'held') { if (counted.current) generationHeld += 1; }
+      else if (lease.state === 'error') { if (counted.current) generationFailures += 1; }
+      else {
+        const { release } = lease;
+        try {
+          // Failed source reads count as a failed family, not a quiet one.
+          const report: NotificationGenerationReport = { failedSources: [] };
+          const made = await generateFamilyNotifications(supabase, f.id, report);
+          if (counted.current) {
+            created += made;
+            if (report.failedSources.length) {
+              generationFailures += 1;
+              console.error(`Notification generation incomplete for family ${f.id}:`, report.failedSources);
+            }
+          }
+        } finally {
+          await release();
+        }
       }
     } catch (e) {
-      generationFailures += 1;
+      if (counted.current) generationFailures += 1;
       console.error(`Notification generation failed for family ${f.id}:`, e);
     }
     try {
       const scope = await systemScopeForFamily(supabase, f.id);
-      const swept = scope ? await respawnMissingChoreAssignments(scope) : null;
-      if (!swept || !swept.ok || swept.data.failed > 0) respawnFailures += 1;
-      if (swept?.ok) respawned += swept.data.respawned;
+      const sweptChores = scope ? await respawnMissingChoreAssignments(scope) : null;
+      if (!counted.current) return;
+      if (!sweptChores || !sweptChores.ok || sweptChores.data.failed > 0) respawnFailures += 1;
+      if (sweptChores?.ok) respawned += sweptChores.data.respawned;
     } catch (e) {
-      respawnFailures += 1;
+      if (counted.current) respawnFailures += 1;
       console.error(`Chore respawn sweep failed for family ${f.id}:`, e);
     }
+  });
+  for (const f of swept.timedOut) {
+    generationFailures += 1;
+    console.error(`Push-scan gave up waiting for family ${f.id} after ${FAMILY_TIMEOUT_MS} ms`);
   }
+  // Families this run never STARTED: the budget ran out first. A failed run,
+  // decided below — an unserved tail must not look like a clean one.
+  const unserved = swept.unreached.length;
+  if (unserved > 0) console.error(`[push-scan] budget reached with ${unserved} families unserved`, swept.unreached.slice(0, 50).map((f) => f.id));
 
   let pushed = { notifications: 0, result: { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 } };
   let pushDispatchFailures = 0;
@@ -82,10 +129,10 @@ export async function GET(req: NextRequest) {
     console.error('Push dispatch failed:', e);
   }
 
-  const failed = generationFailures + respawnFailures + pushDispatchFailures + pushed.result.failed + pushed.result.skipped;
+  const failed = generationFailures + respawnFailures + pushDispatchFailures + pushed.result.failed + pushed.result.skipped + unserved;
   const ok = failed === 0;
   return NextResponse.json(
-    { ok, families: families?.length ?? 0, created, respawned, pushed, failed },
+    { ok, families: families?.length ?? 0, created, generationHeld, unserved, respawned, pushed, failed },
     { status: ok ? 200 : 502 },
   );
 }

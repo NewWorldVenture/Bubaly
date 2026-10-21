@@ -14371,6 +14371,7 @@
   "sync.providerNotConfiguredYet": "{provider} sync isn’t configured yet.",
   "sync.providerNotConnectedForAccount": "{provider} is not connected for this account.",
   "sync.providerTokensAreAes256": "Provider tokens are AES-256-GCM encrypted before storage. Without a key, no OAuth connection can be persisted — this is intentional fail-closed behaviour, not a silent fallback to plaintext.",
+  "sync.syncAlreadyRunning": "A sync of this account is already running. It will finish on its own; try again in a moment.",
   "sync.syncFailed": "Sync failed",
   "sync.tooManySyncRequestsPlease": "Too many sync requests. Please try again shortly.",
   "sync.urlDoesNotAppearTo": "URL does not appear to be a valid ICS calendar",

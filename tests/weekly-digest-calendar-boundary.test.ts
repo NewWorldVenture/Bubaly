@@ -48,7 +48,10 @@ function setup(events: Row[] = [native()], options: Options = {}) {
   } } });
   return { calls, tables };
 }
-beforeEach(() => { h.mail = []; h.enabled = false; vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-04T12:00:00Z')); vi.spyOn(console, 'error').mockImplementation(() => {}); });
+// Monday 08:00 UTC: the digest's slot. The window is the slot's week, not the
+// seven days from the tick (lib/server/cron-slot.ts), so the fixture clock sits
+// on the slot and the window below is 2026-10-05T08:00Z to 2026-10-12T08:00Z.
+beforeEach(() => { h.mail = []; h.enabled = false; vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-05T08:00:00Z')); vi.spyOn(console, 'error').mockImplementation(() => {}); });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 async function send() {
   const response = await GET(new NextRequest('https://local.synthetic.invalid/api/cron/weekly-digest'));
@@ -65,8 +68,8 @@ it.each(['UTC', 'America/New_York', 'America/Los_Angeles', 'Asia/Tokyo'])('prese
   expect(email.props.events).toEqual([{ title: 'Synthetic event 1', date: '2026-10-05' }]); expect(renderToStaticMarkup(email)).toContain('Mon, Oct 5');
 });
 it.each(['America/New_York', 'America/Los_Angeles', 'Asia/Tokyo'])('preserves the timed instant household day in %s', async tz => {
-  setup([native(1, { all_day: false, starts_at: '2026-10-05T02:00:00Z', ends_at: '2026-10-05T03:00:00Z' })], { tz });
-  expect((await send()).props.events[0].date).toBe(tz === 'Asia/Tokyo' ? '2026-10-05' : '2026-10-04');
+  setup([native(1, { all_day: false, starts_at: '2026-10-06T02:00:00Z', ends_at: '2026-10-06T03:00:00Z' })], { tz });
+  expect((await send()).props.events[0].date).toBe(tz === 'Asia/Tokyo' ? '2026-10-06' : '2026-10-05');
 });
 it.each([['2026-03-08', '2026-03-09', 'Sun, Mar 8'], ['2026-11-01', '2026-11-02', 'Sun, Nov 1']])('preserves NY DST DATE %s and its real email label', async (day, next, label) => {
   vi.setSystemTime(new Date(Date.parse(`${day}T12:00:00Z`) - 86400000));
@@ -101,12 +104,19 @@ it('qualifies ongoing rows without adding their earlier starts to the upcoming l
 it('counts expanded native recurrence occurrences rather than stored series rows', async () => {
   setup([native(1, { starts_at: '2026-10-01T00:00:00.000Z', ends_at: '2026-10-02T00:00:00.000Z', recurrence: 'daily' })]);
   const email = await send(); expect(email.props.eventCount).toBe(8); expect(email.props.events).toHaveLength(8);
-  expect(email.props.events[0].date).toBe('2026-10-04'); expect(email.props.events[7].date).toBe('2026-10-11');
+  expect(email.props.events[0].date).toBe('2026-10-05'); expect(email.props.events[7].date).toBe('2026-10-12');
 });
-it('preserves the rolling window inclusive final instant for timed starts', async () => {
-  setup([native(1, { all_day: false, starts_at: '2026-10-11T12:00:00.000Z', ends_at: null }),
-    native(2, { all_day: false, starts_at: '2026-10-11T12:00:00.001Z', ends_at: null })]);
-  const email = await send(); expect(email.props.eventCount).toBe(1); expect(email.props.events).toEqual([{ title: 'Synthetic event 1', date: '2026-10-11' }]);
+it('preserves the slot window inclusive final instant for timed starts', async () => {
+  setup([native(1, { all_day: false, starts_at: '2026-10-12T08:00:00.000Z', ends_at: null }),
+    native(2, { all_day: false, starts_at: '2026-10-12T08:00:00.001Z', ends_at: null })]);
+  const email = await send(); expect(email.props.eventCount).toBe(1); expect(email.props.events).toEqual([{ title: 'Synthetic event 1', date: '2026-10-12' }]);
+});
+it('reads the slot week, not the seven days from the tick: a Wednesday replay renders Monday’s week', async () => {
+  // The same bytes on every tick of one occurrence is what lets the provider
+  // fold the mirrored send; a window derived from the clock defeats the key.
+  vi.setSystemTime(new Date('2026-10-07T15:00:00Z'));
+  setup([native(1), native(2, { starts_at: '2026-10-12T00:00:00.000Z', ends_at: '2026-10-13T00:00:00.000Z' }), native(3, { starts_at: '2026-10-13T00:00:00.000Z', ends_at: '2026-10-14T00:00:00.000Z' })]);
+  const email = await send(); expect(email.props.events).toEqual([{ title: 'Synthetic event 1', date: '2026-10-05' }, { title: 'Synthetic event 2', date: '2026-10-12' }]);
 });
 it('rejects an invalid household clock before calendar transport or email', async () => {
   const f = setup([native()], { tz: 'Invalid/Zone' }); await refuse(); expect(f.calls.some(url => url.pathname.endsWith('/calendar_events'))).toBe(false);

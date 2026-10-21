@@ -10,7 +10,7 @@ import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { allocate, normalizeSplit, type Split } from '@/lib/wallet/ledger';
 import { approveGift, bucketBalanceCents, creditChildWallet, decideAllowance, decideSpend, debitSpendBucket, fundGoal, transferWallets } from '@/lib/wallet/server';
-import { nextRunDate, rollForward, type Cadence } from '@/lib/wallet/allowance';
+import { allowanceOccurrenceKey, nextRunDate, rollForward, type Cadence } from '@/lib/wallet/allowance';
 import { walletTierForPlanLevel, walletFeatureEnabled, type WalletTier } from '@/lib/wallet/tiers';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { normalizeHandle, handleError } from '@/lib/wallet/pay-handle';
@@ -514,7 +514,9 @@ export async function runDueAllowancesAction(): Promise<Result & { ranCount?: nu
       const res = await creditChildWallet(supabase, {
         familyId, childWalletId: rule.child_wallet_id, amountCents: rule.amount_cents, type: 'allowance',
         description: 'Allowance (manual run)', createdBy: ctx.user.id,
-        relatedType: 'allowance_rules', relatedId: rule.id,
+        // The same occurrence key the nightly cron writes, so the two paths
+        // share one ledger identity per payment (lib/wallet/allowance.ts).
+        relatedType: 'allowance_rules', relatedId: allowanceOccurrenceKey(rule.id, today),
         splitOverride: rule.split as Partial<Split> | null,
       });
       if (!res.ok) {

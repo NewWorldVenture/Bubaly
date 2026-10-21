@@ -35,6 +35,7 @@ import type { AiActivityRow, CompletedRunRow } from '@/lib/home/today';
 import type { NeedsReader } from '@/lib/home/needs-sources';
 import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
 import { notify } from '@/lib/services/notifications';
+import { claimLease, releaseLease } from '@/lib/server/app-settings-lease';
 import { readAll } from '@/lib/supabase/read-all';
 import { dayKeyInTz, hourInTz, scopeForSystem, zonedDayBoundsMs, zonedTimeMs } from '@/lib/services/scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
@@ -211,6 +212,13 @@ export type MorningDeliveryResult = {
 
 type Outcome = 'delivered' | 'skipped' | 'failed';
 
+/**
+ * How long one tick's claim on a family's brief stands without a release:
+ * longer than composing and filing one takes, short enough that a tick killed
+ * in between delays the brief by minutes, not a day.
+ */
+export const MORNING_BRIEF_CLAIM_MS = 10 * 60_000;
+
 async function deliverMorningBrief(db: DB, family: { id: string; timezone: string | null }, now: Date): Promise<Outcome> {
   const tz = family.timezone || 'UTC';
   const target = morningTarget(now, tz);
@@ -231,24 +239,44 @@ async function deliverMorningBrief(db: DB, family: { id: string; timezone: strin
   }
   if ((prior ?? []).length > 0) return 'skipped';
 
-  const scope = scopeForSystem(db, family, { now: target.at });
-  const brief = await readMorningBrief(scope, target);
-  if (!brief.ok) return 'failed';
-
-  const sent = await notify(scope, {
-    recipients: 'managers',
-    type: 'system',
-    title: morningBriefTitle(brief.data),
-    body: morningBriefBody(brief.data),
-    relatedType: BRIEF_RELATED_TYPE,
-    relatedId,
-    once: true,
-  });
-  if (!sent.ok) {
-    console.error('[briefing] morning brief notify failed', { familyId: family.id, error: sent.error });
+  // The day is CLAIMED, not merely read. "Once per family per day" was the read
+  // above followed by notify()'s own read-then-insert, and `notifications` has
+  // no unique key to refuse a second writer — so two ticks in the same minute
+  // (both schedulers fire /api/cron/notifications at 11:00) both passed both
+  // reads and every manager got two briefs and two pushes. The lease is one
+  // row per family in app_settings (lib/server/app-settings-lease.ts): of two
+  // concurrent ticks exactly one composes and files; the other finds it held
+  // and skips, as it skips a brief already filed. A tick that dies holding it
+  // frees it by expiry; a tick that finishes releases it.
+  const leaseKey = `morning_brief_claim:v1:family:${family.id}`;
+  const lease = await claimLease(db, leaseKey, { ttlMs: MORNING_BRIEF_CLAIM_MS, now });
+  if (!lease.claimed) {
+    if (lease.reason === 'held') return 'skipped';
+    console.error('[briefing] morning brief claim could not be taken', { familyId: family.id });
     return 'failed';
   }
-  return sent.data.created > 0 ? 'delivered' : 'skipped';
+  try {
+    const scope = scopeForSystem(db, family, { now: target.at });
+    const brief = await readMorningBrief(scope, target);
+    if (!brief.ok) return 'failed';
+
+    const sent = await notify(scope, {
+      recipients: 'managers',
+      type: 'system',
+      title: morningBriefTitle(brief.data),
+      body: morningBriefBody(brief.data),
+      relatedType: BRIEF_RELATED_TYPE,
+      relatedId,
+      once: true,
+    });
+    if (!sent.ok) {
+      console.error('[briefing] morning brief notify failed', { familyId: family.id, error: sent.error });
+      return 'failed';
+    }
+    return sent.data.created > 0 ? 'delivered' : 'skipped';
+  } finally {
+    await releaseLease(db, leaseKey, lease.token);
+  }
 }
 
 /** The cron step: one morning brief per family per family-local day. */

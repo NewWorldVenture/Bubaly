@@ -158,7 +158,7 @@ describe('automations for verified addresses keep every step (positive controls)
       name: 'Rivera',
       subjectKey: 'payment_completed:cs_fixture',
     });
-    expect(result).toEqual({ workflows: 2, emails: 4, failures: 0 });
+    expect(result).toEqual({ workflows: 2, emails: 4, failures: 0, errors: 0 });
     expect(h.sent.map((m) => m.subject)).toEqual(['Thanks', 'A tour', 'Hello again', 'One more thing']);
   });
 });

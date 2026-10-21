@@ -138,8 +138,10 @@ describe('runDueAllowancesAction (ACTION-14F1D3BFB97A)', () => {
     for (const row of ledger()) {
       expect(row).toMatchObject({ family_id: FAMILY, type: 'allowance', status: 'completed', direction: 'credit', related_type: 'allowance_rules', created_by: 'user-self' });
     }
-    expect(new Set(creditsTo('wallet-a').map((row) => row.related_id))).toEqual(new Set(['rule-due-a']));
-    expect(new Set(creditsTo('wallet-b').map((row) => row.related_id))).toEqual(new Set(['rule-due-b']));
+    // Keyed per OCCURRENCE — the rule and the day paid for (lib/wallet/allowance.ts
+    // allowanceOccurrenceKey), the same key the nightly cron writes.
+    expect(new Set(creditsTo('wallet-a').map((row) => row.related_id))).toEqual(new Set([`rule-due-a:${TODAY}`]));
+    expect(new Set(creditsTo('wallet-b').map((row) => row.related_id))).toEqual(new Set([`rule-due-b:${TODAY}`]));
 
     expect(rule('rule-due-a')).toMatchObject({ next_run_on: '2026-10-05', last_run_on: TODAY });
     expect(rule('rule-due-b')).toMatchObject({ next_run_on: '2026-10-01', last_run_on: TODAY });

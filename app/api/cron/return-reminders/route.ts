@@ -51,15 +51,43 @@ export async function GET(req: NextRequest) {
     };
     const notifyFamily = async (
       familyId: string,
-      n: { title: string; body: string; relatedType: string; relatedId: string | null },
+      n: { title: string; body: string; relatedType: string; relatedId: string | null; once?: boolean },
     ): Promise<boolean> => {
       const scope = await scopeFor(familyId);
       if (!scope) return false;
       const sent = await notify(scope, { recipients: 'family', type: 'system', ...n });
-      return sent.ok;
+      // Delivered means a row exists for THIS identity: written now, or already
+      // there from a run that sent and then failed to stamp. `sent.ok` alone
+      // was true with `created: 0` when notify() filtered every recipient as
+      // already notified about something else under the same identity — and
+      // when nobody could be resolved at all — and that stamped the order as
+      // alerted when nobody was.
+      return sent.ok && (sent.data.created > 0 || sent.data.duplicates > 0);
     };
     const now = new Date();
     const nowIso = now.toISOString();
+    // The dedupe stamp is a CLAIM taken before the send, not a receipt written
+    // after it: fenced on the column being unset, so of two overlapping runs
+    // only one sends, and handed back if the send did not go out, so the next
+    // run tries again rather than finding the order stamped and nobody told.
+    type StampColumn = 'due_reminder_sent_at' | 'overdue_notified_at';
+    const stampPatch = (column: StampColumn, value: string | null): Partial<Record<StampColumn, string | null>> => ({ [column]: value });
+    const claimStamp = async (column: StampColumn, orderId: string): Promise<'claimed' | 'taken' | 'error'> => {
+      const { data: claimed, error } = await admin.from('marketplace_orders')
+        .update(stampPatch(column, nowIso)).eq('id', orderId).is(column, null).select('id');
+      if (error) {
+        console.error(`Return-reminders ${column} claim failed for ${orderId}:`, error);
+        return 'error';
+      }
+      return claimed?.length ? 'claimed' : 'taken';
+    };
+    const restoreStamp = async (column: StampColumn, orderId: string): Promise<void> => {
+      const { data: restored, error } = await admin.from('marketplace_orders')
+        .update(stampPatch(column, null)).eq('id', orderId).eq(column, nowIso).select('id');
+      if (error || !restored?.length) {
+        console.error(`Return-reminders ${column} could not be handed back for ${orderId}:`, error ?? 'no rows updated');
+      }
+    };
 
     // Open rent/borrow orders with a due date; the partial index backs this,
     // and soonest-due first means the most urgent order is served first even if
@@ -118,20 +146,23 @@ export async function GET(req: NextRequest) {
       const todayKey = dayKeyInTz(now, scope.tz);
 
       if (needsOverdueAlert(order, todayKey)) {
+        const claim = await claimStamp('overdue_notified_at', o.id);
+        if (claim === 'error') { failed++; continue; }
+        if (claim === 'taken') continue; // another run holds it, or the order is gone
         const late = Math.abs(daysUntilDue(o.ends_on, todayKey) ?? 0);
+        // Its OWN identity. The due-soon nudge went out under `relatedId: o.id`
+        // and notify()'s default guard drops a recipient whose row under the
+        // same type and related_id is still unread, so the overdue alert was
+        // never delivered to anyone who had not opened the due-soon notice —
+        // and was stamped as sent. `once`: an overdue alert is said one time.
         const notified = await notifyFamily(o.family_id, {
           title: `Overdue: "${title}"`,
           body: `This ${verb} was due ${late} day${late === 1 ? '' : 's'} ago. Arrange the return so it doesn't hold anyone up.`,
-          relatedType: 'marketplace_orders', relatedId: o.id,
+          relatedType: 'marketplace_orders', relatedId: `${o.id}:overdue`, once: true,
         });
-        // Rows deliberately not checked: the stamp exists so the NEXT run does not
-        // notify again, and on the service role zero rows means the order was
-        // deleted — which no run will sweep. Audit C1-S9-63.
-        const { error: stampError } = notified
-          ? await admin.from('marketplace_orders').update({ overdue_notified_at: nowIso }).eq('id', o.id)
-          : { error: new Error('notification failed') };
-        if (!notified || stampError) {
-          console.error(`Return-reminders overdue notification failed for ${o.id}:`, stampError);
+        if (!notified) {
+          console.error(`Return-reminders overdue notification failed for ${o.id}`);
+          await restoreStamp('overdue_notified_at', o.id);
           failed++;
         } else {
           overdue++;
@@ -140,18 +171,18 @@ export async function GET(req: NextRequest) {
       }
 
       if (needsDueReminder(order, todayKey)) {
+        const claim = await claimStamp('due_reminder_sent_at', o.id);
+        if (claim === 'error') { failed++; continue; }
+        if (claim === 'taken') continue;
         const d = daysUntilDue(o.ends_on, todayKey) ?? 0;
         const notified = await notifyFamily(o.family_id, {
           title: `Due ${d === 0 ? 'today' : `in ${d} day${d === 1 ? '' : 's'}`}: "${title}"`,
           body: `Time to return this ${verb}. Tap to see the exchange details.`,
-          relatedType: 'marketplace_orders', relatedId: o.id,
+          relatedType: 'marketplace_orders', relatedId: `${o.id}:due`,
         });
-        // As above. Audit C1-S9-63.
-        const { error: stampError } = notified
-          ? await admin.from('marketplace_orders').update({ due_reminder_sent_at: nowIso }).eq('id', o.id)
-          : { error: new Error('notification failed') };
-        if (!notified || stampError) {
-          console.error(`Return-reminders due notification failed for ${o.id}:`, stampError);
+        if (!notified) {
+          console.error(`Return-reminders due notification failed for ${o.id}`);
+          await restoreStamp('due_reminder_sent_at', o.id);
           failed++;
         } else {
           reminded++;

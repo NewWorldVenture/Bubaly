@@ -46,6 +46,21 @@ export function rollForward(nextRunOn: string, cadence: Cadence, today: string, 
   return { runs, next: cursor };
 }
 
+/**
+ * The ledger key of one allowance PAYMENT: the rule and the day it is paid for.
+ *
+ * Every credit used to carry `related_id = rule.id`, so the ledger could not
+ * tell week one from week two and no key could ever refuse a second credit of
+ * the same occurrence — which is exactly what a run needs when an insert's
+ * answer is lost (the insert committed, the connection dropped) and the
+ * schedule is rolled back and paid again. Keyed per occurrence, a run can ask
+ * the ledger whether this payment landed, and the owner's partial unique index
+ * on (family_id, related_type, related_id, bucket_id) can refuse the repeat.
+ */
+export function allowanceOccurrenceKey(ruleId: string, runDate: string): string {
+  return `${ruleId}:${runDate}`;
+}
+
 export type DueRule = { isActive: boolean; nextRunOn: string | null; amountCents: number };
 
 /** Summary of allowance rules that are due to pay (next_run_on ≤ today), used to

@@ -14160,6 +14160,7 @@
   "sync.providerNotConfiguredYet": "{provider}-Synchronisierung ist noch nicht eingerichtet.",
   "sync.providerNotConnectedForAccount": "{provider} ist für dieses Konto nicht verbunden.",
   "sync.providerTokensAreAes256": "Anbieter-Tokens werden vor dem Speichern mit AES-256-GCM verschlüsselt. Ohne Schlüssel lässt sich keine OAuth-Verbindung dauerhaft speichern – das ist bewusstes Fail-Closed-Verhalten und kein stiller Rückfall auf Klartext.",
+  "sync.syncAlreadyRunning": "Für dieses Konto läuft bereits eine Synchronisierung. Sie wird von selbst abgeschlossen; versuchen Sie es gleich noch einmal.",
   "sync.syncFailed": "Die Synchronisierung ist fehlgeschlagen",
   "sync.tooManySyncRequestsPlease": "Zu viele Synchronisierungsanfragen. Bitte versuchen Sie es in Kürze erneut.",
   "sync.urlDoesNotAppearTo": "Die URL scheint kein gültiger ICS-Kalender zu sein",
