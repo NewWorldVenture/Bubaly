@@ -34,13 +34,30 @@ import {
   saveDeparturePlanAction, refreshDeparturePlanAction, deleteDeparturePlanAction,
 } from '@/app/(app)/dashboard/trip-intel/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
-import { useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { allDayDate } from '@/lib/calendar/day';
+import { dayKeyIn } from '@/lib/time/zoned';
 import type { Format } from '@/lib/utils/format';
 
 export type UpcomingEvent = {
   id: string; title: string; location: string; startsAt: string;
+  /** An all-day row is a DATE stored at its UTC midnight, not an instant to arrive by. */
+  allDay?: boolean;
   category: string; memberName: string | null;
 };
+/** A section whose read failed: said so, never drawn as empty. */
+export type TripIntelUnavailable = { tripPlans: boolean; departures: boolean };
+
+/**
+ * The family date an event is on: a timed event's day on the FAMILY's clock
+ * (19:00 in Los Angeles is 02:00Z the next day, and its trip and forecast are
+ * for the day it is on), an all-day event's own date.
+ */
+function eventDay(startsAt: string, allDay: boolean | undefined, timeZone: string): string {
+  if (allDay) return allDayDate(startsAt);
+  const ms = Date.parse(startsAt);
+  return Number.isFinite(ms) ? dayKeyIn(new Date(ms), timeZone) : startsAt.slice(0, 10);
+}
 export type MemberOption = { id: string; name: string; color: string | null };
 export type SavedTripPlan = {
   id: string; title: string; destination: string; startDate: string | null; endDate: string | null;
@@ -61,10 +78,9 @@ const INTERESTS_KEY = 'bubaly.trip.interests';
 const fmtDateTimeIn = (f: Format) => (iso: string) => f.fmtDate(iso, "EEE, MMM d 'at' h:mm a");
 const fmtTimeIn = (f: Format) => (iso: string) => f.fmtDate(iso, 'h:mm a');
 
-/** Derive a weather delay + human summary from a forecast for a target date. */
-function weatherForDate(forecast: Forecast | null, targetISO: string): { delay: number; summary: string | null } {
+/** Derive a weather delay + human summary from a forecast for a target family date (`YYYY-MM-DD`). */
+function weatherForDate(forecast: Forecast | null, day: string): { delay: number; summary: string | null } {
   if (!forecast) return { delay: 0, summary: null };
-  const day = targetISO.slice(0, 10);
   const match = forecast.daily.find((d) => d.date === day) ?? forecast.daily[0];
   if (!match) return { delay: 0, summary: null };
   const info = weatherInfo(match.code, true);
@@ -73,12 +89,13 @@ function weatherForDate(forecast: Forecast | null, targetISO: string): { delay: 
   return { delay, summary };
 }
 
-export function TripIntelModule({ upcoming, memberOptions, tripPlans, departurePlans, tablesMissing }: {
+export function TripIntelModule({ upcoming, memberOptions, tripPlans, departurePlans, tablesMissing, unavailable = { tripPlans: false, departures: false } }: {
   upcoming: UpcomingEvent[];
   memberOptions: MemberOption[];
   tripPlans: SavedTripPlan[];
   departurePlans: SavedDeparturePlan[];
   tablesMissing: boolean;
+  unavailable?: TripIntelUnavailable;
 }) {
   const tr = useTranslations();
   // Dates follow the reader, not the browser (I18N-002).
@@ -100,7 +117,11 @@ export function TripIntelModule({ upcoming, memberOptions, tripPlans, departureP
         </div>
       )}
 
-      {/* Live departures first — they're time-sensitive */}
+      {/* Live departures first — they're time-sensitive. An unread list is said
+          to be unread: hidden, it looked like no plan was active. */}
+      {unavailable.departures && (
+        <p role="alert" className="mb-5 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm">{tr('tripIntel.savedDeparturesUnavailable')}</p>
+      )}
       {departurePlans.length > 0 && (
         <section className="mb-8">
           <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-muted">
@@ -138,10 +159,14 @@ export function TripIntelModule({ upcoming, memberOptions, tripPlans, departureP
                     className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:border-brand/40 hover:text-brand-text transition">
                     <Sparkles className="h-3.5 w-3.5" /> {tr('tripIntel.research')}
                   </button>
-                  <button onClick={() => setDepartureEvent(e)}
-                    className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand/90 transition">
-                    <Car className="h-3.5 w-3.5" /> {tr('tripIntel.planDeparture')}
-                  </button>
+                  {/* An all-day event has no time to arrive by: planned as its
+                      stored UTC midnight, it wrote a head-out for the evening before. */}
+                  {!e.allDay && (
+                    <button onClick={() => setDepartureEvent(e)}
+                      className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand/90 transition">
+                      <Car className="h-3.5 w-3.5" /> {tr('tripIntel.planDeparture')}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -150,6 +175,9 @@ export function TripIntelModule({ upcoming, memberOptions, tripPlans, departureP
       </section>
 
       {/* Saved trip research */}
+      {unavailable.tripPlans && (
+        <p role="alert" className="mb-8 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm">{tr('tripIntel.savedTripResearchUnavailable')}</p>
+      )}
       {tripPlans.length > 0 && (
         <section className="mb-8">
           <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-muted">
@@ -164,7 +192,7 @@ export function TripIntelModule({ upcoming, memberOptions, tripPlans, departureP
       {researchEvent && (
         <ResearchModal event={researchEvent} memberOptions={memberOptions} onClose={() => setResearchEvent(null)} canSave={!tablesMissing} />
       )}
-      {departureEvent && (
+      {departureEvent && !departureEvent.allDay && (
         <DepartureModal event={departureEvent} onClose={() => setDepartureEvent(null)} canSave={!tablesMissing} />
       )}
     </div>
@@ -179,6 +207,8 @@ function ResearchModal({ event, memberOptions, onClose, canSave }: {
   const a11yId = useId();
   const tr = useTranslations();
   const router = useRouter();
+  const { timeZone } = useFamilyClock();
+  const day = eventDay(event.startsAt, event.allDay, timeZone);
   const { success, error: toastError } = useToast();
   const [interests, setInterests] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<string[]>(
@@ -209,7 +239,7 @@ function ResearchModal({ event, memberOptions, onClose, canSave }: {
       if (hits[0]) {
         lat = hits[0].latitude; lng = hits[0].longitude;
         const fc = await fetchForecast(lat, lng, 7);
-        weatherSummary = weatherForDate(fc, event.startsAt).summary;
+        weatherSummary = weatherForDate(fc, day).summary;
       }
     } catch { /* best-effort */ }
     setGeo({ lat: lat ?? 0, lng: lng ?? 0, weather: weatherSummary });
@@ -219,7 +249,7 @@ function ResearchModal({ event, memberOptions, onClose, canSave }: {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           destination: event.location, interests, members: selectedMembers,
-          startDate: event.startsAt.slice(0, 10), weatherSummary,
+          startDate: day, weatherSummary,
         }),
       });
       const json = await res.json();
@@ -231,7 +261,7 @@ function ResearchModal({ event, memberOptions, onClose, canSave }: {
     } finally {
       setLoading(false);
     }
-  }, [event, interests, selectedMembers, toastError, tr]);
+  }, [event, day, interests, selectedMembers, toastError, tr]);
 
   async function save() {
     if (!recs) return;
@@ -239,7 +269,7 @@ function ResearchModal({ event, memberOptions, onClose, canSave }: {
     const res = await saveTripPlanAction({
       title: event.title, destination: event.location,
       destLat: geo?.lat || null, destLng: geo?.lng || null,
-      startDate: event.startsAt.slice(0, 10), members: selectedMembers,
+      startDate: day, members: selectedMembers,
       interests: interests || null, recommendations: recs,
       weatherSummary: geo?.weather ?? null, eventId: event.id,
     });
@@ -309,15 +339,20 @@ function ResearchModal({ event, memberOptions, onClose, canSave }: {
 
 function RecsView({ recs }: { recs: TripRecommendations }) {
   const tr = useTranslations();
+  // A stored set may predate the save-time check (or be the column's `{}`
+  // default): a missing list is an empty one, never a crash on expand.
+  const restaurants = Array.isArray(recs?.restaurants) ? recs.restaurants : [];
+  const activities = Array.isArray(recs?.activities) ? recs.activities : [];
+  const tips = Array.isArray(recs?.tips) ? recs.tips : [];
   return (
     <div className="space-y-4">
-      {recs.restaurants.length > 0 && (
+      {restaurants.length > 0 && (
         <div>
           <h4 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-muted">
             <UtensilsCrossed className="h-3.5 w-3.5" /> Eat
           </h4>
           <div className="space-y-1.5">
-            {recs.restaurants.map((r, i) => (
+            {restaurants.map((r, i) => (
               <div key={i} className="rounded-xl border border-border bg-surface/40 p-3">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-semibold">{r.name}</p>
@@ -329,13 +364,13 @@ function RecsView({ recs }: { recs: TripRecommendations }) {
           </div>
         </div>
       )}
-      {recs.activities.length > 0 && (
+      {activities.length > 0 && (
         <div>
           <h4 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-muted">
             <Compass className="h-3.5 w-3.5" /> Do
           </h4>
           <div className="space-y-1.5">
-            {recs.activities.map((a, i) => (
+            {activities.map((a, i) => (
               <div key={i} className="rounded-xl border border-border bg-surface/40 p-3">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-semibold">{a.name}</p>
@@ -347,13 +382,13 @@ function RecsView({ recs }: { recs: TripRecommendations }) {
           </div>
         </div>
       )}
-      {recs.tips.length > 0 && (
+      {tips.length > 0 && (
         <div>
           <h4 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-muted">
             <Lightbulb className="h-3.5 w-3.5" /> {tr('tripIntel.tips')}
           </h4>
           <ul className="space-y-1">
-            {recs.tips.map((t, i) => (
+            {tips.map((t, i) => (
               <li key={i} className="flex gap-2 text-xs text-muted"><span className="text-brand-text">•</span> {t}</li>
             ))}
           </ul>
@@ -416,6 +451,7 @@ function DepartureModal({ event, onClose, canSave }: { event: UpcomingEvent; onC
   const fmtDateTime = fmtDateTimeIn(fmt);
   const fmtTime = fmtTimeIn(fmt);
   const router = useRouter();
+  const { timeZone } = useFamilyClock();
   const { success, error: toastError } = useToast();
   const [home, setHome] = useState('');
   const [prep, setPrep] = useState(30);
@@ -462,11 +498,11 @@ function DepartureModal({ event, onClose, canSave }: { event: UpcomingEvent; onC
     // Live traffic factor for the departure window + weather penalty at the dest.
     const trafficFactor = trafficFactorForTime(event.startsAt);
     const fc = await fetchForecast(destLL.lat, destLL.lng, 7);
-    const { delay: weatherDelay, summary: weatherSummary } = weatherForDate(fc, event.startsAt);
+    const { delay: weatherDelay, summary: weatherSummary } = weatherForDate(fc, eventDay(event.startsAt, event.allDay, timeZone));
 
     setResult({ driveSeconds, trafficFactor, weatherDelay, weatherSummary, originLL, destLL, miles, usedFallback });
     setComputing(false);
-  }, [home, event, toastError, tr]);
+  }, [home, event, timeZone, toastError, tr]);
 
   const plan = useMemo(() => result ? computeDeparture({
     eventStartISO: event.startsAt, driveSeconds: result.driveSeconds, prepMinutes: prep, parkMinutes: park,
@@ -569,6 +605,7 @@ function DepartureCard({ plan }: { plan: SavedDeparturePlan }) {
   // Dates follow the reader, not the browser (I18N-002).
   const fmtTime = fmtTimeIn(useFormat());
   const router = useRouter();
+  const { timeZone } = useFamilyClock();
   const { success, error: toastError } = useToast();
   const [refreshing, setRefreshing] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -610,7 +647,7 @@ function DepartureCard({ plan }: { plan: SavedDeparturePlan }) {
       let weatherDelay = plan.weatherDelayMinutes, weatherSummary = plan.weatherSummary;
       if (plan.destLat != null && plan.destLng != null) {
         const fc = await fetchForecast(plan.destLat, plan.destLng, 7);
-        const day = plan.eventStart.slice(0, 10);
+        const day = eventDay(plan.eventStart, false, timeZone);
         const match = fc?.daily.find((d) => d.date === day) ?? fc?.daily[0];
         if (match) {
           const info = weatherInfo(match.code, true);

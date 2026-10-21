@@ -17,9 +17,10 @@ vi.mock('next/navigation', () => ({ unstable_rethrow: () => {} }));
 vi.mock('@/components/display/auto-refresh', () => ({ AutoRefresh: () => null }));
 vi.mock('@/components/display/display-shell-client', () => ({ DisplayShellClient: () => null }));
 
-// Every tile's read reported, the meal, grocery and chore reads included (H19):
-// a failed read there is "unavailable", never an empty kitchen.
-const ALL_LOADED = { events: 'ok', upcoming: 'ok', monthEvents: 'ok', reminders: 'ok', meals: 'ok', grocery: 'ok', chores: 'ok' };
+// Every tile's read reported, the meal, grocery and chore reads included (H19),
+// and the members (birthdays) and notes reads (U1): a failed read there is
+// "unavailable", never an empty kitchen.
+const ALL_LOADED = { events: 'ok', upcoming: 'ok', monthEvents: 'ok', reminders: 'ok', meals: 'ok', grocery: 'ok', chores: 'ok', members: 'ok', notes: 'ok' };
 const iso = (value: string) => new Date(value).toISOString();
 const event = (id: string, start: string, end: string | null, fields: Row = {}): Row => ({
   id, family_id: 'family-1', title: id, starts_at: iso(start), ends_at: end ? iso(end) : null,

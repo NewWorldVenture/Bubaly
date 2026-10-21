@@ -175,10 +175,15 @@ function NativeEventDetailModal({ event, members, selfMemberId, familyId, onClos
         {/* M8: the composed schedule model for this event — leave-by, driver,
             car, dinner and care constraints — read live, fail-closed. All-day
             rows carry no time to reason about, so they get no check. */}
-        {!event.all_day && <EventScheduleInsights eventId={event.id} />}
+        {!event.all_day && <EventScheduleInsights eventId={event.id} occurrenceStartsAt={event.starts_at} />}
 
         <AiInsight kind="event" params={{ eventId: event.id }} variant="outline" className="w-full" label={t('eventDetailModal.aiPrepChecklist')} />
 
+        {/* One RSVP per member per event row (0047's unique key), and a series
+            is one row: an answer here, and the list below, is for every week. */}
+        {event.recurrence && event.recurrence !== 'none' && (
+          <p className="text-xs text-muted">{t('eventDetailModal.rsvpAppliesToEverySeriesOccurrence')}</p>
+        )}
         {selfMemberId && (
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{t('eventDetailModal.yourRsvp')}</p>

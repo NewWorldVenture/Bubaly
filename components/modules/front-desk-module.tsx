@@ -54,6 +54,13 @@ export type FrontDeskVoiceMessage = {
 /** Which server read failed, so the page says so rather than showing an empty list. */
 export type FrontDeskUnavailable = { channel: boolean; voice: boolean };
 
+/**
+ * Exact counts of every voice row, read on the server beside the list of the
+ * latest 100 (app/(app)/dashboard/front-desk/page.tsx). `null` is a count the
+ * database did not give, which the tile shows as an em dash, never as 0.
+ */
+export type FrontDeskCounts = { calls: number | null; filed: number | null; urgent: number | null };
+
 const STATUS_CONFIG: Record<string, { icon: React.ComponentType<{ className?: string }>; labelKey: string; color: string }> = {
   screened:  { icon: ShieldCheck,     labelKey: 'frontDeskModule.status.screened', color: 'bg-blue-500/15 text-blue-400' },
   answered:  { icon: PhoneCall,       labelKey: 'frontDeskModule.status.answered', color: 'bg-green-500/15 text-green-400' },
@@ -136,9 +143,10 @@ function fmtDuration(secs: number | null) {
  * and arrive as props, including which of them failed — `unavailable` renders a
  * retryable notice rather than an empty list that would read as "no calls".
  */
-export function FrontDeskModule({ channel, voice, unavailable }: {
+export function FrontDeskModule({ channel, voice, counts, unavailable }: {
   channel: FrontDeskChannel | null;
   voice: FrontDeskVoiceMessage[];
+  counts: FrontDeskCounts;
   unavailable?: FrontDeskUnavailable;
 }) {
   const fmtTime = fmtTimeWith(useFormat());
@@ -189,10 +197,11 @@ export function FrontDeskModule({ channel, voice, unavailable }: {
   }, [calls, filterTab, search]);
 
   const blockedCount = useMemo(() => calls.filter(c => c.status === 'blocked').length, [calls]);
-  // What the family's real number actually did — read from the rows the
-  // webhooks filed, never from a toggle.
-  const voiceHandled = useMemo(() => voice.filter(v => v.ai_handled).length, [voice]);
-  const voiceUrgent = useMemo(() => voice.filter(v => v.ai_intent === 'urgent').length, [voice]);
+  // What the family's real number actually did — exact counts of the rows the
+  // webhooks filed, never a toggle, and never the length of the latest 100.
+  // A count the server could not read is null, shown as an em dash.
+  const countOf = (key: keyof FrontDeskCounts): number | null => (unavailable?.voice ? null : counts[key]);
+  const countsUnavailable = Boolean(unavailable?.voice) || Object.values(counts).some((value) => value === null);
   const numberLive = channel?.provisioning_status === 'active' && !!channel.phone_number;
 
   // No mark-read, no delete, no hand-entered call: `call_logs` is frozen
@@ -273,7 +282,7 @@ export function FrontDeskModule({ channel, voice, unavailable }: {
               <p className="flex-1 text-sm font-semibold">{tr('frontDesk.callsToTheFamilyNumber')}</p>
               {/* Same rule as the tiles: a count of rows nobody could read is
                   not 0, so the card header carries no number at all. */}
-              <span className="text-[11px] text-muted">{unavailable?.voice ? '—' : voice.length}</span>
+              <span className="text-[11px] text-muted">{countOf('calls') ?? '—'}</span>
             </div>
             {unavailable?.voice ? (
               <div className="flex items-center gap-3 px-4 py-6">
@@ -370,19 +379,15 @@ export function FrontDeskModule({ channel, voice, unavailable }: {
               <div key={stat.key} className="stat-card">
                 <span className="text-2xl">{stat.icon}</span>
                 <div>
-                  <div className={cn('text-2xl font-bold', unavailable?.voice ? 'text-muted' : stat.color)}>
-                    {unavailable?.voice
-                      ? '—'
-                      : stat.key === 'calls' ? voice.length
-                        : stat.key === 'filed' ? voiceHandled
-                          : voiceUrgent}
+                  <div className={cn('text-2xl font-bold', unavailable?.voice || countOf(stat.key) === null ? 'text-muted' : stat.color)}>
+                    {countOf(stat.key) ?? '—'}
                   </div>
                   <div className="text-[11px] text-muted">{tr(stat.labelKey)}</div>
                 </div>
               </div>
             ))}
           </div>
-          {unavailable?.voice && (
+          {countsUnavailable && (
             <p className="mt-1 px-1 text-[11px] text-muted">{tr('frontDesk.theseCountsCouldNotBe')}</p>
           )}
 
