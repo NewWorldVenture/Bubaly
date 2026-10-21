@@ -17098,5 +17098,22 @@
   "runOutcome.failed": "Falló",
   "runOutcome.blocked": "Bloqueado",
   "runOutcome.paused": "En pausa",
-  "runOutcome.cancelled": "Cancelado"
+  "runOutcome.cancelled": "Cancelado",
+  "calendarModule.editingWholeSeries": "Este evento se repite. Los cambios aquí se aplican a todas las repeticiones.",
+  "eventDetailModal.rsvpAppliesToEverySeriesOccurrence": "Este evento se repite. Una respuesta aquí vale para todas las repeticiones.",
+  "tripIntel.couldNotLoadTripIntelligence": "Inteligencia de viajes no pudo cargar tus eventos ahora. Inténtalo de nuevo en un momento.",
+  "tripIntel.savedDeparturesUnavailable": "No se pudieron cargar tus salidas guardadas, así que aquí no aparecen los planes activos. Actualiza antes de planear otra.",
+  "tripIntel.savedTripResearchUnavailable": "No se pudo cargar tu investigación de viajes guardada. Actualiza para intentarlo de nuevo.",
+  "calendar.routineAlreadyAppliedAsItWas": "Esta rutina ya está en esta semana tal como era antes de tus cambios. Deshazla o quita esos eventos y vuelve a aplicarla.",
+  "routinesPanel.routineChangedWhileSaving": "Otra persona guardó esta rutina al mismo tiempo. Ciérrala y vuelve a abrirla para ver su versión.",
+  "referralActions.onlyAParentOrAdult": "Solo un padre, una madre o un adulto puede hacer esto con la recomendación de la familia.",
+  "feedback.tooManyIdeasAtOnce": "Son muchas ideas a la vez. Espera un minuto y vuelve a intentarlo.",
+  "feedback.dailyIdeaLimitReached": "Has alcanzado el límite de hoy de {limit} ideas. Vuelve a intentarlo mañana.",
+  "familyHealth.moreInMedical": "+{count} más en Médico",
+  "displayGrid.membersUnavailable": "Los miembros de la familia no están disponibles.",
+  "displayGrid.birthdaysUnavailable": "Los cumpleaños no están disponibles.",
+  "displayGrid.notesUnavailable": "Las notas no están disponibles.",
+  "feedback.couldNotLoadTheBoard": "El tablón de ideas no se ha podido cargar ahora mismo. Inténtalo de nuevo en un momento.",
+  "feedbackFeedbackBoard.yourVotesCouldNotBeRead": "Tus votos no se han podido leer ahora mismo, así que la votación está en pausa. Actualiza para volver a intentarlo.",
+  "actions.tripRecommendationsInvalid": "Esas recomendaciones de viaje no se han podido guardar: no tienen la forma esperada o son demasiado grandes."
 }

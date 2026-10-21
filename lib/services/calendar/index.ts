@@ -36,6 +36,7 @@ import { dayKeyInTz, dayKeysBetween, scopeNow, zonedDayBoundsMs, zonedTimeMs } f
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { escapeLike } from '@/lib/supabase/escape-like';
 import { getTranslations } from '@/lib/i18n/server';
+import { followMovedEvent } from '@/lib/trips/follow-event';
 
 export type CalendarEvent = Tables<'calendar_events'>;
 
@@ -445,11 +446,13 @@ export async function deleteEvents(scope: ServiceScope, eventIds: string[]): Pro
 
 export type UpdateEventPatch = Partial<Omit<CreateEventInput, 'title'>> & { title?: string };
 
-type EventClockState = Pick<CalendarEvent, 'id' | 'title' | 'starts_at' | 'ends_at' | 'all_day'>;
+type EventClockState = Pick<CalendarEvent, 'id' | 'title' | 'starts_at' | 'ends_at' | 'all_day'> & { updated_at?: string };
 /**
  * `expected` is the clock the caller already holds for the row (the conflicts
  * page's quick fix, computed from a render): the time change is written only
- * if the row still has it, rather than against whatever it reads now.
+ * if the row still has it, rather than against whatever it reads now. With an
+ * `updated_at` the row's version must match too, so a change to its text
+ * fields (the calendar editor sends them all) is not written over either.
  */
 export async function updateEvent(scope: ServiceScope, eventId: string, patch: UpdateEventPatch, expected?: EventClockState): Promise<ServiceResult<CalendarEvent>> {
   return applyEventUpdate(scope, eventId, patch, expected);
@@ -529,6 +532,7 @@ async function applyEventUpdate(scope: ServiceScope, eventId: string, patch: Upd
   if (clockState) {
     mutation = mutation.eq('starts_at', clockState.starts_at).eq('all_day', clockState.all_day);
     mutation = clockState.ends_at === null ? mutation.is('ends_at', null) : mutation.eq('ends_at', clockState.ends_at);
+    if (clockState.updated_at) mutation = mutation.eq('updated_at', clockState.updated_at);
   }
   const { data, error } = await mutation.select('*').maybeSingle();
 
@@ -539,6 +543,24 @@ async function applyEventUpdate(scope: ServiceScope, eventId: string, patch: Upd
   // No row means the id belongs to another family (or is gone). Reporting
   // "not found" rather than "denied" avoids confirming that the id exists.
   if (!data) return fail('That event could not be found.', { code: SERVICE_CODES.notFound });
+
+  // A Smart Departure planned for this event follows it (lib/trips/follow-event.ts).
+  // Done HERE because this is where every move is written: the calendar
+  // editor, a conflict quick fix, the assistant's calendar tools and the week
+  // planner that runs them. Each move is followed once, whoever made it.
+  // `clockState` is what the write compared-and-set against, so its start is
+  // the one the event had. The move is saved either way; a plan that could not
+  // follow is logged, and Refresh re-plans it from the event's current start.
+  if (update.starts_at !== undefined && clockState) {
+    try {
+      await followMovedEvent(scope.db, {
+        familyId: scope.familyId, eventId, previousStartsAt: clockState.starts_at, startsAt: data.starts_at,
+        tz: zoneOf(scope), now: scope.now,
+      });
+    } catch (cause) {
+      console.error('[service:calendar] departure plans could not follow a moved event', { eventId, cause });
+    }
+  }
 
   await recordActivitySafely(scope, {
     agent: 'calendar',

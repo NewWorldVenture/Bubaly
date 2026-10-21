@@ -165,6 +165,21 @@ export function awaitingRunToNeed(r: AwaitingRunRow): NeedItem | null {
 
 export type RecommendationRow = { id: string; title: string; priority?: string | null; cta_href?: string | null; created_at: string };
 
+const RECOMMENDATION_FALLBACK_HREF = '/dashboard/autonomous-family-management';
+
+/**
+ * A path inside this app, and nothing that leaves it: one leading `/`, not
+ * followed by another `/` or a backslash (WHATWG URL parsing reads `/\evil.example`
+ * as `//evil.example`, and a link follows it off-site), with no whitespace or
+ * control characters. `cta_href` is free text on a row a member can write, so
+ * the card in a parent's decision queue never trusts it further than this.
+ */
+const SAME_APP_PATH = /^\/(?![\/\\])[^\s\u0000-\u001f\u007f]*$/;
+export function sameAppHref(href: string | null | undefined, fallback: string): string {
+  const value = href?.trim();
+  return value && SAME_APP_PATH.test(value) ? value : fallback;
+}
+
 /**
  * A pending `family_ai_recommendations` row (the household chose "recommend,
  * don't act" — §11 level 1) → a normal-urgency item with one-tap accept/dismiss.
@@ -174,7 +189,7 @@ export function recommendationToNeed(r: RecommendationRow): NeedItem {
     id: `recommendation:${r.id}`,
     kind: 'recommendation',
     title: r.title,
-    href: r.cta_href?.trim() || '/dashboard/autonomous-family-management',
+    href: sameAppHref(r.cta_href, RECOMMENDATION_FALLBACK_HREF),
     urgency: r.priority === 'high' ? 'urgent' : 'normal',
     createdAt: r.created_at,
   };

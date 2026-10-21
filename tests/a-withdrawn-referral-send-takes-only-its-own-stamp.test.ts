@@ -66,7 +66,7 @@ vi.mock('@/lib/email', () => ({
 vi.mock('@/lib/supabase/auth', () => ({
   requireUserContext: async () => ({
     user: { id: 'synthetic-user', email: 'parent@example.invalid' },
-    active: { familyId: FAMILY, member: { display_name: 'Synthetic Parent' }, family: { name: 'Synthetic' } },
+    active: { familyId: FAMILY, role: 'parent', member: { display_name: 'Synthetic Parent' }, family: { name: 'Synthetic' } },
   }),
 }));
 

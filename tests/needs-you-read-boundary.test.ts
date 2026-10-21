@@ -62,8 +62,16 @@ function from(table: string) {
     select: (_selection: string, options?: Query['options']) => { record.options = options; return query; },
     order: () => query,
     limit: () => query,
-    then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) =>
-      Promise.resolve(replies[table] ?? { data: [], count: 0, error: null }).then(resolve, reject),
+    range: () => query,
+    // PostgREST answers `count=exact` with the number of matching rows; a
+    // configured reply that names no count has exactly the rows it lists.
+    then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => {
+      const reply = replies[table] ?? { data: [], count: 0, error: null };
+      const counted = record.options?.count === 'exact' && reply.count === undefined && !reply.error
+        ? { ...reply, count: Array.isArray(reply.data) ? reply.data.length : 0 }
+        : reply;
+      return Promise.resolve(counted).then(resolve, reject);
+    },
   });
   for (const method of ['eq', 'neq', 'in', 'is', 'not', 'lt', 'lte', 'gt', 'gte']) {
     query[method] = (key: string, value: unknown) => { record.filters.push({ method, key, value }); return query; };
@@ -191,7 +199,7 @@ describe('/dashboard/needs-you', () => {
     for (const title of TITLES) expect(html, title).not.toContain(title);
     expect(html).not.toContain('Nothing needs you right now');
     expect(html).not.toContain('things need you');
-    expect(console.error).toHaveBeenCalledWith('[needs-you] inbox messages read failed', expect.objectContaining({ message: expect.stringContaining('permission denied') }));
+    expect(console.error).toHaveBeenCalledWith('[needs-you] inbox-messages read failed', expect.objectContaining({ message: expect.stringContaining('permission denied') }));
   });
 
   it('fails closed the same way when a service read fails', async () => {
@@ -199,7 +207,7 @@ describe('/dashboard/needs-you', () => {
     const html = await render();
     expect(html).toContain('Could not load what needs you');
     expect(html).not.toContain('Book the plumber for Tuesday');
-    expect(console.error).toHaveBeenCalledWith('[needs-you] memory suggestions read failed', 'Could not load family memory.');
+    expect(console.error).toHaveBeenCalledWith('[needs-you] memory-suggestions read failed', 'Could not load family memory.');
   });
 
   it('gives a child the same list read-only: no money approvals read, no decision buttons', async () => {

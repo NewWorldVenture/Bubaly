@@ -44,14 +44,17 @@ export default async function FamilyHealthPage() {
   // sibling's and parent's medicine and dose. No member row asks for the nil
   // UUID, which matches nothing, never everything.
   const ownMedsOnly = readsEveryMedication(ctx.active.role) ? null : (ctx.active.member?.id ?? NIL_UUID);
-  const activeMeds = supabase.from('medications').select('*').eq('family_id', familyId).eq('is_active', true);
+  // The tiles are TOTALS and the lists are a first page, so each capped read
+  // also asks for its exact count: with 15 active medications the tile said 12
+  // and three medicines were simply absent from a caregiver's summary.
+  const activeMeds = supabase.from('medications').select('*', { count: 'exact' }).eq('family_id', familyId).eq('is_active', true);
 
   const [membersRes, apptsRes, medsRes, profilesRes, providersRes] = await Promise.all([
     settle(supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true)),
-    settle(supabase.from('appointments').select('*').eq('family_id', familyId).gte('starts_at', now).lte('starts_at', in30).order('starts_at').limit(8)),
-    settle((ownMedsOnly ? activeMeds.eq('member_id', ownMedsOnly) : activeMeds).limit(12)),
+    settle(supabase.from('appointments').select('*', { count: 'exact' }).eq('family_id', familyId).gte('starts_at', now).lte('starts_at', in30).order('starts_at').order('id').limit(8)),
+    settle((ownMedsOnly ? activeMeds.eq('member_id', ownMedsOnly) : activeMeds).order('name').order('id').limit(12)),
     manager ? settle(supabase.from('medical_profiles').select('member_id, allergies, blood_type, conditions').eq('family_id', familyId)) : Promise.resolve({ data: [], error: null }),
-    settle(supabase.from('health_providers').select('id, name, specialty, phone').eq('family_id', familyId).limit(8)),
+    settle(supabase.from('health_providers').select('id, name, specialty, phone', { count: 'exact' }).eq('family_id', familyId).order('name').order('id').limit(8)),
   ]);
 
   // Health data is safety-critical: a dropped error would render "No allergies
@@ -73,6 +76,20 @@ export default async function FamilyHealthPage() {
   const profiles = profilesRes.data;
   const providers = providersRes.data;
 
+  // A total the database did not give is not the number of rows that came
+  // back: fail closed, like the reads above. A missing table counts nothing.
+  const total = (res: { count?: number | null; error: unknown }) =>
+    (res.error ? 0 : typeof res.count === 'number' ? res.count : null);
+  const apptTotal = total(apptsRes);
+  const medTotal = total(medsRes);
+  const providerTotal = total(providersRes);
+  if (apptTotal === null || medTotal === null || providerTotal === null) {
+    console.error('[dashboard/family-health] health count unavailable');
+    return <ErrorState message={t('familyHealth.couldNotLoadYourFamily')} />;
+  }
+  const moreAppts = Math.max(0, apptTotal - (appts?.length ?? 0));
+  const moreMeds = Math.max(0, medTotal - (meds?.length ?? 0));
+
   const nameById = new Map((members ?? []).map((m) => [m.id, m.display_name]));
 
   return (
@@ -80,9 +97,9 @@ export default async function FamilyHealthPage() {
       <PageHeader title={t('dashboardFamilyHealth.familyHealthCoordinator')} description={t('familyHealth.appointmentsMedicationsProvidersAndEmergency')} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile href="/dashboard/medical" label={t('dashboardFamilyHealth.appts30d')} value={appts?.length ?? 0} icon={CalendarHeart} accent="bg-rose-500" sublabel="Medical" />
-        <StatTile href="/dashboard/medical" label={t('dashboardFamilyHealth.activeMeds')} value={meds?.length ?? 0} icon={Pill} accent="bg-violet-600" sublabel="Medications" />
-        <StatTile href="/dashboard/medical" label={t('dashboardFamilyHealth.providers')} value={providers?.length ?? 0} icon={Stethoscope} accent="bg-blue-600" sublabel="Doctors" />
+        <StatTile href="/dashboard/medical" label={t('dashboardFamilyHealth.appts30d')} value={apptTotal} icon={CalendarHeart} accent="bg-rose-500" sublabel="Medical" />
+        <StatTile href="/dashboard/medical" label={t('dashboardFamilyHealth.activeMeds')} value={medTotal} icon={Pill} accent="bg-violet-600" sublabel="Medications" />
+        <StatTile href="/dashboard/medical" label={t('dashboardFamilyHealth.providers')} value={providerTotal} icon={Stethoscope} accent="bg-blue-600" sublabel="Doctors" />
         <StatTile href="/dashboard/family-emergency" label={t('dashboardFamilyHealth.emergency')} value="Card" icon={ShieldPlus} accent="bg-emerald-600" sublabel="Med summary" />
       </div>
 
@@ -100,6 +117,9 @@ export default async function FamilyHealthPage() {
                   <span className="text-xs text-muted">{fmtDateTime(a.starts_at)}</span>
                 </li>
               ))}
+              {moreAppts > 0 && (
+                <li className="pt-2.5"><a href="/dashboard/medical" className="text-xs font-semibold text-brand-text hover:underline">{t('familyHealth.moreInMedical', { count: moreAppts })}</a></li>
+              )}
             </ul>
           ) : <MiniEmpty icon={CalendarHeart} text={t('familyHealth.noUpcomingAppointments')} />}
         </SectionCard>
@@ -115,6 +135,9 @@ export default async function FamilyHealthPage() {
                   {m.member_id && <span className="text-xs text-muted">{nameById.get(m.member_id)}</span>}
                 </li>
               ))}
+              {moreMeds > 0 && (
+                <li className="pt-2.5"><a href="/dashboard/medical" className="text-xs font-semibold text-brand-text hover:underline">{t('familyHealth.moreInMedical', { count: moreMeds })}</a></li>
+              )}
             </ul>
           ) : <MiniEmpty icon={Pill} text={t('familyHealth.noActiveMedications')} />}
         </SectionCard>

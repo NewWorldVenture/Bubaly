@@ -45,20 +45,24 @@ type State =
   | { status: 'error'; message: string }
   | { status: 'ready'; data: Extract<EventScheduleInsightsResult, { ok: true }> };
 
-export function EventScheduleInsights({ eventId }: { eventId: string }) {
+/**
+ * `occurrenceStartsAt` is the start of the occurrence on screen. A series is
+ * stored once, at its first week, so without it the check ran on that week.
+ */
+export function EventScheduleInsights({ eventId, occurrenceStartsAt }: { eventId: string; occurrenceStartsAt?: string | null }) {
   const t = useTranslations();
   const [state, setState] = useState<State>({ status: 'loading' });
 
   const load = useCallback(async () => {
     setState({ status: 'loading' });
     try {
-      const res = await eventScheduleInsightsAction(eventId);
+      const res = await eventScheduleInsightsAction(eventId, occurrenceStartsAt ?? null);
       if (!res.ok) { setState({ status: 'error', message: res.error }); return; }
       setState({ status: 'ready', data: res });
     } catch {
       setState({ status: 'error', message: t('eventDetail.couldNotCheckThisEvent') });
     }
-  }, [eventId, t]);
+  }, [eventId, occurrenceStartsAt, t]);
 
   useEffect(() => { void load(); }, [load]);
 

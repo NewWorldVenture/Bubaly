@@ -12,7 +12,8 @@ import { getFormat } from '@/lib/utils/format-server';
 import { createServer } from '@/lib/supabase/server';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { departureFromEstimate } from '@/lib/trips/drive-time';
-import type { TripRecommendations } from '@/lib/trips/research';
+import { isSeries } from '@/lib/calendar/occurrences';
+import { MAX_TRIP_RECOMMENDATIONS_BYTES, normalizeTripRecommendations, type TripRecommendations } from '@/lib/trips/research';
 
 type Result<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -38,6 +39,15 @@ export async function saveTripPlanAction(input: {
   const title = input.title.trim();
   const destination = input.destination.trim();
   if (!title || !destination) return { ok: false, error: t('actions.aTitleAndDestinationAre') };
+  // The recommendations arrive from the client as it parsed the model's
+  // answer, and the column is jsonb with no check: held to the parser's shape
+  // and caps, and to a size, before anything is stored. A row the reader
+  // cannot dereference would otherwise take the whole family's Trip Intel
+  // page down on expand.
+  const recommendations = normalizeTripRecommendations(input.recommendations);
+  if (!recommendations || new TextEncoder().encode(JSON.stringify(recommendations)).byteLength > MAX_TRIP_RECOMMENDATIONS_BYTES) {
+    return { ok: false, error: t('actions.tripRecommendationsInvalid') };
+  }
 
   const { data, error } = await supabase
     .from('trip_plans')
@@ -53,7 +63,7 @@ export async function saveTripPlanAction(input: {
       end_date: input.endDate ?? null,
       members: input.members ?? [],
       interests: input.interests ?? null,
-      recommendations: input.recommendations as never,
+      recommendations: recommendations as never,
       weather_summary: input.weatherSummary ?? null,
     })
     .select('id')
@@ -328,10 +338,25 @@ export async function refreshDeparturePlanAction(input: {
 
   const { data: existing, error: fetchErr } = await supabase
     .from('departure_plans')
-    .select('id, title, event_start, prep_minutes, park_minutes, buffer_minutes, destination, origin, reminder_event_id')
+    .select('id, title, event_id, event_start, prep_minutes, park_minutes, buffer_minutes, destination, origin, reminder_event_id')
     .eq('id', input.id).eq('family_id', ctx.active.familyId).maybeSingle();
   if (fetchErr) return { ok: false, error: describeDbError(fetchErr) };
   if (!existing) return { ok: false, error: t('actions.departurePlanNotFound') };
+
+  // The plan's `event_start` is a copy taken when it was saved. A one-off event
+  // moved since then (Saturday 10:00 → Sunday 14:00) is planned from where it
+  // is NOW; recomputing from the copy wrote the head-out reminder back onto
+  // Saturday morning. A series is stored at its first week, so its plan keeps
+  // the week it was made for (moves of a series are followed by
+  // lib/trips/follow-event.ts), and a source event that is gone leaves the copy.
+  let eventStart = existing.event_start;
+  if (existing.event_id) {
+    const { data: source, error: sourceErr } = await supabase
+      .from('calendar_events').select('id, starts_at, recurrence')
+      .eq('id', existing.event_id).eq('family_id', ctx.active.familyId).maybeSingle();
+    if (sourceErr) return { ok: false, error: describeDbError(sourceErr) };
+    if (source && !isSeries(source)) eventStart = source.starts_at;
+  }
 
   const plan = departureFromEstimate({
     driveSeconds: input.driveSeconds,
@@ -341,7 +366,7 @@ export async function refreshDeparturePlanAction(input: {
     weatherDelayMinutes: input.weatherDelayMinutes,
     bufferMinutes: existing.buffer_minutes,
     source: 'manual',
-  }, existing.event_start, new Date());
+  }, eventStart, new Date());
 
   const headOut = await upsertHeadOutEvent(supabase, {
     familyId: ctx.active.familyId, userId: ctx.user.id, existingId: existing.reminder_event_id,
@@ -357,6 +382,7 @@ export async function refreshDeparturePlanAction(input: {
   const { data: refreshed, error } = await supabase
     .from('departure_plans')
     .update({
+      event_start: eventStart,
       drive_seconds: input.driveSeconds,
       traffic_factor: input.trafficFactor,
       weather_delay_minutes: input.weatherDelayMinutes,

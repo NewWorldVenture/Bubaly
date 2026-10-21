@@ -33,11 +33,15 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import {
-  createEvent, createEvents, deleteEvent, deleteEvents, updateEvent,
+  createEvent, createEvents, deleteEvent, deleteEvents, updateEvent, normalizeCalendarWriteInstant,
   EVENT_CATEGORIES, EVENT_RECURRENCES,
 } from '@/lib/services/calendar';
 import { ALREADY_SAVED, makeKey } from '@/lib/services/idempotency';
 import { scopeFromUserContext } from '@/lib/services/scope';
+import { SERVICE_CODES } from '@/lib/services/types';
+import { compareExactInstants } from '@/lib/calendar/exact-instant';
+import { isSeries } from '@/lib/calendar/occurrences';
+import { expandEventsInZone } from '@/lib/calendar/recurrence';
 import { isSubmissionId } from '@/lib/utils/submission-id';
 import { describeActionError } from '@/lib/supabase/errors';
 import { loadScheduleIntelligence } from '@/lib/schedule/intelligence-server';
@@ -201,14 +205,39 @@ export async function createCalendarEventAction(input: CreateCalendarEventInput)
   }
 }
 
+/**
+ * The row as the editor OPENED it. The modal sends every field on Save, so a
+ * Save from a modal another member's change has overtaken wrote this older copy
+ * of the time, place and notes back over theirs, silently.
+ */
+export type OpenedCalendarEvent = { startsAt: string; endsAt: string | null; allDay: boolean; updatedAt: string };
+
+const sameOpenedInstant = (a: string | null, b: string | null): boolean => {
+  if (a === null || b === null) return a === b;
+  try { return compareExactInstants(a, b) === 0; } catch { return false; }
+};
+
 export async function updateCalendarEventAction(
   eventId: string,
   patch: CalendarEventFields,
+  opened?: OpenedCalendarEvent,
 ): Promise<CalendarActionResult> {
   const t = await getTranslations();
   if (!eventId) return { ok: false, error: t('actions.thatEventCouldNotBe') };
   const scope = await calendarScope();
   try {
+    // The clock and the version it was opened at must still be the row's, and
+    // the write below is compared-and-set against what is read here, so a
+    // change landing between this read and the write is refused as well.
+    let current: Awaited<ReturnType<typeof readOpenedEvent>> = null;
+    if (opened) {
+      current = await readOpenedEvent(scope, eventId);
+      if (!current) return { ok: false, error: t('actions.thatEventCouldNotBe') };
+      if (!sameOpenedInstant(current.starts_at, opened.startsAt) || !sameOpenedInstant(current.ends_at, opened.endsAt)
+        || current.all_day !== opened.allDay || current.updated_at !== opened.updatedAt) {
+        return { ok: false, error: t('actions.thatEventChangedSinceThisPage') };
+      }
+    }
     // `undefined` means "leave it alone" all the way down: the service builds its
     // update from the keys actually present, so a modal that shows four fields
     // cannot blank the assignee it never rendered.
@@ -222,8 +251,14 @@ export async function updateCalendarEventAction(
       ...(patch.location !== undefined ? { location: asText(patch.location) ?? null } : {}),
       ...(patch.description !== undefined ? { description: asText(patch.description) ?? null } : {}),
       ...(patch.assigneeId !== undefined ? { assigneeId: patch.assigneeId } : {}),
-    });
-    if (!result.ok) return { ok: false, error: result.error };
+    }, current ?? undefined);
+    if (!result.ok) {
+      // Against an opened copy, no matching row means the compare-and-set lost.
+      if (current && result.code === SERVICE_CODES.notFound) return { ok: false, error: t('actions.thatEventChangedSinceThisPage') };
+      return { ok: false, error: result.error };
+    }
+    // A Smart Departure planned for the event has followed a move: the service
+    // does that for every writer (lib/trips/follow-event.ts).
 
     revalidatePath(PATH);
     return { ok: true, id: result.data.id };
@@ -231,6 +266,15 @@ export async function updateCalendarEventAction(
     console.error('[calendar-action] update failed', err);
     return { ok: false, error: describeActionError(err, t('actions.couldNotUpdateThatEvent')) };
   }
+}
+
+/** The row's clock and version, family-scoped, for the opened-copy check. Throws on a failed read. */
+async function readOpenedEvent(scope: Awaited<ReturnType<typeof calendarScope>>, eventId: string) {
+  const { data, error } = await scope.db.from('calendar_events')
+    .select('id, title, starts_at, ends_at, all_day, updated_at')
+    .eq('id', eventId).eq('family_id', scope.familyId).maybeSingle();
+  if (error) throw error;
+  return data;
 }
 
 export async function deleteCalendarEventAction(eventId: string): Promise<CalendarActionResult> {
@@ -297,6 +341,12 @@ export async function applyRoutineToCalendarAction(input: ApplyRoutineInput): Pr
       recurrence: 'none' as const,
     })));
     if (!result.ok) return { ok: false, error: result.error };
+    // The batch key answers a repeated Apply with the rows the FIRST Apply of
+    // this routine and week wrote. That is the double tap it exists for — and
+    // the wrong answer when the routine was edited in between (a step added, a
+    // time moved): "Added N events" came back with the old rows and none of the
+    // change on the calendar. The rows answered must be the rows asked for.
+    if (!sameRoutineRows(events, result.data)) return { ok: false, error: t('calendar.routineAlreadyAppliedAsItWas') };
 
     revalidatePath(PATH);
     return { ok: true, eventIds: result.data.map((e) => e.id) };
@@ -304,6 +354,24 @@ export async function applyRoutineToCalendarAction(input: ApplyRoutineInput): Pr
     console.error('[calendar-action] apply routine failed', err);
     return { ok: false, error: describeActionError(err, t('actions.couldNotAddThoseEvents')) };
   }
+}
+
+/** Whether `stored` holds exactly the events `asked` for, in any order. */
+function sameRoutineRows(
+  asked: ApplyRoutineInput['events'],
+  stored: { title: string; starts_at: string; ends_at: string | null; category: string; assignee_id: string | null }[],
+): boolean {
+  // Both sides as the one exact spelling the service stores; an unreadable
+  // clock never equals anything.
+  const instant = (value: string | null | undefined) => {
+    const stamped = asStoredInstant(value);
+    return stamped === undefined ? 'none' : normalizeCalendarWriteInstant(stamped, 'UTC') ?? `unreadable:${stamped}`;
+  };
+  const key = (title: string, startsAt: string, endsAt: string | null | undefined, category: string | undefined, assignee: string | null | undefined) =>
+    JSON.stringify([title.trim(), instant(startsAt), instant(endsAt), category ?? 'general', (assignee ?? '').toLowerCase()]);
+  const want = asked.map((e) => key(e.title, e.startsAt, e.endsAt, asCategory(e.category), e.assigneeId)).sort();
+  const have = stored.map((e) => key(e.title, e.starts_at, e.ends_at, e.category, e.assignee_id)).sort();
+  return want.length === have.length && want.every((value, i) => value === have[i]);
 }
 
 export type UndoResult =
@@ -338,15 +406,16 @@ export type EventScheduleInsightsResult =
  * an empty list — "no conflicts" is a claim, and one computed from missing
  * rows would be false.
  */
-export async function eventScheduleInsightsAction(eventId: string): Promise<EventScheduleInsightsResult> {
+export async function eventScheduleInsightsAction(eventId: string, occurrenceStartsAt?: string | null): Promise<EventScheduleInsightsResult> {
   const t = await getTranslations();
   if (!eventId) return { ok: false, error: t('actions.thatEventCouldNotBe') };
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
+  const tz = ctx.active.family.timezone || 'UTC';
   try {
     const { data: event, error } = await supabase
-      .from('calendar_events').select('id, starts_at, ends_at, all_day')
+      .from('calendar_events').select('id, starts_at, ends_at, all_day, recurrence, recurrence_until')
       .eq('id', eventId).eq('family_id', familyId).maybeSingle();
     if (error) {
       console.error('[schedule] event read failed', error);
@@ -355,13 +424,20 @@ export async function eventScheduleInsightsAction(eventId: string): Promise<Even
     if (!event) return { ok: false, error: t('actions.thatEventCouldNotBe') };
     if (event.all_day) return { ok: true, insights: [], leaveBy: null };
 
-    const startMs = Date.parse(event.starts_at);
+    // The occurrence the family OPENED. A series is stored once, at its first
+    // week, so checking the stored start checked that week — long past for an
+    // ongoing practice, which then always read "No conflicts found". The start
+    // the browser names is held to the series: it must be one of its weeks.
+    const startsAt = occurrenceStartsAt ? occurrenceOf(event, occurrenceStartsAt, tz) : event.starts_at;
+    if (!startsAt) return { ok: false, error: t('actions.thatEventCouldNotBe') };
+    const startMs = Date.parse(startsAt);
     if (!Number.isFinite(startMs)) return { ok: true, insights: [], leaveBy: null };
     // Everything that can constrain the event lives on the same family day,
     // give or take: a day either side covers overnight rides and late dinners.
     const result = await loadScheduleIntelligence(supabase, {
-      familyId, tz: ctx.active.family.timezone || 'UTC', now: new Date(),
+      familyId, tz, now: new Date(),
       fromMs: startMs - 86_400_000, toMs: startMs + 86_400_000,
+      occurrence: { eventId, startsAt },
     });
     if (!result.ok) return { ok: false, error: t('actions.couldNotLoadScheduleInsights') };
     const sched = result.data.events.find((e) => e.eventId === eventId);
@@ -369,5 +445,25 @@ export async function eventScheduleInsightsAction(eventId: string): Promise<Even
   } catch (err) {
     console.error('[schedule] event insights read failed', err);
     return { ok: false, error: describeActionError(err, t('actions.couldNotLoadScheduleInsights')) };
+  }
+}
+
+/**
+ * `startsAt` when it is a real occurrence of `event` — the stored start of a
+ * one-off, or one of a series' own steps on the family's clock — else null.
+ */
+function occurrenceOf(
+  event: { id: string; starts_at: string; ends_at: string | null; recurrence: RecurrenceFreq | null; recurrence_until: string | null },
+  startsAt: string, tz: string,
+): string | null {
+  try {
+    if (!isSeries(event)) return compareExactInstants(event.starts_at, startsAt) === 0 ? event.starts_at : null;
+    const at = Date.parse(startsAt);
+    if (!Number.isFinite(at)) return null;
+    const hit = expandEventsInZone([{ ...event, recurrence: event.recurrence ?? 'none' }], new Date(at - 1), new Date(at + 1), tz)
+      .find((row) => compareExactInstants(row.starts_at, startsAt) === 0);
+    return hit?.starts_at ?? null;
+  } catch {
+    return null;
   }
 }
