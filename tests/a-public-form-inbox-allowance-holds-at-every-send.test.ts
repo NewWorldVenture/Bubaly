@@ -38,7 +38,7 @@ vi.mock('@/lib/email', () => ({
   APP_URL: 'https://bubaly.test',
 }));
 
-const FORM_ID = 'form-newsletter';
+const FORM_ID = '7e3c2d1a-5b4f-4c8e-9a1d-2f3e4b5c6d7e';
 
 function limiter(args: Record<string, unknown>, store: InMemorySupabase) {
   const seconds = Number(args.p_window_seconds);

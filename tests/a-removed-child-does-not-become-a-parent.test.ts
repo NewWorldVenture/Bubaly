@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { isChildLoginEmail, syntheticChildEmail } from '@/lib/onboarding/child-login';
+import { deriveChildPassword } from '@/lib/onboarding/child-password';
 
 /**
  * A child removed from the family does not become the parent of a new one.
@@ -31,7 +32,7 @@ const db = vi.hoisted(() => ({
   tables: {} as Record<string, Row[]>,
   failReads: new Set<string>(),
   rpc: [] as Array<{ name: string; args: Record<string, unknown> }>,
-  signIns: [] as Array<{ email: string }>,
+  signIns: [] as Array<{ email: string; password: string }>,
   user: null as null | { id: string; email: string | null; user_metadata: Record<string, unknown> },
 }));
 
@@ -105,8 +106,8 @@ vi.mock('@supabase/supabase-js', async (importOriginal) => {
     ...actual,
     createClient: () => ({
       auth: {
-        signInWithPassword: async ({ email }: { email: string }) => {
-          db.signIns.push({ email });
+        signInWithPassword: async ({ email, password }: { email: string; password: string }) => {
+          db.signIns.push({ email, password });
           const token = [
             Buffer.from('{"alg":"HS256","typ":"JWT"}').toString('base64url'),
             Buffer.from(JSON.stringify({ sub: CHILD })).toString('base64url'),
@@ -248,11 +249,19 @@ describe('a removed child already signed in on a device', () => {
 });
 
 describe('a removed child signing in again', () => {
-  it('is refused like an unknown username, before any password request', async () => {
+  it('is refused like an unknown username, and the password request never carries the real PIN', async () => {
+    // The request IS made — a miss costs the same round trip as a wrong PIN, so
+    // response time does not say which usernames exist (audit N8) — but with a
+    // password no account holds, so a removed child's real credentials are never
+    // presented, and the provider's answer (this fake says yes to everything) is
+    // not adopted.
     seed({ childActive: false });
     const result = await childSignInAction({ username: 'emma', pin: '1234' });
     expect(result).toEqual({ ok: false, error: 'actions.thatUsernameOrPinIsn' });
-    expect(db.signIns).toEqual([]);
+    expect(db.signIns).toHaveLength(1);
+    expect(db.signIns[0].email).toBe(syntheticChildEmail('emma'));
+    expect(db.signIns[0].password).not.toBe(deriveChildPassword('synthetic-child-secret', 'emma', '1234'));
+    expect(parentRowsFor(CHILD)).toEqual([]);
   });
 
   it('fails closed when the membership read fails', async () => {
@@ -267,6 +276,6 @@ describe('a removed child signing in again', () => {
     seed({ childActive: true });
     const result = await childSignInAction({ username: 'emma', pin: '1234' });
     expect(result).toMatchObject({ ok: true });
-    expect(db.signIns).toEqual([{ email: syntheticChildEmail('emma') }]);
+    expect(db.signIns).toEqual([{ email: syntheticChildEmail('emma'), password: deriveChildPassword('synthetic-child-secret', 'emma', '1234') }]);
   });
 });
