@@ -48,8 +48,13 @@ export async function addLeftoverAction(input: {
     .maybeSingle();
 
   if (error) return { ok: false, error: describeDbError(error) };
+  // No error and no row is not a save the family can rely on: the insert may
+  // have landed where this session cannot read it back, or not at all. The
+  // `data!.id` that stood here threw on it, so the form got no answer. Say it
+  // could not be confirmed, as the update and delete below do for zero rows.
+  if (!data?.id) return { ok: false, error: t('actions.couldNotConfirmThatLeftoverWasSaved') };
   revalidatePath('/dashboard/kitchen');
-  return { ok: true, data: { id: data!.id } };
+  return { ok: true, data: { id: data.id } };
 }
 
 export async function updateLeftoverStatusAction(input: { id: string; status: string }): Promise<Result> {
