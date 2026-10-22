@@ -274,7 +274,7 @@ function queryResult(data: unknown[] | null, error: unknown = null, calendar = f
   // `or` and `update` are part of the surface the route really uses: the shared
   // handled count filters `family_automation_runs` with `.or(...)`, and the
   // route marks the notification rows it rendered read.
-  for (const method of ['select', 'eq', 'gte', 'lte', 'gt', 'order', 'limit', 'in', 'neq', 'is', 'not', 'or', 'update', 'abortSignal', 'maybeSingle']) {
+  for (const method of ['select', 'eq', 'gte', 'lte', 'gt', 'order', 'limit', 'range', 'in', 'neq', 'is', 'not', 'or', 'update', 'abortSignal', 'maybeSingle']) {
     query[method] = vi.fn(() => query);
   }
   return query;

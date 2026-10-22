@@ -111,6 +111,9 @@ const cases = [
   // failed read reached the prompt as "MEDICAL APPOINTMENTS THIS WEEK: - None"
   // and the brief told the family there was nothing to take a child to.
   ['daily', 'appointments'] as const,
+  // And its members, school, sports, reminders and meals reads, which the
+  // weekly brief already refuses on (N5): a failed one was "- None".
+  ...(['family_members', 'school_events', 'sports_events', 'reminders', 'meal_plans'] as const).map((table) => ['daily', table] as const),
   // N5: the weekly brief bound only `data` from these, so a failed read was
   // briefed as an empty week ("nothing scheduled", "- none") at 200.
   ...(['chore_assignments', 'calendar_events', 'school_events', 'sports_events', 'appointments', 'meal_plans', 'reminders', 'family_members'] as const)

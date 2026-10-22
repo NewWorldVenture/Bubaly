@@ -116,15 +116,15 @@ export async function POST(req: NextRequest) {
       return { ok: false as const, error: String(cause) };
     });
     const [
-      { data: members },
+      { data: members, error: membersError },
       todayEventsResult,
       tomorrowEventsResult,
       { data: choresDue, error: choresError },
-      { data: schoolEvents },
-      { data: sportsEvents },
+      { data: schoolEvents, error: schoolError },
+      { data: sportsEvents, error: sportsError },
       groceryResult,
-      { data: reminders },
-      { data: mealPlans },
+      { data: reminders, error: remindersError },
+      { data: mealPlans, error: mealPlansError },
       { data: appointments, error: appointmentsError },
       { data: bills, error: billsError },
       { data: medSchedules, error: medsError },
@@ -208,6 +208,19 @@ export async function POST(req: NextRequest) {
         chores: Boolean(choresError), appointments: Boolean(appointmentsError), bills: Boolean(billsError), medications: Boolean(medsError), maintenance: Boolean(maintenanceError),
         warranties: Boolean(warrantiesError), trips: Boolean(tripsError), pantry: Boolean(pantryError), error: householdReadError,
       });
+      return NextResponse.json({ error: tr('briefing.failedToGenerateBriefing') }, { status: 503 });
+    }
+    // And every other read the brief states as facts, as the weekly brief
+    // already refuses on them. A members, school, sports, reminders or meals
+    // read that failed reached the prompt as "- None" ("No meals planned",
+    // no game, no reminder, nobody to name), and the model wrote a quiet day
+    // at 200. A day Bubaly could not read is unavailable, never an empty one.
+    const failedRead = ([
+      ['members', membersError], ['school', schoolError], ['sports', sportsError],
+      ['reminders', remindersError], ['meals', mealPlansError],
+    ] as const).find(([, error]) => error);
+    if (failedRead) {
+      console.error(`[api/ai/briefing] ${failedRead[0]} read failed`, failedRead[1]);
       return NextResponse.json({ error: tr('briefing.failedToGenerateBriefing') }, { status: 503 });
     }
     const groceryItems = groceryResult.data;
