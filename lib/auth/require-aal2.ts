@@ -7,9 +7,10 @@
 // never enrolled a factor are not touched: the guard answers "allow" without
 // a redirect, because `nextLevel` is `aal1` for them.
 //
-// The assurance level is read from the session's JWT (`aal` claim) by
-// `getAuthenticatorAssuranceLevel`; it is not a network round-trip. When even
-// that read fails, the guard FAILS CLOSED: it does not let the page render on
+// The current level comes from the session's JWT (`aal` claim), and enrolled
+// factors must come from the authenticated user. The SDK's token-bound overload
+// validates that token with Auth instead of trusting cookie-stored user.factors.
+// When that read fails, the guard FAILS CLOSED: it does not let the page render on
 // a level it could not establish. It sends the session to the step-up page,
 // which re-reads and shows an honest, retryable error rather than a page of
 // finances behind a guard that silently gave up.
@@ -28,13 +29,23 @@ export type AssuranceRead =
 
 /** The narrow client surface the guard needs, so tests can hand in a stub. */
 export type AssuranceReader = {
-  auth: { mfa: { getAuthenticatorAssuranceLevel: () => Promise<{ data: { currentLevel: string | null; nextLevel: string | null } | null; error: unknown }> } };
+  auth: {
+    getSession: () => Promise<{ data: { session: { access_token: string } | null }; error: unknown }>;
+    mfa: { getAuthenticatorAssuranceLevel: (jwt?: string) => Promise<{ data: { currentLevel: string | null; nextLevel: string | null } | null; error: unknown }> };
+  };
 };
 
 export async function readAssurance(client: AssuranceReader): Promise<AssuranceRead> {
   try {
-    const { data, error } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
+    const session = await client.auth.getSession();
+    if (session.error) return { ok: false, error: session.error };
+    const token = session.data.session?.access_token;
+    if (typeof token !== 'string' || !token.trim()) return { ok: false, error: new Error('assurance session missing') };
+    const { data, error } = await client.auth.mfa.getAuthenticatorAssuranceLevel(token);
     if (error || !data) return { ok: false, error: error ?? new Error('assurance level missing') };
+    if ((data.currentLevel !== 'aal1' && data.currentLevel !== 'aal2') || (data.nextLevel !== 'aal1' && data.nextLevel !== 'aal2')) {
+      return { ok: false, error: new Error('assurance level invalid') };
+    }
     return { ok: true, assurance: { currentLevel: data.currentLevel, nextLevel: data.nextLevel } };
   } catch (error) {
     return { ok: false, error };

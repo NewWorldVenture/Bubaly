@@ -222,6 +222,8 @@ export type ShoppingTripActionResult =
        * says so instead of showing a clean success.
        */
       clearFailed: { name: string; error: string }[];
+      /** Bought, cleared, and NOT counted: the pantry keeps this item in another unit. */
+      unitMismatch: { name: string; bought: string; stocked: string }[];
       cleared: number;
       /**
        * TRUE ONLY WHEN A `transactions` ROW EXISTS. There is no optimistic
@@ -306,6 +308,7 @@ export async function recordShoppingTripAction(input: {
       pantryUpdated: trip.data.pantryUpdated,
       pantryFailed: trip.data.pantryFailed,
       clearFailed: trip.data.clearFailed,
+      unitMismatch: trip.data.unitMismatch,
       cleared: trip.data.cleared,
       purchaseRecorded,
       ...(purchaseError ? { purchaseError } : {}),

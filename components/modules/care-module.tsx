@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { isManager } from '@/lib/constants/roles';
+import { notesInScope, readsEveryNote } from '@/lib/care/note-scope';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
@@ -83,22 +84,28 @@ export function CareModule() {
   const [form, setForm] = useState(blank);
   const [saving, setSaving] = useState(false);
 
+  const seesEveryNote = readsEveryNote(role);
   const { data: entries, loading, error } = useRealtimeQuery<CareEntry>({
-    table: 'care_log', familyId, deps: [familyId],
-    // Bound the read: care_log grows unbounded over time, but the views are
-    // recent-focused ("This week" count + a day-grouped timeline). Load a rolling
-    // 365-day window (hard-capped at 1000 rows) so the client payload stays bounded.
-    fetcher: (sb) => sb.from('care_log').select('*').eq('family_id', familyId)
-      .gte('occurred_at', new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString())
-      .order('occurred_at', { ascending: false }).limit(1000),
+    table: 'care_log', familyId, deps: [familyId, role, userId],
+    // Keep the rolling window and row cap, but narrow an author's read before
+    // the cap: newer notes by others must not crowd their own history out.
+    fetcher: (sb) => {
+      const query = sb.from('care_log').select('*').eq('family_id', familyId);
+      const scoped = seesEveryNote ? query : query.eq('created_by', userId);
+      return scoped.gte('occurred_at', new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString())
+        .order('occurred_at', { ascending: false }).limit(1000);
+    },
   });
 
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
   const now = useMemo(() => new Date(), []); // instant: overdue and last-7-days compare instants (lib/care/log.ts)
 
+  // The held 0510: a parent, an adult or a caregiver reads every note; anyone
+  // else the ones they wrote, so the summaries below are a reader of every
+  // note's alone (built from part of a log they would read as the whole).
   const recipientEntries = useMemo(
-    () => (entries ?? []).filter((e) => e.member_id === recipientId),
-    [entries, recipientId],
+    () => notesInScope(entries ?? [], role, userId, (e) => e.created_by).filter((e) => e.member_id === recipientId),
+    [entries, recipientId, role, userId],
   );
   const entryLikes = useMemo<CareEntryLike[]>(
     () => recipientEntries.map((e) => ({ id: e.id, occurred_at: e.occurred_at, wellbeing: e.wellbeing, log_type: e.log_type })),
@@ -212,8 +219,11 @@ export function CareModule() {
         <EmptyState icon={HeartHandshake} title={tr('care.addAFamilyMember')} description={tr('careModule.addFamilyMembersToStart')} />
       ) : (
         <>
+          {!seesEveryNote && (
+            <p className="text-sm text-muted mb-6">{tr('careModule.onlyTheCareYouLogged', { name: memberName(recipientId) ?? '' })}</p>
+          )}
           {/* Status cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+          {seesEveryNote && <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
             <div className={cn('rounded-2xl border p-5', overdue ? 'bg-amber-500/5 border-amber-500/30' : 'bg-surface/50 border-border')}>
               <div className="flex items-center gap-2 text-xs text-muted uppercase tracking-wider mb-1.5">
                 <Clock className="h-4 w-4" /> {tr('care.lastContact')}
@@ -235,7 +245,7 @@ export function CareModule() {
               <div className="text-2xl font-bold text-fg">{weekCount}</div>
               <div className="text-xs text-muted mt-1">{tr('care.careTouchpoints')}</div>
             </div>
-          </div>
+          </div>}
 
           {/* Quick log */}
           <div className="flex flex-wrap gap-1.5 mb-6">
@@ -288,7 +298,7 @@ export function CareModule() {
                                 {e.logged_by && <div className="text-xs text-muted mt-0.5">by {memberName(e.logged_by)}</div>}
                               </div>
                               {mayEdit(e) && (
-                                <div className="flex items-center gap-1 flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition">
+                                <div className="flex items-center gap-1 flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 coarse:opacity-100 transition">
                                   <button onClick={() => openEdit(e)} aria-label={tr('care.edit')} className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
                                   <button onClick={() => remove(e)} aria-label={tr('care.delete')} className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
                                 </div>

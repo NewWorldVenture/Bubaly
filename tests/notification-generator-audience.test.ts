@@ -154,8 +154,10 @@ describe('other source delivery behavior remains intact', () => {
   it('degrades a failed document read while preserving a family-wide calendar notice', async () => {
     documentFailure = true;
     events = [{ id: id(20001), family_id: FAMILY, title: 'Synthetic family event', starts_at: new Date(Date.now() + 3600000).toISOString(), all_day: false, assignee_id: null, location: null }];
-    expect(await generate()).toBe(1);
-    expect(writes).toMatchObject([{ related_type: 'calendar_events', title: 'Synthetic family event', user_id: null }]);
+    // Family-wide is one row per member with a login (the child and the parent), each settled for email.
+    expect(await generate()).toBe(2);
+    expect(writes.map(r => r.user_id).sort()).toEqual([id(90010), USER].sort());
+    expect(writes.every(r => r.related_type === 'calendar_events' && r.title === 'Synthetic family event' && typeof r.sent_at === 'string')).toBe(true);
     expect(console.error).toHaveBeenCalledWith('[notifications] generation source read failed', expect.objectContaining({ table: 'documents' }));
   });
   it('still reports a refused notification insert', async () => {

@@ -9,12 +9,14 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { signalWordsFor } from '@/lib/intelligence/hard-signals';
-import { loadOperatingIndex } from '@/lib/operating-index/server';
+import { managersItem, managersMove } from '@/lib/operating-index/audience';
+import { loadOperatingIndex, type SnapshotReach } from '@/lib/operating-index/server';
+import type { OperatingSuggestion } from '@/lib/operating-index/score';
 import { loadFamilyContext } from '@/lib/reasoning/context';
 import { reasoningInsights } from '@/lib/reasoning/insights';
 import {
   answerFamilyQuestions, reasoningSummary,
-  type ReasoningReport, type ReasoningSignal, type ReasoningNextAction, type ReasoningReadSource,
+  type ReasoningEngineInput, type ReasoningReport, type ReasoningSignal, type ReasoningNextAction, type ReasoningReadSource,
 } from '@/lib/reasoning/engine';
 
 type DB = SupabaseClient<Database>;
@@ -22,6 +24,58 @@ type Translate = (key: string, params?: Record<string, string | number>) => stri
 
 const IMPACT_PRIORITY: Record<string, number> = { high: 90, medium: 60, low: 35 };
 const SIGNAL_HREF = '/dashboard/family-signals';
+
+/**
+ * Who a report is FOR, beyond their language. A budget-drift signal carries the
+ * household's spend and cap for a budget, and household money is a parent's or
+ * an adult's (lib/finance/household-money.ts readsHouseholdMoney, the held
+ * 0514). The family-signals page and this report showed it to a child, a guest
+ * and everyone else; for them it is left out before the six questions are
+ * answered, so no answer, count or headline is built from it.
+ *
+ * The same goes for the operating index's next moves and the orchestrator's
+ * items: "2 accounts are below zero" (the wallet) and "1 upcoming bill not
+ * covered" (bills) are counts of the household's money. For anyone else they
+ * are left out the same way, decided by where each item comes from and never
+ * by the words of one the family's calendar or its people wrote — "“Bill's
+ * recital” overlaps “Swim practice”", "Bill is carrying the most this week"
+ * and "“Insurance agent visit” — no location" are a child's to read too. The
+ * rule is lib/operating-index/audience.ts (managersMove, managersItem), the one
+ * the Operating Index page, the briefing, the Command Center and the calm inbox
+ * apply for the same reader.
+ */
+export type ReasoningViewer = { readsHouseholdMoney: boolean };
+
+/** Every reader: a service-role caller's, or one a caller narrows itself. */
+const EVERY_SIGNAL: ReasoningViewer = { readsHouseholdMoney: true };
+
+/** An operating index move, with what it is beside how it reads. */
+type IndexMove = ReasoningNextAction & Pick<OperatingSuggestion, 'id' | 'dimension'>;
+
+type ReasoningInputs = {
+  orchestrator: ReasoningEngineInput['orchestrator'];
+  insights: NonNullable<ReasoningEngineInput['insights']>;
+  signals: ReasoningSignal[];
+  nextActions: IndexMove[];
+  readErrors: ReasoningReadSource[];
+};
+
+/** The report from what was read, for `viewer`. */
+function composeReport(inputs: ReasoningInputs, viewer: ReasoningViewer, now: Date): ReasoningReport {
+  const everything = viewer.readsHouseholdMoney;
+  const signals = everything ? inputs.signals : inputs.signals.filter((s) => s.kind !== 'budget_drift');
+  const nextActions = everything ? inputs.nextActions : inputs.nextActions.filter((a) => !managersMove(a));
+  const orchestrator = everything || !inputs.orchestrator ? inputs.orchestrator : {
+    ...inputs.orchestrator,
+    answers: inputs.orchestrator.answers.map((a) => ({ ...a, items: a.items.filter((i) => !managersItem(i)) })),
+  };
+  const report = answerFamilyQuestions({ orchestrator, insights: inputs.insights, signals, nextActions }, now);
+  return {
+    ...report,
+    allClear: report.allClear && inputs.readErrors.length === 0,
+    readErrors: inputs.readErrors,
+  };
+}
 
 /**
  * Assemble the six-question reasoning report from the family's live data.
@@ -37,21 +91,33 @@ const SIGNAL_HREF = '/dashboard/family-signals';
  * carries money, so each signal is worded again here from its `evidence`
  * (signalWordsFor). The reasoning page passes its reader; the proactive AI
  * context slice, whose reader is the model, passes en-US explicitly.
+ *
+ * `reach` is whose client `sb` is (SnapshotReach), and required: composing the
+ * report loads the operating index, which keeps the household's day only from
+ * a client that reads the household. The proactive slice passes 'household'
+ * for a manager or the system, 'member' for anyone else, and `viewer` to
+ * match, so the report it is handed is already its reader's.
  */
 export async function loadReasoningReport(
-  sb: DB, familyId: string, tz: string, locale: LocaleCode, t: Translate, now: Date = new Date(),
+  sb: DB, familyId: string, tz: string, locale: LocaleCode, t: Translate, reach: SnapshotReach, now: Date = new Date(), viewer: ReasoningViewer = EVERY_SIGNAL,
 ): Promise<ReasoningReport> {
+  return composeReport(await readReasoningInputs(sb, familyId, tz, locale, t, reach, now), viewer, now);
+}
+
+async function readReasoningInputs(
+  sb: DB, familyId: string, tz: string, locale: LocaleCode, t: Translate, reach: SnapshotReach, now: Date,
+): Promise<ReasoningInputs> {
   const readErrors: ReasoningReadSource[] = [];
 
   // FOI (orchestrator + ranked suggestions) — the richest single source.
-  const foi = await loadOperatingIndex(sb, familyId, tz, now).catch((err) => {
+  const foi = await loadOperatingIndex(sb, familyId, tz, reach, now).catch((err) => {
     console.error('[reasoning-engine] operating_index read failed', { familyId, err });
     readErrors.push('operating_index');
     return null;
   });
   const orchestrator = foi?.orchestrator ?? null;
-  const nextActions: ReasoningNextAction[] = (foi?.index.suggestions ?? []).map((s) => ({
-    title: s.title, detail: s.detail, href: s.href, priority: IMPACT_PRIORITY[s.impact] ?? 40,
+  const nextActions: IndexMove[] = (foi?.index.suggestions ?? []).map((s) => ({
+    id: s.id, dimension: s.dimension, title: s.title, detail: s.detail, href: s.href, priority: IMPACT_PRIORITY[s.impact] ?? 40,
   }));
 
   // Graph reasoning insights (R2) — hubs / ripple / coverage.
@@ -83,19 +149,26 @@ export async function loadReasoningReport(
     signals = [];
   }
 
-  const report = answerFamilyQuestions({ orchestrator, insights, signals, nextActions }, now);
-  return {
-    ...report,
-    allClear: report.allClear && readErrors.length === 0,
-    readErrors,
-  };
+  return { orchestrator, insights, signals, nextActions, readErrors };
 }
 
-/** Load the report and persist today's snapshot (idempotent per family/day). */
+/**
+ * Load the report and persist today's snapshot (idempotent per family/day).
+ *
+ * The snapshot is the HOUSEHOLD's report, so it is written only from a client
+ * that reads the household: a parent's or an adult's (`viewer`), or a
+ * service-role caller (the default). Anyone else's client may be given less of
+ * the household by RLS (SnapshotReach), and the report it composes is theirs to
+ * read, not the day the parents trend: it is returned, and neither it nor the
+ * operating index under it is written.
+ */
 export async function loadAndSnapshotReasoning(
-  sb: DB, familyId: string, userId: string | null, tz: string, locale: LocaleCode, t: Translate, now: Date = new Date(),
+  sb: DB, familyId: string, userId: string | null, tz: string, locale: LocaleCode, t: Translate, now: Date = new Date(), viewer: ReasoningViewer = EVERY_SIGNAL,
 ): Promise<ReasoningReport> {
-  const report = await loadReasoningReport(sb, familyId, tz, locale, t, now);
+  const reach: SnapshotReach = viewer.readsHouseholdMoney ? 'household' : 'member';
+  const inputs = await readReasoningInputs(sb, familyId, tz, locale, t, reach, now);
+  if (reach === 'member') return composeReport(inputs, viewer, now);
+  const report = composeReport(inputs, EVERY_SIGNAL, now);
   try {
     // Best-effort persistence — the report is returned regardless — but a
     // PostgREST write failure returns { error } without throwing, so we must

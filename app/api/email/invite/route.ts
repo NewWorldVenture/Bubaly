@@ -9,6 +9,7 @@ import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { describeReadError } from '@/lib/supabase/settle';
 import { canInviteWithRole, isManager } from '@/lib/constants/roles';
+import { isChildLoginEmail } from '@/lib/onboarding/child-login';
 
 const MAX_EMAIL_REQUEST_BYTES = 4_096;
 
@@ -57,6 +58,11 @@ export async function POST(req: NextRequest) {
     // route at least refuses to mail it.
     if (!canInviteWithRole(ctx.active.role, invite.role)) {
       return NextResponse.json({ error: t('invite.invalidInvite') }, { status: 403 });
+    }
+    // A kid login's synthetic address receives nothing, and its domain is not
+    // Bubaly's: a join token mailed there is a token in a stranger's inbox.
+    if (isChildLoginEmail(invite.email)) {
+      return NextResponse.json({ error: t('inviteForm.aKidLoginCannotBeInvited') }, { status: 400 });
     }
 
     // The recipient of this mail is a free-text address the inviter chose —

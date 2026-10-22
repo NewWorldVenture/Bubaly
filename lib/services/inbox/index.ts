@@ -96,6 +96,67 @@ export async function markInboxMessageHandled(
 }
 
 /**
+ * Claim an unhandled message for filing, so one press files one request.
+ *
+ * "Handle it" reads `ai_handled` and then files with the planner, which takes
+ * seconds. Two parents pressing at once both read `false` and both filed — two
+ * requests, two plans, two sets of approvals for one message. This sets the
+ * flag ONLY where it is still false, and only the caller whose write matched
+ * the row goes on to file; the other is told it is already with Bubaly. A
+ * filing that then fails gives the claim back (`releaseInboxMessageClaim`), so
+ * the row never says "filed" about a request that does not exist.
+ *
+ * Answers `true` when this caller holds the claim, `false` when someone else
+ * already did.
+ */
+export async function claimInboxMessageForFiling(
+  scope: ServiceScope,
+  messageId: string,
+): Promise<ServiceResult<boolean>> {
+  const id = messageId?.trim();
+  if (!id) return fail('Which message?', { code: SERVICE_CODES.invalidInput });
+  if (!mayFile(scope)) {
+    return fail('Only a parent or adult can file a family message.', { code: SERVICE_CODES.denied });
+  }
+  const { data, error } = await scope.db
+    .from('family_inbox_messages')
+    .update({ ai_handled: true })
+    .eq('id', id)
+    .eq('family_id', scope.familyId)
+    .eq('ai_handled', false)
+    .select('id');
+  if (error) {
+    console.error('[service:inbox] filing claim failed', error);
+    return fail(describeDbError(error, 'Could not hand that message to Bubaly.'), { code: SERVICE_CODES.db, retryable: true });
+  }
+  return ok((data ?? []).length > 0);
+}
+
+/** Give back a claim whose filing failed: the message is not with Bubaly after all. */
+export async function releaseInboxMessageClaim(
+  scope: ServiceScope,
+  messageId: string,
+): Promise<ServiceResult<boolean>> {
+  const id = messageId?.trim();
+  if (!id) return fail('Which message?', { code: SERVICE_CODES.invalidInput });
+  if (!mayFile(scope)) {
+    return fail('Only a parent or adult can file a family message.', { code: SERVICE_CODES.denied });
+  }
+  const { data, error } = await scope.db
+    .from('family_inbox_messages')
+    .update({ ai_handled: false })
+    .eq('id', id)
+    .eq('family_id', scope.familyId)
+    .eq('ai_handled', true)
+    .select('id');
+  if (error) {
+    console.error('[service:inbox] filing claim release failed', error);
+    return fail(describeDbError(error, 'Could not update that message.'), { code: SERVICE_CODES.db, retryable: true });
+  }
+  return ok((data ?? []).length > 0);
+}
+
+/**
  * Move a message between new / read / archived. Managers (or `system`) only.
  *
  * Answers the id and the status it settled on rather than the whole row: no

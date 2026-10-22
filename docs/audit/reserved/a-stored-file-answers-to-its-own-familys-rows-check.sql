@@ -153,6 +153,11 @@ declare
   n        int;
   pos      int;
   installed boolean := to_regprocedure('public.document_object_write_is_refused(text)') is not null;
+  -- The held 0508 makes tax files a manager's (the owner's decision on
+  -- PROD-002); where it is installed a non-manager's every verb on the W-2 is
+  -- refused, and a manager's are unchanged.
+  tax_is_managers boolean := exists (select 1 from pg_policies p where p.schemaname = 'storage' and p.tablename = 'objects'
+                                       and p.policyname = 'Tax files are a manager''s');
 begin
   -- The other family's parent plants, under RLS and in their OWN family, a
   -- sensitive document row and an insurance row that name this family's file.
@@ -186,7 +191,7 @@ begin
         ('front',    '00000000-0000-4000-8499-0000000000f1/insurance/1700000000001-front.png', 'the front of the insurance card a parent saved'),
         ('back',     '00000000-0000-4000-8499-0000000000f1/insurance/1700000000002-back.png',  'the back of the insurance card a parent saved'),
         ('warranty', '00000000-0000-4000-8499-0000000000f1/home/1700000000003-warranty.pdf',   'the bytes behind a household document'),
-        ('w2',       '00000000-0000-4000-8499-0000000000f1/tax/2025/1700000000004-w2.pdf',     'a tax file (control: its row is any member''s)'),
+        ('w2',       '00000000-0000-4000-8499-0000000000f1/tax/2025/1700000000004-w2.pdf',     'a tax file (control: its row is any member''s; a manager''s under 0508)'),
         ('passport', '00000000-0000-4000-8499-0000000000f1/identity/1700000000005-passport.pdf','a sensitive document''s file'),
         ('manual',   '00000000-0000-4000-8499-0000000000f1/home/1700000000006-manual.pdf',     'a household document another family''s rows name'),
         ('passport-braces', '{00000000-0000-4000-8499-0000000000f1}/identity/1700000000007-passport.pdf', 'a sensitive document''s file stored under {family id}'),
@@ -195,7 +200,9 @@ begin
       ) as o(key, path, what) loop
 
       exp := case obj.key when 'front' then who.e_front when 'back' then who.e_back
-                          when 'warranty' then who.e_warranty when 'w2' then who.e_w2
+                          when 'warranty' then who.e_warranty
+                          when 'w2' then case when tax_is_managers and who.label in ('teen', 'child', 'caregiver', 'guest')
+                                              then '000000' else who.e_w2 end
                           when 'passport' then who.e_passport
                           when 'passport-braces' then who.e_passport
                           when 'front-nohyphen' then who.e_front

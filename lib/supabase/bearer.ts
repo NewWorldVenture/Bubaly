@@ -11,6 +11,7 @@ import type { Database } from '../database.types';
 import type { FamilyMembership, UserContext } from './auth';
 import type { MemberRole } from '@/lib/constants/roles';
 import { chooseActiveMembership } from '@/lib/auth/active-membership';
+import { isRetryableAuthError } from '@/lib/auth/session';
 
 type DB = SupabaseClient<Database>;
 
@@ -45,6 +46,8 @@ export type BearerContext =
 export async function getBearerUserContext(token: string): Promise<BearerContext> {
   const supabase = createBearerClient(token);
   const { data: auth, error: authError } = await supabase.auth.getUser(token);
+  // A provider outage cannot establish that the caller's token expired.
+  if (isRetryableAuthError(authError)) return { ok: false, reason: 'unavailable' };
   if (authError || !auth.user) return { ok: false, reason: 'invalid_token' };
   const user = { id: auth.user.id, email: auth.user.email ?? null };
 

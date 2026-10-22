@@ -70,3 +70,18 @@ export function isOrderTerminal(status: OrderStatus): boolean {
 export function isOrderPaid(status: OrderStatus): boolean {
   return status === 'sold' || status === 'completed';
 }
+
+// ── Who takes which step ───────────────────────────────────────────────────
+// The steps `setOrderStatusAction` takes (app/(app)/marketplace/actions.ts,
+// ORDER_FLOW) that say the exchange is over: the item came back, or it is done.
+// They belong to the seller (on a rent or a borrow, the lender), who is the one
+// who knows. Left to either party, a borrower could mark an item returned that
+// is still in their hands, which also ends its overdue reminders. Starting and
+// cancelling stay with either side; completing in person with the hand-off code
+// is its own path.
+export const SELLER_ONLY_ORDER_STEPS: ReadonlySet<string> = new Set(['returned', 'completed']);
+
+/** True when `role`'s side of the exchange may take order step `step`. */
+export function mayTakeOrderStep(role: 'buyer' | 'seller', step: string): boolean {
+  return role === 'seller' || !SELLER_ONLY_ORDER_STEPS.has(step);
+}

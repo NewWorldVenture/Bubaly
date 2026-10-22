@@ -429,9 +429,12 @@ export function composeScheduleIntelligence(
   const events = built.map((b) => b.sched);
   const byEvent: ScheduleIntelligence['byEvent'] = {};
   const departures: ScheduleIntelligence['departures'] = {};
+  // A series can sit in the window more than once under one id; the maps keep
+  // its NEAREST occurrence (events are in start order), which is the one a
+  // surface showing the event's next time is about.
   for (const s of events) {
-    if (s.insights.length) byEvent[s.eventId] = s.insights;
-    if (s.leaveBy) departures[s.eventId] = { leaveByISO: s.leaveBy.at, travelMinutes: s.leaveBy.travelMinutes, source: s.leaveBy.source };
+    if (s.insights.length && !Object.hasOwn(byEvent, s.eventId)) byEvent[s.eventId] = s.insights;
+    if (s.leaveBy && !Object.hasOwn(departures, s.eventId)) departures[s.eventId] = { leaveByISO: s.leaveBy.at, travelMinutes: s.leaveBy.travelMinutes, source: s.leaveBy.source };
   }
   return { events, byEvent, departures };
 }

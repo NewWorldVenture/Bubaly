@@ -58,8 +58,11 @@ export async function POST() {
     // do not rely on that: each words a subscription title again for its own
     // reader from the facts in its payload (autopilotTitleFor).
     const { locale } = await getLocaleContext();
+    // On THIS member's client, so it writes only the cards they may read
+    // (lib/autopilot/audience.ts, 0486); the nightly scan writes the rest.
     const result = await runAutopilotScan(
       supabase, ctx.active.familyId, ctx.user.id, ctx.active.family.timezone || 'UTC', locale.code, t,
+      new Date(), { role: ctx.active.role, memberId: ctx.active.member?.id ?? null },
     );
     return NextResponse.json(result);
   } catch (err) {

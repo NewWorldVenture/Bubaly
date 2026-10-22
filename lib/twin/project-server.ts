@@ -9,10 +9,11 @@ import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
 import {
   projectTwin, projectionSummary, eventWindow, stalePrunableEntityIds, isProjectedRow,
-  type TwinSnapshot,
+  AUDIENCE_RESTRICTED_REF_TABLES, type TwinSnapshot,
 } from './project';
 import { readAll } from '@/lib/supabase/read-all';
 import { describeActionError } from '@/lib/supabase/errors';
+import { isSensitiveMemory } from '@/lib/memory/facts';
 
 type DB = SupabaseClient<Database>;
 
@@ -37,10 +38,15 @@ function readCoveredEverything(rows: { length: number } | null | undefined): boo
   return (rows?.length ?? 0) < ROW_LIMIT;
 }
 
-/** Tables read without a cap: whatever came back is the whole table. */
+/**
+ * Tables read without a cap: whatever came back is the whole table. The
+ * audience-restricted ones are not read at all, so the projection is complete
+ * evidence that none of their nodes belong in the graph: the prune removes
+ * every node an earlier run wrote for them.
+ */
 const UNCAPPED_REF_TABLES = [
   'family_members', 'pets', 'vehicles', 'school_classes', 'teams',
-  'family_routines', 'family_places', 'financial_accounts', 'health_providers', 'homes',
+  'family_routines', 'homes', ...AUDIENCE_RESTRICTED_REF_TABLES,
 ] as const;
 
 /**
@@ -60,21 +66,22 @@ function firstReadFailure(reads: Array<[string, { error: { message: string } | n
 
 export async function runTwinProjection(sb: DB, familyId: string, createdBy: string | null, now: Date = new Date()): Promise<TwinProjectionResult> {
   const eventRange = eventWindow(now);
-  const [members, pets, vehicles, classes, teams, routines, places, accounts, providers] = await settleAll([
+  // Not read, and not projected: AUDIENCE_RESTRICTED_REF_TABLES (clinicians,
+  // paperwork, warranties, accounts, bills, places, storage locations and
+  // renewals). The graph is every member's to read, guests included, and these
+  // are not.
+  const [members, pets, vehicles, classes, teams, routines] = await settleAll([
     sb.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
     sb.from('pets').select('id, name, species').eq('family_id', familyId).eq('is_active', true),
     sb.from('vehicles').select('id, nickname, make, model, primary_driver').eq('family_id', familyId).is('deleted_at', null),
     sb.from('school_classes').select('id, member_id, subject').eq('family_id', familyId),
     sb.from('teams').select('id, member_id, sport').eq('family_id', familyId).eq('is_active', true),
     sb.from('family_routines').select('id, member_id, title').eq('family_id', familyId).eq('status', 'active'),
-    sb.from('family_places').select('id, name').eq('family_id', familyId),
-    sb.from('financial_accounts').select('id, name').eq('family_id', familyId),
-    sb.from('health_providers').select('id, member_id, name, specialty').eq('family_id', familyId),
   ]);
 
   // M3 — the four kinds the household actually runs on. Read alongside the
   // people/pets/places core so one projection produces one coherent graph.
-  const [events, homes, storageLocations, homeAssets, inventory, warranties, projects, bills, paperwork, renewals, preferences] = await settleAll([
+  const [events, homes, homeAssets, inventory, projects, preferences] = await settleAll([
     // Every capped read is ordered. PostgREST gives no stable order without an
     // ORDER BY and Postgres moves updated tuples around the heap, so an
     // unordered `.limit()` returns an arbitrary — and run-to-run different —
@@ -84,37 +91,30 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
       .eq('family_id', familyId).gte('starts_at', eventRange.from).lt('starts_at', eventRange.to)
       .order('starts_at', { ascending: true }).order('id', { ascending: true }).limit(ROW_LIMIT),
     sb.from('homes').select('id, name').eq('family_id', familyId).is('deleted_at', null),
-    sb.from('home_locations').select('id, name, kind').eq('family_id', familyId).order('id', { ascending: true }).limit(ROW_LIMIT),
     sb.from('home_assets').select('id, name, category, home_id, location, warranty_until')
       .eq('family_id', familyId).order('id', { ascending: true }).limit(ROW_LIMIT),
     sb.from('inventory_items').select('id, name, category, location_id, owner_member_id, status, value_cents')
       .eq('family_id', familyId).neq('status', 'disposed').order('id', { ascending: true }).limit(ROW_LIMIT),
-    sb.from('home_warranties').select('id, name, provider, asset_id, home_id, expires_on, status')
-      .eq('family_id', familyId).is('deleted_at', null).order('id', { ascending: true }).limit(ROW_LIMIT),
     sb.from('home_projects').select('id, title, status, room, owner_id, priority')
       .eq('family_id', familyId).in('status', ['idea', 'planning', 'quoting', 'scheduled', 'in_progress', 'on_hold'])
       .order('id', { ascending: true }).limit(ROW_LIMIT),
-    sb.from('bills').select('id, name, amount, due_date, status, category')
-      .eq('family_id', familyId).neq('status', 'paid').order('id', { ascending: true }).limit(ROW_LIMIT),
-    sb.from('paperwork_items').select('id, title, status, due_on, amount, kind, actions')
-      .eq('family_id', familyId).in('status', ['needs_action', 'in_progress']).order('id', { ascending: true }).limit(ROW_LIMIT),
-    sb.from('renewals').select('id, title, member_id, expires_at, cost, category, status')
-      .eq('family_id', familyId).eq('status', 'active').order('id', { ascending: true }).limit(ROW_LIMIT),
-    sb.from('family_facts').select('id, member_id, label, value, source, confidence')
+    sb.from('family_facts').select('id, member_id, label, value, notes, source, confidence')
       .eq('family_id', familyId).eq('category', 'preference').order('id', { ascending: true }).limit(ROW_LIMIT),
   ]);
 
   const readError = firstReadFailure([
     ['family_members', members], ['pets', pets], ['vehicles', vehicles], ['school_classes', classes],
-    ['teams', teams], ['family_routines', routines], ['family_places', places],
-    ['financial_accounts', accounts], ['health_providers', providers],
-    ['calendar_events', events], ['homes', homes], ['home_locations', storageLocations],
-    ['home_assets', homeAssets], ['inventory_items', inventory], ['home_warranties', warranties],
-    ['home_projects', projects], ['bills', bills], ['paperwork_items', paperwork],
-    ['renewals', renewals], ['family_facts', preferences],
+    ['teams', teams], ['family_routines', routines],
+    ['calendar_events', events], ['homes', homes],
+    ['home_assets', homeAssets], ['inventory_items', inventory],
+    ['home_projects', projects], ['family_facts', preferences],
   ]);
   if (readError) return { ok: false, error: readError, entities: 0, edges: 0 };
 
+  // The preferences this run read and withheld as sensitive (see below).
+  const withheldPreferences = new Set((preferences.data ?? [])
+    .filter((f) => isSensitiveMemory({ category: 'preference', key: f.label, content: f.value, notes: f.notes }))
+    .map((f) => f.id));
   const snap: TwinSnapshot = {
     members: (members.data ?? []).map((m) => ({ id: m.id, name: m.display_name })),
     pets: (pets.data ?? []).map((p) => ({ id: p.id, name: p.name, species: p.species })),
@@ -124,15 +124,17 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
     classes: (classes.data ?? []).map((c) => ({ id: c.id, member_id: c.member_id, subject: c.subject })),
     teams: (teams.data ?? []).map((t) => ({ id: t.id, member_id: t.member_id, sport: t.sport })),
     routines: (routines.data ?? []).map((r) => ({ id: r.id, member_id: r.member_id, title: r.title })),
-    places: (places.data ?? []).map((p) => ({ id: p.id, name: p.name })),
-    accounts: (accounts.data ?? []).map((a) => ({ id: a.id, name: a.name })),
-    providers: (providers.data ?? []).map((p) => ({ id: p.id, member_id: p.member_id, name: p.name, specialty: p.specialty })),
+    // Audience-restricted (AUDIENCE_RESTRICTED_REF_TABLES): never read, so
+    // never copied into a table every member reads.
+    places: [],
+    accounts: [],
+    providers: [],
     events: (events.data ?? []).map((e) => ({
       id: e.id, title: e.title, starts_at: e.starts_at, ends_at: e.ends_at,
       all_day: e.all_day, category: e.category, location: e.location, assignee_id: e.assignee_id,
     })),
     homes: (homes.data ?? []).map((h) => ({ id: h.id, name: h.name })),
-    storageLocations: (storageLocations.data ?? []).map((l) => ({ id: l.id, name: l.name, kind: l.kind })),
+    storageLocations: [],
     homeAssets: (homeAssets.data ?? []).map((a) => ({
       id: a.id, name: a.name, category: a.category, home_id: a.home_id, location: a.location, warranty_until: a.warranty_until,
     })),
@@ -140,26 +142,25 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
       id: i.id, name: i.name, category: i.category, location_id: i.location_id,
       owner_member_id: i.owner_member_id, status: i.status, value_cents: i.value_cents,
     })),
-    warranties: (warranties.data ?? []).map((w) => ({
-      id: w.id, name: w.name, provider: w.provider, asset_id: w.asset_id, home_id: w.home_id,
-      expires_on: w.expires_on, status: w.status,
-    })),
+    warranties: [],
     projects: (projects.data ?? []).map((p) => ({
       id: p.id, title: p.title, status: p.status, room: p.room, owner_id: p.owner_id, priority: p.priority,
     })),
-    bills: (bills.data ?? []).map((b) => ({
-      id: b.id, name: b.name, amount: b.amount, due_date: b.due_date, status: b.status, category: b.category,
-    })),
-    paperwork: (paperwork.data ?? []).map((p) => ({
-      id: p.id, title: p.title, status: p.status, due_on: p.due_on, amount: p.amount, kind: p.kind, actions: p.actions,
-    })),
-    renewals: (renewals.data ?? []).map((r) => ({
-      id: r.id, title: r.title, member_id: r.member_id, expires_at: r.expires_at,
-      cost: r.cost, category: r.category, status: r.status,
-    })),
-    preferences: (preferences.data ?? []).map((f) => ({
-      id: f.id, member_id: f.member_id, label: f.label, value: f.value, source: f.source, confidence: f.confidence,
-    })),
+    bills: [],
+    paperwork: [],
+    // Withheld from a guest by the released 0481 (renewals_not_a_guests_read),
+    // so the expiry register stays out of the graph a guest reads.
+    renewals: [],
+    // Only the preferences every member may read. A fact the sensitive-memory
+    // rule matches ("Emma allergies: peanuts", a therapist, a medication) is a
+    // parent's or adult's: Family Memory and Life & Milestones hide it from
+    // everyone else (factsVisibleTo), and the graph is everyone's. The table
+    // stays projector-owned, so the prune removes a node an earlier run wrote.
+    preferences: (preferences.data ?? [])
+      .filter((f) => !withheldPreferences.has(f.id))
+      .map((f) => ({
+        id: f.id, member_id: f.member_id, label: f.label, value: f.value, source: f.source, confidence: f.confidence,
+      })),
   };
 
   const projection = projectTwin(snap, { now });
@@ -206,17 +207,25 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
   // until a read covers the table completely.
   const coveredRefTables = new Set<string>(UNCAPPED_REF_TABLES);
   for (const [table, rows] of [
-    ['calendar_events', events.data], ['home_locations', storageLocations.data],
+    ['calendar_events', events.data],
     ['home_assets', homeAssets.data], ['inventory_items', inventory.data],
-    ['home_warranties', warranties.data], ['home_projects', projects.data],
-    ['bills', bills.data], ['paperwork_items', paperwork.data],
-    ['renewals', renewals.data], ['family_facts', preferences.data],
+    ['home_projects', projects.data], ['family_facts', preferences.data],
   ] as Array<[string, { length: number } | null]>) {
     if (readCoveredEverything(rows)) coveredRefTables.add(table);
     else console.warn(`[twin] ${table} read hit the ${ROW_LIMIT}-row cap; its nodes are refreshed but not pruned this run`);
   }
 
   const stale = stalePrunableEntityIds(idRows ?? [], projection, coveredRefTables);
+  // A preference this run read and withheld as sensitive is known not to be
+  // live, so its node goes even when the preference read hit the cap and the
+  // rest of family_facts is withheld from the prune: otherwise a household
+  // with ROW_LIMIT preferences kept, for every member to read, the node an
+  // earlier run wrote for "Emma allergies: peanuts".
+  const staleIds = new Set(stale);
+  for (const row of idRows ?? []) {
+    if (row.ref_table === 'family_facts' && row.ref_id && withheldPreferences.has(row.ref_id) &&
+      isProjectedRow(row.attributes) && !staleIds.has(row.id)) stale.push(row.id);
+  }
   if (stale.length) {
     // Rows deliberately not checked: these ids were read just above, so fewer
     // matching means some were already deleted — the prune's goal either way.

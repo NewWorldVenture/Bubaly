@@ -25,7 +25,7 @@ export function AmbientClock({ clock24, seconds, timezone }: { clock24: boolean;
     <div className="animate-fade-in text-right leading-none">
       <div className="flex items-baseline justify-end gap-2">
         <span className="text-5xl font-black tabular-nums sm:text-6xl lg:text-7xl">{time}</span>
-        {suffix && <span className="text-xl font-bold text-white/60 sm:text-2xl">{suffix}</span>}
+        {suffix && <span className="text-xl font-bold text-white/70 sm:text-2xl">{suffix}</span>}
       </div>
       <p className="mt-1.5 text-sm font-medium text-white/75 sm:text-base lg:text-lg">
         {now.toLocaleDateString(locale, { timeZone: zone, weekday: 'long', month: 'long', day: 'numeric' })}

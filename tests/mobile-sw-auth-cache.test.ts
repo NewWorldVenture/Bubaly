@@ -102,8 +102,13 @@ describe('service worker cache admission (M-023)', () => {
       expect(policy.libraryItem.test(other), other).toBe(false);
     }
     const request = new Request(origin + path);
-    for (const type of ['audio/mpeg', 'video/mp4', 'application/octet-stream']) {
+    for (const type of ['audio/mpeg', 'audio/mp4', 'audio/x-m4a']) {
       expect(policy.safeResponse(new Response('publisher', { headers: { 'content-type': type, 'cache-control': 'private, max-age=3600' } }), request, 'library')).toBe(true);
+    }
+    // Audio only: the cache serves whoever signs in next, and /library/media
+    // refuses a child or a teen a video or an unnamed byte stream.
+    for (const type of ['video/mp4', 'video/webm', 'application/octet-stream']) {
+      expect(policy.safeResponse(new Response('publisher', { headers: { 'content-type': type } }), request, 'library'), type).toBe(false);
     }
     expect(policy.safeResponse(new Response('private page', { headers: { 'content-type': 'text/html' } }), request, 'library')).toBe(false);
   });

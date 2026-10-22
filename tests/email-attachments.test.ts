@@ -13,6 +13,7 @@ import { emailAttachmentId, fileEmailAttachments, MAX_MULTIPART_EMAIL_BYTES } fr
 import { MAX_DOCUMENT_BYTES } from '@/lib/ai/document-text';
 import { familyScopedEmailRef } from '@/lib/contact-center/server';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
+import { rateLimitHit } from './helpers/rate-limit-rpc';
 
 const state = vi.hoisted(() => ({ db: null as unknown, provider: null as unknown }));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: () => state.db }));
@@ -42,6 +43,9 @@ beforeEach(() => {
   db = createInMemorySupabase<DB>({
     uniques: { paperwork_items: [['id']], family_inbox_messages: [['channel', 'provider_ref']] },
     defaults: { family_inbox_messages: { status: 'new', ai_handled: false } },
+    // Attachment extraction is budgeted through the durable limiter (audit N1);
+    // without the function the fake reads as "unavailable" and nothing is extracted.
+    rpc: { rate_limit_hit: rateLimitHit },
   });
   db.seed('families', [{ id: FAMILY, name: 'Test household', timezone: 'America/New_York' }]);
   db.seed('family_contact_channels', [{ family_id: FAMILY, email_local: 'household', ai_concierge_enabled: false }]);

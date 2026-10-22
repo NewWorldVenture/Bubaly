@@ -10,6 +10,7 @@ import { TripCrudSection, type FieldDef } from './shared';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { tripLabel } from '@/components/vacations/trip-labels';
+import { recordsInScope } from '@/lib/records/personal-scope';
 
 type Contact = Tables<'vacation_emergency_contacts'>;
 type Medical = Tables<'vacation_medical_information'>;
@@ -43,16 +44,18 @@ const medicalFields: FieldDef[] = [
 
 function EmergencySummary({ vacationId }: { vacationId: string }) {
   const t = useTranslations();
-  const { familyId, members } = useApp();
+  const { familyId, members, role, selfMember } = useApp();
   const memberMap = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
   const { data: contacts, loading: contactsLoading, error: contactsError, refresh: refreshContacts } = useRealtimeQuery<Contact>({
     table: 'vacation_emergency_contacts', familyId, deps: [familyId, vacationId],
     fetcher: (sb) => sb.from('vacation_emergency_contacts').select('*').eq('family_id', familyId).eq('vacation_id', vacationId),
   });
-  const { data: medical, loading: medicalLoading, error: medicalError, refresh: refreshMedical } = useRealtimeQuery<Medical>({
+  const { data: allMedical, loading: medicalLoading, error: medicalError, refresh: refreshMedical } = useRealtimeQuery<Medical>({
     table: 'vacation_medical_information', familyId, deps: [familyId, vacationId],
     fetcher: (sb) => sb.from('vacation_medical_information').select('*').eq('family_id', familyId).eq('vacation_id', vacationId),
   });
+  // The held 0517: travel medical detail is a manager's, a caregiver's or its member's to read.
+  const medical = useMemo(() => recordsInScope(allMedical, role, selfMember?.id, 'medical'), [allMedical, role, selfMember]);
 
   if (contactsLoading || medicalLoading) return <LoadingBlock />;
   if (contactsError || medicalError) {
@@ -118,7 +121,7 @@ export function TripEmergency({ vacationId }: { vacationId: string }) {
         )}
       />
       <TripCrudSection<Medical>
-        table="vacation_medical_information" vacationId={vacationId} title={t('tripEmergency.medicalInformation')} icon={HeartPulse}
+        table="vacation_medical_information" vacationId={vacationId} title={t('tripEmergency.medicalInformation')} icon={HeartPulse} personal="medical"
         fields={medicalFields} emptyText={t('tripEmergency.noMedicalInfo')} addLabel="Add medical info"
         renderRow={(m, members) => {
           const who = m.member_id ? members.get(m.member_id)?.display_name : t('tripEmergency.traveler');

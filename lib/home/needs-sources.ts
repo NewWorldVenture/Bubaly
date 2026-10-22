@@ -5,9 +5,9 @@
 
 import type { NeedItem, NeedUrgency } from './needs-attention';
 import { runPagePath } from '@/lib/ai/chat-request';
-import { inAppHref } from '@/lib/auth/redirect';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { formatCents } from '@/lib/wallet/ledger';
+import { daysBetweenDayKeys } from '@/lib/moments/birthdays';
 
 /**
  * Who is reading a "needs you" title.
@@ -69,12 +69,22 @@ export type DocumentRow = { id: string; title: string; expires_at: string | null
  * A stored document with an expiry (passport, license, insurance card…) → a
  * "needs you" item once it's within `windowDays` of expiring (or already
  * expired). Urgent within 3 days / past due. null when not yet due or undated.
+ *
+ * `documents.expires_at` is a DATE (0002_tables.sql:349): the LAST DAY the
+ * document is valid, on the family's wall. So days are counted between DAY
+ * KEYS — the expiry's and the family's today (`today`, a `YYYY-MM-DD` key from
+ * `dayKeyInTz(now, tz)`) — and "expired" means the expiry day is strictly
+ * before today, the rule lib/ai/context/slices/documents.ts applies. Counting
+ * from `Date.parse('YYYY-MM-DD')` (midnight UTC) to the current instant read a
+ * passport as expired all of its last valid day, and in Los Angeles from 17:00
+ * the evening before. A `Date` is read at Greenwich, which is right only for a
+ * UTC family; every caller with documents passes the family's key.
  */
-export function documentExpiryToNeed(r: DocumentRow, now: Date, windowDays = 30): NeedItem | null {
+export function documentExpiryToNeed(r: DocumentRow, today: Date | string, windowDays = 30): NeedItem | null {
   if (!r.expires_at) return null;
-  const t = Date.parse(r.expires_at);
-  if (!Number.isFinite(t)) return null;
-  const days = Math.floor((t - now.getTime()) / 86_400_000);
+  const todayKey = typeof today === 'string' ? today : today.toISOString().slice(0, 10);
+  const days = daysBetweenDayKeys(todayKey, r.expires_at.slice(0, 10));
+  if (days === null) return null;
   if (days > windowDays) return null;
   const when = days < 0 ? 'expired' : days === 0 ? 'expires today' : `expires in ${days}d`;
   const urgency: NeedUrgency = days <= 3 ? 'urgent' : 'normal';
@@ -155,35 +165,31 @@ export function awaitingRunToNeed(r: AwaitingRunRow): NeedItem | null {
 
 export type RecommendationRow = { id: string; title: string; priority?: string | null; cta_href?: string | null; created_at: string };
 
-/** Where a recommendation with no link of its own goes: the page that lists them. */
-const RECOMMENDATIONS_HREF = '/dashboard/autonomous-family-management';
+const RECOMMENDATION_FALLBACK_HREF = '/dashboard/autonomous-family-management';
+
 /**
- * Where one whose stored link would leave the app goes instead: the list of
- * every decision — the same place the morning brief already sends it
- * (lib/briefing/decisions.ts), so Home and the brief agree.
+ * A path inside this app, and nothing that leaves it: one leading `/`, not
+ * followed by another `/` or a backslash (WHATWG URL parsing reads `/\evil.example`
+ * as `//evil.example`, and a link follows it off-site), with no whitespace or
+ * control characters. `cta_href` is free text on a row a member can write, so
+ * the card in a parent's decision queue never trusts it further than this.
  */
-const DECISIONS_HREF = '/dashboard/needs-you';
+const SAME_APP_PATH = /^\/(?![\/\\])[^\s\u0000-\u001f\u007f]*$/;
+export function sameAppHref(href: string | null | undefined, fallback: string): string {
+  const value = href?.trim();
+  return value && SAME_APP_PATH.test(value) ? value : fallback;
+}
 
 /**
  * A pending `family_ai_recommendations` row (the household chose "recommend,
  * don't act" — §11 level 1) → a normal-urgency item with one-tap accept/dismiss.
- *
- * `cta_href` is free text on a row any member can write (RLS is
- * `is_family_member` for INSERT and UPDATE, and the generic record action
- * whitelists the column), and this item is shown to a parent on Home, on
- * Needs you and in the brief as Bubaly's own suggestion. Passed through raw,
- * a child could put "Confirm your card — urgent" in front of a parent linking
- * to https://evil.example. The brief refused that; Home did not. So an href
- * that would leave the app is not rendered: the item keeps its place and opens
- * the decisions list instead.
  */
 export function recommendationToNeed(r: RecommendationRow): NeedItem {
-  const own = r.cta_href?.trim();
   return {
     id: `recommendation:${r.id}`,
     kind: 'recommendation',
     title: r.title,
-    href: !own ? RECOMMENDATIONS_HREF : inAppHref(own) ?? DECISIONS_HREF,
+    href: sameAppHref(r.cta_href, RECOMMENDATION_FALLBACK_HREF),
     urgency: r.priority === 'high' ? 'urgent' : 'normal',
     createdAt: r.created_at,
   };

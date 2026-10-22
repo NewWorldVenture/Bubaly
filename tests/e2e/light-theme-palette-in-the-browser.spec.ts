@@ -130,6 +130,43 @@ test.describe('presentations that stay dark in the light theme keep their shades
     expect(await taken.evaluate((el) => getComputedStyle(el).color)).toBe(EMERALD_800);
   });
 
+  test('Kitchen Mode\u2019s own text reads in the light theme: it takes the dark theme\u2019s tokens', async ({ page }) => {
+    // Its text is text-fg and text-muted on its own near-black. With the light
+    // theme's tokens the clock read 1.18:1 and the muted lines 1.5 to 3.8:1;
+    // the root's `dark` class gives the subtree the dark theme's.
+    await page.goto('/dashboard/briefing');
+    await expect(page.locator('html')).toHaveClass(/\blight\b/);
+    await page.getByRole('button', { name: 'Kitchen Mode' }).or(page.getByRole('tab', { name: 'Kitchen Mode' })).first().click();
+    const kitchen = page.locator('.keep-dark-palette.fixed');
+    await expect(kitchen).toBeVisible();
+    /** Every element of Kitchen Mode that sets text-fg or text-muted and holds text, against its composed background. */
+    const readings = () => kitchen.evaluate((root) => {
+      const parse = (c: string) => { const n = c.match(/[\d.]+/g)!.map(Number); return { rgb: n.slice(0, 3), a: n.length > 3 ? n[3] : 1 }; };
+      const channel = (v: number) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+      const lum = ([r, g, b]: number[]) => 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+      return Array.from(root.querySelectorAll<HTMLElement>('.text-fg, .text-muted'))
+        .filter((el) => (el.textContent ?? '').trim() && el.getClientRects().length)
+        .map((el) => {
+          const stack: { rgb: number[]; a: number }[] = [];
+          for (let n: HTMLElement | null = el; n; n = n.parentElement) {
+            const bg = parse(getComputedStyle(n).backgroundColor);
+            if (bg.a > 0) stack.push(bg);
+            if (bg.a >= 1) break;
+          }
+          const behind = stack.reduceRight((under, top) => top.rgb.map((v, i) => v * top.a + under[i] * (1 - top.a)), [0, 0, 0]);
+          const [hi, lo] = [lum(parse(getComputedStyle(el).color).rgb), lum(behind)].sort((p, q) => q - p);
+          return { text: (el.textContent ?? '').trim().slice(0, 30), ratio: (hi + 0.05) / (lo + 0.05) };
+        });
+    });
+    const now = await readings();
+    expect(now.length, 'token-coloured text inside Kitchen Mode').toBeGreaterThan(3);
+    expect(now.filter((r) => r.ratio < 4.5)).toEqual([]);
+    // Control: without `dark` the light theme's tokens come back, and so does the failure.
+    const boundary = await kitchen.elementHandle();
+    await boundary!.evaluate((el) => el.classList.remove('dark'));
+    expect((await readings()).filter((r) => r.ratio < 4.5).length).toBeGreaterThan(0);
+  });
+
   test('the wall display: its edit-mode delete control and its status line keep the original shades', async ({ page }) => {
     await page.goto('/display');
     await expect(page.locator('html')).toHaveClass(/\blight\b/);
@@ -170,12 +207,16 @@ test.describe('presentations that stay dark in the light theme keep their shades
     // Every remappable class inside it renders its own original shade.
     const ORIGINAL: Record<string, string> = {
       'text-amber-200': AMBER_200, 'text-amber-300': 'rgb(252, 211, 77)', 'text-amber-400': AMBER_400,
+      'text-amber-500': 'rgb(245, 158, 11)', 'text-amber-600': 'rgb(217, 119, 6)',
       'text-emerald-200': 'rgb(167, 243, 208)', 'text-emerald-300': EMERALD_300, 'text-emerald-400': EMERALD_400,
+      'text-emerald-500': 'rgb(16, 185, 129)', 'text-emerald-600': 'rgb(5, 150, 105)',
     };
     const rendered = await kitchen.evaluate((root) => Array.from(root.querySelectorAll<HTMLElement>('*'))
-      .flatMap((el) => Array.from(el.classList).filter((c) => /^text-(amber|emerald)-(200|300|400)$/.test(c))
+      .flatMap((el) => Array.from(el.classList).filter((c) => /^text-(amber|emerald)-(200|300|400|500|600)$/.test(c))
         .map((cls) => ({ cls, color: getComputedStyle(el).color }))));
     expect(rendered.length, 'remappable palette text inside Kitchen Mode').toBeGreaterThan(0);
+    // The due reminder's "Don't forget" heading is a 600: the boundary holds for those too.
+    expect(rendered.map((r) => r.cls)).toContain('text-amber-600');
     for (const { cls, color: shade } of rendered) expect(shade, cls).toBe(ORIGINAL[cls]);
   });
 });

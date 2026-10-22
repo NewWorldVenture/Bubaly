@@ -4,9 +4,11 @@ import {test,expect,type Page} from '@playwright/test';
 import {reactBrowserScripts} from './helpers/react-browser';
 
 const scripts=reactBrowserScripts('development');
-const files=['lib/time/zoned.ts','lib/time/local-input.ts','lib/utils/submission-id.ts','lib/calendar/exact-instant.ts','lib/onboarding/ics-time.ts'];
+const files=['lib/time/zoned.ts','lib/time/local-input.ts','lib/utils/submission-id.ts','lib/calendar/exact-instant.ts','lib/onboarding/ics-time.ts','lib/calendar/day.ts','lib/briefing/calendar-window.ts'];
 const sources=Object.fromEntries(files.map(file=>['@/'+file.replace(/\.ts$/,''),ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText]));
 sources['../onboarding/ics-time']=sources['@/lib/onboarding/ics-time'];
+sources['../calendar/exact-instant']=sources['@/lib/calendar/exact-instant'];
+sources['../time/zoned']=sources['@/lib/time/zoned'];
 const modalSource=fs.readFileSync('components/modules/calendar-module.tsx','utf8');
 const marker='function NewEventModal(';
 if(modalSource.indexOf(marker)<0)throw Error('Actual modal not found');
@@ -24,6 +26,8 @@ async function mount(page:Page,existing:unknown,zone:string){
   w.__calls=[];w.__saved=0;w.__errors=[];
   const {fromLocalInput,toLocalInput}=load('@/lib/time/local-input');
   const {newSubmissionId,submissionSettled}=load('@/lib/utils/submission-id');
+  // An all-day row is edited as dates (lib/calendar/day.ts): the modal's date helpers.
+  const {allDayDate,addDays:addDateDays}=load('@/lib/calendar/day');
   const Input=(props:any)=>React.createElement('input',props),Select=(props:any)=>React.createElement('select',props),Textarea=(props:any)=>React.createElement('textarea',props);
   let field=0;const Field=({children}:any)=>React.createElement('div',{},typeof children==='function'?children(`field-${++field}`):children);
   const Modal=({children}:any)=>React.createElement('section',{},children);
@@ -34,10 +38,10 @@ async function mount(page:Page,existing:unknown,zone:string){
   // Existing action tests separately exercise real server actions with modeled Auth.
   const eventSchema={safeParse:(input:unknown)=>({success:true,data:input})};
   const fieldErrors=()=>({}),describeDbError=(e:unknown)=>String(e);
-  const updateCalendarEventAction=async(id:string,fields:unknown)=>{w.__calls.push({mode:'update',id,fields});return{ok:true};};
+  const updateCalendarEventAction=async(id:string,fields:unknown,opened:unknown)=>{w.__calls.push({mode:'update',id,fields,opened});return{ok:true};};
   const createCalendarEventAction=async(fields:unknown)=>{w.__calls.push({mode:'create',fields});return{ok:true};};
   const useState=React.useState,useRef=React.useRef;
-  const component=new Function('React','useState','useRef','useFamilyClock','useTranslations','useToast','eventSchema','fieldErrors','describeDbError','updateCalendarEventAction','createCalendarEventAction','newSubmissionId','submissionSettled','fromLocalInput','toLocalInput','Modal','Input','Field','Select','Textarea','Button',`${modal};return NewEventModal;`)(React,useState,useRef,useFamilyClock,useTranslations,useToast,eventSchema,fieldErrors,describeDbError,updateCalendarEventAction,createCalendarEventAction,newSubmissionId,submissionSettled,fromLocalInput,toLocalInput,Modal,Input,Field,Select,Textarea,Button);
+  const component=new Function('React','useState','useRef','useFamilyClock','useTranslations','useToast','eventSchema','fieldErrors','describeDbError','updateCalendarEventAction','createCalendarEventAction','newSubmissionId','submissionSettled','fromLocalInput','toLocalInput','allDayDate','addDateDays','Modal','Input','Field','Select','Textarea','Button',`${modal};return NewEventModal;`)(React,useState,useRef,useFamilyClock,useTranslations,useToast,eventSchema,fieldErrors,describeDbError,updateCalendarEventAction,createCalendarEventAction,newSubmissionId,submissionSettled,fromLocalInput,toLocalInput,allDayDate,addDateDays,Modal,Input,Field,Select,Textarea,Button);
   w.__root=w.ReactDOM.createRoot(document.getElementById('root'));w.__root.render(React.createElement(component,{existing,onClose:()=>{},onSaved:()=>w.__saved++}));
  },{sources,modal,existing,zone});
  await expect(page.locator('form')).toBeVisible();
@@ -50,13 +54,15 @@ const cases=[
  ['declared nanosecond precision','UTC','2026-10-09T12:30:29.456789012Z','2026-10-09T13:30:42.789123456Z'],
 ] as const;
 for(const [name,zone,start,end]of cases)test(name,async({page})=>{
- await mount(page,{id:'synthetic-event',title:'Synthetic event',starts_at:start,ends_at:end,category:'general',recurrence:'none'},zone);
+ await mount(page,{id:'synthetic-event',title:'Synthetic event',starts_at:start,ends_at:end,all_day:false,category:'general',recurrence:'none',updated_at:'2026-10-01T00:00:00.000Z'},zone);
  await page.locator('[name=title]').fill('Unrelated title edit');await page.getByRole('button',{name:'Save Changes'}).click();
  await expect.poll(()=>page.evaluate(()=>(window as any).__calls.length),{timeout:1500}).toBe(1);
  const observed=await page.evaluate(()=>({call:(window as any).__calls[0],saved:(window as any).__saved,errors:(window as any).__errors}));
  expect(observed.call.mode).toBe('update');expect(observed.call.id).toBe('synthetic-event');
  expect(observed.call.fields.startsAt).toBe(start);expect(observed.call.fields.endsAt).toBe(end);expect(observed.call.fields.title).toBe('Unrelated title edit');
  expect(observed.call.fields).not.toHaveProperty('family_id');expect(observed.call.fields).not.toHaveProperty('created_by');
+ // The row as it was OPENED travels with the save, so a stale modal is refused (N9).
+ expect(observed.call.opened).toEqual({startsAt:start,endsAt:end,allDay:false,updatedAt:'2026-10-01T00:00:00.000Z'});
  expect(observed.saved).toBe(1);expect(observed.errors).toEqual([]);expect(browserErrors.get(page)).toEqual([]);
 });
 
@@ -73,4 +79,20 @@ test('new form has no original to preserve',async({page})=>{
  await mount(page,null,'UTC');await page.locator('[name=title]').fill('New synthetic event');await page.locator('[name=starts_at]').fill('2026-10-09T12:30');await page.locator('[name=ends_at]').fill('2026-10-09T13:30');await page.getByRole('button',{name:'Add Event'}).click();
  await expect.poll(()=>page.evaluate(()=>(window as any).__calls.length),{timeout:1500}).toBe(1);
  const call=await page.evaluate(()=>(window as any).__calls[0]);expect(call.mode).toBe('create');expect(call.fields.startsAt).toBe('2026-10-09T12:30:00.000Z');expect(call.fields.endsAt).toBe('2026-10-09T13:30:00.000Z');expect(call.fields.submissionId).toMatch(/^[\da-f-]{36}$/);expect(browserErrors.get(page)).toEqual([]);
+});
+
+// N5: an all-day row is a DATE at its UTC midnight with an exclusive end. In a
+// zone west of Greenwich the timed boxes showed Oct 24 as "Oct 23, 20:00", and
+// a date typed into them landed a day late. The boxes are dates now.
+for(const [name,edit,startsAt,endsAt] of [
+ ['an untouched all-day Save keeps its date','', '2026-10-24T00:00:00Z','2026-10-25T00:00:00Z'],
+ ['an all-day event moved to the 25th lands on the 25th','2026-10-25','2026-10-25T00:00:00Z','2026-10-26T00:00:00Z'],
+] as const)test(name,async({page})=>{
+ await mount(page,{id:'synthetic-day',title:'Book fair',starts_at:'2026-10-24T00:00:00.000Z',ends_at:'2026-10-25T00:00:00.000Z',all_day:true,category:'general',recurrence:'none',updated_at:'2026-10-01T00:00:00.000Z'},'America/New_York');
+ await expect(page.locator('[name=starts_at]')).toHaveAttribute('type','date');
+ await expect(page.locator('[name=starts_at]')).toHaveValue('2026-10-24');await expect(page.locator('[name=ends_at]')).toHaveValue('2026-10-24');
+ if(edit){await page.locator('[name=starts_at]').fill(edit);await page.locator('[name=ends_at]').fill(edit);}
+ await page.getByRole('button',{name:'Save Changes'}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__calls.length),{timeout:1500}).toBe(1);
+ const call=await page.evaluate(()=>(window as any).__calls[0]);expect(call.fields).toMatchObject({startsAt,endsAt,allDay:true});expect(browserErrors.get(page)).toEqual([]);
 });

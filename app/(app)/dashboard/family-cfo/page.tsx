@@ -8,7 +8,7 @@ import { requireAal2 } from '@/lib/auth/require-aal2';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { StatTile, SectionCard, MiniEmpty } from '@/components/family/shell';
-import { ErrorState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { HandleItButton } from '@/components/modules/handle-it-button';
 import { AffordabilityScenario } from '@/components/finance/affordability-scenario';
 import { fmtDate } from '@/lib/utils/format';
@@ -20,6 +20,8 @@ import { buildCashflowTimeline, DEFAULT_BUFFER, money as moneyIn, pretty as pret
 import { BillScheduleConfirmationRequired } from '@/lib/finance/bill-schedule';
 import { EXPLAIN_MONTH_REQUEST } from '@/lib/finance/cfo-prompts';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
+import { readsHouseholdMoney } from '@/lib/finance/household-money';
+import { budgetByCategory, monthlyBudgetShare } from '@/lib/finance/budget-periods';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -47,6 +49,12 @@ export default async function FamilyCfoPage() {
   const money = (n: number) => moneyIn(n, locale.code);
   const pretty = (ymdStr: string) => prettyIn(ymdStr, locale.code);
   const ctx = await requireFeature('/dashboard/family-cfo');
+  // The household's accounts, balances and spending are a parent's or adult's
+  // (the held 0514). Every figure here is built from them, so anyone else is
+  // told whose they are rather than shown a $0 net position.
+  if (!readsHouseholdMoney(ctx.active.role)) {
+    return <EmptyState icon={Wallet} title={tr('householdMoney.keptByParents')} description={tr('householdMoney.keptByParentsBody')} />;
+  }
   await requireAal2(ctx, 'money', '/dashboard/family-cfo');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -108,9 +116,23 @@ export default async function FamilyCfoPage() {
   const netWorth = (accounts ?? []).reduce((s, a) => s + (a.type === 'credit' ? -Number(a.balance) : Number(a.balance)), 0);
   const upcomingTotal = (bills ?? []).reduce((s, b) => s + Number(b.amount), 0);
   const monthSpend = (spend ?? []).reduce((s, t) => s + Number(t.amount), 0);
+  // "This month by category" against each category's budget as its MONTHLY
+  // share (weekly x 52/12, yearly / 12), from the one budget the finance
+  // service reports and edits (the oldest row), matched case-insensitively.
+  // The raw amount of any period was set against a month of spend (a $100
+  // weekly budget went red within a week), a legacy duplicate could stand in
+  // for the budget a parent had just changed, and an AI-recorded "groceries"
+  // row showed no budget beside "Groceries".
+  const budgetRows = budgetByCategory((budgets ?? []).map((b) => ({ ...b, amount: Number(b.amount) })));
   const byCat = new Map<string, number>();
-  for (const t of spend ?? []) byCat.set(t.category ?? 'Other', (byCat.get(t.category ?? 'Other') ?? 0) + Number(t.amount));
-  const budgetByCat = new Map((budgets ?? []).map((b) => [b.category, Number(b.amount)]));
+  const catLabel = new Map<string, string>();
+  for (const t of spend ?? []) {
+    const label = t.category ?? 'Other';
+    const key = label.trim().toLowerCase();
+    if (!catLabel.has(key)) catLabel.set(key, budgetRows.get(key)?.category ?? label);
+    byCat.set(key, (byCat.get(key) ?? 0) + Number(t.amount));
+  }
+  const budgetByCat = new Map([...budgetRows].map(([key, b]) => [key, monthlyBudgetShare(b.amount, b.period)]));
 
   const { coverage } = forecast;
   // Copy here says "bills" to a family, so it counts DISTINCT BILLS, never
@@ -243,7 +265,7 @@ export default async function FamilyCfoPage() {
                 return (
                   <li key={cat}>
                     <div className="mb-1 flex items-center justify-between text-sm">
-                      <span className="capitalize">{cat}</span>
+                      <span className="capitalize">{catLabel.get(cat) ?? cat}</span>
                       <span className="tabular-nums text-muted">{usd(amt)}{budget > 0 && ` / ${usd(budget)}`}</span>
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-white/5">

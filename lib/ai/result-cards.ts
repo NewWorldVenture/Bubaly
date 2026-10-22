@@ -135,8 +135,17 @@ export const BudgetAnalysisCardSchema = z.object({
   total_limit: z.number().nullable(),
   /** Previous-period total when the card is a comparison. */
   previous_total: z.number().nullable().optional(),
+  /**
+   * 'month' when the totals are the MONTH's budgeted spending against the
+   * month's limit, weekly and yearly limits counted as their monthly share
+   * (finances.budgetVsActual): not the sum of the rows, which keep their own
+   * periods.
+   */
+  totals: z.enum(['month']).optional(),
   rows: z.array(z.object({
     label: text,
+    /** The period a budget line is judged in, when the line is a budget's. */
+    period: z.enum(['weekly', 'monthly', 'yearly']).optional(),
     spent: z.number(),
     limit: z.number().nullable(),
     share: z.number().nullable(),
@@ -577,20 +586,31 @@ function groceryCard(title: string, data: Rec): GroceryListCard | null {
   return { kind: 'grocery_list', title, list_id: str(data.list_id), items, skipped, in_pantry, href: '/dashboard/grocery' };
 }
 
+const BUDGET_PERIODS = ['weekly', 'monthly', 'yearly'] as const;
+
 function budgetCard(title: string, name: string, data: Rec, ctx: CardContext): BudgetAnalysisCard | null {
   const currency = ctx.currency ?? 'USD';
   const range = asRecord(data.range);
   const period = range ? `${str(range.from) ?? ''} – ${str(range.to) ?? ''}`.trim() : str(data.month);
   if (name === 'finances.budgetVsActual') {
+    // Each line in its OWN period (a week, the month, the year), and the card
+    // says which: "$15,000 / $14,000" under a headline of the month's
+    // "$200 of $1,166.67" read as one red month (M12-CARD).
     const rows = records(data.budgets).flatMap((b) => {
       const label = str(b.category);
       const spent = num(b.spent);
-      return label && spent !== null ? [{ label, spent, limit: num(b.limit), share: num(b.pct), delta: null, over: b.over === true }] : [];
+      const linePeriod = BUDGET_PERIODS.find((p) => p === b.period);
+      return label && spent !== null ? [{ label, ...(linePeriod ? { period: linePeriod } : {}), spent, limit: num(b.limit), share: num(b.pct), delta: null, over: b.over === true }] : [];
     });
+    // The totals are the month's budgeted spending, not the sum of the lines,
+    // and the lines' week, month and year cannot be added into one. A result
+    // without them has no headline to give, so it gives no card.
+    const totalSpent = num(data.total_spent);
+    if (totalSpent === null) return null;
     const over = num(data.over_count) ?? rows.filter((r) => r.over).length;
     return {
-      kind: 'budget_analysis', title, period, currency,
-      total_spent: num(data.total_spent) ?? rows.reduce((s, r) => s + r.spent, 0),
+      kind: 'budget_analysis', title, period, currency, totals: 'month',
+      total_spent: totalSpent,
       total_limit: num(data.total_limit),
       rows,
       insight: rows.length === 0 ? 'No budgets are set up yet.' : over === 0 ? 'Every budget is on track.' : `${over} ${over === 1 ? 'budget is' : 'budgets are'} over.`,

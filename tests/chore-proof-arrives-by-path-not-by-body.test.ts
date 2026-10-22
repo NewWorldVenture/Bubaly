@@ -161,6 +161,10 @@ beforeEach(() => {
   harness.db = withStorage(db);
   db.seed('chore_assignments', [{ id: 'assign-1', family_id: FAMILY, chore_id: 'chore-1', member_id: KID, status: 'pending' }]);
   db.seed('chores', [{ id: 'chore-1', family_id: FAMILY, title: 'Make the bed', proof_required: 'photo', auto_approve_score: null }]);
+  // The reviewer is asked only when the family has AI requests to spend (the
+  // Free plan's monthly allowance, lib/server/ai-access): this one is on Family Basic.
+  db.seed('families', [{ id: FAMILY, trial_ends_at: null, closed_at: null }]);
+  db.seed('subscriptions', [{ id: 'sub-1', family_id: FAMILY, plan: 'basic', status: 'active', current_period_end: '2099-01-01T00:00:00Z' }]);
 });
 afterEach(() => {
   // Every claim taken is let go, whatever the outcome.

@@ -31,7 +31,8 @@
 // Audit C1-S7-02.
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join as nativeJoin } from 'node:path';
+const join = (...parts: string[]): string => nativeJoin(...parts).replace(/\\/g, '/');
 
 const SKIP = new Set(['node_modules', '.next', '.git', 'dist', 'build', 'coverage', 'supabase', 'mobile']);
 
@@ -51,7 +52,7 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
   'app/(auth)/actions.ts::childSignInAction': 'a sign-in: there is no session yet, by definition',
   'app/(auth)/signup/actions.ts::rememberReferralCodeAction': 'writes a referral cookie before any account exists',
   'app/gift/actions.ts::submitGiftPledgeAction': 'public gift flow behind an unguessable link, rate-limited, caps pending pledges',
-  'app/reviews/new/actions.ts::submitReviewAction': 'public review submission behind an unguessable token',
+  'app/reviews/new/actions.ts::submitReviewAction': 'public review submission; a stranger\'s review is always pending, and only a signed-in member can clear the auto-approve threshold',
   'app/s/[slug]/actions.ts::submitResponseAction': 'public survey response behind an unguessable slug',
   'lib/i18n/actions.ts::setLocale': 'sets the locale cookie; touches no family data',
   // Added by the parallel session's auth work. All five run BEFORE a session
@@ -153,7 +154,7 @@ function analyse(): Action[] {
       ...[...source.matchAll(/export\s+(?:async\s+)?function\s+(\w+)/g)].map((m) => m[1]),
       ...[...source.matchAll(/export\s+const\s+(\w+)\s*=/g)].map((m) => m[1]),
     ]);
-    const rel = file.slice(process.cwd().length + 1);
+    const rel = file.slice(process.cwd().length + 1).replace(/\\/g, '/');
     for (const name of exported) {
       if (!bodies.has(name)) continue;
       actions.push({ key: `${rel}::${name}`, guarded: guarded.has(name) });

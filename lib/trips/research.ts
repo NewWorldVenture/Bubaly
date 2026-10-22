@@ -68,6 +68,20 @@ function asString(v: unknown, fallback = ''): string {
   return typeof v === 'string' ? v : fallback;
 }
 
+/**
+ * The most a saved recommendation set may serialise to. The client relays the
+ * model's answer to the save action as it parsed it, so the action holds it to
+ * the same shape and to this size before it is stored (and the reader holds a
+ * stored row to the shape too: `trip_plans.recommendations` is jsonb with no
+ * check, and its default is `{}`).
+ */
+export const MAX_TRIP_RECOMMENDATIONS_BYTES = 64 * 1024;
+
+/** A recommendation set with nothing in it: what an unreadable stored row renders as. */
+export function emptyTripRecommendations(): TripRecommendations {
+  return { overview: '', restaurants: [], activities: [], tips: [] };
+}
+
 /** Parse the model's JSON into typed recommendations, or null if unusable. */
 export function parseTripResearch(text: string): TripRecommendations | null {
   if (!text) return null;
@@ -78,7 +92,17 @@ export function parseTripResearch(text: string): TripRecommendations | null {
   } catch {
     return null;
   }
-  if (!raw || typeof raw !== 'object') return null;
+  return normalizeTripRecommendations(raw);
+}
+
+/**
+ * An untyped value — the model's parsed JSON, a client's relayed copy, a stored
+ * jsonb row — as typed recommendations, or null when nothing usable is in it:
+ * each list capped (8 restaurants, 8 activities, 6 tips), each entry's fields
+ * strings, entries without a name dropped.
+ */
+export function normalizeTripRecommendations(raw: unknown): TripRecommendations | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const o = raw as Record<string, unknown>;
 
   const restaurants: RestaurantRec[] = Array.isArray(o.restaurants)

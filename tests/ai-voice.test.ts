@@ -102,4 +102,11 @@ describe('isValidAudioUpload', () => {
   it('accepts octet-stream (some browsers omit the audio type)', () => {
     expect(isValidAudioUpload(50_000, 'application/octet-stream').ok).toBe(true);
   });
+  // N17: both the browser recorder and the phone name their recording's type.
+  it('rejects an upload that names no type at all', () => {
+    expect(isValidAudioUpload(50_000, '').ok).toBe(false);
+  });
+  it('names the cap it was given', () => {
+    expect(isValidAudioUpload(3 * 1024 * 1024, 'audio/webm', 2 * 1024 * 1024)).toEqual({ ok: false, error: 'Recording too large (max 2 MB)' });
+  });
 });

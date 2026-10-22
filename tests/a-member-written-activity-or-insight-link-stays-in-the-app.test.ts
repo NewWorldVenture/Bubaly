@@ -1,4 +1,4 @@
-// The other family-scoped link columns a member can write and a parent is
+// The family-scoped link columns a member can write and a parent is
 // shown as Bubaly's own: `agent_activity.href` (0127), `daily_insights.href`
 // (0141), `prep_plan_steps.href` (0131) and the Operating Index's stored
 // `suggestions[].href` (0125). Every one of those tables is

@@ -9,7 +9,9 @@ import { LoadingBlock } from '@/components/ui/states';
 // Audit C1-S9-100.
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
-  return { title: t('pageTitle.joinAFamily'), robots: { index: false } };
+  // The invite token is in this page's URL; a link followed from here must not
+  // carry it to another site in its Referer header.
+  return { title: t('pageTitle.joinAFamily'), robots: { index: false }, referrer: 'no-referrer' };
 }
 
 export default function JoinPage() {

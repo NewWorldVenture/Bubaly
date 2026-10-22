@@ -64,3 +64,56 @@ export function writeBackTitle(kind: WriteBackKind, planTitle: string): string {
   if (kind === 'reminder') return `Follow up: ${t}`;
   return t;
 }
+
+// ── What an approval was asked about ────────────────────────────────────────
+//
+// A queued plan is materialized later, by whoever says yes, from the plan row
+// as it is THEN. Any active member may rewrite that row in the meantime (0091's
+// `concierge_plans_family` policy is FOR ALL and reads no role), so a guest
+// could retitle "Soccer Saturday" after the card went out and have a parent's
+// yes put their text on the calendar and in reminders, in the parent's name.
+// So the fields that become records are filed with the ask, and the yes runs
+// only while the plan still says what was filed.
+
+/** The fields of a plan that turn into records when it is materialized. */
+export interface PlanSnapshot {
+  title: string;
+  description: string | null;
+  location: string | null;
+  planned_for: string | null;
+}
+
+type SnapshotSource = { title: string; description?: string | null; location?: string | null; planned_for: string | null };
+
+/** The snapshot to file with a plan's approval or queued run. */
+export function planSnapshot(plan: SnapshotSource): PlanSnapshot {
+  return {
+    title: plan.title,
+    description: plan.description ?? null,
+    location: plan.location ?? null,
+    planned_for: plan.planned_for ?? null,
+  };
+}
+
+const nullableText = (value: unknown): value is string | null => value === null || typeof value === 'string';
+
+/**
+ * The snapshot a payload or a run's metadata carries, or null when it carries
+ * none (a row filed before snapshots existed) or one that is not this shape.
+ */
+export function readPlanSnapshot(value: unknown): PlanSnapshot | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.title !== 'string') return null;
+  if (!nullableText(record.description) || !nullableText(record.location) || !nullableText(record.planned_for)) return null;
+  return { title: record.title, description: record.description, location: record.location, planned_for: record.planned_for };
+}
+
+/** Whether the plan as it is now is the plan the snapshot recorded, field for field. */
+export function matchesPlanSnapshot(plan: SnapshotSource, snapshot: PlanSnapshot): boolean {
+  const now = planSnapshot(plan);
+  return now.title === snapshot.title
+    && now.description === snapshot.description
+    && now.location === snapshot.location
+    && now.planned_for === snapshot.planned_for;
+}

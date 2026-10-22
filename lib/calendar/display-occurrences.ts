@@ -4,12 +4,13 @@ import type { CalendarWindowBounds } from '../briefing/calendar-window';
 import { allDayBusyInterval } from './event-dates';
 import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from './source-capability';
 import type { SourceTransparency } from './source-occurrences';
-import { readCalendarOccurrences, type CalendarOccurrence } from './occurrences';
+import { isSeries, readCalendarOccurrences, type CalendarOccurrence } from './occurrences';
 import { materializeCalendarSourceSnapshot, readCalendarSourceSnapshot, type CalendarSnapshotReference } from './source-snapshot';
 import { compareExactInstants } from './exact-instant';
 
 export { CALENDAR_SOURCE_ARCHIVE_ENABLED } from './source-capability';
-export const CALENDAR_DISPLAY_CONTRACT = 3;
+// 4: native occurrences carry `seriesRow`, the stored row an Edit opens.
+export const CALENDAR_DISPLAY_CONTRACT = 4;
 type NativeEvent = Tables<'calendar_events'>;
 export type NativeCalendarRowValidator = (row: CalendarOccurrence<keyof NativeEvent>) => void;
 type Common = {
@@ -22,16 +23,21 @@ type Common = {
   actualStartsAt: string; actualEndsAt: string | null; startDate: string | null; endDate: string | null;
 };
 export type CalendarDisplayOccurrence = Common & (
-  | { kind: 'native'; reference: Extract<CalendarSnapshotReference,{kind:'native'}>; event: NativeEvent }
+  | { kind: 'native'; reference: Extract<CalendarSnapshotReference,{kind:'native'}>; event: NativeEvent;
+    /** The stored row this occurrence was expanded from (its series' own clock).
+     * `event` carries THIS occurrence's clock; editing must open `seriesRow`, or
+     * a Save writes the clicked week's start over the whole series. Every
+     * `readDisplayCalendarOccurrences` result sets it. */
+    seriesRow?: NativeEvent }
   | { kind: 'source'; reference: Extract<CalendarSnapshotReference,{kind:'source'}> }
 );
 export type CalendarDisplayResult = { data: CalendarDisplayOccurrence[]; count: number; error: null }
   | { data: null; count: null; error: {message:string} };
 
-function nativeDisplay(event: NativeEvent): CalendarDisplayOccurrence {
+function nativeDisplay(event: NativeEvent, seriesRow: NativeEvent): CalendarDisplayOccurrence {
   const busy = event.all_day ? allDayBusyInterval(event,'UTC') : null;
   const startDate = event.all_day ? event.starts_at.slice(0,10) : null;
-  return { transparency:'opaque',kind:'native',reference:{kind:'native',eventId:event.id},event,occurrenceKey:JSON.stringify(['native',event.id,event.starts_at]),
+  return { transparency:'opaque',kind:'native',reference:{kind:'native',eventId:event.id},event,seriesRow,occurrenceKey:JSON.stringify(['native',event.id,event.starts_at]),
     readOnly:event.feed_id !== null || event.external_uid !== null,title:event.title,description:event.description,location:event.location,category:event.category,assignee_id:event.assignee_id,
     starts_at:event.starts_at,ends_at:event.ends_at,all_day:event.all_day,startDate,
     endDate:event.all_day ? event.ends_at?.slice(0,10) ?? new Date(Date.parse(event.starts_at)+86_400_000).toISOString().slice(0,10) : null,
@@ -44,11 +50,16 @@ export async function readDisplayCalendarOccurrences(db: SupabaseClient<Database
   try {
     if (options.limit !== undefined && (!Number.isSafeInteger(options.limit) || options.limit < 1)) throw new Error('Invalid calendar display limit');
     if (!CALENDAR_SOURCE_ARCHIVE_ENABLED) {
-      const result = await readCalendarOccurrences(db,familyId,bounds,timezone,{overlap:options.overlap,limit:options.limit,validateRow:options.validateNativeRow});
+      const stored = new Map<string,NativeEvent>();
+      const result = await readCalendarOccurrences(db,familyId,bounds,timezone,{overlap:options.overlap,limit:options.limit,validateRow:options.validateNativeRow,
+        onSeriesRows:rows => { for (const row of rows) stored.set(row.id,row); }});
       if (result.error) return {data:null,count:null,error:result.error};
       const data = result.data.map(event => {
         if ('source_recurrence' in event && event.source_recurrence !== null) throw new Error('Unreconciled legacy source projection');
-        const display = nativeDisplay(event);
+        // A one-off row is its own stored row; a series occurrence is a clone.
+        const seriesRow = isSeries(event) ? stored.get(event.id) : event;
+        if (!seriesRow) throw new Error('Missing stored series row');
+        const display = nativeDisplay(event,seriesRow);
         if (event.all_day) {
           const busy = allDayBusyInterval(event,timezone);
           display.actualStartsAt = new Date(busy.start).toISOString(); display.actualEndsAt = new Date(busy.end).toISOString();
@@ -67,7 +78,7 @@ export async function readDisplayCalendarOccurrences(db: SupabaseClient<Database
       const original = native.get(row.reference.eventId);
       if (!original) throw new Error('Missing native snapshot identity');
       const event = {...original,starts_at:row.starts_at,ends_at:row.ends_at};
-      return {...row,kind:'native' as const,reference:row.reference,event,category:event.category,assignee_id:event.assignee_id};
+      return {...row,kind:'native' as const,reference:row.reference,event,seriesRow:original,category:event.category,assignee_id:event.assignee_id};
     });
     return {data:options.limit === undefined ? all : all.slice(0,options.limit),count:all.length,error:null};
   } catch {

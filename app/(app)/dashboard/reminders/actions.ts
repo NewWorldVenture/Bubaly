@@ -30,6 +30,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { createReminder, deleteReminder, snoozeReminder } from '@/lib/services/reminders';
+import { SERVICE_CODES } from '@/lib/services/types';
 import { ALREADY_SAVED, makeKey } from '@/lib/services/idempotency';
 import { dayKeyInTz, scopeFromUserContext, zonedTimeMs } from '@/lib/services/scope';
 import { isSubmissionId } from '@/lib/utils/submission-id';
@@ -177,7 +178,17 @@ export async function deleteReminderAction(reminderId: string): Promise<Reminder
       return { ok: false, error: t('actions.onlyAParentGuardianCan16') };
     }
     const result = await deleteReminder(scope, reminderId);
-    if (!result.ok) return { ok: false, error: result.error };
+    if (!result.ok) {
+      // A reminder its actor may not be shown answers as an id the family does
+      // not hold (lib/services/reminders/shown.ts). A teen or child is refused
+      // an unknown id above, by role, so a hidden one they wrote — accepted
+      // from a card that named them then — is refused the same way, not
+      // "could not be found", which would tell them it is still there.
+      if (!isManager(scope.role) && result.code === SERVICE_CODES.notFound) {
+        return { ok: false, error: t('actions.onlyAParentGuardianCan16') };
+      }
+      return { ok: false, error: result.error };
+    }
 
     revalidatePath(PATH);
     return { ok: true, id: result.data.id };

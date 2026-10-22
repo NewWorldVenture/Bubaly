@@ -4,22 +4,24 @@ import { buildAssistantTools, type AssistantCtx } from '@/lib/assistant/tools';
 type Captured = { op: string; payload?: Record<string, unknown> }[];
 type DbArg = Parameters<typeof buildAssistantTools>[0];
 
-// Minimal chainable Supabase stub: select-chains resolve to `selectRows`;
-// update resolves with its matched row, insert with { error: null }; both
-// record their payloads.
+// Minimal chainable Supabase stub: select-chains resolve to `selectRows` (a
+// ranged one to those rows of it, as PostgREST answers); update resolves with
+// its matched row, insert with { error: null }; both record their payloads.
 function fakeDb(selectRows: Record<string, unknown>[], captured: Captured, updateRows: unknown[] = [{ id: 'row' }]): DbArg {
   const make = () => {
     let op: 'select' | 'update' | 'insert' = 'select';
+    let rows = selectRows;
     const b: Record<string, unknown> = {};
     const chain = () => b;
     Object.assign(b, {
       select: chain, eq: chain, ilike: chain, order: chain, limit: chain, not: chain,
+      range(from: number, to: number) { rows = selectRows.slice(from, to + 1); return b; },
       update(p: Record<string, unknown>) { op = 'update'; captured.push({ op, payload: p }); return b; },
       insert(p: Record<string, unknown>) { op = 'insert'; captured.push({ op, payload: p }); return b; },
       then(resolve: (v: unknown) => void) {
         // A matched update answers `.select()` with its row (C1-S9-69); an
         // update with no `data` is a shape the client cannot give once asked.
-        resolve(op === 'select' ? { data: selectRows, error: null } : op === 'update' ? { data: updateRows, error: null } : { error: null });
+        resolve(op === 'select' ? { data: rows, error: null } : op === 'update' ? { data: updateRows, error: null } : { error: null });
       },
     });
     return b;

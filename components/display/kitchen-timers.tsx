@@ -114,7 +114,10 @@ export function KitchenTimers() {
               className="flex flex-col items-center justify-center gap-0.5 rounded-xl bg-white/10 py-2 transition hover:bg-white/20">
               <span className="text-xl leading-none">{p.emoji}</span>
               <span className="text-[10px] font-semibold text-white">{p.label}</span>
-              <span className="text-[10px] text-white/50">{formatDuration(p.seconds)}</span>
+              {/* Full white: on this white/10 button (white/20 hovered) in the
+                  grid's white/6 tile, white/70 read 4.3:1, and 3.4:1 hovered,
+                  on the morning wash. */}
+              <span className="text-[10px] text-white">{formatDuration(p.seconds)}</span>
             </button>
           ))}
         </div>
@@ -130,7 +133,7 @@ export function KitchenTimers() {
         >
           <input value={customMin} onChange={(e) => setCustomMin(e.target.value.replace(/\D/g, ''))}
             inputMode="numeric" placeholder="Minutes…" aria-label={tr('kitchenTimers.customTimerMinutes')}
-            className="h-9 w-full min-w-0 flex-1 rounded-lg border border-white/15 bg-black/25 px-2.5 text-sm text-white outline-none placeholder:text-white/40 focus:border-brand" />
+            className="h-9 w-full min-w-0 flex-1 rounded-lg border border-white/15 bg-black/25 px-2.5 text-sm text-white outline-none placeholder:text-white/70 focus:border-brand" />
           <button type="submit" className="h-9 shrink-0 rounded-lg bg-brand px-3 text-sm font-semibold text-white disabled:opacity-50" disabled={!customMin}>{tr('kitchenTimers.start')}</button>
           <button type="button" aria-label={tr('a11y.close')} onClick={() => setPicking(false)} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20"><X className="h-4 w-4" /></button>
         </form>
@@ -142,7 +145,7 @@ export function KitchenTimers() {
     <div className="flex h-full flex-col">
       {active.length === 0 ? (
         <button onClick={() => setPicking(true)}
-          className="flex flex-1 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-white/15 text-white/50 transition hover:border-white/30 hover:text-white">
+          className="flex flex-1 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-white/15 text-white/70 transition hover:border-white/30 hover:text-white">
           <TimerIcon className="h-8 w-8" />
           <span className="text-sm font-semibold">{tr('kitchenTimers.startATimer')}</span>
         </button>
@@ -154,9 +157,14 @@ export function KitchenTimers() {
               const pct = Math.max(0, Math.min(100, (remaining / t.totalSeconds) * 100));
               return (
                 <li key={t.id} className={cn(
-                  'relative overflow-hidden rounded-xl bg-white/10 px-3 py-2',
-                  t.done && 'animate-pulse bg-emerald-400/25 ring-1 ring-emerald-300/60',
+                  'relative overflow-hidden rounded-xl px-3 py-2',
+                  t.done ? 'ring-1 ring-emerald-300/60' : 'bg-white/10',
                 )}>
+                  {/* A finished timer flashes its wash, not its words. animate-pulse
+                      takes what it is on to half opacity, and when that was the
+                      whole card its label read 2.9:1 and "Done" 2.4:1 at the
+                      faintest frame on the morning wash. */}
+                  {t.done && <span aria-hidden className="absolute inset-0 animate-pulse bg-emerald-400/20" />}
                   {!t.done && <span className="absolute inset-y-0 left-0 bg-brand/25 transition-all" style={{ width: `${100 - pct}%` }} />}
                   <div className="relative flex items-center gap-2.5">
                     <span className="text-xl leading-none">{t.emoji}</span>
@@ -176,7 +184,7 @@ export function KitchenTimers() {
             })}
           </ul>
           <button onClick={() => setPicking(true)}
-            className="mt-2 inline-flex items-center justify-center gap-1.5 rounded-xl bg-white/10 py-1.5 text-xs font-semibold text-white/80 transition hover:bg-white/20">
+            className="mt-2 inline-flex items-center justify-center gap-1.5 rounded-xl bg-white/10 py-1.5 text-xs font-semibold text-white transition hover:bg-white/20">
             <Plus className="h-3.5 w-3.5" /> {tr('kitchenTimers.addTimer')}
           </button>
         </>

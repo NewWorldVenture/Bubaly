@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
+import { refuseClosedOrTrialEnded } from '@/lib/server/account-standing';
 import { getTranslations } from '@/lib/i18n/server';
-import { createServer } from '@/lib/supabase/server';
+import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { settleAll, describeReadError } from '@/lib/supabase/settle';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
@@ -9,11 +10,13 @@ import { scopeFromUserContext, dayKeyInTz, todayKeyFor, zonedDayBoundsMs } from 
 import { isMissingRelationError } from '@/lib/supabase/errors';
 import { logAudit } from '@/lib/server/audit';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { refuseIfLocked } from '@/lib/server/route-feature-gate';
+import { accessDeniedResponse, assertAIAllowance } from '@/lib/server/ai-access';
 import { upcomingDates, formatCountdown, milestoneLabel, type RelDate } from '@/lib/relationship/dates';
 import {
   buildRelationshipDigestPrompt, parseRelationshipDigest, suggestGiftsFromWishlist,
   buildRelationshipGiftHistory, RELATIONSHIP_GIFT_HISTORY_LIMIT,
-  type WishItemLite, type RelationshipDigestContext,
+  type WishItemLite, type RelationshipDigestContext, type RelationshipGiftHistory,
 } from '@/lib/relationship/gifts';
 
 // A family can generate this many AI digests per day. Generous for normal use,
@@ -30,9 +33,16 @@ export async function POST() {
     const ctx = await requireUserContext();
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
+    // A closed or trial-ended family is refused before any work: see lib/server/account-standing.ts.
+    const refused = await refuseClosedOrTrialEnded(supabase, familyId);
+    if (refused) return refused;
     // With no key the provider threw "not configured" and the catch below
     // answered a generic 500; the other AI routes say so with a 503 first.
     if (!(await isAIConfigured())) return NextResponse.json({ error: t('ai.theAiEngineIsnT'), code: 'not_configured' }, { status: 503 });
+    // The page is behind the layout's paywall and this endpoint was not: a
+    // family whose trial ended unpaid could still buy model calls here.
+    const locked = await refuseIfLocked(supabase, familyId);
+    if (locked) return locked;
     const limited = await enforceAIRateLimit(supabase, `ai-relationship:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
       { error: t('relationship.tooManyRelationshipHelperRequests') },
@@ -47,7 +57,13 @@ export async function POST() {
     // tomorrow. Same defect and same fix as the kitchen display
     // (app/(app)/display/page.tsx:122).
     const startOfDay = new Date(zonedDayBoundsMs(dayKeyInTz(new Date(), ctx.active.family.timezone || 'UTC'), ctx.active.family.timezone || 'UTC').start);
-    const { count: usedToday, error: meterError } = await supabase
+    // Counted with the service client, scoped to this family and this action.
+    // The meter's rows are `audit_logs`, which RLS lets only a manager read
+    // (0118's `audit_select`): through a teen's, a child's, a caregiver's or a
+    // guest's own client the count came back 0 with no error, so the family's
+    // daily cap never applied to them — while every call they made still
+    // wrote a row the parents' count kept climbing on.
+    const { count: usedToday, error: meterError } = await createServiceClient()
       .from('audit_logs').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('action', AI_AUDIT_ACTION)
       .gte('created_at', startOfDay.toISOString());
@@ -63,6 +79,14 @@ export async function POST() {
         { status: 429 },
       );
     }
+    // The digest files an `ai_requests` row (withAiRequest below), so the Free
+    // plan's monthly AI allowance applies here as on every other helper: the
+    // twenty a day above was this helper's only limit, and a Free family past
+    // its ten got an eleventh call and an eleventh row. The allowance alone:
+    // whether the helper is available is the paywall above, as the page has no
+    // tier of its own.
+    const access = await assertAIAllowance(ctx, { db: supabase });
+    if (!access.ok) return accessDeniedResponse(access);
 
     const [{ data: profile, error: profileErr }, { data: dateRows, error: datesErr }] = await settleAll([
       supabase.from('relationship_profile')
@@ -111,8 +135,12 @@ export async function POST() {
       partnerMemberId: profile?.partner_member_id ?? null,
       partnerName: profile?.partner_name ?? null,
     };
-    let giftHistory = buildRelationshipGiftHistory(null, recipient);
-    if (recipient.partnerMemberId || recipient.partnerName?.trim()) {
+    // The partner the gifts are FOR is not told what has been bought for them,
+    // nor handed their own wishes ranked with the claimed and bought ones taken
+    // out — the module hides both from them, and so does this.
+    const viewerIsRecipient = !!recipient.partnerMemberId && recipient.partnerMemberId === ctx.active.member?.id;
+    let giftHistory: RelationshipGiftHistory | undefined = viewerIsRecipient ? undefined : buildRelationshipGiftHistory(null, recipient);
+    if (!viewerIsRecipient && (recipient.partnerMemberId || recipient.partnerName?.trim())) {
       // Same cookie-bound client and active-family scope as the existing UI.
       // One extra row detects incomplete coverage without an unbounded read.
       const { data: giftRows, error: giftError } = await supabase.from('relationship_gift_ideas')
@@ -125,7 +153,7 @@ export async function POST() {
 
     // Partner's wishlist (if linked) → ranked gift candidates for grounding.
     let wishlist: { title: string; priceCents: number | null }[] = [];
-    if (profile?.partner_member_id) {
+    if (profile?.partner_member_id && !viewerIsRecipient) {
       // The wishlist IS the grounding for the gift suggestions below. A refused
       // read used to produce an empty one, and the digest went out recommending
       // gifts while silently ignoring everything the partner actually asked for

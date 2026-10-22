@@ -44,14 +44,24 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
-import { generatePrepPlans, type HorizonSignal } from './prep';
+import { generatePrepPlans, type HorizonSignal, type PrepPlan, type SignalKind } from './prep';
 import { nextBirthdayDayKey } from '@/lib/moments/birthdays';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 import { describeActionError } from '@/lib/supabase/errors';
+import { isSensitiveDocument } from '@/lib/documents/sensitivity';
 
 type DB = SupabaseClient<Database>;
 
+/**
+ * What a sensitive document is called on a prep plan: the plan reads "Renew:
+ * Private document". Stored, like every plan title, in the source language.
+ */
+export const PRIVATE_DOCUMENT_TITLE = 'Private document';
+
 export type PrepGenerationResult = { ok: boolean; error?: string; plans: number };
+
+/** Signals that come round again under the same source row: a member's birthday, a document's expiry. */
+const RECURRING_KINDS: ReadonlySet<SignalKind | string> = new Set<SignalKind>(['birthday', 'doc_expiry']);
 
 /**
  * `tz` is the family's IANA zone and is REQUIRED — not optional with a 'UTC'
@@ -75,12 +85,23 @@ export async function runPrepGeneration(
 
   const [trips, members, docs] = await settleAll([
     sb.from('vacations').select('id, title, start_date').eq('family_id', familyId).gte('start_date', todayKey).lte('start_date', in120),
-    sb.from('family_members').select('id, display_name, birthday').eq('family_id', familyId).not('birthday', 'is', null),
-    sb.from('documents').select('id, title, expires_at').eq('family_id', familyId).not('expires_at', 'is', null).gte('expires_at', todayKey).lte('expires_at', in60),
+    // A member removed from the household (is_active = false, a NOT NULL
+    // column) is not planned a birthday for, every year, for good.
+    sb.from('family_members').select('id, display_name, birthday').eq('family_id', familyId).neq('is_active', false).not('birthday', 'is', null),
+    sb.from('documents').select('id, title, expires_at, is_secure, category').eq('family_id', familyId).not('expires_at', 'is', null).gte('expires_at', todayKey).lte('expires_at', in60),
   ]);
 
   const firstErr = [trips, members, docs].find((r) => r.error)?.error;
   if (firstErr) return { ok: false, error: describeActionError(firstErr), plans: 0 };
+
+  // A PLAN WHOSE DAY HAS PASSED IS OVER. Nothing ever retired one: a trip that
+  // happened, or a vacation row deleted before it, left its plan 'active' with
+  // its unticked steps, and Readiness counted them as overdue — a blocker, for
+  // good — and as plans in progress. A birthday or a document passing its day
+  // is closed here too, and opened again below for its next occurrence.
+  const { error: retireErr } = await sb.from('prep_plans').update({ status: 'done' })
+    .eq('family_id', familyId).eq('status', 'active').lt('target_date', todayKey).select('id');
+  if (retireErr) return { ok: false, error: describeActionError(retireErr), plans: 0 };
 
   const signals: HorizonSignal[] = [];
   for (const t of trips.data ?? []) if (t.start_date) signals.push({ id: t.id, kind: 'trip', title: t.title ?? 'Trip', date: t.start_date });
@@ -92,7 +113,23 @@ export async function runPrepGeneration(
     const next = m.birthday ? nextBirthdayDayKey(m.birthday, todayKey) : null;
     if (next) signals.push({ id: m.id, kind: 'birthday', title: `${m.display_name}'s Birthday`, date: next });
   }
-  for (const d of docs.data ?? []) if (d.expires_at) signals.push({ id: d.id, kind: 'doc_expiry', title: d.title ?? 'Document', date: d.expires_at });
+  // A SENSITIVE DOCUMENT'S TITLE STAYS WHERE ITS READERS ARE. The cron reads
+  // with the service client and a manager's click with a session that sees the
+  // Secure Vault, but `prep_plans` reads with is_family_member (0131) for every
+  // role, guests included, and /dashboard/prep-plans prints the title. So a
+  // Secure Vault document, or one whose category is identity, legal, medical
+  // or money (`isSensitiveDocument`, the rule documents_select applies in
+  // 0266/0312), is planned under a title that names nothing. Emitted rather
+  // than skipped: the upsert below overwrites the real title an earlier run
+  // wrote, and the rename after the `decided` read reaches the plans the family
+  // dismissed.
+  const sensitiveDocIds: string[] = [];
+  for (const d of docs.data ?? []) {
+    if (!d.expires_at) continue;
+    const sensitive = isSensitiveDocument(d);
+    if (sensitive) sensitiveDocIds.push(d.id);
+    signals.push({ id: d.id, kind: 'doc_expiry', title: sensitive ? PRIVATE_DOCUMENT_TITLE : (d.title ?? 'Document'), date: d.expires_at });
+  }
 
   const plans = generatePrepPlans(signals, todayKey);
   if (plans.length === 0) return { ok: true, plans: 0 };
@@ -123,21 +160,65 @@ export async function runPrepGeneration(
   // prefix: a dismissal outside it was re-activated, and a new plan outside it
   // found no id below and lost its step ladder while the run reported it
   // generated (SRV-001 census, SRV-C07).
+  //
+  // A DECISION BELONGS TO THE OCCURRENCE IT WAS MADE ON. A birthday and an
+  // expiring document recur under the same source row (one plan per member,
+  // one per document, unique on the signal), so a dismissal of Mia's 2026
+  // birthday hid every birthday she would ever have, and a plan left active
+  // rolled into 2027 with 2026's ticked steps and due dates. For those kinds a
+  // plan whose stored date is not this signal's date is a NEW occurrence: it is
+  // opened again with a fresh step ladder, whatever was decided about the last.
   const signalIds = [...new Set(plans.map((p) => p.signalId))];
   const { data: existing, error: existingErr } = await sb.from('prep_plans')
-    .select('signal_kind, signal_id, status').eq('family_id', familyId).in('signal_id', signalIds);
+    .select('id, signal_kind, signal_id, status, target_date').eq('family_id', familyId).in('signal_id', signalIds);
   if (existingErr) return { ok: false, error: describeActionError(existingErr), plans: 0 };
-  const decided = new Set((existing ?? []).filter((r) => r.status !== 'active').map((r) => `${r.signal_kind}:${r.signal_id}`));
+  const keyOf = (p: { kind: string; signalId: string }) => `${p.kind}:${p.signalId}`;
+  const existingByKey = new Map((existing ?? []).map((r) => [`${r.signal_kind}:${r.signal_id}`, r]));
+  const nextOccurrence = new Set(plans
+    .filter((p) => RECURRING_KINDS.has(p.kind) && existingByKey.has(keyOf(p)) && existingByKey.get(keyOf(p))!.target_date !== p.targetDate)
+    .map(keyOf));
+  const decided = new Set((existing ?? [])
+    .map((r) => `${r.signal_kind}:${r.signal_id}`)
+    .filter((key) => existingByKey.get(key)!.status !== 'active' && !nextOccurrence.has(key)));
+
+  // A plan the family dismissed is left out of the write below, so a real
+  // title an earlier run gave a sensitive document would stay on that row,
+  // readable by every member through PostgREST. Rename just the title; the
+  // family's decision (`status`) is not touched.
+  const privateTitle = plans.find((p) => p.kind === 'doc_expiry' && sensitiveDocIds.includes(p.signalId))?.title;
+  const decidedSensitive = (existing ?? [])
+    .filter((r) => r.status !== 'active' && r.signal_kind === 'doc_expiry' && sensitiveDocIds.includes(r.signal_id))
+    .map((r) => r.signal_id);
+  if (privateTitle && decidedSensitive.length) {
+    const { error: scrubErr } = await sb.from('prep_plans').update({ title: privateTitle })
+      .eq('family_id', familyId).eq('signal_kind', 'doc_expiry').in('signal_id', decidedSensitive).select('id');
+    if (scrubErr) return { ok: false, error: describeActionError(scrubErr), plans: 0 };
+  }
 
   const fresh = plans.filter((p) => !decided.has(`${p.kind}:${p.signalId}`));
   if (fresh.length === 0) return { ok: true, plans: 0 };
 
-  const planRows = fresh.map((p) => ({
+  // A next occurrence is opened again from the row's OWN previous date, so a
+  // concurrent run (the cron beside a click) that already opened it changes
+  // nothing here and does not clear the steps the family has ticked since.
+  const reopened = new Set<string>();
+  for (const p of fresh.filter((plan) => nextOccurrence.has(keyOf(plan)))) {
+    const row = existingByKey.get(keyOf(p))!;
+    const { data: opened, error: openErr } = await sb.from('prep_plans')
+      .update({ status: 'active', title: p.title, target_date: p.targetDate, urgency: p.urgency })
+      .eq('id', row.id).eq('family_id', familyId).eq('target_date', row.target_date).select('id');
+    if (openErr) return { ok: false, error: describeActionError(openErr), plans: 0 };
+    if (opened?.length) reopened.add(keyOf(p));
+  }
+
+  const planRows = fresh.filter((p) => !nextOccurrence.has(keyOf(p))).map((p) => ({
     family_id: familyId, signal_kind: p.kind, signal_id: p.signalId,
     title: p.title, target_date: p.targetDate, urgency: p.urgency, created_by: createdBy,
   }));
-  const { error: planErr } = await sb.from('prep_plans').upsert(planRows, { onConflict: 'family_id,signal_kind,signal_id' });
-  if (planErr) return { ok: false, error: describeActionError(planErr), plans: 0 };
+  if (planRows.length) {
+    const { error: planErr } = await sb.from('prep_plans').upsert(planRows, { onConflict: 'family_id,signal_kind,signal_id' });
+    if (planErr) return { ok: false, error: describeActionError(planErr), plans: 0 };
+  }
 
   const { data: idRows, error: readErr } = await sb.from('prep_plans').select('id, signal_kind, signal_id')
     .eq('family_id', familyId).in('signal_id', fresh.map((p) => p.signalId));
@@ -150,13 +231,29 @@ export async function runPrepGeneration(
   if (fresh.some((p) => !idByKey.has(`${p.kind}:${p.signalId}`))) {
     return { ok: false, error: 'Bubaly could not finish setting up those plans. Try again.', plans: 0 };
   }
-  const stepRows = fresh.flatMap((p) => {
+  const stepsOf = (group: PrepPlan[]) => group.flatMap((p) => {
     const planId = idByKey.get(`${p.kind}:${p.signalId}`);
     if (!planId) return [];
     return p.steps.map((s, i) => ({
       family_id: familyId, plan_id: planId, label: s.label, href: s.href, due_date: s.dueDate, lead_days: s.leadDays, sort_order: i,
     }));
   });
+  // Three kinds of plan, three ways to write a step ladder:
+  //   - a next occurrence starts its ladder again: every step undone, due
+  //     dates counted from the new date;
+  //   - a plan whose date moved (a rescheduled trip) keeps what was ticked and
+  //     takes the new due dates — they were last year's, or last month's;
+  //   - any other plan only gains the steps it lacks, as before.
+  const moved = fresh.filter((p) => !reopened.has(keyOf(p)) && existingByKey.has(keyOf(p))
+    && existingByKey.get(keyOf(p))!.target_date !== p.targetDate);
+  const resetRows = stepsOf(fresh.filter((p) => reopened.has(keyOf(p)))).map((row) => ({ ...row, is_done: false }));
+  const movedRows = stepsOf(moved);
+  const stepRows = stepsOf(fresh.filter((p) => !reopened.has(keyOf(p)) && !moved.includes(p)));
+  for (const rows of [resetRows, movedRows]) {
+    if (!rows.length) continue;
+    const { error: stepErr } = await sb.from('prep_plan_steps').upsert(rows, { onConflict: 'family_id,plan_id,label' });
+    if (stepErr) return { ok: false, error: describeActionError(stepErr), plans: 0 };
+  }
   if (stepRows.length) {
     const { error: stepErr } = await sb.from('prep_plan_steps').upsert(stepRows, { onConflict: 'family_id,plan_id,label', ignoreDuplicates: true });
     if (stepErr) return { ok: false, error: describeActionError(stepErr), plans: 0 };

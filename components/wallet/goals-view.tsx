@@ -240,7 +240,7 @@ function CreateGoalModal({ childOptions, onClose }: { childOptions: ChildOption[
         <Field label={t('goals.whoseGoal')}>
           {(id) => (
             <select id={id} value={childId} onChange={(e) => setChildId(e.target.value)}
-              className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm focus:border-brand/40 focus:outline-none">
+              className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm focus:border-brand focus:outline-none">
               <option value="">{t('goalsView.familyGoal')}</option>
               {childOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>

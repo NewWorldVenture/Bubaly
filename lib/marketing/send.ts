@@ -7,6 +7,7 @@ import { unsubUrl } from '@/lib/marketing/unsubscribe';
 import { readInChunks } from '@/lib/supabase/chunked-in';
 import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
+import { isChildLoginEmail } from '@/lib/onboarding/child-login';
 
 type DB = SupabaseClient<Database>;
 
@@ -31,10 +32,13 @@ export async function resolveRecipients(
     pool = evaluateSegment(customers, (seg.rules ?? {}) as SegmentRules);
   }
 
+  // Never a kid login's synthetic address: the campaign goes out through
+  // Resend's batch API directly, past sendReactEmail's refusal, and a family
+  // whose only login is a kid login has that address as its owner's.
   const emails = new Set<string>();
   for (const c of pool) {
     const e = c.ownerEmail?.trim().toLowerCase();
-    if (e && EMAIL_RE.test(e)) emails.add(e);
+    if (e && EMAIL_RE.test(e) && !isChildLoginEmail(e)) emails.add(e);
   }
 
   // Remove suppressed addresses (unsubscribes, bounces, complaints).

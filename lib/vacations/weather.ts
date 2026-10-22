@@ -50,6 +50,19 @@ export function dayAdvice(day: WeatherDayLike): WeatherAdvice[] {
   return out;
 }
 
+/**
+ * Only the forecast days that fall inside the trip. Open-Meteo answers the
+ * default week-from-today when a trip is beyond its horizon, and a snapshot
+ * for a day the family is not away on is not the trip's weather — it must not
+ * drive packing, readiness or a 'weather_warning' recommendation. An undated
+ * trip keeps everything, because there is no range to hold it to.
+ */
+export function forecastDaysWithin<T extends { forecast_date: string }>(days: T[], startDate: string | null | undefined, endDate: string | null | undefined): T[] {
+  if (!startDate) return days;
+  const end = endDate ?? startDate;
+  return days.filter((d) => d.forecast_date >= startDate && d.forecast_date <= end);
+}
+
 /** Roll a forecast into the worst-severity advice across the trip. */
 export function tripWeatherAdvice(days: WeatherDayLike[]): WeatherAdvice[] {
   const seen = new Map<string, WeatherAdvice>();

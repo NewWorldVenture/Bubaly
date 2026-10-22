@@ -23,7 +23,7 @@ import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '
 import { escapeLike } from '@/lib/supabase/escape-like';
 import { readAllInChunks } from '@/lib/supabase/chunked-in';
 import { makeKey } from '../idempotency';
-import { scopeNow } from '../scope';
+import { familyInstantIso, scopeNow } from '../scope';
 import { choreRepeats, nextChoreDueAt } from '@/lib/chores/respawn';
 import { getTranslations } from '@/lib/i18n/server';
 
@@ -97,6 +97,18 @@ export async function ensureTodoList(scope: ServiceScope, name?: string): Promis
     return fail(describeDbError(list.error as never, 'Could not open your to-do lists.'), { code: SERVICE_CODES.db });
   }
   return ok({ id: list.id });
+}
+
+/**
+ * A guest views the household's tasks and changes none of them ("view limited
+ * shared events only"; the trust engine gives a guest's assistant `['view']`).
+ * RLS on todo_items is plain `is_family_member` for insert and update and no
+ * guest-write trigger covers the table, so this is where it is decided — for
+ * the page's actions and for every assistant, approval and replay path alike.
+ */
+async function refuseGuestWrite(scope: ServiceScope): Promise<ServiceResult<never> | null> {
+  if (scope.role !== 'guest') return null;
+  return fail((await getTranslations())('actionRefusal.notAllowed'), { code: SERVICE_CODES.denied });
 }
 
 export type CreateTodoInput = {
@@ -175,6 +187,8 @@ export async function createTodo(
   input: CreateTodoInput,
   opts: KeyedCreateOptions = {},
 ): Promise<ServiceResult<TodoItem>> {
+  const refused = await refuseGuestWrite(scope);
+  if (refused) return refused;
   const title = input.title?.trim() ?? '';
   if (!title) return fail('A task needs a title.', { code: SERVICE_CODES.invalidInput });
   if (input.dueDate && !DAY_KEY.test(input.dueDate)) {
@@ -247,6 +261,8 @@ export async function createTodo(
 }
 
 export async function completeTodo(scope: ServiceScope, todoId: string, done = true): Promise<ServiceResult<TodoItem>> {
+  const refused = await refuseGuestWrite(scope);
+  if (refused) return refused;
   const { data, error } = await scope.db
     .from('todo_items')
     .update({ is_done: done, completed_at: done ? new Date().toISOString() : null })
@@ -280,6 +296,8 @@ export async function completeTodo(scope: ServiceScope, todoId: string, done = t
 
 /** `memberId` is a `family_members.id`; null unassigns. */
 export async function assignTodo(scope: ServiceScope, todoId: string, memberId: string | null): Promise<ServiceResult<TodoItem>> {
+  const refused = await refuseGuestWrite(scope);
+  if (refused) return refused;
   const assignee = await checkTodoAssignee(scope, memberId);
   if (!assignee.ok) return assignee;
   const { data, error } = await scope.db
@@ -320,6 +338,8 @@ export type UpdateTodoPatch = {
  * keeps, and the reason a spread of the form's state is not good enough.
  */
 export async function updateTodo(scope: ServiceScope, todoId: string, patch: UpdateTodoPatch): Promise<ServiceResult<TodoItem>> {
+  const refused = await refuseGuestWrite(scope);
+  if (refused) return refused;
   const update: Updatable<'todo_items'> = {};
 
   if (patch.title !== undefined) {
@@ -541,6 +561,63 @@ function choreDrift(found: ChoreCreation, wanted: ChoreContent, assigneeId: stri
 }
 
 /**
+ * A chore's due time as the instant it means. A zone-less value — the board's
+ * date box, the planner's `localTime(...)`, the assistant's "Friday 17:00" — is
+ * a reading on the FAMILY's clock. Written raw into the `timestamptz` it was
+ * read in the database's zone (UTC): "Friday 5pm" showed as due at 10am in Los
+ * Angeles and a date-only chore landed on the evening before.
+ *
+ * `createChore` applies it; `tasks.assignChore` applies it before calling
+ * `requestChoreAssignment`, and `assignChore`'s other callers (`createChore`,
+ * the respawn) already hand it an instant.
+ */
+export async function choreDueAt(scope: ServiceScope, value: string | null | undefined): Promise<ServiceResult<string | null>> {
+  if (!value?.trim()) return ok(null);
+  const at = familyInstantIso(value, scope.tz);
+  return at ? ok(at) : fail((await getTranslations())('chores.dueAtUnreadable'), { code: SERVICE_CODES.invalidInput });
+}
+
+/**
+ * Who may put a chore on someone's board: a parent or another adult, or the
+ * system (a routine, a cron). This is the chores board's own rule
+ * (`createChoreAction` is manager-only), held here because the assistant
+ * reaches these writes without that action. The trust gate in front of the
+ * assistant is not a stand-in for it: it lets a teen's low-risk writes through.
+ * Approved work Bubaly filed keeps the approver's role (`scopeForApprovedWork`),
+ * so a request a parent said yes to still runs.
+ *
+ * Deliberately NOT applied inside `assignChore`: a recurring chore's next
+ * assignment is written through it when a child finishes their own.
+ */
+export const CHORES_ARE_SET_BY_A_MANAGER = 'Only a parent or another adult can add or assign chores.';
+
+/**
+ * `parent` and `adult` are `MANAGER_ROLES` (lib/constants/roles.ts), spelled
+ * out because this module's dependency surface is pinned by tests that load it
+ * on its own.
+ */
+export function mayManageChores(role: string | null | undefined): boolean {
+  return role === 'system' || role === 'parent' || role === 'adult';
+}
+
+function refuseUnlessChoreManager(scope: ServiceScope): ServiceResult<never> | null {
+  return mayManageChores(scope.role) ? null : fail(CHORES_ARE_SET_BY_A_MANAGER, { code: SERVICE_CODES.denied });
+}
+
+/**
+ * Assign an existing chore to someone, as a request (the assistant's
+ * `tasks.assignChore`). The manager rule above, then `assignChore`.
+ */
+export async function requestChoreAssignment(
+  scope: ServiceScope,
+  input: { choreId: string; memberId: string; dueAt?: string | null },
+): Promise<ServiceResult<ChoreAssignment>> {
+  const refused = refuseUnlessChoreManager(scope);
+  if (refused) return refused;
+  return assignChore(scope, input);
+}
+
+/**
  * Create a chore, optionally assigning it in the same call.
  *
  * If the assignment insert fails the chore is deleted again: a chore nobody is
@@ -563,6 +640,8 @@ export async function createChore(
   input: CreateChoreInput,
   opts: KeyedCreateOptions = {},
 ): Promise<ServiceResult<ChoreCreation>> {
+  const refused = refuseUnlessChoreManager(scope);
+  if (refused) return refused;
   const title = input.title?.trim() ?? '';
   if (!title) return fail('A chore needs a title.', { code: SERVICE_CODES.invalidInput });
   // Points are a reward a child earns. A negative one would take points away
@@ -573,6 +652,9 @@ export async function createChore(
   if (input.points != null && (!Number.isFinite(input.points) || input.points < 0)) {
     return fail('A chore cannot be worth negative points.', { code: SERVICE_CODES.invalidInput });
   }
+  const due = await choreDueAt(scope, input.dueAt);
+  if (!due.ok) return due;
+  const dueAt = due.data;
 
   /** The `chores` columns this create chooses, as the insert below writes them. */
   const choreRow: ChoreContent = {
@@ -581,7 +663,7 @@ export async function createChore(
     points: input.points ?? 10,
     priority: input.priority ?? 'medium',
     recurrence: input.recurrence ?? 'none',
-    due_at: input.dueAt ?? null,
+    due_at: dueAt,
     requires_approval: input.requiresApproval ?? true,
     ...(input.icon !== undefined ? { icon: input.icon } : {}),
   };
@@ -630,7 +712,7 @@ export async function createChore(
         const assigned = await assignChore(scope, {
           choreId: chore.id,
           memberId: input.assigneeId,
-          dueAt: input.dueAt ?? null,
+          dueAt,
           idempotencyKey: key,
         });
         if (!assigned.ok) {
@@ -756,7 +838,7 @@ export async function respawnChoreAssignment(
   scope: ServiceScope,
   input: { assignment: { id: string; chore_id: string; member_id: string; due_at: string | null }; recurrence: string | null | undefined },
 ): Promise<ServiceResult<{ assignment: ChoreAssignment | null; respawned: boolean }>> {
-  const dueAt = nextChoreDueAt(input.assignment.due_at, input.recurrence, scopeNow(scope).toISOString());
+  const dueAt = nextChoreDueAt(input.assignment.due_at, input.recurrence, scopeNow(scope).toISOString(), scope.tz);
   if (!dueAt) return ok({ assignment: null, respawned: false });
 
   const { data: open, error: openError } = await scope.db
@@ -792,6 +874,20 @@ export async function respawnChoreAssignment(
 
 const OPEN_STATUSES = ['todo', 'in_progress'] as const;
 const FINISHED_STATUSES = ['approved', 'done'] as const;
+
+type FinishedRow = Pick<ChoreAssignment, 'id' | 'approved_at' | 'submitted_at' | 'created_at'>;
+const finishedAt = (a: FinishedRow) => Date.parse(a.approved_at ?? a.submitted_at ?? a.created_at ?? '') || 0;
+
+/**
+ * The finished assignment the sweep repeats: the latest by `finishedAt`, the
+ * first in id order on a tie. One definition, shared by the sweep and by the
+ * delete's prediction of what the sweep will do (`sweepWouldRespawn`).
+ */
+function latestFinished<T extends FinishedRow>(rows: readonly T[]): T | null {
+  let latest: T | null = null;
+  for (const row of rows) if (!latest || finishedAt(row) > finishedAt(latest)) latest = row;
+  return latest;
+}
 
 /**
  * The durable half of the respawn: every recurring chore whose child has
@@ -856,13 +952,12 @@ export async function respawnMissingChoreAssignments(
   }
 
   // Per (chore, child): anything open means nothing to do; otherwise the latest finished one is the predecessor.
-  const finishedAt = (a: Row) => Date.parse(a.approved_at ?? a.submitted_at ?? a.created_at ?? '') || 0;
-  const byPair = new Map<string, { open: boolean; latest: Row | null }>();
+  const byPair = new Map<string, { open: boolean; finished: Row[] }>();
   for (const a of assignments ?? []) {
     const key = `${a.chore_id}\u001F${a.member_id}`;
-    const entry = byPair.get(key) ?? { open: false, latest: null };
+    const entry = byPair.get(key) ?? { open: false, finished: [] };
     if ((OPEN_STATUSES as readonly string[]).includes(a.status)) entry.open = true;
-    else if (!entry.latest || finishedAt(a) > finishedAt(entry.latest)) entry.latest = a;
+    else entry.finished.push(a);
     byPair.set(key, entry);
   }
   const recurrenceOf = new Map(recurring.map((c) => [c.id, c.recurrence]));
@@ -870,7 +965,8 @@ export async function respawnMissingChoreAssignments(
   let respawned = 0;
   let skipped = 0;
   let failed = 0;
-  for (const { open, latest } of byPair.values()) {
+  for (const { open, finished } of byPair.values()) {
+    const latest = latestFinished(finished);
     if (open || !latest || !active.has(latest.member_id)) { skipped += 1; continue; }
     const res = await respawnChoreAssignment(scope, {
       assignment: { id: latest.id, chore_id: latest.chore_id, member_id: latest.member_id, due_at: latest.due_at },
@@ -880,6 +976,31 @@ export async function respawnMissingChoreAssignments(
     if (res.data.respawned) respawned += 1; else skipped += 1;
   }
   return ok({ respawned, skipped, failed });
+}
+
+/**
+ * Why a member's own completion matched no row, read back after the write: the
+ * assignment was handed to someone else, or a parent approved it, after the
+ * checks were made. Both are refusals in the words the up-front checks use; a
+ * row that is gone altogether is "not found", as it would have been before.
+ */
+async function refusedCompletion(scope: ServiceScope, assignmentId: string, ownMemberId: string): Promise<ServiceResult<never>> {
+  const t = await getTranslations();
+  const { data: current, error } = await scope.db
+    .from('chore_assignments')
+    .select('member_id, status')
+    .eq('id', assignmentId)
+    .eq('family_id', scope.familyId)
+    .maybeSingle();
+  if (error) console.error('[service:tasks] could not re-read a chore whose completion matched no row', { assignmentId, error });
+  if (!error && !current) return fail('That chore could not be found.', { code: SERVICE_CODES.notFound });
+  if (current && current.member_id === ownMemberId && current.status === 'approved') {
+    return fail(t('chores.approvedIsSettled'), { code: SERVICE_CODES.denied });
+  }
+  if (current && current.member_id !== ownMemberId) return fail(t('chores.notYourAssignment'), { code: SERVICE_CODES.denied });
+  // Unreadable, or changed in a way neither check names: still not settled by
+  // this write, and nothing was written.
+  return fail(t('chores.changedBeforeCompleting'), { code: SERVICE_CODES.denied });
 }
 
 /**
@@ -899,7 +1020,7 @@ export async function respawnMissingChoreAssignments(
 export async function completeChoreAssignment(scope: ServiceScope, assignmentId: string): Promise<ServiceResult<ChoreAssignment>> {
   const { data: assignment, error: readError } = await scope.db
     .from('chore_assignments')
-    .select('id, chore_id')
+    .select('id, chore_id, member_id, status')
     .eq('id', assignmentId)
     .eq('family_id', scope.familyId)
     .maybeSingle();
@@ -908,6 +1029,23 @@ export async function completeChoreAssignment(scope: ServiceScope, assignmentId:
     return fail(describeDbError(readError, 'Could not load that chore.'), { code: SERVICE_CODES.db });
   }
   if (!assignment) return fail('That chore could not be found.', { code: SERVICE_CODES.notFound });
+
+  // 0374's rule, in code: your own assignment, or a manager's decision. The
+  // run executor writes with the service client, which RLS and 0374's
+  // settled-row guard both let through (`auth.uid() is null`), so a teen's
+  // assistant could mark a sibling's chore done — or pull an approved one, and
+  // its points, back to "submitted". `can_manage_family` is parent or adult
+  // (MANAGER_ROLES); a system actor (a cron) is the household itself.
+  const decidesForAnyone = scope.role === 'parent' || scope.role === 'adult' || scope.role === 'system';
+  const ownMemberId = decidesForAnyone ? null : scope.memberId ?? null;
+  if (!decidesForAnyone) {
+    if (!ownMemberId || assignment.member_id !== ownMemberId) {
+      return fail((await getTranslations())('chores.notYourAssignment'), { code: SERVICE_CODES.denied });
+    }
+    if (assignment.status === 'approved') {
+      return fail((await getTranslations())('chores.approvedIsSettled'), { code: SERVICE_CODES.denied });
+    }
+  }
 
   const { data: chore, error: choreError } = await scope.db
     .from('chores')
@@ -921,18 +1059,27 @@ export async function completeChoreAssignment(scope: ServiceScope, assignmentId:
   }
 
   const status: TaskStatus = chore?.requires_approval === false ? 'done' : 'submitted';
-  const { data, error } = await scope.db
+  let completion = scope.db
     .from('chore_assignments')
     .update({ status, submitted_at: new Date().toISOString() })
     .eq('id', assignmentId)
-    .eq('family_id', scope.familyId)
-    .select('*')
-    .maybeSingle();
+    .eq('family_id', scope.familyId);
+  // The two checks above were made on the FIRST read. A parent approving the
+  // chore, or handing it to a sibling, between that read and this write would
+  // otherwise be overwritten: the approved chore — and its points — pulled
+  // back to "submitted", or a sibling's chore marked done by someone else.
+  // The run executor writes on the service client, where 0374's settled-row
+  // trigger steps aside, so the write itself has to carry the rule.
+  if (ownMemberId) completion = completion.eq('member_id', ownMemberId).neq('status', 'approved');
+  const { data, error } = await completion.select('*').maybeSingle();
   if (error) {
     console.error('[service:tasks] assignment complete failed', error);
     return fail(describeDbError(error, 'Could not update that chore.'), { code: SERVICE_CODES.db });
   }
-  if (!data) return fail('That chore could not be found.', { code: SERVICE_CODES.notFound });
+  if (!data) {
+    if (!ownMemberId) return fail('That chore could not be found.', { code: SERVICE_CODES.notFound });
+    return refusedCompletion(scope, assignmentId, ownMemberId);
+  }
 
   // The SETTLED status, not the requested one: a chore that needs no approval
   // is done, and the trail must not say it is waiting for a parent.
@@ -1012,11 +1159,264 @@ export async function setChoreProgress(
   return ok(data);
 }
 
-/** Remove an assignment. The chore itself survives — it may be assigned to others. */
+/**
+ * A manager sends a submitted chore back for a redo: `submitted` → `rejected`.
+ *
+ * The board's Redo button sent 'rejected' through `setChoreStatusAction`, which
+ * hands every status but 'submitted' to `setChoreProgress` — and that refuses
+ * it, by design (the member vocabulary above must never grow a decision). So
+ * every Redo failed with "That is not a status a member can set." and the
+ * chore sat in the approvals queue. This is the decision's own door: manager
+ * only, and only from 'submitted', so a chore approved or reopened in the
+ * meantime is not overwritten by a stale screen.
+ */
+export async function rejectChoreAssignment(
+  scope: ServiceScope,
+  assignmentId: string,
+): Promise<ServiceResult<ChoreAssignment>> {
+  const refused = refuseUnlessChoreManager(scope);
+  if (refused) return refused;
+
+  const { data, error } = await scope.db
+    .from('chore_assignments')
+    .update({ status: 'rejected' })
+    .eq('id', assignmentId)
+    .eq('family_id', scope.familyId)
+    .eq('status', 'submitted')
+    .select('*')
+    .maybeSingle();
+  if (error) {
+    console.error('[service:tasks] chore rejection failed', error);
+    return fail(describeDbError(error, 'Could not update that chore.'), { code: SERVICE_CODES.db });
+  }
+  if (!data) return fail('That chore is no longer waiting for a decision. Refresh the board and try again.', { code: SERVICE_CODES.notFound });
+
+  await recordActivitySafely(scope, {
+    agent: 'chores',
+    action: 'update',
+    title: `Sent "${await choreTitle(scope, data.chore_id)}" back for a redo`,
+    href: '/dashboard/chores',
+    memberId: data.member_id,
+    resourceId: data.id,
+  });
+  return ok(data);
+}
+
+/** The statuses that keep a chore on a child's board: not yet decided, or sent back. */
+const LIVE_STATUSES = ['todo', 'in_progress', 'submitted', 'rejected'] as const;
+
+/**
+ * What deleting this assignment does to the chore, for this child:
+ *
+ *   'retires'     a RECURRING chore that is only this child's, with nothing
+ *                 else of it still live: the chore itself is retired
+ *                 (`is_active = false`), which the sweep already skips.
+ *   'comes-back'  a recurring chore that stays active — other children share
+ *                 it, or this child still has another row of it — and the
+ *                 push-scan sweep WILL give this child a new one once this row
+ *                 is gone (`sweepWouldRespawn`): the board says so instead of
+ *                 "removed".
+ *   'stays'       anything else: a one-off or retired chore, or one the sweep
+ *                 will not repeat for this child (something of it still open,
+ *                 nothing finished to repeat, its next one already written, or
+ *                 a child who has left the family).
+ *
+ * Deleting the row alone did not stop a repeating chore. The push-scan sweep
+ * (`respawnMissingChoreAssignments`) finds a child with a finished assignment
+ * of a repeating chore and nothing open, and asks for the successor under
+ * `respawnKeyFor(finished)` — a key the deleted row held and the delete freed.
+ * Retiring the chore stops that only when no other child has it, and a chore
+ * shared by several children is the ordinary case, not a corner: /missions/new
+ * shows one checkbox per kid and createChoreAction writes ONE chore with an
+ * assignment per ticked child (the assistant's `tasks.assignChore` can add a
+ * child to any chore too). Stopping it for one child alone needs a tombstone
+ * the sweep respects — a task_status value such as `removed`, or a
+ * per-(chore, member) stop table read by the sweep — which is a schema change
+ * for the owner. Until it lands, 'comes-back' is said, not hidden.
+ *
+ * A submitted or rejected row keeps the chore on the board, so it keeps a
+ * chore that is only this child's from being retired; it does NOT stop the
+ * sweep, which counts only to-do and in-progress rows as open. Whether the
+ * chore comes back is therefore the sweep's own question, asked of this one
+ * (chore, child), not "is anything else of it live".
+ */
+type DeleteOutcome = 'retires' | 'comes-back' | 'stays';
+
+async function deleteOutcome(
+  scope: ServiceScope,
+  target: { id: string; chore_id: string; member_id: string },
+): Promise<ServiceResult<DeleteOutcome>> {
+  const { data: chore, error: choreError } = await scope.db
+    .from('chores')
+    .select('id, recurrence, is_active')
+    .eq('id', target.chore_id)
+    .eq('family_id', scope.familyId)
+    .maybeSingle();
+  if (choreError) {
+    console.error('[service:tasks] chore read before delete failed', choreError);
+    return fail(describeDbError(choreError, 'Could not load that chore.'), { code: SERVICE_CODES.db });
+  }
+  if (!chore || chore.is_active === false || !choreRepeats(chore.recurrence)) return ok('stays');
+
+  const { data: others, error: othersError } = await scope.db
+    .from('chore_assignments')
+    .select('id')
+    .eq('family_id', scope.familyId)
+    .eq('chore_id', target.chore_id)
+    .neq('member_id', target.member_id)
+    .limit(1);
+  if (othersError) {
+    console.error('[service:tasks] shared chore read before delete failed', othersError);
+    return fail(describeDbError(othersError, 'Could not load that chore.'), { code: SERVICE_CODES.db });
+  }
+  const shared = Boolean(others && others.length > 0);
+
+  const { data: live, error: liveError } = await scope.db
+    .from('chore_assignments')
+    .select('id')
+    .eq('family_id', scope.familyId)
+    .eq('chore_id', target.chore_id)
+    .eq('member_id', target.member_id)
+    .neq('id', target.id)
+    .in('status', [...LIVE_STATUSES])
+    .limit(1);
+  if (liveError) {
+    console.error('[service:tasks] live chore read before delete failed', liveError);
+    return fail(describeDbError(liveError, 'Could not load that chore.'), { code: SERVICE_CODES.db });
+  }
+  if (!shared && !(live && live.length > 0)) return ok('retires');
+
+  const respawns = await sweepWouldRespawn(scope, target);
+  if (!respawns.ok) return respawns;
+  return ok(respawns.data ? 'comes-back' : 'stays');
+}
+
+/**
+ * Whether the push-scan sweep gives this child a new assignment of the chore
+ * once `target` is gone: `respawnMissingChoreAssignments`'s own test, for one
+ * (chore, child). Nothing of it open (to do or in progress — a submitted or
+ * rejected row does not count), a finished one to repeat (the latest, as the
+ * sweep picks it), that one's respawn key not held by a row that stays, and
+ * the child still an active member of the family.
+ */
+async function sweepWouldRespawn(
+  scope: ServiceScope,
+  target: { id: string; chore_id: string; member_id: string },
+): Promise<ServiceResult<boolean>> {
+  const { data: open, error: openError } = await scope.db
+    .from('chore_assignments')
+    .select('id')
+    .eq('family_id', scope.familyId)
+    .eq('chore_id', target.chore_id)
+    .eq('member_id', target.member_id)
+    .neq('id', target.id)
+    .in('status', [...OPEN_STATUSES])
+    .limit(1);
+  if (openError) {
+    console.error('[service:tasks] open chore read before delete failed', openError);
+    return fail(describeDbError(openError, 'Could not load that chore.'), { code: SERVICE_CODES.db });
+  }
+  if (open && open.length > 0) return ok(false);
+
+  // Read as the sweep reads it (paged, in id order), so both pick the same row.
+  const { data: finished, error: finishedError } = await readAllInChunks<FinishedRow, { message: string }>(
+    [target.chore_id],
+    (chunk, from, to) => scope.db
+      .from('chore_assignments')
+      .select('id, approved_at, submitted_at, created_at')
+      .eq('family_id', scope.familyId)
+      .in('chore_id', chunk)
+      .eq('member_id', target.member_id)
+      .neq('id', target.id)
+      .in('status', [...FINISHED_STATUSES])
+      .order('id')
+      .range(from, to),
+  );
+  if (finishedError || !finished) {
+    console.error('[service:tasks] finished chore read before delete failed', finishedError);
+    return fail(describeDbError(finishedError, 'Could not load that chore.'), { code: SERVICE_CODES.db });
+  }
+  const latest = latestFinished(finished);
+  if (!latest) return ok(false);
+
+  // The sweep asks for the successor under this key; a row that stays holding it means 0256 refuses that insert.
+  const { data: holder, error: holderError } = await scope.db
+    .from('chore_assignments')
+    .select('id')
+    .eq('family_id', scope.familyId)
+    .eq('idempotency_key', respawnKeyFor(scope.familyId, latest.id))
+    .neq('id', target.id)
+    .limit(1);
+  if (holderError) {
+    console.error('[service:tasks] respawn key read before delete failed', holderError);
+    return fail(describeDbError(holderError, 'Could not load that chore.'), { code: SERVICE_CODES.db });
+  }
+  if (holder && holder.length > 0) return ok(false);
+
+  const { data: member, error: memberError } = await scope.db
+    .from('family_members')
+    .select('id')
+    .eq('id', target.member_id)
+    .eq('family_id', scope.familyId)
+    .eq('is_active', true)
+    .maybeSingle();
+  if (memberError) {
+    console.error('[service:tasks] member read before delete failed', memberError);
+    return fail(describeDbError(memberError, 'Could not load that chore.'), { code: SERVICE_CODES.db });
+  }
+  return ok(Boolean(member));
+}
+
+/** Turn a chore on or off, confirmed: zero rows is a write that did not land. */
+async function setChoreActive(scope: ServiceScope, choreId: string, isActive: boolean): Promise<boolean> {
+  const { data, error } = await scope.db
+    .from('chores')
+    .update({ is_active: isActive })
+    .eq('id', choreId)
+    .eq('family_id', scope.familyId)
+    .select('id');
+  if (error || wroteNoRows(data)) {
+    console.error('[service:tasks] chore active flag write failed', { choreId, isActive, error: error ?? 'no rows updated' });
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Remove an assignment. The chore itself survives when it may still be
+ * someone's; a recurring chore that was only this child's is retired with it,
+ * so the respawn sweep does not put it back (`deleteOutcome`).
+ *
+ * `comesBack` is true when the respawn sweep WILL put the chore back on this
+ * child's board: a repeating chore that stays active (other children share it,
+ * or this child still has another row of it), which a delete cannot stop for
+ * one child until the schema has a tombstone the sweep reads.
+ */
 export async function deleteChoreAssignment(
   scope: ServiceScope,
   assignmentId: string,
-): Promise<ServiceResult<{ id: string }>> {
+): Promise<ServiceResult<{ id: string; comesBack: boolean }>> {
+  const { data: target, error: targetError } = await scope.db
+    .from('chore_assignments')
+    .select('id, chore_id, member_id')
+    .eq('id', assignmentId)
+    .eq('family_id', scope.familyId)
+    .maybeSingle();
+  if (targetError) {
+    console.error('[service:tasks] chore assignment read before delete failed', targetError);
+    return fail(describeDbError(targetError, 'Could not remove that chore.'), { code: SERVICE_CODES.db });
+  }
+  if (!target) return fail('That chore could not be found.', { code: SERVICE_CODES.notFound });
+
+  // Retired BEFORE the delete, so a refused retirement leaves the board as it
+  // was rather than removing a row the sweep will put back.
+  const outcome = await deleteOutcome(scope, target);
+  if (!outcome.ok) return outcome;
+  const retires = outcome.data === 'retires';
+  if (retires && !(await setChoreActive(scope, target.chore_id, false))) {
+    return fail('Could not remove that chore.', { code: SERVICE_CODES.db });
+  }
+
   // `chore_id` comes back with the deleted row, so naming it on the trail costs
   // no extra round trip here — the row is gone by the time we could ask again.
   const { data, error } = await scope.db
@@ -1026,6 +1426,10 @@ export async function deleteChoreAssignment(
     .eq('family_id', scope.familyId)
     .select('id, chore_id, member_id')
     .maybeSingle();
+  if (error || !data) {
+    // The chore was retired for a delete that did not happen: put it back.
+    if (retires) await setChoreActive(scope, target.chore_id, true);
+  }
   if (error) {
     console.error('[service:tasks] chore assignment delete failed', error);
     return fail(describeDbError(error, 'Could not remove that chore.'), { code: SERVICE_CODES.db });
@@ -1040,7 +1444,7 @@ export async function deleteChoreAssignment(
     memberId: data.member_id,
     resourceId: data.id,
   });
-  return ok({ id: data.id });
+  return ok({ id: data.id, comesBack: outcome.data === 'comes-back' });
 }
 
 /** Open assignments (not yet done or approved), soonest due first. */

@@ -15,11 +15,61 @@ import { describeReadError } from '@/lib/supabase/settle';
 export const runtime = 'nodejs';
 
 const FETCH_TIMEOUT = 9000;
-async function fetchWithTimeout(url: string, ms = FETCH_TIMEOUT): Promise<Response> {
+
+/**
+ * How much of a family's own feed list one search reads. Any member may save a
+ * feed, as many as they like, and every one of them used to be fetched AT
+ * ONCE on every search: a few hundred saved URLs on a slow host were a few
+ * hundred concurrent outbound requests, each holding up to 1 MiB, from one
+ * request. A search now reads the feeds fetched longest ago, a few at a time,
+ * each for at most FEED_TIMEOUT_MS, until a deadline that bounds the whole of
+ * it — reads and their status writes alike. A feed not started, or still
+ * reading, when the deadline passes waits for the next search and is reported
+ * as skipped. The per-family cap on saved feeds is the
+ * database's to enforce (a member inserts them directly).
+ */
+const MAX_FEEDS_PER_SEARCH = 12;
+const FEED_CONCURRENCY = 4;
+const FEEDS_DEADLINE_MS = 25_000;
+/**
+ * The longest one feed may take before it counts as not answering. Shorter
+ * than the deadline, so a few feeds that never answer cannot hold every worker
+ * until it: they time out, are recorded as tried, and fall to the back of the
+ * next search's queue instead of starving the feeds behind them.
+ */
+const FEED_TIMEOUT_MS = 10_000;
+/** Any saved feed that did not answer: said once per search, however many failed. Each feed's own row keeps its status. */
+const FEEDS_FAILED = 'Some of your saved local feeds could not be read.';
+/** The most of a keyed provider's reply that is read. */
+const PROVIDER_BODY_BYTES = 2 * 1024 * 1024;
+
+/**
+ * A keyed provider's JSON reply, headers AND body, within ONE deadline.
+ *
+ * The timer used to be cleared the moment `fetch` resolved — when the headers
+ * arrived — and the body was then read with a byte cap but no clock, so a
+ * provider that trickled its body held the request with no bound but the
+ * platform's. The timer now runs until the body is parsed: it aborts the
+ * fetch, which ends the real stream, and the read is raced against it as
+ * well, so a body that never ends is a failed source like any other.
+ */
+async function fetchJsonWithTimeout<T>(url: string, maxBytes: number, ms = FETCH_TIMEOUT): Promise<{ ok: true; body: T } | { ok: false; status: number }> {
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), ms);
-  try { return await fetch(url, { headers: { accept: '*/*', 'user-agent': 'BubalyWeekendPlanner/1.0' }, signal: ctrl.signal }); }
-  finally { clearTimeout(t); }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => { ctrl.abort(); reject(new Error(`provider did not answer within ${ms}ms`)); }, ms);
+  });
+  // Settled only by the timer, which `finally` clears; this keeps a late
+  // rejection from ever surfacing as unhandled.
+  timedOut.catch(() => {});
+  try {
+    const res = await Promise.race([fetch(url, { headers: { accept: '*/*', 'user-agent': 'BubalyWeekendPlanner/1.0' }, signal: ctrl.signal }), timedOut]);
+    if (!res.ok) return { ok: false, status: res.status };
+    const body = await Promise.race([readBoundedResponseJson<T>(res, maxBytes), timedOut]);
+    return { ok: true, body };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // Aggregate local events near a ZIP for the next N days from MANY sources:
@@ -50,19 +100,27 @@ export async function POST(req: NextRequest) {
   const { startISO, endISO } = discoveryWindow(windowDays);
 
   const familyId = ctx.active.familyId;
+  // An all-day event is a date where the FAMILY is: read at its midnight, not Greenwich's.
+  const familyZone = ctx.active.family?.timezone || null;
+  // A source is USED once it answered. Pushed before the fetch, a provider
+  // that failed still counted, so a search where every source failed came
+  // back 200 "No events found" — an outage reported as an empty weekend.
   const sourcesUsed: string[] = [];
+  const sourcesTried: string[] = [];
   const sourceErrors: Record<string, string> = {};
   const lists: NormalizedEvent[][] = [];
 
   // --- Ticketmaster (keyed) ---
   const tmKey = process.env.TICKETMASTER_API_KEY;
   if (tmKey) {
-    sourcesUsed.push('ticketmaster');
+    sourcesTried.push('ticketmaster');
     try {
       const p = new URLSearchParams({ apikey: tmKey, postalCode: zip.trim(), radius: String(radiusMiles), unit: 'miles', startDateTime: startISO, endDateTime: endISO, size: '100', sort: 'date,asc' });
-      const res = await fetchWithTimeout(`https://app.ticketmaster.com/discovery/v2/events.json?${p}`);
-      if (res.ok) lists.push(normalizeTicketmasterResponse(await readBoundedResponseJson<unknown>(res, 2 * 1024 * 1024)));
-      else {
+      const res = await fetchJsonWithTimeout<unknown>(`https://app.ticketmaster.com/discovery/v2/events.json?${p}`, PROVIDER_BODY_BYTES);
+      if (res.ok) {
+        lists.push(normalizeTicketmasterResponse(res.body, familyZone));
+        sourcesUsed.push('ticketmaster');
+      } else {
         sourceErrors.ticketmaster = `HTTP ${res.status}`;
         console.warn('Ticketmaster discovery failed:', res.status);
       }
@@ -75,12 +133,14 @@ export async function POST(req: NextRequest) {
   // --- SeatGeek (keyed) ---
   const sgKey = process.env.SEATGEEK_CLIENT_ID;
   if (sgKey) {
-    sourcesUsed.push('seatgeek');
+    sourcesTried.push('seatgeek');
     try {
       const p = new URLSearchParams({ client_id: sgKey, postal_code: zip.trim(), range: `${radiusMiles}mi`, 'datetime_utc.gte': startISO, 'datetime_utc.lte': endISO, per_page: '100', sort: 'datetime_utc.asc' });
-      const res = await fetchWithTimeout(`https://api.seatgeek.com/2/events?${p}`);
-      if (res.ok) lists.push(normalizeSeatGeekResponse(await readBoundedResponseJson<unknown>(res, 2 * 1024 * 1024)));
-      else {
+      const res = await fetchJsonWithTimeout<unknown>(`https://api.seatgeek.com/2/events?${p}`, PROVIDER_BODY_BYTES);
+      if (res.ok) {
+        lists.push(normalizeSeatGeekResponse(res.body));
+        sourcesUsed.push('seatgeek');
+      } else {
         sourceErrors.seatgeek = `HTTP ${res.status}`;
         console.warn('SeatGeek discovery failed:', res.status);
       }
@@ -97,48 +157,123 @@ export async function POST(req: NextRequest) {
   // empty, the block below was skipped, and the response came back looking
   // complete while omitting the only source the family configured themselves.
   // Reported through the existing mechanism rather than a new one. C1-S9-41.
-  const { data: feeds, error: feedsError } = await supabase.from('weekend_feeds').select('*').eq('family_id', familyId).eq('is_active', true);
+  // The ones fetched longest ago first (never-fetched before all), one past
+  // the cap so a longer list is known to be longer.
+  const { data: savedFeeds, error: feedsError } = await supabase.from('weekend_feeds').select('*').eq('family_id', familyId).eq('is_active', true)
+    .order('last_fetched_at', { ascending: true, nullsFirst: true }).order('id').limit(MAX_FEEDS_PER_SEARCH + 1);
   if (feedsError) {
+    sourcesTried.push('feeds');
     console.error('[weekend/discover] feed read failed', { familyId, error: describeReadError(feedsError) });
     sourceErrors.feeds = 'Your saved local feeds could not be loaded.';
   }
+  const feeds = (savedFeeds ?? []).slice(0, MAX_FEEDS_PER_SEARCH);
+  let feedsSkipped = Math.max(0, (savedFeeds?.length ?? 0) - MAX_FEEDS_PER_SEARCH);
   if (feeds && feeds.length) {
-    await Promise.allSettled(feeds.map(async (feed) => {
-      let status = 'ok'; let count = 0;
+    // One feed's fetch and parse. Its events are the caller's to use: a read
+    // still running at the deadline is dropped, not merged in late.
+    type FeedRead = { events: NormalizedEvent[]; status: string };
+    const fetchFeed = async (feed: (typeof feeds)[number]): Promise<FeedRead> => {
       try {
         const fetched = await fetchPublicCalendarText(feed.url);
         if (!fetched.ok) {
-          status = fetched.status ? `HTTP ${fetched.status}` : 'Feed unavailable.';
           console.warn(`Weekend feed ${feed.id} failed:`, fetched.error);
+          return { events: [], status: fetched.status ? `HTTP ${fetched.status}` : 'Feed unavailable.' };
         }
-        else {
-          const text = fetched.text;
-          const parsed = feed.kind === 'rss' ? parseRSS(text, `feed:${feed.label}`) : parseICS(text, `feed:${feed.label}`);
-          const windowed = withinWindow(parsed, windowDays);
-          count = windowed.length;
-          lists.push(windowed);
-          sourcesUsed.push(`feed:${feed.label}`);
-        }
+        const parsed = feed.kind === 'rss' ? parseRSS(fetched.text, `feed:${feed.label}`) : parseICS(fetched.text, `feed:${feed.label}`, familyZone);
+        return { events: withinWindow(parsed, windowDays), status: 'ok' };
       } catch (e) {
         console.warn(`Weekend feed ${feed.id} request failed:`, e);
-        status = 'Request failed.';
+        return { events: [], status: 'Request failed.' };
       }
-      // Bookkeeping on the feed row: its result was discarded whole, so a
-      // settings page could go on showing a stale "last fetched" forever. Zero
-      // rows is a feed deleted mid-request and stays ordinary; the ERROR is now
-      // logged. Audit C1-S9-62.
-      const { error: statusError } = await supabase.from('weekend_feeds')
-        .update({ last_fetched_at: new Date().toISOString(), last_status: status, last_count: count }).eq('id', feed.id);
-      if (statusError) console.error('[weekend/discover] feed status write failed', { feedId: feed.id, error: statusError.message });
-    }));
+    };
+    // Bookkeeping on the feed row: its result was discarded whole, so a
+    // settings page could go on showing a stale "last fetched" forever. Zero
+    // rows is a feed deleted mid-request and stays ordinary; an error is
+    // logged, and so is a write that THROWS — which used to end the worker
+    // that awaited it, and with it every feed still queued behind. Audit C1-S9-62.
+    const recordFeedStatus = async (feed: (typeof feeds)[number], read: FeedRead) => {
+      try {
+        const { error: statusError } = await supabase.from('weekend_feeds')
+          .update({ last_fetched_at: new Date().toISOString(), last_status: read.status, last_count: read.events.length }).eq('id', feed.id);
+        if (statusError) console.error('[weekend/discover] feed status write failed', { feedId: feed.id, error: statusError.message });
+      } catch (e) {
+        console.error('[weekend/discover] feed status write threw', { feedId: feed.id, error: e instanceof Error ? e.name : 'unknown' });
+      }
+    };
+
+    // A feed that does not answer in FEED_TIMEOUT_MS has not answered: it is
+    // recorded as tried like any other failure, so it moves to the back of the
+    // queue rather than holding a worker until the deadline on every search.
+    const fetchFeedInTime = async (feed: (typeof feeds)[number]): Promise<FeedRead> => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timedOut = new Promise<FeedRead>((resolve) => { timer = setTimeout(() => resolve({ events: [], status: 'Timed out.' }), FEED_TIMEOUT_MS); });
+      try {
+        return await Promise.race([fetchFeed(feed), timedOut]);
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+
+    // The deadline bounds all of it — every read and every status write — and
+    // once it passes the reply is decided: `closed` keeps a read that answers
+    // late from adding events, sources or failures to it. A feed still reading
+    // then is left for the next search (`feedsSkipped`); one whose events were
+    // used and whose status write is still running counts as read.
+    const DEADLINE = Symbol('deadline');
+    let closed = false;
+    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+    const deadlineReached = new Promise<typeof DEADLINE>((resolve) => {
+      deadlineTimer = setTimeout(() => { closed = true; resolve(DEADLINE); }, FEEDS_DEADLINE_MS);
+    });
+    const deadline = Date.now() + FEEDS_DEADLINE_MS;
+    const used = new Set<string>();
+    const processFeed = async (feed: (typeof feeds)[number]) => {
+      const read = await fetchFeedInTime(feed);
+      if (closed) return;
+      used.add(feed.id);
+      if (read.status === 'ok') {
+        lists.push(read.events);
+        sourcesUsed.push(`feed:${feed.label}`);
+      } else {
+        sourceErrors.feedsFailed = FEEDS_FAILED;
+      }
+      await recordFeedStatus(feed, read);
+    };
+    let next = 0;
+    // A few at a time; past the deadline, the rest are left for the next search.
+    const worker = async () => {
+      while (next < feeds.length) {
+        const feed = feeds[next++];
+        if (closed || Date.now() >= deadline) { feedsSkipped += 1; continue; }
+        sourcesTried.push(`feed:${feed.label}`);
+        await Promise.race([processFeed(feed), deadlineReached]);
+        if (!used.has(feed.id)) feedsSkipped += 1;
+      }
+    };
+    try {
+      await Promise.all(Array.from({ length: Math.min(FEED_CONCURRENCY, feeds.length) }, worker));
+    } finally {
+      closed = true;
+      clearTimeout(deadlineTimer);
+    }
   }
+  // Left for the next search is not the same as unreachable: the planner says
+  // each in its own words, keyed `feedsSkipped` and `feedsFailed`.
+  if (feedsSkipped > 0) sourceErrors.feedsSkipped = 'Some of your saved local feeds were left for the next search.';
 
   // No sources at all → tell the user how to enable discovery (never fake data).
-  if (sourcesUsed.length === 0) {
+  if (sourcesTried.length === 0) {
     return NextResponse.json({
       error: tr('discover.noEventSourcesAreConnected'),
       needsConfig: true,
     }, { status: 503 });
+  }
+  // Every source tried, none answered: that is an outage, not an empty weekend.
+  if (sourcesUsed.length === 0) {
+    return NextResponse.json({
+      error: tr('discover.eventSourcesUnreachable'),
+      errors: sourceErrors,
+    }, { status: 502 });
   }
 
   // Merge, keep only the window, dedupe across providers.

@@ -4,7 +4,6 @@ import { useRef, useState } from 'react';
 import { Camera, CalendarPlus, Clock, Check, AlertTriangle, ShoppingCart, Sparkles, Utensils } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Recipe = {
@@ -82,7 +81,21 @@ export function FridgeChef() {
       const json = await res.json();
       if (!res.ok) { toastError(json.error ?? t('fridgeChef.couldNotUpdateYourGrocery')); return; }
       setAdded((prev) => new Set(prev).add(index));
-      success((json.added ?? recipe.need.length) === 1 ? t('fridgeChef.addedItemToGroceryOne', { count: json.added ?? recipe.need.length }) : t('fridgeChef.addedItemsToGroceryMany', { count: json.added ?? recipe.need.length }));
+      const count = Number.isInteger(json.added) ? json.added as number : recipe.need.length;
+      // Nothing added is not "Added 0 items".
+      if (count > 0) success(count === 1 ? t('fridgeChef.addedItemToGroceryOne', { count }) : t('fridgeChef.addedItemsToGroceryMany', { count }));
+      // What the family's allergies changed on the way to the list, by name —
+      // and, apart, what they kept off it: a bare "shrimp" under "Changed"
+      // read as though the shrimp had been added.
+      const swapped: { from: string; to: string | null }[] = Array.isArray(json.swapped) ? json.swapped : [];
+      const changed = swapped.filter((s) => s.to);
+      const leftOff = swapped.filter((s) => !s.to);
+      if (changed.length > 0) {
+        toastError(t('fridgeChef.changedForAllergies', { names: changed.map((s) => `${s.from} → ${s.to}`).join(', ') }));
+      }
+      if (leftOff.length > 0) {
+        toastError(t('fridgeChef.leftOffForAllergies', { names: leftOff.map((s) => s.from).join(', ') }));
+      }
     } catch {
       toastError(t('fridgeChef.couldNotUpdateYourGrocery'));
     } finally {
@@ -101,8 +114,12 @@ export function FridgeChef() {
       });
       const json = await res.json();
       if (!res.ok) { toastError(json.error ?? t('fridgeChef.couldNotAddThatTo')); return; }
-      setPlanned((prev) => new Set(prev).add(index));
-      success(t('fridgeChef.plannedForTonightDinner', { name: recipe.title }));
+      // Tonight has ONE dinner: planning this card replaced whatever the slot
+      // held, including a card planned a moment ago, so only this one is on it.
+      setPlanned(new Set([index]));
+      success(json.replaced
+        ? t('fridgeChef.plannedForTonightReplacing', { name: recipe.title })
+        : t('fridgeChef.plannedForTonightDinner', { name: recipe.title }));
     } catch {
       toastError(t('fridgeChef.couldNotAddThatTo'));
     } finally {
@@ -181,9 +198,9 @@ export function FridgeChef() {
 
               <div className="mt-auto space-y-2 pt-4">
                 <Button
-                  className={cn('w-full', planned.has(i) && 'pointer-events-none opacity-70')}
+                  className="w-full"
                   onClick={() => planForDinner(recipe, i)}
-                  disabled={planningIndex !== null}
+                  disabled={planningIndex !== null || planned.has(i)}
                 >
                   {planned.has(i)
                     ? <><Check className="h-4 w-4" /> On tonight&apos;s plan</>
@@ -192,9 +209,9 @@ export function FridgeChef() {
                 {recipe.need.length > 0 ? (
                   <Button
                     variant="secondary"
-                    className={cn('w-full', added.has(i) && 'pointer-events-none opacity-70')}
+                    className="w-full"
                     onClick={() => addToGrocery(recipe, i)}
-                    disabled={addingIndex !== null}
+                    disabled={addingIndex !== null || added.has(i)}
                   >
                     {added.has(i)
                       ? <><Check className="h-4 w-4" />{' '}{t('fridgeChef.addedToGrocery')}</>

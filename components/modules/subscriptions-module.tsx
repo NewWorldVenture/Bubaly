@@ -74,7 +74,9 @@ export function SubscriptionsWorkspace({ context, timezone = 'UTC' }: { context:
   const [priceHistoryDraft, setPriceHistoryDraft] = useState<string | null>(null);
   const all = useMemo(() => subs ?? [], [subs]);
   const stats = useMemo(() => summarizeSubscriptions(all as SubLike[]), [all]);
-  const usageNow = new Date();
+  // Recorded use is a DATE on the family's wall: counted from the family's day
+  // (lib/finance/subscriptions.ts), not from this instant at Greenwich.
+  const usageNow = todayKey;
   const reviewMonthly = wastedMonthlyCents(all as SubLike[], 60, usageNow);
 
   async function save(e: React.FormEvent) {

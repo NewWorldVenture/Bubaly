@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { cacheIdentity, cacheKey, clearAllCache, readPartitionedCache, writeCache, writePartitionedCache, type CachePartition, type StorageLike } from '@/lib/offline/cache';
 
 function store() {
@@ -52,10 +52,42 @@ describe('partitioned persistent cache', () => {
   it('unserializable queries cannot silently share a fallback identity', () => {
     const deps: unknown[] = []; deps.push(deps); expect(cacheIdentity(A, 'calendar_events', 'family-A', deps)).toBeNull();
   });
-  it('unreadable or malformed persistent entries fail closed without throwing', () => {
+  it('unreadable or malformed persistent entries fail closed without throwing', async () => {
     const s: StorageLike = { getItem: () => { throw new Error('blocked'); }, setItem() {}, removeItem() {} };
     expect(readPartitionedCache(identity(), s)).toBeNull();
-    const readable = store(); readable.setItem(identity().key, '{bad-json');
-    expect(readPartitionedCache(identity(), readable)).toBeNull();
+    // Earlier cases have purged their module. Exercise parsing before a fresh lifetime's first purge.
+    vi.resetModules();
+    const fresh = await import('@/lib/offline/cache');
+    const readable = store(), key = fresh.cacheIdentity(A, 'calendar_events', 'family-A', ['same-window'])!;
+    fresh.writePartitionedCache(key, [{ id: 'healthy' }], readable, 100);
+    const healthy = readable.getItem(key.key)!;
+    const nativeParse = JSON.parse, parse = vi.spyOn(JSON, 'parse');
+    try {
+      expect(fresh.readPartitionedCache(key, readable, 100)).toEqual({ rows: [{ id: 'healthy' }], savedAt: 100 });
+      expect(parse).toHaveBeenCalledWith(healthy);
+      readable.setItem(key.key, '{bad-json');
+      expect(fresh.readPartitionedCache(key, readable, 100)).toBeNull();
+      const malformed = parse.mock.calls.findIndex(([raw]) => raw === '{bad-json');
+      expect(malformed).toBeGreaterThanOrEqual(0);
+      expect(parse.mock.results[malformed]).toMatchObject({ type: 'throw', value: expect.any(SyntaxError) });
+    } finally { parse.mockRestore(); }
+    expect(JSON.parse).toBe(nativeParse);
+  });
+  it('rejects unreceipted bytes before parsing after purge and accepts an actual replacement write', async () => {
+    vi.resetModules();
+    const fresh = await import('@/lib/offline/cache');
+    const readable = store(), key = fresh.cacheIdentity(A, 'calendar_events', 'family-A', ['same-window'])!;
+    fresh.clearAllCache(readable);
+    readable.setItem(key.key, '{bad-json');
+    const nativeParse = JSON.parse, parse = vi.spyOn(JSON, 'parse');
+    try {
+      expect(fresh.readPartitionedCache(key, readable, 100)).toBeNull();
+      expect(parse.mock.calls.filter(([raw]) => raw === '{bad-json')).toHaveLength(0);
+      fresh.writePartitionedCache(key, [{ id: 'replacement' }], readable, 100);
+      const replacement = readable.getItem(key.key)!;
+      expect(fresh.readPartitionedCache(key, readable, 100)).toEqual({ rows: [{ id: 'replacement' }], savedAt: 100 });
+      expect(parse).toHaveBeenCalledWith(replacement);
+    } finally { parse.mockRestore(); }
+    expect(JSON.parse).toBe(nativeParse);
   });
 });

@@ -98,8 +98,11 @@ describe('the notifications screen marks read only what it shows this member', (
     const start = source.indexOf(`async function ${name}(`);
     return source.slice(start, source.indexOf('\n  }\n', start));
   };
-  it.each(['markRead', 'markAllRead'])('%s is bounded to this member and family-wide rows', (name) => {
-    expect(body(name)).toMatch(/\.update\(\{ is_read: true \}\)[\s\S]*\.or\(`user_id\.eq\.\$\{userId\},user_id\.is\.null`\)/);
+  it.each(['markRead', 'markAllRead'])('%s is bounded to this member (and, for a manager, the shared family-wide rows)', (name) => {
+    expect(body(name)).toMatch(/\.update\(\{ is_read: true \}\)[\s\S]*\.or\(readableRows\)/);
+    // A legacy NULL row has one is_read for the whole family: only a manager
+    // marks it; everyone else marks their own rows alone.
+    expect(source).toContain('const readableRows = isManager(role) ? `user_id.eq.${userId},user_id.is.null` : `user_id.eq.${userId}`;');
   });
 });
 

@@ -1,10 +1,12 @@
 import type { Metadata } from 'next';
 import { AlertTriangle } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { refuseGuest } from '@/lib/auth/guest-scope';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { WalletActivation } from '@/components/wallet/wallet-activation';
+import { readFamilyWalletIsActive } from '@/lib/wallet/family-wallet-status';
 import {
   InvestView, type InvestAsset, type InvestChild, type Holding, type PendingOrder,
 } from '@/components/wallet/invest-view';
@@ -20,12 +22,12 @@ export const dynamic = 'force-dynamic';
 
 export default async function WalletInvestPage() {
   const tr = await getTranslations();
-  const ctx = await requireUserContext();
+  const ctx = await requireUserContext(); refuseGuest(ctx, '/wallet/invest');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   const dataWarnings: string[] = [];
 
-  const { data: wallet, error: walletError } = await supabase.from('family_wallets').select('id, is_active').eq('family_id', familyId).maybeSingle();
+  const { data: wallet, error: walletError } = await readFamilyWalletIsActive(familyId);
   if (walletError) {
     console.error('[wallet-invest] Wallet read failed', walletError);
     return <ErrorState message={tr('invest.couldNotLoadTheFamily')} />;
@@ -75,9 +77,15 @@ export default async function WalletInvestPage() {
 
   const nameByMember = new Map((members ?? []).map((m) => [m.id, { name: m.display_name, color: m.color }]));
   const assetList: InvestAsset[] = (assets ?? []).map((a) => ({ id: a.id, symbol: a.symbol, name: a.name, kind: a.kind, emoji: a.emoji, description: a.description, priceCents: a.price_cents, riskLevel: a.risk_level }));
+  // Who may place an order on each card: a manager on any child's, a child on
+  // their own. placeInvestOrderAction refuses the rest; the card stops offering it.
+  const manager = isManager(ctx.active.role);
   const children: InvestChild[] = (childWallets ?? []).map((cw) => {
     const m = nameByMember.get(cw.member_id);
-    return { id: cw.id, name: m?.name ?? 'Child', color: m?.color ?? null, investCashCents: investCashByChild.get(cw.id) ?? 0 };
+    return {
+      id: cw.id, name: m?.name ?? 'Child', color: m?.color ?? null, investCashCents: investCashByChild.get(cw.id) ?? 0,
+      canTrade: manager || cw.member_id === ctx.active.member.id,
+    };
   });
   const holdingList: Holding[] = (holdings ?? []).filter((h) => h.shares > 0).map((h) => ({ childWalletId: h.child_wallet_id, assetId: h.asset_id, shares: h.shares, avgCostCents: h.avg_cost_cents }));
 
@@ -97,7 +105,7 @@ export default async function WalletInvestPage() {
           <p>{tr('walletInvest.someInvestmentDetailsAreTemporarilyUnavailable')} {dataWarnings.join(', ')}.</p>
         </div>
       )}
-      <InvestView assets={assetList} childWallets={children} holdings={holdingList} pendingOrders={pendingOrders} canManage={isManager(ctx.active.role)} />
+      <InvestView assets={assetList} childWallets={children} holdings={holdingList} pendingOrders={pendingOrders} canManage={manager} />
     </div>
   );
 }

@@ -112,7 +112,22 @@ export const ROLE_DEFAULTS: Record<TrustRole, RoleDefault> = {
   },
   guest: {
     capabilities: ['view'],
-    sensitiveDomains: [],
+    // "View limited shared events only" (ROLE_DESCRIPTIONS). An empty list
+    // here made the one outside-adult role a LESS restricted reader than the
+    // family's own children: `riskToDecision`'s view rule only bites on a
+    // sensitive domain, so a guest's assistant could read every child's
+    // teacher, timetable, coach, practice location and passport status. With
+    // these domains the ASSISTANT refuses a guest: the read tools in them, the
+    // `activities` and `travel` context slices, the school/sports/trips
+    // insight summaries and household search's trip sources. That is the
+    // assistant's rule, not the database's — RLS still shows a guest the same
+    // rows in the app's school, sports and trip pages.
+    sensitiveDomains: [
+      'medical', 'dental', 'vision', 'mental_health',
+      'education', 'school_forms', 'homework',
+      'travel', 'passports', 'documents',
+      'finances', 'banking', 'insurance', 'emergency',
+    ],
     automationTrusted: false,
   },
 };
@@ -277,10 +292,50 @@ function conditionsSatisfied(c: PolicyConditions, ctx: ActionContext): boolean {
   return true;
 }
 
+/**
+ * Whether an ALLOW may reach an assistant acting for this person, whatever the
+ * policy's subject.
+ *
+ * An agent's `role` is the role of the person it acts FOR, and an assistant
+ * must never get more than that person may do unasked. For a parent or an
+ * adult — the roles whose AI work is automation-trusted — every allow reaches
+ * their assistant as written. For a guest, child, caregiver or teen:
+ *
+ *   - A policy addressed to Bubaly (subject 'ai') — a learned Autopilot allow,
+ *     the Autopilot dial, "Bubaly may act on the calendar" — speaks for the
+ *     household's managers and is not about them at all.
+ *   - A READ ('view') answers to the rule the person themselves reads under:
+ *     an assistant reading what the family shared with that role, or with
+ *     everyone, gets nothing the person could not open in the app. This is how
+ *     a parent lets a teen's assistant read the practice schedule.
+ *   - A WRITE is automation, which these roles are not trusted with. A blanket
+ *     — subject 'everyone', or capability 'all' — was written about what
+ *     PEOPLE may do, and only incidentally covered `automate`: "everyone may do
+ *     anything on the calendar" handed a guest's assistant every calendar
+ *     write with the risk tier silent, a deletion included. So a write is
+ *     reached only by a rule that names this role AND the capability itself —
+ *     "children's assistants may send family messages" — which is the family
+ *     extending automation to that role on purpose.
+ *
+ * Where an allow does not reach, the policy is not about this assistant: the
+ * role matrix and the risk tier decide, as they would with no policy at all.
+ * A deny or require_approval still binds every actor — those only tighten —
+ * and a member acting directly is matched exactly as before.
+ */
+function allowReachesAssistant(p: Policy, actor: Actor, capability: Capability): boolean {
+  if (actor.kind !== 'ai_agent') return true;
+  if (p.effect !== 'allow' && p.effect !== 'auto_approve') return true;
+  if (ROLE_DEFAULTS[actor.role]?.automationTrusted) return true;
+  if (p.subjectKind === 'ai') return false;
+  if (capability === 'view') return true;
+  return p.subjectKind === 'role' && p.subjectRole === actor.role && p.capability === capability;
+}
+
 function policyApplies(p: Policy, actor: Actor, domain: string, capability: Capability): boolean {
   if (!p.enabled) return false;
   if (p.domain !== 'all' && p.domain !== domain) return false;
   if (p.capability !== 'all' && p.capability !== capability) return false;
+  if (!allowReachesAssistant(p, actor, capability)) return false;
   switch (p.subjectKind) {
     case 'everyone': return true;
     case 'ai': return actor.kind === 'ai_agent';
@@ -455,8 +510,43 @@ export type RiskDecisionInput = {
   sensitiveRead?: boolean;
 };
 
-/** Roles a household would not hand a private read to without saying so. */
-const RESTRICTED_READ_ROLES: TrustRole[] = ['teen', 'child', 'caregiver', 'guest'];
+/**
+ * Roles a household would not hand a private read to without saying so.
+ * Exported so the tool executor can tell which callers may skip the gate on a
+ * read: for these, every read is evaluated as `view`, because a read that
+ * should never have happened cannot be undone afterwards.
+ */
+export const RESTRICTED_READ_ROLES: readonly TrustRole[] = ['teen', 'child', 'caregiver', 'guest'];
+
+/**
+ * Whether a READ may skip the trust gate entirely — the one rule both the
+ * tool executor's `gate()` (lib/ai/tools/execute.ts) and the planner's
+ * `dryRunGate()` (lib/ai/planner/validate.ts) apply, so the plan a family
+ * reviews and the run that executes it cannot disagree.
+ *
+ * A read in a high-stakes domain never skips. Otherwise a parent, an adult or
+ * the system skips — the view rule has nothing to say to them — and so does a
+ * restricted-read role (teen, child, caregiver, guest) reading something the
+ * view rule allows. A read the view rule WOULD deny (a role-sensitive domain,
+ * or a tool marked `sensitiveRead`) goes through the full gate, where it is
+ * refused unless a household rule that reaches the AI actor allows it.
+ *
+ * The dry run used to keep the old early allow for every non-high-stakes
+ * read after the executor stopped doing so, so a teen's "plan our week"
+ * passed planning with a practices read the run then denied, and its
+ * dependants failed mid-run instead of being left out at plan time.
+ */
+export function readSkipsTrustGate(
+  tool: { readOnly: boolean; domain: string; risk: RiskDecisionInput['risk']; sensitiveRead?: boolean },
+  actor: Actor,
+): boolean {
+  if (!tool.readOnly || HIGH_STAKES_AI_DOMAINS.includes(tool.domain)) return false;
+  if (!RESTRICTED_READ_ROLES.includes(actor.role)) return true;
+  return riskToDecision({
+    risk: tool.risk, actor, domain: tool.domain, capability: 'view',
+    explicitAllow: false, sensitiveRead: tool.sensitiveRead === true,
+  }) === null;
+}
 
 function isSensitiveDomainFor(role: TrustRole, domain: string): boolean {
   const def = ROLE_DEFAULTS[role];

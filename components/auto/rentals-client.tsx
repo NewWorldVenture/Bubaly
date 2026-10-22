@@ -15,15 +15,19 @@ import { Input, Select, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/home/field';
 import { EmptyState } from '@/components/ui/states';
 import { useTranslations } from '@/components/i18n/locale-provider';
-import { useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { instantToDatetimeLocal } from '@/lib/time/datetime-local';
 
 type Rental = Tables<'rental_cars'>;
 const TONE: Record<string, 'success' | 'brand' | 'neutral' | 'danger'> = { active: 'success', upcoming: 'brand', returned: 'neutral', cancelled: 'danger' };
-const toLocal = (iso: string | null) => (iso ? new Date(iso).toISOString().slice(0, 16) : '');
 
 export function RentalsClient({ rentals }: { rentals: Rental[] }) {
   const t = useTranslations();
   const { fmtDate, fmtMoney } = useFormat();
+  // The form shows the family's wall time, the same zone saveRentalAction
+  // reads it back in; the two are inverses only on the same clock.
+  const clock = useFamilyClock();
+  const toLocal = (iso: string | null) => instantToDatetimeLocal(iso, clock.timeZone);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Rental | null>(null);
   const [pending, start] = useTransition();

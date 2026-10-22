@@ -5,6 +5,7 @@ import { createServer } from '@/lib/supabase/server';
 import { LifeEventsModule } from '@/components/modules/life-events-module';
 import { detectLifeEvents, SCHOOL_START_WINDOW_DAYS, type LifeEventSuggestion } from '@/lib/life-events/detect';
 import { settleAll } from '@/lib/supabase/settle';
+import { factsVisibleTo } from '@/lib/memory/facts';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -42,7 +43,9 @@ export default async function LifeEventsPage() {
       .gte('created_at', `${petSince}T00:00:00Z`).limit(20),
     supabase.from('home_projects').select('title, status').eq('family_id', familyId)
       .in('status', ['idea', 'planning', 'quoting']).limit(20),
-    supabase.from('family_facts').select('label, value').eq('family_id', familyId).limit(100),
+    // Read with what the sensitive-memory rule needs: a "Coming up" reason
+    // quotes a fact's label, so a fact this reader may not see is not a signal.
+    supabase.from('family_facts').select('category, label, value, notes').eq('family_id', familyId).limit(100),
     // ACTIVE only. `activePlanKeys` suppresses a proposal, so a completed plan
     // in this set would silence the transition for good: a family who ran "The
     // Holidays" in 2026 and ticked it off would never be offered it again in
@@ -64,7 +67,7 @@ export default async function LifeEventsPage() {
         .map((e) => ({ label: e.title, startKey: String(e.starts_at).slice(0, 10) })),
       pets: (petsRes.data ?? []).map((p) => ({ name: p.name, createdKey: String(p.created_at).slice(0, 10) })),
       homeProjects: (projectsRes.data ?? []).map((p) => ({ title: p.title, status: p.status })),
-      facts: (factsRes.data ?? []).map((f) => ({ label: f.label, value: f.value })),
+      facts: factsVisibleTo(ctx.active.role, factsRes.data ?? []).map((f) => ({ label: f.label, value: f.value })),
       activePlanKeys: (plansRes.data ?? []).map((p) => p.template_key),
     });
   }

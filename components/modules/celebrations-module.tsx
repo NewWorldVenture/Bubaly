@@ -21,7 +21,7 @@ import {
 } from '@/lib/celebrations/dates';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
-import { useFormat } from '@/components/i18n/use-format';
+import { useFamilyCalendarToday, useFormat } from '@/components/i18n/use-format';
 
 type FamilyDate = Tables<'family_dates'>;
 
@@ -60,7 +60,10 @@ export function CelebrationsModule() {
     return [...fromMembers, ...fromDates];
   }, [members, dates, memberById]);
 
-  const upcoming = useMemo(() => upcomingCelebrations(items, 120), [items]);
+  // Counted from the FAMILY's day, as Home, Moments and the grandparent portal
+  // count the same dates — not from whatever day this device is on.
+  const familyToday = useFamilyCalendarToday();
+  const upcoming = useMemo(() => upcomingCelebrations(items, 120, familyToday), [items, familyToday]);
 
   const [showAdd, setShowAdd] = useState(false);
   const [title, setTitle] = useState('');
