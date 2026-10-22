@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractBearerToken, getBearerUserContext } from '@/lib/supabase/bearer';
+import { refuseIfLocked } from '@/lib/server/route-feature-gate';
 import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
 import { readDisplayCalendarOccurrences } from '@/lib/calendar/display-occurrences';
 
@@ -17,6 +18,14 @@ export async function GET(req: NextRequest) {
     if (req.headers.get('X-Bubaly-User-Id') !== ctx.user.id || req.headers.get('X-Bubaly-Family-Id') !== ctx.active.familyId) {
       return json({ code: 'context_changed' }, 409);
     }
+    // The cookie path to this data renders the (app) layout's AccountClosedGate
+    // or TrialPaywallGate instead of the calendar. This route IS the phone's
+    // calendar, and the phone has no such gate, so a closed or trial-ended
+    // family kept reading its household calendar from the Today and Calendar
+    // tabs. The lock half only: the Calendar page carries no `requireFeature`
+    // tier, so a tier gate here would make the phone stricter than the web.
+    const refused = await refuseIfLocked(supabase, ctx.active.familyId);
+    if (refused) return refused;
     const p = req.nextUrl.searchParams;
     const fromDay = p.get('fromDay') ?? '';
     const days = Number(p.get('days') ?? '14');

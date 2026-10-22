@@ -10,7 +10,9 @@ import { GlassCard } from '../../src/components/GlassCard';
 import { Pill } from '../../src/components/Pill';
 import { Screen } from '../../src/components/Screen';
 import { askAssistant, AssistantError, transcribeSpeech } from '../../src/lib/api';
-import { cardSections, type CardSection } from '../../src/lib/assistant-core';
+import { cardSections, responseErrorCopy, type CardSection } from '../../src/lib/assistant-core';
+import { recordingFiles } from '../../src/lib/recording-files';
+import { discardRecording } from '../../src/lib/recordings';
 import { fetchAssistantConversations, fetchAssistantHistory, mergeAssistantHistory, savedRunIds, type AssistantMessage as Message, type HistoryCursor, type SavedConversation } from '../../src/lib/assistant-history';
 import { supabase } from '../../src/lib/supabase';
 import { useAuth } from '../../src/lib/auth';
@@ -75,6 +77,8 @@ export default function AssistantScreen() {
     prepare: () => runtime.current.recorder.prepareToRecordAsync(), record: () => runtime.current.recorder.record(),
     stop: () => runtime.current.recorder.stop(), recordingUri: () => runtime.current.recorder.uri,
     transcribe: (context, uri, signal) => transcribeSpeech({ token: context.token, recording: { uri }, expectedFamilyId: context.familyId, locale: context.locale, signal }),
+    // The recording is deleted once the transcriber is done with it (recordings.ts).
+    discard: (uri) => discardRecording(recordingFiles, uri),
     ask: (context, text, signal) => askAssistant({ token: context.token, conversationId: context.conversationId, message: text, expectedFamilyId: context.familyId, locale: context.locale, signal }),
     phase: (next) => { if (mounted.current) updateConversation((previous) => ({ ...previous, phase: next })); },
     user: (text) => { scrollToLatest.current = true; updateConversation((previous) => ({ ...previous, draft: '', notice: undefined, retryText: undefined, messages: [...previous.messages, { id: Crypto.randomUUID(), role: 'user', content: text }] })); },
@@ -320,7 +324,7 @@ function Bubble({ message, t, locale }: { message: Message; t: MobileTranslator;
         </View>
       ) : null}
       {message.cards?.map((card, i) => <CardSectionView key={`${card.kind}-${i}`} section={cardSections(card, t, locale)} t={t} />)}
-      {message.responseError && <AppText color={colors.danger}>{message.responseError}</AppText>}
+      {message.responseError && <AppText color={colors.danger}>{responseErrorCopy(message.responseErrorCode, t)}</AppText>}
       {message.runIds?.filter((id) => !message.cards?.some((card) => card.kind === 'run_status' && card.run_id === id)).map((id) => <CardSectionView key={id} section={{ kind: 'run', title: t('mobileAssistant.openRun'), subtitle: null, lines: [], more: 0, tone: 'brand', href: `/dashboard/concierge/runs/${id}` }} t={t} />)}
     </View>
   );

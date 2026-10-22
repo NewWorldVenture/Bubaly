@@ -44,12 +44,35 @@ export function buildAssistantRequest(args: { apiUrl: string; token: string; con
   };
 }
 
+/**
+ * describeAIError's codes (lib/ai/provider.ts), in the reader's words. The
+ * engine's own messages — "Add an OpenAI API key in Admin → AI Engine", "Update
+ * it in Admin → AI Engine" — are written for the workspace admin; the route
+ * now sends the code beside them, and a child on the phone reads this instead.
+ */
+export const ENGINE_FAILURE_COPY: Record<string, string> = {
+  unconfigured: 'mobileAssistant.notConfigured',
+  quota: 'mobileAssistant.engineUnavailable', auth: 'mobileAssistant.engineUnavailable', model: 'mobileAssistant.engineUnavailable',
+  rate_limit: 'mobileAssistant.rateLimited',
+  network: 'mobileAssistant.failed', unknown: 'mobileAssistant.failed', cancelled: 'mobileAssistant.failed', context_unavailable: 'mobileAssistant.failed',
+};
+
 const FRIENDLY: Record<string, string> = {
   invalid_token: 'mobileAssistant.sessionExpired', signed_out: 'mobileAssistant.signedOut',
   needs_family: 'mobileAssistant.needsFamily', not_configured: 'mobileAssistant.notConfigured',
   message_too_long: 'mobileAssistant.messageTooLong', unavailable: 'mobileAssistant.familyUnavailable',
-  family_changed: 'mobileAssistant.contextChanged', invalid_family: 'mobileAssistant.contextChanged',
+  // 409 family_changed: the server resolved another active family than this
+  // phone did (lib/server/ai-request-context.ts). A retry asks the same
+  // question, so the copy names the remedy; invalid_family is a malformed header.
+  family_changed: 'mobileAssistant.familyMismatch', invalid_family: 'mobileAssistant.contextChanged',
+  trial_expired: 'mobileAssistant.trialEnded', account_closed: 'mobileAssistant.accountClosed',
+  ...ENGINE_FAILURE_COPY,
 };
+
+/** What a saved turn's `responseError` says on the phone: by its code, never the engine's own wording. */
+export function responseErrorCopy(code: string | undefined, t: MobileTranslator = englishMobile): string {
+  return t(code && ENGINE_FAILURE_COPY[code] ? ENGINE_FAILURE_COPY[code] : 'mobileAssistant.answerCutShort');
+}
 
 const isRecord = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
 
@@ -84,8 +107,11 @@ export function parseAssistantResponse(status: number, body: unknown, t: MobileT
   }
   const code = typeof obj.code === 'string' ? obj.code : undefined;
   const serverError = typeof obj.error === 'string' ? obj.error : undefined;
+  if (code && FRIENDLY[code]) return { ok: false, status, code, error: t(FRIENDLY[code]) };
   if (status === 429) return { ok: false, status, code: 'rate_limited', error: t('mobileAssistant.rateLimited') };
-  const error = code && FRIENDLY[code] ? t(FRIENDLY[code]) : serverError ?? t('mobileAssistant.failed');
+  // A 4xx body's message was written for the caller ("Message is required"); a
+  // 5xx body's is the server's account of its own failure, for its log.
+  const error = status < 500 && serverError ? serverError : t('mobileAssistant.failed');
   return { ok: false, status, error, ...(code ? { code } : {}) };
 }
 

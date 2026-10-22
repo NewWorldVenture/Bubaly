@@ -308,6 +308,14 @@ function splitSelect(list: string): string[] {
 }
 
 /**
+ * The columns an embed may hang off: `<alias>_id`, `<table singular>_id` (both
+ * the `-s` and the `-ies` plural: `families` → `family_id`), `<table>_id`.
+ */
+function foreignKeyCandidates(alias: string, table: string): string[] {
+  return [`${alias}_id`, `${table.replace(/s$/, '')}_id`, `${table.replace(/ies$/, 'y')}_id`, `${table}_id`];
+}
+
+/**
  * Project a row onto a select list. Embedded resources (`member:family_members(display_name)`)
  * resolve through a foreign key named `<alias>_id` or `<table singular>_id` when
  * one exists on the row, and are null otherwise — enough for the display joins
@@ -324,8 +332,7 @@ function project(db: InMemorySupabase, row: Row, select: string): Row {
       const alias = embed[1] ?? embed[2];
       const table = embed[2];
       const inner = embed[3] || '*';
-      const fkCandidates = [`${alias}_id`, `${table.replace(/s$/, '')}_id`, `${table}_id`];
-      const fk = fkCandidates.find((c) => c in row);
+      const fk = foreignKeyCandidates(alias, table).find((c) => c in row);
       const target = fk ? db.table(table).find((r) => looseEq(r.id, row[fk])) : undefined;
       out[alias] = target ? project(db, target, inner) : null;
       continue;
@@ -394,7 +401,7 @@ class QueryBuilder implements PromiseLike<Reply> {
     const table = part[2];
     const inner = operatorPredicate(dot[2], op, value);
     return (row) => {
-      const fk = [`${alias}_id`, `${table.replace(/s$/, '')}_id`, `${table}_id`].find((c) => c in row);
+      const fk = foreignKeyCandidates(alias, table).find((c) => c in row);
       const target = fk ? this.db.table(table).find((r) => looseEq(r.id, row[fk])) : undefined;
       return target !== undefined && inner(target);
     };

@@ -277,12 +277,21 @@ describe('POST /api/ai guards', () => {
     expect(prepareAssistantTurn).not.toHaveBeenCalled();
   });
 
-  it('500s with the engine error when context preparation fails', async () => {
+  it('500s with the engine error when context preparation fails, with a code a native client can map', async () => {
     prepareAssistantTurn.mockResolvedValue({ ok: false, error: 'Could not load the family assistant context.' });
     const { POST } = await import('@/app/api/ai/route');
     const res = await POST(post({ conversationId: CONVERSATION, message: 'hi' }));
     expect(res.status).toBe(500);
-    expect((await res.json()).error).toBe('Could not load the family assistant context.');
+    expect(await res.json()).toEqual({ error: 'Could not load the family assistant context.', code: 'context_unavailable' });
+  });
+
+  it('500s with describeAIError’s message AND code when the turn throws — the message is written for the admin, the code is what the phone shows', async () => {
+    prepareAssistantTurn.mockRejectedValue(new Error('The AI engine is not configured: missing API key'));
+    const { POST } = await import('@/app/api/ai/route');
+    const res = await POST(post({ conversationId: CONVERSATION, message: 'hi' }));
+    expect(res.status).toBe(500);
+    // describeAIError is stubbed above to answer code 'x' with the error's own message.
+    expect(await res.json()).toEqual({ error: 'The AI engine is not configured: missing API key', code: 'x' });
   });
 });
 

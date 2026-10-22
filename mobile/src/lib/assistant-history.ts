@@ -6,7 +6,11 @@ export type SavedConversation = { id: string; title: string; updated_at: string 
 export type HistoryCursor = { id: string; created_at: string };
 export type AssistantMessage = {
   id: string; role: 'user' | 'assistant' | 'error'; content: string; created_at?: string;
-  actions?: AssistantAction[]; cards?: AssistantCard[]; runIds?: string[]; responseError?: string;
+  actions?: AssistantAction[]; cards?: AssistantCard[]; runIds?: string[];
+  /** The engine's own account of a turn cut short — for the log; the screen renders `responseErrorCopy(responseErrorCode)`. */
+  responseError?: string;
+  /** describeAIError's code for that failure (lib/ai/result-cards.ts `responseErrorCode`), when the turn was saved with one. */
+  responseErrorCode?: string;
 };
 export type HistoryPage = { messages: AssistantMessage[]; before: HistoryCursor | null };
 export const CONVERSATION_PAGE_SIZE = 25;
@@ -73,7 +77,8 @@ export async function fetchAssistantHistory(db: Db, owner: AssistantHistoryOwner
     const actions = savedActions(row.tool_results);
     return { id: row.id, role: row.role === 'user' ? 'user' : 'assistant', content: row.content, created_at: row.created_at,
       ...(actions.length ? { actions } : {}), ...(cards.length ? { cards } : {}), ...(runIds.length ? { runIds } : {}),
-      ...(typeof structured.responseError === 'string' ? { responseError: structured.responseError.slice(0, 1000) } : {}) };
+      ...(typeof structured.responseError === 'string' ? { responseError: structured.responseError.slice(0, 1000) } : {}),
+      ...(typeof structured.responseErrorCode === 'string' && /^[a-z_]{1,64}$/.test(structured.responseErrorCode) ? { responseErrorCode: structured.responseErrorCode } : {}) };
   });
   return { messages, before: rows.length > MESSAGE_PAGE_SIZE && oldest ? { id: oldest.id, created_at: oldest.created_at } : null };
 }
