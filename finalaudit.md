@@ -1,5 +1,13 @@
 # Final Production Audit
 
+## Private schema-verifier composition allocated before editing — 2026-10-22T18:55:32.701Z
+
+- Last Updated: 2026-10-22T18:55:32.701Z
+
+Root allocates a private ordinary merge of exact vendor candidate1079ece510b6 into the schema-verifier repair46d2a8ac. Only incoming package.json and package-lock.json may change outside the audit; the exact existing verifier and fixture repair must remain byte-identical. Preserve every parent audit ID, independently changed row, chronology and existing status, retaining shared-row evidence explicitly if necessary. No new product implementation, migration or production query is allocated. The source-only composition is not publication or acceptance of still-running1079 original checks.
+
+After mechanical independent review, use a fresh full G: checkout with physical owned dependencies and an explicit credential-free environment for clean install, build, generated full types, lint and complete schema-related/vendor fixtures. Preserve original69PASS7FAIL versus candidate76PASS, all actual owned localhost HTTP/cleanup controls and current41 production schema gaps; a verifier fix does not repair production data or schema. New exact hosted qualification remains required after publication. No production SQL, config, provider or customer writes; all allocation-map, identity, cutover and reconciliation holds remain. PRODUCTION READY: NO.
+
 ## Runtime schema verifier repair locally verified; publication pending patched baseline — 2026-10-22T18:07:38.326Z
 
 - Last Updated: 2026-10-22T18:07:38.326Z
