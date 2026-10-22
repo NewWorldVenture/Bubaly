@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { CreditCard, Users, DollarSign, TrendingDown, ExternalLink, Receipt } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAllAsQuery, readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { getStripe } from '@/lib/stripe';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -98,10 +98,18 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
   // ceiling, and reaching it is an error that lands in the read-error state
   // below rather than in a smaller platform. The counts and the paged reads
   // settle separately so each keeps its own tuple type.
+  //
+  // The subscription rows are counted (the growth chart, the All tab's total),
+  // so they page on the id, not on offsets: a checkout between two pages
+  // shifted every later offset by one and counted one subscription twice.
   const since30 = new Date(Date.now() - 30 * 86400000);
   const [[subscriptionsResult, activeCountResult, canceledRecentlyResult, familiesResult, billingCustomersResult], planCountResults] = await Promise.all([
     settleAll([
-      readAllAsQuery((from, to) => supabase.from('subscriptions').select('*').order('id').range(from, to), { max: ROW_CEILING }),
+      readAllByIdAsQuery((after, limit) => {
+        let query = supabase.from('subscriptions').select('*');
+        if (after) query = query.gt('id', after);
+        return query.order('id').limit(limit);
+      }, { max: ROW_CEILING }),
       supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active'),
       supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'canceled').gte('updated_at', since30.toISOString()),
       readAllAsQuery((from, to) => supabase.from('families').select('id, name').order('id').range(from, to), { max: ROW_CEILING }),

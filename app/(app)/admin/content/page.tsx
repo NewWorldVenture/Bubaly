@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { FileText, Image as ImageIcon, FolderKanban, HardDrive, Clock } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAllAsQuery, readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { readInChunks } from '@/lib/supabase/chunked-in';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -70,7 +70,10 @@ export default async function AdminContentPage({ searchParams }: Params) {
   //   - the two tiles that are counts are `head: true` counts — exact, uncapped;
   //   - what is SUMMED (bytes, per-category counts) pages to a real ceiling,
   //     and reaching it is an error that lands in the read-error state below
-  //     rather than a smaller platform;
+  //     rather than a smaller platform. It pages on the id (readAllByIdAsQuery),
+  //     not on offsets: families upload while this reads, and a document filed
+  //     ahead of the next offset pushed one already read onto the next page,
+  //     so its bytes were added twice;
   //   - the browsable list is an explicit newest-first page of LIST_CEILING,
   //     with the category and family filters applied by the server so they
   //     reach the whole table, and it says when there are more;
@@ -81,8 +84,11 @@ export default async function AdminContentPage({ searchParams }: Params) {
   const [docCountResult, recentCountResult, aggregateResult, listResult, recentResult, familiesResult] = await settleAll([
     supabase.from('documents').select('id', { count: 'exact', head: true }),
     supabase.from('documents').select('id', { count: 'exact', head: true }).gte('created_at', since7.toISOString()),
-    readAllAsQuery((from, to) =>
-      supabase.from('documents').select('category, size_bytes').order('id').range(from, to), { max: SUM_ROW_CEILING }),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('documents').select('id, category, size_bytes');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING }),
     readAllAsQuery((from, to) => {
       let query = supabase.from('documents').select('*');
       if (familyFilter) query = query.eq('family_id', familyFilter);

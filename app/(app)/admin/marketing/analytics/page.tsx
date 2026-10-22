@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { createServiceClient } from '@/lib/supabase/server';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { Bars } from '@/components/admin/charts';
@@ -24,11 +24,22 @@ export default async function AnalyticsPage() {
   // clicks), so they are read to a real ceiling: an unbounded select is
   // answered with at most `db-max-rows` (1,000) and no error. Reaching the
   // ceiling is an error, which takes the page to its read-error state rather
-  // than to a smaller total. readAllAsQuery never rejects, so it needs no settle.
+  // than to a smaller total. Both page on the id, not on offsets: a campaign
+  // created or deleted between two pages shifted every later offset by one,
+  // and one row's budget or engagement was added twice, or dropped.
+  // readAllByIdAsQuery never rejects, so it needs no settle.
   const [customersResult, campaignsResult, emailsResult] = await Promise.all([
     getMarketingCustomersWithError(supabase),
-    readAllAsQuery((from, to) => supabase.from('marketing_campaigns').select('channel, status, budget_cents').is('deleted_at', null).order('id').range(from, to), { max: SUM_ROW_CEILING }),
-    readAllAsQuery((from, to) => supabase.from('marketing_email_campaigns').select('recipients, opens, clicks, status').is('deleted_at', null).order('id').range(from, to), { max: SUM_ROW_CEILING }),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('marketing_campaigns').select('id, channel, status, budget_cents').is('deleted_at', null);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING }),
+    readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('marketing_email_campaigns').select('id, recipients, opens, clicks, status').is('deleted_at', null);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING }),
   ]);
   const readError = customersResult.error ?? campaignsResult.error ?? emailsResult.error;
   if (readError) {

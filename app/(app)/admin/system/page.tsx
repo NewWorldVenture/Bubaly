@@ -13,7 +13,7 @@ import { fmtMoney } from '@/lib/utils/format';
 import { getTranslations } from '@/lib/i18n/server';
 import { getFormat } from '@/lib/utils/format-server';
 import { ADMIN_ZONE } from '@/lib/admin/clock';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAllAsQuery, readAllByIdAsQuery } from '@/lib/supabase/read-all';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -70,9 +70,19 @@ export default async function AdminSystemPage() {
     // summed that prefix as the platform's revenue and storage while the
     // profiles read beside them paged. Reaching the ceiling is an error, which
     // joins readFailures and names itself in the banner instead of rendering
-    // a smaller platform than exists.
-    settle(readAllAsQuery((from, to) => supabase.from('subscriptions').select('plan, status').order('id').range(from, to), { max: SUM_ROW_CEILING })),
-    settle(readAllAsQuery((from, to) => supabase.from('documents').select('size_bytes').order('id').range(from, to), { max: SUM_ROW_CEILING })),
+    // a smaller platform than exists. Both page on the id, not on offsets:
+    // a checkout or an upload landing between two pages shifted every later
+    // offset by one, and one row's price or bytes was added twice.
+    settle(readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('subscriptions').select('id, plan, status');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING })),
+    settle(readAllByIdAsQuery((after, limit) => {
+      let query = supabase.from('documents').select('id, size_bytes');
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: SUM_ROW_CEILING })),
   ]);
 
   const readFailures = ([

@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { UsersRound, UserCheck, UserPlus, UserX, ShieldCheck } from 'lucide-react';
 import { createServiceClient, describeConfiguredServiceKey } from '@/lib/supabase/server';
 import { settleAll, describeReadError, credentialHint } from '@/lib/supabase/settle';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { readInChunks } from '@/lib/supabase/chunked-in';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -88,11 +88,15 @@ export default async function AdminUsersPage({ searchParams }: Params) {
   // thousand NEWEST profiles was labelled "No account" and counted as one. So:
   //
   //   - the tiles and the role donut are `head: true` counts — exact, uncapped,
-  //     one per figure (readAllAsQuery answers no count, and a count that can
+  //     one per figure (a paged read answers no count, and a count that can
   //     be asked for is cheaper than rows that must be read);
-  //   - the row sets page through readAllAsQuery to a real ceiling; reaching it
-  //     is an error, which joins loadErrors and the banner below instead of
-  //     rendering a prefix;
+  //   - the row sets page through readAllByIdAsQuery to a real ceiling; reaching
+  //     it is an error, which joins loadErrors and the banner below instead of
+  //     rendering a prefix. They page on the id, not on offsets, because they
+  //     are counted (members per family, the Families and Invitations totals)
+  //     and people join and are invited while this reads: a row written ahead
+  //     of the next offset pushed one already read onto the next page, and it
+  //     was listed and counted twice;
   //   - profiles are joined by the members' user ids rather than read whole.
   //
   // The counts and the paged reads settle in two batches so each keeps its own
@@ -104,10 +108,26 @@ export default async function AdminUsersPage({ searchParams }: Params) {
     roleCountResults,
   ] = await Promise.all([
     settleAll([
-      readAllAsQuery((from, to) => supabase.from('family_members').select('*').eq('is_active', true).order('id').range(from, to), { max: ROW_CEILING }),
-      readAllAsQuery((from, to) => supabase.from('families').select('*').order('id').range(from, to), { max: ROW_CEILING }),
-      readAllAsQuery((from, to) => supabase.from('subscriptions').select('family_id, plan, status').order('id').range(from, to), { max: ROW_CEILING }),
-      readAllAsQuery((from, to) => supabase.from('invites').select('*').order('id').range(from, to), { max: ROW_CEILING }),
+      readAllByIdAsQuery((after, limit) => {
+        let query = supabase.from('family_members').select('*').eq('is_active', true);
+        if (after) query = query.gt('id', after);
+        return query.order('id').limit(limit);
+      }, { max: ROW_CEILING }),
+      readAllByIdAsQuery((after, limit) => {
+        let query = supabase.from('families').select('*');
+        if (after) query = query.gt('id', after);
+        return query.order('id').limit(limit);
+      }, { max: ROW_CEILING }),
+      readAllByIdAsQuery((after, limit) => {
+        let query = supabase.from('subscriptions').select('id, family_id, plan, status');
+        if (after) query = query.gt('id', after);
+        return query.order('id').limit(limit);
+      }, { max: ROW_CEILING }),
+      readAllByIdAsQuery((after, limit) => {
+        let query = supabase.from('invites').select('*');
+        if (after) query = query.gt('id', after);
+        return query.order('id').limit(limit);
+      }, { max: ROW_CEILING }),
       supabase.from('roles').select('*'),
       supabase.from('permissions').select('*'),
       supabase.from('super_admins').select('email'),

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { Target } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -25,33 +25,42 @@ export default async function AdsPage() {
   // rows, so they are read to a real ceiling: an unbounded select is answered
   // with at most `db-max-rows` (1,000) and no error. Reaching the ceiling is an
   // error, which takes the page to its read-error state, not to a smaller total.
-  const { data: ads, error: adsError } = await readAllAsQuery((from, to) =>
-    supabase.from('marketing_ad_campaigns').select('*').is('deleted_at', null)
-      .order('created_at', { ascending: false }).order('id').range(from, to), { max: ROW_CEILING });
+  //
+  // It pages on the id, not on offsets. Paged newest first, a campaign created
+  // between two pages landed at offset 0 and pushed the last row of the first
+  // page onto the second, so that campaign's budget and spend were added twice.
+  // On `id > last` no write between pages brings a row back; the list is put
+  // newest first in memory instead.
+  const { data: adRows, error: adsError } = await readAllByIdAsQuery((after, limit) => {
+    let query = supabase.from('marketing_ad_campaigns').select('*').is('deleted_at', null);
+    if (after) query = query.gt('id', after);
+    return query.order('id').limit(limit);
+  }, { max: ROW_CEILING });
   if (adsError) {
     console.error('[admin-marketing-ads] campaign read failed', adsError);
     return <AdminAdsReadError />;
   }
+  const ads = [...(adRows ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
 
-  const totalBudget = (ads ?? []).reduce((s, a) => s + (a.budget_cents ?? 0), 0);
-  const totalSpend = (ads ?? []).reduce((s, a) => s + (a.spend_cents ?? 0), 0);
+  const totalBudget = ads.reduce((s, a) => s + (a.budget_cents ?? 0), 0);
+  const totalSpend = ads.reduce((s, a) => s + (a.spend_cents ?? 0), 0);
 
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-border bg-surface/30 p-4 text-sm text-muted">{t('ads.planPaidCampaignsAndTrack')}</div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Card><p className="text-xs text-muted">{t('adminMarketingAds.campaigns')}</p><p className="text-2xl font-bold">{(ads ?? []).length}</p></Card>
+        <Card><p className="text-xs text-muted">{t('adminMarketingAds.campaigns')}</p><p className="text-2xl font-bold">{ads.length}</p></Card>
         <Card><p className="text-xs text-muted">{t('adminMarketingAds.totalBudget')}</p><p className="text-2xl font-bold">{fmtMoney(totalBudget)}</p></Card>
         <Card><p className="text-xs text-muted">{t('adminMarketingAds.totalSpend')}</p><p className="text-2xl font-bold">{fmtMoney(totalSpend)}</p></Card>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-3">
-          {(ads ?? []).length === 0 ? (
+          {ads.length === 0 ? (
             <EmptyState icon={Target} title={t('adminMarketingAds.noAdCampaignsYet')} description={t('ads.planYourFirstAdCampaign')} />
           ) : (
-            (ads ?? []).map((a) => (
+            ads.map((a) => (
               <Card key={a.id} className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
