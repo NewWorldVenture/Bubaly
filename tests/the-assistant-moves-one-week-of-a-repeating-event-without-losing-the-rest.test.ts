@@ -5,11 +5,13 @@
 // series' id. `calendar.updateEvent` and `calendar.rescheduleEvent` took that id
 // and a new start, and wrote the start into the series row, so "move Sam's
 // swim on 3 November to 5pm" restarted the series on 3 November and every week
-// before it left the calendar. That is the same re-anchoring the Edit modal had
-// (tests/editing-one-week-of-a-repeating-event-keeps-the-earlier-weeks.test.ts).
+// before it left the calendar. The calendar's Edit modal had the same fault and
+// now opens the stored series row instead; the assistant has no row in hand,
+// only the weeks it read.
 //
-// Both tools now take `occurrence_starts_at`, the week being changed, and go
-// through the same service mapping as the modal. A time change on a repeating
+// Both tools now take `occurrence_starts_at`, the week being changed, and the
+// service maps the change back onto the series' first date, on the family's
+// wall clock (by date for an all-day series). A time change on a repeating
 // event that names no week is refused with a question, not guessed. That
 // matches the service's contract for an ambiguous request (`findEventByTitle`
 // refuses "game" when it matches two things), and a guess that kept the first
@@ -118,6 +120,72 @@ describe('calendar.updateEvent on one week of a series', () => {
     const result = await tool('calendar.updateEvent').execute(scope, { event_id: DENTIST, starts_at: '2026-11-05T09:00:00', ends_at: '2026-11-05T09:30:00' });
     expect(result.ok, result.ok ? '' : result.error).toBe(true);
     expect(instant(row(DENTIST).starts_at)).toBe('2026-11-05T14:00:00.000Z');
+  });
+});
+
+describe('the move is mapped onto the series on its own clock', () => {
+  it('a move across the clock change is counted in days on the wall, not in hours', async () => {
+    // 27 October is EDT, 3 November is EST: one week on the wall is 169 hours.
+    // Shifting the September start by that many hours would land it at 17:00.
+    const result = await tool('calendar.rescheduleEvent').execute(scope, {
+      event_id: SWIM, starts_at: '2026-11-03T16:00:00', occurrence_starts_at: '2026-10-27T20:00:00.000Z',
+    });
+    expect(result.ok, result.ok ? '' : result.error).toBe(true);
+    expect(instant(row(SWIM).starts_at), 'the move was not a week on the wall clock').toBe('2026-09-08T20:00:00.000Z');
+    expect(instant(row(SWIM).ends_at), 'the length changed').toBe('2026-09-08T21:30:00.000Z');
+  });
+
+  it('a later end alone lengthens every week, from the first', async () => {
+    const result = await tool('calendar.updateEvent').execute(scope, {
+      event_id: SWIM, ends_at: '2026-11-03T18:00:00', occurrence_starts_at: '2026-11-03T21:00:00.000Z',
+    });
+    expect(result.ok, result.ok ? '' : result.error).toBe(true);
+    expect(instant(row(SWIM).starts_at), 'the start moved').toBe('2026-09-01T20:00:00.000Z');
+    expect(instant(row(SWIM).ends_at), 'the end was not mapped onto the first week').toBe('2026-09-01T22:00:00.000Z');
+  });
+
+  it('moving the first week moves the series from there', async () => {
+    const result = await tool('calendar.rescheduleEvent').execute(scope, {
+      event_id: SWIM, starts_at: '2026-09-01T17:00:00', occurrence_starts_at: '2026-09-01T20:00:00.000Z',
+    });
+    expect(result.ok, result.ok ? '' : result.error).toBe(true);
+    expect(instant(row(SWIM).starts_at)).toBe('2026-09-01T21:00:00.000Z');
+  });
+
+  it('an unchanged start is the series\' own instant, even in the hour the clocks repeat', async () => {
+    // 1 November 2026 shows 01:30 twice in New York; this series starts at the
+    // second (EST, 06:30Z). Re-reading "01:30 on 1 November" would pick the first.
+    db.seed('calendar_events', [{
+      ...row(SWIM), id: 'handover-1', title: 'Night shift handover', starts_at: '2026-11-01T06:30:00.000Z', ends_at: '2026-11-01T07:30:00.000Z',
+    }]);
+    const result = await tool('calendar.updateEvent').execute(scope, {
+      event_id: 'handover-1', starts_at: '2026-11-08T06:30:00.000Z', ends_at: '2026-11-08T08:00:00.000Z', occurrence_starts_at: '2026-11-08T06:30:00.000Z',
+    });
+    expect(result.ok, result.ok ? '' : result.error).toBe(true);
+    expect(instant(row('handover-1').starts_at), 'an unchanged start was re-read on the wall clock').toBe('2026-11-01T06:30:00.000Z');
+    expect(instant(row('handover-1').ends_at)).toBe('2026-11-01T08:00:00.000Z');
+  });
+
+  it('a one-off that moved since it was read takes the time it is given', async () => {
+    const result = await tool('calendar.updateEvent').execute(scope, {
+      event_id: DENTIST, starts_at: '2026-11-05T09:00:00', ends_at: '2026-11-05T10:00:00', occurrence_starts_at: '2026-11-02T14:00:00.000Z',
+    });
+    expect(result.ok, result.ok ? '' : result.error).toBe(true);
+    expect(instant(row(DENTIST).starts_at), 'a one-off was shifted like a series').toBe('2026-11-05T14:00:00.000Z');
+  });
+
+  it('an all-day series is moved by date', async () => {
+    // Saturdays from 5 September; 7 November's market moved to the Sunday.
+    db.seed('calendar_events', [{
+      ...row(DENTIST), id: 'market-1', title: 'Farmers market', starts_at: '2026-09-05T00:00:00.000Z', ends_at: null,
+      all_day: true, recurrence: 'weekly',
+    }]);
+    const result = await tool('calendar.updateEvent').execute(scope, {
+      event_id: 'market-1', starts_at: '2026-11-08T00:00:00.000Z', occurrence_starts_at: '2026-11-07T00:00:00.000Z',
+    });
+    expect(result.ok, result.ok ? '' : result.error).toBe(true);
+    expect(instant(row('market-1').starts_at), 'the all-day series was not moved by one date').toBe('2026-09-06T00:00:00.000Z');
+    expect(row('market-1').all_day).toBe(true);
   });
 });
 

@@ -184,7 +184,11 @@ describe.each(LOCALES)('Photos in %s', (locale) => {
   beforeEach(() => { h.locale = locale; });
 
   it('renders translated tabs, album kinds and counts without translating saved content', () => {
-    h.albums = KINDS.map(album);
+    // An album's count is its own `photo_count` (kept by the database trigger),
+    // not a tally of whichever photos the grid has loaded — which stopped at
+    // the newest 1,000. The fixture carries the column the module reads.
+    const counted: Record<string, number> = { 'album-general': 1, 'album-vacation': 2 };
+    h.albums = KINDS.map(album).map((a) => ({ ...a, photo_count: counted[a.id] ?? 0 }));
     h.photos = [photo(), photo('two', { album_id: 'album-vacation' }), photo('three', { album_id: 'album-vacation' })];
     const html = render();
     for (const kind of KINDS) {

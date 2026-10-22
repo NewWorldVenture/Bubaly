@@ -16,8 +16,10 @@
 import 'server-only';
 import { z } from 'zod';
 import { addFromMealPlan } from '@/lib/services/groceries';
-import { foodProfile, getMealPlan, listRecipes, planWeek, setSlot, type PlanSlot } from '@/lib/services/meals';
-import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
+import {
+  foodProfile, getMealPlan, listRecipes, normalizeDishName, planWeek, setSlot, type PlanEntryInput, type PlanSlot,
+} from '@/lib/services/meals';
+import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { defineTool, plural, type ToolDefinition } from './types';
 
@@ -47,6 +49,94 @@ function describeDayKey(key: string): string {
   const ms = Date.parse(`${key}T12:00:00Z`);
   if (!Number.isFinite(ms)) return key;
   return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric' }).format(new Date(ms));
+}
+
+type IngredientLine = z.infer<typeof ingredientInput>;
+
+/**
+ * The service's ingredients field, or nothing at all.
+ *
+ * Omitted (or null, or an empty list) means "the model named no ingredients",
+ * which is NOT the same as "this dish has none": `ensureMealByName` reuses a
+ * library dish only when every field it is handed matches, so an `[]` here
+ * failed to match the family's "Tacos" (with tortillas) and cloned it as an
+ * empty "Tacos" that then refused to build a shopping list. And a `meal_id`
+ * entry may carry no ingredients key at all — `validateEntries` refuses one
+ * that does, so the documented "existing meal id" path was always refused.
+ */
+function ingredientsField(lines: IngredientLine[] | null | undefined): { ingredients?: { name: string; quantity: string | null; unit: string | null }[] } {
+  if (!lines?.length) return {};
+  return { ingredients: lines.map((i) => ({ name: i.name, quantity: i.quantity ?? null, unit: i.unit ?? null })) };
+}
+
+type PlanEntryArgs = {
+  date: string;
+  meal_type?: (typeof MEAL_TYPE_ENUM)[number] | null;
+  meal_id?: string | null;
+  meal_name?: string | null;
+  ingredients?: IngredientLine[] | null;
+};
+
+/**
+ * The library name of every saved meal an entry names by id AND by name, so
+ * `planEntry` can tell "meal-1, Tacos" (one dish, said twice) from "meal-1,
+ * Curry" (two dishes). One family-scoped read for the whole batch.
+ *
+ * `complete` says whether an id the read did not return is known to name no
+ * meal of this family. It is true only when the read's own count matches the
+ * rows it returned; a server cap that stopped short, or a missing count, leaves
+ * the missing ids unchecked.
+ */
+type LibraryNames = { names: ReadonlyMap<string, string>; complete: boolean };
+
+async function libraryNames(scope: ServiceScope, entries: PlanEntryArgs[]): Promise<ServiceResult<LibraryNames>> {
+  const ids = [...new Set(entries.flatMap((e) => (e.meal_id && e.meal_name?.trim() ? [e.meal_id] : [])))];
+  if (!ids.length) return ok({ names: new Map(), complete: true });
+  const { data, error, count } = await scope.db
+    .from('meals')
+    .select('id, name', { count: 'exact' })
+    .eq('family_id', scope.familyId)
+    .in('id', ids);
+  if (error || !Array.isArray(data)) {
+    console.error('[tool:meals] meal name read failed', error);
+    return fail(describeDbError(error, 'Could not read that meal.'), { code: SERVICE_CODES.db });
+  }
+  const complete = data.length === ids.length || (typeof count === 'number' && count <= data.length);
+  return ok({ names: new Map(data.map((meal) => [meal.id, meal.name])), complete });
+}
+
+/**
+ * A plan entry for the service: a saved meal by id, or a dish by name with
+ * whatever ingredients the model gave.
+ *
+ * A name or ingredients sent WITH an id must describe that saved meal, or the
+ * call is a contradiction: "meal-1 (Tacos), named Curry" or "meal-1, with
+ * these ingredients" used to plan meal-1 and drop the rest without a word.
+ * The contradicting field now travels with the id, so the service's own
+ * "choose one meal, recipe or custom dish" refusal applies before anything is
+ * written. The id's own name (any case, any spacing) and an empty or missing
+ * ingredients list say nothing new and are not passed on — the service refuses
+ * an id with a name or an ingredients key, however harmless.
+ */
+function planEntry(e: PlanEntryArgs, library: LibraryNames): PlanEntryInput {
+  const mealType = e.meal_type ?? 'dinner';
+  if (!e.meal_id) return { date: e.date, mealType, mealName: e.meal_name ?? null, ...ingredientsField(e.ingredients) };
+  const name = e.meal_name?.trim();
+  const saved = library.names.get(e.meal_id);
+  // An id a complete read did not return names no meal of this family, and is
+  // left to the service, which says it could not be found. An id a capped read
+  // stopped short of was never checked: its name travels with it, so the
+  // service refuses the pair rather than planning a dish nobody confirmed.
+  const unchecked = saved === undefined && !library.complete;
+  const otherName = name && (unchecked || (saved !== undefined && normalizeDishName(name) !== normalizeDishName(saved))) ? { mealName: name } : {};
+  return { date: e.date, mealType, mealId: e.meal_id, ...otherName, ...ingredientsField(e.ingredients) };
+}
+
+/** Every entry, ready for the service. */
+async function planEntries(scope: ServiceScope, entries: PlanEntryArgs[]): Promise<ServiceResult<PlanEntryInput[]>> {
+  const library = await libraryNames(scope, entries);
+  if (!library.ok) return library;
+  return ok(entries.map((e) => planEntry(e, library.data)));
 }
 
 const planEntryInput = z.object({
@@ -208,13 +298,11 @@ export const mealTools: ToolDefinition[] = [
       const mealName = (input.meal_name ?? input.name ?? '').trim();
       if (!mealName && !input.meal_id) return fail('Which dish should go on the plan?', { code: SERVICE_CODES.invalidInput });
 
-      const res = await setSlot(scope, {
-        date,
-        mealType: input.meal_type ?? 'dinner',
-        mealId: input.meal_id ?? null,
-        mealName: mealName || null,
-        ingredients: (input.ingredients ?? []).map((i) => ({ name: i.name, quantity: i.quantity ?? null, unit: i.unit ?? null })),
-      });
+      const entries = await planEntries(scope, [{
+        date, meal_type: input.meal_type, meal_id: input.meal_id, meal_name: mealName || null, ingredients: input.ingredients,
+      }]);
+      if (!entries.ok) return entries;
+      const res = await setSlot(scope, entries.data[0]);
       if (!res.ok) return res;
       return ok({ ...toSlotOutput(res.data), replaced: res.data.replaced });
     },
@@ -273,13 +361,9 @@ export const mealTools: ToolDefinition[] = [
       return out;
     },
     execute: async (scope, input) => {
-      const res = await planWeek(scope, input.entries.map((e) => ({
-        date: e.date,
-        mealType: e.meal_type ?? 'dinner',
-        mealId: e.meal_id ?? null,
-        mealName: e.meal_name ?? null,
-        ingredients: (e.ingredients ?? []).map((i) => ({ name: i.name, quantity: i.quantity ?? null, unit: i.unit ?? null })),
-      })));
+      const entries = await planEntries(scope, input.entries);
+      if (!entries.ok) return entries;
+      const res = await planWeek(scope, entries.data);
       if (!res.ok) return res;
       return ok({ planned: res.data.planned.map(toSlotOutput), replaced: res.data.replaced, created_meals: res.data.createdMeals });
     },

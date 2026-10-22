@@ -25,7 +25,7 @@ export function DevicesModule() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: devices, loading, error, refresh } = useRealtimeQuery<Device>({
+  const { data: devices, loading, setData, error, refresh } = useRealtimeQuery<Device>({
     table: 'smart_devices', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('smart_devices').select('*').eq('family_id', familyId).order('room').order('name'),
   });
@@ -58,6 +58,11 @@ export function DevicesModule() {
         : await supabase.from('smart_devices').insert({ ...row, family_id: familyId, created_by: userId }).select('id');
       if (error) return toastError(describeDbError(error));
       if (wroteNoRows(saved)) return toastError(tr('errors.thatChangeWasNotSaved'));
+      // smart_devices is in no realtime publication: nothing tells this list
+      // about its own writes, so each confirmed one re-reads it. Without this
+      // an added device never appeared (and a second Add saved it twice), an
+      // edit kept showing the old values, and a deleted one stayed on screen.
+      void refresh();
       success(form.id ? 'Updated' : 'Added'); setForm(null);
     } finally {
       setSaving(false);
@@ -65,16 +70,23 @@ export function DevicesModule() {
   }
   async function cycleStatus(d: Device) {
     const next = d.status === 'online' ? 'offline' : d.status === 'offline' ? 'unknown' : 'online';
-    const { data: cycled, error } = await createClient().from('smart_devices').update({ status: next }).eq('id', d.id).select('id');
+    const { data: cycled, error } = await createClient().from('smart_devices').update({ status: next }).eq('id', d.id).select('id, status');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(cycled)) toastError(tr('errors.thatChangeWasNotSaved'));
+    else {
+      // The row as saved, on screen now, so the next tap steps from it rather
+      // than from the stale status and writes the same value again.
+      const saved = cycled?.[0];
+      if (saved) setData((rows) => rows.map((row) => (row.id === saved.id ? { ...row, status: saved.status } : row)));
+      void refresh();
+    }
   }
   async function remove(id: string) {
     if (!confirm(tr('devicesModule.deleteThisDevice'))) return;
     const { data: deleted, error } = await createClient().from('smart_devices').delete().eq('id', id).select('id');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(deleted)) toastError(tr('errors.thatChangeWasNotSaved'));
-    else success(tr('devicesModule.deleted'));
+    else { void refresh(); success(tr('devicesModule.deleted')); }
   }
   function edit(d: Device) {
     setForm({ id: d.id, name: d.name, type: d.type, room: d.room ?? '', brand: d.brand ?? '', integration: d.integration, status: d.status, last_state: d.last_state ?? '', note: d.note ?? '' });

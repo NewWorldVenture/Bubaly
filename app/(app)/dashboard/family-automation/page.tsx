@@ -8,6 +8,8 @@ import { isManager } from '@/lib/constants/roles';
 import { PageHeader } from '@/components/app/page-header';
 import { SectionCard, MiniEmpty, StatTile } from '@/components/family/shell';
 import { DeleteButton, AutomationApproval } from '@/components/family/record-actions';
+import { RunOutcomeIcon } from '@/components/family/run-outcome';
+import { RUN_OUTCOME_FILTER, runOutcome } from '@/lib/ai/runs/outcome';
 import { getFormat } from '@/lib/utils/format-server';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
@@ -65,7 +67,10 @@ export default async function FamilyAutomationPage() {
   const [rulesResult, pendingResult, recentResult] = await settleAll([
     supabase.from('family_automation_rules').select('*').eq('family_id', familyId).order('created_at', { ascending: false }),
     supabase.from('family_automation_runs').select('*').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(10),
-    supabase.from('family_automation_runs').select('*').eq('family_id', familyId).in('status', ['approved', 'executed', 'skipped']).order('created_at', { ascending: false }).limit(8),
+    // Runs that have STOPPED, by the §10 state (lib/ai/runs/outcome.ts): the
+    // legacy status called a blocked, paused or mid-flight run 'approved' and
+    // never listed a failed one.
+    supabase.from('family_automation_runs').select('*').eq('family_id', familyId).or(RUN_OUTCOME_FILTER).order('created_at', { ascending: false }).limit(8),
   ]);
 
   const readError = rulesResult.error ?? pendingResult.error ?? recentResult.error;
@@ -182,14 +187,19 @@ export default async function FamilyAutomationPage() {
       {recent && recent.length > 0 && (
         <SectionCard title={t('dashboardFamilyAutomation.recentRuns')}>
           <ul className="divide-y divide-border">
-            {recent.map((run) => (
-              <li key={run.id} className="flex items-center gap-3 py-2.5 text-sm">
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                <span className="min-w-0 flex-1 truncate">{run.summary ?? 'Automation run'}</span>
-                <span className="text-xs capitalize text-muted">{run.status}</span>
-                <span className="text-xs text-muted">{fmtRelative(run.created_at)}</span>
-              </li>
-            ))}
+            {/* How each run ENDED, in its own word and mark: only a completed
+                run carries the green check. */}
+            {recent.map((run) => {
+              const outcome = runOutcome(run);
+              return (
+                <li key={run.id} className="flex items-center gap-3 py-2.5 text-sm">
+                  {outcome && <RunOutcomeIcon state={outcome.state} />}
+                  <span className="min-w-0 flex-1 truncate">{run.summary ?? 'Automation run'}</span>
+                  {outcome && <span className="text-xs text-muted">{t(outcome.labelKey)}</span>}
+                  <span className="text-xs text-muted">{fmtRelative(run.created_at)}</span>
+                </li>
+              );
+            })}
           </ul>
         </SectionCard>
       )}

@@ -194,7 +194,7 @@ beforeEach(() => {
   pauseRun.mockResolvedValue({ ok: true, data: { state: 'paused' } });
   resumeRun.mockResolvedValue({ ok: true, data: { state: 'ready' } });
   cancelRun.mockResolvedValue({ ok: true, data: { state: 'cancelled', cancelledSteps: 2, cancelledApprovals: 1 } });
-  rerunStep.mockResolvedValue({ ok: true, data: { rerun: true, state: 'queued', detail: 'Queued again.' } });
+  rerunStep.mockResolvedValue({ ok: true, data: { rerun: true, state: 'queued', runState: 'ready', detail: 'Queued again.' } });
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => { vi.clearAllMocks(); vi.restoreAllMocks(); });

@@ -108,6 +108,45 @@ describe('a one-off event moved after its reminder', () => {
     expect(reminders(db)).toHaveLength(1);
   });
 
+  it('an event for the whole family is reminded to each member again at its new date, past a shared notice of the old one', async () => {
+    // No assignee: every member with a login gets their own copy. A shared
+    // notice (no user) from before that fan-out covered everyone for its date.
+    const db = household([event({ id: GAME, title: 'Soccer game', starts_at: '2026-10-24T14:00:00.000Z', assignee_id: null })]);
+    db.seed('family_members', [
+      { id: '00000000-0000-4000-8000-00000000ad02', family_id: FAMILY, user_id: '00000000-0000-4000-8000-00000000aa02', display_name: 'Sam', role: 'adult', is_active: true, birthday: null },
+    ]);
+    db.seed('notifications', [{
+      family_id: FAMILY, user_id: null, type: 'calendar_event', related_type: 'calendar_events', related_id: GAME,
+      title: 'Soccer game', body: 'Saturday at 10:00 AM', created_at: '2026-10-15T15:00:00.000Z',
+    }]);
+    await tick(db, '2026-10-22T15:00:00.000Z');
+    expect(reminders(db).filter((n) => n.user_id !== null).map((n) => n.user_id).sort(), 'the old date\'s shared notice stood in for the new date')
+      .toEqual([PARENT_USER, '00000000-0000-4000-8000-00000000aa02']);
+
+    await tick(db, '2026-10-23T15:00:00.000Z');
+    expect(reminders(db)).toHaveLength(3);
+  });
+
+  it('a notice whose write time cannot be read still counts as sent', async () => {
+    const db = household([event({ id: GAME, title: 'Soccer game', starts_at: '2026-10-24T14:00:00.000Z' })]);
+    db.seed('notifications', [{
+      family_id: FAMILY, user_id: PARENT_USER, type: 'calendar_event', related_type: 'calendar_events', related_id: GAME,
+      title: 'Soccer game', body: 'Saturday at 10:00 AM', created_at: null,
+    }]);
+    await tick(db, '2026-10-22T15:00:00.000Z');
+    expect(reminders(db), 'a notice with no clock was taken as old').toHaveLength(1);
+  });
+
+  it('a shared notice written for this date still covers every member', async () => {
+    const db = household([event({ id: GAME, title: 'Soccer game', starts_at: '2026-10-24T14:00:00.000Z', assignee_id: null })]);
+    db.seed('notifications', [{
+      family_id: FAMILY, user_id: null, type: 'calendar_event', related_type: 'calendar_events', related_id: GAME,
+      title: 'Soccer game', body: 'Saturday at 10:00 AM', created_at: '2026-10-22T14:30:00.000Z',
+    }]);
+    await tick(db, '2026-10-22T15:00:00.000Z');
+    expect(reminders(db)).toHaveLength(1);
+  });
+
   it('an all-day date far east of Greenwich counts a notice from when its own day came into view', async () => {
     // Auckland is UTC+13 in October: Saturday the 17th starts at 11:00Z on the
     // 16th, so it comes into the 48-hour view at 11:00Z on the 14th, two and a

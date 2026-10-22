@@ -6,6 +6,8 @@ import { scopeNow } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
 import { AUTOPILOT_SOURCE_TAG } from '@/lib/reminders/provenance';
 import { reminderIsoFor } from '@/lib/autopilot/reminder-time';
+import { stampedPayload, type SuggestionStampSource } from '@/lib/autopilot/reminder-key';
+import { reminderMemberFor, suggestionVisibleTo } from '@/lib/autopilot/audience';
 
 type Suggestion = Tables<'autopilot_suggestions'>;
 export type ResolutionResult =
@@ -22,12 +24,21 @@ export function suggestionReminderKey(familyId: string, suggestionId: string): s
   return makeKey(['autopilot.createReminder', familyId, suggestionId]);
 }
 
-function sourceTag(source: Suggestion): string {
+/**
+ * The AUTOPILOT_SOURCE_TAG tag an accepted card writes on its reminder. It is
+ * copied with the tags onto a repeating reminder's next occurrence, which has
+ * no key, so a reader finds the card from it too (lib/autopilot/reminder-cards.ts
+ * `sourceTagOf`; the browser's mint is lib/autopilot/reminder-key.ts
+ * mintSuggestionSourceTag).
+ */
+export function suggestionSourceTag(source: SuggestionStampSource): string {
   // Existing tags preserve which proposal was accepted, independently of later
   // edits to the reminder. Exclude status/timestamps: our own resolution updates
   // those. A revised proposal must never inherit an older reminder's success.
+  // Exclude, too, the scan's record of the reminder it wrote with the card
+  // (stampedPayload): bookkeeping, not the proposal.
   return `${AUTOPILOT_SOURCE_TAG}${makeKey([source.family_id, source.id, source.kind, source.action_type,
-    source.title, source.detail, source.member_id, source.urgency, JSON.stringify(source.payload)])}`;
+    source.title, source.detail, source.member_id, source.urgency, JSON.stringify(stampedPayload(source.payload))])}`;
 }
 
 async function readSuggestion(scope: ServiceScope, id: string) {
@@ -46,6 +57,9 @@ export async function resolveSuggestion(scope: ServiceScope, input: ResolveSugge
     if (read.error) return { ok: false, code: 'unavailable' };
     const source = read.data;
     if (!source || source.id !== input.suggestionId || source.family_id !== scope.familyId) return { ok: false, code: 'notFound' };
+    // A card the reader is not shown (lib/autopilot/audience.ts) is not theirs
+    // to accept or dismiss either; answered as absent, like another family's.
+    if (!suggestionVisibleTo(source, { role: scope.role, memberId: scope.memberId })) return { ok: false, code: 'notFound' };
 
     if (input.action === 'reminder') {
       if (source.kind === 'policy' || source.action_type !== 'create_reminder') return { ok: false, code: 'unsupported' };
@@ -57,7 +71,7 @@ export async function resolveSuggestion(scope: ServiceScope, input: ResolveSugge
           return { ok: false, code: 'unavailable' };
         }
         savedId = receipt.data.id;
-        if (!receipt.data.tags?.includes(sourceTag(source))) return { ok: false, code: 'sourceChanged', saved: true, reminderId: savedId };
+        if (!receipt.data.tags?.includes(suggestionSourceTag(source))) return { ok: false, code: 'sourceChanged', saved: true, reminderId: savedId };
         if (source.status === 'executed') return { ok: true, status: 'executed', reminderId: savedId };
       }
       // A legacy approval carries no receipt: never replay uncertain old work.
@@ -87,20 +101,25 @@ export async function resolveSuggestion(scope: ServiceScope, input: ResolveSugge
         // remind anyone of, and the card has changed under the reader.
         const at = reminderIsoFor(source.source_kind, rawAt, scopeNow(scope), scope.tz || 'UTC', source.expires_at);
         if (!at) return { ok: false, code: 'changed' };
+        // Who the reminder is FOR: the card's member, except on an insurance
+        // card, whose member is whose policy it is and not who renews it — the
+        // notice goes to the card's readers instead (lib/autopilot/audience.ts
+        // reminderMemberFor; lib/server/notifications.ts).
+        const reminderMember = reminderMemberFor(source);
         // A member_id is a family_members FK, not an auth user ID. Check the
         // source recipient belongs here instead of trusting the stored payload.
-        if (source.member_id) {
+        if (reminderMember) {
           const member = await scope.db.from('family_members').select('id, family_id, is_active')
-            .eq('id', source.member_id).eq('family_id', scope.familyId).eq('is_active', true).maybeSingle();
+            .eq('id', reminderMember).eq('family_id', scope.familyId).eq('is_active', true).maybeSingle();
           if (member.error) return { ok: false, code: 'unavailable' };
-          if (!member.data || member.data.id !== source.member_id || member.data.family_id !== scope.familyId || !member.data.is_active) {
+          if (!member.data || member.data.id !== reminderMember || member.data.family_id !== scope.familyId || !member.data.is_active) {
             return { ok: false, code: 'invalid' };
           }
         }
         const created = await createReminder({ ...scope, idempotencyKey: key }, {
-          title, remindAt: at, notes: source.detail, memberId: source.member_id,
+          title, remindAt: at, notes: source.detail, memberId: reminderMember,
           kind: 'time', priority: source.urgency >= 3 ? 'high' : 'medium', aiSuggested: true,
-          tags: [sourceTag(source)],
+          tags: [suggestionSourceTag(source)],
         });
         if (!created.ok) return { ok: false, code: 'unavailable' };
         if (!created.data.id || created.data.family_id !== scope.familyId || created.data.idempotency_key !== key) {
@@ -109,7 +128,7 @@ export async function resolveSuggestion(scope: ServiceScope, input: ResolveSugge
         savedId = created.data.id;
         // The service's own duplicate/race recovery can return a row created
         // after our first probe. It must still belong to this proposal content.
-        if (!created.data.tags?.includes(sourceTag(source))) return { ok: false, code: 'sourceChanged', saved: true, reminderId: savedId };
+        if (!created.data.tags?.includes(suggestionSourceTag(source))) return { ok: false, code: 'sourceChanged', saved: true, reminderId: savedId };
       }
       return await stamp(scope, source, 'executed', savedId);
     }
@@ -195,7 +214,7 @@ async function stamp(scope: ServiceScope, source: Suggestion, status: 'executed'
   }
   // Concurrent accepts may already have committed this exact resolution.
   const current = await readSuggestion(scope, source.id);
-  if (reminderId && current.data && (sourceTag(current.data) !== sourceTag(source) || current.data.status !== source.status && current.data.status !== status)) {
+  if (reminderId && current.data && (suggestionSourceTag(current.data) !== suggestionSourceTag(source) || current.data.status !== source.status && current.data.status !== status)) {
     return { ok: false, code: 'sourceChanged', saved: true, reminderId };
   }
   if (!current.error && current.data?.id === source.id && current.data.family_id === scope.familyId && current.data.status === status) {

@@ -13,7 +13,7 @@ const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/su
 const sources = Object.fromEntries([
   'components/modules/rewards-module.tsx', 'lib/hooks/use-realtime-query.ts', 'lib/realtime/own-channel.ts',
   'lib/offline/cache.ts', 'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts',
-  'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts', 'lib/constants/roles.ts', 'lib/rewards/points.ts',
+  'lib/supabase/errors.ts', 'lib/supabase/read-all.ts', 'lib/realtime/published-tables.ts', 'lib/constants/roles.ts', 'lib/rewards/points.ts',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
   'components/ui/input.tsx', 'components/ui/modal.tsx',
   // rewards-module.tsx asks before a destructive write via useConfirm; the
@@ -36,7 +36,8 @@ type Table = 'rewards' | 'chore_assignments' | 'reward_redemptions' | 'family_me
 type Row = Record<string, unknown> & { id: string };
 type Fixture = {
   rows: Record<Table, Row[]>;
-  mode: Partial<Record<Table, 'fail' | 'hold'>>;
+  /** 'fail-later' refuses only a LATER page of a paged read: the first arrives, the rest do not. */
+  mode: Partial<Record<Table, 'fail' | 'hold' | 'fail-later'>>;
   reads: Table[];
   writes: Array<{ table: Table; method: string; body: Record<string, unknown> | null }>;
   holdMutations: boolean;
@@ -82,11 +83,24 @@ async function fixture(page: Page): Promise<Fixture> {
     finishWrites: async () => { state.holdMutations = false; await Promise.all(pendingWrites.splice(0).map(release => release())); },
   };
   const headers = { 'access-control-allow-origin': origin, 'access-control-allow-headers': '*', 'access-control-allow-methods': 'GET,POST,PATCH,DELETE,OPTIONS' };
+  // The ledger is read whole and keyed (readAllById), so a page arrives as
+  // `id=gt.<last>&order=id.asc&limit=n`, as PostgREST reads it; a `.range()`
+  // read arrives as offset/limit. Both windows are applied here.
+  const rangeOf = (rows: Row[], query: URLSearchParams) => {
+    const ordered = query.get('order') === 'id.asc' ? [...rows].sort((a, b) => (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0)) : rows;
+    const offset = Number(query.get('offset') ?? 0);
+    const limit = query.get('limit');
+    return limit === null ? ordered.slice(offset) : ordered.slice(offset, offset + Number(limit));
+  };
+  const keep = (row: Row, column: string, value: string) =>
+    value.startsWith('eq.') ? String(row[column]) === value.slice(3)
+      : value.startsWith('gt.') ? String(row[column]) > value.slice(3) : true;
+  const matching = (table: Table, query: URLSearchParams) =>
+    rangeOf(state.rows[table].filter(row => [...query].every(([column, value]) => keep(row, column, value))), query);
   const read = (route: Route, table: Table) => {
     const query = new URL(route.request().url()).searchParams;
-    const rows = state.rows[table].filter(row => [...query].every(([column, value]) => !value.startsWith('eq.') || String(row[column]) === value.slice(3)));
     return route.fulfill({ status: state.mode[table] === 'fail' ? 403 : 200, headers, contentType: 'application/json',
-      body: JSON.stringify(state.mode[table] === 'fail' ? { code: '42501', message: `Fixture ${table} read unavailable`, details: null, hint: null } : rows) });
+      body: JSON.stringify(state.mode[table] === 'fail' ? { code: '42501', message: `Fixture ${table} read unavailable`, details: null, hint: null } : matching(table, query)) });
   };
   await page.route('**/*', async route => {
     const request = route.request(), url = new URL(request.url());
@@ -96,6 +110,16 @@ async function fixture(page: Page): Promise<Fixture> {
     const table = url.pathname.split('/').at(-1) as Table;
     if (!(table in state.rows)) throw new Error(`Unexpected fixture table: ${table}`);
     if (request.method() === 'GET') {
+      // A later page of a paged read (offset > 0, or a key past the last row
+      // read) belongs to the read already counted and released: it is answered
+      // at once from the same rows, so a read stays one counted, holdable event
+      // however many pages it takes.
+      if (Number(url.searchParams.get('offset') ?? 0) > 0 || (url.searchParams.get('id') ?? '').startsWith('gt.')) {
+        const refused = state.mode[table] === 'fail-later';
+        await route.fulfill({ status: refused ? 403 : 200, headers, contentType: 'application/json',
+          body: JSON.stringify(refused ? { code: '42501', message: `Fixture ${table} later page unavailable`, details: null, hint: null } : matching(table, url.searchParams)) });
+        return;
+      }
       state.reads.push(table);
       if (state.mode[table] === 'hold') { const queue = held.get(table) ?? []; queue.push(() => read(route, table)); held.set(table, queue); }
       else await read(route, table);
@@ -218,6 +242,21 @@ for (const table of ['rewards', 'chore_assignments', 'reward_redemptions'] as co
     await expect(page.getByRole('button', { name: 'Redeem', exact: true })).toHaveCount(0); await noWrites(state);
     await state.release(table); await ready(page);
     await expect(page.getByRole('button', { name: 'Not enough points', exact: true })).toBeDisabled();
+  });
+}
+
+// AUD-1040-LEDGER-PAGING: a ledger read whose FIRST page arrives and a later one
+// is refused is a failed read. The rows that did arrive are not summed into a
+// balance, and nothing can be redeemed against them.
+for (const table of ['chore_assignments', 'reward_redemptions'] as const) {
+  test(`${table} refused on a later page is reported, not summed from the page that arrived`, async ({ page }) => {
+    const state = await fixture(page); state.mode[table] = 'fail-later'; await mount(page);
+    await expect(page.getByText(/permission to do that/)).toBeVisible();
+    await expect(page.getByText('Points Leaderboard', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Redeem', exact: true })).toHaveCount(0); await noWrites(state);
+    delete state.mode[table];
+    await page.getByRole('button', { name: 'Try again', exact: true }).click(); await ready(page);
+    await noWrites(state);
   });
 }
 

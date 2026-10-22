@@ -486,8 +486,10 @@ export async function revokeDelegationAction(input: { id: string }): Promise<Res
   const supabase = await createServer();
   // "Access revoked" over a delegation that is still granting access is the
   // sharpest form of this on the whole surface.
+  // Only a delegation still open: a second Revoke (another parent, a stale tab)
+  // must not rewrite when it was revoked, or log the revoke twice.
   const { data: rows, error: e } = await supabase.from('trust_delegations').update({ revoked_at: new Date().toISOString() })
-    .eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
+    .eq('id', input.id).eq('family_id', ctx.active.familyId).is('revoked_at', null).select('id');
   if (e) return actionFailure(e, t('actions.couldNotRevokeThatDelegation'));
   if (changedNothing(rows)) return { ok: false, error: t('actions.couldNotRevokeThatDelegation') };
   await recordTrustChange(supabase, {
@@ -535,6 +537,15 @@ export async function activateEmergencyAction(input: { kind: string; reason?: st
   // "I did not choose" into "everything, including money and medical".
   if (!domains.length) return { ok: false, error: t('actions.chooseWhichAreasTheEmergency') };
 
+  // One emergency at a time. A second activation beside an open one (two
+  // managers, or a tab that had not seen the first) left two live sessions:
+  // the engine applies their union while the console named one of them. A
+  // session past its expiry has already stopped and does not count.
+  const { data: open, error: openError } = await supabase.from('emergency_sessions')
+    .select('id').eq('family_id', ctx.active.familyId).is('ended_at', null).gt('expires_at', new Date().toISOString()).limit(1);
+  if (openError) return actionFailure(openError, t('actions.couldNotActivateEmergencyMode'));
+  if ((open ?? []).length > 0) return { ok: false, error: t('actions.emergencyModeIsAlreadyOn') };
+
   const { error: e } = await supabase.from('emergency_sessions').insert({
     family_id: ctx.active.familyId, kind, reason: input.reason?.trim() || null,
     activated_by: ctx.active.member.id, elevated_domains: domains,
@@ -574,10 +585,12 @@ export async function endEmergencyAction(input: { id: string }): Promise<Result>
   const { ctx, error } = await managerCtx();
   if (!ctx) return { ok: false, error };
   const supabase = await createServer();
-  // An emergency session that did not end is one still elevating access.
+  // An emergency session that did not end is one still elevating access. Only
+  // one still open: a second End (another parent, a stale tab) overwrote who
+  // ended it and when, and logged a second 'emergency_ended'.
   const { data: rows, error: e } = await supabase.from('emergency_sessions')
     .update({ ended_at: new Date().toISOString(), ended_by: ctx.active.member.id })
-    .eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
+    .eq('id', input.id).eq('family_id', ctx.active.familyId).is('ended_at', null).select('id');
   if (e) return actionFailure(e, t('actions.couldNotEndEmergencyMode'));
   if (changedNothing(rows)) return { ok: false, error: t('actions.couldNotEndEmergencyMode') };
   // Activation was recorded and the end was not, so the ledger could show an

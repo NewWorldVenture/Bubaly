@@ -12,7 +12,8 @@ import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import { dayKeyIn } from '@/lib/time/zoned';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { createChoreAction, deleteChoreAssignmentAction, respawnChoreAssignmentAction, setChoreStatusAction } from '@/app/(app)/dashboard/chores/actions';
+import { createChoreAction, deleteChoreAssignmentAction, rejectChoreAssignmentAction, respawnChoreAssignmentAction, setChoreStatusAction } from '@/app/(app)/dashboard/chores/actions';
+import { readAllById } from '@/lib/supabase/read-all';
 import { newSubmissionId, submissionSettled } from '@/lib/utils/submission-id';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
@@ -43,6 +44,9 @@ type Reward = Tables<'rewards'>;
 type Assignment = Tables<'chore_assignments'> & { chore: Chore | null };
 
 type Tab = 'mine' | 'all' | 'completed' | 'approvals' | 'store';
+
+/** A real ceiling for the board's reads: past it the board says it could not load, rather than summing a prefix. */
+const BOARD_MAX_ROWS = 50_000;
 
 const STATUS_META: Record<string, { labelKey: string; cls: string; icon: typeof Circle }> = {
   todo: { labelKey: 'choresModule.status.todo', cls: 'text-muted border-border', icon: Circle },
@@ -90,12 +94,34 @@ export function ChoresModule() {
   const { data, loading, error, refresh } = useRealtimeQuery<Assignment>({
     table: 'chore_assignments', familyId, deps: [familyId],
     fetcher: async (supabase) => {
-      const { data: assigns, error } = await supabase.from('chore_assignments').select('*').eq('family_id', familyId).order('created_at', { ascending: false });
-      if (error) return { data: null, error };
-      const ids = [...new Set(assigns.map((a) => a.chore_id))];
-      const { data: chores } = ids.length ? await supabase.from('chores').select('*').in('id', ids) : { data: [] as Chore[] };
-      const byId = new Map((chores ?? []).map((c) => [c.id, c]));
-      return { data: assigns.map((a) => ({ ...a, chore: byId.get(a.chore_id) ?? null })), error: null };
+      // EVERY assignment, paged on id. The all-time points, the reward
+      // progress and the streaks are sums over this list, and the unpaged
+      // read was cut at PostgREST's db-max-rows (1,000) without a word: a
+      // family past it lost its all-time total and its oldest open and
+      // submitted chores. On id, not offsets, because a chore approved
+      // between two pages must not be counted twice (lib/supabase/read-all).
+      const assigned = await readAllById<Tables<'chore_assignments'>>((after, limit) => {
+        let query = supabase.from('chore_assignments').select('*').eq('family_id', familyId);
+        if (after) query = query.gt('id', after);
+        return query.order('id').limit(limit);
+      }, { max: BOARD_MAX_ROWS });
+      if (assigned.error) return { data: null, error: assigned.error };
+      // The family's chores, paged the same way rather than by `.in('id', ids)`,
+      // whose URL a long history outgrows. A failed read FAILS the board: it
+      // used to be dropped, every row rendered as an untitled 0-point chore,
+      // and approving one wrote points_awarded 0 for good.
+      const chores = await readAllById<Chore>((after, limit) => {
+        let query = supabase.from('chores').select('*').eq('family_id', familyId);
+        if (after) query = query.gt('id', after);
+        return query.order('id').limit(limit);
+      }, { max: BOARD_MAX_ROWS });
+      if (chores.error) return { data: null, error: chores.error };
+      const byId = new Map(chores.rows.map((c) => [c.id, c]));
+      // Newest first, as the board has always listed them.
+      const rows = assigned.rows
+        .map((a) => ({ ...a, chore: byId.get(a.chore_id) ?? null }))
+        .sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0));
+      return { data: rows, error: null };
     },
   });
 
@@ -169,6 +195,9 @@ export function ChoresModule() {
 
   async function approve(a: Assignment) {
     if (busy) return;
+    // The points come from the chore. A row whose chore did not load would be
+    // approved for 0 points, for good, and skip its recurring successor.
+    if (!a.chore) return toastError(tr('choresModule.failedToLoadChores'));
     setBusy(a.id); setMenuFor(null);
     const supabase = createClient();
     // A non-manager's approval is refused by the 0223 trigger WITH an error;
@@ -191,6 +220,17 @@ export function ChoresModule() {
     success(tr('choresModule.approvedPlusPoints', { points: a.chore?.points ?? 0 })); void refresh();
   }
 
+  // Redo: a manager's decision, so it has its own door. It used to go through
+  // `setStatus`, whose action refuses 'rejected', and failed every time.
+  async function reject(a: Assignment) {
+    if (busy) return;
+    setBusy(a.id); setMenuFor(null);
+    const result = await rejectChoreAssignmentAction(a.id);
+    setBusy(null);
+    if (!result.ok) return toastError(result.error);
+    success(tr('choresModule.sentBackForRedo')); void refresh();
+  }
+
   async function payChore(a: Assignment) {
     if (paying) return;
     setPaying(a.id); setMenuFor(null);
@@ -208,7 +248,9 @@ export function ChoresModule() {
     const result = await deleteChoreAssignmentAction(a.id);
     setBusy(null);
     if (!result.ok) return toastError(result.error);
-    success(tr('choresModule.choreRemoved')); void refresh();
+    // A repeating chore other children share is not stopped for this one by a
+    // delete: the push-scan sweep puts it back. Say so, not "removed".
+    success(tr(result.comesBack ? 'choresModule.choreRemovedComesBack' : 'choresModule.choreRemoved')); void refresh();
   }
 
   // Through the server action, which resolves the role from the session and
@@ -356,7 +398,7 @@ export function ChoresModule() {
                     <span className="flex items-center gap-1 text-xs font-semibold text-emerald-400"><Star className="h-3.5 w-3.5 fill-emerald-400" /> {tr('choresModule.nPts', { count: a.chore?.points ?? 0 })}</span>
                     {manager && (
                       <div className="flex gap-2">
-                        <Button size="sm" variant="outline" onClick={() => setStatus(a, 'rejected')} disabled={busy === a.id}>{tr('chores.redo')}</Button>
+                        <Button size="sm" variant="outline" onClick={() => reject(a)} disabled={busy === a.id}>{tr('chores.redo')}</Button>
                         <Button size="sm" onClick={() => approve(a)} loading={busy === a.id}>{tr('chores.approve')}</Button>
                       </div>
                     )}

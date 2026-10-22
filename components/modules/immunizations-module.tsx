@@ -57,11 +57,23 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
   const [memberFilter, setMemberFilter] = useState('all');
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
 
+  // The rows this viewer reads (the held 0506, lib/health/record-scope.ts): a
+  // parent or adult the household's; anyone else the vaccinations about
+  // themselves and the ones they recorded. Released, 0481 still hands a teen or
+  // child every member's lot numbers and notes, and a caregiver only their own;
+  // the screen shows the same rows either way, before the doses due are counted.
+  const readable = useMemo(() => {
+    const all = shots ?? [];
+    if (canEdit) return all;
+    const own = new Set(filterMembers.map((m) => m.id));
+    return all.filter((s) => (s.member_id != null && own.has(s.member_id)) || (s.created_by != null && s.created_by === userId));
+  }, [shots, canEdit, filterMembers, userId]);
+
   const scoped = useMemo(() => {
-    let list = shots ?? [];
+    let list = readable;
     if (memberFilter !== 'all') list = list.filter((s) => s.member_id === memberFilter);
     return sortByDateGiven(list);
-  }, [shots, memberFilter]);
+  }, [readable, memberFilter]);
   const due = useMemo(() => dueImmunizations(scoped, 90), [scoped]);
 
   async function save(e: React.FormEvent) {
@@ -164,8 +176,13 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
       ) : error ? (
         <ErrorState message={t('immunizationsModule.couldNotLoadImmunizationRecords')} onRetry={refresh} />
       ) : scoped.length === 0 ? (
-        <EmptyState icon={Syringe} title={t('immunizations.noImmunizationsRecorded')} description={t('immunizationsModule.trackVaccinesAndNextDue')} />
+        // "No immunizations recorded" is true only for a reader who sees the household's.
+        canEdit
+          ? <EmptyState icon={Syringe} title={t('immunizations.noImmunizationsRecorded')} description={t('immunizationsModule.trackVaccinesAndNextDue')} />
+          : <EmptyState icon={Syringe} title={t('immunizationsModule.noneOfYours')} description={t('immunizationsModule.onlyYourOwn')} />
       ) : (
+        <>
+        {!canEdit && <p className="text-xs text-muted">{t('immunizationsModule.onlyYourOwn')}</p>}
         <ul className="space-y-2">
           {scoped.map((s) => {
             const who = s.member_id ? memberById.get(s.member_id) : undefined;
@@ -196,6 +213,7 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
             );
           })}
         </ul>
+        </>
       )}
 
       {form && (

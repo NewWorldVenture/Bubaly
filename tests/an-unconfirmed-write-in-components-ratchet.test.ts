@@ -41,13 +41,15 @@ import { filesMatching, perFile, unconfirmedWritesIn } from './helpers/unconfirm
 // behavior, binder) → 8/7 (C1-S9-86: the last thirteen modules) → 7/6 (the
 // messages read-receipt fallback reads its row back: a receipt that did not
 // land is logged, not shown, which is more than the silence it kept before,
-// and the gated-write guard's tolerated list is empty). Every entry left is
-// DELIBERATE, and says so beside the write — see the last case below.
+// and the gated-write guard's tolerated list is empty) → 6/5 (N19: a routine's
+// steps are no longer cleared wholesale before the new ones land; the old
+// steps are deleted by id AFTER the new ones are confirmed, and that delete is
+// held to the count it read). Every entry left is DELIBERATE, and says so
+// beside the write — see the last case below.
 const BASELINE = new Map<string, number>([
   ['components/modules/career-module.tsx', 1],
   ['components/modules/meals-module.tsx', 1],
   ['components/modules/notifications-module.tsx', 1],
-  ['components/modules/routines-panel.tsx', 1],
   ['components/modules/voting-module.tsx', 2],
   ['components/modules/weather-module.tsx', 1],
 ]);
@@ -85,10 +87,10 @@ describe('the unconfirmed-write class in components/ only shrinks (C1-S9-77)', (
     expect(stale, 'BASELINE lists files with no unconfirmed writes left — remove them').toEqual([]);
   });
 
-  it('the baseline total matches the burn-down record above (finalaudit.md records 8 in 7 at C1-S9-86; one fewer since)', () => {
+  it('the baseline total matches the burn-down record above (finalaudit.md records 8 in 7 at C1-S9-86; two fewer since)', () => {
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(7);
-    expect(BASELINE.size).toBe(6);
+    expect(total).toBe(6);
+    expect(BASELINE.size).toBe(5);
   });
 
   // C1-S9-86: the burn-down is finished. What is left is a register of writes

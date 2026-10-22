@@ -28,18 +28,26 @@ afterEach(() => { disposers.splice(0).forEach(stop => stop()); vi.unstubAllGloba
 
 describe('explicit session storage change transport', () => {
   it('invalidates same-tab observers synchronously and sends only a reread nonce through both transports', () => {
-    const revision = getSessionStorageChangeRevision(), callback = subscribe();
-    notifySessionStorageChanged();
-    expect(callback).toHaveBeenCalledTimes(1);
-    expect(getSessionStorageChangeRevision()).toBe(revision + 1);
-    expect(channels).toHaveLength(1);
-    expect(channels[0].name).toBe(KEY);
-    const message = channels[0].postMessage.mock.calls[0][0];
-    expect(message).toMatch(/^reread-session:[0-9]+:[0-9]+:[0-9.]+$/);
-    expect(setItem).toHaveBeenCalledWith(KEY, message);
-    expect(removeItem).toHaveBeenCalledWith(KEY);
-    expect(callback.mock.invocationCallOrder[0]).toBeLessThan(channels[0].postMessage.mock.invocationCallOrder[0]);
-    expect(callback.mock.invocationCallOrder[0]).toBeLessThan(setItem.mock.invocationCallOrder[0]);
+    const nativeRandom = Math.random, nativeNow = Date.now;
+    const random = vi.spyOn(Math, 'random').mockReturnValue(5e-7);
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    try {
+      const revision = getSessionStorageChangeRevision(), callback = subscribe();
+      notifySessionStorageChanged();
+      expect(callback).toHaveBeenCalledTimes(1);
+      expect(getSessionStorageChangeRevision()).toBe(revision + 1);
+      expect(channels).toHaveLength(1);
+      expect(channels[0].name).toBe(KEY);
+      const message = channels[0].postMessage.mock.calls[0][0];
+      expect(message.split(':')).toEqual(['reread-session', '1700000000000', expect.stringMatching(/^[0-9]+$/), '5e-7']);
+      expect(message.length).toBeLessThanOrEqual(160);
+      expect(setItem).toHaveBeenCalledWith(KEY, message);
+      expect(removeItem).toHaveBeenCalledWith(KEY);
+      expect(callback.mock.invocationCallOrder[0]).toBeLessThan(channels[0].postMessage.mock.invocationCallOrder[0]);
+      expect(callback.mock.invocationCallOrder[0]).toBeLessThan(setItem.mock.invocationCallOrder[0]);
+    } finally { random.mockRestore(); now.mockRestore(); }
+    expect(Math.random).toBe(nativeRandom);
+    expect(Date.now).toBe(nativeNow);
   });
   it('deduplicates a peer notification received through both transports', () => {
     const callback = subscribe();
@@ -115,5 +123,38 @@ describe('explicit session storage change transport', () => {
     const callback = subscribe(); notifySessionStorageChanged();
     expect(callback).not.toHaveBeenCalled(); expect(getSessionStorageChangeRevision()).toBe(revision);
     expect(channels).toHaveLength(0);
+  });
+  it.each([
+    { value: 0, suffix: '0' },
+    { value: 0.5, suffix: '0.5' },
+    { value: 0.9999999999999999, suffix: '0.9999999999999999' },
+  ])('preserves notification and peer deduplication with random suffix $suffix', ({ value, suffix }) => {
+    const nativeRandom = Math.random, nativeNow = Date.now;
+    const random = vi.spyOn(Math, 'random').mockReturnValue(value);
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    try {
+      const revision = getSessionStorageChangeRevision(), callback = subscribe();
+      notifySessionStorageChanged();
+      expect(callback).toHaveBeenCalledTimes(1);
+      expect(getSessionStorageChangeRevision()).toBe(revision + 1);
+      expect(channels).toHaveLength(1);
+      expect(channels[0].name).toBe(KEY);
+      expect(channels[0].postMessage).toHaveBeenCalledTimes(1);
+      const message = channels[0].postMessage.mock.calls[0][0];
+      expect(message.split(':')).toEqual(['reread-session', '1700000000000', expect.stringMatching(/^[0-9]+$/), suffix]);
+      expect(message.length).toBeLessThanOrEqual(160);
+      expect(setItem).toHaveBeenCalledTimes(1);
+      expect(setItem).toHaveBeenCalledWith(KEY, message);
+      expect(removeItem).toHaveBeenCalledTimes(1);
+      expect(removeItem).toHaveBeenCalledWith(KEY);
+      expect(callback.mock.invocationCallOrder[0]).toBeLessThan(channels[0].postMessage.mock.invocationCallOrder[0]);
+      expect(callback.mock.invocationCallOrder[0]).toBeLessThan(setItem.mock.invocationCallOrder[0]);
+      channels[0].onmessage!({ data: message });
+      storage(KEY, message);
+      expect(callback).toHaveBeenCalledTimes(1);
+      expect(getSessionStorageChangeRevision()).toBe(revision + 1);
+    } finally { random.mockRestore(); now.mockRestore(); }
+    expect(Math.random).toBe(nativeRandom);
+    expect(Date.now).toBe(nativeNow);
   });
 });

@@ -41,7 +41,6 @@ const BASELINE = new Map<string, number>([
   ['app/api/ai/briefing/route.ts', 1],
   ['app/api/blog/like/route.ts', 1],
   ['app/api/blog/save/route.ts', 1],
-  ['app/api/cron/checkout-abandoned/route.ts', 1],
   ['app/api/cron/family-routines/route.ts', 3],
   ['app/api/cron/guardian-learning/route.ts', 1],
   ['app/api/cron/return-reminders/route.ts', 2],
@@ -154,7 +153,10 @@ describe('the unconfirmed-write class outside server actions only shrinks (C1-S9
     // it read, so it confirms what it wrote.
     // 49 since #1030: a sign-in whose CRM contact changed under it no longer
     // falls back to an unconfirmed lifecycle-only write; it is unknown.
+    // 48 since the abandoned-checkout claim became guarded and confirmed (its
+    // rows decide whether anyone is nudged); finalaudit.md is the owner's to
+    // update.
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(49);
+    expect(total).toBe(48);
   });
 });

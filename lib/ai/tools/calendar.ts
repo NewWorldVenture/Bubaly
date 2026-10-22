@@ -219,7 +219,7 @@ export const calendarTools: ToolDefinition[] = [
         ...(input.location !== undefined ? { location: input.location } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
         ...(assignee.data !== null ? { assigneeId: assignee.data } : {}),
-      }, { occurrenceStartsAt: input.occurrence_starts_at ?? null, seriesNeedsOccurrence: true });
+      }, undefined, { occurrenceStartsAt: input.occurrence_starts_at ?? null });
       if (!res.ok) return res;
       const event = res.data;
       return ok({
@@ -249,7 +249,7 @@ export const calendarTools: ToolDefinition[] = [
     consequences: (input) => [`Moves calendar event ${input.event_id}; anyone counting on the old time needs to know.`],
     resource: (output) => ({ table: 'calendar_events', id: output.id }),
     execute: async (scope, input) => {
-      const res = await rescheduleAfter(scope, input.event_id, { startsAt: input.starts_at, occurrenceStartsAt: input.occurrence_starts_at ?? null }, { seriesNeedsOccurrence: true });
+      const res = await rescheduleAfter(scope, input.event_id, { startsAt: input.starts_at }, { occurrenceStartsAt: input.occurrence_starts_at ?? null });
       if (!res.ok) return res;
       const event = res.data;
       return ok({

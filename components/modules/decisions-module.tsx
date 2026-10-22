@@ -11,6 +11,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -28,6 +29,8 @@ type Decision = Tables<'family_decisions'>;
 type Option = Tables<'decision_options'>;
 
 const num = (v: number | null | undefined): number | undefined => (typeof v === 'number' ? v : undefined);
+/** A ceiling the family's decision history is far below; reaching it is a failed read, not a prefix. */
+const DECISION_OPTIONS_MAX = 50_000;
 
 export function DecisionsModule() {
   const t = useTranslations();
@@ -46,7 +49,15 @@ export function DecisionsModule() {
   });
   const { data: options, loading: lo, error: optionsError, refresh: refreshOptions } = useRealtimeQuery<Option>({
     table: 'decision_options', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('decision_options').select('*').eq('family_id', familyId),
+    // Every option the family has, to the end, in id order. An unpaged read is
+    // cut at the server's row cap (1,000) with no error, and the engine would
+    // then score a decision on whichever of its options happened to arrive.
+    // Past the ceiling the read fails and the page says so.
+    fetcher: (sb) => readAllByIdAsQuery<Option>((after, limit) => {
+      let q = sb.from('decision_options').select('*').eq('family_id', familyId);
+      if (after) q = q.gt('id', after);
+      return q.order('id').limit(limit);
+    }, { max: DECISION_OPTIONS_MAX }),
   });
 
   const [selectedId, setSelectedId] = useState<string | null>(null);

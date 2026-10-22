@@ -24,3 +24,10 @@ additional_redirect_urls = ["http://localhost:3000/auth/callback"]
 [storage]
 enabled = true
 # Create a PRIVATE bucket named "documents"; serve via signed URLs only.
+
+# Hold automatic SQL replay by the Supabase GitHub App while the production
+# backlog needs a separately reviewed release. This does not disable the App.
+# Owned disposable local databases only: SUPABASE_DB_MIGRATIONS_ENABLED=true
+# with `supabase start` or `supabase db reset --local`.
+[db.migrations]
+enabled = false

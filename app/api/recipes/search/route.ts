@@ -22,9 +22,9 @@ export async function GET(req: NextRequest) {
   if (!q) return NextResponse.json({ recipes: [] });
 
   try {
-    const recipes = await searchAllProviders(q, { limit: 24 });
+    const { recipes, partial } = await searchAllProviders(q, { limit: 24 });
     // Strip raw payloads from the search response (kept only on save).
-    return NextResponse.json({ recipes: recipes.map(({ raw: _raw, ...r }) => r) });
+    return NextResponse.json({ recipes: recipes.map(({ raw: _raw, ...r }) => r), ...(partial ? { partial: true } : {}) });
   } catch (err) {
     console.error('Recipe search error:', err);
     return NextResponse.json({ error: t('search.recipeSearchIsTemporarilyUnavailable') }, { status: 502 });

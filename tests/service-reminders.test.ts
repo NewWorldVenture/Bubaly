@@ -10,7 +10,7 @@ import type { Database } from '@/lib/database.types';
 import { completeReminder, createReminder, listDue, snoozeReminder } from '@/lib/services/reminders';
 import type { ServiceScope } from '@/lib/services/types';
 
-type Call = { table: string; kind: 'select' | 'insert' | 'update' | 'delete'; filters: Record<string, unknown>; payload?: unknown };
+type Call = { table: string; kind: 'select' | 'insert' | 'update' | 'delete'; filters: Record<string, unknown>; payload?: unknown; range?: [number, number] };
 type Reply = { data: unknown; error: unknown };
 
 function makeDb(respond: (call: Call) => Reply) {
@@ -19,14 +19,20 @@ function makeDb(respond: (call: Call) => Reply) {
     const call: Call = { table, kind: 'select', filters: {} };
     calls.push(call);
     const b: Record<string, unknown> = {};
-    const reply = () => call.table === 'family_members'
+    const answer = () => call.table === 'family_members'
       ? { data: call.kind === 'select' && call.filters.family_id === 'fam-1' && call.filters.id === 'member-2'
         ? [{ id: 'member-2', family_id: 'fam-1' }] : [], error: null }
       : respond(call);
+    // A ranged read is answered with those rows of the reply, as PostgREST answers it.
+    const reply = (): Reply => {
+      const out = answer();
+      return call.range && Array.isArray(out.data) ? { ...out, data: out.data.slice(call.range[0], call.range[1] + 1) } : out;
+    };
     const chain = () => b;
     const filter = (column: string, value: unknown) => { call.filters[column] = value; return b; };
     Object.assign(b, {
       select: chain, order: chain, limit: chain, ilike: chain, or: chain,
+      range: (from: number, to: number) => { call.range = [from, to]; return b; },
       eq: filter, is: filter, in: filter,
       lt: (c: string, v: unknown) => filter(`lt:${c}`, v),
       lte: (c: string, v: unknown) => filter(`lte:${c}`, v),
@@ -201,7 +207,14 @@ describe('snoozeReminder', () => {
     const { db, calls } = makeDb(() => ({ data: { id: 'rem-1', status: 'snoozed' }, error: null }));
     const res = await snoozeReminder(scopeWith(db), 'rem-1', 30);
     expect(res.ok).toBe(true);
-    expect(calls[0].payload).toMatchObject({ status: 'snoozed', snoozed_until: '2026-09-05T12:30:00.000Z' });
+    // The row is read first, by id and family, to ask whether its actor may be
+    // shown it (lib/services/reminders/shown.ts); the snooze is the next call.
+    const updates = calls.filter(call => call.table === 'family_reminders' && call.kind === 'update');
+    expect(updates).toHaveLength(1);
+    expect(updates[0].filters).toMatchObject({ id: 'rem-1', family_id: 'fam-1' });
+    expect(calls[0]).toMatchObject({ table: 'family_reminders', kind: 'select', filters: { id: 'rem-1', family_id: 'fam-1' } });
+    expect(calls[1]).toMatchObject({ table: 'family_reminders', kind: 'update', filters: { id: 'rem-1', family_id: 'fam-1' } });
+    expect(updates[0].payload).toMatchObject({ status: 'snoozed', snoozed_until: '2026-09-05T12:30:00.000Z' });
   });
 
   it('rejects a non-positive snooze', async () => {

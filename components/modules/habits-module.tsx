@@ -29,6 +29,7 @@ import { HABIT_PRESETS, PRESET_CATEGORIES, presetToHabit, presetTarget, dayProgr
 import { ageOn } from '@/lib/members/age';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock } from '@/components/i18n/use-format';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 type Habit = Tables<'habits'>;
 type HabitLog = Tables<'habit_logs'>;
@@ -102,10 +103,14 @@ export function HabitsModule() {
     table: 'habit_logs',
     familyId,
     deps: [familyId, today],
-    fetcher: (supabase) =>
+    // Paged, with a real ceiling: one select stops at db-max-rows (1,000), and
+    // nine or so daily habits pass that in 120 days — the oldest days fell off
+    // and the streaks were counted from what was left, with no sign of it.
+    // Past the ceiling readAll answers an error, and the screen says so.
+    fetcher: (supabase) => readAllAsQuery<HabitLog>((from, to) =>
       supabase.from('habit_logs').select('*').eq('family_id', familyId)
         .gte('log_date', toISODate(new Date(Date.now() - 120 * 86400000)))
-        .order('log_date', { ascending: false }),
+        .order('log_date', { ascending: false }).order('id').range(from, to), { max: 20_000 }),
   });
 
   // A day counts once the habit's daily target is met, so a half-finished

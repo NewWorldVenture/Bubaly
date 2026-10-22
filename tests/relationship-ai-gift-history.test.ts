@@ -5,15 +5,29 @@ import type { RelationshipGiftRecord } from '@/lib/relationship/gifts';
 const mocks = vi.hoisted(() => ({
   context: vi.fn(), server: vi.fn(), provider: vi.fn(), complete: vi.fn(), rate: vi.fn(), audit: vi.fn(),
 }));
+// The account-standing gate (a closed or trial-ended family is refused) has its
+// own test, tests/the-free-ai-helpers-refuse-a-closed-or-trial-ended-family.test.ts.
+// The family here is open, so the gate is answered rather than seeded.
+vi.mock('@/lib/server/account-standing', () => ({ refuseClosedOrTrialEnded: async () => null }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.context }));
-vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.server }));
+// The daily meter is counted with the service client (RLS hides audit_logs
+// from a non-manager), so both clients answer from the same results here.
+vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.server, createServiceClient: () => ({ from: (table: string) => new MockQuery(table) }) }));
 vi.mock('@/lib/ai/provider', async (importOriginal) => ({
   describeAIError: (await importOriginal<typeof import('@/lib/ai/provider')>()).describeAIError,
   resolveProvider: mocks.provider,
   isAIConfigured: async () => true,
 }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: mocks.rate }));
+// The route refuses a locked family now (F33); that refusal has its own case, so it admits here.
+vi.mock('@/lib/server/route-feature-gate', () => ({ refuseIfLocked: async () => null }));
 vi.mock('@/lib/server/audit', () => ({ logAudit: mocks.audit }));
+// The Free allowance (N18) has its own cases in
+// tests/the-free-plans-ai-allowance-holds-on-every-helper.test.ts; it admits here.
+vi.mock('@/lib/server/ai-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/ai-access')>()),
+  assertAIAllowance: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
+}));
 
 type QueryResult = { data: unknown; error: { message: string; code?: string } | null; count?: number };
 const queries: { table: string; operations: unknown[][] }[] = [];

@@ -23,7 +23,7 @@
 // numbers out. `ageOnDay(birthday, todayKey)` beside the browser-side `ageOn`;
 // `relativeDay` / `buildTimeline` take the zone and count day keys in it; the
 // playbook reads the year off `dayKeyInTz` and the month off the date's own
-// digits; the home page reads `${todayKey.slice(0, 7)}-01`.
+// digits; the home page reads the month of `todayKey` (periodWindow).
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -78,7 +78,9 @@ describe('a member\'s age turns over at the family\'s midnight', () => {
     const home = code('app/(app)/home/page.tsx');
     expect(home).toContain('memberTagline(m, ctx.user.id, todayKey)');
     expect(home, 'the month filter re-read the family\'s midnight on the host\'s calendar').not.toContain('isoDate(monthStart)');
-    expect(home).toContain("gte('date', `${todayKey.slice(0, 7)}-01`)");
+    // The family's month off its own day key, both ends (SUMMED-READ-SIB).
+    expect(home).toContain("const thisMonth = periodWindow('monthly', todayKey);");
+    expect(home).toContain(".gte('date', thisMonth.from).lte('date', thisMonth.to)");
     const service = code('lib/services/family/index.ts');
     expect(service).toContain('age: ageOnDay(row.birthday, todayKey),');
     expect(service.match(/dayKeyInTz\(scopeNow\(scope\), scope\.tz\)/g)).toHaveLength(2);

@@ -47,7 +47,10 @@ const ALLOWED = new Map([
   // lib/operating-index/server.ts carried the same admission and were converted
   // one by one. That sentence was never a justification; it was a note of work
   // not yet done, and the work is now done. All five are gone from this list.
-  ['app/(app)/dashboard/family-digital-twin/actions.ts', 'simulation input over a month window; a day either way does not move the result'],
+  // So is app/(app)/dashboard/family-digital-twin/actions.ts ("a day either way
+  // does not move the result"): a weekly budget's week is seven days, and a day
+  // either way moved a whole day of spending in or out of it. It now reads the
+  // family's day (TWIN-SIB).
 ]);
 
 function sourceFiles(dir: string, out: string[] = []): string[] {

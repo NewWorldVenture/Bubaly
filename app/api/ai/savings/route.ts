@@ -3,12 +3,15 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { settleAll, describeReadError } from '@/lib/supabase/settle';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { isManager } from '@/lib/constants/roles';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
-import { resolveProvider } from '@/lib/ai/provider';
+import { dayKeyIn } from '@/lib/time/zoned';
+import { budgetByCategory, periodWindow } from '@/lib/finance/budget-periods';
+import type { BudgetPeriod } from '@/lib/database.types';
+import { isAIConfigured, resolveProvider } from '@/lib/ai/provider';
 import { summarizeSubscriptions, wastedMonthlyCents, isStale, monthlyCostCents, type SubLike } from '@/lib/finance/subscriptions';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
@@ -16,12 +19,27 @@ export const runtime = 'nodejs';
 
 const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
+/** "You're $X over your … budget", in the budget's own period. */
+const OVER_BUDGET_DETAIL: Record<BudgetPeriod, string> = {
+  weekly: 'savings.overYourWeeklyBudget',
+  monthly: 'savings.overYourMonthlyBudget',
+  yearly: 'savings.overYourYearlyBudget',
+};
+
 /**
  * AI savings suggestions for a family's finances. Reads recent transactions,
  * budgets, upcoming bills and tracked subscriptions (family-scoped via the
  * cookie client + RLS), summarises them deterministically, then asks the AI for
  * concrete, prioritised savings ideas. Degrades to a data-driven fallback when
- * AI is unconfigured — never fabricates numbers.
+ * the AI cannot answer — never fabricates numbers.
+ *
+ * `source` says which of three things happened, as /api/ai/chef does, because
+ * the family is told different things for each: 'ai' is the model's analysis;
+ * 'fallback' is "no AI provider is set up"; 'unavailable' is "the provider was
+ * asked and gave no usable answer". Every provider failure and every
+ * unusable reply used to be answered "AI is not configured" to a family whose
+ * AI was configured — or, for a reply with nothing in it, shown as the AI's own
+ * analysis while the turn was logged as failed.
  */
 export async function POST() {
   const tr = await getTranslations();
@@ -43,7 +61,22 @@ export async function POST() {
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 
-  const monthStart = new Date().toISOString().slice(0, 8) + '01';
+  // The FAMILY's day, not Greenwich's. `new Date().toISOString()` was the UTC
+  // month: from 17:00 on the last day of a month Los Angeles read next month's
+  // empty window ("no overspending"), and Tokyo kept counting last month until
+  // 09:00 on the 1st. And each budget is judged in its OWN period (Sunday to
+  // Saturday, the month, the year; lib/finance/hub periodWindow), both ends
+  // bounded: a month of spending set against a weekly limit reported $400 of
+  // groceries as "$250 over", a yearly limit was never over, and next month's
+  // scheduled rows counted. One read starts where the earliest period can (this
+  // week, which can begin in December, or 1 January); each budget then counts
+  // only the rows inside its own window, end included.
+  const today = dayKeyIn(new Date(), ctx.active.family?.timezone || 'UTC');
+  const thisWeek = periodWindow('weekly', today), thisYear = periodWindow('yearly', today);
+  const readFrom = thisWeek.from < thisYear.from ? thisWeek.from : thisYear.from;
+  // And it ends where the latest period can: 31 December, or this week's
+  // Saturday when it falls in next year's January.
+  const readTo = thisWeek.to > thisYear.to ? thisWeek.to : thisYear.to;
   // All four errors were dropped here, and this route's own docstring above says
   // it "never fabricates numbers". It did. `txns ?? []` empties the category
   // map, so a refused `transactions` read produced no overspending, no stale
@@ -60,15 +93,23 @@ export async function POST() {
   //
   // The transactions read was additionally unbounded — PostgREST caps it at
   // db-max-rows (1,000) in silence — so a family with a busy month had its
-  // over-budget amounts UNDERSTATED and stated as fact. `readAllAsQuery` with a
+  // over-budget amounts UNDERSTATED and stated as fact. A paged read with a
   // real ceiling fixes that; exceeding the ceiling surfaces as an error here
   // rather than as a quiet prefix, because a truncated read is a failed read.
   // Audit C1-S9-25.
+  //
+  // Paged on the id, not on offsets (readAllByIdAsQuery): the read spans up to
+  // a year, many pages, and a transaction recorded between two of them shifted
+  // every offset after it, so one row was summed twice (or one skipped) and a
+  // budget read as over by a row it never held (M11-RATCHET).
   const [txnsResult, budgetsResult, billsResult, subsResult] = await settleAll([
-    readAllAsQuery<{ amount: number; category: string | null; type: string; date: string }>((from, to) =>
-      supabase.from('transactions').select('amount, category, type, date').eq('family_id', familyId)
-        .eq('type', 'expense').gte('date', monthStart).order('date').order('id').range(from, to), { max: 20_000 }),
-    supabase.from('budgets').select('category, amount, period').eq('family_id', familyId),
+    readAllByIdAsQuery<{ id: string; amount: number; category: string | null; type: string; date: string }>((after, limit) => {
+      let query = supabase.from('transactions').select('id, amount, category, type, date').eq('family_id', familyId)
+        .eq('type', 'expense').gte('date', readFrom).lte('date', readTo);
+      if (after) query = query.gt('id', after);
+      return query.order('id').limit(limit);
+    }, { max: 20_000 }),
+    supabase.from('budgets').select('id, category, amount, period, created_at').eq('family_id', familyId),
     supabase.from('bills').select('name, amount, status').eq('family_id', familyId).neq('status', 'paid'),
     supabase.from('subscriptions_tracked').select('name, cost_cents, cadence, status, last_used').eq('family_id', familyId),
   ]);
@@ -85,31 +126,50 @@ export async function POST() {
   const { data: txns } = txnsResult, { data: budgets } = budgetsResult;
   const { data: bills } = billsResult, { data: subs } = subsResult;
 
-  // Spend by category this month.
+  // One budget per category, the oldest (the one the finance service edits and
+  // reports), matched case-insensitively: a "groceries" row is Groceries spend.
+  const budgetByCat = budgetByCategory((budgets ?? []).map((b) => ({ ...b, amount: Number(b.amount) })));
+  // Spend per budgeted category, inside that budget's own period.
   const byCat = new Map<string, number>();
-  for (const t of txns ?? []) byCat.set(t.category ?? 'Other', (byCat.get(t.category ?? 'Other') ?? 0) + Number(t.amount));
-  const budgetByCat = new Map((budgets ?? []).map((b) => [b.category, Number(b.amount)]));
-  const overspent = [...byCat.entries()]
-    .map(([cat, spent]) => ({ cat, spent, budget: budgetByCat.get(cat) ?? 0, over: spent - (budgetByCat.get(cat) ?? 0) }))
+  for (const [key, b] of budgetByCat) {
+    const window = periodWindow(b.period, today);
+    let spent = 0;
+    for (const t of txns ?? []) {
+      if ((t.category ?? '').trim().toLowerCase() !== key || t.date < window.from || t.date > window.to) continue;
+      spent += Math.abs(Number(t.amount));
+    }
+    byCat.set(key, spent);
+  }
+  const overspent = [...budgetByCat.entries()]
+    .map(([key, b]) => ({ cat: b.category, period: b.period, spent: byCat.get(key) ?? 0, budget: b.amount, over: (byCat.get(key) ?? 0) - b.amount }))
     .filter((x) => x.budget > 0 && x.over > 0)
     .sort((a, b) => b.over - a.over);
 
   const subList = (subs ?? []) as SubLike[];
   const subStats = summarizeSubscriptions(subList);
-  const wasted = wastedMonthlyCents(subList);
-  const staleNames = (subs ?? []).filter((s) => isStale(s as SubLike)).map((s) => `${s.name} (${usd(monthlyCostCents(s.cost_cents, s.cadence))}/mo)`);
+  // Recorded use is a DATE on the family's wall, counted from the family's day.
+  const usageDay = dayKeyIn(new Date(), ctx.active.family?.timezone || 'UTC');
+  const wasted = wastedMonthlyCents(subList, 60, usageDay);
+  const staleNames = (subs ?? []).filter((s) => isStale(s as SubLike, 60, usageDay)).map((s) => `${s.name} (${usd(monthlyCostCents(s.cost_cents, s.cadence))}/mo)`);
 
   const context = [
     `Subscriptions: ${subStats.active} active, ${usd(subStats.monthlyCents)}/mo. Unused (60d+): ${staleNames.join(', ') || 'none'} → up to ${usd(wasted)}/mo recoverable.`,
-    `Over-budget categories this month: ${overspent.map((o) => `${o.cat} +$${o.over.toFixed(0)}`).join(', ') || 'none'}.`,
+    `Over-budget categories, each in its own budget period: ${overspent.map((o) => `${o.cat} (${o.period} budget) +$${o.over.toFixed(0)}`).join(', ') || 'none'}.`,
     `Unpaid bills: ${(bills ?? []).length}.`,
   ].join('\n');
 
   // Deterministic fallback suggestions (used if AI is unavailable).
   const fallback: Array<{ title: string; detail: string }> = [];
   if (staleNames.length) fallback.push({ title: `Cancel ${staleNames.length} unused subscription${staleNames.length > 1 ? 's' : ''}`, detail: `Save up to ${usd(wasted)}/mo (${usd(wasted * 12)}/yr): ${staleNames.join(', ')}.` });
-  for (const o of overspent.slice(0, 2)) fallback.push({ title: `Trim ${o.cat} spending`, detail: `You're $${o.over.toFixed(0)} over your ${o.cat} budget this month.` });
+  for (const o of overspent.slice(0, 2)) {
+    fallback.push({ title: `Trim ${o.cat} spending`, detail: tr(OVER_BUDGET_DETAIL[o.period], { amount: `$${o.over.toFixed(0)}`, category: o.cat }) });
+  }
   if (fallback.length === 0) fallback.push({ title: 'On track', detail: 'No overspending or unused subscriptions detected. Set category budgets to unlock sharper suggestions.' });
+
+  if (!(await isAIConfigured())) {
+    return NextResponse.json({ summary: tr('savings.aiIsNotSetUpHereAre'), suggestions: fallback, wastedMonthlyCents: wasted, source: 'fallback' });
+  }
+  const unavailable = () => NextResponse.json({ summary: tr('savings.theAiCouldNotAnswerHereAre'), suggestions: fallback, wastedMonthlyCents: wasted, source: 'unavailable' });
 
   try {
     const result = await withAiRequest(
@@ -124,8 +184,16 @@ export async function POST() {
           maxTokens: 600,
         });
         obs.used(completion.model ?? 'unknown', completion.usage);
-        const m = completion.text.match(/\{[\s\S]*\}/);
-        const parsed = m ? JSON.parse(m[0]) : {};
+        // A reply that is not text, or whose JSON does not parse, is an
+        // unusable answer — recorded as one here, not thrown past the record.
+        const m = typeof completion.text === 'string' ? completion.text.match(/\{[\s\S]*\}/) : null;
+        let parsed: { summary?: unknown; suggestions?: unknown } = {};
+        try {
+          const decoded: unknown = m ? JSON.parse(m[0]) : {};
+          if (decoded && typeof decoded === 'object' && !Array.isArray(decoded)) parsed = decoded as typeof parsed;
+        } catch {
+          parsed = {};
+        }
         const suggestions = Array.isArray(parsed.suggestions)
           ? parsed.suggestions.filter((s: unknown) =>
             s !== null && typeof s === 'object'
@@ -136,16 +204,25 @@ export async function POST() {
         const hasSummary = typeof parsed.summary === 'string' && parsed.summary.trim().length > 0;
         if (!hasSummary && suggestions.length === 0) {
           obs.failed(new Error('The savings response contained no usable summary or suggestions.'));
+          return null;
         }
         return {
           summary: hasSummary ? parsed.summary : 'Here are the biggest opportunities to save.',
           suggestions: suggestions.length ? suggestions : fallback,
           wastedMonthlyCents: wasted,
+          source: 'ai' as const,
+          // A reply with a summary and no usable suggestions keeps the summary
+          // (the model's) and shows the list computed from the family's own
+          // numbers — which `source: 'ai'` alone presented as the AI's. Said
+          // here so the card can label the list for what it is.
+          ...(suggestions.length ? {} : { suggestionsSource: 'fallback' as const }),
         };
       },
     );
-    return NextResponse.json(result);
-  } catch {
-    return NextResponse.json({ summary: 'AI is not configured — here are data-driven suggestions from your finances.', suggestions: fallback, wastedMonthlyCents: wasted });
+    return result ? NextResponse.json(result) : unavailable();
+  } catch (error) {
+    // Quota, rate limit, key, timeout: the AI was asked and could not answer.
+    console.error('[ai/savings] provider request failed', describeReadError(error));
+    return unavailable();
   }
 }

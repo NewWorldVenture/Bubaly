@@ -377,11 +377,15 @@ const contactCenter = readFileSync('app/(app)/dashboard/contact-center/actions.t
 const home = readFileSync('app/(app)/dashboard/home/actions.ts', 'utf8');
 
 describe('a milestone the child is congratulated for is confirmed (C1-S9-47)', () => {
-  it('both milestone transitions ask what they changed', () => {
-    for (const binding of ['achieved', 'skipped']) {
+  it('both milestone transitions ask what they changed, and so does the start', () => {
+    // The start is insert-only (ignoreDuplicates): an empty answer is a rung
+    // already on the ladder, told as such rather than "Added".
+    for (const binding of ['achieved', 'skipped', 'started']) {
       expect(independence, binding).toContain(`wroteNoRows(${binding})`);
     }
-    expect(independence.match(/\.select\('id'\)/g) ?? []).toHaveLength(2);
+    expect(independence.match(/\.select\('id'\)/g) ?? []).toHaveLength(3);
+    expect(independence).toContain("if (wroteNoRows(started)) return { ok: false, code: 'alreadyOnLadder', error: t('actions.milestoneAlreadyOnTheLadder') };");
+    expect(at(independence, 'if (wroteNoRows(started))')).toBeLessThan(at(independence, 'await logAudit(supabase, {'));
   });
 
   it('each stays scoped to the acting family', () => {
@@ -877,7 +881,9 @@ describe('an order transition is claimed, not assumed (C1-S9-56)', () => {
     // family_id of the order that read returned.
     const body = bodyOf(marketplaceActions, 'export async function setOrderStatusAction', 'return { ok: true };');
     expect(body).toContain('readFamilyOrders(ctx.active.familyId, (scope) => scope(');
-    expect(body).toContain(".select('id, status, family_id')");
+    // `seller_member` rides along for the seller-only steps
+    // (tests/an-order-is-finished-by-its-seller.test.ts).
+    expect(body).toContain(".select('id, status, family_id, seller_member')");
     expect(body.match(/\.eq\('family_id', order\.family_id\)/g) ?? []).toHaveLength(1);
   });
 
@@ -1237,7 +1243,9 @@ describe('a cancelled pickup is not a completed one (C1-S9-59)', () => {
   it('confirms the cancel', () => {
     const body = actionBody(handoff, 'export async function cancelHandoffAction');
     expect(body).toContain('wroteNoRows(cancelled)');
-    expect(body).toContain(".in('status', ['proposed', 'confirmed']).select('id')");
+    // Read back with the event it linked, so the cancel can take it off the
+    // family calendar (tests/a-cancelled-pickup-leaves-the-family-calendar.test.ts).
+    expect(body).toContain(".in('status', ['proposed', 'confirmed']).select('id, calendar_event_id')");
   });
 
   it('leaves the C1-S9-23 confirm guard in place beside it', () => {

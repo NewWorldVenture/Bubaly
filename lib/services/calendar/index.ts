@@ -36,6 +36,7 @@ import { dayKeyInTz, dayKeysBetween, scopeNow, zonedDayBoundsMs, zonedTimeMs } f
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { escapeLike } from '@/lib/supabase/escape-like';
 import { getTranslations } from '@/lib/i18n/server';
+import { followMovedEvent } from '@/lib/trips/follow-event';
 
 export type CalendarEvent = Tables<'calendar_events'>;
 
@@ -445,57 +446,56 @@ export async function deleteEvents(scope: ServiceScope, eventIds: string[]): Pro
 
 export type UpdateEventPatch = Partial<Omit<CreateEventInput, 'title'>> & { title?: string };
 
-export type UpdateEventOptions = {
-  /**
-   * The `starts_at` of the occurrence the edit was made from, when the caller
-   * showed one occurrence of a series (the calendar's Edit modal). A series is
-   * one row whose `starts_at` is its FIRST occurrence, and every later week is
-   * drawn with its own time; written back as it stood, that week's time became
-   * the series' start and every week before it left the calendar. With this,
-   * the patch's times are read as that occurrence's new times and mapped back
-   * onto the series' first date (`onSeriesClock`).
-   */
-  occurrenceStartsAt?: string | null;
-  /**
-   * Refuse a new time for a repeating event when no occurrence is named. The
-   * assistant reads a series a week at a time, so a start it sends is some
-   * week's start, and written into the row it restarts the series there. Which
-   * week it meant is asked, not guessed, as an ambiguous title is
-   * (`findEventByTitle`): keeping the first date and taking only the clock time
-   * would silently drop a move to another day.
-   */
-  seriesNeedsOccurrence?: boolean;
-};
-
-/** The refusal `seriesNeedsOccurrence` gives; exported so a translated surface can recognise it. */
-export const SERIES_NEEDS_OCCURRENCE = 'That event repeats. Say which week this new time is for, and every week moves with it.';
-
-type EventClockState = Pick<CalendarEvent, 'id' | 'title' | 'starts_at' | 'ends_at' | 'all_day'>;
+type EventClockState = Pick<CalendarEvent, 'id' | 'title' | 'starts_at' | 'ends_at' | 'all_day'> & { updated_at?: string };
+/**
+ * `expected` is the clock the caller already holds for the row (the conflicts
+ * page's quick fix, computed from a render): the time change is written only
+ * if the row still has it, rather than against whatever it reads now. With an
+ * `updated_at` the row's version must match too, so a change to its text
+ * fields (the calendar editor sends them all) is not written over either.
+ * `week` names the week of a series a change was made from (`OccurrenceEdit`).
+ */
 export async function updateEvent(
-  scope: ServiceScope, eventId: string, patch: UpdateEventPatch, opts: UpdateEventOptions = {},
+  scope: ServiceScope, eventId: string, patch: UpdateEventPatch, expected?: EventClockState, week?: OccurrenceEdit,
 ): Promise<ServiceResult<CalendarEvent>> {
-  const occurrence = opts.occurrenceStartsAt?.trim() ? opts.occurrenceStartsAt : null;
-  if ((!occurrence && !opts.seriesNeedsOccurrence) || (patch.startsAt === undefined && patch.endsAt === undefined)) {
-    return applyEventUpdate(scope, eventId, patch);
+  if (!week || (patch.startsAt === undefined && patch.endsAt === undefined)) {
+    return applyEventUpdate(scope, eventId, patch, expected);
   }
   const { data, error } = await scope.db.from('calendar_events')
     .select('id,title,starts_at,ends_at,all_day,recurrence').eq('id', eventId).eq('family_id', scope.familyId).maybeSingle();
   if (error) return fail(describeDbError(error, 'Could not load that event.'), { code: SERVICE_CODES.db });
   if (!data) return fail('That event could not be found.', { code: SERVICE_CODES.notFound });
   const { recurrence, ...clock } = data;
-  const mapped = forSeriesOccurrence({ ...clock, recurrence }, patch, occurrence, scope.tz);
+  const mapped = forSeriesOccurrence({ ...clock, recurrence }, patch, week, scope.tz);
   if (!mapped.ok) return mapped;
   // The row just read is the compare-and-set state, as in `rescheduleAfter`.
-  return applyEventUpdate(scope, eventId, mapped.data, clock);
+  return applyEventUpdate(scope, eventId, mapped.data, expected ?? clock);
 }
 
-/** `onSeriesClock` for a named occurrence; with none, a new time for a series that stays one is refused. */
+/**
+ * The week a change was made from, for a caller that reads a series a week at
+ * a time: the assistant's `calendar.searchEvents` returns each week of a series
+ * with that week's own `starts_at` and the series' id. A series is one row
+ * whose `starts_at` is its FIRST occurrence, so a week's new time written into
+ * it restarted the series on that week and every week before it left the
+ * calendar. With a week named, the change is mapped back onto the series' first
+ * date (`onSeriesClock`); with `null`, a new time for a series is refused and
+ * the week asked for, as an ambiguous title is (`findEventByTitle`): keeping
+ * the first date and taking only the clock time would silently drop a move to
+ * another day. One-off events are unchanged.
+ */
+export type OccurrenceEdit = { occurrenceStartsAt: string | null };
+
+/** The refusal a series time change that names no week gets. */
+const SERIES_NEEDS_OCCURRENCE = 'That event repeats. Say which week this new time is for, and every week moves with it.';
+
 function forSeriesOccurrence(
   stored: EventClockState & Pick<CalendarEvent, 'recurrence'>,
   patch: UpdateEventPatch,
-  occurrence: string | null,
+  week: OccurrenceEdit,
   timezone: string,
 ): ServiceResult<UpdateEventPatch> {
+  const occurrence = week.occurrenceStartsAt?.trim() ? week.occurrenceStartsAt : null;
   if (occurrence) return ok(onSeriesClock(stored, patch, occurrence, timezone));
   return isSeries(stored) && isSeries({ recurrence: patch.recurrence ?? stored.recurrence })
     ? fail(SERIES_NEEDS_OCCURRENCE, { code: SERVICE_CODES.invalidInput })
@@ -511,11 +511,11 @@ function forSeriesOccurrence(
  * series' first date, at the clock time the new start shows. Counting the move
  * in hours would put a September start an hour off whenever the edited week
  * and the week it moved to sit on different sides of a clock change. The end
- * keeps the length the person gave the occurrence.
+ * keeps the length given for the occurrence.
  *
  * An unchanged start is the series' own start, exactly. A one-off row, the
  * first occurrence, and a series turned into a one-off (which stays where the
- * modal showed it) are left as given, and so is anything unreadable, which
+ * week was) are left as given, and so is anything unreadable, which
  * `applyEventUpdate` refuses in its own words.
  */
 function onSeriesClock(
@@ -635,6 +635,7 @@ async function applyEventUpdate(scope: ServiceScope, eventId: string, patch: Upd
   if (clockState) {
     mutation = mutation.eq('starts_at', clockState.starts_at).eq('all_day', clockState.all_day);
     mutation = clockState.ends_at === null ? mutation.is('ends_at', null) : mutation.eq('ends_at', clockState.ends_at);
+    if (clockState.updated_at) mutation = mutation.eq('updated_at', clockState.updated_at);
   }
   const { data, error } = await mutation.select('*').maybeSingle();
 
@@ -645,6 +646,24 @@ async function applyEventUpdate(scope: ServiceScope, eventId: string, patch: Upd
   // No row means the id belongs to another family (or is gone). Reporting
   // "not found" rather than "denied" avoids confirming that the id exists.
   if (!data) return fail('That event could not be found.', { code: SERVICE_CODES.notFound });
+
+  // A Smart Departure planned for this event follows it (lib/trips/follow-event.ts).
+  // Done HERE because this is where every move is written: the calendar
+  // editor, a conflict quick fix, the assistant's calendar tools and the week
+  // planner that runs them. Each move is followed once, whoever made it.
+  // `clockState` is what the write compared-and-set against, so its start is
+  // the one the event had. The move is saved either way; a plan that could not
+  // follow is logged, and Refresh re-plans it from the event's current start.
+  if (update.starts_at !== undefined && clockState) {
+    try {
+      await followMovedEvent(scope.db, {
+        familyId: scope.familyId, eventId, previousStartsAt: clockState.starts_at, startsAt: data.starts_at,
+        tz: zoneOf(scope), now: scope.now,
+      });
+    } catch (cause) {
+      console.error('[service:calendar] departure plans could not follow a moved event', { eventId, cause });
+    }
+  }
 
   await recordActivitySafely(scope, {
     agent: 'calendar',
@@ -1023,15 +1042,13 @@ export async function busyEvenings(
  * conflict: the family agreed to move the thing, not to reshape it, so the
  * duration is preserved rather than reset to a default.
  *
- * For a repeating event, `occurrenceStartsAt` names the week being moved and
- * the move is mapped onto the series' first date, as `updateEvent` does;
- * `seriesNeedsOccurrence` refuses a series move that names no week.
+ * `week` names the week of a series being moved, as for `updateEvent`.
  */
 export async function rescheduleAfter(
   scope: ServiceScope,
   eventId: string,
-  input: { startsAt: string; occurrenceStartsAt?: string | null },
-  opts: Pick<UpdateEventOptions, 'seriesNeedsOccurrence'> = {},
+  input: { startsAt: string },
+  week?: OccurrenceEdit,
 ): Promise<ServiceResult<CalendarEvent>> {
   const startsAt = normalizeCalendarWriteInstant(input.startsAt, scope.tz);
   if (!startsAt) return fail('That new time could not be understood.', { code: SERVICE_CODES.invalidInput });
@@ -1056,8 +1073,7 @@ export async function rescheduleAfter(
     startsAt: input.startsAt,
     endsAt: duration === null ? null : formatExactInstant(parseExactInstant(startsAt) + duration),
   };
-  const occurrence = input.occurrenceStartsAt?.trim() ? input.occurrenceStartsAt : null;
-  const mapped = occurrence || opts.seriesNeedsOccurrence ? forSeriesOccurrence(existing, patch, occurrence, scope.tz) : ok(patch);
+  const mapped = week ? forSeriesOccurrence(existing, patch, week, scope.tz) : ok(patch);
   if (!mapped.ok) return mapped;
   return applyEventUpdate(scope, eventId, mapped.data, existing);
 }

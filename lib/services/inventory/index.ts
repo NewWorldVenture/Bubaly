@@ -23,7 +23,7 @@ import { recordActivitySafely } from '../activity';
 import { scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { escapeLike } from '@/lib/supabase/escape-like';
-import { readAll } from '@/lib/supabase/read-all';
+import { readAll, readAllById } from '@/lib/supabase/read-all';
 import { getTranslations } from '@/lib/i18n/server';
 
 export type InventoryItemRow = Tables<'inventory_items'>;
@@ -169,17 +169,21 @@ export async function getItem(scope: ServiceScope, itemId: string): Promise<Serv
 export async function resolveLocationByName(scope: ServiceScope, name: string): Promise<ServiceResult<HomeLocationRow | null>> {
   const term = name.trim().replace(/^(the|my|our)\s+/i, '');
   if (!term) return ok(null);
-  const { data, error } = await scope.db
-    .from('home_locations')
-    .select('*')
-    .eq('family_id', scope.familyId)
-    .ilike('name', `%${escapeLike(term)}%`)
-    .limit(10);
+  // An exact name in a prefix is not necessarily unique: another room or
+  // container with that name may be beyond the page. Read only the matching
+  // candidates, completely or fail, before authorizing a move to any of them.
+  const { rows, error } = await readAllById<HomeLocationRow>((after, limit) => {
+    let query = scope.db.from('home_locations').select('*')
+      .eq('family_id', scope.familyId)
+      .ilike('name', `%${escapeLike(term)}%`)
+      .order('id', { ascending: true }).limit(limit);
+    if (after !== null) query = query.gt('id', after);
+    return query;
+  }, { max: MAX_LOCATIONS });
   if (error) {
     console.error('[service:inventory] location lookup failed', error);
     return fail(describeDbError(error, 'Could not look up that location.'), { code: SERVICE_CODES.db });
   }
-  const rows = data ?? [];
   const exact = rows.filter((r) => r.name.trim().toLowerCase() === term.toLowerCase());
   if (exact.length === 1) return ok(exact[0]);
   if (rows.length === 1) return ok(rows[0]);

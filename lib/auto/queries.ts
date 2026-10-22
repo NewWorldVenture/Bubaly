@@ -40,7 +40,7 @@ export const getPolicies = (f: string, reader: MoneyReader) => fam<Policy>('auto
 export const getRentals = (f: string) => fam<Rental>('rental_cars', f, { col: 'pickup_at', asc: false });
 export const getServiceRecords = (f: string) => fam<AutoService>('auto_service_records', f, { col: 'service_date', asc: false });
 
-export async function getAutoOverview(familyId: string, reader: MoneyReader): Promise<{
+export async function getAutoOverview(familyId: string, reader: MoneyReader, todayKey: string): Promise<{
   vehicles: Vehicle[]; policies: Policy[]; rentals: Rental[]; renewals: RenewalItem[];
 }> {
   const [vehicles, licenses, registrations, inspections, policies, rentals] = await Promise.all([
@@ -51,6 +51,7 @@ export async function getAutoOverview(familyId: string, reader: MoneyReader): Pr
   const renewals = buildRenewals({
     licenses, registrations, inspections, policies,
     vehicleName: (id) => (id ? nameById.get(id) ?? null : null),
+    todayKey,
   });
   return { vehicles, policies, rentals, renewals };
 }

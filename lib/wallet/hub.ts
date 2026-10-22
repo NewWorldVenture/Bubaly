@@ -6,7 +6,7 @@
 
 import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
 
-export interface AccountLite { balance: number } // dollars
+export interface AccountLite { balance: number; type?: string | null } // dollars
 export interface CardLite { available_cents: number }
 export interface RewardLite { unit: string; balance: number; value_cents: number }
 
@@ -29,7 +29,10 @@ export function walletOverview(
   cards: CardLite[],
   rewards: RewardLite[],
 ): WalletOverview {
-  const accountsCents = accounts.reduce((s, a) => s + dollarsToCents(a.balance), 0);
+  // A credit account's balance is what the family OWES, so it lowers the
+  // total, as on Family CFO and in the money timeline. Added as positive cash,
+  // a $1,500 card balance raised "Total balance" by $1,500.
+  const accountsCents = accounts.reduce((s, a) => s + (a.type === 'credit' ? -dollarsToCents(a.balance) : dollarsToCents(a.balance)), 0);
   const cardsCents = cards.reduce((s, c) => s + (c.available_cents ?? 0), 0);
   const rewardsValueCents = rewards.reduce((s, r) => s + (r.value_cents ?? 0), 0);
   const rewardsPoints = rewards

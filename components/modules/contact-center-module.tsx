@@ -41,9 +41,11 @@ const SMS_REPLY_COPY = {
   failed: ['contactSmsReply.failed', 'contactSmsReply.failedDetail'],
 } as const;
 
-export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, suggestedLocal, twilioReady, canManage }: {
+export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, suggestedLocal, twilioReady, canManage, canFile = false }: {
   channel: Channel; messages: InboxRow[]; suggestedLocal: string; twilioReady: boolean; canManage: boolean;
   smsReplyStatuses?: Record<string, SmsReplyStatus>;
+  /** A parent or adult: the only members who may mark a message read or archive it (the action refuses anyone else). */
+  canFile?: boolean;
 }) {
   const tr = useTranslations();
   // One time-ago, and it follows the reader. The ladder this replaced ended in a
@@ -224,7 +226,7 @@ export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, 
                           <p className="mt-1">{t(replyCopy[1])}</p>
                         </div>
                       )}
-                      {!outbound && (
+                      {!outbound && canFile && (
                         <div className="mt-2 flex items-center gap-3">
                           {m.status !== 'read' && (
                             <button type="button" disabled={pending} onClick={() => run(() => setMessageStatusAction(m.id, 'read'))}

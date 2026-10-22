@@ -25,7 +25,7 @@ import type { Database } from '@/lib/database.types';
 import type { ServiceScope } from '@/lib/services/types';
 
 const holder = vi.hoisted(() => ({ serviceClient: null as unknown }));
-const cron = vi.hoisted(() => ({ createRequest: vi.fn(), createRun: vi.fn(), kickRun: vi.fn() }));
+const cron = vi.hoisted(() => ({ createRequest: vi.fn(), createRun: vi.fn(), kickRun: vi.fn(), planRoutineRequest: vi.fn() }));
 
 // The service-role client: the tool gate's ledger in one block, the cron's
 // whole database in another. Production code must never reach either with a
@@ -53,6 +53,15 @@ vi.mock('@/lib/ai/runs/store', async (importOriginal) => ({
   createRun: cron.createRun,
 }));
 vi.mock('@/lib/ai/runs/continue', () => ({ kickRun: cron.kickRun }));
+// Whether a family still has Ask Bubaly (N8) has its own cases in
+// tests/a-routine-is-planned-before-it-is-filed.test.ts; every family here has it.
+vi.mock('@/lib/ai/runs/entitlement', () => ({ agentRunEntitlementChecker: () => async () => 'entitled' }));
+// The cron plans an occurrence before it hands it on; planning is not what
+// this file is about, so the plan is answered.
+vi.mock('@/lib/ai/runs/intake', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/ai/runs/intake')>()),
+  planRoutineRequest: cron.planRoutineRequest,
+}));
 
 const { executeTool } = await import('@/lib/ai/tools/execute');
 const { getTool } = await import('@/lib/ai/tools/registry');
@@ -327,6 +336,7 @@ describe('the routine cron: a paused family whose switch cannot be read', () => 
     cron.createRequest.mockReset().mockResolvedValue({ ok: true, data: { id: 'req-1' } });
     cron.createRun.mockReset().mockResolvedValue({ ok: true, data: { id: 'run-1' } });
     cron.kickRun.mockReset();
+    cron.planRoutineRequest.mockReset().mockResolvedValue({ ok: true, data: { runId: 'run-1', outcome: 'plan' } });
     state = {
       rules: [rule('rule-1', 'fam-1'), rule('rule-2', 'fam-2')],
       families: [{ id: 'fam-1', timezone: NY }, { id: 'fam-2', timezone: NY }],

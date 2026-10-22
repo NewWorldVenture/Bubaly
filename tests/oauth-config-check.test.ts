@@ -1,4 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import {
   checkOAuthConfig,
   checkCredentials,
@@ -9,6 +13,8 @@ import {
   isBlankish,
   summarize,
   REDIRECT_URIS,
+  CREDENTIAL_PAIRS,
+  SCOPE_KEYS,
 } from '../scripts/lib/oauth-config-check.mjs';
 
 type Finding = { level: string; key: string; message: string };
@@ -138,6 +144,150 @@ describe('oauth config preflight', () => {
     const { errors, notes } = summarize(checkOAuthConfig(bare));
     expect(errors).toEqual([]);
     expect(keysOf(notes)).toContain('GOOGLE_SYNC_REDIRECT_URI');
+  });
+});
+
+describe('OAuth URL admission', () => {
+  // Loopback permits HTTP for local development, not arbitrary transports.
+  // Keep the real three callback paths so a path mismatch cannot hide the bug.
+  it.each(REDIRECT_URIS)('$key rejects non-HTTP loopback transports', ({ key, path }) => {
+    for (const origin of ['ftp://localhost', 'ftp://127.0.0.1', 'ws://localhost', 'custom://127.0.0.1']) {
+      expect(summarize(checkRedirectUris({ [key]: `${origin}${path}` })).errors,
+        `${key}: ${origin}`).toContainEqual(expect.objectContaining({ key, level: 'error' }));
+    }
+  });
+
+  it.each(REDIRECT_URIS)('$key retains valid HTTPS and local HTTP callbacks', ({ key, path }) => {
+    for (const origin of ['https://www.bubaly.com', 'http://localhost:3000', 'http://127.0.0.1:3000', 'https://localhost:3000']) {
+      expect(summarize(checkRedirectUris({ [key]: `${origin}${path}` })).errors, origin).toEqual([]);
+    }
+    for (const origin of ['http://localhost.example.com', 'http://127.0.0.1.example.com']) {
+      expect(summarize(checkRedirectUris({ [key]: `${origin}${path}` })).errors, origin)
+        .toContainEqual(expect.objectContaining({ key }));
+    }
+  });
+
+  it.each(['https://:443', 'https://#fragment', 'http://[invalid'])('rejects an unparseable app URL: %s', (value) => {
+    expect(checkAppUrl({ NEXT_PUBLIC_APP_URL: value })).toContainEqual(
+      expect.objectContaining({ key: 'NEXT_PUBLIC_APP_URL', level: 'error' }),
+    );
+  });
+});
+
+describe('the complete preflight diagnostic contract', () => {
+  it('accepts absent optional configuration without claiming it is installed', () => {
+    const result = summarize(checkOAuthConfig({}));
+    expect(result.errors).toEqual([]);
+    expect(result.warnings.map((f: Finding) => f.key)).toEqual(['NEXT_PUBLIC_APP_URL']);
+    expect(result.notes.map((f: Finding) => f.key)).toEqual(REDIRECT_URIS.map(({ key }) => key));
+  });
+
+  it.each(CREDENTIAL_PAIRS)('$label checks both missing halves without disclosing credentials', ({ id, secret }) => {
+    const sentinel = 'synthetic-credential-must-not-be-printed';
+    const idOnly = checkCredentials({ [id]: '123-example.apps.googleusercontent.com' });
+    const secretOnly = checkCredentials({ [secret]: sentinel });
+    expect(summarize(idOnly).errors).toContainEqual(expect.objectContaining({ key: secret }));
+    expect(summarize(secretOnly).errors).toContainEqual(expect.objectContaining({ key: id }));
+    expect(JSON.stringify([idOnly, secretOnly])).not.toContain(sentinel);
+  });
+
+  it('reports the shared Google client arrangement as information, not failure', () => {
+    const env = { ...GOOD, GOOGLE_SYNC_CLIENT_ID: GOOD.GOOGLE_CLIENT_ID };
+    const result = summarize(checkCredentials(env));
+    expect(result.errors).toEqual([]);
+    expect(result.notes).toContainEqual(expect.objectContaining({ key: 'GOOGLE_SYNC_CLIENT_ID', message: expect.stringContaining('identical') }));
+  });
+
+  it.each(REDIRECT_URIS)('$key rejects fragments and blank values without confusing them with absent settings', ({ key, path }) => {
+    for (const value of [`https://www.bubaly.com${path}#fragment`, ' ', ` https://www.bubaly.com${path}\n`]) {
+      expect(summarize(checkRedirectUris({ [key]: value })).errors)
+        .toContainEqual(expect.objectContaining({ key }));
+    }
+    expect(summarize(checkRedirectUris({ [key]: '' })).notes.map((f: Finding) => f.key)).not.toContain(key);
+  });
+
+  it.each(SCOPE_KEYS)('%s checks every whitespace-separated scope', (key) => {
+    const valid = 'https://www.googleapis.com/auth/calendar.events\nhttps://www.googleapis.com/auth/tasks';
+    expect(checkScopes({ [key]: valid })).toEqual([]);
+    expect(summarize(checkScopes({ [key]: `${valid} nope` })).errors).toContainEqual(expect.objectContaining({ key }));
+  });
+
+  it('keeps app URL absence, blankness, whitespace and trailing-slash diagnostics distinct', () => {
+    expect(summarize(checkAppUrl({})).warnings).toHaveLength(1);
+    expect(summarize(checkAppUrl({ NEXT_PUBLIC_APP_URL: '' })).errors).toHaveLength(1);
+    expect(summarize(checkAppUrl({ NEXT_PUBLIC_APP_URL: ' https://www.bubaly.com' })).errors).toHaveLength(1);
+    expect(summarize(checkAppUrl({ NEXT_PUBLIC_APP_URL: 'https://www.bubaly.com/' })).warnings).toHaveLength(1);
+    expect(checkAppUrl({ NEXT_PUBLIC_APP_URL: 'http://localhost:3000' })).toEqual([]);
+  });
+
+  it('keeps each diagnostic in its own summary bucket without changing the supplied environment', () => {
+    const env = Object.freeze({ ...GOOD, GOOGLE_CLIENT_SECRET: '', NEXT_PUBLIC_APP_URL: undefined });
+    const findings = checkOAuthConfig(env);
+    const result = summarize(findings);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.notes.length).toBeGreaterThan(0);
+    expect(result.errors.every((f: Finding) => f.level === 'error')).toBe(true);
+    expect(result.warnings.every((f: Finding) => f.level === 'warn')).toBe(true);
+    expect(result.notes.every((f: Finding) => f.level === 'info')).toBe(true);
+    expect([...result.errors, ...result.warnings, ...result.notes]).toHaveLength(findings.length);
+    expect(env.GOOGLE_CLIENT_SECRET).toBe('');
+  });
+});
+
+describe('the isolated OAuth preflight CLI', () => {
+  const script = resolve('scripts/verify-oauth-config.mjs');
+  const run = (env: Record<string, string>, files: Record<string, string> = {}) => {
+    const dir = mkdtempSync(join(tmpdir(), 'bubaly-oauth-config-'));
+    try {
+      for (const [name, content] of Object.entries(files)) writeFileSync(join(dir, name), content);
+      // No inherited process environment, real .env files or live provider.
+      return spawnSync(process.execPath, [script], {
+        cwd: dir, env: { NODE_ENV: 'production', ...env }, encoding: 'utf8', timeout: 10_000,
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  it('exits successfully on valid synthetic settings and states its shape-only limit', () => {
+    const result = run(GOOD);
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toContain('OAuth configuration looks consistent');
+    expect(result.stdout).toContain('Shape is all this proves.');
+    expect(result.stdout).not.toContain(GOOD.GOOGLE_CLIENT_SECRET);
+    expect(result.stdout).not.toContain(GOOD.GOOGLE_SYNC_CLIENT_SECRET);
+  });
+
+  it('exits unsuccessfully on an invalid loopback transport, naming the setting without leaking a secret', () => {
+    const sentinel = 'synthetic-secret-only-in-the-child-environment';
+    const result = run({ ...GOOD, GOOGLE_CLIENT_SECRET: sentinel, GOOGLE_SYNC_REDIRECT_URI: 'ftp://localhost/api/sync/google/callback' });
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('GOOGLE_SYNC_REDIRECT_URI');
+    expect(result.stdout).toContain('configuration error(s)');
+    expect(result.stdout).not.toContain('looks consistent');
+    expect(`${result.stdout}${result.stderr}`).not.toContain(sentinel);
+  });
+
+  it('reports missing optional configuration as warnings and notes, not false installation proof', () => {
+    const result = run({});
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Warnings');
+    expect(result.stdout).toContain('Notes');
+    expect(result.stdout).toContain('unset');
+    expect(result.stdout).toContain('Shape is all this proves.');
+  });
+
+  it('loads only the isolated dotenv inputs and honors environment precedence', () => {
+    const file = 'GOOGLE_SYNC_REDIRECT_URI=ftp://localhost/api/sync/google/callback\n';
+    expect(run({}, { '.env': file }).status).toBe(1);
+    const local = 'GOOGLE_SYNC_REDIRECT_URI=https://www.bubaly.com/api/sync/google/callback\n';
+    expect(run({}, { '.env': file, '.env.local': local }).status).toBe(0);
+    expect(run({ GOOGLE_SYNC_REDIRECT_URI: 'ftp://localhost/api/sync/google/callback' }, { '.env.local': local }).status).toBe(1);
   });
 });
 

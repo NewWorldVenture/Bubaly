@@ -33,7 +33,7 @@ import { useVoice } from '@/lib/hooks/use-voice';
 import { MicButton } from '@/components/voice/mic-button';
 import type { MicStatus } from '@/lib/voice/mic-flow';
 import { VOICE_MODES } from '@/lib/ai/voice';
-import { parsePrefillQuery } from '@/lib/ai/prefill';
+import { ASSISTANT_HANDOFF_PARAM, clearAssistantHandoff, parsePrefillQuery, readAssistantHandoff } from '@/lib/ai/prefill';
 import { runStatusCard, structuredContentFrom, type ResultCard } from '@/lib/ai/result-cards';
 import {
   AssistantConversationActivity, assistantConversationKey, chronologicalMessages,
@@ -175,6 +175,9 @@ function AssistantSession() {
   const [conversations, setConversations] = useState<{ id: string; title: string; updated_at: string }[]>([]);
   const [conversationsError, setConversationsError] = useState<string | null>(null);
   const [threadError, setThreadError] = useState<string | null>(null);
+  // The draft came from a link (`?q=`), not from this member: said so beside
+  // it, and sent only when they press Send.
+  const [draftFromLink, setDraftFromLink] = useState(false);
 
   // Workspace state: which pane a phone shows, which card the thread pointed at,
   // and how many cards arrived since the plan pane was last looked at.
@@ -456,8 +459,17 @@ function AssistantSession() {
   // On first mount, rehydrate the stored conversation (or greet for a new one).
   useEffect(() => {
     if (prefillSent.current) return;
-    const q = parsePrefillQuery(window.location.search);
-    if (q) {
+    let session: Storage | null = null;
+    try { session = window.sessionStorage; } catch { /* Storage denied: no hand-off can have been staged. */ }
+    // Only the app's own hand-off is SENT on arrival (lib/ai/prefill.ts): its
+    // question is in this tab's storage under the nonce the URL carries, which
+    // a link from outside cannot write. A `?q=` question is anyone's link —
+    // an email, a text, a QR code — and used to be sent at once as this
+    // member's own request, with their authority over the family's calendar
+    // and messages. It is put in the draft box instead, and waits for Send.
+    const handed = readAssistantHandoff(session, window.location.search);
+    const linked = handed ? null : parsePrefillQuery(window.location.search);
+    if (handed || linked) {
       // StrictMode's mount cleanup happens before this microtask. Only the live
       // mount may consume the link, so its probe mount cannot send then abort it.
       const ticket = activityGuard.begin();
@@ -467,11 +479,19 @@ function AssistantSession() {
         prefillSent.current = true;
         const url = new URL(window.location.href);
         url.searchParams.delete('q');
+        url.searchParams.delete(ASSISTANT_HANDOFF_PARAM);
         window.history.replaceState({}, '', url.toString());
         // A deep-linked request starts its own conversation instead of joining a
         // saved thread whose async rehydration might overwrite the new response.
         remember(activeId.current);
-        void send(q);
+        if (handed) {
+          clearAssistantHandoff(session);
+          void send(handed);
+        } else if (linked) {
+          setMessages(greeting());
+          setDraft(linked);
+          setDraftFromLink(true);
+        }
       });
       return;
     }
@@ -488,6 +508,7 @@ function AssistantSession() {
     const conversationId = activeId.current;
     const ticket = activityGuard.begin();
     setDraft('');
+    setDraftFromLink(false);
     setThreadError(null);
     setHighlightId(null);
 
@@ -800,6 +821,9 @@ function AssistantSession() {
           <p>{threadError}</p>
           {threadRetryId && <button type="button" onClick={() => void loadConversation(threadRetryId)} className="focus-ring mt-2 min-h-11 rounded-lg border border-current px-2">{t('mobileAssistant.retry')}</button>}
         </div>
+      )}
+      {draftFromLink && (
+        <p role="status" className="rounded-xl border border-border bg-surface/40 px-3 py-2 text-xs text-muted">{t('assistantModule.draftFromLink')}</p>
       )}
       {threadLoading && <p role="status" className="text-sm text-muted">{t('assistantModule.session.loading')}</p>}
       {loading && <button type="button" onClick={stopResponse} className="focus-ring inline-flex min-h-11 items-center gap-2 self-start rounded-lg border border-border px-3 text-sm text-fg">

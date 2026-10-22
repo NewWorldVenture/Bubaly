@@ -20,14 +20,16 @@ import { listDocuments } from '@/lib/services/documents';
 import { getMembers, getPreferences } from '@/lib/services/family';
 import { listTransactions } from '@/lib/services/finances';
 import { listOpen as listOpenGroceries } from '@/lib/services/groceries';
-import { listMemories } from '@/lib/services/memory';
+import { listMemories, PENDING_SUGGESTION_LIMIT } from '@/lib/services/memory';
 import { listAllRoutines } from '@/lib/services/routines';
 import { listClassRoster, listEventsBetween } from '@/lib/services/school';
-import { dayKeyInTz, scopeNow } from '@/lib/services/scope';
+import { normalizeCalendarWindowInstant } from '@/lib/briefing/calendar-window';
+import { describeDbError } from '@/lib/supabase/errors';
+import { dayKeyInTz, scopeNow, zonedDayBoundsMs } from '@/lib/services/scope';
 import { listPracticesBetween, listTeams } from '@/lib/services/sports';
 import { searchTodos } from '@/lib/services/tasks';
 import { listTrips } from '@/lib/services/trips';
-import type { ServiceResult, ServiceScope } from '@/lib/services/types';
+import { fail, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 
 export const EXPORT_FORMAT_VERSION = 1;
 
@@ -89,8 +91,20 @@ export type ExportSection = {
   count: number;
   /** The service's ceiling, when it has one; `count === limit` means "maybe more". */
   limit: number | null;
-  /** True when `count` reached `limit`: the section is a window on the data. */
+  /**
+   * True when the section is a window on the data: `count` reached `limit`,
+   * the family has rows outside `window`, or the family holds as many rows as
+   * the service's cap (counted before any role filter, so a non-manager's
+   * shorter list cannot pass for the whole).
+   */
   truncated: boolean;
+  /**
+   * The dates a section was read between, for the sections read by date. The
+   * file says so rather than presenting a two-year window as everything: an
+   * event older than a year, or a weekly series started 14 months ago, is not
+   * in it, and `truncated` is true when the family has any such row.
+   */
+  window?: { from: string; to: string };
   data: unknown;
 };
 
@@ -116,7 +130,49 @@ function dayKey(scope: ServiceScope, offsetDays: number): string {
   return dayKeyInTz(new Date(now.getTime() + offsetDays * 86_400_000), scope.tz);
 }
 
-type SectionRead = ServiceResult<{ data: unknown; count: number }>;
+type SectionRead = ServiceResult<{ data: unknown; count: number; window?: { from: string; to: string }; beyondWindow?: boolean; capped?: boolean }>;
+
+/** The instants a school or sports read between two family dates spans: the first day's midnight to the last day's last millisecond. */
+function familyDayWindow(scope: ServiceScope, window: { from: string; to: string }): { from: string; to: string } {
+  return {
+    from: new Date(zonedDayBoundsMs(window.from, scope.tz).start).toISOString(),
+    to: new Date(zonedDayBoundsMs(window.to, scope.tz).end - 1).toISOString(),
+  };
+}
+
+/**
+ * Whether the family has stored rows of `table` that the windowed read left
+ * out, counted exactly. A count that cannot be read fails the section: the
+ * file would otherwise claim to be complete on the strength of a missing number.
+ */
+async function rowsBeyondWindow(scope: ServiceScope, table: 'calendar_events' | 'school_events' | 'sports_events', outside: string): Promise<ServiceResult<boolean>> {
+  const { count, error } = await scope.db.from(table).select('id', { count: 'exact', head: true })
+    .eq('family_id', scope.familyId).or(outside);
+  if (error || typeof count !== 'number') {
+    console.error(`[privacy] export ${table} window count failed`, { familyId: scope.familyId, error });
+    return fail(describeDbError(error, 'Could not check for older or later rows.'), { code: SERVICE_CODES.db });
+  }
+  return { ok: true, data: count > 0 };
+}
+
+/**
+ * Whether the family holds at least `cap` rows of what `count` counts — the
+ * service's own ceiling, so the read may have left rows out. Counted BEFORE the
+ * role filter: `listMemories` and `listDocuments` read to their cap and then
+ * drop the sensitive rows for a non-manager, so a count taken after the filter
+ * could sit under the cap while the table did not, and the file said it was
+ * complete. `listMemories` also reads pending suggestions to their own cap,
+ * which the facts count never saw. A count that cannot be read fails the
+ * section, as `rowsBeyondWindow` does.
+ */
+async function rowsAtCap(scope: ServiceScope, what: string, cap: number, count: () => PromiseLike<{ count: number | null; error: unknown }>): Promise<ServiceResult<boolean>> {
+  const { count: rows, error } = await count();
+  if (error || typeof rows !== 'number') {
+    console.error(`[privacy] export ${what} count failed`, { familyId: scope.familyId, error });
+    return fail(describeDbError(error, 'Could not count the family’s rows.'), { code: SERVICE_CODES.db });
+  }
+  return { ok: true, data: rows >= cap };
+}
 
 /**
  * One reader per section. Each returns the SERVICE's answer untouched, so a
@@ -134,8 +190,14 @@ async function readSection(scope: ServiceScope, key: ExportSectionKey): Promise<
       return r.ok ? { ok: true, data: { data: r.data, count: r.data.length } } : r;
     }
     case 'calendar': {
-      const r = await searchEvents(scope, { from: dayKey(scope, -365), to: dayKey(scope, 365), limit: 200, expandSeries: false });
-      return r.ok ? { ok: true, data: { data: r.data, count: r.data.length } } : r;
+      const window = { from: dayKey(scope, -365), to: dayKey(scope, 365) };
+      const r = await searchEvents(scope, { ...window, limit: 200, expandSeries: false });
+      if (!r.ok) return r;
+      // The same bounds searchEvents read between: `from` inclusive, `to` inclusive.
+      const beyond = await rowsBeyondWindow(scope, 'calendar_events',
+        `starts_at.lt.${normalizeCalendarWindowInstant(window.from, scope.tz)},starts_at.gt.${normalizeCalendarWindowInstant(window.to, scope.tz)}`);
+      if (!beyond.ok) return beyond;
+      return { ok: true, data: { data: r.data, count: r.data.length, window, beyondWindow: beyond.data } };
     }
     case 'todos': {
       const r = await searchTodos(scope, { limit: 200 });
@@ -143,11 +205,22 @@ async function readSection(scope: ServiceScope, key: ExportSectionKey): Promise<
     }
     case 'memories': {
       const r = await listMemories(scope);
-      return r.ok ? { ok: true, data: { data: r.data, count: r.data.facts.length } } : r;
+      if (!r.ok) return r;
+      const [facts, pending] = await Promise.all([
+        rowsAtCap(scope, 'family_facts', 500, () => scope.db.from('family_facts').select('id', { count: 'exact', head: true }).eq('family_id', scope.familyId)),
+        rowsAtCap(scope, 'family_playbook_suggestions', PENDING_SUGGESTION_LIMIT, () => scope.db.from('family_playbook_suggestions').select('id', { count: 'exact', head: true })
+          .eq('family_id', scope.familyId).eq('status', 'suggested')),
+      ]);
+      if (!facts.ok) return facts;
+      if (!pending.ok) return pending;
+      return { ok: true, data: { data: r.data, count: r.data.facts.length, capped: facts.data || pending.data } };
     }
     case 'documents': {
       const r = await listDocuments(scope, { limit: 500 });
-      return r.ok ? { ok: true, data: { data: r.data, count: r.data.length } } : r;
+      if (!r.ok) return r;
+      const cap = await rowsAtCap(scope, 'documents', 500, () => scope.db.from('documents').select('id', { count: 'exact', head: true }).eq('family_id', scope.familyId));
+      if (!cap.ok) return cap;
+      return { ok: true, data: { data: r.data, count: r.data.length, capped: cap.data } };
     }
     case 'trips': {
       const r = await listTrips(scope, { includeFinished: true, limit: 200 });
@@ -158,22 +231,34 @@ async function readSection(scope: ServiceScope, key: ExportSectionKey): Promise<
       return r.ok ? { ok: true, data: { data: r.data, count: r.data.items.length } } : r;
     }
     case 'school': {
-      const [events, classes] = await Promise.all([
-        listEventsBetween(scope, { from: dayKey(scope, -365), to: dayKey(scope, 365), limit: 500 }),
+      const window = { from: dayKey(scope, -365), to: dayKey(scope, 365) };
+      const bounds = familyDayWindow(scope, window);
+      const [events, classes, beyond] = await Promise.all([
+        listEventsBetween(scope, { ...window, limit: 500 }),
         listClassRoster(scope, { limit: 500 }),
+        rowsBeyondWindow(scope, 'school_events', `starts_at.lt.${bounds.from},starts_at.gt.${bounds.to}`),
       ]);
       if (!events.ok) return events;
       if (!classes.ok) return classes;
-      return { ok: true, data: { data: { events: events.data, classes: classes.data }, count: events.data.length + classes.data.length } };
+      if (!beyond.ok) return beyond;
+      return { ok: true, data: { data: { events: events.data, classes: classes.data }, count: events.data.length + classes.data.length, window, beyondWindow: beyond.data } };
     }
     case 'sports': {
-      const [teams, practices] = await Promise.all([
+      const window = { from: dayKey(scope, -365), to: dayKey(scope, 365) };
+      // listPracticesBetween reads one-offs that start in the window and every
+      // series still running in it. Left out: one-offs before or after it, a
+      // series that starts after it or ended before it, and a row whose
+      // recurrence is unset (neither of its reads matches one).
+      const { from, to } = familyDayWindow(scope, window);
+      const [teams, practices, beyond] = await Promise.all([
         listTeams(scope, { activeOnly: false }),
-        listPracticesBetween(scope, { from: dayKey(scope, -365), to: dayKey(scope, 365), limit: 500 }),
+        listPracticesBetween(scope, { ...window, limit: 500 }),
+        rowsBeyondWindow(scope, 'sports_events', `recurrence.is.null,and(recurrence.eq.none,starts_at.lt.${from}),and(recurrence.eq.none,starts_at.gt.${to}),and(recurrence.neq.none,starts_at.gt.${to}),and(recurrence.neq.none,recurrence_until.lte.${from})`),
       ]);
       if (!teams.ok) return teams;
       if (!practices.ok) return practices;
-      return { ok: true, data: { data: { teams: teams.data, events: practices.data }, count: teams.data.length + practices.data.length } };
+      if (!beyond.ok) return beyond;
+      return { ok: true, data: { data: { teams: teams.data, events: practices.data }, count: teams.data.length + practices.data.length, window, beyondWindow: beyond.data } };
     }
     case 'routines': {
       const r = await listAllRoutines(scope);
@@ -210,7 +295,8 @@ export async function buildFamilyExport(scope: ServiceScope): Promise<ExportBuil
       key,
       count: read.data.count,
       limit,
-      truncated: limit !== null && read.data.count >= limit,
+      truncated: (limit !== null && read.data.count >= limit) || read.data.beyondWindow === true || read.data.capped === true,
+      ...(read.data.window ? { window: read.data.window } : {}),
       data: read.data.data,
     });
   }

@@ -18,6 +18,35 @@ export function readsHouseholdMoney(role: string | null | undefined): boolean {
   return isManager(role);
 }
 
+/**
+ * The pages of the household's money, as lib/auth/guest-scope.ts lists them
+ * for a guest. An item that links to one ("2 accounts are below zero" → the
+ * wallet, "1 upcoming bill not covered" → bills) is about that money, whatever
+ * its words say.
+ */
+export const HOUSEHOLD_MONEY_ROUTES = [
+  '/wallet',
+  '/dashboard/autopay',
+  '/dashboard/billing',
+  '/dashboard/bills',
+  '/dashboard/budgets',
+  '/dashboard/due',
+  '/dashboard/expenses',
+  '/dashboard/family-cfo',
+  '/dashboard/money-timeline',
+  '/dashboard/payments',
+  '/dashboard/savings',
+  '/dashboard/subscriptions',
+  '/dashboard/utilities',
+] as const;
+
+/** True when `href` is one of the money pages or below one (its query or fragment aside). */
+export function isHouseholdMoneyRoute(href: string | null | undefined): boolean {
+  if (!href) return false;
+  const path = href.split(/[?#]/)[0];
+  return HOUSEHOLD_MONEY_ROUTES.some((route) => path === route || path.startsWith(`${route}/`));
+}
+
 /** The transactions a viewer reads: all of them, or the ones tagged to them. */
 export function transactionsInScope<T extends { member_id: string | null }>(
   rows: readonly T[],

@@ -76,7 +76,8 @@ export type StressSignal = { memberId: string | null; weight: number; occurredOn
 export type MedicationSignal = { id: string; name: string; memberId: string | null; refillOn: string; reminderDays: number };
 /** Family Memory: a favorite meal learned from past plans (most-cooked first). */
 export type FavoriteMeal = { name: string; count: number };
-export type InsuranceSignal = { id: string; label: string; renewalOn: string };
+/** `memberId`: the member the policy names, if any — the card is theirs and the managers' (lib/autopilot/audience.ts). */
+export type InsuranceSignal = { id: string; label: string; renewalOn: string; memberId?: string | null };
 
 export type FamilySnapshot = {
   /**
@@ -619,7 +620,7 @@ export function insuranceSuggestions(s: FamilySnapshot): SuggestionDraft[] {
         payload: { title: `Renew ${p.label}`, at: localMorningIso(s, isoDay(p.renewalOn)) },
         sourceKind: 'family_insurance_policies',
         sourceId: p.id,
-        memberId: null,
+        memberId: p.memberId ?? null,
         dedupeKey: `insurance:${p.id}:${isoDay(p.renewalOn)}`,
         expiresAt: localEndOfDayIso(s, isoDay(p.renewalOn)),
       };

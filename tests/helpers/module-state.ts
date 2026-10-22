@@ -20,6 +20,13 @@ export type ModuleState = {
   readErrors: Record<string, string>;
   /** Tables a component asked to re-read, in order. */
   refreshes: string[];
+  /**
+   * What the real hook's realtime (or 'online') callback does for a table:
+   * re-read with the component's latest fetcher, without the component
+   * asking. Filled by `fetchedQueryModule`; a test calls it where an event
+   * would arrive.
+   */
+  realtime: Record<string, () => Promise<unknown>>;
   app: {
     familyId: string; userId: string;
     members: HarnessRow[]; selfMember: HarnessRow | null; family: HarnessRow;
@@ -47,6 +54,7 @@ export function createModuleState(): ModuleState {
     rows: {},
     readErrors: {},
     refreshes: [],
+    realtime: {},
     app: {
       familyId: '0f0f0f0f-0000-4000-8000-000000000001', userId: 'user-1',
       members: [{ id: 'member-1', display_name: 'Ada', role: 'parent', is_active: true, color: null, birthday: null }],

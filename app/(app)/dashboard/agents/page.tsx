@@ -13,6 +13,7 @@ import { birthdayCountdown } from '@/lib/moments/birthdays';
 import type { Tables } from '@/lib/database.types';
 import { ErrorState } from '@/components/ui/states';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
+import { readOnOpenGroceryLists } from '@/lib/services/groceries';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -86,7 +87,8 @@ export default async function AgentsPage() {
       .gte('plan_date', todayKey).lt('plan_date', weekEndKey)),
     settle(supabase.from('family_members').select('birthday').eq('family_id', familyId)),
     settle(supabase.from('agent_activity').select('*').eq('family_id', familyId).eq('status', 'active').order('created_at', { ascending: false }).limit(200)),
-    count(supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_checked', false)),
+    // Only lists the family has not archived (readOnOpenGroceryLists).
+    count(readOnOpenGroceryLists(supabase, familyId, (lists) => supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', familyId).in('list_id', lists).eq('is_checked', false))),
     count(supabase.from('bills').select('id', { count: 'exact', head: true }).eq('family_id', familyId).neq('status', 'paid').lte('due_date', in14)),
     count(supabase.from('subscriptions_tracked').select('id', { count: 'exact', head: true }).eq('family_id', familyId).in('status', ['active', 'trial'])),
     count(supabase.from('chore_assignments').select('id', { count: 'exact', head: true }).eq('family_id', familyId).in('status', ['todo', 'in_progress']).lt('due_at', iso)),

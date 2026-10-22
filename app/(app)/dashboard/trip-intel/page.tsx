@@ -4,6 +4,8 @@ import { requireFeature } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
+import { ErrorState } from '@/components/ui/states';
+import { emptyTripRecommendations, normalizeTripRecommendations } from '@/lib/trips/research';
 import { TripIntelModule, type UpcomingEvent, type SavedTripPlan, type SavedDeparturePlan } from '@/components/modules/trip-intel-module';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -20,11 +22,11 @@ export default async function TripIntelPage() {
   const now = new Date();
   const horizon = new Date(now.getTime() + 21 * 86400000).toISOString();
 
-  const [{ data: events }, { data: members }, tripRes, depRes] = await settleAll([
+  const [eventsRes, membersRes, tripRes, depRes] = await settleAll([
     // Upcoming events that have a location — these are the candidates for both
     // destination research and smart-departure planning.
     supabase.from('calendar_events')
-      .select('id, title, location, starts_at, ends_at, category, assignee_id')
+      .select('id, title, location, starts_at, ends_at, all_day, category, assignee_id')
       .eq('family_id', familyId)
       .gte('starts_at', now.toISOString())
       .lte('starts_at', horizon)
@@ -40,6 +42,30 @@ export default async function TripIntelPage() {
       .eq('family_id', familyId).eq('status', 'active').order('event_start').limit(30),
   ]);
 
+  // A failed read is not an empty one. With the events or the members unread,
+  // the page would say "No upcoming events with a location" and hide every
+  // active leave-by plan — and a family re-planning a departure it cannot see
+  // writes a second head-out event. A table that is not there yet (the
+  // migration) is still the graceful empty below.
+  const failed = [eventsRes.error, membersRes.error].find((e) => e && !isMissingTableError(e));
+  if (failed) {
+    console.error('[trip-intel] required read failed', failed);
+    const t = await getTranslations();
+    return (
+      <div className="module-page space-y-4">
+        <h1 className="text-xl font-bold">{t('tripIntel.tripIntelligence')}</h1>
+        <ErrorState message={t('tripIntel.couldNotLoadTripIntelligence')} />
+        <a href="/dashboard/trip-intel" className="inline-flex rounded-lg border border-border px-4 py-2 text-sm font-semibold transition hover:bg-elevated">{t('root.tryAgain')}</a>
+      </div>
+    );
+  }
+  const events = eventsRes.data;
+  const members = membersRes.data;
+  const tripPlansUnavailable = Boolean(tripRes.error) && !isMissingTableError(tripRes.error);
+  const departuresUnavailable = Boolean(depRes.error) && !isMissingTableError(depRes.error);
+  if (tripPlansUnavailable) console.error('[trip-intel] trip plans read failed', tripRes.error);
+  if (departuresUnavailable) console.error('[trip-intel] departure plans read failed', depRes.error);
+
   const memberById = new Map((members ?? []).map((m) => [m.id, m]));
 
   const upcoming: UpcomingEvent[] = (events ?? [])
@@ -50,21 +76,24 @@ export default async function TripIntelPage() {
       title: e.title,
       location: e.location ?? '',
       startsAt: e.starts_at,
+      allDay: e.all_day === true,
       category: e.category,
       memberName: e.assignee_id ? memberById.get(e.assignee_id)?.display_name ?? null : null,
     }));
 
   // Missing-table → graceful empty (migration may not be applied yet).
-  const tripPlans: SavedTripPlan[] = isMissingTableError(tripRes.error) ? [] : (tripRes.data ?? []).map((t) => ({
+  const tripPlans: SavedTripPlan[] = tripRes.error ? [] : (tripRes.data ?? []).map((t) => ({
     id: t.id, title: t.title, destination: t.destination,
     startDate: t.start_date, endDate: t.end_date,
     members: Array.isArray(t.members) ? (t.members as string[]) : [],
     interests: t.interests, weatherSummary: t.weather_summary,
-    recommendations: t.recommendations as unknown as SavedTripPlan['recommendations'],
+    // Stored jsonb is held to the shape the card renders (the column's own
+    // default is `{}`); a row without a usable set renders as an empty one.
+    recommendations: normalizeTripRecommendations(t.recommendations) ?? emptyTripRecommendations(),
     status: t.status,
   }));
 
-  const departurePlans: SavedDeparturePlan[] = isMissingTableError(depRes.error) ? [] : (depRes.data ?? []).map((d) => ({
+  const departurePlans: SavedDeparturePlan[] = depRes.error ? [] : (depRes.data ?? []).map((d) => ({
     id: d.id, title: d.title, origin: d.origin, destination: d.destination,
     eventStart: d.event_start, prepMinutes: d.prep_minutes, parkMinutes: d.park_minutes,
     bufferMinutes: d.buffer_minutes, driveSeconds: d.drive_seconds, trafficFactor: d.traffic_factor,
@@ -82,6 +111,7 @@ export default async function TripIntelPage() {
       tripPlans={tripPlans}
       departurePlans={departurePlans}
       tablesMissing={isMissingTableError(tripRes.error) || isMissingTableError(depRes.error)}
+      unavailable={{ tripPlans: tripPlansUnavailable, departures: departuresUnavailable }}
     />
   );
 }

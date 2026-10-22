@@ -207,6 +207,75 @@ export function realtimeQueryModule(h: ModuleState) {
   };
 }
 
+/**
+ * `useRealtimeQuery` for a test about WHAT a read returns — a capped, paged or
+ * filtered read. `realtimeQueryModule` seeds the screen with the whole table,
+ * which is right for writes and wrong here: a query the server cuts at 1,000
+ * rows, or one that pages, would look complete. This one shows exactly what
+ * the component's own fetcher answered for its current `deps`, as the real hook
+ * does on mount and on every change of its key: the first render of a key
+ * starts the read and reports `loading`, and a later render shows the result
+ * (`settle()` between them). `refresh` re-reads the same key, and so does
+ * `h.realtime[table]()`, which is the hook re-reading on its own.
+ *
+ * Like the real hook, only the LATEST request for a key lands: a read that a
+ * later read, or a `setData`, started after is dropped when it answers
+ * (lib/hooks/use-realtime-query.ts, `scope.request` and isCurrent()).
+ */
+export function fetchedQueryModule(h: ModuleState) {
+  const inFlight = new Map<string, Promise<'ok' | 'error' | 'superseded'>>();
+  const requests = new Map<string, number>();
+  const begin = (key: string) => { const request = (requests.get(key) ?? 0) + 1; requests.set(key, request); return request; };
+  // The real hook's `data` is state: the same array until a read replaces it.
+  // A fresh `[]` per render would re-run every effect keyed on it, forever.
+  const empty: HarnessRow[] = [];
+  return {
+    useRealtimeQuery: ({ table, fetcher, deps = [] }: { table: string; fetcher: Fetcher; deps?: unknown[] }) => {
+      const key = `${table}:${JSON.stringify(deps)}`;
+      const reread = () => {
+        h.refreshes.push(table);
+        const request = begin(key);
+        const running = (async () => {
+          let reply: Awaited<ReturnType<Fetcher>>;
+          try {
+            reply = await fetcher(clientFor(h));
+          } catch (cause) {
+            reply = { data: null, error: { message: cause instanceof Error ? cause.message : String(cause) } };
+          }
+          if (requests.get(key) !== request) return 'superseded' as const;
+          if (reply.error) { h.readErrors[key] = reply.error.message; delete h.rows[key]; return 'error' as const; }
+          delete h.readErrors[key];
+          h.rows[key] = clone(reply.data ?? []);
+          return 'ok' as const;
+        })();
+        // The newest read of a key is the one a first render waits on.
+        inFlight.set(key, running);
+        void running.finally(() => { if (inFlight.get(key) === running) inFlight.delete(key); });
+        return running;
+      };
+      const known = key in h.rows || key in h.readErrors;
+      if (!known && !inFlight.has(key)) void reread();
+      h.realtime[table] = reread;
+      return {
+        data: h.rows[key] ?? empty,
+        loading: !known,
+        error: h.readErrors[key] ?? null,
+        stale: false,
+        updatedAt: 0,
+        refresh: async () => { await reread(); },
+        refreshAndConfirm: async () => {
+          const outcome = await reread();
+          return outcome === 'ok' ? { ok: true as const } : { ok: false as const, reason: outcome };
+        },
+        setData: (update: HarnessRow[] | ((rows: HarnessRow[]) => HarnessRow[])) => {
+          begin(key);
+          h.rows[key] = typeof update === 'function' ? update(h.rows[key] ?? []) : update;
+        },
+      };
+    },
+  };
+}
+
 /** A builder that records its calls and lets `h.fault` answer for the database. */
 function recorded(h: ModuleState, table: string, target: object): object {
   const calls: string[] = [];
@@ -246,6 +315,10 @@ function bucket(h: ModuleState, name: string) {
       const gone = paths.filter((path) => !h.storage.refused.has(path) && objects.delete(path));
       return { data: gone.map((path) => ({ name: path })), error: null };
     },
+    // A private bucket's read: a URL for an object the bucket holds, an error otherwise.
+    createSignedUrl: async (path: string) => (objects.has(path)
+      ? { data: { signedUrl: `https://signed.invalid/${name}/${path}` }, error: null }
+      : { data: null, error: { message: 'Object not found' } }),
     list: async (folder: string, options?: { search?: string }) => {
       const inFolder = [...objects].filter((path) => path.startsWith(`${folder}/`)).map((path) => path.slice(folder.length + 1));
       return { data: inFolder.filter((n) => !options?.search || n.startsWith(options.search)).map((n) => ({ name: n })), error: null };
@@ -274,6 +347,7 @@ export function toastModule(h: ModuleState) {
     success: (message: string) => { h.toasts.success.push(message); },
     error: (message: string) => { h.toasts.error.push(message); },
     info: (message: string) => { h.toasts.success.push(message); },
+    toast: (message: string, tone?: 'success' | 'error' | 'info') => { (tone === 'error' ? h.toasts.error : h.toasts.success).push(message); },
   };
   return { useToast: () => api };
 }

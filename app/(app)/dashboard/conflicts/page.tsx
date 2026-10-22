@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { CalendarClock, ArrowLeft } from 'lucide-react';
 import { requireFeature } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
+import { isSeries, readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { createServer } from '@/lib/supabase/server';
 import { detectConflicts, quickFixMoveAfter, type TimedEvent } from '@/lib/family/conflicts';
 import { ConflictResolver, type ConflictView } from '@/components/family/conflict-resolver';
@@ -50,17 +52,30 @@ export default async function ConflictsPage() {
   // A failed read here is not "no conflicts". `detectConflicts([])` returns an
   // empty list, which this page renders as the all-clear — the one answer a
   // conflict detector must never give when it could not look.
-  const [{ data: events, error: eventsError }, { data: members, error: membersError }] = await settleAll([
-    supabase
-      .from('calendar_events')
-      .select('id, title, starts_at, ends_at, all_day, location, assignee_id')
-      .eq('family_id', familyId)
-      .gte('starts_at', now.toISOString())
-      .lte('starts_at', in14.toISOString())
-      .order('starts_at', { ascending: true })
+  //
+  // Series-aware, and overlapping the window (N3). This read raw rows by
+  // `starts_at`, but a recurring event is ONE row whose `starts_at` is its
+  // first occurrence (lib/calendar/occurrences.ts): a weekly practice created
+  // last month had no row in the fortnight, so a one-off booked over it was
+  // never a clash, and an event already under way was not read either. The
+  // shared occurrence read — the one readiness, the briefs and the conflict
+  // notifications use — expands every series in the family's zone.
+  let bounds: ReturnType<typeof instantCalendarBounds>;
+  try {
+    bounds = instantCalendarBounds(now.toISOString(), in14.toISOString(), tz);
+  } catch {
+    console.error('[conflicts] calendar window could not be built', { familyId });
+    return <ErrorState message={t('conflicts.couldNotCheckForClashes')} />;
+  }
+  const [{ data: events, count: eventCount, error: eventsError }, { data: members, error: membersError }] = await settleAll([
+    readCalendarOccurrences(supabase, familyId, bounds, tz, {
+      columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day', 'location', 'assignee_id'],
+      overlap: true,
       // Bounded on both sides: the read, and the pairs it can produce below.
       // Neither was, and a dense fortnight rendered a card per overlapping pair.
-      .limit(MAX_EVENTS),
+      // `count` is every occurrence in the window, so a capped read is said.
+      limit: MAX_EVENTS,
+    }),
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId),
   ]);
 
@@ -76,15 +91,25 @@ export default async function ConflictsPage() {
   }
 
   const nameById = new Map((members ?? []).map((m) => [m.id, m.display_name]));
+  // Which ids are a series: an occurrence carries the series row's id.
+  const seriesIds = new Set((events ?? []).filter(isSeries).map((e) => e.id));
   const timed: TimedEvent[] = (events ?? []).map((e) => ({
     id: e.id, title: e.title, starts_at: e.starts_at, ends_at: e.ends_at, all_day: e.all_day,
     location: e.location, assignee_id: e.assignee_id,
   }));
+  // The fortnight was not read whole: not every event was checked, so an
+  // empty list below is not an all-clear, and the page says so.
+  const eventsCapped = (eventCount ?? 0) > timed.length;
 
   const conflicts = detectConflicts(timed, { maxConflicts: MAX_CONFLICTS });
   const truncated = conflicts.length >= MAX_CONFLICTS;
+  // An occurrence is named by its series AND its start: two weeks of the same
+  // pair of series are two clashes, not one card that resolves both.
+  const occurrenceKey = (e: TimedEvent) => (seriesIds.has(e.id) ? `${e.id}@${e.starts_at}` : e.id);
   const views: ConflictView[] = conflicts.map((c) => {
-    const qf = quickFixMoveAfter(c);
+    // No one-tap move for a recurring event: its row is the whole series, so
+    // moving "this" occurrence would move every week (N11).
+    const qf = seriesIds.has(c.b.id) ? null : quickFixMoveAfter(c);
     const ev = (e: TimedEvent) => ({
       id: e.id,
       title: e.title,
@@ -93,7 +118,7 @@ export default async function ConflictsPage() {
       assignee: e.assignee_id ? nameById.get(e.assignee_id) ?? null : null,
     });
     return {
-      key: `${c.a.id}:${c.b.id}`,
+      key: `${occurrenceKey(c.a)}:${occurrenceKey(c.b)}`,
       a: ev(c.a),
       b: ev(c.b),
       overlapLabel: `Overlaps ${c.overlapMinutes} min`,
@@ -103,7 +128,9 @@ export default async function ConflictsPage() {
             label: qf.label,
             startsAtIso: qf.startsAtIso,
             endsAtIso: qf.endsAtIso,
-            occurrenceStartsAt: qf.occurrenceStartsAt,
+            // The times the fix was computed from: the move is refused if the
+            // event has changed since this render (N11).
+            rendered: { startsAt: c.b.starts_at, endsAt: c.b.ends_at, allDay: c.b.all_day },
             newWhenLabel: whenLabel(qf.startsAtIso, qf.endsAtIso, locale.code, tz),
           }
         : null,
@@ -129,12 +156,17 @@ export default async function ConflictsPage() {
         </div>
       </div>
 
+      {eventsCapped && (
+        <p role="status" className="text-sm text-muted">
+          {t('dashboardConflicts.onlyTheFirstEventsWereChecked', { count: MAX_EVENTS })}
+        </p>
+      )}
       {truncated && (
         <p className="text-sm text-muted">
           {t('dashboardConflicts.showingTheFirstConflicts', { count: MAX_CONFLICTS })}
         </p>
       )}
-      <ConflictResolver conflicts={views} />
+      <ConflictResolver conflicts={views} partial={eventsCapped} />
     </div>
   );
 }

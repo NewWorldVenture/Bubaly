@@ -7,6 +7,14 @@
 
 import { adviseOnPurchase, describeAdvice, type FactRow, type HomeAssetRow, type InventoryRow, type WardrobeRow, type WishRow } from '@/lib/purchases/advisor';
 import type { LocationLike } from '@/lib/inventory/finder';
+import { daysUntilNextOn } from '@/lib/celebrations/dates';
+import { isPollClosed } from '@/lib/voting/polls';
+import { isManager } from '@/lib/constants/roles';
+import { isDeductible } from '@/lib/finance/tax';
+import { insightReadRefused } from '@/lib/ai/insight-read-domains';
+import { localPartsAt } from '@/lib/time/zoned';
+import { computeBalances, type AssignmentLike, type RedemptionLike } from '@/lib/rewards/points';
+import { daysToDeadline, isOpen as isOpenOpportunity, type OpportunityLike } from '@/lib/opportunities/deadlines';
 
 export type InsightKind =
   | 'chores'
@@ -73,6 +81,14 @@ export type InsightData = {
   familyName: string;
   /** Human-readable local date/time, e.g. "Wednesday, June 24, 2026, 3:00 PM". */
   now: string;
+  /** The family's day, `YYYY-MM-DD`, for the kinds that count days to a DATE column. */
+  todayKey?: string;
+  /**
+   * The family's IANA zone, for the kinds that print a TIMESTAMP's day. The
+   * `Now:` line is already in it; a due date sliced from its ISO string is
+   * Greenwich's day, which for an evening deadline west of it is tomorrow.
+   */
+  timeZone?: string;
   members: InsightMember[];
   /** Raw rows fetched server-side, keyed by table name. */
   rows: Record<string, Record<string, unknown>[]>;
@@ -102,6 +118,24 @@ const dollars = (n: number | null | undefined) =>
   typeof n === 'number' ? `$${n.toFixed(2)}` : '—';
 
 const day = (iso: unknown) => (typeof iso === 'string' && iso ? iso.slice(0, 10) : 'no date');
+
+/**
+ * A timestamp's calendar day and time on the FAMILY's clock, `YYYY-MM-DD HH:MM`
+ * — the clock the due date was entered on (homework-module's
+ * datetimeLocalToInstant) and the one the prompt's `Now:` line is written in.
+ */
+function familyDue(iso: unknown, timeZone: string | undefined): string {
+  if (typeof iso !== 'string' || !iso) return 'no date';
+  const instant = new Date(iso);
+  if (Number.isNaN(instant.getTime())) return 'no date';
+  try {
+    const p = localPartsAt(instant, timeZone || 'UTC');
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${String(p.year).padStart(4, '0')}-${pad(p.month)}-${pad(p.day)} ${pad(p.hour)}:${pad(p.minute)}`;
+  } catch {
+    return iso.slice(0, 10);
+  }
+}
 
 function nameMap(members: InsightMember[]) {
   const m = new Map(members.map((x) => [x.id, x.name]));
@@ -134,7 +168,23 @@ const q = (data: InsightData) =>
 export const MANAGER_ONLY_INSIGHTS: ReadonlySet<InsightKind> = new Set<InsightKind>([
   'medications', 'care', 'documents', 'expenses', 'billing', 'subscriptions',
   'renewals', 'messages', 'notifications', 'settings',
+  // Every policy's premium and coverage, family-wide — while the Insurance Hub
+  // shows a child or teen only the policies that name them.
+  'insurance',
 ]);
+
+/**
+ * Whether `role` may ask for `kind` — the route's own refusals
+ * (`MANAGER_ONLY_INSIGHTS.has(kind) && !isManager(ctx.active.role)`, and the
+ * view rule over INSIGHT_READ_DOMAINS in lib/ai/insight-read-domains.ts, each
+ * answer 403), for the screens that offer the button. A page every role
+ * reaches offered a child the Insurance Hub's summary, and every tap was a
+ * refusal; the homework and timetable pages offered a guest theirs.
+ */
+export function mayAskInsight(kind: InsightKind, role: string | null | undefined): boolean {
+  if (MANAGER_ONLY_INSIGHTS.has(kind) && !isManager(role)) return false;
+  return !insightReadRefused(kind, role);
+}
 
 // The §44 data-not-instruction rule is appended by the route, not here: this
 // module is imported by a CLIENT component (components/ai/ai-insight.tsx), and
@@ -231,7 +281,7 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     buildUser: (d) => {
       const who = nameMap(d.members);
       const hw = cap(r(d, 'homework_assignments'), 40);
-      const lines = hw.shown.map((h) => `- ${h.title}${h.subject ? ` (${h.subject})` : ''} — ${who(h.member_id)}, ${h.status}${h.due_at ? `, due ${day(h.due_at)}` : ''}`).join('\n') || 'none';
+      const lines = hw.shown.map((h) => `- ${h.title}${h.subject ? ` (${h.subject})` : ''} — ${who(h.member_id)}, ${h.status}${h.due_at ? `, due ${familyDue(h.due_at, d.timeZone)}` : ''}`).join('\n') || 'none';
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nOpen homework:\n${lines}\n\nGive: (1) what to do first and why, (2) a simple day-by-day plan for the next few days, (3) one study tip.${q(d)}`;
     },
   },
@@ -550,7 +600,9 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
       'You are a personal notes assistant. Help the family summarize, categorize, and extract actionable next steps from their notes. Suggest tags, follow-ups, or connections between notes. ' + SHARED_RULES,
     buildUser: (d) => {
       const notes = r(d, 'notes').slice(0, 10);
-      const list = notes.map((n) => `- "${n.title || 'Untitled'}": ${String(n.content || '').slice(0, 120)}`).join('\n') || 'No notes yet.';
+      // `body` is the column (0002_tables.sql); `content` never existed, so
+      // every note reached the model as its title alone.
+      const list = notes.map((n) => `- "${n.title || 'Untitled'}": ${String(n.body || '').slice(0, 120)}`).join('\n') || 'No notes yet.';
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nNotes (most recent):\n${list}\n\nGive: (1) a 2-sentence summary of key themes, (2) top 2 action items hidden in these notes, (3) one suggestion to organize better.${q(d)}`;
     },
   },
@@ -582,7 +634,9 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
       'You are a family document management assistant. Help organize, categorize, and surface important information from stored documents. Flag anything that may be expiring, needs action, or could be better organized. ' + SHARED_RULES,
     buildUser: (d) => {
       const docs = r(d, 'documents').slice(0, 15);
-      const list = docs.map((doc) => `- "${doc.name || doc.original_name || 'Untitled'}" (${doc.category || 'uncategorized'}, ${doc.created_at ? String(doc.created_at).slice(0, 10) : 'unknown date'})`).join('\n') || 'No documents stored.';
+      // `documents` names a file in `title` (0002); it has no `name` or
+      // `original_name`, so every file used to read "Untitled".
+      const list = docs.map((doc) => `- "${doc.title || 'Untitled'}" (${doc.category || 'uncategorized'}, ${doc.created_at ? String(doc.created_at).slice(0, 10) : 'unknown date'})`).join('\n') || 'No documents stored.';
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nDocuments:\n${list}\n\nGive: (1) any documents that may need attention or renewal, (2) categories that seem disorganized, (3) one thing to do to improve the document vault.${q(d)}`;
     },
   },
@@ -612,8 +666,13 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
       'You are a family contacts and relationship assistant. Help organize contacts, identify who to follow up with, and suggest ways to strengthen important relationships. ' + SHARED_RULES,
     buildUser: (d) => {
       const contacts = r(d, 'family_contacts').slice(0, 20);
-      const list = contacts.slice(0, 12).map((c) => `- ${c.name || 'Unknown'} (${c.category || 'general'})`).join('\n') || 'No contacts saved.';
-      return `Family: ${d.familyName}. Now: ${d.now}.\n\nContacts (${contacts.length} total):\n${list}\n\nGive: (1) categories that could be better organized, (2) 1-2 contact types the family should add, (3) one relationship to nurture this week.${q(d)}`;
+      // The family's total is COUNTED by the route (`contact_totals`); the
+      // length of the capped read is only what was listed.
+      const counted = Number(r(d, 'contact_totals')[0]?.contacts);
+      const total = Number.isSafeInteger(counted) && counted >= contacts.length ? counted : contacts.length;
+      const shown = contacts.slice(0, 12);
+      const list = shown.map((c) => `- ${c.name || 'Unknown'} (${c.category || 'general'})`).join('\n') || 'No contacts saved.';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nContacts (${total} total${total > shown.length ? `, ${shown.length} listed` : ''}):\n${list}\n\nGive: (1) categories that could be better organized, (2) 1-2 contact types the family should add, (3) one relationship to nurture this week.${q(d)}`;
     },
   },
 
@@ -629,8 +688,14 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
       const subs = r(d, 'subscriptions').slice(0, 15);
       const expenses = r(d, 'expenses').slice(0, 20);
       const subList = subs.map((s) => `- ${s.name}: $${s.amount || '?'}/${s.billing_period || 'mo'}`).join('\n') || 'No subscriptions.';
-      const expTotal = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-      return `Family: ${d.familyName}. Now: ${d.now}.\n\nSubscriptions:\n${subList}\n\nRecent expenses: ${expenses.length} items, total ~$${expTotal.toFixed(0)}.\n\nGive: (1) subscriptions to consider canceling, (2) top spending category to review, (3) one money-saving action for this month.${q(d)}`;
+      // expense_splits carries `total_cents`, not `amount`: summing `amount`
+      // told the model "total ~$0" on every request, and gave it no category to
+      // name as the top one.
+      const expTotalCents = expenses.reduce((sum, e) => sum + (Number(e.total_cents) || 0), 0);
+      const byCat = new Map<string, number>();
+      expenses.forEach((e) => byCat.set((e.category as string) || 'Uncategorized', (byCat.get((e.category as string) || 'Uncategorized') || 0) + (Number(e.total_cents) || 0)));
+      const catLines = [...byCat.entries()].sort((a, b) => b[1] - a[1]).map(([c, v]) => `- ${c}: ${money(v)}`).join('\n') || 'none';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nSubscriptions:\n${subList}\n\nRecent expenses: ${expenses.length} items, total ${money(expTotalCents)}.\n\nBy category:\n${catLines}\n\nGive: (1) subscriptions to consider canceling, (2) top spending category to review, (3) one money-saving action for this month.${q(d)}`;
     },
   },
 
@@ -660,7 +725,10 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     buildUser: (d) => {
       const pets = r(d, 'pets').slice(0, 8);
       const list = pets.map((p) => `- ${p.name || 'Pet'} (${p.species || '?'}, ${p.breed || 'mixed'})`).join('\n') || 'No pets logged.';
-      return `Family: ${d.familyName}. Now: ${d.now}.\n\nPets:\n${list}\n\nGive: (1) any upcoming vet or care tasks to schedule, (2) one wellness tip for the most recent pet, (3) one thing to track in the pet log.${q(d)}`;
+      const petName = new Map(pets.map((p) => [String(p.id), String(p.name || 'Pet')]));
+      const care = r(d, 'pet_care_records').filter((c) => petName.has(String(c.pet_id))).slice(0, 30);
+      const careList = care.map((c) => `- ${petName.get(String(c.pet_id))}: ${c.title || c.kind || 'care'} (${c.kind || 'other'}) on ${day(c.record_date)}${c.next_due ? `, next due ${day(c.next_due)}` : ''}`).join('\n') || 'No care records logged.';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nPets:\n${list}\n\nCare records:\n${careList}\n\nGive: (1) any upcoming vet or care tasks to schedule, (2) one wellness tip for the most recent pet, (3) one thing to track in the pet log.${q(d)}`;
     },
   },
 
@@ -912,7 +980,7 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     buildUser: (d) => {
       const assignments = r(d, 'homework_assignments').slice(0, 15);
       const grades = r(d, 'grades').slice(0, 10);
-      const aList = assignments.map((a) => `- ${a.title || 'Assignment'} (${a.status || 'pending'}, due: ${a.due_at ? String(a.due_at).slice(0, 10) : 'no date'})`).join('\n') || 'No assignments.';
+      const aList = assignments.map((a) => `- ${a.title || 'Assignment'} (${a.status || 'pending'}, due: ${a.due_at ? familyDue(a.due_at, d.timeZone) : 'no date'})`).join('\n') || 'No assignments.';
       const gList = grades.slice(0, 6).map((g) => `- ${g.subject || 'Subject'}: ${g.grade || g.score || '?'}`).join('\n') || 'No grades.';
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nAssignments:\n${aList}\n\nRecent grades:\n${gList}\n\nGive: (1) assignments overdue or due soon, (2) subject areas needing attention, (3) one encouragement or study tip.${q(d)}`;
     },
@@ -995,8 +1063,8 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     system:
       'You are a family insurance advisor. Help families understand their coverage, identify gaps, and flag expiring policies. Always recommend consulting a licensed insurance professional for specific advice. ' + SHARED_RULES,
     buildUser: (d) => {
-      const policies = r(d, 'insurance_policies').slice(0, 10);
-      const list = policies.map((p) => `- ${p.policy_type || 'Policy'}: ${p.insurer || '?'} | $${p.premium || '?'}/yr | expires: ${String(p.renewal_date || p.expires_at || '').slice(0, 10)}`).join('\n') || 'No policies tracked.';
+      const policies = r(d, 'family_insurance_policies').slice(0, 10);
+      const list = policies.map((p) => `- ${p.policy_type || 'Policy'}: ${p.insurer || '?'} | ${p.premium_amount != null ? `${dollars(Number(p.premium_amount))} ${p.premium_frequency || 'monthly'}` : 'premium not recorded'} | renews: ${p.renewal_date ? day(p.renewal_date) : 'no date'}`).join('\n') || 'No policies tracked.';
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nInsurance policies:\n${list}\n\nGive: (1) policies expiring in 60 days, (2) coverage type that seems missing for this family size, (3) one cost-saving action.${q(d)}`;
     },
   },
@@ -1009,13 +1077,25 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     allowQuestion: true,
     system:
       'You are an encouraging family rewards and motivation coach. Review kids\' points, chore completion, and reward redemptions. Suggest motivating rewards and positive reinforcement strategies. ' + SHARED_RULES,
+    // The figures are the ledger's, not a sample's. This summed `points_awarded`
+    // over the first 20 of 40 unordered assignment rows of any status — 'done'
+    // included, which neither lib/rewards/points nor 0439 counts — and called
+    // it "Total points earned". The route now hands over every APPROVED
+    // assignment and every redemption (read whole), and the balances below are
+    // computeBalances' — the rewards page's leaderboard and 0439's guard.
     buildUser: (d) => {
-      const assignments = r(d, 'chore_assignments').slice(0, 20);
-      const redemptions = r(d, 'reward_redemptions').slice(0, 10);
-      const totalPoints = assignments.filter((a) => a.status === 'approved' || a.status === 'done')
-        .reduce((s, a) => s + (Number(a.points_awarded) || 0), 0);
-      const pending = assignments.filter((a) => a.status === 'todo' || a.status === 'in_progress').length;
-      return `Family: ${d.familyName}. Now: ${d.now}.\n\nTotal points earned: ${totalPoints}. Pending chores: ${pending}. Recent redemptions: ${redemptions.length}.\n\nGive: (1) one motivating observation about progress, (2) two reward ideas that would excite kids, (3) one strategy to keep engagement high.${q(d)}`;
+      const balances = computeBalances(
+        d.members.map((m) => m.id),
+        r(d, 'chore_assignments').map<AssignmentLike>((a) => ({ member_id: String(a.member_id), status: String(a.status), points_awarded: a.points_awarded == null ? null : Number(a.points_awarded) })),
+        r(d, 'reward_redemptions').map<RedemptionLike>((x) => ({ member_id: String(x.member_id), cost_points: Number(x.cost_points) || 0, status: x.status as RedemptionLike['status'] })),
+      );
+      const who = nameMap(d.members);
+      const perMember = balances
+        .filter((b) => b.earned > 0 || b.spent > 0)
+        .map((b) => `- ${who(b.memberId)}: earned ${b.earned}, spent ${b.spent}, available ${b.available}`).join('\n') || 'No points earned yet.';
+      const pending = Number(r(d, 'pending_chores')[0]?.count) || 0;
+      const recent = r(d, 'reward_redemptions').slice(0, 10).length;
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nPoints by member (approved chores earned, approved or fulfilled rewards spent):\n${perMember}\n\nChores still open (to do, in progress or awaiting approval): ${pending}. Redemptions in the last ten: ${recent}.\n\nGive: (1) one motivating observation about progress, (2) two reward ideas that would excite kids, (3) one strategy to keep engagement high.${q(d)}`;
     },
   },
 
@@ -1028,9 +1108,12 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     system:
       'You are a warm family memory keeper. Help families organize their photo collection, create albums, and capture meaningful moments. Suggest creative ways to preserve and share family memories. ' + SHARED_RULES,
     buildUser: (d) => {
-      const photos = r(d, 'family_photos').slice(0, 20);
-      const albums = r(d, 'family_albums').slice(0, 10);
-      return `Family: ${d.familyName}. Now: ${d.now}.\n\nPhotos: ${photos.length} total. Albums: ${albums.length}.\n\nGive: (1) a memory-keeping idea for this week, (2) one album to create from recent photos, (3) one creative way to share memories with family.${q(d)}`;
+      // The totals are COUNTED by the route; the rows are only the most recent
+      // few. "Photos: 20 total" used to be the length of a read capped at 20.
+      const totals = r(d, 'photo_totals')[0];
+      const photos = Number(totals?.photos) || 0;
+      const albums = Number(totals?.albums) || 0;
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nPhotos: ${photos} total. Albums: ${albums} total.\n\nGive: (1) a memory-keeping idea for this week, (2) one album to create from recent photos, (3) one creative way to share memories with family.${q(d)}`;
     },
   },
 
@@ -1043,17 +1126,25 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     system:
       'You are a thoughtful family celebration planner. Help families prepare for upcoming birthdays, anniversaries, and special dates. Suggest meaningful, personalized celebration ideas that fit different ages and budgets. ' + SHARED_RULES,
     buildUser: (d) => {
-      const dates = r(d, 'family_dates').slice(0, 20);
-      const upcoming = dates.filter((dt) => {
-        const dStr = dt.date as string;
-        if (!dStr) return false;
-        const thisYear = new Date().getFullYear();
-        const next = new Date(`${thisYear}-${dStr.slice(5, 10)}`);
-        if (next < new Date()) next.setFullYear(thisYear + 1);
-        const diff = (next.getTime() - Date.now()) / 86400000;
-        return diff >= 0 && diff <= 60;
-      });
-      return `Family: ${d.familyName}. Now: ${d.now}. Members: ${d.members.map((m) => m.name).join(', ')}.\n\nUpcoming celebrations (next 60 days): ${upcoming.length > 0 ? JSON.stringify(upcoming.map((dt) => ({ name: dt.name, type: dt.type, date: dt.date }))) : 'none found'}. Total saved dates: ${dates.length}.\n\nGive: (1) alert for any celebration within 2 weeks, (2) two creative ideas for the soonest upcoming occasion, (3) one year-round tradition to start.${q(d)}`;
+      const dates = r(d, 'family_dates');
+      // The same list the module shows: saved dates and the members' birthdays,
+      // counted from the family's day.
+      const all = [
+        ...dates.map((dt) => ({ name: String(dt.title ?? ''), type: String(dt.kind ?? 'other'), date: String(dt.event_date ?? '') })),
+        ...r(d, 'family_members').map((m) => ({ name: `${String(m.display_name ?? '')}'s birthday`, type: 'birthday', date: String(m.birthday ?? '') })),
+      ];
+      // The route always supplies the family's day. Without one there is no day
+      // to count from (the host's UTC date is a different family's day), so the
+      // prompt says the countdown is unknown rather than "none found".
+      const today = d.todayKey;
+      const upcoming = today ? all
+        .map((c) => ({ ...c, inDays: daysUntilNextOn(c.date, today) }))
+        .filter((c): c is typeof c & { inDays: number } => c.inDays !== null && c.inDays <= 60)
+        .sort((a, b) => a.inDays - b.inDays)
+        .slice(0, 20) : null;
+      const listed = upcoming === null ? "unknown (the family's day was not supplied)"
+        : upcoming.length > 0 ? JSON.stringify(upcoming) : 'none found';
+      return `Family: ${d.familyName}. Now: ${d.now}. Members: ${d.members.map((m) => m.name).join(', ')}.\n\nUpcoming celebrations (next 60 days): ${listed}. Total saved dates: ${dates.length}.\n\nGive: (1) alert for any celebration within 2 weeks, (2) two creative ideas for the soonest upcoming occasion, (3) one year-round tradition to start.${q(d)}`;
     },
   },
 
@@ -1066,14 +1157,23 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     system:
       'You are a helpful family activity coordinator. Help families track registration deadlines, evaluate activity options, and balance kids\' schedules. Prioritize upcoming deadlines and suggest how to avoid over-scheduling. ' + SHARED_RULES,
     buildUser: (d) => {
-      const opps = r(d, 'opportunities').slice(0, 30);
-      const open = opps.filter((o) => o.status !== 'closed' && o.status !== 'passed');
-      const urgent = open.filter((o) => {
-        if (!o.deadline) return false;
-        const diff = (new Date(o.deadline as string).getTime() - Date.now()) / 86400000;
-        return diff >= 0 && diff <= 14;
-      });
-      return `Family: ${d.familyName}. Now: ${d.now}.\n\nOpen opportunities: ${open.length}. Deadlines within 14 days: ${urgent.length}${urgent.length > 0 ? ': ' + JSON.stringify(urgent.map((o) => ({ name: o.name, deadline: o.deadline, type: o.type }))) : ''}.\n\nGive: (1) urgent deadline alerts if any, (2) advice on prioritizing which activities to sign up for, (3) one tip for managing a balanced activity schedule.${q(d)}`;
+      // Open is the tracker's own rule (isOpen: interested or waitlisted), and a
+      // deadline is a DATE compared as a day key against the family's day — not
+      // a "closed" status that does not exist, and not an instant against the
+      // host's clock. The route reads open sign-ups from today on, soonest
+      // first, and counts them (`opportunity_totals`).
+      const opps = r(d, 'opportunities').filter((o) => isOpenOpportunity(o as unknown as OpportunityLike));
+      const counted = Number(r(d, 'opportunity_totals')[0]?.open);
+      const openCount = Number.isSafeInteger(counted) && counted >= opps.length ? counted : opps.length;
+      const today = d.todayKey;
+      const urgent = today ? opps.filter((o) => {
+        const days = daysToDeadline(o as unknown as OpportunityLike, today);
+        return days !== null && days >= 0 && days <= 14;
+      }) : [];
+      const deadlines = today
+        ? `${urgent.length}${urgent.length > 0 ? ': ' + JSON.stringify(urgent.map((o) => ({ name: o.title, deadline: o.deadline, type: o.category ?? null }))) : ''}`
+        : "unknown (the family's day was not supplied)";
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nOpen opportunities: ${openCount}. Deadlines within 14 days: ${deadlines}.\n\nGive: (1) urgent deadline alerts if any, (2) advice on prioritizing which activities to sign up for, (3) one tip for managing a balanced activity schedule.${q(d)}`;
     },
   },
 
@@ -1133,9 +1233,11 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     system:
       'You are a nostalgic and creative family memory keeper. Help families document and celebrate their travel memories. Suggest ways to preserve stories, create mementos, and inspire future adventures. ' + SHARED_RULES,
     buildUser: (d) => {
-      const memories = r(d, 'trip_memories').slice(0, 20);
-      const trips = r(d, 'vacations').slice(0, 10);
-      return `Family: ${d.familyName}. Now: ${d.now}.\n\nTrip memories recorded: ${memories.length}. Vacations logged: ${trips.length}.\n\nGive: (1) one creative way to preserve a recent memory, (2) one idea for turning memories into a keepsake, (3) one suggestion for capturing better memories on the next trip.${q(d)}`;
+      // Counted totals, as for photos — not the length of a capped read.
+      const totals = r(d, 'memory_totals')[0];
+      const memories = Number(totals?.memories) || 0;
+      const trips = Number(totals?.vacations) || 0;
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nTrip memories recorded: ${memories}. Vacations logged: ${trips}.\n\nGive: (1) one creative way to preserve a recent memory, (2) one idea for turning memories into a keepsake, (3) one suggestion for capturing better memories on the next trip.${q(d)}`;
     },
   },
 
@@ -1165,7 +1267,9 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     buildUser: (d) => {
       const docs = r(d, 'tax_documents').slice(0, 30);
       const years = [...new Set(docs.map((doc) => doc.tax_year as number))].sort((a, b) => b - a);
-      const deductible = docs.filter((doc) => doc.is_deductible).length;
+      // `tax_documents` has no `is_deductible` column (0077), so that read was
+      // always 0; deductibility is the category's, as the vault itself counts it.
+      const deductible = docs.filter((doc) => isDeductible(String(doc.category ?? ''))).length;
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nTax documents: ${docs.length} total across ${years.length} years (${years.slice(0, 3).join(', ')}). Deductible items: ${deductible}.\n\nGive: (1) one document category that might be missing (e.g., W-2, 1099, charitable receipts), (2) one deduction opportunity based on the documents stored, (3) one tip for staying organized year-round. Always note: consult a tax professional for personalized advice.${q(d)}`;
     },
   },
@@ -1195,12 +1299,15 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     system:
       'You are a helpful family logistics coordinator. Help families plan rides, identify carpool opportunities, and reduce transportation stress. Be specific and actionable. ' + SHARED_RULES,
     buildUser: (d) => {
-      const rides = r(d, 'rides').slice(0, 30);
-      const upcoming = rides.filter((ride) => {
-        if (!ride.ride_date) return false;
-        return new Date(ride.ride_date as string) >= new Date();
-      });
-      const pending = rides.filter((r) => r.status === 'requested' || r.status === 'pending').length;
+      // The route reads every ride still to happen from the family's today, so
+      // these counts are complete; the filter below stays as a guard. `planned`
+      // is the unconfirmed status (0027's ride_status enum has no 'requested'
+      // or 'pending', so that count was always 0).
+      const rides = r(d, 'rides');
+      const today = d.todayKey ?? '';
+      const upcoming = rides.filter((ride) => typeof ride.ride_date === 'string' && ride.ride_date >= today
+        && ride.status !== 'cancelled' && ride.status !== 'completed');
+      const pending = upcoming.filter((ride) => ride.status === 'planned').length;
       return `Family: ${d.familyName}. Now: ${d.now}. Members: ${d.members.map((m) => m.name).join(', ')}.\n\nUpcoming rides: ${upcoming.length}. Pending/unconfirmed: ${pending}.\n\nGive: (1) any urgent unconfirmed rides to address, (2) one carpool or consolidation opportunity, (3) one tip to streamline family transportation.${q(d)}`;
     },
   },
@@ -1214,10 +1321,21 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     system:
       'You are a thoughtful family decision facilitator. Help families understand their poll results, encourage participation, and make collaborative decisions. Be encouraging and inclusive. ' + SHARED_RULES,
     buildUser: (d) => {
+      // family_polls has `question` and `status` (+ `closes_at`), never
+      // `title` or `is_closed`: read through those names, every poll counted
+      // as open and the recent ones went to the model as empty objects.
       const polls = r(d, 'family_polls').slice(0, 15);
-      const open = polls.filter((p) => !p.is_closed).length;
-      const closed = polls.filter((p) => p.is_closed).length;
-      return `Family: ${d.familyName}. Now: ${d.now}. Members: ${d.members.map((m) => m.name).join(', ')}.\n\nFamily polls: ${polls.length} total (${open} open, ${closed} decided). Recent: ${JSON.stringify(polls.slice(0, 3).map((p) => ({ title: p.title, is_closed: p.is_closed })))}.\n\nGive: (1) a nudge to vote on any open polls, (2) one tip to make family decisions more inclusive, (3) one idea for a poll topic the family would enjoy.${q(d)}`;
+      const isClosed = (p: Record<string, unknown>) => isPollClosed(String(p.status ?? 'open'), (p.closes_at as string | null) ?? null);
+      const open = polls.filter((p) => !isClosed(p)).length;
+      const closed = polls.length - open;
+      const options = r(d, 'family_poll_options');
+      const votes = r(d, 'family_poll_votes');
+      const recent = polls.slice(0, 3).map((p) => ({
+        question: p.question,
+        closed: isClosed(p),
+        options: options.filter((o) => o.poll_id === p.id).map((o) => ({ label: o.label, votes: votes.filter((v) => v.option_id === o.id).length })),
+      }));
+      return `Family: ${d.familyName}. Now: ${d.now}. Members: ${d.members.map((m) => m.name).join(', ')}.\n\nFamily polls: ${polls.length} total (${open} open, ${closed} decided). Recent: ${JSON.stringify(recent)}.\n\nGive: (1) a nudge to vote on any open polls, (2) one tip to make family decisions more inclusive, (3) one idea for a poll topic the family would enjoy.${q(d)}`;
     },
   },
 };

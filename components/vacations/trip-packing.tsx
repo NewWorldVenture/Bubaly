@@ -94,15 +94,30 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
   async function ensureMasterList(reportError = toastError): Promise<string | null> {
     const master = lists.find((l) => l.is_master);
     if (master) return master.id;
-    const { data, error } = await createClient().from('vacation_packing_lists').insert({ family_id: familyId, vacation_id: vacationId, name: 'Master list', is_master: true, created_by: userId }).select('id').single();
-    if (error) { reportError(describeDbError(error)); return null; }
-    return data.id;
+    // The screen may not have heard of a master list written a moment ago (by
+    // this screen's last press, or another device): ask before writing another.
+    const { data: found, error: findError } = await createClient().from('vacation_packing_lists').select('id')
+      .eq('family_id', familyId).eq('vacation_id', vacationId).eq('is_master', true);
+    if (findError) { reportError(describeDbError(findError)); return null; }
+    if (!found?.length) {
+      const { data, error } = await createClient().from('vacation_packing_lists').insert({ family_id: familyId, vacation_id: vacationId, name: 'Master list', is_master: true, created_by: userId }).select('id').single();
+      if (error) { reportError(describeDbError(error)); return null; }
+      return data.id;
+    }
+    return found[0].id;
   }
 
+  // The packing tables are not in the realtime publication, so nothing tells
+  // this screen about its own writes: each confirmed one re-reads what it
+  // changed. Without that, a second Smart list press still saw no master list
+  // and no items, and wrote a second "Master list" and every suggestion again;
+  // a ticked box snapped back and the next tap wrote the same value; a removed
+  // item stayed until a reload.
   async function generate() {
     setBusy(true);
     const listId = await ensureMasterList();
     if (!listId) { setBusy(false); return; }
+    refreshConfirmed('lists');
     const nights = tripNights(trip?.start_date, trip?.end_date) ?? 5;
     // Only the forecast days inside the trip drive the packing hints.
     const inTrip = forecastDaysWithin(weather, trip?.start_date, trip?.end_date);
@@ -115,13 +130,20 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
       maxTempC: temps.length ? Math.max(...temps) : null, minTempC: lows.length ? Math.min(...lows) : null,
       rainy, activities: activities.map((a) => a.name),
     });
-    const existing = new Set(items.map((i) => i.name.toLowerCase()));
+    // What is already packed, as the database has it now, not as this screen last heard.
+    const { data: current, error: currentError } = await createClient().from('vacation_packing_items').select('name')
+      .eq('family_id', familyId).eq('vacation_id', vacationId);
+    if (currentError) { setBusy(false); return toastError(describeDbError(currentError)); }
+    const existing = new Set([...items, ...(current ?? [])].map((i) => i.name.toLowerCase()));
     const toAdd = suggestions.filter((s) => !existing.has(s.name.toLowerCase()))
       .map((s) => ({ family_id: familyId, vacation_id: vacationId, list_id: listId, name: s.name, category: s.category, quantity: s.quantity, ai_suggested: true, created_by: userId }));
     if (toAdd.length === 0) { setBusy(false); return toastError(tr('tripPacking.yourListAlreadyCoversThe')); }
-    const { error } = await createClient().from('vacation_packing_items').insert(toAdd);
+    const { data: added, error } = await createClient().from('vacation_packing_items').insert(toAdd).select('id');
     setBusy(false);
-    if (error) toastError(describeDbError(error)); else success(tr('trips.addedSuggestedItems', { count: toAdd.length }));
+    if (error) return toastError(describeDbError(error));
+    refreshConfirmed('items');
+    if (wroteNoRows(added)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    success(tr('trips.addedSuggestedItems', { count: added?.length ?? toAdd.length }));
   }
 
   async function toggle(it: PackItem) {
@@ -129,6 +151,7 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
     const { data: updated, error } = await createClient().from('vacation_packing_items').update({ packed: !it.packed }).eq('id', it.id).select('id');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(updated)) toastError(tr('errors.thatChangeWasNotSaved'));
+    else refreshConfirmed('items');
   }
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -168,6 +191,7 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
     const { data: removed, error } = await createClient().from('vacation_packing_items').delete().eq('id', id).select('id');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(removed)) toastError(tr('errors.thatChangeWasNotSaved'));
+    else refreshConfirmed('items');
   }
 
   if (loading) return <LoadingBlock />;
