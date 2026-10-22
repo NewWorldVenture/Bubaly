@@ -21,6 +21,9 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 export const dynamic = 'force-dynamic';
 
+/** Rows a summed read may page through before it is reported as a prefix (one round trip per 1,000). */
+const SUM_ROW_CEILING = 25_000;
+
 function fmtBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -62,8 +65,14 @@ export default async function AdminSystemPage() {
     settle(supabase.from('profiles').select('id', { count: 'exact', head: true })),
     settle(supabase.from('families').select('id', { count: 'exact', head: true })),
     settle(readAllAsQuery((from, to) => supabase.from('profiles').select('created_at').order('created_at', { ascending: false }).order('id').range(from, to), { max: 2000 })),
-    settle(supabase.from('subscriptions').select('plan, status')),
-    settle(supabase.from('documents').select('size_bytes')),
+    // Summed below, so read to a REAL ceiling: an unbounded select is answered
+    // with at most `db-max-rows` (1,000) and no error, and these two tiles
+    // summed that prefix as the platform's revenue and storage while the
+    // profiles read beside them paged. Reaching the ceiling is an error, which
+    // joins readFailures and names itself in the banner instead of rendering
+    // a smaller platform than exists.
+    settle(readAllAsQuery((from, to) => supabase.from('subscriptions').select('plan, status').order('id').range(from, to), { max: SUM_ROW_CEILING })),
+    settle(readAllAsQuery((from, to) => supabase.from('documents').select('size_bytes').order('id').range(from, to), { max: SUM_ROW_CEILING })),
   ]);
 
   const readFailures = ([

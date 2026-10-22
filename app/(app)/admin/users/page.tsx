@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import { UsersRound, UserCheck, UserPlus, UserX, ShieldCheck } from 'lucide-react';
 import { createServiceClient, describeConfiguredServiceKey } from '@/lib/supabase/server';
 import { settleAll, describeReadError, credentialHint } from '@/lib/supabase/settle';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -25,6 +27,8 @@ export const metadata: Metadata = { title: 'Users & Families', robots: { index: 
 export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 10;
+/** Rows a paged read may go through before it is reported as a prefix (one round trip per 1,000). */
+const ROW_CEILING = 25_000;
 const TABS = [
   { key: 'all', label: 'All Users' },
   { key: 'families', label: 'Families' },
@@ -76,17 +80,46 @@ export default async function AdminUsersPage({ searchParams }: Params) {
   // Admin-scale dataset: load everything once and enrich/filter/paginate in memory.
   // At real scale this would move to a dedicated aggregating view or RPC — flagged
   // here rather than hidden, since this is the one place in the app doing that.
-  const [profilesRes, membersRes, familiesRes, subscriptionsRes, invitesRes, rolesRes, permissionsRes, superAdminsRes] =
-    await settleAll([
-      supabase.from('profiles').select('*').order('created_at', { ascending: false }),
-      supabase.from('family_members').select('*').eq('is_active', true).order('created_at'),
-      supabase.from('families').select('*'),
-      supabase.from('subscriptions').select('family_id, plan, status'),
-      supabase.from('invites').select('*').order('created_at', { ascending: false }),
+  //
+  // "Everything" has to mean everything. These used to be plain unbounded
+  // selects, which PostgREST answers with at most `db-max-rows` (1,000) and no
+  // error, so past a thousand members the tiles froze, members beyond the cap
+  // never reached the list, and a member whose profile was not among the
+  // thousand NEWEST profiles was labelled "No account" and counted as one. So:
+  //
+  //   - the tiles and the role donut are `head: true` counts — exact, uncapped,
+  //     one per figure (readAllAsQuery answers no count, and a count that can
+  //     be asked for is cheaper than rows that must be read);
+  //   - the row sets page through readAllAsQuery to a real ceiling; reaching it
+  //     is an error, which joins loadErrors and the banner below instead of
+  //     rendering a prefix;
+  //   - profiles are joined by the members' user ids rather than read whole.
+  //
+  // The counts and the paged reads settle in two batches so each keeps its own
+  // tuple type. "This month" starts in the admin zone, not the host's
+  // (lib/admin/clock.ts).
+  const monthStart = new Date(utcMonthStartIso());
+  const [
+    [membersRes, familiesRes, subscriptionsRes, invitesRes, rolesRes, permissionsRes, superAdminsRes, memberCountRes, withAccountCountRes, newThisMonthCountRes],
+    roleCountResults,
+  ] = await Promise.all([
+    settleAll([
+      readAllAsQuery((from, to) => supabase.from('family_members').select('*').eq('is_active', true).order('id').range(from, to), { max: ROW_CEILING }),
+      readAllAsQuery((from, to) => supabase.from('families').select('*').order('id').range(from, to), { max: ROW_CEILING }),
+      readAllAsQuery((from, to) => supabase.from('subscriptions').select('family_id, plan, status').order('id').range(from, to), { max: ROW_CEILING }),
+      readAllAsQuery((from, to) => supabase.from('invites').select('*').order('id').range(from, to), { max: ROW_CEILING }),
       supabase.from('roles').select('*'),
       supabase.from('permissions').select('*'),
       supabase.from('super_admins').select('email'),
-    ]);
+      supabase.from('family_members').select('id', { count: 'exact', head: true }).eq('is_active', true),
+      supabase.from('family_members').select('id', { count: 'exact', head: true }).eq('is_active', true).not('user_id', 'is', null),
+      supabase.from('family_members').select('id', { count: 'exact', head: true }).eq('is_active', true).gte('created_at', monthStart.toISOString()),
+    ]),
+    settleAll(ROLE_ORDER.map((role) =>
+      supabase.from('family_members').select('id', { count: 'exact', head: true }).eq('is_active', true).eq('role', role))),
+  ]);
+  const userIds = [...new Set((membersRes.data ?? []).map((m) => m.user_id).filter((id): id is string => !!id))];
+  const profilesRes = await readInChunks(userIds, (chunk) => supabase.from('profiles').select('*').in('id', chunk));
 
   // Any query that errored (bad/missing key, unapplied migration, RLS) is reported
   // explicitly rather than silently collapsing to an empty result set.
@@ -94,6 +127,9 @@ export default async function AdminUsersPage({ searchParams }: Params) {
     ['profiles', profilesRes], ['family_members', membersRes], ['families', familiesRes],
     ['subscriptions', subscriptionsRes], ['invites', invitesRes], ['roles', rolesRes], ['permissions', permissionsRes],
     ['super_admins', superAdminsRes],
+    ['family_members (count)', memberCountRes], ['family_members with an account (count)', withAccountCountRes],
+    ['family_members new this month (count)', newThisMonthCountRes],
+    ...ROLE_ORDER.map((role, i) => [`family_members (${role} count)`, roleCountResults[i]] as const),
   ] as const) {
     if (res.error) loadErrors.push(`Could not load “${label}”: ${describeReadError(res.error)}`);
   }
@@ -120,27 +156,29 @@ export default async function AdminUsersPage({ searchParams }: Params) {
   }
 
   const profiles = profilesRes.data;
-  const members = membersRes.data;
+  // Members oldest first and invites newest first, as the page has always listed
+  // them; the paged reads were ordered by id.
+  const members = [...(membersRes.data ?? [])].sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
   const families = familiesRes.data;
   const subscriptions = subscriptionsRes.data;
-  const invites = invitesRes.data;
+  const invites = [...(invitesRes.data ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
   const roles = rolesRes.data;
   const permissions = permissionsRes.data;
 
   const familyById = new Map((families ?? []).map((f) => [f.id, f]));
   const subByFamily = new Map((subscriptions ?? []).map((s) => [s.family_id, s]));
-  const profileByUserId = new Map((profiles ?? []).map((p) => [p.id, p]));
+  const profileByUserId = new Map(profiles.map((p) => [p.id, p]));
   // Site super-admins: the DB-backed `super_admins` table (toggleable here) plus
   // the immutable code/env allowlist (shown locked).
   const superAdminDbEmails = new Set((superAdminsRes.data ?? []).map((r) => r.email.toLowerCase()));
   const codeAdminEmails = new Set(superAdminEmails());
   const memberCountByFamily = new Map<string, number>();
-  for (const m of members ?? []) memberCountByFamily.set(m.family_id, (memberCountByFamily.get(m.family_id) ?? 0) + 1);
+  for (const m of members) memberCountByFamily.set(m.family_id, (memberCountByFamily.get(m.family_id) ?? 0) + 1);
 
   // One row per family member (the real people). Members linked to a login
   // account are enriched with the profile's name/email/avatar; account-less
   // members fall back to their member record.
-  const enriched: EnrichedUser[] = (members ?? []).map((member) => {
+  const enriched: EnrichedUser[] = members.map((member) => {
     const profile = member.user_id ? profileByUserId.get(member.user_id) ?? null : null;
     const family = familyById.get(member.family_id) ?? null;
     const sub = subByFamily.get(member.family_id);
@@ -157,17 +195,20 @@ export default async function AdminUsersPage({ searchParams }: Params) {
     };
   });
 
-  // Stats (computed over the full dataset, not the filtered/paginated view).
-  // "This month" starts in the admin zone, not the host's (lib/admin/clock.ts).
-  const monthStart = new Date(utcMonthStartIso());
-  const totalUsers = enriched.length;
-  const activeUsers = enriched.filter((u) => u.hasAccount).length;
-  const newThisMonth = enriched.filter((u) => new Date(u.joinedAt) >= monthStart).length;
-  const noAccountUsers = enriched.filter((u) => !u.hasAccount).length;
-  const adminCount = enriched.filter((u) => u.role === 'parent').length;
+  // Stats: exact counts over the whole table, not over the rows in hand and not
+  // over the filtered/paginated view. "With account" is a member with a login
+  // (`user_id` set); "No account" is the remainder.
+  const totalUsers = memberCountRes.count ?? 0;
+  const activeUsers = withAccountCountRes.count ?? 0;
+  const newThisMonth = newThisMonthCountRes.count ?? 0;
+  const noAccountUsers = Math.max(0, totalUsers - activeUsers);
 
   const roleCounts = new Map<MemberRole, number>();
-  for (const u of enriched) if (u.role) roleCounts.set(u.role, (roleCounts.get(u.role) ?? 0) + 1);
+  ROLE_ORDER.forEach((role, i) => {
+    const count = roleCountResults[i].count ?? 0;
+    if (count > 0) roleCounts.set(role, count);
+  });
+  const adminCount = roleCounts.get('parent') ?? 0;
 
   // Filters (applied in-memory; q/role/status/plan all derived from joined data).
   const q = (sp.q ?? '').trim().toLowerCase();

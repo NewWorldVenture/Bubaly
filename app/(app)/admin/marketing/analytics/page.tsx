@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { createServiceClient } from '@/lib/supabase/server';
-import { settle } from '@/lib/supabase/settle';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { Bars } from '@/components/admin/charts';
@@ -13,14 +13,22 @@ import { ADMIN_ZONE, inWindow, lastUtcMonths } from '@/lib/admin/clock';
 export const metadata: Metadata = { title: 'Marketing · Analytics', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
+/** Rows a summed read may page through before it is reported as a prefix (one round trip per 1,000). */
+const SUM_ROW_CEILING = 25_000;
+
 export default async function AnalyticsPage() {
   const locale = (await getLocaleContext()).locale.code;
   const tr = await getTranslations();
   const supabase = createServiceClient();
+  // Both tables are SUMMED below (budget per channel; recipients, opens and
+  // clicks), so they are read to a real ceiling: an unbounded select is
+  // answered with at most `db-max-rows` (1,000) and no error. Reaching the
+  // ceiling is an error, which takes the page to its read-error state rather
+  // than to a smaller total. readAllAsQuery never rejects, so it needs no settle.
   const [customersResult, campaignsResult, emailsResult] = await Promise.all([
     getMarketingCustomersWithError(supabase),
-    settle(supabase.from('marketing_campaigns').select('channel, status, budget_cents').is('deleted_at', null)),
-    settle(supabase.from('marketing_email_campaigns').select('recipients, opens, clicks, status').is('deleted_at', null)),
+    readAllAsQuery((from, to) => supabase.from('marketing_campaigns').select('channel, status, budget_cents').is('deleted_at', null).order('id').range(from, to), { max: SUM_ROW_CEILING }),
+    readAllAsQuery((from, to) => supabase.from('marketing_email_campaigns').select('recipients, opens, clicks, status').is('deleted_at', null).order('id').range(from, to), { max: SUM_ROW_CEILING }),
   ]);
   const readError = customersResult.error ?? campaignsResult.error ?? emailsResult.error;
   if (readError) {

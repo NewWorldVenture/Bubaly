@@ -864,6 +864,7 @@
   "adminContent.size": "Size",
   "adminContent.storageByCategory": "Storage by category",
   "adminContent.storageUsed": "Storage used",
+  "adminContent.theListIsTheNewestItems": "The list shows the newest {n} items; the category and family filters reach every item.",
   "adminContent.title": "Title",
   "adminContent.totalItems": "Total items",
   "adminContent.type": "Type",

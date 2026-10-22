@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Target } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -14,11 +15,19 @@ export const dynamic = 'force-dynamic';
 
 const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm focus-ring';
 const PLATFORMS = ['meta', 'google', 'linkedin', 'tiktok', 'x'];
+/** Rows the campaign list may page through before it is reported as a prefix (one round trip per 1,000). */
+const ROW_CEILING = 25_000;
 
 export default async function AdsPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
-  const { data: ads, error: adsError } = await supabase.from('marketing_ad_campaigns').select('*').is('deleted_at', null).order('created_at', { ascending: false });
+  // The campaign count, total budget and total spend are summed from these
+  // rows, so they are read to a real ceiling: an unbounded select is answered
+  // with at most `db-max-rows` (1,000) and no error. Reaching the ceiling is an
+  // error, which takes the page to its read-error state, not to a smaller total.
+  const { data: ads, error: adsError } = await readAllAsQuery((from, to) =>
+    supabase.from('marketing_ad_campaigns').select('*').is('deleted_at', null)
+      .order('created_at', { ascending: false }).order('id').range(from, to), { max: ROW_CEILING });
   if (adsError) {
     console.error('[admin-marketing-ads] campaign read failed', adsError);
     return <AdminAdsReadError />;
