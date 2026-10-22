@@ -28,6 +28,8 @@ import {
 import type { Tables } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { datetimeLocalToInstant } from '@/lib/time/datetime-local';
+import { toLocalInput } from '@/lib/time/local-input';
 
 type CareEntry = Tables<'care_log'>;
 
@@ -40,18 +42,9 @@ const TYPE_ACCENT: Record<CareLogType, string> = {
   medication: 'text-rose-400', appointment: 'text-blue-400', incident: 'text-rose-500', note: 'text-muted',
 };
 
-function nowLocalInput(): string {
-  const d = new Date(); // device-input: the datetime-local box default; this form's save path still reads the device clock (TIME-003 remaining scope)
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-function toLocalInput(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-const blank = { id: '', log_type: 'check_in' as CareLogType, occurred_at: '', wellbeing: '', note: '' };
+// `stored_at` is the edited entry's instant, so an edit that leaves the time
+// alone keeps it to the second (the box shows minutes).
+const blank = { id: '', log_type: 'check_in' as CareLogType, occurred_at: '', stored_at: '', wellbeing: '', note: '' };
 
 // Log-type labels as catalogue keys (I18N-002); CARE_LOG_TYPE_LABELS in
 // lib/care/log.ts stays the English source for anything that is not a screen.
@@ -118,24 +111,36 @@ export function CareModule() {
   const grouped = useMemo(() => groupByDay(recipientEntries, clock.timeZone), [recipientEntries, clock]);
   const entryById = useMemo(() => new Map(recipientEntries.map((e) => [e.id, e])), [recipientEntries]);
 
+  // The "When" box is a <input type="datetime-local">, a wall reading with no
+  // zone. It was filled from the DEVICE's clock and saved with `new Date(value)`,
+  // the device's clock again, while the log groups and prints every entry on
+  // the FAMILY's (TIME-003): a caregiver away from home who logged a 15:00
+  // visit filed it under another hour. Both halves now use the family's clock.
   function openNew(type: CareLogType = 'check_in') {
-    setForm({ ...blank, log_type: type, occurred_at: nowLocalInput() });
+    setForm({ ...blank, log_type: type, occurred_at: toLocalInput(new Date().toISOString(), clock.timeZone) });
     setModalOpen(true);
   }
   function openEdit(e: CareEntry) {
-    setForm({ id: e.id, log_type: e.log_type, occurred_at: toLocalInput(e.occurred_at), wellbeing: e.wellbeing != null ? String(e.wellbeing) : '', note: e.note ?? '' });
+    setForm({ id: e.id, log_type: e.log_type, occurred_at: toLocalInput(e.occurred_at, clock.timeZone), stored_at: e.occurred_at, wellbeing: e.wellbeing != null ? String(e.wellbeing) : '', note: e.note ?? '' });
     setModalOpen(true);
   }
 
   async function save(ev: React.FormEvent) {
     ev.preventDefault();
     if (!recipientId) { toastError(tr('careModule.pickWhoTheCareIs')); return; }
+    // Blank is now; an edit whose box still shows its own time keeps it; a
+    // reading that is not on the family's calendar is refused, never rolled
+    // into another day.
+    const occurredAt = !form.occurred_at ? new Date().toISOString()
+      : form.stored_at && form.occurred_at === toLocalInput(form.stored_at, clock.timeZone) ? form.stored_at
+        : datetimeLocalToInstant(form.occurred_at, clock.timeZone);
+    if (!occurredAt) { toastError(tr('errors.thatTimeIsNotOnTheFamilysClock')); return; }
     setSaving(true);
     const sb = createClient();
     const fields = {
       member_id: recipientId,
       log_type: form.log_type,
-      occurred_at: form.occurred_at ? new Date(form.occurred_at).toISOString() : new Date().toISOString(),
+      occurred_at: occurredAt,
       wellbeing: form.wellbeing ? Number(form.wellbeing) : null,
       note: form.note.trim() || null,
     };
