@@ -140,6 +140,7 @@ async function scannedHousehold(): Promise<Memory> {
   db.seed('family_insurance_policies', [{ id: 'pol-ava', family_id: FAMILY, policy_type: 'dental', insurer: 'Smile Co', renewal_date: '2026-09-28', member_id: 'ava', is_active: true }]);
   db.seed('renewals', [{ id: 'ren-1', family_id: FAMILY, title: 'Passport', expires_at: '2026-10-01', status: 'active' }]);
   vi.setSystemTime(new Date('2026-09-28T06:30:00Z'));
+  db.setRpcAuth(null, 'service_role');
   await runAutopilotScan(db, FAMILY, null, 'UTC', 'en-US', echo, new Date('2026-09-28T06:30:00Z'));
   expect(db.table('autopilot_suggestions').filter((s) => s.status === 'auto_executed').map((s) => s.source_id).sort()).toEqual(['pol-ava', 'ren-1']);
   expect(db.table('reminders').map((r) => [r.title, r.member_id, r.related_type, r.related_id])).toEqual(expect.arrayContaining([
@@ -203,7 +204,7 @@ describe('the Calm inbox lists the scan-made reminder only to its card\'s reader
 
   it('a reminder somebody wrote is still in everyone\'s inbox', async () => {
     const db = await scannedHousehold();
-    db.seed('reminders', [{ id: 'rem-bins', family_id: FAMILY, title: 'Put the bins out', remind_at: '2026-09-28T18:00:00Z', member_id: null, is_done: false, related_type: null, related_id: null }]);
+    db.seed('reminders', [{ id: 'rem-bins', family_id: FAMILY, title: 'Put the bins out', remind_at: '2026-09-28T18:00:00Z', member_id: null, is_done: false, related_type: null, related_id: null, autopilot_origin: false, autopilot_card_id: null }]);
     expect(await calmReminders('neighbour')).toEqual(['Put the bins out']);
     expect(await calmReminders('kit')).toEqual([PASSPORT, 'Put the bins out'].sort());
   });

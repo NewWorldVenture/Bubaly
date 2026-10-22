@@ -159,7 +159,7 @@ export function RemindersModule() {
         sourceTagOf: mintSuggestionSourceTag,
         onError: (cause) => console.error('[reminders] autopilot reminder cards read failed', cause),
       });
-      return { data: await visibleReminders(read.data ?? [], reminderViewer, cards), error: null };
+      return { data: await visibleReminders(read.data ?? [], reminderViewer, cards, { preserveTrustedManualOnCardError: true }), error: null };
     },
   });
 
@@ -236,11 +236,34 @@ export function RemindersModule() {
           subtasks: normalizeSubtasks(reminder.subtasks).map((s) => ({ ...s, done: false })) as unknown as Reminder['subtasks'],
           list_id: reminder.list_id, tags: reminder.tags, status: 'active',
         };
-        let { error: insErr } = await supabase.from('family_reminders').insert(nextRow);
-        if (insErr && isMissingRelationError(insErr)) ({ error: insErr } = await supabase.from('family_reminders').insert(stripNewCols(nextRow)));
-        recurred = !insErr;
+        try {
+          if (reminder.autopilot_origin) {
+            const { data: receipt, error } = await supabase.rpc('repeat_card_family_reminder', {
+              p_parent_id: reminder.id, p_at: next,
+            }).maybeSingle();
+            recurred = !error && !!receipt && typeof receipt.id === 'string' && receipt.id.trim().length > 0
+              && receipt.family_id === familyId && receipt.autopilot_origin === true
+              && receipt.autopilot_card_id === reminder.autopilot_card_id;
+          } else {
+            let { error: insErr } = await supabase.from('family_reminders').insert(nextRow);
+            // Retry only a definite schema rejection, never ambiguous response text.
+            if (insErr && ['PGRST204', 'PGRST205', '42P01', '42703'].includes(insErr.code)) {
+              ({ error: insErr } = await supabase.from('family_reminders').insert(stripNewCols(nextRow)));
+            }
+            recurred = !insErr;
+          }
+        } catch {
+          recurred = false;
+        }
+        if (!recurred) {
+          // The parent is complete. A lost response may still have saved the next
+          // occurrence, so retain both outcomes and never restore or blindly retry.
+          toastError(tr('remindersModule.completedNextUnconfirmed'));
+          void refresh();
+          return;
+        }
       }
-      success(recurred ? 'Completed ✓ — next one scheduled' : 'Reminder completed ✓');
+      success(recurred ? tr('remindersModule.completedNextScheduled') : tr('remindersModule.completed'));
       void refresh();
     });
   }

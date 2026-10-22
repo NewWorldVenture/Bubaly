@@ -89,10 +89,12 @@ function household(): Memory {
 async function acceptedInsuranceReminder(db: Memory) {
   db.seed('family_insurance_policies', [AVAS_DENTAL]);
   vi.setSystemTime(new Date('2026-09-21T06:30:00Z'));
+  db.setRpcAuth(null, 'service_role');
   await runAutopilotScan(db, FAMILY, null, 'UTC', 'en-US', echo, new Date('2026-09-21T06:30:00Z'));
   const card = db.table('autopilot_suggestions').find((s) => s.source_id === 'pol-ava')!;
   expect(card).toMatchObject({ status: 'open', member_id: 'ava' });
   vi.setSystemTime(new Date('2026-09-21T08:00:00Z'));
+  db.setRpcAuth('u-mum');
   const scope = { db, familyId: FAMILY, userId: 'u-mum', memberId: 'mum', role: 'parent', actorKind: 'member', tz: 'UTC', now: new Date('2026-09-21T08:00:00Z') } as ServiceScope;
   expect(await resolveSuggestion(scope, { suggestionId: card.id as string, updatedAt: card.updated_at as string, action: 'reminder' }))
     .toMatchObject({ ok: true, status: 'executed' });
@@ -162,13 +164,15 @@ describe("the dashboard lists an accepted card's reminder only to the card's rea
     const db = household();
     db.seed('renewals', [{ id: 'ren-1', family_id: FAMILY, title: 'Passport', expires_at: '2026-10-15', status: 'active' }]);
     vi.setSystemTime(new Date('2026-09-21T06:30:00Z'));
+    db.setRpcAuth(null, 'service_role');
     await runAutopilotScan(db, FAMILY, null, 'UTC', 'en-US', echo, new Date('2026-09-21T06:30:00Z'));
     const card = db.table('autopilot_suggestions').find((s) => s.source_id === 'ren-1')!;
     vi.setSystemTime(new Date('2026-09-21T08:00:00Z'));
+    db.setRpcAuth('u-mum');
     const scope = { db, familyId: FAMILY, userId: 'u-mum', memberId: 'mum', role: 'parent', actorKind: 'member', tz: 'UTC', now: new Date('2026-09-21T08:00:00Z') } as ServiceScope;
     expect(await resolveSuggestion(scope, { suggestionId: card.id as string, updatedAt: card.updated_at as string, action: 'reminder' })).toMatchObject({ ok: true });
     const [renewal] = db.table('family_reminders');
-    db.seed('family_reminders', [{ id: 'bins', family_id: FAMILY, title: 'Put the bins out', remind_at: renewal.remind_at, status: 'active', member_id: null, tags: [], idempotency_key: null }]);
+    db.seed('family_reminders', [{ id: 'bins', family_id: FAMILY, title: 'Put the bins out', remind_at: renewal.remind_at, status: 'active', member_id: null, tags: [], idempotency_key: null, autopilot_origin: false, autopilot_card_id: null }]);
     const dayBefore = new Date(Date.parse(String(renewal.remind_at)) - 86_400_000).toISOString();
 
     expect((await dashboardFor(db, 'neighbour', dayBefore)).comingUp).toEqual(['Put the bins out']);
@@ -200,9 +204,10 @@ describe("the dashboard lists an accepted card's reminder only to the card's rea
       ...cards.map((c, i) => ({
         id: `r-${i}`, family_id: FAMILY, title: `Renew policy ${i}`, remind_at: `2026-09-23T0${i}:00:00.000Z`, status: 'active', member_id: null,
         idempotency_key: suggestionReminderKey(FAMILY, c.id), tags: [`${AUTOPILOT_SOURCE_TAG}${'a'.repeat(64)}`],
+        autopilot_origin: true, autopilot_card_id: c.id,
       })),
-      { id: 'bins', family_id: FAMILY, title: 'Put the bins out', remind_at: '2026-09-24T18:00:00.000Z', status: 'active', member_id: null, idempotency_key: null, tags: [] },
-      { id: 'mine', family_id: FAMILY, title: 'Water the plants', remind_at: '2026-09-25T18:00:00.000Z', status: 'active', member_id: 'neighbour', idempotency_key: null, tags: [] },
+      { id: 'bins', family_id: FAMILY, title: 'Put the bins out', remind_at: '2026-09-24T18:00:00.000Z', status: 'active', member_id: null, idempotency_key: null, tags: [], autopilot_origin: false, autopilot_card_id: null },
+      { id: 'mine', family_id: FAMILY, title: 'Water the plants', remind_at: '2026-09-25T18:00:00.000Z', status: 'active', member_id: 'neighbour', idempotency_key: null, tags: [], autopilot_origin: false, autopilot_card_id: null },
     ]);
     expect((await dashboardFor(db, 'neighbour', '2026-09-21T08:00:00Z')).comingUp).toEqual(['Put the bins out', 'Water the plants']);
     const parent = await dashboardFor(db, 'mum', '2026-09-21T08:00:00Z');
@@ -212,16 +217,18 @@ describe("the dashboard lists an accepted card's reminder only to the card's rea
 });
 
 describe('the shared lookup (lib/autopilot/reminder-cards.ts)', () => {
-  it("an accepted card's reminder read without a way to mint its key is the managers' alone, never nobody's card", async () => {
+  it("an accepted card's immutable origin preserves its readers even without legacy key mints", async () => {
     const { reminderCardsReader, visibleReminders } = await import('@/lib/autopilot/reminder-cards');
     const db = household();
     const reminder = await acceptedInsuranceReminder(db);
     const withoutKeys = reminderCardsReader(db, FAMILY, { onError: () => { throw new Error('the cards were readable'); } });
     const withKeys = reminderCardsReader(db, FAMILY, { keyOf: (id) => suggestionReminderKey(FAMILY, id), sourceTagOf: suggestionSourceTag, onError: () => { throw new Error('the cards were readable'); } });
     const rows = [reminder as { id: string; idempotency_key: string | null; tags: string[] | null }];
-    expect(await visibleReminders(rows, { role: 'parent', memberId: 'mum' }, withoutKeys)).toHaveLength(1);
-    expect(await visibleReminders(rows, { role: 'child', memberId: 'ava' }, withoutKeys)).toHaveLength(0);
-    expect(await visibleReminders(rows, { role: 'child', memberId: 'ava' }, withKeys)).toHaveLength(1);
-    expect(await visibleReminders(rows, { role: 'child', memberId: 'kit' }, withKeys)).toHaveLength(0);
+    for (const reader of [withoutKeys, withKeys]) {
+      expect(await visibleReminders(rows, { role: 'parent', memberId: 'mum' }, reader)).toHaveLength(1);
+      expect(await visibleReminders(rows, { role: 'child', memberId: 'ava' }, reader)).toHaveLength(1);
+      expect(await visibleReminders(rows, { role: 'child', memberId: 'kit' }, reader)).toHaveLength(0);
+      expect(await visibleReminders(rows, { role: 'guest', memberId: 'neighbour' }, reader)).toHaveLength(0);
+    }
   });
 });

@@ -165,20 +165,24 @@ async function household(): Promise<Memory> {
   db.seed('family_insurance_policies', [{ id: 'pol-ava', family_id: FAMILY, policy_type: 'dental', insurer: 'Smile Co', renewal_date: '2026-10-01', member_id: 'ava', is_active: true }]);
   db.seed('renewals', [{ id: 'ren-1', family_id: FAMILY, title: 'Passport', expires_at: '2026-10-15', status: 'active' }]);
   vi.setSystemTime(new Date('2026-09-21T06:30:00Z'));
+  db.setRpcAuth(null, 'service_role');
   await runAutopilotScan(db, FAMILY, null, 'UTC', 'en-US', echo, new Date('2026-09-21T06:30:00Z'));
   vi.setSystemTime(new Date('2026-09-21T08:00:00Z'));
+  db.setRpcAuth('u-mum');
   const scope = { db, familyId: FAMILY, userId: 'u-mum', memberId: 'mum', role: 'parent', actorKind: 'member', tz: 'UTC', now: new Date('2026-09-21T08:00:00Z') } as ServiceScope;
   for (const source of ['pol-ava', 'ren-1']) {
     const card = db.table('autopilot_suggestions').find((s) => s.source_id === source)!;
     expect(card, source).toMatchObject({ status: 'open' });
     expect(await resolveSuggestion(scope, { suggestionId: card.id as string, updatedAt: card.updated_at as string, action: 'reminder' }), source)
       .toMatchObject({ ok: true, status: 'executed' });
+    expect(db.table('family_reminders').find(row => row.autopilot_card_id === card.id))
+      .toMatchObject({ family_id: FAMILY, autopilot_origin: true, autopilot_card_id: card.id });
   }
   // Unassigned, so the managers are reminded; each stamped with its card's key.
   expect(db.table('family_reminders').map((r) => [r.title, r.member_id]).sort()).toEqual([[POLICY, null], [PASSPORT, null]].sort());
   for (const r of db.table('family_reminders')) expect(Date.parse(String(r.remind_at))).toBeLessThan(Date.parse(NOW));
   db.seed('family_reminders', [{
-    id: 'bins', family_id: FAMILY, title: BINS, remind_at: '2026-10-12T08:00:00.000Z', status: 'active', member_id: null,
+    id: 'bins', family_id: FAMILY, autopilot_origin: false, autopilot_card_id: null, title: BINS, remind_at: '2026-10-12T08:00:00.000Z', status: 'active', member_id: null,
     tags: [], idempotency_key: null, kind: 'time', priority: 'medium', recurrence: 'none', snoozed_until: null, subtasks: [],
   }]);
   vi.setSystemTime(new Date(NOW));

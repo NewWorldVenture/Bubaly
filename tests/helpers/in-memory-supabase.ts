@@ -18,7 +18,7 @@
 // limit, range, single, maybeSingle, thenable execution, and rpc through a
 // handler map. Every result is `{ data, error, count }` — nothing throws, the
 // way the real client behaves.
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 export type Row = Record<string, unknown>;
 
@@ -37,6 +37,10 @@ export type InMemoryOptions = {
   rpc?: Record<string, (args: Record<string, unknown>, db: InMemorySupabase) => unknown | Promise<unknown>>;
   /** Auth user id for `auth.getUser()`. */
   userId?: string | null;
+  /** Explicit API role for the 0487 RPC model; no role is inferred from seeded rows. */
+  rpcRole?: 'authenticated' | 'service_role';
+  /** A database statement refusing inside the atomic writer, before any staged rows publish. */
+  cardReminderFault?: (name: string, stage: 'card' | 'reminder', rows: readonly Row[]) => { code?: string; message: string } | null;
   /**
    * PostgREST's `db-max-rows` — the server's own ceiling on ONE response,
    * 1,000 on a default Supabase project.
@@ -80,7 +84,14 @@ const BUILT_IN_RPC: Record<string, (args: Record<string, unknown>, db: InMemoryS
   family_allergies: (args, db) => db.table('medical_profiles')
     .filter((row) => row.family_id === args.p_family_id)
     .map((row) => ({ member_id: row.member_id, allergies: row.allergies ?? null })),
+  ...Object.fromEntries(['create_card_legacy_reminder', 'create_card_legacy_reminder_service', 'create_card_family_reminder', 'repeat_card_family_reminder']
+    .map((name) => [name, (args: Record<string, unknown>, db: InMemorySupabase) => db.cardReminderRpc(name, args)])),
 };
+
+const sourceStamp = (value: unknown): boolean => typeof value === 'string' && /^autopilot-source:[a-f0-9]{64}$/.test(value);
+const generatedReminder = (table: string, row: Row): boolean => (table === 'reminders' || table === 'family_reminders')
+  && (row.autopilot_origin === true || row.autopilot_card_id != null
+    || (table === 'family_reminders' ? Array.isArray(row.tags) && row.tags.some(sourceStamp) : row.related_type === 'renewal' && row.related_id != null));
 
 function pgError(code: string, message: string): PostgrestError {
   return { code, message, details: null, hint: null };
@@ -512,9 +523,12 @@ class QueryBuilder implements PromiseLike<Reply> {
       case 'select':
         return this.shape(this.matching());
       case 'insert': {
+        // 0487's INVOKER admission trigger rejects direct generated copies,
+        // even for service_role. Owner seeding uses seed(), never this path.
+        if (this.payload.some((row) => generatedReminder(this.tableName, row))) return { data: null, error: pgError('42501', 'Trusted reminder creation required'), count: null, status: 403, statusText: 'Forbidden' };
         const inserted: Row[] = [];
         for (const raw of this.payload) {
-          const row = this.db.withDefaults(this.tableName, raw);
+          const row = this.db.withInsertDefaults(this.tableName, raw);
           const violation = this.uniqueViolation(row, table);
           if (violation) return { data: null, error: violation, count: null, status: 409, statusText: 'Conflict' };
           table.push(row);
@@ -523,6 +537,7 @@ class QueryBuilder implements PromiseLike<Reply> {
         return this.written(inserted);
       }
       case 'upsert': {
+        if (this.payload.some((row) => generatedReminder(this.tableName, row))) return { data: null, error: pgError('42501', 'Trusted reminder creation required'), count: null, status: 403, statusText: 'Forbidden' };
         const touched: Row[] = [];
         for (const raw of this.payload) {
           const keys = this.upsertOn ?? ['id'];
@@ -534,7 +549,8 @@ class QueryBuilder implements PromiseLike<Reply> {
             Object.assign(existing, raw, { updated_at: new Date().toISOString() });
             touched.push(existing);
           } else {
-            const row = this.db.withDefaults(this.tableName, raw);
+            if (generatedReminder(this.tableName, raw)) return { data: null, error: pgError('42501', 'Trusted reminder creation required'), count: null, status: 403, statusText: 'Forbidden' };
+            const row = this.db.withInsertDefaults(this.tableName, raw);
             table.push(row);
             touched.push(row);
           }
@@ -561,7 +577,17 @@ export class InMemorySupabase {
   /** Every builder created, in order — a test can assert what was touched. */
   readonly log: { table: string }[] = [];
 
-  constructor(private readonly options: InMemoryOptions = {}) {}
+  private rpcUserId: string | null;
+  private rpcRole: InMemoryOptions['rpcRole'];
+  constructor(private readonly options: InMemoryOptions = {}) {
+    this.rpcUserId = options.userId ?? null;
+    this.rpcRole = options.rpcRole ?? (options.userId ? 'authenticated' : undefined);
+  }
+
+  setRpcAuth(userId: string | null, role: 'authenticated' | 'service_role' = 'authenticated'): void {
+    this.rpcUserId = userId;
+    this.rpcRole = role;
+  }
 
   /** The server's per-response row ceiling, or undefined for no cap. */
   get maxRows(): number | undefined { return this.options.maxRows; }
@@ -572,20 +598,136 @@ export class InMemorySupabase {
     return new QueryBuilder(this, table);
   }
 
-  async rpc(name: string, args: Record<string, unknown> = {}): Promise<Reply> {
+  rpc(name: string, args: Record<string, unknown> = {}): Promise<Reply> & { maybeSingle(): Promise<Reply>; single(): Promise<Reply> } {
     const handler = this.options.rpc?.[name] ?? BUILT_IN_RPC[name];
-    if (!handler) return { data: null, error: pgError('42883', `function ${name} does not exist`), count: null, status: 404, statusText: 'Not Found' };
-    try {
-      const data = await handler(args, this);
-      return { data, error: null, count: null, status: 200, statusText: 'OK' };
-    } catch (error) {
-      return { data: null, error: pgError('P0001', error instanceof Error ? error.message : String(error)), count: null, status: 400, statusText: 'Bad Request' };
-    }
+    const request = (async (): Promise<Reply> => {
+      if (!handler) return { data: null, error: pgError('42883', `function ${name} does not exist`), count: null, status: 404, statusText: 'Not Found' };
+      try {
+        const data = await handler(args, this);
+        return { data, error: null, count: null, status: 200, statusText: 'OK' };
+      } catch (error) {
+        const failure = error as { code?: string; message?: string } | null;
+        return { data: null, error: pgError(failure?.code ?? 'P0001', failure?.message ?? String(error)), count: null, status: 400, statusText: 'Bad Request' };
+      }
+    })();
+    const single = (optional: boolean) => request.then((reply): Reply => {
+      if (reply.error || !Array.isArray(reply.data)) return reply;
+      if (reply.data.length === 1 || optional && reply.data.length === 0) return { ...reply, data: reply.data[0] ?? null };
+      return { ...reply, data: null, error: pgError('PGRST116', 'JSON object requested, multiple (or no) rows returned'), status: 406, statusText: 'Not Acceptable' };
+    });
+    return Object.assign(request, { maybeSingle: () => single(true), single: () => single(false) });
   }
 
   readonly auth = {
-    getUser: async () => ({ data: { user: this.options.userId ? { id: this.options.userId } : null }, error: null }),
+    getUser: async () => ({ data: { user: this.rpcUserId ? { id: this.rpcUserId } : null }, error: null }),
   };
+
+  /**
+   * Bounded 0487 writer model. Explicit actors, receipt checks and staged commit
+   * are modelled; PostgreSQL locks, RLS and trigger composition still require
+   * the native SQL/HTTP fixture. Seeded historical rows gain no origin here.
+   */
+  cardReminderRpc(name: string, args: Record<string, unknown>): unknown {
+    const refuse = (message: string, code = '42501'): never => { throw pgError(code, message); };
+    const service = name === 'create_card_legacy_reminder_service';
+    if (this.rpcRole !== (service ? 'service_role' : 'authenticated')) refuse('Invalid RPC role');
+    const actor = service ? args.p_actor ?? null : this.rpcUserId;
+    if (!service && !actor) refuse('Invalid actor');
+    const at = typeof args.p_at === 'string' ? Date.parse(args.p_at) : NaN;
+    if (!Number.isFinite(at)) refuse('Invalid reminder time', '22023');
+    const now = Date.now();
+    const member = (family: unknown, user: unknown) => this.table('family_members').find((m) => m.family_id === family && m.user_id === user && m.is_active === true);
+    const manager = (family: unknown) => ['parent', 'adult'].includes(String(member(family, actor)?.role));
+    const readable = (c: Row): boolean => {
+      const m = member(c.family_id, actor);
+      if (!m) return false;
+      if (c.kind === 'insurance' || c.source_kind === 'family_insurance_policies') return manager(c.family_id) || m.id === c.member_id;
+      return !(c.kind === 'finance' || ['subscriptions_tracked', 'renewals'].includes(String(c.source_kind))) || m.role !== 'guest';
+    };
+    const recipient = (c: Row, code = '40001') => {
+      if (c.member_id != null && !this.table('family_members').some((m) => m.id === c.member_id && m.family_id === c.family_id && m.is_active === true)) refuse('Reminder recipient changed', code);
+    };
+    const fault = (stage: 'card' | 'reminder', rows: Row[]) => {
+      const error = this.options.cardReminderFault?.(name, stage, rows);
+      if (error) refuse(error.message, error.code ?? 'P0001');
+    };
+    if (name === 'create_card_legacy_reminder' || service) {
+      if (!args.p_card || typeof args.p_card !== 'object' || Array.isArray(args.p_card)) refuse('Invalid card reminder', '22023');
+      const input = args.p_card as Row;
+      if (!input.family_id || input.action_type !== 'create_reminder') refuse('Invalid card reminder', '22023');
+      if (!this.table('families').some((f) => f.id === input.family_id)) refuse('Invalid family');
+      if (actor != null && !member(input.family_id, actor)) refuse('Invalid actor');
+      recipient(input, '42501');
+      if (input.expires_at != null && Date.parse(String(input.expires_at)) <= now) refuse('Reminder source expired', '40001');
+      if (!service && !readable(input)) refuse('Reminder source unavailable');
+      if (input.kind === 'insurance' || input.source_kind === 'family_insurance_policies') {
+        const policy = this.table('family_insurance_policies').find((p) => p.id === input.source_id && p.family_id === input.family_id);
+        if (input.source_kind !== 'family_insurance_policies' || !policy || (policy.member_id ?? null) !== (input.member_id ?? null)) refuse('Insurance source unavailable');
+      }
+      if (this.table('autopilot_suggestions').some((c) => c.family_id === input.family_id && c.dedupe_key != null && c.dedupe_key === input.dedupe_key)) refuse('duplicate suggestion key', '23505');
+      const columns = ['family_id', 'member_id', 'kind', 'title', 'detail', 'confidence', 'urgency', 'action_type', 'action_label', 'payload', 'source_kind', 'source_id', 'dedupe_key', 'expires_at'];
+      const card = this.withDefaults('autopilot_suggestions', { ...Object.fromEntries(columns.map((key) => [key, input[key] ?? null])), status: 'open', resolved_at: null, resolved_by: null, created_by: actor });
+      fault('card', [card]);
+      const reminder = this.withInsertDefaults('reminders', {
+        family_id: card.family_id, title: (card.payload as Row | null)?.title ?? card.title, notes: card.detail,
+        remind_at: args.p_at, member_id: card.kind === 'insurance' || card.source_kind === 'family_insurance_policies' ? null : card.member_id,
+        related_type: card.source_kind === 'appointments' ? 'appointment' : card.source_kind === 'calendar_events' ? 'event' : 'renewal',
+        related_id: card.source_id, created_by: actor, autopilot_origin: true, autopilot_card_id: card.id,
+      });
+      fault('reminder', [card, reminder]);
+      card.status = 'auto_executed'; card.resolved_at = new Date(now).toISOString();
+      card.payload = { ...(card.payload as Row), reminder_id: reminder.id };
+      this.table('autopilot_suggestions').push(card); this.table('reminders').push(reminder);
+      return { card_id: card.id, reminder_id: reminder.id, family_id: card.family_id };
+    }
+    if (name === 'create_card_family_reminder') {
+      const card = this.table('autopilot_suggestions').find((c) => c.id === args.p_card_id);
+      if (!card || card.action_type !== 'create_reminder' || card.kind === 'policy' || !readable(card)) refuse('Reminder source unavailable');
+      const c = card as Row;
+      recipient(c);
+      if (!sourceStamp(args.p_source_tag)) refuse('Invalid informational stamp', '22023');
+      const key = createHash('sha256').update(JSON.stringify(['autopilot.createReminder', c.family_id, c.id])).digest('hex');
+      const existing = this.table('family_reminders').find((r) => r.family_id === c.family_id && r.idempotency_key === key);
+      if (existing) {
+        if (existing.autopilot_origin !== true || existing.autopilot_card_id !== c.id || !Array.isArray(existing.tags) || !existing.tags.includes(args.p_source_tag) || !['open', 'executed'].includes(String(c.status))) refuse('Reminder receipt changed', '40001');
+        return [{ ...existing }];
+      }
+      if (c.status !== 'open' || c.updated_at !== args.p_expected_updated_at) refuse('Reminder source changed', '40001');
+      if (c.expires_at != null && Date.parse(String(c.expires_at)) <= now) refuse('Reminder source expired', '40001');
+      if (at <= now) refuse('Reminder time expired', '40001');
+      const row = this.withInsertDefaults('family_reminders', {
+        family_id: c.family_id, created_by: actor, title: (c.payload as Row | null)?.title ?? c.title, notes: c.detail, remind_at: args.p_at,
+        member_id: c.kind === 'insurance' || c.source_kind === 'family_insurance_policies' ? null : c.member_id,
+        priority: Number(c.urgency) >= 3 ? 'high' : 'medium', ai_suggested: true, tags: [args.p_source_tag],
+        idempotency_key: key, autopilot_origin: true, autopilot_card_id: c.id,
+      });
+      fault('reminder', [row]); this.table('family_reminders').push(row);
+      return [{ ...row }];
+    }
+    if (name === 'repeat_card_family_reminder') {
+      const parent = this.table('family_reminders').find((r) => r.id === args.p_parent_id);
+      if (!parent || parent.status !== 'completed' || parent.autopilot_origin !== true || !member(parent.family_id, actor)) refuse('Recurrence unavailable');
+      const p = parent as Row;
+      const card = this.table('autopilot_suggestions').find((c) => c.id === p.autopilot_card_id && c.family_id === p.family_id && c.action_type === 'create_reminder');
+      if (!manager(p.family_id) && (!card || !readable(card))) refuse('Recurrence unavailable');
+      const key = createHash('sha256').update(`autopilot.repeat:${p.id}`).digest('hex');
+      // The real INSERT ON CONFLICT still runs the BEFORE INSERT origin guard.
+      if (p.autopilot_card_id != null && !card) refuse('Reminder source unavailable');
+      const existing = this.table('family_reminders').find((r) => r.family_id === p.family_id && r.idempotency_key === key);
+      if (existing) {
+        if (existing.autopilot_origin !== true || existing.autopilot_card_id !== p.autopilot_card_id || !equalJson(existing.tags, p.tags)) refuse('Recurrence identity changed', '40001');
+        return [{ ...existing }];
+      }
+      const row = this.withInsertDefaults('family_reminders', { ...p, id: randomUUID(), idempotency_key: key, created_by: actor,
+        created_at: new Date(now).toISOString(), updated_at: new Date(now).toISOString(), remind_at: args.p_at,
+        status: 'active', completed_at: null, snoozed_until: null,
+        ...(Array.isArray(p.subtasks) ? { subtasks: p.subtasks.map((s) => ({ ...s, done: false })) } : {}),
+      });
+      fault('reminder', [row]); this.table('family_reminders').push(row);
+      return [{ ...row }];
+    }
+    return refuse('Unknown card writer', '42883');
+  }
 
   /** Direct access for seeding and assertions. Rows are live objects. */
   table(name: string): Row[] {
@@ -608,6 +750,14 @@ export class InMemorySupabase {
   reset(): void { this.tables.clear(); this.log.length = 0; }
 
   uniquesFor(name: string): string[][] { return this.options.uniques?.[name] ?? []; }
+
+  /** Real INSERT defaults only: seeding keeps absent origin genuinely unknown. */
+  withInsertDefaults(table: string, row: Row): Row {
+    const defaults = table === 'family_reminders'
+      ? { autopilot_origin: false, autopilot_card_id: null, status: 'active', tags: [], recurrence: 'none', completed_at: null, snoozed_until: null }
+      : table === 'reminders' ? { autopilot_origin: false, autopilot_card_id: null, is_done: false, recurrence: 'none' } : {};
+    return this.withDefaults(table, { ...defaults, ...row });
+  }
 
   /** The defaults every migration in this repository gives its tables: a uuid id and timestamps. */
   withDefaults(table: string, raw: Row): Row {

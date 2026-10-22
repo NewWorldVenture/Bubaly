@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type { ServiceScope } from '@/lib/services/types';
@@ -38,10 +38,12 @@ const ROSTER = [
 ];
 const NOT_GUESTS = ['mum', 'gran', 'sitter', 'sam', 'ava'];
 
-afterEach(() => { sent.notices = []; });
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-21T06:30:00Z')); });
+afterEach(() => { sent.notices = []; vi.useRealTimers(); });
 
 function household() {
   const db = createInMemorySupabase<DB>({
+    rpcRole: 'service_role',
     uniques: { autopilot_suggestions: [['family_id', 'dedupe_key']] },
     rpc: { ensure_default_grocery_list: () => 'list-1' },
   });
@@ -97,6 +99,7 @@ describe("a member's own scan writes only the cards they may read back (0486)", 
   const AT = new Date('2026-09-28T06:30:00Z');
   function insured() {
     const db = household();
+    vi.setSystemTime(AT);
     db.seed('family_insurance_policies', [
       // Within 7 days: auto-tier, so the card would also create a reminder.
       { id: 'pol-ava', family_id: FAMILY, policy_type: 'dental', insurer: 'Smile Co', renewal_date: '2026-10-01', member_id: 'ava', is_active: true },
@@ -110,6 +113,7 @@ describe("a member's own scan writes only the cards they may read back (0486)", 
 
   it('a teen no policy names writes neither insurance card, nor its reminder, and the scan does not fail', async () => {
     const db = insured();
+    db.setRpcAuth('u-sam');
     await runAutopilotScan(db, FAMILY, 'u-sam', 'UTC', 'en-US', echo, AT, { role: 'teen', memberId: 'sam' });
 
     expect(insuranceCards(db)).toEqual([]);
@@ -121,10 +125,12 @@ describe("a member's own scan writes only the cards they may read back (0486)", 
 
   it('the member a policy names writes that card alone; a manager and the nightly scan write both', async () => {
     const asAva = insured();
+    asAva.setRpcAuth('u-ava');
     await runAutopilotScan(asAva, FAMILY, 'u-ava', 'UTC', 'en-US', echo, AT, { role: 'child', memberId: 'ava' });
     expect(insuranceCards(asAva)).toEqual(['pol-ava']);
 
     const asMum = insured();
+    asMum.setRpcAuth('u-mum');
     await runAutopilotScan(asMum, FAMILY, 'u-mum', 'UTC', 'en-US', echo, AT, { role: 'parent', memberId: 'mum' });
     expect(insuranceCards(asMum)).toEqual(['pol-ava', 'pol-home']);
 
@@ -140,6 +146,7 @@ describe("a member's own scan writes only the cards they may read back (0486)", 
       source_kind: 'family_insurance_policies', source_id: 'pol-home', member_id: null, dedupe_key: 'insurance:pol-home:2026-10-02',
       urgency: 2, confidence: 95, action_type: 'create_reminder', payload: {},
     }]);
+    db.setRpcAuth('u-sam');
     await runAutopilotScan(db, FAMILY, 'u-sam', 'UTC', 'en-US', echo, AT, { role: 'teen', memberId: 'sam' });
 
     const card = db.table('autopilot_suggestions').find((s) => s.id === 'sug-home');

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -74,58 +75,6 @@ function failingReadClient(failingTable: string) {
   return { client, writes };
 }
 
-function suggestionInsertFailureClient() {
-  const writes: Write[] = [];
-  const now = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-  const reads: Record<string, QueryResult> = {
-    renewals: { data: [{ id: 'renewal-1', title: 'Passport', expires_at: now, status: 'active' }], error: null },
-    appointments: { data: [], error: null },
-    chore_assignments: { data: [], error: null },
-    family_members: { data: [], error: null },
-    grocery_items: { data: [], error: null },
-    reminders: { data: [], error: null },
-    calendar_events: { data: [], error: null },
-    subscriptions_tracked: { data: [], error: null },
-    family_stress_signals: { data: [], error: null },
-    medications: { data: [], error: null },
-    family_digital_twin_profiles: { data: [], error: null },
-    meal_plans: { data: [], error: null },
-    family_insurance_policies: { data: [], error: null },
-    wishlist_items: { data: [], error: null },
-    autopilot_suggestions: { data: [], error: null },
-  };
-  const client = {
-    from(table: string) {
-      let operation = 'read';
-      const chain: Record<string, unknown> = {};
-      for (const method of ['select', 'eq', 'neq', 'is', 'in', 'gte', 'lte', 'lt', 'not', 'order', 'limit', 'maybeSingle', 'single']) {
-        chain[method] = () => chain;
-      }
-      chain.insert = () => { operation = 'insert'; writes.push({ table, operation }); return chain; };
-      chain.update = () => { operation = 'update'; writes.push({ table, operation }); return chain; };
-      chain.delete = () => { operation = 'delete'; writes.push({ table, operation }); return chain; };
-      const replyFor = () => {
-        let result = reads[table] ?? { data: [], error: null };
-        if (table === 'reminders' && operation === 'insert') result = { data: { id: 'reminder-1' }, error: null };
-        if (table === 'autopilot_suggestions' && operation === 'insert') result = { data: null, error: new Error('suggestion insert failed') };
-        return result;
-      };
-      // A paged read stops at an empty page, so `.range()` must slice.
-      chain.range = (from: number, to: number) => ({
-        then: (resolveResult: (value: QueryResult) => unknown, rejectResult: (reason: unknown) => unknown) => {
-          const result = replyFor();
-          return Promise.resolve(Array.isArray(result.data) ? { ...result, data: result.data.slice(from, to + 1) } : result)
-            .then(resolveResult, rejectResult);
-        },
-      });
-      chain.then = (resolveResult: (value: QueryResult) => unknown, rejectResult: (reason: unknown) => unknown) =>
-        Promise.resolve(replyFor()).then(resolveResult, rejectResult);
-      return chain;
-    },
-  };
-  return { client, writes };
-}
-
 describe('autopilot persistence boundaries', () => {
   it('fails closed before any write when a required family read fails', async () => {
     const { client, writes } = failingReadClient('calendar_events');
@@ -135,25 +84,43 @@ describe('autopilot persistence boundaries', () => {
     expect(writes).toEqual([]);
   });
 
-  it('removes an auto-created reminder when its suggestion cannot be saved', async () => {
-    const { client, writes } = suggestionInsertFailureClient();
+  it.each(['card', 'reminder'] as const)('publishes neither row when the atomic %s write fails', async (stage) => {
+    const staged: string[] = [];
+    const db = createInMemorySupabase({
+      rpcRole: 'service_role',
+      cardReminderFault(name, atStage, rows) {
+        expect(name).toBe('create_card_legacy_reminder_service');
+        expect(db.table('autopilot_suggestions')).toEqual([]);
+        expect(db.table('reminders')).toEqual([]);
+        staged.push(atStage);
+        if (atStage !== stage) return null;
+        if (stage === 'reminder') {
+          expect(rows).toHaveLength(2);
+          expect(rows[1]).toMatchObject({ autopilot_origin: true, autopilot_card_id: rows[0].id });
+        }
+        return { code: '23514', message: `${stage} write refused` };
+      },
+    });
+    db.seed('families', [{ id: 'family-1', timezone: 'UTC' }]);
+    db.seed('family_members', [{ id: 'member-1', family_id: 'family-1', user_id: 'user-1', role: 'parent', is_active: true }]);
+    db.seed('renewals', [{ id: 'renewal-1', family_id: 'family-1', title: 'Passport',
+      expires_at: new Date(Date.now() + 86_400_000).toISOString().slice(0, 10), status: 'active' }]);
 
-    await expect(runAutopilotScan(client as never, 'family-1', 'user-1', 'UTC', 'en-US', echo))
-      .rejects.toThrow('Autopilot could not save the suggestion');
-    expect(writes).toEqual([
-      { table: 'reminders', operation: 'insert' },
-      { table: 'autopilot_suggestions', operation: 'insert' },
-      { table: 'reminders', operation: 'delete' },
-    ]);
+    await expect(runAutopilotScan(db as never, 'family-1', 'user-1', 'UTC', 'en-US', echo))
+      .rejects.toThrow('Autopilot could not save the reminder suggestion');
+    expect(staged).toEqual(stage === 'card' ? ['card'] : ['card', 'reminder']);
+    expect(db.table('autopilot_suggestions')).toEqual([]);
+    expect(db.table('reminders')).toEqual([]);
+    expect(db.table('notifications')).toEqual([]);
   });
 
-  it('checks suggestion persistence and compensates auto-created side effects', () => {
+  it('uses atomic reminder creation and checks compensation for other auto-created side effects', () => {
     const source = readFileSync(resolve(process.cwd(), 'lib/autopilot/scan.ts'), 'utf8');
 
     expect(source).toContain('const { data: inserted, error: suggestionError }');
-    expect(source).toContain('createdReminderId');
+    expect(source).toContain("supabase.rpc('create_card_legacy_reminder'");
+    expect(source).toContain("supabase.rpc('create_card_legacy_reminder_service'");
     expect(source).toContain('createdGroceryIds');
-    expect(source).toContain(".from('reminders').delete().eq('id', createdReminderId)");
     expect(source).toContain(".from('grocery_items').delete().in('id', createdGroceryIds)");
     expect(source).toContain("throw new Error('Autopilot could not save the suggestion')");
   });
@@ -176,6 +143,105 @@ describe('autopilot persistence boundaries', () => {
 
     expect(source).toContain('!isPolicySuggestionKey(e.dedupe_key)');
     expect(source).toContain('await runPolicyScan(supabase, familyId, userId, { now })');
+  });
+});
+
+// Controls for the bounded writer fixture: these keep passing application tests
+// from acquiring permissions or origin metadata that PostgreSQL does not grant.
+// The native 0487 SQL/HTTP tests remain the oracle for RLS, locks and triggers.
+describe('the atomic writer fixture preserves the database boundary', () => {
+  const stamp = `autopilot-source:${'a'.repeat(64)}`;
+  const at = '2026-09-22T09:00:00.000Z';
+  const card = () => ({ id: 'card-1', family_id: 'family-1', member_id: null, kind: 'renewal',
+    title: 'Passport', action_type: 'create_reminder', source_kind: 'renewals', source_id: 'renewal-1',
+    status: 'open', updated_at: '2026-09-21T06:00:00.000Z', expires_at: at, payload: {}, dedupe_key: 'passport' });
+  function household() {
+    const db = createInMemorySupabase();
+    db.seed('families', [{ id: 'family-1' }]);
+    db.seed('family_members', [{ id: 'member-1', family_id: 'family-1', user_id: 'user-1', role: 'parent', is_active: true }]);
+    return db;
+  }
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime('2026-09-21T06:00:00.000Z'); });
+  afterEach(() => vi.useRealTimers());
+
+  it('requires explicit role and current membership, and refuses unknown RPCs', async () => {
+    const db = household();
+    const args = { p_card: card(), p_at: at, p_actor: 'user-1' };
+    expect((await db.rpc('create_card_legacy_reminder_service', args)).error?.code).toBe('42501');
+    db.setRpcAuth(null, 'service_role');
+    expect((await db.rpc('create_card_legacy_reminder_service', { ...args, p_actor: 'outsider' })).error?.code).toBe('42501');
+    expect((await db.rpc('create_card_legacy_reminder_service', { ...args, p_card: { ...card(), member_id: 'foreign-member' } })).error?.code).toBe('42501');
+    db.setRpcAuth(null);
+    expect((await db.rpc('create_card_legacy_reminder', args)).error?.code).toBe('42501');
+    expect((await db.rpc('unmodelled_writer', args)).error?.code).toBe('42883');
+    expect(db.table('autopilot_suggestions')).toEqual([]);
+    expect(db.table('reminders')).toEqual([]);
+  });
+
+  it('mints the scan identity and committed receipt even without a service actor', async () => {
+    const db = household();
+    db.setRpcAuth(null, 'service_role');
+    const result = await db.rpc('create_card_legacy_reminder_service', {
+      p_card: { ...card(), id: 'forged-id', created_at: '1900-01-01', status: 'executed', resolved_by: 'outsider' },
+      p_at: at, p_actor: null,
+    });
+    expect(result.error).toBeNull();
+    const [saved] = db.table('autopilot_suggestions');
+    const [reminder] = db.table('reminders');
+    expect(saved.id).not.toBe('forged-id');
+    expect(saved).toMatchObject({ status: 'auto_executed', created_at: '2026-09-21T06:00:00.000Z', resolved_by: null, created_by: null });
+    expect(reminder).toMatchObject({ autopilot_origin: true, autopilot_card_id: saved.id });
+    expect(saved.payload).toMatchObject({ reminder_id: reminder.id });
+    expect(result.data).toEqual({ card_id: saved.id, reminder_id: reminder.id, family_id: 'family-1' });
+  });
+
+  it('defaults real manual inserts without laundering seeded or direct generated rows', async () => {
+    const db = household();
+    db.seed('family_reminders', [{ id: 'historic', family_id: 'family-1' }]);
+    expect(db.table('family_reminders')[0]).not.toHaveProperty('autopilot_origin');
+    const manual = await db.from('family_reminders').insert({ id: 'manual', family_id: 'family-1' }).select('*').single();
+    expect(manual.error).toBeNull();
+    expect(manual.data).toMatchObject({ autopilot_origin: false, autopilot_card_id: null });
+    for (const generated of [{ autopilot_origin: true }, { autopilot_card_id: 'card-1' }, { tags: [stamp] }]) {
+      expect((await db.from('family_reminders').insert({ family_id: 'family-1', ...generated })).error?.code).toBe('42501');
+      // PostgreSQL runs BEFORE INSERT even when ON CONFLICT finds an existing id.
+      expect((await db.from('family_reminders').upsert({ id: 'manual', family_id: 'family-1', ...generated }, { onConflict: 'id' })).error?.code).toBe('42501');
+    }
+    expect((await db.from('reminders').insert({ family_id: 'family-1', related_type: 'renewal', related_id: 'renewal-1' })).error?.code).toBe('42501');
+    expect(db.table('family_reminders')).toHaveLength(2);
+    expect(db.table('family_reminders')[1]).toMatchObject({ id: 'manual', autopilot_origin: false, autopilot_card_id: null });
+    expect(db.table('reminders')).toEqual([]);
+  });
+
+  it('replays only the same family receipt after revision and source time have passed', async () => {
+    const db = household();
+    db.setRpcAuth('user-1');
+    db.seed('autopilot_suggestions', [card()]);
+    const args = { p_card_id: 'card-1', p_expected_updated_at: card().updated_at, p_at: at, p_source_tag: stamp };
+    const first = await db.rpc('create_card_family_reminder', args).maybeSingle();
+    expect(first.error).toBeNull();
+    expect(first.data).toMatchObject({ autopilot_origin: true, autopilot_card_id: 'card-1', tags: [stamp] });
+    vi.setSystemTime('2026-09-23T00:00:00.000Z');
+    db.table('autopilot_suggestions')[0].status = 'executed';
+    db.table('autopilot_suggestions')[0].updated_at = 'new revision';
+    const replay = await db.rpc('create_card_family_reminder', args).maybeSingle();
+    expect(replay.error).toBeNull();
+    expect(replay.data).toEqual(first.data);
+    expect(db.table('family_reminders')).toHaveLength(1);
+    db.table('family_reminders')[0].autopilot_card_id = 'other-card';
+    expect((await db.rpc('create_card_family_reminder', args)).error?.code).toBe('40001');
+    expect(db.table('family_reminders')).toHaveLength(1);
+  });
+
+  it('does not replay a recurrence receipt around an orphaned nonnull card guard', async () => {
+    const db = household();
+    db.setRpcAuth('user-1');
+    const parent = { id: 'parent', family_id: 'family-1', status: 'completed', autopilot_origin: true,
+      autopilot_card_id: 'missing-card', tags: [stamp] };
+    db.seed('family_reminders', [parent, { ...parent, id: 'existing-repeat', status: 'active',
+      idempotency_key: createHash('sha256').update('autopilot.repeat:parent').digest('hex') }]);
+    expect((await db.rpc('repeat_card_family_reminder', { p_parent_id: parent.id, p_at: at })).error?.code).toBe('42501');
+    expect(db.table('family_reminders')).toHaveLength(2);
   });
 });
 

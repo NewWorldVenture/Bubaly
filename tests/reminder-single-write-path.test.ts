@@ -54,7 +54,12 @@ describe('the surfaces whose reminder create was rejected', () => {
     if (file === 'components/modules/autopilot-module.tsx') {
       expect(src).toContain('resolveAutopilotSuggestionAction(');
       expect(code('app/(app)/dashboard/autopilot/actions.ts')).toContain('resolveSuggestion(scopeFromUserContext(ctx, db)');
-      expect(code('lib/services/autopilot/index.ts')).toContain('await createReminder(');
+      const service = code('lib/services/autopilot/index.ts');
+      expect(service).toContain("await scope.db.rpc('create_card_family_reminder', {");
+      expect(service).toContain('p_card_id: source.id, p_expected_updated_at: input.updatedAt');
+      expect(service).toContain('p_source_tag: suggestionSourceTag(source)');
+      expect(service).toContain('created.data.autopilot_origin !== true || created.data.autopilot_card_id !== source.id');
+      expect(writesIn('lib/services/autopilot/index.ts')).toEqual([]);
       return;
     }
     // The three client modules go through the action; the paperwork server

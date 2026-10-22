@@ -1,17 +1,20 @@
 # Reserved migrations, held until their number comes up
 
 Each file here is a migration whose number is **reserved** for it in the
-allocation map. It cannot be released yet, because that number is above the
-next free one (owner decision of 2026-10-04; see "Numbering from `0475` on" in
-`docs/PENDING_PROD_MIGRATIONS.md`).
+allocation map. Filename order is a prerequisite, not authorization to release.
+The PR #1046 candidate sequence includes `0487`; the next sequence, `0488`, is
+already reserved for the held bill anchor and is not a free feature slot.
+Every file here remains held pending its owner decision and dependency/rollout
+gates (see "Numbering from `0475` on" in `docs/PENDING_PROD_MIGRATIONS.md`).
 
 **Nothing here is applied.** Only `supabase/migrations/` is read by:
 - `supabase db push`;
 - the CI replay (`docs/audit/pg-bootstrap.sh`);
 - the migration audit.
 
-A file here moves into `supabase/migrations/` under its reserved number once
-every number below it has landed. Its probe, held alongside it in
+A file here may move into `supabase/migrations/` under its reserved number only
+after every lower number has landed and the owner has accepted its dependency
+and rollout gates. Lower filenames alone never promote a held migration. Its probe, held alongside it in
 `docs/audit/reserved/`, moves back to `docs/audit/` with it. Code dependent on a held RPC fails visibly when the RPC is absent.
 That refusal does not provide the held behavior or prove production readiness.
 `tests/migration-version-safety.test.ts` checks that a held file never shares a

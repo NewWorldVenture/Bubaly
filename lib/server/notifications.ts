@@ -341,9 +341,10 @@ export async function generateFamilyNotifications(
   /** The accounts told about a card's reminder; undefined when it has no link, or its card is found and is everyone's. */
   const cardReaders = async (row: ReminderLink): Promise<string[] | undefined> => {
     if (!mayBeCardReminder(row)) return undefined;
-    const cards = await reminderCards();
+    const cards = await reminderCards([row]);
     const found = cards ? reminderCardOf(cards, row) : null;
-    if (!found) return managerAccounts;
+    if (found === undefined) return undefined;
+    if (found === null) return managerAccounts;
     const ids = reminderNoticeMemberIds(found, audienceRoster);
     if (!ids) return undefined;
     return [...new Set(ids.map((id) => userByMember.get(id)).filter((u): u is string => typeof u === 'string' && u.trim().length > 0))];

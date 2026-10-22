@@ -378,13 +378,20 @@ describe('onboarding OAuth routes and Finish integration', () => {
 
   it('claims a new family once and resumes its wizard after consent returns', async () => {
     db.replace('families', []); db.replace('family_members', []); db.replace('onboarding_progress', []); db.replace('user_preferences', []);
-    vi.spyOn(db, 'rpc').mockImplementation(async (name, args = {}) => {
+    const claimRpc = createInMemorySupabase({
+      rpc: {
+        onboarding_claim_family: (args) => {
+          if (!db.table('families').length) {
+            db.seed('families', [{ id: familyId, created_by: userId, name: args.p_name, timezone: args.p_timezone, trial_ends_at: new Date(Date.now() + 5 * 86_400_000).toISOString(), closed_at: null }]);
+            db.seed('onboarding_progress', [{ user_id: userId, family_id: familyId, source: 'wizard', status: 'in_progress', updated_at: '2026-09-09T00:00:00Z' }]);
+          }
+          return [{ family_id: familyId, created: true }];
+        },
+      },
+    });
+    vi.spyOn(db, 'rpc').mockImplementation((name, args = {}) => {
       expect(name).toBe('onboarding_claim_family');
-      if (!db.table('families').length) {
-        db.seed('families', [{ id: familyId, created_by: userId, name: args.p_name, timezone: args.p_timezone, trial_ends_at: new Date(Date.now() + 5 * 86_400_000).toISOString(), closed_at: null }]);
-        db.seed('onboarding_progress', [{ user_id: userId, family_id: familyId, source: 'wizard', status: 'in_progress', updated_at: '2026-09-09T00:00:00Z' }]);
-      }
-      return { data: [{ family_id: familyId, created: true }], error: null } as never;
+      return claimRpc.rpc(name, args);
     });
     await connected();
     await expect(OnboardingPage({})).resolves.toBeDefined();

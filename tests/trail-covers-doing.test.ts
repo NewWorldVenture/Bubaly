@@ -50,7 +50,8 @@ beforeEach(() => {
       chores: { requires_approval: true, points: 5 },
       grocery_items: { is_checked: false, quantity: null, category: null },
       meal_plans: { meal_id: null },
-      family_reminders: { status: 'active', snoozed_until: null, member_id: null },
+      family_reminders: { status: 'active', snoozed_until: null, member_id: null, autopilot_origin: false, autopilot_card_id: null },
+      reminders: { autopilot_origin: false, autopilot_card_id: null },
       calendar_events: { all_day: false, ends_at: null, assignee_id: null },
     },
   });

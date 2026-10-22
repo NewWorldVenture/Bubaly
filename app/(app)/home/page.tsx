@@ -392,7 +392,7 @@ export default async function HomePage() {
     readVisibleReminders((from, to) => supabase.from('family_reminders').select('id, title, remind_at, member_id, priority, idempotency_key, tags')
       .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null).lte('remind_at', dayEndIso)
       .order('remind_at', { ascending: true }).order('id').range(from, to),
-    { limit: 20, viewer: { role: ctx.active.role, memberId: me.id }, cards: reminderCardsReader(supabase, familyId, {
+    { limit: 20, preserveTrustedManualOnCardError: true, viewer: { role: ctx.active.role, memberId: me.id }, cards: reminderCardsReader(supabase, familyId, {
       keyOf: (cardId) => suggestionReminderKey(familyId, cardId),
       sourceTagOf: suggestionSourceTag,
       onError: (error) => console.error('[home] autopilot reminder cards read failed', error),
