@@ -21,7 +21,9 @@ const page = fs.readFileSync('app/(app)/dashboard/briefing/page.tsx', 'utf8');
 
 describe('briefing read boundary', () => {
   it('takes its recap from the shared loader, not from a private snapshot read', () => {
-    expect(page).toContain('loadOperatingIndex(supabase, ctx.active.familyId, tz)');
+    // With the reach that decides whether this visit keeps the household's day
+    // (SnapshotReach, tests/budget-drift-is-the-parents-to-read-and-decide.test.ts).
+    expect(page).toContain("loadOperatingIndex(supabase, ctx.active.familyId, tz, readsHouseholdMoney(ctx.active.role) ? 'household' : 'member')");
     expect(page).toContain('const { change } = indexResult.value;');
   });
 

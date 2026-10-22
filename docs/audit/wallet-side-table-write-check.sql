@@ -17,10 +17,14 @@
 --      plant a gift link, settle a pending gift, or erase the record of who
 --      accepted the wallet terms;
 --   2. a manager still can — a guard that refuses everyone is not a boundary;
---   3. a child CAN still read, recorded rather than asserted as a defect:
---      /wallet/babysitters and /wallet/gift render from these rows for whoever
---      is signed in, and narrowing SELECT is a product decision nobody has
---      taken. If that changes this line fails on purpose;
+--   3. a child CAN still read babysitter payments, recorded rather than
+--      asserted as a defect: /wallet/babysitters renders from those rows for
+--      whoever is signed in, and narrowing that SELECT is a product decision
+--      nobody has taken. gift_payments is the exception, decided in 0483 §9: a
+--      pending gift's giver_name and message are an outsider's free text, so a
+--      child reads only a COMPLETED gift on their own wallet and the pending
+--      gift here is invisible to them. If either changes this file fails on
+--      purpose;
 --   4. UPDATE pins `family_id` on BOTH sides, so a manager of family A cannot
 --      move a row into family B;
 --   5. `anon` holds no INSERT. The 0322 guards are `TO authenticated` and a
@@ -164,13 +168,28 @@ begin
   end;
 
   -- Reads stay open, deliberately. Recorded so the decision is visible.
+  -- The held 0514 is that decision, taken by the account holder: babysitter
+  -- payouts are a parent's or adult's to read. Read from its policy, by name
+  -- and exact predicate, so this holds on the released schema and on one with
+  -- 0514 installed. (Its negative control below still sees the defect: 0088's
+  -- FOR ALL policy, put back there, reads as well as writes.)
   select count(*) into n from public.babysitter_payments where id = payment;
-  if n = 0 then
+  if exists (select 1 from pg_policy
+              where polrelid = 'public.babysitter_payments'::regclass and polcmd = 'r' and polpermissive
+                and polname = 'Household money is read by a parent or adult'
+                and pg_get_expr(polqual, polrelid) = '(is_family_member(family_id) AND can_manage_family(family_id))') then
+    if n <> 0 then
+      failures := array_append(failures, 'the held 0514 is installed, yet a child READ a babysitter payment');
+    end if;
+  elsif n = 0 then
     failures := array_append(failures, 'a child can no longer READ babysitter payments — that is a change of decision; update finalaudit.md and this probe');
   end if;
+  -- gift_payments: the read was narrowed by decision in 0483 §9 — a pending
+  -- gift is the parents' to read first; a child sees only a completed gift on
+  -- their own wallet. The pending gift here is invisible to the child.
   select count(*) into n from public.gift_payments where id = gift;
-  if n = 0 then
-    failures := array_append(failures, 'a child can no longer READ gift payments — that is a change of decision; update finalaudit.md and this probe');
+  if n <> 0 then
+    failures := array_append(failures, 'a child can READ a pending gift — 0483 §9 keeps it for the parents until it is approved; that is a change of decision, update finalaudit.md and this probe');
   end if;
 
   -- ── As the parent: the positive control ─────────────────────────────────

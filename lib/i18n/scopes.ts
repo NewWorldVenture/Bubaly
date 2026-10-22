@@ -55,7 +55,10 @@ import type { Messages } from '@/lib/i18n/messages';
 // string "toast.dismiss" the moment the English fallback is removed.
 // `modal` is here for the same reason as `toast`: the modal primitive's close control
 // renders under every surface that opens a dialog.
-export const ROOT_CHROME_SCOPE = ['a11y', 'error', 'globalError', 'root', 'logo', 'language', 'modal', 'toast'] as const;
+// `dbError` is the toast's too: a server action's refusal reaches the toast in
+// English, and the toast puts describeDbError's five sentences into the
+// reader's language with THIS scope's `t` (I18N-011). Five sentences.
+export const ROOT_CHROME_SCOPE = ['a11y', 'dbError', 'error', 'globalError', 'root', 'logo', 'language', 'modal', 'toast'] as const;
 
 /** The public marketing site, /blog and the hosted form and landing routes. */
 export const MARKETING_SCOPE = [

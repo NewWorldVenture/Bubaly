@@ -26,6 +26,12 @@ export type HomeNeedsInput = {
   openTodos: number;
   now: Date;
   /**
+   * The family's today (`dayKeyInTz(now, tz)`). A document's expiry is a DATE,
+   * counted against this day — see `documentExpiryToNeed`. Pass it whenever
+   * `documents` is not empty; without it the day is Greenwich's.
+   */
+  todayKey?: string;
+  /**
    * Who reads the titles. A money approval and a paperwork payment put an amount
    * in the title, so it is written in this reader's format and words. Required:
    * every caller has a reader — see `NeedsReader`.
@@ -81,7 +87,7 @@ export function buildHomeNeeds(data: HomeNeedsInput): NeedItem[] {
   for (const r of data.inboxMessages ?? []) { const n = inboxMessageToNeed(r); if (n) items.push(n); }
   for (const r of data.paperwork ?? []) items.push(...paperworkActionsToNeeds(r, data.now, data.reader));
   for (const r of data.renewals) { const n = renewalToNeed(r, data.now); if (n) items.push(n); }
-  for (const d of data.documents) { const n = documentExpiryToNeed(d, data.now); if (n) items.push(n); }
+  for (const d of data.documents) { const n = documentExpiryToNeed(d, data.todayKey ?? data.now); if (n) items.push(n); }
   for (const c of data.conflicts)
     items.push({
       id: `conflict:${c.id}`, kind: 'calendar_conflict',

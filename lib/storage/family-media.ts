@@ -1,4 +1,5 @@
 import { removeConfirmed } from './confirm-removal';
+import { parseFamilyMediaRef } from './family-media-ref';
 import { unguessableObjectName } from './object-name';
 // Client-side size guard for the `family-media` Storage bucket (Photos,
 // Create Memory, Messages attachments). Matches the bucket's 25 MB
@@ -73,4 +74,32 @@ export async function removeFamilyMedia(
   path: string,
 ): Promise<{ error: string | null }> {
   return removeConfirmed(supabase.storage.from(FAMILY_MEDIA_BUCKET), path);
+}
+
+/**
+ * Remove the object a row has stopped pointing at: the row was deleted, its
+ * photo replaced or cleared, or the form that uploaded it was closed unsaved.
+ *
+ * The closet and inventory modules deleted the row and left the photo, so a
+ * picture of a child's swimwear "deleted" with a confirmation that said it
+ * cannot be undone stayed in the public bucket, readable at its URL by anyone
+ * who had ever been sent the row — including a member removed since — with
+ * nothing left in the product that pointed at it (H2, the SEC-015 defect the
+ * photos module already fixed).
+ *
+ * Only an object under `<familyId>/<folder>/` is removed. A stored value that
+ * is not one — empty, an external URL, or a path into another folder that a
+ * crafted row could name — is not this row's photo to delete, and answers
+ * "nothing to do". Confirmed through `removeFamilyMedia`, so a refused delete
+ * is an error rather than a silent `[]`.
+ */
+export async function releaseFamilyMedia(
+  supabase: Parameters<typeof removeFamilyMedia>[0],
+  ref: string | null | undefined,
+  owner: { familyId: string; folder: string },
+): Promise<{ error: string | null }> {
+  const parsed = parseFamilyMediaRef(ref);
+  if (!parsed || parsed.kind !== 'family-media') return { error: null };
+  if (!owner.familyId || !parsed.path.startsWith(`${owner.familyId}/${owner.folder}/`)) return { error: null };
+  return removeFamilyMedia(supabase, parsed.path);
 }

@@ -50,6 +50,13 @@ export type OccurrencesOptions<C extends keyof EventRow> = {
   signal?: AbortSignal;
   /** Qualify each fetched native row before filtering or expanding masters. */
   validateRow?: (row: CalendarOccurrence<C>) => void;
+  /**
+   * Receives every stored series row as written — its own `starts_at`/`ends_at`,
+   * before expansion. An occurrence is a clone carrying ITS clock, so a caller
+   * that edits the series (the calendar's Edit) must open the stored row, not
+   * the clone: saving a clone's clock moved the whole series to that week.
+   */
+  onSeriesRows?: (rows: readonly CalendarOccurrence<C>[]) => void;
   columns?: readonly C[];
   /** Applied after the merge, to the sorted occurrences. */
   limit?: number;
@@ -266,6 +273,7 @@ export async function readCalendarOccurrences<C extends keyof EventRow = keyof E
   if (opts.signal?.aborted) return { data: null, count: null, error: { message: 'Calendar request aborted' } };
   const seriesRows = ((series.data ?? []) as unknown as CalendarOccurrence<C>[]).filter(isSeries);
   if (seriesRows.length > SERIES_READ_MAX) return { data: null, count: null, error: { message: `More than ${SERIES_READ_MAX} recurring events; the window cannot be read whole` } };
+  opts.onSeriesRows?.(seriesRows);
 
   const timed = seriesRows.filter((row) => !row.all_day);
   const allDay = seriesRows.filter((row) => row.all_day);

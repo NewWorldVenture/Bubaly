@@ -19,7 +19,9 @@ import { getTool } from '@/lib/ai/tools/registry';
 import { getTranslations } from '@/lib/i18n/server';
 import { loadAISettingsFor } from '@/lib/services/ai-settings';
 import { riskToDecision, riskTierStance, toolTags, type Capability, type Decision, type TrustRole } from '@/lib/trust/engine';
+import { readAmountCents } from '@/lib/trust/amount';
 import { evaluateTrust, openApprovalRequest } from '@/lib/trust/server';
+import { ledgerWriter } from '@/lib/trust/ledger';
 
 type DB = SupabaseClient<Database>;
 
@@ -68,6 +70,12 @@ export type AiGateOutcome =
       alreadyPending?: boolean;
     };
 
+/** The arguments of a `{ name, args }` payload, or the payload itself when it has no `args`. */
+function payloadArgs(payload: Record<string, unknown>): unknown {
+  const args = payload.args;
+  return args && typeof args === 'object' && !Array.isArray(args) ? args : payload;
+}
+
 export async function gateAiAction(supabase: DB, familyId: string, req: AiGateRequest): Promise<AiGateOutcome> {
   // Read STRICTLY. Every caller of this gate is Bubaly about to write (chat's
   // tools, Magic Import, the school desk), so a settings read that failed must
@@ -96,6 +104,12 @@ export async function gateAiAction(supabase: DB, familyId: string, req: AiGateRe
   const registryTool = getTool(req.toolName);
   const risk = registryTool ? effectiveRisk(settings, registryTool) : 'medium';
 
+  // The money the action moves, for a policy capped by `maxAmountCents`, read
+  // from the arguments every caller files as `{ name, args }` — the same
+  // reader as the executor's gate (lib/trust/amount.ts). Without it the engine
+  // read 0, and "Bubaly may spend up to $50" cleared any amount from chat.
+  const amountCents = readAmountCents(payloadArgs(req.payload));
+
   const evaluateRequest = {
     actor: { kind: 'ai_agent' as const, id: req.actorId, role: req.actorRole },
     domain: req.domain,
@@ -112,6 +126,7 @@ export async function gateAiAction(supabase: DB, familyId: string, req: AiGateRe
       // in the domain. Both spellings, because the policy names the canonical
       // one and this surface may still use the legacy alias.
       tags: toolTags(req.toolName, registryTool?.name ?? null),
+      ...(amountCents !== null ? { amountCents } : {}),
     },
   };
   const { decision: engineDecision, approvalId: engineApprovalId, alreadyPending: engineAlreadyPending }
@@ -153,6 +168,27 @@ export async function gateAiAction(supabase: DB, familyId: string, req: AiGateRe
         { ...evaluateRequest, payload: req.payload as unknown as Record<string, Json>, onBehalfOfMemberId: req.onBehalfOfMemberId ?? null },
         decision,
       );
+    if (opened?.id) {
+      // The tier's own audit line, as `executeTool` writes one for the same
+      // case. It is also the server-only proof that BUBALY filed this row:
+      // `requested_by_kind` is writable by any manager while the row is
+      // pending, so the decision path (lib/services/approvals `filedByBubaly`)
+      // skips the trust gate only for a row this ledger names.
+      const writer = await ledgerWriter(supabase);
+      const { error: auditError } = await writer.from('trust_audit_logs').insert({
+        family_id: familyId,
+        actor_kind: 'ai_agent',
+        actor_id: req.actorId,
+        domain: req.domain,
+        capability,
+        decision: decision.effect,
+        reason: decision.reason,
+        confidence: req.confidence ?? 0.85,
+        approval_id: opened.id,
+        context: { basis: decision.basis, tool: req.toolName } as unknown as Json,
+      });
+      if (auditError) console.error('[trust] the approval was filed but its audit row was not', { familyId, approvalId: opened.id }, auditError);
+    }
     return {
       effect: 'require_approval',
       reason: decision.reason,

@@ -41,6 +41,7 @@ const MAX_WEBHOOK_BODY_BYTES = 256_000;
  */
 const HANDLED_EVENT_TYPES = new Set<string>([
   'issuing_authorization.request',
+  'issuing_authorization.created',
   'issuing_authorization.updated',
   'issuing_transaction.created',
   'issuing_card.created',
@@ -105,6 +106,12 @@ export async function POST(req: NextRequest) {
       case 'issuing_transaction.created':
         await handleTransactionCreated(supabase, event.data.object as Stripe.Issuing.Transaction);
         break;
+      // Stripe sends `.created` for every authorization. For one it decided
+      // itself (our answer did not arrive inside its ~2 second window) it is the
+      // only notice, and one it declined that way arrives already closed: its
+      // hold is released like any closed authorization's. Idempotent, so
+      // `.created` and `.updated` may both arrive for the same authorization.
+      case 'issuing_authorization.created':
       case 'issuing_authorization.updated':
         await handleAuthorizationUpdated(supabase, event.data.object as Stripe.Issuing.Authorization);
         break;
@@ -121,7 +128,14 @@ export async function POST(req: NextRequest) {
       case 'account.updated': {
         const acct = event.data.object as Stripe.Account;
         const familyId = acct.metadata?.family_id;
-        if (familyId) await syncConnectedAccount(supabase, familyId, acct.id);
+        // Mirrored only where the family AND the account agree
+        // (lib/stripe/connect.ts): metadata naming a family that does not own
+        // this account is a logged skip, not a success. The event is still
+        // marked processed — Stripe retrying it for days would change nothing.
+        // Audit N12.
+        if (familyId && !await syncConnectedAccount(supabase, familyId, acct.id)) {
+          console.warn('[money webhook] account.updated skipped: no mirror row pairs this family with this account', { familyId, accountId: acct.id });
+        }
         break;
       }
       default:

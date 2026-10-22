@@ -82,6 +82,11 @@ vi.mock('@/lib/supabase/server', () => ({
   createServer: () => { throw new Error('Cookie-bound auth must not run'); },
   createServiceClient: () => ({ from: (table: string) => {
     if (table === 'child_login_throttle') return throttleTable();
+    // The linked member is active, so the removed-child refusal does not apply.
+    if (table === 'family_members') {
+      const member = { select: () => member, eq: () => member, maybeSingle: () => later(() => ({ data: { id: 'member-emma' }, error: null })) };
+      return member;
+    }
     const lookup = { select: () => lookup, eq: () => lookup,
       limit: () => later(() => ({ data: state.known ? [{ username: 'emma', user_id: CHILD }] : [], error: null })) };
     return lookup;
@@ -162,7 +167,13 @@ describe('a concurrent burst gets no more guesses than a sequential one', () => 
     state.known = false;
     const results = (await Promise.all(wrongPins(25).map(pin => guess(pin)))).map(outcome);
     expect(tally(results)).toEqual({ 'actions.thatUsernameOrPinIsn': DEFAULT_POLICY.maxFails, LOCKED: 25 - DEFAULT_POLICY.maxFails });
-    expect(state.checked).toHaveLength(0);
+    // The same spend in WORK as well (audit N8): the provider sees exactly the
+    // allowance of password checks, as it does for a real username — response
+    // time used to say which usernames exist, because an unknown one saw none —
+    // and not one of them is the real derivation of a PIN that was typed, so the
+    // request is a round trip, never a guess that could succeed.
+    expect(state.checked).toHaveLength(DEFAULT_POLICY.maxFails);
+    for (const pin of wrongPins(25)) expect(state.checked).not.toContain(deriveChildPassword('synthetic-child-secret', 'emma', pin));
   });
 });
 

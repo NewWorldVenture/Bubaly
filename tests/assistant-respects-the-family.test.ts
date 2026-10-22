@@ -71,6 +71,11 @@ function groupHolds(row: Row, expr: string): boolean {
   return termHolds(row, expr);
 }
 
+// A database without 0443 (DATA-007): the default-list get-or-create answers
+// "function missing", and the capture falls back to the read-then-insert these
+// cases were written against.
+const missingDefaultListRpc = async () => ({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } });
+
 function fakeDb(tables: Record<string, Row[]>) {
   const writes: Write[] = [];
   const from = (table: string) => {
@@ -119,7 +124,7 @@ function fakeDb(tables: Record<string, Row[]>) {
     };
     return chain;
   };
-  return { db: { from } as never, writes };
+  return { db: { from, rpc: missingDefaultListRpc } as never, writes };
 }
 
 const say = async (utterance: string, tables: Record<string, Row[]>) => {

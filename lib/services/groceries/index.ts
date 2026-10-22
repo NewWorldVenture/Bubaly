@@ -119,6 +119,42 @@ export function categorizeGroceryItem(name: string): string | null {
 export { normalizeName };
 
 /**
+ * The family's shopping lists that are NOT archived, by id, asking both archive
+ * columns (see the header above `AISLES`).
+ *
+ * For readers of `grocery_items` that work across lists, such as the briefings
+ * and Autopilot: an item on an archived list is off the shopping page, and
+ * announcing it sounds authoritative about a list nobody looks at.
+ * `grocery_items.list_id` is NOT NULL (0002), so `.in('list_id', ids)` drops
+ * nothing else.
+ */
+export async function openGroceryListIds(
+  db: ServiceScope['db'],
+  familyId: string,
+): Promise<{ ok: true; ids: string[] } | { ok: false; error: { message: string } }> {
+  const { data, error } = await db.from('grocery_lists').select('id')
+    .eq('family_id', familyId).eq('is_archived', false).is('archived_at', null);
+  if (error) return { ok: false, error };
+  return { ok: true, ids: (data ?? []).map((row) => row.id) };
+}
+
+/**
+ * Run a `grocery_items` read over the family's open lists only: `read` gets
+ * their ids and adds `.in('list_id', ids)` to its own query. A failed list
+ * read comes back in the shape of a failed PostgREST read, so the caller's
+ * existing error handling reports it.
+ */
+export async function readOnOpenGroceryLists<T>(
+  db: ServiceScope['db'],
+  familyId: string,
+  read: (listIds: string[]) => PromiseLike<T>,
+): Promise<T | { data: null; count: null; error: { message: string } }> {
+  const lists = await openGroceryListIds(db, familyId);
+  if (!lists.ok) return { data: null, count: null, error: lists.error };
+  return read(lists.ids);
+}
+
+/**
  * Get-or-create a family's default grocery list, as ONE operation (DATA-007).
  *
  * Every writer that files groceries without naming a list comes through here:
@@ -685,6 +721,30 @@ export async function pantryList(
   return ok({ items, expiring, low });
 }
 
+/** Rows per page when a pantry item is looked up by name, and the most it walks. */
+const PANTRY_LOOKUP_PAGE = 200;
+const PANTRY_LOOKUP_MAX = 2_000;
+
+/** "kg", "KG" and "kgs" are one unit; "kg" and "cup" are not. */
+/**
+ * A unit's one spelling: trimmed, lower-cased, its trailing period gone and
+ * its plural folded. Not `normalizeName`, which strips a single trailing 's'
+ * as suits a grocery name: "boxes" became "boxe" and stopped matching "box",
+ * so 2 boxes put away against a stocked 1 box was refused as another unit.
+ */
+const IRREGULAR_UNITS: Record<string, string> = { loaves: 'loaf', leaves: 'leaf', halves: 'half' };
+function unitKey(unit: string | null | undefined): string {
+  const word = (unit ?? '').trim().toLowerCase().replace(/\s+/g, ' ').replace(/\.$/, '');
+  if (IRREGULAR_UNITS[word]) return IRREGULAR_UNITS[word];
+  if (/(?:ss|sh|ch|x|z)es$/.test(word)) return word.slice(0, -2);
+  if (/ss$/.test(word)) return word;
+  return word.replace(/s$/, '');
+}
+
+function sameUnit(a: string | null | undefined, b: string | null | undefined): boolean {
+  return unitKey(a) === unitKey(b);
+}
+
 export type PantryAdjustInput = {
   itemId?: string | null;
   /** Matched by normalised name when no id is given. */
@@ -706,7 +766,9 @@ export type PantryAdjustInput = {
  * zero — "used the last of the milk" lands on 0, which is what the low-stock
  * rule keys on; a negative count would hide the item from every alert.
  */
-export async function pantryAdjust(scope: ServiceScope, input: PantryAdjustInput): Promise<ServiceResult<{ item: PantryItem; created: boolean }>> {
+export async function pantryAdjust(
+  scope: ServiceScope, input: PantryAdjustInput,
+): Promise<ServiceResult<{ item: PantryItem; created: boolean; unitMismatch?: { bought: string; stocked: string } }>> {
   const name = input.name?.trim() ?? '';
   if (!input.itemId && !name) return fail('Which pantry item?', { code: SERVICE_CODES.invalidInput });
   if (input.quantity == null && input.delta == null && !input.location && !input.expiresAt && !input.unit) {
@@ -728,13 +790,39 @@ export async function pantryAdjust(scope: ServiceScope, input: PantryAdjustInput
     if (!data) return fail('That pantry item could not be found.', { code: SERVICE_CODES.notFound });
     existing = data;
   } else {
-    const { data, error } = await scope.db.from('pantry_items').select('*').eq('family_id', scope.familyId).ilike('name', `%${escapeLike(name)}%`).limit(20);
-    if (error) {
-      console.error('[service:groceries] pantry lookup failed', error);
-      return fail(describeDbError(error, 'Could not look up the pantry.'), { code: SERVICE_CODES.db });
-    }
+    // Prefiltered on the NORMALISED stem, the same key the match below uses.
+    // `%Onions%` never fetched the family's "Onion", so putting away a plural
+    // line created a second row beside the one it should have topped up — and
+    // the original stayed "Running low" and went back on the list. Each word is
+    // escaped and the gaps are wildcards, so "red  onion" is found by "Red
+    // onions" too. Ordered and paged, so a short name matching many rows ("egg")
+    // cannot lose the exact one past an arbitrary 20th.
+    //
+    // A page SHORTER than asked for is not the end. The server caps every
+    // response at its `db-max-rows`, silently, so a project capped below
+    // PANTRY_LOOKUP_PAGE answers a short page while more rows match; stopping
+    // there never saw an exact row past the cap and created a duplicate beside
+    // it. As `readAll` (lib/supabase/read-all.ts) does: advance by the rows
+    // RECEIVED and stop only on an empty page — never walking past
+    // PANTRY_LOOKUP_MAX, and refusing rather than creating once it is reached.
     const key = normalizeName(name);
-    existing = (data ?? []).find((row) => normalizeName(row.name) === key) ?? null;
+    for (let from = 0; ; ) {
+      if (from >= PANTRY_LOOKUP_MAX) {
+        return fail('Too many pantry items look like that one. Put it away from the pantry page.', { code: SERVICE_CODES.invalidInput });
+      }
+      const to = Math.min(from + PANTRY_LOOKUP_PAGE, PANTRY_LOOKUP_MAX) - 1;
+      const { data, error } = await scope.db.from('pantry_items').select('*').eq('family_id', scope.familyId)
+        .ilike('name', `%${key.split(' ').map((word) => escapeLike(word)).join('%')}%`)
+        .order('created_at', { ascending: true }).order('id').range(from, to);
+      if (error) {
+        console.error('[service:groceries] pantry lookup failed', error);
+        return fail(describeDbError(error, 'Could not look up the pantry.'), { code: SERVICE_CODES.db });
+      }
+      const rows = data ?? [];
+      existing = rows.find((row) => normalizeName(row.name) === key) ?? null;
+      if (existing || rows.length === 0) break;
+      from += rows.length;
+    }
   }
 
   if (!existing) {
@@ -762,12 +850,21 @@ export async function pantryAdjust(scope: ServiceScope, input: PantryAdjustInput
     return ok({ item: data, created: true });
   }
 
-  const nextQuantity = input.quantity != null
-    ? input.quantity
-    : input.delta != null ? Math.max(0, Number(existing.quantity ?? 0) + input.delta) : undefined;
+  const isDelta = input.quantity == null && input.delta != null;
+  // A DELTA in one unit added to a count in another is a number nobody owns:
+  // "Rice 3 kg" plus a bought "1 cup" became "Rice 4 cup". When both sides
+  // name a unit and they differ, nothing is written — the caller is told, so
+  // the family can count it — and a delta never relabels the row's unit. A row
+  // with no unit yet takes the bought one, and a unitless delta counts in the
+  // row's own unit, as it always has.
+  //
+  // The units are judged against the row as it stands on EACH attempt below,
+  // not once against the first read: an editor changing "3 kg" to "2 cups"
+  // between the read and the write would otherwise have the retry add the
+  // bought kilogram to the cups.
+  const incomingUnit = input.unit?.trim() || null;
   const patch: Partial<{ quantity: number; unit: string | null; location: PantryLocation; expires_at: string | null }> = {};
-  if (nextQuantity !== undefined) patch.quantity = nextQuantity;
-  if (input.unit !== undefined && input.unit !== null) patch.unit = input.unit.trim() || null;
+  if (input.quantity != null) patch.quantity = input.quantity;
   if (isPantryLocation(input.location)) patch.location = input.location;
   if (input.expiresAt) patch.expires_at = input.expiresAt;
 
@@ -778,18 +875,29 @@ export async function pantryAdjust(scope: ServiceScope, input: PantryAdjustInput
   // again rather than overwrite their change. An absolute `quantity` is the
   // caller stating a figure, so it does not need the condition and does not get
   // one. Same distinction as `setGoalProgress` versus `contributeToSavingsGoal`.
-  const isDelta = input.quantity == null && input.delta != null;
   let current = existing;
 
   for (let attempt = 0; attempt < 4; attempt += 1) {
+    const stockedUnit = current.unit?.trim() || null;
+    if (isDelta && incomingUnit && stockedUnit && !sameUnit(incomingUnit, stockedUnit)) {
+      return ok({ item: current, created: false, unitMismatch: { bought: incomingUnit, stocked: stockedUnit } });
+    }
     if (isDelta) patch.quantity = Math.max(0, Number(current.quantity ?? 0) + (input.delta ?? 0));
+    if (input.unit !== undefined && input.unit !== null && !(isDelta && stockedUnit)) patch.unit = input.unit.trim() || null;
+    else delete patch.unit;
 
     let write = scope.db
       .from('pantry_items')
       .update(patch)
       .eq('family_id', scope.familyId)
       .eq('id', current.id);
-    if (isDelta) write = write.eq('quantity', current.quantity as number);
+    // A delta is written only while the row still holds the quantity AND the
+    // unit it was judged against: a unit-only edit ("3 kg" to "3 cups") leaves
+    // the quantity as it was, and a quantity fence alone let the kilogram in.
+    if (isDelta) {
+      write = write.eq('quantity', current.quantity as number);
+      write = current.unit == null ? write.is('unit', null) : write.eq('unit', current.unit);
+    }
 
     const { data, error } = await write.select('*').maybeSingle();
     if (error) {
@@ -827,6 +935,11 @@ export async function pantryAdjust(scope: ServiceScope, input: PantryAdjustInput
  * board set and `CreateChoreInput` did not carry.
  *
  * `quantity` here is an ABSOLUTE the family typed, so it needs no compare-and-set.
+ * Which is also why an edit that did NOT touch it must not send it: the editor
+ * opens on a snapshot, and writing that snapshot's quantity back undid every
+ * +/- tap and every put-away that landed while the form was open — the lost
+ * update `pantryAdjust`'s compare-and-set exists to prevent. On an update,
+ * `quantity` and `unit` left undefined keep what the row holds now.
  */
 export type SavePantryItemInput = {
   name: string;
@@ -872,9 +985,15 @@ export async function savePantryItem(
   };
 
   if (input.itemId) {
+    const { quantity, unit, ...rest } = fields;
+    const changes = {
+      ...rest,
+      ...(input.quantity !== undefined ? { quantity } : {}),
+      ...(input.unit !== undefined ? { unit } : {}),
+    };
     const { data, error } = await scope.db
       .from('pantry_items')
-      .update(fields)
+      .update(changes)
       .eq('id', input.itemId)
       .eq('family_id', scope.familyId)
       .select('*')
@@ -999,6 +1118,13 @@ export type ShoppingTripResult = {
    * updated nor failed here.
    */
   alreadyClaimed: string[];
+  /**
+   * Bought lines whose unit is not the one the pantry counts that item in
+   * ("1 cup" of rice against "3 kg"). Taken off the list — they were bought —
+   * with the pantry count left as it was for the family to correct, because
+   * adding the two numbers would be wrong and retrying would be wrong again.
+   */
+  unitMismatch: { name: string; bought: string; stocked: string }[];
   /** Bought lines removed from the list — one per line that reached the pantry. */
   cleared: number;
 };
@@ -1054,6 +1180,7 @@ export async function recordShoppingTrip(
   const pantryFailed: { name: string; error: string }[] = [];
   const clearFailed: { name: string; error: string }[] = [];
   const alreadyClaimed: string[] = [];
+  const unitMismatch: { name: string; bought: string; stocked: string }[] = [];
   const clearedNames: string[] = [];
   for (const item of items) {
     // CLAIM THE LINE BEFORE TOUCHING THE PANTRY (Audit C1-S9-88, closing the
@@ -1100,7 +1227,8 @@ export async function recordShoppingTrip(
       pantryFailed.push({ name: item.name, error: result.error });
       continue;
     }
-    pantryUpdated.push(item.name);
+    if (result.data.unitMismatch) unitMismatch.push({ name: item.name, ...result.data.unitMismatch });
+    else pantryUpdated.push(item.name);
 
     // Immediately, and scoped to this row: whatever happens to the rest of the
     // trip, this quantity is now in the pantry and must not be added twice.
@@ -1121,7 +1249,13 @@ export async function recordShoppingTrip(
     }
     if (clearError) {
       console.error('[service:groceries] bought line clear failed', clearError);
-      clearFailed.push({ name: item.name, error: describeDbError(clearError, 'Put away, but still on the list.') });
+      // `clearFailed` says "this is in your pantry": true only of a line that
+      // was COUNTED. A unit-mismatched line counted nothing — it is already in
+      // `unitMismatch`, whose "count these by hand" is the whole truth about
+      // it, and it stays on the list, un-ticked by its claim.
+      if (!result.data.unitMismatch) {
+        clearFailed.push({ name: item.name, error: describeDbError(clearError, 'Put away, but still on the list.') });
+      }
       continue;
     }
     clearedNames.push(item.name);
@@ -1152,5 +1286,5 @@ export async function recordShoppingTrip(
     });
   }
 
-  return ok({ listId, pantryUpdated, pantryFailed, clearFailed, alreadyClaimed, cleared: clearedNames.length });
+  return ok({ listId, pantryUpdated, pantryFailed, clearFailed, alreadyClaimed, unitMismatch, cleared: clearedNames.length });
 }

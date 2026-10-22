@@ -16,6 +16,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { resolveAutopilotSuggestionAction } from '@/app/(app)/dashboard/autopilot/actions';
 import { acceptPolicySuggestionAction } from '@/app/(app)/dashboard/trust/actions';
 import { suggestionAction } from '@/lib/autopilot/resolution';
+import { suggestionVisibleTo } from '@/lib/autopilot/audience';
 import type { ResolutionResult } from '@/lib/services/autopilot';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
@@ -54,7 +55,7 @@ export function AutopilotModule({ preview = false }: { preview?: boolean } = {})
 
 function FamilyAutopilot({ owner, currentOwner, preview }: { owner: string; currentOwner: { current: string }; preview: boolean }) {
   const t = useTranslations();
-  const { familyId, userId } = useApp();
+  const { familyId, userId, role, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const [scanning, setScanning] = useState(false);
   const [scannedOnce, setScannedOnce] = useState(false);
@@ -73,7 +74,7 @@ function FamilyAutopilot({ owner, currentOwner, preview }: { owner: string; curr
     return () => { mounted.current = false; };
   }, []);
 
-  const { data, loading, error, refresh } = useRealtimeQuery<Suggestion>({
+  const { data: allRows, loading, error, refresh } = useRealtimeQuery<Suggestion>({
     table: 'autopilot_suggestions',
     familyId,
     deps: [familyId],
@@ -81,6 +82,15 @@ function FamilyAutopilot({ owner, currentOwner, preview }: { owner: string; curr
       supabase.from('autopilot_suggestions').select('*').eq('family_id', familyId)
         .order('urgency', { ascending: false }).order('confidence', { ascending: false }),
   });
+
+  // The cards this reader may see (lib/autopilot/audience.ts): the table is
+  // family-wide under 0085, and a subscription charge or an insurance renewal
+  // is not everyone's.
+  const viewerMemberId = selfMember?.id ?? null;
+  const data = useMemo(
+    () => allRows.filter((s) => suggestionVisibleTo(s, { role, memberId: viewerMemberId })),
+    [allRows, role, viewerMemberId],
+  );
 
   async function runScan() {
     if (!isCurrent()) return;

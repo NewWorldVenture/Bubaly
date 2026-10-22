@@ -63,7 +63,7 @@ export default async function AssistantsPage() {
         <p className="mt-1 text-sm text-muted">{t('assistantsPage.intro')}</p>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-3">
           {links.length === 0 ? (
             <EmptyState icon={Speaker} title={t('assistantsPage.noneConnectedTitle')}
@@ -102,7 +102,7 @@ export default async function AssistantsPage() {
                 <p className="font-medium text-fg">Siri, on an iPhone or iPad</p>
                 <p>
                   Shortcuts app → new shortcut → <strong>Get Contents of URL</strong>.
-                  Method <strong>POST</strong>, URL <code className="text-xs">https://www.bubaly.com/api/assistant</code>,
+                  Method <strong>POST</strong>, URL <code className="break-all text-xs">https://www.bubaly.com/api/assistant</code>,
                   a header <code className="text-xs">Authorization: Bearer YOUR-KEY</code>, and a JSON body
                   with one field <code className="text-xs">utterance</code> set to a Dictated Text input.
                   Name the shortcut &ldquo;Ask Bubaly&rdquo; and Siri will run it by name.
@@ -112,7 +112,7 @@ export default async function AssistantsPage() {
                 <p className="font-medium text-fg">Alexa</p>
                 <p>
                   Point a custom skill&apos;s endpoint at
-                  {' '}<code className="text-xs">https://www.bubaly.com/api/assistant/alexa</code> and put the key in
+                  {' '}<code className="break-all text-xs">https://www.bubaly.com/api/assistant/alexa</code> and put the key in
                   account linking. One intent with an <code className="text-xs">AMAZON.SearchQuery</code> slot is enough &mdash;
                   Bubaly works out what you meant from the words.
                 </p>

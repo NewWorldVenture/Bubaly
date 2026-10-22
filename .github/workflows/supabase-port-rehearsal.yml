@@ -1,0 +1,55 @@
+name: Synthetic Supabase port collision mechanism
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'scripts/ci-supabase-port-rehearsal.mjs'
+      - '.github/workflows/supabase-port-rehearsal.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/ci-supabase-port-rehearsal.mjs'
+      - '.github/workflows/supabase-port-rehearsal.yml'
+permissions:
+  contents: read
+concurrency:
+  group: supabase-port-mechanism-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+jobs:
+  port-rehearsal:
+    if: >-
+      github.repository == 'NewWorldVenture/Bubaly' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out the exact owned candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Use the declared Node runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.21.0'
+      - name: Validate syntax and static refusal controls
+        run: |
+          node --check scripts/ci-supabase-port-rehearsal.mjs
+          node scripts/ci-supabase-port-rehearsal.mjs --self-check
+      - name: Exercise real kernel sockets in owned network namespaces
+        run: node scripts/ci-supabase-port-rehearsal.mjs
+        env:
+          BUBALY_PORT_REHEARSAL_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+      # GNU timeout and unshare --kill-child bound each owned child. Normal results
+      # require socket closure, child exit and byte-identical host sysctls. A hard
+      # runner termination cannot earn cleanup PASS; VM destruction is separate.
+      - name: Retain the sanitized first result
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: supabase-port-mechanism-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/bubaly-port-rehearsal-${{ github.run_id }}-${{ github.run_attempt }}/summary.json
+          if-no-files-found: error
+          retention-days: 14

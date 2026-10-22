@@ -44,7 +44,7 @@ const validId = (value: unknown): value is string => typeof value === 'string' &
 
 export function readConversationInbox(db: Db, familyId: string): Promise<Result<Tables<'family_conversations'>>> {
   if (!familyId) return Promise.resolve({ data: null, error: { message: 'A family is required to read conversations.' } });
-  return complete(() => db.from('family_conversations').select('*', { count: 'exact' }).eq('family_id', familyId)
+  return complete(() => db.from('family_conversations').select('*,is_family_chat', { count: 'exact' }).eq('family_id', familyId)
     .order('last_message_at', { ascending: false, nullsFirst: false }).order('id', { ascending: false }),
   row => row?.family_id === familyId && validId(row.id) ? row.id : null, 'conversation list');
 }

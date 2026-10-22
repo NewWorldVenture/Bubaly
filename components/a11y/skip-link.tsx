@@ -18,7 +18,7 @@ export function SkipLink() {
   return (
     <a
       href="#main-content"
-      className="sr-only rounded-lg font-semibold focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:bg-brand focus:px-4 focus:py-2 focus:text-sm focus:text-brand-fg focus:shadow-glow focus:outline-none focus:ring-2 focus:ring-brand/60"
+      className="sr-only rounded-lg font-semibold focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:bg-brand focus:px-4 focus:py-2 focus:text-sm focus:text-brand-fg focus:shadow-glow focus:outline-none focus:ring-2 focus:ring-brand"
     >{t('skipLink.skipToContent')}</a>
   );
 }

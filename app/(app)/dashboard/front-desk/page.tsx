@@ -18,7 +18,7 @@ import { createServer } from '@/lib/supabase/server';
 import { ErrorState } from '@/components/ui/states';
 import { settleAll } from '@/lib/supabase/settle';
 import {
-  FrontDeskModule, type FrontDeskChannel, type FrontDeskVoiceMessage,
+  FrontDeskModule, type FrontDeskChannel, type FrontDeskCounts, type FrontDeskVoiceMessage,
 } from '@/components/modules/front-desk-module';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -33,7 +33,12 @@ export default async function FrontDeskPage() {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
-  const [voiceResult, channelResult] = await settleAll([
+  // The tiles are TOTALS and the list is the latest 100, so each tile reads
+  // its exact count: with 140 calls the tiles said 100, and an urgent call
+  // older than the hundredth was simply absent from "Urgent".
+  const voiceCount = () => supabase.from('family_inbox_messages').select('id', { count: 'exact', head: true })
+    .eq('family_id', familyId).eq('channel', 'voice');
+  const [voiceResult, channelResult, callsResult, filedResult, urgentResult] = await settleAll([
     supabase
       .from('family_inbox_messages')
       .select('id, from_addr, body, ai_summary, ai_intent, ai_handled, status, occurred_at')
@@ -46,6 +51,9 @@ export default async function FrontDeskPage() {
       .select('phone_number, email_local, provisioning_status, ai_concierge_enabled, forward_to_phone')
       .eq('family_id', familyId)
       .maybeSingle(),
+    voiceCount(),
+    voiceCount().eq('ai_handled', true),
+    voiceCount().eq('ai_intent', 'urgent'),
   ]);
 
   if (voiceResult.error) console.error('[dashboard/front-desk] voice inbox read failed', voiceResult.error);
@@ -53,11 +61,19 @@ export default async function FrontDeskPage() {
   if (voiceResult.error && channelResult.error) {
     return <ErrorState message={t('frontDesk.couldNotLoadTheFrontDesk')} />;
   }
+  // A total the database did not give is not a number: the tile shows an em
+  // dash for it, as it does when the list read failed.
+  const total = (label: string, res: { count?: number | null; error: unknown }): number | null => {
+    if (res.error) { console.error(`[dashboard/front-desk] ${label} count failed`, res.error); return null; }
+    return typeof res.count === 'number' ? res.count : null;
+  };
+  const counts: FrontDeskCounts = { calls: total('calls', callsResult), filed: total('filed', filedResult), urgent: total('urgent', urgentResult) };
 
   return (
     <FrontDeskModule
       voice={(voiceResult.data ?? []) as FrontDeskVoiceMessage[]}
       channel={(channelResult.data ?? null) as FrontDeskChannel | null}
+      counts={counts}
       unavailable={{ voice: Boolean(voiceResult.error), channel: Boolean(channelResult.error) }}
     />
   );

@@ -31,10 +31,14 @@ const childLogin = readFileSync('app/(app)/family/child-login-actions.ts', 'utf8
 describe('deleting a wallet row is confirmed before it is reported (C1-S9-16)', () => {
   it('asks for the deleted rows on every branch of the allowlist', () => {
     const body = between(wallet, 'export async function deleteWalletRowAction', 'return { ok: true };');
-    // The five branches are one ternary chain, so they are one statement — the
-    // count has to come from the branches themselves, not from splitting on `;`.
+    // The four direct branches are one ternary chain, so they are one statement
+    // — the count has to come from the branches themselves, not from splitting
+    // on `;`. The fifth table, `transactions`, is removed by the finances
+    // service (which confirms with `.maybeSingle()` and records the activity).
     const deletes = body.match(/\.delete\(\)[^\n]*/g) ?? [];
-    expect(deletes.length, 'the five DELETABLE branches').toBe(5);
+    expect(deletes.length, 'the four direct DELETABLE branches').toBe(4);
+    expect(body).toContain("if (input.table === 'transactions') return deleteHouseholdTransaction(");
+    expect(wallet).toContain('await deleteTransaction(scopeFromUserContext(ctx, supabase), id)');
     for (const d of deletes) {
       expect(d, 'a delete that cannot be confirmed').toContain(".select('id')");
       // And each stays scoped to the acting family.
@@ -239,7 +243,7 @@ describe('a rollback that fails is not reported as a clean failure (C1-S9-35)', 
     // C1-S9-35 — went red on that improvement. Ninth of the session, and the
     // first of mine: `toContain("<exact statement>")` is a trap regardless of
     // who writes it.
-    const link = between(childLogin, "update({ user_id: childUserId, is_active: true })", 'const { error: rowErr }');
+    const link = between(childLogin, "update({ user_id: childUserId, is_active: true", 'const { error: rowErr }');
     expect(link).toContain('const { error: deleteError } = await admin.auth.admin.deleteUser(childUserId);');
     expect(link).toContain("t('childLoginActions.couldNotFinishAndCouldNotUndo')");
   });
@@ -373,11 +377,15 @@ const contactCenter = readFileSync('app/(app)/dashboard/contact-center/actions.t
 const home = readFileSync('app/(app)/dashboard/home/actions.ts', 'utf8');
 
 describe('a milestone the child is congratulated for is confirmed (C1-S9-47)', () => {
-  it('both milestone transitions ask what they changed', () => {
-    for (const binding of ['achieved', 'skipped']) {
+  it('both milestone transitions ask what they changed, and so does the start', () => {
+    // The start is insert-only (ignoreDuplicates): an empty answer is a rung
+    // already on the ladder, told as such rather than "Added".
+    for (const binding of ['achieved', 'skipped', 'started']) {
       expect(independence, binding).toContain(`wroteNoRows(${binding})`);
     }
-    expect(independence.match(/\.select\('id'\)/g) ?? []).toHaveLength(2);
+    expect(independence.match(/\.select\('id'\)/g) ?? []).toHaveLength(3);
+    expect(independence).toContain("if (wroteNoRows(started)) return { ok: false, code: 'alreadyOnLadder', error: t('actions.milestoneAlreadyOnTheLadder') };");
+    expect(at(independence, 'if (wroteNoRows(started))')).toBeLessThan(at(independence, 'await logAudit(supabase, {'));
   });
 
   it('each stays scoped to the acting family', () => {
@@ -868,8 +876,15 @@ describe('an order transition is claimed, not assumed (C1-S9-56)', () => {
   it('the order write carries its own family scope', () => {
     // Ownership is already proven by the read above and by RLS. Carrying the
     // scope on the write too means a later edit cannot detach it from its guard.
+    // The read is scoped to the caller's family on either side of the exchange
+    // (readFamilyOrders: family_id or buyer_family_id), and the write to the
+    // family_id of the order that read returned.
     const body = bodyOf(marketplaceActions, 'export async function setOrderStatusAction', 'return { ok: true };');
-    expect(body.match(/eq\('family_id', ctx\.active\.familyId\)/g) ?? []).toHaveLength(2);
+    expect(body).toContain('readFamilyOrders(ctx.active.familyId, (scope) => scope(');
+    // `seller_member` rides along for the seller-only steps
+    // (tests/an-order-is-finished-by-its-seller.test.ts).
+    expect(body).toContain(".select('id, status, family_id, seller_member')");
+    expect(body.match(/\.eq\('family_id', order\.family_id\)/g) ?? []).toHaveLength(1);
   });
 
   it('the match, save and follow writes are confirmed', () => {
@@ -1228,7 +1243,9 @@ describe('a cancelled pickup is not a completed one (C1-S9-59)', () => {
   it('confirms the cancel', () => {
     const body = actionBody(handoff, 'export async function cancelHandoffAction');
     expect(body).toContain('wroteNoRows(cancelled)');
-    expect(body).toContain(".in('status', ['proposed', 'confirmed']).select('id')");
+    // Read back with the event it linked, so the cancel can take it off the
+    // family calendar (tests/a-cancelled-pickup-leaves-the-family-calendar.test.ts).
+    expect(body).toContain(".in('status', ['proposed', 'confirmed']).select('id, calendar_event_id')");
   });
 
   it('leaves the C1-S9-23 confirm guard in place beside it', () => {
@@ -1434,8 +1451,11 @@ const profileActions = readFileSync('app/(app)/dashboard/settings/profile-action
 describe('writes that were hidden as the first statement in a block (C1-S9-61)', () => {
   it('claiming a CRM lead never overwrites an owner, and is confirmed', () => {
     const body = actionBody(profileActions, 'async function resolveContactId');
-    expect(body).toContain(".update({ owner_id: userId }).eq('id', byEmail[0].id).is('owner_id', null).select('id')");
+    // #1030 also binds the claim to the email the lookup verified, and a claim
+    // that matched nothing refuses the call instead of minting a second lead.
+    expect(body).toContain(".update({ owner_id: userId }).eq('id', byEmail[0].id).eq('email', contact.email).is('owner_id', null).select('id')");
     expect(body).toContain('if (!wroteNoRows(claimed)) return byEmail[0].id;');
+    expect(body).toContain("throw unanswered('contact identity changed before claim'");
   });
 
   it("a lead owned by SOMEONE ELSE is not returned as this user's", () => {

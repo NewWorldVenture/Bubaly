@@ -148,6 +148,12 @@ declare
   s        text;
   outcome  text;
   door_open boolean := false;
+  -- The held 0509 keeps the household's money from a guest (the owner's
+  -- decision on ROLE-SCOPE-001); where it is installed a guest reads no
+  -- warning, and every other role still does.
+  guest_narrowed boolean := exists (select 1 from pg_policies p
+                                     where p.schemaname = 'public' and p.tablename = 'money_timeline_insights'
+                                       and p.policyname = 'A guest does not read money_timeline_insights');
   control_failures text[] := '{}';
   failures text[] := '{}';
 begin
@@ -329,7 +335,12 @@ begin
       -- Recorded so a change of that decision is made on purpose.
       s := null;
       select status into s from public.money_timeline_insights where id = warning;
-      if s is null then
+      if r = 'guest' and guest_narrowed then
+        if s is not null then
+          failures := array_append(failures, format(
+            '%s READ the warning — 0509 keeps the household''s money from a guest', who));
+        end if;
+      elsif s is null then
         failures := array_append(failures, format(
           '%s can no longer READ the warning — reads were meant to stay open; update 0352''s header and this probe if that changed on purpose', who));
       end if;
@@ -444,7 +455,7 @@ begin
     raise exception 'money-warning write boundary failed: %', array_to_string(failures, ' | ');
   end if;
   raise notice 'OK money_timeline_insights control: the same actor, promoted to parent and to adult, CAN dismiss, update, pre-dismiss and delete the family''s warning';
-  raise notice 'OK money_timeline_insights: as child, teen, guest and caregiver the same actor cannot dismiss, update, pre-dismiss or delete it, still reads it, and the parent still sees it active';
+  raise notice 'OK money_timeline_insights: as child, teen, guest and caregiver the same actor cannot dismiss, update, pre-dismiss or delete it, still reads it (a guest does not where the held 0509 is installed), and the parent still sees it active';
   raise notice 'OK money_timeline_insights backstop: with a stray permissive FOR ALL policy planted, the restrictive manager guards still refuse all four writes';
   raise notice 'OK money_timeline_insights: a parent dismisses and an adult restores; a non-member can neither read nor write';
 end $$;

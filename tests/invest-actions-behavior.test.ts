@@ -90,7 +90,8 @@ beforeEach(() => {
   db = createInMemorySupabase({ rpc: { invest_decide_order: completeDecision } });
   vi.spyOn(db, 'rpc');
   mocks.createServer.mockResolvedValue(db);
-  db.seed('child_wallets', [{ id: WALLET, family_id: FAMILY }]);
+  // The wallet is the acting child's own; a sibling's is a different member.
+  db.seed('child_wallets', [{ id: WALLET, family_id: FAMILY, member_id: 'member-child' }]);
   db.seed('invest_assets', [{ id: ASSET, price_cents: 500, is_active: true }]);
   db.seed('wallet_buckets', [{ id: BUCKET, family_id: FAMILY, child_wallet_id: WALLET, kind: 'invest' }]);
   db.seed('wallet_transactions', [
@@ -129,6 +130,22 @@ describe('placeInvestOrderAction', () => {
   it.each(['missing', 'another family'])('refuses a wallet from %s', async (kind) => {
     db.replace('child_wallets', kind === 'missing' ? [] : [{ id: WALLET, family_id: 'family-b' }]);
     await expectRequestRefused(request, 'actions.childWalletNotFound');
+  });
+
+  // A child used to be able to queue an order against a SIBLING's wallet: the
+  // only check was that the wallet was in the family, and a parent approving
+  // the queue then filled it against the sibling's Invest cash or shares.
+  it.each(['buy', 'sell'] as const)('refuses a child placing a %s on a sibling\'s wallet', async (side) => {
+    db.table('child_wallets')[0].member_id = 'member-sibling';
+    await expectRequestRefused({ ...request, side }, 'actions.childWalletNotFound');
+    expect(mocks.evaluateTrust).not.toHaveBeenCalled();
+  });
+
+  it('still lets a parent place an order on any child wallet in the family', async () => {
+    db.table('child_wallets')[0].member_id = 'member-sibling';
+    asRole('parent');
+    expect(await placeInvestOrderAction(request)).toEqual({ ok: true });
+    expect(db.table('invest_orders')).toHaveLength(1);
   });
 
   it.each(['missing', 'inactive'])('refuses an %s asset', async (kind) => {

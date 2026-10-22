@@ -17,11 +17,12 @@ describe('Vacation AI persistence boundaries', () => {
   });
 
   it('checks generated row counts and rolls back tracked build writes', () => {
-    expect(source).toContain('const createdActivityIds: string[] = [];');
-    expect(source).toContain('const createdItemIds: string[] = [];');
-    expect(source).toContain('const createdPackingItemIds: string[] = [];');
+    expect(source).toContain('const createdActivities: Written[] = [];');
+    expect(source).toContain('const createdItems: Written[] = [];');
+    expect(source).toContain('const createdPackingItems: Written[] = [];');
     expect(source).toContain('const rollbackBuild = async () =>');
-    expect(source).toContain(".insert(rows).select('id')");
+    // Each tracked row keeps the `updated_at` its insert returned: the rollback fences on it.
+    expect(source).toContain(".insert(rows).select('id, updated_at')");
     expect(source).toContain('data.length !== rows.length');
     expect(source).toContain('await rollbackBuild();');
   });

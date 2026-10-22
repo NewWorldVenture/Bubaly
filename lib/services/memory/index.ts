@@ -38,12 +38,15 @@ import 'server-only';
 import { createHash } from 'node:crypto';
 import type { Tables } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
-import { FACT_CATEGORY_LABELS, filterFacts, type FactCategory } from '@/lib/memory/facts';
+import {
+  FACT_CATEGORY_LABELS, factsVisibleTo, filterFacts, isSensitiveMemory, SENSITIVE_MEMORY_CATEGORIES, type FactCategory,
+} from '@/lib/memory/facts';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { readAllPages } from '@/lib/supabase/read-all-pages';
 import { recordActivitySafely } from '../activity';
 import { getTranslations } from '@/lib/i18n/server';
 import { loadAISettings } from '../ai-settings';
+import { getMember } from '../family';
 import { scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { escapeLike } from '@/lib/supabase/escape-like';
@@ -61,28 +64,13 @@ const AI_SIGNATURE_PREFIX = 'ai_memory:';
 /** The two `family_facts.source` values that mean "Bubaly, not a person". */
 export const AI_FACT_SOURCES: MemorySource[] = ['ai_conversation', 'ai_inferred'];
 
-/**
- * Categories the assistant must never write on its own. Medical facts belong
- * in the health profile where a person enters them deliberately; account
- * facts are credentials by another name. Both are readable through the
- * modules that own them, never inferred from a chat.
- */
-export const SENSITIVE_MEMORY_CATEGORIES: FactCategory[] = ['medical', 'account'];
-
-const SENSITIVE_TERMS = /\b(ssn|social security|passport (?:no|number)|password|passcode|pin\b|bank|routing|account number|card number|credit card|iban|allerg(?:y|ies|ic)|diagnos|prescription|medication|therap|hiv|pregnan|salary)\b/i;
-
-/**
- * True when a memory should not be written by the assistant: the category is
- * sensitive, or the words are, whatever category was chosen. Exported so the
- * tool and the service refuse on the same rule.
- */
-export function isSensitiveMemory(input: {
-  category?: string | null; key: string; content: string;
-  notes?: string | null; evidence?: string | null;
-}): boolean {
-  if (input.category && (SENSITIVE_MEMORY_CATEGORIES as string[]).includes(input.category)) return true;
-  return SENSITIVE_TERMS.test(`${input.key} ${input.content} ${input.notes ?? ''} ${input.evidence ?? ''}`);
-}
+// The sensitive-memory rule — SENSITIVE_MEMORY_CATEGORIES, the term list and
+// `isSensitiveMemory` — lives in lib/memory/facts.ts, because the Family Memory
+// page reads facts in the BROWSER and has to apply the same rule before it
+// renders (and this module is server-only). Re-exported so every server
+// caller keeps one import, and the tool and the service still refuse on the
+// same rule.
+export { isSensitiveMemory, SENSITIVE_MEMORY_CATEGORIES };
 
 function isCategory(value: unknown): value is FactCategory {
   return typeof value === 'string' && Object.prototype.hasOwnProperty.call(FACT_CATEGORY_LABELS, value);
@@ -402,7 +390,10 @@ async function rememberConfirmed(
     console.error('[service:memory] fact insert failed', error);
     return fail(describeDbError(error, 'Could not save that memory.'), { code: SERVICE_CODES.db });
   }
-  await recordActivitySafely(scope, { action: 'create', agent: 'memory', title: `Remembered ${input.key}: ${input.content}`, href: '/dashboard/knowledge', memberId: input.memberId });
+  // The label only, never the value: activity rows (agent_activity, audit)
+  // are readable by every family member and outlive `forgetFact`, so a value
+  // written here would survive the forget it was meant to honour.
+  await recordActivitySafely(scope, { action: 'create', agent: 'memory', title: `Remembered ${input.key}`, href: '/dashboard/knowledge', memberId: input.memberId });
   return ok({ kind: 'fact', fact: data, updated: false });
 }
 
@@ -462,8 +453,7 @@ export type RecallInput = { query?: string | null; category?: FactCategory | str
 
 /** Shared visibility rule for recall and review; expiry is handled separately. */
 function filterVisibleMemories<T extends Pick<FamilyFact, 'category' | 'label' | 'value'> & { notes?: string | null; evidence?: string | null }>(scope: ServiceScope, rows: T[]): T[] {
-  const canSeeSensitive = scope.role === 'system' || isManager(scope.role);
-  return rows.filter((f) => canSeeSensitive || !isSensitiveMemory({ category: f.category, key: f.label, content: f.value, notes: f.notes, evidence: f.evidence }));
+  return factsVisibleTo(scope.role, rows);
 }
 
 /**
@@ -573,12 +563,15 @@ function readTraitBlob(metadata: unknown): { reliabilityScore: number | null; ch
   };
 }
 
+/** The most pending suggestions `listMemories` reads; a caller that counts them says how many more there are. */
+export const PENDING_SUGGESTION_LIMIT = 200;
+
 /** Everything, for the review screen: confirmed facts plus what is waiting for a yes. */
 export async function listMemories(scope: ServiceScope, input: ListMemoriesInput = {}): Promise<ServiceResult<Memories>> {
   let facts = scope.db.from('family_facts').select('*').eq('family_id', scope.familyId)
     .order('is_pinned', { ascending: false }).order('updated_at', { ascending: false }).limit(500);
   let pending = scope.db.from('family_playbook_suggestions').select('*').eq('family_id', scope.familyId)
-    .eq('status', 'suggested').order('confidence', { ascending: false }).limit(200);
+    .eq('status', 'suggested').order('confidence', { ascending: false }).limit(PENDING_SUGGESTION_LIMIT);
   if (input.memberId) {
     facts = facts.eq('member_id', input.memberId);
     pending = pending.eq('member_id', input.memberId);
@@ -778,6 +771,11 @@ export async function confirmFact(scope: ServiceScope, suggestionId: string): Pr
     }
     return ok({ fact: fact ?? null, alreadyAccepted: true });
   }
+  // A dismissal is permanent (see `forgetFact`): a dismissed card is not
+  // waiting to be confirmed, and only an open one may become a fact.
+  if (suggestion.status !== 'suggested') {
+    return fail('That suggestion was already dismissed.', { code: SERVICE_CODES.invalidInput });
+  }
 
   // Validate the stored timestamp without reformatting it: PostgreSQL can
   // return fractional seconds more precise than the JavaScript clock.
@@ -829,6 +827,10 @@ export async function confirmFact(scope: ServiceScope, suggestionId: string): Pr
     .update({ status: 'accepted', fact_id: fact.id })
     .eq('family_id', scope.familyId)
     .eq('id', suggestionId)
+    // Compare-and-set: two concurrent confirms (or a confirm racing a
+    // dismissal) both read 'suggested'; only one may flip it. The loser
+    // matches no row and takes the rollback below, so one card is one fact.
+    .eq('status', 'suggested')
     .select('id');
   // The fact exists; leaving the card open would let it be confirmed twice —
   // and an accept that matched no row leaves it open exactly as an error does,
@@ -842,7 +844,7 @@ export async function confirmFact(scope: ServiceScope, suggestionId: string): Pr
     return fail(updateError ? describeDbError(updateError, 'Could not confirm that memory.') : 'Could not confirm that memory.', { code: SERVICE_CODES.db });
   }
 
-  await recordActivitySafely(scope, { action: 'confirm', agent: 'memory', title: `Confirmed: ${fact.label} — ${fact.value}`, href: '/dashboard/knowledge', memberId: fact.member_id });
+  await recordActivitySafely(scope, { action: 'confirm', agent: 'memory', title: `Confirmed: ${fact.label}`, href: '/dashboard/knowledge', memberId: fact.member_id });
   return ok({ fact, alreadyAccepted: false });
 }
 
@@ -994,6 +996,16 @@ async function factForWrite(scope: ServiceScope, factId: string): Promise<Servic
   return ok(data);
 }
 
+function sameMemberReference(received: unknown, requested: string): boolean {
+  if (typeof received !== 'string' || !received) return false;
+  if (received === requested) return true;
+  // PostgreSQL returns canonical UUIDs but accepts braces, uppercase and
+  // optional hyphens after four hex digits. Normalize only this comparison.
+  const uuid = /^(?:\{[0-9a-f]{4}(?:-?[0-9a-f]{4}){7}\}|[0-9a-f]{4}(?:-?[0-9a-f]{4}){7})$/i;
+  return uuid.test(received) && uuid.test(requested)
+    && received.replace(/[{}-]/g, '').toLowerCase() === requested.replace(/[{}-]/g, '').toLowerCase();
+}
+
 export async function updateFact(
   scope: ServiceScope,
   factId: string,
@@ -1044,6 +1056,26 @@ export async function updateFact(
   const nextNotes = patch.notes !== undefined ? patch.notes : existing.data.notes;
   if (!canManage(scope) && isSensitiveMemory({ category: nextCategory, key: nextLabel, content: nextValue, notes: nextNotes })) {
     return fail('Only a parent or adult can file a memory as medical or account information.', { code: SERVICE_CODES.denied });
+  }
+
+  // Editing rights do not establish which household the referenced member is
+  // in. Validate every explicit reference, even an unchanged one; omission
+  // keeps the saved association, while null/empty still means the whole family.
+  // getMember deliberately permits inactive members for historical memories.
+  if (patch.member_id) {
+    try {
+      const member = await getMember(scope, patch.member_id);
+      if (!member.ok) {
+        if (member.code === SERVICE_CODES.notFound) return member;
+        return fail('Could not confirm that family member.', { code: SERVICE_CODES.db });
+      }
+      if (!member.data || !sameMemberReference(member.data.id, patch.member_id)) {
+        return fail('Could not confirm that family member.', { code: SERVICE_CODES.db });
+      }
+    } catch (error) {
+      console.error('[service:memory] member reference lookup failed', error);
+      return fail('Could not confirm that family member.', { code: SERVICE_CODES.db });
+    }
   }
 
   // The family filter here is belt-and-braces and NO TEST DISTINGUISHES IT:

@@ -9,6 +9,8 @@ import { coerceNutrition, parseModelJSON, type Nutrition } from '@/lib/meals/nut
 import { weekDates } from '@/lib/meals/planner';
 import type { NutritionSubject } from '@/lib/database.types';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
+import { accessDeniedResponse, assertAIAllowance } from '@/lib/server/ai-access';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import { describeReadError } from '@/lib/supabase/settle';
 
@@ -57,6 +59,10 @@ export async function POST(req: Request) {
   }
 
   const supabase = await createServer();
+  // Served to the meals page, which is `requireFeature('/dashboard/meals')`.
+  // Ungated, a locked or switched-off family still got model calls here.
+  const refused = await refuseUnlessEntitled(supabase, familyId, ['/dashboard/meals']);
+  if (refused) return refused;
   const limited = await enforceAIRateLimit(supabase, `ai-meals-nutrition:${ctx.user.id}`, { limit: 15 });
   if (!limited.ok) return NextResponse.json(
     { error: t('nutrition.tooManyNutritionRequestsPlease') },
@@ -77,6 +83,15 @@ export async function POST(req: Request) {
     }
     if (cached) return NextResponse.json({ nutrition: cached, cached: true });
   }
+
+  // A model call from here on, so the Free plan's monthly AI allowance applies
+  // as it does at /api/ai and on the Habits, Journal and Notes helpers: these
+  // rows count toward the limit the assistant refuses on. A cached estimate
+  // (above) costs nothing and is still served. The allowance alone: whether
+  // the estimate is available is the Meals gate above, not the assistant's
+  // tier or its Off switch.
+  const access = await assertAIAllowance(ctx, { db: supabase });
+  if (!access.ok) return accessDeniedResponse(access);
 
   // Build the prompt for the subject --------------------------------------
   let userMsg = '';

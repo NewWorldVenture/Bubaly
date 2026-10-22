@@ -71,13 +71,18 @@ export async function POST(req: Request) {
       async (obs) => {
         const completion = await (await resolveProvider()).complete({ system, messages: [{ role: 'user', content: userMsg }], tools: [] });
         obs.used(completion.model ?? 'unknown', completion.usage);
-        return completion.text.trim();
+        const answer = completion.text.trim();
+        if (!answer) obs.failed(new Error('The accident assistant reply was empty.'));
+        return answer;
       },
     );
   } catch (err) {
     console.error('Accident assistant error:', err);
     return NextResponse.json({ error: describeAIError(err).message }, { status: 503 });
   }
+  // An empty reply is not help. Answered 200 it rendered nothing — no steps and
+  // no error line — to someone who has just had an accident.
+  if (!text) return NextResponse.json({ error: t('accident.noAnswerCameBackTryAgain') }, { status: 502 });
 
   // Its result used to be discarded outright — not even the error bound. Best-effort, so logged rather than raised. Audit C1-S9-76.
   const { error: autoAiLogsWriteError } = await supabase.from('auto_ai_logs').insert({

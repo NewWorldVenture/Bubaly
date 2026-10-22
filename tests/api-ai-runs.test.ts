@@ -120,7 +120,9 @@ vi.mock('@/lib/supabase/bearer', async (importOriginal) => ({
 vi.mock('@/lib/server/ensure-family', () => ({ ensureActiveFamily: async () => false }));
 // `react.cache` is server-only; the tier module is not under test here.
 vi.mock('@/lib/server/feature-tiers', () => ({ getResolvedFeatureTiers: (...a: unknown[]) => getResolvedFeatureTiers(...a) }));
-vi.mock('@/lib/server/plan', () => ({ resolveFamilyPlanLevel: (...a: unknown[]) => resolveFamilyPlanLevel(...a) }));
+vi.mock('@/lib/server/plan', () => ({ resolveFamilyPlanLevel: (...a: unknown[]) => resolveFamilyPlanLevel(...a),
+  resolveFamilyEntitlement: async (...a: unknown[]) => ({ effectiveLevel: await (resolveFamilyPlanLevel(...a)), locked: false, closed: false, inTrial: false, trialEndsAt: null }),
+}));
 vi.mock('@/lib/server/rate-limit', () => ({ rateLimit: () => ({ ok: true }) }));
 vi.mock('@/lib/server/rate-limit-db', () => ({ rateLimitDb: async () => ({ ok: true }) }));
 vi.mock('@/lib/ai/context/intents', async (importOriginal) => ({
@@ -192,7 +194,7 @@ beforeEach(() => {
   pauseRun.mockResolvedValue({ ok: true, data: { state: 'paused' } });
   resumeRun.mockResolvedValue({ ok: true, data: { state: 'ready' } });
   cancelRun.mockResolvedValue({ ok: true, data: { state: 'cancelled', cancelledSteps: 2, cancelledApprovals: 1 } });
-  rerunStep.mockResolvedValue({ ok: true, data: { rerun: true, state: 'queued', detail: 'Queued again.' } });
+  rerunStep.mockResolvedValue({ ok: true, data: { rerun: true, state: 'queued', runState: 'ready', detail: 'Queued again.' } });
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => { vi.clearAllMocks(); vi.restoreAllMocks(); });

@@ -69,6 +69,17 @@ export async function stitchIdentityAction(): Promise<void> {
 }
 
 /**
+ * A password no child account holds: derived for a "username" outside the
+ * grammar `isValidUsername` admits (`#` is not in it), so it can equal no real
+ * account's derived password. The miss branches of sign-in present it, so they
+ * make the provider round trip without ever offering a removed child's real
+ * credentials — and whatever the provider answers, a miss stays a miss.
+ */
+function decoyChildPassword(secret: string, username: string, pin: string): string {
+  return deriveChildPassword(secret, `${username}#decoy`, pin);
+}
+
+/**
  * Sign a child in with their username + 4-digit PIN (no email). Resolves the
  * username → the child's synthetic auth user via the service role, then signs in
  * with an isolated server client. The browser owns session adoption, so a late
@@ -118,13 +129,28 @@ export async function childSignInAction(input: { username: string; pin: string }
   // separate key with its own five attempts: 7 spellings for a five-character
   // name, 63 for an eight-character one, each resetting a budget that exists
   // because a 4-digit PIN is only 10,000 combinations.
-  const { data: rows, error: loginLookupError } = await admin.from('child_logins').select('username,user_id').eq('username', username).limit(1);
+  const { data: rows, error: loginLookupError } = await admin.from('child_logins').select('username,user_id,member_id').eq('username', username).limit(1);
   if (loginLookupError) {
     console.error('[child-login] login lookup failed', loginLookupError);
     return { ok: false, error: t('actions.kidSignInIsTemporarily') };
   }
   const row = rows?.[0];
-  if (!row) return { ok: false, error: t('actions.thatUsernameOrPinIsn') };
+
+  // A child login is only as live as the membership it was issued for.
+  // Removing a member is a soft `is_active = false` that leaves this row and
+  // the auth user in place, so a removed child could still sign in — and then
+  // be auto-provisioned a family of their own as its parent. Answered with
+  // the same wording as a wrong PIN, so this is not an oracle for removal.
+  let live: typeof row | undefined;
+  if (row) {
+    const { data: linkedMember, error: linkedMemberError } = await admin.from('family_members')
+      .select('id').eq('id', row.member_id).eq('user_id', row.user_id).eq('is_active', true).maybeSingle();
+    if (linkedMemberError) {
+      console.error('[child-login] member lookup failed', linkedMemberError);
+      return { ok: false, error: t('actions.kidSignInIsTemporarily') };
+    }
+    if (linkedMember) live = row;
+  }
 
   let passwordClient: ReturnType<typeof createPasswordClient> | null = null;
   try {
@@ -135,13 +161,20 @@ export async function childSignInAction(input: { username: string; pin: string }
     passwordClient = createPasswordClient(configuration[0], configuration[1], {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, skipAutoInitialize: true },
     });
+    // The same WORDING for an unknown username, a removed child and a wrong
+    // PIN was not the same WORK: the first two returned after the reads above,
+    // while a wrong PIN went on to this password round trip and its bcrypt
+    // verification, so response time said which usernames exist. The miss
+    // branches now make the same request — for the typed username, with a
+    // password no account can hold — and answer the same whatever the provider
+    // says. The throttle reservation above still comes first. Audit N8.
     const { data, error } = await passwordClient.auth.signInWithPassword({
-      email: syntheticChildEmail(row.username),
-      password: deriveChildPassword(sec, row.username, pin),
+      email: syntheticChildEmail(live?.username ?? username),
+      password: live ? deriveChildPassword(sec, live.username, pin) : decoyChildPassword(sec, username, pin),
     });
-    if (error) return { ok: false, error: t('actions.thatUsernameOrPinIsn') };
+    if (!live || error) return { ok: false, error: t('actions.thatUsernameOrPinIsn') };
     const session = data.session;
-    if (!session || !data.user || data.user.id !== row.user_id || session.user?.id !== data.user.id
+    if (!session || !data.user || data.user.id !== live.user_id || session.user?.id !== data.user.id
       || typeof session.access_token !== 'string' || !session.access_token.trim()
       || typeof session.refresh_token !== 'string' || !session.refresh_token.trim()) {
       return { ok: false, error: t('actions.kidSignInIsTemporarily') };
@@ -150,7 +183,7 @@ export async function childSignInAction(input: { username: string; pin: string }
     // this decoded claim, established the credentials above.
     const tokenPayload = session.access_token.split('.')[1];
     if (!tokenPayload || tokenPayload.length > 64 * 1024
-      || JSON.parse(Buffer.from(tokenPayload, 'base64url').toString('utf8'))?.sub !== row.user_id) {
+      || JSON.parse(Buffer.from(tokenPayload, 'base64url').toString('utf8'))?.sub !== live.user_id) {
       return { ok: false, error: t('actions.kidSignInIsTemporarily') };
     }
 

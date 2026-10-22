@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
-import { searchHousehold, MANAGER_ONLY_KINDS, MIN_QUERY_CHARS } from '@/lib/services/search';
+import { searchHousehold, MANAGER_ONLY_KINDS, MIN_QUERY_CHARS, TRAVEL_KINDS } from '@/lib/services/search';
 import type { ServiceScope } from '@/lib/services/types';
 import type { MemberRole } from '@/lib/constants/roles';
 
@@ -149,7 +149,9 @@ describe('searchHousehold — who may search what', () => {
     expect(result.data.searched).not.toContain('renewals');
     expect(result.data.hits.some((h) => MANAGER_ONLY_KINDS.includes(h.kind))).toBe(false);
     // Honest about the gap rather than implying the household owns no bills.
-    expect(result.data.withheld).toEqual([...MANAGER_ONLY_KINDS]);
+    // A child is also not searched the trip sources trips.getTrip refuses a
+    // child (travel is in the child's private domains) — named, not hidden.
+    expect(result.data.withheld).toEqual([...MANAGER_ONLY_KINDS, ...TRAVEL_KINDS]);
   });
 
   it('withholds a Secure Vault document from a child but not from a parent', async () => {

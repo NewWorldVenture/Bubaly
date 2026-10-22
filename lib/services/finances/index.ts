@@ -26,14 +26,17 @@
 // into the wrong month for any family west of UTC.
 import 'server-only';
 import { readAllPages } from '@/lib/supabase/read-all-pages';
+import { readAll } from '@/lib/supabase/read-all';
+import { getTranslations } from '@/lib/i18n/server';
 import type { BudgetPeriod, Json, Tables, TransactionType } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
 import { withIdempotency } from '../idempotency';
 import { dayKeyInTz, scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { escapeLike } from '@/lib/supabase/escape-like';
+import { monthlyBudgetShare } from '@/lib/finance/budget-periods';
 import {
   createTransactionIntent, FINANCE_TRANSACTION_TOOL_NAME, readTransactionOperationReply,
   transactionIntentFromToolInputs, type TransactionOperationMetadata,
@@ -49,7 +52,13 @@ const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
 const MONTH_KEY = /^\d{4}-\d{2}$/;
 const PERIODS: BudgetPeriod[] = ['weekly', 'monthly', 'yearly'];
 const TYPES: TransactionType[] = ['income', 'expense', 'transfer'];
-/** Hard cap on rows pulled for any analysis; a household with more has a different problem. */
+/**
+ * Ceiling on rows pulled for any analysis; a household with more has a
+ * different problem. A REAL ceiling, paged to with `readAll`: PostgREST answers
+ * one request with at most `db-max-rows` (1,000 on a default project) whatever
+ * `.limit()` asks for, so `.limit(5000)` summed the newest 1,000 rows of a
+ * window and reported the total as exact.
+ */
 const MAX_ROWS = 5000;
 
 // ── money helpers ─────────────────────────────────────────────────────────────
@@ -165,30 +174,52 @@ export function budgetWindow(period: BudgetPeriod, refDay: string): DateRange {
 
 // ── reads ─────────────────────────────────────────────────────────────────────
 
+type TransactionFilter = { type?: TransactionType | null; category?: string | null; memberId?: string | null };
+
+/** One page of a window's transactions, newest first; `id` breaks ties so pages neither repeat nor skip. */
+function transactionPage(scope: ServiceScope, range: DateRange, opts: TransactionFilter | undefined, from: number, to: number) {
+  let q = scope.db.from('transactions').select('*').eq('family_id', scope.familyId)
+    .gte('date', range.from).lte('date', range.to).order('date', { ascending: false });
+  if (opts?.type) q = q.eq('type', opts.type);
+  if (opts?.memberId) q = q.eq('member_id', opts.memberId);
+  if (opts?.category?.trim()) {
+    const term = opts.category.trim();
+    q = q.ilike('category', escapeLike(term));
+  }
+  return q.order('id').range(from, to);
+}
+
+/**
+ * Every transaction in a window, for a caller that SUMS them. Every analysis
+ * here does, so a window holding more than `MAX_ROWS` fails the call instead of
+ * totalling the newest rows as if they were all of them. `complete` lifts the
+ * ceiling for the one caller that must judge the whole year whatever its size
+ * (purchase advice).
+ */
 async function loadTransactions(
   scope: ServiceScope,
   range: DateRange,
-  opts?: { type?: TransactionType | null; category?: string | null; memberId?: string | null; limit?: number; complete?: boolean },
+  opts?: TransactionFilter & { complete?: boolean },
 ): Promise<ServiceResult<TransactionRow[]>> {
-  const query = () => {
-    let q = scope.db.from('transactions').select('*').eq('family_id', scope.familyId)
-      .gte('date', range.from).lte('date', range.to).order('date', { ascending: false });
-    if (opts?.type) q = q.eq('type', opts.type);
-    if (opts?.memberId) q = q.eq('member_id', opts.memberId);
-    if (opts?.category?.trim()) {
-      const term = opts.category.trim();
-      q = q.ilike('category', escapeLike(term));
+  const page = (from: number, to: number) => transactionPage(scope, range, opts, from, to);
+  if (opts?.complete) {
+    const { data, error } = await readAllPages(page);
+    if (error) {
+      console.error('[service:finances] transactions read failed', error);
+      return fail(describeDbError(error, 'Could not load your transactions.'), { code: SERVICE_CODES.db });
     }
-    return q;
-  };
-  const { data, error } = opts?.complete
-    ? await readAllPages((from, to) => query().order('id').range(from, to))
-    : await query().limit(Math.min(Math.max(opts?.limit ?? MAX_ROWS, 1), MAX_ROWS));
+    return ok(data ?? []);
+  }
+  const { rows, error, truncated } = await readAll<TransactionRow>(page, { max: MAX_ROWS });
+  if (truncated) {
+    console.error('[service:finances] transactions read reached its ceiling', { familyId: scope.familyId, range, max: MAX_ROWS });
+    return fail((await getTranslations())('finances.tooManyToTotal'), { code: SERVICE_CODES.invalidInput });
+  }
   if (error) {
     console.error('[service:finances] transactions read failed', error);
     return fail(describeDbError(error, 'Could not load your transactions.'), { code: SERVICE_CODES.db });
   }
-  return ok(data ?? []);
+  return ok(rows);
 }
 
 export type ListTransactionsInput = {
@@ -226,11 +257,18 @@ function toSummary(row: TransactionRow): TransactionSummary {
   };
 }
 
-/** Transactions in a window, newest first. */
+/**
+ * Transactions in a window, newest first, up to `limit` (paged, so a limit
+ * above the server's 1,000-row response cap is honoured).
+ *
+ * `total` sums the LISTED transactions. `complete` says whether those are all
+ * of the window's: when it is false the window holds more than `limit`, and
+ * `total` is the listed page's total, not the window's.
+ */
 export async function listTransactions(
   scope: ServiceScope,
   input: ListTransactionsInput = {},
-): Promise<ServiceResult<{ range: DateRange; transactions: TransactionSummary[]; total: number }>> {
+): Promise<ServiceResult<{ range: DateRange; transactions: TransactionSummary[]; total: number; complete: boolean }>> {
   const access = assertFinanceReader(scope);
   if (!access.ok) return access;
   const range = resolveRange(scope, input);
@@ -238,10 +276,19 @@ export async function listTransactions(
   if (input.type && !TYPES.includes(input.type)) {
     return fail('That transaction type is not one Bubaly knows.', { code: SERVICE_CODES.invalidInput });
   }
-  const rows = await loadTransactions(scope, range.data, { ...input, limit: input.limit ?? 200 });
-  if (!rows.ok) return rows;
-  const total = rows.data.reduce((sum, row) => sum + toCents(row.amount), 0);
-  return ok({ range: range.data, transactions: rows.data.map(toSummary), total: toDollars(total) });
+  const limit = Math.min(Math.max(input.limit ?? 200, 1), MAX_ROWS);
+  // A listing, not a sum: the newest `limit` rows are the useful prefix, and
+  // `truncated` is reported rather than raised.
+  const { rows, error, truncated } = await readAll<TransactionRow>(
+    (from, to) => transactionPage(scope, range.data, input, from, to),
+    { max: limit, failOnMax: false },
+  );
+  if (error) {
+    console.error('[service:finances] transactions read failed', error);
+    return fail(describeDbError(error, 'Could not load your transactions.'), { code: SERVICE_CODES.db });
+  }
+  const total = rows.reduce((sum, row) => sum + toCents(row.amount), 0);
+  return ok({ range: range.data, transactions: rows.map(toSummary), total: toDollars(total), complete: !truncated });
 }
 
 // ── pure analysis over rows ───────────────────────────────────────────────────
@@ -499,6 +546,26 @@ export type BudgetLine = {
 };
 
 /**
+ * One budget per category: the oldest row (created_at, then id), which is the
+ * one `updateBudget` edits. Without a unique index a family can hold duplicate
+ * "Groceries" rows (legacy forms, or two saves racing), and every duplicate
+ * line summed the SAME transactions, so `totalSpent` counted that spend twice
+ * and the stale twin kept reporting its old limit.
+ */
+function canonicalBudgets(rows: BudgetRow[]): BudgetRow[] {
+  const first = new Map<string, BudgetRow>();
+  const older = (a: BudgetRow, b: BudgetRow) =>
+    a.created_at !== b.created_at ? a.created_at < b.created_at : a.id < b.id;
+  for (const row of rows) {
+    const key = row.category.trim().toLowerCase();
+    const held = first.get(key);
+    if (!held || older(row, held)) first.set(key, row);
+  }
+  const keep = new Set([...first.values()].map((r) => r.id));
+  return rows.filter((r) => keep.has(r.id));
+}
+
+/**
  * Every budget against what was actually spent in its window. The window is
  * judged at the last day of `month` (or today when the month is the current
  * one) so a weekly budget reports the week that matters for that month.
@@ -527,15 +594,16 @@ export async function budgetVsActual(
     console.error('[service:finances] budgets read failed', error);
     return fail(describeDbError(error, 'Could not load your budgets.'), { code: SERVICE_CODES.db });
   }
-  const rows = budgets ?? [];
+  const rows = canonicalBudgets(budgets ?? []);
   if (rows.length === 0) return ok({ month, budgets: [], totalLimit: 0, totalSpent: 0, overCount: 0 });
 
   // One read covering the widest window any budget needs (the year for a
-  // yearly budget), then sliced per budget in memory.
+  // yearly budget) and the whole month the totals report, then sliced per
+  // budget in memory.
   const windows = rows.map((b) => budgetWindow(b.period, refDay));
   const wide: DateRange = {
-    from: windows.reduce((min, w) => (w.from < min ? w.from : min), windows[0].from),
-    to: windows.reduce((max, w) => (w.to > max ? w.to : max), windows[0].to),
+    from: windows.reduce((min, w) => (w.from < min ? w.from : min), bounds.from),
+    to: windows.reduce((max, w) => (w.to > max ? w.to : max), bounds.to),
   };
   const txns = await loadTransactions(scope, wide, { type: 'expense', complete: input.complete });
   if (!txns.ok) return txns;
@@ -560,17 +628,30 @@ export async function budgetVsActual(
       spent: toDollars(cents),
       remaining: toDollars(limitCents - cents),
       pct: limitCents > 0 ? Math.round((cents / limitCents) * 100) : (cents > 0 ? 999 : 0),
-      over: limitCents > 0 && cents > limitCents,
+      over: cents > limitCents,
       window,
       transactionCount: count,
     };
   }).sort((a, b) => b.pct - a.pct);
 
+  // The totals are the MONTH's: every budget's limit as its monthly share
+  // (weekly x 52/12, yearly / 12), against what was spent in the month in the
+  // budgeted categories. Adding each line's raw limit and spent mixed a week, a
+  // month and a year: $150 weekly Groceries + $300 monthly Dining + $6,000
+  // yearly Travel read as a $6,450 "this month" against week, month and
+  // year-to-date spend together. The lines keep their own periods.
+  const budgeted = new Set(rows.map((b) => b.category.trim().toLowerCase()));
+  let monthSpentCents = 0;
+  for (const t of txns.data) {
+    if (t.date < bounds.from || t.date > bounds.to) continue;
+    if (!budgeted.has((t.category ?? '').trim().toLowerCase())) continue;
+    monthSpentCents += Math.abs(toCents(t.amount));
+  }
   return ok({
     month,
     budgets: lines,
-    totalLimit: toDollars(lines.reduce((s, l) => s + toCents(l.limit), 0)),
-    totalSpent: toDollars(lines.reduce((s, l) => s + toCents(l.spent), 0)),
+    totalLimit: toDollars(lines.reduce((s, l) => s + Math.round(monthlyBudgetShare(toCents(l.limit), l.period)), 0)),
+    totalSpent: toDollars(monthSpentCents),
     overCount: lines.filter((l) => l.over).length,
   });
 }
@@ -675,19 +756,24 @@ export async function updateBudget(
   }
   const amount = toDollars(toCents(input.amount));
 
-  const { data: existing, error: readError } = await scope.db
+  // `budgets` has no unique index on the category (only idx_budgets_family,
+  // 0006), so a family can hold two "Groceries" rows: legacy forms wrote them,
+  // and two saves racing this read-then-insert both miss and both insert.
+  // Every reader therefore needs ONE answer to "which row is the Groceries
+  // budget?", and it is the OLDEST — the same rule `budgetVsActual` applies
+  // when it collapses duplicates. `.limit(1)` with no order handed back an
+  // arbitrary one, so an edit could land on a row the overview then ignored.
+  const canonical = () => scope.db
     .from('budgets')
     .select('*')
     .eq('family_id', scope.familyId)
     .ilike('category', escapeLike(category))
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
     .limit(1)
     .maybeSingle();
-  if (readError) {
-    console.error('[service:finances] budget lookup failed', readError);
-    return fail(describeDbError(readError, 'Could not check the existing budget.'), { code: SERVICE_CODES.db });
-  }
 
-  if (existing) {
+  const applyTo = async (existing: BudgetRow): Promise<ServiceResult<{ budget: BudgetRow; created: boolean; previousAmount: number | null }>> => {
     const { data, error } = await scope.db
       .from('budgets')
       .update({ amount, ...(input.period ? { period: input.period } : {}) })
@@ -707,7 +793,14 @@ export async function updateBudget(
       href: '/dashboard/finances',
     });
     return ok({ budget: data, created: false, previousAmount: toDollars(toCents(existing.amount)) });
+  };
+
+  const { data: existing, error: readError } = await canonical();
+  if (readError) {
+    console.error('[service:finances] budget lookup failed', readError);
+    return fail(describeDbError(readError, 'Could not check the existing budget.'), { code: SERVICE_CODES.db });
   }
+  if (existing) return applyTo(existing);
 
   const { data, error } = await scope.db
     .from('budgets')
@@ -718,6 +811,37 @@ export async function updateBudget(
     console.error('[service:finances] budget insert failed', error);
     return fail(describeDbError(error, 'Could not create that budget.'), { code: SERVICE_CODES.db });
   }
+
+  // Without a unique index the insert cannot fail on a race, so the race is
+  // settled after it: read the canonical row again, and when it is not ours a
+  // concurrent save created this category first. Ours is the duplicate — remove
+  // it and set the amount on theirs, so the family keeps one budget. (A unique
+  // index on (family_id, lower(btrim(category))) is what makes this airtight;
+  // it needs a migration that first merges the duplicates already stored.)
+  const { data: winner, error: winnerError } = await canonical();
+  if (winnerError) {
+    console.error('[service:finances] budget duplicate check failed', winnerError);
+  } else if (winner && winner.id !== data.id) {
+    // The amount this call was asked for lands on the WINNER whatever becomes
+    // of our duplicate: readers select the oldest row, so answering with ours
+    // (`created: true`) would report success while the family's budget still
+    // read the old amount. The delete is read back so the log can say whether
+    // the duplicate is gone or may remain; its outcome never decides the answer.
+    // Only the winner update failing fails the call, and it says so.
+    const { data: dropped, error: dropError } = await scope.db
+      .from('budgets')
+      .delete()
+      .eq('id', data.id)
+      .eq('family_id', scope.familyId)
+      .select('id');
+    if (dropError) {
+      console.error('[service:finances] duplicate budget cleanup failed: the duplicate may remain', { budgetId: data.id, winnerId: winner.id, error: dropError });
+    } else if (wroteNoRows(dropped)) {
+      console.error('[service:finances] duplicate budget cleanup matched no row: the duplicate was already gone', { budgetId: data.id, winnerId: winner.id });
+    }
+    return applyTo(winner);
+  }
+
   await recordActivitySafely(scope, {
     agent: 'finances',
     action: 'create',
@@ -992,6 +1116,22 @@ export async function createSavingsGoal(scope: ServiceScope, input: CreateSaving
           return fail(describeDbError(error, 'Could not check for an existing goal.'), { code: SERVICE_CODES.db });
         }
         return ok(data ?? null);
+      },
+      // The probe above matches by NAME, not by this call's key — savings_goals
+      // has no idempotency_key column — so what it finds may be an older goal
+      // the family set up long before this request ("Emergency fund", $2,000),
+      // not the row a retry of THIS call wrote. Handing that back as a success
+      // told a parent who approved a $10,000 target that it had started, while
+      // the old $2,000 goal was what stood. A found goal is only this save when
+      // the money on it is what this call would have written; otherwise the
+      // answer is "that goal already exists", and nothing was changed.
+      changedRetry: {
+        drift: (found) => [
+          ...(toCents(found.target_amount) !== toCents(target) ? ['target_amount'] : []),
+          ...(toCents(found.current_amount) !== toCents(current) ? ['current_amount'] : []),
+        ],
+        message: (found) => `A savings goal called ${found.name} already exists, with a target of ${formatDollars(toCents(found.target_amount))} and ${formatDollars(toCents(found.current_amount))} saved. Nothing was changed; update that goal or choose a different name.`,
+        id: (found) => found.id,
       },
     },
     async () => {

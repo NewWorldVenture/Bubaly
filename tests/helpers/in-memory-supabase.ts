@@ -49,6 +49,16 @@ export type InMemoryOptions = {
    * existing test assumes.
    */
   maxRows?: number;
+  /**
+   * How `like`/`ilike` read their pattern. Unset keeps this fake's historical
+   * reading: `%` and `_` are wildcards and every other character, a backslash
+   * included, is literal. `'postgrest'` reads it as the real transport does:
+   * PostgREST first turns EVERY `*` into `%` (its alias, escaped or not), then
+   * PostgreSQL's LIKE applies, where `\` makes the next character literal — so
+   * `escapeLike('50%')` matches "50%", and an escaped star matches a literal
+   * percent sign, not a star (lib/supabase/escape-like.ts).
+   */
+  likeSyntax?: 'postgrest';
 };
 
 /**
@@ -109,6 +119,21 @@ function jsonContains(value: unknown, wanted: unknown): boolean {
   return looseEq(value, wanted);
 }
 
+/** PostgREST's `*` alias, then PostgreSQL LIKE with `\` as its escape (InMemoryOptions.likeSyntax). */
+function postgrestLike(column: string, pattern: string, flags: string): Predicate {
+  const aliased = pattern.replace(/\*/g, '%');
+  let source = '';
+  for (let i = 0; i < aliased.length; i++) {
+    const char = aliased[i];
+    if (char === '\\' && i + 1 < aliased.length) source += aliased[++i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    else if (char === '%') source += '[\\s\\S]*';
+    else if (char === '_') source += '[\\s\\S]';
+    else source += char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+  const re = new RegExp(`^${source}$`, flags);
+  return (row) => typeof row[column] === 'string' && re.test(row[column] as string);
+}
+
 function operatorPredicate(column: string, op: string, wanted: unknown): Predicate {
   if (column.includes('->')) {
     const path = /^([a-zA-Z_]\w*)((?:->>?[a-zA-Z_]\w*)+)$/.exec(column);
@@ -142,6 +167,32 @@ function operatorPredicate(column: string, op: string, wanted: unknown): Predica
         ? wanted
         : String(wanted).replace(/^\(/, '').replace(/\)$/, '').split(',').map((v) => parseFilterValue(v.trim().replace(/^"|"$/g, '')));
       return (row) => values.some((v) => looseEq(row[column], v));
+    }
+    case 'imatch': {
+      // Only an escaped literal: anchored at both ends (CRM email lookups:
+      // equal) or at neither (searches: contains). Unsupported ARE syntax must
+      // fail rather than silently model a regex.
+      if (typeof wanted !== 'string') throw new Error('[in-memory-supabase] unsupported imatch pattern');
+      const anchored = wanted.startsWith('^') && wanted.endsWith('$') && !/(^|[^\\])(\\\\)*\\\$$/.test(wanted);
+      const body = anchored ? wanted.slice(1, -1) : wanted;
+      const specials = '.*+?^$' + '{}()|[]' + String.fromCharCode(92);
+      let literal = '';
+      for (let index = 0; index < body.length; index++) {
+        const char = body[index];
+        if (char === String.fromCharCode(92)) {
+          const escaped = body[++index];
+          if (escaped === undefined || !specials.includes(escaped)) {
+            throw new Error('[in-memory-supabase] unsupported imatch pattern');
+          }
+          literal += escaped;
+        } else {
+          if (specials.includes(char)) throw new Error('[in-memory-supabase] unsupported imatch pattern');
+          literal += char;
+        }
+      }
+      return (row) => typeof row[column] === 'string' && (anchored
+        ? (row[column] as string).toLowerCase() === literal.toLowerCase()
+        : (row[column] as string).toLowerCase().includes(literal.toLowerCase()));
     }
     case 'like':
     case 'ilike': {
@@ -223,7 +274,13 @@ function parseOr(expression: string, mode: 'or' | 'and' = 'or'): Predicate {
     const column = body.slice(0, first);
     const op = body.slice(first + 1, second);
     const raw = body.slice(second + 1);
-    const wanted = op === 'in' ? raw : parseFilterValue(raw);
+    // An array operator's value is a PostgreSQL array literal (`tags.cs.{beach}`),
+    // which PostgREST hands to the database as an array; read it as one, or
+    // `cs` would compare the whole `{beach}` string against each element.
+    const arrayLiteral = (op === 'cs' || op === 'ov') && /^\{.*\}$/.test(raw);
+    const wanted = op === 'in' ? raw
+      : arrayLiteral ? raw.slice(1, -1).split(',').map((v) => v.trim().replace(/^"|"$/g, '')).filter((v) => v !== '')
+        : parseFilterValue(raw);
     const predicate = operatorPredicate(column, op, wanted);
     return negated ? (row: Row) => !predicate(row) : predicate;
   });
@@ -318,16 +375,43 @@ class QueryBuilder implements PromiseLike<Reply> {
   }
   delete() { this.op = 'delete'; return this; }
 
-  eq(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, value === null ? 'is' : 'eq', value)); return this; }
+  /**
+   * A filter on an EMBEDDED resource's column (`family.closed_at`), named by the
+   * embed's alias in the select list, as PostgREST names it. An `!inner` embed
+   * also drops the parent row when the embedded row does not match; a plain
+   * embed only filters the embedded value, which this fake does not model, so
+   * it is left unfiltered. Null when the column is not an embed's.
+   */
+  private embedPredicate(column: string, op: string, value: unknown): Predicate | null {
+    const dot = /^([\w]+)\.([\w]+)$/.exec(column);
+    if (!dot || !this.selectList) return null;
+    const part = splitSelect(this.selectList.replace(/\s+/g, ' '))
+      .map((p) => /^(?:([\w]+):)?([\w]+)(!inner)?\((.*)\)$/.exec(p))
+      .find((m) => m && (m[1] ?? m[2]) === dot[1]);
+    if (!part) return null;
+    if (!part[3]) return () => true;
+    const alias = part[1] ?? part[2];
+    const table = part[2];
+    const inner = operatorPredicate(dot[2], op, value);
+    return (row) => {
+      const fk = [`${alias}_id`, `${table.replace(/s$/, '')}_id`, `${table}_id`].find((c) => c in row);
+      const target = fk ? this.db.table(table).find((r) => looseEq(r.id, row[fk])) : undefined;
+      return target !== undefined && inner(target);
+    };
+  }
+  eq(column: string, value: unknown) { const op = value === null ? 'is' : 'eq'; this.predicates.push(this.embedPredicate(column, op, value) ?? operatorPredicate(column, op, value)); return this; }
   neq(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'neq', value)); return this; }
   gt(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'gt', value)); return this; }
   gte(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'gte', value)); return this; }
   lt(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'lt', value)); return this; }
   lte(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'lte', value)); return this; }
   in(column: string, values: unknown[]) { this.predicates.push(operatorPredicate(column, 'in', values)); return this; }
-  is(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'is', value)); return this; }
+  is(column: string, value: unknown) { this.predicates.push(this.embedPredicate(column, 'is', value) ?? operatorPredicate(column, 'is', value)); return this; }
   like(column: string, pattern: string) { this.predicates.push(operatorPredicate(column, 'like', pattern)); return this; }
-  ilike(column: string, pattern: string) { this.predicates.push(operatorPredicate(column, 'ilike', pattern)); return this; }
+  ilike(column: string, pattern: string) {
+    this.predicates.push(this.db.likeSyntax === 'postgrest' ? postgrestLike(column, pattern, 'i') : operatorPredicate(column, 'ilike', pattern));
+    return this;
+  }
   contains(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'contains', value)); return this; }
   overlaps(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, 'overlaps', value)); return this; }
   not(column: string, op: string, value: unknown) {
@@ -481,6 +565,7 @@ export class InMemorySupabase {
 
   /** The server's per-response row ceiling, or undefined for no cap. */
   get maxRows(): number | undefined { return this.options.maxRows; }
+  get likeSyntax(): InMemoryOptions['likeSyntax'] { return this.options.likeSyntax; }
 
   from(table: string): QueryBuilder {
     this.log.push({ table });
@@ -541,4 +626,55 @@ export class InMemorySupabase {
 /** Build one, typed as the client the server code expects. */
 export function createInMemorySupabase<T = unknown>(options: InMemoryOptions = {}): InMemorySupabase & T {
   return new InMemorySupabase(options) as InMemorySupabase & T;
+}
+
+/** One builder call, as `withFaults` records it. */
+export type FaultCall = { method: string; args: unknown[] };
+
+/**
+ * The same client, with chosen calls answering an error instead of the
+ * database — a refused read, a timeout, a column PostgREST does not know.
+ *
+ * `fault` sees the table and every builder call made on it, in order, when the
+ * query is awaited; returning an error answers `{ data: null, error }`, the
+ * way supabase-js resolves every failure (it never throws). Returning null lets
+ * the in-memory database answer as usual.
+ */
+export function withFaults<T extends object>(
+  db: T,
+  fault: (table: string, calls: FaultCall[]) => { code?: string; message: string } | null,
+): T {
+  return new Proxy(db, {
+    get(target, property, receiver) {
+      if (property !== 'from') return Reflect.get(target, property, receiver);
+      return (table: string) => {
+        const builder = (target as unknown as InMemorySupabase).from(table);
+        const calls: FaultCall[] = [];
+        const proxy: object = new Proxy(builder, {
+          get(object, key) {
+            if (key === 'then') {
+              return (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) => {
+                const failure = fault(table, calls);
+                if (failure) {
+                  return Promise.resolve({
+                    data: null, count: null, status: 400, statusText: 'Bad Request',
+                    error: pgError(failure.code ?? 'XX000', failure.message),
+                  }).then(resolve, reject);
+                }
+                return object.then(resolve as never, reject);
+              };
+            }
+            const value = Reflect.get(object, key);
+            if (typeof value !== 'function') return value;
+            return (...args: unknown[]) => {
+              calls.push({ method: String(key), args });
+              const result = Reflect.apply(value, object, args);
+              return result === object ? proxy : result;
+            };
+          },
+        });
+        return proxy;
+      };
+    },
+  });
 }

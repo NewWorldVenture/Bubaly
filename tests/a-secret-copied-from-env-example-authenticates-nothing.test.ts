@@ -47,6 +47,37 @@ describe('shared-secret checks', () => {
   });
 });
 
+describe('the rate-limit table\'s keyed digest', () => {
+  // public.rate_limits stores an IP or an address only as an HMAC keyed on
+  // INTERNAL_SECRET (else the service-role key), so it cannot be reversed by
+  // hashing the IPv4 space. Keyed on the published placeholder it can.
+  const digestWith = (key: string, value: string) =>
+    `h.${createHmac('sha256', key).update('rate-limit-subject\0').update(value).digest('hex').slice(0, 32)}`;
+
+  it('is not keyed on an INTERNAL_SECRET left as the placeholder', async () => {
+    vi.stubEnv('INTERNAL_SECRET', PLACEHOLDER);
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'a-real-service-role-key-for-this-test');
+    const { storedBucketKey } = await import('@/lib/server/rate-limit-db');
+    const stored = storedBucketKey('contact:203.0.113.7');
+    expect(stored).not.toBe(`contact:${digestWith(PLACEHOLDER, '203.0.113.7')}`);
+    expect(stored).toBe(`contact:${digestWith('a-real-service-role-key-for-this-test', '203.0.113.7')}`);
+  });
+
+  it('in production with no other secret, refuses to store a digest anyone can reverse', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('INTERNAL_SECRET', PLACEHOLDER);
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', '');
+    const { storedBucketKey } = await import('@/lib/server/rate-limit-db');
+    expect(() => storedBucketKey('contact:203.0.113.7')).toThrow();
+  });
+
+  it('control: a real INTERNAL_SECRET keys the digest, as before', async () => {
+    vi.stubEnv('INTERNAL_SECRET', 'a-real-internal-secret-for-this-test');
+    const { storedBucketKey } = await import('@/lib/server/rate-limit-db');
+    expect(storedBucketKey('contact:203.0.113.7')).toBe(`contact:${digestWith('a-real-internal-secret-for-this-test', '203.0.113.7')}`);
+  });
+});
+
 describe('webhook signing secrets', () => {
   it('Stripe: the placeholder signing secret is no signing secret', async () => {
     vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'whsec_your_webhook_signing_secret');

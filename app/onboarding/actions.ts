@@ -15,7 +15,7 @@ import { cleanGoals, cleanReferralSource, DEFAULT_OWNER_DISPLAY_NAME } from '@/l
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
 import { upsertOnboardingContact } from '@/lib/marketing/onboarding-contact';
-import { recordOnboardingProgress, getOnboardingProgress } from '@/lib/server/onboarding-progress';
+import { recordOnboardingProgress, readOnboardingProgress } from '@/lib/server/onboarding-progress';
 import { sendReactEmail } from '@/lib/email';
 import { WelcomeEmail } from '@/lib/emails/welcome';
 import { InviteEmail } from '@/lib/emails/invite';
@@ -38,8 +38,42 @@ import { finishConnectedCalendar, enableConnectedCalendar, validateConnectedCale
 import type { ServiceScope } from '@/lib/services/types';
 import type { OnboardingOwner } from '@/lib/onboarding/owner';
 import { verifyOnboardingOwner } from '@/lib/onboarding/verify-owner';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+import { isChildLoginAccount, memberHasAKidLogin } from '@/lib/server/child-account';
+import { requireUserContext } from '@/lib/supabase/auth';
+import { isManager } from '@/lib/constants/roles';
+import { mergeNotificationPrefs } from '@/lib/preferences/notification-prefs';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
+
+/** An invite finalize created but did not email (see ONBOARDING_INVITE_EMAIL_CAP). */
+export type UnsentInvite = { id: string; email: string };
+
+/**
+ * The most invite EMAILS one finalize may send. The schema admits 30 drafted
+ * members, and every invite used to mail a caller-chosen address from
+ * Bubaly's sender with a caller-chosen family name in the subject, with no
+ * limiter at all — so a fresh account was a 30-message spam relay. Invite
+ * rows past the cap (or refused by a limiter, or rejected by the mail
+ * provider) are still created but NOT emailed. Finalize returns them as
+ * `unsentInvites`, and the Done screen offers a Send button for each, which
+ * goes through /api/email/invite and its own limiter. Nothing else re-sends
+ * them.
+ */
+const ONBOARDING_INVITE_EMAIL_CAP = 5;
+
+/**
+ * The welcome email goes once per ACCOUNT, and the record of it is kept in the
+ * auth user's app_metadata, which only the service role can write (the kid
+ * login's marker lives there too). The limiter bucket used to be that record,
+ * with a 30-day window, but rate_limit_prune (0156) deletes buckets a day old
+ * and the automations cron runs it daily — so a replayed finish could send
+ * another welcome about once a day. The limiter stays for what it can do:
+ * stop two finishes racing each other from both sending before either has
+ * written the record.
+ */
+const WELCOME_EMAIL_SENT_KEY = 'welcome_email_sent_at';
+const WELCOME_EMAIL_RACE_WINDOW_MS = 24 * 3_600_000;
 
 function onboardingFailure(operation: string, error: unknown, fallback: string): { ok: false; error: string } {
   console.error(`[onboarding] ${operation} failed`, error);
@@ -164,8 +198,15 @@ export async function previewCalendarImportAction(input: {
 /**
  * Captures the "About your family" step: household makeup, goals, and how they
  * heard about Bubaly. Upserts one `family_onboarding` row, stamps it complete,
- * and fires the `onboarding_completed` marketing automation (best-effort). RLS
- * (`is_family_member`) guarantees the caller can only write their own family.
+ * and fires the `onboarding_completed` marketing automation (best-effort).
+ *
+ * The household's answers are a manager's to give. The family used to come
+ * from the input and no role was checked, and family_onboarding's policy is
+ * any member (0052; 0481 blocks only guests), so a child, teen or caregiver
+ * rewrote the household's adults, children and goals and then, through the
+ * service role, the owner's CRM contact. The family is now the caller's
+ * ACTIVE one, a parent or adult is required, and a familyId that is not it
+ * is refused rather than quietly redirected.
  */
 export async function saveFamilyDetailsAction(input: {
   familyId: string; householdAdults: number; householdChildren: number; childAges: number[];
@@ -176,11 +217,15 @@ export async function saveFamilyDetailsAction(input: {
   const parsed = familyDetailsSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid details' };
 
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentOrGuardian') };
+  if (parsed.data.familyId !== ctx.active.familyId) return { ok: false, error: t('onboardingWizard.contextChanged') };
+
   const supabase = await createServer();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return { ok: false, error: t('actions.notSignedIn') };
+  if (!auth.user || auth.user.id !== ctx.user.id) return { ok: false, error: t('actions.notSignedIn') };
 
-  const d = parsed.data;
+  const d = { ...parsed.data, familyId: ctx.active.familyId };
   const { error } = await supabase.from('family_onboarding').upsert(
     {
       family_id: d.familyId,
@@ -225,7 +270,9 @@ export async function saveFamilyDetailsAction(input: {
       familyId: d.familyId,
       source: 'onboarding',
       attributes: {
-        role: 'parent',
+        // The caller's own role, not an assumed 'parent': an adult answering
+        // for the household is recorded as the adult they are.
+        role: ctx.active.role,
         goals: cleanGoals(d.goals),
         referral_source: cleanReferralSource(d.referralSource),
         household_adults: d.householdAdults,
@@ -267,16 +314,18 @@ export async function resetOnboardingAction(): Promise<Result> {
 
   const admin = createServiceClient();
 
-  // 1. Clear the completion flag (merge — never clobber other prefs).
-  const { data: prefRow } = await admin
-    .from('user_preferences').select('notification_prefs, active_family_id').eq('user_id', auth.user.id).maybeSingle();
-  const prefs = (prefRow?.notification_prefs as Record<string, unknown> | null) ?? {};
-  const merged: Record<string, unknown> = { ...prefs, onboardingComplete: false };
-  const { error: prefErr } = await admin.from('user_preferences').upsert(
-    { user_id: auth.user.id, notification_prefs: merged as never },
-    { onConflict: 'user_id' },
-  );
-  if (prefErr) return onboardingFailure('reset preference update', prefErr, 'Could not reset onboarding.');
+  // 1. Clear the completion flag through the one merge every other writer of
+  //    this blob uses. It used to read the row with its error dropped, so a
+  //    failed read became `{}` and the upsert below replaced the WHOLE
+  //    notification_prefs blob — App Lock, navigation, shortcuts, moment prep
+  //    and the referral dismissal — with `{ onboardingComplete: false }`, and
+  //    the screen said "Onboarding reset". mergeNotificationPrefs refuses to
+  //    merge into an unread row and compare-and-sets on updated_at, so a
+  //    concurrent App Lock or shortcut save is not overwritten either.
+  const cleared = await mergeNotificationPrefs(admin, auth.user.id, (prefs) => ({ ...prefs, onboardingComplete: false }));
+  if (!cleared.ok) {
+    return onboardingFailure(`reset preference update (${cleared.reason})`, cleared.error ?? new Error(cleared.reason), 'Could not reset onboarding.');
+  }
 
   // 2. Mark the lifecycle row reset (best-effort, degrades pre-migration).
   //    `active_family_id` is the user's own preference row, so it names
@@ -284,12 +333,21 @@ export async function resetOnboardingAction(): Promise<Result> {
   //    onboarding_progress.family_id by the service role, it walked around the
   //    column 0454 takes away from clients — the pointer SEC-018 turned on. Only
   //    a family the user is an active member of is recorded.
+  //
+  //    A read that did not answer is not "no family": both errors used to be
+  //    dropped, and the reset then recorded a NULL family over the one the row
+  //    named. When either read fails the family is left as it is (undefined
+  //    leaves the column untouched) and the failure is logged.
+  const { data: prefRow, error: prefReadError } = await admin
+    .from('user_preferences').select('active_family_id').eq('user_id', auth.user.id).maybeSingle();
+  if (prefReadError) console.error('[onboarding] reset active family read failed', prefReadError);
   const preferred = (prefRow?.active_family_id as string | null) ?? null;
-  const { data: membership } = preferred
+  const { data: membership, error: membershipError } = preferred
     ? await admin.from('family_members').select('family_id')
       .eq('user_id', auth.user.id).eq('family_id', preferred).eq('is_active', true).maybeSingle()
-    : { data: null };
-  const ownFamilyId = membership?.family_id ?? null;
+    : { data: null, error: null };
+  if (membershipError) console.error('[onboarding] reset membership read failed', membershipError);
+  const ownFamilyId = prefReadError || membershipError ? undefined : membership?.family_id ?? null;
   await recordOnboardingProgress(admin, {
     userId: auth.user.id,
     familyId: ownFamilyId,
@@ -308,7 +366,7 @@ export async function resetOnboardingAction(): Promise<Result> {
   // role writes whatever it is given, so recording the unverified preference
   // would launder a pointer into the audit trail with no policy to catch it.
   await logAudit(admin, {
-    familyId: ownFamilyId, actorId: auth.user.id,
+    familyId: ownFamilyId ?? null, actorId: auth.user.id,
     action: 'update', resource: 'onboarding_progress', resourceId: auth.user.id,
     metadata: { onboarding: 'reset' },
   });
@@ -354,12 +412,12 @@ export async function finalizeOnboardingAction(input: {
     goals: string[]; referralSource?: string; referralDetail?: string;
   };
   members: Array<
-    | { kind: 'local'; name: string; role: MemberRole; birthday?: string; color?: string }
-    | { kind: 'invite'; email: string; role: MemberRole }
+    | { kind: 'local'; id?: string; name: string; role: MemberRole; birthday?: string; color?: string }
+    | { kind: 'invite'; id?: string; email: string; role: MemberRole }
   >;
   appearance?: { color?: string; age?: number | null; avatarUrl?: string; pin?: string };
   calendarImport?: { source: string; events: BriefEvent[]; receipt?: string };
-}, expectedOwner?: OnboardingOwner): Promise<Result<{ familyId: string; brief?: FirstBrief }>> {
+}, expectedOwner?: OnboardingOwner): Promise<Result<{ familyId: string; brief?: FirstBrief; unsentInvites?: UnsentInvite[] }>> {
   const t = await getTranslations();
   const parsed = finalizeOnboardingSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid onboarding data' };
@@ -388,12 +446,16 @@ export async function finalizeOnboardingAction(input: {
     if (!verified.ok) return verified;
   }
 
-  // 1. Save profile (name, phone, email, optional avatar)
+  // 1. Save profile (name, phone, optional avatar). The email stored is the
+  //    ACCOUNT's address, never the form's: `profile.email` is whatever the
+  //    caller typed (the schema checks only its shape), and profiles.email is
+  //    what journey-recovery later mails, so an unverified value there was a
+  //    stranger's inbox on Bubaly's sender.
   const profileRes = await saveUserProfile(auth.user.id, {
     firstName: profile.firstName,
     lastName: profile.lastName,
     phone: profile.phone,
-    email: profile.email,
+    email: auth.user.email ?? null,
     avatarUrl: profile.avatarUrl || null,
   });
   if (!profileRes.ok) return onboardingFailure('profile save', profileRes.error, 'Could not save your profile.');
@@ -411,12 +473,18 @@ export async function finalizeOnboardingAction(input: {
   let familyId: string;
   let newFamily = false; // set when this run creates a brand-new family (a signup)
   const { data: existingMembership, error: membershipLookupError } = await admin
-    .from('family_members').select('family_id')
+    .from('family_members').select('family_id, role')
     .eq('user_id', auth.user.id).eq('is_active', true)
     .order('created_at').limit(1).maybeSingle();
   if (membershipLookupError) return onboardingFailure('membership lookup', membershipLookupError, 'Could not check your family setup.');
   if (existingMembership?.family_id) {
-    const progress = await getOnboardingProgress(admin, auth.user.id);
+    // An unread progress row is not an absent one. Read as null it took the
+    // "idempotent re-submit" branch below and returned success having written
+    // nothing — details, members, invites, preferences — while the wizard
+    // showed Done and deleted the draft. Only a confirmed answer decides.
+    const progressRead = await readOnboardingProgress(admin, auth.user.id);
+    if (progressRead.error) return onboardingFailure('onboarding progress read', progressRead.error, t('actions.couldNotFinishSettingUp2'));
+    const progress = progressRead.row;
     const resumableWizard = progress?.source === 'wizard' && progress.status !== 'completed';
     if (progress?.source !== 'auto_provision' && !resumableWizard) {
       if (connectedReceipt && connectedScope) {
@@ -428,6 +496,22 @@ export async function finalizeOnboardingAction(input: {
         return { ok: true, data: { familyId: existingMembership.family_id, brief: buildFirstBrief(calendarImport.events, new Date(), [], family.timezone) } };
       }
       return { ok: true, data: { familyId: existingMembership.family_id } };
+    }
+    // ADOPT only the caller's own first family. The oldest active membership
+    // is not necessarily that: an auto-provisioned user who later joined
+    // another household as a guest and deactivated their own row would
+    // otherwise have that household renamed and be upserted into it as a
+    // PARENT with the service role below. The same three facts
+    // prepareCalendarFamily / verifyOnboardingOwner already insist on: the
+    // marker names this family, the caller is its parent, and they created it.
+    if (progress?.family_id !== existingMembership.family_id || existingMembership.role !== 'parent') {
+      return { ok: false, error: t('onboardingWizard.contextChanged') };
+    }
+    {
+      const { data: adoptable, error: adoptableError } = await admin
+        .from('families').select('created_by').eq('id', existingMembership.family_id).maybeSingle();
+      if (adoptableError) return onboardingFailure('adopted family owner check', adoptableError, t('actions.couldNotFinishSettingUp2'));
+      if (adoptable?.created_by !== auth.user.id) return { ok: false, error: t('onboardingWizard.contextChanged') };
     }
     // Preserve the pre-existing marker long enough to make the resume decision
     // above, then claim this request as the active wizard run.
@@ -453,6 +537,9 @@ export async function finalizeOnboardingAction(input: {
       return onboardingFailure('auto-provisioned family update', new Error('no rows updated'), t('actions.couldNotFinishSettingUp2'));
     }
   } else {
+    // A child login without an active membership was removed from its family;
+    // it must not mint a household of its own as that household's parent.
+    if (await isChildLoginAccount(admin, auth.user)) return { ok: false, error: t('onboardingWizard.contextChanged') };
     // Claim first-family creation under a per-user database lock. This keeps
     // double-submit/retry requests on one family even before the membership
     // trigger is visible to a later request.
@@ -575,15 +662,85 @@ export async function finalizeOnboardingAction(input: {
 
   // 5. Upsert local (managed) members — no user_id, no login. The stable key
   // makes a retry reconcile the same row after a partial finalization.
-  for (const [index, m] of members.entries()) {
-    if (m.kind !== 'local') continue;
+  //
+  // Stable across the WHOLE wizard, not this one payload. `runKey` digests
+  // everything the wizard sent, and a retry after a later step failed rarely
+  // sends the same thing: a reload drops the imported events, the PIN and the
+  // calendar receipt (lib/onboarding/flow.ts), and any step can be edited. Each
+  // difference was a new key for every member and invite, so every child was
+  // added twice and every invitee got a second invite and a second email. The
+  // household key names only the account and the family it is setting up. The
+  // calendar keeps `runKey`: its rows ARE the payload.
+  //
+  // Within the household, a member is named by the id the draft gave it when
+  // it was added (lib/onboarding/draft.ts), not by its place in the list and
+  // everything in it. Keyed by (index, content), removing an earlier member
+  // or fixing a name or a role before the retry made every later member a
+  // new row, and every later invitee a new invite. An invite is keyed by its
+  // address too: a corrected address is someone else to invite. A payload
+  // without ids (an older wizard), or one that sends an id twice, keeps the
+  // (index, content) key.
+  const householdKey = onboardingRunKey(auth.user.id, { familyId, scope: 'onboarding-household' });
+  const draftIdUses = new Map<string, number>();
+  for (const m of members) if (m.id) draftIdUses.set(m.id, (draftIdUses.get(m.id) ?? 0) + 1);
+  const DRAFT_ID_SLOT = -1;
+  const memberSlot = (index: number, m: (typeof members)[number]): [number, unknown] => (m.id && draftIdUses.get(m.id) === 1
+    ? [DRAFT_ID_SLOT, m.kind === 'invite' ? { draftId: m.id, email: m.email.trim().toLowerCase() } : { draftId: m.id }]
+    : [index, m]);
+  const localMembers = [...members.entries()].flatMap(([index, m]) => (m.kind === 'local'
+    ? [{ m, onboarding_key: onboardingItemKey(householdKey, 'member', ...memberSlot(index, m)) }]
+    : []));
+
+  // A row this step wrote may since have been given a kid login:
+  // createChildLoginAction links it (user_id) to the child's PIN account. The
+  // key names that row whatever the payload now says about it, and finalize
+  // can be replayed (0454), so a replay that reused a member's draft id — or
+  // an id-less one that still said what the row was before — with 'adult'
+  // made the kid login a manager: the role every member editor refuses for
+  // one (memberHasAKidLogin, the held 0512). So the rows the keys already
+  // name are read first, a manager role for one with a login is refused
+  // before any member is written, and a manager role is written onto an
+  // existing row only while that row is still unlinked. Anything else (a
+  // name, a colour, a role that is not a manager's) is reconciled as before.
+  type KeyedMember = { id: string; family_id: string; user_id: string | null; role: string; display_name: string };
+  const keyedMembers = new Map<string, KeyedMember>();
+  if (localMembers.length > 0) {
+    const { data: keyedRows, error: keyedErr } = await admin.from('family_members')
+      .select('id, family_id, user_id, role, display_name, onboarding_key')
+      .eq('family_id', familyId).in('onboarding_key', localMembers.map((l) => l.onboarding_key));
+    if (keyedErr) return onboardingFailure('household members read', keyedErr, t('actions.couldNotFinishSettingUp2'));
+    for (const row of keyedRows ?? []) if (row.onboarding_key) keyedMembers.set(row.onboarding_key, row);
+  }
+  for (const { m, onboarding_key } of localMembers) {
+    const row = keyedMembers.get(onboarding_key);
+    if (!row || !isManager(m.role)) continue;
+    // A row with a login is never given a manager role here. For one without,
+    // as the editors ask it: a role it already has is not a promotion.
+    if (row.user_id !== null || (m.role !== row.role && await memberHasAKidLogin(admin, row))) {
+      return { ok: false, error: t('familyModule.aKidLoginCannotBeAManager', { name: row.display_name }) };
+    }
+  }
+  for (const { m, onboarding_key } of localMembers) {
+    const fields = { role: m.role, display_name: m.name, color: m.color ?? null, birthday: m.birthday || null };
+    const row = keyedMembers.get(onboarding_key);
+    if (row && isManager(m.role)) {
+      // Compare-and-set on the link the check above saw. A kid login links
+      // the row before it writes its child_logins mapping, so a row linked
+      // since that check matches nothing here.
+      const { data: written, error: writeErr } = await admin.from('family_members').update(fields)
+        .eq('id', row.id).eq('family_id', familyId).is('user_id', null)
+        .select('id');
+      if (writeErr) return onboardingFailure(`member "${m.name}" update`, writeErr, t('actions.couldNotFinishSettingUp2'));
+      if (wroteNoRows(written)) {
+        console.error('[onboarding] member changed while it was being written', { memberId: row.id });
+        return { ok: false, error: t('actions.couldNotFinishSettingUp2') };
+      }
+      continue;
+    }
     const { error: memberErr } = await admin.from('family_members').upsert({
       family_id: familyId,
-      role: m.role,
-      display_name: m.name,
-      color: m.color ?? null,
-      birthday: m.birthday || null,
-      onboarding_key: onboardingItemKey(runKey, 'member', index, m),
+      ...fields,
+      onboarding_key,
     }, { onConflict: 'family_id,onboarding_key' });
     if (memberErr) return onboardingFailure(`member "${m.name}" creation`, memberErr, 'Could not add all household members.');
   }
@@ -593,6 +750,8 @@ export async function finalizeOnboardingAction(input: {
   // sending a duplicate email on replay.
   // Who the invite is from, for the email's subject and body.
   const inviterName = profile.firstName.trim() || DEFAULT_OWNER_DISPLAY_NAME;
+  let inviteEmailsSent = 0;
+  const unsentInvites: UnsentInvite[] = [];
   for (const [index, m] of members.entries()) {
     if (m.kind !== 'invite') continue;
     const { data: invite, error: inviteErr } = await admin
@@ -602,9 +761,9 @@ export async function finalizeOnboardingAction(input: {
         email: m.email,
         role: m.role,
         invited_by: auth.user.id,
-        onboarding_key: onboardingItemKey(runKey, 'invite', index, m),
+        onboarding_key: onboardingItemKey(householdKey, 'invite', ...memberSlot(index, m)),
       }, { onConflict: 'family_id,onboarding_key', ignoreDuplicates: true })
-      .select('token')
+      .select('id, token')
       .maybeSingle();
     if (inviteErr) {
       return inviteErr
@@ -615,9 +774,9 @@ export async function finalizeOnboardingAction(input: {
     if (!token) {
       const { data: existingInvite, error: existingInviteErr } = await admin
         .from('invites')
-        .select('token')
+        .select('id, token, role, status')
         .eq('family_id', familyId)
-        .eq('onboarding_key', onboardingItemKey(runKey, 'invite', index, m))
+        .eq('onboarding_key', onboardingItemKey(householdKey, 'invite', ...memberSlot(index, m)))
         .maybeSingle();
       if (existingInviteErr || !existingInvite) {
         return existingInviteErr
@@ -625,8 +784,30 @@ export async function finalizeOnboardingAction(input: {
           : { ok: false, error: t('actions.couldNotCreateAllHousehold') };
       }
       token = existingInvite.token;
+      // Keyed by its draft id, a retry that fixed the invitee's role names the
+      // invite the first run wrote, and ignoreDuplicates left it as it was: a
+      // guest when the owner had made grandpa an adult. A still-pending invite
+      // takes the corrected role (compare-and-set on what was read); one already
+      // accepted, revoked or expired is left alone.
+      if (existingInvite.status === 'pending' && existingInvite.role !== m.role) {
+        const { error: roleErr } = await admin.from('invites')
+          .update({ role: m.role })
+          .eq('id', existingInvite.id).eq('family_id', familyId).eq('status', 'pending').eq('role', existingInvite.role)
+          .select('id');
+        if (roleErr) return onboardingFailure(`invite for ${m.email} role`, roleErr, t('actions.couldNotCreateAllHousehold'));
+      }
     }
     if (!invite) continue;
+    // Bounded per call, per user and per family (the same family bucket
+    // /api/email/invite spends). The invite row above stands either way.
+    // An invite not mailed here is returned, so the Done screen can say so.
+    const unsent = { id: invite.id, email: m.email };
+    if (inviteEmailsSent >= ONBOARDING_INVITE_EMAIL_CAP) { unsentInvites.push(unsent); continue; }
+    const userLimited = await enforceRequestRateLimit(admin, `email:onboarding-invite:${auth.user.id}`, { limit: ONBOARDING_INVITE_EMAIL_CAP, windowMs: 3_600_000 });
+    if (!userLimited.ok) { unsentInvites.push(unsent); continue; }
+    const familyLimited = await enforceRequestRateLimit(admin, `email:invite:${familyId}`, { limit: 20, windowMs: 3_600_000 });
+    if (!familyLimited.ok) { unsentInvites.push(unsent); continue; }
+    inviteEmailsSent++;
     // The branded template every other invite in the product already uses
     // (app/api/email/invite). This site used to build its own two-line HTML
     // string, and an i18n sweep left the calls UNINTERPOLATED inside it:
@@ -638,13 +819,15 @@ export async function finalizeOnboardingAction(input: {
     // "{t('actions.youVeBeenInvitedTo')}" — with the accept link labelled
     // "{t('actions.acceptYourInvite')}". It typechecked, it sent, and the keys
     // existed in all eleven catalogues, so the i18n gate passed too.
-    await sendReactEmail({
+    const sent = await sendReactEmail({
       to: m.email,
       subject: `${inviterName} invited you to join ${family.name} on Bubaly`,
       react: React.createElement(InviteEmail, {
         familyName: family.name, inviterName, token, role: m.role,
       }),
     });
+    // A rejected send, or no mail provider at all, is not a sent invite either.
+    if (!sent?.ok || sent.skipped) unsentInvites.push(unsent);
   }
 
   // 6a. VALUE-FIRST (T1): persist the calendar the user imported in the value step
@@ -718,20 +901,24 @@ export async function finalizeOnboardingAction(input: {
   //     salted-SHA-256 scheme as Settings); it stays off until the user enables
   //     it, at which point they don't have to re-enter the PIN. Service-role so it
   //     persists reliably under this env's flaky RLS writes.
-  const { data: prefRow, error: prefReadError } = await admin
-    .from('user_preferences').select('notification_prefs').eq('user_id', auth.user.id).maybeSingle();
-  if (prefReadError) return onboardingFailure('onboarding preferences read', prefReadError, t('actions.couldNotFinishSettingUp2'));
-  const prefs = (prefRow?.notification_prefs as Record<string, unknown> | null) ?? {};
-  const mergedPrefs: Record<string, unknown> = { ...prefs, onboardingComplete: true };
+  //
+  //     Through mergeNotificationPrefs, as every other writer of the blob is:
+  //     a read-then-upsert of the whole blob put back whatever it read, so an
+  //     App Lock, shortcut or Google sync save that landed in between was
+  //     silently undone. The merge compare-and-sets on updated_at and re-runs
+  //     the change on the newer row; a read it cannot make writes nothing.
   const age = normalizeAge(appearance.age);
-  if (age !== null) mergedPrefs.age = age;
-  if (appearance.pin && isValidPin(appearance.pin)) {
-    mergedPrefs.appLock = { ...(await buildAppLockConfig(appearance.pin)), enabled: false };
-  }
-  const { error: prefErr } = await admin.from('user_preferences').upsert(
-    { user_id: auth.user.id, notification_prefs: mergedPrefs as never },
-    { onConflict: 'user_id' },
-  );
+  const seededAppLock = appearance.pin && isValidPin(appearance.pin)
+    ? { ...(await buildAppLockConfig(appearance.pin)), enabled: false } : null;
+  const savedPrefs = await mergeNotificationPrefs(admin, auth.user.id, (prefs) => ({
+    ...prefs,
+    onboardingComplete: true,
+    ...(age !== null ? { age } : {}),
+    ...(seededAppLock ? { appLock: seededAppLock } : {}),
+  }));
+  const prefReadError = !savedPrefs.ok && savedPrefs.reason === 'read_failed' ? savedPrefs.error ?? new Error('read_failed') : null;
+  if (prefReadError) return onboardingFailure('onboarding preferences read', prefReadError, t('actions.couldNotFinishSettingUp2'));
+  const prefErr = savedPrefs.ok ? null : savedPrefs.error ?? new Error(savedPrefs.reason);
   if (prefErr) return onboardingFailure('onboarding preferences save', prefErr, t('actions.couldNotFinishSettingUp2'));
 
   // 6c. Remember what the family just told us (M30). The answers were going
@@ -810,14 +997,36 @@ export async function finalizeOnboardingAction(input: {
 
   // 8b. Send the branded welcome email (best-effort — the template existed but
   //     was never wired to a completion path, so no one ever received it).
+  //
+  //     To the ACCOUNT's address only, and once. It went to `profile.email` —
+  //     a value the caller types, checked for shape and nothing else — and
+  //     finalize can be replayed (a client may set its own onboarding_progress
+  //     back to in_progress, 0454), so every replay mailed any address Bubaly's
+  //     own sender, with a caller-chosen name in the heading. The record that
+  //     says it was sent is in app_metadata (WELCOME_EMAIL_SENT_KEY), not in a
+  //     column the client can rewrite, nor in a limiter bucket that is pruned
+  //     after a day.
   try {
-    const to = profile.email || auth.user.email;
-    if (to) {
-      await sendReactEmail({
-        to,
-        subject: 'Welcome to Bubaly 🎉',
-        react: React.createElement(WelcomeEmail, { name: profile.firstName.trim() || 'there' }),
+    const to = auth.user.email;
+    const welcomed = Boolean(auth.user.app_metadata?.[WELCOME_EMAIL_SENT_KEY]);
+    const once = to && !welcomed
+      ? await enforceRequestRateLimit(admin, `email:welcome:${auth.user.id}`, { limit: 1, windowMs: WELCOME_EMAIL_RACE_WINDOW_MS })
+      : { ok: false as const };
+    if (to && once.ok) {
+      // Recorded before it is sent. A welcome whose record could not be
+      // written is not sent: the record is what stops the next replay.
+      const { error: recordError } = await admin.auth.admin.updateUserById(auth.user.id, {
+        app_metadata: { [WELCOME_EMAIL_SENT_KEY]: new Date().toISOString() },
       });
+      if (recordError) {
+        console.error('[onboarding] welcome email not sent: could not record it', recordError);
+      } else {
+        await sendReactEmail({
+          to,
+          subject: 'Welcome to Bubaly 🎉',
+          react: React.createElement(WelcomeEmail, { name: profile.firstName.trim() || 'there' }),
+        });
+      }
     }
   } catch (e) {
     console.error('[onboarding] welcome email failed', e);
@@ -910,5 +1119,5 @@ export async function finalizeOnboardingAction(input: {
     console.error('[onboarding] family email provisioning failed', e);
   }
 
-  return { ok: true, data: { familyId, brief: finalBrief } };
+  return { ok: true, data: { familyId, brief: finalBrief, ...(unsentInvites.length ? { unsentInvites } : {}) } };
 }

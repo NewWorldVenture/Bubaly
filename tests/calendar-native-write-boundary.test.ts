@@ -116,9 +116,20 @@ describe('native calendar exact write and captured-state boundary', () => {
             body: unknown;
             url: string;
         }[] = [];
+        // A moved event's Smart Departure follows it (lib/trips/follow-event.ts),
+        // so a move asks which departure plans it has. Answered here, and kept
+        // apart from `calls`: every calendar_events request is still asserted
+        // as before, and a plan request may only READ, for this family.
+        const planReads: URL[] = [];
         const db = createClient<Database>('https://calendar-write.synthetic.invalid', 'synthetic', { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: async (input, init) => {
                     const u = new URL(String(input)), method = init?.method ?? 'GET';
                     expect(u.origin).toBe('https://calendar-write.synthetic.invalid');
+                    if (u.pathname === '/rest/v1/departure_plans') {
+                        planReads.push(u);
+                        if (method !== 'GET' || u.searchParams.get('family_id') !== 'eq.' + FAMILY)
+                            throw Error(`Synthetic departure plans answer family reads only, not ${method} ${u.search}`);
+                        return Response.json([]);
+                    }
                     expect(u.pathname).toBe('/rest/v1/calendar_events');
                     const body: Record<string, unknown> | Record<string, unknown>[] | null = init?.body ? JSON.parse(String(init.body)) : null;
                     calls.push({ method, body, url: u.toString() });
@@ -165,8 +176,12 @@ describe('native calendar exact write and captured-state boundary', () => {
                         found = found.filter(r => u.searchParams.get('recurrence') === 'neq.none' ? r.recurrence !== 'none' : r.recurrence === 'none');
                     return Response.json(found, { headers: { 'Content-Range': `0-${Math.max(found.length - 1, 0)}/${found.length}` } });
                 } } });
-        return { rows, calls, scope: { db, familyId: FAMILY, userId: null, memberId: null, role: 'system' as const, actorKind: 'system' as const, tz: 'America/New_York', now: new Date('2026-10-08T08:00:00Z') } };
+        return { rows, calls, planReads, scope: { db, familyId: FAMILY, userId: null, memberId: null, role: 'system' as const, actorKind: 'system' as const, tz: 'America/New_York', now: new Date('2026-10-08T08:00:00Z') } };
     }
+    it('a move reads the moved event\'s departure plans for this family, and writes only calendar_events', async () => { const f = fixture([base]); expect((await updateEvent(f.scope, ID, { startsAt: '2026-10-08T10:00:00.000001Z', endsAt: '2026-10-08T10:00:00.000009Z' })).ok).toBe(true); expect(f.planReads).toHaveLength(1); expect(f.planReads[0].searchParams.get('event_id')).toBe('eq.' + ID); expect(f.calls.filter(c => c.method === 'PATCH')).toHaveLength(1); expect(f.calls.every(c => new URL(c.url).pathname === '/rest/v1/calendar_events')).toBe(true); });
+    it('the assistant\'s reschedule tool reads the moved event\'s departure plans too', async () => { const f = fixture([base]); const tool = calendarTools.find(t => t.name === 'calendar.rescheduleEvent')!; expect((await tool.execute(f.scope, { event_id: ID, starts_at: '2026-10-09T09:00:00.000003Z' })).ok).toBe(true); expect(f.planReads).toHaveLength(1); expect(f.planReads[0].searchParams.get('event_id')).toBe('eq.' + ID); });
+    it('a write that moved nothing reads no departure plans', async () => { const f = fixture([base]); expect((await updateEvent(f.scope, ID, { title: 'Changed' })).ok).toBe(true); expect(f.planReads).toHaveLength(0); });
+    it('a move refused at the compare-and-set reads no departure plans', async () => { const f = fixture([base], rows => { rows[0].starts_at = '2026-10-08T09:00:00.000003Z'; }); expect((await rescheduleAfter(f.scope, ID, { startsAt: '2026-10-09T09:00:00.000003Z' })).ok).toBe(false); expect(f.planReads).toHaveLength(0); });
     it('healthy millisecond explicit offset create preserves known instant', async () => { const f = fixture(); const r = await createEvent(f.scope, { title: 'Synthetic', startsAt: '2026-10-08T18:00:00.123+09:00', endsAt: '2026-10-08T18:00:00.124+09:00' }); expect(r.ok).toBe(true); expect(f.rows[0]).toMatchObject({ starts_at: '2026-10-08T09:00:00.123Z', ends_at: '2026-10-08T09:00:00.124Z' }); });
     it('healthy canonical DATE create remains visible in qualified reader', async () => { const f = fixture(); expect((await createEvent(f.scope, { title: 'Synthetic', startsAt: '2026-10-08', endsAt: '2026-10-09', allDay: true })).ok).toBe(true); const r = await readCompleteCalendarOccurrences(f.scope, { from: '2026-10-08T00:00:00Z', to: '2026-10-09T23:59:59.999Z' }); expect(r.ok).toBe(true); if (r.ok)
         expect(r.data.totalVisibleCount).toBe(1); });

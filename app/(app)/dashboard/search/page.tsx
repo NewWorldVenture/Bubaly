@@ -22,7 +22,7 @@ import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { scopeFromUserContext } from '@/lib/services/scope';
-import { searchHousehold, MAX_LIMIT, MIN_QUERY_CHARS } from '@/lib/services/search';
+import { searchHousehold, MANAGER_ONLY_KINDS, MAX_LIMIT, MIN_QUERY_CHARS } from '@/lib/services/search';
 import { groupByKind, kindLabelKey, type SearchKind } from '@/lib/search/rank';
 import { ErrorState } from '@/components/ui/states';
 
@@ -125,10 +125,19 @@ export default async function HouseholdSearchPage({ searchParams }: { searchPara
         </div>
       )}
 
-      {withheld.length > 0 && (
+      {withheld.some((kind) => MANAGER_ONLY_KINDS.includes(kind)) && (
         <p className="mb-4 rounded-xl border border-border bg-elevated px-4 py-3 text-xs text-muted">
           {t('search.moneyRecordsAreOnlySearched', {
-            kinds: withheld.map((kind) => t(kindLabelKey(kind))).join(', '),
+            kinds: withheld.filter((kind) => MANAGER_ONLY_KINDS.includes(kind)).map((kind) => t(kindLabelKey(kind))).join(', '),
+          })}
+        </p>
+      )}
+      {/* Trips are withheld by role (a guest, a child), not for being money:
+          the parents-and-adults sentence above would not be true of them. */}
+      {withheld.some((kind) => !MANAGER_ONLY_KINDS.includes(kind)) && (
+        <p className="mb-4 rounded-xl border border-border bg-elevated px-4 py-3 text-xs text-muted">
+          {t('search.recordsNotSearchedForYourRole', {
+            kinds: withheld.filter((kind) => !MANAGER_ONLY_KINDS.includes(kind)).map((kind) => t(kindLabelKey(kind))).join(', '),
           })}
         </p>
       )}

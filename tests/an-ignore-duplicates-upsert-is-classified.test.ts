@@ -1,5 +1,11 @@
-import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const file = dir + '/' + entry.name;
+    return entry.isDirectory() ? sourceFiles(file) : entry.isFile() ? [file] : [];
+  });
+}
+
 import { describe, expect, it } from 'vitest';
 
 /**
@@ -20,21 +26,21 @@ const CLASSIFIED: Record<string, { count: number; how: string }> = {
   'app/api/ai/chat/route.ts': { count: 1, how: 'readback: re-reads the conversation with ownership' },
   'app/(app)/dashboard/moments/page.tsx': { count: 1, how: 'best-effort log; reports nothing; error now logged' },
   'app/(app)/dashboard/playbook/playbook-actions.ts': { count: 1, how: '.select(): counts only inserted rows (fixed C1-S9-70)' },
+  'app/(app)/dashboard/independence/actions.ts': { count: 1, how: '.select(): insert-only start; an empty result is a rung already on the ladder, left as it is and answered alreadyOnLadder (never "Added", never audited); the module refreshes to its real state' },
   'app/onboarding/actions.ts': { count: 1, how: '.select() + readback of the existing token on a duplicate' },
   'lib/chores/server.ts': { count: 1, how: '.select(): returns only newly earned badges' },
   'lib/planning/prep-server.ts': { count: 1, how: 'idempotent regeneration; reports plans, not steps' },
   'lib/contact-center/urgent-delivery.ts': { count: 1, how: 'readback: verifies the notification identity' },
   'lib/marketing/automation-events.ts': { count: 1, how: '.select() claim, then reads the existing run on a duplicate' },
+  'lib/server/feature-tiers.ts': { count: 1, how: '.select(): an empty result is a lost insert race, so the save re-reads and retries' },
   'lib/server/push.ts': { count: 1, how: 'delivery receipt (0440): a duplicate IS the goal state — already recorded; reports nothing' },
 };
 
 function found(): Map<string, number> {
-  const out = execSync("grep -rc \"ignoreDuplicates: true\" app lib --include='*.ts' --include='*.tsx' || true", { encoding: 'utf8' });
   const m = new Map<string, number>();
-  for (const line of out.trim().split('\n')) {
-    const i = line.lastIndexOf(':');
-    const n = Number(line.slice(i + 1));
-    if (n > 0) m.set(line.slice(0, i), n);
+  for (const file of ['app', 'lib'].flatMap(sourceFiles).filter(file => /\.tsx?$/.test(file))) {
+    const n = readFileSync(file, 'utf8').split('\n').filter(line => line.includes('ignoreDuplicates: true')).length;
+    if (n > 0) m.set(file, n);
   }
   return m;
 }
@@ -53,6 +59,12 @@ describe('every ignoreDuplicates upsert knows what it actually wrote (C1-S9-70)'
       if ((sites.get(f) ?? 0) !== count) off.push(`${f}: ${sites.get(f) ?? 0} != ${count}`);
     }
     expect(off, 'update CLASSIFIED to match the code').toEqual([]);
+  });
+
+  it('the independence start reports what it inserted, not what it was asked to', () => {
+    const src = readFileSync('app/(app)/dashboard/independence/actions.ts', 'utf8');
+    expect(src).toContain("ignoreDuplicates: true }).select('id');");
+    expect(src).toContain("if (wroteNoRows(started)) return { ok: false, code: 'alreadyOnLadder'");
   });
 
   it('the playbook reports what it inserted, not what it offered', () => {

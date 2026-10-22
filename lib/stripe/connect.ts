@@ -91,8 +91,12 @@ export async function createOnboardingLink(
   return link.url;
 }
 
-/** Pull the latest account state from Stripe and mirror it into our table. */
-export async function syncConnectedAccount(supabase: DB, familyId: string, accountId: string): Promise<void> {
+/**
+ * Pull the latest account state from Stripe and mirror it into our table. True
+ * when a row was mirrored; false when no row pairs this family with this
+ * account (logged, see below).
+ */
+export async function syncConnectedAccount(supabase: DB, familyId: string, accountId: string): Promise<boolean> {
   const stripe = getStripe();
   const acct = await stripe.accounts.retrieve(accountId);
   // The result was discarded whole. This mirror is what the wallet reads to
@@ -104,6 +108,16 @@ export async function syncConnectedAccount(supabase: DB, familyId: string, accou
   // could not reconcile. Zero rows is logged, NOT thrown: an account row that is
   // gone has nothing to mirror, and throwing would have Stripe retry for days.
   // Audit C1-S9-64.
+  //
+  // Bound to BOTH the family and the account the state was retrieved for. The
+  // money webhook takes the family from the account's metadata, which this
+  // platform writes but a Dashboard edit or an orphaned duplicate account could
+  // carry for another family; filtered on family_id alone, that family's mirror
+  // took on the other account's state (the table is unique on each column, so
+  // a mismatch is exactly one wrong row). With the account id in the predicate
+  // a mismatch matches zero rows, which the caller logs as a skip. The other
+  // callers pass the family's own stored account id, for which the extra
+  // predicate changes nothing. Audit N12.
   const { data: mirrored, error } = await supabase
     .from('stripe_connected_accounts')
     .update({
@@ -116,9 +130,12 @@ export async function syncConnectedAccount(supabase: DB, familyId: string, accou
       requirements_due: (acct.requirements?.currently_due ?? []) as unknown as Database['public']['Tables']['stripe_connected_accounts']['Update']['requirements_due'],
     })
     .eq('family_id', familyId)
+    .eq('stripe_account_id', accountId)
     .select('id');
   if (error) throw new Error('Stripe connected-account mirror update failed');
   if (wroteNoRows(mirrored)) {
     console.error('[money] connected account changed at Stripe but no mirror row matched', { familyId, accountId });
+    return false;
   }
+  return true;
 }

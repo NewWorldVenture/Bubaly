@@ -129,10 +129,15 @@ beforeEach(() => {
   state.memberReadFails = false;
 });
 
-// The voice route reads the member twice, each within the number's family:
-// its display name (spoken by the greeting and the voicemail prompt) and its
-// phone (dialled on immediate_ring). Each case below is decided by exactly one
-// of those reads, so removing either filter fails its own case.
+// The voice route checks the profile's member against the number's family
+// before the pipeline runs, and refuses the call when they differ: nothing is
+// dialled, screened or recorded, and the caller hears that the call cannot be
+// taken. The two member reads that follow (the display name spoken by the
+// greeting and the voicemail prompt, and the phone dialled on immediate_ring)
+// are scoped to the family as well, so neither can name or dial a stranger
+// even if that check were lost. The controls prove the family's own member is
+// still named and dialled, or every refusal below would be satisfied by a
+// route that dials nobody.
 describe('the inbound call is put through only to the number\'s own family (phone read)', () => {
   it('control: a trusted caller is dialled through to the family\'s own member', async () => {
     state.db = freshDb('m-own');
@@ -141,15 +146,17 @@ describe('the inbound call is put through only to the number\'s own family (phon
     expect(xml).toContain(OWN_PHONE);
   });
 
-  it('a profile naming another family\'s member dials nobody: the call is thanked and hung up', async () => {
+  it('a profile naming another family\'s member dials nobody: the call is refused and hung up', async () => {
     state.db = freshDb('m-stranger');
     const xml = await inboundCall();
     expect(xml).not.toContain(STRANGER_PHONE);
     expect(xml).not.toContain('<Dial');
-    // With no phone in the number's family, immediate_ring falls through to the
-    // route's default: a thank-you and a hang-up. It is not screened.
-    expect(xml).toContain('voice.thankYouForCallingWe');
+    // The profile finds no member in the number's family, so the call is
+    // refused before any routing: the caller is told it cannot be taken and the
+    // call ends. It is neither screened nor recorded.
+    expect(xml).toContain('voice.iMSorryWeRe');
     expect(xml).toContain('<Hangup');
+    expect(xml).not.toMatch(/<Gather|<Record/);
   });
 });
 
@@ -166,7 +173,11 @@ describe('the inbound call speaks only the number\'s own family member\'s name (
     state.db = freshDb('m-stranger');
     const xml = await inboundCall();
     expect(xml).not.toContain('Stranger Kid');
-    expect(xml).toContain('the family');
+    // Nothing greets or prompts in the stranger's name because nothing greets
+    // or prompts at all: the call is refused and hung up before screening or
+    // voicemail could speak.
+    expect(xml).toContain('<Hangup');
+    expect(xml).not.toMatch(/<Gather|<Record|<Dial/);
   });
 });
 

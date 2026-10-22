@@ -88,7 +88,9 @@ export const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security
   '/twitter-image',
   // Liveness/readiness probe for uptime monitors + LB health checks. Must be
   // reachable without a session (a monitor cannot authenticate); it is read-only
-  // and returns only booleans/latency/missing-var names — never a secret.
+  // and the public body is status, time and one boolean per check — the names
+  // of unset secrets and probe error text go to the log and to a monitor
+  // bearer (audit N5); never a secret value.
   '/api/health',
   // Scheduled jobs, internal callbacks, and provider webhooks authenticate
   // themselves with a shared secret or provider signature in their route.

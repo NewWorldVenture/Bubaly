@@ -11,7 +11,22 @@ function oldReceiptUuid(value: string) {
   const hex = hash(value);
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
-async function callback(origin: string, fields: Record<string, string>) {
+// Only fixed route-response categories may enter assertion diagnostics.
+function callbackCategory(status: number, body: string): string {
+  if (status !== 503) return status === 200 ? 'http-ok' : 'other-status';
+  switch (body) {
+    case 'Contact Center temporarily unavailable': return 'contact-center-unavailable';
+    case 'Intake temporarily unavailable': return 'intake-unavailable';
+    case 'Routing temporarily unavailable': return 'routing-unavailable';
+    case 'Original destination temporarily unavailable': return 'original-destination-unavailable';
+    case 'Inbox temporarily unavailable': return 'inbox-unavailable';
+    case 'Planner temporarily unavailable': return 'planner-unavailable';
+    case 'Urgent delivery state temporarily unavailable': return 'urgent-delivery-unavailable';
+    case 'Reply confirmation temporarily unavailable': return 'reply-confirmation-unavailable';
+    default: return 'unrecognized-503';
+  }
+}
+async function callback(origin: string, fields: Record<string, string>, diagnostic: { category: string }) {
   const url = `${origin}/api/contact-center/sms`;
   const signed = url + Object.keys(fields).sort().map(key => key + fields[key]).join('');
   const response = await fetch(url, {
@@ -20,7 +35,9 @@ async function callback(origin: string, fields: Record<string, string>) {
       'x-twilio-signature': createHmac('sha1', TOKEN).update(signed).digest('base64') },
     body: new URLSearchParams(fields),
   });
-  return { status: response.status, emits: /<Message(?:\s|>)/.test(await response.text()) };
+  const body = await response.text();
+  diagnostic.category = callbackCategory(response.status, body);
+  return { status: response.status, emits: /<Message(?:\s|>)/.test(body) };
 }
 
 test.use({ trace: 'off', screenshot: 'off', video: 'off' });
@@ -62,10 +79,12 @@ test.describe('Contact Center text boundaries through disposable PostgreSQL and 
         // that the provider normally forwards a message of this length.
         { body: `offer ${'a'.repeat(4089)}😀`, stored: `offer ${'a'.repeat(4089)}` },
       ];
-      for (const sample of cases) {
+      const diagnostic = { category: 'response-unavailable' };
+      for (const [sampleIndex, sample] of cases.entries()) {
         const providerSid = `SM${randomUUID().replaceAll('-', '')}`;
         const fields = { MessageSid: providerSid, From: sender, To: phone, Body: sample.body };
-        expect(await callback(appOrigin, fields)).toEqual({ status: 200, emits: true });
+        const initial = await callback(appOrigin, fields, diagnostic);
+        expect(initial, `SMS sample ${sampleIndex + 1} initial: ${diagnostic.category}`).toEqual({ status: 200, emits: true });
         const incoming = await admin.from('family_inbox_messages').select('*').eq('family_id', familyId)
           .eq('channel', 'sms').eq('provider_ref', providerSid).single();
         expect(incoming.error).toBeNull();
@@ -82,7 +101,8 @@ test.describe('Contact Center text boundaries through disposable PostgreSQL and 
         expect(outgoing.error).toBeNull();
         expect(outgoing.data?.body?.length).toBeLessThanOrEqual(320);
         expect(outgoing.data?.body).toContain('Thanks for the offer.');
-        expect(await callback(appOrigin, fields)).toEqual({ status: 200, emits: false });
+        const duplicate = await callback(appOrigin, fields, diagnostic);
+        expect(duplicate, `SMS sample ${sampleIndex + 1} duplicate: ${diagnostic.category}`).toEqual({ status: 200, emits: false });
         expect((await receipt()).data).toEqual(saved.data);
       }
 
@@ -113,14 +133,16 @@ test.describe('Contact Center text boundaries through disposable PostgreSQL and 
       const before = await projections();
       expect(before.error).toBeNull();
       const fields = { MessageSid: providerSid, From: sender, To: phone, Body: binding.body };
-      expect(await callback(appOrigin, fields)).toEqual({ status: 200, emits: false });
+      const historical = await callback(appOrigin, fields, diagnostic);
+      expect(historical, `SMS historical initial: ${diagnostic.category}`).toEqual({ status: 200, emits: false });
       const held = () => admin.from('ai_tool_calls').select('*').eq('family_id', familyId).eq('id', receiptId).single();
       const saved = await held();
       expect(saved.error).toBeNull();
       expect(saved.data?.inputs).toEqual(old.data?.inputs);
       expect(saved.data?.outputs).toMatchObject({ phase: 'suppressed', reason: 'unsupported_content', emissionToken: null });
       expect((await projections()).data).toEqual(before.data);
-      expect(await callback(appOrigin, fields)).toEqual({ status: 200, emits: false });
+      const historicalDuplicate = await callback(appOrigin, fields, diagnostic);
+      expect(historicalDuplicate, `SMS historical duplicate: ${diagnostic.category}`).toEqual({ status: 200, emits: false });
       expect((await held()).data).toEqual(saved.data);
       expect((await projections()).data).toEqual(before.data);
     } finally { if (account) await account.dispose(); }

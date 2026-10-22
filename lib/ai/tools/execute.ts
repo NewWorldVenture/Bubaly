@@ -45,10 +45,11 @@ import type { ServiceScope } from '@/lib/services/types';
 import { createServiceClient } from '@/lib/supabase/server';
 import { describeActionError, describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import {
-  HIGH_STAKES_AI_DOMAINS, riskToDecision, riskTierStance, toolTags,
+  readSkipsTrustGate, riskToDecision, riskTierStance, toolTags,
   type Capability, type Decision, type TrustRole,
 } from '@/lib/trust/engine';
-import { approvalDedupeKey, evaluateTrust, roleOf } from '@/lib/trust/server';
+import { readAmountCents } from '@/lib/trust/amount';
+import { approvalDedupeKey, evaluateTrust, fileOrReusePendingApproval, roleOf } from '@/lib/trust/server';
 import { behaviorForDomain, DEFAULT_AI_SETTINGS, effectiveRisk } from '@/lib/ai/family-settings';
 import { loadAISettings } from '@/lib/services/ai-settings';
 import { getTranslations } from '@/lib/i18n/server';
@@ -131,9 +132,17 @@ function argLabel(input: unknown): string | null {
   return null;
 }
 
+/** `approval_requests.title` is CHECKed to 200 characters (0093); a longer one fails the insert and files nothing. */
+const MAX_APPROVAL_TITLE = 200;
+
 function approvalTitle(tool: ToolDefinition, input: unknown): string {
   const label = argLabel(input);
-  return label ? `${firstSentence(tool.description)} — "${label}"` : firstSentence(tool.description);
+  const title = label ? `${firstSentence(tool.description)} — "${label}"` : firstSentence(tool.description);
+  if (title.length <= MAX_APPROVAL_TITLE) return title;
+  const cut = title.slice(0, MAX_APPROVAL_TITLE - 1);
+  // Never leave half of a surrogate pair behind.
+  const last = cut.charCodeAt(cut.length - 1);
+  return `${last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut}…`;
 }
 
 function issueSummary(error: { issues: { path: (string | number)[]; message: string }[] }): string {
@@ -331,12 +340,17 @@ type Gate =
 /**
  * Everything between "the arguments are valid" and "the service may run".
  *
- * Read-only tools skip the gate unless their domain is one where a read is
- * itself sensitive (finances, medical, documents…), in which case they are
- * evaluated as `view` and the view-sensitivity rule in `riskToDecision`
- * applies. No read tool is in such a domain today; the guard is live so that
- * the first one that arrives is gated by construction rather than by someone
- * remembering.
+ * Read-only tools skip the gate for a parent, an adult or the system — the
+ * roles `riskToDecision`'s view rule never denies — unless their domain is one
+ * where a read is itself high-stakes (finances, medical, documents…). For a
+ * restricted-read role (teen, child, caregiver, guest) EVERY read is evaluated
+ * as `view`: the view-sensitivity rule denies a read in a domain the role
+ * treats as sensitive, and any tool marked `sensitiveRead` regardless of
+ * domain. The early allow used to apply to every read in a non-high-stakes
+ * domain, and 'travel' and 'education' hold reads that are anything but
+ * harmless — bills due during a trip, each traveller's passport expiry, a
+ * child's teacher, coach and practice location — so a guest's assistant
+ * answered with all of it.
  */
 async function gate(
   scope: ServiceScope,
@@ -345,13 +359,33 @@ async function gate(
   opts: ExecuteToolOptions,
 ): Promise<Gate> {
   if (opts.skipTrust) return { kind: 'allow' };
-  if (tool.readOnly && !HIGH_STAKES_AI_DOMAINS.includes(tool.domain)) return { kind: 'allow' };
-
-  const actorKind = scope.actorKind === 'member' ? 'member' : 'ai_agent';
   const role = trustRoleFor(scope.role);
+  const actorKind = scope.actorKind === 'member' ? 'member' : 'ai_agent';
   const actorId = actorKind === 'member' ? (scope.memberId ?? scope.userId ?? 'unknown') : 'bubaly';
+  // The view rule is pure, so it is asked first without a query: it has
+  // nothing to say for a parent, an adult or the system, nor for a restricted
+  // role reading a harmless domain, and those reads stay as cheap as they
+  // were. Only a read it WOULD deny goes through the full gate below. The same
+  // helper is the planner's dry run (lib/ai/planner/validate.ts), so a plan
+  // cannot promise a read this refuses.
+  //
+  // What can lift that denial in the full gate is a household rule that
+  // reaches the AI ACTOR every surface here runs as: a trust policy whose
+  // subject is the role or everyone; one addressed to the AI speaks for the
+  // managers only (`allowReachesAssistant`, lib/trust/engine.ts). A per-member permission grant,
+  // a delegation, or a policy naming one member does NOT — the engine matches
+  // those to a member actor only — so a parent who wants one teen's assistant
+  // to read the practice schedule has to allow it for the role.
+  if (readSkipsTrustGate(tool, { kind: actorKind, id: actorId, role })) return { kind: 'allow' };
+
   const capability: Capability = actorKind === 'ai_agent' && !tool.readOnly ? 'automate' : tool.capability;
   const confidence = opts.confidence ?? 0.85;
+  // The money this call moves, for a policy capped by `maxAmountCents`. Left
+  // out, the engine reads 0 (`conditionsSatisfied`), so "Bubaly may spend up
+  // to $50" was an uncapped allow here: a $900 `finances.updateBudget` ran
+  // with nobody asked. The planner's dry run and the rule a held step is filed
+  // under read it the same way (lib/trust/amount.ts).
+  const amountCents = readAmountCents(input);
   const title = approvalTitle(tool, input);
   const consequences = tool.consequences?.(input) ?? [];
 
@@ -400,6 +434,7 @@ async function gate(
       // approvals is scoped by `conditions.tags` to exactly one tool, and
       // must not reach its neighbours in the same domain.
       tags: [...toolTags(tool.name), `op:${tool.capability}`, `risk:${risk}`, `domain:${tool.domain}`],
+      ...(amountCents !== null ? { amountCents } : {}),
     },
   });
 
@@ -427,6 +462,7 @@ async function gate(
       capability,
       behavior,
       explicitAllow: false,
+      sensitiveRead: tool.sensitiveRead === true,
     });
     // Safety rail: a tier must never release work that already has an approval
     // waiting on a person. (`riskToDecision` cannot produce that today; this
@@ -458,9 +494,18 @@ async function gate(
   if (decision.effect === 'deny') return { kind: 'denied', reason: decision.reason };
   if (decision.effect === 'require_approval') {
     if (tool.name === 'finances.advisePurchase' && (!approvalId || !await associatePurchaseRequest(scope, approvalId))) {
+      // The card is already in the parents' queue. Left pending with no
+      // request attached, an approval of it could never be delivered
+      // (scopeForApprovedPurchase refuses a row without request_id), so it is
+      // withdrawn rather than left for a parent to approve into nothing.
+      if (approvalId) await withdrawUnassociatedPurchaseApproval(scope, approvalId);
       const t = await getTranslations();
       return { kind: 'denied', reason: t('purchaseAdvice.privateUnavailable') };
     }
+    // "Waiting for a parent" is only true when a row exists for a parent to
+    // find. A failed approval insert filed nothing, so the honest answer is a
+    // retryable failure, not a pending card nobody can see.
+    if (!approvalId) return { kind: 'unverified', reason: (await getTranslations())('aiRuns.approvalNotFiled') };
     return {
       kind: 'pending',
       approvalId,
@@ -539,6 +584,24 @@ async function associatePurchaseRequest(scope: ServiceScope, approvalId: string)
   }
 }
 
+/** Cancel a still-pending purchase approval that never got a request attached.
+ * A card that already carries a request (a reused, validly associated one) is
+ * untouched: the fence on `request_id is null` keeps someone else's question. */
+async function withdrawUnassociatedPurchaseApproval(scope: ServiceScope, approvalId: string): Promise<void> {
+  try {
+    const writer = await trustWriter(scope);
+    let query = writer.from('approval_requests')
+      .update({ status: 'cancelled', decided_at: (scope.now ?? new Date()).toISOString() })
+      .eq('id', approvalId).eq('family_id', scope.familyId).eq('requested_by_kind', 'ai')
+      .eq('status', 'pending').is('request_id', null);
+    if (scope.memberId) query = query.eq('requested_by_member_id', scope.memberId);
+    const { error } = await query.select('id');
+    if (error) console.error('[tool-exec] could not withdraw an unassociated purchase approval', { approvalId, error });
+  } catch (error) {
+    console.error('[tool-exec] could not withdraw an unassociated purchase approval', { approvalId, error });
+  }
+}
+
 async function openApproval(
   scope: ServiceScope,
   tool: ToolDefinition,
@@ -562,23 +625,26 @@ async function openApproval(
     payload: { name: tool.name, args: input as Record<string, unknown> },
   });
 
-  const existing = await writer.from('approval_requests')
-    .select('id').eq('family_id', scope.familyId).eq('dedupe_key', dedupeKey).eq('status', 'pending')
-    .limit(1).maybeSingle();
-  if (existing.data?.id) return existing.data.id;
-
-  const { data, error } = await writer
+  const requestedByKind = meta.actorKind === 'ai_agent' ? 'ai' as const : 'member' as const;
+  const payload = { name: tool.name, args: input as Record<string, unknown> } as unknown as Json;
+  // A pending row under this key is reused only when it is this ask — same
+  // filer, same payload. `dedupe_key` is member-writable on a member's own row,
+  // so a key match alone would let a planted row collect Bubaly's audit line
+  // (see `pendingRowIsThisAsk`).
+  const opened = await fileOrReusePendingApproval(writer, scope.familyId, dedupeKey, {
+    requestedByKind, requestedByMemberId: scope.memberId ?? null, domain: tool.domain, capability: meta.capability, payload,
+  }, (key) => writer
     .from('approval_requests')
     .insert({
       family_id: scope.familyId,
       domain: tool.domain,
       capability: meta.capability,
-      requested_by_kind: meta.actorKind === 'ai_agent' ? 'ai' : 'member',
+      requested_by_kind: requestedByKind,
       requested_by_member_id: scope.memberId,
       agent: meta.actorKind === 'ai_agent' ? 'Bubaly' : null,
       title: meta.title ?? tool.name,
       summary: meta.consequences?.[0] ?? tool.description,
-      payload: { name: tool.name, args: input as Record<string, unknown> } as unknown as Json,
+      payload,
       payload_kind: 'tool',
       consequences: (meta.consequences ?? []) as unknown as Json,
       confidence: meta.confidence,
@@ -586,21 +652,12 @@ async function openApproval(
       approval_model: decision.approvalModel ?? 'single',
       required_approvals: decision.requiredApprovals ?? 1,
       status: 'pending',
-      dedupe_key: dedupeKey,
+      dedupe_key: key,
     })
     .select('id')
-    .single();
-  if (data?.id) return data.id;
-  // 23505: a concurrent resend won between the lookup and the insert. Its row is
-  // the answer — returning null here would park the step on an approval that
-  // exists, reported as one that could not be opened.
-  if (error?.code === '23505') {
-    const raced = await writer.from('approval_requests')
-      .select('id').eq('family_id', scope.familyId).eq('dedupe_key', dedupeKey).eq('status', 'pending')
-      .limit(1).maybeSingle();
-    if (raced.data?.id) return raced.data.id;
-  }
-  console.error('[tool-exec] could not open an approval request', error);
+    .single());
+  if (opened.id) return opened.id;
+  console.error('[tool-exec] could not open an approval request', 'error' in opened ? opened.error : null);
   return null;
 }
 

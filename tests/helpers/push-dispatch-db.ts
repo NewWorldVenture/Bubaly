@@ -75,6 +75,7 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options
   const calls: { table: string; operation: string; count: number; limit: number; filter?: string }[] = [];
   const from = (table: string) => {
     let operation = 'select', patch: PushFixtureRow = {}, limit = Infinity, expression: string | undefined;
+    let selection = '*';
     // readAll() pages with .order().range(); without range support the whole
     // paged read threw, and a cron route that should answer 502 answered 500.
     let rangeFrom: number | undefined, rangeTo: number | undefined;
@@ -124,10 +125,25 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options
       if (operation === 'update') {
         for (const row of rows) { Object.assign(row, patch); if (table === 'notifications') stamps.push(String(row.id)); }
       } else if (operation === 'delete') tables[table] = tables[table].filter(row => !rows.includes(row));
-      return { data: rows, error: null };
+      // The existing fixtures without a families table explicitly model open
+      // families (same assumption as the embedded filter below). Expose that
+      // joined row when selected; explicit family tables control closure.
+      const data = operation === 'select' && selection.includes('family:families!inner(')
+        ? rows.map(row => ({ ...row, family: tables.families
+          ? (() => {
+            const family = tables.families.find(family => family.id === row.family_id);
+            // Only this fixture's known family row with an omitted SQL-null
+            // default is declared open. Explicit malformed values stay raw.
+            return family && typeof family.id === 'string'
+              && !Object.prototype.hasOwnProperty.call(family, 'closed_at')
+              ? { ...family, closed_at: null } : family ?? null;
+          })()
+          : { id: row.family_id, closed_at: null } }))
+        : rows;
+      return { data, error: null };
     };
     const query = {
-      select: () => query,
+      select: (columns?: string) => { selection = columns ?? '*'; return query; },
       // postgrest-js writes `eq.${value}` into the URL, so the server sees TEXT:
       // an object arrives as "[object Object]". Against a jsonb column the text
       // is parsed as JSON (and compared as jsonb, key order aside), and text that
@@ -151,7 +167,22 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options
         return query;
       },
       contains: (key: string, value: unknown) => { filters.push(row => contains(row[key], value)); return query; },
-      is: (key: string, value: unknown) => { filters.push(row => row[key] === value); return query; },
+      is: (key: string, value: unknown) => {
+        // A filter on the `family:families!inner(...)` embed — the dispatcher
+        // skips closed families' rows. A fixture with no `families` table has
+        // only open families in it, which is every fixture written before this.
+        const embedded = /^family\.(\w+)$/.exec(key);
+        if (embedded) {
+          filters.push(row => {
+            if (!tables.families) return true;
+            const family = tables.families.find(f => f.id === row.family_id);
+            return family !== undefined && (family[embedded[1]] ?? null) === value;
+          });
+          return query;
+        }
+        filters.push(row => row[key] === value);
+        return query;
+      },
       not: (key: string, operator: string, value: unknown) => {
         if (operator !== 'is' || value !== null) throw new Error(`Unsupported fixture not filter: ${key}.${operator}.${value}`);
         filters.push(row => row[key] != null);

@@ -7,6 +7,7 @@ import { todayKeyFor } from '@/lib/services/scope';
 import { createServer } from '@/lib/supabase/server';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { refusalError, refusalForError } from '@/lib/actions/refusal';
+import { datetimeLocalToInstant } from '@/lib/time/datetime-local';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 
@@ -22,6 +23,8 @@ async function ctx() {
     // a day key is the HOST's day, so a record logged at 6pm in California was
     // dated tomorrow.
     todayKey: todayKeyFor(c),
+    // The family's zone, for a `datetime-local` value written to a timestamptz.
+    tz: c.active.family?.timezone || 'UTC',
   };
 }
 function str(fd: FormData, k: string): string | null {
@@ -55,7 +58,7 @@ async function saveRow(
   // cannot match zero rows. That asymmetry is why only one branch grows a
   // `.select()`. Audit C1-S9-46.
   const { data, error } = id
-    ? await supabase.from(table as 'vehicles').update(row as never).eq('id', id).eq('family_id', familyId).select('id')
+    ? await supabase.from(table as 'vehicles').update(row as never).eq('id', id).eq('family_id', familyId).is('deleted_at', null).select('id')
     : await supabase.from(table as 'vehicles').insert({ ...row, family_id: familyId, created_by: userId } as never);
   if (error) throw refusalError(describeActionError(error, label), refusalForError(error));
   if (id && wroteNoRows(data)) throw refusalError(label, 'notSaved');
@@ -169,11 +172,28 @@ export async function deletePolicyAction(id: string) {
 
 // ── Rentals ───────────────────────────────────────────────────────────────────
 export async function saveRentalAction(fd: FormData) {
-  const { familyId, userId, supabase } = await ctx();
+  const t = await getTranslations();
+  const { familyId, userId, supabase, tz } = await ctx();
   const id = str(fd, 'id');
+  // A `datetime-local` reading has no zone. Written raw to a timestamptz it was
+  // read in the database session's zone (UTC), so a 1am New York pickup was
+  // stored as 01:00Z and shown on the day before. It is the FAMILY's wall time.
+  //
+  // The converter answers null both for a blank field and for one that names
+  // no instant (30 February, 25:00), and the second was written as the first:
+  // an edit carrying a malformed time cleared the pickup it was meant to change.
+  // Blank still clears; a filled-in value that does not convert is refused
+  // before anything is written.
+  const pickupTyped = str(fd, 'pickup_at');
+  const pickupAt = datetimeLocalToInstant(pickupTyped, tz);
+  if (pickupTyped !== null && pickupAt === null) throw refusalError(t('actions.thatPickupTimeCouldNotBeRead'), 'invalid');
+  const returnTyped = str(fd, 'return_at');
+  const returnAt = datetimeLocalToInstant(returnTyped, tz);
+  if (returnTyped !== null && returnAt === null) throw refusalError(t('actions.thatReturnTimeCouldNotBeRead'), 'invalid');
   const row = {
     company: str(fd, 'company'), confirmation_number: str(fd, 'confirmation_number'), pickup_location: str(fd, 'pickup_location'),
-    dropoff_location: str(fd, 'dropoff_location'), pickup_at: str(fd, 'pickup_at'), return_at: str(fd, 'return_at'),
+    dropoff_location: str(fd, 'dropoff_location'),
+    pickup_at: pickupAt, return_at: returnAt,
     vehicle_desc: str(fd, 'vehicle_desc'), daily_rate: num(fd, 'daily_rate'), total_cost: num(fd, 'total_cost'),
     coverage: str(fd, 'coverage'), status: str(fd, 'status') ?? 'upcoming', notes: str(fd, 'notes'), updated_by: userId,
   };
@@ -187,11 +207,36 @@ export async function deleteRentalAction(id: string) {
 }
 
 // ── Service log ───────────────────────────────────────────────────────────────
+function sameVehicleReference(received: unknown, requested: string): boolean {
+  if (typeof received !== 'string' || !received.trim()) return false;
+  if (received === requested) return true;
+  // PostgreSQL returns canonical UUID text for these accepted input spellings.
+  // Compare identities without rewriting the submitted query or payload.
+  const uuid = /^(?:\{[0-9a-f]{4}(?:-?[0-9a-f]{4}){7}\}|[0-9a-f]{4}(?:-?[0-9a-f]{4}){7})$/i;
+  return uuid.test(received) && uuid.test(requested)
+    && received.replace(/[{}-]/g, '').toLowerCase() === requested.replace(/[{}-]/g, '').toLowerCase();
+}
+
 export async function saveAutoServiceAction(fd: FormData) {
   const t = await getTranslations();
   const { familyId, userId, supabase, todayKey } = await ctx();
   const vehicleId = str(fd, 'vehicle_id');
   const mileage = num(fd, 'mileage');
+  // An odometer reading is never negative; -5 was stored and then copied onto
+  // the vehicle.
+  if (mileage != null && mileage < 0) throw refusalError(t('actions.aMileageCannotBeNegative'), 'invalid');
+  // The child row's family and single-ID FK do not establish the vehicle's family.
+  // Admit an explicit parent before saving, including records with no odometer reading.
+  if (vehicleId !== null) {
+    let admitted = false;
+    try {
+      const { data: vehicle, error: vehicleError } = await supabase.from('vehicles')
+        .select('id, family_id').eq('id', vehicleId).eq('family_id', familyId).maybeSingle();
+      admitted = !vehicleError && !!vehicle && typeof vehicle === 'object' && !Array.isArray(vehicle)
+        && sameVehicleReference(vehicle.id, vehicleId) && sameVehicleReference(vehicle.family_id, familyId);
+    } catch { /* An uncertain parent lookup cannot authorize a write. */ }
+    if (!admitted) throw refusalError(t('actions.couldNotSaveThatService'), 'notSaved');
+  }
   const { error } = await supabase.from('auto_service_records').insert({
     family_id: familyId, vehicle_id: vehicleId, title: str(fd, 'title') ?? 'Service',
     service_date: str(fd, 'service_date') ?? todayKey,
@@ -202,17 +247,31 @@ export async function saveAutoServiceAction(fd: FormData) {
   // Keep the vehicle odometer fresh — best-effort (the record is already saved),
   // but log a failure so a broken update is observable, not silently ignored.
   if (vehicleId && mileage != null) {
-    // The log said it was here so a broken update would be observable — but only
-    // an ERROR reached it, and the commonest way this write does nothing is a
-    // vehicle id that matches no row in this family. Confirmed for the LOG, not
-    // for a bail: the service record is already saved and the caller must not be
-    // failed for it. Audit C1-S9-60.
-    const { data: odoUpdated, error: odoError } = await supabase.from('vehicles')
-      .update({ mileage }).eq('id', vehicleId).eq('family_id', familyId).select('id');
-    if (odoError || wroteNoRows(odoUpdated)) {
-      console.error('[auto] vehicle odometer update failed', {
-        familyId, vehicleId, error: odoError?.message ?? 'no rows updated',
+    // Only FORWARD. Logging last spring's oil change at 30,000 mi on a car that
+    // now reads 52,000 used to set the odometer back to 30,000; a back-dated or
+    // simply older record is history, not a new reading. The vehicle is read
+    // first so a missing one is still told apart from a lower reading, and the
+    // write repeats the condition so a concurrent higher reading is not lost.
+    const { data: vehicle, error: vehicleReadError } = await supabase.from('vehicles')
+      .select('id, mileage').eq('id', vehicleId).eq('family_id', familyId).maybeSingle();
+    if (vehicleReadError || !vehicle) {
+      console.error('[auto] vehicle odometer read failed', {
+        familyId, vehicleId, error: vehicleReadError?.message ?? 'no such vehicle',
       });
+    } else if (vehicle.mileage == null || mileage > vehicle.mileage) {
+      // The log said it was here so a broken update would be observable — but only
+      // an ERROR reached it, and the commonest way this write does nothing is a
+      // vehicle id that matches no row in this family. Confirmed for the LOG, not
+      // for a bail: the service record is already saved and the caller must not be
+      // failed for it. Audit C1-S9-60.
+      const { data: odoUpdated, error: odoError } = await supabase.from('vehicles')
+        .update({ mileage }).eq('id', vehicleId).eq('family_id', familyId)
+        .or(`mileage.is.null,mileage.lt.${mileage}`).select('id');
+      if (odoError || wroteNoRows(odoUpdated)) {
+        console.error('[auto] vehicle odometer update failed', {
+          familyId, vehicleId, error: odoError?.message ?? 'no rows updated',
+        });
+      }
     }
   }
   revalidate('/dashboard/auto', '/dashboard/auto/service');

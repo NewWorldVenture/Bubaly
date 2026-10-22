@@ -52,15 +52,12 @@ describe('callback admission never owns browser authentication storage', () => {
     expect(response.cookies.getAll()).toEqual([]);
     expect(seam.exchange).not.toHaveBeenCalled(); expect(seam.ambient).not.toHaveBeenCalled();
   });
-  it.each([false, true])('a delayed old callback remains cookie-neutral after a newer browser decision (exchangeFailure=%s)', async failed => {
-    seam.failed = failed;
-    let release = () => {};
-    seam.gate = new Promise<void>(resolve => { release = resolve; });
-    const pending = GET(new Request('https://app.example.invalid/auth/callback?code=older-code&next=%2Fdashboard%2Fmeals'));
-    // The browser can log out or adopt another session while the older request
-    // is in flight. Its response must have no mechanism to overwrite that state.
-    await Promise.resolve(); release();
-    const response = await pending;
+  it.each([undefined, 'sb-fixture-auth-token=older-session'])('admission emits no cookies for request Cookie header %s', async cookie => {
+    // Actual late response delivery after logout/replacement login is exercised
+    // by the real browser cases in tests/e2e/callback-admission.spec.ts.
+    const response = await GET(new Request('https://app.example.invalid/auth/callback?code=older-code&next=%2Fdashboard%2Fmeals', {
+      headers: cookie === undefined ? undefined : { cookie },
+    }));
     expect(response.headers.get('set-cookie')).toBeNull();
     expect(response.cookies.getAll()).toEqual([]);
     expect(seam.exchange).not.toHaveBeenCalled(); expect(seam.ambient).not.toHaveBeenCalled();

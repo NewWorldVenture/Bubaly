@@ -13,6 +13,7 @@ import { isManager } from '@/lib/constants/roles';
 import { performUpload } from '@/lib/documents/upload';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -89,7 +90,12 @@ export function FilesHubModule({ view }: { view: FileView }) {
 
   const { data, loading, error, refresh } = useRealtimeQuery<Document>({
     table: 'documents', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('documents').select('*').eq('family_id', familyId).order('created_at', { ascending: false }),
+    // Paged to the end: one select stops at db-max-rows (1,000) and says
+    // nothing, so past it the oldest files — Vault ones included, since the
+    // view filter runs after the read — fell out of every tile and search.
+    // Past the ceiling readAll answers an error, and the screen says so.
+    fetcher: (sb) => readAllAsQuery<Document>((from, to) => sb.from('documents').select('*').eq('family_id', familyId)
+      .order('created_at', { ascending: false }).order('id').range(from, to), { max: 20_000 }),
   });
 
   const byId = useMemo(() => new Map(data.map((d) => [d.id, d])), [data]);
@@ -290,7 +296,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
                     </button>
                     {manager && (
                       <button onClick={() => toggleSecure(d.id)} aria-label={t(d.is_secure ? 'filesHubModule.moveShared' : 'filesHubModule.moveVault')}
-                        className="rounded-lg p-1.5 text-muted opacity-0 transition hover:bg-elevated hover:text-fg group-hover:opacity-100">
+                        className="rounded-lg p-1.5 text-muted opacity-100 sm:opacity-0 transition hover:bg-elevated hover:text-fg sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100">
                         {d.is_secure ? <LockOpen className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
                       </button>
                     )}

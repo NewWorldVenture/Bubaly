@@ -122,6 +122,8 @@ describe('network aggregation', () => {
   it('keeps the contribution of a consenting family past the cap', async () => {
     const db = capped();
     const families = ids('fam', OVER);
+    // Open families: the consent read inner-joins families and skips closed ones.
+    db.seed('families', families.map((id) => ({ id, closed_at: null })));
     db.seed('network_consent', families.map((id) => ({ family_id: id, enabled: true, scopes: {} })));
     // Every opted-in family already has a contribution row from an earlier run.
     db.seed('network_contributions', families.map((id) => ({
@@ -177,6 +179,8 @@ describe('the push campaign suppression list', () => {
     db.seed('push_devices', users.map((user_id, index) => ({ id: devices[index], user_id, enabled: true })));
     db.seed('profiles', users.map(id => ({ id, email: `${id}@example.test` })));
     db.seed('marketing_suppressions', users.slice(0, -1).map(id => ({ email: `${id}@example.test` })));
+    // Marketing push is opt-in; every account here has said yes.
+    db.seed('user_preferences', users.map(user_id => ({ user_id, notification_prefs: { marketingPush: true } })));
     // A single-page device scan cannot see the only eligible owner. A partial
     // suppression scan would incorrectly include opted-out owners near the end.
     const short = await (db as unknown as DB).from('push_devices').select('user_id').eq('enabled', true);
@@ -245,6 +249,8 @@ describe('network contributions', () => {
     // Enough families that one `.in()` over all of them matches far more than
     // a thousand member rows: 400 households of four.
     const families = ids('fam', 400);
+    // Open families: the consent read inner-joins families and skips closed ones.
+    db.seed('families', families.map((id) => ({ id, closed_at: null })));
     db.seed('network_consent', families.map((id) => ({ family_id: id, enabled: true, scopes: {} })));
     db.seed('family_members', families.flatMap((familyId, f) => [
       { id: `m-${f}-0`, family_id: familyId, role: 'parent', is_active: true, birthday: '1990-01-01' },

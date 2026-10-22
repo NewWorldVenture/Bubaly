@@ -61,7 +61,7 @@ beforeEach(() => {
     onboarding_progress: [['user_id']], invites: [['family_id', 'onboarding_key']], sync_accounts: [['user_id', 'provider', 'external_id']], calendar_events: [['family_id', 'onboarding_key']],
     onboarding_imports: [['family_id', 'onboarding_key']], sync_external_mappings: [['provider', 'item_type', 'external_id', 'account_id']] },
   defaults: { sync_accounts: { updated_at: '2026-09-09T00:00:00Z' }, calendar_events: { updated_at: '2026-09-09T00:00:00Z' } },
-  rpc: { onboarding_claim_family: () => [{ family_id: familyId, created: false }] } });
+  rpc: { onboarding_claim_family: () => [{ family_id: familyId, created: false }], rate_limit_hit: () => [{ allowed: true, retry_after: 0 }] } });
   mock.db = db;
   db.seed('families', [{ id: familyId, created_by: userId, name: 'Ada family', timezone: 'UTC', trial_ends_at: null, closed_at: null }]);
   db.seed('family_members', [{ id: 'owner-member', user_id: userId, family_id: familyId, role: 'parent', is_active: true, created_at: '2026-09-09' }]);

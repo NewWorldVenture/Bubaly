@@ -19,9 +19,10 @@ describe('family-hub card pairs split at md for tablets (M-035)', () => {
   it('every hub two-card grid uses md:grid-cols-2 (not lg-gated)', () => {
     for (const [file, count] of HUBS) {
       const src = readFileSync(file, 'utf8');
-      const md = (src.match(/grid gap-5 md:grid-cols-2/g) ?? []).length;
+      // `grid-cols-1` below md keeps the single column from outgrowing a 320 px screen (A11Y-001 reflow).
+      const md = (src.match(/grid (?:grid-cols-1 )?gap-5 md:grid-cols-2/g) ?? []).length;
       expect(md, `${file} md-split grids`).toBe(count);
-      expect(src, `${file} should have no lg-gated pair grid left`).not.toContain('grid gap-5 lg:grid-cols-2');
+      expect(src, `${file} should have no lg-gated pair grid left`).not.toMatch(/grid (?:grid-cols-1 )?gap-5 lg:grid-cols-2/);
     }
   });
 });

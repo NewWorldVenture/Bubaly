@@ -10,6 +10,7 @@
 
 import type { TrustLevel } from './trust';
 import { TRUST_RANK } from './trust';
+import { isValidTimezone, localPartsAt } from '@/lib/time/zoned';
 
 /** Minimal shape of a communication row needed for pattern analysis. */
 export type CommSummary = {
@@ -47,10 +48,16 @@ export const FREQUENT_UNKNOWN_THRESHOLD = 4;  // calls/texts before "add to cont
 export const PROVEN_SAFE_THRESHOLD = 6;        // safe interactions before trust upgrade
 export const NIGHT_CALL_THRESHOLD = 3;         // off-hours unknown calls → quiet-hours rule
 
-function isNightHour(iso: string): boolean {
-  const h = new Date(iso).getUTCHours();
-  // Treat 22:00–06:59 as "night". (Family-local refinement happens via the
-  // rule's own time window; this is just the signal that prompts the rule.)
+/**
+ * Treat 22:00–06:59 on the FAMILY's clock as "night" — the same window the
+ * suggested Quiet Hours rule proposes, evaluated where the rule will be. In UTC
+ * a Pacific family's "night" was 15:00–23:59, so ordinary afternoon calls
+ * prompted a "late-night calls" suggestion and real 01:00 calls did not count.
+ */
+function isNightHour(iso: string, timezone: string): boolean {
+  const instant = new Date(iso);
+  if (!Number.isFinite(instant.getTime())) return false;
+  const h = localPartsAt(instant, timezone).hour;
   return h >= 22 || h < 7;
 }
 
@@ -71,8 +78,11 @@ function pretty(phone: string | null): string {
 export function analyzeCommunications(input: {
   communications: CommSummary[];
   contacts: ContactSummary[];
+  /** The family's IANA zone; night-time patterns are counted on its clock. */
+  timezone: string;
 }): SuggestionDraft[] {
-  const { communications, contacts } = input;
+  const { communications, contacts, timezone } = input;
+  if (!isValidTimezone(timezone)) throw new Error('Guardian learning needs a valid family timezone');
   const drafts: SuggestionDraft[] = [];
 
   const contactByPhone = new Map<string, ContactSummary>();
@@ -86,7 +96,7 @@ export function analyzeCommunications(input: {
     const b = byPhone.get(comm.from_number) ?? { total: 0, scam: 0, night: 0, lastSeen: comm.started_at, trustSeen: comm.trust_level_at_time };
     b.total += 1;
     if (comm.scam_detected) b.scam += 1;
-    if (isNightHour(comm.started_at)) b.night += 1;
+    if (isNightHour(comm.started_at, timezone)) b.night += 1;
     if (comm.started_at > b.lastSeen) b.lastSeen = comm.started_at;
     byPhone.set(comm.from_number, b);
   }

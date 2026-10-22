@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { readAll } from '@/lib/supabase/read-all';
-import { generateFamilyNotifications } from '@/lib/server/notifications';
+import { generateFamilyNotifications, type NotificationGenerationReport } from '@/lib/server/notifications';
 import { respawnMissingChoreAssignments } from '@/lib/services/tasks';
 import { systemScopeForFamily } from '@/lib/services/scope';
 import { dispatchPendingPushes } from '@/lib/server/push';
@@ -31,9 +31,10 @@ export async function GET(req: NextRequest) {
 
   const supabase = createServiceClient();
   // Every household — see lib/supabase/read-all.ts for why an unbounded select
-  // silently stops at PostgREST's row ceiling.
+  // silently stops at PostgREST's row ceiling. Every OPEN household: a family
+  // that closed its account (families.closed_at) is not nudged on its devices.
   const { rows: families, error } = await readAll<{ id: string }>(
-    (from, to) => supabase.from('families').select('id').order('id').range(from, to),
+    (from, to) => supabase.from('families').select('id').is('closed_at', null).order('id').range(from, to),
   );
   if (error) {
     console.error('Push-scan cron read failed:', error);
@@ -50,7 +51,13 @@ export async function GET(req: NextRequest) {
   let respawnFailures = 0;
   for (const f of families ?? []) {
     try {
-      created += await generateFamilyNotifications(supabase, f.id);
+      // Failed source reads count as a failed family, not a quiet one.
+      const report: NotificationGenerationReport = { failedSources: [] };
+      created += await generateFamilyNotifications(supabase, f.id, report);
+      if (report.failedSources.length) {
+        generationFailures += 1;
+        console.error(`Notification generation incomplete for family ${f.id}:`, report.failedSources);
+      }
     } catch (e) {
       generationFailures += 1;
       console.error(`Notification generation failed for family ${f.id}:`, e);

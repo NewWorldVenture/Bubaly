@@ -25,7 +25,8 @@ const FAMILY = '11111111-1111-4111-8111-111111111111';
 const MEMBER = '22222222-2222-4222-8222-222222222222';
 const CONTACT = '33333333-3333-4333-8333-333333333333';
 const COMM = '44444444-4444-4444-8444-444444444444';
-const stages = ['guardian_contacts', 'guardian_member_profiles', 'guardian_routing_rules'] as const;
+// The family's own timezone is the fourth required policy read.
+const stages = ['guardian_contacts', 'guardian_member_profiles', 'guardian_routing_rules', 'families'] as const;
 let calls: { table: string; method: string }[];
 let failure: typeof stages[number] | null;
 beforeEach(() => {
@@ -41,14 +42,18 @@ beforeEach(() => {
       calls.push({ table, method: init.method ?? 'GET' });
       if (init.method === 'PATCH') return new Response(null, { status: 204 });
       if (table === 'guardian_communications' && init.method === 'POST') return Response.json({ id: COMM }, { status: 201 });
-      if (table === 'family_members') return Response.json({ display_name: 'Synthetic member' });
-      if (table === 'families') return Response.json({ name: 'Synthetic family' });
+      // The profile's member, in the profile's family: the voice route checks
+      // that before it routes (a profile naming another family's member is refused).
+      if (table === 'family_members') return Response.json({ id: MEMBER, family_id: FAMILY, display_name: 'Synthetic member', is_active: true });
       if (table === 'guardian_member_profiles' && url.searchParams.has('guardian_phone')) {
         return Response.json({ id: MEMBER, family_id: FAMILY, member_id: MEMBER });
       }
       if (table === failure) return Response.json({ code: '42501', message: 'Synthetic policy failure' }, { status: 503, headers: { 'retry-after': '0' } });
+      // One row, PostgREST-shaped: the pipeline's fourth policy read wants
+      // `id, timezone` with an exact count, the voice greeting wants `name`.
+      if (table === 'families') return Response.json([{ id: FAMILY, name: 'Synthetic family', timezone: 'UTC' }], { headers: { 'content-range': '0-0/1' } });
       if (!failure && table === 'guardian_contacts') return Response.json([{ id: CONTACT, family_id: FAMILY, phone: '+15555550200', name: 'Synthetic blocked contact', trust_level: 'blocked', spam_score: 90 }], { headers: { 'content-range': '0-0/1' } });
-      if (stages.includes(table as typeof stages[number])) return Response.json([], { headers: { 'content-range': '*/0' } });
+      if (stages.includes(table as typeof stages[number]) && table !== 'families') return Response.json([], { headers: { 'content-range': '*/0' } });
       // A policy failure gives the claim back (releaseGuardianCallback), so the
       // retry the 503 asks for can take the event. PostgREST answers the delete
       // with the removed row, as `.select('event_id')` asks.

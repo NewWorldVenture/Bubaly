@@ -19,7 +19,8 @@ vi.mock('@/lib/supabase/auth', () => ({
 vi.mock('@/lib/supabase/server', () => ({
   createServer: async () => ({ from: (table: string) => {
     mocks.reads.push(table);
-    const b = { select: () => b, eq: () => b, neq: () => b, gte: () => b, order: () => b, range: async () => ({ data: [], error: null }),
+    // The year of spending is paged on the id, both ends bounded (gt/lte/limit).
+    const b = { select: () => b, eq: () => b, neq: () => b, gte: () => b, lte: () => b, gt: () => b, order: () => b, limit: () => b, range: async () => ({ data: [], error: null }),
       then: (resolve: (v: unknown) => void) => resolve({ data: [], error: null }) };
     return b;
   } }),

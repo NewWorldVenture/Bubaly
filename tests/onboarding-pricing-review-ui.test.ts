@@ -187,3 +187,38 @@ it('a retired Finish response cannot release another screen’s pending Finish l
   control(donePanel(render(current)), 'onboardingWizard.reviewSelectedPlan')();
   expect(mocks.push).toHaveBeenCalledExactlyOnceWith('/dashboard/billing?view=manage&reviewPlan=basic_annual');
 });
+
+describe('invites onboarding saved but did not email', () => {
+  const unsentInvites = [{ id: 'invite-6', email: 'p5@example.test' }];
+  function unsentPanel() {
+    const done = donePanel(render());
+    const node = nodes(done).find(n => typeof n.type === 'function' && n.type.name === 'UnsentInvites');
+    return node ? (node.type as (props: unknown) => ReactNode)(node.props) : null;
+  }
+  it('lists them on Done with a Send control that mails through /api/email/invite', async () => {
+    mocks.finish.mockReset().mockResolvedValue({ ok: true, data: { familyId, unsentInvites } });
+    const fetch = vi.fn(async () => ({ ok: true }));
+    vi.stubGlobal('fetch', fetch);
+    render(); finishControl(render())(); await vi.waitFor(() => expect(donePanel(render())).not.toBeNull());
+    const panel = unsentPanel();
+    expect(panel).not.toBeNull();
+    expect(textOf(panel)).toContain(translate(getMessages('en-US'), 'onboardingWizard.invitesNotEmailed'));
+    expect(textOf(panel)).toContain('p5@example.test');
+    control(panel, 'onboardingWizard.sendInviteEmail')();
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    const [url, init] = fetch.mock.calls[0] as unknown as [string, { body: string }];
+    expect(url).toBe('/api/email/invite');
+    expect(JSON.parse(init.body)).toEqual({ inviteId: 'invite-6' });
+  });
+  it('says so when that send fails', async () => {
+    mocks.finish.mockReset().mockResolvedValue({ ok: true, data: { familyId, unsentInvites } });
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false })));
+    render(); finishControl(render())(); await vi.waitFor(() => expect(donePanel(render())).not.toBeNull());
+    control(unsentPanel(), 'onboardingWizard.sendInviteEmail')();
+    await vi.waitFor(() => expect(mocks.error).toHaveBeenCalledWith(translate(getMessages('en-US'), 'invite.failedToSendInvite')));
+  });
+  it('shows nothing when every invite was mailed (control)', async () => {
+    render(); finishControl(render())(); await vi.waitFor(() => expect(donePanel(render())).not.toBeNull());
+    expect(unsentPanel()).toBeNull();
+  });
+});

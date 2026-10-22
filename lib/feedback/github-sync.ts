@@ -1,5 +1,5 @@
 import 'server-only';
-import type { createServiceClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import {
   isGithubConfigured, listIssuesByLabels, type GithubIssue,
 } from '@/lib/integrations/github';
@@ -7,6 +7,7 @@ import { GH_MARKER_LABEL, feedbackIdFromBody, statusFromIssue } from '@/lib/feed
 import { syncIdeaToGithub } from '@/lib/feedback/notify';
 import { readAll } from '@/lib/supabase/read-all';
 import { wroteNoRows } from '@/lib/supabase/errors';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 type Admin = ReturnType<typeof createServiceClient>;
 
@@ -17,7 +18,26 @@ export type SyncResult = {
   reconciled: number;   // linked issues examined
   changes: SyncChange[]; // status transitions the bot applied
   errors: number;
+  /** Unsynced ideas left for a later run because their family reached the day's issue cap. */
+  held: number;
 };
+
+/** Unsynced ideas one run reads; the rest wait for the next. */
+const BACKFILL_PER_RUN = 25;
+/**
+ * Issues the backfill opens for ONE family in a day. The submit action limits
+ * a member to 20 ideas a day before it opens an issue (app/(app)/feedback/
+ * actions.ts), but a row written straight to PostgREST never passes through
+ * it, and this backfill picked up every unlinked row and opened an issue with
+ * the bot token for each: a scripted insert loop still spent GitHub's
+ * content-creation allowance, 25 issues a run. So the backfill holds a
+ * family's ideas once it has opened this many for them in a day, on the same
+ * two-layer limiter the action uses, keyed by family (by author when a row
+ * has none, and one shared key for a row with neither). A held idea is not an
+ * error: it stays unlinked and is picked up when the window has passed.
+ */
+const FAMILY_ISSUES_PER_DAY = 20;
+const ISSUE_WINDOW_MS = 86_400_000;
 
 /**
  * The feedback ↔ GitHub bot. One pass:
@@ -31,20 +51,31 @@ export type SyncResult = {
  * Best-effort throughout — a GitHub hiccup degrades the run, never throws.
  */
 export async function runGithubFeedbackSync(admin: Admin, opts?: { backfillLimit?: number; issueLimit?: number }): Promise<SyncResult> {
-  if (!isGithubConfigured()) return { configured: false, created: 0, reconciled: 0, changes: [], errors: 0 };
+  if (!isGithubConfigured()) return { configured: false, created: 0, reconciled: 0, changes: [], errors: 0, held: 0 };
 
   let created = 0;
   let errors = 0;
+  let held = 0;
   const changes: SyncChange[] = [];
+  // The backfill's limiter is keyed by FAMILY, so it runs on the service
+  // client: rate_limit_hit (0179) refuses a key that does not name the caller
+  // on a session client, and the limiter then fails closed. Both callers hand
+  // this run the service client already; the limiter takes its own so where
+  // the key is evaluated is on the page (tests/a-signed-in-rate-limit-key-
+  // names-the-caller.test.ts).
+  const limiter = createServiceClient();
 
-  // 1. Backfill unsynced ideas → issues.
+  // 1. Backfill unsynced ideas → issues, within the per-run and per-family caps.
   const { data: unsynced } = await admin
     .from('feedback_ideas')
-    .select('id, title, kind, category, problem, body, impact, vote_count, author_name')
+    .select('id, title, kind, category, problem, body, impact, vote_count, author_name, family_id, author_id')
     .is('github_issue_number', null)
     .order('created_at', { ascending: true })
-    .limit(opts?.backfillLimit ?? 25);
+    .limit(opts?.backfillLimit ?? BACKFILL_PER_RUN);
   for (const idea of unsynced ?? []) {
+    const subject = idea.family_id ? `family:${idea.family_id}` : idea.author_id ? `author:${idea.author_id}` : 'unattributed';
+    const gate = await enforceRequestRateLimit(limiter, `feedback-github-backfill:${subject}`, { limit: FAMILY_ISSUES_PER_DAY, windowMs: ISSUE_WINDOW_MS });
+    if (!gate.ok) { held++; continue; }
     const r = await syncIdeaToGithub(admin, idea);
     if (r.ok) created++;
     else if (!r.skipped) errors++;
@@ -56,7 +87,7 @@ export async function runGithubFeedbackSync(admin: Admin, opts?: { backfillLimit
     issues = await listIssuesByLabels([GH_MARKER_LABEL], undefined, opts?.issueLimit ?? 100);
   } catch (e) {
     console.error('[github-sync] listIssues failed', e);
-    return { configured: true, created, reconciled: 0, changes, errors: errors + 1 };
+    return { configured: true, created, reconciled: 0, changes, errors: errors + 1, held };
   }
 
   // `.limit(3000)` never was 3,000 — PostgREST caps at db-max-rows — so past
@@ -75,7 +106,7 @@ export async function runGithubFeedbackSync(admin: Admin, opts?: { backfillLimit
   // one. A read this loop writes from has to be whole or not used.
   if (linkedError) {
     console.error('[github-sync] linked-idea read failed', linkedError);
-    return { configured: true, created, reconciled: 0, changes, errors: errors + 1 };
+    return { configured: true, created, reconciled: 0, changes, errors: errors + 1, held };
   }
   const byNumber = new Map<number, { id: string; title: string; status: string; github_issue_number: number | null }>();
   const byId = new Map<string, { id: string; title: string; status: string; github_issue_number: number | null }>();
@@ -108,7 +139,7 @@ export async function runGithubFeedbackSync(admin: Admin, opts?: { backfillLimit
     if (error) errors++; else if (!wroteNoRows(reconciledRow)) reconciled++;
   }
 
-  return { configured: true, created, reconciled, changes, errors };
+  return { configured: true, created, reconciled, changes, errors, held };
 }
 
 /** A one-line human summary of a sync run for the relay. */
@@ -118,6 +149,7 @@ export function summarizeSync(r: SyncResult): string {
   if (r.created) parts.push(`${r.created} new issue${r.created === 1 ? '' : 's'} opened`);
   if (r.changes.length) parts.push(`${r.changes.length} status update${r.changes.length === 1 ? '' : 's'} from GitHub`);
   if (r.errors) parts.push(`${r.errors} error${r.errors === 1 ? '' : 's'}`);
+  if (r.held) parts.push(`${r.held} idea${r.held === 1 ? '' : 's'} held by the daily cap`);
   if (parts.length === 0) return `Nothing new — ${r.reconciled} issue${r.reconciled === 1 ? '' : 's'} in sync.`;
   return parts.join(' · ');
 }

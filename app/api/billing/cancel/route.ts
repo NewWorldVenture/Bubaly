@@ -8,6 +8,8 @@ import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { isAdmin } from '@/lib/constants/roles';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
+import { refuseWithoutBillingStepUp } from '@/lib/billing/route-step-up';
+import { readFamilySubscription } from '@/lib/billing/subscription-row';
 
 const MAX_BILLING_REQUEST_BYTES = 4_096;
 
@@ -26,6 +28,8 @@ export async function POST(req: NextRequest) {
     if (!isAdmin(ctx.active.role)) {
       return NextResponse.json({ error: t('cancel.onlyAParentCanChange') }, { status: 403 });
     }
+    const stepUp = await refuseWithoutBillingStepUp(ctx, t);
+    if (stepUp) return stepUp;
     const familyId = ctx.active.familyId;
     const body = await readBoundedRequestJson(req, MAX_BILLING_REQUEST_BYTES);
     if (!body.ok) {
@@ -38,11 +42,12 @@ export async function POST(req: NextRequest) {
     if (typeof resume !== 'boolean') return NextResponse.json({ error: t('cancel.invalidCancellationRequest') }, { status: 400 });
 
     const supabase = await createServer();
-    const { data: sub, error: subError } = await supabase
+    // A family may hold more than one row (0285 could not enforce one);
+    // maybeSingle alone answered those families 503 forever.
+    const { data: sub, error: subError } = await readFamilySubscription(() => supabase
       .from('subscriptions')
       .select('provider_ref, status')
-      .eq('family_id', familyId)
-      .maybeSingle();
+      .eq('family_id', familyId));
     if (subError) {
       console.error('[billing-cancel] Subscription read failed', subError);
       return NextResponse.json({ error: t('cancel.subscriptionStatusIsTemporarilyUnavailable') }, { status: 503 });

@@ -4,6 +4,7 @@ import { requireFeature } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
+import { readsHouseholdMoney } from '@/lib/finance/household-money';
 import { PageHeader } from '@/components/app/page-header';
 import { SectionCard, MiniEmpty } from '@/components/family/shell';
 import { QuickAdd } from '@/components/family/quick-add';
@@ -53,7 +54,11 @@ export default async function FamilyDigitalTwinPage() {
   const savedSims: SavedSim[] = (savedSimRows ?? []).map((s) => ({
     id: s.id, activityName: s.activity_name, verdict: s.verdict, weeklyHours: Number(s.weekly_hours), createdAt: s.created_at,
   }));
-  const budgetCategories = [...new Set((budgets ?? []).map((b) => b.category).filter(Boolean))];
+  // A budget is the household's money: only those who read it are offered one
+  // to check a cost against (the actions refuse or skip it for anyone else).
+  const budgetCategories = readsHouseholdMoney(ctx.active.role)
+    ? [...new Set((budgets ?? []).map((b) => b.category).filter(Boolean))]
+    : [];
   const memberList = (members ?? []).map((m) => ({ id: m.id, display_name: m.display_name }));
 
   const profileByMember = new Map((profiles ?? []).map((p) => [p.member_id, p]));

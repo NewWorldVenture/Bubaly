@@ -1,8 +1,10 @@
 import type { Metadata } from 'next';
 import { Gift } from 'lucide-react';
+import { unstable_rethrow } from 'next/navigation';
 import { requireFeature } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
-import { getOrCreateReferralCode, listReferralsForFamily, getReferralConfig } from '@/lib/referrals/server';
+import { getOrCreateReferralCode, listReferralsForFamily, getReferralConfigResult } from '@/lib/referrals/server';
+import { isManager } from '@/lib/constants/roles';
 import { summarizeReferrals, referralLink } from '@/lib/referrals/core';
 import { getFormat } from '@/lib/utils/format-server';
 import { ReferralPanel } from '@/components/referrals/referral-panel';
@@ -19,78 +21,109 @@ export default async function ReferralsPage() {
   const { fmtMoney } = await getFormat();
   const ctx = await requireFeature('/referrals');
   const familyId = ctx.active.familyId;
+  // Applying a code spends the family's one referral; sending invites goes out
+  // in its name; the invite list is the addresses the parents typed and the
+  // Earned tile is billing credit. Those are a parent's or an adult's. Anyone
+  // else sees the family's code and link to share.
+  const manager = isManager(ctx.active.role);
 
-  const service = createServiceClient();
-  const [code, config] = await Promise.all([
-    getOrCreateReferralCode(familyId, { familyName: ctx.active.family.name, userId: ctx.user.id }),
-    getReferralConfig(service),
-  ]);
+  try {
+    const service = createServiceClient();
+    const [code, configResult] = await Promise.all([
+      getOrCreateReferralCode(familyId, { familyName: ctx.active.family.name, userId: ctx.user.id }),
+      getReferralConfigResult(service),
+    ]);
+    // A failed settings read is not "the program is on at $10": it is the
+    // retry section below, like every other read on this page.
+    if (configResult.error) throw configResult.error;
+    const config = configResult.config;
 
-  const supabase = await createServer();
-  const referrals = await listReferralsForFamily(supabase, familyId);
-  const summary = summarizeReferrals(referrals);
+    if (typeof code !== 'string' || !code.trim()) {
+      throw new Error('Referral code is unavailable.');
+    }
 
-  // Did this family itself get referred?
-  //
-  // The error is read, not dropped, because this page is fail-closed everywhere
-  // else — `listReferralsForFamily` throws rather than render "no referrals yet"
-  // over an unreadable list, and `getOrCreateReferralCode` throws too. This one
-  // read used to swallow its error and hand the panel `alreadyReferred: false`,
-  // which is a claim about the family, not an absence of data: a family that HAD
-  // been referred was offered the "enter a code" box again, and the write behind
-  // it can only fail with `already_referred`.
-  const { data: wasReferred, error: wasReferredError } = await supabase
-    .from('referrals')
-    .select('id')
-    .eq('referred_family_id', familyId)
-    .maybeSingle();
-  if (wasReferredError) {
-    console.error('[referrals] referred-by read failed', { familyId, error: wasReferredError });
-    throw new Error('Could not check whether your family was referred. Refresh and try again.');
-  }
+    const supabase = await createServer();
+    const referrals = await listReferralsForFamily(supabase, familyId);
+    const summary = summarizeReferrals(referrals);
 
-  const rows = referrals.map((r) => ({
-    id: r.id,
-    email: r.referred_email,
-    status: r.status,
-    rewardCents: r.referrer_reward_cents,
-    createdAt: r.created_at,
-  }));
+    // Did this family itself get referred?
+    //
+    // The error is read, not dropped, because this page is fail-closed everywhere
+    // else — `listReferralsForFamily` throws rather than render "no referrals yet"
+    // over an unreadable list, and `getOrCreateReferralCode` throws too. This one
+    // read used to swallow its error and hand the panel `alreadyReferred: false`,
+    // which is a claim about the family, not an absence of data: a family that HAD
+    // been referred was offered the "enter a code" box again, and the write behind
+    // it can only fail with `already_referred`.
+    const { data: wasReferred, error: wasReferredError } = await supabase
+      .from('referrals')
+      .select('id')
+      .eq('referred_family_id', familyId)
+      .maybeSingle();
+    if (wasReferredError) {
+      console.error('[referrals] referred-by read failed', { familyId, error: wasReferredError });
+      throw new Error('Could not check whether your family was referred. Refresh and try again.');
+    }
 
-  return (
-    <div className="space-y-6">
-      <header className="flex items-center gap-3">
-        <div className="grid h-11 w-11 place-items-center rounded-2xl bg-brand/15 text-brand-text"><Gift className="h-6 w-6" /></div>
-        <div>
-          <h1 className="text-xl font-bold">{t('referrals.referAFamily')}</h1>
-          <p className="text-sm text-muted">
-            {t('referrals.give')} {config.rewardLabel}{t('referrals.get')} {config.rewardLabel} {t('referrals.whenAFamilyYouInviteUpgrades')}
-          </p>
-        </div>
-      </header>
+    const rows = !manager ? [] : referrals.map((r) => ({
+      id: r.id,
+      email: r.referred_email,
+      status: r.status,
+      rewardCents: r.referrer_reward_cents,
+      createdAt: r.created_at,
+    }));
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {[
-          { label: 'Invited', labelKey: 'referrals.tileInvited', value: summary.total },
-          { label: 'Signed up', labelKey: 'referrals.tileSignedUp', value: summary.signedUp },
-          { label: 'Upgraded', labelKey: 'referrals.tileUpgraded', value: summary.converted },
-          { label: 'Earned', labelKey: 'referrals.tileEarned', value: fmtMoney(summary.earnedCents) },
-        ].map((s) => (
-          <div key={s.label} className="rounded-2xl border border-border bg-surface/40 p-4">
-            <p className="text-2xl font-bold leading-none">{s.value}</p>
-            <p className="mt-1 text-xs text-muted">{t(s.labelKey)}</p>
+    return (
+      <div className="space-y-6">
+        <header className="flex items-center gap-3">
+          <div className="grid h-11 w-11 place-items-center rounded-2xl bg-brand/15 text-brand-text"><Gift className="h-6 w-6" /></div>
+          <div>
+            <h1 className="text-xl font-bold">{t('referrals.referAFamily')}</h1>
+            <p className="text-sm text-muted">
+              {t('referrals.give')} {config.rewardLabel}{t('referrals.get')} {config.rewardLabel} {t('referrals.whenAFamilyYouInviteUpgrades')}
+            </p>
           </div>
-        ))}
-      </div>
+        </header>
 
-      <ReferralPanel
-        code={code}
-        link={referralLink(code)}
-        rewardLabel={config.rewardLabel}
-        enabled={config.enabled}
-        alreadyReferred={Boolean(wasReferred)}
-        rows={rows}
-      />
-    </div>
-  );
+        {manager && <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {[
+            { label: 'Invited', labelKey: 'referrals.tileInvited', value: summary.total },
+            { label: 'Signed up', labelKey: 'referrals.tileSignedUp', value: summary.signedUp },
+            { label: 'Upgraded', labelKey: 'referrals.tileUpgraded', value: summary.converted },
+            { label: 'Earned', labelKey: 'referrals.tileEarned', value: fmtMoney(summary.earnedCents) },
+          ].map((s) => (
+            <div key={s.label} className="rounded-2xl border border-border bg-surface/40 p-4">
+              <p className="text-2xl font-bold leading-none">{s.value}</p>
+              <p className="mt-1 text-xs text-muted">{t(s.labelKey)}</p>
+            </div>
+          ))}
+        </div>}
+
+        <ReferralPanel
+          code={code}
+          link={referralLink(code)}
+          rewardLabel={config.rewardLabel}
+          enabled={config.enabled}
+          alreadyReferred={Boolean(wasReferred)}
+          rows={rows}
+          canManage={manager}
+        />
+      </div>
+    );
+  } catch (error) {
+    // A refused read is not an empty referral history or permission to invite.
+    // Authentication is above this guard; Next's redirect/not-found signals
+    // must still propagate if a dependency emits one while loading the data.
+    unstable_rethrow(error);
+    console.warn('[referrals] page data unavailable');
+    return (
+      <section role="alert" className="space-y-4 rounded-2xl border border-border bg-surface/40 p-6">
+        <h1 className="text-xl font-bold">{t('referrals.referAFamily')}</h1>
+        <p className="text-sm text-muted">{t('root.somethingWentWrongLoadingThisSection')}</p>
+        <a href="/referrals" className="inline-flex rounded-lg border border-border px-4 py-2 text-sm font-semibold transition hover:bg-elevated">
+          {t('root.tryAgain')}
+        </a>
+      </section>
+    );
+  }
 }

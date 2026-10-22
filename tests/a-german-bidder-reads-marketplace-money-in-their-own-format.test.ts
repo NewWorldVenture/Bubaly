@@ -124,7 +124,7 @@ vi.mock('@/lib/i18n/server', async () => {
 });
 // Only the I/O boundaries are replaced: auth, the database, the router and toasts.
 vi.mock('@/lib/supabase/auth', () => ({
-  requireUserContext: async () => ({ active: { familyId: 'fam-1', member: { id: 'm-self' } } }),
+  requireUserContext: async () => ({ active: { familyId: 'fam-1', role: 'parent', member: { id: 'm-self' } } }),
 }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => client(), createServiceClient: () => client() }));
 vi.mock('@/lib/supabase/client', () => ({ createClient: () => client() }));
@@ -186,12 +186,17 @@ describe('the auction box a bidder watches', () => {
     listingId: 'l1', isOwner: false, myFamilyId: 'fam-1', initial: auction(),
     initialBids: [{ id: 'b1', bidder_family_id: 'fam-other', amount_cents: 276850, status: 'winning', created_at: '2026-09-01T10:00:00Z', is_auto: false }],
   });
+  // Buy-It-Now closes at the first bid, so the button is read on an auction
+  // nobody has bid on yet.
+  const unbidPanel = () => createElement(AuctionPanel, {
+    listingId: 'l1', isOwner: false, myFamilyId: 'fam-1', initial: { ...auction(), bidCount: 0 }, initialBids: [],
+  });
 
   it('reads the current bid, Buy-It-Now and the bid history in German notation', () => {
     const html = renderAs('de-DE', panel());
     expect(html).toContain(DE);                  // current bid and the history row
     // Buy it now: German's own sentence around the German amount.
-    expect(visible(html)).toContain(german('auctionPanel.buyItNowForAmount', { amount: '3.500,00\u00a0$' }));
+    expect(visible(renderAs('de-DE', unbidPanel()))).toContain(german('auctionPanel.buyItNowForAmount', { amount: '3.500,00\u00a0$' }));
     expectNoHandWrittenDollar(html);
     expectNoRawKey(visible(html));
   });
@@ -206,7 +211,7 @@ describe('the auction box a bidder watches', () => {
   it('still reads "$2,768.50" to an American bidder', () => {
     const html = renderAs('en-US', panel());
     expect(html).toContain(EN);
-    expect(html).toContain('Buy it now for $3,500.00');
+    expect(renderAs('en-US', unbidPanel())).toContain('Buy it now for $3,500.00');
   });
 
   it('puts the amount inside the sentence, not after an English fragment', () => {

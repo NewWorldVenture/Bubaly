@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { settleAll } from '@/lib/supabase/settle';
 import { readAll } from '@/lib/supabase/read-all';
 import type { Database } from '@/lib/database.types';
+import localImageAssets from './local-image-assets.json';
 
 export type BlogCategory =
   | 'Parenting'
@@ -35,6 +36,8 @@ export type BlogPost = {
   heroImageUrl?: string;
   heroImageAlt?: string;
   heroImageCredit?: string;
+  heroImageAttribution?: Pick<(typeof localImageAssets.assets)[number],
+    'title' | 'creator' | 'sourceUrl' | 'license' | 'licenseUrl' | 'attribution'>;
   body: BlogBlock[];
 };
 
@@ -140,10 +143,14 @@ export function freeLicensedImage(url: string | null | undefined): string | unde
   if (UNVERIFIED_IMAGE_HOSTS.some((h) => url.includes(h))) return undefined;
   const picsum = /^https:\/\/picsum\.photos\/id\/(\d+)\//.exec(url);
   if (picsum && RETIRED_PICSUM_IDS.has(Number(picsum[1]))) return undefined;
-  return url;
+  return localImageAssets.assets.find((asset) => asset.originalHeroUrl === url)?.localPath ?? url;
 }
 
 function toPost(r: Row): BlogPost {
+  // Reviewed local mirrors retain attribution independently of editable row
+  // credit. Only the exact original URL or its exact local path identifies one.
+  const localAsset = localImageAssets.assets.find((asset) =>
+    asset.originalHeroUrl === r.hero_image_url || asset.localPath === r.hero_image_url);
   return {
     slug: r.slug,
     title: r.title,
@@ -159,6 +166,10 @@ function toPost(r: Row): BlogPost {
     heroImageUrl: freeLicensedImage(r.hero_image_url),
     heroImageAlt: r.hero_image_alt ?? undefined,
     heroImageCredit: r.hero_image_credit ?? undefined,
+    ...(localAsset ? { heroImageAttribution: {
+      title: localAsset.title, creator: localAsset.creator, sourceUrl: localAsset.sourceUrl,
+      license: localAsset.license, licenseUrl: localAsset.licenseUrl, attribution: localAsset.attribution,
+    } } : {}),
     body: normalizeBody(r.body),
   };
 }

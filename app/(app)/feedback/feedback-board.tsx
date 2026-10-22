@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils/cn';
 import { labelledGroup } from '@/lib/ui/a11y';
 import {
   STATUS_META, FILTERABLE_STATUSES, CATEGORY_META, CATEGORY_ORDER, IMPACT_META, IMPACT_ORDER,
-  AUDIENCE_META, AUDIENCE_ORDER, KIND_META, KIND_ORDER, statusMeta, categoryMeta, impactMeta, kindMeta, sortIdeas, searchIdeas, toggleVote,
+  AUDIENCE_META, AUDIENCE_ORDER, KIND_META, KIND_ORDER, statusMeta, categoryMeta, impactMeta, kindMeta, sortIdeas, searchIdeas,
   isFeedbackStatus, type IdeaRow, type FeedbackSort, type FeedbackStatus, type FeedbackKind,
 } from '@/lib/feedback/board';
 import { submitIdeaAction, toggleVoteAction, addCommentAction, setIdeaStatusAction } from './actions';
@@ -279,8 +279,13 @@ function StatusControl({ idea, onChanged }: { idea: IdeaRow; onChanged: (status:
 }
 
 // ── One idea row ─────────────────────────────────────────────────────────────
-function IdeaCard({ idea, voted, onVote, isSuperAdmin, onStatus }: {
-  idea: IdeaRow; voted: boolean; onVote: () => void; isSuperAdmin: boolean; onStatus: (s: FeedbackStatus) => void;
+function IdeaCard({ idea, voted, votesUnavailable, onVote, isSuperAdmin, onStatus }: {
+  idea: IdeaRow; voted: boolean;
+  /** The member's votes could not be read, so no pill may claim a state or toggle one. */
+  votesUnavailable: boolean;
+  /** What the action answered: whether the member's vote now stands, and the idea's count. */
+  onVote: (voted: boolean, count: number | undefined) => void;
+  isSuperAdmin: boolean; onStatus: (s: FeedbackStatus) => void;
 }) {
   const t = useTranslations();
   const [open, setOpen] = useState(false);
@@ -294,7 +299,9 @@ function IdeaCard({ idea, voted, onVote, isSuperAdmin, onStatus }: {
     start(async () => {
       const res = await toggleVoteAction(idea.id);
       if (!res.ok) { error(res.error ?? 'Could not record your vote.'); return; }
-      onVote();
+      // The action re-read the database: its answer is the vote's state, not
+      // the opposite of what this card believed before the tap.
+      onVote(res.voted === true, res.count);
     });
   }
 
@@ -303,7 +310,7 @@ function IdeaCard({ idea, voted, onVote, isSuperAdmin, onStatus }: {
       <div className="flex gap-4">
         {/* Upvote pill */}
         <button
-          type="button" onClick={vote} disabled={voting} aria-pressed={voted}
+          type="button" onClick={vote} disabled={voting || votesUnavailable} aria-pressed={votesUnavailable ? undefined : voted}
           className={cn(
             'flex h-16 w-14 shrink-0 flex-col items-center justify-center rounded-xl border text-center transition',
             voted ? 'border-brand bg-brand/10 text-brand-text' : 'border-border bg-bg text-muted hover:border-brand/50 hover:text-brand-text',
@@ -352,8 +359,10 @@ function IdeaCard({ idea, voted, onVote, isSuperAdmin, onStatus }: {
 }
 
 // ── The board ────────────────────────────────────────────────────────────────
-export function FeedbackBoard({ initialIdeas, votedIds, userId, isSuperAdmin }: {
-  initialIdeas: IdeaRow[]; votedIds: string[]; userId: string; isSuperAdmin: boolean;
+export function FeedbackBoard({ initialIdeas, votedIds, votesUnavailable = false, userId, isSuperAdmin }: {
+  initialIdeas: IdeaRow[]; votedIds: string[];
+  /** The votes read failed on the server: voting is paused and no pill claims a state. */
+  votesUnavailable?: boolean; userId: string; isSuperAdmin: boolean;
 }) {
   const t = useTranslations();
   const [ideas, setIdeas] = useState<IdeaRow[]>(initialIdeas);
@@ -376,10 +385,11 @@ export function FeedbackBoard({ initialIdeas, votedIds, userId, isSuperAdmin }: 
   // A filter/search is narrowing the list when fewer than all ideas show.
   const isFiltered = statusFilter !== 'all' || categoryFilter !== 'all' || kindFilter !== 'all' || search.trim() !== '';
 
-  function handleVote(ideaId: string) {
-    const { next, voted: nowVoted } = toggleVote(voted, ideaId);
-    setVoted(next);
-    setIdeas((prev) => prev.map((i) => i.id === ideaId ? { ...i, vote_count: Math.max(0, i.vote_count + (nowVoted ? 1 : -1)) } : i));
+  function handleVote(ideaId: string, nowVoted: boolean, count: number | undefined) {
+    setVoted((prev) => (nowVoted ? (prev.includes(ideaId) ? prev : [...prev, ideaId]) : prev.filter((id) => id !== ideaId)));
+    setIdeas((prev) => prev.map((i) => i.id === ideaId
+      ? { ...i, vote_count: typeof count === 'number' ? count : Math.max(0, i.vote_count + (nowVoted ? 1 : -1)) }
+      : i));
   }
   function handleStatus(ideaId: string, status: FeedbackStatus) {
     setIdeas((prev) => prev.map((i) => i.id === ideaId ? { ...i, status } : i));
@@ -460,6 +470,10 @@ export function FeedbackBoard({ initialIdeas, votedIds, userId, isSuperAdmin }: 
         ))}
       </div>
 
+      {votesUnavailable && (
+        <p role="status" className="mt-4 rounded-xl border border-amber-500/40 bg-amber-500/5 px-4 py-2 text-xs text-amber-600">{t('feedbackFeedbackBoard.yourVotesCouldNotBeRead')}</p>
+      )}
+
       {/* List */}
       <div ref={listRef} className="mt-5 space-y-3">
         {visible.length === 0 ? (
@@ -473,8 +487,8 @@ export function FeedbackBoard({ initialIdeas, votedIds, userId, isSuperAdmin }: 
             </button>
           </div>
         ) : visible.map((idea) => (
-          <IdeaCard key={idea.id} idea={idea} voted={voted.includes(idea.id)}
-            onVote={() => handleVote(idea.id)} isSuperAdmin={isSuperAdmin}
+          <IdeaCard key={idea.id} idea={idea} voted={voted.includes(idea.id)} votesUnavailable={votesUnavailable}
+            onVote={(nowVoted, count) => handleVote(idea.id, nowVoted, count)} isSuperAdmin={isSuperAdmin}
             onStatus={(s) => handleStatus(idea.id, s)} />
         ))}
       </div>

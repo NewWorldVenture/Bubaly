@@ -45,8 +45,9 @@ export async function GET(req: NextRequest) {
     // whole point of prep plans is "a trip departing today", and read against
     // Greenwich's today that trip is filtered out as already gone for every
     // family west of UTC during their own evening.
+    // OPEN families only: a closed account (families.closed_at) is not modelled.
     const { rows: families, error } = await readAll((from, to) => supabase
-      .from('families').select('id, timezone').order('id').range(from, to), { max: 5000 });
+      .from('families').select('id, timezone').is('closed_at', null).order('id').range(from, to), { max: 5000 });
     if (error) throw error;
 
     // Batch the skip-decision reads into ONE query instead of 2-per-family, so the
@@ -80,7 +81,9 @@ export async function GET(req: NextRequest) {
         const prep = await runPrepGeneration(supabase, fam.id, null, fam.timezone || 'UTC', now);
         // R10: keep the hard-signal family intelligence current too. Non-fatal —
         // a signal-detection hiccup must not fail the twin/prep refresh.
-        try { await runSignalDetection(supabase, fam.id, SIGNAL_LOCALE, signalText, now); } catch (e) { console.error(`Signal detection failed for ${fam.id}:`, e); }
+        // The service client reads the whole household, so this scan retires
+        // what has stopped (SignalReach).
+        try { await runSignalDetection(supabase, fam.id, SIGNAL_LOCALE, signalText, now, fam.timezone || 'UTC', 'household'); } catch (e) { console.error(`Signal detection failed for ${fam.id}:`, e); }
         let ok = twin.ok && prep.ok;
         let dirtyWriteFailed = false;
         // Clear the dirty flag once a refresh succeeds.

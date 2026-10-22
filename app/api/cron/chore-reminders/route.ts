@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (byMember.size === 0) {
-    return NextResponse.json({ sent: 0, message: 'No pending assignments' });
+    return NextResponse.json({ sent: 0, message: t('choreReminders.noPendingAssignments') });
   }
 
   // Fetch family names
@@ -120,11 +120,20 @@ export async function GET(req: NextRequest) {
   // family's, not the UTC host's.
   const { data: families, error: familiesError } = await readInChunks<{ id: string; name: string; timezone: string | null }, { message: string }>(
     familyIds,
-    (chunk) => supabase.from('families').select('id, name, timezone').in('id', chunk),
+    // OPEN families only: a family that closed its account (families.closed_at)
+    // is not emailed, so its members' buckets are dropped below.
+    (chunk) => supabase.from('families').select('id, name, timezone').is('closed_at', null).in('id', chunk),
   );
   if (familiesError) {
     console.error('Cron chore family read error:', familiesError);
     return NextResponse.json({ error: t('choreReminders.choreReminderProcessingFailed') }, { status: 500 });
+  }
+  const openFamilyIds = new Set(families.map((f) => f.id));
+  for (const [memberId, bucket] of byMember) {
+    if (!openFamilyIds.has(bucket.familyId)) byMember.delete(memberId);
+  }
+  if (byMember.size === 0) {
+    return NextResponse.json({ sent: 0, message: t('choreReminders.noPendingAssignments') });
   }
   const familyNameById = new Map(families.map((f) => [f.id, f.name]));
   const familyZoneById = new Map(families.map((f) => [f.id, f.timezone || 'UTC']));

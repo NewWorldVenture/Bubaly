@@ -15,6 +15,24 @@ vi.mock('@/lib/ai/provider', () => ({ isAIConfigured: async () => true,
   resolveProvider: async () => ({ complete: h.complete }), describeAIError: () => ({ message: 'Synthetic failure' }),
 }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
+// The Free plan's AI allowance (N18) has its own cases in
+// tests/the-free-plans-ai-allowance-holds-on-every-helper.test.ts; it admits here.
+vi.mock('@/lib/server/ai-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/ai-access')>()),
+  assertAIAccess: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
+  assertAIAllowance: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
+}));
+// The route's plan gate (refuseUnlessEntitled, H18) is covered by
+// tests/the-meal-and-recipe-model-endpoints-refuse-like-their-pages.test.ts;
+// this file is about something else, so the gate admits its fixture family.
+vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: async () => null }));
+// The household's recorded allergies, diets and dislikes (foodProfile) are
+// covered by tests/the-meal-planner-holds-to-recorded-allergies.test.ts; this
+// file is about other reads, so the household has none on file.
+vi.mock('@/lib/services/meals', async (original) => ({
+  ...(await original<typeof import('@/lib/services/meals')>()),
+  foodProfile: async () => ({ ok: true, data: { members: [], household: { allergies: [], dislikes: [], favorites: [], diet: [] } } }),
+}));
 vi.mock('@/lib/ai/observability', () => ({ withAiRequest: (_scope: unknown, _feature: unknown,
   run: (observer: { used: () => void }) => Promise<string>) => run({ used: () => {} }),
 }));
@@ -104,8 +122,13 @@ describe('actual SDK complete meal planning inputs before ranking', () => {
     expect(prompt().split('\n').filter(line => line.startsWith('- meal:'))).toHaveLength(60);
   });
   it('keeps the deliberate twelve pantry choices after global urgency sorting', async () => {
-    h.rows.pantry_items = Array.from({ length: 13 }, (_, index) => pantry(String(index).padStart(3, '0'), `Ordinary ${index}`, today()));
-    h.rows.pantry_items.push(pantry('999', 'Most urgent last page', '2000-01-01'));
+    // The most urgent item is one still good TODAY. It used to be a date in
+    // 2000, which only ranked first because expired food was offered to the
+    // planner as "expiring" — tests/the-meal-planner-holds-to-recorded-allergies.test.ts (S5) and tests/the-assistant-is-not-told-to-use-food-past-its-date.test.ts
+    // pins that it no longer is.
+    const inThreeDays = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
+    h.rows.pantry_items = Array.from({ length: 13 }, (_, index) => pantry(String(index).padStart(3, '0'), `Ordinary ${index}`, inThreeDays));
+    h.rows.pantry_items.push(pantry('999', 'Most urgent last page', today()));
     expect((await POST(request())).status).toBe(200);
     expect(prompt()).toContain('Most urgent last page'); expect(prompt()).toContain('Ordinary 10'); expect(prompt()).not.toContain('Ordinary 11');
   });

@@ -129,6 +129,9 @@ function uriLimited(db: InMemorySupabase, limit = URI_LIMIT): { db: DB; longest:
 /** `total` consenting families, of which the last `withdrawn` have opted out. */
 function seedNetwork(db: InMemorySupabase, total: number, withdrawn: number) {
   const all = Array.from({ length: total }, (_, i) => famId(i));
+  // The consent read inner-joins families to skip closed accounts, as the
+  // foreign key guarantees a consent row's family exists.
+  db.seed('families', all.map((id) => ({ id, closed_at: null })));
   db.seed('network_consent', all.map((id, i) => ({
     family_id: id, enabled: i < total - withdrawn, scopes: {},
   })));
@@ -255,6 +258,11 @@ const BOUNDED_NOT_IN: { file: string; list: string; why: string }[] = [
     file: 'lib/services/notifications/index.ts',
     list: 'DIGEST_NOTIFICATION_TYPES',
     why: 'a module constant of notification type names',
+  },
+  {
+    file: 'app/(app)/dashboard/needs-you/page.tsx',
+    list: 'SENSITIVE_MEMORY_CATEGORIES',
+    why: 'a module constant of the two fact categories a non-manager is not shown (lib/memory/facts.ts)',
   },
 ];
 

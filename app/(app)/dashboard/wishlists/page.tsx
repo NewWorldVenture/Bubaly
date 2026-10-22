@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
 import { RelatedOutcomes } from '@/components/outcomes/related-outcomes';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { WishlistsModule } from '@/components/modules/wishlists-module';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -10,6 +10,8 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function WishlistsPage() {
-  await requireUserContext();
+  // A catalog feature: the sidebar hides or padlocks it when an admin moves its
+  // tier, so the page answers to the same gate rather than only a session.
+  await requireFeature('/dashboard/wishlists');
   return <><RelatedOutcomes href="/dashboard/wishlists" /><WishlistsModule /></>;
 }

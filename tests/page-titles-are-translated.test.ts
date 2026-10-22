@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -13,7 +13,8 @@ import { describe, expect, it } from 'vitest';
 // Left on purpose: the staff-only /admin pages, the root layout's default
 // title (the brand line), and /offline, which must stay static so the service
 // worker can precache it.
-const pages = execSync("git ls-files 'app/**/page.tsx' 'app/**/layout.tsx'", { encoding: 'utf8' }).trim().split('\n');
+const pages = execFileSync('git', ["ls-files","-z","app/**/page.tsx","app/**/layout.tsx"], { encoding: 'utf8' })
+    .split('\0').filter(Boolean);
 const EXEMPT = (f: string) => f.includes('/admin/') || f === 'app/layout.tsx' || f === 'app/offline/page.tsx';
 const code = (f: string) => readFileSync(f, 'utf8').split('\n').filter((l) => !l.trimStart().startsWith('//')).join('\n');
 

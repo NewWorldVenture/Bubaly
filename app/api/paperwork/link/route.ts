@@ -17,6 +17,8 @@ const json = (result: DocumentLinkResult, status: number) => NextResponse.json(r
 export async function POST(req: NextRequest) {
   let ctx: Awaited<ReturnType<typeof requireUserContext>>;
   try { ctx = await requireUserContext(); } catch { return json(unavailable, 401); }
+  // Guests are view-only: no paperwork rows and no server-side fetch of their URL.
+  if (ctx.active.role === 'guest') return json({ ok: false, reason: 'access_denied', retryable: false }, 403);
   try {
     const assurance = await aal2Verdict(ctx, 'documents', '/capture/link');
     if (assurance.action === 'step_up') return json({ ok: false, reason: 'step_up', retryable: false, stepUp: assurance.to }, 403);

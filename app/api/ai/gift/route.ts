@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { familyLockedCode } from '@/lib/server/account-standing';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll, describeReadError } from '@/lib/supabase/settle';
@@ -56,6 +57,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: t('gift.giftDataIsTemporarilyUnavailable') }, { status: 503 });
   }
   if (!link || !link.is_active) return NextResponse.json({ error: t('gift.thisGiftLinkIsNo') }, { status: 404 });
+
+  // A closed or trial-ended family's link does not spend the model either
+  // (lib/server/account-standing.ts). Worded for the giver, who is not the
+  // family: what is wrong is the family's account, not the link.
+  let locked;
+  try {
+    locked = await familyLockedCode(supabase, link.family_id);
+  } catch (error) {
+    console.error('[ai/gift] family standing read failed', { error });
+    return NextResponse.json({ error: t('gift.giftDataIsTemporarilyUnavailable') }, { status: 503 });
+  }
+  if (locked) return NextResponse.json({ error: t('gift.ideasAreNotAvailableForThisFamily') }, { status: 403 });
 
   // Resolve the child's first name + their top active goal (kept minimal).
   let childName = 'the child';

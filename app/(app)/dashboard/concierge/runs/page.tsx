@@ -28,7 +28,7 @@ import { scopeFromUserContext } from '@/lib/services/scope';
 import { listRuns } from '@/lib/ai/runs/store';
 import { loadRunEvidence } from '@/lib/ai/runs/evidence';
 import {
-  orderRunHistoryRows, parseRunHistoryCursor, parseRunHistoryFilter, runHistoryItems, runHistoryQueries,
+  orderRunHistoryRows, parseRunHistoryCursor, parseRunHistoryFilter, runHistoryCursorFor, runHistoryItems, runHistoryQueries,
   RUN_HISTORY_FILTERS, RUN_HISTORY_PAGE_SIZE,
   type RunHistoryFilter, type RunHistoryItem, type RunHistoryRunRow,
 } from '@/lib/ai/runs/history';
@@ -130,7 +130,7 @@ export default async function RunHistoryPage({ searchParams }: { searchParams: P
   if (!evidence.ok) return <Unavailable message={evidence.error} retryHref={selfHref} />;
 
   const items: RunHistoryItem[] = runHistoryItems(rows, evidence.data);
-  const olderHref = hasOlder && items.length ? historyHref(filter, items[items.length - 1].createdAt) : null;
+  const olderHref = hasOlder && items.length ? historyHref(filter, runHistoryCursorFor(items[items.length - 1])) : null;
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 px-4 py-6 pb-28">

@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { verifyUnsubToken } from '@/lib/marketing/unsubscribe';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+import { canonicalMailbox } from '@/lib/server/canonical-mailbox';
 
 export const runtime = 'nodejs';
 
@@ -59,8 +60,17 @@ async function suppress(email: string, token: string, req: NextRequest): Promise
   // endpoint, and a 2xx is what tells Gmail or Yahoo the opt-out was honoured;
   // answering 200 on a failed write spends the provider's only signal on a
   // promise that was not kept.
-  const { error } = await supabase.from('marketing_suppressions').upsert({ email: clean, reason: 'unsubscribe' });
-  if (error) {
+  //
+  // THE INBOX IS RECORDED TOO. The automation sender looks an address up under
+  // its spelling and its canonical inbox (lib/marketing/automation-steps.ts),
+  // and this used to store only the spelling that was mailed. So an opt-out
+  // clicked in a mail to `victim+news@gmail.com` stopped that spelling and
+  // nothing else: a public form could reach the same inbox the next day as
+  // `victim@gmail.com` or `victim+other@gmail.com`. The signed link proves
+  // control of the inbox the mail was delivered to, which is what the
+  // canonical form names, so the opt-out is recorded for it as well. It never
+  // relabels a row the inbox already has (a bounce or a complaint stays one).
+  const failed = (error: unknown) => {
     console.error('[unsubscribe] suppression write failed', error);
     return page(
       'Unsubscribe not completed',
@@ -68,6 +78,19 @@ async function suppress(email: string, token: string, req: NextRequest): Promise
       false,
       503,
     );
+  };
+  const { error } = await supabase.from('marketing_suppressions').upsert({ email: clean, reason: 'unsubscribe' });
+  if (error) return failed(error);
+  const inbox = canonicalMailbox(clean);
+  if (inbox !== clean) {
+    // An insert, not an upsert: a row the inbox already has (`email` is the
+    // key) answers 23505, which is the outcome this write exists for — and it
+    // keeps that row's own reason. Any other error is a failure.
+    const { error: inboxError } = await supabase
+      .from('marketing_suppressions')
+      .insert({ email: inbox, reason: 'unsubscribe' })
+      .select('email');
+    if (inboxError && inboxError.code !== '23505') return failed(inboxError);
   }
   return page('Unsubscribed', `${clean} will no longer receive marketing emails from Bubaly. Account and transactional emails are unaffected.`, true);
 }

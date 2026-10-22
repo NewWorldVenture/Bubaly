@@ -4,8 +4,20 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
+import { superAdminAssurance } from '@/lib/auth/super-admin-assurance';
 import { normalizeIdea, isFeedbackStatus, type IdeaDraft } from '@/lib/feedback/board';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+
+/**
+ * How many ideas one person may post: a burst per minute, and a day's worth.
+ * Each idea opens a GitHub issue with the bot token and emails every super
+ * admin over the shared transport, so an unbounded loop of this action spent
+ * GitHub's content-creation allowance (blocking the sync bot too), the mail
+ * quota invites depend on, and the admins' inboxes.
+ */
+const IDEA_BURST = { limit: 5, windowMs: 60_000 } as const;
+const IDEAS_PER_DAY = 20;
 
 type Result = { ok: boolean; error?: string };
 
@@ -30,6 +42,14 @@ export async function submitIdeaAction(draft: IdeaDraft): Promise<Result & { id?
   if (!norm.ok) return { ok: false, error: norm.error };
 
   const supabase = await createServer();
+  const burst = await enforceRequestRateLimit(supabase, `feedback-submit:${ctx.user.id}`, IDEA_BURST);
+  if (!burst.ok) return { ok: false, error: t('feedback.tooManyIdeasAtOnce') };
+  const dayAgo = new Date(Date.now() - 86_400_000).toISOString();
+  const { count: postedToday, error: countError } = await supabase.from('feedback_ideas')
+    .select('id', { count: 'exact', head: true }).eq('author_id', ctx.user.id).gte('created_at', dayAgo);
+  if (countError || typeof postedToday !== 'number') return actionFailure('check today\'s ideas', t('feedback.couldNotSubmitTheIdea'), countError);
+  if (postedToday >= IDEAS_PER_DAY) return { ok: false, error: t('feedback.dailyIdeaLimitReached', { limit: IDEAS_PER_DAY }) };
+
   const { data, error } = await supabase.from('feedback_ideas').insert({
     author_id: ctx.user.id,
     author_name: authorNameFor(ctx),
@@ -96,16 +116,23 @@ export async function addCommentAction(input: { ideaId: string; body: string }):
   if (!body) return { ok: false, error: t('actions.writeSomethingFirst') };
   if (body.length > 2000) return { ok: false, error: t('actions.thatCommentIsALittle') };
 
-  const supabase = await createServer();
-  const admin = await isSuperAdmin();
-  const { error } = await supabase.from('feedback_comments').insert({
+  // A team reply carries the Bubaly Team badge to every family's board, so it
+  // takes what a roadmap change takes: a super admin who has passed the
+  // step-up (setIdeaStatusAction), on the service client. Anyone else — a
+  // password-only admin session included — comments as themselves, on their
+  // own session, where the migration proposed alongside this change refuses
+  // `is_team` outright.
+  const team = (await isSuperAdmin()) && (await superAdminAssurance()).ok;
+  const writer = team ? createServiceClient() : await createServer();
+  const { data: posted, error } = await writer.from('feedback_comments').insert({
     idea_id: input.ideaId,
     author_id: ctx.user.id,
-    author_name: admin ? 'Bubaly Team' : authorNameFor(ctx),
-    is_team: admin,
+    author_name: team ? 'Bubaly Team' : authorNameFor(ctx),
+    is_team: team,
     body,
-  });
+  }).select('id');
   if (error) return actionFailure('add the comment', t('feedback.couldNotAddTheComment'), error);
+  if (wroteNoRows(posted)) return { ok: false, error: t('feedback.couldNotAddTheComment') };
   revalidatePath('/feedback');
   return { ok: true };
 }
@@ -116,6 +143,10 @@ export async function setIdeaStatusAction(input: { ideaId: string; status: strin
   const t = await getTranslations();
   await requireUserContext();
   if (!(await isSuperAdmin())) return { ok: false, error: t('actions.onlyTheBubalyTeamCan') };
+  // A service-role write on the strength of an email: the same step-up as the
+  // admin console, so a password-only session of an admin with an
+  // authenticator cannot move the public roadmap.
+  if (!(await superAdminAssurance()).ok) return { ok: false, error: t('actions.teamActionNeedsYourCode') };
   if (!isFeedbackStatus(input.status)) return { ok: false, error: t('actions.unknownStatus') };
 
   const svc = createServiceClient();

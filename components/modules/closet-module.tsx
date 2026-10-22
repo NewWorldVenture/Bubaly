@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Shirt, Plus, Sparkles, Thermometer, Trash2, Star, X, Camera, History, WashingMachine, Check, Pencil, Wand2, AlertTriangle,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
-import { familyMediaPath } from '@/lib/storage/family-media';
+import { familyMediaPath, releaseFamilyMedia } from '@/lib/storage/family-media';
+import { FormUploads } from '@/lib/storage/form-uploads';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
@@ -27,7 +28,8 @@ import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { formatCents } from '@/lib/wallet/ledger';
 import { useConfirm } from '@/components/ui/confirm';
-import { bumpWearCount, type WearBump, type WearStore } from '@/lib/closet/wear';
+import { bumpWearCount, takeBackWear, type LandedWear, type WearBump, type WearStore } from '@/lib/closet/wear';
+import { writeWasRefused } from '@/lib/supabase/write-outcome';
 import { FamilyMediaImg } from '@/components/media/family-media-img';
 
 type Item = Tables<'wardrobe_items'>;
@@ -122,26 +124,67 @@ export function ClosetModule() {
     if (!itemIds.length) return toastError(t('closetModule.pickAtLeastOneItem'));
     setBusy(true);
     const supabase = createClient();
-    const { error } = await supabase.from('outfit_logs').insert({
-      family_id: familyId, member_id: memberId, outfit_id: outfitId, worn_on: todayIso(), item_ids: itemIds,
-      occasion, temp_c: tempC, weather: weatherLabelFromTemp(tempC), created_by: userId,
-    });
-    if (error) { setBusy(false); return toastError(describeDbError(error)); }
-    // Each bump is a compare-and-swap on the LIVE count, not `cached + 1`: two
-    // members logging the same item at once each add their wear. Audit C1-S9-90.
-    const store: WearStore = {
-      readWearCount: (id) => supabase.from('wardrobe_items').select('wear_count').eq('id', id).maybeSingle(),
-      writeWearCount: (id, expected, next, wornOn) => supabase.from('wardrobe_items')
-        .update({ wear_count: next, last_worn_on: wornOn }).eq('id', id).eq('wear_count', expected).select('id'),
-    };
-    const results = await Promise.all(itemIds.map((id) => bumpWearCount(store, id, todayIso())));
-    setBusy(false);
-    const failed = results.find((r): r is Extract<WearBump, { reason: 'error' }> => !r.ok && r.reason === 'error');
-    if (failed) return toastError(describeDbError(failed.error));
-    // A bump that did not land is an item the log names but whose count did
-    // not move. Audit C1-S9-81.
-    if (results.some((r) => !r.ok)) return toastError(t('errors.thatChangeWasNotSaved'));
-    success(t('closetModule.loggedTodaySOutfit'));
+    try {
+      // A saved outfit outlives the items in it: outfits.item_ids is a uuid[]
+      // with no foreign key (0240), so deleting an item left its id behind. Its
+      // bump then came back 'missing' on EVERY tap — after the log row and the
+      // other items' wears had already been written — so each retry added
+      // another log and another wear to everything else. Only items that still
+      // exist are worn (asked of the database, so an item deleted on another
+      // phone counts as gone too), and the saved outfit forgets the rest.
+      const { data: present, error: presentError } = await supabase.from('wardrobe_items')
+        .select('id').eq('family_id', familyId).in('id', itemIds);
+      if (presentError) return toastError(describeDbError(presentError));
+      if (!present?.length) return toastError(t('closetModule.pickAtLeastOneItem'));
+      const live = itemIds.filter((id) => present.some((row) => row.id === id));
+      if (outfitId && live.length !== itemIds.length) {
+        const { data: pruned, error: pruneError } = await supabase.from('outfits')
+          .update({ item_ids: live }).eq('id', outfitId).eq('family_id', familyId).select('id');
+        if (pruneError) return toastError(describeDbError(pruneError));
+        if (wroteNoRows(pruned)) return toastError(t('errors.thatChangeWasNotSaved'));
+        outfits.setData((rows) => rows.map((row) => (row.id === outfitId ? { ...row, item_ids: live } : row)));
+      }
+      // Each bump is a compare-and-swap on the LIVE count, not `cached + 1`: two
+      // members logging the same item at once each add their wear. Audit C1-S9-90.
+      const store: WearStore = {
+        readWearCount: (id) => supabase.from('wardrobe_items').select('wear_count, last_worn_on').eq('id', id).maybeSingle(),
+        writeWearCount: (id, expected, next, wornOn) => supabase.from('wardrobe_items')
+          .update({ wear_count: next, last_worn_on: wornOn }).eq('id', id).eq('wear_count', expected).select('id'),
+      };
+      const landed: LandedWear[] = [];
+      const results = await Promise.all(live.map((id) => bumpWearCount(store, id, todayIso(), landed)));
+      // A tap that fails anywhere takes back the wears that did land, so the
+      // retry its error invites counts once (HC2). Without this, one bump
+      // failing beside the others, or a refused log row, left those +1s
+      // committed under "not saved", and every retry added another: a saved
+      // outfit deleted on another phone stays on this screen (outfits is
+      // DELETE-blind), and its log then failed the outfit_id foreign key on
+      // EVERY tap. When the take-back cannot be written, or a reply was lost
+      // so nobody knows what committed, the closet says the counts may already
+      // include this wear. Closing that needs one transaction — see
+      // lib/closet/wear.ts.
+      const takeBack = async () => (await Promise.all(landed.map((wear) => takeBackWear(store, wear)))).every(Boolean);
+      const failed = results.find((r): r is Extract<WearBump, { reason: 'error' }> => !r.ok && r.reason === 'error');
+      const unanswered = results.some((r) => !r.ok && r.reason === 'error' && !writeWasRefused(r.error));
+      if (results.some((r) => !r.ok) && (!(await takeBack()) || unanswered)) return toastError(t('closetModule.wearMayAlreadyBeCounted'));
+      if (failed) return toastError(describeDbError(failed.error));
+      // A bump that did not land is an item whose count did not move. Nothing
+      // is logged then: the log row is written LAST, only once every wear it
+      // names has landed, so a failure never leaves a log for a wear that was
+      // not counted. Audit C1-S9-81.
+      if (results.some((r) => !r.ok)) return toastError(t('errors.thatChangeWasNotSaved'));
+      const { error } = await supabase.from('outfit_logs').insert({
+        family_id: familyId, member_id: memberId, outfit_id: outfitId, worn_on: todayIso(), item_ids: live,
+        occasion, temp_c: tempC, weather: weatherLabelFromTemp(tempC), created_by: userId,
+      });
+      // Refused: no log, so no wears either. Unanswered: the log may be there,
+      // and taking its wears back would undercount it.
+      if (error && (!writeWasRefused(error) || !(await takeBack()))) return toastError(t('closetModule.wearMayAlreadyBeCounted'));
+      if (error) return toastError(describeDbError(error));
+      success(t('closetModule.loggedTodaySOutfit'));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function saveSuggestionAsOutfit() {
@@ -166,9 +209,24 @@ export function ClosetModule() {
 
   async function deleteItem(item: Item) {
     if (!(await askConfirm({ title: t('confirm.removeNamed', { name: item.name }), body: t('confirm.cannotBeUndone') }))) return;
-    const { data: removed, error } = await createClient().from('wardrobe_items').delete().eq('id', item.id).select('id');
+    const supabase = createClient();
+    const { data: removed, error } = await supabase.from('wardrobe_items').delete().eq('id', item.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed)) return toastError(t('errors.thatChangeWasNotSaved'));
+    // Published without REPLICA IDENTITY FULL, so the family_id-filtered
+    // channel never hears this DELETE: the confirmed delete drops the row from
+    // the screen here, or it stays until a reload (H3).
+    items.setData((rows) => rows.filter((row) => row.id !== item.id));
+    // The photo goes with the row, after the row (as the photos module does,
+    // SEC-015): the family-media bucket serves an object to anyone holding its
+    // URL, and nothing points at this one any more (H2).
+    if (item.photo_path) {
+      const removal = await releaseFamilyMedia(supabase, item.photo_path, { familyId, folder: 'closet' });
+      if (removal.error) {
+        console.error('[closet] photo survived its deleted item', { itemId: item.id }, removal.error);
+        return toastError(t('closetModule.itemRemovedButPhotoKept'));
+      }
+    }
     success(t('closetModule.itemRemoved'));
   }
 
@@ -183,6 +241,8 @@ export function ClosetModule() {
     const { data: removed2, error } = await createClient().from('outfits').delete().eq('id', outfit.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed2)) return toastError(t('errors.thatChangeWasNotSaved'));
+    // Same as deleteItem: the DELETE never arrives over realtime (H3).
+    outfits.setData((rows) => rows.filter((row) => row.id !== outfit.id));
     success(t('closetModule.outfitDeleted'));
   }
 
@@ -373,7 +433,7 @@ export function ClosetModule() {
                     </p>
                   </div>
                   <Button size="sm" variant="secondary" loading={busy} onClick={() => logWear(o.item_ids, o.id)}>{t('closet.wear')}</Button>
-                  <button onClick={() => deleteOutfit(o)} aria-label={t('closet.deleteOutfit')} className="shrink-0 p-1 text-muted/60 hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
+                  <button onClick={() => deleteOutfit(o)} aria-label={t('closet.deleteOutfit')} className="shrink-0 p-1 text-muted hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
                 </li>
               ))}
             </ul>
@@ -402,7 +462,10 @@ export function ClosetModule() {
         <ItemForm
           familyId={familyId} userId={userId} memberId={memberId} members={members} item={itemForm.item}
           onClose={() => setItemForm({ open: false, item: null })}
-          onSaved={(msg) => { setItemForm({ open: false, item: null }); success(msg); }}
+          // Closes THIS opening, read when the save calls back: by then the
+          // person may have dismissed it and opened another, whose draft a
+          // plain close would discard (HD1). Each opening is a new object.
+          onSaved={(msg) => { setItemForm((now) => (now === itemForm ? { open: false, item: null } : now)); success(msg); }}
         />
       )}
       {builderOpen && memberId && (
@@ -425,6 +488,33 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
   const [uploading, setUploading] = useState(false);
   const [photoPath, setPhotoPath] = useState<string | null>(item?.photo_path ?? null);
   const [seasons, setSeasons] = useState<string[]>(item?.seasons ?? []);
+  // Every object this form put in the bucket. Whatever the saved row does not
+  // end up pointing at — a photo replaced before saving, or everything when
+  // the form is closed unsaved — is removed rather than left behind (H2). But
+  // never while a save in flight can still make the row point at it, and an
+  // upload that lands after the form closed goes as it lands (HC1): see
+  // lib/storage/form-uploads.ts.
+  const session = useRef<FormUploads | null>(null);
+  if (session.current === null) session.current = new FormUploads(item?.photo_path ?? null, releaseUnreferenced);
+  const uploads = session.current;
+
+  /** Remove objects nothing points at. Logged, not shown: the save stands either way. */
+  async function releaseUnreferenced(paths: string[]) {
+    const supabase = createClient();
+    for (const path of paths) {
+      const removal = await releaseFamilyMedia(supabase, path, { familyId, folder: 'closet' });
+      if (removal.error) console.error('[closet] could not remove an unreferenced photo', removal.error);
+    }
+  }
+
+  /**
+   * Close without saving — Cancel, Escape, the X or the backdrop, all of which
+   * stay live during a save. A save already sent decides what its photo becomes.
+   */
+  function abandon() {
+    void uploads.dismiss();
+    onClose();
+  }
 
   async function uploadPhoto(file: File) {
     if (file.size > 25 * 1024 * 1024) { toastError(t('validation.photoTooLarge', { max: 25 })); return; }
@@ -433,7 +523,8 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
       const path = familyMediaPath(familyId, 'closet', file.name);
       const { data: stored, error: upErr } = await createClient().storage.from('family-media').upload(path, file, { upsert: false });
       if (upErr || !stored) { toastError(describeDbError(upErr)); return; }
-      setPhotoPath(stored.path);
+      // False when the form closed while this was uploading: nothing will save it, so it is already gone.
+      if (uploads.landed(stored.path)) setPhotoPath(stored.path);
     } finally {
       setUploading(false);
     }
@@ -462,17 +553,26 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
       notes: String(f.get('notes') ?? '').trim() || null,
     };
     const supabase = createClient();
+    const settle = uploads.send(photoPath);
     const { data: saved, error } = item
       ? await supabase.from('wardrobe_items').update(payload).eq('id', item.id).select('id')
       : await supabase.from('wardrobe_items').insert({ family_id: familyId, created_by: userId, ...payload }).select('id');
     setLoading(false);
-    if (error) return toastError(describeDbError(error));
-    if (wroteNoRows(saved)) return toastError(t('errors.thatChangeWasNotSaved'));
+    // A refused write committed nothing; a lost reply may have, so its photo stays.
+    if (error) { void settle(writeWasRefused(error) ? 'refused' : 'unanswered'); return toastError(describeDbError(error)); }
+    if (wroteNoRows(saved)) { void settle('refused'); return toastError(t('errors.thatChangeWasNotSaved')); }
+    // Only now that the row is confirmed to point at `photoPath`: the photo it
+    // used to have (replaced or removed) and any other upload from this form.
+    await settle('saved');
+    // Reported however the form was left meanwhile — dismissed while the
+    // request was in flight, or while the old photo was being removed — since
+    // the item is saved all the same. onSaved closes this form only if it is
+    // still the one on screen, so a form opened since keeps its draft (HD1).
     onSaved(item ? 'Item updated' : 'Item added');
   }
 
   return (
-    <Modal open title={item ? `Edit · ${item.name}` : 'Add a closet item'} onClose={onClose}>
+    <Modal open title={item ? `Edit · ${item.name}` : 'Add a closet item'} onClose={abandon}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label={t('closet.name')} required>{(id) => <Input id={id} name="name" autoFocus defaultValue={item?.name ?? ''} placeholder={t('closet.greyHoodie')} />}</Field>
@@ -520,7 +620,7 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
         </div>
         <Field label={t('closet.notes')}>{(id) => <Textarea id={id} name="notes" defaultValue={item?.notes ?? ''} placeholder={t('closet.handMeDownFromSamSchool')} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>{t('closet.cancel')}</Button>
+          <Button type="button" variant="ghost" onClick={abandon}>{t('closet.cancel')}</Button>
           <Button type="submit" loading={loading || uploading}>{item ? 'Save changes' : 'Add item'}</Button>
         </div>
       </form>

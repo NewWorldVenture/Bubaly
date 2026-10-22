@@ -300,8 +300,11 @@ describe('hardcoded locales only go down', () => {
   //   lib/onboarding/ics-time.ts  resolvedOptions().timeZone canonicalises a zone; the
   //                               second pins calendar/numberingSystem/hourCycle so an
   //                               ICS parser can read parts positionally
-  //   lib/guardian/rules.ts       parses hour and minute out of a fixed-format string to
-  //                               decide call routing
+  //   (lib/guardian/rules.ts     used to parse hour and minute out of a fixed-format
+  //                               string to decide call routing; it now reads them
+  //                               through lib/time/zoned.ts's localPartsAt — the same
+  //                               engine, counted once where it lives — so its own two
+  //                               sites are gone and the pin below fell from 21 to 19)
   //   … and confirmation-import, routines/schedule, onboarding-calendar, first-brief,
   //     first-brief-display, assistant/answers
   //
@@ -320,11 +323,18 @@ describe('hardcoded locales only go down', () => {
   // BESIDE it in the same file already takes a locale in all three cases. Raising this
   // number on anything less than that reading would defeat the whole point of pinning it.
   //
+  // 20 since the Guardian follow-ups (#1004): lib/guardian/escalate.ts formatOriginalTime
+  // (+1) reads year, month, day, hour, minute and the short zone name out of formatToParts
+  // with hourCycle 'h23', to stamp a late emergency retry as `2026-10-10 17:11 PDT`: the
+  // same characters in every language, so a parent reading the SMS or hearing the call
+  // knows exactly when the emergency was first raised. localPartsAt cannot replace it,
+  // because it does not carry the zone name. A genuine engine, read before it was counted.
+  //
   // So the count is PINNED rather than minimised. If it FALLS, someone has localised a
   // parser and this fails with the reason — which is the failure mode a ceiling alone
   // cannot see, because converting a parser makes the ceiling look better.
   it('keeps the timezone-and-parts engines on a pinned locale', () => {
-    const MECHANISM_SITES = 21;
+    const MECHANISM_SITES = 20;
     const SIGNALS: [RegExp, string][] = [
       [/\.resolvedOptions\(\)/, 'resolvedOptions — canonicalising a zone'],
       [/formatToParts/, 'formatToParts — reading parts out'],

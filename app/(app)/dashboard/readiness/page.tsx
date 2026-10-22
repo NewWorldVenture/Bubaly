@@ -126,7 +126,10 @@ export default async function ReadinessPage() {
     // the coverage check still sees a capped week as partial.
     settle(readCalendarOccurrences(supabase, familyId, briefingCalendarBounds(todayStr, tz, 0, 8), tz, { columns: READINESS_COLUMNS, limit: 200 })),
     cnt(supabase.from('meal_plans').select('plan_date', { count: 'exact', head: true }).eq('family_id', familyId).eq('plan_date', tomorrowKey).eq('meal_type', 'dinner')),
-    cnt(supabase.from('prep_plan_steps').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_done', false).lt('due_date', todayStr)),
+    // Only the steps of ACTIVE plans: a dismissed plan's unticked steps are on
+    // no screen (/dashboard/prep-plans lists active plans), so counting them
+    // made a "prep steps overdue" blocker nobody could see or clear.
+    cnt(supabase.from('prep_plan_steps').select('id, plan:prep_plans!inner(status)', { count: 'exact', head: true }).eq('family_id', familyId).eq('plan.status', 'active').eq('is_done', false).lt('due_date', todayStr)),
     cnt(supabase.from('bills').select('id', { count: 'exact', head: true }).eq('family_id', familyId).neq('status', 'paid').lte('due_date', weekEndStr)),
     cnt(supabase.from('documents').select('id', { count: 'exact', head: true }).eq('family_id', familyId).not('expires_at', 'is', null).gte('expires_at', todayStr).lte('expires_at', monthEndKey)),
     cnt(supabase.from('vacations').select('id', { count: 'exact', head: true }).eq('family_id', familyId).gte('start_date', todayStr).lte('start_date', monthEndKey)),

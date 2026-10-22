@@ -27,6 +27,20 @@ vi.mock('@/lib/auth/require-aal2', () => ({ aal2Verdict: async () => ({ action: 
 // same class of fake-vs-reality gap as C1-S9-26, found the same way: a fix went
 // in and the fake, not the code, was what broke. Pass `rows: []` to model the
 // case the confirmation exists for — a write that matched nothing. C1-S9-46.
+const contactTrace: string[] = [];
+const contactQueryViolations: string[] = [];
+afterEach(() => {
+  // These assertions live outside the action's catch and the original
+  // rejects.toThrow oracle: a broken parent read cannot impersonate INSERT.
+  try {
+    expect(contactQueryViolations).toEqual([]);
+    if (contactTrace.length) expect(contactTrace).toEqual(contactTrace[0] === 'lookup' ? ['lookup', 'insert'] : ['insert']);
+  } finally {
+    contactTrace.length = 0;
+    contactQueryViolations.length = 0;
+  }
+});
+
 function writeClient(result: { error: unknown; rows?: unknown[] }) {
   const rows = result.error ? null : (result.rows ?? [{ id: 'row-1' }]);
   const settle = (onF: (v: { data: unknown; error: unknown }) => unknown) =>
@@ -37,11 +51,35 @@ function writeClient(result: { error: unknown; rows?: unknown[] }) {
     then: settle,
   };
   return {
-    from: () => ({
-      insert: () => Promise.resolve({ data: rows, error: result.error }),
+    from: (table: string) => {
+      if (table === 'family_contacts') {
+        // The insert-failure case must first admit its explicit saved contact.
+        // It still fails at INSERT, not at an unsupported SELECT on this fake.
+        const filters: Record<string, unknown> = {};
+        let projection = '';
+        contactTrace.push('lookup');
+        const contact = {
+          select: (columns: string) => { projection = columns; return contact; },
+          eq: (key: string, value: unknown) => { filters[key] = value; return contact; },
+          maybeSingle: async () => {
+            if (projection !== 'id, family_id' || filters.id !== 'c-1' || filters.family_id !== 'fam-1' || Object.keys(filters).length !== 2) {
+              contactQueryViolations.push('Unexpected contact read');
+              return { data: null, error: { message: 'Unexpected contact read' } };
+            }
+            return { data: { id: 'c-1', family_id: 'fam-1' }, error: null };
+          },
+        };
+        return contact;
+      }
+      return {
+      insert: () => {
+        if (table === 'contact_interactions') contactTrace.push('insert');
+        return Promise.resolve({ data: rows, error: result.error });
+      },
       update: () => eqChain,
       delete: () => eqChain,
-    }),
+      };
+    },
   };
 }
 

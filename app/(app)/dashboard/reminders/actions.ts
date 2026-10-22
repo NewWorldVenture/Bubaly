@@ -30,10 +30,12 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { createReminder, deleteReminder, snoozeReminder } from '@/lib/services/reminders';
+import { SERVICE_CODES } from '@/lib/services/types';
 import { ALREADY_SAVED, makeKey } from '@/lib/services/idempotency';
 import { dayKeyInTz, scopeFromUserContext, zonedTimeMs } from '@/lib/services/scope';
 import { isSubmissionId } from '@/lib/utils/submission-id';
 import { describeActionError } from '@/lib/supabase/errors';
+import { isManager } from '@/lib/constants/roles';
 
 const PATH = '/dashboard/reminders';
 
@@ -131,6 +133,38 @@ export async function createReminderAction(input: CreateReminderActionInput): Pr
   }
 }
 
+/**
+ * Who may remove a reminder.
+ *
+ * The permission matrix (/family/permissions, supabase/seed.sql) gives
+ * `can_delete` on reminders to managers only, and ROLE_DESCRIPTIONS calls a
+ * guest or caregiver view-only. Neither the service (id + family_id) nor the
+ * RLS (`is_family_member` for all) agreed, so any active member could delete a
+ * parent's medication or bill reminder. A manager may remove any; a teen or
+ * child only one they created; a guest or caregiver none.
+ *
+ * Authorship only: `assigned_to_id` and `member_id` are not ownership. Any
+ * member can rewrite them (the reminder modal updates family_reminders
+ * directly), so accepting them let a child reassign a parent's reminder to
+ * themselves and then delete it. `created_by` references auth.users (0014).
+ */
+async function canDeleteReminder(
+  scope: ReturnType<typeof scopeFromUserContext>,
+  reminderId: string,
+): Promise<boolean> {
+  if (isManager(scope.role)) return true;
+  if (scope.role !== 'teen' && scope.role !== 'child') return false;
+  if (!scope.userId) return false;
+  const { data } = await scope.db
+    .from('family_reminders')
+    .select('created_by')
+    .eq('id', reminderId)
+    .eq('family_id', scope.familyId)
+    .maybeSingle();
+  if (!data) return false;
+  return data.created_by === scope.userId;
+}
+
 export async function deleteReminderAction(reminderId: string): Promise<ReminderActionResult> {
   const t = await getTranslations();
   if (!reminderId) return { ok: false, error: t('actions.thatReminderCouldNotBe') };
@@ -140,8 +174,21 @@ export async function deleteReminderAction(reminderId: string): Promise<Reminder
   const scope = scopeFromUserContext(ctx, supabase);
 
   try {
+    if (!(await canDeleteReminder(scope, reminderId))) {
+      return { ok: false, error: t('actions.onlyAParentGuardianCan16') };
+    }
     const result = await deleteReminder(scope, reminderId);
-    if (!result.ok) return { ok: false, error: result.error };
+    if (!result.ok) {
+      // A reminder its actor may not be shown answers as an id the family does
+      // not hold (lib/services/reminders/shown.ts). A teen or child is refused
+      // an unknown id above, by role, so a hidden one they wrote — accepted
+      // from a card that named them then — is refused the same way, not
+      // "could not be found", which would tell them it is still there.
+      if (!isManager(scope.role) && result.code === SERVICE_CODES.notFound) {
+        return { ok: false, error: t('actions.onlyAParentGuardianCan16') };
+      }
+      return { ok: false, error: result.error };
+    }
 
     revalidatePath(PATH);
     return { ok: true, id: result.data.id };

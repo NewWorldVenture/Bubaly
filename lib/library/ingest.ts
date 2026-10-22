@@ -36,8 +36,18 @@ export const FEED_SAVE_FAILED = 'The feed was read but its episodes could not be
  * which is textbook server-side request forgery unless the blocked-subnet list,
  * the DNS pinning and the redirect budget all apply. They do.
  */
+/**
+ * `requestedBy` is the member who pressed Subscribe or Refresh, or null for the
+ * nightly cron (or a feed whose subscriber's account is gone). It is NOT written
+ * onto the episodes. The cron used to pass `''` for a subscriber who had been
+ * deleted, `''` is not a uuid, and the whole upsert failed with 22P02 every
+ * night from then on. And a merge upsert rewrites every column it is handed on
+ * conflict, so carrying the asker reassigned every existing episode to whoever
+ * refreshed last. An episode is the publisher's; who subscribed is on the
+ * subscription row (`library_feeds.created_by`).
+ */
 export async function ingestFeed(
-  supabase: Client, familyId: string, userId: string, feedId: string, feedUrl: string,
+  supabase: Client, familyId: string, requestedBy: string | null, feedId: string, feedUrl: string,
 ): Promise<IngestResult> {
   let parsed;
   try {
@@ -65,16 +75,24 @@ export async function ingestFeed(
     console.error('[library] feed metadata update failed', { feedId, error: describeError ?? 'no rows updated' });
   }
 
+  // One row per guid, the first the feed lists. The upsert below is ONE
+  // statement keyed on (family_id, feed_key, guid), and Postgres refuses the
+  // whole statement (21000, "cannot affect row a second time") when two of its
+  // rows share a key — a re-posted episode, two entries on one enclosure, two
+  // guids equal after the 400-character cut. The feed then failed on every
+  // refresh and every nightly run, and never gained another episode.
+  const seen = new Set<string>();
   const rows = parsed.items
     // An entry with nothing to play and nowhere to go is not worth a row.
     .filter((item) => item.mediaUrl || item.pageUrl)
+    .filter((item) => !seen.has(item.guid) && Boolean(seen.add(item.guid)))
     .map((item) => ({
       family_id: familyId, feed_id: feedId,
       kind: 'episode' as const,
       guid: item.guid, title: item.title, description: item.description,
       media_url: item.mediaUrl, page_url: item.pageUrl, image_url: item.imageUrl ?? parsed.imageUrl,
       duration_seconds: item.durationSeconds, published_at: item.publishedAt,
-      author: parsed.author, created_by: userId,
+      author: parsed.author,
     }));
   if (rows.length === 0) return { added: 0 };
 
@@ -91,7 +109,7 @@ export async function ingestFeed(
     onConflict: 'family_id,feed_key,guid',
   } as never);
   if (error) {
-    console.error('[library] item upsert failed', error);
+    console.error('[library] item upsert failed', { feedId, requestedBy: requestedBy ?? 'nightly refresh', error });
     return { error: FEED_SAVE_FAILED };
   }
   return { added: rows.length };

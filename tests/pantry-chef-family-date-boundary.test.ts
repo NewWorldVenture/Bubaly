@@ -10,7 +10,7 @@ const h = vi.hoisted(() => ({
   forbidden: vi.fn(),
 }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
-vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: async () => ({ user: { id: 'synthetic-user' }, active: { familyId: 'synthetic-family', family: { timezone: h.zone } } }) }));
+vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: async () => ({ user: { id: 'synthetic-user' }, active: { familyId: 'synthetic-family', role: 'parent', member: { id: 'synthetic-member' }, family: { timezone: h.zone } } }) }));
 vi.mock('@/lib/supabase/server', () => ({
   createServer: async () => h.db,
   createServiceClient: () => { h.forbidden(); throw Error('Service/provider path forbidden'); },
@@ -21,6 +21,10 @@ vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => {
 } }));
 vi.mock('@/lib/ai/settings', () => ({ getAIConfig: h.forbidden }));
 vi.mock('@/lib/services/groceries', () => ({ ensureDefaultGroceryListId: h.forbidden }));
+// The route's Smart Kitchen gate and AI allowance are covered by
+// tests/fridge-chef-is-a-kitchen-feature.test.ts; this file is about the date.
+vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: async () => null }));
+vi.mock('@/lib/server/ai-access', () => ({ assertAIAccess: h.forbidden, accessDeniedResponse: h.forbidden }));
 import { POST } from '@/app/api/ai/pantry-chef/route';
 
 beforeEach(() => {
@@ -28,18 +32,44 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-09T02:30:00Z'));
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   vi.stubGlobal('fetch', vi.fn(() => { throw Error('External network forbidden'); }));
+  // The plan is written through the meal service (setSlot), which reads the
+  // slot and the library before it writes and reads both back after, so the
+  // SDK's requests are answered from a small table store: GETs by their
+  // eq/in/ilike filters, POSTs stored and echoed the way PostgREST answers
+  // `Prefer: return=representation`. Only writes to meals and meal_plans are
+  // what this file asserts on; the household trail row is checked for its
+  // family and actor and otherwise left alone.
+  const store: Record<string, Record<string, unknown>[]> = { meals: [], meal_plans: [], audit_logs: [] };
+  const matches = (row: Record<string, unknown>, url: URL) => [...url.searchParams].every(([column, filter]) => {
+    if (['select', 'order', 'limit', 'offset'].includes(column)) return true;
+    if (filter.startsWith('eq.')) return String(row[column]) === filter.slice(3);
+    if (filter.startsWith('in.(')) return filter.slice(4, -1).split(',').map((v) => v.replace(/^"|"$/g, '')).includes(String(row[column]));
+    if (filter.startsWith('ilike.')) return String(row[column]).toLowerCase() === filter.slice(6).toLowerCase();
+    throw new Error(`unexpected filter ${column}=${filter}`);
+  });
   h.db = createClient('https://synthetic-pantry-date.invalid', 'synthetic-not-secret', {
     accessToken: async () => null,
     global: { fetch: async (input, init) => {
       const u = new URL(String(input));
       expect(u.origin).toBe('https://synthetic-pantry-date.invalid');
-      expect(init?.method).toBe('POST');
       const table = u.pathname.split('/').pop()!;
-      expect(['meals', 'meal_plans']).toContain(table);
-      const body = JSON.parse(String(init?.body));
-      expect(body.family_id).toBe('synthetic-family'); expect(body.created_by).toBe('synthetic-user');
-      h.writes.push({ table, body });
-      return Response.json(table === 'meals' ? { id: 'synthetic-dish' } : null);
+      expect(Object.keys(store)).toContain(table);
+      const method = init?.method ?? 'GET';
+      if (method === 'GET') return Response.json(store[table].filter((row) => matches(row, u)));
+      expect(method).toBe('POST');
+      const sent = JSON.parse(String(init?.body));
+      const rows: Record<string, unknown>[] = (Array.isArray(sent) ? sent : [sent]).map((row: Record<string, unknown>) => ({
+        ...row, id: table === 'meals' ? 'synthetic-dish' : row.id ?? `${table}-${store[table].length + 1}`,
+      }));
+      for (const row of rows) {
+        expect(row.family_id).toBe('synthetic-family');
+        expect(table === 'audit_logs' ? row.actor_id : row.created_by).toBe('synthetic-user');
+      }
+      store[table].push(...rows);
+      if (table !== 'audit_logs') h.writes.push({ table, body: rows[0] });
+      const headers = new Headers(init?.headers);
+      if (!headers.get('prefer')?.includes('return=representation')) return new Response(null, { status: 201 });
+      return Response.json(headers.get('accept')?.includes('vnd.pgrst.object') ? rows[0] : rows, { status: 201 });
     } },
   });
 });
@@ -61,7 +91,7 @@ async function assertPlanned(expected: string, planDate?: unknown) {
   expect(h.writes.map(write => write.table)).toEqual(['meals', 'meal_plans']);
   expect(h.writes[0].body.name).toBe('Synthetic supper');
   expect(h.writes[1].body).toMatchObject({ meal_id: 'synthetic-dish', meal_type: 'dinner', plan_date: expected });
-  expect(await response.json()).toEqual({ planned: true, planDate: expected });
+  expect(await response.json()).toEqual({ planned: true, planDate: expected, replaced: false });
 }
 
 describe('actual pantry route and SDK save the household dinner day', () => {

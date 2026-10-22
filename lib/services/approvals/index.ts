@@ -50,21 +50,24 @@ import { ledgerWriter } from '@/lib/trust/ledger';
 import { executeTool } from '@/lib/ai/tools/execute';
 import { markApprovedSchoolSource } from '@/lib/front-desk/school-approval';
 import { getTool } from '@/lib/ai/tools/registry';
+import { firstPersonEditProof, recordedEditsOf, requesterEditedArgsAreProven, speaksForTheRequester } from '@/lib/ai/tools/first-person';
 import { savePrivatePurchaseAnswer, scopeForApprovedPurchase } from '@/lib/services/purchases/private-result';
 import { getTranslations } from '@/lib/i18n/server';
 import { kickRun } from '@/lib/ai/runs/continue';
 import { isTerminalRunState, legacyStatusFor, type RunState, type StepState } from '@/lib/ai/runs/states';
 import {
-  appendEvent, ledgerClient, loadPlanSteps, loadRun, updateRequest, updateRun, updateStep, type StepRow,
+  appendEvent, ledgerClient, loadPlanSteps, loadRun, updateRequest, updateRun, updateRunWhereState, updateStep, type StepRow,
 } from '@/lib/ai/runs/store';
 import {
-  availableWriteBackKinds, reminderLeadAt, writeBackTitle, type WriteBackKind,
+  availableWriteBackKinds, matchesPlanSnapshot, readPlanSnapshot, reminderLeadAt, writeBackTitle, type WriteBackKind,
 } from '@/lib/concierge/apply';
 import { runSummary } from '@/lib/autonomy/loop';
 import {
   asRecord, classifyPayload, editableArgsOf, editableFieldsFor, effectiveArgsOf, toApprovalCardData, WRITE_BACK_KINDS,
   type ApprovalCardData, type ClassifiedPayload,
 } from '@/lib/approvals/card-data';
+import { releaseStaysWithinFiledRule, type ReleasedRequest } from '@/lib/trust/edit-rule';
+import { resolveBindings } from '@/lib/ai/runs/bindings';
 import { aiApprovalReminders, type AiApprovalInput } from '@/lib/notifications/approval-reminders';
 import type { NeedsReader } from '@/lib/home/needs-sources';
 import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
@@ -216,11 +219,31 @@ async function auditDecision(
  * the model never was, so "Two-parent" approved on one vote from any adult.
  *
  * Consensus needs to know how many people could vote, so the manager count is
- * read here rather than guessed.
+ * read rather than guessed — today's, for a card still being voted on
+ * (`consensusCount`).
  */
-async function thresholdOf(scope: ServiceScope, row: ApprovalRow): Promise<Threshold> {
+function thresholdOf(row: ApprovalRow, counted: ConsensusCount): Threshold {
   const model = row.approval_model ?? 'single';
   if (model !== 'consensus') return thresholdFor(model, row.required_approvals, 1);
+  const { managers } = counted;
+  // Consensus that cannot count its household must not quietly become
+  // "one yes"; fall back to the stricter of the stored count and two.
+  if (managers === null) return thresholdFor('consensus', Math.max(2, row.required_approvals ?? 2), 2);
+  return thresholdFor('consensus', row.required_approvals, managers);
+}
+
+/** The family's active parents and adults on a consensus row; null when they could not be counted. */
+type ConsensusCount = { managers: number | null };
+
+/**
+ * Who a consensus row counts, read once per vote so the release check and the
+ * threshold weigh the same household (AUD-1028-AI-QUORUM): a pending card is
+ * released against the family's managers NOW, so a yes is weighed against
+ * today's rule at today's count too (lib/trust/edit-rule.ts). Other models
+ * count nobody.
+ */
+async function consensusCount(scope: ServiceScope, row: ApprovalRow): Promise<ConsensusCount> {
+  if ((row.approval_model ?? 'single') !== 'consensus') return { managers: null };
   const { count, error } = await scope.db
     .from('family_members')
     .select('id', { count: 'exact', head: true })
@@ -228,12 +251,10 @@ async function thresholdOf(scope: ServiceScope, row: ApprovalRow): Promise<Thres
     .eq('is_active', true)
     .in('role', MANAGER_ROLES);
   if (error) {
-    // Consensus that cannot count its household must not quietly become
-    // "one yes"; fall back to the stricter of the stored count and two.
     console.error('[service:approvals] could not count managers for a consensus approval', error);
-    return thresholdFor('consensus', Math.max(2, row.required_approvals ?? 2), 2);
+    return { managers: null };
   }
-  return thresholdFor('consensus', row.required_approvals, count ?? 1);
+  return { managers: count ?? 1 };
 }
 
 /** "1 more parent needs" / "2 more people need" — the rule, said plainly. */
@@ -314,12 +335,16 @@ async function stampExecution(scope: ServiceScope, approvalId: string, result: s
 // ─── Run linkage ────────────────────────────────────────────────────────────
 
 /**
- * The plan steps parked on this approval. Steps are looked up by their own
- * `approval_id` rather than trusted from the payload alone, because a
- * `{name,args}` approval opened by the tool gate inside a run carries no
- * `run_id` — the step that is waiting on it is the only record of the link.
+ * The plan steps parked on this approval, found ONLY by their own
+ * `approval_id`. `ai_plan_steps` is written by the server alone, so that
+ * column is the one link between a step and the approval that gates it that a
+ * member cannot forge. The row's own `plan_step_ids`/`plan_step_id` columns are
+ * NOT trusted to name extra steps: any manager can rewrite them on a pending
+ * row, and folding them in let one adult's self-filed row re-point and release
+ * steps held by a different approval — a pending two-parent one, or one that
+ * had already expired or been declined.
  */
-async function stepsWaitingOn(db: DB, familyId: string, approvalId: string, extraStepIds: string[]): Promise<ServiceResult<StepRow[]>> {
+async function stepsWaitingOn(db: DB, familyId: string, approvalId: string): Promise<ServiceResult<StepRow[]>> {
   const { data: byApproval, error } = await db
     .from('ai_plan_steps')
     .select('*')
@@ -329,21 +354,7 @@ async function stepsWaitingOn(db: DB, familyId: string, approvalId: string, extr
     console.error('[service:approvals] failed to find the steps waiting on an approval', error);
     return fail(describeDbError(error, 'Bubaly could not find the work this approval releases.'), { code: SERVICE_CODES.db, retryable: true });
   }
-  const found = new Map<string, StepRow>((byApproval ?? []).map((s) => [s.id, s as StepRow]));
-  const missing = extraStepIds.filter((id) => !found.has(id));
-  if (missing.length) {
-    const { data: byId, error: idError } = await db
-      .from('ai_plan_steps')
-      .select('*')
-      .eq('family_id', familyId)
-      .in('id', missing);
-    if (idError) {
-      console.error('[service:approvals] failed to read the approval steps', idError);
-      return fail(describeDbError(idError, 'Bubaly could not find the work this approval releases.'), { code: SERVICE_CODES.db, retryable: true });
-    }
-    for (const s of byId ?? []) found.set(s.id, s as StepRow);
-  }
-  return ok([...found.values()]);
+  return ok(((byApproval ?? []) as StepRow[]).filter((s) => s.approval_id === approvalId));
 }
 
 /** Step states that have produced nothing yet, so blocking or cancelling them loses no work. */
@@ -386,11 +397,10 @@ function unstartedDependents(steps: readonly StepRow[], roots: readonly string[]
 async function foldIntoRun(
   scope: ServiceScope,
   row: ApprovalRow,
-  stepIds: string[],
   decision: 'approved' | 'rejected',
 ): Promise<ServiceResult<{ resumedRunId: string | null; runId: string | null; released: number }>> {
   const db = ledgerClient(scope);
-  const waiting = await stepsWaitingOn(db, scope.familyId, row.id, stepIds);
+  const waiting = await stepsWaitingOn(db, scope.familyId, row.id);
   if (!waiting.ok) return waiting;
   const gated = waiting.data;
   if (gated.length === 0) return ok({ resumedRunId: null, runId: row.run_id, released: 0 });
@@ -424,6 +434,8 @@ async function foldIntoRun(
 
   if (decision === 'approved') {
     for (const step of gated) {
+      // `gated` holds only steps already pointing at THIS row, so a step held
+      // by another approval is never re-pointed or released here.
       if (step.status !== 'awaiting_approval' && step.status !== 'blocked') continue;
       const updated = await updateStep(scope, step.id, { status: 'ready', approval_required: true, approval_id: row.id, error: null }, { db });
       if (!updated.ok) return updated;
@@ -439,7 +451,8 @@ async function foldIntoRun(
       if (!updated.ok) return updated;
     }
     for (const dependent of unstartedDependents(allSteps.data, gated.map((s) => s.id))) {
-      await updateStep(scope, dependent.id, { status: 'blocked', error: 'A step this one depends on was declined.' }, { db });
+      const blocked = await updateStep(scope, dependent.id, { status: 'blocked', error: 'A step this one depends on was declined.' }, { db });
+      if (!blocked.ok) return blocked;
     }
   }
 
@@ -471,7 +484,12 @@ async function foldIntoRun(
     lease_expires_at: null,
   }, { db });
   if (!resumed.ok) return resumed;
-  if (run.data.request_id) await updateRequest(scope, run.data.request_id, { status: 'ready', error: null }, { db });
+  if (run.data.request_id) {
+    // The run is back in the queue either way; a request left showing its old
+    // status is cosmetic, but it must not be silent.
+    const request = await updateRequest(scope, run.data.request_id, { status: 'ready', error: null }, { db });
+    if (!request.ok) console.error('[service:approvals] could not mark the request ready after a decision', { runId, error: request.error });
+  }
   kickRun(runId);
   return ok({ resumedRunId: runId, runId, released: gated.length });
 }
@@ -527,10 +545,33 @@ export async function materializeConciergePlan(
   const failed: WriteBackKind[] = [];
   for (const kind of targets) {
     if (already.has(kind)) continue;
-    let targetTable = '';
-    let targetId: string | null = null;
+    let targetTable: 'calendar_events' | 'family_reminders';
+    if (kind === 'calendar' && plan.planned_for) targetTable = 'calendar_events';
+    else if (kind === 'reminder' || kind === 'task') targetTable = 'family_reminders';
+    else continue;
 
-    if (kind === 'calendar' && plan.planned_for) {
+    // Reserve the ledger row BEFORE creating anything. The read above is only a
+    // fast path: two callers running at once (a double-click on "Make it
+    // happen", or that button racing `decide` on the same plan) both see an
+    // empty ledger. `unique (family_id, plan_id, action_kind)` (0158) lets
+    // exactly one of them insert this row; the loser gets 23505 and creates
+    // nothing. Creating the record first and the ledger row after meant both
+    // callers created an event and the loser's ledger conflict was only logged.
+    const { data: reserved, error: reserveErr } = await db.from('concierge_plan_actions').insert({
+      family_id: familyId, plan_id: plan.id, action_kind: kind,
+      target_table: targetTable, target_id: null,
+      detail: writeBackTitle(kind, plan.title), created_by: userId,
+    }).select('id').single();
+    if (reserveErr?.code === '23505') continue;
+    if (reserveErr || !reserved) {
+      console.error('[concierge] could not reserve the write-back ledger row', { planId: plan.id, familyId, kind, error: reserveErr });
+      failed.push(kind);
+      continue;
+    }
+
+    let targetId: string | null = null;
+    let createErr: unknown = null;
+    if (targetTable === 'calendar_events') {
       const descParts = [plan.description, plan.location ? `Location: ${plan.location}` : null].filter(Boolean);
       const { data: ev, error: evErr } = await db.from('calendar_events').insert({
         family_id: familyId, created_by: userId, title: plan.title,
@@ -538,10 +579,8 @@ export async function materializeConciergePlan(
         location: plan.location, category: 'general',
         starts_at: new Date(`${plan.planned_for}T00:00:00.000Z`).toISOString(), all_day: true,
       }).select('id').single();
-      // A failed insert is not "applied": claiming it would also skip it on the idempotent re-run.
-      if (evErr) { console.error('[concierge] calendar write-back failed', { planId: plan.id, familyId, error: evErr }); failed.push(kind); continue; }
-      targetTable = 'calendar_events'; targetId = ev?.id ?? null;
-    } else if (kind === 'reminder' || kind === 'task') {
+      createErr = evErr; targetId = ev?.id ?? null;
+    } else {
       const { data: rem, error: remErr } = await db.from('family_reminders').insert({
         family_id: familyId, created_by: userId,
         title: writeBackTitle(kind, plan.title),
@@ -550,20 +589,30 @@ export async function materializeConciergePlan(
         remind_at: reminderLeadAt(plan.planned_for),
         ai_suggested: true,
       }).select('id').single();
-      if (remErr) { console.error('[concierge] reminder write-back failed', { planId: plan.id, familyId, kind, error: remErr }); failed.push(kind); continue; }
-      targetTable = 'family_reminders'; targetId = rem?.id ?? null;
-    } else {
+      createErr = remErr; targetId = rem?.id ?? null;
+    }
+    if (createErr) {
+      // A failed insert is not "applied": release the reservation so the
+      // idempotent re-run tries this kind again.
+      console.error(`[concierge] ${kind} write-back failed`, { planId: plan.id, familyId, kind, error: createErr });
+      // Through the server's writer, not the caller's client: a member DELETE
+      // policy on the ledger lets anyone in the family erase rows and have the
+      // next apply create the records again, and the proposed pin removes it.
+      // The release is the server undoing its own reservation, so it does not
+      // depend on that policy.
+      const releaser = await ledgerWriter(db);
+      const { data: released, error: releaseErr } = await releaser.from('concierge_plan_actions').delete()
+        .eq('id', reserved.id).eq('family_id', familyId).eq('plan_id', plan.id).is('target_id', null).select('id');
+      if (releaseErr || wroteNoRows(released)) console.error('[concierge] could not release the write-back reservation', { planId: plan.id, familyId, kind, error: releaseErr });
+      failed.push(kind);
       continue;
     }
 
-    const { error: logErr } = await db.from('concierge_plan_actions').insert({
-      family_id: familyId, plan_id: plan.id, action_kind: kind,
-      target_table: targetTable, target_id: targetId,
-      detail: writeBackTitle(kind, plan.title), created_by: userId,
-    });
-    // The real record exists; a lost ledger row means a later re-run could
-    // duplicate it, which is worth a log line but not worth un-counting the write.
-    if (logErr) console.error('[concierge] concierge_plan_actions log failed', { planId: plan.id, familyId, kind, error: logErr });
+    const { data: linked, error: linkErr } = await db.from('concierge_plan_actions').update({ target_id: targetId })
+      .eq('id', reserved.id).eq('family_id', familyId).select('id');
+    // The record exists and the ledger already holds this kind, so a re-run
+    // cannot duplicate it; only the link from the ledger to the record is lost.
+    if (linkErr || wroteNoRows(linked)) console.error('[concierge] could not link the write-back ledger row', { planId: plan.id, familyId, kind, error: linkErr });
     applied.push(kind);
   }
   return { applied, failed };
@@ -587,6 +636,19 @@ async function runConciergePlan(
     return fail(describeDbError(error, 'Bubaly could not read that plan.'), { code: SERVICE_CODES.db, retryable: true });
   }
   if (!plan) return fail('That plan no longer exists.', { code: SERVICE_CODES.notFound });
+
+  // The yes is to the plan the card was filed about. planAcceptedAction files
+  // the fields that become records with the ask, and 0389 freezes `payload`;
+  // the plan row itself any member may rewrite meanwhile (0091 reads no role),
+  // and materializing it as it is NOW put a guest's retitled plan on the
+  // calendar and in reminders in the approver's name. So nothing is written
+  // unless the plan still says what was filed. A row filed before the snapshot
+  // existed cannot show that and is refused the same way; the plan's own Make
+  // it happen, or accepting it again, files a fresh ask.
+  const filed = readPlanSnapshot(asRecord(row.payload)?.plan);
+  if (!filed || !matchesPlanSnapshot(plan, filed)) {
+    return fail((await getTranslations())('approval.planChangedSinceAsked'), { code: SERVICE_CODES.denied, retryable: false });
+  }
 
   const { applied, failed } = await materializeConciergePlan(scope.db, scope.familyId, scope.userId, plan, kinds);
   if (failed.length) {
@@ -682,9 +744,9 @@ async function dismissConciergeRun(scope: ServiceScope, row: ApprovalRow): Promi
  *     until now NO approved write appeared in the feed at all.
  *
  * Confined to `requested_by_kind === 'ai'` — the same condition that already
- * decides `skipTrust`. A member-filed row keeps the decider's scope, because its
- * gate is re-evaluated under the approver's authority and re-labelling the actor
- * would change that evaluation.
+ * decides `skipTrust`. A member's row is not Bubaly's work: it runs, if the
+ * server filed it, as that member (`memberRequestScope`), and otherwise not at
+ * all.
  */
 export async function scopeForApprovedWork(scope: ServiceScope, row: ApprovalRow): Promise<ServiceScope> {
   if (row.requested_by_kind !== 'ai') return scope;
@@ -692,15 +754,24 @@ export async function scopeForApprovedWork(scope: ServiceScope, row: ApprovalRow
 
   const { data: asker, error } = await scope.db
     .from('family_members')
-    .select('id, user_id')
+    .select('id, user_id, role')
     .eq('id', row.requested_by_member_id)
     .eq('family_id', scope.familyId)
+    // A removed asker is "a roster entry since removed" (see unattributed()):
+    // removal is a soft `is_active = false`, so without this the work ran as
+    // someone no longer in the family.
+    .eq('is_active', true)
     .maybeSingle();
   if (error || !asker) {
     if (error) console.error('[service:approvals] could not resolve the asker', error);
     return unattributed(scope);
   }
-  return { ...scope, actorKind: 'ai', memberId: asker.id, userId: asker.user_id ?? scope.userId };
+  // The approver's role still does the work; what it may be done TO is the
+  // asker's to see. A teen's "complete <id>" for a policy reminder the policy
+  // does not name them on reached the parent as an opaque card, ran as the
+  // parent's role, completed the reminder and stamped its title on this row,
+  // which every family member reads (lib/services/reminders/shown.ts).
+  return { ...scope, actorKind: 'ai', memberId: asker.id, userId: asker.user_id ?? scope.userId, viewer: { role: asker.role, memberId: asker.id } };
 }
 
 /**
@@ -714,9 +785,125 @@ export async function scopeForApprovedWork(scope: ServiceScope, row: ApprovalRow
  * the wrong person and, on `event_rsvps_once`, upsert over their own reply.
  * Refusing something a parent approved is a bad outcome; recording it against
  * them is a worse one.
+ *
+ * For the same reason nothing is shown or acted on as the approver's: the
+ * reader is no member, with a guest's narrowest view (`viewer`), so a
+ * reminder only some of the family may be shown is not acted on for an asker
+ * nobody can name.
  */
 function unattributed(scope: ServiceScope): ServiceScope {
-  return { ...scope, actorKind: 'ai', memberId: null };
+  return { ...scope, actorKind: 'ai', memberId: null, viewer: { role: 'guest', memberId: null } };
+}
+
+/**
+ * Whether the SERVER filed this row as Bubaly's. Every AI approval is opened by
+ * the trust gate (`evaluateTrust`, or the risk tier in `executeTool`), and both
+ * write a `trust_audit_logs` row with `actor_kind = 'ai_agent'` and this
+ * `approval_id` through the service role. 0260 leaves that table with no member
+ * INSERT/UPDATE/DELETE policy, so — unlike `requested_by_kind`, which any
+ * manager can PATCH on a pending row — a member cannot manufacture it.
+ * Unreadable is "not proven": the gate then runs rather than being skipped.
+ */
+async function filedByBubaly(scope: ServiceScope, row: ApprovalRow): Promise<boolean> {
+  if (row.requested_by_kind !== 'ai') return false;
+  const reader = await ledgerWriter(scope.db);
+  const { data, error } = await reader
+    .from('trust_audit_logs')
+    .select('id')
+    .eq('family_id', scope.familyId)
+    .eq('approval_id', row.id)
+    .eq('actor_kind', 'ai_agent')
+    .limit(1);
+  if (error) {
+    console.error('[service:approvals] could not confirm who filed an approval; the trust gate will run', { approvalId: row.id, error });
+    return false;
+  }
+  return (data ?? []).length > 0;
+}
+
+/**
+ * A row Bubaly did not file is a MEMBER's request, and it is done — if at all
+ * — as that member, never as the parent who tapped Approve.
+ *
+ * The 0255/0480 insert policy lets any member file their own approval row with
+ * a `payload` of their choosing, and the card a parent sees is built from the
+ * title and consequences the member wrote. Replayed under the approver's scope
+ * (what this used to do), a child picked any registry tool and its arguments
+ * and the write landed as the parent: a routine the cron later fires with
+ * household authority, a family message in the parent's name, an erased fact.
+ *
+ * So the requester is resolved, active, in this family, and the work runs
+ * under THEIR identity and role on the approver's session client:
+ *
+ *   - `filedByServer`: the server's own gate filed this row for that member
+ *     (`evaluateTrust` / the risk tier, under their role) and wrote the
+ *     `require_approval` audit line naming them, which 0260 lets no member
+ *     write. The approval is then the gate, and exactly that payload replays.
+ *   - otherwise the row is only what a member typed, and nothing runs
+ *     (`performApproved`). Gating it again under their role was not enough:
+ *     a member's own `create` reached tools that write through the service
+ *     role (`notifications.notify`), on the approver's session client.
+ *
+ * Null when the requester cannot be confirmed: nothing runs.
+ */
+async function memberRequestScope(
+  scope: ServiceScope,
+  row: ApprovalRow,
+): Promise<{ scope: ServiceScope; filedByServer: boolean } | null> {
+  if (!row.requested_by_member_id) return null;
+  const reader = await ledgerWriter(scope.db);
+  const [{ data: asker, error: askerError }, { data: filed, error: filedError }] = await settleAll([
+    reader.from('family_members')
+      .select('id, user_id, role, is_active, family_id')
+      .eq('id', row.requested_by_member_id)
+      .eq('family_id', scope.familyId)
+      .eq('is_active', true)
+      .maybeSingle(),
+    reader.from('trust_audit_logs')
+      .select('id')
+      .eq('family_id', scope.familyId)
+      .eq('approval_id', row.id)
+      .eq('actor_kind', 'member')
+      .eq('actor_id', row.requested_by_member_id)
+      .eq('decision', 'require_approval')
+      .limit(1),
+  ]);
+  if (askerError || filedError) {
+    console.error('[service:approvals] could not confirm who filed a member approval; nothing will run', { approvalId: row.id, error: askerError ?? filedError });
+    return null;
+  }
+  if (!asker || asker.id !== row.requested_by_member_id || asker.family_id !== scope.familyId || asker.is_active !== true) return null;
+  return {
+    scope: { ...scope, memberId: asker.id, userId: asker.user_id ?? null, role: asker.role, actorKind: 'member' },
+    filedByServer: Array.isArray(filed) && filed.length > 0,
+  };
+}
+
+/**
+ * The decision is recorded but the run could not be put back in the queue.
+ * Not `retryable`: a retry of the decision is refused as "already decided".
+ * `resumeSettledRuns` (the notifications cron) finds a run still parked on a
+ * decided approval and returns it to the queue, where the executor folds the
+ * decision in itself — so the honest message is "it will be picked up".
+ */
+function decidedButNotResumed(error: string): ServiceResult<never> {
+  console.error('[service:approvals] a decision was recorded but its run was not resumed', error);
+  return fail('Your decision is recorded, but Bubaly could not restart that work just now. It will pick it up on its next check.', {
+    code: SERVICE_CODES.db, retryable: false,
+  });
+}
+
+/**
+ * The decision is recorded, but whether a run is waiting on it could not be
+ * read. If one is, the settled-run sweep resumes it; if not, nothing ever will
+ * — and executing here could do the work a second time beside the run. So
+ * nothing is done, and the message says both halves honestly.
+ */
+function decidedButUnclear(error: string): ServiceResult<never> {
+  console.error('[service:approvals] a decision was recorded but Bubaly could not tell whether a run was waiting on it', error);
+  return fail('Your decision is recorded, but Bubaly could not check whether this was part of something it is already working on, so it has not done it yet. If that work does not carry on by itself shortly, ask Bubaly again.', {
+    code: SERVICE_CODES.db, retryable: false,
+  });
 }
 
 async function performApproved(
@@ -728,13 +915,12 @@ async function performApproved(
 ): Promise<ServiceResult<DecideResult>> {
   switch (classified.kind) {
     case 'plan_steps': {
-      // Only a row Bubaly filed (server-side, requested_by_kind = 'ai') may name
-      // extra steps to release. A member-filed row releases nothing beyond the
-      // steps already pointing at it, so a forged {kind:'plan_steps'} payload
-      // cannot un-block a parent's declined work.
-      const releasable = row.requested_by_kind === 'ai' ? classified.stepIds : [];
-      const folded = await foldIntoRun(scope, row, releasable, 'approved');
-      if (!folded.ok) return folded;
+      // Only the steps the server parked on THIS row (their own `approval_id`)
+      // are released. The row's `plan_step_ids`/`payload_kind`/
+      // `requested_by_kind` are writable by any manager while it is pending, so
+      // none of them may widen what a decision releases.
+      const folded = await foldIntoRun(scope, row, 'approved');
+      if (!folded.ok) return decidedButNotResumed(folded.error);
       const summary = folded.data.released
         ? 'Approved — Bubaly is picking this up now.'
         : 'Approved. Those steps had already been handled.';
@@ -744,13 +930,31 @@ async function performApproved(
     }
 
     case 'concierge_plan': {
+      // The one filer of these rows is the concierge's own gate
+      // (planAcceptedAction → evaluateTrust, as Bubaly), which writes the
+      // `ai_agent` audit line `filedByBubaly` reads and no member can write
+      // (0260). Anything else is a payload a member typed — any member may
+      // file their own approval row (0255/0480) and create a plan row (0091's
+      // concierge_plans policy reads no role), and `classifyPayload`'s shape
+      // fallback routes `{plan_id, kinds}` here — and materializing it wrote
+      // calendar events and reminders as the APPROVER with no gate at all, a
+      // guest's included. So, as for a tool row nobody on the server filed,
+      // nothing runs and the row says so.
+      if (!await filedByBubaly(scope, row)) {
+        const refused = (await getTranslations())('approval.memberPayloadNotRun');
+        await stampExecution(scope, row.id, `error: ${refused}`);
+        await auditDecision(scope, row, 'approved_execution', `Execution refused: ${refused}`, { plan_id: classified.planId, ok: false });
+        return fail(refused, { code: SERVICE_CODES.denied, retryable: false });
+      }
       const kinds = edited
         ? WRITE_BACK_KINDS.filter((k) => edited[k] === true)
         : classified.kinds;
       const done = await runConciergePlan(scope, row, classified.planId, kinds);
       if (!done.ok) {
         await stampExecution(scope, row.id, `error: ${done.error}`);
-        await auditDecision(scope, row, 'approved_execution', `Execution failed: ${done.error}`, { ok: false });
+        // `denied` is a plan that no longer says what was filed: refused, not failed.
+        const outcome = done.code === SERVICE_CODES.denied ? 'Execution refused' : 'Execution failed';
+        await auditDecision(scope, row, 'approved_execution', `${outcome}: ${done.error}`, { plan_id: classified.planId, ok: false });
         return done;
       }
       await stampExecution(scope, row.id, done.data.summary);
@@ -761,33 +965,81 @@ async function performApproved(
     case 'tool': {
       // A gate opened inside a run: the step, not this call, performs the tool
       // so the run's idempotency key and timeline stay the single record.
-      const folded = await foldIntoRun(scope, row, [], 'approved');
-      if (!folded.ok) return folded;
-      if (folded.data.released > 0) {
+      const folded = await foldIntoRun(scope, row, 'approved');
+      if (!folded.ok) {
+        // "It will pick it up on its next check" is only true when a run step
+        // is parked on this row: `resumeSettledRuns` scans runs, and a
+        // standalone tool approval has none. The fold can fail before it knew
+        // which case this is (the step read), so look again.
+        const parked = await stepsWaitingOn(ledgerClient(scope), scope.familyId, row.id);
+        if (!parked.ok) return decidedButUnclear(folded.error);
+        if (parked.data.length > 0) return decidedButNotResumed(folded.error);
+        // No run waits on this row: it is a standalone approval, and the work
+        // is done here, below, exactly as when the fold found no steps.
+      } else if (folded.data.released > 0) {
         const summary = 'Approved — Bubaly is picking this up now.';
         await stampExecution(scope, row.id, summary);
         await auditDecision(scope, row, 'approved_execution', summary, { released: folded.data.released, resumed_run_id: folded.data.resumedRunId });
         return ok({ status: decisionLabel, executed: true, resumedRunId: folded.data.resumedRunId, summary });
       }
 
-      const args = edited ?? classified.args;
+      // Words said in the asker's name run as they were filed unless the
+      // ledger shows the edit is the asker's own (lib/ai/tools/first-person.ts):
+      // `edited_payload` is a column any manager may write on a pending row,
+      // so it cannot vouch for itself.
+      const othersWords = edited !== null && speaksForTheRequester(classified.name)
+        && !requesterEditedArgsAreProven(await recordedEditsOf(await ledgerWriter(scope.db), scope.familyId, row.id) ?? [], {
+          familyId: scope.familyId, approvalId: row.id, requesterMemberId: row.requested_by_member_id, toolName: classified.name,
+        }, edited);
+      const args = othersWords ? classified.args : edited ?? classified.args;
+      // `requested_by_kind` is a column any manager can rewrite on a pending
+      // row, so it cannot decide whether the trust gate is skipped. An 'ai' row
+      // only counts as Bubaly's when the server's own ledger says so; anything
+      // else is a member's row.
+      const bubalyFiled = await filedByBubaly(scope, row);
+      const provenRow: ApprovalRow = bubalyFiled ? row : { ...row, requested_by_kind: 'member' };
+      // A member's row runs its `{name, args}` only when the server's own gate
+      // filed it for them (`memberRequestScope`). Anything else is a payload a
+      // member typed under a card they wrote, and nothing of it runs: re-gating
+      // it lent the approver's session client and a member's own `create` to a
+      // tool whose limits live in RLS or nowhere — `notifications.notify`
+      // writes through the service role, so a child's "Can I go to Sam's?"
+      // sent the whole family an urgent push. No server code files a member row
+      // with a payload it did not gate, so nothing legitimate is refused.
+      const asker = bubalyFiled ? null : await memberRequestScope(scope, row);
+      if (!bubalyFiled && !asker?.filedByServer) {
+        const refused = (await getTranslations())(asker ? 'approval.memberPayloadNotRun' : 'approval.requesterUnconfirmed');
+        await stampExecution(scope, row.id, `error: ${refused}`);
+        await auditDecision(scope, row, 'approved_execution', `Execution refused: ${refused}`, { tool: classified.name, ok: false });
+        return fail(refused, { code: SERVICE_CODES.denied, retryable: false });
+      }
       const privatePurchase = classified.name === 'finances.advisePurchase';
-      const requester = privatePurchase ? await scopeForApprovedPurchase(scope, row) : null;
+      const requester = privatePurchase ? await scopeForApprovedPurchase(scope, provenRow) : null;
       if (requester && !requester.ok) {
         await stampExecution(scope, row.id, (await getTranslations())('purchaseAdvice.privateUnavailable'));
         return requester;
       }
-      const actingScope = requester?.ok ? requester.data : await scopeForApprovedWork(scope, row);
+      // The approval IS the gate — the server filed it. A row Bubaly filed
+      // replays as Bubaly for its asker; a row the gate filed for a member
+      // replays as that member (`memberRequestScope`).
+      let actingScope: ServiceScope;
+      let skipTrust: boolean;
+      if (requester?.ok) {
+        actingScope = requester.data;
+        skipTrust = bubalyFiled;
+      } else if (bubalyFiled) {
+        actingScope = await scopeForApprovedWork(scope, provenRow);
+        skipTrust = true;
+      } else {
+        actingScope = asker!.scope;
+        skipTrust = true;
+      }
       const outcome = await executeTool(
         { ...actingScope, requestId: row.request_id ?? scope.requestId ?? null, runId: row.run_id ?? null },
         classified.name,
         args,
         {
-          // The approval IS the gate — when Bubaly filed it. A row a member
-          // filed themselves (requested_by_kind = 'member') is not a decision
-          // Bubaly made, so the tool is evaluated again under the approver's
-          // role rather than executed on the strength of the row's contents.
-          skipTrust: row.requested_by_kind === 'ai',
+          skipTrust,
           requestId: row.request_id ?? null,
           runId: row.run_id ?? null,
           // A retried decision (network blip after the flip) must not write twice.
@@ -822,8 +1074,12 @@ async function performApproved(
           : outcome.error;
       await stampExecution(scope, row.id, `error: ${reason}`);
       await auditDecision(scope, row, 'approved_execution', `Execution failed: ${reason}`, { tool: classified.name, ok: false });
-      return fail(`Approved, but Bubaly could not finish it: ${reason}`, {
-        code: SERVICE_CODES.db, retryable: outcome.status === 'error' ? outcome.retryable : false,
+      // Never `retryable`: the decision is already recorded, so a retry of
+      // decide/editAndApprove is refused as "already decided", and nothing
+      // re-executes an approved row. Promising a retry would lose the work
+      // quietly; saying so lets the family ask again.
+      return fail(`Approved, but Bubaly could not finish it: ${reason} The approval is closed, so ask Bubaly again if you still want this.`, {
+        code: SERVICE_CODES.db, retryable: false,
       });
     }
   }
@@ -845,6 +1101,27 @@ async function performApproved(
  */
 const VOTE_RETRIES = 3;
 
+/**
+ * A member's own request is not theirs to approve: the row exists because the
+ * family's rules said someone else must agree. (Declining or cancelling it is
+ * still fine.) An AI-filed row on someone's behalf is different — the asker is
+ * Bubaly, and the person it asked for may well be the parent who decides.
+ */
+async function isOwnMemberRequest(scope: ServiceScope, row: ApprovalRow, memberId: string): Promise<boolean> {
+  if (row.requested_by_member_id !== memberId) return false;
+  if (row.requested_by_kind !== 'ai') return true;
+  // 'ai' is a column any manager can PATCH onto their own pending row, so it
+  // only makes the row Bubaly's when the server's ledger says Bubaly filed it
+  // (`filedByBubaly`). Otherwise an adult flips the column and approves alone —
+  // and the concierge_plan branch, unlike the tool branch, runs no gate after.
+  // A plan_steps row is the exception: the executor files those without an
+  // audit line, and a decision on one only releases steps the server itself
+  // parked on that row (`stepsWaitingOn`), so a forged one releases nothing.
+  if (classifyPayload(row)?.kind === 'plan_steps') return false;
+  return !(await filedByBubaly(scope, row));
+}
+const OWN_REQUEST = fail('You asked for this one, so someone else in the family needs to approve it.', { code: SERVICE_CODES.denied });
+
 export async function decide(
   scope: ServiceScope,
   approvalId: string,
@@ -864,9 +1141,30 @@ export async function decide(
   if (prior.some((v) => v.member_id === memberId)) {
     return fail('You already responded to this request.', { code: SERVICE_CODES.invalidInput });
   }
+  if (decision === 'approved' && await isOwnMemberRequest(scope, row, memberId)) return OWN_REQUEST;
+  // A yes releases the edit an earlier approver recorded — or one written to
+  // the column directly, which any manager may do on a pending row. One that
+  // moved the request out from under the rule it was filed under is not this
+  // card's to release, so the vote is refused before anything is written.
+  //
+  // A plain yes is weighed too (AUD-1028-AI-LEGACY). The card's rule is the
+  // one it was FILED under, and a card filed before the held-step rule read
+  // its bound amount, or before a held step answered to a deny, carries "one
+  // of us" for a $900 the family's rules send to both parents, or refuse. One
+  // yes released it, and the work ran with the gate skipped. What the release
+  // runs must still be this card's to release under the rules as they are —
+  // a consensus counted at the household this vote is counted against
+  // (AUD-1028-AI-QUORUM), read once for both.
+  const counted = await consensusCount(scope, row);
+  const filedAs = classifyPayload(row);
+  const recordedEdit = decision === 'approved' && filedAs ? storedEdit(row, filedAs) : null;
+  if (decision === 'approved' && filedAs) {
+    const kept = await releaseKeepsFiledRule(scope, row, filedAs, recordedEdit, counted);
+    if (!kept.ok) return kept;
+  }
   const nowIso = scopeNow(scope).toISOString();
   const cleanNote = note?.trim() || null;
-  const threshold = await thresholdOf(scope, row);
+  const threshold = thresholdOf(row, counted);
   // One "no" still stops the AI whoever says it — a rule about how many yeses
   // are needed is not a reason to ignore an objection. A yes that cannot count
   // is refused up front rather than recorded and quietly ignored.
@@ -938,10 +1236,14 @@ export async function decide(
     if (classified.kind === 'concierge_plan') {
       await dismissConciergeRun(scope, row);
     } else {
-      const folded = await foldIntoRun(scope, row, classified.kind === 'plan_steps' ? classified.stepIds : [], 'rejected');
+      const folded = await foldIntoRun(scope, row, 'rejected');
       // A declined approval must read as declined even if the run bookkeeping
-      // fails; that failure is logged and the run's next pass reconciles it.
-      if (!folded.ok) console.error('[service:approvals] could not fold a rejection into its run', folded.error);
+      // fails. The run is still `awaiting_approval`, which no claim path
+      // leases, so "the run's next pass" never comes on its own:
+      // `resumeSettledRuns` (notifications cron) returns a run parked on a
+      // decided approval to the queue, and the executor's reconcileApprovals
+      // cancels the declined steps then.
+      if (!folded.ok) console.error('[service:approvals] could not fold a rejection into its run; the settled-run sweep will', folded.error);
     }
     return ok({ status: 'rejected', executed: false, resumedRunId: null, summary: 'Declined — Bubaly will not do that.' });
   }
@@ -950,8 +1252,9 @@ export async function decide(
   // approver edited the request, `editAndApprove` recorded their change on
   // `edited_payload` and left the row pending — passing `null` here executed
   // the ORIGINAL instead, silently discarding the correction that was the whole
-  // reason they engaged with it.
-  return performApproved(scope, row, classified, storedEdit(row, classified), 'approved');
+  // reason they engaged with it. (`recordedEdit` is `storedEdit` of this row,
+  // weighed against its rule above.)
+  return performApproved(scope, row, classified, recordedEdit, 'approved');
 }
 
 /**
@@ -997,6 +1300,130 @@ function storedEdit(row: ApprovalRow, classified: ClassifiedPayload): Record<str
   return merged;
 }
 
+/** The registry tool a parked step runs: its own, or `notifications.notify` for a notify step. */
+function toolOfStep(step: StepRow) {
+  if (step.step_type === 'notify') return getTool('notifications.notify');
+  return step.tool_name ? getTool(step.tool_name) : null;
+}
+
+/** A value with its step bindings resolved against `results`, or as it is when they do not resolve. */
+function resolvedOr(value: unknown, results: Record<string, unknown>): unknown {
+  const bound = resolveBindings(value as Json, results);
+  return bound.ok ? bound.value : value;
+}
+
+/**
+ * The results of the steps these steps depend on, by id: what their bindings
+ * resolve against when the executor runs them (`runStep`).
+ */
+async function dependencyResults(scope: ServiceScope, steps: readonly StepRow[]): Promise<ServiceResult<Map<string, unknown>>> {
+  const ids = [...new Set(steps.flatMap((step) => step.dependency_ids ?? []))];
+  if (ids.length === 0) return ok(new Map());
+  const { data, error } = await ledgerClient(scope)
+    .from('ai_plan_steps')
+    .select('id, result_json')
+    .eq('family_id', scope.familyId)
+    .in('id', ids);
+  if (error) {
+    console.error('[service:approvals] failed to read what a held step depends on', error);
+    return fail((await getTranslations())('approval.releaseRuleUnreadable'), { code: SERVICE_CODES.db, retryable: true });
+  }
+  return ok(new Map(((data ?? []) as { id: string; result_json: unknown }[]).map((dep) => [dep.id, dep.result_json])));
+}
+
+/**
+ * Whether releasing this row — on a plain yes, or with an edit — keeps it
+ * under the rule it was filed under (lib/trust/edit-rule.ts). Two things are
+ * weighed, and either refuses with nothing changed:
+ *
+ *  - An edit. An approver may correct a held card, but not move it to an
+ *    amount the family's rules send to another require_approval policy, or to
+ *    a stricter model or count, than this card's — one parent turning a $40
+ *    card filed "one of us" into $900 that "needs both of us". The family asks
+ *    Bubaly again.
+ *  - The rule now (AUD-1028-AI-LEGACY). What the release runs must still be
+ *    this card's to release under the family's rules as they are: not refused
+ *    outright by one, and asking no more approvals than the card carries. A
+ *    card filed under the current rules always is; a stale one is declined,
+ *    and Bubaly asked again.
+ *
+ * A `tool` row is weighed as its filing gate weighed it; a `plan_steps` row as
+ * the executor filed it, for each step the server parked on it (found by the
+ * steps' own `approval_id`, as `foldIntoRun` finds what a decision releases),
+ * with that step's bindings resolved as the executor resolves them. A pure
+ * approval step runs nothing, so only an edit of it is weighed. A concierge
+ * plan's edit only picks write-backs, which no rule reads.
+ *
+ * A consensus is counted at the managers `thresholdOf` counts this vote
+ * against (`counted`), since that is what the card will need to release; an
+ * uncounted household is weighed at one, the strictest reading.
+ */
+async function releaseKeepsFiledRule(
+  scope: ServiceScope,
+  row: ApprovalRow,
+  classified: ClassifiedPayload,
+  edited: Record<string, unknown> | null,
+  counted: ConsensusCount,
+): Promise<ServiceResult<null>> {
+  if (classified.kind === 'concierge_plan') return ok(null);
+  const quorum = counted.managers ?? 1;
+  let requests: ReleasedRequest[];
+  if (classified.kind === 'tool') {
+    requests = [{
+      row, filedBy: { kind: 'tool', filedName: classified.name }, tool: getTool(classified.name),
+      asked: classified.args, released: edited ?? classified.args, edited: edited !== null, quorum,
+    }];
+  } else {
+    const waiting = await stepsWaitingOn(ledgerClient(scope), scope.familyId, row.id);
+    if (!waiting.ok) return waiting;
+    if (waiting.data.length === 0) {
+      // Nothing is parked on this row, so its yes releases nothing; an edit of
+      // it is still weighed, as it always was.
+      requests = edited
+        ? [{ row, filedBy: { kind: 'step' }, tool: null, asked: classified.input ?? {}, released: edited, edited: true, runsWork: false, quorum }]
+        : [];
+    } else {
+      const results = await dependencyResults(scope, waiting.data);
+      if (!results.ok) return results;
+      requests = waiting.data.map((step) => {
+        const deps = Object.fromEntries((step.dependency_ids ?? []).map((id) => [id, results.data.get(id) ?? null]));
+        const asked = resolvedOr(step.input_json, deps);
+        return {
+          row, filedBy: { kind: 'step' as const }, tool: toolOfStep(step),
+          asked, released: edited ? resolvedOr(edited, deps) : asked, edited: edited !== null,
+          runsWork: step.step_type !== 'approval', quorum,
+        };
+      });
+    }
+  }
+  for (const request of requests) {
+    const verdict = await releaseStaysWithinFiledRule(scope.db, request);
+    if (verdict.ok) continue;
+    const t = await getTranslations();
+    if (verdict.reason === 'unreadable') {
+      return fail(edited ? t('approval.editRuleUnreadable') : t('approval.releaseRuleUnreadable'), { code: SERVICE_CODES.db, retryable: true });
+    }
+    return fail(verdict.reason === 'outside_rule' ? t('approval.editOutsideFiledRule') : t('approval.ruleNoLongerReleases'), {
+      code: SERVICE_CODES.denied, retryable: false,
+    });
+  }
+  return ok(null);
+}
+
+/**
+ * Whether the work this row releases speaks in its asker's first person
+ * (lib/ai/tools/first-person.ts): the tool a `tool` row names, or the tool of
+ * a step the server parked on a `plan_steps` row — found by the steps' own
+ * `approval_id`, as `foldIntoRun` finds what a decision releases.
+ */
+async function requesterSpeechTools(scope: ServiceScope, row: ApprovalRow, classified: ClassifiedPayload): Promise<ServiceResult<string[]>> {
+  if (classified.kind === 'tool') return ok(speaksForTheRequester(classified.name) ? [classified.name] : []);
+  if (classified.kind !== 'plan_steps') return ok([]);
+  const waiting = await stepsWaitingOn(ledgerClient(scope), scope.familyId, row.id);
+  if (!waiting.ok) return waiting;
+  return ok(waiting.data.filter((step) => step.step_type !== 'notify' && speaksForTheRequester(step.tool_name)).map((step) => step.tool_name!));
+}
+
 /**
  * Change what an approval would do, then approve the changed version.
  *
@@ -1034,7 +1461,19 @@ export async function editAndApprove(
   // re-derived, allow-listed, schema-checked version of that column, so
   // nothing a manager wrote straight to `edited_payload` is trusted here
   // either.
-  const base = storedEdit(row, classified) ?? original;
+  const speechTools = await requesterSpeechTools(scope, row, classified);
+  if (!speechTools.ok) return speechTools;
+  let stored = storedEdit(row, classified);
+  if (stored && speechTools.data.length) {
+    const recorded = await recordedEditsOf(await ledgerWriter(scope.db), scope.familyId, row.id);
+    // An unchanged second vote must not certify words written directly to the
+    // pending column. Rebase on the original if the existing edit is unproven;
+    // the requester can submit their own words, but no other voter can do so.
+    if (!speechTools.data.every((toolName) => requesterEditedArgsAreProven(recorded ?? [], {
+      familyId: scope.familyId, approvalId: row.id, requesterMemberId: row.requested_by_member_id, toolName,
+    }, stored!))) stored = null;
+  }
+  const base = stored ?? original;
   // Only the fields the card offered may change: an edit is a correction of
   // what was shown, never a way to smuggle in new arguments. The allow-list is
   // derived from the ORIGINAL, so an earlier edit can never widen it.
@@ -1059,23 +1498,52 @@ export async function editAndApprove(
     return fail('Keep at least one thing for Bubaly to do, or decline instead.', { code: SERVICE_CODES.invalidInput });
   }
 
-  const nowIso = scopeNow(scope).toISOString();
-  const cleanNote = note?.trim() || null;
-  const prior = priorVotes(row);
-  if (prior.some((v) => v.member_id === memberId)) {
-    return fail('You already responded to this request.', { code: SERVICE_CODES.invalidInput });
-  }
-  const threshold = await thresholdOf(scope, row);
-  if (threshold.parentsOnly && scope.role !== 'parent') {
-    return fail('This one needs two parents to agree. Ask a parent to approve it.', { code: SERVICE_CODES.denied });
-  }
-  const votes: Vote[] = [...prior, { member_id: memberId, decision: 'approved', note: cleanNote, at: nowIso, role: scope.role ?? null }];
   // Two deltas, because they answer different questions. `changed` is the
   // cumulative difference from what Bubaly proposed — what the family is
   // actually agreeing to. `changedByMe` is this approver's own contribution;
   // without it the activity line credited one parent with the other's wording.
   const changed = Object.keys(merged).filter((k) => merged[k] !== original[k]);
   const changedByMe = Object.keys(merged).filter((k) => merged[k] !== base[k]);
+
+  // Words said in someone's name are theirs to change (lib/ai/tools/first-person.ts).
+  // The approved work runs AS the person who asked — a run step on the service
+  // client, a Bubaly-filed row replayed for its asker — so another manager's
+  // rewording of a family message went out with the asker's name on it.
+  // Approving or declining it exactly as written stays open to every approver.
+  if (changedByMe.length > 0 && memberId !== row.requested_by_member_id) {
+    if (speechTools.data.length) return fail((await getTranslations())('approval.notYoursToReword'), { code: SERVICE_CODES.denied });
+  }
+
+  // Only a requester actually changing the safe base can author a new proof.
+  // A voter re-submitting a proven edit unchanged leaves its prior proof intact.
+  const proof = speechTools.data.length && changedByMe.length > 0
+    ? firstPersonEditProof({ familyId: scope.familyId, approvalId: row.id, requesterMemberId: row.requested_by_member_id }, speechTools.data, merged)
+    : null;
+  if (speechTools.data.length && changedByMe.length > 0 && !proof) {
+    return fail('Bubaly could not verify those edited details, so nothing was changed.', { code: SERVICE_CODES.invalidInput });
+  }
+  const editEvidence = proof ? { firstPersonEdit: proof } : {};
+
+  const nowIso = scopeNow(scope).toISOString();
+  const cleanNote = note?.trim() || null;
+  const prior = priorVotes(row);
+  if (prior.some((v) => v.member_id === memberId)) {
+    return fail('You already responded to this request.', { code: SERVICE_CODES.invalidInput });
+  }
+  if (await isOwnMemberRequest(scope, row, memberId)) return OWN_REQUEST;
+  const counted = await consensusCount(scope, row);
+  const threshold = thresholdOf(row, counted);
+  if (threshold.parentsOnly && scope.role !== 'parent') {
+    return fail('This one needs two parents to agree. Ask a parent to approve it.', { code: SERVICE_CODES.denied });
+  }
+  // This row's rule covers what it was filed for. An edit that moves it under
+  // another rule — a bigger amount the family sends to both parents — is
+  // refused before anything is written, and so is any release the family's
+  // rules no longer let this card make (`releaseKeepsFiledRule`), a consensus
+  // counted at the household this vote is counted against.
+  const kept = await releaseKeepsFiledRule(scope, row, classified, merged, counted);
+  if (!kept.ok) return kept;
+  const votes: Vote[] = [...prior, { member_id: memberId, decision: 'approved', note: cleanNote, at: nowIso, role: scope.role ?? null }];
 
   // An edit is still one vote. A two-parent rule stays a two-parent rule:
   // record the edited payload and this approval, and wait for the rest.
@@ -1094,7 +1562,7 @@ export async function editAndApprove(
       if (attempt < VOTE_RETRIES) return editAndApprove(scope, approvalId, edits, note, attempt + 1);
       return fail('This request was already decided.', { code: SERVICE_CODES.invalidInput });
     }
-    await auditDecision(scope, row, 'modified', cleanNote ?? `Edited ${changedByMe.length ? changedByMe.join(', ') : 'nothing'}; approval ${approvedCount} of ${required} recorded.`, { changed, changedByMe, votes: votes.length, required });
+    await auditDecision(scope, row, 'modified', cleanNote ?? `Edited ${changedByMe.length ? changedByMe.join(', ') : 'nothing'}; approval ${approvedCount} of ${required} recorded.`, { changed, changedByMe, votes: votes.length, required, ...editEvidence });
     const remaining = required - approvedCount;
     return ok({
       status: 'pending', resumedRunId: null,
@@ -1114,7 +1582,7 @@ export async function editAndApprove(
   if (!flipped.ok) return flipped;
   if (!flipped.data) return fail('This request was already decided.', { code: SERVICE_CODES.invalidInput });
 
-  await auditDecision(scope, row, 'modified', cleanNote ?? `Edited ${changedByMe.length ? changedByMe.join(', ') : 'nothing'} and approved.`, { changed, changedByMe });
+  await auditDecision(scope, row, 'modified', cleanNote ?? `Edited ${changedByMe.length ? changedByMe.join(', ') : 'nothing'} and approved.`, { changed, changedByMe, ...editEvidence });
 
   const done = await performApproved(scope, row, classified, merged, 'modified');
   if (!done.ok) return done;
@@ -1130,75 +1598,109 @@ const SWEEP_LIMIT = 500;
  * one becomes `blocked` with a timeline event, so a family sees "this stopped
  * because nobody answered" instead of a run that looks alive forever.
  *
+ * ORDER MATTERS. The steps and the run are blocked FIRST and the approval is
+ * expired only once that landed. The other way round, a failure in between (a
+ * step read, the run read, the run update) left the approval `expired` —
+ * which this sweep never selects again, since it reads only `pending` rows —
+ * and the run parked at `awaiting_approval`, which no claim path leases: the
+ * exact "alive forever" run this exists to prevent. Now such a row stays
+ * `pending` and the next tick tries again; `resumeSettledRuns` is the backstop
+ * for anything that still ends up parked on a non-pending approval.
+ *
+ * `failures` counts what this tick could not do, so the cron reports a sweep
+ * that did not run instead of answering 200.
+ *
  * The initial read is necessarily cross-family (it is a sweep), but every
  * write is issued per family with an explicit `family_id`, per the cron rule.
  */
-export async function expireStale(db: DB, now: Date = new Date()): Promise<{ expired: number; blockedRuns: number }> {
+export async function expireStale(db: DB, now: Date = new Date()): Promise<{ expired: number; blockedRuns: number; failures: number }> {
   const nowIso = now.toISOString();
   const { data, error } = await db
     .from('approval_requests')
-    .select('id, family_id, run_id, plan_step_id, plan_step_ids, title')
+    .select('id, family_id, run_id, title')
     .eq('status', 'pending')
     .lt('expires_at', nowIso)
     .limit(SWEEP_LIMIT);
   if (error) {
     console.error('[service:approvals] expiry sweep read failed', error);
-    return { expired: 0, blockedRuns: 0 };
+    return { expired: 0, blockedRuns: 0, failures: 1 };
   }
   const rows = data ?? [];
-  if (rows.length === 0) return { expired: 0, blockedRuns: 0 };
+  if (rows.length === 0) return { expired: 0, blockedRuns: 0, failures: 0 };
 
   const byFamily = new Map<string, typeof rows>();
   for (const row of rows) byFamily.set(row.family_id, [...(byFamily.get(row.family_id) ?? []), row]);
 
   let expired = 0;
   let blockedRuns = 0;
+  let failures = 0;
   for (const [familyId, familyRows] of byFamily) {
+    const scope = scopeForSystem(db, { id: familyId });
+    const settled: string[] = [];
+    const blockedLater: { runId: string; requestId: string | null; approvalId: string; message: string }[] = [];
+    for (const row of familyRows) {
+      const waiting = await stepsWaitingOn(db, familyId, row.id);
+      if (!waiting.ok) { failures += 1; continue; }
+      const gated = waiting.data;
+      let stepsBlocked = true;
+      for (const step of gated) {
+        if (step.status !== 'awaiting_approval') continue;
+        const blockedStep = await updateStep(scope, step.id, { status: 'blocked', error: 'The approval expired before anyone decided.' }, { db });
+        if (!blockedStep.ok) { stepsBlocked = false; break; }
+      }
+      if (!stepsBlocked) { failures += 1; continue; }
+
+      let runId = row.run_id;
+      if (!runId && gated.length) {
+        const found = await runIdForPlan(db, familyId, gated[0].plan_id);
+        if (!found.ok) { failures += 1; continue; }
+        runId = found.data;
+      }
+      if (runId) {
+        const run = await loadRun(scope, runId, { db });
+        if (!run.ok) { failures += 1; continue; }
+        if (run.data && run.data.state === 'awaiting_approval') {
+          const message = `"${row.title}" expired before anyone approved it, so Bubaly stopped here.`;
+          const blocked = await updateRun(scope, runId, {
+            state: 'blocked', status: legacyStatusFor('blocked'), error: message, lease_owner: null, lease_expires_at: null,
+          }, { db });
+          if (!blocked.ok) { failures += 1; continue; }
+          blockedLater.push({ runId, requestId: run.data.request_id, approvalId: row.id, message });
+        }
+      }
+      settled.push(row.id);
+    }
+    if (settled.length === 0) continue;
+
     const { data: flipped, error: flipError } = await db
       .from('approval_requests')
       .update({ status: 'expired', decided_at: nowIso })
       .eq('family_id', familyId)
       .eq('status', 'pending')
-      .in('id', familyRows.map((r) => r.id))
+      .in('id', settled)
       .select('id');
     if (flipError) {
+      // The runs are already blocked; the rows stay pending and are expired
+      // on the next tick, which finds nothing left to block.
       console.error('[service:approvals] expiry sweep update failed', { familyId, error: flipError });
+      failures += 1;
       continue;
     }
-    const expiredIds = new Set((flipped ?? []).map((r) => r.id));
-    expired += expiredIds.size;
+    expired += (flipped ?? []).length;
 
-    const scope = scopeForSystem(db, { id: familyId });
-    for (const row of familyRows) {
-      if (!expiredIds.has(row.id)) continue;
-      const stepIds = [...new Set([...(row.plan_step_ids ?? []), ...(row.plan_step_id ? [row.plan_step_id] : [])])];
-      const waiting = await stepsWaitingOn(db, familyId, row.id, stepIds);
-      if (!waiting.ok) continue;
-      const gated = waiting.data;
-      for (const step of gated) {
-        if (step.status !== 'awaiting_approval') continue;
-        await updateStep(scope, step.id, { status: 'blocked', error: 'The approval expired before anyone decided.' }, { db });
+    for (const { runId, requestId, approvalId, message } of blockedLater) {
+      await appendEvent(scope, runId, { eventType: 'blocked', message, payload: { approval_id: approvalId, reason: 'approval_expired' } }, { db });
+      if (requestId) {
+        const request = await updateRequest(scope, requestId, { status: 'blocked', error: message }, { db });
+        if (!request.ok) console.error('[service:approvals] could not mark the request blocked after an expiry', { runId, error: request.error });
       }
-
-      const runId = row.run_id ?? (gated.length ? await runIdForPlan(db, familyId, gated[0].plan_id) : null);
-      if (!runId) continue;
-      const run = await loadRun(scope, runId, { db });
-      if (!run.ok || !run.data || run.data.state !== 'awaiting_approval') continue;
-
-      const message = `"${row.title}" expired before anyone approved it, so Bubaly stopped here.`;
-      const blocked = await updateRun(scope, runId, {
-        state: 'blocked', status: legacyStatusFor('blocked'), error: message, lease_owner: null, lease_expires_at: null,
-      }, { db });
-      if (!blocked.ok) continue;
-      await appendEvent(scope, runId, { eventType: 'blocked', message, payload: { approval_id: row.id, reason: 'approval_expired' } }, { db });
-      if (run.data.request_id) await updateRequest(scope, run.data.request_id, { status: 'blocked', error: message }, { db });
       blockedRuns += 1;
     }
   }
-  return { expired, blockedRuns };
+  return { expired, blockedRuns, failures };
 }
 
-async function runIdForPlan(db: DB, familyId: string, planId: string): Promise<string | null> {
+async function runIdForPlan(db: DB, familyId: string, planId: string): Promise<ServiceResult<string | null>> {
   const { data, error } = await db
     .from('family_automation_runs')
     .select('id')
@@ -1209,9 +1711,95 @@ async function runIdForPlan(db: DB, familyId: string, planId: string): Promise<s
     .maybeSingle();
   if (error) {
     console.error('[service:approvals] could not find the run for a plan', { familyId, planId, error });
-    return null;
+    return fail(describeDbError(error, 'Bubaly could not find the run for that plan.'), { code: SERVICE_CODES.db, retryable: true });
   }
-  return data?.id ?? null;
+  return ok(data?.id ?? null);
+}
+
+// ─── Cron: runs parked on a decision that was already made ─────────────────
+
+/**
+ * Return to the queue every run still parked at `awaiting_approval` although
+ * what it waits on is settled.
+ *
+ * A decision is committed (`flipStatus`) before its run is folded, and the fold
+ * can fail — a timeout reading the steps, a refused run update, a partial fold
+ * that set some steps `ready` but not the run. A declined decision's fold
+ * failure is only logged. Either way the run stays `awaiting_approval`, which
+ * neither `claimRun` nor `claim_ai_runs` leases, and a retry of the decision
+ * is refused as "already decided": nothing would ever touch the run again.
+ *
+ * This sweep is that "next pass". It does not re-implement the fold: it moves
+ * the run back to `ready` (only from `awaiting_approval`, conditionally) and
+ * kicks it, and the executor's own `reconcileApprovals` reads each step's
+ * approval — approved/modified → ready, anything else → cancelled — exactly as
+ * it does for a decision taken while the run was out of the queue.
+ *
+ * A run is resumed when a step parked on approval points at a row that is no
+ * longer `pending`, or when no step is parked at all but one is `ready` (a
+ * partial fold). A run waiting only on pending approvals is left alone.
+ */
+export async function resumeSettledRuns(db: DB, now: Date = new Date()): Promise<{ resumed: number; failures: number }> {
+  const nowIso = now.toISOString();
+  const { data: runs, error } = await db
+    .from('family_automation_runs')
+    .select('id, family_id, plan_id, request_id')
+    .eq('state', 'awaiting_approval')
+    .limit(SWEEP_LIMIT);
+  if (error) {
+    console.error('[service:approvals] settled-run sweep read failed', error);
+    return { resumed: 0, failures: 1 };
+  }
+
+  let resumed = 0;
+  let failures = 0;
+  for (const run of runs ?? []) {
+    if (!run.plan_id) continue;
+    const { data: steps, error: stepsError } = await db
+      .from('ai_plan_steps')
+      .select('id, status, approval_id')
+      .eq('family_id', run.family_id)
+      .eq('plan_id', run.plan_id);
+    if (stepsError) {
+      console.error('[service:approvals] settled-run sweep could not read the steps', { runId: run.id, error: stepsError });
+      failures += 1;
+      continue;
+    }
+    const parked = (steps ?? []).filter((s) => s.status === 'awaiting_approval');
+    let settled = false;
+    if (parked.length === 0) {
+      settled = (steps ?? []).some((s) => s.status === 'ready');
+    } else {
+      const gateIds = [...new Set(parked.map((s) => s.approval_id).filter((id): id is string => !!id))];
+      if (gateIds.length === 0) continue;
+      const { data: gates, error: gateError } = await db
+        .from('approval_requests')
+        .select('id, status')
+        .eq('family_id', run.family_id)
+        .in('id', gateIds);
+      if (gateError) {
+        console.error('[service:approvals] settled-run sweep could not read the approvals', { runId: run.id, error: gateError });
+        failures += 1;
+        continue;
+      }
+      settled = (gates ?? []).some((g) => g.status !== 'pending');
+    }
+    if (!settled) continue;
+
+    const scope = scopeForSystem(db, { id: run.family_id }, { now });
+    const moved = await updateRunWhereState(scope, run.id, 'awaiting_approval', {
+      state: 'ready', status: legacyStatusFor('ready'), run_after: nowIso, error: null, lease_owner: null, lease_expires_at: null,
+    }, { db });
+    if (!moved.ok) { failures += 1; continue; }
+    if (!moved.data) continue; // someone else moved it first
+    if (run.request_id) {
+      const request = await updateRequest(scope, run.request_id, { status: 'ready', error: null }, { db });
+      if (!request.ok) console.error('[service:approvals] could not mark the request ready for a resumed run', { runId: run.id, error: request.error });
+    }
+    kickRun(run.id);
+    resumed += 1;
+  }
+  return { resumed, failures };
 }
 
 // ─── Cron: reminders ────────────────────────────────────────────────────────
@@ -1248,20 +1836,25 @@ const AI_APPROVAL_REMINDER_READER: NeedsReader = {
  * the dedupe key against every notification ever written for the family — so
  * a reminder the parent already read is not sent again on the next tick.
  */
-export async function remindPendingApprovals(db: DB, now: Date = new Date()): Promise<{ reminded: number; families: number }> {
+export async function remindPendingApprovals(db: DB, now: Date = new Date()): Promise<{ reminded: number; families: number; failures: number }> {
   const { data, error } = await db
     .from('approval_requests')
-    .select('id, family_id, title, amount_cents, created_at, expires_at, agent')
+    // OPEN families only (families.closed_at): a closed account is not
+    // reminded. In the query, before the sweep limit.
+    .select('id, family_id, title, amount_cents, created_at, expires_at, agent, family:families!inner(closed_at)')
+    .is('family.closed_at', null)
     .eq('status', 'pending')
     .eq('requested_by_kind', 'ai')
     .or(`expires_at.is.null,expires_at.gt.${now.toISOString()}`)
     .limit(SWEEP_LIMIT);
   if (error) {
+    // Counted, not swallowed: the cron reports a tick whose sweep did not run.
     console.error('[service:approvals] reminder sweep read failed', error);
-    return { reminded: 0, families: 0 };
+    return { reminded: 0, families: 0, failures: 1 };
   }
   const rows = data ?? [];
-  if (rows.length === 0) return { reminded: 0, families: 0 };
+  if (rows.length === 0) return { reminded: 0, families: 0, failures: 0 };
+  let failures = 0;
 
   const byFamily = new Map<string, AiApprovalInput[]>();
   for (const row of rows) byFamily.set(row.family_id, [...(byFamily.get(row.family_id) ?? []), row]);
@@ -1275,6 +1868,7 @@ export async function remindPendingApprovals(db: DB, now: Date = new Date()): Pr
     ]);
     if (familyError || memberError) {
       console.error('[service:approvals] reminder sweep could not read the family', { familyId, error: familyError ?? memberError });
+      failures += 1;
       continue;
     }
     const managers = (members ?? []).filter((m) => isManager(m.role)).map((m) => ({ id: m.id, user_id: m.user_id }));
@@ -1296,6 +1890,7 @@ export async function remindPendingApprovals(db: DB, now: Date = new Date()): Pr
       // Without the dedupe read every manager would be re-notified; skip the
       // family this tick rather than ship the duplicate.
       console.error('[service:approvals] reminder dedupe read failed', { familyId, error: existingError });
+      failures += 1;
       continue;
     }
     const seen = new Set((existing ?? []).map((n) => n.related_id));
@@ -1314,6 +1909,7 @@ export async function remindPendingApprovals(db: DB, now: Date = new Date()): Pr
       });
       if (!res.ok) {
         console.error('[service:approvals] approval reminder failed', { familyId, approvalId: c.approval_id, error: res.error });
+        failures += 1;
         continue;
       }
       sent += res.data.created;
@@ -1321,5 +1917,5 @@ export async function remindPendingApprovals(db: DB, now: Date = new Date()): Pr
     if (sent > 0) families += 1;
     reminded += sent;
   }
-  return { reminded, families };
+  return { reminded, families, failures };
 }

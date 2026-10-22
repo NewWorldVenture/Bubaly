@@ -12,6 +12,10 @@ const mocks = vi.hoisted(() => ({ createServer: vi.fn(), requireUserContext: vi.
 vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.createServer }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.requireUserContext }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
+// The step-up gate on the household-money tables has its own test
+// (the-wallet-hub-asks-for-the-code-before-money.test.ts); this fake client has
+// no auth.mfa, so here the session is one that may change money.
+vi.mock('@/lib/auth/require-aal2', () => ({ aal2Verdict: async () => ({ action: 'allow' }) }));
 
 const FAMILY = 'session-family';
 const USER = 'session-user';
@@ -32,7 +36,8 @@ let db: InMemorySupabase;
 
 function asRole(role: string) {
   mocks.requireUserContext.mockResolvedValue({
-    user: { id: USER }, active: { familyId: FAMILY, role, member: { id: 'session-member' } },
+    user: { id: USER },
+    active: { familyId: FAMILY, role, member: { id: 'session-member' }, family: { id: FAMILY, timezone: 'UTC' } },
   });
 }
 
@@ -45,6 +50,8 @@ function failWrite(table: string, code: string) {
       const reply = { data: null, error: { code, message: 'private relation and constraint detail', details: null, hint: null },
         count: null, status: 400, statusText: 'Bad Request' };
       vi.spyOn(query, 'then').mockImplementation((resolve, reject) => Promise.resolve(reply).then(resolve, reject));
+      // The transactions branch reads its reply through `.maybeSingle()` (lib/services/finances).
+      vi.spyOn(query, 'maybeSingle').mockImplementation(() => Promise.resolve(reply) as never);
     }
     return query;
   });
@@ -60,6 +67,14 @@ async function expectReward(payload: Row) {
   expect(db.table('wallet_rewards')).toHaveLength(2);
   expect(db.table('wallet_rewards').find((row) => row.id === OTHER.id)).toEqual(OTHER);
 }
+
+/** The household trail entry deleteTransaction records after a committed delete. */
+const TRAIL = 'audit_logs';
+const loggedFor = (table: string, wrote: boolean) =>
+  table === 'transactions' && wrote ? [{ table }, { table: TRAIL }] : [{ table }];
+/** The transactions branch goes through lib/services/finances; the hub keeps its own sentence for a db failure. */
+const dbFailureFor = (table: string, expected: string | null) =>
+  (table === 'transactions' ? null : expected) ?? 'hubActions.couldNotDeleteTheWalletItem';
 
 function expectDeleteState(deletedTable?: string) {
   for (const table of TABLES) {
@@ -157,7 +172,7 @@ describe('deleteWalletRowAction', () => {
     it.each(['parent', 'adult'])('lets a %s delete only the requested row in the requested table', async (role) => {
       asRole(role);
       expect(await deleteWalletRowAction({ table, id: TARGET.id })).toEqual({ ok: true });
-      expect(db.log).toEqual([{ table }]);
+      expect(db.log).toEqual(loggedFor(table, true));
       expect(mocks.createServer).toHaveBeenCalledTimes(1);
       expectDeleteState(table);
       const { data, error } = await db.from(table).select('id').eq('id', TARGET.id).maybeSingle();
@@ -189,6 +204,8 @@ describe('deleteWalletRowAction', () => {
           // confirm success, and this execution leaves every row intact.
           const reply = { data: null, error: null, count: null, status: 204, statusText: 'No Content' };
           vi.spyOn(query, 'then').mockImplementation((resolve, reject) => Promise.resolve(reply).then(resolve, reject));
+          // The transactions branch reads its reply through `.maybeSingle()` (lib/services/finances).
+          vi.spyOn(query, 'maybeSingle').mockImplementation(() => Promise.resolve(reply) as never);
         }
         return query;
       });
@@ -203,7 +220,7 @@ describe('deleteWalletRowAction', () => {
       expectDeleteState(table);
       expect(console.error).not.toHaveBeenCalled();
       expect(await deleteWalletRowAction({ table, id: TARGET.id })).toEqual({ ok: false, error: 'hubActions.couldNotDeleteTheWalletItem' });
-      expect(db.log).toEqual([{ table }, { table }]);
+      expect(db.log).toEqual([...loggedFor(table, true), { table }]);
       expectDeleteState(table);
       expect(console.error).toHaveBeenCalledTimes(1);
       expect(console.error).toHaveBeenCalledWith('[wallet] delete matched no row', { table, familyId: FAMILY });
@@ -211,7 +228,7 @@ describe('deleteWalletRowAction', () => {
 
     it.each(DATABASE_FAILURES)('sanitizes database failure $code without deleting rows', async ({ code, expected }) => {
       failWrite(table, code);
-      expect(await deleteWalletRowAction({ table, id: TARGET.id })).toEqual({ ok: false, error: expected ?? 'hubActions.couldNotDeleteTheWalletItem' });
+      expect(await deleteWalletRowAction({ table, id: TARGET.id })).toEqual({ ok: false, error: dbFailureFor(table, expected) });
       expect(db.log).toEqual([{ table }]);
       expectDeleteState();
       expect(console.error).toHaveBeenCalledTimes(1);
@@ -225,6 +242,27 @@ describe('deleteWalletRowAction', () => {
       expect(await deleteWalletRowAction(input)).toEqual({ ok: false, error: 'hubActions.onlyAParentOrAnother' });
       expect(mocks.createServer).not.toHaveBeenCalled();
       expectDeleteState();
+    });
+  });
+
+  // Finding: the hub deleted transactions directly, so the family's history had
+  // no entry for a money record removed here, while the same delete from
+  // /dashboard/billing (lib/services/finances deleteTransaction) recorded one.
+  describe('transactions go through the finances service', () => {
+    it('records who removed the transaction on the household trail', async () => {
+      db.replace('transactions', [{ ...TARGET, amount: 42 }, { ...KEEP }, { ...OTHER }]);
+      expect(await deleteWalletRowAction({ table: 'transactions', id: TARGET.id })).toEqual({ ok: true });
+      expect(db.table(TRAIL)).toEqual([expect.objectContaining({
+        family_id: FAMILY, actor_id: USER, action: 'delete', resource: 'finances', resource_id: TARGET.id,
+        metadata: { actor: 'member', title: 'Deleted $42.00 — Target record' },
+      })]);
+    });
+
+    it('writes no trail entry when nothing was deleted', async () => {
+      expect(await deleteWalletRowAction({ table: 'transactions', id: 'missing-row' })).toEqual({
+        ok: false, error: 'hubActions.couldNotDeleteTheWalletItem',
+      });
+      expect(db.table(TRAIL)).toEqual([]);
     });
   });
 

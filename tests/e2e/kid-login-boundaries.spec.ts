@@ -85,13 +85,21 @@ async function fixture(page: Page, mode: ActionMode = 'success', locale = 'en-US
     const process = { env: { NEXT_PUBLIC_SUPABASE_URL: ${JSON.stringify(provider)}, NEXT_PUBLIC_SUPABASE_ANON_KEY: 'synthetic-public-anon' } };
     const p = window.__kidLogin = { mode: ${JSON.stringify(mode)}, calls: [], toasts: [], errors: [], navigations: [], links: [], refreshes: 0, pending: 0 };
     let root, captured, jobs = [], releases = [];
+    // Keep this isolated fixture alive after the real component's same-tab link handler.
+    // Actual document navigation remains covered by the genuine Next browser fixture.
+    document.addEventListener('click', event => {
+      const link = event.target instanceof Element ? event.target.closest('a[href="/login"]') : null;
+      if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.defaultPrevented || link.target === '_blank') return;
+      event.preventDefault();
+      p.links.push(link.getAttribute('href'));
+    });
     window.addEventListener('error', event => p.errors.push(event.message));
     window.addEventListener('unhandledrejection', event => { p.errors.push(String(event.reason)); event.preventDefault(); });
     const router = { push: path => p.navigations.push(path), refresh: () => { p.refreshes++; } };
     const mocks = {
       react: React, '@supabase/supabase-js': window.supabase, 'lucide-react': new Proxy({}, { get: () => () => null }),
       'next/navigation': { useRouter: () => router },
-      'next/link': { default: ({ children, ...props }) => React.createElement('a', { ...props, onClick: event => { props.onClick?.(event); event.preventDefault(); p.links.push(props.href); } }, children) },
+      'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
       '@/components/i18n/locale-provider': { useTranslations: () => key => messages[key] ?? key },
       '@/components/ui/toast': { useToast: () => ({ error: message => p.toasts.push(message) }) },
       '@/lib/utils/cn': { cn: (...values) => values.filter(value => typeof value === 'string').join(' ') },

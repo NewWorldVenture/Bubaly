@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { readAll } from '@/lib/supabase/read-all';
-import { generateFamilyNotifications } from '@/lib/server/notifications';
+import { generateFamilyNotifications, type NotificationGenerationReport } from '@/lib/server/notifications';
 import { dispatchPendingPushes } from '@/lib/server/push';
 import { deliverNotificationEmails } from '@/lib/server/notification-emails';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { deliverMorningBriefs } from '@/lib/briefing/deliver';
-import { expireStale, remindPendingApprovals } from '@/lib/services/approvals';
+import { expireStale, remindPendingApprovals, resumeSettledRuns } from '@/lib/services/approvals';
 
 export const runtime = 'nodejs';
 
@@ -25,9 +25,11 @@ export async function GET(req: NextRequest) {
 
   const supabase = createServiceClient();
   // Every household — see lib/supabase/read-all.ts for why an unbounded select
-  // silently stops at PostgREST's row ceiling.
+  // silently stops at PostgREST's row ceiling. Every OPEN household: a family
+  // that closed its account (families.closed_at) is not notified. The delivery
+  // steps below skip closed families' queued rows the same way.
   const { rows: families, error } = await readAll<{ id: string }>(
-    (from, to) => supabase.from('families').select('id').order('id').range(from, to),
+    (from, to) => supabase.from('families').select('id').is('closed_at', null).order('id').range(from, to),
   );
   if (error) {
     console.error('Notification cron read failed:', error);
@@ -38,7 +40,15 @@ export async function GET(req: NextRequest) {
   let generationFailures = 0;
   for (const f of families ?? []) {
     try {
-      total += await generateFamilyNotifications(supabase, f.id);
+      // A family whose source reads did not all answer is a failure of this
+      // tick, not a quiet family: it used to answer 200 ok however many reads
+      // had failed, because only a throw was counted.
+      const report: NotificationGenerationReport = { failedSources: [] };
+      total += await generateFamilyNotifications(supabase, f.id, report);
+      if (report.failedSources.length) {
+        generationFailures += 1;
+        console.error(`Notification generation incomplete for family ${f.id}:`, report.failedSources);
+      }
     } catch (e) {
       generationFailures += 1;
       console.error(`Notification generation failed for family ${f.id}:`, e);
@@ -50,11 +60,24 @@ export async function GET(req: NextRequest) {
   // run before push dispatch so the reminders ride the same tick's pushes.
   // A sweep failure counts as a generation failure: the reminders it would
   // have produced are notifications this tick did not generate.
-  let approvals = { expired: 0, blockedRuns: 0, reminded: 0, remindedFamilies: 0 };
+  // The sweeps RETURN their failures (a refused read or write) rather than
+  // throw, so those are counted here too: a tick whose approvals stopped
+  // expiring or reminding must answer 502, not 200.
+  //
+  // `resumeSettledRuns` runs after the expiry: a run still parked on an
+  // approval that was decided (or expired) while its fold failed is returned
+  // to the queue, since no claim path ever leases `awaiting_approval`.
+  let approvals = { expired: 0, blockedRuns: 0, reminded: 0, remindedFamilies: 0, resumedRuns: 0, failures: 0 };
   try {
     const swept = await expireStale(supabase);
+    const resumed = await resumeSettledRuns(supabase);
     const reminded = await remindPendingApprovals(supabase);
-    approvals = { ...swept, reminded: reminded.reminded, remindedFamilies: reminded.families };
+    const failures = swept.failures + resumed.failures + reminded.failures;
+    generationFailures += failures;
+    approvals = {
+      expired: swept.expired, blockedRuns: swept.blockedRuns, reminded: reminded.reminded, remindedFamilies: reminded.families,
+      resumedRuns: resumed.resumed, failures,
+    };
   } catch (e) {
     generationFailures += 1;
     console.error('Approval expiry/reminder sweep failed:', e);

@@ -76,6 +76,8 @@ const MANAGER_ALL_CAUGHT_UP = 'All caught up — you’ve cleared every insight.
 const DISMISS = 'Dismiss';
 const GOT_IT = 'Got it';
 const REFRESH = 'Refresh';
+// The held 0514's sentence for a reader the household's money is not theirs.
+const KEPT_BY_PARENTS = "Household money is kept by your family's parents";
 // describeActionError's own sentence for a 42501 (lib/supabase/errors.ts).
 const NO_PERMISSION = /permission/i;
 
@@ -103,7 +105,7 @@ vi.mock('@/lib/finance/timeline-load', () => ({ loadMoneyTimeline: mocks.loadMon
 const MoneyTimelinePage = (await import('@/app/(app)/dashboard/money-timeline/page')).default;
 const { setMoneyInsightStatusAction, syncMoneyInsightsAction } =
   await import('@/app/(app)/dashboard/money-timeline/actions');
-const { settleWrite, visibleInsights } =
+const { settleWrite, visibleInsights, MoneyTimelineModule } =
   await import('@/components/modules/money-timeline-module');
 const { LocaleProvider } = await import('@/components/i18n/locale-provider');
 const { getMessages } = await import('@/lib/i18n/messages');
@@ -266,17 +268,29 @@ describe("a child cannot clear the household's money warnings", () => {
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
-  it('shows a child the forecast but not a button that would be refused', async () => {
+  it('tells a child whose the forecast is, with no button that would be refused', async () => {
     signedInAs('child');
     const childsPage = await openThePage();
-    // Reading the forecast is a documented product decision (0267's header), so
-    // this half must NOT change: the child still sees the warning.
-    expect(childsPage, 'the child can still read the forecast').toContain(WARNING_TITLE);
+    // 0267 made the forecast every member's to read. The owner's later decision
+    // (the held 0514, lib/finance/household-money.ts) makes the household's
+    // balances a parent's or adult's, and this forecast starts from them
+    // ("Liquid today"), so a child is told whose it is instead (M7).
+    expect(childsPage, 'the child is not shown the household forecast').not.toContain(WARNING_TITLE);
+    expect(childsPage, 'and is told whose it is').toContain(KEPT_BY_PARENTS);
     const childsButtons = buttonLabels(childsPage);
     expect(childsButtons, 'no Dismiss button').not.toContain(DISMISS);
     expect(childsButtons, 'no Got it button').not.toContain(GOT_IT);
     expect(childsButtons, 'no Refresh button').not.toContain(REFRESH);
-    expect(childsPage, 'and it says who does clear them').toContain(WHO_CLEARS);
+
+    // The module still says who clears the notes to any reader it is handed
+    // without the buttons.
+    const readersModule = renderToStaticMarkup(createElement(
+      LocaleProvider,
+      { locale: localeOrDefault('en-US'), source: 'cookie', messages: getMessages('en-US') } as Parameters<typeof LocaleProvider>[0],
+      createElement(MoneyTimelineModule, { timeline: timelineWith([WARNING]), insights: [{ ...WARNING, key: DEDUPE_KEY }], statusByKey: {}, canManage: false }),
+    ));
+    expect(buttonLabels(readersModule)).not.toContain(DISMISS);
+    expect(readersModule, 'and it says who does clear them').toContain(WHO_CLEARS);
 
     signedInAs('parent');
     const parentsPage = await openThePage();
@@ -295,13 +309,24 @@ describe("a child cannot clear the household's money warnings", () => {
     expect(afterwards).not.toContain(WARNING_TITLE);
     expect(afterwards).toContain(MANAGER_ALL_CAUGHT_UP);
 
-    // The child's empty page does not tell them they cleared anything, or to
-    // tap a Refresh button they do not have.
+    // The child's page does not tell them they cleared anything, or to tap a
+    // Refresh button they do not have: it tells them whose the money is (M7).
     signedInAs('child');
     const childsPage = await openThePage();
     expect(childsPage).not.toContain(WARNING_TITLE);
-    expect(childsPage).toContain(READER_ALL_CAUGHT_UP);
+    expect(childsPage).toContain(KEPT_BY_PARENTS);
     expect(childsPage).not.toContain(MANAGER_ALL_CAUGHT_UP);
+
+    // A reader the module is handed without the buttons, with nothing left to
+    // show, is told it is all caught up in a reader's words.
+    const readersModule = renderToStaticMarkup(createElement(
+      LocaleProvider,
+      { locale: localeOrDefault('en-US'), source: 'cookie', messages: getMessages('en-US') } as Parameters<typeof LocaleProvider>[0],
+      createElement(MoneyTimelineModule, { timeline: timelineWith([WARNING]), insights: [{ ...WARNING, key: DEDUPE_KEY }], statusByKey: { [DEDUPE_KEY]: 'dismissed' }, canManage: false }),
+    )).replace(/&#x27;|&#39;/g, "'");
+    expect(readersModule).not.toContain(WARNING_TITLE);
+    expect(readersModule).toContain(READER_ALL_CAUGHT_UP);
+    expect(readersModule).not.toContain(MANAGER_ALL_CAUGHT_UP);
   });
 
   it('refuses a payload the copilot never produced, so a future week cannot be pre-dismissed', async () => {

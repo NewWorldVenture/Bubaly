@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, CalendarDays, Download } from 'lucide-react'
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { Button } from '@/components/ui/button';
+import { ButtonLink } from '@/components/ui/button-link';
 import { ErrorState } from '@/components/ui/states';
 import { VACATION_KINDS, lookup } from '@/lib/vacations/meta';
 import { buildICS, type IcsEvent } from '@/lib/vacations/ics';
@@ -78,7 +79,7 @@ export function VacationsCalendar() {
         <h1 className="flex items-center gap-2 text-2xl font-bold"><CalendarDays className="h-6 w-6 text-brand-text" /> {tr('vacationsCalendar.vacationCalendar')}</h1>
         <div className="flex items-center gap-2">
           <Button size="sm" variant="secondary" onClick={exportICS}><Download className="h-4 w-4" /> {tr('vacationsCalendar.exportIcs')}</Button>
-          <Link href="/dashboard/vacations"><Button size="sm" variant="ghost">{tr('vacationsCalendar.allTrips')}</Button></Link>
+          <ButtonLink href="/dashboard/vacations" size="sm" variant="ghost">{tr('vacationsCalendar.allTrips')}</ButtonLink>
         </div>
       </div>
       <p className="-mt-2 text-xs text-muted">{tr('vacationsCalendar.exportImportsStraightIntoGoogleCalendar')}</p>

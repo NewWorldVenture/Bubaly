@@ -5,10 +5,12 @@ import type { Database } from '@/lib/database.types';
 import { createServiceClient } from '@/lib/supabase/server';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { loadAISettings } from '@/lib/services/ai-settings';
-import { nextRelativeFire, scheduleOf } from '@/lib/services/routines';
+import { nextRelativeFire, readRelativeFire, scheduleOf } from '@/lib/services/routines';
 import { firesOncePerDay, nextCronRun, sameLocalMinute } from '@/lib/services/routines/schedule';
-import { createRequest, createRun } from '@/lib/ai/runs/store';
+import { createRequest, createRun, updateRequest } from '@/lib/ai/runs/store';
 import { kickRun } from '@/lib/ai/runs/continue';
+import { DEFAULT_PLANNER_BUDGET_MS, planRoutineRequest } from '@/lib/ai/runs/intake';
+import { agentRunEntitlementChecker } from '@/lib/ai/runs/entitlement';
 import type { ServiceScope } from '@/lib/services/types';
 import { wroteNoRows } from '@/lib/supabase/errors';
 
@@ -70,6 +72,12 @@ export const maxDuration = 120;
 // prevents is a family being told the same thing twice.
 const TICK_BUDGET_MS = 85_000;
 const MAX_ROUTINES_PER_TICK = 25;
+/**
+ * Each occurrence is planned before it is handed on (`planRoutineRequest`),
+ * which can take the planner's whole budget. A routine is only started with at
+ * least this much of the tick left; the rest stay due for the next tick.
+ */
+const MIN_PLANNING_WINDOW_MS = DEFAULT_PLANNER_BUDGET_MS + 5_000;
 
 type DB = SupabaseClient<Database>;
 
@@ -130,7 +138,11 @@ export async function GET(req: NextRequest) {
 
   const { data: due, error } = await db
     .from('family_automation_rules')
-    .select('id, family_id, name, action_config, schedule_kind, schedule_expr, anchor_key, offset_days, at_hour, next_run_at, said')
+    // Routines of OPEN families only (families.closed_at). Filtered in the
+    // query, not after it: this read is oldest-due-first and bounded, so a
+    // closed family's routines would otherwise fill every tick's batch.
+    .select('id, family_id, name, action_config, schedule_kind, schedule_expr, anchor_key, offset_days, at_hour, next_run_at, said, family:families!inner(closed_at)')
+    .is('family.closed_at', null)
     .not('schedule_kind', 'is', null)
     .eq('is_enabled', true)
     .lte('next_run_at', now.toISOString())
@@ -154,12 +166,54 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: t('familyRoutines.couldNotReadRoutines') }, { status: 500 });
   }
 
+  // Whether each family still has Ask Bubaly, the feature a routine's run is
+  // the work of — read once per family per tick.
+  const mayRunAgents = agentRunEntitlementChecker(db);
+
   for (const rule of due ?? []) {
     if (Date.now() > deadline) break;
+    if (deadline - Date.now() < MIN_PLANNING_WINDOW_MS) break;
     const dueAt = rule.next_run_at;
     if (!dueAt) continue;
 
     const tz = zoneFor(zones, rule.family_id);
+
+    // A relative routine's `next_run_at` was computed from its anchor rows
+    // when it was armed, and nothing re-arms it when a row changes. So the
+    // anchor is asked again whether this instant is still an occurrence: a
+    // cancelled trip filed a request on its old date, and a trip moved later
+    // fired at the old time and then again at the new one (two different
+    // due_at, so the reservation did not stop it). Not an occurrence any more:
+    // the rule moves to what is, and nothing is filed.
+    //
+    // A read that FAILED is not an anchor that went: moving the rule then would
+    // arm it from a later tick's `now`, after this due_at, and one transient
+    // error would lose a real occurrence. So the rule and the occurrence are
+    // left exactly as they are, nothing is reserved, and the next tick asks
+    // again.
+    const anchored = scheduleOf(rule);
+    if (anchored?.kind === 'relative') {
+      const fire = await readRelativeFire(db, rule.family_id, anchored, new Date(Date.parse(dueAt) - 1), tz);
+      if (!fire.ok) {
+        console.error('[cron:family-routines] could not read the anchor of a due routine; it stays due', rule.id);
+        problems.push(rule.id);
+        continue;
+      }
+      const current = fire.at;
+      if (!current || current.getTime() !== Date.parse(dueAt)) {
+        const { data: moved, error: moveError } = await db.from('family_automation_rules')
+          .update({ next_run_at: current ? current.toISOString() : null })
+          .eq('id', rule.id).eq('family_id', rule.family_id).eq('next_run_at', dueAt).select('id');
+        if (moveError) {
+          console.error('[cron:family-routines] could not move a routine off an occurrence its anchor no longer has', rule.id, moveError);
+          problems.push(rule.id);
+        } else if (wroteNoRows(moved)) {
+          console.error('[cron:family-routines] routine changed before it could be moved off a stale occurrence', rule.id);
+        }
+        skipped += 1;
+        continue;
+      }
+    }
 
     // Reserve the occurrence first. A duplicate key means another worker has
     // it — not an error, just somebody else's turn.
@@ -194,17 +248,30 @@ export async function GET(req: NextRequest) {
     // tick reports it as a problem rather than a quiet skip.
     const read = await loadAISettings(scope);
     const schedule = scheduleOf(rule);
-    const held = !read.ok || !read.data.enabled;
+    // And the family's plan. A routine is Ask Bubaly's work on a schedule, and
+    // a family whose trial ended unpaid, whose plan is below Family Basic or
+    // whose Ask Bubaly an admin switched Off does not get it — not planned
+    // (a classify call and a planner call, billed per occurrence) and not run.
+    // Asked only of a family whose switch is on: a paused Bubaly is already
+    // held, and a plan read it does not need is a read that can fail.
+    // Unreadable is held like an unreadable switch: this occurrence, never the
+    // routine, and the tick says so.
+    const entitlement = read.ok && read.data.enabled && schedule ? await mayRunAgents(rule.family_id) : null;
+    const held = !read.ok || !read.data.enabled || (entitlement !== null && entitlement !== 'entitled');
     if (held || !schedule) {
       await stampRun(db, rule.id, dueAt, {
         status: 'skipped',
         detail: !held
           ? 'The routine no longer has a readable schedule.'
-          : read.ok
-            ? 'Bubaly is switched off for this family.'
-            : "Bubaly could not read this family's settings, so this occurrence was not filed.",
+          : !read.ok
+            ? "Bubaly could not read this family's settings, so this occurrence was not filed."
+            : !read.data.enabled
+              ? 'Bubaly is switched off for this family.'
+              : entitlement === 'unentitled'
+                ? "This family's plan does not include Ask Bubaly, so this occurrence was not filed."
+                : "Bubaly could not confirm this family's plan, so this occurrence was not filed.",
       }, 'routine_runs write failed (skipped stamp)');
-      if (!read.ok) problems.push(rule.id);
+      if (!read.ok || entitlement === 'unknown') problems.push(rule.id);
       // A pause is not a deletion. Advancing to the next occurrence lets the
       // routine simply resume when the family switches Bubaly back on; nulling
       // it (what this used to do) silently lost every routine a family owned
@@ -244,26 +311,47 @@ export async function GET(req: NextRequest) {
     // reschedule does anyway, so the outcome matches and the wedge above becomes
     // recoverable rather than permanent.
     const request = await createRequest(scope, { requestText: prompt, kind: 'routine' }, { db });
-    if (!request.ok) {
-      await stampRun(db, rule.id, dueAt, { status: 'failed', detail: request.error }, 'routine_runs write failed (failed stamp)');
-      problems.push(rule.id);
-    } else {
-      const run = await createRun(scope, { requestId: request.data.id, runType: 'routine', summary: prompt, state: 'queued' }, { db });
-      await stampRun(db, rule.id, dueAt, { status: 'filed', request_id: request.data.id }, 'routine_runs write failed (filed stamp)');
+    let failure: string | null = request.ok ? null : request.error;
+    if (request.ok) {
+      // The run starts in `planning`, and the request is PLANNED here before
+      // anything is handed on: a run filed `queued` with no plan was never
+      // claimed (`claimRun` and `claim_ai_runs` take only `ready` and
+      // `scheduled_followup`) and nothing ever planned a routine request, so
+      // the routine never ran while this tick counted it filed.
+      const run = await createRun(scope, { requestId: request.data.id, runType: 'routine', summary: prompt, state: 'planning' }, { db });
       // `filed` is held to the standard this file already sets for `armed`
       // ("it may only count writes that landed, so a quiet tick reads
       // differently from a broken one"). A refused createRun leaves a request
       // with no run to execute it: nothing is kicked, nothing runs, and the
       // routine did not file any work. Counting that as filed while it is
       // absent from `problems` makes a broken tick read as a clean one.
-      // Audit C1-S6-03.
+      // Audit C1-S6-03. The same holds for an occurrence that could not be
+      // planned: it is the request, the run and this occurrence that failed.
       if (!run.ok) {
         console.error('[cron:family-routines] request created but no run to execute it', rule.id, run.error);
-        problems.push(rule.id);
+        failure = run.error;
+        const closed = await updateRequest(scope, request.data.id, { status: 'failed', error: run.error, completed_at: now.toISOString() }, { db });
+        if (!closed.ok) console.error('[cron:family-routines] could not close the request that has no run', rule.id, closed.error);
       } else {
-        kickRun(run.data.id, { budgetMs: 20_000 });
-        filed += 1;
+        const planned = await planRoutineRequest(scope, { requestId: request.data.id, runId: run.data.id, text: prompt }, {
+          db, plannerBudgetMs: Math.min(DEFAULT_PLANNER_BUDGET_MS, deadline - Date.now()),
+        });
+        if (!planned.ok) {
+          console.error('[cron:family-routines] the routine could not be planned', rule.id, planned.error);
+          failure = planned.error;
+        } else {
+          // A plan is handed to the continuation worker; a recommendation or
+          // an answer is already the routine's whole outcome.
+          if (planned.data.outcome === 'plan') kickRun(planned.data.runId, { budgetMs: 20_000 });
+          filed += 1;
+        }
       }
+    }
+    if (failure !== null) {
+      problems.push(rule.id);
+      await stampRun(db, rule.id, dueAt, { status: 'failed', detail: failure, ...(request.ok ? { request_id: request.data.id } : {}) }, 'routine_runs write failed (failed stamp)');
+    } else if (request.ok) {
+      await stampRun(db, rule.id, dueAt, { status: 'filed', request_id: request.data.id }, 'routine_runs write failed (filed stamp)');
     }
 
     // Schedule the next occurrence. A cron's is arithmetic; a relative
@@ -351,7 +439,9 @@ async function armPendingRoutines(
 ): Promise<number> {
   const { data: pending, error } = await db
     .from('family_automation_rules')
-    .select('id, family_id, schedule_kind, schedule_expr, anchor_key, offset_days, at_hour, said, next_run_at')
+    // OPEN families only, for the same reason as the due read.
+    .select('id, family_id, schedule_kind, schedule_expr, anchor_key, offset_days, at_hour, said, next_run_at, family:families!inner(closed_at)')
+    .is('family.closed_at', null)
     .not('schedule_kind', 'is', null)
     .eq('is_enabled', true)
     .is('next_run_at', null)

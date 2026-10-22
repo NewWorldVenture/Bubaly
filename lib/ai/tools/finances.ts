@@ -56,7 +56,12 @@ export const financeTools: ToolDefinition[] = [
       member_id: z.string().nullish(),
       limit: z.number().int().nullish(),
     }),
-    output: z.object({ range, total: z.number(), transactions: z.array(transaction) }),
+    output: z.object({
+      range,
+      total: z.number().describe('Dollars: the sum of the transactions LISTED here'),
+      complete: z.boolean().describe('False when the window holds more transactions than were listed, so `total` covers only these'),
+      transactions: z.array(transaction),
+    }),
     summarize: (_input, output) => (output.transactions.length === 0
       ? `No transactions between ${output.range.from} and ${output.range.to}`
       : `${plural(output.transactions.length, 'transaction')} totalling ${formatDollars(toCents(output.total))} (${output.range.from} to ${output.range.to})`),
@@ -69,6 +74,7 @@ export const financeTools: ToolDefinition[] = [
       return ok({
         range: res.data.range,
         total: res.data.total,
+        complete: res.data.complete,
         transactions: res.data.transactions.map((t) => ({
           id: t.id, name: t.name, merchant: t.merchant, amount: t.amount, category: t.category, date: t.date, type: t.type, member_id: t.memberId,
         })),
@@ -104,7 +110,10 @@ export const financeTools: ToolDefinition[] = [
   defineTool({
     name: 'finances.budgetVsActual',
     aliases: ['budget_vs_actual', 'check_budgets'],
-    description: 'Every budget against what was actually spent in its period, most-used first. Includes the exact days each figure covers.',
+    // The totals are the MONTH's (lib/services/finances budgetVsActual), as the
+    // money context slice says: a model told "total_limit" and "total_spent"
+    // without that read a month's figures as the sum of every line.
+    description: 'Every budget against what was actually spent in its own period (week, month or year), most-used first, with the exact days each line covers. total_limit and total_spent are the month\'s: the limits of monthly budgets, with weekly and yearly limits counted as their monthly share, against what was spent that month in the budgeted categories. They are not the sum of the lines.',
     domain: 'finances',
     capability: 'view',
     risk: 'low',
@@ -112,19 +121,21 @@ export const financeTools: ToolDefinition[] = [
     input: z.object({ month: z.string().nullish().describe('YYYY-MM; defaults to the current month') }),
     output: z.object({
       month: z.string(),
-      total_limit: z.number(),
-      total_spent: z.number(),
-      over_count: z.number().int(),
+      total_limit: z.number().describe('The month\'s limit in dollars: weekly and yearly limits as their monthly share'),
+      total_spent: z.number().describe('Dollars spent in the month in the budgeted categories'),
+      over_count: z.number().int().describe('Budgets over their limit in their own period'),
       budgets: z.array(z.object({
         budget_id: z.string(), category: z.string(), period: z.string(), limit: z.number(), spent: z.number(),
         remaining: z.number(), pct: z.number(), over: z.boolean(), window: range, transaction_count: z.number().int(),
       })),
     }),
-    summarize: (_input, output) => (output.budgets.length === 0
-      ? 'No budgets are set up yet'
-      : output.over_count === 0
-        ? `All ${plural(output.budgets.length, 'budget')} on track for ${output.month} (${formatDollars(toCents(output.total_spent))} of ${formatDollars(toCents(output.total_limit))})`
-        : `${plural(output.over_count, 'budget')} over for ${output.month}: ${output.budgets.filter((b) => b.over).map((b) => `${b.category} ${formatDollars(toCents(b.spent))}/${formatDollars(toCents(b.limit))}`).join(', ')}`),
+    summarize: (_input, output) => {
+      if (output.budgets.length === 0) return 'No budgets are set up yet';
+      const month = `the month's budgeted spending is ${formatDollars(toCents(output.total_spent))} of ${formatDollars(toCents(output.total_limit))} (weekly and yearly limits as their monthly share)`;
+      return output.over_count === 0
+        ? `All ${plural(output.budgets.length, 'budget')} on track for ${output.month}; ${month}`
+        : `${plural(output.over_count, 'budget')} over for ${output.month}: ${output.budgets.filter((b) => b.over).map((b) => `${b.category} ${formatDollars(toCents(b.spent))}/${formatDollars(toCents(b.limit))} (${b.period})`).join(', ')}; ${month}`;
+    },
     execute: async (scope, input) => {
       const res = await budgetVsActual(scope, { month: input.month ?? null });
       if (!res.ok) return res;

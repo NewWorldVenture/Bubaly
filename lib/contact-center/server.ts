@@ -1,13 +1,13 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
 import type { createServiceClient } from '@/lib/supabase/server';
-import type { Json, Tables } from '@/lib/database.types';
+import type { Json, MemberRole, Tables } from '@/lib/database.types';
 import {
   isTwilioConfigured, searchAvailableNumber, provisionNumber, findOwnedNumberSid, releaseNumber,
 } from '@/lib/guardian/twilio';
 import { submitRequest } from '@/lib/ai/runs/intake';
-import { paperworkKindFields, triagePaperwork, type PaperworkKind } from '@/lib/paperwork/triage';
-import { systemScopeForFamily } from '@/lib/services/scope';
+import { classifyPaperwork, paperworkKindFields, triagePaperwork, type PaperworkKind } from '@/lib/paperwork/triage';
+import { dayKeyInTz, systemScopeForFamily } from '@/lib/services/scope';
 import { enrichPaperworkEntities, PaperworkEnrichmentError } from '@/lib/services/paperwork';
 import { classifyIntent, summarizeInbound, shouldNotifyFamily, shouldPlanInbound, type InboundChannel } from './routing';
 import { escapeLike } from '@/lib/supabase/escape-like';
@@ -270,6 +270,20 @@ export function inboundProviderRef(input: { familyId: string; channel: InboundCh
   return (input.providerRef ?? '').trim() || derivedProviderRef(input);
 }
 
+/**
+ * The ref an inbound EMAIL is stored under. `uq_inbox_channel_provider_ref` is
+ * unique per channel across every family, and a Message-Id is written by the
+ * sender and is the same for every recipient: one email to two families (a
+ * school distribution list) arrived once per family with one Message-Id, the
+ * second copy collided with the first family's row, and it was answered 503 on
+ * every redelivery and never filed. A sender who knew a Message-Id could also
+ * use it first and suppress the real message. Scoping the ref to the family
+ * makes each family's copy its own row; the derived ref already includes it.
+ */
+export function familyScopedEmailRef(familyId: string, messageId: string): string {
+  return `email:${createHash('sha256').update([familyId, messageId.trim()].join('\u0000')).digest('hex').slice(0, 48)}`;
+}
+
 /** The index is global: a duplicate must still belong to this inbound family. */
 export async function findInboundMessage(admin: Admin, input: { familyId: string; channel: InboundChannel; providerRef: string }, signal?: AbortSignal): Promise<string | null> {
   const found = await admin.from('family_inbox_messages')
@@ -341,17 +355,88 @@ export type InboundRouteOutcome = {
   requestId: string | null;
   runId: string | null;
   paperworkItemId: string | null;
-  reason: 'filed' | 'not_actionable' | 'no_text' | 'no_scope' | 'intake_failed';
+  /**
+   * `unverified_sender`: the message is kept in the inbox for a person to read
+   * and hand to Bubaly ("Handle it"); nothing was planned from it.
+   */
+  reason: 'filed' | 'not_actionable' | 'no_text' | 'no_scope' | 'intake_failed' | 'unverified_sender';
 };
+
+/** A family member the code can prove sent an inbound message. */
+export type InboundSender = { memberId: string; userId: string; role: MemberRole };
+
+export type SenderCheck = { ok: true; sender: InboundSender | null } | { ok: false };
+
+/**
+ * Who an inbound message is FROM, when — and only when — the code can prove it.
+ *
+ * One case is provable: a text message whose `From` is a number an active
+ * member of THIS family confirmed with a one-time code when they signed in by
+ * phone (`auth.users.phone_confirmed_at`). Twilio signs the webhook, so `From`
+ * is the number the carrier delivered, and the code proves the member holds
+ * it. `family_members.phone` and `profiles.phone` are free text the member
+ * typed and prove nothing, so they are never read here.
+ *
+ * Nothing else is provable, so nothing else is anyone:
+ *   - email: `From` is a header the sender writes. The webhook secret proves
+ *     the PROVIDER posted it, not who wrote it, and no SPF/DKIM verdict is read;
+ *   - a voicemail: caller ID is whatever the caller's network presents.
+ *
+ * Two members on one confirmed number prove neither of them. A read that fails
+ * is `ok: false`, so the webhook answers 503 rather than deciding on a guess.
+ */
+export async function verifiedInboundSender(
+  admin: Admin,
+  input: { familyId: string; channel: InboundChannel; from?: string | null },
+): Promise<SenderCheck> {
+  if (input.channel !== 'sms') return { ok: true, sender: null };
+  const from = (input.from ?? '').trim();
+  if (!/^\+[1-9]\d{6,14}$/.test(from)) return { ok: true, sender: null };
+  const digits = from.slice(1);
+
+  const { data: members, error } = await admin.from('family_members')
+    .select('id, user_id, role, is_active, family_id')
+    .eq('family_id', input.familyId)
+    .eq('is_active', true)
+    .not('user_id', 'is', null);
+  if (error || !Array.isArray(members)) {
+    console.error('[contact-center] inbound sender roster read failed', { familyId: input.familyId, error });
+    return { ok: false };
+  }
+
+  const matches: InboundSender[] = [];
+  for (const member of members) {
+    if (member.family_id !== input.familyId || member.is_active !== true || !member.user_id) continue;
+    const { data, error: userError } = await admin.auth.admin.getUserById(member.user_id);
+    // An account that cannot be read proves nothing about this message; the
+    // safe reading is "not them", which leaves the text in the inbox.
+    if (userError || !data?.user) continue;
+    const confirmed = data.user.phone && data.user.phone_confirmed_at ? data.user.phone.replace(/\D/g, '') : null;
+    if (confirmed && confirmed === digits) matches.push({ memberId: member.id, userId: member.user_id, role: member.role });
+  }
+  return { ok: true, sender: matches.length === 1 ? matches[0] : null };
+}
 
 /**
  * M20's missing half: after an inbound message is filed, hand the actionable
  * ones to the planner so they become work instead of a line in a log.
  *
- * It goes through `submitRequest` — the same intake the Ask bar uses — under a
- * SYSTEM scope for the family, so trust gating, the approval spine and the run
- * ledger are exactly the ones already in place. Nothing is auto-executed here
- * that a person would not have to approve when they asked for it themselves.
+ * WHO SENT IT DECIDES WHETHER ANYTHING IS PLANNED. A Contact Center number
+ * and address are public, so the text is, by default, a stranger's words. It
+ * used to be filed under a SYSTEM scope — which the trust gate evaluates as an
+ * automation-trusted adult — so an outsider's email or SMS was planned and
+ * executed with household authority: events on a child's calendar, family-wide
+ * urgent notifications, announcements, with nobody asked. Now:
+ *
+ *   - a sender `verifiedInboundSender` can prove is an active member of this
+ *     family files the text as THEIR OWN request, under their own member
+ *     scope and role, exactly as if they had typed it into the Ask bar;
+ *   - anyone else's message stays where `recordInboundMessage` put it: in the
+ *     inbox, unhandled, for a person to read. A member who wants Bubaly to act
+ *     on it presses "Handle it", which fences the text as untrusted content
+ *     and holds every write the plan makes for a parent or adult.
+ *
+ * No message is ever planned under a system scope here.
  *
  * A REDELIVERY MUST NOT PLAN TWICE, and that is guarded in two places: the
  * webhook only calls this when `recordInboundMessage` reports it actually
@@ -377,6 +462,8 @@ export async function routeInboundToPlanner(admin: Admin, input: {
   sender?: string | null;
   /** Injectable for tests; production uses the real intake. */
   submit?: typeof submitRequest;
+  /** Injectable for tests; production proves the sender with `verifiedInboundSender`. */
+  resolveSender?: typeof verifiedInboundSender;
   now?: Date;
 }): Promise<InboundRouteOutcome> {
   const empty: InboundRouteOutcome = { routed: false, requestId: null, runId: null, paperworkItemId: null, reason: 'not_actionable' };
@@ -406,7 +493,20 @@ export async function routeInboundToPlanner(admin: Admin, input: {
   // filed rather than a bare `not_actionable`.
   if (!shouldPlanInbound(input.intent)) return { ...empty, paperworkItemId };
 
-  const scope = await systemScopeForFamily(admin, input.familyId);
+  // Only a member the code can prove sent this may have it planned, and then
+  // with their own authority. Everyone else's message is an inbox item.
+  const checked = await (input.resolveSender ?? verifiedInboundSender)(admin, {
+    familyId: input.familyId, channel: input.channel, from: input.sender ?? null,
+  });
+  if (!checked.ok) return { ...empty, paperworkItemId, reason: 'no_scope' };
+  if (!checked.sender) return { ...empty, paperworkItemId, reason: 'unverified_sender' };
+
+  const scope = await systemScopeForFamily(admin, input.familyId, {
+    userId: checked.sender.userId,
+    memberId: checked.sender.memberId,
+    role: checked.sender.role,
+    actorKind: 'member',
+  });
   if (!scope) return { ...empty, paperworkItemId, reason: 'no_scope' };
 
   const submit = input.submit ?? submitRequest;
@@ -454,8 +554,14 @@ export async function routeInboundToPlanner(admin: Admin, input: {
 export async function fileInboundPaperwork(
   admin: Admin, familyId: string, text: string, now?: Date, providerRef?: string | null, sender?: string | null,
 ): Promise<string | null> {
-  const triage = triagePaperwork(text, now ?? new Date());
-  if (!FILEABLE_PAPERWORK.has(triage.kind)) return null;
+  // Whether this is paperwork at all does not depend on the day; what it is
+  // due, and how urgent, does — and that is the FAMILY's day, read off their
+  // own zone (lib/paperwork/triage.ts, TriageToday). The same household scope
+  // runs the enrichment below.
+  if (!FILEABLE_PAPERWORK.has(classifyPaperwork(text))) return null;
+  const scope = await systemScopeForFamily(admin, familyId, { now });
+  if (!scope) throw new PaperworkEnrichmentError('Could not read the paperwork household. Retry.');
+  const triage = triagePaperwork(text, dayKeyInTz(now ?? new Date(), scope.tz));
   const rawText = text.slice(0, 20_000);
 
   // The delivery identity survives a person's edit to raw_text. Fall back to
@@ -478,8 +584,6 @@ export async function fileInboundPaperwork(
     throw new PaperworkEnrichmentError('Could not check the saved paperwork. Retry.');
   }
   const enrich = async (id: string) => {
-    const scope = await systemScopeForFamily(admin, familyId, { now });
-    if (!scope) throw new PaperworkEnrichmentError('Could not read the paperwork household. Retry.');
     const result = await enrichPaperworkEntities(scope, id);
     if (!result.ok) throw new PaperworkEnrichmentError(result.error);
     return id;

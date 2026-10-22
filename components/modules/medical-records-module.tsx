@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Stethoscope, Smile, Plus, Pencil, Trash2, FileText, ClipboardList,
   Phone, ShieldCheck, Camera, ChevronRight, Lock,
@@ -8,8 +8,11 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { uploadFamilyDocument, getDocumentSignedUrl } from '@/lib/storage/documents';
+import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument } from '@/lib/storage/documents';
+import { FormUploads, type SaveOutcome } from '@/lib/storage/form-uploads';
+import { writeWasRefused } from '@/lib/supabase/write-outcome';
 import { isManager } from '@/lib/constants/roles';
+import { readsEveryonesRecords, recordsInScope } from '@/lib/records/personal-scope';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -39,6 +42,13 @@ const WHOLE_FAMILY = '__family__';
 const blankProvider = { id: '', member_id: '', name: '', specialty: '', practice_name: '', phone: '', fax: '', email: '', address: '', is_primary: false, notes: '' };
 const blankPolicy = { id: '', member_id: '', insurer: '', plan_name: '', plan_type: '', policy_number: '', group_number: '', rx_bin: '', rx_pcn: '', rx_group: '', customer_service_phone: '', effective_date: '', is_primary: true, notes: '', front_image_path: '', back_image_path: '' };
 const blankProfile = { member_id: '', blood_type: '', allergies: '', conditions: '', current_medications: '', primary_physician: '', preferred_pharmacy: '', pharmacy_phone: '', emergency_contact_name: '', emergency_contact_phone: '', emergency_contact_relation: '', immunizations: '', dental_notes: '', notes: '' };
+
+/** The profile's own columns, every one a field of the form. */
+const PROFILE_FIELDS = [
+  'blood_type', 'allergies', 'conditions', 'current_medications', 'primary_physician', 'preferred_pharmacy',
+  'pharmacy_phone', 'emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relation',
+  'immunizations', 'dental_notes', 'notes',
+] as const;
 
 /** Renders a private Storage image via a short-lived signed URL. */
 function CardImage({ path, label }: { path: string | null; label: string }) {
@@ -88,11 +98,11 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   const k = (name: string) => t(`medicalRecordsModule.${kind}.${name}`);
 
   // ── Data ──────────────────────────────────────────────────
-  const { data: providers, loading: pLoading, error: pError, refresh: refreshProviders } = useRealtimeQuery<Provider>({
+  const { data: rawProviders, loading: pLoading, error: pError, refresh: refreshProviders } = useRealtimeQuery<Provider>({
     table: 'health_providers', familyId, deps: [familyId, kind],
     fetcher: (sb) => sb.from('health_providers').select('*').eq('family_id', familyId).eq('kind', kind).order('is_primary', { ascending: false }).order('name'),
   });
-  const { data: policies, loading: polLoading, error: polError, refresh: refreshPolicies } = useRealtimeQuery<Policy>({
+  const { data: rawPolicies, loading: polLoading, error: polError, refresh: refreshPolicies } = useRealtimeQuery<Policy>({
     table: 'insurance_policies', familyId, deps: [familyId, kind],
     fetcher: (sb) => sb.from('insurance_policies').select('*').eq('family_id', familyId).eq('kind', kind).order('is_primary', { ascending: false }),
   });
@@ -105,6 +115,10 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
     fetcher: (sb) => sb.from('medications').select('*').eq('family_id', familyId).eq('is_active', true),
   });
 
+  // The held 0517: a policy is a parent's, an adult's or its member's to read;
+  // a provider also a caregiver's. The page asks for exactly that.
+  const policies = useMemo(() => recordsInScope(rawPolicies, role, selfMember?.id), [rawPolicies, role, selfMember]);
+  const providers = useMemo(() => recordsInScope(rawProviders, role, selfMember?.id, 'medical'), [rawProviders, role, selfMember]);
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
   const profileByMember = useMemo(() => new Map(profiles.map((p) => [p.member_id, p])), [profiles]);
   const loading = pLoading || polLoading || profLoading || medsLoading;
@@ -127,7 +141,15 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   const [providerForm, setProviderForm] = useState<typeof blankProvider | null>(null);
   const [policyForm, setPolicyForm] = useState<typeof blankPolicy | null>(null);
   const [profileForm, setProfileForm] = useState<typeof blankProfile | null>(null);
+  // The profile as it was when the form opened. Only what the person changed
+  // from it is written (see saveProfile).
+  const [profileBaseline, setProfileBaseline] = useState<typeof blankProfile | null>(null);
   const [saving, setSaving] = useState(false);
+  // What the open insurance form put in the bucket, one session per side. A
+  // card photo uploads the moment it is picked, so until a save points the
+  // row at it — or after a save points the row somewhere else — the object
+  // belongs to nothing; lib/storage/form-uploads.ts decides when it may go.
+  const policyUploads = useRef<{ front: FormUploads; back: FormUploads } | null>(null);
   const [uploading, setUploading] = useState<'front' | 'back' | null>(null);
 
   // Print sheets
@@ -179,13 +201,47 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
     success(t('medicalRecordsModule.deleted'));
   }
 
+  /**
+   * Remove card photos nothing points at. Logged, not shown: they hold a member
+   * ID, group number and Rx BIN, every member can list the folder, and nothing
+   * in the product can reach them again.
+   */
+  async function releaseCardPhotos(paths: string[]) {
+    const sb = createClient();
+    for (const path of paths) {
+      const removal = await removeFamilyDocument(sb, path);
+      if (removal.error) console.error('[medical-records] an insurance card photo nothing points at could not be removed', removal.error);
+    }
+  }
+
+  function openPolicy(p: Policy | null) {
+    policyUploads.current = {
+      front: new FormUploads(p?.front_image_path ?? null, releaseCardPhotos),
+      back: new FormUploads(p?.back_image_path ?? null, releaseCardPhotos),
+    };
+    setPolicyForm(p
+      ? { id: p.id, member_id: p.member_id ?? '', insurer: p.insurer, plan_name: p.plan_name ?? '', plan_type: p.plan_type ?? '', policy_number: p.policy_number ?? '', group_number: p.group_number ?? '', rx_bin: p.rx_bin ?? '', rx_pcn: p.rx_pcn ?? '', rx_group: p.rx_group ?? '', customer_service_phone: p.customer_service_phone ?? '', effective_date: p.effective_date ?? '', is_primary: p.is_primary, notes: p.notes ?? '', front_image_path: p.front_image_path ?? '', back_image_path: p.back_image_path ?? '' }
+      : { ...blankPolicy });
+  }
+
+  /** Closed without saving: what this form uploaded goes, unless a save in flight may still point at it. */
+  function closePolicy() {
+    const uploads = policyUploads.current;
+    policyUploads.current = null;
+    if (uploads) { void uploads.front.dismiss(); void uploads.back.dismiss(); }
+    setPolicyForm(null);
+  }
+
   async function uploadCard(side: 'front' | 'back', file: File) {
-    if (!policyForm) return;
+    const session = policyUploads.current;
+    if (!policyForm || !session) return;
     setUploading(side);
     const sb = createClient();
     const { path, error: err } = await uploadFamilyDocument(sb, { familyId, folder: 'insurance', file });
     setUploading(null);
     if (err || !path) { toastError(err ?? t('medicalRecordsModule.uploadFailed')); return; }
+    // False when the form closed while this was uploading: nothing will save it, so it is already gone.
+    if (!session[side].landed(path)) return;
     setPolicyForm((f) => (f ? { ...f, [side === 'front' ? 'front_image_path' : 'back_image_path']: path } : f));
     success(side === 'front' ? t('medicalRecordsModule.frontUploaded') : t('medicalRecordsModule.backUploaded'));
   }
@@ -211,22 +267,42 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       back_image_path: policyForm.back_image_path || null,
       notes: policyForm.notes || null,
     };
+    // Each side's photo is only released once the row is confirmed to point
+    // somewhere else: the one an edit replaced, and every other upload of this
+    // form. A refused save keeps its photos while the form is open; a save
+    // whose reply was lost may have committed, so its photos stay.
+    const uploads = policyUploads.current;
+    const sent = uploads ? [uploads.front.send(fields.front_image_path), uploads.back.send(fields.back_image_path)] : [];
+    const settle = (outcome: SaveOutcome) => Promise.all(sent.map((done) => done(outcome)));
     const { data: rows, error: err } = policyForm.id
       ? await sb.from('insurance_policies').update(fields).eq('id', policyForm.id).eq('family_id', familyId).select('id')
       : await sb.from('insurance_policies').insert({ ...fields, family_id: familyId, kind, created_by: userId }).select('id');
     setSaving(false);
-    if (err) { toastError(t('medicalRecordsModule.couldNotSaveInsurance')); return; }
-    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
+    if (err) { void settle(writeWasRefused(err) ? 'refused' : 'unanswered'); toastError(t('medicalRecordsModule.couldNotSaveInsurance')); return; }
+    if (wroteNoRows(rows)) { void settle('refused'); toastError(t('errors.thatChangeWasNotSaved')); return; }
+    await settle('saved');
     success(t('medicalRecordsModule.insuranceSaved'));
-    setPolicyForm(null);
+    // Close this form only if it is still the one on screen.
+    if (policyUploads.current === uploads) { policyUploads.current = null; setPolicyForm(null); }
   }
 
-  async function deletePolicy(id: string) {
+  async function deletePolicy(p: Policy) {
     if (!(await askConfirm({ title: t('medicalRecords.deletePolicyQ'), body: t('medicalRecords.deletePolicyBody') }))) return;
     const sb = createClient();
-    const { data: rows, error: err } = await sb.from('insurance_policies').delete().eq('id', id).eq('family_id', familyId).select('id');
+    const { data: rows, error: err } = await sb.from('insurance_policies').delete().eq('id', p.id).eq('family_id', familyId).select('id');
     if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
+    // "The card photos go with it", as the confirmation promises — after the
+    // row, which is confirmed gone. No documents row points at these objects,
+    // so nothing restricts them (0303): left behind, every member could still
+    // list and open a member ID, group number and Rx BIN nobody can see.
+    let kept = false;
+    for (const path of [p.front_image_path, p.back_image_path]) {
+      if (!path) continue;
+      const removal = await removeFamilyDocument(sb, path);
+      if (removal.error) { kept = true; console.error('[medical-records] a deleted policy\'s card photo survived', { policyId: p.id }, removal.error); }
+    }
+    if (kept) { toastError(t('medicalRecordsModule.deletedButCardPhotosKept')); return; }
     success(t('medicalRecordsModule.deleted'));
   }
 
@@ -234,22 +310,22 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
     if (!profileForm?.member_id) return;
     setSaving(true);
     const sb = createClient();
+    // ONLY WHAT THIS PERSON CHANGED. The form is a snapshot taken when it
+    // opened, and realtime never refreshes an open form, so writing every
+    // column back put that snapshot over anything saved meanwhile: a parent
+    // updating the pharmacy on a laptop erased the peanut allergy the other
+    // parent had just added, and both were told "Profile saved". The upsert's
+    // ON CONFLICT DO UPDATE sets only the columns it is given, so a column
+    // nobody touched here keeps whatever is stored.
+    const baseline = profileBaseline ?? { ...blankProfile, member_id: profileForm.member_id };
+    const changed: Partial<Record<(typeof PROFILE_FIELDS)[number], string | null>> = {};
+    for (const field of PROFILE_FIELDS) {
+      if (profileForm[field] !== baseline[field]) changed[field] = profileForm[field] || null;
+    }
     const payload = {
       family_id: familyId,
       member_id: profileForm.member_id,
-      blood_type: profileForm.blood_type || null,
-      allergies: profileForm.allergies || null,
-      conditions: profileForm.conditions || null,
-      current_medications: profileForm.current_medications || null,
-      primary_physician: profileForm.primary_physician || null,
-      preferred_pharmacy: profileForm.preferred_pharmacy || null,
-      pharmacy_phone: profileForm.pharmacy_phone || null,
-      emergency_contact_name: profileForm.emergency_contact_name || null,
-      emergency_contact_phone: profileForm.emergency_contact_phone || null,
-      emergency_contact_relation: profileForm.emergency_contact_relation || null,
-      immunizations: profileForm.immunizations || null,
-      dental_notes: profileForm.dental_notes || null,
-      notes: profileForm.notes || null,
+      ...changed,
       updated_by: userId,
     };
     // The fifth manager-gated write in this module, and the one the other four
@@ -263,11 +339,12 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('medicalRecordsModule.profileSaved'));
     setProfileForm(null);
+    setProfileBaseline(null);
   }
 
   function openProfile(memberId: string) {
     const existing = profileByMember.get(memberId);
-    setProfileForm(existing
+    const snapshot = existing
       ? {
           member_id: memberId,
           blood_type: existing.blood_type ?? '', allergies: existing.allergies ?? '', conditions: existing.conditions ?? '',
@@ -277,7 +354,9 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
           emergency_contact_relation: existing.emergency_contact_relation ?? '', immunizations: existing.immunizations ?? '',
           dental_notes: existing.dental_notes ?? '', notes: existing.notes ?? '',
         }
-      : { ...blankProfile, member_id: memberId });
+      : { ...blankProfile, member_id: memberId };
+    setProfileForm(snapshot);
+    setProfileBaseline(snapshot);
   }
 
   if (loading) return <SkeletonList />;
@@ -307,10 +386,11 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       <section className="rounded-2xl border border-border bg-surface/40 p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 font-semibold"><ShieldCheck className="h-4 w-4 text-brand-text" /> {t('medicalRecords.insuranceCards')}</h2>
-          {canEdit && <button onClick={() => setPolicyForm({ ...blankPolicy })} className="text-xs font-semibold text-brand-text">{t('medicalRecords.addInsurance')}</button>}
+          {canEdit && <button onClick={() => openPolicy(null)} className="text-xs font-semibold text-brand-text">{t('medicalRecords.addInsurance')}</button>}
         </div>
+        {!readsEveryonesRecords(role) && <p className="mb-3 text-xs text-muted">{t('medicalRecordsModule.onlyYourOwnInsurance')}</p>}
         {policies.length === 0 ? (
-          <EmptyState icon={ShieldCheck} title={t('medicalRecords.noInsuranceOnFile')} description={canEdit ? k('noInsuranceBody') : t('medicalRecordsModule.noInsuranceYet')} action={canEdit ? <Button onClick={() => setPolicyForm({ ...blankPolicy })} className="btn-cta"><Plus className="h-4 w-4" /> {t('medicalRecords.addInsurance')}</Button> : undefined} />
+          <EmptyState icon={ShieldCheck} title={t('medicalRecords.noInsuranceOnFile')} description={canEdit ? k('noInsuranceBody') : t('medicalRecordsModule.noInsuranceYet')} action={canEdit ? <Button onClick={() => openPolicy(null)} className="btn-cta"><Plus className="h-4 w-4" /> {t('medicalRecords.addInsurance')}</Button> : undefined} />
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
             {policies.map((p) => {
@@ -326,8 +406,8 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
                       {p.is_primary && <span className="rounded-full bg-emerald-600/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">PRIMARY</span>}
                       {canEdit && (
                         <>
-                          <button aria-label={t('a11y.edit')} onClick={() => setPolicyForm({ id: p.id, member_id: p.member_id ?? '', insurer: p.insurer, plan_name: p.plan_name ?? '', plan_type: p.plan_type ?? '', policy_number: p.policy_number ?? '', group_number: p.group_number ?? '', rx_bin: p.rx_bin ?? '', rx_pcn: p.rx_pcn ?? '', rx_group: p.rx_group ?? '', customer_service_phone: p.customer_service_phone ?? '', effective_date: p.effective_date ?? '', is_primary: p.is_primary, notes: p.notes ?? '', front_image_path: p.front_image_path ?? '', back_image_path: p.back_image_path ?? '' })} className="text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
-                          <button aria-label={t('a11y.delete')} onClick={() => deletePolicy(p.id)} className="text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
+                          <button aria-label={t('a11y.edit')} onClick={() => openPolicy(p)} className="text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
+                          <button aria-label={t('a11y.delete')} onClick={() => deletePolicy(p)} className="text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
                         </>
                       )}
                     </div>
@@ -357,6 +437,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
           <h2 className="flex items-center gap-2 font-semibold"><Icon className="h-4 w-4 text-brand-text" /> {k('providers')}</h2>
           {canEdit && <button onClick={() => setProviderForm({ ...blankProvider })} className="text-xs font-semibold text-brand-text">{k('add')}</button>}
         </div>
+        {!readsEveryonesRecords(role, 'medical') && <p className="mb-3 text-xs text-muted">{t('medicalRecordsModule.onlyYourOwnProviders')}</p>}
         {providerGroups.length === 0 ? (
           <EmptyState icon={Icon} title={k('noneYet')} description={canEdit ? k('noneYetBody') : t('medicalRecordsModule.noProvidersYet')} action={canEdit ? <Button onClick={() => setProviderForm({ ...blankProvider })} className="btn-cta"><Plus className="h-4 w-4" /> {k('add')}</Button> : undefined} />
         ) : (
@@ -400,6 +481,8 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 font-semibold"><ClipboardList className="h-4 w-4 text-brand-text" /> {t('medicalRecords.healthProfiles')}</h2>
         </div>
+        {/* 0438: a parent or adult reads every profile, anyone else their own. */}
+        {!canEdit && <p className="mb-3 text-xs text-muted">{t('medicalRecordsModule.onlyYourOwnProfile')}</p>}
         <div className="grid max-h-[36rem] gap-3 overflow-y-auto sm:grid-cols-2">
           {members.map((m) => {
             const prof = profileByMember.get(m.id);
@@ -423,7 +506,10 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
                     {kind === 'dental' && prof.dental_notes && <div className="flex gap-2"><dt className="w-24 shrink-0 text-muted">{t('medicalRecords.dental')}</dt><dd className="font-medium">{prof.dental_notes}</dd></div>}
                   </dl>
                 ) : (
-                  <p className="text-xs text-muted">{canEdit ? 'No profile yet — click the pencil to add allergies, conditions, and emergency contacts.' : 'No profile on file.'}</p>
+                  // No row is "none on file" only for a reader who could see one.
+                  // Anyone else's profile is withheld from a non-manager, so
+                  // reading its absence as "no allergies recorded" would be false.
+                  <p className="text-xs text-muted">{canEdit ? 'No profile yet — click the pencil to add allergies, conditions, and emergency contacts.' : m.id === selfMember?.id ? 'No profile on file.' : t('medicalRecordsModule.profileKeptForManagers')}</p>
                 )}
               </div>
             );
@@ -455,7 +541,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       </Modal>
 
       {/* ── Insurance modal ───────────────────────────────── */}
-      <Modal open={!!policyForm} title={policyForm?.id ? t('medicalRecords.editInsurance') : t('medicalRecords.addInsuranceTitle')} onClose={() => setPolicyForm(null)} className="sm:max-w-lg">
+      <Modal open={!!policyForm} title={policyForm?.id ? t('medicalRecords.editInsurance') : t('medicalRecords.addInsuranceTitle')} onClose={closePolicy} className="sm:max-w-lg">
         {policyForm && (
           <div className="space-y-3">
             <Field label={t('medicalRecords.covers')}>{(id) => <Select id={id} value={policyForm.member_id} onChange={(e) => setPolicyForm({ ...policyForm, member_id: e.target.value })}><option value="">{t('medicalRecords.wholeFamily')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
