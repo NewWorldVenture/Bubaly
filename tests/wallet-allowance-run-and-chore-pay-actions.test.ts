@@ -139,9 +139,10 @@ describe('runDueAllowancesAction (ACTION-14F1D3BFB97A)', () => {
       expect(row).toMatchObject({ family_id: FAMILY, type: 'allowance', status: 'completed', direction: 'credit', related_type: 'allowance_rules', created_by: 'user-self' });
     }
     // Keyed per OCCURRENCE — the rule and the day paid for (lib/wallet/allowance.ts
-    // allowanceOccurrenceKey), the same key the nightly cron writes.
-    expect(new Set(creditsTo('wallet-a').map((row) => row.related_id))).toEqual(new Set([`rule-due-a:${TODAY}`]));
-    expect(new Set(creditsTo('wallet-b').map((row) => row.related_id))).toEqual(new Set([`rule-due-b:${TODAY}`]));
+    // allowanceOccurrenceKey), the same key the nightly cron writes. It rides in
+    // metadata.occurrence; related_id is a uuid column and carries the rule's id.
+    for (const row of creditsTo('wallet-a')) expect(row).toMatchObject({ related_id: 'rule-due-a', metadata: { occurrence: `rule-due-a:${TODAY}` } });
+    for (const row of creditsTo('wallet-b')) expect(row).toMatchObject({ related_id: 'rule-due-b', metadata: { occurrence: `rule-due-b:${TODAY}` } });
 
     expect(rule('rule-due-a')).toMatchObject({ next_run_on: '2026-10-05', last_run_on: TODAY });
     expect(rule('rule-due-b')).toMatchObject({ next_run_on: '2026-10-01', last_run_on: TODAY });

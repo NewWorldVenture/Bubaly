@@ -177,7 +177,10 @@ export async function GET(req: NextRequest) {
 
       // Keyed per OCCURRENCE (lib/wallet/allowance.ts allowanceOccurrenceKey):
       // the rule and the day it is paid for, so the ledger can say whether THIS
-      // payment landed, and a unique key can refuse paying it twice.
+      // payment landed, and a unique key can refuse paying it twice. The key
+      // rides in `metadata.occurrence`; `related_id` is a uuid column and keeps
+      // the rule's id — the `<rule>:<day>` text there was refused with 22P02,
+      // and the claim above had already moved the schedule on: nobody was paid.
       const occurrence = allowanceOccurrenceKey(rule.id, today);
       const res = await creditChildWallet(supabase, {
         familyId: rule.family_id,
@@ -187,7 +190,8 @@ export async function GET(req: NextRequest) {
         description: 'Weekly allowance',
         createdBy: null,
         relatedType: 'allowance_rules',
-        relatedId: occurrence,
+        relatedId: rule.id,
+        occurrence,
         splitOverride: rule.split as Partial<Split> | null,
       });
       if (!res.ok) {
@@ -203,13 +207,14 @@ export async function GET(req: NextRequest) {
           // anyway (the server committed, the connection dropped). Rolling the
           // schedule back on that answer re-credited the child next run, and
           // nothing refused the second payment. Ask the ledger first, under the
-          // occurrence key.
+          // occurrence key — the rule's uuid in related_id, the day in metadata.
           const { data: landed, error: landedError } = await supabase
             .from('wallet_transactions')
             .select('id')
             .eq('family_id', rule.family_id)
             .eq('related_type', 'allowance_rules')
-            .eq('related_id', occurrence)
+            .eq('related_id', rule.id)
+            .eq('metadata->>occurrence', occurrence)
             .limit(1);
           if (landedError) {
             // Unknown outcome, and no way to find out this run: the claim stays

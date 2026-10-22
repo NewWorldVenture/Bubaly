@@ -14,8 +14,14 @@
 // lib/wallet/allowance.ts), and on an insert error the run asks the ledger for
 // that key before deciding: landed is paid, absent is rolled back, unreadable
 // leaves the claim in place.
+//
+// WHERE the key lives matters: `related_id` is a uuid column (0088), so the
+// key rides in `metadata.occurrence` and `related_id` stays the rule's id. The
+// database here declares the ledger's uuid columns (`uuidColumns`), so a key
+// written to `related_id` is refused with 22P02 exactly as Postgres refuses it
+// — which is how this file can tell the two apart.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
+import { createInMemorySupabase, type InMemoryOptions, type InMemorySupabase } from './helpers/in-memory-supabase';
 
 const h = vi.hoisted(() => ({ db: null as unknown }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
@@ -24,14 +30,47 @@ vi.mock('@/lib/supabase/server', () => ({ createServiceClient: () => h.db }));
 
 const { GET } = await import('@/app/api/cron/wallet-allowance/route');
 
-const FAMILY = 'fam-1';
+const FAMILY = '10000000-0000-4000-8000-000000000001';
+const PARENT_USER = '20000000-0000-4000-8000-000000000001';
+const WALLET = '30000000-0000-4000-8000-000000000001';
+const KINDS = ['spend', 'save', 'give', 'invest'] as const;
+const BUCKET: Record<(typeof KINDS)[number], string> = {
+  spend: '40000000-0000-4000-8000-000000000001',
+  save: '40000000-0000-4000-8000-000000000002',
+  give: '40000000-0000-4000-8000-000000000003',
+  invest: '40000000-0000-4000-8000-000000000004',
+};
 const TODAY = '2026-10-20';
 const RULE = '70000000-0000-4000-8000-000000000001';
+const OCCURRENCE = `${RULE}:${TODAY}`;
+
+/** The ledger's uuid columns, as 0088 declares them. */
+const SCHEMA: InMemoryOptions = {
+  uuidColumns: {
+    wallet_transactions: ['id', 'family_id', 'child_wallet_id', 'bucket_id', 'related_id', 'reverses_id', 'created_by', 'approved_by'],
+    allowance_rules: ['id', 'family_id', 'child_wallet_id', 'created_by'],
+  },
+};
+
 let db: InMemorySupabase;
 const req = () => new Request('https://bubaly.test/api/cron/wallet-allowance') as never;
 const ledger = () => db.table('wallet_transactions');
 const credited = () => ledger().reduce((sum, row) => sum + Number(row.amount_cents), 0);
 const rule = () => db.table('allowance_rules').find((r) => r.id === RULE)!;
+
+function household(options: InMemoryOptions = {}): InMemorySupabase {
+  const next = createInMemorySupabase({ ...SCHEMA, ...options });
+  next.seed('families', [{ id: FAMILY, name: 'Synthetic', timezone: 'UTC', closed_at: null }]);
+  next.seed('subscriptions', [{ id: 'sub-1', family_id: FAMILY, plan: 'plus', status: 'active' }]);
+  next.seed('family_members', [{ id: 'parent-1', family_id: FAMILY, user_id: PARENT_USER, role: 'parent', is_active: true, display_name: 'Parent' }]);
+  next.seed('child_wallets', [{ id: WALLET, family_id: FAMILY, member_id: 'child-1' }]);
+  next.seed('wallet_buckets', KINDS.map((kind) => ({ id: BUCKET[kind], family_id: FAMILY, child_wallet_id: WALLET, kind })));
+  next.seed('allowance_rules', [{
+    id: RULE, family_id: FAMILY, child_wallet_id: WALLET, amount_cents: 1_500, cadence: 'weekly', split: null,
+    is_active: true, next_run_on: TODAY, last_run_on: '2026-10-13', created_by: PARENT_USER,
+  }]);
+  return next;
+}
 
 /**
  * The same database, with the first ledger INSERT committed and then answered
@@ -76,17 +115,8 @@ beforeEach(() => {
   vi.setSystemTime(new Date(`${TODAY}T07:00:00.000Z`));
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.spyOn(console, 'warn').mockImplementation(() => {});
-  db = createInMemorySupabase();
+  db = household();
   h.db = db;
-  db.seed('families', [{ id: FAMILY, name: 'Synthetic', timezone: 'UTC', closed_at: null }]);
-  db.seed('subscriptions', [{ id: 'sub-1', family_id: FAMILY, plan: 'plus', status: 'active' }]);
-  db.seed('family_members', [{ id: 'parent-1', family_id: FAMILY, user_id: 'user-1', role: 'parent', is_active: true, display_name: 'Parent' }]);
-  db.seed('child_wallets', [{ id: 'wallet-1', family_id: FAMILY, member_id: 'child-1' }]);
-  db.seed('wallet_buckets', (['spend', 'save', 'give', 'invest'] as const).map((kind) => ({ id: `bucket-${kind}`, family_id: FAMILY, child_wallet_id: 'wallet-1', kind })));
-  db.seed('allowance_rules', [{
-    id: RULE, family_id: FAMILY, child_wallet_id: 'wallet-1', amount_cents: 1_500, cadence: 'weekly', split: null,
-    is_active: true, next_run_on: TODAY, last_run_on: '2026-10-13', created_by: 'user-1',
-  }]);
 });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
@@ -105,30 +135,27 @@ describe('a credit whose insert committed but answered an error', () => {
     expect(credited(), 'the child was paid twice').toBe(1_500);
   });
 
-  it('keys every ledger row by the occurrence, so a key can refuse the repeat', async () => {
+  it('keys every ledger row by the occurrence — in metadata, under the rule\'s uuid — so a key can refuse the repeat', async () => {
     await GET(req());
     expect(ledger().length).toBeGreaterThan(0);
-    for (const row of ledger()) expect(row).toMatchObject({ related_type: 'allowance_rules', related_id: `${RULE}:${TODAY}` });
+    for (const row of ledger()) {
+      expect(row).toMatchObject({ related_type: 'allowance_rules', related_id: RULE, metadata: { occurrence: OCCURRENCE } });
+    }
   });
 });
 
 describe('a credit the ledger already holds (the owner\'s unique key, once it lands)', () => {
   it('is paid, not failed, and the schedule stays advanced', async () => {
-    db = createInMemorySupabase({ uniques: { wallet_transactions: [['family_id', 'related_type', 'related_id', 'bucket_id']] } });
+    // The owner's partial unique expression index on
+    // (family_id, related_id, (metadata->>'occurrence'), bucket_id) where
+    // related_type = 'allowance_rules'; related_type is in the key here in
+    // place of the WHERE clause.
+    db = household({ uniques: { wallet_transactions: [['family_id', 'related_type', 'related_id', 'metadata->>occurrence', 'bucket_id']] } });
     h.db = db;
-    db.seed('families', [{ id: FAMILY, name: 'Synthetic', timezone: 'UTC', closed_at: null }]);
-    db.seed('subscriptions', [{ id: 'sub-1', family_id: FAMILY, plan: 'plus', status: 'active' }]);
-    db.seed('family_members', [{ id: 'parent-1', family_id: FAMILY, user_id: 'user-1', role: 'parent', is_active: true, display_name: 'Parent' }]);
-    db.seed('child_wallets', [{ id: 'wallet-1', family_id: FAMILY, member_id: 'child-1' }]);
-    db.seed('wallet_buckets', (['spend', 'save', 'give', 'invest'] as const).map((kind) => ({ id: `bucket-${kind}`, family_id: FAMILY, child_wallet_id: 'wallet-1', kind })));
-    db.seed('allowance_rules', [{
-      id: RULE, family_id: FAMILY, child_wallet_id: 'wallet-1', amount_cents: 1_500, cadence: 'weekly', split: null,
-      is_active: true, next_run_on: TODAY, last_run_on: '2026-10-13', created_by: 'user-1',
-    }]);
     // The mirrored run already paid this occurrence into every bucket a split can reach.
-    db.seed('wallet_transactions', (['spend', 'save', 'give', 'invest'] as const).map((kind) => ({
-      family_id: FAMILY, child_wallet_id: 'wallet-1', bucket_id: `bucket-${kind}`, type: 'allowance', status: 'completed', direction: 'credit',
-      amount_cents: kind === 'spend' ? 1_500 : 0, related_type: 'allowance_rules', related_id: `${RULE}:${TODAY}`,
+    db.seed('wallet_transactions', KINDS.map((kind) => ({
+      family_id: FAMILY, child_wallet_id: WALLET, bucket_id: BUCKET[kind], type: 'allowance', status: 'completed', direction: 'credit',
+      amount_cents: kind === 'spend' ? 1_500 : 0, related_type: 'allowance_rules', related_id: RULE, metadata: { split: { spend: 100, save: 0, give: 0, invest: 0 }, occurrence: OCCURRENCE },
     })));
     const res = await GET(req());
     expect(await res.json()).toMatchObject({ ok: true, paid: 1, failed: 0 });

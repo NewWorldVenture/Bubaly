@@ -515,8 +515,9 @@ export async function runDueAllowancesAction(): Promise<Result & { ranCount?: nu
         familyId, childWalletId: rule.child_wallet_id, amountCents: rule.amount_cents, type: 'allowance',
         description: 'Allowance (manual run)', createdBy: ctx.user.id,
         // The same occurrence key the nightly cron writes, so the two paths
-        // share one ledger identity per payment (lib/wallet/allowance.ts).
-        relatedType: 'allowance_rules', relatedId: allowanceOccurrenceKey(rule.id, today),
+        // share one ledger identity per payment (lib/wallet/allowance.ts). It
+        // rides in metadata.occurrence: related_id is uuid and stays the rule's.
+        relatedType: 'allowance_rules', relatedId: rule.id, occurrence: allowanceOccurrenceKey(rule.id, today),
         splitOverride: rule.split as Partial<Split> | null,
       });
       if (!res.ok) {

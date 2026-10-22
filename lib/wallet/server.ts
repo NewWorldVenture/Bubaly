@@ -307,6 +307,14 @@ export async function creditChildWallet(supabase: DB, params: {
   approvedBy?: string | null;
   relatedType?: string | null;
   relatedId?: string | null;
+  /**
+   * The payment's own identity when `relatedId` alone cannot carry it — an
+   * allowance's `<rule>:<day>` (lib/wallet/allowance.ts allowanceOccurrenceKey).
+   * Written to `metadata.occurrence`, not `related_id`: that column is uuid
+   * (0088), and a composite text there is refused with 22P02 before any row
+   * lands, so the credit never happens.
+   */
+  occurrence?: string | null;
   splitOverride?: Partial<Split> | null;
 }): Promise<CreditResult> {
   const amount = Math.trunc(params.amountCents);
@@ -341,7 +349,7 @@ export async function creditChildWallet(supabase: DB, params: {
       related_id: params.relatedId ?? null,
       created_by: params.createdBy,
       approved_by: params.approvedBy ?? params.createdBy,
-      metadata: { split },
+      metadata: params.occurrence ? { split, occurrence: params.occurrence } : { split },
     }));
   if (rows.length === 0) return { ok: false, error: 'Nothing to allocate', credited: 0 };
 
