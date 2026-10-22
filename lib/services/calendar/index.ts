@@ -16,7 +16,7 @@
 // fastest way to lose a family's trust in the assistant.
 import 'server-only';
 import { detectConflicts, type ConflictEvent, type EventConflict } from '@/lib/home/conflicts';
-import { readCalendarOccurrences, readCalendarBusySource, readCountedRows } from '@/lib/calendar/occurrences';
+import { isSeries, readCalendarOccurrences, readCalendarBusySource, readCountedRows } from '@/lib/calendar/occurrences';
 import { readCalendarAvailability } from '@/lib/calendar/availability';
 import { buildConflictAdvisories, conflictSubject, type CalendarConflictAdvisory, type CalendarConflictSubject } from '@/lib/calendar/conflict-advisories';
 import { addDays } from '@/lib/calendar/day';
@@ -26,7 +26,7 @@ import { validDay } from '@/lib/onboarding/ics-time';
 import { calendarOpenWindowFilter, instantCalendarBounds, normalizeCalendarWindowInstant } from '@/lib/briefing/calendar-window';
 import { freeGaps, intervalTicks, mergeIntervals, type Interval } from '@/lib/calendar/scheduling';
 import { addExactMilliseconds, exactInstantMilliseconds, exactIntervalOf, formatExactInstant, inclusiveInstantStep, parseExactInstant } from '@/lib/calendar/exact-instant';
-import { instantForIcsLocalTime, isValidTimezone } from '@/lib/time/zoned';
+import { instantForIcsLocalTime, isValidTimezone, localPartsAt } from '@/lib/time/zoned';
 import type { EventCategory, Insertable, RecurrenceFreq, Tables, Updatable } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
@@ -453,9 +453,112 @@ type EventClockState = Pick<CalendarEvent, 'id' | 'title' | 'starts_at' | 'ends_
  * if the row still has it, rather than against whatever it reads now. With an
  * `updated_at` the row's version must match too, so a change to its text
  * fields (the calendar editor sends them all) is not written over either.
+ * `week` names the week of a series a change was made from (`OccurrenceEdit`).
  */
-export async function updateEvent(scope: ServiceScope, eventId: string, patch: UpdateEventPatch, expected?: EventClockState): Promise<ServiceResult<CalendarEvent>> {
-  return applyEventUpdate(scope, eventId, patch, expected);
+export async function updateEvent(
+  scope: ServiceScope, eventId: string, patch: UpdateEventPatch, expected?: EventClockState, week?: OccurrenceEdit,
+): Promise<ServiceResult<CalendarEvent>> {
+  if (!week || (patch.startsAt === undefined && patch.endsAt === undefined)) {
+    return applyEventUpdate(scope, eventId, patch, expected);
+  }
+  const { data, error } = await scope.db.from('calendar_events')
+    .select('id,title,starts_at,ends_at,all_day,recurrence').eq('id', eventId).eq('family_id', scope.familyId).maybeSingle();
+  if (error) return fail(describeDbError(error, 'Could not load that event.'), { code: SERVICE_CODES.db });
+  if (!data) return fail('That event could not be found.', { code: SERVICE_CODES.notFound });
+  const { recurrence, ...clock } = data;
+  const mapped = forSeriesOccurrence({ ...clock, recurrence }, patch, week, scope.tz);
+  if (!mapped.ok) return mapped;
+  // The row just read is the compare-and-set state, as in `rescheduleAfter`.
+  return applyEventUpdate(scope, eventId, mapped.data, expected ?? clock);
+}
+
+/**
+ * The week a change was made from, for a caller that reads a series a week at
+ * a time: the assistant's `calendar.searchEvents` returns each week of a series
+ * with that week's own `starts_at` and the series' id. A series is one row
+ * whose `starts_at` is its FIRST occurrence, so a week's new time written into
+ * it restarted the series on that week and every week before it left the
+ * calendar. With a week named, the change is mapped back onto the series' first
+ * date (`onSeriesClock`); with `null`, a new time for a series is refused and
+ * the week asked for, as an ambiguous title is (`findEventByTitle`): keeping
+ * the first date and taking only the clock time would silently drop a move to
+ * another day. One-off events are unchanged.
+ */
+export type OccurrenceEdit = { occurrenceStartsAt: string | null };
+
+/** The refusal a series time change that names no week gets. */
+const SERIES_NEEDS_OCCURRENCE = 'That event repeats. Say which week this new time is for, and every week moves with it.';
+
+function forSeriesOccurrence(
+  stored: EventClockState & Pick<CalendarEvent, 'recurrence'>,
+  patch: UpdateEventPatch,
+  week: OccurrenceEdit,
+  timezone: string,
+): ServiceResult<UpdateEventPatch> {
+  const occurrence = week.occurrenceStartsAt?.trim() ? week.occurrenceStartsAt : null;
+  if (occurrence) return ok(onSeriesClock(stored, patch, occurrence, timezone));
+  return isSeries(stored) && isSeries({ recurrence: patch.recurrence ?? stored.recurrence })
+    ? fail(SERIES_NEEDS_OCCURRENCE, { code: SERVICE_CODES.invalidInput })
+    : ok(patch);
+}
+
+/**
+ * A patch made on one occurrence of a series, as the series row's own times.
+ *
+ * The move is read on the wall clock the series is stepped on (the family's
+ * zone for a timed series, dates for an all-day one, lib/calendar/recurrence.ts):
+ * whole days by date from the occurrence to its new start, applied to the
+ * series' first date, at the clock time the new start shows. Counting the move
+ * in hours would put a September start an hour off whenever the edited week
+ * and the week it moved to sit on different sides of a clock change. The end
+ * keeps the length given for the occurrence.
+ *
+ * An unchanged start is the series' own start, exactly. A one-off row, the
+ * first occurrence, and a series turned into a one-off (which stays where the
+ * week was) are left as given, and so is anything unreadable, which
+ * `applyEventUpdate` refuses in its own words.
+ */
+function onSeriesClock(
+  stored: EventClockState & Pick<CalendarEvent, 'recurrence'>,
+  patch: UpdateEventPatch,
+  occurrenceStartsAt: string,
+  timezone: string,
+): UpdateEventPatch {
+  if (!isSeries(stored) || !isSeries({ recurrence: patch.recurrence ?? stored.recurrence })) return patch;
+  const occurrence = normalizeCalendarWriteInstant(occurrenceStartsAt, timezone);
+  const start = patch.startsAt === undefined ? occurrence : normalizeCalendarWriteInstant(patch.startsAt, timezone);
+  const end = patch.endsAt == null ? null : normalizeCalendarWriteInstant(patch.endsAt, timezone);
+  if (!occurrence || !start || (patch.endsAt != null && !end) || sameCalendarInstant(occurrence, stored.starts_at)) return patch;
+  try {
+    const zone = stored.all_day ? 'UTC' : isValidTimezone(timezone) ? timezone : 'UTC';
+    const seriesStart = sameCalendarInstant(start, occurrence)
+      ? stored.starts_at
+      : movedOnWallClock(stored.starts_at, occurrence, start, zone);
+    const mapped: UpdateEventPatch = { ...patch };
+    if (patch.startsAt !== undefined) mapped.startsAt = seriesStart;
+    if (end !== null) mapped.endsAt = formatExactInstant(parseExactInstant(seriesStart) + parseExactInstant(end) - parseExactInstant(start));
+    return mapped;
+  } catch { return patch; }
+}
+
+const MINUTE_NS = 60_000_000_000n;
+
+/** `anchor` moved as `from` moved to `to` on `zone`'s wall clock: by whole dates, to `to`'s clock time. */
+function movedOnWallClock(anchor: string, from: string, to: string, zone: string): string {
+  const exactTo = parseExactInstant(to);
+  const [a, f, t] = [parseExactInstant(anchor), parseExactInstant(from), exactTo]
+    .map((exact) => localPartsAt(new Date(exactInstantMilliseconds(exact)), zone));
+  const civil = (p: { year: number; month: number; day: number }) => {
+    const day = new Date(0);
+    day.setUTCFullYear(p.year, p.month - 1, p.day);
+    return day;
+  };
+  const moved = civil(a!);
+  moved.setUTCDate(moved.getUTCDate() + Math.round((civil(t!).getTime() - civil(f!).getTime()) / 86_400_000));
+  const at = instantForIcsLocalTime(moved.getUTCFullYear(), moved.getUTCMonth() + 1, moved.getUTCDate(), t!.hour * 60 + t!.minute, zone);
+  if (!at) throw new Error('That time does not exist on the series clock');
+  // Seconds and below are the new start's own, as the expander keeps them.
+  return formatExactInstant(BigInt(at.getTime()) * 1_000_000n + ((exactTo % MINUTE_NS) + MINUTE_NS) % MINUTE_NS);
 }
 async function applyEventUpdate(scope: ServiceScope, eventId: string, patch: UpdateEventPatch, captured?: EventClockState): Promise<ServiceResult<CalendarEvent>> {
   const update: Updatable<'calendar_events'> = {};
@@ -938,18 +1041,21 @@ export async function busyEvenings(
  * Move an event to a new start, keeping its length. Used when resolving a
  * conflict: the family agreed to move the thing, not to reshape it, so the
  * duration is preserved rather than reset to a default.
+ *
+ * `week` names the week of a series being moved, as for `updateEvent`.
  */
 export async function rescheduleAfter(
   scope: ServiceScope,
   eventId: string,
   input: { startsAt: string },
+  week?: OccurrenceEdit,
 ): Promise<ServiceResult<CalendarEvent>> {
   const startsAt = normalizeCalendarWriteInstant(input.startsAt, scope.tz);
   if (!startsAt) return fail('That new time could not be understood.', { code: SERVICE_CODES.invalidInput });
 
   const { data: existing, error: readError } = await scope.db
     .from('calendar_events')
-    .select('id, title, starts_at, ends_at, all_day')
+    .select('id, title, starts_at, ends_at, all_day, recurrence')
     .eq('id', eventId)
     .eq('family_id', scope.familyId)
     .maybeSingle();
@@ -963,10 +1069,13 @@ export async function rescheduleAfter(
     return fail('Choose valid event date boundaries.', { code: SERVICE_CODES.invalidInput });
   }
   const duration = existing.ends_at === null ? null : parseExactInstant(existing.ends_at) - parseExactInstant(existing.starts_at);
-  return applyEventUpdate(scope, eventId, {
+  const patch: UpdateEventPatch = {
     startsAt: input.startsAt,
     endsAt: duration === null ? null : formatExactInstant(parseExactInstant(startsAt) + duration),
-  }, existing);
+  };
+  const mapped = week ? forSeriesOccurrence(existing, patch, week, scope.tz) : ok(patch);
+  if (!mapped.ok) return mapped;
+  return applyEventUpdate(scope, eventId, mapped.data, existing);
 }
 
 // ─── RSVPs ──────────────────────────────────────────────────────────────────
