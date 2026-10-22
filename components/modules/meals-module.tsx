@@ -788,6 +788,9 @@ function AutoPlanModal({ weekStart, dates, mealTypes, readSlots, isScopeCurrent,
   const [avoidRepeats, setAvoidRepeats] = useState(true);
   const [failure, setFailure] = useState<string | null>(null), [savedCount, setSavedCount] = useState<number | null>(null);
   const alive = useRef(false), closed = useRef(false), pending = useRef(false), receipt = useRef<PlanSlot[] | null>(null);
+  // Nights the planner's dishes were screened out of for a recorded allergy:
+  // said in the saved message, so a short week is not mistaken for the model's.
+  const leftOut = useRef(0);
   const onCloseRef = useRef(onClose); onCloseRef.current = onClose;
   useLayoutEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const current = () => alive.current && !closed.current && isScopeCurrent();
@@ -823,12 +826,15 @@ function AutoPlanModal({ weekStart, dates, mealTypes, readSlots, isScopeCurrent,
         setFailure(tr('mealsPlanner.saveUnconfirmed')); return;
       }
       receipt.current = data.slots; setSavedCount(data.count);
+      leftOut.current = Number.isInteger(data.leftOutForAllergies) && data.leftOutForAllergies > 0 ? data.leftOutForAllergies : 0;
       }
       const readback = await refreshAndConfirm();
       if (!current()) return;
       if (!readback.ok) { setFailure(tr('mealsPlanner.planReadbackFailed')); return; }
       if (!readSlots(receipt.current!)) { setFailure(tr('mealsPlanner.saveUnconfirmed')); return; }
-      success(tr('mealsPlanner.autoSaved', { count: receipt.current!.length }));
+      success(leftOut.current > 0
+        ? tr('mealsPlanner.autoSavedLeftOut', { count: receipt.current!.length, left: leftOut.current })
+        : tr('mealsPlanner.autoSaved', { count: receipt.current!.length }));
       closed.current = true;
       onPlanned();
     } catch {

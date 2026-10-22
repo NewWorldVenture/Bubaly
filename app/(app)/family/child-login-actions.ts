@@ -8,7 +8,7 @@
 import { requireUserContext } from '@/lib/supabase/auth';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { isManager } from '@/lib/constants/roles';
+import { isManager, ROLE_ORDER } from '@/lib/constants/roles';
 import { isValidPin } from '@/lib/onboarding/pin';
 import { normalizeUsername, isValidUsername, syntheticChildEmail } from '@/lib/onboarding/child-login';
 import { deriveChildPassword } from '@/lib/onboarding/child-password';
@@ -17,6 +17,9 @@ import { liftRemovedChildBan } from '@/lib/server/child-account';
 import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
+
+/** The roles a PIN login may sit on: every role but a manager's. */
+const KID_LOGIN_ROLES = ROLE_ORDER.filter((role) => !isManager(role));
 
 const secret = () => process.env.CHILD_LOGIN_SECRET || null;
 /** The app_metadata key that marks a kid login. The held 0495 reads the same
@@ -229,9 +232,16 @@ export async function createChildLoginAction(input: {
   // `is_active = false`). Removal drops the row to `guest`
   // (REMOVED_MEMBER_PATCH), so a reactivated row is put back as the `child` a
   // PIN login is for, rather than coming back as a guest.
+  //
+  // And on a role that is not a manager's: the role check above is a plain
+  // read too, so a change to 'adult' landing between it and this link (from
+  // the household editor, the admin edit or a replayed onboarding finish)
+  // would put a manager account behind a PIN. Each single-statement update
+  // re-checks its WHERE against the newest row, so whichever write commits
+  // second matches nothing.
   const { data: linked, error: linkErr } = await admin.from('family_members')
     .update({ user_id: childUserId, is_active: true, ...(member.is_active === false ? { role: 'child' as const } : {}) })
-    .eq('id', member.id).is('user_id', null).select('id');
+    .eq('id', member.id).is('user_id', null).in('role', KID_LOGIN_ROLES).select('id');
   if (linkErr || wroteNoRows(linked)) {
     const { error: deleteError } = await admin.auth.admin.deleteUser(childUserId);
     if (deleteError) {
@@ -240,7 +250,14 @@ export async function createChildLoginAction(input: {
       });
       return { ok: false, error: t('childLoginActions.couldNotFinishAndCouldNotUndo') };
     }
-    if (!linkErr) return { ok: false, error: t('childLoginActions.thisMemberAlreadyHasA') };
+    if (!linkErr) {
+      // Zero rows: another attempt linked first, or the member became a
+      // manager meanwhile. Say which; an unreadable row says neither.
+      const { data: now, error: nowError } = await admin.from('family_members')
+        .select('role, user_id').eq('id', member.id).eq('family_id', member.family_id).maybeSingle();
+      if (!nowError && now?.user_id) return { ok: false, error: t('childLoginActions.thisMemberAlreadyHasA') };
+      if (!nowError && now && isManager(now.role)) return { ok: false, error: t('childLoginActions.aParentOrAdultSignsIn') };
+    }
     return { ok: false, error: t('childLoginActions.couldNotLinkTheLogin') };
   }
 

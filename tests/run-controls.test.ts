@@ -297,12 +297,13 @@ describe('editStepInput', () => {
   });
 
   it('refuses to edit a run that has no request to version a plan against', async () => {
-    const { db } = makeDb(responder({ run: { ...RUN, request_id: null } }));
+    // Parked, so the in-flight guard does not answer first.
+    const { db } = makeDb(responder({ run: { ...RUN, state: 'blocked', request_id: null } }));
     expect(await editStepInput(scopeWith(db), 'run-1', 's1', { title: 'x' }, { db })).toMatchObject({ ok: false, code: 'invalid_input' });
   });
 
   it('refuses an input that is not an object', async () => {
-    const { db } = makeDb(responder({ steps: [planStep('s1')] }));
+    const { db } = makeDb(responder({ run: { ...RUN, state: 'blocked' }, steps: [planStep('s1')] }));
     expect(await editStepInput(scopeWith(db), 'run-1', 's1', 'not an object', { db })).toMatchObject({ ok: false, code: 'invalid_input' });
   });
 });

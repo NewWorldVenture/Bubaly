@@ -6,7 +6,7 @@ import { extractDocumentText, MAX_DOCUMENT_BYTES } from '@/lib/ai/document-text'
 import { resolveProviderForTask } from '@/lib/ai/routing';
 import { sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
 import { paperworkKindFields, triagePaperwork } from '@/lib/paperwork/triage';
-import { scopeForSystem } from '@/lib/services/scope';
+import { dayKeyInTz, systemScopeForFamily } from '@/lib/services/scope';
 import type { ServiceResult, ServiceScope } from '@/lib/services/types';
 import { enrichPaperworkEntities } from '@/lib/services/paperwork';
 import { isPaperworkExtractionPartial } from '@/lib/paperwork/extraction';
@@ -54,7 +54,12 @@ export async function fileEmailAttachments(db: DB, input: Input, options: Option
     return { ok: false, results: filenames.map((filename) => ({ filename, status: 'retry', reason: 'source_unavailable' })) };
   }
 
-  const scope = scopeForSystem(db, { id: input.familyId });
+  // The household's own zone: an attachment's "due 10/13" and its urgency are
+  // read on the FAMILY's day (lib/paperwork/triage.ts, TriageToday), and the
+  // enrichment below runs in it too. A family that cannot be read is retried,
+  // like a source message that cannot be.
+  const scope = await systemScopeForFamily(db, input.familyId);
+  if (!scope) return { ok: false, results: filenames.map((filename) => ({ filename, status: 'retry', reason: 'family_unavailable' })) };
   const deadline = AbortSignal.timeout(ATTACHMENT_DEADLINE_MS);
   let provider: ReturnType<typeof resolveProviderForTask> | undefined;
   const engine = (signal?: AbortSignal) => provider ??= resolveProviderForTask('vision', { db, failClosed: true, signal });
@@ -112,7 +117,7 @@ export async function fileEmailAttachments(db: DB, input: Input, options: Option
         continue;
       }
       const rawText = extracted.text.replace(/\u0000/g, '');
-      const triage = triagePaperwork(rawText, options.now ?? new Date());
+      const triage = triagePaperwork(rawText, dayKeyInTz(options.now ?? new Date(), scope.tz));
       if (triage.kind === 'other' && !extracted.truncated) {
         results.push({ filename, status: 'skipped', reason: 'unclassified' });
         continue;

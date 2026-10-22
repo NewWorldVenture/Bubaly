@@ -137,7 +137,7 @@ export const homeTools: ToolDefinition[] = [
   defineTool({
     name: 'home.saveContractor',
     aliases: ['save_contractor', 'add_contractor'],
-    description: 'Save a contractor the family found or used, so they can be found again next time. Updates the existing entry when the name matches.',
+    description: 'Save a contractor the family found or used, so they can be found again next time. Updates the existing entry when the name matches. Omitted or null fields leave existing details unchanged; use an empty string to clear company, phone, email, website or notes.',
     domain: 'home_maintenance',
     capability: 'create',
     risk: 'low',
@@ -159,9 +159,12 @@ export const homeTools: ToolDefinition[] = [
     summarize: (_input, output) => (output.created ? `Saved ${output.name}${output.trade ? ` (${output.trade})` : ''} to your contractors` : `Updated ${output.name} in your contractors`),
     resource: (output) => ({ table: 'home_contractors', id: output.id }),
     execute: async (scope, input) => {
+      // Strict provider schemas require nullable placeholders for details the
+      // person did not supply. The service uses undefined to preserve a saved
+      // field and null to clear it; only actual edits belong in this patch.
       const res = await saveContractor(scope, {
-        name: input.name, trade: input.trade ?? null, company: input.company ?? null, phone: input.phone ?? null, email: input.email ?? null,
-        website: input.website ?? null, rating: input.rating ?? null, isPreferred: input.is_preferred ?? null, notes: input.notes ?? null,
+        name: input.name, trade: input.trade ?? undefined, company: input.company ?? undefined, phone: input.phone ?? undefined, email: input.email ?? undefined,
+        website: input.website ?? undefined, rating: input.rating ?? undefined, isPreferred: input.is_preferred ?? undefined, notes: input.notes ?? undefined,
       });
       if (!res.ok) return res;
       return ok({ id: res.data.contractor.id, name: res.data.contractor.name, trade: res.data.contractor.trade, created: res.data.created });

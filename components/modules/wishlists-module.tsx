@@ -66,8 +66,8 @@ export function WishlistsModule() {
   const isOwnList = activeMember === selfId;
 
   const visible = useMemo(
-    () => sortWishes((wishes ?? []).filter((w) => w.member_id === activeMember) as WishLike[]),
-    [wishes, activeMember],
+    () => sortWishes((wishes ?? []).filter((w) => w.member_id === activeMember) as WishLike[], { viewerMemberId: selfId }),
+    [wishes, activeMember, selfId],
   );
   const wishById = useMemo(() => new Map((wishes ?? []).map((w) => [w.id, w])), [wishes]);
 

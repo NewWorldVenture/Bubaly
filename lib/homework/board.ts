@@ -44,9 +44,11 @@ export type DueBucket = 'overdue' | 'today' | 'upcoming' | 'no_date' | 'done';
 /**
  * Classifies homework into a due-bucket for board grouping.
  *
- * "Today" is a calendar day, so it is asked in `timeZone` — the FAMILY's zone
- * (TIME-003), the one the due time is printed and entered in. Without a zone it
- * falls back to the runtime's own calendar.
+ * "Due today" is a CALENDAR question, so it is asked in `timeZone` — the
+ * family's, which is the clock the due date was entered on. Comparing the
+ * device's local year, month and day filed a family-today 9 PM deadline under
+ * "Upcoming" on a kid's Chromebook set to UTC. Without a zone it falls back to
+ * the runtime's own calendar, as it always did.
  */
 export function dueBucket(hw: HomeworkLike, now: Date, timeZone?: string): DueBucket {
   if (!isOpen(hw)) return 'done';

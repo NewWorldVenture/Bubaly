@@ -29,13 +29,13 @@ async function complete<T extends Owned>(
 /** Complete independently counted sets, not a transaction snapshot. */
 export function readPlannerMeals(db: SupabaseClient<Database>, familyId: string) {
   return complete<Owned & MealRow>(familyId,
-    () => db.from('meals').select('id,family_id,name,meal_type', { count: 'exact' }).eq('family_id', familyId).order('id'),
+    () => db.from('meals').select('id,family_id,name,meal_type,ingredients', { count: 'exact' }).eq('family_id', familyId).order('id'),
     row => PLAN_MEAL_TYPES.some(type => type === row.meal_type));
 }
 
 export function readPlannerRecipes(db: SupabaseClient<Database>, familyId: string) {
   return complete<Owned & RecipeRow>(familyId,
-    () => db.from('family_recipes').select('id,family_id,name,category,allergy_flags', { count: 'exact' }).eq('family_id', familyId).order('id'),
+    () => db.from('family_recipes').select('id,family_id,name,category,allergy_flags,ingredients', { count: 'exact' }).eq('family_id', familyId).order('id'),
     row => nonempty(row.category) && (row.allergy_flags == null || (Array.isArray(row.allergy_flags) && row.allergy_flags.every(nonempty))));
 }
 

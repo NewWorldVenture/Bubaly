@@ -101,7 +101,7 @@ vi.mock('@/lib/supabase/auth', () => ({
 }));
 vi.mock('@/lib/supabase/server', () => ({
   createServiceClient: () => { h.serviceClientCalls += 1; return serviceClient; },
-  createServer: async () => ({ auth: { mfa: { getAuthenticatorAssuranceLevel: async () => h.assurance } } }),
+  createServer: async () => ({ auth: { getSession: async () => ({ data: { session: { access_token: 'synthetic-assurance-token' } }, error: null }), mfa: { getAuthenticatorAssuranceLevel: async () => h.assurance } } }),
   describeConfiguredServiceKey: () => null,
   serviceKeyRemedy: () => null,
 }));

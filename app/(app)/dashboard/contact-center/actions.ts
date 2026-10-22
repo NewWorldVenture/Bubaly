@@ -9,6 +9,7 @@ import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { normalizeEmailLocal, isValidEmailLocal, isReservedEmailLocal } from '@/lib/contact-center/address';
 import { normalizeFallbackPhone } from '@/lib/contact-center/phone';
 import { getOrCreateChannelResult, provisionFamilyNumber } from '@/lib/contact-center/server';
+import { isManager } from '@/lib/constants/roles';
 
 type Fail = { ok: false; error: string };
 
@@ -112,10 +113,24 @@ export async function updateConciergeAction(input: {
   return { ok: true };
 }
 
-/** Mark an inbox message read / archived. */
+/**
+ * Mark an inbox message read / archived.
+ *
+ * Filing the household's mail is a manager's act, as it is everywhere else it
+ * can be done (lib/services/inbox `mayFile`, the Needs-you and inbox actions):
+ * a child or guest archiving the dentist's message makes it vanish from the
+ * parents' "Needs you" list with nobody having answered it. This action used to
+ * check only that the caller was signed in, then write with the service role —
+ * which 0214's SELECT-only member policy cannot stop. It now refuses anyone who
+ * is not a parent or adult, and a family below Family+ (the guard its
+ * neighbours apply), BEFORE the privileged write.
+ */
 export async function setMessageStatusAction(id: string, status: 'read' | 'archived'): Promise<{ ok: true } | Fail> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentOrAdultCanFileAMessage') };
+  const level = await resolveFamilyPlanLevel(await createServer(), ctx.active.familyId);
+  if (level < 2) return { ok: false, error: t('actions.theFamilyContactCenterIs') };
   const admin = createServiceClient();
   const { data: updated, error } = await admin
     .from('family_inbox_messages')

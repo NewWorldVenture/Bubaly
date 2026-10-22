@@ -35,22 +35,22 @@ describe('resolveWindow reads a zone-less edge on the family clock', () => {
 
   it('a bare date spans the whole family day, not a single UTC instant', () => {
     expect(resolveWindow(scope('America/Los_Angeles'), { from: '2026-10-12', to: '2026-10-12' }))
-      .toEqual({ ok: true, data: { from: '2026-10-12T07:00:00.000Z', to: '2026-10-13T06:59:59.999Z' } });
+      .toEqual({ ok: true, data: { from: '2026-10-12T07:00:00.000Z', to: '2026-10-13T06:59:59.999Z', toExclusive: '2026-10-13T07:00:00.000Z' } });
     expect(resolveWindow(scope('Asia/Tokyo'), { from: '2026-10-12', to: '2026-10-13' }))
-      .toEqual({ ok: true, data: { from: '2026-10-11T15:00:00.000Z', to: '2026-10-13T14:59:59.999Z' } });
+      .toEqual({ ok: true, data: { from: '2026-10-11T15:00:00.000Z', to: '2026-10-13T14:59:59.999Z', toExclusive: '2026-10-13T15:00:00.000Z' } });
   });
 
   it('crosses the Los Angeles fall-back correctly', () => {
     // 1 November 2026 is 25 hours long in Los Angeles.
     expect(resolveWindow(scope('America/Los_Angeles'), { from: '2026-11-01', to: '2026-11-01' }))
-      .toEqual({ ok: true, data: { from: '2026-11-01T07:00:00.000Z', to: '2026-11-02T07:59:59.999Z' } });
+      .toEqual({ ok: true, data: { from: '2026-11-01T07:00:00.000Z', to: '2026-11-02T07:59:59.999Z', toExclusive: '2026-11-02T08:00:00.000Z' } });
   });
 
   it('keeps an offset or Z exactly as written, and the UTC control', () => {
     expect(resolveWindow(scope('America/Los_Angeles'), { from: '2026-10-12T00:00:00Z', to: '2026-10-12T23:59:00+02:00' }))
       .toEqual({ ok: true, data: { from: '2026-10-12T00:00:00.000Z', to: '2026-10-12T21:59:00.000Z' } });
     expect(resolveWindow(scope('UTC'), { from: '2026-10-12T00:00:00', to: '2026-10-12' }))
-      .toEqual({ ok: true, data: { from: '2026-10-12T00:00:00.000Z', to: '2026-10-12T23:59:59.999Z' } });
+      .toEqual({ ok: true, data: { from: '2026-10-12T00:00:00.000Z', to: '2026-10-12T23:59:59.999Z', toExclusive: '2026-10-13T00:00:00.000Z' } });
   });
 
   it('refuses an impossible naive date or clock before any read', () => {

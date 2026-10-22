@@ -20,24 +20,23 @@ import { loadReasoningReport } from '@/lib/reasoning/engine-server';
 import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { settle } from '@/lib/supabase/settle';
+import { suggestionVisibleTo } from '@/lib/autopilot/audience';
+import { readVisiblePrefix } from '@/lib/autopilot/visible-prefix';
 import { dayKeyInZone, zonedTimeMs } from '@/lib/schedule/zoned';
 import type { SliceDefinition } from '../policy';
+// The suggestion queues are household-wide and can mention budgets, bills or
+// documents. Those areas are manager-only (§4, `SLICE_ACCESS`), so for anyone
+// else an item whose words touch them is dropped here — the same rule the
+// money and documents slices enforce by not loading. The reasoning report is
+// composed for this reader instead, by where each item comes from
+// (lib/operating-index/audience.ts), as the reasoning page is: the words are
+// run only over the items an Autopilot card or an approval request worded.
+import { managerOnlyText } from '../manager-only';
+import { wordedByItsSource } from '@/lib/operating-index/audience';
 
 const MAX_ITEMS_PER_ANSWER = 3;
 const MAX_SUGGESTIONS = 8;
 const MAX_SIGNALS = 8;
-
-/**
- * The reasoning report and the suggestion queues are household-wide and can
- * mention budgets, bills or documents. Those areas are manager-only (§4,
- * `SLICE_ACCESS`), so for anyone else an item that touches them is dropped
- * here — the same rule the money and documents slices enforce by not loading.
- */
-const MANAGER_ONLY_RE = /\b(budget|bill|bills|spend|spending|money|financ|transaction|account|salary|income|document|passport|insurance|tax|vault|subscription)\b/i;
-
-function managerOnlyText(...parts: (string | null | undefined)[]): boolean {
-  return MANAGER_ONLY_RE.test(parts.filter(Boolean).join(' '));
-}
 
 /**
  * The words this slice reads a hard signal in: en-US, explicitly. Its reader is
@@ -141,11 +140,37 @@ export const proactiveSlice: SliceDefinition = {
     const schoolVisible = env.viewer.canManage || env.viewer.role !== 'guest';
     const noTerms: { data: { title: string; starts_at: string }[]; error: null } = { data: [], error: null };
 
+    const canManage = env.viewer.canManage;
+    let withheld = 0;
+    const withhold = (managersOnly: boolean): boolean => {
+      if (canManage || !managersOnly) return true;
+      withheld += 1;
+      return false;
+    };
+    const keep = (...parts: (string | null | undefined)[]): boolean => withhold(managerOnlyText(...parts));
+
     const [signals, report, liveSignals, autopilot, recommendations, terms, pets, projects, plans] = await Promise.all([
       loadSignals(scope.familyId, env.tz, env.now),
-      loadReasoningReport(scope.db, scope.familyId, env.tz, MODEL_LOCALE, modelText, env.now),
+      // Composed for this reader (ReasoningViewer): for anyone who does not
+      // read the household's money, its drift, its money and paperwork moves
+      // and its money items are left out by where each comes from, as on the
+      // reasoning page. The household's daily operating index is kept only
+      // from a manager's or the system's client (SnapshotReach), never from
+      // one RLS may give less of the household.
+      loadReasoningReport(scope.db, scope.familyId, env.tz, MODEL_LOCALE, modelText, canManage ? 'household' : 'member', env.now, { readsHouseholdMoney: canManage }),
       settle(scope.db.from('family_signals').select('kind, title, detail, score, evidence').eq('family_id', scope.familyId).eq('status', 'active').order('score', { ascending: false }).limit(MAX_SIGNALS)),
-      settle(scope.db.from('autopilot_suggestions').select('id, title, detail, urgency, action_label').eq('family_id', scope.familyId).eq('status', 'open').order('urgency', { ascending: false }).limit(MAX_SUGGESTIONS)),
+      // The first eight open cards this reader may be handed, the rules applied
+      // BEFORE the eight are taken (lib/autopilot/visible-prefix.ts): the card's
+      // own audience (lib/autopilot/audience.ts) — an unused-subscription flag
+      // carries no word the filter below knows, and it is not a guest's to read
+      // whatever its wording — and then that filter. Taken first, eight cards a
+      // child is not shown left their context with none of the cards that are.
+      settle(readVisiblePrefix((from, to) => scope.db.from('autopilot_suggestions').select('id, title, detail, urgency, action_label, kind, source_kind, member_id')
+        .eq('family_id', scope.familyId).eq('status', 'open').order('urgency', { ascending: false }).order('id').range(from, to), {
+        limit: MAX_SUGGESTIONS,
+        visible: (s) => (canManage || suggestionVisibleTo(s, { role: env.viewer.role, memberId: env.viewer.memberId }))
+          && keep(s.title, s.detail, s.action_label),
+      })),
       settle(scope.db.from('family_ai_recommendations').select('id, title, body, priority, category').eq('family_id', scope.familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(MAX_SUGGESTIONS)),
       // The four life-event reads take settle() like the three above them: this
       // slice loads inside a context build, and a rejected read here would throw
@@ -174,14 +199,6 @@ export const proactiveSlice: SliceDefinition = {
       activePlanKeys: (plans.data ?? []).map((p) => p.template_key),
     }).slice(0, MAX_LIFE_EVENTS);
 
-    const canManage = env.viewer.canManage;
-    let withheld = 0;
-    const keep = (...parts: (string | null | undefined)[]): boolean => {
-      if (canManage || !managerOnlyText(...parts)) return true;
-      withheld += 1;
-      return false;
-    };
-
     // The structured slice is persisted as requester-readable context too.
     // Redact before returning it, rather than hiding only the prompt words.
     // Copy the source counts so one guest build cannot change another reader's.
@@ -199,8 +216,12 @@ export const proactiveSlice: SliceDefinition = {
         answers: report.answers.map((a) => ({
           id: a.id, question: a.question, status: a.status,
           headline: keep(a.headline) ? a.headline : 'Some items are only shown to the adults who manage the family.',
+          // The report is already this reader's. The words are run again only
+          // over an item an Autopilot card or an approval request worded: the
+          // rest are worded from the calendar and the family's names, and
+          // "“Bill's recital” overlaps “Swim practice”" is a child's to read.
           items: a.items
-            .filter((i) => keep(i.title, i.detail, i.href))
+            .filter((i) => withhold(wordedByItsSource(i.href) && managerOnlyText(i.title, i.detail)))
             .slice(0, MAX_ITEMS_PER_ANSWER)
             .map((i) => ({ title: i.title, detail: i.detail ?? null })),
         })),
@@ -208,7 +229,9 @@ export const proactiveSlice: SliceDefinition = {
       },
       signals: (liveSignals.data ?? []).map((s) => ({ kind: s.kind, ...signalWordsFor(s, MODEL_LOCALE, modelText), score: s.score }))
         .filter((s) => keep(s.kind, s.title, s.detail)),
-      autopilot: (autopilot.data ?? []).filter((s) => keep(s.title, s.detail, s.action_label)).map((s) => ({ id: s.id, title: s.title, detail: s.detail, urgency: s.urgency, actionLabel: s.action_label })),
+      // Already this reader's: both rules were applied as the cards were read.
+      autopilot: (autopilot.data ?? [])
+        .map((s) => ({ id: s.id, title: s.title, detail: s.detail, urgency: s.urgency, actionLabel: s.action_label })),
       recommendations: (recommendations.data ?? []).filter((r) => keep(r.category, r.title, r.body)).map((r) => ({ id: r.id, title: r.title, body: r.body, priority: r.priority, category: r.category })),
       lifeEvents,
       withheld,

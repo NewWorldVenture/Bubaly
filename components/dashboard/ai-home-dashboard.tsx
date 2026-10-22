@@ -7,6 +7,10 @@ import { settle, settleAll } from '@/lib/supabase/settle';
 import type { UserContext } from '@/lib/supabase/auth';
 import { isSuperAdmin } from '@/lib/supabase/auth';
 import { isManager } from '@/lib/constants/roles';
+import { suggestionVisibleTo } from '@/lib/autopilot/audience';
+import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
+import { readVisiblePrefix } from '@/lib/autopilot/visible-prefix';
+import { suggestionReminderKey, suggestionSourceTag } from '@/lib/services/autopilot';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { fmtTime } from '@/lib/utils/format';
@@ -28,13 +32,14 @@ import {
   type WorkingRunRow, type WorkingStepRow,
 } from '@/lib/home/today';
 import { listPending } from '@/lib/services/approvals';
-import { dayKeyInTz, scopeFromUserContext, zonedDayBoundsMs } from '@/lib/services/scope';
+import { addDaysToDayKey, dayKeyInTz, scopeFromUserContext, zonedDayBoundsMs } from '@/lib/services/scope';
 import { Heart } from 'lucide-react';
 import { upcomingRelationship, formatCountdown, milestoneLabel, type RelKind } from '@/lib/relationship/dates';
 import { reminderAttention } from '@/lib/dashboard/reminder-attention';
 import { mergeUpcoming } from '@/lib/dashboard/upcoming';
 import { topNeeds, summarizeNeeds, needsHeadline } from '@/lib/home/needs-attention';
 import { type ParentApprovalRow, type RenewalRow, type DocumentRow, type AwaitingRunRow, type RecommendationRow } from '@/lib/home/needs-sources';
+import { daysBetweenDayKeys } from '@/lib/moments/birthdays';
 import { buildHomeNeeds } from '@/lib/home/needs-build';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
 import { buildHomeBrief } from '@/lib/home/home-brief';
@@ -100,6 +105,20 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     return 0 as Awaited<ReturnType<typeof resolveFamilyPlanLevel>>;
   });
 
+  // A reminder an Autopilot card made is listed only to the card's readers
+  // (lib/autopilot/reminder-cards.ts). "Mine or nobody's" is not that rule: a
+  // manager's accepted insurance card writes an unassigned reminder so the
+  // managers are reminded, and read by it a guest and the child the policy does
+  // not name were listed "Renew dental insurance (Smile Co)". The cards are
+  // read once, only when a listed reminder could be one; if that read fails,
+  // such a reminder is listed to the managers alone.
+  const reminderViewer = { role: ctx.active.role, memberId: myMemberId };
+  const reminderCards = reminderCardsReader(supabase, familyId, {
+    keyOf: (cardId) => suggestionReminderKey(familyId, cardId),
+    sourceTagOf: suggestionSourceTag,
+    onError: (error) => console.error('[dashboard-home] autopilot reminder cards read failed', error),
+  });
+
   const [
     { count: pendingChores },
     todayCalendarRes,
@@ -142,10 +161,15 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     supabase.from('family_members').select('id, display_name, color, role')
       .eq('family_id', familyId).eq('is_active', true).order('created_at').limit(6),
     readDisplayCalendarOccurrences(supabase, familyId, upcomingWindow, tz, { overlap: true }),
-    supabase.from('autopilot_suggestions')
-      .select('id, title, detail, kind, urgency, confidence, payload')
+    // The first twenty open cards THIS reader may see (lib/autopilot/audience.ts),
+    // the rule applied before the twenty are taken (lib/autopilot/
+    // visible-prefix.ts): taken first, twenty insurance cards a child is not
+    // shown emptied the panel with a card of theirs behind them.
+    readVisiblePrefix((from, to) => supabase.from('autopilot_suggestions')
+      .select('id, title, detail, kind, urgency, confidence, payload, source_kind, member_id')
       .eq('family_id', familyId).eq('status', 'open')
-      .order('urgency', { ascending: false }).order('confidence', { ascending: false }).limit(20),
+      .order('urgency', { ascending: false }).order('confidence', { ascending: false }).order('id').range(from, to),
+    { limit: 20, visible: (s) => suggestionVisibleTo(s, { role: ctx.active.role, memberId: myMemberId }) }),
     supabase.from('autopilot_suggestions').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).in('status', ['auto_executed', 'executed', 'approved']),
     supabase.from('family_communications').select('id', { count: 'exact', head: true })
@@ -159,16 +183,18 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       .eq('family_id', familyId).is('deleted_at', null).in('scope', ['user', 'family']),
     supabase.from('relationship_dates').select('id, kind, title, event_date, recurs_annually, reminder_days_before, status')
       .eq('family_id', familyId).neq('status', 'cancelled').limit(100),
-    supabase.from('family_reminders').select('id, title, remind_at, status, member_id, priority')
+    readVisibleReminders((from, to) => supabase.from('family_reminders').select('id, title, remind_at, status, member_id, priority, idempotency_key, tags')
       .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null)
       .or(`member_id.eq.${myMemberId},member_id.is.null`)
-      .lte('remind_at', todayEnd.toISOString()).order('remind_at', { ascending: true }).limit(100),
-    supabase.from('family_reminders').select('id, title, remind_at')
+      .lte('remind_at', todayEnd.toISOString()).order('remind_at', { ascending: true }).order('id').range(from, to),
+    { limit: 100, viewer: reminderViewer, cards: reminderCards }),
+    readVisibleReminders((from, to) => supabase.from('family_reminders').select('id, title, remind_at, idempotency_key, tags')
       .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null)
       .or(`member_id.eq.${myMemberId},member_id.is.null`)
       .gt('remind_at', todayEnd.toISOString())
       .lte('remind_at', new Date(Date.now() + 7 * 86400000).toISOString())
-      .order('remind_at').limit(10),
+      .order('remind_at').order('id').range(from, to),
+    { limit: 10, viewer: reminderViewer, cards: reminderCards }),
     // Money decisions waiting on a parent (wallet/cards/allowance) — managers only.
     manager
       ? supabase.from('parent_approvals').select('id, kind, amount_cents, created_at')
@@ -181,9 +207,10 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     // Assigned events through the complete local date +14 → personal double-bookings.
     readDisplayCalendarOccurrences(supabase, familyId, conflictWindow, tz, { overlap: true }),
     // Stored documents expiring within ~30 days (passports, licenses, insurance…).
+    // `expires_at` is a DATE: bounded by the family's day key, not an instant.
     supabase.from('documents').select('id, title, expires_at')
       .eq('family_id', familyId).not('expires_at', 'is', null)
-      .lte('expires_at', new Date(Date.now() + 30 * 86400000).toISOString()).limit(50),
+      .lte('expires_at', addDaysToDayKey(todayKey, 30)).limit(50),
     // T4 sources: assignments due TOMORROW that are not finished — started
     // work included, as the Homework board counts it.
     supabase.from('homework_assignments').select('title, member_id')
@@ -247,7 +274,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   // the tool that acted and the plan's reason. A ServiceResult, not a Postgrest
   // response, so it is awaited BESIDE the batch — settleAll substitutes the
   // { data, error } shape for a rejection, which has no `ok` to branch on.
-  const completedRes = await loadCompletedByBubaly(supabase, familyId, { now, limit: 6 }).catch((cause) => {
+  const completedRes = await loadCompletedByBubaly(supabase, familyId, { now, limit: 6, viewer: { role: ctx.active.role, memberId: ctx.active.member.id } }).catch((cause) => {
     console.error('[dashboard-home] completed-by-Bubaly read threw', cause);
     return { ok: false as const, error: String(cause) };
   });
@@ -302,7 +329,11 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   // A subscription suggestion's title carries money and was worded by whichever
   // scan inserted it — usually the cron, in en-US — so it is worded again here for
   // THIS reader from the facts in its payload (lib/autopilot/engine.ts).
-  const openSuggestions = ((autopilotOpen ?? []) as { id: string; title: string; detail: string | null; kind: string; urgency: number; confidence: number; payload: unknown }[])
+  // Only the cards this reader may see: a subscription charge is not a
+  // guest's, an insurance renewal is the managers' and its member's
+  // (lib/autopilot/audience.ts). autopilot_suggestions is family-wide under
+  // 0085, so the rule is applied where the cards are read, above.
+  const openSuggestions = ((autopilotOpen ?? []) as { id: string; title: string; detail: string | null; kind: string; urgency: number; confidence: number; payload: unknown; source_kind: string | null; member_id: string | null }[])
     .map((s) => ({ ...s, title: autopilotTitleFor(s, locale.code, t) }));
   const concierge = (activeConcierge ?? []) as { id: string; title: string; kind: string; status: string }[];
   const autopilotProbability = successProbability(openSuggestions.map((s) => ({ urgency: s.urgency as 1 | 2 | 3, confidence: s.confidence } as never)));
@@ -361,6 +392,8 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     lowGrocery: !groceryUnavailable && (groceryCount ?? 0) > 0,
     openTodos: openTodos ?? 0,
     now,
+    // A document's expiry is a DATE, counted against the family's day.
+    todayKey,
     // A money approval's amount and the words around it, in this reader's locale.
     reader: { locale: locale.code, t },
     aiApprovals: aiApprovals.map((a) => ({ id: a.id, title: a.title, runId: a.runId, priority: a.priority ?? null, requestedAt: a.requestedAt, expiresAt: a.expiresAt })),
@@ -426,6 +459,16 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   // the family's live signals, rank by impact, and surface exactly ONE above the
   // fold. Candidates are persisted to daily_insights so a dismissal sticks and the
   // next-best insight takes its place. All best-effort — never blocks the render.
+  //
+  // The rows are the HOUSEHOLD's (one per family, day and kind, 0141; any
+  // member reads and writes them), and the candidates are built from THIS
+  // reader's reads: a parent's hold a passport 0266 keeps from a child, an
+  // insurance card that is the managers' and every member's clashes; a child's
+  // only their own. Shown the top active row whoever wrote it, a child was
+  // handed "Mum's passport expires in 6 days", and a child's visit rewrote the
+  // household's clash for the day as theirs. Now only a parent's or an adult's
+  // visit keeps the household's rows, and is shown them; anyone else's starts
+  // a kind nobody has written today, marked as theirs, and is shown their own.
   let insightRow: { id: string; kind: string; title: string; detail: string; href: string; impact: number; alternatives: number } | null = null;
   try {
     const dayIso = new Date(todayStart.getTime() + 86400000).toISOString().slice(0, 10);
@@ -443,7 +486,8 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       renewalsSoon: ((renewalRows ?? []) as RenewalRow[])
         .map((r) => ({ title: r.title, days: daysUntil(r.expires_at) })).filter((r) => r.days >= 0),
       documentsSoon: ((documentRows ?? []) as DocumentRow[])
-        .filter((d) => d.expires_at).map((d) => ({ title: d.title, days: daysUntil(d.expires_at as string) })).filter((d) => d.days >= 0),
+        // A DATE, counted from the family's day: the expiry day itself is 0.
+        .filter((d) => d.expires_at).map((d) => ({ title: d.title, days: daysBetweenDayKeys(todayKey, (d.expires_at as string).slice(0, 10)) ?? -1 })).filter((d) => d.days >= 0),
       unplannedDinners: Math.max(0, 7 - Math.min(7, plannedDinnerCount ?? 0)),
       lowGrocery: groceryUnavailable ? undefined : groceryCount ?? 0,
       autopilotTop: openSuggestions[0] ? { title: openSuggestions[0].title, confidence: openSuggestions[0].confidence } : null,
@@ -462,26 +506,46 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       const blocked = new Set(((existingIns ?? []) as { kind: string; status: string }[]).filter((r) => r.status !== 'active').map((r) => r.kind));
       const toUpsert = existingError ? [] : candidates.filter((c) => !blocked.has(c.kind));
       if (toUpsert.length > 0) {
-        const { error: insightError } = await settle(supabase.from('daily_insights').upsert(
-          toUpsert.map((c) => ({
-            family_id: familyId, as_of_date: today, kind: c.kind,
-            title: c.title, detail: c.detail, href: c.href, impact: c.impact,
-            status: 'active', created_by: ctx.user.id,
-          })),
-          { onConflict: 'family_id,as_of_date,kind' },
-        ));
+        const rows = toUpsert.map((c) => ({
+          family_id: familyId, as_of_date: today, kind: c.kind,
+          title: c.title, detail: c.detail, href: c.href, impact: c.impact,
+          status: 'active', created_by: ctx.user.id,
+          // Whose reading the row is: none (null) for the household's.
+          member_id: manager ? null : myMemberId,
+        }));
+        // A parent's or an adult's reading is the household's and keeps the
+        // day's row; anyone else's starts a kind nobody has written today and
+        // leaves a row that is there as it is. Neither reports what it wrote:
+        // the re-read below finds the rows there are.
+        const { error: insightError } = await settle(manager
+          ? supabase.from('daily_insights').upsert(rows, { onConflict: 'family_id,as_of_date,kind' })
+          : supabase.from('daily_insights').upsert(rows, { onConflict: 'family_id,as_of_date,kind', ignoreDuplicates: true }));
         if (insightError) console.error('[home] daily_insights upsert failed', { message: insightError.message });
       }
       // Re-read active rows so the DB id (needed to dismiss) + persisted dismissals win.
       const { data: activeRows } = await supabase.from('daily_insights')
-        .select('id, kind, title, detail, href, impact')
+        .select('id, kind, title, detail, href, impact, member_id')
         .eq('family_id', familyId).eq('as_of_date', today).eq('status', 'active');
-      const ranked = rankInsights(((activeRows ?? []) as { id: string; kind: string; title: string; detail: string | null; href: string | null; impact: number }[])
-        // A row persisted earlier today says what its source said then: with that
-        // source unread now, an old conflict or an old grocery count is not
-        // shown as today's insight (a fresh candidate from it is already withheld).
-        .filter((r) => (!conflictsUnavailable || r.kind !== 'conflict') && (!groceryUnavailable || r.kind !== 'grocery'))
-        .map((r) => ({ id: r.id, kind: r.kind as InsightKind, title: r.title, detail: r.detail ?? '', href: r.href ?? '/dashboard', impact: r.impact })));
+      const active = (activeRows ?? []) as { id: string; kind: string; title: string; detail: string | null; href: string | null; impact: number; member_id: string | null }[];
+      const shown = manager
+        // A parent or an adult is shown the household's insight of the day as
+        // its rows keep it — never a row another member's narrower reading
+        // started (member_id), which no household reading has rewritten.
+        ? active
+          .filter((r) => !r.member_id)
+          // A row persisted earlier today says what its source said then: with that
+          // source unread now, an old conflict or an old grocery count is not
+          // shown as today's insight (a fresh candidate from it is already withheld).
+          .filter((r) => (!conflictsUnavailable || r.kind !== 'conflict') && (!groceryUnavailable || r.kind !== 'grocery'))
+          .map((r) => ({ id: r.id, kind: r.kind as InsightKind, title: r.title, detail: r.detail ?? '', href: r.href ?? '/dashboard', impact: r.impact }))
+        // Anyone else is shown their own reading, never a row's words, under
+        // the day's active row of the same kind: its id is what a dismissal
+        // marks, and a kind with no active row was dismissed today.
+        : candidates.flatMap((c) => {
+          const row = active.find((r) => r.kind === c.kind);
+          return row ? [{ ...c, id: row.id }] : [];
+        });
+      const ranked = rankInsights(shown);
       const top = ranked[0];
       if (top) insightRow = { id: top.id, kind: top.kind, title: top.title, detail: top.detail, href: top.href, impact: top.impact, alternatives: Math.max(0, ranked.length - 1) };
     }
@@ -640,7 +704,9 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
         headline={needsHeader}
         approvals={Object.fromEntries(aiApprovals.map((a) => [a.id, a]))}
         moneyApprovalKinds={Object.fromEntries(((approvalRows ?? []) as ParentApprovalRow[]).map((a) => [a.id, a.kind]))}
-        recommendationBodies={Object.fromEntries(recommendations.map((r) => [r.id, r.body]))}
+        // A recommendation's body is the planner's reasoning, which can touch
+        // money or documents: the managers' to read, as they decide it.
+        recommendationBodies={manager ? Object.fromEntries(recommendations.map((r) => [r.id, r.body])) : {}}
         canDecide={manager}
       />}
 

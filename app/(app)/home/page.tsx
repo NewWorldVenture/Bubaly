@@ -12,6 +12,8 @@ import { settle, settleAll } from '@/lib/supabase/settle';
 import { getOnboardingProgress, resolveCompleteness } from '@/lib/server/onboarding-progress';
 import { isManager } from '@/lib/constants/roles';
 import { readsHouseholdMoney } from '@/lib/finance/household-money';
+import { periodWindow } from '@/lib/finance/budget-periods';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { firstName } from '@/lib/utils/format';
@@ -35,6 +37,8 @@ import { buildHomeNeeds } from '@/lib/home/needs-build';
 import { needsHeadline, summarizeNeeds, topNeeds } from '@/lib/home/needs-attention';
 import type { AwaitingRunRow, ParentApprovalRow, RecommendationRow } from '@/lib/home/needs-sources';
 import { listPending } from '@/lib/services/approvals';
+import { suggestionReminderKey, suggestionSourceTag } from '@/lib/services/autopilot';
+import { readVisibleReminders, reminderCardsReader } from '@/lib/autopilot/reminder-cards';
 import { dayKeyInTz, scopeFromUserContext, zonedDayBoundsMs } from '@/lib/services/scope';
 import { loadScheduleIntelligence } from '@/lib/schedule/intelligence-server';
 import { TimeSavedBanner } from '@/components/metric/time-saved-banner';
@@ -67,6 +71,9 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t('navLabel.home') };
 }
 export const dynamic = 'force-dynamic';
+
+/** A real ceiling on the month the Family Finances card sums: past it, a failed read, never a smaller total. */
+const MONTH_TXN_MAX = 50_000;
 
 // ── Small shared UI ───────────────────────────────────────────────────────────
 function Card({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -195,6 +202,8 @@ export default async function HomePage() {
   // last afternoon of the previous one, and "this month" spent a few hours
   // reporting the wrong month's finances.
   const monthStart = new Date(zonedDayBoundsMs(`${todayKey.slice(0, 7)}-01`, tz).start);
+  // The family's month as day keys, both ends: what the Family Finances card sums.
+  const thisMonth = periodWindow('monthly', todayKey);
 
   const [
     { data: members, count: memberCount, error: membersError },
@@ -203,7 +212,7 @@ export default async function HomePage() {
     { data: tasks },
     { data: choreRows },
     { data: dinnerPlans },
-    { data: txns },
+    { data: txns, error: txnsError },
     { data: photos },
     { data: messages },
     { count: choresToday },
@@ -230,12 +239,21 @@ export default async function HomePage() {
       .eq('family_id', familyId).eq('meal_type', 'dinner').gte('plan_date', weekStartIso).lte('plan_date', weekEndIso),
     // The household's spending is a parent's or adult's (the held 0514): the
     // Family Finances card is theirs, and nobody else's session asks for it.
+    //
+    // The card SUMS this read, so it is the whole month: both ends (next month's
+    // scheduled rent is not this month's), paged on the id past PostgREST's
+    // 1,000-row cap (`.limit(1000)` was that cap, silently), and a month past the
+    // ceiling is an error the card shows, not a smaller total.
     readsHouseholdMoney(ctx.active.role)
-      ? supabase.from('transactions').select('type, amount, date')
-        // `date` is a DATE column: the family's first of the month as a day key.
+      ? readAllByIdAsQuery<HomeTxn & { id: string }>((after, limit) => {
+        // `date` is a DATE column: the family's month as day keys.
         // `isoDate(monthStart)` re-read the family's midnight instant in the host's
         // calendar, which east of Greenwich is the last day of the previous month.
-        .eq('family_id', familyId).gte('date', `${todayKey.slice(0, 7)}-01`).limit(1000)
+        let query = supabase.from('transactions').select('id, type, amount, date')
+          .eq('family_id', familyId).gte('date', thisMonth.from).lte('date', thisMonth.to);
+        if (after) query = query.gt('id', after);
+        return query.order('id').limit(limit);
+      }, { max: MONTH_TXN_MAX })
       : Promise.resolve({ data: [] as HomeTxn[], error: null }),
     supabase.from('family_photos').select('id, url, thumbnail_url, caption, taken_at, created_at')
       .eq('family_id', familyId).order('created_at', { ascending: false }).limit(4),
@@ -291,7 +309,11 @@ export default async function HomePage() {
     overdueReminders: overdueReminders ?? 0,
   });
 
-  const finances = summarizeMonthFinances((txns ?? []) as HomeTxn[], now);
+  if (txnsError) console.error('[home] month finances read failed', txnsError);
+  // The family's month, as the read above is: summarizeMonthFinances keeps the
+  // rows of the UTC month of the date it is given, and `now` is Greenwich's,
+  // which on a month's last evening in Los Angeles is already next month.
+  const finances = summarizeMonthFinances((txns ?? []) as HomeTxn[], new Date(`${todayKey}T12:00:00Z`));
 
   // Two id-list lookups that both depend only on the batch above and on nothing
   // from each other, so they go out together rather than one after the other.
@@ -342,7 +364,7 @@ export default async function HomePage() {
       console.warn('[home] pending AI approvals read threw', cause);
       return { ok: false as const, error: String(cause) };
     }),
-    loadCompletedByBubaly(supabase, familyId, { now, limit: 6 }).catch((cause) => {
+    loadCompletedByBubaly(supabase, familyId, { now, limit: 6, viewer: { role: ctx.active.role, memberId: ctx.active.member.id } }).catch((cause) => {
       console.error('[home] completed-by-Bubaly read threw', cause);
       return { ok: false as const, error: String(cause) };
     }),
@@ -362,9 +384,19 @@ export default async function HomePage() {
       .eq('family_id', familyId).eq('is_done', false).lte('due_date', todayKey).order('due_date', { ascending: true }).limit(20),
     supabase.from('chore_assignments').select('id, chore_id, member_id, status, due_at')
       .eq('family_id', familyId).in('status', ['todo', 'in_progress']).lt('due_at', dayEndIso).order('due_at', { ascending: true }).limit(20),
-    supabase.from('family_reminders').select('id, title, remind_at, member_id, priority')
+    // A reminder an Autopilot card made is listed only to the card's readers
+    // (lib/autopilot/reminder-cards.ts), as the dashboard lists it: an accepted
+    // insurance card's unassigned "Renew dental insurance (Smile Co)" is the
+    // managers' and the member the policy names, a renewal's is not a guest's.
+    // Every other reminder is on Today as before, whoever it is for.
+    readVisibleReminders((from, to) => supabase.from('family_reminders').select('id, title, remind_at, member_id, priority, idempotency_key, tags')
       .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null).lte('remind_at', dayEndIso)
-      .order('remind_at', { ascending: true }).limit(20),
+      .order('remind_at', { ascending: true }).order('id').range(from, to),
+    { limit: 20, viewer: { role: ctx.active.role, memberId: me.id }, cards: reminderCardsReader(supabase, familyId, {
+      keyOf: (cardId) => suggestionReminderKey(familyId, cardId),
+      sourceTagOf: suggestionSourceTag,
+      onError: (error) => console.error('[home] autopilot reminder cards read failed', error),
+    }) }),
     ]),
   ]);
   for (const [label, res] of [
@@ -588,7 +620,9 @@ export default async function HomePage() {
         headline={needsHeader}
         approvals={Object.fromEntries(aiApprovals.map((a) => [a.id, a]))}
         moneyApprovalKinds={Object.fromEntries(((moneyApprovalsRes.data ?? []) as ParentApprovalRow[]).map((a) => [a.id, a.kind]))}
-        recommendationBodies={Object.fromEntries(recommendations.map((r) => [r.id, r.body]))}
+        // A recommendation's body is the planner's reasoning, which can touch
+        // money or documents: the managers' to read, as they decide it.
+        recommendationBodies={manager ? Object.fromEntries(recommendations.map((r) => [r.id, r.body])) : {}}
         canDecide={manager}
         seeAllHref="/dashboard/needs-you"
       />
@@ -809,14 +843,18 @@ export default async function HomePage() {
         {manager && <Card>
           <CardHead icon={DollarSign} title={tr('home.familyFinances')} href="/dashboard/billing" action="View finances" />
           <p className="text-xs text-muted">{tr('home.thisMonth')} {monthStart.toLocaleDateString(locale.code, { month: 'long', timeZone: tz })}</p>
-          <div className="mt-3 flex items-center gap-4">
-            <FinanceDonut income={finances.income} expenses={finances.expenses} remaining={finances.remaining} />
-            <div className="flex-1 space-y-2 text-sm">
-              <Row label={tr('home.totalIncome')} value={usd(finances.income)} valueClass="text-emerald-400" />
-              <Row label={tr('home.totalExpenses')} value={usd(finances.expenses)} valueClass="text-rose-400" />
-              <Row label={tr('home.remaining')} value={usd(finances.remaining)} valueClass="text-brand-text font-bold" />
+          {txnsError ? (
+            <p role="alert" className="mt-3 text-sm text-danger">{tr('financesModule.couldNotLoadFinancialData')}</p>
+          ) : (
+            <div className="mt-3 flex items-center gap-4">
+              <FinanceDonut income={finances.income} expenses={finances.expenses} remaining={finances.remaining} />
+              <div className="flex-1 space-y-2 text-sm">
+                <Row label={tr('home.totalIncome')} value={usd(finances.income)} valueClass="text-emerald-400" />
+                <Row label={tr('home.totalExpenses')} value={usd(finances.expenses)} valueClass="text-rose-400" />
+                <Row label={tr('home.remaining')} value={usd(finances.remaining)} valueClass="text-brand-text font-bold" />
+              </div>
             </div>
-          </div>
+          )}
         </Card>}
 
         {/* Recent Memories */}

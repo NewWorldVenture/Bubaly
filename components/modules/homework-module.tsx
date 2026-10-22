@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   BookOpen, Plus, Pencil, Trash2, Check, AlertTriangle, Clock,
   CircleDashed, GraduationCap,
@@ -8,7 +8,9 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
+import { mayAskInsight } from '@/lib/ai/insights';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -41,6 +43,14 @@ const NEXT_STATUS: Record<HomeworkStatus, HomeworkStatus> = {
 
 const blank = { id: '', member_id: '', subject: '', title: '', details: '', due_at: '', status: 'assigned' as HomeworkStatus };
 
+/** Statuses still to do — `isOpen` in lib/homework/board.ts. */
+const OPEN_STATUSES: HomeworkStatus[] = ['assigned', 'in_progress'];
+const DONE_STATUSES: HomeworkStatus[] = ['done', 'submitted'];
+/** Finished homework is listed newest first up to this, and counted exactly. */
+const COMPLETED_SHOWN = 200;
+/** Open homework is read whole; past this many the read fails rather than cuts. */
+const OPEN_MAX = 20_000;
+
 export function HomeworkModule() {
   const format = useFormat();
   // The due-date input is a reading on the FAMILY's clock, both ways: a
@@ -50,7 +60,6 @@ export function HomeworkModule() {
   const askConfirm = useConfirm();
   const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
-  void role;
 
   const [memberFilter, setMemberFilter] = useState('all');
   const [showDone, setShowDone] = useState(false);
@@ -58,25 +67,65 @@ export function HomeworkModule() {
   const [form, setForm] = useState(blank);
   const [saving, setSaving] = useState(false);
 
-  const { data: homework, loading, error } = useRealtimeQuery<Homework>({
-    table: 'homework_assignments', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('homework_assignments').select('*').eq('family_id', familyId).order('due_at', { nullsFirst: false }),
+  // One unpaged select of every assignment stopped at db-max-rows (1,000) with
+  // no sign of it, and finished homework is never purged. Ordered oldest-due
+  // first, it was today's and upcoming work — and everything undated — that fell
+  // off the end, while Open, Overdue and Completed% were computed from the rest.
+  // Open homework is read whole (past the ceiling the read fails and the screen
+  // says so); finished homework is listed newest first up to a bound, for the
+  // student in view, and counted exactly.
+  const memberScope = memberFilter === 'all' ? null : memberFilter;
+  const openQ = useRealtimeQuery<Homework>({
+    table: 'homework_assignments', familyId, deps: [familyId, 'open'],
+    fetcher: (sb) => readAllAsQuery<Homework>((from, to) => sb.from('homework_assignments').select('*')
+      .eq('family_id', familyId).in('status', OPEN_STATUSES)
+      .order('due_at', { ascending: true, nullsFirst: false }).order('id').range(from, to), { max: OPEN_MAX }),
   });
+  const doneQ = useRealtimeQuery<Homework>({
+    table: 'homework_assignments', familyId, deps: [familyId, 'done', memberScope],
+    fetcher: (sb) => readAllAsQuery<Homework>((from, to) => {
+      const read = sb.from('homework_assignments').select('*').eq('family_id', familyId).in('status', DONE_STATUSES);
+      return (memberScope ? read.eq('member_id', memberScope) : read)
+        .order('completed_at', { ascending: false, nullsFirst: false }).order('id').range(from, to);
+    }, { max: COMPLETED_SHOWN, failOnMax: false }),
+  });
+  const doneCountQ = useRealtimeQuery<{ total: number }>({
+    table: 'homework_assignments', familyId, deps: [familyId, 'done-count', memberScope],
+    fetcher: async (sb) => {
+      const read = sb.from('homework_assignments').select('id', { count: 'exact', head: true })
+        .eq('family_id', familyId).in('status', DONE_STATUSES);
+      const { count, error: countError } = await (memberScope ? read.eq('member_id', memberScope) : read);
+      return { data: countError ? null : [{ total: count ?? 0 }], error: countError };
+    },
+  });
+  const loading = openQ.loading || doneQ.loading || doneCountQ.loading;
+  const error = openQ.error || doneQ.error || doneCountQ.error;
 
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
   const students = useMemo(() => members.filter((m) => m.role === 'child' || m.role === 'teen'), [members]);
-  const now = useMemo(() => new Date(), []); // instant: compared with due_at only (lib/homework/board.ts)
+  // The FAMILY's clock, not the device's: "Due today" is the family's day
+  // (lib/homework/board.ts dueBucket), and `now` moves on when that day does
+  // rather than staying frozen at the moment the page was opened.
+  const familyToday = clock.todayKey();
+  const [now, setNow] = useState(() => new Date()); // instant: compared with due_at; its day is read in clock.timeZone
+  useEffect(() => { setNow(new Date()); }, [familyToday]);
 
   const visible = useMemo(() => {
-    let list = homework ?? [];
-    if (memberFilter !== 'all') list = list.filter((h) => h.member_id === memberFilter);
+    let list = [...openQ.data, ...doneQ.data];
+    if (memberScope) list = list.filter((h) => h.member_id === memberScope);
     return list;
-  }, [homework, memberFilter]);
+  }, [openQ.data, doneQ.data, memberScope]);
+  const doneTotal = doneCountQ.data[0]?.total ?? 0;
 
-  const stats = useMemo(() => homeworkStats(visible as HomeworkLike[], now), [visible, now]);
-  // "Due today" is the FAMILY's today, like the due time printed under it.
+  const stats = useMemo(() => {
+    const open = homeworkStats(visible.filter((h) => OPEN_STATUSES.includes(h.status)) as HomeworkLike[], now);
+    const total = open.open + doneTotal;
+    // Over every assignment, finished ones counted rather than listed.
+    return { ...open, completionRate: total === 0 ? 0 : Math.round((doneTotal / total) * 100) };
+  }, [visible, now, doneTotal]);
   const grouped = useMemo(() => groupByDue(visible as HomeworkLike[], now, clock.timeZone), [visible, now, clock.timeZone]);
-  const hwById = useMemo(() => new Map((homework ?? []).map((h) => [h.id, h])), [homework]);
+  const hwById = useMemo(() => new Map(visible.map((h) => [h.id, h])), [visible]);
+  const canAskInsight = mayAskInsight('homework', role);
 
   function openNew() { setForm({ ...blank, member_id: students[0]?.id ?? '' }); setModalOpen(true); }
   function openEdit(h: Homework) {
@@ -145,7 +194,7 @@ export function HomeworkModule() {
       <PageHeader
         title={t('homework.homework')}
         description={t('homeworkModule.keepEveryAssignmentOnTrack')}
-        action={<div className="flex items-center gap-2"><AiInsight kind="homework" /><Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('homework.addHomework')}</Button></div>}
+        action={<div className="flex items-center gap-2">{canAskInsight && <AiInsight kind="homework" />}<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('homework.addHomework')}</Button></div>}
       />
 
       {/* Stats */}
@@ -178,7 +227,7 @@ export function HomeworkModule() {
         </label>
       </div>
 
-      {visible.length === 0 ? (
+      {visible.length === 0 && doneTotal === 0 ? (
         <EmptyState icon={BookOpen} title={t('homework.noHomeworkYet')}
           description={t('homeworkModule.addAssignmentsToTrackDue')}
           action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('homework.addHomework')}</Button>} />
@@ -192,7 +241,7 @@ export function HomeworkModule() {
                 <h2 className={cn('text-sm font-semibold uppercase tracking-wider mb-2.5 flex items-center gap-2', BUCKET_ACCENT[bucket])}>
                   {bucket === 'overdue' && <AlertTriangle className="h-4 w-4" />}
                   {bucket === 'today' && <Clock className="h-4 w-4" />}
-                  {DUE_BUCKET_LABELS[bucket]} <span className="text-muted font-normal">({list.length})</span>
+                  {DUE_BUCKET_LABELS[bucket]} <span className="text-muted font-normal">({bucket === 'done' ? doneTotal : list.length})</span>
                 </h2>
                 <div className="space-y-2">
                   {list.map((row) => {

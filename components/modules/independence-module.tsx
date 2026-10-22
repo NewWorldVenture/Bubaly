@@ -38,20 +38,29 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
   const kidRows = useMemo(() => rows.filter(r => r.member_id === selectedKid), [rows, selectedKid]);
   const achievedTitles = useMemo(
     () => new Set(kidRows.filter(r => r.status === 'achieved').map(r => r.title)), [kidRows]);
+  // Every rung already on this child's ladder, skipped ones included: Skip
+  // promises "it won't be suggested again", and leaving skipped titles out of
+  // this set put the rung straight back among the suggestions.
   const trackedTitles = useMemo(
-    () => new Set(kidRows.filter(r => r.status !== 'skipped').map(r => r.title)), [kidRows]);
+    () => new Set(kidRows.map(r => r.title)), [kidRows]);
 
   const level = useMemo(() => independenceLevel(age, achievedTitles), [age, achievedTitles]);
   const suggestions = useMemo(() => suggestMilestones(age, trackedTitles), [age, trackedTitles]);
   const inProgress = kidRows.filter(r => r.status === 'in_progress' || r.status === 'suggested');
   const achieved = kidRows.filter(r => r.status === 'achieved');
 
-  function run(fn: () => Promise<{ ok: boolean } & { error?: string }>, key: string, okMsg: string) {
+  function run(fn: () => Promise<{ ok: boolean } & { error?: string; code?: string }>, key: string, okMsg: string) {
     setBusy(key);
     startTransition(async () => {
       const res = await fn();
       setBusy(null);
-      if (!res.ok) { toastError(res.error ?? 'Something went wrong'); return; }
+      if (!res.ok) {
+        toastError(res.error ?? 'Something went wrong');
+        // Start on a rung already on the ladder added nothing: this page is
+        // behind, so it is brought up to date rather than left offering Start.
+        if (res.code === 'alreadyOnLadder') router.refresh();
+        return;
+      }
       success(okMsg);
       router.refresh();
     });

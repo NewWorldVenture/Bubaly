@@ -18,19 +18,15 @@ beforeEach(()=>{rows=[];requests=[];mode='healthy';state.role='parent';state.aud
   const reply=(data:any,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json'}});
   if(method==='POST'&&table==='independence_milestones'){
    expect(body).toEqual({family_id:family,member_id:body.member_id,domain:'school',title,description:'Puts folder, snack, and water bottle in the bag.',age_band:'4-6',status:'in_progress',points:5,created_by:'bbbbbbbb-bbbb-4bbb-8bbb-000000000001'});
-   // Insert-or-ignore: an existing rung is never rewritten by this POST (tests/a-restarted-milestone-keeps-its-achievement.test.ts).
    expect(u.searchParams.get('on_conflict')).toBe('family_id,member_id,domain,title');expect(new Headers(init.headers).get('prefer')).toContain('resolution=ignore-duplicates');
+   // The start reads back what it inserted: an empty answer is a rung already there.
+   expect(new Headers(init.headers).get('prefer')).toContain('return=representation');expect(u.searchParams.get('select')).toBe('id');
    if(mode==='write-refusal')return reply({code:'42501',message:'Synthetic policy refused this write'},403);
    if(!roster.some(r=>r.id===body.member_id))return reply({code:'23503',message:'Synthetic single-column member FK refuses a nonexistent member'},409);
+   // ignore-duplicates: a conflicting row is left as it is and not returned.
    const previous=rows.findIndex(r=>r.family_id===body.family_id&&r.member_id===body.member_id&&r.domain===body.domain&&r.title===body.title);if(previous>=0)return reply([],201);
-   rows.push(body);return reply([{id:'synthetic-rung-'+rows.length}],201);
-  }
-  // The conditional restart of a rung already on the ladder: never an achieved one.
-  if(method==='PATCH'&&table==='independence_milestones'){
-   expect(body).toEqual({status:'in_progress'});expect(u.searchParams.get('family_id')).toBe('eq.'+family);expect(u.searchParams.get('status')).toBe('neq.achieved');
-   const hit=rows.filter(r=>'eq.'+r.family_id===u.searchParams.get('family_id')&&'eq.'+r.member_id===u.searchParams.get('member_id')&&'eq.'+r.domain===u.searchParams.get('domain')&&'eq.'+r.title===u.searchParams.get('title')&&r.status!=='achieved');
-   for(const r of hit)r.status='in_progress';
-   return reply(hit.map((_r,i)=>({id:'synthetic-rung-'+i})));
+   rows.push(body);
+   return reply([{id:'dddddddd-dddd-4ddd-8ddd-'+String(rows.length).padStart(12,'0')}],201);
   }
   // This future-compatible seam accepts only a correctly scoped reference read.
   if(method==='GET'&&table==='family_members'){
@@ -51,7 +47,7 @@ beforeEach(()=>{rows=[];requests=[];mode='healthy';state.role='parent';state.aud
  }}});
 });
 it('refuses a foreign-family member before starting an own-family school milestone',async()=>{const result=await startMilestoneAction(foreignMember,title);expect(result.ok,JSON.stringify({result,rows,requests,audits:state.audits})).toBe(false);expect(rows).toEqual([]);expect(state.audits).toEqual([]);});
-it('starts a same-family school milestone with server-derived scope and normal 204 acknowledgement',async()=>{const result=await startMilestoneAction(ownMember,title);expect(result).toEqual({ok:true});expect(rows).toHaveLength(1);expect(rows[0]).toMatchObject({family_id:family,member_id:ownMember,domain:'school',title,status:'in_progress'});expect(state.audits).toEqual([{familyId:family,actorId:'bbbbbbbb-bbbb-4bbb-8bbb-000000000001',action:'create',resource:'independence_milestones',resourceId:ownMember,metadata:{title}}]);});
+it('starts a same-family school milestone with server-derived scope and the inserted row read back',async()=>{const result=await startMilestoneAction(ownMember,title);expect(result).toEqual({ok:true});expect(rows).toHaveLength(1);expect(rows[0]).toMatchObject({family_id:family,member_id:ownMember,domain:'school',title,status:'in_progress'});expect(state.audits).toEqual([{familyId:family,actorId:'bbbbbbbb-bbbb-4bbb-8bbb-000000000001',action:'create',resource:'independence_milestones',resourceId:ownMember,metadata:{title}}]);});
 it('a nonexistent member fails the synthetic single-column FK without audit success',async()=>{const result=await startMilestoneAction(missingMember,title);expect(result.ok).toBe(false);expect(rows).toEqual([]);expect(state.audits).toEqual([]);});
 it('a child cannot start a milestone and causes no SDK or server-client work',async()=>{state.role='child';const result=await startMilestoneAction(ownMember,title);expect(result).toEqual({ok:false,error:'actions.onlyAParentCanMoveTheLadder'});expect(requests).toEqual([]);expect(state.serverCalls).toBe(0);expect(state.audits).toEqual([]);});
 it('an unknown title causes no write or audit',async()=>{const result=await startMilestoneAction(ownMember,'Synthetic unknown neutral title');expect(result).toEqual({ok:false,error:'actions.unknownMilestone'});expect(requests).toEqual([]);expect(rows).toEqual([]);expect(state.audits).toEqual([]);});
@@ -60,5 +56,5 @@ it('an adult manager retains the same-family start behavior',async()=>{state.rol
 
 for(const refusedRead of ['read-error','read-throw','read-empty','read-multiple','read-wrong-id','read-wrong-family','read-missing-id','read-missing-family','read-primitive','read-null-row'])it(refusedRead+' cannot write or audit a started milestone',async()=>{mode=refusedRead;const result=await startMilestoneAction(ownMember,title);expect(result.ok).toBe(false);expect(requests.filter(r=>r.method!=='GET')).toEqual([]);expect(rows).toEqual([]);expect(state.audits).toEqual([]);});
 it('a scoped reference read precedes the milestone upsert and retains the exact audit scope',async()=>{expect(await startMilestoneAction(ownMember,title)).toEqual({ok:true});expect(requests.map(r=>[r.method,r.table])).toEqual([['GET','family_members'],['POST','independence_milestones']]);expect(requests[0].query).toEqual({select:'id,family_id',id:'eq.'+ownMember,family_id:'eq.'+family});expect(state.audits[0].familyId).toBe(family);expect(state.audits[0].resourceId).toBe(ownMember);});
-it('a repeated start retains the existing upsert identity and one persisted synthetic row',async()=>{expect(await startMilestoneAction(ownMember,title)).toEqual({ok:true});expect(await startMilestoneAction(ownMember,title)).toEqual({ok:true});expect(rows).toHaveLength(1);expect(requests.filter(r=>r.method==='POST')).toHaveLength(2);expect(state.audits).toHaveLength(2);});
+it('a repeated start retains the existing upsert identity and one persisted synthetic row, and says the second added nothing',async()=>{expect(await startMilestoneAction(ownMember,title)).toEqual({ok:true});expect(await startMilestoneAction(ownMember,title)).toEqual({ok:false,code:'alreadyOnLadder',error:'actions.milestoneAlreadyOnTheLadder'});expect(rows).toHaveLength(1);expect(requests.filter(r=>r.method==='POST')).toHaveLength(2);expect(state.audits).toHaveLength(1);});
 for(const role of ['teen','caregiver','guest'])it(role+' retains the existing manager refusal before any SDK work',async()=>{state.role=role;expect(await startMilestoneAction(ownMember,title)).toEqual({ok:false,error:'actions.onlyAParentCanMoveTheLadder'});expect(requests).toEqual([]);expect(state.serverCalls).toBe(0);expect(rows).toEqual([]);expect(state.audits).toEqual([]);});

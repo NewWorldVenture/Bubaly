@@ -6,6 +6,7 @@ import type { Copy } from '@/lib/marketing/automation-triggers';
 import { unsubUrl } from '@/lib/marketing/unsubscribe';
 import { canonicalMailbox } from '@/lib/server/canonical-mailbox';
 import { escapeLike } from '@/lib/supabase/escape-like';
+import { isChildLoginEmail } from '@/lib/onboarding/child-login';
 
 type DB = SupabaseClient<Database>;
 
@@ -241,6 +242,16 @@ export async function runSteps(
       }
       if (step.action === 'send_email' && !recipient.email) {
         done.push('send_email:skipped(no-recipient)');
+        continue;
+      }
+      // Never a kid login's synthetic address (lib/onboarding/child-login.ts),
+      // the rule sendReactEmail and sendEmail keep: nothing is delivered on
+      // that domain and it is not Bubaly's, so a send is a bounce or a child's
+      // name in a stranger's inbox. This step calls the provider directly, so
+      // it keeps the rule here: a profile or a CRM contact can still carry
+      // one, such as a kid login's own profiles.email.
+      if (step.action === 'send_email' && isChildLoginEmail(recipient.email)) {
+        done.push('send_email:skipped(kid-login)');
         continue;
       }
       if (step.action === 'send_email' && recipient.email) {

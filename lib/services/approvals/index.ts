@@ -754,7 +754,7 @@ export async function scopeForApprovedWork(scope: ServiceScope, row: ApprovalRow
 
   const { data: asker, error } = await scope.db
     .from('family_members')
-    .select('id, user_id')
+    .select('id, user_id, role')
     .eq('id', row.requested_by_member_id)
     .eq('family_id', scope.familyId)
     // A removed asker is "a roster entry since removed" (see unattributed()):
@@ -766,7 +766,12 @@ export async function scopeForApprovedWork(scope: ServiceScope, row: ApprovalRow
     if (error) console.error('[service:approvals] could not resolve the asker', error);
     return unattributed(scope);
   }
-  return { ...scope, actorKind: 'ai', memberId: asker.id, userId: asker.user_id ?? scope.userId };
+  // The approver's role still does the work; what it may be done TO is the
+  // asker's to see. A teen's "complete <id>" for a policy reminder the policy
+  // does not name them on reached the parent as an opaque card, ran as the
+  // parent's role, completed the reminder and stamped its title on this row,
+  // which every family member reads (lib/services/reminders/shown.ts).
+  return { ...scope, actorKind: 'ai', memberId: asker.id, userId: asker.user_id ?? scope.userId, viewer: { role: asker.role, memberId: asker.id } };
 }
 
 /**
@@ -780,9 +785,14 @@ export async function scopeForApprovedWork(scope: ServiceScope, row: ApprovalRow
  * the wrong person and, on `event_rsvps_once`, upsert over their own reply.
  * Refusing something a parent approved is a bad outcome; recording it against
  * them is a worse one.
+ *
+ * For the same reason nothing is shown or acted on as the approver's: the
+ * reader is no member, with a guest's narrowest view (`viewer`), so a
+ * reminder only some of the family may be shown is not acted on for an asker
+ * nobody can name.
  */
 function unattributed(scope: ServiceScope): ServiceScope {
-  return { ...scope, actorKind: 'ai', memberId: null };
+  return { ...scope, actorKind: 'ai', memberId: null, viewer: { role: 'guest', memberId: null } };
 }
 
 /**

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
+import { rateLimitHit } from './helpers/rate-limit-rpc';
 
 const mocks = vi.hoisted(() => ({ admin: vi.fn(), submit: vi.fn(), sendEmail: vi.fn(), sendSms: vi.fn(), concierge: vi.fn() }));
 vi.mock('@/lib/supabase/server', async (original) => ({ ...await original<typeof import('@/lib/supabase/server')>(), createServiceClient: mocks.admin }));
@@ -23,7 +24,10 @@ beforeEach(() => {
   vi.stubEnv('CONTACT_CENTER_INBOUND_SECRET', 'secret');
   vi.spyOn(console, 'error').mockImplementation(() => {});
   db = createInMemorySupabase({ uniques: { notifications: [['id']], ai_tool_calls: [['id'], ['family_id', 'idempotency_key']], family_inbox_messages: [['channel', 'provider_ref']] },
-    defaults: { paperwork_items: { updated_at: '2026-09-09T12:00:00Z' }, family_inbox_messages: { ai_handled: false } } });
+    defaults: { paperwork_items: { updated_at: '2026-09-09T12:00:00Z' }, family_inbox_messages: { ai_handled: false } },
+    // The concierge is budgeted through the durable limiter (audit N1); without
+    // the function the fake reads as "unavailable" and the concierge is withheld.
+    rpc: { rate_limit_hit: rateLimitHit } });
   mocks.admin.mockReturnValue(db);
   mocks.concierge.mockResolvedValue({ intent: 'school', summary: 'Please sign', reply: 'Thank you', aiUsed: false });
   mocks.submit.mockResolvedValue({ ok: true, data: { requestId: 'request-1', runId: 'run-1', planId: null, outcome: 'plan', summary: 'Ready', redirect: null } });

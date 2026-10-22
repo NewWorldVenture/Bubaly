@@ -42,7 +42,12 @@ export default async function KitchenPage() {
       .select('plan_date, meal_type, meals(name)')
       .eq('family_id', familyId).gte('plan_date', weekStart).lte('plan_date', weekEnd).order('plan_date'),
     supabase.from('pantry_items').select('name, expires_at, quantity, low_threshold, is_staple, location').eq('family_id', familyId).limit(300),
-    supabase.from('leftover_inventory').select('id, name, source_meal, quantity, use_by, location, status').eq('family_id', familyId).limit(50),
+    // Fresh ones only, most urgent first. Eaten, frozen and tossed rows are
+    // never deleted, so an unfiltered, unordered 50 was a slice of the family's
+    // whole leftover HISTORY — oldest first in practice — and once there were
+    // more than 50 the card said "No leftovers logged" over tonight's.
+    supabase.from('leftover_inventory').select('id, name, source_meal, quantity, use_by, location, status').eq('family_id', familyId)
+      .eq('status', 'fresh').order('use_by', { ascending: true, nullsFirst: false }).order('id').limit(50),
     supabase.from('family_recipes').select('name, rating, estimated_cost_cents').eq('family_id', familyId).limit(300),
     // Only lists the family has not archived (readOnOpenGroceryLists).
     readOnOpenGroceryLists(supabase, familyId, (lists) => supabase.from('grocery_items').select('id, name, is_checked').eq('family_id', familyId).in('list_id', lists).eq('is_checked', false).limit(200)),
@@ -88,8 +93,12 @@ export default async function KitchenPage() {
   const expiring = expiringSoon(pantry, 5, today).map((p) => ({ name: p.name, expires_at: p.expires_at ?? null }));
 
   // ── Leftovers (migration-aware) ──
+  // A table that is not there yet is an absence; any other failed read is not
+  // "No leftovers logged", it is a card that could not be read.
   const leftoversMissing = isMissingTableError(leftoverRes.error);
-  const leftoverRows = (leftoversMissing ? [] : (leftoverRes.data ?? [])) as LeftoverLike[];
+  const leftoversUnavailable = Boolean(leftoverRes.error) && !leftoversMissing;
+  if (leftoversUnavailable) console.error('[dashboard/kitchen] leftovers read failed', leftoverRes.error);
+  const leftoverRows = (leftoversMissing || leftoversUnavailable ? [] : (leftoverRes.data ?? [])) as LeftoverLike[];
   const active = activeLeftovers(leftoverRows, today);
   const nudge = leftoverNudge(leftoverRows, today);
 
@@ -116,6 +125,10 @@ export default async function KitchenPage() {
   if (!isMissingTableError(nutritionRes.error) && nutritionRes.data && nutritionRes.data.calories != null) {
     perDayNutrition = coerceNutrition(nutritionRes.data);
   }
+  // A failed read is not "no nutrition estimate this week": the score below is
+  // then missing a part, so the card says so and does not offer to save it.
+  const nutritionUnavailable = Boolean(nutritionRes.error) && !isMissingTableError(nutritionRes.error);
+  if (nutritionUnavailable) console.error('[dashboard/kitchen] nutrition read failed', nutritionRes.error);
 
   // ── Food Score ──
   const scoreInput: FoodScoreInput = {
@@ -145,6 +158,8 @@ export default async function KitchenPage() {
     })),
     leftoverNudge: nudge,
     leftoversMissing,
+    leftoversUnavailable,
+    nutritionUnavailable,
     groceryOpen: (groceryRes.data ?? []).length,
     recipeCount: recipes.length,
     foodScore,

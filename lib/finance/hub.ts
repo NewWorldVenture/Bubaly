@@ -4,6 +4,9 @@
 
 import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
 import { localDayKey } from '@/lib/time/local-day';
+import { periodWindow } from '@/lib/finance/budget-periods';
+
+export { periodWindow };
 
 /**
  * Dollars for the reader. The LOCALE is the reader's; the CURRENCY is the
@@ -65,15 +68,21 @@ export function periodStart(period: Period, now: Date = new Date()): string {
 
 export interface TxnLike { type: string; category: string | null; amount: number; date: string }
 
-/** Total expense spend for a category within the current period. */
+/**
+ * Total expense spend for a category within the current period — the whole
+ * period and nothing past it. Only its start used to be checked, so next
+ * month's rent recorded today as scheduled counted against this month's
+ * Housing budget, and a yearly budget counted next year's rows.
+ */
 export function budgetSpent(txns: TxnLike[], category: string, period: Period, now: Date = new Date()): number {
-  const start = periodStart(period, now);
+  // The reader's day (`now` carries the family's day in its local fields).
+  const { from: start, to: end } = periodWindow(period, localDayKey(now));
   const cat = category.toLowerCase();
   let sum = 0;
   for (const t of txns) {
     if (t.type !== 'expense') continue;
     if ((t.category ?? '').toLowerCase() !== cat) continue;
-    if (t.date < start) continue;
+    if (t.date < start || t.date > end) continue;
     sum += Math.abs(t.amount);
   }
   return Math.round(sum * 100) / 100;

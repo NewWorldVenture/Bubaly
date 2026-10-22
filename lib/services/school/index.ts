@@ -70,8 +70,16 @@ function windowInstant(value: string | null | undefined, tz: string, edge: 'star
   return at ? at.toISOString() : null;
 }
 
+type ResolvedWindow = {
+  from: string;
+  /** Inclusive millisecond endpoint, retained for timed windows and existing callers. */
+  to: string;
+  /** Bare-date ends use the next civil-day boundary, exclusive, for precise database reads. */
+  toExclusive?: string;
+};
+
 /** A window defaulting to the coming week; an inverted window is refused rather than returned empty. */
-export function resolveWindow(scope: ServiceScope, input?: { from?: string | null; to?: string | null }): ServiceResult<{ from: string; to: string }> {
+export function resolveWindow(scope: ServiceScope, input?: { from?: string | null; to?: string | null }): ServiceResult<ResolvedWindow> {
   const explicitFrom = windowInstant(input?.from, scope.tz, 'start');
   const explicitTo = windowInstant(input?.to, scope.tz, 'end');
   if (input?.from && !explicitFrom) return fail('That start time could not be understood.', { code: SERVICE_CODES.invalidInput });
@@ -81,7 +89,13 @@ export function resolveWindow(scope: ServiceScope, input?: { from?: string | nul
   const toDate = explicitTo ? new Date(explicitTo) : new Date(fromDate.getTime() + WEEK_MS);
   if (!Number.isFinite(toDate.getTime())) return fail('That end time is outside the supported date range.', { code: SERVICE_CODES.invalidInput });
   if (toDate < fromDate) return fail('The end of that window is before its start.', { code: SERVICE_CODES.invalidInput });
-  return ok({ from: fromDate.toISOString(), to: toDate.toISOString() });
+  // A PostgreSQL timestamp can fall in the final 999 microseconds after our
+  // Date's last millisecond. A whole civil day ends at the next boundary,
+  // exclusive; only an explicitly timed end keeps the inclusive predicate.
+  const wholeDayEnd = explicitTo && parseCivilReading(input?.to ?? '')?.hasTime === false;
+  return ok({ from: fromDate.toISOString(), to: toDate.toISOString(),
+    ...(wholeDayEnd ? { toExclusive: new Date(toDate.getTime() + 1).toISOString() } : {}),
+  });
 }
 
 export type SchoolWindowInput = { from?: string | null; to?: string | null; memberId?: string | null; limit?: number };
@@ -96,9 +110,11 @@ export async function listEventsBetween(scope: ServiceScope, input: SchoolWindow
     .from('school_events')
     .select('*', { count: 'exact' })
     .eq('family_id', scope.familyId)
-    .gte('starts_at', window.data.from)
-    .lte('starts_at', window.data.to)
-    .order('starts_at', { ascending: true }).order('id');
+    .gte('starts_at', window.data.from);
+    read = window.data.toExclusive
+      ? read.lt('starts_at', window.data.toExclusive)
+      : read.lte('starts_at', window.data.to);
+    read = read.order('starts_at', { ascending: true }).order('id');
     if (input.memberId) read = read.eq('member_id', input.memberId);
     return read;
   };
@@ -137,9 +153,14 @@ export async function listHomeworkDue(scope: ServiceScope, input: HomeworkDueInp
     .select('*', { count: 'exact' })
     .eq('family_id', scope.familyId)
     .not('due_at', 'is', null);
-    read = part === 'window'
-      ? read.gte('due_at', window.data.from).lte('due_at', window.data.to)
-      : read.lt('due_at', window.data.from);
+    if (part === 'overdue') {
+      read = read.lt('due_at', window.data.from);
+    } else {
+      read = read.gte('due_at', window.data.from);
+      read = window.data.toExclusive
+        ? read.lt('due_at', window.data.toExclusive)
+        : read.lte('due_at', window.data.to);
+    }
     read = read.order('due_at', { ascending: true }).order('id');
     if (part === 'overdue' || !input.includeDone) read = read.in('status', OPEN_STATUSES);
     if (input.memberId) read = read.eq('member_id', input.memberId);

@@ -81,7 +81,6 @@ const KNOWN_UNGATED = new Set([
   'components/modules/documents-module.tsx -> documents',
   'components/modules/finances-module.tsx -> financial_accounts',
   'components/modules/passwords-module.tsx -> family_credentials',
-  'components/modules/settings-module.tsx -> family_members',
 ]);
 
 // Two idioms mean the same thing in this codebase. `family-module.tsx` reaches

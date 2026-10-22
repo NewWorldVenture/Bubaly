@@ -198,7 +198,12 @@ export type ExecutorPort = {
   updateRun(run: RunSnapshot, patch: RunPatch): Promise<void>;
   updateStep(run: RunSnapshot, stepId: string, patch: StepPatch): Promise<void>;
   appendEvent(run: RunSnapshot, event: RunEventInput): Promise<void>;
-  heartbeat(run: RunSnapshot): Promise<void>;
+  /**
+   * Extend the lease `run.lease_owner` names. `false` means that lease is no
+   * longer this worker's (another worker claimed the run, or the row moved
+   * on), and the slice stops without writing anything more.
+   */
+  heartbeat(run: RunSnapshot): Promise<boolean | void>;
   /** Re-reads the requester's membership; a failure blocks the run rather than executing with stale authority. */
   scopeFor(run: RunSnapshot): Promise<ServiceResult<ServiceScope>>;
   runTool(
@@ -247,6 +252,8 @@ export type ExecutorPort = {
     | ((scope: ServiceScope, run: RunSnapshot, step: StepSnapshot, steps: StepSnapshot[]) => Promise<ServiceResult<{ planId: string }>>)
     | null;
   setRequestState(run: RunSnapshot, state: RunState, error: string | null): Promise<void>;
+  /** Give up this worker's lease (only while it is still `leaseOwner`'s). Optional: a port without it leaves the lease to run out. */
+  releaseLease?(run: RunSnapshot, leaseOwner: string): Promise<void>;
   now(): number;
   sleep(ms: number): Promise<void>;
   random(): number;
@@ -588,6 +595,11 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
   if (initial.paused_at || initial.state === 'paused') return { status: 'paused', ...empty };
 
   let run = initial;
+  // The lease this slice was claimed under. The claim (`claimRun`, or
+  // `claim_ai_runs` for the cron) wrote it just before this call, so the first
+  // read carries it; every later read must still carry it, or another worker
+  // owns the run now (`leaseLost`).
+  const leaseToken = initial.lease_owner ?? null;
 
   // Cancellation wins over everything, including a run mid-flight whose worker
   // died: the executor never resumes work a person has stopped (§45).
@@ -617,6 +629,10 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
   const firstSteps = await port.loadSteps(run);
   if (!firstSteps.ok) return { status: 'error', ...empty };
   let steps = firstSteps.data;
+  // Which plan `steps` were read from. The run row can be pointed at another
+  // version while this slice runs (an edit, an answer), and steps from the
+  // version it no longer names must never be run or finalized on.
+  let stepsPlanId: string | null = run.plan_id;
 
   const cycle = findDependencyCycle(steps);
   if (cycle) {
@@ -674,9 +690,27 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
     if (!refreshed.data) return summarize('not_found', steps);
     run = refreshed.data;
     if (run.cancel_requested_at) return finalizeCancelled(port, run, steps);
+    // Another worker holds the run now (a pause and a resume landed while this
+    // batch ran, and the resume's kick claimed it). Everything this slice
+    // would write next — steps, approvals, the final state — is that worker's
+    // to write, so stop here and write nothing.
+    if (leaseLost(leaseToken, run.lease_owner)) return summarize('lease_lost', steps);
     if (run.paused_at || run.state === 'paused') {
       await port.appendEvent(run, { eventType: 'paused', message: 'Paused - Bubaly stopped after the steps already in flight.' });
+      // Let go of the lease the pause left with this worker (`pauseRun` keeps
+      // a live one), so a Resume can be picked up at once instead of waiting
+      // for it to run out. Guarded on the token: nothing else is touched.
+      if (leaseToken) await port.releaseLease?.(run, leaseToken);
       return summarize('paused', steps);
+    }
+    if (run.plan_id !== stepsPlanId) {
+      // The run was pointed at another plan version since these steps were
+      // read. Choose the next batch — or decide the run is finished — from
+      // the plan it names now, never from the one it left.
+      const current = await port.loadSteps(run);
+      if (!current.ok) return summarize('error', steps);
+      steps = current.data;
+      stepsPlanId = run.plan_id;
     }
 
     // Everything downstream of a failure can never run; say so once, then finish.
@@ -752,7 +786,12 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
       if (disposition.kind === 'out_of_budget') outOfBudget = true;
     }
 
-    await port.heartbeat(run);
+    // Extended with the token this slice was claimed under, never with
+    // whatever the refreshed row says: that would extend another worker's
+    // lease on its behalf and hide that this one no longer holds the run.
+    if (await port.heartbeat(leaseToken ? { ...run, lease_owner: leaseToken } : run) === false && leaseToken) {
+      return summarize('lease_lost', steps);
+    }
 
     if (replannedTo) {
       run = { ...run, plan_id: replannedTo };
@@ -762,6 +801,7 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
     const reloaded = await port.loadSteps(run);
     if (!reloaded.ok) return summarize('error', steps);
     steps = reloaded.data;
+    stepsPlanId = run.plan_id;
 
     if (scheduledFor) {
       return parkForContinuation(port, run, steps, scheduledFor, 'Bubaly scheduled the rest of this for later.', 'scheduled_followup');
@@ -785,6 +825,15 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
   // Reaching the pass cap means the graph stopped converging; finishing
   // honestly beats spinning until the function is killed.
   return finalizeRun(port, run, steps);
+}
+
+/**
+ * Whether the run's lease is no longer the one this slice was claimed under.
+ * A slice started without a lease (a caller that did not claim) has nothing to
+ * lose, so it is never stopped on this.
+ */
+function leaseLost(leaseToken: string | null, current: string | null | undefined): boolean {
+  return !!leaseToken && (current ?? null) !== leaseToken;
 }
 
 /**
@@ -1441,9 +1490,11 @@ async function runFollowupStep(port: ExecutorPort, run: RunSnapshot, step: StepS
     ? Math.max(1, Math.round(raw.delayMinutes))
     : null;
   const at = Number.isFinite(explicit) ? explicit : port.now() + (minutes ?? 60) * 60_000;
+  const date = new Date(at);
+  if (!Number.isFinite(date.getTime())) return failStep(port, run, step, 'That follow-up has a time Bubaly cannot use.', false);
   if (at <= port.now()) return failStep(port, run, step, 'That follow-up is scheduled for a time that has already passed.', false);
 
-  const runAfter = new Date(at).toISOString();
+  const runAfter = date.toISOString();
   await port.updateStep(run, step.id, {
     status: 'completed',
     completed_at: new Date(port.now()).toISOString(),
@@ -1701,7 +1752,21 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
       await storeAppendEvent(systemScope(run), run.id, event, { db });
     },
     async heartbeat(run) {
-      if (run.lease_owner) await heartbeatRun(db, run.id, run.lease_owner);
+      if (!run.lease_owner) return true;
+      return heartbeatRun(db, run.id, run.lease_owner);
+    },
+    async releaseLease(run, leaseOwner) {
+      // Zero rows is ordinary: filtered on this worker's own lease, it means
+      // another worker or a control already moved the run on, and there is
+      // nothing of ours left to give up.
+      const { error } = await db
+        .from('family_automation_runs')
+        .update({ lease_owner: null, lease_expires_at: null })
+        .eq('id', run.id)
+        .eq('family_id', run.family_id)
+        .eq('lease_owner', leaseOwner)
+        .select('id');
+      if (error) console.error('[ai/runs] failed to give up the lease of a paused run; it will run out on its own', error);
     },
     async scopeFor(run) {
       // Read every time it is asked: the graph asks again before each later

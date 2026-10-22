@@ -55,8 +55,6 @@ const DECLARED: Record<string, string> = {
   'lib/inventory/finder.ts': 'lentOut/warrantyAlerts(items, today) take the inventory module\'s (client) today; the server imports only search/location helpers.',
   'lib/marketplace/handoff.ts': 'suggestedMeetTimes(now) is called only by components/marketplace/handoff-panel.tsx (client); the server imports the code helpers.',
   'lib/trips/departure.ts': 'trafficFactorForTime\'s dow/hour defaults are used only by components/modules/trip-intel-module.tsx (client).',
-  // ── fixes in flight ──
-  'lib/ai/insights.ts': 'the celebration planner\'s 60-day window takes the host\'s year; a day off only around New Year\'s midnight on the host. The data bundle does not carry the zone yet; tracked.',
 };
 
 function walk(dir: string, out: string[] = []): string[] {

@@ -9,6 +9,12 @@ import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 
 type Result = { ok: true } | { ok: false; error: string };
+/**
+ * Start's own answer for a rung that was already on the ladder: nothing was
+ * added, so it is not "Added …", and the page that offered Start is behind —
+ * the module says so and refreshes to show the rung as it is.
+ */
+export type StartResult = Result | { ok: false; error: string; code: 'alreadyOnLadder' };
 
 // The ladder is a parent's to move (0442): a child reads their own progress but
 // does not mark it achieved, skip what they would rather not do, or edit a
@@ -19,7 +25,7 @@ type Result = { ok: true } | { ok: false; error: string };
 // the row back — `error: null` over zero rows is a milestone that did not move.
 
 /** Add a ladder milestone to a child's track (status 'in_progress'). */
-export async function startMilestoneAction(memberId: string, title: string): Promise<Result> {
+export async function startMilestoneAction(memberId: string, title: string): Promise<StartResult> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentCanMoveTheLadder') };
@@ -40,11 +46,7 @@ export async function startMilestoneAction(memberId: string, title: string): Pro
     return { ok: false, error: t('actions.familyMemberNotFound') };
   }
 
-  // A new rung is inserted; a rung already on the ladder is left to the
-  // conditional restart below. This was one upsert that set 'in_progress' over
-  // whatever the row said, so Start from a stale page (or a repeated tap) took
-  // an ACHIEVED rung, and the child's badge, back to work.
-  const { data: added, error } = await supabase.from('independence_milestones').upsert({
+  const { data: started, error } = await supabase.from('independence_milestones').upsert({
     family_id: ctx.active.familyId,
     member_id: memberId,
     domain: m.domain,
@@ -54,18 +56,17 @@ export async function startMilestoneAction(memberId: string, title: string): Pro
     status: 'in_progress',
     points: m.points,
     created_by: ctx.user.id,
+  // Insert-only. A merge rewrote whatever row was there: a second parent's page
+  // rendered before the rung was achieved offered "Start", and the tap set the
+  // child's achievement back to in progress (achieved_at and evidence left
+  // set). A rung already on the ladder stays as it is.
+  //
+  // Read back, the answer holds only the row this call inserted, so an empty
+  // one is that rung already on the ladder — told as such, never as "Added",
+  // and not audited as a start that did not happen.
   }, { onConflict: 'family_id,member_id,domain,title', ignoreDuplicates: true }).select('id');
   if (error) return { ok: false, error: describeActionError(error) };
-  if (wroteNoRows(added)) {
-    // Already on this child's ladder: a skipped rung, or one started elsewhere,
-    // goes back to work. An achieved one is never touched, in the same write.
-    const { data: restarted, error: restartError } = await supabase.from('independence_milestones')
-      .update({ status: 'in_progress' })
-      .eq('family_id', ctx.active.familyId).eq('member_id', memberId).eq('domain', m.domain).eq('title', m.title)
-      .neq('status', 'achieved').select('id');
-    if (restartError) return { ok: false, error: describeActionError(restartError) };
-    if (wroteNoRows(restarted)) return { ok: false, error: t('actions.milestoneAlreadyAchieved') };
-  }
+  if (wroteNoRows(started)) return { ok: false, code: 'alreadyOnLadder', error: t('actions.milestoneAlreadyOnTheLadder') };
 
   await logAudit(supabase, {
     familyId: ctx.active.familyId, actorId: ctx.user.id, action: 'create',

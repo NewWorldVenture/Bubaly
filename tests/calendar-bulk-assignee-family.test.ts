@@ -80,7 +80,7 @@ if (id === '@/lib/calendar/source-capability') return { CALENDAR_SOURCE_ARCHIVE_
     if (id === 'server-only') return {}; if (id === 'node:crypto') return nativeRequire(id);
     if (id === '../types' || id === './types') return load('types'); if (id === '../idempotency') return load('idempotency'); if (id === '@/lib/supabase/errors') return load('errors');
     if (id === '../activity') return { recordActivitySafely: async (_scope: any, descriptor: any) => trace.activity.push(descriptor) };
-    if (['@/lib/home/conflicts', '@/lib/calendar/scheduling', '@/lib/supabase/settle', '../scope', '@/lib/supabase/escape-like', '@/lib/i18n/server'].includes(id)) return unused(id);
+    if (['@/lib/home/conflicts', '@/lib/calendar/scheduling', '@/lib/supabase/settle', '../scope', '@/lib/supabase/escape-like', '@/lib/i18n/server', '@/lib/trips/follow-event'].includes(id)) return unused(id);
     return deny('Forbidden import ' + id);
   }; new Function('require', 'module', 'exports', sourceFor(name))(require, entry, entry.exports); loaded[name] = entry.exports; return entry.exports; }
   return { run: () => load('calendar').createEvents(scope, inputs), rows, saved, settled, keys };

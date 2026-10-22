@@ -1,5 +1,8 @@
 // /dashboard/needs-you — M5 "Needs Your Decision": every decision waiting on a
-// person, uncapped.
+// person. Each source is read to a cap (50 approvals, 50 recommendations, …)
+// WITH its exact count, and whatever a cap left out is counted into the
+// headline and the "+N more" line, so the page never presents a first page as
+// everything.
 //
 // Home ranks the same queue but shows five and rolls the rest into "+N more";
 // this page is where that link lands. It reads the same sources Home does
@@ -28,8 +31,9 @@ import {
   type AwaitingRunRow, type FactSuggestionRow, type InboxMessageRow, type PaperworkRow, type ParentApprovalRow, type RecommendationRow,
 } from '@/lib/home/needs-sources';
 import { listPending } from '@/lib/services/approvals';
-import { listMemories } from '@/lib/services/memory';
+import { listMemories, PENDING_SUGGESTION_LIMIT, SENSITIVE_MEMORY_CATEGORIES } from '@/lib/services/memory';
 import { scopeFromUserContext } from '@/lib/services/scope';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { settle } from '@/lib/supabase/settle';
 import { readsHouseholdMoney } from '@/lib/finance/household-money';
 
@@ -49,46 +53,75 @@ export default async function NeedsYouPage() {
   const now = new Date();
   const manager = isManager(ctx.active.role);
 
+  // What a manager may confirm and a child may not: the memory service hides
+  // the sensitive categories from anyone else (filterVisibleMemories), so the
+  // count of what its cap left out is taken over the same rows, or a child's
+  // headline counted medical inferences it was never shown.
+  const suggestionCount = supabase.from('family_playbook_suggestions').select('id', { count: 'exact', head: true })
+    .eq('family_id', familyId).eq('status', 'suggested');
   const [
     aiApprovalsRes, memoriesRes, awaitingRunsRes, recsRes, moneyApprovalsRes, choreSignoffRes, overdueRemindersRes, inboxRes, paperworkRes,
+    approvalCountRes, suggestionCountRes, gatedRunsRes,
   ] = await Promise.all([
     listPending(scope),
     // The memory service applies the same visibility rule the knowledge page
     // does (sensitive categories are for managers), so a child's queue never
     // carries a medical inference to confirm.
     listMemories(scope),
-    settle(supabase.from('family_automation_runs').select('id, summary, state, updated_at, created_at')
+    settle(supabase.from('family_automation_runs').select('id, summary, state, updated_at, created_at', { count: 'exact' })
       .eq('family_id', familyId).in('state', ['awaiting_approval', 'awaiting_context']).order('updated_at', { ascending: false }).limit(50)),
-    settle(supabase.from('family_ai_recommendations').select('id, title, body, priority, cta_href, created_at')
+    settle(supabase.from('family_ai_recommendations').select('id, title, body, priority, cta_href, created_at', { count: 'exact' })
       .eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(50)),
     manager
-      ? settle(supabase.from('parent_approvals').select('id, kind, amount_cents, created_at')
+      ? settle(supabase.from('parent_approvals').select('id, kind, amount_cents, created_at', { count: 'exact' })
           .eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(50))
-      : Promise.resolve({ data: [] as ParentApprovalRow[], error: null }),
+      : Promise.resolve({ data: [] as ParentApprovalRow[], count: 0, error: null }),
     manager
       ? settle(supabase.from('chore_assignments').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('status', 'submitted'))
       : Promise.resolve({ count: 0, error: null }),
     settle(supabase.from('family_reminders').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null).lt('remind_at', now.toISOString())),
-    settle(supabase.from('family_inbox_messages').select('id, direction, from_addr, subject, ai_summary, body, ai_intent, status, occurred_at')
-      .eq('family_id', familyId).eq('status', 'new').eq('direction', 'inbound').in('ai_intent', [...REPLY_INTENTS])
-      .order('occurred_at', { ascending: false }).limit(50)),
+    // The household inbox is not a guest's (ROLE-SCOPE-001): the Contact
+    // Center sends a guest away, and the reserved 0509 refuses them the rows.
+    // Until it is applied RLS still answers, so a guest is not asked for it.
+    ctx.active.role === 'guest'
+      ? Promise.resolve({ data: [] as InboxMessageRow[], count: 0, error: null })
+      : settle(supabase.from('family_inbox_messages').select('id, direction, from_addr, subject, ai_summary, body, ai_intent, status, occurred_at', { count: 'exact' })
+          .eq('family_id', familyId).eq('status', 'new').eq('direction', 'inbound').in('ai_intent', [...REPLY_INTENTS])
+          .order('occurred_at', { ascending: false }).limit(50)),
     // Paperwork is a parent's or adult's, and whoever filed an item keeps it
     // (the held 0514): anyone else's list is what they filed, before the limit.
     settle((readsHouseholdMoney(ctx.active.role)
-      ? supabase.from('paperwork_items').select('id, title, status, urgency, due_on, actions, created_at').eq('family_id', familyId)
-      : supabase.from('paperwork_items').select('id, title, status, urgency, due_on, actions, created_at').eq('family_id', familyId).eq('created_by', ctx.user.id))
+      ? supabase.from('paperwork_items').select('id, title, status, urgency, due_on, actions, created_at', { count: 'exact' }).eq('family_id', familyId)
+      : supabase.from('paperwork_items').select('id, title, status, urgency, due_on, actions, created_at', { count: 'exact' }).eq('family_id', familyId).eq('created_by', ctx.user.id))
       .in('status', ['needs_action', 'in_progress']).order('created_at', { ascending: false }).limit(100)),
+    // The two service-read sources, counted the way the services read them.
+    settle(supabase.from('approval_requests').select('id', { count: 'exact', head: true })
+      .eq('family_id', familyId).eq('status', 'pending')),
+    settle(manager ? suggestionCount : suggestionCount.not('category', 'in', `(${SENSITIVE_MEMORY_CATEGORIES.join(',')})`)),
+    // An approval that gates a run and the run parked on it are ONE decision
+    // (buildHomeNeeds). The approvals list is read to its cap of 50, so the
+    // runs it gates are read whole here, or the 51st approval's run showed up
+    // beside it as its own item. Paged by id, never summed; settled like the
+    // rest, so a transport failure is this read's error, not the page's.
+    settle(readAllAsQuery<{ run_id: string | null }>((from, to) => supabase.from('approval_requests').select('run_id')
+      .eq('family_id', familyId).eq('status', 'pending').not('run_id', 'is', null).order('id').range(from, to), { max: 5000 })),
   ]);
 
+  // Labels for the server log only, written as tokens: the i18n scanner reads a
+  // two-word string as copy, and these are not shown to anyone.
   const failures: { label: string; error: unknown }[] = [];
-  if (!aiApprovalsRes.ok) failures.push({ label: 'pending AI approvals', error: aiApprovalsRes.error });
-  if (!memoriesRes.ok) failures.push({ label: 'memory suggestions', error: memoriesRes.error });
+  if (!aiApprovalsRes.ok) failures.push({ label: 'ai-approvals', error: aiApprovalsRes.error });
+  if (!memoriesRes.ok) failures.push({ label: 'memory-suggestions', error: memoriesRes.error });
+  if (gatedRunsRes.error) failures.push({ label: 'gated-runs', error: gatedRunsRes.error });
   for (const [label, res] of [
-    ['awaiting runs', awaitingRunsRes], ['recommendations', recsRes], ['money approvals', moneyApprovalsRes],
-    ['chore sign-offs', choreSignoffRes], ['overdue reminders', overdueRemindersRes], ['inbox messages', inboxRes], ['paperwork', paperworkRes],
+    ['awaiting-runs', awaitingRunsRes], ['recommendations', recsRes], ['money-approvals', moneyApprovalsRes],
+    ['chore-sign-offs', choreSignoffRes], ['overdue-reminders', overdueRemindersRes], ['inbox-messages', inboxRes], ['paperwork', paperworkRes],
+    ['approval-count', approvalCountRes], ['suggestion-count', suggestionCountRes],
   ] as const) {
     if (res.error) failures.push({ label, error: res.error });
+    // A cap that cannot say what it left out cannot be presented as the list.
+    else if (typeof res.count !== 'number') failures.push({ label, error: 'no-count' });
   }
   if (failures.length) {
     for (const f of failures) console.error(`[needs-you] ${f.label} read failed`, f.error);
@@ -107,6 +140,7 @@ export default async function NeedsYouPage() {
     ? memoriesRes.data.pending.map((s) => ({ id: s.id, label: s.label, value: s.value, expires_at: s.expires_at, created_at: s.created_at }))
     : [];
 
+  const gatedRunIds = new Set((gatedRunsRes.data ?? []).map((r) => r.run_id).filter((id): id is string => typeof id === 'string'));
   const all = buildHomeNeeds({
     approvals: moneyApprovals,
     renewals: [], documents: [], conflicts: [],
@@ -120,24 +154,36 @@ export default async function NeedsYouPage() {
     // it, in this reader's locale.
     reader: { locale: locale.code, t },
     aiApprovals: aiApprovals.map((a) => ({ id: a.id, title: a.title, runId: a.runId, priority: a.priority ?? null, requestedAt: a.requestedAt, expiresAt: a.expiresAt })),
-    awaitingRuns: (awaitingRunsRes.data ?? []) as AwaitingRunRow[],
+    awaitingRuns: ((awaitingRunsRes.data ?? []) as AwaitingRunRow[]).filter((r) => !(r.state === 'awaiting_approval' && gatedRunIds.has(r.id))),
     recommendations,
     factSuggestions,
     inboxMessages: (inboxRes.data ?? []) as InboxMessageRow[],
     paperwork: (paperworkRes.data ?? []) as PaperworkRow[],
   });
   const items = rankNeedsAttention(all);
+  // What the caps left unread, by source: counted, never silently dropped.
+  const beyond = (count: number | null | undefined, read: number) => Math.max(0, (count ?? 0) - read);
+  const unread = beyond(approvalCountRes.count, aiApprovals.length)
+    + beyond(suggestionCountRes.count, PENDING_SUGGESTION_LIMIT)
+    + beyond(awaitingRunsRes.count, awaitingRunsRes.data?.length ?? 0)
+    + beyond(recsRes.count, recommendations.length)
+    + beyond(moneyApprovalsRes.count, moneyApprovals.length)
+    + beyond(inboxRes.count, inboxRes.data?.length ?? 0)
+    + beyond(paperworkRes.count, paperworkRes.data?.length ?? 0);
+  const summary = summarizeNeeds(all);
 
   return (
     <div className="module-page">
       <PageHeader title={t('needsYou.needsYourDecision')} description={t('needsYou.everythingWaitingOnAPerson')} />
       <NeedsAttention
         items={items}
-        more={0}
-        headline={needsHeadline(summarizeNeeds(all))}
+        more={unread}
+        headline={needsHeadline({ ...summary, total: summary.total + unread })}
         approvals={Object.fromEntries(aiApprovals.map((a) => [a.id, a]))}
         moneyApprovalKinds={Object.fromEntries(moneyApprovals.map((a) => [a.id, a.kind]))}
-        recommendationBodies={Object.fromEntries(recommendations.map((r) => [r.id, r.body]))}
+        // A recommendation's body is the planner's reasoning, which can touch
+        // money or documents: the managers' to read, as they decide it.
+        recommendationBodies={manager ? Object.fromEntries(recommendations.map((r) => [r.id, r.body])) : {}}
         canDecide={manager}
       />
     </div>

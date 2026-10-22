@@ -9,6 +9,12 @@ import { PaperworkModule } from '@/components/modules/paperwork-module';
 import type { Tables } from '@/lib/database.types';
 import { isMissingRelationError } from '@/lib/supabase/errors';
 import { addedInScope, readsHouseholdMoney } from '@/lib/finance/household-money';
+import { readAll } from '@/lib/supabase/read-all';
+
+/** What still needs someone (0169's status CHECK): read to the end. */
+const OPEN_STATUSES = ['needs_action', 'in_progress'];
+/** What is settled: the newest 500 are history enough. */
+const SETTLED_STATUSES = ['done', 'archived'];
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -52,20 +58,36 @@ export default async function PaperworkPage() {
   // The paperwork is a parent's or adult's, and whoever added an item keeps
   // reading it (the held 0514): anyone else's read is narrowed to what they
   // added before the limit, and the module says so.
+  //
+  // EVERY OPEN ITEM, AND ONLY THE SETTLED ONES CAPPED. One read of the newest
+  // 500 rows of any status used to be the whole inbox: rows only accumulate
+  // (no delete path; email attachments and captures file on their own), so a
+  // family past 500 lost its OLDEST still-open slips — exactly the ones left
+  // in needs_action — and the chip counts with them, and with no needs_action
+  // row among the newest 500 the page said "Inbox zero". The open statuses are
+  // now read to the end, paged; done and archived keep the 500 cap, which is
+  // only a history.
   const seesAll = readsHouseholdMoney(ctx.active.role);
-  const scoped = supabase.from('paperwork_items').select('*').eq('family_id', ctx.active.familyId);
+  const openRead = readAll<Tables<'paperwork_items'>>((from, to) => {
+    const open = supabase.from('paperwork_items').select('*').eq('family_id', ctx.active.familyId).in('status', OPEN_STATUSES);
+    return (seesAll ? open : open.eq('created_by', ctx.user.id))
+      .order('created_at', { ascending: false }).order('id').range(from, to);
+  }, { max: 20_000 });
+  const scoped = supabase.from('paperwork_items').select('*').eq('family_id', ctx.active.familyId).in('status', SETTLED_STATUSES);
   const inbox = await (seesAll ? scoped : scoped.eq('created_by', ctx.user.id))
     .order('created_at', { ascending: false })
+    .order('id')
     .limit(500);
-  if (inbox.error && !isMissingRelationError(inbox.error)) {
-    return (
-      <div className="module-page">
-        <PageHeader title={t('paperwork.paperworkInbox')} description={t('paperworkModule.pasteAnySlipFormOr')} />
-        <ErrorState message={t('paperwork.couldNotLoadYourInbox')} />
-      </div>
-    );
-  }
-  const items = addedInScope((inbox.data ?? []) as Tables<'paperwork_items'>[], ctx.active.role, ctx.user.id);
+  const open = await openRead;
+  const failed = (
+    <div className="module-page">
+      <PageHeader title={t('paperwork.paperworkInbox')} description={t('paperworkModule.pasteAnySlipFormOr')} />
+      <ErrorState message={t('paperwork.couldNotLoadYourInbox')} />
+    </div>
+  );
+  if (inbox.error && !isMissingRelationError(inbox.error)) return failed;
+  if (open.error && !isMissingRelationError(open.error)) return failed;
+  const items = addedInScope([...open.rows, ...((inbox.data ?? []) as Tables<'paperwork_items'>[])], ctx.active.role, ctx.user.id);
 
   return <PaperworkModule items={items} ownOnly={!seesAll} />;
 }

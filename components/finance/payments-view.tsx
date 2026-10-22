@@ -12,8 +12,16 @@ import { usd as usdIn, fmtDueDate as fmtDueDateIn } from '@/lib/finance/hub';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import { readsHouseholdMoney, transactionsInScope } from '@/lib/finance/household-money';
+import { periodWindow } from '@/lib/finance/budget-periods';
+import { readAllByIdAsQuery } from '@/lib/supabase/read-all';
 
 type Txn = Tables<'transactions'>;
+/** The columns the "this month" tiles are summed from. */
+type MonthTxn = Pick<Txn, 'id' | 'type' | 'amount' | 'member_id' | 'date'>;
+/** A real ceiling: a month past it is a failed read, never a smaller total. */
+const MONTH_TXN_MAX = 50_000;
+/** The list's length: the newest transactions, by date. */
+const LIST_LIMIT = 500;
 const FILTERS = ['all', 'income', 'expense', 'transfer'] as const;
 
 export function PaymentsView() {
@@ -32,12 +40,35 @@ export function PaymentsView() {
   const seesAll = readsHouseholdMoney(role);
   const selfId = selfMember?.id ?? null;
 
+  // The FAMILY's month (TIME-003), both ends.
+  const thisMonth = periodWindow('monthly', clock.todayKey());
+  // The TILES: every transaction dated in the family's month, read whole. They
+  // were summed from the list below, the newest 500 by date, where next month's
+  // scheduled rows come first: past 500, "Out · this month", the net and the
+  // count were part of the month, and Finances said otherwise. Bounded at both
+  // ends, narrowed to a member's own as the list is, and paged on the id, so a
+  // row written between pages is not counted twice. Past the ceiling the read
+  // fails and the page shows its error, not a smaller total.
+  const { data: monthRows, loading: monthLoading, error: monthError, stale: monthStale, refresh: refreshMonth } = useRealtimeQuery<MonthTxn>({
+    table: 'transactions', familyId, deps: [familyId, role, selfId, thisMonth.from, thisMonth.to],
+    fetcher: (sb) => {
+      if (!seesAll && !selfId) return Promise.resolve({ data: [] as MonthTxn[], error: null });
+      return readAllByIdAsQuery<MonthTxn>((after, limit) => {
+        let query = sb.from('transactions').select('id, type, amount, member_id, date')
+          .eq('family_id', familyId).gte('date', thisMonth.from).lte('date', thisMonth.to);
+        if (!seesAll) query = query.eq('member_id', selfId!);
+        if (after) query = query.gt('id', after);
+        return query.order('id').limit(limit);
+      }, { max: MONTH_TXN_MAX });
+    },
+  });
+  // The LIST: the newest transactions, as the page lists them. Nothing is summed from it.
   const { data: rows, loading, error: readError, stale, refresh } = useRealtimeQuery<Txn>({
     table: 'transactions', familyId, deps: [familyId, role, selfId],
     fetcher: (sb) => {
       if (!seesAll && !selfId) return Promise.resolve({ data: [] as Txn[], error: null });
       const query = sb.from('transactions').select('*').eq('family_id', familyId);
-      return (seesAll ? query : query.eq('member_id', selfId!)).order('date', { ascending: false }).limit(500);
+      return (seesAll ? query : query.eq('member_id', selfId!)).order('date', { ascending: false }).limit(LIST_LIMIT);
     },
   });
 
@@ -62,23 +93,36 @@ export function PaymentsView() {
     return [...m.entries()];
   }, [filtered]);
 
-  // This-month summary from ALL transactions (not the filtered view), so the
-  // tiles stay stable while searching.
+  // This-month summary from the whole month's read (not the filtered view), so
+  // the tiles stay stable while searching.
   const summary = useMemo(() => {
-    // The FAMILY's month (TIME-003), not Greenwich's.
-    const key = clock.todayKey().slice(0, 7);
     let income = 0, expense = 0, count = 0;
-    for (const t of txns) {
-      if (!t.date.startsWith(key)) continue;
+    for (const t of transactionsInScope(monthRows ?? [], role, selfId)) {
       count++;
       const amt = Math.abs(Number(t.amount));
       if (t.type === 'income') income += amt; else if (t.type === 'expense') expense += amt;
     }
     return { income, expense, net: income - expense, count };
-  }, [txns, clock]);
+  }, [monthRows, role, selfId]);
+  // Either read failing is the page's error: the tiles never stand on part of the month.
+  const failed = readError || monthError;
 
-  const monthTotal = (items: Txn[]) =>
+  const monthTotal = (items: Pick<Txn, 'type' | 'amount'>[]) =>
     items.reduce((s, t) => s + (t.type === 'income' ? 1 : -1) * Math.abs(Number(t.amount)), 0);
+  // A month heading's total is the month's only when the list holds the month
+  // whole. The list is the newest LIST_LIMIT by date, so once it is full its
+  // oldest month may be cut short, and summing it gave part of that month as
+  // its total (the current month's, beside tiles that said otherwise). This
+  // month, unsearched and unfiltered, is totalled from the month's own read,
+  // as the tiles are; a month the full list may have cut short shows none.
+  const listFull = (rows?.length ?? 0) >= LIST_LIMIT;
+  const currentMonth = thisMonth.from.slice(0, 7);
+  const unfiltered = !q.trim() && filter === 'all';
+  const headingTotal = (month: string, items: Txn[], index: number): number | null => {
+    if (month === currentMonth && unfiltered) return monthTotal(transactionsInScope(monthRows ?? [], role, selfId));
+    if (listFull && index === byMonth.length - 1) return null;
+    return monthTotal(items);
+  };
 
   return (
     <div className="module-page">
@@ -90,7 +134,7 @@ export function PaymentsView() {
           waits for a verified read rather than stating a figure it does not
           have. One gate, here — no second placeholder inside the tiles, which
           this gate would make unreachable anyway. */}
-      {!loading && !stale && !readError && <div className="grid-stats">
+      {!loading && !stale && !monthLoading && !monthStale && !failed && <div className="grid-stats">
         {[
           { label: 'In · this month', value: `+${usd(summary.income)}`, icon: '📥', color: 'text-emerald-400' },
           { label: 'Out · this month', value: `-${usd(summary.expense)}`, icon: '📤', color: 'text-fg' },
@@ -121,19 +165,23 @@ export function PaymentsView() {
         </div>
       </div>
 
-      {readError ? (
-        <ErrorState message={tr('paymentsView.couldNotLoadPayments')} onRetry={() => { void refresh(); }} />
+      {failed ? (
+        <ErrorState message={tr('paymentsView.couldNotLoadPayments')} onRetry={() => { void refresh(); void refreshMonth(); }} />
       ) : loading || stale ? <SkeletonList /> : filtered.length === 0 ? (
         <EmptyState icon={History} title={tr('payments.noPayments')} description={q || filter !== 'all' ? 'No transactions match your filters.' : 'Transactions will appear here as they are added.'} />
       ) : (
         <div className="space-y-5">
-          {byMonth.map(([month, items]) => (
+          {byMonth.map(([month, items], index) => {
+            const total = headingTotal(month, items, index);
+            return (
             <section key={month}>
               <h2 className="mb-2 flex items-baseline justify-between text-sm font-bold uppercase tracking-wide text-muted">
                 <span>{fmtDate(`${month}-01`, 'MMMM yyyy')}</span>
-                <span className={cn('text-xs font-bold normal-case tabular-nums', monthTotal(items) < 0 ? 'text-muted' : 'text-emerald-400')}>
-                  {monthTotal(items) < 0 ? '-' : '+'}{usd(Math.abs(monthTotal(items)))}
-                </span>
+                {total !== null && (
+                  <span className={cn('text-xs font-bold normal-case tabular-nums', total < 0 ? 'text-muted' : 'text-emerald-400')}>
+                    {total < 0 ? '-' : '+'}{usd(Math.abs(total))}
+                  </span>
+                )}
               </h2>
               <div className="space-y-1.5">
                 {items.map((t) => {
@@ -153,7 +201,8 @@ export function PaymentsView() {
                 })}
               </div>
             </section>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

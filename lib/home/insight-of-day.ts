@@ -31,7 +31,7 @@ export interface InsightSources {
   departure?: { leaveEarlierMinutes: number; eventTitle: string } | null;
   /** Schedule clashes happening today or tomorrow. */
   conflictsSoon?: { title: string; when: string }[];
-  /** Assignments due tomorrow that haven't been acknowledged (still 'assigned'). */
+  /** Assignments due tomorrow that are not finished (assigned or in progress). */
   homeworkDueTomorrow?: { title: string; who: string | null }[];
   /** Money/permission decisions waiting on a parent. */
   pendingApprovals?: number;

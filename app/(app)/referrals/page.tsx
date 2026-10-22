@@ -3,7 +3,8 @@ import { Gift } from 'lucide-react';
 import { unstable_rethrow } from 'next/navigation';
 import { requireFeature } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
-import { getOrCreateReferralCode, listReferralsForFamily, getReferralConfig } from '@/lib/referrals/server';
+import { getOrCreateReferralCode, listReferralsForFamily, getReferralConfigResult } from '@/lib/referrals/server';
+import { isManager } from '@/lib/constants/roles';
 import { summarizeReferrals, referralLink } from '@/lib/referrals/core';
 import { getFormat } from '@/lib/utils/format-server';
 import { ReferralPanel } from '@/components/referrals/referral-panel';
@@ -20,13 +21,22 @@ export default async function ReferralsPage() {
   const { fmtMoney } = await getFormat();
   const ctx = await requireFeature('/referrals');
   const familyId = ctx.active.familyId;
+  // Applying a code spends the family's one referral; sending invites goes out
+  // in its name; the invite list is the addresses the parents typed and the
+  // Earned tile is billing credit. Those are a parent's or an adult's. Anyone
+  // else sees the family's code and link to share.
+  const manager = isManager(ctx.active.role);
 
   try {
     const service = createServiceClient();
-    const [code, config] = await Promise.all([
+    const [code, configResult] = await Promise.all([
       getOrCreateReferralCode(familyId, { familyName: ctx.active.family.name, userId: ctx.user.id }),
-      getReferralConfig(service),
+      getReferralConfigResult(service),
     ]);
+    // A failed settings read is not "the program is on at $10": it is the
+    // retry section below, like every other read on this page.
+    if (configResult.error) throw configResult.error;
+    const config = configResult.config;
 
     if (typeof code !== 'string' || !code.trim()) {
       throw new Error('Referral code is unavailable.');
@@ -55,7 +65,7 @@ export default async function ReferralsPage() {
       throw new Error('Could not check whether your family was referred. Refresh and try again.');
     }
 
-    const rows = referrals.map((r) => ({
+    const rows = !manager ? [] : referrals.map((r) => ({
       id: r.id,
       email: r.referred_email,
       status: r.status,
@@ -75,7 +85,7 @@ export default async function ReferralsPage() {
           </div>
         </header>
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {manager && <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[
             { label: 'Invited', labelKey: 'referrals.tileInvited', value: summary.total },
             { label: 'Signed up', labelKey: 'referrals.tileSignedUp', value: summary.signedUp },
@@ -87,7 +97,7 @@ export default async function ReferralsPage() {
               <p className="mt-1 text-xs text-muted">{t(s.labelKey)}</p>
             </div>
           ))}
-        </div>
+        </div>}
 
         <ReferralPanel
           code={code}
@@ -96,6 +106,7 @@ export default async function ReferralsPage() {
           enabled={config.enabled}
           alreadyReferred={Boolean(wasReferred)}
           rows={rows}
+          canManage={manager}
         />
       </div>
     );

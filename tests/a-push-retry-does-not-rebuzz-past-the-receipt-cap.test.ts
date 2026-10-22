@@ -68,16 +68,20 @@ afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe('a push retry', () => {
   it('does not re-send to devices whose receipts sit past the server row cap', async () => {
-    // 150 notifications each reached 11 of one member's 12 devices: 1,650
+    // 150 family-wide notifications each reached 11 of the family's 12 devices
+    // (six for each of two members, under the per-account device cap): 1,650
     // receipts, and 1,100 in a single chunk of 100 notifications, so a chunk
     // must be paged too. Only the twelfth device has anything left to receive.
-    const devices = Array.from({ length: 12 }, (_, i) => device(`d${String(i).padStart(2, '0')}`, 'u1'));
-    const notifications = Array.from({ length: 150 }, (_, n) => notice(n + 1, 'u1'));
+    const devices = Array.from({ length: 12 }, (_, i) => device(`d${String(i).padStart(2, '0')}`, i < 6 ? 'u1' : 'u2'));
+    const notifications = Array.from({ length: 150 }, (_, n): PushFixtureRow => ({ ...notice(n + 1, 'u1'), user_id: null }));
     const receipts = notifications.flatMap((n) => devices.slice(0, 11).map((d) => ({ notification_id: n.id, device_id: d.id })));
     const f = pushDispatchDb({
       families: [{ id: 'family', closed_at: null }],
       notifications, push_devices: devices, push_deliveries: receipts,
-      family_members: [{ id: 'm1', user_id: 'u1', family_id: 'family', role: 'parent', is_active: true }],
+      family_members: [
+        { id: 'm1', user_id: 'u1', family_id: 'family', role: 'parent', is_active: true },
+        { id: 'm2', user_id: 'u2', family_id: 'family', role: 'adult', is_active: true },
+      ],
       family_ai_settings: [], user_preferences: [],
     }, { maxRows: CAP });
 

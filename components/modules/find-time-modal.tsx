@@ -61,6 +61,10 @@ export function FindTimeModal({
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [slots, setSlots] = useState<Slot[]>([]);
+  // A search that did not finish is not an answer. Without this the panel fell
+  // back to "No shared openings in this window" once the toast had gone, as if
+  // everyone's calendar were full.
+  const [searchFailed, setSearchFailed] = useState(false);
   const [booking, setBooking] = useState<string | null>(null);
 
   function toggleMember(id: string) {
@@ -71,6 +75,7 @@ export function FindTimeModal({
   async function findTimes() {
     setLoading(true);
     setSearched(true);
+    setSearchFailed(false);
     try {
       const res = await fetch('/api/ai/schedule', {
         method: 'POST',
@@ -83,12 +88,14 @@ export function FindTimeModal({
           maxSuggestions: 8,
         }),
       });
-      const json = (await res.json()) as { slots?: Slot[]; error?: string };
+      const json = (await res.json().catch(() => ({}))) as { slots?: Slot[]; error?: string };
       if (json.error) throw new Error(json.error);
-      setSlots(json.slots ?? []);
+      if (!res.ok || !Array.isArray(json.slots)) throw new Error(tr('findTimeModal.couldNotFindTimes'));
+      setSlots(json.slots);
     } catch (err) {
       toastError(describeDbError(err, tr('findTimeModal.couldNotFindTimes')));
       setSlots([]);
+      setSearchFailed(true);
     } finally {
       setLoading(false);
     }
@@ -207,7 +214,12 @@ export function FindTimeModal({
         {/* Results */}
         {searched && !loading && (
           <div className="border-t border-border pt-3">
-            {slots.length === 0 ? (
+            {searchFailed ? (
+              <div role="alert" className="space-y-2 py-4 text-center">
+                <p className="text-sm text-muted">{tr('findTimeModal.searchDidNotFinish')}</p>
+                <Button variant="secondary" onClick={findTimes}>{tr('findTimeModal.tryAgain')}</Button>
+              </div>
+            ) : slots.length === 0 ? (
               <p className="py-4 text-center text-sm text-muted">
                 {tr('findTimeModal.noSharedOpeningsInThisWindow')}
               </p>

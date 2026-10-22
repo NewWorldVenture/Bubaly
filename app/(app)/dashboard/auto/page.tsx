@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { requirePlanLevel } from '@/lib/supabase/auth';
 import { getAutoOverview } from '@/lib/auto/queries';
+import { todayKeyFor } from '@/lib/services/scope';
 import { vehicleLabel, dueSoonCount } from '@/lib/auto/renewals';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -21,7 +22,8 @@ export const dynamic = 'force-dynamic';
 export default async function AutoOverviewPage() {
   const t = await getTranslations();
   const ctx = await requirePlanLevel(1);
-  const { vehicles, policies, rentals, renewals } = await getAutoOverview(ctx.active.familyId, { role: ctx.active.role, userId: ctx.user.id });
+  // Statuses count from the family's day: `expires_on` is a DATE column.
+  const { vehicles, policies, rentals, renewals } = await getAutoOverview(ctx.active.familyId, { role: ctx.active.role, userId: ctx.user.id }, todayKeyFor(ctx));
 
   const activePolicies = policies.filter((p) => p.is_active);
   const activeRental = rentals.find((r) => r.status === 'active' || r.status === 'upcoming');

@@ -75,9 +75,9 @@ export function withHookSlots<R extends object>(react: R, s: HookSlots): R {
         slots[index] = typeof value === 'function' ? (value as (p: unknown) => unknown)(slots[index]) : value;
       }];
     },
-    useReducer: (reducer: (state: unknown, action: unknown) => unknown, initial: unknown) => {
+    useReducer: (reducer: (state: unknown, action: unknown) => unknown, initial: unknown, init?: (arg: unknown) => unknown) => {
       const { slots, index } = next();
-      if (!(index in slots)) slots[index] = initial;
+      if (!(index in slots)) slots[index] = init ? init(initial) : initial;
       return [slots[index], (action: unknown) => { slots[index] = reducer(slots[index], action); }];
     },
     useRef: (initial: unknown) => {
