@@ -78,7 +78,6 @@ const MANAGER_ONLY_WRITES = [
 const KNOWN_UNGATED = new Set([
   'components/family/invite-form.tsx -> invites',
   'components/modules/binder-module.tsx -> household_info',
-  'components/modules/documents-module.tsx -> documents',
   'components/modules/finances-module.tsx -> financial_accounts',
   'components/modules/passwords-module.tsx -> family_credentials',
 ]);

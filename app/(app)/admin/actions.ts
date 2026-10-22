@@ -22,6 +22,7 @@ import { superAdminAssurance } from '@/lib/auth/super-admin-assurance';
 import { forgetMemberLocation } from '@/lib/location/retention';
 import { closePendingInvitesFor } from '@/lib/server/member-invites';
 import { recordTrustChange } from '@/lib/trust/ledger';
+import { isFamilyDocumentPath } from '@/lib/storage/documents';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -558,14 +559,26 @@ export async function adminRevokeInviteAction(inviteId: string): Promise<Result>
  * Signed URL for any family's document, via the service role. The browser's
  * anon-key client can't do this for the super admin — Storage RLS only grants
  * access to actual family members, and the admin isn't a member of every family.
+ *
+ * The service role signs any object it is handed, so the path is the ROW's,
+ * read by id as adminDeleteDocumentAction reads it — never one the browser
+ * sends. `listedPath` is what the screen showed: a row whose path is no longer
+ * that one is refused rather than opened as something else. And nothing ties a
+ * row's path to the row's family (the held 0499's recorded lead), so a path
+ * outside the row's own family folder is refused too.
  */
-export async function adminGetDocumentUrlAction(storagePath: string): Promise<Result<{ url: string }>> {
+export async function adminGetDocumentUrlAction(documentId: string, listedPath: string): Promise<Result<{ url: string }>> {
   const t = await getTranslations();
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
 
   const supabase = createServiceClient();
-  const { data, error } = await supabase.storage.from('documents').createSignedUrl(storagePath, 120);
+  const { data: doc, error: docError } = await supabase
+    .from('documents').select('family_id, storage_path').eq('id', documentId).maybeSingle();
+  if (docError) return actionFailure(docError, t('actions.couldNotLoadThatDocument'));
+  if (!doc || doc.storage_path !== listedPath) return { ok: false, error: t('actions.documentNotFound') };
+  if (!isFamilyDocumentPath(doc.family_id, doc.storage_path)) return { ok: false, error: t('actions.couldNotCreateADocument') };
+  const { data, error } = await supabase.storage.from('documents').createSignedUrl(doc.storage_path, 120);
   if (error || !data) return error ? actionFailure(error, t('actions.couldNotCreateADocument')) : { ok: false, error: t('actions.couldNotCreateADocument') };
   return { ok: true, data: { url: data.signedUrl } };
 }

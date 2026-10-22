@@ -17,7 +17,7 @@ export function DocumentRowActions({ documentId, storagePath }: { documentId: st
   async function view() {
     const tab = preOpenWindow(); // sync, inside the tap gesture (iOS popup blocker)
     setBusy('view');
-    const res = await adminGetDocumentUrlAction(storagePath);
+    const res = await adminGetDocumentUrlAction(documentId, storagePath);
     setBusy(null);
     if (!res.ok) { tab.cancel(); return toastError(res.error); }
     tab.navigate(res.data!.url);

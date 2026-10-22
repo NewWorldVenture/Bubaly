@@ -8,6 +8,8 @@ import {
   Search, Sparkles, Star, Table as TableIcon, Trash2, Upload, Video,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { isManager } from '@/lib/constants/roles';
+import { performUpload } from '@/lib/documents/upload';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
@@ -115,7 +117,7 @@ export function DocumentsModule() {
   const fmtDate = (iso: string): string => format.fmtDate(iso, 'MMM d, yyyy');
   const timeAgo = (iso: string): string => format.fmtTimeAgo(iso, { absoluteAfterDays: 7, absoluteWithYear: true });
   const tr = useTranslations();
-  const { familyId, userId, members } = useApp();
+  const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
 
   const [open, setOpen] = useState(false);
@@ -299,16 +301,34 @@ export function DocumentsModule() {
     setSaving(true);
     const sb = createClient();
     const folder = form.category.trim() || 'general';
-    const { path, error: upErr } = await uploadFamilyDocument(sb, { familyId, folder, file });
-    if (upErr || !path) { setSaving(false); toastError(upErr ?? 'Upload failed'); return; }
-    const { error: err } = await sb.from('documents').insert({
-      family_id: familyId, title: form.title, category: folder,
-      member_id: form.member_id || null, created_by: userId,
-      storage_path: path, size_bytes: file.size, mime_type: file.type || null,
-      expires_at: form.expires_at || null,
-    });
+    // Decided BEFORE the bytes move, as the Files hub decides it
+    // (lib/documents/upload.ts): 0266 refuses a teen's, a child's or a
+    // caregiver's row in an adults-only folder ("School IDs", "Medical"), and
+    // uploading first stored their file and then said only "Failed to save
+    // file", on every retry. A row refused for any other reason still takes
+    // its file back out of the bucket.
+    const outcome = await performUpload(
+      { view: 'shared', category: folder, manager: isManager(role), folderFallback: 'general' },
+      {
+        store: (storeFolder) => uploadFamilyDocument(sb, { familyId, folder: storeFolder, file }),
+        record: async ({ storagePath }) => {
+          const { error: err } = await sb.from('documents').insert({
+            family_id: familyId, title: form.title, category: folder,
+            member_id: form.member_id || null, created_by: userId,
+            storage_path: storagePath, size_bytes: file.size, mime_type: file.type || null,
+            expires_at: form.expires_at || null,
+          });
+          return { error: err ? tr('documentsModule.failedToSaveFile') : null };
+        },
+        discard: async (path) => {
+          const { error: rollbackError } = await removeFamilyDocument(sb, path);
+          if (rollbackError) console.error('[documents] upload rollback left an object behind', { path }, rollbackError);
+        },
+      },
+      tr,
+    );
     setSaving(false);
-    if (err) { await removeFamilyDocument(sb, path); toastError(tr('documentsModule.failedToSaveFile')); return; }
+    if (!outcome.ok) { toastError(outcome.reason); return; }
     success(tr('documentsModule.fileUploaded'));
     setOpen(false); setForm({ title: '', category: 'general', member_id: '', expires_at: '' }); setFile(null); refresh();
   }
@@ -670,7 +690,7 @@ export function DocumentsModule() {
           <Field label={tr('family.member')}>{(id) => (
             <Select id={id} value={form.member_id} onChange={(e) => setForm((f) => ({ ...f, member_id: e.target.value }))}>
               <option value="">{tr('family.family')}</option>
-              {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
+              {activeMembers.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </Select>
           )}</Field>
           <Field label={tr('documents.expiresOptional')} hint={tr('documentsModule.forPassportsInsuranceRegistrationsBubaly')}>{(id) => <Input id={id} type="date" value={form.expires_at} onChange={(e) => setForm((f) => ({ ...f, expires_at: e.target.value }))} />}</Field>
