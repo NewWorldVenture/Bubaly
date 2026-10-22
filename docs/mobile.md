@@ -51,9 +51,18 @@ npm run typecheck
   Approval and payouts remain manager/server decisions (migration 0223).
 - **Paywall**: the server routes the phone calls (`/api/ai`, voice,
   `/api/calendar/occurrences`) refuse a closed or trial-ended family. The
-  Chores and Grocery tabs read PostgREST directly under RLS, which has no notion
-  of account standing, so those two surfaces are not yet paywalled on the phone
-  (an owner decision between bearer routes and a client-side verdict).
+  Chores and Grocery tabs (`queries.ts`) and the assistant's saved
+  conversations (`assistant-history.ts`) read and write PostgREST directly
+  under RLS, which has no notion of account standing or of a feature an admin
+  switched off, so those surfaces are not yet paywalled on the phone. This is
+  an open owner decision (audit N6), between: (a) bearer routes that call
+  `refuseUnlessEntitled(supabase, familyId, ['/dashboard/chores'])` /
+  `['/dashboard/grocery']` before each read and write, each added to
+  `middleware.ts`'s `bearerApi` allowlist — enforced on the server; or (b) a
+  bearer `GET /api/mobile/context` returning the active family with its
+  entitlement verdicts, read by `refreshFamily` (`auth.tsx`), with the tabs
+  rendering the standing copy (`mobileAssistant.trialEnded` /
+  `accountClosed`) and disabling writes — a client gate only.
 - **Assistant**: `POST /api/ai?mode=json` with `Authorization: Bearer <jwt>`.
   The web keeps using the SSE transport of the same route.
 - **Theme**: dark by default, light toggle, or match the device — persisted in
