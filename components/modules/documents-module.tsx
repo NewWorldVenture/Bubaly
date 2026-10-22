@@ -690,7 +690,7 @@ export function DocumentsModule() {
           <Field label={tr('family.member')}>{(id) => (
             <Select id={id} value={form.member_id} onChange={(e) => setForm((f) => ({ ...f, member_id: e.target.value }))}>
               <option value="">{tr('family.family')}</option>
-              {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
+              {activeMembers.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </Select>
           )}</Field>
           <Field label={tr('documents.expiresOptional')} hint={tr('documentsModule.forPassportsInsuranceRegistrationsBubaly')}>{(id) => <Input id={id} type="date" value={form.expires_at} onChange={(e) => setForm((f) => ({ ...f, expires_at: e.target.value }))} />}</Field>
