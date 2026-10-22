@@ -9,8 +9,13 @@
 // moderation whatever the threshold, a signed-in member's still clears it (the
 // control), a filled honeypot writes nothing and is told what a person is told,
 // an address gets three a day, and the same text twice in a day is one review.
+//
+// The repeat check used to be a limiter bucket charged BEFORE the insert, so a
+// refused insert consumed it and the same person's retry was answered
+// { ok: true } with nothing written (audit RV1-N4). The record that a text was
+// written now travels with the row, so a refused write leaves nothing to find.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createInMemorySupabase } from './helpers/in-memory-supabase';
+import { createInMemorySupabase, withFaults } from './helpers/in-memory-supabase';
 import { rateLimitHit } from './helpers/rate-limit-rpc';
 
 const h = vi.hoisted(() => ({ db: null as unknown, userId: null as string | null, ip: '203.0.113.9' }));
@@ -82,5 +87,28 @@ describe('what a bot gets', () => {
     expect(await submit(review)).toEqual({ ok: true });
     expect(await submit({ ...review, name: 'Someone Else' })).toEqual({ ok: true });
     expect(reviews()).toHaveLength(1);
+  });
+
+  it('a refused insert does not spend the repeat check: the retry with the same text is written (audit RV1-N4)', async () => {
+    const review = { rating: 5, title: 'Wonderful', body: 'Changed our mornings.' };
+    let refuse = true;
+    h.db = withFaults(db, (table, calls) => table === 'reviews' && refuse && calls.some((call) => call.method === 'insert')
+      ? { code: '57P01', message: 'synthetic write failure' } : null);
+    expect(await submit(review)).toEqual({ ok: false, error: 'actions.couldNotSaveYourReview' });
+    expect(reviews()).toEqual([]);
+    refuse = false;
+    expect(await submit(review)).toEqual({ ok: true });
+    expect(reviews()).toHaveLength(1);
+    expect(reviews()[0]).toMatchObject({ title: 'Wonderful', body: 'Changed our mornings.', status: 'pending' });
+    // And once written, the same words are still one review.
+    expect(await submit({ ...review, name: 'Someone Else' })).toEqual({ ok: true });
+    expect(reviews()).toHaveLength(1);
+  });
+
+  it('a repeat check that cannot be read is reported, not answered as a success that wrote nothing', async () => {
+    h.db = withFaults(db, (table, calls) => table === 'reviews' && calls.some((call) => call.method === 'select')
+      ? { code: '57P01', message: 'synthetic read failure' } : null);
+    expect(await submit({ rating: 5, body: 'Helpful.' })).toEqual({ ok: false, error: 'actions.couldNotSaveYourReview' });
+    expect(reviews()).toEqual([]);
   });
 });
