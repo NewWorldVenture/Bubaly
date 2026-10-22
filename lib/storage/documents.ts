@@ -17,8 +17,24 @@ function sanitizeFileName(name: string): string {
   return name.replace(/[^a-zA-Z0-9.\-_]/g, '_').slice(-120);
 }
 
+/**
+ * The folder as a storage key can hold it. Supabase Storage accepts only
+ * `A-Za-z0-9_/!.*'() &$=@;:+,?-` in a key (storage-api `isValidKey`), and the
+ * folder is what a family TYPED: "École", "Financiën", "Kids’ stuff" (the
+ * apostrophe an iPhone types), "Taxes #2". Each of those refused every upload
+ * into it. Each folder keeps what Storage accepts, less `?` (which
+ * `isFamilyDocumentPath` refuses), and gets `_` for the rest; an empty or
+ * dot-only folder is not written. Only the key changes: the documents row keeps
+ * the category exactly as typed.
+ */
+function storageFolder(folder: string): string {
+  const segments = folder.split('/').filter(Boolean)
+    .map((segment) => (/^\.+$/.test(segment) ? '_' : segment.replace(/[^A-Za-z0-9_!.*'() &$=@;:+,-]/g, '_')));
+  return segments.length ? segments.join('/') : '_';
+}
+
 export function buildFamilyPath(familyId: string, folder: string, fileName: string): string {
-  return `${familyId}/${folder}/${Date.now()}-${sanitizeFileName(fileName)}`;
+  return `${familyId}/${storageFolder(folder)}/${Date.now()}-${sanitizeFileName(fileName)}`;
 }
 
 function hasSafeDocumentSegments(path: unknown): path is string {
@@ -52,7 +68,7 @@ export function isFamilyDocumentPath(familyId: string, path: unknown): path is s
 
 /** A preallocated upload keeps its exact family/folder prefix, without alias normalization. */
 export function isReservedDocumentPath(familyId: string, folder: string, path: string): boolean {
-  return path.startsWith(`${familyId}/${folder}/`) && hasSafeDocumentSegments(path);
+  return path.startsWith(`${familyId}/${storageFolder(folder)}/`) && hasSafeDocumentSegments(path);
 }
 
 export async function uploadFamilyDocument(
