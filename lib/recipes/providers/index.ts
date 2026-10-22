@@ -16,10 +16,26 @@ export function getProvider(id: string): RecipeProvider | undefined {
   return ALL.find((p) => p.id === id && p.isEnabled());
 }
 
-/** Search across every enabled provider, de-duped by provider+id. */
-export async function searchAllProviders(query: string, opts?: { limit?: number }): Promise<NormalizedRecipe[]> {
+/**
+ * Search across every enabled provider, de-duped by provider+id.
+ *
+ * THROWS when no provider answered — none enabled, or every one failed — so
+ * the route can say the search is unavailable. Dropping every rejected
+ * provider and returning what was left made an outage of the only provider an
+ * empty list at HTTP 200, and the screen said "No recipes found". `partial`
+ * says some providers answered and some did not.
+ */
+export async function searchAllProviders(
+  query: string, opts?: { limit?: number },
+): Promise<{ recipes: NormalizedRecipe[]; partial: boolean }> {
   const providers = enabledProviders();
+  if (providers.length === 0) throw new Error('No recipe provider is enabled.');
   const results = await Promise.allSettled(providers.map((p) => p.search(query, opts)));
+  const failed = results.filter((r) => r.status !== 'fulfilled').length;
+  if (failed === results.length) {
+    const first = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+    throw new Error('Every recipe provider failed.', { cause: first?.reason });
+  }
   const merged: NormalizedRecipe[] = [];
   const seen = new Set<string>();
   for (const r of results) {
@@ -31,5 +47,5 @@ export async function searchAllProviders(query: string, opts?: { limit?: number 
       merged.push(recipe);
     }
   }
-  return typeof opts?.limit === 'number' ? merged.slice(0, opts.limit) : merged;
+  return { recipes: typeof opts?.limit === 'number' ? merged.slice(0, opts.limit) : merged, partial: failed > 0 };
 }

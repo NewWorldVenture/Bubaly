@@ -3,7 +3,12 @@ import type { Database } from '@/lib/database.types';
 
 type Client = SupabaseClient<Database>;
 
-// Reuse the existing todo completion and chore-assignee submission paths.
+// Direct browser writes, kept for the callers and tests that pin them. Focus
+// Mode itself no longer uses them: a to-do it ticks goes through
+// completeTodoAction (completed_at and the activity trail with it), and a chore
+// through setChoreStatusAction, which settles a chore that needs no approval as
+// done and creates its next recurrence. These two wrote `is_done` alone and
+// `submitted` always.
 // Returned rows are required: an error-free, zero-row update is not completion.
 export async function completeFocusTodo(client: Client, familyId: string, id: string): Promise<void> {
   const { data, error } = await client.from('todo_items').update({ is_done: true })
@@ -29,9 +34,11 @@ export async function submitFocusChore(client: Client, familyId: string, memberI
 export type FocusAction = {
   kind: 'event' | 'chore' | 'todo';
   complete?: () => Promise<void>;
-  submit?: () => Promise<void>;
+  /** May answer the status the chore SETTLED on: 'done' when it needs no approval. */
+  submit?: () => Promise<void | string>;
 };
-export type FocusOutcome = 'reviewed' | 'submitted' | 'completed';
+/** `finished`: a chore that needed no approval, settled as done. */
+export type FocusOutcome = 'reviewed' | 'submitted' | 'finished' | 'completed';
 
 /** The queue's success continuation must never run before persistence succeeds. */
 export async function runFocusAction(item: FocusAction, onSuccess: (outcome: FocusOutcome) => void): Promise<void> {
@@ -40,8 +47,8 @@ export async function runFocusAction(item: FocusAction, onSuccess: (outcome: Foc
     return;
   }
   if (item.kind === 'chore' && item.submit) {
-    await item.submit();
-    onSuccess('submitted');
+    const settled = await item.submit();
+    onSuccess(settled === 'done' ? 'finished' : 'submitted');
     return;
   }
   if (item.kind === 'todo' && item.complete) {

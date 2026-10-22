@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { MoonStar, Plus, Sparkles, Sunrise, BedDouble, Activity, ListChecks, Pencil, Trash2, Check, TrendingUp, TrendingDown, Minus, ClipboardCheck } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { recordScope, rowsInScope } from '@/lib/health/record-scope';
+import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
@@ -23,15 +24,12 @@ import {
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
+import { fromLocalInput, toLocalInput } from '@/lib/time/local-input';
 
 type Log = Tables<'sleep_logs'>;
 type Routine = Tables<'bedtime_routines'>;
 type Checkin = Tables<'sleep_checkins'>;
 
-const localInput = (d: Date) => {
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-};
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export function SleepModule() {
@@ -47,10 +45,21 @@ export function SleepModule() {
   const { familyId, userId, members, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
 
+  // The held 0506 (lib/health/record-scope.ts): a parent or adult reads every
+  // member's nights; anyone else their own record and the entries they
+  // logged. Narrowed in the query, before the limit, as the Family Map's
+  // history is (N6): the whole family's nights reached a child's browser and
+  // were only filtered for display, and everyone else's could crowd their own
+  // out of the newest 600.
+  const readsEveryRecord = isManager(role);
+  const selfId = selfMember?.id ?? null;
+  const ownOrAuthored = <Q extends { or: (filter: string) => Q }>(query: Q): Q => (readsEveryRecord
+    ? query
+    : query.or([selfId ? `member_id.eq.${selfId}` : null, `created_by.eq.${userId}`].filter(Boolean).join(',')));
   const logs = useRealtimeQuery<Log>({
     table: 'sleep_logs', familyId,
-    fetcher: (s) => s.from('sleep_logs').select('*').eq('family_id', familyId).order('sleep_date', { ascending: false }).limit(600),
-    deps: [familyId],
+    fetcher: (s) => ownOrAuthored(s.from('sleep_logs').select('*').eq('family_id', familyId)).order('sleep_date', { ascending: false }).limit(600),
+    deps: [familyId, readsEveryRecord, selfId, userId],
   });
   const routines = useRealtimeQuery<Routine>({
     table: 'bedtime_routines', familyId,
@@ -59,8 +68,8 @@ export function SleepModule() {
   });
   const checkins = useRealtimeQuery<Checkin>({
     table: 'sleep_checkins', familyId,
-    fetcher: (s) => s.from('sleep_checkins').select('*').eq('family_id', familyId).order('checkin_date', { ascending: false }).limit(400),
-    deps: [familyId],
+    fetcher: (s) => ownOrAuthored(s.from('sleep_checkins').select('*').eq('family_id', familyId)).order('checkin_date', { ascending: false }).limit(400),
+    deps: [familyId, readsEveryRecord, selfId, userId],
   });
 
   const [memberId, setMemberId] = useState('');
@@ -280,23 +289,35 @@ export function SleepModule() {
 
 function LogForm({ familyId, userId, memberId, existing, onClose, onSaved }: { familyId: string; userId: string; memberId: string; existing: Log | null; onClose: () => void; onSaved: () => void }) {
   const t = useTranslations();
+  const clock = useFamilyClock();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
-  // The bedtime/wake datetime-local defaults: this form's save path still reads
-  // the device clock (TIME-003 remaining scope).
-  const defaultBed = useMemo(() => { const d = new Date(); d.setDate(d.getDate() - 1); d.setHours(21, 30, 0, 0); return existing ? new Date(existing.bedtime) : d; }, [existing]); // device-input: datetime-local default
-  const defaultWake = useMemo(() => { const d = new Date(); d.setHours(7, 0, 0, 0); return existing ? new Date(existing.wake_time) : d; }, [existing]); // device-input: datetime-local default
+  // The bedtime/wake boxes read and write the FAMILY's wall clock (TIME-003),
+  // as the behaviour log's do: the summary, consistency and adherence read
+  // bedtimes in the family's zone and the prefill looks the night up by the
+  // family's day, so a parent logging from another zone stored a 21:30 that
+  // read as 16:30 at home, under a date the prefill did not look for.
+  const defaultBed = useMemo(
+    () => (existing ? toLocalInput(existing.bedtime, clock.timeZone) : `${clock.wallKey(clock.addDays(clock.wallToday(), -1))}T21:30`),
+    [existing, clock],
+  );
+  const defaultWake = useMemo(
+    () => (existing ? toLocalInput(existing.wake_time, clock.timeZone) : `${clock.todayKey()}T07:00`),
+    [existing, clock],
+  );
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
-    const bedtime = new Date(String(f.get('bedtime') ?? ''));
-    const wake = new Date(String(f.get('wake_time') ?? ''));
+    const bedtime = new Date(fromLocalInput(String(f.get('bedtime') ?? ''), clock.timeZone, existing?.bedtime) ?? '');
+    const wake = new Date(fromLocalInput(String(f.get('wake_time') ?? ''), clock.timeZone, existing?.wake_time) ?? '');
     if (Number.isNaN(bedtime.getTime()) || Number.isNaN(wake.getTime())) return toastError(t('sleepModule.enterBothTimes'));
     const duration = durationMinutes(bedtime.toISOString(), wake.toISOString());
     if (duration === 0) return toastError(t('sleepModule.wakeTimeMustBeAfter'));
     setLoading(true);
-    const sleepDate = `${wake.getFullYear()}-${String(wake.getMonth() + 1).padStart(2, '0')}-${String(wake.getDate()).padStart(2, '0')}`;
+    // The night is filed under the family's day it ended on, the key the
+    // prefill and the summaries look it up by.
+    const sleepDate = clock.dayKeyOf(wake);
     const { error } = await createClient().from('sleep_logs').upsert({
       family_id: familyId, member_id: memberId, sleep_date: sleepDate, bedtime: bedtime.toISOString(), wake_time: wake.toISOString(), duration_min: duration,
       quality: f.get('quality') ? Number(f.get('quality')) : null, awakenings: Number(f.get('awakenings') ?? 0),
@@ -311,8 +332,8 @@ function LogForm({ familyId, userId, memberId, existing, onClose, onSaved }: { f
     <Modal open title={t('sleep.logANight')} description={t('sleepModule.theNightIsFiledUnder')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label={t('sleep.lightsOut')} required>{(id) => <Input id={id} name="bedtime" type="datetime-local" defaultValue={localInput(defaultBed)} />}</Field>
-          <Field label={t('sleep.wokeUp')} required>{(id) => <Input id={id} name="wake_time" type="datetime-local" defaultValue={localInput(defaultWake)} />}</Field>
+          <Field label={t('sleep.lightsOut')} required>{(id) => <Input id={id} name="bedtime" type="datetime-local" defaultValue={defaultBed} />}</Field>
+          <Field label={t('sleep.wokeUp')} required>{(id) => <Input id={id} name="wake_time" type="datetime-local" defaultValue={defaultWake} />}</Field>
         </div>
         <div className="grid grid-cols-3 gap-3">
           <Field label={t('sleep.quality')}>{(id) => <Select id={id} name="quality" defaultValue={existing?.quality ?? ''}><option value="">{t('sleep.skip')}</option>{[5, 4, 3, 2, 1].map((q) => <option key={q} value={q}>{q}/5</option>)}</Select>}</Field>

@@ -8,7 +8,7 @@ import {
   saveRegistrationAction, deleteRegistrationAction, saveInspectionAction, deleteInspectionAction,
 } from '@/app/(app)/dashboard/auto/actions';
 import { renewalStatus, vehicleLabel, INSPECTION_TYPES } from '@/lib/auto/renewals';
-import { useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import type { Tables } from '@/lib/database.types';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -31,6 +31,8 @@ export function RegistrationClient({
   ownOnly?: boolean;
 }) {
   const { fmtDate } = useFormat();
+  // The family's day: `expires_on` is a DATE (lib/auto/renewals.ts).
+  const todayKey = useFamilyClock().todayKey();
   const tr = useTranslations();
   const [regOpen, setRegOpen] = useState(false);
   const [regEdit, setRegEdit] = useState<Registration | null>(null);
@@ -55,7 +57,7 @@ export function RegistrationClient({
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {registrations.map((r) => {
-              const s = renewalStatus(r.expires_on);
+              const s = renewalStatus(r.expires_on, todayKey);
               return (
                 <Card key={r.id}>
                   <div className="flex items-start justify-between gap-2">
@@ -84,7 +86,7 @@ export function RegistrationClient({
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {inspections.map((i) => {
-              const s = renewalStatus(i.expires_on);
+              const s = renewalStatus(i.expires_on, todayKey);
               return (
                 <Card key={i.id}>
                   <div className="flex items-start justify-between gap-2">

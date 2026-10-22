@@ -18,6 +18,7 @@ import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { refusalError, refusalForError } from '@/lib/actions/refusal';
 import { isPaperworkExtractionPartial } from '@/lib/paperwork/extraction';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { assertAIAllowance } from '@/lib/server/ai-access';
 
 const PATH = '/dashboard/paperwork';
 
@@ -82,8 +83,9 @@ export async function addPaperworkAction(formData: FormData): Promise<PaperworkA
   // captureDocument and captureDocumentLink give.
   if (ctx.active.role === 'guest') return { ok: false, error: tr('actionRefusal.notAllowed') };
 
+  // The slip's "by 10/13" is read on the FAMILY's day, not Greenwich's.
   const row = await paperworkInsertRow({
-    familyId: ctx.active.familyId, userId: ctx.user.id, text, sender,
+    familyId: ctx.active.familyId, userId: ctx.user.id, text, sender, timeZone: ctx.active.family.timezone || 'UTC',
   });
   const { error } = await supabase.from('paperwork_items').insert(row);
   if (error) throw refusalError(describeActionError(error, tr('actions.couldNotSaveThatPaperwork')), refusalForError(error));
@@ -265,6 +267,11 @@ export async function draftPaperworkReplyAction(itemId: string): Promise<DraftRe
   if (!(await isAIConfigured())) {
     return { ok: false, error: tr('actions.aiIsnTConfiguredYet') };
   }
+  // The draft files an `ai_requests` row below, so the Free plan's monthly AI
+  // allowance applies here as on every other helper (and a trial that ended
+  // unpaid, or a closed account, gets none).
+  const access = await assertAIAllowance(ctx, { db: supabase });
+  if (!access.ok) return { ok: false, error: access.error };
 
   const source = (item.raw_text || item.summary || item.title || '').slice(0, 6000);
   const system =

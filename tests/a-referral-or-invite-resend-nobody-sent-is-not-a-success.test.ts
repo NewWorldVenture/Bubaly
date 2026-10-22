@@ -32,7 +32,7 @@ vi.mock('@/lib/emails/invite', () => ({ InviteEmail: () => null }));
 vi.mock('@/lib/supabase/auth', () => ({
   requireUserContext: async () => ({
     user: { id: 'u1', email: 'parent@example.test' },
-    active: { familyId: 'f1', member: { display_name: 'Pat' }, family: { name: 'Fixture' } },
+    active: { familyId: 'f1', role: 'parent', member: { display_name: 'Pat' }, family: { name: 'Fixture' } },
   }),
   getUser: async () => ({ id: 'admin-1', email: 'admin@example.test' }),
   isSuperAdmin: async () => true,
@@ -40,7 +40,7 @@ vi.mock('@/lib/supabase/auth', () => ({
 vi.mock('@/lib/referrals/server', () => ({
   applyReferralCode: async () => ({ ok: true }),
   getOrCreateReferralCode: async () => 'CODE1234',
-  getReferralConfig: async () => ({ enabled: true, rewardLabel: 'a free month' }),
+  getReferralConfigResult: async () => ({ config: { enabled: true, rewardLabel: 'a free month' }, error: null }),
   recordReferralEmailInvite: async () => ({ ok: true, rowId: 'row-1', created: true }),
   rollbackReferralEmailInvite: async () => { state.rollbacks++; },
 }));

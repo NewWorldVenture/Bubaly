@@ -155,7 +155,9 @@ describe('legacy pending decisions preserve the existing document metadata bound
   });
   it.each(['guest', 'child', 'parent'])('enforces metadata omission through actual installed SDK projection for %s', async (role) => {
     const { createClient } = await import('@supabase/supabase-js');
-    const allowedTables = new Set(['documents', 'parent_approvals', 'renewals', 'family_reminders', 'calendar_events', 'chore_assignments', 'grocery_items', 'todo_items']);
+    // `grocery_lists`: the grocery count reads only lists the family has not
+    // archived (tests/an-archived-shopping-list-is-not-counted.test.ts).
+    const allowedTables = new Set(['documents', 'parent_approvals', 'renewals', 'family_reminders', 'calendar_events', 'chore_assignments', 'grocery_lists', 'grocery_items', 'todo_items']);
     const requests: { table: string; select: string | null; family: string | null }[] = [];
     const client = createClient<Database>('https://synthetic-pending-documents.invalid', 'synthetic-public-key', {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },

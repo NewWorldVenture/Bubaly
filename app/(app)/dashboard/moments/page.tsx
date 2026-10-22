@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { settleAll } from '@/lib/supabase/settle';
+import { describeReadError, settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { MomentsView } from '@/components/moments/moments-view';
 import { MomentOrganizer, type OrganizerMoment } from '@/components/moments/moment-organizer';
@@ -105,6 +105,13 @@ export default async function Page() {
       homeworkDueTomorrow: homework.count ?? 0,
     };
 
+    // An unread dismissal list is not an empty one: treated as "nothing
+    // dismissed" it brought back every moment the family hid today, with no
+    // error. The band is skipped for this render instead (the catch below).
+    if (dismissedRows.error) {
+      console.error('[moments] dismissal read failed', { familyId, error: describeReadError(dismissedRows.error) });
+      throw new Error('moment dismissals unavailable');
+    }
     const dismissed = new Set(((dismissedRows.data ?? []) as { moment_key: string; status: string }[]).filter((r) => r.status === 'dismissed').map((r) => r.moment_key));
     const live = activeMoments(sig).filter((m) => !dismissed.has(m.key));
 

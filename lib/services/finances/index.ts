@@ -36,6 +36,7 @@ import { withIdempotency } from '../idempotency';
 import { dayKeyInTz, scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { escapeLike } from '@/lib/supabase/escape-like';
+import { monthlyBudgetShare } from '@/lib/finance/budget-periods';
 import {
   createTransactionIntent, FINANCE_TRANSACTION_TOOL_NAME, readTransactionOperationReply,
   transactionIntentFromToolInputs, type TransactionOperationMetadata,
@@ -597,11 +598,12 @@ export async function budgetVsActual(
   if (rows.length === 0) return ok({ month, budgets: [], totalLimit: 0, totalSpent: 0, overCount: 0 });
 
   // One read covering the widest window any budget needs (the year for a
-  // yearly budget), then sliced per budget in memory.
+  // yearly budget) and the whole month the totals report, then sliced per
+  // budget in memory.
   const windows = rows.map((b) => budgetWindow(b.period, refDay));
   const wide: DateRange = {
-    from: windows.reduce((min, w) => (w.from < min ? w.from : min), windows[0].from),
-    to: windows.reduce((max, w) => (w.to > max ? w.to : max), windows[0].to),
+    from: windows.reduce((min, w) => (w.from < min ? w.from : min), bounds.from),
+    to: windows.reduce((max, w) => (w.to > max ? w.to : max), bounds.to),
   };
   const txns = await loadTransactions(scope, wide, { type: 'expense', complete: input.complete });
   if (!txns.ok) return txns;
@@ -626,17 +628,30 @@ export async function budgetVsActual(
       spent: toDollars(cents),
       remaining: toDollars(limitCents - cents),
       pct: limitCents > 0 ? Math.round((cents / limitCents) * 100) : (cents > 0 ? 999 : 0),
-      over: limitCents > 0 && cents > limitCents,
+      over: cents > limitCents,
       window,
       transactionCount: count,
     };
   }).sort((a, b) => b.pct - a.pct);
 
+  // The totals are the MONTH's: every budget's limit as its monthly share
+  // (weekly x 52/12, yearly / 12), against what was spent in the month in the
+  // budgeted categories. Adding each line's raw limit and spent mixed a week, a
+  // month and a year: $150 weekly Groceries + $300 monthly Dining + $6,000
+  // yearly Travel read as a $6,450 "this month" against week, month and
+  // year-to-date spend together. The lines keep their own periods.
+  const budgeted = new Set(rows.map((b) => b.category.trim().toLowerCase()));
+  let monthSpentCents = 0;
+  for (const t of txns.data) {
+    if (t.date < bounds.from || t.date > bounds.to) continue;
+    if (!budgeted.has((t.category ?? '').trim().toLowerCase())) continue;
+    monthSpentCents += Math.abs(toCents(t.amount));
+  }
   return ok({
     month,
     budgets: lines,
-    totalLimit: toDollars(lines.reduce((s, l) => s + toCents(l.limit), 0)),
-    totalSpent: toDollars(lines.reduce((s, l) => s + toCents(l.spent), 0)),
+    totalLimit: toDollars(lines.reduce((s, l) => s + Math.round(monthlyBudgetShare(toCents(l.limit), l.period)), 0)),
+    totalSpent: toDollars(monthSpentCents),
     overCount: lines.filter((l) => l.over).length,
   });
 }

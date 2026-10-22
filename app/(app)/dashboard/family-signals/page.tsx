@@ -8,6 +8,7 @@ import { ErrorState } from '@/components/ui/states';
 import { SignalPrecisionCard } from '@/components/metrics/signal-precision-card';
 import { loadSignalPrecision } from '@/lib/metric/signal-precision-server';
 import { signalWordsFor } from '@/lib/intelligence/hard-signals';
+import { readsHouseholdMoney } from '@/lib/finance/household-money';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -55,8 +56,13 @@ export default async function FamilySignalsPage() {
     score: r.score, evidence: r.evidence ?? {}, status: r.status, lastSeenAt: r.last_seen_at,
   });
 
-  const active = rows.filter((r) => r.status === 'active').map(toView);
-  const hidden = rows.filter((r) => r.status !== 'active').map(toView);
+  // Budget drift is the household's spend against each budget's cap, and
+  // household money is a parent's or an adult's (readsHouseholdMoney, as the
+  // proactive AI context and /dashboard/budgets already hold it). Everyone else
+  // is not shown it, active or decided.
+  const readable = readsHouseholdMoney(ctx.active.role) ? rows : rows.filter((r) => r.kind !== 'budget_drift');
+  const active = readable.filter((r) => r.status === 'active').map(toView);
+  const hidden = readable.filter((r) => r.status !== 'active').map(toView);
   const precision = await loadSignalPrecision(supabase, { familyId: ctx.active.familyId });
 
   return (

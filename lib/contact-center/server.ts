@@ -6,8 +6,8 @@ import {
   isTwilioConfigured, searchAvailableNumber, provisionNumber, findOwnedNumberSid, releaseNumber,
 } from '@/lib/guardian/twilio';
 import { submitRequest } from '@/lib/ai/runs/intake';
-import { paperworkKindFields, triagePaperwork, type PaperworkKind } from '@/lib/paperwork/triage';
-import { systemScopeForFamily } from '@/lib/services/scope';
+import { classifyPaperwork, paperworkKindFields, triagePaperwork, type PaperworkKind } from '@/lib/paperwork/triage';
+import { dayKeyInTz, systemScopeForFamily } from '@/lib/services/scope';
 import { enrichPaperworkEntities, PaperworkEnrichmentError } from '@/lib/services/paperwork';
 import { classifyIntent, summarizeInbound, shouldNotifyFamily, shouldPlanInbound, type InboundChannel } from './routing';
 import { escapeLike } from '@/lib/supabase/escape-like';
@@ -554,8 +554,14 @@ export async function routeInboundToPlanner(admin: Admin, input: {
 export async function fileInboundPaperwork(
   admin: Admin, familyId: string, text: string, now?: Date, providerRef?: string | null, sender?: string | null,
 ): Promise<string | null> {
-  const triage = triagePaperwork(text, now ?? new Date());
-  if (!FILEABLE_PAPERWORK.has(triage.kind)) return null;
+  // Whether this is paperwork at all does not depend on the day; what it is
+  // due, and how urgent, does — and that is the FAMILY's day, read off their
+  // own zone (lib/paperwork/triage.ts, TriageToday). The same household scope
+  // runs the enrichment below.
+  if (!FILEABLE_PAPERWORK.has(classifyPaperwork(text))) return null;
+  const scope = await systemScopeForFamily(admin, familyId, { now });
+  if (!scope) throw new PaperworkEnrichmentError('Could not read the paperwork household. Retry.');
+  const triage = triagePaperwork(text, dayKeyInTz(now ?? new Date(), scope.tz));
   const rawText = text.slice(0, 20_000);
 
   // The delivery identity survives a person's edit to raw_text. Fall back to
@@ -578,8 +584,6 @@ export async function fileInboundPaperwork(
     throw new PaperworkEnrichmentError('Could not check the saved paperwork. Retry.');
   }
   const enrich = async (id: string) => {
-    const scope = await systemScopeForFamily(admin, familyId, { now });
-    if (!scope) throw new PaperworkEnrichmentError('Could not read the paperwork household. Retry.');
     const result = await enrichPaperworkEntities(scope, id);
     if (!result.ok) throw new PaperworkEnrichmentError(result.error);
     return id;

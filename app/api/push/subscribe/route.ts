@@ -6,6 +6,7 @@ import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { MAX_PUSH_REQUEST_BYTES, parsePushRegistration } from '@/lib/server/push-request';
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body';
 import { isDeliverablePushEndpoint } from '@/lib/server/push-endpoint';
+import { MAX_PUSH_DEVICES_PER_USER } from '@/lib/push/device-cap';
 
 export const dynamic = 'force-dynamic';
 
@@ -117,5 +118,22 @@ export async function POST(req: Request) {
     { onConflict: 'user_id,device_key' },
   );
   if (error) return NextResponse.json({ error: t('subscribe.couldNotSavePushSubscription') }, { status: 500 });
+
+  // An account keeps its newest MAX_PUSH_DEVICES_PER_USER devices switched on
+  // (lib/server/push.ts sends to no more than those). Nothing bounded how many
+  // an account registered, and every one is a send the serial dispatch waits
+  // on. The one just saved is the newest, so it is never the one switched off.
+  // Best-effort: the registration stands if this cannot run.
+  const { data: surplus, error: surplusError } = await supabase.from('push_devices')
+    .select('id').eq('user_id', user.id).eq('enabled', true)
+    .order('last_seen_at', { ascending: false }).order('id', { ascending: true })
+    .range(MAX_PUSH_DEVICES_PER_USER, MAX_PUSH_DEVICES_PER_USER + 99);
+  if (surplusError) {
+    console.error('[push/subscribe] device cap read failed', { userId: user.id });
+  } else if (surplus && surplus.length > 0) {
+    const { error: capError } = await supabase.from('push_devices').update({ enabled: false })
+      .eq('user_id', user.id).in('id', surplus.map((d) => d.id)).select('id');
+    if (capError) console.error('[push/subscribe] older devices were not switched off', { userId: user.id });
+  }
   return NextResponse.json({ ok: true });
 }

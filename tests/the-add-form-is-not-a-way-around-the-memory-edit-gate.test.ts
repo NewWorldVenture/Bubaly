@@ -69,6 +69,11 @@ beforeEach(() => {
       audit_logs: { resource_id: null, metadata: null },
     },
   });
+  // The explicit unchanged reference below names a real member of this family.
+  db.seed('family_members', [{
+    id: 'teen', family_id: FAMILY, user_id: 'user-teen', role: 'teen',
+    display_name: 'Synthetic teen', is_active: true, birthday: null,
+  }]);
 });
 
 describe('a memory a member would not be allowed to correct', () => {

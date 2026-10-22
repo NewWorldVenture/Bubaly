@@ -103,6 +103,12 @@ vi.mock('@/lib/ai/safety/untrusted', () => ({ fenceUntrustedBlock: (_kind: strin
 // The draft path carries the AI rate-limit budget (C3-S4-01, merged from main);
 // this suite is about the step-up gate, so the budget always has room.
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
+// The Free plan's AI allowance has its own cases in
+// tests/the-free-plans-ai-allowance-holds-on-every-helper.test.ts; it admits here.
+vi.mock('@/lib/server/ai-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/ai-access')>()),
+  assertAIAllowance: async () => ({ ok: true, planLevel: 1, monthlyUsed: null, monthlyAllowance: null }),
+}));
 
 const actions = await import('@/app/(app)/dashboard/paperwork/actions');
 
@@ -152,7 +158,7 @@ beforeEach(() => {
     },
   });
   db.seed('paperwork_items', [structuredClone(SLIP)]);
-  Object.assign(db, { auth: { mfa: { getAuthenticatorAssuranceLevel: h.getAal } } });
+  Object.assign(db, { auth: { getSession: async () => ({ data: { session: { access_token: 'synthetic-assurance-token' } }, error: null }), mfa: { getAuthenticatorAssuranceLevel: h.getAal } } });
   h.db = db;
 });
 

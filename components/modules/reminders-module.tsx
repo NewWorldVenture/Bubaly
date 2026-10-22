@@ -33,6 +33,8 @@ import {
 import type { Tables } from '@/lib/database.types';
 import { usePlural, useTranslations } from '@/components/i18n/locale-provider';
 import { visibleReminderTags, withReminderProvenance } from '@/lib/reminders/provenance';
+import { reminderCardsReader, visibleReminders } from '@/lib/autopilot/reminder-cards';
+import { mintSuggestionReminderKey, mintSuggestionSourceTag } from '@/lib/autopilot/reminder-key';
 import { FamilyMediaImg } from '@/components/media/family-media-img';
 import { safeWebLink } from '@/lib/utils/safe-link';
 
@@ -114,7 +116,7 @@ export function RemindersModule() {
   const tr = useTranslations();
   const askConfirm = useConfirm();
   const plural = usePlural();
-  const { familyId, userId, members, family } = useApp();
+  const { familyId, userId, members, family, role, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
 
@@ -135,12 +137,30 @@ export function RemindersModule() {
   });
   const listById = useMemo(() => new Map((lists ?? []).map((l) => [l.id, l])), [lists]);
 
+  // A reminder an Autopilot card made is listed only to the card's readers
+  // (lib/autopilot/reminder-cards.ts): a manager's accepted insurance card
+  // writes an unassigned "Renew dental insurance (Smile Co)" so the managers are
+  // reminded, and it is the managers' and the member the policy names; a
+  // renewal's is not a guest's. The card's key and tag are minted here in the
+  // browser (lib/autopilot/reminder-key.ts); the tag finds the card of a
+  // repeating one's next occurrence, which `complete` below writes without
+  // the key. Every other reminder is listed as before.
+  // The reader is in `deps`, so a change re-reads.
+  const reminderViewer = { role, memberId: selfMember?.id ?? null };
   const { data: reminders, loading, error, refresh } = useRealtimeQuery<Reminder>({
-    table: 'family_reminders', familyId, deps: [familyId],
-    fetcher: (sb) =>
-      sb.from('family_reminders').select('*').eq('family_id', familyId)
+    table: 'family_reminders', familyId, deps: [familyId, role, reminderViewer.memberId],
+    fetcher: async (sb) => {
+      const read = await sb.from('family_reminders').select('*').eq('family_id', familyId)
         .order('status', { ascending: true })
-        .order('remind_at', { ascending: true, nullsFirst: false }),
+        .order('remind_at', { ascending: true, nullsFirst: false });
+      if (read.error) return read;
+      const cards = reminderCardsReader(sb, familyId, {
+        keyOf: (cardId) => mintSuggestionReminderKey(familyId, cardId),
+        sourceTagOf: mintSuggestionSourceTag,
+        onError: (cause) => console.error('[reminders] autopilot reminder cards read failed', cause),
+      });
+      return { data: await visibleReminders(read.data ?? [], reminderViewer, cards), error: null };
+    },
   });
 
   const combinedLoading = listsLoading || loading;

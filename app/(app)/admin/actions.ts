@@ -12,14 +12,16 @@ import { InviteEmail } from '@/lib/emails/invite';
 import { emailSchema } from '@/lib/validation';
 import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { stripeFromKey } from '@/lib/stripe';
-import { REMOVED_MEMBER_PATCH, type MemberRole } from '@/lib/constants/roles';
-import { REMOVED_CHILD_BAN_MARKER, revokeRemovedChildLogin } from '@/lib/server/child-account';
+import { REMOVED_MEMBER_PATCH, isManager, type MemberRole } from '@/lib/constants/roles';
+import { REMOVED_CHILD_BAN_MARKER, isChildLoginAccount, memberHasAKidLogin, revokeRemovedChildLogin } from '@/lib/server/child-account';
 import type { PlanId } from '@/lib/constants/plans';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { isValidTimezone } from '@/lib/time/zoned';
 import { superAdminAssurance } from '@/lib/auth/super-admin-assurance';
 import { forgetMemberLocation } from '@/lib/location/retention';
+import { closePendingInvitesFor } from '@/lib/server/member-invites';
+import { recordTrustChange } from '@/lib/trust/ledger';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -174,6 +176,14 @@ export async function adminCreateFamilyAction(input: {
   const timezone = (input.timezone || 'UTC').trim();
   if (!isValidTimezone(timezone)) return { ok: false, error: t('actions.unknownTimeZone') };
 
+  // The owner is seated as the family's parent, so a kid login (a 4-digit PIN
+  // its parent knows) is never one, as the household and admin editors refuse
+  // it a manager role (the held 0512). Fails closed: an unanswerable lookup
+  // counts as a kid login.
+  if (await isChildLoginAccount(supabase, { id: authOwner.id, email: authOwner.email, user_metadata: authOwner.user_metadata })) {
+    return { ok: false, error: t('familyModule.aKidLoginCannotBeAManager', { name: owner.full_name?.trim() || owner.email || wantedEmail }) };
+  }
+
   const { data: family, error } = await supabase.from('families').insert({
     name, timezone, created_by: owner.id,
   }).select('id').single();
@@ -242,7 +252,7 @@ export async function adminRemoveMemberAction(memberId: string): Promise<Result<
 
   const supabase = createServiceClient();
   const { data: member, error } = await supabase.from('family_members')
-    .update(REMOVED_MEMBER_PATCH).eq('id', memberId).select('id, family_id, display_name, user_id').single();
+    .update(REMOVED_MEMBER_PATCH).eq('id', memberId).select('id, family_id, display_name, user_id, email').single();
   if (error) return actionFailure(error, t('actions.couldNotRemoveThatMember'));
 
   // A removed child's PIN login is switched off too; the removal stands if that fails.
@@ -255,12 +265,16 @@ export async function adminRemoveMemberAction(memberId: string): Promise<Result<
   // no longer active is held and runs nowhere, pending the owner's decision.)
   const forgotten = await forgetMemberLocation(supabase, member.family_id, memberId);
   if (!forgotten.ok) console.error('[admin-action] removed member location was not cleared', { memberId, failures: forgotten.failures });
+  // Every pending invite to them is revoked too, or a second one they hold
+  // brings them back (accept_invite reactivates the row). Stands if it fails.
+  const invitesRevoked = await closePendingInvitesFor(supabase, member.family_id, member, 'revoked');
 
-  await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name, login_revocation: loginRevocation, location_forgotten: forgotten.ok } });
+  await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name, login_revocation: loginRevocation, location_forgotten: forgotten.ok, invites_revoked: invitesRevoked } });
   revalidatePath('/admin/users');
   const warning = loginRevocation === 'failed'
     ? t('familyModule.removedButLoginStillActive')
-    : !forgotten.ok ? t('familyModule.removedButLocationStillVisible') : null;
+    : !forgotten.ok ? t('familyModule.removedButLocationStillVisible')
+      : !invitesRevoked ? t('familyModule.removedButInviteStillOpen') : null;
   return warning ? { ok: true, data: { warning } } : { ok: true };
 }
 
@@ -274,10 +288,34 @@ export async function adminUpdateMemberAction(memberId: string, input: { display
   if (!displayName) return { ok: false, error: t('actions.nameIsRequired') };
 
   const supabase = createServiceClient();
+  // The household's editors refuse a manager role for a kid-PIN login
+  // (updateFamilyMemberAction); this one wrote any role with the service role,
+  // so it was the one path left to a manager account behind a 4-digit PIN.
+  // Read first, so the refusal and the ledger know who and what it was.
+  const { data: target, error: readError } = await supabase.from('family_members')
+    .select('id, family_id, user_id, role, display_name').eq('id', memberId).maybeSingle();
+  if (readError) return actionFailure(readError, t('actions.couldNotUpdateThatMember'));
+  if (!target) return { ok: false, error: t('actions.couldNotUpdateThatMember') };
+  const roleChanges = input.role !== target.role;
+  if (roleChanges && isManager(input.role) && await memberHasAKidLogin(supabase, target)) {
+    return { ok: false, error: t('familyModule.aKidLoginCannotBeAManager', { name: target.display_name }) };
+  }
+
   const { data: member, error } = await supabase.from('family_members')
-    .update({ display_name: displayName, role: input.role }).eq('id', memberId).select('family_id').single();
+    .update({ display_name: displayName, role: input.role }).eq('id', memberId).eq('family_id', target.family_id)
+    .select('family_id').single();
   if (error) return actionFailure(error, t('actions.couldNotUpdateThatMember'));
 
+  // A role is a permission: recorded in the family's trust ledger beside every
+  // other change to who may do what, as the household's own editors record it.
+  // No member made this change, so no member is named as its actor.
+  if (roleChanges) {
+    await recordTrustChange(supabase, {
+      familyId: member.family_id, actorMemberId: null, decision: 'role_changed',
+      reason: `Bubaly support changed ${target.display_name}'s role from ${target.role} to ${input.role}`,
+      context: { memberId, from: target.role, to: input.role, by: 'super_admin' },
+    });
+  }
   await adminAuditLog({ familyId: member.family_id, action: 'update', resource: 'family_members', resourceId: memberId, metadata: { display_name: displayName, role: input.role } });
   revalidatePath('/admin/users');
   return { ok: true };

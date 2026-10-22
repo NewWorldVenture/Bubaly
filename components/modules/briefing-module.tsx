@@ -29,6 +29,7 @@ import { kitchenMemberStatus, kitchenToday, kitchenUpcoming } from '@/lib/briefi
 import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
 import { readDisplayCalendarOccurrences, CALENDAR_DISPLAY_CONTRACT, CALENDAR_SOURCE_ARCHIVE_ENABLED, type CalendarDisplayOccurrence } from '@/lib/calendar/display-occurrences';
 import { calendarConsumerKey } from '@/lib/calendar/consumer-spans';
+import { reminderCardsReader, visibleReminders } from '@/lib/autopilot/reminder-cards';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -826,7 +827,7 @@ function ScopedBriefingModule({ recap, relationships, preview = false, contextKe
   setTab: (tab: TabType) => void;
 }) {
   const tr = useTranslations();
-  const { familyId, members } = useApp();
+  const { familyId, members, role, selfMember } = useApp();
   const [session] = useState(() => createBriefingSession());
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot);
   const active = tab === 'kitchen' ? null : state[tab];
@@ -874,7 +875,18 @@ function ScopedBriefingModule({ recap, relationships, preview = false, contextKe
     table: 'reminders',
     familyId,
     deps: [contextKey],
-    fetcher: (sb) => sb.from('reminders').select('*').eq('family_id', familyId).eq('is_done', false) as never,
+    // A reminder an Autopilot card made is listed only to the card's readers
+    // (lib/autopilot/reminder-cards.ts): the scan's "Renew Passport" is not a
+    // guest's, a policy's renewal is the managers' and its member's. The
+    // reader's role and member are in `contextKey`, so a change re-reads.
+    fetcher: async (sb) => {
+      const read = await sb.from('reminders').select('*').eq('family_id', familyId).eq('is_done', false);
+      if (read.error) return read;
+      const cards = reminderCardsReader(sb, familyId, {
+        onError: (error) => console.error('[briefing] autopilot reminder cards read failed', error),
+      });
+      return { data: await visibleReminders(read.data ?? [], { role, memberId: selfMember?.id ?? null }, cards), error: null };
+    },
   });
 
   // On today's date: a timed row on the family's day, an all-day row on its

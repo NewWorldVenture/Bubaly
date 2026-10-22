@@ -9,9 +9,10 @@ import { APP_URL, sendReactEmail } from '@/lib/email';
 import { ReferralEmail } from '@/lib/emails/referral';
 import { emailSchema } from '@/lib/validation';
 import {
-  applyReferralCode, getOrCreateReferralCode, getReferralConfig,
+  applyReferralCode, getOrCreateReferralCode, getReferralConfigResult,
   recordReferralEmailInvite, rollbackReferralEmailInvite, type ApplyFailureCode, type ApplyResult,
 } from '@/lib/referrals/server';
+import { isManager } from '@/lib/constants/roles';
 import { REFERRAL_EMAIL_POLICY, REFERRAL_HOME_CARD_DISMISSED_KEY, referralLink } from '@/lib/referrals/core';
 import { mergeNotificationPrefs } from '@/lib/preferences/notification-prefs';
 
@@ -28,11 +29,18 @@ const APPLY_FAILURE_KEY: Record<ApplyFailureCode, string> = {
   already_referred: 'referralActions.familyAlreadyUsedACode',
   lookup_failed: 'referralActions.couldNotApplyCode',
   write_failed: 'referralActions.couldNotApplyCode',
+  denied: 'referralActions.onlyAParentOrAdult',
 };
 
 export async function applyReferralCodeAction(rawCode: string): Promise<ApplyResult> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
+  // A family has ONE referral, unique on the referred family and paid out in
+  // Stripe credit when it converts. A guest (who may be a parent in their own
+  // household) or a child could spend it, irreversibly, for a code of their
+  // choosing. The panel shows the control to parents and adults; this is where
+  // that holds.
+  if (!isManager(ctx.active.role)) return { ok: false, reason: t('referralActions.onlyAParentOrAdult'), code: 'denied' };
   const result = await applyReferralCode({
     rawCode,
     referredFamilyId: ctx.active.familyId,
@@ -57,6 +65,8 @@ export type SendReferralEmailResult = { ok: true; email: string } | { ok: false;
 export async function sendReferralEmailAction(rawEmail: string): Promise<SendReferralEmailResult> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
+  // An invite goes out in the family's name and spends its daily allowance.
+  if (!isManager(ctx.active.role)) return { ok: false, reason: t('referralActions.onlyAParentOrAdult') };
   const parsed = emailSchema.safeParse(typeof rawEmail === 'string' ? rawEmail : '');
   if (!parsed.success) return { ok: false, reason: t('referralActions.enterAValidEmail') };
   const email = parsed.data;
@@ -65,7 +75,10 @@ export async function sendReferralEmailAction(rawEmail: string): Promise<SendRef
   }
 
   const service = createServiceClient();
-  const config = await getReferralConfig(service);
+  // A failed settings read is not the defaults: it would record $10 rewards on
+  // the invite and promise a "$10 credit" from a program that may be paused.
+  const { config, error: configError } = await getReferralConfigResult(service);
+  if (configError) return { ok: false, reason: t('referralActions.couldNotRecordInvite') };
   if (!config.enabled) return { ok: false, reason: t('referralActions.programPaused') };
 
   const familyId = ctx.active.familyId;

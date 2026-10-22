@@ -29,7 +29,7 @@ import { isValidTimezone } from '@/lib/time/zoned';
 import { localDayKey } from '@/lib/time/local-day';
 import { ageOn, nextBirthday } from '@/lib/utils/birthday';
 import { FamilyMediaImg } from '@/components/media/family-media-img';
-import { removeFamilyMemberAction } from '@/app/(app)/family/member-actions';
+import { removeFamilyMemberAction, updateFamilyMemberAction } from '@/app/(app)/family/member-actions';
 
 type Family = Tables<'families'>;
 type Member = Tables<'family_members'>;
@@ -490,6 +490,9 @@ export function FamilyModule() {
               // scheduled clears it (the retention sweep that would is held):
               // said, like the login that stayed live.
               else if (!res.locationForgotten) toastError(t('familyModule.removedButLocationStillVisible'));
+              // And a pending invite to them that could not be revoked would
+              // let them straight back in.
+              else if (!res.invitesRevoked) toastError(t('familyModule.removedButInviteStillOpen'));
               else success(t('familyModule.memberRemoved'));
               void refreshMembers();
             }}>{t('family.remove')}</Button>
@@ -563,24 +566,35 @@ function MemberModal({ familyId, createdBy, member, onClose, onSaved }: {
     if (!name.trim()) return;
     if (!roleOptions.includes(mrole)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     setSaving(true);
-    const sb = createClient();
     const payload = {
       display_name: name.trim(), role: mrole,
       birthday: birthday || null, email: email.trim() || null, phone: phone.trim() || null,
     };
-    // Same manager gate as the removal above: an UPDATE the policy filters comes
-    // back `error: null` with nothing changed. The INSERT needs no readback —
-    // RLS refuses an insert with an error rather than filtering it away.
-    const { data: savedRows, error: err } = member
-      ? await sb.from('family_members').update(payload).eq('id', member.id).eq('family_id', familyId).select('id')
-      : await sb.from('family_members').insert({
-          ...payload, family_id: familyId, is_active: true,
-          color: MEMBER_COLORS[Math.floor(Math.random() * MEMBER_COLORS.length)],
-        }).select('id');
+    if (member) {
+      // An edit goes through the server action Settings uses too: it refuses
+      // a member another manager removed (this list may be stale), writes only
+      // the columns that changed while the row is still the one opened here,
+      // and decides the roles a kid login may hold itself.
+      const res = await updateFamilyMemberAction({ memberId: member.id, expectedUpdatedAt: member.updated_at ?? null, changes: payload })
+        .catch(() => null);
+      setSaving(false);
+      if (!res) { toastError(t('errors.thatChangeWasNotSaved')); return; }
+      if (!res.ok) { toastError(res.error); return; }
+      success(t('familyModule.memberUpdated'));
+      onSaved();
+      return;
+    }
+    const sb = createClient();
+    // The INSERT needs no readback for refusal — RLS refuses an insert with an
+    // error rather than filtering it away — and reads its row back anyway.
+    const { data: savedRows, error: err } = await sb.from('family_members').insert({
+      ...payload, family_id: familyId, is_active: true,
+      color: MEMBER_COLORS[Math.floor(Math.random() * MEMBER_COLORS.length)],
+    }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(savedRows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
-    success(member ? t('familyModule.memberUpdated') : t('familyModule.memberAdded'));
+    success(t('familyModule.memberAdded'));
     onSaved();
   }
 

@@ -71,6 +71,6 @@ describe('a failed cron run is visible in its status code', () => {
   it('an unconfigured bot is still a clean run, not a failure', () => {
     // `configured: false` returns errors: 0, so the route must answer 200.
     const lib = readFileSync('lib/feedback/github-sync.ts', 'utf8');
-    expect(lib).toContain('return { configured: false, created: 0, reconciled: 0, changes: [], errors: 0 }');
+    expect(lib).toContain('return { configured: false, created: 0, reconciled: 0, changes: [], errors: 0, held: 0 }');
   });
 });

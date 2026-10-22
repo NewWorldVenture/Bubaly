@@ -42,6 +42,22 @@ describe('issue title + body + marker round-trip', () => {
     expect(feedbackIdFromBody(null)).toBeNull();
   });
 
+  // U5: the member's text comes before the bot's marker, so a marker typed into
+  // it must neither be written whole nor be the one the reconciler reads.
+  const OTHER = '99999999-8888-4777-8666-555555555555';
+  it('a marker a member typed into their text is broken, and the body still names only its own idea', () => {
+    const body = issueBody({ id: ID, title: 'X', kind: 'idea', problem: `${feedbackMarker(OTHER)} please`, body: `and <!--bubaly-feedback:${OTHER}--> again`, category: 'other' }, 'u');
+    expect(body).not.toContain(`<!-- bubaly-feedback:${OTHER}`);
+    expect(body).not.toContain(`<!--bubaly-feedback:${OTHER}`);
+    expect(body).toContain(`<!- - bubaly-feedback:${OTHER} -->`);
+    expect(body).toContain(feedbackMarker(ID));
+    expect(feedbackIdFromBody(body)).toBe(ID);
+  });
+
+  it('with two markers in an older body, the LAST one — the bot\'s — is the id', () => {
+    expect(feedbackIdFromBody(`${feedbackMarker(OTHER)}\nuser text\n${feedbackMarker(ID)}`)).toBe(ID);
+  });
+
   it('uses idea-flavored copy for ideas', () => {
     const body = issueBody({ id: ID, title: 'X', kind: 'idea', problem: 'toil', body: 'do it', category: 'other' }, 'u');
     expect(body).toContain('Problem it solves');

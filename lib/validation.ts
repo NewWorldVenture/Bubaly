@@ -122,10 +122,14 @@ export const localMemberActionSchema = z.object({
 
 // A family member captured during onboarding. `local` = managed profile with NO
 // email/login (any role, so parents can add kids, grandparents, caregivers who
-// don't have an email); `invite` = an email join link will be sent.
+// don't have an email); `invite` = an email join link will be sent. `id` is
+// the draft's own id for the member (lib/onboarding/draft.ts), which stays the
+// same across edits and reloads, so a retried finish keys the same row by it.
+const draftMemberId = z.string().trim().min(1).max(64).optional();
 export const draftMemberSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('local'),
+    id: draftMemberId,
     name: z.string().trim().min(1, 'Enter a name').max(60),
     role: z.enum(['adult', 'teen', 'child', 'caregiver', 'guest']),
     birthday: z.string().trim().max(10).optional().default(''),
@@ -133,6 +137,7 @@ export const draftMemberSchema = z.discriminatedUnion('kind', [
   }),
   z.object({
     kind: z.literal('invite'),
+    id: draftMemberId,
     email: emailSchema,
     role: z.enum(['adult', 'teen', 'caregiver', 'guest']),
   }),

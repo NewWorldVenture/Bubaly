@@ -7,7 +7,7 @@ import { effectiveSecretKey, getStripeSettings } from '@/lib/stripe/settings';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import {
   DEFAULT_REFERRAL_CONFIG, resolveReferralConfig, generateReferralCode, normalizeCode,
-  REFERRAL_EMAIL_SOURCE, evaluateReferralEmailThrottle, referralEmailSendTimes, withReferralEmailSent,
+  REFERRAL_EMAIL_SOURCE, evaluateReferralEmailThrottle, decideReferralEmailAdmission, referralEmailSendTimes, withReferralEmailSent,
   rewardRecordFrom, rewardSidesOwed, withRewardRecord, rewardIdempotencyKey,
   type ReferralConfig, type ReferralRewardSide,
 } from '@/lib/referrals/core';
@@ -17,17 +17,20 @@ type ReferralMetadata = Database['public']['Tables']['referrals']['Update']['met
 
 const SETTINGS_KEY = 'referral_program';
 
-/** Read the program config from marketing_settings (falls back to defaults). */
+/**
+ * Read the program config from marketing_settings. A missing row is the
+ * defaults, on purpose; a FAILED read is `error`, and its `config` is only the
+ * defaults as a placeholder. Every caller that acts on the program (applies a
+ * code, records an invite's reward, says the program is on) refuses on
+ * `error`: taking the defaults there re-enabled a paused program at $10/$10
+ * for the length of one failed read.
+ */
 export async function getReferralConfigResult(supabase: DB): Promise<{ config: ReferralConfig; error: Error | null }> {
   const { data, error } = await supabase.from('marketing_settings').select('value').eq('key', SETTINGS_KEY).maybeSingle();
   return {
     config: data ? resolveReferralConfig(data.value) : DEFAULT_REFERRAL_CONFIG,
     error: error ? new Error('Referral program settings read failed') : null,
   };
-}
-
-export async function getReferralConfig(supabase: DB): Promise<ReferralConfig> {
-  return (await getReferralConfigResult(supabase)).config;
 }
 
 /** Persist program config (admin only — caller must be gated). */
@@ -91,7 +94,7 @@ export async function listReferralsForFamily(supabase: DB, familyId: string): Pr
   return data ?? [];
 }
 
-export type ApplyFailureCode = 'empty' | 'paused' | 'not_found' | 'own_code' | 'already_referred' | 'lookup_failed' | 'write_failed';
+export type ApplyFailureCode = 'empty' | 'paused' | 'not_found' | 'own_code' | 'already_referred' | 'lookup_failed' | 'write_failed' | 'denied';
 export type ApplyResult = { ok: true } | { ok: false; reason: string; code: ApplyFailureCode };
 
 /**
@@ -113,10 +116,13 @@ export async function applyReferralCode(input: {
   if (!code) return { ok: false, reason: 'Enter a referral code.', code: 'empty' };
 
   const service = createServiceClient();
-  const config = await getReferralConfig(service);
-  if (!config.enabled) return { ok: false, reason: 'The referral program is currently paused.', code: 'paused' };
-
   const lookupFailed: ApplyResult = { ok: false, reason: 'We could not apply that referral code right now. Please try again.', code: 'lookup_failed' };
+  const { config, error: configError } = await getReferralConfigResult(service);
+  if (configError) {
+    console.error('[referrals/server] referral settings read failed', { familyId: input.referredFamilyId });
+    return lookupFailed;
+  }
+  if (!config.enabled) return { ok: false, reason: 'The referral program is currently paused.', code: 'paused' };
 
   const { data: codeRow, error: codeError } = await service.from('referral_codes').select('family_id, code').eq('code', code).maybeSingle();
   if (codeError) {
@@ -538,12 +544,61 @@ export type EmailInviteRecord =
   | { ok: false; reason: 'throttled'; retryAfterSec: number }
   | { ok: false; reason: 'read_failed' | 'write_failed' };
 
+/** Rows asked for per page of a family's referrals. The server may answer with fewer (db-max-rows). */
+const REFERRAL_PAGE_ROWS = 1000;
+
+/**
+ * Every referral row of one family, for a decision about the family's daily
+ * email limit. One unpaged read is answered with at most db-max-rows and no
+ * error, so a family with enough old invitations had its recent sends cut
+ * from the read, and both the limit check and the admission counted a
+ * budget with sends missing.
+ *
+ * Keyset pages in `id` order (`page` adds `.gt('id', cursor)` after the
+ * first): another request's rollback deleting a row while this one pages
+ * cannot shift a later row out of view, which an offset would. A row written
+ * behind the cursor meanwhile is missed, and that is safe: its own request
+ * read after it wrote, so it counts this one. Each page asks for its `count`,
+ * taken in the same statement as its rows, so a page holding every row past
+ * the cursor ends the read without a second round trip, while one cut short
+ * by the server's cap reads on. Any failed page fails the whole read: a part
+ * of the family's sends is not a budget.
+ */
+async function readEveryReferralPage<Row extends { id: string }>(
+  page: (cursor: string | null) => PromiseLike<{ data: Row[] | null; count: number | null; error: unknown }>,
+): Promise<{ rows: Row[]; error: unknown }> {
+  const rows: Row[] = [];
+  let cursor: string | null = null;
+  for (;;) {
+    const { data, count, error } = await page(cursor);
+    if (error) return { rows: [], error };
+    if (!Array.isArray(data)) return { rows: [], error: new Error('Referral page unavailable') };
+    if (data.length === 0) return { rows, error: null };
+    let last: string | null = cursor;
+    for (const row of data) {
+      if (typeof row.id !== 'string' || (cursor !== null && row.id <= cursor)) {
+        return { rows: [], error: new Error('Referral page did not advance') };
+      }
+      if (last === null || row.id > last) last = row.id;
+    }
+    rows.push(...data);
+    if (typeof count === 'number' && data.length >= count) return { rows, error: null };
+    cursor = last;
+  }
+}
+
 /**
  * Record that the referrer is emailing `email` their code, subject to the
  * per-family daily limit. Every send is a timestamp on the invited family's
  * row (`metadata.email_sent_at`), which is also what the limit is counted
  * from — so the state lives in a column that already exists. A repeat send
  * to the same address reuses that row rather than adding a second family.
+ *
+ * The first read only turns away a family that is already at the limit. The
+ * compare-and-set below guards one row, and two invitations to different
+ * addresses write different rows. So a written send is admitted only by
+ * `admitWrittenReferralEmail`, from a read taken after the write. `ok: true`
+ * means admitted, and only then may the caller send the email.
  */
 export async function recordReferralEmailInvite(service: DB, input: {
   referrerFamilyId: string;
@@ -554,18 +609,19 @@ export async function recordReferralEmailInvite(service: DB, input: {
 }): Promise<EmailInviteRecord> {
   const now = input.now ?? new Date();
   const email = input.email.trim().toLowerCase();
-  const { data: rows, error } = await service
-    .from('referrals')
-    .select('id, referred_email, status, metadata')
-    .eq('referrer_family_id', input.referrerFamilyId);
+  const { rows, error } = await readEveryReferralPage((cursor) => {
+    const page = service.from('referrals').select('id, referred_email, status, metadata', { count: 'exact' })
+      .eq('referrer_family_id', input.referrerFamilyId).order('id', { ascending: true }).limit(REFERRAL_PAGE_ROWS);
+    return cursor === null ? page : page.gt('id', cursor);
+  });
   if (error) {
     console.error('[referrals/email] referral rows read failed', { familyId: input.referrerFamilyId, error });
     return { ok: false, reason: 'read_failed' };
   }
-  const decision = evaluateReferralEmailThrottle(rows ?? [], now);
+  const decision = evaluateReferralEmailThrottle(rows, now);
   if (!decision.allowed) return { ok: false, reason: 'throttled', retryAfterSec: decision.retryAfterSec };
 
-  const existing = (rows ?? []).find((r) => (r.referred_email ?? '').toLowerCase() === email);
+  const existing = rows.find((r) => (r.referred_email ?? '').toLowerCase() === email);
   if (existing) {
     const query = service.from('referrals')
       .update({ metadata: withReferralEmailSent(existing.metadata, now) as ReferralMetadata })
@@ -578,7 +634,7 @@ export async function recordReferralEmailInvite(service: DB, input: {
       console.error('[referrals/email] referral send record failed', { id: existing.id, error: updateError });
       return { ok: false, reason: 'write_failed' };
     }
-    return { ok: true, rowId: existing.id, created: false, remaining: decision.remaining - 1 };
+    return admitWrittenReferralEmail(service, { referrerFamilyId: input.referrerFamilyId, rowId: existing.id, created: false, sentAt: now });
   }
 
   const { data, error: insertError } = await service
@@ -600,29 +656,102 @@ export async function recordReferralEmailInvite(service: DB, input: {
     console.error('[referrals/email] referral invite insert failed', { familyId: input.referrerFamilyId, error: insertError });
     return { ok: false, reason: 'write_failed' };
   }
-  return { ok: true, rowId: data.id, created: true, remaining: decision.remaining - 1 };
+  return admitWrittenReferralEmail(service, { referrerFamilyId: input.referrerFamilyId, rowId: data.id, created: true, sentAt: now });
 }
 
-/** Undo a recorded send whose email never left: drop a fresh row, or the timestamp on a reused one. */
+/**
+ * Pauses before reading again while a send ranked past the limit withdraws.
+ * Bounded: a send that never withdraws leaves this one throttled instead of
+ * sent. That happens when an admitted send ranks after this one because this
+ * request's clock is behind, or when another request's rollback failed.
+ */
+const ADMISSION_RECHECK_MS = [25, 50, 100, 200] as const;
+
+/**
+ * Admit a send that is already written, or withdraw it. Each racer reads
+ * after its own write, so it sees its own send, and every racer ranks sends
+ * the same way (see `decideReferralEmailAdmission`). Only this request's own
+ * send is ever rolled back: its row by id, or its stamp on a reused row.
+ */
+async function admitWrittenReferralEmail(service: DB, input: {
+  referrerFamilyId: string; rowId: string; created: boolean; sentAt: Date;
+}): Promise<EmailInviteRecord> {
+  const own = { rowId: input.rowId, created: input.created, sentAt: input.sentAt };
+  for (let attempt = 0; ; attempt++) {
+    const { rows, error } = await readEveryReferralPage((cursor) => {
+      const page = service.from('referrals').select('id, metadata', { count: 'exact' })
+        .eq('referrer_family_id', input.referrerFamilyId).order('id', { ascending: true }).limit(REFERRAL_PAGE_ROWS);
+      return cursor === null ? page : page.gt('id', cursor);
+    });
+    if (error) {
+      console.error('[referrals/email] referral admission read failed', { familyId: input.referrerFamilyId, error });
+      await rollbackReferralEmailInvite(service, own);
+      return { ok: false, reason: 'read_failed' };
+    }
+    const admission = decideReferralEmailAdmission(rows, { rowId: input.rowId, sentAt: input.sentAt });
+    if (admission.verdict === 'admit') return { ok: true, rowId: input.rowId, created: input.created, remaining: admission.remaining };
+    if (admission.verdict === 'missing') {
+      console.error('[referrals/email] referral send missing after write', { id: input.rowId });
+      return { ok: false, reason: 'write_failed' };
+    }
+    if (admission.verdict === 'wait' && attempt < ADMISSION_RECHECK_MS.length) {
+      await new Promise((resolve) => setTimeout(resolve, ADMISSION_RECHECK_MS[attempt]));
+      continue;
+    }
+    // A failed rollback is logged inside and leaves the send counted; either way no email goes.
+    await rollbackReferralEmailInvite(service, own);
+    return { ok: false, reason: 'throttled', retryAfterSec: admission.retryAfterSec };
+  }
+}
+
+/**
+ * Undo a recorded send whose email never left: this request's own send, and
+ * nothing another request wrote. Uncertain cases leave the send counted.
+ *
+ * A fresh row is deleted only while it still holds exactly what its insert
+ * wrote. A repeat invitation to the same address appends its send to this
+ * row, and may already be admitted and emailed; deleting the row then took
+ * that send out of the count, and the family could be emailed past its limit.
+ * Otherwise, and on a reused row, ONE copy of this request's timestamp is
+ * removed: two sends stamped in the same millisecond each own one copy.
+ */
 export async function rollbackReferralEmailInvite(service: DB, input: { rowId: string; created: boolean; sentAt: Date }): Promise<void> {
   if (input.created) {
-    // A rollback of a row this request inserted, so zero rows deleted is a
-    // failed rollback rather than an absence: the invite stays recorded as sent
-    // and counts against the family's limit for an email that never left.
-    // Logged, not raised, like the update below. Audit C1-S9-64.
-    const { data: dropped, error } = await service.from('referrals').delete().eq('id', input.rowId).eq('status', 'pending').select('id');
-    if (error || wroteNoRows(dropped)) {
-      console.error('[referrals/email] invite rollback delete failed', { id: input.rowId, error: error ?? 'no rows deleted' });
+    // A rollback of a row this request inserted, fenced on what the insert
+    // wrote. An error leaves the invite recorded as sent, counted against the
+    // family's limit for an email that never left. Logged, not raised, like
+    // the update below. Audit C1-S9-64.
+    const { data: dropped, error } = await service.from('referrals').delete()
+      .eq('id', input.rowId).eq('status', 'pending')
+      .eq('metadata', JSON.stringify(withReferralEmailSent({}, input.sentAt)))
+      .select('id');
+    if (error) {
+      console.error('[referrals/email] invite rollback delete failed', { id: input.rowId, error });
+      return;
+    }
+    if (wroteNoRows(dropped)) {
+      // The row changed after the insert: another send landed on it (a repeat
+      // to the same address), or it left `pending`. It is not this request's
+      // alone to delete, so only this request's own timestamp comes off it.
+      console.error('[referrals/email] invite rollback found its row changed; withdrawing only its own send', { id: input.rowId });
+      await withdrawOwnReferralSend(service, input);
     }
     return;
   }
+  await withdrawOwnReferralSend(service, input);
+}
+
+/** Take ONE copy of this request's timestamp off its row, under the row's full-metadata compare-and-set. */
+async function withdrawOwnReferralSend(service: DB, input: { rowId: string; sentAt: Date }): Promise<void> {
   const { data, error } = await service.from('referrals').select('status, metadata').eq('id', input.rowId).maybeSingle();
   if (error || !data) {
     console.error('[referrals/email] invite rollback read failed', { id: input.rowId, error });
     return;
   }
-  const stamp = input.sentAt.toISOString();
-  const kept = referralEmailSendTimes(data.metadata).filter((iso) => iso !== stamp);
+  const times = referralEmailSendTimes(data.metadata);
+  const own = times.lastIndexOf(input.sentAt.toISOString());
+  if (own < 0) return;
+  const kept = [...times.slice(0, own), ...times.slice(own + 1)];
   const base = data.metadata && typeof data.metadata === 'object' && !Array.isArray(data.metadata) ? { ...(data.metadata as Record<string, unknown>) } : {};
   const query = service.from('referrals')
     .update({ metadata: { ...base, email_sent_at: kept } as ReferralMetadata })

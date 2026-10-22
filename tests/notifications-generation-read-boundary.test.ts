@@ -267,8 +267,12 @@ describe('generation establishes private audiences through complete SDK roster r
   it.each(['empty', 'children only', 'accountless managers'] as const)('withholds sensitive documents for an entirely read %s roster while retaining public events', async state => {
     const roster = state === 'empty' ? [] : state === 'children only' ? [audienceMember(1, 'child', AUDIENCE_CHILD), audienceMember(2, 'teen', AUDIENCE_ADULT)] : [audienceMember(1, 'parent', null), audienceMember(2, 'adult', '')];
     const fixture = start({ roster, cap: 1, publicEvent: true });
-    expect(await generateFamilyNotifications(fixture.db, AUDIENCE_FAMILY)).toBe(1);
-    expect(fixture.writes).toMatchObject([{ related_type: 'calendar_events', user_id: null, title: 'Synthetic public family event' }]);
+    // The public event is one row per member with a login; a household with no
+    // login at all keeps the single shared row.
+    const logins = roster.map(m => m.user_id).filter((u): u is string => typeof u === 'string' && u.trim().length > 0).sort();
+    expect(await generateFamilyNotifications(fixture.db, AUDIENCE_FAMILY)).toBe(Math.max(1, logins.length));
+    expect(fixture.writes.every(row => row.related_type === 'calendar_events' && row.title === 'Synthetic public family event')).toBe(true);
+    expect(fixture.writes.map(row => row.user_id ?? null).sort()).toEqual(logins.length ? logins : [null]);
     expect(fixture.writes.some(row => row.related_type === 'documents' || String(row.title).includes(PRIVATE_DOCUMENT))).toBe(false);
     expect((await audienceUnread(fixture.db, AUDIENCE_CHILD)).map(row => row.title)).toEqual(['Synthetic public family event']);
   });
@@ -276,7 +280,8 @@ describe('generation establishes private audiences through complete SDK roster r
   it('degrades a document read failure without losing an independently public event', async () => {
     const fixture = start({ roster: [audienceMember(1, 'parent', AUDIENCE_PARENT)], documentError: true, publicEvent: true });
     expect(await generateFamilyNotifications(fixture.db, AUDIENCE_FAMILY)).toBe(1);
-    expect(fixture.writes).toMatchObject([{ related_type: 'calendar_events', user_id: null }]);
+    // The family's one login gets the family-wide event as its own row.
+    expect(fixture.writes).toMatchObject([{ related_type: 'calendar_events', user_id: AUDIENCE_PARENT }]);
     expect(console.error).toHaveBeenCalledWith('[notifications] generation source read failed', expect.objectContaining({ table: 'documents' }));
   });
 

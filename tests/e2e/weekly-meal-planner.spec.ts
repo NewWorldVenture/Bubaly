@@ -53,7 +53,7 @@ type Row = Record<string, unknown>;
 type ActionKind = 'plan' | 'create' | 'remove' | 'grocery';
 type GroceryToggleMode = 'success' | 'transport' | 'refuse' | 'lost-response';
 type ActionMode = 'success' | 'hold' | 'reject' | 'throw' | 'wrong-slot' | 'missing-slot' | 'lost-response' | 'duplicate-slot';
-type ApiMode = 'success' | 'hold' | 'reject' | 'not-written' | 'zero-count' | 'no-rows' | 'wrong-row' | 'duplicate-row';
+type ApiMode = 'success' | 'hold' | 'reject' | 'not-written' | 'zero-count' | 'no-rows' | 'wrong-row' | 'duplicate-row' | 'left-out';
 type Call = { kind: ActionKind; input: Row | string; familyId: string };
 type Probe = {
   familyId: string; timezone: string; calls: Call[]; notices: Array<{ kind: string; message: string }>;
@@ -205,7 +205,8 @@ async function fixture(page: Page, options: { familyId?: string; timezone?: stri
         if(mode==='duplicate-row') p.tables.meal_plans.push({id:'competing-slot',family_id:familyId,meal_id:'meal-curry',plan_date:slots[0].date,meal_type:slots[0].mealType});
       }
       return {status:200,body:{written:mode!=='not-written',count:mode==='zero-count'?0:7,slots,
-        assignments:slots.map(slot=>({date:slot.date,meal_type:slot.mealType,ref:'meal:'+slot.mealId,name:slot.name}))}};
+        assignments:slots.map(slot=>({date:slot.date,meal_type:slot.mealType,ref:'meal:'+slot.mealId,name:slot.name})),
+        ...(mode==='left-out'?{leftOutForAllergies:2}:{})}};
     };
     const mocks = {
       react:React, 'react-dom':ReactDOM, 'lucide-react':window.LucideReact,
@@ -664,6 +665,17 @@ test('auto plan accepts a real write receipt only after its seven saved rows rel
   await expect(page.getByRole('status').first()).toContainText('7 of 7');
   expect(await page.evaluate(()=>window.__weeklyMeals.tables.meal_plans.length)).toBe(7);
   expect(await notices(page,'success')).toHaveLength(1);
+});
+
+// The planner's dishes screened out for a recorded allergy are said in the
+// saved message, so a short week is not mistaken for the model's own.
+test('auto plan says how many dishes were left out for recorded allergies', async ({page}) => {
+  await fixture(page);
+  await page.evaluate(()=>{window.__weeklyMeals.apiMode='left-out';});
+  await openAutoPlan(page);
+  await dialog(page).getByRole('button',{name:'Generate plan',exact:true}).click();
+  await expect(dialog(page)).toHaveCount(0);
+  expect((await notices(page,'success')).map(item=>item.message)).toEqual(['7 meals saved for the week. Left out for recorded allergies: 2.']);
 });
 
 for(const mode of ['reject','not-written','zero-count','no-rows','wrong-row','duplicate-row'] as const) {

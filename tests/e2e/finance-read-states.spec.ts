@@ -40,6 +40,10 @@ const sources = Object.fromEntries([
   // reportRefusal, which sends an aal1 session to the step-up page (0382's
   // application half); it reads its path from lib/auth/mfa.
   'lib/auth/step-up-client.ts', 'lib/auth/mfa.ts', 'lib/auth/redirect.ts',
+  // budgets-view sums the year's transactions, so it reads them whole, paged
+  // on the id (readAllByIdAsQuery), over every budget period's whole window
+  // (hub.ts's periodWindow, from the zone-free budget-periods module).
+  'lib/supabase/read-all.ts', 'lib/finance/budget-periods.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.React },
 }).outputText]));

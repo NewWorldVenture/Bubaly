@@ -46,7 +46,7 @@ export function issueTitle(idea: Pick<IdeaLike, 'title' | 'kind'>): string {
   return `[${tag}] ${title}`;
 }
 
-const MARKER_RE = /<!--\s*bubaly-feedback:([0-9a-f-]{36})\s*-->/i;
+const MARKER_RE = /<!--\s*bubaly-feedback:([0-9a-f-]{36})\s*-->/gi;
 
 /** The machine marker embedded in an issue body (id round-trips even if the
  *  stored issue number is lost). */
@@ -54,10 +54,26 @@ export function feedbackMarker(id: string): string {
   return `<!-- bubaly-feedback:${id} -->`;
 }
 
-/** Recover the feedback id from an issue body, or null. */
+/**
+ * Recover the feedback id from an issue body, or null.
+ *
+ * The LAST marker in the body is the bot's: `issueBody` writes the member's
+ * text first and its own marker on the final line. The first match was taken
+ * before, so a member who typed a marker naming ANOTHER idea into their text
+ * had the reconciler apply this issue's state to that idea, once the issue
+ * fell out of the stored-number map (its idea deleted, or the link write
+ * failed). New bodies also neutralise the opener (`neutralComment`), so a
+ * marker in the text is never written whole; this rule covers issues created
+ * before that.
+ */
 export function feedbackIdFromBody(body: string | null | undefined): string | null {
-  const m = (body ?? '').match(MARKER_RE);
-  return m ? m[1] : null;
+  const matches = [...(body ?? '').matchAll(MARKER_RE)];
+  return matches.length ? matches[matches.length - 1][1] : null;
+}
+
+/** Member text as it goes into the body: an HTML comment opener is broken so it cannot form a marker. */
+function neutralComment(text: string): string {
+  return text.replace(/<!--/g, '<!- -');
 }
 
 /** The full issue body (markdown) for a new submission. */
@@ -66,12 +82,12 @@ export function issueBody(idea: IdeaLike, boardUrl: string): string {
   const lines: string[] = [];
   if (idea.kind === 'bug') {
     lines.push('**Reported bug from the Bubaly feedback board.**', '');
-    if (idea.problem) lines.push('**What’s wrong / steps to reproduce:**', idea.problem, '');
-    if (idea.body) lines.push('**Details:**', idea.body, '');
+    if (idea.problem) lines.push('**What’s wrong / steps to reproduce:**', neutralComment(idea.problem), '');
+    if (idea.body) lines.push('**Details:**', neutralComment(idea.body), '');
   } else {
     lines.push('**Idea from the Bubaly feedback board.**', '');
-    if (idea.problem) lines.push('**Problem it solves:**', idea.problem, '');
-    if (idea.body) lines.push('**The idea:**', idea.body, '');
+    if (idea.problem) lines.push('**Problem it solves:**', neutralComment(idea.problem), '');
+    if (idea.body) lines.push('**The idea:**', neutralComment(idea.body), '');
   }
   lines.push(
     '---',

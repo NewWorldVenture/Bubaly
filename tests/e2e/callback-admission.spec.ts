@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { expect, test as base, type BrowserContext, type Page } from '@playwright/test';
+import { expect, request as apiRequest, test as base, type APIRequestContext, type APIResponse, type BrowserContext, type Page, type Request as BrowserRequest } from '@playwright/test';
 import { callbackAdmissionMaterial, parseCallbackAdmissionCookies } from '../../lib/auth/callback-witness';
 import { encodePkceInitiationRecord, pkceInitiationCookieName, readPkceInitiationSlot } from '../../lib/auth/pkce-initiation';
 import {
@@ -8,8 +8,9 @@ import {
 } from './helpers/durable-session';
 
 // Runs against the real Next server and the CI job's disposable GoTrue. This is
-// not a component fixture: route.fetch obtains the original HTTP redirect, and
-// only its delivery is delayed. No provider response or server action is mocked.
+// not a component fixture: an isolated request obtains the original HTTP
+// redirect, and only its browser delivery is delayed. No provider response or
+// server action is mocked. The isolated jar cannot publish cookies early.
 // The invalid-code control covers explicit rejection; the Mailpit case follows
 // a real emailed recovery code through exchange, adoption and password change.
 const enabled = process.env.E2E_AUTHENTICATED === '1';
@@ -95,24 +96,63 @@ async function captureActualActionReceipt(page: Page, origin: string, expected: 
 }
 
 async function holdOriginalAdmission(page: Page, origin: string) {
-  let ready = false, failed = false, release = () => {};
-  const gate = new Promise<void>(resolve => { release = resolve; });
+  let ready = false, failed = false, cleanupFailed = false, releaseGate = () => {};
+  let released = false, decisionComplete = false, deliveries = 0;
+  let originalUrl: string | undefined, completionUrl: string | undefined;
+  let deliveredCookies: string | undefined, cookieNeutral = false;
+  const phases: string[] = [];
+  const pending: Promise<void>[] = [];
+  const gate = new Promise<void>(resolve => { releaseGate = resolve; });
+  const release = () => { released = true; releaseGate(); };
+  const observeDelivery = (request: BrowserRequest) => {
+    if (request.method() !== 'GET' || !request.isNavigationRequest()
+      || request.url() !== completionUrl || request.redirectedFrom()?.url() !== originalUrl) return;
+    deliveries++;
+    phases.push('original-response-delivered');
+    // This is Chromium's immutable outgoing Cookie header after it processes
+    // the original 307. Later completion code cannot repair this observation.
+    const observed = request.allHeaders().then(headers => {
+      const cookies = parseCallbackAdmissionCookies(headers.cookie ?? null);
+      if (!cookies) throw new Error('Invalid redirected request cookies');
+      const key = authCookieName(provider);
+      deliveredCookies = JSON.stringify(cookies.filter(cookie => cookie.name === key
+        || (cookie.name.startsWith(`${key}.`) && /^\d+$/.test(cookie.name.slice(key.length + 1))))
+        .map(({ name, value }) => ({ name, value })).sort((a, b) => a.name.localeCompare(b.name)));
+    }).catch(() => { failed = true; });
+    pending.push(observed);
+  };
+  page.on('request', observeDelivery);
   await page.route(url => url.origin === origin && url.pathname === '/auth/callback', async route => {
-    try {
-      const response = await route.fetch({ maxRedirects: 0 });
-      const location = new URL(response.headers().location ?? '', origin);
-      if (response.status() !== 307 || location.origin !== origin || location.pathname !== '/auth/complete'
-        || !location.searchParams.get('admission') || response.headers()['set-cookie']) {
-        throw new Error('Unexpected callback admission response');
+    const handled = (async () => {
+      let isolated: APIRequestContext | undefined, response: APIResponse | undefined;
+      try {
+        if (originalUrl !== undefined || route.request().method() !== 'GET') throw new Error('Unexpected callback request');
+        originalUrl = route.request().url();
+        // route.fetch uses the browser's cookie jar and applies Set-Cookie
+        // before returning. Keep capture isolated until actual browser delivery.
+        isolated = await apiRequest.newContext({ timeout: 15_000 });
+        response = await isolated.get(originalUrl, { headers: await route.request().allHeaders(), maxRedirects: 0 });
+        const location = new URL(response.headers().location ?? '', origin);
+        if (response.status() !== 307 || location.origin !== origin || location.pathname !== '/auth/complete'
+          || !location.searchParams.get('admission')) {
+          throw new Error('Unexpected callback admission response');
+        }
+        completionUrl = location.href;
+        cookieNeutral = !response.headers()['set-cookie'];
+        phases.push('original-response-captured');
+        ready = true;
+        await gate;
+        await route.fulfill({ response });
+      } catch {
+        failed = true;
+        await route.abort().catch(() => {});
+      } finally {
+        try { await response?.dispose(); } catch { cleanupFailed = true; }
+        try { await isolated?.dispose(); } catch { cleanupFailed = true; }
       }
-      ready = true;
-      await gate;
-      await route.fulfill({ response });
-      await response.dispose();
-    } catch {
-      failed = true;
-      await route.abort().catch(() => {});
-    }
+    })();
+    pending.push(handled);
+    await handled;
   });
   return {
     wait: async () => {
@@ -120,7 +160,27 @@ async function holdOriginalAdmission(page: Page, origin: string) {
       if (failed) throw new Error('Callback admission E2E could not hold the original Next redirect.');
     },
     release,
+    decisionComplete: () => {
+      expect({ ready, failed, released, decisionComplete, deliveries })
+        .toEqual({ ready: true, failed: false, released: false, decisionComplete: false, deliveries: 0 });
+      decisionComplete = true;
+      phases.push('newer-decision-complete');
+    },
+    deliveredCookies: async () => {
+      await expect.poll(() => deliveredCookies !== undefined || failed, { timeout: 30_000 }).toBe(true);
+      expect(failed, 'The actual old redirect must reach the browser').toBe(false);
+      expect(deliveries).toBe(1);
+      expect(phases).toEqual(['original-response-captured', 'newer-decision-complete', 'original-response-delivered']);
+      return deliveredCookies;
+    },
+    cookieNeutral: () => cookieNeutral,
     failed: () => failed,
+    dispose: async () => {
+      release();
+      await Promise.allSettled(pending);
+      page.off('request', observeDelivery);
+      if (cleanupFailed) throw new Error('Callback admission E2E could not dispose its isolated capture.');
+    },
   };
 }
 
@@ -207,52 +267,62 @@ test.describe('callback admission through the real Next HTTP path', () => {
 
   test('held original redirect cannot continue after production logout before completion mounts', async ({ browser, baseURL, account }) => {
     const origin = requireLocalOrigin(baseURL), context = await browser.newContext({ locale: 'en-US' });
-    let release = () => {};
+    let release = () => {}, dispose = async () => {};
     try {
       const decision = await context.newPage(); await signIn(decision, origin, account);
       const callbackUrl = await seedInvalidExchange(context, origin);
       const completion = await context.newPage();
       let actions = 0;
       completion.on('request', request => { if (actionRequest(request, origin)) actions++; });
-      const held = await holdOriginalAdmission(completion, origin); release = held.release;
+      const original = await sessionBytes(context);
+      const held = await holdOriginalAdmission(completion, origin); release = held.release; dispose = held.dispose;
       const navigation = completion.goto(callbackUrl, { waitUntil: 'domcontentloaded' }).then(() => true, () => false);
       await held.wait();
+      expect(await sessionBytes(context) === original, 'Isolated response capture must preserve browser cookies').toBe(true);
       await decision.getByRole('button', { name: 'Account menu', exact: true }).click();
       await decision.getByRole('button', { name: 'Sign out', exact: true }).click();
       await decision.getByRole('dialog').getByRole('button', { name: 'Sign out', exact: true }).click();
       await expect(decision).toHaveURL(/\/login(?:\?|$)/);
       expect(authCookies(await context.cookies(), authCookieName(provider)).length).toBe(0);
-      held.release(); expect(await navigation).toBe(true);
+      held.decisionComplete(); held.release();
+      expect(await held.deliveredCookies() === '[]', 'The old redirect must not reintroduce auth cookies after logout').toBe(true);
+      expect(held.cookieNeutral(), 'The actual old redirect must contain no Set-Cookie').toBe(true);
+      expect(await navigation).toBe(true);
       await expect(completion.getByRole('alert').filter({ hasText: 'Your sign-in state changed' })).toContainText('Your sign-in state changed');
       expect(new URL(completion.url()).pathname).toBe('/auth/complete');
       expect(actions, 'Stale admission must be refused before a real server action').toBe(0);
       expect(held.failed()).toBe(false);
       expect(authCookies(await context.cookies(), authCookieName(provider)).length).toBe(0);
-    } finally { release(); await closeWithoutSnapshot(context); }
+    } finally { release(); try { await dispose(); } finally { await closeWithoutSnapshot(context); } }
   });
 
   test('held original redirect preserves a newer production login without intervening logout', async ({ browser, baseURL, account, replacement }) => {
     const origin = requireLocalOrigin(baseURL), context = await browser.newContext({ locale: 'en-US' });
-    let release = () => {};
+    let release = () => {}, dispose = async () => {};
     try {
       const decision = await context.newPage(); await signIn(decision, origin, account);
       const callbackUrl = await seedInvalidExchange(context, origin);
       const completion = await context.newPage();
       let actions = 0;
       completion.on('request', request => { if (actionRequest(request, origin)) actions++; });
-      const held = await holdOriginalAdmission(completion, origin); release = held.release;
+      const original = await sessionBytes(context);
+      const held = await holdOriginalAdmission(completion, origin); release = held.release; dispose = held.dispose;
       const navigation = completion.goto(callbackUrl, { waitUntil: 'domcontentloaded' }).then(() => true, () => false);
       await held.wait();
+      expect(await sessionBytes(context) === original, 'Isolated response capture must preserve browser cookies').toBe(true);
       await signIn(decision, origin, replacement);
       const before = await sessionBytes(context);
-      held.release(); expect(await navigation).toBe(true);
+      held.decisionComplete(); held.release();
+      expect(await held.deliveredCookies() === before, 'The old redirect must send the newer session cookies unchanged').toBe(true);
+      expect(held.cookieNeutral(), 'The actual old redirect must contain no Set-Cookie').toBe(true);
+      expect(await navigation).toBe(true);
       await expect(completion.getByRole('alert').filter({ hasText: 'Your sign-in state changed' })).toContainText('Your sign-in state changed');
       expect(new URL(completion.url()).pathname).toBe('/auth/complete');
       expect(actions, 'Newer login must be detected before a real server action').toBe(0);
       expect(held.failed()).toBe(false);
       expect(await sessionBytes(context) === before, 'The original response must preserve the newer session bytes').toBe(true);
       expect(readSession(await context.cookies(), authCookieName(provider)).user.id === replacement.userId).toBe(true);
-    } finally { release(); await closeWithoutSnapshot(context); }
+    } finally { release(); try { await dispose(); } finally { await closeWithoutSnapshot(context); } }
   });
 
   test('untouched admission runs the real rejected-code action and preserves the existing login', async ({ browser, baseURL, account }) => {

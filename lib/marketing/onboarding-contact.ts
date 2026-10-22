@@ -7,6 +7,23 @@ import { wroteNoRows } from '@/lib/supabase/errors';
 type DB = SupabaseClient<Database>;
 
 /**
+ * Whether a family's contact is this user's own: they own it, created it, or
+ * an earlier onboarding of theirs recorded them as its subject.
+ */
+function contactBelongsTo(
+  contact: { owner_id: string | null; created_by?: string | null; notes?: string | null },
+  userId: string,
+): boolean {
+  if (contact.owner_id === userId || contact.created_by === userId) return true;
+  try {
+    const notes: unknown = contact.notes ? JSON.parse(contact.notes) : null;
+    return !!notes && typeof notes === 'object' && (notes as { onboarding_user_id?: unknown }).onboarding_user_id === userId;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Feed the marketing engine from onboarding: create — or enrich, on re-run — a
  * `crm_contacts` row for a newly onboarded account holder, so segments,
  * campaigns and automations can target them.
@@ -72,13 +89,20 @@ export async function upsertOnboardingContact(admin: DB, p: {
       return;
     }
   }
+  // The family fallback finds only THIS caller's own contact. It used to take
+  // whichever contact the family had — the owner's, made by finalize — so a
+  // child, teen or co-parent with no contact of their own who saved the setup
+  // questionnaire rewrote the owner's CRM identity (name, email, phone, and a
+  // 'parent' role) through the service role. A family contact that belongs to
+  // someone else is left alone, and this caller gets a contact of their own.
   if (!existing && p.familyId) {
-    const { data, error } = await admin.from('crm_contacts').select('id, email, owner_id, family_id').eq('family_id', p.familyId).limit(1);
+    const { data, error } = await admin.from('crm_contacts').select('id, email, owner_id, family_id, created_by, notes')
+      .eq('family_id', p.familyId).order('id').limit(50);
     if (error || !Array.isArray(data)) {
       console.error('[onboarding-contact] contact lookup by family failed', { familyId: p.familyId, error: error ?? 'no result list' });
       return;
     }
-    existing = data[0] ?? null;
+    existing = data.find((contact) => contactBelongsTo(contact, p.userId)) ?? null;
   }
 
   // Both results are read. This function decides who a CRM contact IS — the

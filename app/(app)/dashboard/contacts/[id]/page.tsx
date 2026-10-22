@@ -10,6 +10,10 @@ import {
 import { ContactTimelineModule, ContactTimelineReadError } from '@/components/modules/contact-timeline-module';
 import type { Tables } from '@/lib/database.types';
 import { AppNotFound } from '@/components/app/app-not-found';
+import { isWithheldFromGuest } from '@/lib/auth/guest-scope';
+
+/** A guest does not read the household inbox, wherever its rows are shown. */
+const inboxWithheldFrom = (role: string) => role === 'guest' && isWithheldFromGuest('/dashboard/inbox');
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -70,17 +74,23 @@ export default async function ContactTimelinePage({ params }: { params: Promise<
   }
 
   // Linked communications are required for both the timeline and its health summary.
+  // They are the household inbox's rows (subjects and summaries, medical,
+  // financial and legal ones among them), and a guest is sent away from the
+  // inbox (lib/auth/guest-scope.ts) — so a guest's timeline is the logged
+  // interactions only, not the inbox one route over.
   let comms: CommunicationLike[] = [];
   let communicationsError: unknown = null;
-  try {
-    const { data, error } = await supabase
-      .from('family_communications')
-      .select('id, channel, direction, subject, summary, received_at')
-      .eq('contact_id', id).eq('family_id', familyId)
-      .order('received_at', { ascending: false }).limit(200);
-    comms = (data ?? []) as CommunicationLike[];
-    communicationsError = error || (!Array.isArray(data) ? new Error('Missing communication rows') : null);
-  } catch (error) { communicationsError = error || new Error('Communication read failed'); }
+  if (!inboxWithheldFrom(ctx.active.role)) {
+    try {
+      const { data, error } = await supabase
+        .from('family_communications')
+        .select('id, channel, direction, subject, summary, received_at')
+        .eq('contact_id', id).eq('family_id', familyId)
+        .order('received_at', { ascending: false }).limit(200);
+      comms = (data ?? []) as CommunicationLike[];
+      communicationsError = error || (!Array.isArray(data) ? new Error('Missing communication rows') : null);
+    } catch (error) { communicationsError = error || new Error('Communication read failed'); }
+  }
   if (communicationsError) {
     console.error('[dashboard-contact-timeline] communication read failed');
     return <ReadFailure />;

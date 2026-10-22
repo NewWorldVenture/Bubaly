@@ -17,7 +17,7 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import {
   buildTree, treeStats, groupByGeneration, relationshipLabel, lifespan,
-  RELATIONSHIPS, type TreeNode,
+  descendantIds, wouldBeOwnAncestor, RELATIONSHIPS, type TreeNode,
 } from '@/lib/family-tree/tree';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -64,6 +64,14 @@ export function FamilyTreeModule() {
   const tree = useMemo(() => buildTree(all), [all]);
   const stats = useMemo(() => treeStats(all), [all]);
   const gens = useMemo(() => groupByGeneration(tree), [tree]);
+  // Who the person being edited may NOT be given as a parent: themselves and
+  // everyone below them. Any of those would make them their own ancestor.
+  const notAParent = useMemo(() => {
+    if (!editNode) return new Set<string>();
+    const below = descendantIds(all, editNode.id);
+    below.add(editNode.id);
+    return below;
+  }, [all, editNode]);
 
   function toggleExpand(id: string) {
     setExpanded((s) => {
@@ -99,8 +107,14 @@ export function FamilyTreeModule() {
   async function update(e: React.FormEvent) {
     e.preventDefault();
     if (!editNode) return;
-    setSaving(true);
     const f = form!;
+    // Checked against the rows on screen as well as by the picker: a parent
+    // chosen before someone else re-linked the branch can still close a loop,
+    // and a loop takes everyone in it off the tree.
+    if (wouldBeOwnAncestor(all, editNode.id, f.parent_node_id || null)) {
+      return toastError(t('familyTreeModule.cannotBeTheirOwnAncestor'));
+    }
+    setSaving(true);
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as updated. Audit C1-S9-85.
     const { data: edited, error } = await createClient().from('family_tree_nodes').update({
       name: f.name.trim(),
@@ -301,7 +315,7 @@ export function FamilyTreeModule() {
                 {(id) => (
                   <Select id={id} value={form.parent_node_id} onChange={(e) => setForm({ ...form, parent_node_id: e.target.value })}>
                     <option value="">{t('familyTree.rootNoParent')}</option>
-                    {all.filter((n) => editNode ? n.id !== editNode.id : true).map((n) => (
+                    {all.filter((n) => !notAParent.has(n.id)).map((n) => (
                       <option key={n.id} value={n.id}>{n.name}</option>
                     ))}
                   </Select>

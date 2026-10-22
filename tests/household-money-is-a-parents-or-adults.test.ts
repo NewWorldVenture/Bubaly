@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createClient as createSdkClient, type SupabaseClient } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { at } from './helpers/source-order';
+import { at, between } from './helpers/source-order';
 import { cacheKey } from '@/lib/offline/cache';
 import { addedInScope, narrowedToAdder, readsHouseholdMoney, transactionsInScope } from '@/lib/finance/household-money';
 
@@ -182,7 +182,9 @@ describe('the screens say whose the household\'s money is', () => {
 
   it('the home page\'s Family Finances card, and its read, are a manager\'s', () => {
     const src = read('app/(app)/home/page.tsx');
-    expect(src).toContain('readsHouseholdMoney(ctx.active.role)\n      ? supabase.from(\'transactions\')');
+    // The month's whole read (SUMMED-READ-SIB), asked for only past the gate.
+    expect(src).toContain('readsHouseholdMoney(ctx.active.role)\n      ? readAllByIdAsQuery<HomeTxn & { id: string }>((after, limit) => {');
+    expect(between(src, 'readsHouseholdMoney(ctx.active.role)\n      ? readAllByIdAsQuery', ': Promise.resolve({ data: [] as HomeTxn[], error: null }),')).toContain("supabase.from('transactions')");
     expect(src).toContain(': Promise.resolve({ data: [] as HomeTxn[], error: null }),');
     expect(src).toContain('{manager && <Card>');
   });
@@ -238,7 +240,15 @@ describe('the screens say whose the household\'s money is', () => {
 
   it('the budget simulator, the intelligence preview and needs-you do not stand a member\'s own spending in for the household\'s', () => {
     const twin = read('app/(app)/dashboard/family-digital-twin/actions.ts');
-    expect(at(twin, 'if (!readsHouseholdMoney(ctx.active.role)) {')).toBeLessThan(at(twin, ".from('budgets').select('category, amount, period')"));
+    // The budget and its spending are read in budgetHeadroom; each action asks
+    // for them only past its gate (TWIN-SIB: the projection's Cost line too).
+    expect(twin).toContain(".from('budgets').select('id, category, amount, period, created_at')");
+    expect(at(twin, 'if (!readsHouseholdMoney(ctx.active.role)) {')).toBeLessThan(at(twin, 'await budgetHeadroom(supabase, familyId, input.category,'));
+    // The projection's Cost line is checked only for a reader of household
+    // money; anyone else's projection carries no cost and no budget at all.
+    expect(at(twin, 'const seesCost = readsHouseholdMoney(ctx.active.role);')).toBeLessThan(at(twin, 'const checksCost = seesCost && !!input.costCategory && costCents > 0;'));
+    expect(at(twin, 'const checksCost = seesCost && !!input.costCategory && costCents > 0;')).toBeLessThan(at(twin, '? budgetHeadroom(supabase, familyId, input.costCategory!,'));
+    expect(twin).toContain('costCents: seesCost && costCents > 0 ? costCents : undefined, costCategory: seesCost ? input.costCategory : undefined,');
     const intel = read('app/(app)/dashboard/intelligence/page.tsx');
     expect(intel).toContain('typicalWeeklySpend: seesSpending ? typicalWeeklySpend(');
     expect(intel).toContain(': Promise.resolve({ data: [] as { amount: number }[], error: null }),');

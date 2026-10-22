@@ -40,6 +40,7 @@ const MAX_WEBHOOK_BODY_BYTES = 256_000;
  */
 const HANDLED_EVENT_TYPES = new Set<string>([
   'issuing_authorization.request',
+  'issuing_authorization.created',
   'issuing_authorization.updated',
   'issuing_transaction.created',
   'issuing_card.created',
@@ -104,6 +105,12 @@ export async function POST(req: NextRequest) {
       case 'issuing_transaction.created':
         await handleTransactionCreated(supabase, event.data.object as Stripe.Issuing.Transaction);
         break;
+      // Stripe sends `.created` for every authorization. For one it decided
+      // itself (our answer did not arrive inside its ~2 second window) it is the
+      // only notice, and one it declined that way arrives already closed: its
+      // hold is released like any closed authorization's. Idempotent, so
+      // `.created` and `.updated` may both arrive for the same authorization.
+      case 'issuing_authorization.created':
       case 'issuing_authorization.updated':
         await handleAuthorizationUpdated(supabase, event.data.object as Stripe.Issuing.Authorization);
         break;

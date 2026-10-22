@@ -11,6 +11,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { settle } from '@/lib/supabase/settle';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { createReminderAction } from '@/app/(app)/dashboard/reminders/actions';
 import { newSubmissionId } from '@/lib/utils/submission-id';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
@@ -25,7 +26,8 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
-import { useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { datetimeLocalToInstant } from '@/lib/time/datetime-local';
 import type { Format } from '@/lib/utils/format';
 
 type Comm = Tables<'family_communications'> & { contact?: Tables<'family_contacts'> | null };
@@ -63,6 +65,9 @@ type FilterTab = 'all' | 'unread' | 'call' | 'sms' | 'school' | 'sports' | 'emai
 const fmtTimeWith = (format: Format) => (iso: string) =>
   format.fmtTimeAgo(iso, { absoluteAfterDays: 2 });
 
+/** More contacts than a household keeps, as the Contacts page reads; past it the read fails, never a silent prefix. */
+const CONTACTS_MAX = 20_000;
+
 export function InboxModule() {
   const fmtTime = fmtTimeWith(useFormat());
   const tr = useTranslations();
@@ -94,9 +99,15 @@ export function InboxModule() {
     },
   });
 
+  // Read whole, a page at a time, as the Contacts page does (N14). One
+  // unpaged select stopped at PostgREST's 1,000 rows without a word: the
+  // sidebar counted the prefix as the total, and the Log message and AI Import
+  // pickers could not link a message to any contact after the 1,000th.
   const { data: contacts, loading: contactsLoading, error: contactsError, refresh: refreshContacts } = useRealtimeQuery<Contact>({
     table: 'family_contacts', familyId, deps: [familyId],
-    fetcher: async (supabase) => supabase.from('family_contacts').select('*').eq('family_id', familyId).order('name'),
+    fetcher: (supabase) => readAllAsQuery<Contact>((from, to) =>
+      supabase.from('family_contacts').select('*').eq('family_id', familyId)
+        .order('name').order('id').range(from, to), { max: CONTACTS_MAX }),
   });
 
   const filtered = useMemo(() => {
@@ -425,19 +436,12 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
     if (drafting) return;
     setDrafting(true);
     try {
-      const contextLines = [
-        comm.contact?.name ? `From: ${comm.contact.name}` : null,
-        comm.subject ? `Subject: ${comm.subject}` : null,
-        comm.body ? `Message: ${comm.body}` : (comm.summary ? `Summary: ${comm.summary}` : null),
-        `Channel: ${tr(ch.labelKey)}`,
-      ].filter(Boolean).join('\n');
+      // The server reads the message from the family's own record and writes
+      // the prompt itself (app/api/ai/assist/route.ts): the sender's words
+      // reach the model fenced as data, never as part of the instructions.
       const res = await fetch('/api/ai/assist', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemPrompt: `You are a family's AI message agent. Draft a brief, warm, polite reply to the message below on the family's behalf. Match the tone to the channel (${tr(ch.labelKey)}). Keep it natural and ready to send — no placeholders, no "[Name]", no preamble. Just the reply text.`,
-          messages: [{ role: 'user', content: contextLines }],
-          maxTokens: 300,
-        }),
+        body: JSON.stringify({ purpose: 'inbox_reply', communicationId: comm.id }),
       });
       const data = await res.json();
       if (!res.ok) { toastError(data.error ?? tr('inboxModule.couldNotDraftAReply')); return; }
@@ -650,6 +654,7 @@ function AddCommModal({ familyId, userId, contacts, onClose, onSaved }: {
   onClose: () => void; onSaved: () => void;
 }) {
   const tr = useTranslations();
+  const clock = useFamilyClock();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -664,9 +669,15 @@ function AddCommModal({ familyId, userId, contacts, onClose, onSaved }: {
     const category = String(form.get('category') ?? 'general');
     const priority = String(form.get('priority') ?? 'normal');
     const contact_id = String(form.get('contact_id') ?? '') || null;
-    const received_at = String(form.get('received_at') ?? '') || new Date().toISOString();
+    // The field is a wall reading on the FAMILY's clock. Written raw into the
+    // timestamptz column, Postgres read it in the session zone (UTC), so a Los
+    // Angeles parent logging a 2:30 PM call stored 7:30 AM (TIME-003). Blank is
+    // "now"; a reading that is not a real time on that clock is refused.
+    const typed = String(form.get('received_at') ?? '').trim();
+    const received_at = typed ? datetimeLocalToInstant(typed, clock.timeZone) : new Date().toISOString();
 
     if (!subject && !body) return toastError(tr('inboxModule.addASubjectOrMessage'));
+    if (!received_at) return toastError(tr('errors.thatTimeIsNotOnTheFamilysClock'));
 
     setLoading(true);
     const supabase = createClient();

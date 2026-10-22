@@ -13,9 +13,10 @@ import type { InsightKind } from '@/lib/ai/insights';
 // entitled to something. So the gate is per kind, and this is the map.
 //
 // It is DERIVED, not authored: each entry is the `requireFeature` href of the
-// page that renders `<AiInsight kind="…">`, found by walking each page's
-// imports. `tests/insight-kinds-are-gated-like-their-pages.test.ts` re-derives
-// it from the pages and fails if the two drift — so moving a button between
+// page that renders `<AiInsight kind="…">` — the page's own, and its
+// layouts' — found by walking each page's imports.
+// `tests/insight-kinds-are-gated-like-their-pages.test.ts` re-derives it from
+// the pages and fails if the two drift — so moving a button between
 // modules updates the map or breaks the build, rather than silently ungating a
 // paid insight.
 //
@@ -27,10 +28,15 @@ export const INSIGHT_FEATURE_HREFS: Partial<Record<InsightKind, readonly string[
   binder: ['/dashboard/binder'],
   care: ['/dashboard/care'],
   career: ['/dashboard/career'],
+  celebrations: ['/dashboard/celebrations'],
   closet: ['/dashboard/closet'],
   declutter: ['/dashboard/declutter'],
   expenses: ['/dashboard/expenses'],
   goals: ['/dashboard/goals'],
+  // Gated in its LAYOUT (app/(app)/dashboard/home/layout.tsx), which the
+  // derivation read only page.tsx files for, so it went unmapped and a Free
+  // family could ask for a Plus insight by name.
+  home: ['/dashboard/home'],
   homework: ['/dashboard/homework'],
   insurance: ['/dashboard/insurance'],
   inventory: ['/dashboard/inventory'],
@@ -44,6 +50,7 @@ export const INSIGHT_FEATURE_HREFS: Partial<Record<InsightKind, readonly string[
   pantry: ['/dashboard/pantry'],
   pets: ['/dashboard/pets'],
   projects: ['/dashboard/projects'],
+  purchase_advisor: ['/dashboard/wishlists'],
   recipes: ['/dashboard/recipes'],
   renewals: ['/dashboard/renewals'],
   rewards: ['/dashboard/rewards'],
@@ -61,4 +68,22 @@ export const INSIGHT_FEATURE_HREFS: Partial<Record<InsightKind, readonly string[
   utilities: ['/dashboard/utilities'],
   votes: ['/dashboard/voting'],
   watchlist: ['/dashboard/watchlist'],
+  wishlists: ['/dashboard/wishlists'],
 };
+
+/**
+ * Kinds that read the SAME rows as a mapped kind under another name, and so
+ * answer to its gate. No page renders these (which is why the derived map above
+ * cannot list them), but the endpoint accepts them: `grocery` reads the open
+ * grocery items exactly as `shopping` does, and while it was simply absent from
+ * the map it reached the model for a family whose Groceries feature an admin had
+ * switched Off — the request `shopping` was refused with a 404.
+ */
+const INSIGHT_KIND_ALIASES: Partial<Record<InsightKind, InsightKind>> = {
+  grocery: 'shopping',
+};
+
+/** The feature hrefs a kind answers to, an alias's included; undefined for a kind no gated page renders. */
+export function insightFeatureHrefs(kind: InsightKind): readonly string[] | undefined {
+  return INSIGHT_FEATURE_HREFS[kind] ?? INSIGHT_FEATURE_HREFS[INSIGHT_KIND_ALIASES[kind] ?? kind];
+}

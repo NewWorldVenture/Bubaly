@@ -137,6 +137,9 @@ function scope(as: NonNullable<Scenario['as']> = 'parent'): ServiceScope {
 function seedHousehold() {
   db.reset();
   db.seed('families', [{ id: FAMILY, name: 'The Hughens', timezone: 'America/New_York', created_by: USER }]);
+  // Family Basic: a run is Ask Bubaly's work, and `continueRun` executes only
+  // a family that has it (N8; tests/no-kick-runs-a-lapsed-familys-run.test.ts).
+  db.seed('subscriptions', [{ id: 'sub-hughens', family_id: FAMILY, plan: 'basic', status: 'active', current_period_end: '2099-01-01T00:00:00Z' }]);
   // Dan, Maya and Dana: the three people the scripted plans assign work to. A
   // name the household does not have fails the step by design
   // (`resolveAssigneeId`), so the harness must seed everyone the scripts name.
